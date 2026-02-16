@@ -1,155 +1,98 @@
-"use client";
+import axios from "axios";
+import { useCallback, useRef, useState } from "react";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-export type ApiError = {
-  message: string;
-  status?: number;
-  details?: unknown;
+type UseApiOptions<TBody> = {
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  headers?: Record<string, string>;
+  body?: TBody; // optional default body
 };
 
-export type QueryValue = string | number | boolean | undefined | null;
-
-type BaseOptions = {
-  headers?: HeadersInit;
-  query?: Record<string, QueryValue>;
-};
-
-type GetOptions = BaseOptions & {
-  skip?: boolean;
-};
-
-type MutateOptions<TBody> = BaseOptions & {
+type UseApiRunOverride<TBody> = {
   body?: TBody;
+  query?: Record<string, string>;
+  url?: string;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "https://localhost:3010/api/v1";
 
-function buildUrl(path: string, query?: Record<string, QueryValue>) {
-  const url = new URL(path, API_BASE || window.location.origin);
-  if (query) {
-    Object.entries(query).forEach(([key, value]) => {
-      if (value === undefined || value === null) return;
-      url.searchParams.set(key, String(value));
-    });
-  }
-  return url.toString();
-}
-
-async function handleResponse<T>(response: Response): Promise<T> {
-  const contentType = response.headers.get("content-type") ?? "";
-  const isJson = contentType.includes("application/json");
-  const payload = isJson ? await response.json().catch(() => null) : null;
-
-  if (!response.ok) {
-    const error: ApiError = {
-      message: (payload as any)?.message ?? response.statusText,
-      status: response.status,
-      details: payload,
-    };
-    throw error;
-  }
-
-  return (payload as T) ?? (undefined as T);
-}
-
-export function useGet<T>(path: string, options: GetOptions = {}) {
-  const { headers, query, skip } = options;
-  const [data, setData] = useState<T | undefined>(undefined);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [loading, setLoading] = useState(false);
-  const controllerRef = useRef<AbortController | null>(null);
-
-  const url = useMemo(() => buildUrl(path, query), [path, JSON.stringify(query)]);
-
-  const refetch = useCallback(async () => {
-    if (skip) return;
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(url, {
-        headers,
-        signal: controller.signal,
-      });
-      const payload = await handleResponse<T>(response);
-      setData(payload);
-    } catch (err) {
-      if ((err as any)?.name === "AbortError") return;
-      setError(err as ApiError);
-    } finally {
-      setLoading(false);
-    }
-  }, [headers, skip, url]);
-
-  useEffect(() => {
-    refetch();
-    return () => controllerRef.current?.abort();
-  }, [refetch]);
-
-  return { data, error, loading, refetch } as const;
-}
-
-export function useMutation<TResponse, TBody = unknown>(
-  path: string,
-  method: "POST" | "PUT" | "PATCH" | "DELETE",
+export function useApi<TResp = unknown, TBody = unknown>(
+  url: string,
+  options: UseApiOptions<TBody> = {}
 ) {
-  const [data, setData] = useState<TResponse | undefined>(undefined);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [loading, setLoading] = useState(false);
-  const controllerRef = useRef<AbortController | null>(null);
+  const { method = "GET", headers, body: defaultBody } = options;
 
-  const mutate = useCallback(
-    async (options: MutateOptions<TBody> = {}) => {
-      const { headers, query, body } = options;
-      controllerRef.current?.abort();
+  const [data, setData] = useState<TResp | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const abortRef = useRef<AbortController | null>(null);
+
+  const run = useCallback(
+    async (override?: UseApiRunOverride<TBody>) => {
+      // cancel previous request (optional)
+      abortRef.current?.abort();
       const controller = new AbortController();
-      controllerRef.current = controller;
+      abortRef.current = controller;
+      const requestUrl = override?.url ?? url;
+
       setLoading(true);
       setError(null);
+
       try {
-        const response = await fetch(buildUrl(path, query), {
+        const resp = await axios.request<TResp>({
+          url: requestUrl,
           method,
+          baseURL: API_BASE || undefined,
           headers: {
-            "Content-Type": "application/json",
-            ...headers,
+            ...(headers ?? {}),
           },
-          body: body !== undefined ? JSON.stringify(body) : undefined,
+          params: override?.query,
+          data:
+            method === "GET" || method === "DELETE"
+              ? undefined
+              : override?.body ?? defaultBody ?? {},
           signal: controller.signal,
         });
-        const payload = await handleResponse<TResponse>(response);
-        setData(payload);
-        return payload;
-      } catch (err) {
-        if ((err as any)?.name === "AbortError") return undefined;
-        setError(err as ApiError);
-        throw err;
+
+        const json = resp.data as TResp;
+        setData(json);
+        return json;
+      } catch (e: any) {
+        if (e?.name === "AbortError" || e?.name === "CanceledError") return; // ignore cancels
+
+        if (axios.isAxiosError(e)) {
+          const responseData = e.response?.data as
+            | { message?: string }
+            | string
+            | undefined;
+
+          const message =
+            (typeof responseData === "object" ? responseData?.message : responseData) ??
+            e.message ??
+            "Something went wrong";
+          setError(message);
+          throw e;
+        }
+
+        setError(e?.message ?? "Something went wrong");
+        throw e;
       } finally {
         setLoading(false);
       }
     },
-    [method, path],
+    [url, method, headers, defaultBody]
   );
 
-  useEffect(() => () => controllerRef.current?.abort(), []);
+  const reset = useCallback(() => {
+    setData(null);
+    setError(null);
+    setLoading(false);
+  }, []);
 
-  return { mutate, data, error, loading } as const;
-}
+  const getAll = useCallback(
+    async (query?: Record<string, string>) => run({ query }),
+    [run]
+  );
 
-export function usePost<TResponse, TBody = unknown>(path: string) {
-  return useMutation<TResponse, TBody>(path, "POST");
-}
-
-export function usePut<TResponse, TBody = unknown>(path: string) {
-  return useMutation<TResponse, TBody>(path, "PUT");
-}
-
-export function usePatch<TResponse, TBody = unknown>(path: string) {
-  return useMutation<TResponse, TBody>(path, "PATCH");
-}
-
-export function useDelete<TResponse = void>(path: string) {
-  return useMutation<TResponse, undefined>(path, "DELETE");
+  return { data, loading, error, run, getAll, reset };
 }

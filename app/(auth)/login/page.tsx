@@ -1,58 +1,235 @@
-import Link from "next/link";
-import styles from "./page.module.css";
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useApi } from "@/hooks/useApi";
+
+type Errors = {
+  username?: string;
+  password?: string;
+};
+
+type LoginRequest = {
+  user_name: string;
+  user_password: string;
+};
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [values, setValues] = useState({ username: "", password: "" });
+  const [errors, setErrors] = useState<Errors>({});
+  const { run: login, loading, error } = useApi<unknown, LoginRequest>(
+    "/auth/login",
+    { method: "POST" }
+  );
+
+  const validate = () => {
+    const next: Errors = {};
+    const username = values.username.trim();
+
+    if (!username) next.username = "User Name is required.";
+    else if (username.length < 3) next.username = "Minimum 3 characters.";
+
+    if (!values.password) next.password = "Password is required.";
+    else if (values.password.length < 4) next.password = "Minimum 4 characters.";
+
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    try {
+      await login({
+        body: {
+          user_name: values.username.trim(),
+          user_password: values.password,
+        },
+      });
+      router.push("/");
+    } catch {
+      // error state is handled by useApi
+    }
+  };
+
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setValues((p) => ({ ...p, [name]: value }));
+    setErrors((p) => ({ ...p, [name]: "" }));
+  };
+
+  const inputBase =
+    "w-full rounded-xl border px-3.5 py-2.5 text-[0.95rem] outline-none transition " +
+    "placeholder:text-slate-500/80 " +
+    "bg-white text-slate-900 border-slate-300/90 " +
+    "focus:border-sky-500 focus:ring-4 focus:ring-sky-500/20 " +
+    "dark:bg-[#112536] dark:text-slate-100 dark:border-[#35526a] " +
+    "dark:focus:border-sky-300 dark:focus:ring-sky-300/25";
+
+  const inputError =
+    "border-rose-500/80 focus:border-rose-500 focus:ring-rose-500/20 " +
+    "dark:border-rose-400/70 dark:focus:border-rose-300 dark:focus:ring-rose-300/20";
+
   return (
-    <main className={styles.page}>
-      <div className={styles.gradientOrb} aria-hidden />
-      <section className={styles.card} aria-labelledby="login-heading">
-        <div className={styles.brand}>
-          <p className={styles.kicker}>ERP Client</p>
-          <h1 id="login-heading">Sign in to your workspace</h1>
-          <p className={styles.subtitle}>
+    <main
+      className={[
+        "relative min-h-screen overflow-hidden",
+        "grid place-items-center",
+        "px-5 py-6 sm:px-6",
+        // background (light)
+        "bg-[linear-gradient(145deg,#eef4fb_0%,#f8fafb_42%,#f4f8f4_100%)]",
+        "bg-[radial-gradient(circle_at_14%_20%,#c9ecff_0%,transparent_48%),radial-gradient(circle_at_86%_82%,#d2f5d7_0%,transparent_50%),linear-gradient(145deg,#eef4fb_0%,#f8fafb_42%,#f4f8f4_100%)]",
+        // background (dark)
+        "dark:bg-[radial-gradient(circle_at_14%_20%,rgba(55,126,169,0.35)_0%,transparent_48%),radial-gradient(circle_at_86%_82%,rgba(66,126,94,0.2)_0%,transparent_50%),linear-gradient(145deg,#071420_0%,#0b1b2a_42%,#08131f_100%)]",
+        "font-sans",
+      ].join(" ")}
+    >
+      {/* gradient orb */}
+      <div
+        aria-hidden
+        className={[
+          "pointer-events-none absolute -top-28 -right-20",
+          "h-[22rem] w-[22rem] rounded-full blur-[64px] opacity-[0.22]",
+          "bg-[radial-gradient(circle_at_30%_30%,#6fc8ff_0%,#1a91d2_76%)]",
+          "dark:bg-[radial-gradient(circle_at_30%_30%,#2d9fd6_0%,#19698e_76%)]",
+          "animate-[drift_12s_ease-in-out_infinite]",
+        ].join(" ")}
+      />
+
+      {/* card */}
+      <section
+        aria-labelledby="login-heading"
+        className={[
+          "relative w-full max-w-[28rem]",
+          "rounded-[1.2rem] border p-6 sm:p-7",
+          "bg-white/90 border-slate-900/10 shadow-[0_1.2rem_3rem_rgba(31,62,87,0.16)]",
+          "backdrop-blur-[8px]",
+          "animate-[rise_0.5s_ease_both]",
+          "dark:bg-[#081a28]/80 dark:border-sky-200/30 dark:shadow-[0_1.2rem_3rem_rgba(0,0,0,0.46)]",
+          "max-[480px]:rounded-[1rem] max-[480px]:p-[1.1rem]",
+        ].join(" ")}
+      >
+        <div className="mb-5">
+          <p className="mb-1 text-[0.72rem] font-bold tracking-[0.1em] text-sky-700 dark:text-sky-300 uppercase">
+            ERP Client
+          </p>
+
+          <h1
+            id="login-heading"
+            className="m-0 text-[1.45rem] sm:text-[1.8rem] leading-tight font-semibold text-slate-900 dark:text-slate-100"
+          >
+            Login to your workspace
+          </h1>
+
+          <p className="mt-2 text-[0.94rem] text-slate-600 dark:text-slate-300">
             Continue with your assigned company credentials.
           </p>
         </div>
 
-        <form className={styles.form}>
-          <label htmlFor="email">Work Email</label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@company.com"
-            required
-          />
-
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            placeholder="Enter your password"
-            required
-          />
-
-          <div className={styles.row}>
-            <label className={styles.check}>
-              <input type="checkbox" name="remember" />
-              <span>Remember me</span>
+        <form onSubmit={onSubmit} noValidate className="grid gap-3">
+          {/* username */}
+          <div>
+            <label
+              htmlFor="username"
+              className="text-[0.84rem] font-semibold text-slate-700 dark:text-slate-200"
+            >
+              User Name
             </label>
-            <a href="#" className={styles.link}>
-              Forgot password?
-            </a>
+            <input
+              id="username"
+              name="username"
+              type="text"
+              autoComplete="username"
+              required
+              value={values.username}
+              onChange={onChange}
+              placeholder="Enter user name"
+              className={`${inputBase} ${errors.username ? inputError : ""}`}
+            />
+            {errors.username && (
+              <p className="mt-1 text-sm text-rose-600 dark:text-rose-400">
+                {errors.username}
+              </p>
+            )}
           </div>
 
-          <button type="submit">Sign In</button>
-        </form>
+          {/* password */}
+          <div>
+            <label
+              htmlFor="password"
+              className="text-[0.84rem] font-semibold text-slate-700 dark:text-slate-200"
+            >
+              Password
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={values.password}
+              onChange={onChange}
+              placeholder="Enter password"
+              className={`${inputBase} ${errors.password ? inputError : ""}`}
+            />
+            {errors.password && (
+              <p className="mt-1 text-sm text-rose-600 dark:text-rose-400">
+                {errors.password}
+              </p>
+            )}
+          </div>
 
-        <div className={styles.footer}>
-          <p>Need access? Contact your administrator.</p>
-          <Link href="/">Back to landing page</Link>
-        </div>
+        
+
+          {/* button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className={[
+              "mt-1 rounded-xl px-4 py-3 font-bold text-[0.96rem] text-white",
+              "bg-[linear-gradient(120deg,#0d7ebf,#0b6ca4)]",
+              "transition duration-150",
+              "hover:-translate-y-[1px] hover:shadow-[0_0.6rem_1.4rem_rgba(13,126,191,0.28)]",
+              "active:translate-y-0",
+              "disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0",
+              "dark:bg-[linear-gradient(120deg,#1b8dcc,#146f9f)]",
+              "dark:hover:shadow-[0_0.6rem_1.4rem_rgba(0,0,0,0.4)]",
+            ].join(" ")}
+          >
+            {loading ? "LOGGING IN..." : "LOGIN"}
+          </button>
+          {error && (
+            <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
+          )}
+
+        
+        </form>
       </section>
+
+      {/* Tailwind keyframes (works with arbitrary animate-[...]) */}
+      <style jsx global>{`
+        @keyframes rise {
+          from {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        @keyframes drift {
+          0%,
+          100% {
+            transform: translate(0, 0);
+          }
+          50% {
+            transform: translate(-18px, 12px);
+          }
+        }
+      `}</style>
     </main>
   );
 }

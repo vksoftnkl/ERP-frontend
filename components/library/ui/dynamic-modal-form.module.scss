@@ -1,0 +1,330 @@
+.cardButton {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.58rem 0.9rem;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease;
+}
+
+.cardButton:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.94);
+  box-shadow: 0 14px 24px rgba(15, 32, 52, 0.2);
+}
+
+.cardButton:focus-visible {
+  outline: 2px solid var(--erp-modal-accent);
+  outline-offset: 2px;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: erp-modal-fade-in 0.2s ease-out;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 15, 28, 0.56);
+  backdrop-filter: blur(4px);
+}
+
+.panel {
+  position: relative;
+  display: flex;
+  width: min(100%, 52rem);
+  max-height: 90vh;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid var(--erp-modal-border, #d4dde7);
+  background: var(--erp-modal-surface, #fff);
+  box-shadow: 0 28px 58px rgba(5, 21, 38, 0.34);
+  animation: erp-modal-slide-up 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.header {
+  border-bottom: 1px solid var(--erp-modal-border, #d4dde7);
+  padding: 1.35rem 1.45rem;
+}
+
+.headerRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+.headerTitle {
+  margin: 0;
+  color: #12263a;
+  font-size: clamp(1.25rem, 2.3vw, 1.7rem);
+  line-height: 1.2;
+}
+
+.headerDescription {
+  margin: 0.45rem 0 0;
+  color: #40586c;
+  font-size: 0.86rem;
+}
+
+.closeButton {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border: 1px solid rgba(26, 41, 55, 0.18);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #30485c;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.closeButton:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid var(--erp-modal-accent);
+  outline-offset: 2px;
+}
+
+.scrollArea {
+  overflow-y: auto;
+  max-height: calc(90vh - 194px);
+  padding: 1.2rem 1.45rem;
+}
+
+.scrollArea::-webkit-scrollbar {
+  width: 10px;
+}
+
+.scrollArea::-webkit-scrollbar-track {
+  background: rgba(18, 43, 67, 0.08);
+}
+
+.scrollArea::-webkit-scrollbar-thumb {
+  background: rgba(18, 43, 67, 0.24);
+  border-radius: 4px;
+}
+
+.formGrid {
+  display: grid;
+  gap: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.fieldWide {
+  grid-column: 1 / -1;
+}
+
+.label {
+  margin: 0;
+  color: #20384c;
+  font-size: 0.84rem;
+  font-weight: 620;
+}
+
+.requiredMark {
+  color: #d23f3f;
+}
+
+.control {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid #c4d0dc;
+  border-radius: 4px;
+  padding: 0.56rem 0.74rem;
+  background: #fff;
+  color: #152d40;
+  font-size: 0.94rem;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.control::placeholder {
+  color: #667f93;
+}
+
+.control:focus-visible {
+  outline: 0;
+  border-color: var(--erp-modal-accent);
+  box-shadow: 0 0 0 3px var(--erp-modal-accent-soft-ring);
+}
+
+.controlInvalid {
+  border-color: #d14343;
+  box-shadow: 0 0 0 3px rgba(209, 67, 67, 0.16);
+}
+
+.fileField {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.fileInput {
+  padding-block: 0.45rem;
+}
+
+.fileInput::file-selector-button {
+  margin-right: 0.6rem;
+  border: 1px solid #bccbd8;
+  border-radius: 4px;
+  background: #f3f8fc;
+  color: #1c3a52;
+  padding: 0.26rem 0.55rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fileInput::file-selector-button:hover {
+  background: #e8f1f8;
+}
+
+.fileMeta {
+  margin: 0;
+  font-size: 0.76rem;
+  color: #4f677a;
+}
+
+.textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.helpText {
+  margin: 0;
+  color: #50687b;
+  font-size: 0.78rem;
+}
+
+.errorText {
+  margin: 0;
+  color: #b42323;
+  font-size: 0.78rem;
+  font-weight: 540;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.72rem;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--erp-modal-border, #d4dde7);
+  padding: 1rem 1.45rem 1.1rem;
+  background: color-mix(in srgb, var(--erp-modal-surface, #fff) 90%, #e7eff6 10%);
+}
+
+.submitError {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #b42323;
+  flex: 1 0 100%;
+}
+
+.cancelButton,
+.submitButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  width: 120px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  padding: 0.56rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+}
+
+.cancelButton {
+  border-color: #bccbd8;
+  background: #fff;
+  color: #244055;
+}
+
+.submitButton {
+  background: var(--erp-modal-accent);
+  color: #fff;
+}
+
+.cancelButton:hover,
+.submitButton:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.96);
+}
+
+.cancelButton:focus-visible,
+.submitButton:focus-visible {
+  outline: 2px solid var(--erp-modal-accent);
+  outline-offset: 2px;
+}
+
+.cancelButton:disabled,
+.submitButton:disabled,
+.cardButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
+  transform: none;
+  box-shadow: none;
+  filter: none;
+}
+
+@media (min-width: 760px) {
+  .formGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.1rem;
+  }
+}
+
+@keyframes erp-modal-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes erp-modal-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.965);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

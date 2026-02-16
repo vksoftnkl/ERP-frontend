@@ -8,19 +8,22 @@ Frontend web application for the ERP client, built with Next.js App Router and T
 - React
 - TypeScript
 - CSS Modules
-- Tailwind CSS (dependency installed)
+- Tailwind CSS
+- SCSS (Sass)
 
 ## Current Screens
 
 - `/` -> Marketing landing page
 - `/login` -> Sign-in page
 - `/dashboard` -> ERP dashboard UI
+- `/ui-library` -> Custom Tailwind + SCSS component library showcase
 
 ## Key Capabilities
 
 - Theme toggle with persisted user preference (`light` / `dark`)
 - Reusable API hooks for GET and mutations in `hooks/useApi.ts`
 - Feature-oriented folder structure for scaling modules
+- Token-driven UI library at `styles/library` and `components/library`
 
 ## Getting Started
 

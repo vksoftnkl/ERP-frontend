@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import ThemeToggle from "@/components/ui/theme-toggle";
 import "./globals.css";
+import "@/styles/library/index.scss";
 
 export const metadata: Metadata = {
   title: "ERP Client | Operations Platform",
