@@ -266,7 +266,7 @@ export default function ErpHeader({
   }, [billNumber, onBillNumberChange]);
 
   return (
-    <>
+    <div className={styles.headerShell}>
       <header className={styles.topHeader}>
         <nav className={styles.primaryMenu} aria-label={ARIA_LABELS.MAIN_MENU}>
           <MenuTree
@@ -295,6 +295,6 @@ export default function ErpHeader({
         onBillNumberChange={handleBillNumberChange}
         billPlaceholder={billPlaceholder}
       />
-    </>
+    </div>
   );
 }

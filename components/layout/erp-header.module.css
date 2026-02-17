@@ -1,3 +1,9 @@
+.headerShell {
+  position: sticky;
+  top: 0;
+  z-index: 150;
+}
+
 .topHeader {
   background: #7b1111;
   color: #fff;

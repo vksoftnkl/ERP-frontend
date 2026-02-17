@@ -7,8 +7,18 @@ import {
   useState,
 } from "react";
 import ErpHeader, { type ErpHeaderItem } from "@/components/layout/erp-header";
+import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
+import {
+  fetchGridColumns,
+  selectGridColumns,
+  selectGridColumnsError,
+  selectGridColumnsLoading,
+  selectGridColumnsRequested,
+  type GridColumnConfig,
+} from "@/store/slices/gridColumnsSlice";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import styles from "./page.module.scss";
 import {
   ERPDynamicModalForm,
@@ -20,9 +30,11 @@ import {
 // Constants
 const API_ENDPOINTS = {
   LIST: "/item-groups/list",
+  GET_BY_ID: "/item-groups/get",
   CREATE: "/item-groups/create",
   DELETE: "/item-groups/delete",
 } as const;
+const ITEM_GROUP_GRID_ID = 1;
 const FILE_CONSTRAINTS = {
   MAX_UPLOAD_IMAGE_BYTES: 5 * 1024 * 1024,
   ALLOWED_MIME_TYPES: [
@@ -35,13 +47,70 @@ const FILE_CONSTRAINTS = {
   ] as const,
   DEBOUNCE_MS: 300,
 } as const;
+const DEFAULT_PAGE = 1;
+const DEFAULT_PAGE_SIZE = 20;
 const ARRAY_KEYS = ["data", "items", "results", "rows", "list", "groups", "itemGroups"] as const;
-const GROUP_ID_KEYS = ["group_id", "groupId", "id", "_id", "itg_id"] as const;
-const GROUP_CODE_KEYS = ["group_code", "groupCode", "code", "itg_alias", "itg_short"] as const;
-const GROUP_NAME_KEYS = ["group_name", "groupName", "name", "itg_name"] as const;
+const PAGINATION_CONTAINER_KEYS = ["meta", "pagination", "pageInfo", "pager"] as const;
+const TOTAL_ENTRIES_KEYS = [
+  "total",
+  "totalCount",
+  "total_count",
+  "totalRecords",
+  "total_records",
+  "count",
+  "recordsTotal",
+  "totalItems",
+  "total_items",
+] as const;
+const CURRENT_PAGE_KEYS = ["page", "currentPage", "current_page", "pageNo", "page_no"] as const;
+const PAGE_SIZE_KEYS = ["limit", "pageSize", "page_size", "perPage", "per_page"] as const;
+const GROUP_ID_KEYS = [
+  "group_id",
+  "groupId",
+  "id",
+  "_id",
+  "itg_id",
+  "itemgroupid",
+  "item_group_id",
+  "itemGroupId",
+] as const;
+const GROUP_CODE_KEYS = [
+  "group_code",
+  "groupCode",
+  "code",
+  "itg_alias",
+  "itg_short",
+  "groupalias",
+  "groupshort",
+] as const;
+const GROUP_NAME_KEYS = [
+  "group_name",
+  "groupName",
+  "name",
+  "itg_name",
+  "itemgroupname",
+  "item_group_name",
+  "itemGroupName",
+] as const;
 const GROUP_POSITION_KEYS = ["position", "itg_sort", "sort"] as const;
-const GROUP_ALIAS_KEYS = ["itg_alias", "alias", "group_alias"] as const;
-const GROUP_SHORT_KEYS = ["itg_short", "short_name", "shortName", "short"] as const;
+const GROUP_ALIAS_KEYS = [
+  "itg_alias",
+  "alias",
+  "group_alias",
+  "groupalias",
+  "itemgroupalias",
+  "item_group_alias",
+] as const;
+const GROUP_SHORT_KEYS = [
+  "itg_short",
+  "short_name",
+  "shortName",
+  "short",
+  "groupshort",
+  "itemgroupshort",
+  "item_group_short",
+] as const;
+const GROUP_ACTIVE_KEYS = ["itg_active", "active", "is_active", "isActive", "isactive", "status"] as const;
 const GROUP_DESCRIPTION_KEYS = ["itg_description", "description", "desc"] as const;
 const GROUP_PARENT_ID_KEYS = ["itg_parent_id", "parent_id", "parentId", "parent_group_id"] as const;
 const HEADER_QUICK_TABS: ErpHeaderItem[] = [
@@ -73,6 +142,9 @@ type ItemGroupTableRow = {
   groupId: string;
   groupCode: string;
   groupName: string;
+  groupShort: string;
+  groupAlias: string;
+  groupActive: string;
   position: string;
 };
 type ItemGroupFormState = {
@@ -89,15 +161,199 @@ type CreateItemGroupRequest = {
   itg_alias: string;
   itg_short: string;
   itg_description: string;
-  itg_parent_id: Record<string, unknown>;
+  itg_parent_id: string;
   itg_sort: number;
   itg_photo: Record<string, unknown>;
   itg_id?: string | number;
 };
+type ItemGroupColumnAccessor = keyof Pick<
+  ItemGroupTableRow,
+  "serialNo" | "groupId" | "groupCode" | "groupName" | "groupShort" | "groupAlias" | "groupActive" | "position"
+>;
+
+const DEFAULT_SERIAL_NO_COLUMN: ReusableTableColumn<ItemGroupTableRow> = {
+  key: "serialNo",
+  header: "S.No",
+  accessor: "serialNo",
+  align: "left",
+  width: "46px",
+  sortable: false,
+};
+
+const DEFAULT_ITEM_GROUP_COLUMNS: ReusableTableColumn<ItemGroupTableRow>[] = [
+  DEFAULT_SERIAL_NO_COLUMN,
+  {
+    key: "groupCode",
+    header: "Group Code",
+    accessor: "groupCode",
+    align: "left",
+    width: "260px",
+  },
+  {
+    key: "groupName",
+    header: "Group Name",
+    accessor: "groupName",
+    align: "left",
+    width: "360px",
+  },
+  {
+    key: "position",
+    header: "Position",
+    accessor: "position",
+    align: "left",
+    width: "80px",
+    sortAccessor: (row) => Number(row.position || 0),
+  },
+];
+
+const ITEM_GROUP_COLUMN_ACCESSOR_MAP: Record<string, ItemGroupColumnAccessor> = {
+  serialno: "serialNo",
+  serialnumber: "serialNo",
+  sno: "serialNo",
+  srno: "serialNo",
+  s_no: "serialNo",
+  serial_no: "serialNo",
+  groupid: "groupId",
+  group_id: "groupId",
+  groupcode: "groupCode",
+  group_code: "groupCode",
+  itgid: "groupId",
+  itg_id: "groupId",
+  code: "groupCode",
+  itgalias: "groupCode",
+  itg_alias: "groupCode",
+  itgshort: "groupCode",
+  itg_short: "groupCode",
+  groupshort: "groupShort",
+  group_short: "groupShort",
+  short: "groupShort",
+  shortname: "groupShort",
+  short_name: "groupShort",
+  itemgroupshort: "groupShort",
+  item_group_short: "groupShort",
+  itemgroupshortname: "groupShort",
+  item_group_short_name: "groupShort",
+  groupalias: "groupAlias",
+  group_alias: "groupAlias",
+  alias: "groupAlias",
+  itemgroupalias: "groupAlias",
+  item_group_alias: "groupAlias",
+  active: "groupActive",
+  isactive: "groupActive",
+  is_active: "groupActive",
+  status: "groupActive",
+  itemgroupactive: "groupActive",
+  item_group_active: "groupActive",
+  groupname: "groupName",
+  group_name: "groupName",
+  name: "groupName",
+  itgname: "groupName",
+  itg_name: "groupName",
+  itemgroupname: "groupName",
+  item_group_name: "groupName",
+  itemgroupid: "groupId",
+  item_group_id: "groupId",
+  position: "position",
+  sort: "position",
+  order: "position",
+  itgsort: "position",
+  itg_sort: "position",
+};
+
+function normalizeColumnToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9_]+/g, "");
+}
+
+function resolveItemGroupAccessor(
+  ...candidates: Array<string | undefined>
+): ItemGroupColumnAccessor | null {
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    const normalized = normalizeColumnToken(candidate);
+    const mapped = ITEM_GROUP_COLUMN_ACCESSOR_MAP[normalized];
+    if (mapped) {
+      return mapped;
+    }
+
+    const compact = normalized.replace(/_/g, "");
+    const compactMapped = ITEM_GROUP_COLUMN_ACCESSOR_MAP[compact];
+    if (compactMapped) {
+      return compactMapped;
+    }
+  }
+
+  return null;
+}
+
+function buildColumnsFromGridColumns(
+  gridColumns: GridColumnConfig[],
+): ReusableTableColumn<ItemGroupTableRow>[] {
+  const columns: ReusableTableColumn<ItemGroupTableRow>[] = [];
+  const seenColumnKeys = new Set<string>();
+
+  for (const gridColumn of gridColumns) {
+    if (!gridColumn.visible) {
+      continue;
+    }
+
+    const accessor = resolveItemGroupAccessor(
+      gridColumn.accessorKey,
+      gridColumn.key,
+      gridColumn.header,
+    );
+    if (!accessor) {
+      continue;
+    }
+
+    const keyBase = normalizeColumnToken(
+      gridColumn.key || gridColumn.accessorKey || gridColumn.header || accessor,
+    ) || accessor;
+    const uniqueKey = seenColumnKeys.has(keyBase) ? `${keyBase}-${columns.length + 1}` : keyBase;
+    seenColumnKeys.add(uniqueKey);
+
+    const tableColumn: ReusableTableColumn<ItemGroupTableRow> = {
+      key: uniqueKey,
+      header: gridColumn.header,
+      accessor,
+      align: gridColumn.align ?? "left",
+      width: gridColumn.width ?? (accessor === "serialNo" ? "46px" : undefined),
+      sortable: gridColumn.sortable ?? accessor !== "serialNo",
+    };
+
+    if (accessor === "position") {
+      tableColumn.sortAccessor = (row) => Number(row.position || 0);
+    }
+
+    columns.push(tableColumn);
+  }
+
+  if (columns.length === 0) {
+    return DEFAULT_ITEM_GROUP_COLUMNS;
+  }
+
+  const serialColumnIndex = columns.findIndex((column) => column.accessor === "serialNo");
+  if (serialColumnIndex < 0) {
+    columns.unshift({ ...DEFAULT_SERIAL_NO_COLUMN });
+    return columns;
+  }
+
+  if (serialColumnIndex > 0) {
+    const [serialColumn] = columns.splice(serialColumnIndex, 1);
+    columns.unshift({
+      ...serialColumn,
+      accessor: "serialNo",
+      sortable: false,
+    });
+  }
+
+  return columns;
+}
 // Utility functions
-function toReferenceObject(value: string): Record<string, unknown> {
+function toReferenceObject(value: string): string {
   const normalizedValue = value.trim();
-  return normalizedValue ? { id: normalizedValue } : {};
+  return normalizedValue;
 }
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -142,6 +398,8 @@ function toDisplayValue(value: unknown): string {
   if (typeof value === "object") {
     const nestedValue = value as Record<string, unknown>;
     const nested =
+      nestedValue.itg_id ??
+      nestedValue.parent_id ??
       nestedValue.id ??
       nestedValue._id ??
       nestedValue.code ??
@@ -158,6 +416,42 @@ function toDisplayValue(value: unknown): string {
   }
   return "";
 }
+function toNonNegativeInt(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const normalized = Math.floor(value);
+    return normalized >= 0 ? normalized : null;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value.trim(), 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+  return null;
+}
+function toPositiveInt(value: unknown): number | null {
+  const normalized = toNonNegativeInt(value);
+  if (normalized === null || normalized < 1) {
+    return null;
+  }
+  return normalized;
+}
+function findPaginationNumber(
+  candidates: Record<string, unknown>[],
+  keys: readonly string[],
+  allowZero: boolean,
+): number | null {
+  for (const candidate of candidates) {
+    for (const key of keys) {
+      const value = candidate[key];
+      const normalized = allowZero ? toNonNegativeInt(value) : toPositiveInt(value);
+      if (normalized !== null) {
+        return normalized;
+      }
+    }
+  }
+  return null;
+}
 function extractRows(payload: unknown): unknown[] {
   if (Array.isArray(payload)) {
     return payload;
@@ -172,9 +466,51 @@ function extractRows(payload: unknown): unknown[] {
     if (Array.isArray(value)) {
       return value;
     }
+    if (value && typeof value === "object") {
+      const nestedObject = value as Record<string, unknown>;
+      for (const nestedKey of ARRAY_KEYS) {
+        const nestedValue = nestedObject[nestedKey];
+        if (Array.isArray(nestedValue)) {
+          return nestedValue;
+        }
+      }
+      const nestedArray = Object.values(nestedObject).find((entry) => Array.isArray(entry));
+      if (Array.isArray(nestedArray)) {
+        return nestedArray;
+      }
+    }
   }
   const firstArray = Object.values(objectPayload).find((value) => Array.isArray(value));
   return Array.isArray(firstArray) ? firstArray : [];
+}
+function extractPaginationInfo(payload: unknown): {
+  totalEntries: number | null;
+  currentPage: number | null;
+  pageSize: number | null;
+} {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return {
+      totalEntries: null,
+      currentPage: null,
+      pageSize: null,
+    };
+  }
+  const root = payload as Record<string, unknown>;
+  const candidates: Record<string, unknown>[] = [root];
+  for (const key of PAGINATION_CONTAINER_KEYS) {
+    const value = root[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      candidates.push(value as Record<string, unknown>);
+    }
+  }
+  if (root.data && typeof root.data === "object" && !Array.isArray(root.data)) {
+    candidates.push(root.data as Record<string, unknown>);
+  }
+  return {
+    totalEntries: findPaginationNumber(candidates, TOTAL_ENTRIES_KEYS, true),
+    currentPage: findPaginationNumber(candidates, CURRENT_PAGE_KEYS, false),
+    pageSize: findPaginationNumber(candidates, PAGE_SIZE_KEYS, false),
+  };
 }
 function resolveItgId(row: ItemGroupTableRow): string | number {
   if (row.__source) {
@@ -215,45 +551,99 @@ function mapRowToFormState(row: ItemGroupTableRow): ItemGroupFormState {
     parentGroupId: toDisplayValue(getFirstDefinedValue(source, GROUP_PARENT_ID_KEYS)),
   };
 }
-function buildItemGroupRows(payload: unknown): ItemGroupTableRow[] {
+function buildItemGroupRows(payload: unknown, serialOffset = 0): ItemGroupTableRow[] {
   return extractRows(payload).map((item, index) => {
+    const serialNo = serialOffset + index + 1;
     if (item && typeof item === "object" && !Array.isArray(item)) {
       const row = item as Record<string, unknown>;
       const groupIdValue = getFirstDefinedValue(row, GROUP_ID_KEYS);
       const groupCodeValue = getFirstDefinedValue(row, GROUP_CODE_KEYS);
       const groupNameValue = getFirstDefinedValue(row, GROUP_NAME_KEYS);
+      const groupShortValue = getFirstDefinedValue(row, GROUP_SHORT_KEYS);
+      const groupAliasValue = getFirstDefinedValue(row, GROUP_ALIAS_KEYS);
+      const groupActiveValue = getFirstDefinedValue(row, GROUP_ACTIVE_KEYS);
       const positionValue = getFirstDefinedValue(row, GROUP_POSITION_KEYS);
-      const preferredKey = groupIdValue ?? row.id ?? row._id ?? row.groupId ?? row.code ?? index + 1;
+      const preferredKey = groupIdValue ?? row.id ?? row._id ?? row.groupId ?? row.code ?? serialNo;
       const rowId =
         typeof preferredKey === "string" || typeof preferredKey === "number"
           ? preferredKey
-          : index + 1;
+          : serialNo;
       return {
         __rowId: rowId,
         __recordId: rowId,
         __source: row,
-        serialNo: index + 1,
-        groupId: toDisplayValue(groupIdValue) || String(index + 1),
+        serialNo,
+        groupId: toDisplayValue(groupIdValue) || String(serialNo),
         groupCode: toDisplayValue(groupCodeValue),
         groupName: toDisplayValue(groupNameValue),
+        groupShort: toDisplayValue(groupShortValue),
+        groupAlias: toDisplayValue(groupAliasValue),
+        groupActive: toDisplayValue(groupActiveValue),
         position: toDisplayValue(positionValue),
       };
     }
     return {
-      __rowId: index + 1,
-      __recordId: index + 1,
+      __rowId: serialNo,
+      __recordId: serialNo,
       __source: null,
-      serialNo: index + 1,
-      groupId: String(index + 1),
+      serialNo,
+      groupId: String(serialNo),
       groupCode: "",
       groupName: toDisplayValue(item),
+      groupShort: "",
+      groupAlias: "",
+      groupActive: "",
       position: "",
     };
   });
 }
+
+function extractItemGroupDetailSource(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+
+  const objectPayload = payload as Record<string, unknown>;
+  const nestedData = objectPayload.data;
+  if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
+    return nestedData as Record<string, unknown>;
+  }
+
+  return objectPayload;
+}
+
+function mergeRowWithItemGroupDetail(
+  row: ItemGroupTableRow,
+  source: Record<string, unknown>,
+): ItemGroupTableRow {
+  const groupIdValue = getFirstDefinedValue(source, GROUP_ID_KEYS);
+  const recordId =
+    typeof groupIdValue === "string" || typeof groupIdValue === "number"
+      ? groupIdValue
+      : row.__recordId;
+
+  return {
+    ...row,
+    __recordId: recordId,
+    __source: source,
+    groupId: toDisplayValue(groupIdValue) || row.groupId,
+    groupCode: toDisplayValue(getFirstDefinedValue(source, GROUP_CODE_KEYS)) || row.groupCode,
+    groupName: toDisplayValue(getFirstDefinedValue(source, GROUP_NAME_KEYS)) || row.groupName,
+    groupShort: toDisplayValue(getFirstDefinedValue(source, GROUP_SHORT_KEYS)) || row.groupShort,
+    groupAlias: toDisplayValue(getFirstDefinedValue(source, GROUP_ALIAS_KEYS)) || row.groupAlias,
+    groupActive: toDisplayValue(getFirstDefinedValue(source, GROUP_ACTIVE_KEYS)) || row.groupActive,
+    position: toDisplayValue(getFirstDefinedValue(source, GROUP_POSITION_KEYS)) || row.position,
+  };
+}
 // Custom hooks
 function useItemGroupData() {
   const { data, error, loading, getAll } = useApi<unknown>(API_ENDPOINTS.LIST);
+  const {
+    run: getItemGroupById,
+    loading: detailsLoading,
+    error: detailsError,
+    reset: resetDetailsState,
+  } = useApi<unknown>(API_ENDPOINTS.GET_BY_ID);
   const {
     run: createItemGroup,
     loading: createLoading,
@@ -263,39 +653,59 @@ function useItemGroupData() {
   const { run: deleteItemGroup, loading: deleteLoading, error: deleteError } =
     useApi<unknown>(API_ENDPOINTS.DELETE, { method: "DELETE" });
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [totalEntries, setTotalEntries] = useState(0);
   const loadItemGroups = useCallback(
-    async (term: string) => {
+    async (term: string, page: number, limit: number) => {
       const normalizedTerm = term.trim();
+      const query: Record<string, string> = {
+        page: String(Math.max(1, page)),
+        limit: String(Math.max(1, limit)),
+      };
       if (normalizedTerm) {
-        await getAll({ search: normalizedTerm });
-        return;
+        query.search = normalizedTerm;
       }
-      await getAll();
+      const payload = await getAll(query);
+      const paginationInfo = extractPaginationInfo(payload);
+      const fallbackTotal = extractRows(payload).length;
+      const resolvedTotal = paginationInfo.totalEntries ?? fallbackTotal;
+      setTotalEntries(Math.max(0, resolvedTotal));
     },
     [getAll],
   );
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      void loadItemGroups(searchTerm);
+      void loadItemGroups(searchTerm, currentPage, pageSize);
     }, FILE_CONSTRAINTS.DEBOUNCE_MS);
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [loadItemGroups, searchTerm]);
-  const rows = useMemo(() => buildItemGroupRows(data), [data]);
+  }, [currentPage, loadItemGroups, pageSize, searchTerm]);
+  const serialOffset = Math.max(0, (currentPage - 1) * pageSize);
+  const rows = useMemo(() => buildItemGroupRows(data, serialOffset), [data, serialOffset]);
   return {
     data,
     error,
     loading,
+    detailsLoading,
+    detailsError,
     createLoading,
     createError,
     deleteLoading,
     deleteError,
     searchTerm,
     setSearchTerm,
+    currentPage,
+    setCurrentPage,
+    pageSize,
+    setPageSize,
+    totalEntries,
     loadItemGroups,
+    getItemGroupById,
     createItemGroup,
     deleteItemGroup,
+    resetDetailsState,
     resetCreateState,
     rows,
   };
@@ -327,20 +737,49 @@ function useItemGroupSelection(rows: ItemGroupTableRow[]) {
 // Main component
 export default function ItemGroupMasterPage() {
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);  
+  const dispatch = useAppDispatch();
+
+  const gridColumns = useAppSelector((state) => selectGridColumns(state, ITEM_GROUP_GRID_ID));
+  const gridColumnsLoading = useAppSelector((state) =>
+    selectGridColumnsLoading(state, ITEM_GROUP_GRID_ID),
+  );
+  const gridColumnsRequested = useAppSelector((state) =>
+    selectGridColumnsRequested(state, ITEM_GROUP_GRID_ID),
+  );
+  const gridColumnsError = useAppSelector((state) =>
+    selectGridColumnsError(state, ITEM_GROUP_GRID_ID),
+  );
+
+  useEffect(() => {
+    if (gridColumnsRequested || gridColumnsLoading) {
+      return;
+    }
+    void dispatch(fetchGridColumns({ gridId: ITEM_GROUP_GRID_ID }));
+  }, [dispatch, gridColumnsLoading, gridColumnsRequested]);
+
   // Custom hooks
   const {
     data,
     error,
     loading,
+    detailsLoading,
+    detailsError,
     createLoading,
     createError,
     deleteLoading,
     deleteError,
     searchTerm,
     setSearchTerm,
+    currentPage,
+    setCurrentPage,
+    pageSize,
+    setPageSize,
+    totalEntries,
     loadItemGroups,
+    getItemGroupById,
     createItemGroup,
     deleteItemGroup,
+    resetDetailsState,
     resetCreateState,
     rows,
   } = useItemGroupData();
@@ -351,6 +790,15 @@ export default function ItemGroupMasterPage() {
     setEditingItemId,
     selectedRow,
   } = useItemGroupSelection(rows);
+  const [pendingDeleteRow, setPendingDeleteRow] = useState<ItemGroupTableRow | null>(null);
+
+  const pendingDeleteLabel = useMemo(() => {
+    if (!pendingDeleteRow) {
+      return "";
+    }
+    return pendingDeleteRow.groupName || pendingDeleteRow.groupCode || pendingDeleteRow.groupId;
+  }, [pendingDeleteRow]);
+
   const parentGroupOptions = useMemo(() => {
     const editingId = editingItemId === null ? null : String(editingItemId);
     const currentParentId = selectedRow ? mapRowToFormState(selectedRow).parentGroupId.trim() : "";
@@ -375,30 +823,58 @@ export default function ItemGroupMasterPage() {
   // Event handlers
   const openCreateModal = useCallback(() => {
     resetCreateState();
+    resetDetailsState();
     setEditingItemId(null);
     modalControllerRef.current?.openModal("item-group-create", { values: INITIAL_FORM_STATE });
-  }, [resetCreateState]);
+  }, [resetCreateState, resetDetailsState]);
   const openUpdateModalForRow = useCallback(
     (row: ItemGroupTableRow) => {
       resetCreateState();
+      resetDetailsState();
       setSelectedRowId(row.__rowId);
-      setEditingItemId(resolveItgId(row));
-      modalControllerRef.current?.openModal("item-group-update", {
-        values: mapRowToFormState(row),
-      });
+      const updateItgId = resolveItgId(row);
+      setEditingItemId(updateItgId);
+      void (async () => {
+        try {
+          const payload = await getItemGroupById({
+            url: `${API_ENDPOINTS.GET_BY_ID}/${encodeURIComponent(String(updateItgId))}`,
+          });
+          const detailSource = extractItemGroupDetailSource(payload);
+          const detailRow = detailSource ? mergeRowWithItemGroupDetail(row, detailSource) : row;
+          setEditingItemId(resolveItgId(detailRow));
+          modalControllerRef.current?.openModal("item-group-update", {
+            values: mapRowToFormState(detailRow),
+          });
+        } catch {
+          // Error UI is driven by detailsError from useApi.
+        }
+      })();
     },
-    [resetCreateState],
+    [getItemGroupById, resetCreateState, resetDetailsState],
   );
   const openViewModalForRow = useCallback(
     (row: ItemGroupTableRow) => {
       resetCreateState();
+      resetDetailsState();
       setSelectedRowId(row.__rowId);
       setEditingItemId(null);
-      modalControllerRef.current?.openModal("item-group-view", {
-        values: mapRowToFormState(row),
-      });
+      const viewItgId = resolveItgId(row);
+      void (async () => {
+        try {
+          const payload = await getItemGroupById({
+            url: `${API_ENDPOINTS.GET_BY_ID}/${encodeURIComponent(String(viewItgId))}`,
+          });
+          const detailSource = extractItemGroupDetailSource(payload);
+          const detailRow = detailSource ? mergeRowWithItemGroupDetail(row, detailSource) : row;
+          modalControllerRef.current?.openModal("item-group-view", {
+            values: mapRowToFormState(detailRow),
+          });
+        } catch {
+          // Error UI is driven by detailsError from useApi.
+        }
+      })();
     },
-    [resetCreateState],
+    [getItemGroupById, resetCreateState, resetDetailsState],
   );
   const handleModalSubmit = useCallback(
     async ({ variantKey, values, files }: ERPDynamicModalSubmitPayload) => {
@@ -442,55 +918,70 @@ export default function ItemGroupMasterPage() {
       };
       await createItemGroup({ body: createPayload });
       setEditingItemId(null);
-      await loadItemGroups(searchTerm);
+      await loadItemGroups(searchTerm, currentPage, pageSize);
     },
-    [createItemGroup, editingItemId, loadItemGroups, searchTerm],
+    [createItemGroup, currentPage, editingItemId, loadItemGroups, pageSize, searchTerm],
   );
   const handleModalCancel = useCallback(() => {
     if (createLoading) {
       return;
     }
     resetCreateState();
+    resetDetailsState();
     setEditingItemId(null);
-  }, [createLoading, resetCreateState]);
+  }, [createLoading, resetCreateState, resetDetailsState]);
   const handleDeleteRow = useCallback(
     (row: ItemGroupTableRow) => {
-      if (deleteLoading || createLoading) {
+      if (deleteLoading || createLoading || detailsLoading) {
         return;
       }
-      const recordLabel = row.groupName || row.groupCode || row.groupId;
-      const allowDelete = window.confirm(`Delete selected item group "${recordLabel}"?`);
-      if (!allowDelete) {
-        return;
-      }
-      void (async () => {
-        try {
-          const deleteItgId = resolveItgId(row);
-          await deleteItemGroup({
-            url: `${API_ENDPOINTS.DELETE}/${encodeURIComponent(String(deleteItgId))}`,
-          });
-
-          setSelectedRowId((current) => (current === row.__rowId ? null : current));
-          if (editingItemId === deleteItgId) {
-            setEditingItemId(null);
-            modalControllerRef.current?.closeModal();
-          }
-
-          await loadItemGroups(searchTerm);
-        } catch {
-          // Error UI is driven by deleteError from useApi.
-        }
-      })();
+      setPendingDeleteRow(row);
     },
-    [
-      createLoading,
-      deleteItemGroup,
-      deleteLoading,
-      editingItemId,
-      loadItemGroups,
-      searchTerm,
-    ],
+    [createLoading, deleteLoading, detailsLoading],
   );
+
+  const handleDeleteCancel = useCallback(() => {
+    if (deleteLoading) {
+      return;
+    }
+    setPendingDeleteRow(null);
+  }, [deleteLoading]);
+
+  const handleDeleteConfirm = useCallback(() => {
+    if (!pendingDeleteRow || deleteLoading || createLoading || detailsLoading) {
+      return;
+    }
+    void (async () => {
+      try {
+        const row = pendingDeleteRow;
+        const deleteItgId = resolveItgId(row);
+        await deleteItemGroup({
+          url: `${API_ENDPOINTS.DELETE}/${encodeURIComponent(String(deleteItgId))}`,
+        });
+
+        setSelectedRowId((current) => (current === row.__rowId ? null : current));
+        if (editingItemId === deleteItgId) {
+          setEditingItemId(null);
+          modalControllerRef.current?.closeModal();
+        }
+        setPendingDeleteRow(null);
+        await loadItemGroups(searchTerm, currentPage, pageSize);
+      } catch {
+        // Error UI is driven by deleteError from useApi.
+      }
+    })();
+  }, [
+    createLoading,
+    deleteItemGroup,
+    deleteLoading,
+    detailsLoading,
+    editingItemId,
+    loadItemGroups,
+    currentPage,
+    pageSize,
+    pendingDeleteRow,
+    searchTerm,
+  ]);
   const itemGroupFields = useMemo<ERPDynamicModalField[]>(
     () => [
       {
@@ -607,46 +1098,8 @@ export default function ItemGroupMasterPage() {
     [createLoading, itemGroupFields, itemGroupViewFields],
   );
   const columns = useMemo<ReusableTableColumn<ItemGroupTableRow>[]>(
-    () => [
-      {
-        key: "serialNo",
-        header: "S.No",
-        accessor: "serialNo",
-        align: "left",
-        width: "46px",
-        sortable: false,
-      },
-      // {
-      //   key: "groupId",
-      //   header: "Group ID",
-      //   accessor: "groupId",
-      //   align: "left",
-      //   width: "160px",
-      // },
-      {
-        key: "groupCode",
-        header: "Group Code",
-        accessor: "groupCode",
-        align: "left",
-        width: "260px",
-      },
-      {
-        key: "groupName",
-        header: "Group Name",
-        accessor: "groupName",
-        align: "left",
-        width: "360px",
-      },
-      {
-        key: "position",
-        header: "Position",
-        accessor: "position",
-        align: "left",
-        width: "80px",
-        sortAccessor: (row) => Number(row.position || 0),
-      },
-    ],
-    [],
+    () => buildColumnsFromGridColumns(gridColumns),
+    [gridColumns],
   );
   // Table event handlers
   const handleUpdate = useCallback(() => {
@@ -700,7 +1153,7 @@ export default function ItemGroupMasterPage() {
                 <button
                   type="button"
                   className={styles.retryButton}
-                  onClick={() => void loadItemGroups(searchTerm)}
+                  onClick={() => void loadItemGroups(searchTerm, currentPage, pageSize)}
                 >
                   Retry
                 </button>
@@ -711,7 +1164,29 @@ export default function ItemGroupMasterPage() {
                 <p className={styles.errorText}>Unable to delete selected group: {deleteError}</p>
               </div>
             ) : null}
-            <section>
+            {detailsError ? (
+              <div className={styles.errorBox}>
+                <p className={styles.errorText}>
+                  Unable to load selected group details: {detailsError}
+                </p>
+              </div>
+            ) : null}
+            {gridColumnsError ? (
+              <div className={styles.errorBox}>
+                <p className={styles.errorText}>
+                  Unable to load table headers: {gridColumnsError}. Showing default headers.
+                </p>
+                <button
+                  type="button"
+                  className={styles.retryButton}
+                  onClick={() => void dispatch(fetchGridColumns({ gridId: ITEM_GROUP_GRID_ID }))}
+                  disabled={gridColumnsLoading}
+                >
+                  {gridColumnsLoading ? "Loading..." : "Retry Headers"}
+                </button>
+              </div>
+            ) : null}
+            <section className={styles.tableSection}>
               <ReusableTable
                 columns={columns}
                 rows={rows}
@@ -727,9 +1202,9 @@ export default function ItemGroupMasterPage() {
                 onView={handleRowView}
                 onUpdate={handleRowUpdate}
                 onDelete={handleRowDelete}
-                isViewDisabled={() => createLoading}
-                isUpdateDisabled={() => createLoading}
-                isDeleteDisabled={() => deleteLoading || createLoading}
+                isViewDisabled={() => createLoading || detailsLoading}
+                isUpdateDisabled={() => createLoading || detailsLoading}
+                isDeleteDisabled={() => deleteLoading || createLoading || detailsLoading}
                 actionsAsIcons
                 updateLabel="Update"
                 deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
@@ -739,15 +1214,19 @@ export default function ItemGroupMasterPage() {
                 searchPlaceholder="Search..."
                 sortable
                 paginated
-                defaultPageSize={10}
-                pageSizeOptions={[5, 10, 25, 50]}
-                tableMaxHeight="500px"
+                manualPagination
+                totalEntries={totalEntries}
+                currentPage={currentPage}
+                onCurrentPageChange={setCurrentPage}
+                pageSize={pageSize}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={[10, 20, 25, 50]}
+                fullViewHeight={false}
                 stickyHeader
                 emptyText={loading ? "Loading group data..." : "No group data found"}
               />
             </section>
-          </section>
-          
+          </section>          
         </div>
       </div>
       <ERPDynamicModalForm
@@ -762,6 +1241,17 @@ export default function ItemGroupMasterPage() {
         }}
         onSubmit={handleModalSubmit}
         onCancel={handleModalCancel}
+      />
+      <DeleteConfirmModal
+        isOpen={pendingDeleteRow !== null}
+        itemName={pendingDeleteLabel}
+        title="Delete Item Group?"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        loading={deleteLoading}
+        loadingLabel="Deleting..."
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
       />
     </main>
   );

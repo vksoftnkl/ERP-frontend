@@ -19,19 +19,3 @@
   --layout-max-wide: 1320px;
   --layout-max-narrow: 860px;
 }
-
-html[data-theme="dark"] {
-  --ds-bg: #061320;
-  --ds-surface: #0c2234;
-  --ds-surface-muted: #122b40;
-  --ds-border: #275271;
-  --ds-text: #d7e5f0;
-  --ds-text-muted: #9ab1c3;
-  --ds-primary: #5bb7ff;
-  --ds-primary-strong: #2093e9;
-  --ds-success: #4dd0aa;
-  --ds-warning: #f0b958;
-  --ds-danger: #ff8d8d;
-  --ds-shadow-sm: 0 10px 24px rgba(0, 0, 0, 0.28);
-  --ds-shadow-md: 0 16px 34px rgba(0, 0, 0, 0.42);
-}

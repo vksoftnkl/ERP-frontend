@@ -1,34 +1,12 @@
 import type { Metadata } from "next";
-import ThemeToggle from "@/components/ui/theme-toggle";
 import "./globals.css";
 import "@/styles/library/index.scss";
+import Providers from "@/store/provider";
 
 export const metadata: Metadata = {
   title: "ERP Client | Operations Platform",
   description: "Landing page and login experience for ERP Client.",
 };
-
-const themeInitScript = `
-(() => {
-  try {
-    const storageKey = "erp-client-theme";
-    const stored = localStorage.getItem(storageKey);
-    const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const theme =
-      stored === "light" || stored === "dark"
-        ? stored
-        : systemDark
-          ? "dark"
-          : "light";
-
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
-  } catch {
-    document.documentElement.dataset.theme = "light";
-    document.documentElement.style.colorScheme = "light";
-  }
-})();
-`;
 
 export default function RootLayout({
   children,
@@ -36,13 +14,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-      </head>
+    <html lang="en">
       <body>
-        <ThemeToggle />
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

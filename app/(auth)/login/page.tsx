@@ -64,13 +64,10 @@ export default function LoginPage() {
     "w-full rounded-xl border px-3.5 py-2.5 text-[0.95rem] outline-none transition " +
     "placeholder:text-slate-500/80 " +
     "bg-white text-slate-900 border-slate-300/90 " +
-    "focus:border-sky-500 focus:ring-4 focus:ring-sky-500/20 " +
-    "dark:bg-[#112536] dark:text-slate-100 dark:border-[#35526a] " +
-    "dark:focus:border-sky-300 dark:focus:ring-sky-300/25";
+    "focus:border-sky-500 focus:ring-4 focus:ring-sky-500/20";
 
   const inputError =
-    "border-rose-500/80 focus:border-rose-500 focus:ring-rose-500/20 " +
-    "dark:border-rose-400/70 dark:focus:border-rose-300 dark:focus:ring-rose-300/20";
+    "border-rose-500/80 focus:border-rose-500 focus:ring-rose-500/20";
 
   return (
     <main
@@ -78,11 +75,8 @@ export default function LoginPage() {
         "relative min-h-screen overflow-hidden",
         "grid place-items-center",
         "px-5 py-6 sm:px-6",
-        // background (light)
         "bg-[linear-gradient(145deg,#eef4fb_0%,#f8fafb_42%,#f4f8f4_100%)]",
         "bg-[radial-gradient(circle_at_14%_20%,#c9ecff_0%,transparent_48%),radial-gradient(circle_at_86%_82%,#d2f5d7_0%,transparent_50%),linear-gradient(145deg,#eef4fb_0%,#f8fafb_42%,#f4f8f4_100%)]",
-        // background (dark)
-        "dark:bg-[radial-gradient(circle_at_14%_20%,rgba(55,126,169,0.35)_0%,transparent_48%),radial-gradient(circle_at_86%_82%,rgba(66,126,94,0.2)_0%,transparent_50%),linear-gradient(145deg,#071420_0%,#0b1b2a_42%,#08131f_100%)]",
         "font-sans",
       ].join(" ")}
     >
@@ -93,7 +87,6 @@ export default function LoginPage() {
           "pointer-events-none absolute -top-28 -right-20",
           "h-[22rem] w-[22rem] rounded-full blur-[64px] opacity-[0.22]",
           "bg-[radial-gradient(circle_at_30%_30%,#6fc8ff_0%,#1a91d2_76%)]",
-          "dark:bg-[radial-gradient(circle_at_30%_30%,#2d9fd6_0%,#19698e_76%)]",
           "animate-[drift_12s_ease-in-out_infinite]",
         ].join(" ")}
       />
@@ -107,23 +100,22 @@ export default function LoginPage() {
           "bg-white/90 border-slate-900/10 shadow-[0_1.2rem_3rem_rgba(31,62,87,0.16)]",
           "backdrop-blur-[8px]",
           "animate-[rise_0.5s_ease_both]",
-          "dark:bg-[#081a28]/80 dark:border-sky-200/30 dark:shadow-[0_1.2rem_3rem_rgba(0,0,0,0.46)]",
           "max-[480px]:rounded-[1rem] max-[480px]:p-[1.1rem]",
         ].join(" ")}
       >
         <div className="mb-5">
-          <p className="mb-1 text-[0.72rem] font-bold tracking-[0.1em] text-sky-700 dark:text-sky-300 uppercase">
+          <p className="mb-1 text-[0.72rem] font-bold tracking-[0.1em] text-sky-700 uppercase">
             ERP Client
           </p>
 
           <h1
             id="login-heading"
-            className="m-0 text-[1.45rem] sm:text-[1.8rem] leading-tight font-semibold text-slate-900 dark:text-slate-100"
+            className="m-0 text-[1.45rem] sm:text-[1.8rem] leading-tight font-semibold text-slate-900"
           >
             Login to your workspace
           </h1>
 
-          <p className="mt-2 text-[0.94rem] text-slate-600 dark:text-slate-300">
+          <p className="mt-2 text-[0.94rem] text-slate-600">
             Continue with your assigned company credentials.
           </p>
         </div>
@@ -133,7 +125,7 @@ export default function LoginPage() {
           <div>
             <label
               htmlFor="username"
-              className="text-[0.84rem] font-semibold text-slate-700 dark:text-slate-200"
+              className="text-[0.84rem] font-semibold text-slate-700"
             >
               User Name
             </label>
@@ -149,7 +141,7 @@ export default function LoginPage() {
               className={`${inputBase} ${errors.username ? inputError : ""}`}
             />
             {errors.username && (
-              <p className="mt-1 text-sm text-rose-600 dark:text-rose-400">
+              <p className="mt-1 text-sm text-rose-600">
                 {errors.username}
               </p>
             )}
@@ -159,7 +151,7 @@ export default function LoginPage() {
           <div>
             <label
               htmlFor="password"
-              className="text-[0.84rem] font-semibold text-slate-700 dark:text-slate-200"
+              className="text-[0.84rem] font-semibold text-slate-700"
             >
               Password
             </label>
@@ -175,7 +167,7 @@ export default function LoginPage() {
               className={`${inputBase} ${errors.password ? inputError : ""}`}
             />
             {errors.password && (
-              <p className="mt-1 text-sm text-rose-600 dark:text-rose-400">
+              <p className="mt-1 text-sm text-rose-600">
                 {errors.password}
               </p>
             )}
@@ -194,14 +186,12 @@ export default function LoginPage() {
               "hover:-translate-y-[1px] hover:shadow-[0_0.6rem_1.4rem_rgba(13,126,191,0.28)]",
               "active:translate-y-0",
               "disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0",
-              "dark:bg-[linear-gradient(120deg,#1b8dcc,#146f9f)]",
-              "dark:hover:shadow-[0_0.6rem_1.4rem_rgba(0,0,0,0.4)]",
             ].join(" ")}
           >
             {loading ? "LOGGING IN..." : "LOGIN"}
           </button>
           {error && (
-            <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
+            <p className="text-sm text-rose-600">{error}</p>
           )}
 
         

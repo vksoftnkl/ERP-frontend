@@ -60,7 +60,7 @@ export default function UiLibraryPage() {
             <div>
               <h1 className="text-3xl font-semibold tracking-tight">Tailwind + SCSS Custom UI Library</h1>
               <p className="mt-2 text-sm text-[var(--ds-text-muted)]">
-                Layout primitives and reusable components with a token-driven theme layer.
+                Layout primitives and reusable components with a token-driven design layer.
               </p>
             </div>
             <Cluster gap="sm">
@@ -131,8 +131,8 @@ export default function UiLibraryPage() {
                       <Badge>Sidebar</Badge>
                       <Badge>Split</Badge>
                     </Cluster>
-                    <Alert kind="success" title="Theme Aware">
-                      Classes adapt automatically to your existing light/dark toggle (`html[data-theme]`).
+                    <Alert kind="success" title="Token Driven">
+                      Components stay consistent across pages using shared design tokens.
                     </Alert>
                   </Stack>
                 </CardBody>

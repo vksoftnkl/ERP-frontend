@@ -37,6 +37,7 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   rows: T[];
   rowKey: RowKeyResolver<T>;
   title?: ReactNode;
+  fullViewHeight?: boolean;
   minWidth?: string;
   activeRowIndex?: number;
   activeRowKey?: Key | null;
@@ -73,6 +74,8 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   defaultSortState?: ReusableTableSortState;
   onSortChange?: (sortState: ReusableTableSortState) => void;
   paginated?: boolean;
+  manualPagination?: boolean;
+  totalEntries?: number;
   currentPage?: number;
   defaultCurrentPage?: number;
   onCurrentPageChange?: (page: number) => void;
@@ -253,6 +256,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   rows,
   rowKey,
   title,
+  fullViewHeight = true,
   minWidth = "min(980px, 100%)",
   activeRowIndex,
   activeRowKey,
@@ -289,6 +293,8 @@ export function ReusableTable<T extends Record<string, unknown>>({
   defaultSortState = { key: null, direction: "asc" },
   onSortChange,
   paginated = false,
+  manualPagination = false,
+  totalEntries,
   currentPage,
   defaultCurrentPage = 1,
   onCurrentPageChange,
@@ -381,8 +387,11 @@ export function ReusableTable<T extends Record<string, unknown>>({
     });
     return normalized.map((entry) => entry.row);
   }, [effectiveSortState.direction, effectiveSortState.key, filteredRows, sortable, sortableColumns]);
-  const totalEntries = sortedRows.length;
-  const totalPages = paginated ? Math.max(1, Math.ceil(totalEntries / effectivePageSize)) : 1;
+  const resolvedTotalEntries =
+    manualPagination && typeof totalEntries === "number" && Number.isFinite(totalEntries)
+      ? Math.max(0, Math.floor(totalEntries))
+      : sortedRows.length;
+  const totalPages = paginated ? Math.max(1, Math.ceil(resolvedTotalEntries / effectivePageSize)) : 1;
   const requestedCurrentPage = Math.max(
     1,
     isCurrentPageControlled ? (currentPage ?? defaultCurrentPage) : internalCurrentPage,
@@ -390,10 +399,14 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const effectiveCurrentPage = Math.min(requestedCurrentPage, totalPages);
   const pageStartIndex = paginated ? (effectiveCurrentPage - 1) * effectivePageSize : 0;
   const paginatedRows = paginated
-    ? sortedRows.slice(pageStartIndex, pageStartIndex + effectivePageSize)
+    ? manualPagination
+      ? sortedRows
+      : sortedRows.slice(pageStartIndex, pageStartIndex + effectivePageSize)
     : sortedRows;
-  const pageStart = totalEntries === 0 ? 0 : pageStartIndex + 1;
-  const pageEnd = paginated ? Math.min(pageStartIndex + effectivePageSize, totalEntries) : totalEntries;
+  const pageStart = resolvedTotalEntries === 0 ? 0 : Math.min(pageStartIndex + 1, resolvedTotalEntries);
+  const pageEnd = paginated
+    ? Math.min(pageStartIndex + paginatedRows.length, resolvedTotalEntries)
+    : resolvedTotalEntries;
   const pageList = useMemo(
     () => (paginated ? buildPageList(totalPages, effectiveCurrentPage) : []),
     [effectiveCurrentPage, paginated, totalPages],
@@ -403,6 +416,10 @@ export function ReusableTable<T extends Record<string, unknown>>({
     return Array.from(set).sort((left, right) => left - right);
   }, [effectivePageSize, pageSizeOptions]);
   const showToolbar = Boolean(title || searchable || onCreate);
+  const renderedRowCount = Math.max(1, paginatedRows.length);
+  const compactViewportRowThreshold = paginated ? effectivePageSize : 8;
+  const shouldUseCompactViewport =
+    fullViewHeight && renderedRowCount < compactViewportRowThreshold;
   useEffect(() => {
     if (!paginated || effectiveCurrentPage === requestedCurrentPage) {
       return;
@@ -484,7 +501,15 @@ export function ReusableTable<T extends Record<string, unknown>>({
     handler?.(row, rowIndex);
   };
   return (
-    <div className={cx(styles.tableShell, wrapperClassName)}>
+    <div
+      className={cx(styles.tableShell, wrapperClassName)}
+      style={
+        {
+          "--erp-table-shell-height": fullViewHeight ? "100vh" : "auto",
+          "--erp-table-shell-min-height": fullViewHeight ? "100vh" : "0px",
+        } as CSSProperties
+      }
+    >
       {showToolbar ? (
         <div className={styles.toolbar}>
           {title ? <h3 className={styles.toolbarTitle}>{title}</h3> : null}
@@ -522,7 +547,8 @@ export function ReusableTable<T extends Record<string, unknown>>({
         className={styles.tableViewport}
         style={
           {
-            "--erp-table-max-height": tableMaxHeight ?? "none",
+            "--erp-table-max-height": fullViewHeight ? "none" : tableMaxHeight ?? "none",
+            "--erp-table-viewport-flex": shouldUseCompactViewport ? "0 1 auto" : "1 1 auto",
           } as CSSProperties
         }
       >
@@ -731,7 +757,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
         <div className={styles.paginationBar}>
           <div className={styles.paginationInfo}>
             <span>
-              {paginationLabel} {pageStart} to {pageEnd} of {totalEntries} entries
+              {paginationLabel} {pageStart} to {pageEnd} of {resolvedTotalEntries} entries
             </span>
             {showPageSizeSelector ? (
               <label className={styles.pageSizeControl}>
