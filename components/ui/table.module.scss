@@ -134,6 +134,11 @@
     letter-spacing: 0.07em;
     font-size: 0.92rem;
 
+    .headerText {
+      font-size: clamp(0.78rem, 0.2vw + 0.72rem, 0.92rem);
+      line-height: 1.2;
+    }
+
     &.stickyHeaderCell {
       position: sticky;
       top: 0;
@@ -420,10 +425,15 @@
       padding: 1rem 1.1rem 0.9rem;
     }
 
-    .headerCell,
     .cell {
       padding: 0.76rem 1rem;
       font-size: 0.95rem;
+    }
+
+    .headerCell {
+      .headerText {
+        font-size: clamp(0.74rem, 0.16vw + 0.7rem, 0.86rem);
+      }
     }
 
     .paginationBar {
@@ -447,8 +457,11 @@
     }
 
     .headerCell {
-      font-size: 0.82rem;
       letter-spacing: 0.05em;
+
+      .headerText {
+        font-size: clamp(0.7rem, 0.18vw + 0.64rem, 0.8rem);
+      }
     }
 
     .actionsGroup {

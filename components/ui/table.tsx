@@ -24,7 +24,9 @@ export type ReusableTableColumn<T> = {
   align?: "left" | "center" | "right";
   mobileLabel?: string;
   headerClassName?: string;
+  headerStyle?: CSSProperties;
   cellClassName?: string | ((row: T, rowIndex: number) => string | undefined);
+  cellStyle?: CSSProperties | ((row: T, rowIndex: number) => CSSProperties | undefined);
   sortable?: boolean;
   sortAccessor?: (row: T, rowIndex: number) => unknown;
   searchAccessor?: (row: T, rowIndex: number) => unknown;
@@ -102,11 +104,9 @@ function formatColumnLabel(columnKey: string): string {
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/\s+/g, " ")
     .trim();
-
   if (!normalized) {
     return "Value";
   }
-
   return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 function getCellLabel(header: ReactNode, columnKey: string, mobileLabel?: string): string {
@@ -250,6 +250,12 @@ function isColumnSortable<T extends Record<string, unknown>>(
     return false;
   }
   return column.sortable ?? true;
+}
+function renderColumnHeaderContent(header: ReactNode): ReactNode {
+  if (typeof header === "string" || typeof header === "number") {
+    return <span className={styles.headerText}>{header}</span>;
+  }
+  return header;
 }
 export function ReusableTable<T extends Record<string, unknown>>({
   columns,
@@ -567,10 +573,11 @@ export function ReusableTable<T extends Record<string, unknown>>({
                 const canSort = isColumnSortable(column, sortable);
                 const sortDirection =
                   effectiveSortState.key === column.key ? effectiveSortState.direction : null;
-
+                const headerContent = renderColumnHeaderContent(column.header);
                 return (
                   <th
                     key={column.key}
+                    style={column.headerStyle}
                     className={cx(
                       styles.headerCell,
                       getColumnAlignClass(column.align),
@@ -588,13 +595,13 @@ export function ReusableTable<T extends Record<string, unknown>>({
                         )}
                         onClick={() => toggleSort(column)}
                       >
-                        <span>{column.header}</span>
+                        {headerContent}
                         <span className={styles.sortIndicator}>
                           {sortDirection === "asc" ? "▲" : sortDirection === "desc" ? "▼" : "↕"}
                         </span>
                       </button>
                     ) : (
-                      column.header
+                      headerContent
                     )}
                   </th>
                 );
@@ -648,11 +655,16 @@ export function ReusableTable<T extends Record<string, unknown>>({
                       const updateDisabled =
                         !resolvedOnUpdate || resolvedIsUpdateDisabled?.(row, rowIndex) === true;
                       const deleteDisabled = !onDelete || isDeleteDisabled?.(row, rowIndex) === true;
+                      const resolvedCellStyle =
+                        typeof column.cellStyle === "function"
+                          ? column.cellStyle(row, rowIndex)
+                          : column.cellStyle;
 
                       return (
                         <td
                           key={column.key}
                           data-label={getCellLabel(column.header, column.key, column.mobileLabel)}
+                          style={resolvedCellStyle}
                           className={cx(
                             styles.cell,
                             getColumnAlignClass(column.align),

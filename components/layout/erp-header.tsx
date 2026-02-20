@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import styles from "./erp-header.module.css";
 import {
   ARIA_LABELS,
@@ -17,41 +18,32 @@ import type {
   MenuTreeProps,
   TabStripProps,
 } from "./types";
-
 export type { ErpHeaderItem, ErpHeaderProps } from "./types";
-
 // Utility functions
 function formatDateLabel(date: Date): string {
   return new Intl.DateTimeFormat("en-GB", DEFAULT_DATE_FORMAT_OPTIONS)
     .format(date)
     .replaceAll("/", "-");
 }
-
 function cx(...tokens: Array<string | false | undefined>): string {
   return tokens.filter(Boolean).join(" ");
 }
-
 // Components
-function MenuLink({ item, className, hasSubmenu }: MenuLinkProps) {
-  const handleClick = useCallback((event: MouseEvent<HTMLAnchorElement>) => {
-    if (!item.href || item.href === "#") {
-      event.preventDefault();
-    }
-
+function MenuLink({ item, className, hasSubmenu, onNavigate }: MenuLinkProps) {
+  const handleClick = useCallback(() => {
     item.onClick?.();
-
-    if (!item.onClick && !hasSubmenu) {
-      const destination = item.href && item.href !== "#" ? item.href : item.label;
-      window.alert(`Navigating to ${destination}`);
+    if (item.href && item.href !== "#") {
+      onNavigate(item.href);
+      return;
     }
-  }, [item.href, item.onClick, item.label, hasSubmenu]);
-
-  const href = item.href ?? "#";
-
+    if (!item.onClick && !hasSubmenu) {
+      window.alert(`Navigating to ${item.label}`);
+    }
+  }, [item.href, item.onClick, item.label, hasSubmenu, onNavigate]);
   return (
-    <a
-      href={href}
-      className={cx(className, hasSubmenu && styles.menuLinkWithSubmenu)}
+    <button
+      type="button"
+      className={cx(styles.menuLinkButton, className, hasSubmenu && styles.menuLinkWithSubmenu)}
       onClick={handleClick}
       aria-haspopup={hasSubmenu ? "menu" : undefined}
     >
@@ -61,18 +53,17 @@ function MenuLink({ item, className, hasSubmenu }: MenuLinkProps) {
           &#9656;
         </span>
       )}
-    </a>
+    </button>
   );
 }
-
 function MenuTree({
   items,
   rootListClassName,
   rootLinkClassName,
+  onNavigate,
   depth = 0,
 }: MenuTreeProps) {
   const isRootLevel = depth === 0;
-
   return (
     <ul
       className={
@@ -96,12 +87,14 @@ function MenuTree({
               item={item}
               className={isRootLevel ? rootLinkClassName : styles.submenuLink}
               hasSubmenu={hasSubmenu}
+              onNavigate={onNavigate}
             />
             {hasSubmenu && (
               <MenuTree
                 items={children}
                 rootListClassName={rootListClassName}
                 rootLinkClassName={rootLinkClassName}
+                onNavigate={onNavigate}
                 depth={depth + 1}
               />
             )}
@@ -111,7 +104,6 @@ function MenuTree({
     </ul>
   );
 }
-
 // Header Right Component
 function HeaderRight({
   searchMenuCount,
@@ -128,7 +120,6 @@ function HeaderRight({
     const next = event.target.value;
     onCustomerChange?.(next);
   }, [onCustomerChange]);
-
   return (
     <div className={styles.headerRight}>
       <span className={styles.searchText}>{searchMenuCount} Search Menu :</span>
@@ -162,13 +153,13 @@ function HeaderRight({
     </div>
   );
 }
-
 // Tab Strip Component
 function TabStrip({
   quickTabs,
   billNumber,
   onBillNumberChange,
   billPlaceholder,
+  onNavigate,
 }: TabStripProps) {
   const handleBillNumberChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const next = event.target.value;
@@ -182,6 +173,7 @@ function TabStrip({
           items={quickTabs}
           rootListClassName={styles.quickTabsList}
           rootLinkClassName={styles.quickTab}
+          onNavigate={onNavigate}
         />
       </div>
       <input
@@ -212,19 +204,18 @@ export default function ErpHeader({
   onBillNumberChange,
   billPlaceholder = "Enter Bill No",
 }: ErpHeaderProps) {
+  const router = useRouter();
   // State management
   const [localCustomer, setLocalCustomer] = useState(
     selectedCustomer ?? customerOptions[0] ?? ""
   );
   const [localBillNumber, setLocalBillNumber] = useState(billNumber ?? "");
-
   // Effects for syncing with props
   useEffect(() => {
     if (selectedCustomer !== undefined) {
       setLocalCustomer(selectedCustomer);
     }
   }, [selectedCustomer]);
-
   useEffect(() => {
     if (
       selectedCustomer === undefined &&
@@ -234,22 +225,18 @@ export default function ErpHeader({
       setLocalCustomer(customerOptions[0]);
     }
   }, [customerOptions, localCustomer, selectedCustomer]);
-
   useEffect(() => {
     if (billNumber !== undefined) {
       setLocalBillNumber(billNumber);
     }
   }, [billNumber]);
-
   // Memoized values
   const resolvedDateText = useMemo(
     () => dateText ?? formatDateLabel(new Date()),
     [dateText]
   );
-
   const resolvedCustomer = selectedCustomer ?? localCustomer;
   const resolvedBillNumber = billNumber ?? localBillNumber;
-
   // Event handlers
   const handleCustomerChange = useCallback((value: string) => {
     if (selectedCustomer === undefined) {
@@ -257,14 +244,15 @@ export default function ErpHeader({
     }
     onCustomerChange?.(value);
   }, [selectedCustomer, onCustomerChange]);
-
   const handleBillNumberChange = useCallback((value: string) => {
     if (billNumber === undefined) {
       setLocalBillNumber(value);
     }
     onBillNumberChange?.(value);
   }, [billNumber, onBillNumberChange]);
-
+  const handleNavigate = useCallback((destination: string) => {
+    router.push(destination);
+  }, [router]);
   return (
     <div className={styles.headerShell}>
       <header className={styles.topHeader}>
@@ -273,9 +261,9 @@ export default function ErpHeader({
             items={primaryMenu}
             rootListClassName={styles.primaryMenuList}
             rootLinkClassName={styles.primaryMenuItem}
+            onNavigate={handleNavigate}
           />
         </nav>
-
         <HeaderRight
           searchMenuCount={searchMenuCount}
           dateText={resolvedDateText}
@@ -288,12 +276,12 @@ export default function ErpHeader({
           onGoClick={onGoClick}
         />
       </header>
-
       <TabStrip
         quickTabs={quickTabs}
         billNumber={resolvedBillNumber}
         onBillNumberChange={handleBillNumberChange}
         billPlaceholder={billPlaceholder}
+        onNavigate={handleNavigate}
       />
     </div>
   );

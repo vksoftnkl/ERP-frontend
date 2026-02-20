@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "@/styles/library/index.scss";
 import Providers from "@/store/provider";
+import GlobalErpHeader from "@/components/layout/global-erp-header";
 
 export const metadata: Metadata = {
   title: "ERP Client | Operations Platform",
@@ -16,7 +17,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <GlobalErpHeader />
+          {children}
+        </Providers>
       </body>
     </html>
   );

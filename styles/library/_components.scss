@@ -243,9 +243,12 @@
   .ui-navlink {
     display: inline-flex;
     align-items: center;
+    background: transparent;
     border-radius: 9999px;
     padding: 0.34rem 0.68rem;
     color: var(--ds-text-muted);
+    cursor: pointer;
+    font: inherit;
     text-decoration: none;
     font-size: 0.85rem;
     border: 1px solid transparent;

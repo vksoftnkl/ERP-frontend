@@ -84,6 +84,13 @@ const COLUMN_ALIGN_KEYS = [
   "grid_column_alignment",
   "gridColumnAlignment",
 ] as const;
+const COLUMN_COLOR_KEYS = [
+  "color",
+  "column_color",
+  "columnColor",
+  "grid_column_color",
+  "gridColumnColor",
+] as const;
 const COLUMN_VISIBLE_KEYS = [
   "visible",
   "is_visible",
@@ -123,6 +130,7 @@ export type GridColumnConfig = {
   sortable?: boolean;
   align?: GridColumnAlign;
   width?: string;
+  color?: string;
 };
 
 type GridColumnsEntry = {
@@ -255,6 +263,14 @@ function normalizeAlign(value: unknown): GridColumnAlign | undefined {
   return undefined;
 }
 
+function normalizeColor(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized || undefined;
+}
+
 function extractColumnRows(payload: unknown): Record<string, unknown>[] {
   if (Array.isArray(payload)) {
     return payload.filter(isRecord);
@@ -287,10 +303,36 @@ function extractColumnRows(payload: unknown): Record<string, unknown>[] {
   return [];
 }
 
+function normalizeGridColumnAdjustmentRow(
+  row: Record<string, unknown>,
+  fallbackOrder: number,
+): GridColumnConfig | null {
+  const columnName = normalizeKey(row.grid_column_name);
+  if (!columnName) {
+    return null;
+  }
+
+  return {
+    key: columnName,
+    accessorKey: columnName,
+    header: columnName,
+    order: normalizeOrder(row.grid_column_number, fallbackOrder),
+    visible: true,
+    align: normalizeAlign(row.grid_column_alignment),
+    width: normalizeWidth(row.grid_column_width),
+    color: normalizeColor(row.grid_column_color),
+  };
+}
+
 function normalizeColumnRow(
   row: Record<string, unknown>,
   fallbackOrder: number,
 ): GridColumnConfig | null {
+  const directAdjustment = normalizeGridColumnAdjustmentRow(row, fallbackOrder);
+  if (directAdjustment) {
+    return directAdjustment;
+  }
+
   const rawKey = getFirstDefinedValue(row, COLUMN_KEY_KEYS);
   const rawAccessor = getFirstDefinedValue(row, COLUMN_ACCESSOR_KEYS);
   const rawHeader = getFirstDefinedValue(row, COLUMN_HEADER_KEYS);
@@ -305,6 +347,7 @@ function normalizeColumnRow(
   const order = normalizeOrder(getFirstDefinedValue(row, COLUMN_ORDER_KEYS), fallbackOrder);
   const width = normalizeWidth(getFirstDefinedValue(row, COLUMN_WIDTH_KEYS));
   const align = normalizeAlign(getFirstDefinedValue(row, COLUMN_ALIGN_KEYS));
+  const color = normalizeColor(getFirstDefinedValue(row, COLUMN_COLOR_KEYS));
   const sortable = toBoolean(getFirstDefinedValue(row, COLUMN_SORTABLE_KEYS));
   const hidden = toBoolean(getFirstDefinedValue(row, COLUMN_HIDDEN_KEYS));
   const visibleValue = toBoolean(getFirstDefinedValue(row, COLUMN_VISIBLE_KEYS));
@@ -319,6 +362,7 @@ function normalizeColumnRow(
     sortable: sortable ?? undefined,
     align,
     width,
+    color,
   };
 }
 
@@ -369,9 +413,9 @@ function getErrorMessage(error: unknown): string {
 
 export const fetchGridColumns = createAsyncThunk<
   { gridId: number; columns: GridColumnConfig[] },
-  { gridId: number },
+  { gridId: number; page?: number; limit?: number },
   { rejectValue: { gridId: number; message: string } }
->("gridColumns/fetch", async ({ gridId }, { rejectWithValue }) => {
+>("gridColumns/fetch", async ({ gridId, page = 1, limit = 20 }, { rejectWithValue }) => {
   try {
     const response = await axios.request<unknown>({
       url: GRID_COLUMNS_LIST_ENDPOINT,
@@ -379,6 +423,8 @@ export const fetchGridColumns = createAsyncThunk<
       baseURL: API_BASE || undefined,
       params: {
         grid_id: gridId,
+        page,
+        limit,
       },
     });
 

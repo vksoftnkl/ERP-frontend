@@ -26,12 +26,14 @@ export type MenuLinkProps = {
   item: ErpHeaderItem;
   className: string;
   hasSubmenu: boolean;
+  onNavigate: (destination: string) => void;
 };
 
 export type MenuTreeProps = {
   items: ErpHeaderItem[];
   rootListClassName: string;
   rootLinkClassName: string;
+  onNavigate: (destination: string) => void;
   depth?: number;
 };
 
@@ -52,6 +54,7 @@ export type TabStripProps = {
   billNumber: string;
   onBillNumberChange?: (value: string) => void;
   billPlaceholder: string;
+  onNavigate: (destination: string) => void;
 };
 
 export type ERPMenuObject = {

@@ -181,6 +181,113 @@
   box-shadow: 0 0 0 3px rgba(209, 67, 67, 0.16);
 }
 
+.searchSelect {
+  position: relative;
+}
+
+.searchSelect .control {
+  padding-right: 2.2rem;
+}
+
+.searchSelectToggle {
+  position: absolute;
+  top: 50%;
+  right: 0.38rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #3e5a70;
+  cursor: pointer;
+}
+
+.searchSelectToggle:focus-visible {
+  outline: 2px solid var(--erp-modal-accent);
+  outline-offset: 1px;
+}
+
+.searchSelectToggle:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.searchSelectChevron {
+  width: 0.95rem;
+  height: 0.95rem;
+  transition: transform 0.16s ease;
+}
+
+.searchSelectChevronOpen {
+  transform: rotate(180deg);
+}
+
+.searchSelectList {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 5;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #c4d0dc;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 12px 24px rgba(8, 22, 36, 0.16);
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+}
+
+.searchSelectOption {
+  border-radius: 4px;
+  padding: 0.5rem 0.58rem;
+  font-size: 0.9rem;
+  color: #17354b;
+  cursor: pointer;
+}
+
+.searchSelectOption:hover {
+  background: #eef4fa;
+}
+
+.searchSelectOptionActive {
+  background: #dbeafe;
+}
+
+.searchSelectEmpty {
+  padding: 0.56rem 0.58rem;
+  font-size: 0.86rem;
+  color: #5a7084;
+}
+
+.searchSelectTokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.36rem;
+  margin-top: 0.45rem;
+}
+
+.searchSelectToken {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border: 1px solid #bfd3e6;
+  border-radius: 4px;
+  background: #eef4fb;
+  color: #1a4465;
+  font-size: 0.78rem;
+  line-height: 1;
+  padding: 0.26rem 0.44rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .fileField {
   display: grid;
   gap: 0.4rem;

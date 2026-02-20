@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
 } from "react";
-import ErpHeader, { type ErpHeaderItem } from "@/components/layout/erp-header";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
@@ -35,6 +34,8 @@ const API_ENDPOINTS = {
   DELETE: "/item-groups/delete",
 } as const;
 const ITEM_GROUP_GRID_ID = 1;
+const GRID_COLUMNS_PAGE = 1;
+const GRID_COLUMNS_LIMIT = 20;
 const FILE_CONSTRAINTS = {
   MAX_UPLOAD_IMAGE_BYTES: 5 * 1024 * 1024,
   ALLOWED_MIME_TYPES: [
@@ -113,17 +114,6 @@ const GROUP_SHORT_KEYS = [
 const GROUP_ACTIVE_KEYS = ["itg_active", "active", "is_active", "isActive", "isactive", "status"] as const;
 const GROUP_DESCRIPTION_KEYS = ["itg_description", "description", "desc"] as const;
 const GROUP_PARENT_ID_KEYS = ["itg_parent_id", "parent_id", "parentId", "parent_group_id"] as const;
-const HEADER_QUICK_TABS: ErpHeaderItem[] = [
-  { label: "Sales Entry" },
-  { label: "Sales Return" },
-  { label: "SO Management" },
-  { label: "Cashier Screen" },
-  { label: "Import Invoices" },
-  { label: "Item Group Master" },
-  { label: "Gate Inward Entry" },
-  { label: "SO Stock Position" },
-  { label: "Profit & Loss" },
-];
 const INITIAL_FORM_STATE = {
   itemGroupName: "",
   searchCode: "",
@@ -170,7 +160,6 @@ type ItemGroupColumnAccessor = keyof Pick<
   ItemGroupTableRow,
   "serialNo" | "groupId" | "groupCode" | "groupName" | "groupShort" | "groupAlias" | "groupActive" | "position"
 >;
-
 const DEFAULT_SERIAL_NO_COLUMN: ReusableTableColumn<ItemGroupTableRow> = {
   key: "serialNo",
   header: "S.No",
@@ -179,7 +168,6 @@ const DEFAULT_SERIAL_NO_COLUMN: ReusableTableColumn<ItemGroupTableRow> = {
   width: "46px",
   sortable: false,
 };
-
 const DEFAULT_ITEM_GROUP_COLUMNS: ReusableTableColumn<ItemGroupTableRow>[] = [
   DEFAULT_SERIAL_NO_COLUMN,
   {
@@ -205,7 +193,6 @@ const DEFAULT_ITEM_GROUP_COLUMNS: ReusableTableColumn<ItemGroupTableRow>[] = [
     sortAccessor: (row) => Number(row.position || 0),
   },
 ];
-
 const ITEM_GROUP_COLUMN_ACCESSOR_MAP: Record<string, ItemGroupColumnAccessor> = {
   serialno: "serialNo",
   serialnumber: "serialNo",
@@ -259,9 +246,16 @@ const ITEM_GROUP_COLUMN_ACCESSOR_MAP: Record<string, ItemGroupColumnAccessor> = 
   itgsort: "position",
   itg_sort: "position",
 };
-
 function normalizeColumnToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9_]+/g, "");
+}
+
+function normalizeGridColumnColor(value: string | undefined): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized || undefined;
 }
 
 function resolveItemGroupAccessor(
@@ -276,28 +270,23 @@ function resolveItemGroupAccessor(
     if (mapped) {
       return mapped;
     }
-
     const compact = normalized.replace(/_/g, "");
     const compactMapped = ITEM_GROUP_COLUMN_ACCESSOR_MAP[compact];
     if (compactMapped) {
       return compactMapped;
     }
   }
-
   return null;
 }
-
 function buildColumnsFromGridColumns(
   gridColumns: GridColumnConfig[],
 ): ReusableTableColumn<ItemGroupTableRow>[] {
   const columns: ReusableTableColumn<ItemGroupTableRow>[] = [];
   const seenColumnKeys = new Set<string>();
-
   for (const gridColumn of gridColumns) {
     if (!gridColumn.visible) {
       continue;
     }
-
     const accessor = resolveItemGroupAccessor(
       gridColumn.accessorKey,
       gridColumn.key,
@@ -306,13 +295,12 @@ function buildColumnsFromGridColumns(
     if (!accessor) {
       continue;
     }
-
     const keyBase = normalizeColumnToken(
       gridColumn.key || gridColumn.accessorKey || gridColumn.header || accessor,
     ) || accessor;
     const uniqueKey = seenColumnKeys.has(keyBase) ? `${keyBase}-${columns.length + 1}` : keyBase;
     seenColumnKeys.add(uniqueKey);
-
+    const columnColor = normalizeGridColumnColor(gridColumn.color);
     const tableColumn: ReusableTableColumn<ItemGroupTableRow> = {
       key: uniqueKey,
       header: gridColumn.header,
@@ -320,6 +308,8 @@ function buildColumnsFromGridColumns(
       align: gridColumn.align ?? "left",
       width: gridColumn.width ?? (accessor === "serialNo" ? "46px" : undefined),
       sortable: gridColumn.sortable ?? accessor !== "serialNo",
+      headerStyle: columnColor ? { backgroundColor: columnColor } : undefined,
+      cellStyle: columnColor ? { backgroundColor: columnColor } : undefined,
     };
 
     if (accessor === "position") {
@@ -754,7 +744,13 @@ export default function ItemGroupMasterPage() {
     if (gridColumnsRequested || gridColumnsLoading) {
       return;
     }
-    void dispatch(fetchGridColumns({ gridId: ITEM_GROUP_GRID_ID }));
+    void dispatch(
+      fetchGridColumns({
+        gridId: ITEM_GROUP_GRID_ID,
+        page: GRID_COLUMNS_PAGE,
+        limit: GRID_COLUMNS_LIMIT,
+      }),
+    );
   }, [dispatch, gridColumnsLoading, gridColumnsRequested]);
 
   // Custom hooks
@@ -1024,6 +1020,7 @@ export default function ItemGroupMasterPage() {
         name: "parentGroupId",
         label: "Parent Group",
         type: "select",
+        searchable: true,
         options: parentGroupOptions,
         placeholder: "Select parent group (optional)",
       },
@@ -1138,14 +1135,6 @@ export default function ItemGroupMasterPage() {
     <main className={styles.page}>
       <div className={styles.viewport}>
         <div className={styles.board}>
-          <ErpHeader
-            searchMenuCount={0}
-            cartCount={6}
-            goLabel="K Go"
-            quickTabs={HEADER_QUICK_TABS}
-            selectedCustomer="Customers"
-            billPlaceholder="Enter Bill No"
-          />
           <section className={styles.content}>            
             {error ? (
               <div className={styles.errorBox}>
@@ -1179,7 +1168,15 @@ export default function ItemGroupMasterPage() {
                 <button
                   type="button"
                   className={styles.retryButton}
-                  onClick={() => void dispatch(fetchGridColumns({ gridId: ITEM_GROUP_GRID_ID }))}
+                  onClick={() =>
+                    void dispatch(
+                      fetchGridColumns({
+                        gridId: ITEM_GROUP_GRID_ID,
+                        page: GRID_COLUMNS_PAGE,
+                        limit: GRID_COLUMNS_LIMIT,
+                      }),
+                    )
+                  }
                   disabled={gridColumnsLoading}
                 >
                   {gridColumnsLoading ? "Loading..." : "Retry Headers"}

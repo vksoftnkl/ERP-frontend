@@ -1,4 +1,6 @@
-import Link from "next/link";
+"use client";
+
+import { useRouter } from "next/navigation";
 import ModalFormShowcase from "./modal-form-showcase";
 import {
   Alert,
@@ -29,6 +31,8 @@ import {
 } from "@/components/library";
 
 export default function UiLibraryPage() {
+  const router = useRouter();
+
   return (
     <Shell>
       <Container size="wide" className="py-8">
@@ -44,15 +48,19 @@ export default function UiLibraryPage() {
             }
           >
             <NavLinks>
-              <Link href="/ui-library" className="ui-navlink ui-navlink--active">
+              <button
+                type="button"
+                className="ui-navlink ui-navlink--active"
+                onClick={() => router.push("/ui-library")}
+              >
                 Library
-              </Link>
-              <Link href="/" className="ui-navlink">
+              </button>
+              <button type="button" className="ui-navlink" onClick={() => router.push("/")}>
                 Existing Home
-              </Link>
-              <Link href="/dashboard" className="ui-navlink">
+              </button>
+              <button type="button" className="ui-navlink" onClick={() => router.push("/dashboard")}>
                 Dashboard
-              </Link>
+              </button>
             </NavLinks>
           </NavBar>
 

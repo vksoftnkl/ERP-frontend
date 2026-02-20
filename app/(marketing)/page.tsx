@@ -1,31 +1,9 @@
-import ErpHeader, { type ErpHeaderItem } from "@/components/layout/erp-header";
 import styles from "./page.module.css";
-
-const quickTabs: ErpHeaderItem[] = [
-  { label: "Sales Entry" },
-  { label: "Sales Return" },
-  { label: "SO Management" },
-  { label: "Cashier Screen" },
-  { label: "Import Invoices" },
-  { label: "Item Group Master", href: "/item-group-master" },
-  { label: "Gate Inward Entry" },
-  { label: "SO Stock Position" },
-  { label: "Profit & Loss" },
-];
 
 export default function LandingPage() {
   return (
     <main className={styles.page}>
       <div className={styles.board}>
-        <ErpHeader
-          searchMenuCount={9}
-          cartCount={6}
-          goLabel="K Go"
-          quickTabs={quickTabs}
-          selectedCustomer="Customers"
-          billPlaceholder="Enter Bill No"
-        />
-
         <section className={styles.hero} aria-label="ERP landing screen">
           <div className={styles.heroGlow} aria-hidden />
 

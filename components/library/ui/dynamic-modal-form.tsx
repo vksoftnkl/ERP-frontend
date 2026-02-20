@@ -75,6 +75,7 @@ export type ERPDynamicFieldType =
   | "email"
   | "tel"
   | "number"
+  | "color"
   | "date"
   | "select"
   | "textarea"
@@ -111,9 +112,12 @@ export type ERPDynamicModalField = {
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  searchable?: boolean;
+  multiple?: boolean;
   options?: ERPDynamicSelectOption[];
   colSpan?: 1 | 2;
   helperText?: string;
+  controlStyle?: CSSProperties;
   defaultValue?: string;
   rows?: number;
   min?: string | number;
@@ -220,6 +224,37 @@ function toRegExp(pattern: string | RegExp): RegExp | null {
   } catch {
     return null;
   }
+}
+
+function getSelectOptionLabel(
+  field: ERPDynamicModalField,
+  value: string | undefined,
+): string {
+  if (!value) {
+    return "";
+  }
+
+  const matchedOption = field.options?.find((option) => option.value === value);
+  return matchedOption?.label ?? value;
+}
+
+function parseMultiSelectValue(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function formatMultiSelectValue(values: string[]): string {
+  return values.join(",");
+}
+
+function getMultiSelectOptionLabels(field: ERPDynamicModalField, values: string[]): string[] {
+  return values.map((value) => getSelectOptionLabel(field, value) || value);
 }
 
 function validateFieldValue(
@@ -371,6 +406,8 @@ export function ERPDynamicModalForm({
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [fileData, setFileData] = useState<Record<string, File | null>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
+  const [openSearchField, setOpenSearchField] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const activeVariant = useMemo(
@@ -394,6 +431,8 @@ export function ERPDynamicModalForm({
     setIsSubmitting(false);
     setFieldErrors({});
     setFileData({});
+    setSearchQueries({});
+    setOpenSearchField(null);
     onOpenChange?.(false, activeVariant?.key ?? null);
   }, [activeVariant?.key, onOpenChange]);
 
@@ -411,6 +450,8 @@ export function ERPDynamicModalForm({
       });
       setFileData({});
       setFieldErrors({});
+      setSearchQueries({});
+      setOpenSearchField(null);
       setIsOpen(true);
       onOpenChange?.(true, variantKey);
     },
@@ -458,8 +499,15 @@ export function ERPDynamicModalForm({
     const target = event.target;
     const { name } = target;
     const isFileInput = target instanceof HTMLInputElement && target.type === "file";
+    const isMultiSelectInput = target instanceof HTMLSelectElement && target.multiple;
     const nextFile = isFileInput ? target.files?.[0] ?? null : null;
-    const nextValue = isFileInput ? (nextFile ? nextFile.name : "") : target.value;
+    const nextValue = isFileInput
+      ? nextFile
+        ? nextFile.name
+        : ""
+      : isMultiSelectInput
+        ? formatMultiSelectValue(Array.from(target.selectedOptions).map((option) => option.value))
+        : target.value;
 
     if (isFileInput) {
       setFileData((current) => ({
@@ -499,6 +547,96 @@ export function ERPDynamicModalForm({
       return nextValues;
     });
   };
+
+  const handleSearchableSelectInput = useCallback(
+    (field: ERPDynamicModalField, query: string) => {
+      const fieldName = field.name;
+      const isMultipleSelect = (field.type ?? "text") === "select" && field.multiple;
+      setSearchQueries((current) => ({
+        ...current,
+        [fieldName]: query,
+      }));
+
+      setFormData((current) => {
+        const nextValues = isMultipleSelect
+          ? { ...current }
+          : {
+              ...current,
+              [fieldName]: "",
+            };
+
+        if (validateOnChange && activeVariant) {
+          const nextError = validateFieldValue(field, nextValues, fileData);
+          setFieldErrors((currentErrors) => {
+            const nextErrors = { ...currentErrors };
+            if (nextError) {
+              nextErrors[fieldName] = nextError;
+            } else {
+              delete nextErrors[fieldName];
+            }
+            return nextErrors;
+          });
+        }
+
+        return nextValues;
+      });
+    },
+    [activeVariant, fileData, validateOnChange],
+  );
+
+  const handleSearchableSelectChoose = useCallback(
+    (field: ERPDynamicModalField, option: ERPDynamicSelectOption) => {
+      const fieldName = field.name;
+      const isMultipleSelect = (field.type ?? "text") === "select" && field.multiple;
+      setFormData((current) => {
+        const nextFieldValue = isMultipleSelect
+          ? (() => {
+              const existingValues = parseMultiSelectValue(current[fieldName] ?? "");
+              const isSelected = existingValues.includes(option.value);
+              const updatedValues = isSelected
+                ? existingValues.filter((value) => value !== option.value)
+                : [...existingValues, option.value];
+              return formatMultiSelectValue(updatedValues);
+            })()
+          : option.value;
+
+        const nextValues = {
+          ...current,
+          [fieldName]: nextFieldValue,
+        };
+
+        if (validateOnChange && activeVariant) {
+          const nextError = validateFieldValue(field, nextValues, fileData);
+          setFieldErrors((currentErrors) => {
+            const nextErrors = { ...currentErrors };
+            if (nextError) {
+              nextErrors[fieldName] = nextError;
+            } else {
+              delete nextErrors[fieldName];
+            }
+            return nextErrors;
+          });
+        }
+
+        return nextValues;
+      });
+
+      setSearchQueries((current) => {
+        if (isMultipleSelect) {
+          return {
+            ...current,
+            [fieldName]: "",
+          };
+        }
+
+        const nextState = { ...current };
+        delete nextState[fieldName];
+        return nextState;
+      });
+      setOpenSearchField(isMultipleSelect ? fieldName : null);
+    },
+    [activeVariant, fileData, validateOnChange],
+  );
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -664,6 +802,27 @@ export function ERPDynamicModalForm({
                   const selectedFile = fileData[field.name] ?? null;
                   const fieldError = fieldErrors[field.name];
                   const inputType = field.type ?? "text";
+                  const isMultiSelect = inputType === "select" && field.multiple;
+                  const selectedValues = isMultiSelect ? parseMultiSelectValue(fieldValue) : [];
+                  const selectedLabels = isMultiSelect
+                    ? getMultiSelectOptionLabels(field, selectedValues)
+                    : [];
+                  const selectedLabel = getSelectOptionLabel(field, fieldValue);
+                  const searchQuery = searchQueries[field.name];
+                  const searchInputValue =
+                    searchQuery !== undefined ? searchQuery : isMultiSelect ? "" : selectedLabel;
+                  const normalizedQuery = searchInputValue.trim().toLowerCase();
+                  const filteredOptions =
+                    field.searchable && inputType === "select"
+                      ? (field.options ?? []).filter((option) => {
+                          if (!normalizedQuery) {
+                            return true;
+                          }
+                          const valueMatch = option.value.toLowerCase().includes(normalizedQuery);
+                          const labelMatch = option.label.toLowerCase().includes(normalizedQuery);
+                          return valueMatch || labelMatch;
+                        })
+                      : [];
                   const controlId = `${formId}-${field.name}`;
                   const helpId = field.helperText ? `${controlId}-help` : undefined;
                   const fileId = selectedFile ? `${controlId}-file` : undefined;
@@ -690,13 +849,125 @@ export function ERPDynamicModalForm({
                         {field.required ? <span className={styles.requiredMark}>*</span> : null}
                       </label>
 
-                      {inputType === "select" ? (
+                      {inputType === "select" && field.searchable ? (
+                        <div className={styles.searchSelect}>
+                          <input
+                            {...commonProps}
+                            type="text"
+                            name={`${field.name}-search`}
+                            value={searchInputValue}
+                            placeholder={field.placeholder ?? `Search ${field.label}`}
+                            className={cx(styles.control, fieldError && styles.controlInvalid)}
+                            role="combobox"
+                            aria-autocomplete="list"
+                            aria-expanded={openSearchField === field.name}
+                            aria-controls={`${controlId}-search-list`}
+                            autoComplete="off"
+                            onFocus={() => setOpenSearchField(field.name)}
+                            onBlur={() => {
+                              window.setTimeout(() => {
+                                setOpenSearchField((current) =>
+                                  current === field.name ? null : current,
+                                );
+                              }, 100);
+                            }}
+                            onChange={(event) =>
+                              handleSearchableSelectInput(field, event.currentTarget.value)
+                            }
+                          />
+                          <button
+                            type="button"
+                            className={styles.searchSelectToggle}
+                            aria-label={`Toggle ${field.label} options`}
+                            aria-expanded={openSearchField === field.name}
+                            aria-controls={`${controlId}-search-list`}
+                            disabled={field.disabled || isSubmitting}
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              setOpenSearchField((current) =>
+                                current === field.name ? null : field.name,
+                              );
+                            }}
+                          >
+                            <svg
+                              viewBox="0 0 20 20"
+                              aria-hidden="true"
+                              className={cx(
+                                styles.searchSelectChevron,
+                                openSearchField === field.name && styles.searchSelectChevronOpen,
+                              )}
+                            >
+                              <path
+                                d="M5 7.5 10 12.5 15 7.5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                          {openSearchField === field.name && !field.disabled ? (
+                            <ul
+                              id={`${controlId}-search-list`}
+                              className={styles.searchSelectList}
+                              role="listbox"
+                            >
+                              {filteredOptions.length ? (
+                                filteredOptions.map((option) => (
+                                  <li
+                                    key={`${field.name}-${option.value}`}
+                                    className={cx(
+                                      styles.searchSelectOption,
+                                      (isMultiSelect
+                                        ? selectedValues.includes(option.value)
+                                        : option.value === fieldValue) && styles.searchSelectOptionActive,
+                                    )}
+                                    role="option"
+                                    aria-selected={
+                                      isMultiSelect
+                                        ? selectedValues.includes(option.value)
+                                        : option.value === fieldValue
+                                    }
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      handleSearchableSelectChoose(field, option);
+                                    }}
+                                  >
+                                    {option.label}
+                                  </li>
+                                ))
+                              ) : (
+                                <li className={styles.searchSelectEmpty} role="option" aria-disabled>
+                                  No matching options
+                                </li>
+                              )}
+                            </ul>
+                          ) : null}
+                          {isMultiSelect && selectedLabels.length ? (
+                            <div className={styles.searchSelectTokens} aria-live="polite">
+                              {selectedLabels.map((label, index) => (
+                                <span
+                                  key={`${field.name}-selected-${selectedValues[index] ?? index}`}
+                                  className={styles.searchSelectToken}
+                                >
+                                  {label}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : inputType === "select" ? (
                         <select
                           {...commonProps}
-                          value={fieldValue}
+                          value={isMultiSelect ? selectedValues : fieldValue}
+                          multiple={isMultiSelect}
                           className={cx(styles.control, fieldError && styles.controlInvalid)}
+                          style={field.controlStyle}
                         >
-                          <option value="">{field.placeholder ?? `Select ${field.label}`}</option>
+                          {!isMultiSelect ? (
+                            <option value="">{field.placeholder ?? `Select ${field.label}`}</option>
+                          ) : null}
                           {field.options?.map((option) => (
                             <option key={`${field.name}-${option.value}`} value={option.value}>
                               {option.label}
@@ -714,6 +985,7 @@ export function ERPDynamicModalForm({
                             styles.textarea,
                             fieldError && styles.controlInvalid,
                           )}
+                          style={field.controlStyle}
                         />
                       ) : inputType === "file" ? (
                         <div className={styles.fileField}>
@@ -722,6 +994,7 @@ export function ERPDynamicModalForm({
                             type="file"
                             accept={field.accept}
                             className={cx(styles.control, styles.fileInput, fieldError && styles.controlInvalid)}
+                            style={field.controlStyle}
                           />
                           <p id={fileId} className={styles.fileMeta}>
                             {selectedFile
@@ -732,7 +1005,7 @@ export function ERPDynamicModalForm({
                       ) : (
                         <input
                           {...commonProps}
-                          value={fieldValue}
+                          value={inputType === "color" ? fieldValue || "#000000" : fieldValue}
                           type={inputType}
                           inputMode={field.inputMode}
                           min={field.min}
@@ -740,6 +1013,7 @@ export function ERPDynamicModalForm({
                           step={field.step}
                           placeholder={field.placeholder}
                           className={cx(styles.control, fieldError && styles.controlInvalid)}
+                          style={field.controlStyle}
                         />
                       )}
 
