@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import axios from "axios";
+import { getAuthSession } from "@/lib/auth/session";
 import type { RootState } from "@/store/store";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE 
@@ -417,10 +418,18 @@ export const fetchGridColumns = createAsyncThunk<
   { rejectValue: { gridId: number; message: string } }
 >("gridColumns/fetch", async ({ gridId, page = 1, limit = 20 }, { rejectWithValue }) => {
   try {
+    const token = getAuthSession()?.trim();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers.Authorization = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+    }
+
     const response = await axios.request<unknown>({
       url: GRID_COLUMNS_LIST_ENDPOINT,
       method: "GET",
       baseURL: API_BASE || undefined,
+      headers,
       params: {
         grid_id: gridId,
         page,

@@ -125,52 +125,36 @@ const UNIT_INITIAL_FORM_VALUES = {
 
 function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
   return [
-    {
+     {
       name: "unitName",
       label: "Unit Name",
       required: true,
-      placeholder: "Kilogram",
+      colSpan: 1,
       validation: {
         minLength: 2,
         minLengthMessage: "Unit Name must be at least 2 characters.",
       },
     },
-    {
-      name: "unitCode",
-      label: "Unit Code",
-      placeholder: "KG",
-    },
-       {
-      name: "unitAlias",
-      label: "Unit Alias",
-      placeholder: "Alternate unit label",
-    },
+    { name: "unitCode", label: "Unit Code", colSpan: 1 },
+    { name: "unitAlias", label: "Unit Alias", colSpan: 1 },
+
     {
       name: "unitWeight",
       label: "Weight",
       type: "number",
       min: 0,
       step: "0.01",
-      placeholder: "0",
+      colSpan: 1,
     },
-     {
-      name: "unitBaseUnitId",
-      label: "Base Unit ",
-      type: "select",
-      searchable: true,
-      options: baseUnitOptions,
-      placeholder: "Search base unit",
-    },
- 
     {
       name: "unitDecimalCount",
       label: "Decimal Count",
       type: "number",
       min: 0,
       step: 1,
-      placeholder: "0",
+      colSpan: 1,
     },
-     {
+    {
       name: "unitIsPackUnit",
       label: "Pack Unit",
       type: "select",
@@ -178,28 +162,41 @@ function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDyna
         { label: "Yes", value: "true" },
         { label: "No", value: "false" },
       ],
+      colSpan: 1,
     },
-    
+
+    {
+      name: "unitBaseUnitId",
+      label: "Base Unit",
+      type: "select",
+      searchable: true,
+      options: baseUnitOptions,
+      placeholder: "Search base unit",
+      visibleWhen: (values) => (values.unitIsPackUnit ?? "false") === "true",
+      colSpan: 1,
+    },
+    {
+      name: "unitConversion",
+      label: "Conversion",
+      colSpan: 1,
+      visibleWhen: (values) => (values.unitIsPackUnit ?? "false") === "true",
+    },
     {
       name: "unitLoading",
       label: "Loading charge",
       type: "number",
       min: 0,
       step: "0.01",
-      placeholder: "0",
-    },   
-    {
-      name: "unitConversion",
-      label: "Conversion",
-      placeholder: "Conversion value",
+      colSpan: 1,
     },
+
     {
       name: "unitUnloading",
       label: "Unloading charge",
       type: "number",
       min: 0,
       step: "0.01",
-      placeholder: "0",
+      colSpan: 1,
     },
     {
       name: "unitAttachCharge",
@@ -207,14 +204,12 @@ function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDyna
       type: "number",
       min: 0,
       step: "0.01",
-      placeholder: "0",
+      colSpan: 1,
     },
-   
     {
       name: "unitDescription",
       label: "Unit Description",
       type: "textarea",
-      placeholder: "Add notes about this unit",
       colSpan: 2,
     },
   ];
@@ -398,7 +393,7 @@ export default function UnitMasterPage() {
 
     void (async () => {
       try {
-        const payload = await getBaseUnitList({ page: "1", limit: "500" });
+        const payload = await getBaseUnitList({ page: "1", limit: "20" });
         if (mounted) {
           setBaseUnitOptions(buildBaseUnitOptions(payload));
         }
@@ -481,9 +476,9 @@ export default function UnitMasterPage() {
         const unitCode = (values.unitCode ?? "").trim();
         const unitDescription = (values.unitDescription ?? "").trim();
         const unitDecimalCount = toInteger(values.unitDecimalCount ?? "0", 0);
-        const rawBaseUnitId = (values.unitBaseUnitId ?? "").trim();
-        const unitBaseUnitId = rawBaseUnitId ? rawBaseUnitId : null;
         const unitIsPackUnit = (values.unitIsPackUnit ?? "false") === "true";
+        const rawBaseUnitId = (values.unitBaseUnitId ?? "").trim();
+        const unitBaseUnitId = unitIsPackUnit && rawBaseUnitId ? rawBaseUnitId : null;
         const unitIsActive = (values.unitIsActive ?? "true") !== "false";
         return {
           unit_id: shouldUpdate ? toUpdateUnitId(editingItemId) : "",

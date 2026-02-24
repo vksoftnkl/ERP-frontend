@@ -4,14 +4,24 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
   {
     label: "1 Sales",
     children: [
+      {label: "Customers", href: "/master/customer"},
       { label: "Sales Entry", href: "/dashboard" },
       { label: "Sales Return" },
+      {
+        label: "Master",
+        children: [
+          { label: "State Master", href: "/master/state-master" },
+          { label: "City Master", href: "/master/city-master" },
+          { label: "Area Master", href: "/master/area-master" },
+        ],
+      },
       {
         label: "SO Management",
         children: [
           { label: "Sales Orders" },
           { label: "Order Approvals" },
           { label: "Dispatch Planning" },
+        
         ],
       },
       { label: "Cashier Screen" },
@@ -43,6 +53,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       label: "Master",
       children: [
         { label: "Item Group Master", href: "/master/item-group-master" },
+        { label: "Item Category Master", href: "/master/item-category-master" },
         { label: "Item Brand Master", href: "/master/item-brand-master" },
         { label: "Item Section Master", href: "/master/item-section-master" },
         { label: "Unit Master", href: "/master/unit-master" },
@@ -53,10 +64,19 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
 
     { label: "Allow to Change Master Price" },
   ],
-},
+  },
 
   { label: "4 Stock" },
-  { label: "5 Accounts" },
+  {
+    label: "5 Accounts",
+    children: [
+      {
+        label: "Account Ledger Groups Master",
+        href: "/master/account-ledger-groups-master",
+      },
+      { label: "Account Ledger Master", href: "/master/account-ledger-master" },
+    ],
+  },
   {
     label: "6 Reports",
     children: [
@@ -109,6 +129,10 @@ export const DEFAULT_QUICK_TABS: ErpHeaderItem[] = [
 ];
 
 export const ERP_MENU_OBJECT: ERPMenuObject = {
+  Accounts: {
+    "Account Ledger Groups Master": null,
+    "Account Ledger Master": null,
+  },
   Inventory: {
     "Item Master": "Ctrl+I",
     "Change Selling": null,
@@ -120,6 +144,7 @@ export const ERP_MENU_OBJECT: ERPMenuObject = {
     "Cost Price - Bulk Change": null,
     Master: {
       "Item Group Master": null,
+      "Item Category Master": null,
       "Item Brand Master": null,
       "Item Section Master": null,
       "Unit Master": null,

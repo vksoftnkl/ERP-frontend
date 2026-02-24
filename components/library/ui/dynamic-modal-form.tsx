@@ -1,5 +1,4 @@
 "use client";
-
 import {
   type ChangeEvent,
   type CSSProperties,
@@ -13,9 +12,7 @@ import {
 } from "react";
 import { cx } from "@/components/library/cx";
 import styles from "./dynamic-modal-form.module.scss";
-
 type FieldInputMode = InputHTMLAttributes<HTMLInputElement>["inputMode"];
-
 type ModalAccentPalette = {
   accent: string;
   accentStrong: string;
@@ -24,7 +21,6 @@ type ModalAccentPalette = {
   iconBg: string;
   iconFg: string;
 };
-
 const ACCENT_PRESETS = {
   blue: {
     accent: "#2563eb",
@@ -67,10 +63,9 @@ const ACCENT_PRESETS = {
     iconFg: "#3730a3",
   },
 } as const;
-
 const DEFAULT_ACCENT = ACCENT_PRESETS.blue;
-
 export type ERPDynamicFieldType =
+  | "heading"
   | "text"
   | "email"
   | "tel"
@@ -82,12 +77,10 @@ export type ERPDynamicFieldType =
   | "file"
   | "password"
   | "url";
-
 export type ERPDynamicSelectOption = {
   label: string;
   value: string;
 };
-
 export type ERPDynamicFieldValidation = {
   requiredMessage?: string;
   minLength?: number;
@@ -104,7 +97,6 @@ export type ERPDynamicFieldValidation = {
     field: ERPDynamicModalField,
   ) => string | null | undefined;
 };
-
 export type ERPDynamicModalField = {
   name: string;
   label: string;
@@ -129,10 +121,9 @@ export type ERPDynamicModalField = {
   maxFileSizeBytes?: number;
   allowedMimeTypes?: string[];
   validation?: ERPDynamicFieldValidation;
+  visibleWhen?: (values: Record<string, string>) => boolean;
 };
-
 type AccentPreset = keyof typeof ACCENT_PRESETS;
-
 export type ERPDynamicModalVariant = {
   key: string;
   cardTitle: string;
@@ -145,23 +136,19 @@ export type ERPDynamicModalVariant = {
   accent?: AccentPreset | Partial<ModalAccentPalette>;
   fields: ERPDynamicModalField[];
 };
-
 export type ERPDynamicModalSubmitPayload = {
   variantKey: string;
   variant: ERPDynamicModalVariant;
   values: Record<string, string>;
   files: Record<string, File | null>;
 };
-
 export type ERPDynamicModalOpenOptions = {
   values?: Record<string, string>;
 };
-
 export type ERPDynamicModalController = {
   openModal: (variantKey: string, options?: ERPDynamicModalOpenOptions) => void;
   closeModal: () => void;
 };
-
 export type ERPDynamicModalFormProps = {
   title: string;
   description?: string;
@@ -182,50 +169,41 @@ export type ERPDynamicModalFormProps = {
   className?: string;
   cardGridClassName?: string;
 };
-
 function resolvePalette(accent: ERPDynamicModalVariant["accent"]): ModalAccentPalette {
   if (!accent) {
     return DEFAULT_ACCENT;
   }
-
   if (typeof accent === "string") {
     return ACCENT_PRESETS[accent] ?? DEFAULT_ACCENT;
   }
-
   return {
     ...DEFAULT_ACCENT,
     ...accent,
   };
 }
-
 function buildInitialValues(
   variant: ERPDynamicModalVariant,
   initialValuesByVariant: ERPDynamicModalFormProps["initialValuesByVariant"],
 ): Record<string, string> {
   const storedValues = initialValuesByVariant?.[variant.key] ?? {};
-
   return variant.fields.reduce<Record<string, string>>((state, field) => {
     state[field.name] = storedValues[field.name] ?? field.defaultValue ?? "";
     return state;
   }, {});
 }
-
 function isEmptyValue(value: string): boolean {
   return value.trim().length === 0;
 }
-
 function toRegExp(pattern: string | RegExp): RegExp | null {
   if (pattern instanceof RegExp) {
     return pattern;
   }
-
   try {
     return new RegExp(pattern);
   } catch {
     return null;
   }
 }
-
 function getSelectOptionLabel(
   field: ERPDynamicModalField,
   value: string | undefined,
@@ -233,30 +211,24 @@ function getSelectOptionLabel(
   if (!value) {
     return "";
   }
-
   const matchedOption = field.options?.find((option) => option.value === value);
   return matchedOption?.label ?? value;
 }
-
 function parseMultiSelectValue(value: string | undefined): string[] {
   if (!value) {
     return [];
   }
-
   return value
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
 }
-
 function formatMultiSelectValue(values: string[]): string {
   return values.join(",");
 }
-
 function getMultiSelectOptionLabels(field: ERPDynamicModalField, values: string[]): string[] {
   return values.map((value) => getSelectOptionLabel(field, value) || value);
 }
-
 function validateFieldValue(
   field: ERPDynamicModalField,
   values: Record<string, string>,
@@ -266,79 +238,67 @@ function validateFieldValue(
   const value = rawValue.trim();
   const fieldType = field.type ?? "text";
   const validation = field.validation;
-
+  if (fieldType === "heading") {
+    return null;
+  }
   if (fieldType === "file") {
     const selectedFile = files[field.name] ?? null;
-
     if (field.required && !selectedFile) {
       return validation?.requiredMessage ?? `${field.label} is required.`;
     }
-
     if (!selectedFile) {
       return null;
     }
-
     if (field.allowedMimeTypes?.length && !field.allowedMimeTypes.includes(selectedFile.type)) {
       return validation?.patternMessage ?? `${field.label} file type is not allowed.`;
     }
-
     if (field.maxFileSizeBytes !== undefined && selectedFile.size > field.maxFileSizeBytes) {
       const maxMB = (field.maxFileSizeBytes / (1024 * 1024)).toFixed(1);
       return validation?.maxMessage ?? `${field.label} must be smaller than ${maxMB} MB.`;
     }
-
     return null;
   }
-
   if (field.required && isEmptyValue(rawValue)) {
     return validation?.requiredMessage ?? `${field.label} is required.`;
   }
-
   if (isEmptyValue(rawValue)) {
     return null;
   }
-
   if (validation?.minLength !== undefined && value.length < validation.minLength) {
     return (
       validation.minLengthMessage ??
       `${field.label} must be at least ${validation.minLength} characters.`
     );
   }
-
   if (validation?.maxLength !== undefined && value.length > validation.maxLength) {
     return (
       validation.maxLengthMessage ??
       `${field.label} must be at most ${validation.maxLength} characters.`
     );
   }
-
   if (validation?.pattern) {
     const regex = toRegExp(validation.pattern);
     if (regex && !regex.test(value)) {
       return validation.patternMessage ?? `${field.label} format is invalid.`;
     }
   }
-
   if (fieldType === "email" && !validation?.pattern) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(value)) {
       return validation?.patternMessage ?? `${field.label} must be a valid email address.`;
     }
   }
-
   if (fieldType === "number") {
     const numericValue = Number(value);
     if (Number.isNaN(numericValue)) {
       return `${field.label} must be a valid number.`;
     }
-
     if (field.min !== undefined) {
       const minValue = Number(field.min);
       if (!Number.isNaN(minValue) && numericValue < minValue) {
         return validation?.minMessage ?? `${field.label} must be at least ${field.min}.`;
       }
     }
-
     if (field.max !== undefined) {
       const maxValue = Number(field.max);
       if (!Number.isNaN(maxValue) && numericValue > maxValue) {
@@ -346,27 +306,37 @@ function validateFieldValue(
       }
     }
   }
-
   if (fieldType === "date") {
     if (field.min !== undefined && value < String(field.min)) {
       return validation?.minMessage ?? `${field.label} cannot be before ${field.min}.`;
     }
-
     if (field.max !== undefined && value > String(field.max)) {
       return validation?.maxMessage ?? `${field.label} cannot be after ${field.max}.`;
     }
   }
-
   if (validation?.custom) {
     const customError = validation.custom(rawValue, values, field);
     if (customError) {
       return customError;
     }
   }
-
   return null;
 }
-
+function resolveVisibleFields(
+  variant: ERPDynamicModalVariant,
+  values: Record<string, string>,
+): ERPDynamicModalField[] {
+  return variant.fields.filter((field) => {
+    if (!field.visibleWhen) {
+      return true;
+    }
+    try {
+      return field.visibleWhen(values);
+    } catch {
+      return true;
+    }
+  });
+}
 function IconPlaceholder() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
@@ -380,7 +350,6 @@ function IconPlaceholder() {
     </svg>
   );
 }
-
 export function ERPDynamicModalForm({
   title,
   description,
@@ -409,23 +378,19 @@ export function ERPDynamicModalForm({
   const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
   const [openSearchField, setOpenSearchField] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
   const activeVariant = useMemo(
     () => variants.find((variant) => variant.key === activeVariantKey),
     [activeVariantKey, variants],
   );
-
   useEffect(() => {
     if (variants.length === 0) {
       setActiveVariantKey("");
       return;
     }
-
     if (!variants.some((variant) => variant.key === activeVariantKey)) {
       setActiveVariantKey(variants[0].key);
     }
   }, [activeVariantKey, variants]);
-
   const closeModal = useCallback(() => {
     setIsOpen(false);
     setIsSubmitting(false);
@@ -435,14 +400,12 @@ export function ERPDynamicModalForm({
     setOpenSearchField(null);
     onOpenChange?.(false, activeVariant?.key ?? null);
   }, [activeVariant?.key, onOpenChange]);
-
   const openModal = useCallback(
     (variantKey: string, options?: ERPDynamicModalOpenOptions) => {
       const variant = variants.find((item) => item.key === variantKey);
       if (!variant) {
         return;
       }
-
       setActiveVariantKey(variantKey);
       setFormData({
         ...buildInitialValues(variant, initialValuesByVariant),
@@ -457,41 +420,79 @@ export function ERPDynamicModalForm({
     },
     [initialValuesByVariant, onOpenChange, variants],
   );
-
   useEffect(() => {
     onControllerReady?.({ openModal, closeModal });
   }, [closeModal, onControllerReady, openModal]);
-
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         closeModal();
       }
     };
-
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [closeModal, isOpen]);
-
   const validateVariant = useCallback(
     (variant: ERPDynamicModalVariant, values: Record<string, string>) => {
       const nextErrors: Record<string, string> = {};
-
-      for (const field of variant.fields) {
+      for (const field of resolveVisibleFields(variant, values)) {
         const fieldError = validateFieldValue(field, values, fileData);
         if (fieldError) {
           nextErrors[field.name] = fieldError;
         }
       }
-
       return nextErrors;
     },
     [fileData],
   );
+  const visibleFields = useMemo(() => {
+    if (!activeVariant) {
+      return [];
+    }
+    return resolveVisibleFields(activeVariant, formData);
+  }, [activeVariant, formData]);
+  useEffect(() => {
+    if (!activeVariant) {
+      return;
+    }
+    const visibleFieldNames = new Set(visibleFields.map((field) => field.name));
+    setFieldErrors((current) => {
+      let changed = false;
+      const nextErrors: Record<string, string> = {};
+      for (const [fieldName, errorMessage] of Object.entries(current)) {
+        if (visibleFieldNames.has(fieldName)) {
+          nextErrors[fieldName] = errorMessage;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? nextErrors : current;
+    });
+    setSearchQueries((current) => {
+      let changed = false;
+      const nextQueries: Record<string, string> = {};
+
+      for (const [fieldName, query] of Object.entries(current)) {
+        if (visibleFieldNames.has(fieldName)) {
+          nextQueries[fieldName] = query;
+        } else {
+          changed = true;
+        }
+      }
+
+      return changed ? nextQueries : current;
+    });
+
+    setOpenSearchField((current) => {
+      if (current && !visibleFieldNames.has(current)) {
+        return null;
+      }
+      return current;
+    });
+  }, [activeVariant, visibleFields]);
 
   const handleChange = (
     event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
@@ -682,15 +683,12 @@ export function ERPDynamicModalForm({
       closeModal();
       return;
     }
-
     onCancel?.(activeVariant.key);
     closeModal();
   };
-
   if (variants.length === 0) {
     return null;
   }
-
   const activePalette = resolvePalette(activeVariant?.accent);
   const modalStyle = {
     "--erp-modal-accent": activePalette.accent,
@@ -698,9 +696,7 @@ export function ERPDynamicModalForm({
     "--erp-modal-border": "#cfdae6",
     "--erp-modal-surface": "#ffffff",
   } as CSSProperties;
-
   const formId = activeVariant ? `erp-modal-form-${activeVariant.key}` : "erp-modal-form";
-
   return (
     <section className={cx("space-y-6", className)}>
       {!hideSectionHeader ? (
@@ -709,12 +705,10 @@ export function ERPDynamicModalForm({
           {description ? <p className="max-w-3xl text-sm text-slate-600">{description}</p> : null}
         </header>
       ) : null}
-
       {showDefaultCards ? (
         <div className={cx("grid gap-6 md:grid-cols-2 xl:grid-cols-3", cardGridClassName)}>
           {variants.map((variant) => {
             const palette = resolvePalette(variant.accent);
-
             return (
             <article
               key={variant.key}
@@ -726,10 +720,8 @@ export function ERPDynamicModalForm({
               >
                   {variant.icon ?? <IconPlaceholder />}
                 </div>
-
                 <h3 className="text-xl font-semibold text-slate-900">{variant.cardTitle}</h3>
                 <p className="mt-2 text-sm text-slate-600">{variant.cardDescription}</p>
-
                 <button
                   type="button"
                   className={styles.cardButton}
@@ -747,7 +739,6 @@ export function ERPDynamicModalForm({
           })}
         </div>
       ) : null}
-
       {isOpen && activeVariant ? (
         <div className={styles.overlay} style={modalStyle}>
           <div
@@ -755,7 +746,6 @@ export function ERPDynamicModalForm({
             onClick={closeOnBackdrop ? closeModal : undefined}
             aria-hidden
           />
-
           <section
             className={styles.panel}
             role="dialog"
@@ -775,7 +765,6 @@ export function ERPDynamicModalForm({
                     <p className={styles.headerDescription}>{activeVariant.modalDescription}</p>
                   ) : null}
                 </div>
-
                 <button
                   type="button"
                   className={styles.closeButton}
@@ -794,14 +783,26 @@ export function ERPDynamicModalForm({
                 </button>
               </div>
             </header>
-
             <div className={styles.scrollArea}>
               <form id={formId} onSubmit={handleSubmit} noValidate className={styles.formGrid}>
-                {activeVariant.fields.map((field) => {
+                {visibleFields.map((field) => {
                   const fieldValue = formData[field.name] ?? "";
                   const selectedFile = fileData[field.name] ?? null;
                   const fieldError = fieldErrors[field.name];
                   const inputType = field.type ?? "text";
+                  if (inputType === "heading") {
+                    return (
+                      <div
+                        key={field.name}
+                        className={cx(styles.field, styles.fieldWide, styles.sectionHeadingField)}
+                      >
+                        <p className={styles.sectionHeading}>{field.label}</p>
+                        {field.helperText ? (
+                          <p className={styles.sectionHeadingDescription}>{field.helperText}</p>
+                        ) : null}
+                      </div>
+                    );
+                  }
                   const isMultiSelect = inputType === "select" && field.multiple;
                   const selectedValues = isMultiSelect ? parseMultiSelectValue(fieldValue) : [];
                   const selectedLabels = isMultiSelect
@@ -838,7 +839,6 @@ export function ERPDynamicModalForm({
                     "aria-invalid": fieldError ? true : undefined,
                     "aria-describedby": describedBy,
                   };
-
                   return (
                     <div
                       key={field.name}

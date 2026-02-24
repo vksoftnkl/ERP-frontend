@@ -45,8 +45,8 @@
 .panel {
   position: relative;
   display: flex;
-  width: min(100%, 52rem);
-  max-height: 90vh;
+  width: min(100%, 42rem);
+  max-height: 50vh;
   flex-direction: column;
   overflow: hidden;
   border-radius: 4px;
@@ -58,7 +58,7 @@
 
 .header {
   border-bottom: 1px solid var(--erp-modal-border, #d4dde7);
-  padding: 1.35rem 1.45rem;
+  padding: 0.75rem 0.75rem;
 }
 
 .headerRow {
@@ -129,7 +129,7 @@
 
 .formGrid {
   display: grid;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
 .field {
@@ -139,6 +139,29 @@
 
 .fieldWide {
   grid-column: 1 / -1;
+}
+
+.sectionHeadingField {
+  grid-column: 1 / -1;
+  gap: 0.2rem;
+  padding-top: 0.25rem;
+}
+
+.sectionHeading {
+  margin: 0;
+  color: #183145;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #d6e0ea;
+  padding-bottom: 0.28rem;
+}
+
+.sectionHeadingDescription {
+  margin: 0;
+  color: #4d677c;
+  font-size: 0.78rem;
 }
 
 .label {
@@ -157,7 +180,7 @@
   width: 100%;
   border: 1px solid #c4d0dc;
   border-radius: 4px;
-  padding: 0.56rem 0.74rem;
+  padding: 0.5rem 0.5rem;
   background: #fff;
   color: #152d40;
   font-size: 0.94rem;
@@ -344,7 +367,7 @@
   gap: 0.72rem;
   flex-wrap: wrap;
   border-top: 1px solid var(--erp-modal-border, #d4dde7);
-  padding: 1rem 1.45rem 1.1rem;
+  padding: 0.75rem 0.75rem;
   background: color-mix(in srgb, var(--erp-modal-surface, #fff) 90%, #e7eff6 10%);
 }
 
@@ -409,8 +432,8 @@
 
 @media (min-width: 760px) {
   .formGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1.1rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
   }
 }
 

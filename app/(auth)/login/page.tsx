@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
+import { extractAuthToken, setAuthSession } from "@/lib/auth/session";
 
 type Errors = {
   username?: string;
@@ -14,11 +15,22 @@ type LoginRequest = {
   user_password: string;
 };
 
+type LoginResponse = Record<string, unknown>;
+
+function normalizeNextRoute(nextRoute: string | null): string {
+  if (!nextRoute || !nextRoute.startsWith("/") || nextRoute.startsWith("//")) {
+    return "/";
+  }
+
+  return nextRoute.startsWith("/login") ? "/" : nextRoute;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [values, setValues] = useState({ username: "", password: "" });
   const [errors, setErrors] = useState<Errors>({});
-  const { run: login, loading, error } = useApi<unknown, LoginRequest>(
+  const [authError, setAuthError] = useState<string | null>(null);
+  const { run: login, loading, error } = useApi<LoginResponse, LoginRequest>(
     "/auth/login",
     { method: "POST" }
   );
@@ -40,15 +52,27 @@ export default function LoginPage() {
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!validate()) return;
+    setAuthError(null);
 
     try {
-      await login({
+      const response = await login({
         body: {
           user_name: values.username.trim(),
           user_password: values.password,
         },
       });
-      router.push("/");
+      const token = extractAuthToken(response);
+      const hasSession = setAuthSession(token);
+      if (!hasSession) {
+        setAuthError("Token missing in login response.");
+        router.replace("/login");
+        return;
+      }
+
+      const nextRoute = normalizeNextRoute(
+        new URLSearchParams(window.location.search).get("next")
+      );
+      router.push(nextRoute);
     } catch {
       // error state is handled by useApi
     }
@@ -58,6 +82,7 @@ export default function LoginPage() {
     const { name, value } = e.target;
     setValues((p) => ({ ...p, [name]: value }));
     setErrors((p) => ({ ...p, [name]: "" }));
+    setAuthError(null);
   };
 
   const inputBase =
@@ -192,6 +217,9 @@ export default function LoginPage() {
           </button>
           {error && (
             <p className="text-sm text-rose-600">{error}</p>
+          )}
+          {authError && (
+            <p className="text-sm text-rose-600">{authError}</p>
           )}
 
         

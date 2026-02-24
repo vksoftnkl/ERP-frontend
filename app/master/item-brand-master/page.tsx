@@ -757,7 +757,6 @@ export default function ItemBrandMasterPage() {
         name: "itemBrandName",
         label: "Item Brand Name",
         required: true,
-        placeholder: "Acme",
         validation: {
           minLength: 2,
           minLengthMessage: "Item Brand Name must be at least 2 characters.",
@@ -766,17 +765,14 @@ export default function ItemBrandMasterPage() {
       {
         name: "searchCode",
         label: "Search Code",
-        placeholder: "Code for quick search",
       },
       {
         name: "itemAlias",
         label: "Alias",
-        placeholder: "Alternate name",
       },
       {
         name: "itemShortName",
         label: "Short Name",
-        placeholder: "Short label for printouts",
       },
       {
         name: "position",
@@ -784,7 +780,6 @@ export default function ItemBrandMasterPage() {
         type: "number",
         min: 0,
         step: 1,
-        placeholder: "0",
         validation: {
           minMessage: "Position must be 0 or greater.",
         },
@@ -794,7 +789,6 @@ export default function ItemBrandMasterPage() {
         name: "itemDescription",
         label: "Description",
         type: "textarea",
-        placeholder: "Add notes about this brand",
         colSpan: 2,
       },
       {

@@ -9,12 +9,17 @@ type MasterModulePageProps = {
 };
 
 const MASTER_MENU_LINKS: Array<{ label: string; href: string }> = [
+  { label: "Customer Master", href: "/master/customer" },
   { label: "Item Group Master", href: "/master/item-group-master" },
+  { label: "Item Category Master", href: "/master/item-category-master" },
   { label: "Item Brand Master", href: "/master/item-brand-master" },
   { label: "Item Section Master", href: "/master/item-section-master" },
   { label: "Unit Master", href: "/master/unit-master" },
   { label: "Godown Master", href: "/master/godown-master" },
   { label: "Tax Master", href: "/master/tax-master" },
+  { label: "State Master", href: "/master/state-master" },
+  { label: "City Master", href: "/master/city-master" },
+  { label: "Area Master", href: "/master/area-master" },
 ];
 
 export default function MasterModulePage({ title, description }: MasterModulePageProps) {

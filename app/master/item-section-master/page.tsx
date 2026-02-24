@@ -147,7 +147,6 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
       name: "masterName",
       label: "Item Section Name",
       required: true,
-      placeholder: "Frozen Foods",
       validation: {
         minLength: 2,
         minLengthMessage: "Item Section Name must be at least 2 characters.",
@@ -156,17 +155,14 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
     {
       name: "searchCode",
       label: "Section Code",
-      placeholder: "FRZ",
     },
     {
       name: "masterAlias",
       label: "Section Alias",
-      placeholder: "Alternate section name",
     },
     {
       name: "masterShortName",
       label: "Short Name",
-      placeholder: "Short label for printouts",
     },
     {
       name: "position",
@@ -174,7 +170,6 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
       type: "number",
       min: 0,
       step: 1,
-      placeholder: "0",
       validation: {
         minMessage: "Sort Order must be 0 or greater.",
       },
@@ -185,7 +180,6 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
       type: "select",
       searchable: true,
       options: sectionOptions,
-      placeholder: "Search parent section",
     },
     {
       name: "secLevel",
@@ -193,7 +187,6 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
       type: "number",
       min: 0,
       step: 1,
-      placeholder: "0",
       validation: {
         minMessage: "Section Level must be 0 or greater.",
       },
@@ -209,7 +202,6 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
       name: "masterDescription",
       label: "Description",
       type: "textarea",
-      placeholder: "Add notes about this item section",
       colSpan: 2,
     },
     {
@@ -392,7 +384,7 @@ export default function ItemSectionMasterPage() {
 
     void (async () => {
       try {
-        const payload = await getSectionOptions({ page: "1", limit: "500" });
+        const payload = await getSectionOptions({ page: "1", limit: "20" });
         if (mounted) {
           setSectionOptions(buildSectionOptions(payload));
         }

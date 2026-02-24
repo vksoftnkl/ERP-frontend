@@ -985,6 +985,7 @@ export default function ItemGroupMasterPage() {
         label: "Item Group Name",
         required: true,
         placeholder: "Frozen Products",
+        colSpan: 2,
         validation: {
           minLength: 2,
           minLengthMessage: "Item Group Name must be at least 2 characters.",
@@ -1029,7 +1030,7 @@ export default function ItemGroupMasterPage() {
         label: "Description",
         type: "textarea",
         placeholder: "Add notes about this item group",
-        colSpan: 2,
+        colSpan: 1,
       },
       {
         name: "itemGroupPhoto",

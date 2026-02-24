@@ -104,6 +104,38 @@ export type CrudMasterRequestPayloadKeys = {
   sort: string;
 };
 
+export type CrudMasterTableColumnHeaders = {
+  serialNo?: string;
+  masterCode?: string;
+  masterName?: string;
+  masterShort?: string;
+  position?: string;
+  masterActive?: string;
+};
+
+export type CrudMasterTableColumnLayout = {
+  serialNo?: {
+    width?: string;
+    align?: ReusableTableColumn<Record<string, unknown>>["align"];
+  };
+  masterCode?: {
+    width?: string;
+    align?: ReusableTableColumn<Record<string, unknown>>["align"];
+  };
+  masterName?: {
+    width?: string;
+    align?: ReusableTableColumn<Record<string, unknown>>["align"];
+  };
+  masterShort?: {
+    width?: string;
+    align?: ReusableTableColumn<Record<string, unknown>>["align"];
+  };
+  masterActive?: {
+    width?: string;
+    align?: ReusableTableColumn<Record<string, unknown>>["align"];
+  };
+};
+
 export type CrudMasterPageProps = {
   title: string;
   entityLabel: string;
@@ -117,6 +149,8 @@ export type CrudMasterPageProps = {
   createLabel?: string;
   codeColumnHeader?: string;
   nameColumnHeader?: string;
+  tableColumnHeaders?: CrudMasterTableColumnHeaders;
+  tableColumnLayout?: CrudMasterTableColumnLayout;
   nameFieldLabel?: string;
   nameFieldPlaceholder?: string;
   formTitle?: string;
@@ -463,6 +497,8 @@ export default function CrudMasterPage({
   createLabel,
   codeColumnHeader,
   nameColumnHeader,
+  tableColumnHeaders,
+  tableColumnLayout,
   nameFieldLabel,
   nameFieldPlaceholder,
   formTitle,
@@ -554,50 +590,42 @@ export default function CrudMasterPage({
     () => [
       {
         key: "serialNo",
-        header: "S.No",
+        header: tableColumnHeaders?.serialNo ?? "S.No",
         accessor: "serialNo",
-        align: "left",
-        width: "56px",
+        align: tableColumnLayout?.serialNo?.align,
+        width: tableColumnLayout?.serialNo?.width,
         sortable: false,
       },
       {
         key: "masterCode",
-        header: codeColumnHeader ?? `${title} Code`,
+        header: tableColumnHeaders?.masterCode ?? codeColumnHeader ?? `${title} Code`,
         accessor: "masterCode",
-        align: "left",
-        width: "210px",
+        align: tableColumnLayout?.masterCode?.align,
+        width: tableColumnLayout?.masterCode?.width,
       },
       {
         key: "masterName",
-        header: nameColumnHeader ?? `${title} Name`,
+        header: tableColumnHeaders?.masterName ?? nameColumnHeader ?? `${title} Name`,
         accessor: "masterName",
-        align: "left",
-        width: "280px",
+        align: tableColumnLayout?.masterName?.align,
+        width: tableColumnLayout?.masterName?.width,
       },
       {
         key: "masterShort",
-        header: "Short Name",
+        header: tableColumnHeaders?.masterShort ?? "Short Name",
         accessor: "masterShort",
-        align: "left",
-        width: "160px",
-      },
-      {
-        key: "position",
-        header: "Position",
-        accessor: "position",
-        align: "left",
-        width: "100px",
-        sortAccessor: (row) => Number(row.position || 0),
+        align: tableColumnLayout?.masterShort?.align,
+        width: tableColumnLayout?.masterShort?.width,
       },
       {
         key: "masterActive",
-        header: "Status",
+        header: tableColumnHeaders?.masterActive ?? "Status",
         accessor: "masterActive",
-        align: "left",
-        width: "120px",
+        align: tableColumnLayout?.masterActive?.align,
+        width: tableColumnLayout?.masterActive?.width,
       },
     ],
-    [codeColumnHeader, nameColumnHeader, title],
+    [codeColumnHeader, nameColumnHeader, tableColumnHeaders, tableColumnLayout, title],
   );
 
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(null);
