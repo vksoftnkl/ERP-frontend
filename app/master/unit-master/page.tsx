@@ -123,6 +123,58 @@ const UNIT_INITIAL_FORM_VALUES = {
   unitIsActive: "true",
 } as const;
 
+const UNIT_UQC_LIST = [
+  { uqc: "BAG", unit: "Bags" },
+  { uqc: "BAL", unit: "Bale" },
+  { uqc: "BDL", unit: "Bundles" },
+  { uqc: "BKL", unit: "Buckles" },
+  { uqc: "BOU", unit: "Billions of Units" },
+  { uqc: "BOX", unit: "Box" },
+  { uqc: "BTL", unit: "Bottles" },
+  { uqc: "BUN", unit: "Bunches" },
+  { uqc: "CAN", unit: "Cans" },
+  { uqc: "CBM", unit: "Cubic Meter" },
+  { uqc: "CCM", unit: "Cubic Centimeter" },
+  { uqc: "CMS", unit: "Centimeter" },
+  { uqc: "CTN", unit: "Cartons" },
+  { uqc: "DOZ", unit: "Dozen" },
+  { uqc: "DRM", unit: "Drums" },
+  { uqc: "GGR", unit: "Great Gross" },
+  { uqc: "GMS", unit: "Grams" },
+  { uqc: "GRS", unit: "Gross" },
+  { uqc: "GYD", unit: "Gross Yards" },
+  { uqc: "KGS", unit: "Kilograms" },
+  { uqc: "KLR", unit: "Kiloliter" },
+  { uqc: "KME", unit: "Kilometre" },
+  { uqc: "MLT", unit: "Millilitre" },
+  { uqc: "MTR", unit: "Meters" },
+  { uqc: "MTS", unit: "Metric Tons" },
+  { uqc: "NOS", unit: "Numbers" },
+  { uqc: "PAC", unit: "Packs" },
+  { uqc: "PCS", unit: "Pieces" },
+  { uqc: "PRS", unit: "Pairs" },
+  { uqc: "QTL", unit: "Quintal" },
+  { uqc: "ROL", unit: "Rolls" },
+  { uqc: "SET", unit: "Sets" },
+  { uqc: "SQF", unit: "Square Feet" },
+  { uqc: "SQM", unit: "Square Meters" },
+  { uqc: "SQY", unit: "Square Yards" },
+  { uqc: "TBS", unit: "Tablets" },
+  { uqc: "TGM", unit: "Ten Gross" },
+  { uqc: "THD", unit: "Thousands" },
+  { uqc: "TON", unit: "Tonnes" },
+  { uqc: "TUB", unit: "Tubes" },
+  { uqc: "UGS", unit: "US Gallons" },
+  { uqc: "UNT", unit: "Units" },
+  { uqc: "YDS", unit: "Yards" },
+  { uqc: "OTH", unit: "Others" },
+] as const;
+
+const UNIT_CODE_OPTIONS: ERPDynamicSelectOption[] = UNIT_UQC_LIST.map(({ uqc, unit }) => ({
+  value: uqc,
+  label: `${uqc} - ${unit}`,
+}));
+
 function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
   return [
      {
@@ -135,7 +187,15 @@ function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDyna
         minLengthMessage: "Unit Name must be at least 2 characters.",
       },
     },
-    { name: "unitCode", label: "Unit Code", colSpan: 1 },
+    {
+      name: "unitCode",
+      label: "Unit Code",
+      type: "select",
+      searchable: true,
+      options: UNIT_CODE_OPTIONS,
+      placeholder: "Search unit code or unit name",
+      colSpan: 1,
+    },
     { name: "unitAlias", label: "Unit Alias", colSpan: 1 },
 
     {
@@ -157,7 +217,7 @@ function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDyna
     {
       name: "unitIsPackUnit",
       label: "Pack Unit",
-      type: "select",
+      type: "checkbox",
       options: [
         { label: "Yes", value: "true" },
         { label: "No", value: "false" },
@@ -209,7 +269,6 @@ function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDyna
     {
       name: "unitDescription",
       label: "Unit Description",
-      type: "textarea",
       colSpan: 2,
     },
   ];

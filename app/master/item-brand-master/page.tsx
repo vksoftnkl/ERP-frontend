@@ -757,27 +757,27 @@ export default function ItemBrandMasterPage() {
         name: "itemBrandName",
         label: "Item Brand Name",
         required: true,
+        colSpan:2,
         validation: {
           minLength: 2,
           minLengthMessage: "Item Brand Name must be at least 2 characters.",
         },
-      },
-      {
-        name: "searchCode",
-        label: "Search Code",
-      },
+      },      
       {
         name: "itemAlias",
         label: "Alias",
+        colSpan:2
       },
       {
         name: "itemShortName",
         label: "Short Name",
+        colSpan:2
       },
       {
         name: "position",
         label: "Position",
         type: "number",
+        colSpan:1,
         min: 0,
         step: 1,
         validation: {
@@ -788,7 +788,6 @@ export default function ItemBrandMasterPage() {
       {
         name: "itemDescription",
         label: "Description",
-        type: "textarea",
         colSpan: 2,
       },
       {

@@ -73,7 +73,7 @@ const STATE_FORM_FIELDS: ERPDynamicModalField[] = [
   {
     name: "stateIsActive",
     label: "Status",
-    type: "select",
+    type: "checkbox",
     options: [
       { label: "Active", value: "true" },
       { label: "Inactive", value: "false" },

@@ -215,27 +215,27 @@ function buildCategoryFormFields(
       name: "masterName",
       label: "Item Category Name",
       required: true,
+      colSpan:2,
       validation: {
         minLength: 2,
         minLengthMessage: "Item Category Name must be at least 2 characters.",
       },
     },
-    {
-      name: "searchCode",
-      label: "Category Code",
-    },
-    {
-      name: "masterAlias",
-      label: "Category Alias",
-    },
+    // {
+    //   name: "masterAlias",
+    //   label: "Category Alias",
+    //   colSpan:2
+    // },
     {
       name: "masterShortName",
       label: "Short Name",
+      colSpan:2
     },
     {
       name: "position",
-      label: "Sort Order",
+      label: "Position",
       type: "number",
+      colSpan:1,
       min: 0,
       step: 1,
       validation: {
@@ -246,59 +246,23 @@ function buildCategoryFormFields(
       name: "categoryParentId",
       label: "Parent Category",
       type: "select",
+      colSpan:2,
       searchable: true,
       options: categoryOptions,
     },
-    {
-      name: "categoryLevel",
-      label: "Category Level",
-      type: "number",
-      min: 0,
-      step: 1,
-      validation: {
-        minMessage: "Category Level must be 0 or greater.",
-      },
-    },
-    {
-      name: "categoryTaxClaim",
-      label: "Tax Claim",
-      type: "select",
-      options: [
-        { label: "Yes", value: "true" },
-        { label: "No", value: "false" },
-      ],
-    },
-    {
-      name: "categoryDefaultTaxId",
-      label: "Default Tax",
-      type: "select",
-      searchable: true,
-      options: taxOptions,
-    },
-    {
-      name: "categoryDefaultUomId",
-      label: "Default Unit",
-      type: "select",
-      searchable: true,
-      options: unitOptions,
-    },
-    {
-      name: "categoryDefaultHsn",
-      label: "Default HSN",
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "Default HSN must be at most 20 characters.",
-      },
-    },
-    {
-      name: "categoryPhotoUrl",
-      label: "Image URL",
-      type: "url",
-    },
+    // {
+    //   name: "categoryLevel",
+    //   label: "Category Level",
+    //   type: "number",
+    //   min: 0,
+    //   step: 1,
+    //   validation: {
+    //     minMessage: "Category Level must be 0 or greater.",
+    //   },
+    // },
     {
       name: "masterDescription",
       label: "Description",
-      type: "textarea",
       colSpan: 2,
     },
     {

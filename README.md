@@ -44,7 +44,7 @@ npm install
 npm run dev
 ```
 
-App runs at `http://localhost:3000`.
+App runs at `https://localhost:3000`.
 
 ### Production build
 
@@ -53,11 +53,20 @@ npm run build
 npm run start
 ```
 
+`npm run start` serves the client over HTTPS using cert/key files.
+Default cert paths:
+- `../ERP server/certs/server.crt`
+- `../ERP server/certs/server.key`
+
 ## Environment Variables
 
 Use `.env.local` for local config.
 
 - `NEXT_PUBLIC_API_BASE` (optional): Base URL used by API hooks in `hooks/useApi.ts`
+  - If not set, the app auto-targets `https://<current-host>:3010/api/v1`, which works for LAN access when frontend and backend run on the same machine.
+- `HTTPS_CERT_PATH` (optional): Cert path for `npm run start`
+- `HTTPS_KEY_PATH` (optional): Key path for `npm run start`
+- `HTTPS_PASSPHRASE` (optional): Passphrase for encrypted private keys
 
 Example:
 

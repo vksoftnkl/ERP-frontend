@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { FiEdit, FiEye, FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
+import { FiCopy, FiEdit, FiEye, FiMoreVertical, FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
 import styles from "./table.module.scss";
 export type ReusableTableSortDirection = "asc" | "desc";
 export type ReusableTableSortState = {
@@ -51,14 +51,17 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   onView?: RowActionHandler<T>;
   onUpdate?: RowActionHandler<T>;
   onEdit?: RowActionHandler<T>;
+  onDuplicate?: RowActionHandler<T>;
   onDelete?: RowActionHandler<T>;
   isViewDisabled?: RowActionDisabledResolver<T>;
   isUpdateDisabled?: RowActionDisabledResolver<T>;
   isEditDisabled?: RowActionDisabledResolver<T>;
+  isDuplicateDisabled?: RowActionDisabledResolver<T>;
   isDeleteDisabled?: RowActionDisabledResolver<T>;
   viewLabel?: string;
   updateLabel?: string;
   editLabel?: string;
+  duplicateLabel?: string;
   deleteLabel?: string;
   showActionsColumn?: boolean;
   actionsHeader?: ReactNode;
@@ -159,12 +162,15 @@ function buildPageList(totalPages: number, currentPage: number): Array<number | 
   }
   return pages;
 }
-function ActionIcon({ type }: { type: "view" | "update" | "delete" }): ReactNode {
+function ActionIcon({ type }: { type: "view" | "update" | "duplicate" | "delete" }): ReactNode {
   if (type === "view") {
     return <FiEye className={styles.actionIcon} aria-hidden="true" />;
   }
   if (type === "update") {
     return <FiEdit className={styles.actionIcon} aria-hidden="true" />;
+  }
+  if (type === "duplicate") {
+    return <FiCopy className={styles.actionIcon} aria-hidden="true" />;
   }
   return <FiTrash2 className={styles.actionIcon} aria-hidden="true" />;
 }
@@ -274,14 +280,17 @@ export function ReusableTable<T extends Record<string, unknown>>({
   onView,
   onUpdate,
   onEdit,
+  onDuplicate,
   onDelete,
   isViewDisabled,
   isUpdateDisabled,
   isEditDisabled,
+  isDuplicateDisabled,
   isDeleteDisabled,
-  viewLabel = "View",
+  viewLabel = "View Details",
   updateLabel,
   editLabel,
+  duplicateLabel = "Duplicate",
   deleteLabel = "Delete",
   showActionsColumn,
   actionsHeader = "Actions",
@@ -321,22 +330,27 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const [internalSortState, setInternalSortState] = useState<ReusableTableSortState>(defaultSortState);
   const [internalCurrentPage, setInternalCurrentPage] = useState(defaultCurrentPage);
   const [internalPageSize, setInternalPageSize] = useState(defaultPageSize);
+  const [openActionMenuKey, setOpenActionMenuKey] = useState<Key | null>(null);
   const resolvedOnUpdate = onUpdate ?? onEdit;
   const resolvedIsUpdateDisabled = isUpdateDisabled ?? isEditDisabled;
-  const resolvedUpdateLabel = updateLabel ?? editLabel ?? "Update";
+  const resolvedUpdateLabel = updateLabel ?? editLabel ?? "Edit";
+  const hasRowActions = Boolean(onView || resolvedOnUpdate || onDuplicate || onDelete);
+  const shouldRenderInlineActionMenu = hasRowActions;
   const hasActionsColumn = columns.some((column) => isActionsColumn(column));
+  const baseColumns = shouldRenderInlineActionMenu
+    ? columns.filter((column) => !isActionsColumn(column))
+    : columns;
   const effectiveSearchQuery = isSearchControlled ? searchQuery : internalSearchQuery;
   const effectiveSortState = isSortControlled ? sortState : internalSortState;
   const effectivePageSize = Math.max(
     1,
     isPageSizeControlled ? (pageSize ?? defaultPageSize) : internalPageSize,
   );
-  const shouldIncludeActionsColumn =
-    showActionsColumn ?? Boolean(hasActionsColumn || onView || resolvedOnUpdate || onDelete);
+  const shouldIncludeActionsColumn = showActionsColumn ?? Boolean(hasActionsColumn || hasRowActions);
   const displayColumns =
-    shouldIncludeActionsColumn && !hasActionsColumn
+    shouldIncludeActionsColumn && !hasActionsColumn && !shouldRenderInlineActionMenu
       ? [
-          ...columns,
+          ...baseColumns,
           {
             key: "actions",
             header: actionsHeader,
@@ -345,7 +359,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
             mobileLabel: "Actions",
           } satisfies ReusableTableColumn<T>,
         ]
-      : columns;
+      : baseColumns;
   const sortableColumns = displayColumns.filter((column) => isColumnSortable(column, sortable));
   const normalizedSearchQuery = normalizeString(effectiveSearchQuery);
   const filteredRows = useMemo(() => {
@@ -426,6 +440,49 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const compactViewportRowThreshold = paginated ? effectivePageSize : 8;
   const shouldUseCompactViewport =
     fullViewHeight && renderedRowCount < compactViewportRowThreshold;
+
+  useEffect(() => {
+    if (openActionMenuKey === null) {
+      return;
+    }
+
+    const isVisible = paginatedRows.some(
+      (row, index) => resolveRowKey(row, index, rowKey) === openActionMenuKey,
+    );
+
+    if (!isVisible) {
+      setOpenActionMenuKey(null);
+    }
+  }, [openActionMenuKey, paginatedRows, rowKey]);
+
+  useEffect(() => {
+    if (openActionMenuKey === null) {
+      return;
+    }
+
+    const handlePointerDown = (event: globalThis.MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-erp-actions-root="true"]')) {
+        return;
+      }
+      setOpenActionMenuKey(null);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenActionMenuKey(null);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [openActionMenuKey]);
+
   useEffect(() => {
     if (!paginated || effectiveCurrentPage === requestedCurrentPage) {
       return;
@@ -504,8 +561,88 @@ export function ReusableTable<T extends Record<string, unknown>>({
     rowIndex: number,
   ) => {
     event.stopPropagation();
+    setOpenActionMenuKey(null);
     handler?.(row, rowIndex);
   };
+  const handleActionMenuToggle = (event: MouseEvent<HTMLButtonElement>, rowActionKey: Key) => {
+    event.stopPropagation();
+    setOpenActionMenuKey((current) => (current === rowActionKey ? null : rowActionKey));
+  };
+  const renderActionMenu = (
+    row: T,
+    rowIndex: number,
+    resolvedKey: Key,
+    viewDisabled: boolean,
+    updateDisabled: boolean,
+    duplicateDisabled: boolean,
+    deleteDisabled: boolean,
+  ): ReactNode => (
+    <div className={styles.actionsMenuRoot} data-erp-actions-root="true">
+      <button
+        type="button"
+        className={styles.actionsTrigger}
+        aria-label="Open row actions"
+        aria-haspopup="menu"
+        aria-expanded={openActionMenuKey === resolvedKey}
+        onClick={(event) => handleActionMenuToggle(event, resolvedKey)}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <FiMoreVertical className={styles.actionsTriggerIcon} aria-hidden="true" />
+      </button>
+      {openActionMenuKey === resolvedKey ? (
+        <div className={styles.actionsDropdown} role="menu" aria-label="Row actions">
+          {resolvedOnUpdate ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.actionsDropdownItem}
+              onClick={(event) => handleActionClick(event, resolvedOnUpdate, row, rowIndex)}
+              disabled={updateDisabled}
+            >
+              <ActionIcon type="update" />
+              <span>{resolvedUpdateLabel}</span>
+            </button>
+          ) : null}
+          {onDuplicate ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.actionsDropdownItem}
+              onClick={(event) => handleActionClick(event, onDuplicate, row, rowIndex)}
+              disabled={duplicateDisabled}
+            >
+              <ActionIcon type="duplicate" />
+              <span>{duplicateLabel}</span>
+            </button>
+          ) : null}
+          {onView ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.actionsDropdownItem}
+              onClick={(event) => handleActionClick(event, onView, row, rowIndex)}
+              disabled={viewDisabled}
+            >
+              <ActionIcon type="view" />
+              <span>{viewLabel}</span>
+            </button>
+          ) : null}
+          {onDelete ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={cx(styles.actionsDropdownItem, styles.actionsDropdownDelete)}
+              onClick={(event) => handleActionClick(event, onDelete, row, rowIndex)}
+              disabled={deleteDisabled}
+            >
+              <ActionIcon type="delete" />
+              <span>{deleteLabel}</span>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
   return (
     <div
       className={cx(styles.tableShell, wrapperClassName)}
@@ -649,11 +786,13 @@ export function ReusableTable<T extends Record<string, unknown>>({
                     }
                     tabIndex={onRowClick ? 0 : undefined}
                   >
-                    {displayColumns.map((column) => {
+                    {displayColumns.map((column, columnIndex) => {
                       const shouldRenderActions = isActionsColumn(column) && !column.render;
                       const viewDisabled = !onView || isViewDisabled?.(row, rowIndex) === true;
                       const updateDisabled =
                         !resolvedOnUpdate || resolvedIsUpdateDisabled?.(row, rowIndex) === true;
+                      const duplicateDisabled =
+                        !onDuplicate || isDuplicateDisabled?.(row, rowIndex) === true;
                       const deleteDisabled = !onDelete || isDeleteDisabled?.(row, rowIndex) === true;
                       const resolvedCellStyle =
                         typeof column.cellStyle === "function"
@@ -669,91 +808,49 @@ export function ReusableTable<T extends Record<string, unknown>>({
                             styles.cell,
                             getColumnAlignClass(column.align),
                             shouldRenderActions && styles.actionsCell,
+                            shouldRenderInlineActionMenu && columnIndex === 0 && styles.leadingActionsCell,
                             typeof column.cellClassName === "function"
                               ? column.cellClassName(row, rowIndex)
                               : column.cellClassName,
                           )}
                         >
                           {shouldRenderActions ? (
-                            onView || resolvedOnUpdate || onDelete ? (
+                            hasRowActions ? (
                               <div className={styles.actionsGroup}>
-                              {onView ? (
-                                <button
-                                  type="button"
-                                  className={cx(
-                                    styles.actionButton,
-                                    styles.viewButton,
-                                    actionsAsIcons && styles.iconActionButton,
-                                  )}
-                                  onClick={(event) => handleActionClick(event, onView, row, rowIndex)}
-                                  disabled={viewDisabled}
-                                  aria-label={viewLabel}
-                                  title={viewLabel}
-                                >
-                                  {actionsAsIcons ? (
-                                    <>
-                                      <ActionIcon type="view" />
-                                      <span className={styles.srOnly}>{viewLabel}</span>
-                                    </>
-                                  ) : (
-                                    viewLabel
-                                  )}
-                                </button>
-                              ) : null}
-                              {resolvedOnUpdate ? (
-                                <button
-                                  type="button"
-                                  className={cx(
-                                    styles.actionButton,
-                                    styles.updateButton,
-                                    actionsAsIcons && styles.iconActionButton,
-                                  )}
-                                  onClick={(event) =>
-                                    handleActionClick(event, resolvedOnUpdate, row, rowIndex)
-                                  }
-                                  disabled={updateDisabled}
-                                  aria-label={resolvedUpdateLabel}
-                                  title={resolvedUpdateLabel}
-                                >
-                                  {actionsAsIcons ? (
-                                    <>
-                                      <ActionIcon type="update" />
-                                      <span className={styles.srOnly}>{resolvedUpdateLabel}</span>
-                                    </>
-                                  ) : (
-                                    resolvedUpdateLabel
-                                  )}
-                                </button>
-                              ) : null}
-                              {onDelete ? (
-                                <button
-                                  type="button"
-                                  className={cx(
-                                    styles.actionButton,
-                                    styles.deleteButton,
-                                    actionsAsIcons && styles.iconActionButton,
-                                  )}
-                                  onClick={(event) => handleActionClick(event, onDelete, row, rowIndex)}
-                                  disabled={deleteDisabled}
-                                  aria-label={deleteLabel}
-                                  title={deleteLabel}
-                                >
-                                  {actionsAsIcons ? (
-                                    <>
-                                      <ActionIcon type="delete" />
-                                      <span className={styles.srOnly}>{deleteLabel}</span>
-                                    </>
-                                  ) : (
-                                    deleteLabel
-                                  )}
-                                </button>
-                              ) : null}
+                                {renderActionMenu(
+                                  row,
+                                  rowIndex,
+                                  resolvedKey,
+                                  viewDisabled,
+                                  updateDisabled,
+                                  duplicateDisabled,
+                                  deleteDisabled,
+                                )}
                               </div>
                             ) : (
                               "-"
                             )
                           ) : (
-                            getCellContent(row, column, rowIndex)
+                            <>
+                              {shouldRenderInlineActionMenu && columnIndex === 0 ? (
+                                <div className={styles.leadingActionsRow}>
+                                  {renderActionMenu(
+                                    row,
+                                    rowIndex,
+                                    resolvedKey,
+                                    viewDisabled,
+                                    updateDisabled,
+                                    duplicateDisabled,
+                                    deleteDisabled,
+                                  )}
+                                  <div className={styles.leadingActionsValue}>
+                                    {getCellContent(row, column, rowIndex)}
+                                  </div>
+                                </div>
+                              ) : (
+                                getCellContent(row, column, rowIndex)
+                              )}
+                            </>
                           )}
                         </td>
                       );

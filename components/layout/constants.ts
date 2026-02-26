@@ -39,16 +39,13 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
   label: "3 Inventory",
   children: [
     { label: "Item Master", href: "/item-master" },
-
     { label: "Change Selling" },
     { label: "Change Selling (Purchase)" },
     { label: "Item Group wise Discount" },
     { label: "Sticker Printing" },
     { label: "Product Kits" },
-
     { label: "Reorder" },
     { label: "Cost Price - Bulk Change" },
-
     {
       label: "Master",
       children: [
@@ -59,6 +56,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         { label: "Unit Master", href: "/master/unit-master" },
         { label: "Godown Master", href: "/master/godown-master" },
         { label: "Tax Master", href: "/master/tax-master" },
+
       ],
     },
 
@@ -75,6 +73,37 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         href: "/master/account-ledger-groups-master",
       },
       { label: "Account Ledger Master", href: "/master/account-ledger-master" },
+      {
+        label:"Companies",href:"/master/companies"
+      },
+      {
+        label:"Company Group Master",href:"/master/company-group-master"
+      },
+      {
+        label:"Branches",href:"/master/branches-master"
+      },
+      {
+        label:"Employee Designation Master",href:"/master/employee-designation-master"
+      },
+      {
+        label:"Employee Master",href:"/master/employee-master"
+      },
+      {
+        label:"GSP Company Service",href:"/master/gsp-company-service"
+      },
+      {
+        label:"GSP Service Master",href:"/master/gsp-service-master"
+      },{
+        label:"GSP Provider Master",href:"/master/gsp-provider-master"
+      },{
+        label:"Ledger Bank Account",href:"/master/ledger-bank-account-master"
+      },
+      {
+        label:"Ledger Shipping Address",href:"/master/ledger-shipping-address-master"
+      },
+      {
+        label:"Tender Master",href:"/master/tender-master"
+      }
     ],
   },
   {
@@ -95,7 +124,6 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
   { label: "7 Settings" },
   { label: "8 Transport" },
 ];
-
 export const DEFAULT_QUICK_TABS: ErpHeaderItem[] = [
   { label: "Sales Entry" },
   { label: "Sales Return" },
@@ -127,7 +155,6 @@ export const DEFAULT_QUICK_TABS: ErpHeaderItem[] = [
     ],
   },
 ];
-
 export const ERP_MENU_OBJECT: ERPMenuObject = {
   Accounts: {
     "Account Ledger Groups Master": null,
@@ -154,15 +181,12 @@ export const ERP_MENU_OBJECT: ERPMenuObject = {
     "Allow to Change Master Price": null,
   },
 };
-
 export const DEFAULT_CUSTOMER_OPTIONS = ["Customers"];
-
 export const DEFAULT_DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
   day: "2-digit",
   month: "2-digit",
   year: "numeric",
 };
-
 export const ARIA_LABELS = {
   MAIN_MENU: "Main ERP modules",
   CUSTOMER_SELECT: "Customer selection",

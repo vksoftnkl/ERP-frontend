@@ -222,12 +222,125 @@
     text-overflow: clip;
   }
 
+  .leadingActionsCell {
+    overflow: visible;
+    text-overflow: clip;
+  }
+
   .actionsGroup {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    flex-wrap: wrap;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .actionsMenuRoot {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+
+  .actionsTrigger {
+    width: 24px;
+    height: 28px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #8b98a9;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    transition:
+      background-color 0.16s ease,
+      color 0.16s ease;
+
+    &:hover {
+      background: #edf2f7;
+      color: #5f6f82;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #3f6fe0;
+      outline-offset: 0;
+    }
+  }
+
+  .actionsTriggerIcon {
+    width: 17px;
+    height: 17px;
+  }
+
+  .actionsDropdown {
+    position: absolute;
+    top: -4px;
+    left: calc(100% + 8px);
+    right: auto;
+    min-width: 162px;
+    border: 1px solid #d7dee8;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 14px 32px rgba(18, 30, 45, 0.18);
+    padding: 6px;
+    z-index: 30;
+  }
+
+  .actionsDropdownItem {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #374151;
+    font-size: 0.94rem;
+    line-height: 1.25;
+    text-align: left;
+    padding: 0.5rem 0.62rem;
+    cursor: pointer;
+    transition: background-color 0.14s ease;
+
+    &:hover:not(:disabled) {
+      background: #eef2f7;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #3f6fe0;
+      outline-offset: 1px;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  .actionsDropdownDelete {
+    color: #dc2626;
+
+    &:hover:not(:disabled) {
+      background: #fff1f2;
+    }
+  }
+
+  .leadingActionsRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .leadingActionsValue {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: inherit;
   }
 
   .actionButton {
@@ -297,8 +410,9 @@
   }
 
   .actionIcon {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
   }
 
   .srOnly {
@@ -466,6 +580,28 @@
 
     .actionsGroup {
       justify-content: flex-start;
+    }
+
+    .actionsMenuRoot {
+      justify-content: flex-start;
+      width: auto;
+    }
+
+    .actionsDropdown {
+      top: calc(100% + 6px);
+      left: 0;
+      right: auto;
+    }
+
+    .leadingActionsRow {
+      width: 100%;
+    }
+
+    .leadingActionsValue {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+      overflow-wrap: anywhere;
     }
 
     .paginationBar {

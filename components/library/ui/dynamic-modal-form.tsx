@@ -70,6 +70,7 @@ export type ERPDynamicFieldType =
   | "email"
   | "tel"
   | "number"
+  | "checkbox"
   | "color"
   | "date"
   | "select"
@@ -239,6 +240,13 @@ function validateFieldValue(
   const fieldType = field.type ?? "text";
   const validation = field.validation;
   if (fieldType === "heading") {
+    return null;
+  }
+  if (fieldType === "checkbox") {
+    const isChecked = rawValue === "true";
+    if (field.required && !isChecked) {
+      return validation?.requiredMessage ?? `${field.label} is required.`;
+    }
     return null;
   }
   if (fieldType === "file") {
@@ -500,12 +508,17 @@ export function ERPDynamicModalForm({
     const target = event.target;
     const { name } = target;
     const isFileInput = target instanceof HTMLInputElement && target.type === "file";
+    const isCheckboxInput = target instanceof HTMLInputElement && target.type === "checkbox";
     const isMultiSelectInput = target instanceof HTMLSelectElement && target.multiple;
     const nextFile = isFileInput ? target.files?.[0] ?? null : null;
     const nextValue = isFileInput
       ? nextFile
         ? nextFile.name
         : ""
+      : isCheckboxInput
+        ? target.checked
+          ? "true"
+          : "false"
       : isMultiSelectInput
         ? formatMultiSelectValue(Array.from(target.selectedOptions).map((option) => option.value))
         : target.value;
@@ -752,18 +765,15 @@ export function ERPDynamicModalForm({
             aria-modal="true"
             aria-labelledby={`${formId}-title`}
           >
-            <header
-              className={styles.header}
-              style={{ background: `linear-gradient(120deg, ${activePalette.softFrom} 0%, ${activePalette.softTo} 100%)` }}
-            >
+            <header className={styles.header}>
               <div className={styles.headerRow}>
                 <div>
                   <h3 id={`${formId}-title`} className={styles.headerTitle}>
                     {activeVariant.modalTitle}
                   </h3>
-                  {activeVariant.modalDescription ? (
+                  {/* {activeVariant.modalDescription ? (
                     <p className={styles.headerDescription}>{activeVariant.modalDescription}</p>
-                  ) : null}
+                  ) : null} */}
                 </div>
                 <button
                   type="button"
@@ -974,12 +984,22 @@ export function ERPDynamicModalForm({
                             </option>
                           ))}
                         </select>
+                      ) : inputType === "checkbox" ? (
+                        <div className={styles.checkboxWrapper}>
+                          <input
+                            {...commonProps}
+                            type="checkbox"
+                            checked={fieldValue === "true"}
+                            className={cx(styles.checkboxControl, fieldError && styles.checkboxControlInvalid)}
+                            style={field.controlStyle}
+                          />
+                        </div>
                       ) : inputType === "textarea" ? (
                         <textarea
                           {...commonProps}
                           value={fieldValue}
                           rows={field.rows ?? 4}
-                          placeholder={field.placeholder}
+                          //placeholder={field.placeholder}
                           className={cx(
                             styles.control,
                             styles.textarea,
@@ -1011,7 +1031,7 @@ export function ERPDynamicModalForm({
                           min={field.min}
                           max={field.max}
                           step={field.step}
-                          placeholder={field.placeholder}
+                          //placeholder={field.placeholder}
                           className={cx(styles.control, fieldError && styles.controlInvalid)}
                           style={field.controlStyle}
                         />

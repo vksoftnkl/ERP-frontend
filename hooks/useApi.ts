@@ -25,7 +25,17 @@ type UseApiRunOverride<TBody> = {
   url?: string;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "https://localhost:3010/api/v1";
+const DEFAULT_API_PORT = "3010";
+
+function resolveDefaultApiBase(): string {
+  if (typeof window === "undefined") {
+    return `https://localhost:${DEFAULT_API_PORT}/api/v1`;
+  }
+
+  return `https://${window.location.hostname}:${DEFAULT_API_PORT}/api/v1`;
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? resolveDefaultApiBase();
 
 function isMutationMethod(method: ApiMethod): boolean {
   return method !== "GET";
@@ -47,13 +57,57 @@ function defaultSuccessMessage(method: ApiMethod): string {
   return "Request completed successfully.";
 }
 
-function showErrorToast(message: string): void {
-  const normalizedMessage = message.trim() || "Something went wrong";
+function extractMessage(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (typeof value === "number" || typeof value === "bigint" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    const combined = value
+      .map((entry) => extractMessage(entry))
+      .filter((entry) => entry.length > 0)
+      .join(", ");
+
+    return combined.trim();
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+
+    const preferredKeys = ["message", "error", "detail", "title", "errors"] as const;
+    for (const key of preferredKeys) {
+      const nested = extractMessage(record[key]);
+      if (nested) {
+        return nested;
+      }
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "";
+    }
+  }
+
+  return "";
+}
+
+function normalizeMessage(value: unknown, fallback: string): string {
+  const extracted = extractMessage(value);
+  return extracted || fallback;
+}
+
+function showErrorToast(message: unknown): void {
+  const normalizedMessage = normalizeMessage(message, "Something went wrong");
   toast.error(normalizedMessage, { toastId: `api-error:${normalizedMessage}` });
 }
 
-function showSuccessToast(message: string): void {
-  const normalizedMessage = message.trim() || "Success";
+function showSuccessToast(message: unknown): void {
+  const normalizedMessage = normalizeMessage(message, "Success");
   toast.success(normalizedMessage);
 }
 
@@ -181,15 +235,11 @@ export function useApi<TResp = unknown, TBody = unknown>(
             redirectToLogin();
           }
 
-          const responseData = e.response?.data as
-            | { message?: string }
-            | string
-            | undefined;
-
-          const message =
-            (typeof responseData === "object" ? responseData?.message : responseData) ??
-            e.message ??
-            "Something went wrong";
+          const responseData = e.response?.data as unknown;
+          const message = normalizeMessage(
+            responseData,
+            normalizeMessage(e.message, "Something went wrong")
+          );
           setError(message);
           if (shouldToastError) {
             showErrorToast(toastOptions?.errorMessage ?? message);
@@ -197,7 +247,7 @@ export function useApi<TResp = unknown, TBody = unknown>(
           throw e;
         }
 
-        const message = e?.message ?? "Something went wrong";
+        const message = normalizeMessage(e, "Something went wrong");
         setError(message);
         if (shouldToastError) {
           showErrorToast(toastOptions?.errorMessage ?? message);

@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --experimental-https",
     "build": "next build",
-    "start": "next start"
+    "start": "node https-server.cjs",
+    "start:http": "next start"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

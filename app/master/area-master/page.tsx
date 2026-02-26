@@ -137,7 +137,7 @@ function buildAreaFormFields(cityOptions: ERPDynamicSelectOption[]): ERPDynamicM
     {
       name: "areaIsActive",
       label: "Status",
-      type: "select",
+      type: "checkbox",
       options: [
         { label: "Active", value: "true" },
         { label: "Inactive", value: "false" },

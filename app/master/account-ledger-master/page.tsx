@@ -213,20 +213,17 @@ function buildLedgerFormFields(
     {
       name: "ledIsBillByBill",
       label: "Bill By Bill",
-      type: "select",
-      options: BOOLEAN_OPTIONS,
+      type: "checkbox",
     },
     {
       name: "ledIsCostCenterReq",
       label: "Cost Center Required",
-      type: "select",
-      options: BOOLEAN_OPTIONS,
+      type: "checkbox",
     },
     {
       name: "ledIsInterestApplicable",
       label: "Interest Applicable",
-      type: "select",
-      options: BOOLEAN_OPTIONS,
+      type: "checkbox",
     },
     {
       name: "ledInterestRate",
@@ -372,7 +369,7 @@ function buildLedgerFormFields(
     {
       name: "ledIsSez",
       label: "Is SEZ",
-      type: "select",
+      type: "checkbox",
       options: BOOLEAN_OPTIONS,
     },
     {
@@ -453,25 +450,25 @@ function buildLedgerFormFields(
     {
       name: "ledIsActive",
       label: "Is Active",
-      type: "select",
+      type: "checkbox",
       options: STATUS_OPTIONS,
     },
     {
       name: "ledAllowEdit",
       label: "Allow Edit",
-      type: "select",
+      type: "checkbox",
       options: BOOLEAN_OPTIONS,
     },
     {
       name: "ledIsEntry",
       label: "Is Entry",
-      type: "select",
+      type: "checkbox",
       options: BOOLEAN_OPTIONS,
     },
     {
       name: "ledAllowSms",
       label: "Allow SMS",
-      type: "select",
+      type: "checkbox",
       options: BOOLEAN_OPTIONS,
     },
     {

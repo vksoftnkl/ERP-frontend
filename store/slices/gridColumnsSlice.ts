@@ -3,7 +3,17 @@ import axios from "axios";
 import { getAuthSession } from "@/lib/auth/session";
 import type { RootState } from "@/store/store";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE 
+const DEFAULT_API_PORT = "3010";
+
+function resolveDefaultApiBase(): string {
+  if (typeof window === "undefined") {
+    return `https://localhost:${DEFAULT_API_PORT}/api/v1`;
+  }
+
+  return `https://${window.location.hostname}:${DEFAULT_API_PORT}/api/v1`;
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? resolveDefaultApiBase();
 const GRID_COLUMNS_LIST_ENDPOINT = "/grid-columns/list";
 
 const ARRAY_KEYS = [

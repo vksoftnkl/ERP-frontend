@@ -146,28 +146,29 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
     {
       name: "masterName",
       label: "Item Section Name",
+      colSpan:2,
       required: true,
       validation: {
         minLength: 2,
         minLengthMessage: "Item Section Name must be at least 2 characters.",
       },
     },
-    {
-      name: "searchCode",
-      label: "Section Code",
-    },
-    {
-      name: "masterAlias",
-      label: "Section Alias",
-    },
+   
+    // {
+    //   name: "masterAlias",
+    //   label: "Section Alias",
+    //   colSpan:2,
+    // },
     {
       name: "masterShortName",
       label: "Short Name",
+      colSpan:2,
     },
     {
       name: "position",
-      label: "Sort Order",
+      label: "Position",
       type: "number",
+      colSpan:1,
       min: 0,
       step: 1,
       validation: {
@@ -178,19 +179,11 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
       name: "secParentId",
       label: "Parent Section ID",
       type: "select",
+      colSpan:2,
       searchable: true,
       options: sectionOptions,
     },
-    {
-      name: "secLevel",
-      label: "Section Level",
-      type: "number",
-      min: 0,
-      step: 1,
-      validation: {
-        minMessage: "Section Level must be 0 or greater.",
-      },
-    },
+    
     {
       name: "secColorCode",
       label: "Color Code",
@@ -201,7 +194,6 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
     {
       name: "masterDescription",
       label: "Description",
-      type: "textarea",
       colSpan: 2,
     },
     {

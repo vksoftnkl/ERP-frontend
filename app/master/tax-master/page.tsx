@@ -4,10 +4,10 @@ import CrudMasterPage from "@/components/master/crud-master-page";
 import styles from "./page.module.scss";
 
 const API_ENDPOINTS = {
-  list: "/taxes/list",
-  getById: "/taxes/get",
-  create: "/taxes/create",
-  delete: "/taxes/delete",
+  list: "/item-taxes/list",
+  getById: "/item-taxes/get",
+  create: "/item-taxes/create",
+  delete: "/item-taxes/delete",
 } as const;
 
 const LOOKUP_KEYS = {

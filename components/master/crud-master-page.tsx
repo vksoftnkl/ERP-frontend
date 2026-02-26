@@ -1041,7 +1041,7 @@ export default function CrudMasterPage({
                 activeRowKey={selectedRowId}
                 onRowClick={(row) => setSelectedRowId(row.__rowId)}
                 onCreate={openCreateModal}
-                createLabel={createLabel ?? `Add ${title}`}
+                createLabel="Add"
                 onView={handleRowView}
                 onUpdate={handleRowUpdate}
                 onDelete={handleRowDelete}

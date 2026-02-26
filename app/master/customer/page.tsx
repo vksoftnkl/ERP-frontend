@@ -238,7 +238,7 @@ function buildCustomerFormFields(
     {
       name: "customerIsActive",
       label: "Status",
-      type: "select",
+      type: "checkbox",
       options: [
         { label: "Active", value: "true" },
         { label: "Inactive", value: "false" },
