@@ -30,17 +30,17 @@ const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 
 const LOOKUP_QUERY_COMPANIES = {
   module: "companies",
-  limit: "100",
+  limit: "20",
 } as const;
 
 const LOOKUP_QUERY_BRANCHES = {
   module: "branches",
-  limit: "100",
+  limit: "20",
 } as const;
 
 const LOOKUP_QUERY_DESIGNATIONS = {
   module: "employeeDesignations",
-  limit: "100",
+  limit: "20",
 } as const;
 
 const LOOKUP_KEYS = {

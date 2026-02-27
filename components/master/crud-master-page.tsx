@@ -16,8 +16,19 @@ const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 
-const DEFAULT_ARRAY_KEYS = ["data", "items", "results", "rows", "list"] as const;
-const PAGINATION_CONTAINER_KEYS = ["meta", "pagination", "pageInfo", "pager"] as const;
+const DEFAULT_ARRAY_KEYS = [
+  "data",
+  "items",
+  "results",
+  "rows",
+  "list",
+] as const;
+const PAGINATION_CONTAINER_KEYS = [
+  "meta",
+  "pagination",
+  "pageInfo",
+  "pager",
+] as const;
 const TOTAL_ENTRIES_KEYS = [
   "total",
   "totalCount",
@@ -29,10 +40,28 @@ const TOTAL_ENTRIES_KEYS = [
   "totalItems",
   "total_items",
 ] as const;
-const CURRENT_PAGE_KEYS = ["page", "currentPage", "current_page", "pageNo", "page_no"] as const;
-const PAGE_SIZE_KEYS = ["limit", "pageSize", "page_size", "perPage", "per_page"] as const;
+const CURRENT_PAGE_KEYS = [
+  "page",
+  "currentPage",
+  "current_page",
+  "pageNo",
+  "page_no",
+] as const;
+const PAGE_SIZE_KEYS = [
+  "limit",
+  "pageSize",
+  "page_size",
+  "perPage",
+  "per_page",
+] as const;
 
-const DEFAULT_ACTIVE_KEYS = ["active", "is_active", "isActive", "isactive", "status"] as const;
+const DEFAULT_ACTIVE_KEYS = [
+  "active",
+  "is_active",
+  "isActive",
+  "isactive",
+  "status",
+] as const;
 const DEFAULT_POSITION_KEYS = ["position", "sort"] as const;
 const DEFAULT_DESCRIPTION_KEYS = ["description", "desc"] as const;
 
@@ -157,6 +186,16 @@ export type CrudMasterPageProps = {
   formDescription?: string;
   customFields?: ERPDynamicModalField[];
   createInitialValues?: Record<string, string>;
+  getByIdMethod?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  buildGetByIdRequest?: (params: {
+    recordId: string | number;
+    action: "view" | "update";
+    rowSource: Record<string, unknown> | null;
+  }) => {
+    url?: string;
+    query?: Record<string, string>;
+    body?: Record<string, unknown>;
+  };
   mapFormValues?: (params: {
     source: Record<string, unknown> | null;
     defaults: MasterFormState;
@@ -191,7 +230,11 @@ function toDisplayValue(value: unknown): string {
     return value.trim();
   }
 
-  if (typeof value === "number" || typeof value === "bigint" || typeof value === "boolean") {
+  if (
+    typeof value === "number" ||
+    typeof value === "bigint" ||
+    typeof value === "boolean"
+  ) {
     return String(value);
   }
 
@@ -250,7 +293,9 @@ function findPaginationNumber(
   for (const candidate of candidates) {
     for (const key of keys) {
       const value = candidate[key];
-      const normalized = allowZero ? toNonNegativeInt(value) : toPositiveInt(value);
+      const normalized = allowZero
+        ? toNonNegativeInt(value)
+        : toPositiveInt(value);
       if (normalized !== null) {
         return normalized;
       }
@@ -260,7 +305,10 @@ function findPaginationNumber(
   return null;
 }
 
-function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] {
+function extractRows(
+  payload: unknown,
+  arrayKeys: readonly string[],
+): unknown[] {
   if (Array.isArray(payload)) {
     return payload;
   }
@@ -288,14 +336,18 @@ function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] 
         }
       }
 
-      const nestedArray = Object.values(nestedObject).find((entry) => Array.isArray(entry));
+      const nestedArray = Object.values(nestedObject).find((entry) =>
+        Array.isArray(entry),
+      );
       if (Array.isArray(nestedArray)) {
         return nestedArray;
       }
     }
   }
 
-  const firstArray = Object.values(objectPayload).find((value) => Array.isArray(value));
+  const firstArray = Object.values(objectPayload).find((value) =>
+    Array.isArray(value),
+  );
   return Array.isArray(firstArray) ? firstArray : [];
 }
 
@@ -337,54 +389,57 @@ function buildMasterRows(
   const activeKeys = lookupKeys.active ?? DEFAULT_ACTIVE_KEYS;
   const positionKeys = lookupKeys.position ?? DEFAULT_POSITION_KEYS;
 
-  return extractRows(payload, lookupKeys.array ?? DEFAULT_ARRAY_KEYS).map((item, index) => {
-    const serialNo = serialOffset + index + 1;
+  return extractRows(payload, lookupKeys.array ?? DEFAULT_ARRAY_KEYS).map(
+    (item, index) => {
+      const serialNo = serialOffset + index + 1;
 
-    if (item && typeof item === "object" && !Array.isArray(item)) {
-      const row = item as Record<string, unknown>;
-      const idValue = getFirstDefinedValue(row, lookupKeys.id);
-      const codeValue = getFirstDefinedValue(row, lookupKeys.code);
-      const nameValue = getFirstDefinedValue(row, lookupKeys.name);
-      const shortValue = getFirstDefinedValue(row, lookupKeys.short);
-      const aliasValue = getFirstDefinedValue(row, lookupKeys.alias);
-      const activeValue = getFirstDefinedValue(row, activeKeys);
-      const positionValue = getFirstDefinedValue(row, positionKeys);
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        const row = item as Record<string, unknown>;
+        const idValue = getFirstDefinedValue(row, lookupKeys.id);
+        const codeValue = getFirstDefinedValue(row, lookupKeys.code);
+        const nameValue = getFirstDefinedValue(row, lookupKeys.name);
+        const shortValue = getFirstDefinedValue(row, lookupKeys.short);
+        const aliasValue = getFirstDefinedValue(row, lookupKeys.alias);
+        const activeValue = getFirstDefinedValue(row, activeKeys);
+        const positionValue = getFirstDefinedValue(row, positionKeys);
 
-      const preferredKey = idValue ?? row.id ?? row._id ?? row.code ?? serialNo;
-      const rowId =
-        typeof preferredKey === "string" || typeof preferredKey === "number"
-          ? preferredKey
-          : serialNo;
+        const preferredKey =
+          idValue ?? row.id ?? row._id ?? row.code ?? serialNo;
+        const rowId =
+          typeof preferredKey === "string" || typeof preferredKey === "number"
+            ? preferredKey
+            : serialNo;
+
+        return {
+          __rowId: rowId,
+          __recordId: rowId,
+          __source: row,
+          serialNo,
+          masterId: toDisplayValue(idValue) || String(serialNo),
+          masterCode: toDisplayValue(codeValue),
+          masterName: toDisplayValue(nameValue),
+          masterShort: toDisplayValue(shortValue),
+          masterAlias: toDisplayValue(aliasValue),
+          masterActive: toDisplayValue(activeValue),
+          position: toDisplayValue(positionValue),
+        };
+      }
 
       return {
-        __rowId: rowId,
-        __recordId: rowId,
-        __source: row,
+        __rowId: serialNo,
+        __recordId: serialNo,
+        __source: null,
         serialNo,
-        masterId: toDisplayValue(idValue) || String(serialNo),
-        masterCode: toDisplayValue(codeValue),
-        masterName: toDisplayValue(nameValue),
-        masterShort: toDisplayValue(shortValue),
-        masterAlias: toDisplayValue(aliasValue),
-        masterActive: toDisplayValue(activeValue),
-        position: toDisplayValue(positionValue),
+        masterId: String(serialNo),
+        masterCode: "",
+        masterName: toDisplayValue(item),
+        masterShort: "",
+        masterAlias: "",
+        masterActive: "",
+        position: "",
       };
-    }
-
-    return {
-      __rowId: serialNo,
-      __recordId: serialNo,
-      __source: null,
-      serialNo,
-      masterId: String(serialNo),
-      masterCode: "",
-      masterName: toDisplayValue(item),
-      masterShort: "",
-      masterAlias: "",
-      masterActive: "",
-      position: "",
-    };
-  });
+    },
+  );
 }
 
 function mapRowToFormState(
@@ -407,13 +462,24 @@ function mapRowToFormState(
 
   const source = row.__source;
   return {
-    masterName: toDisplayValue(getFirstDefinedValue(source, lookupKeys.name)) || row.masterName,
-    searchCode: toDisplayValue(getFirstDefinedValue(source, lookupKeys.code)) || row.masterCode,
-    masterAlias: toDisplayValue(getFirstDefinedValue(source, lookupKeys.alias)) || row.masterAlias,
+    masterName:
+      toDisplayValue(getFirstDefinedValue(source, lookupKeys.name)) ||
+      row.masterName,
+    searchCode:
+      toDisplayValue(getFirstDefinedValue(source, lookupKeys.code)) ||
+      row.masterCode,
+    masterAlias:
+      toDisplayValue(getFirstDefinedValue(source, lookupKeys.alias)) ||
+      row.masterAlias,
     masterShortName:
-      toDisplayValue(getFirstDefinedValue(source, lookupKeys.short)) || row.masterShort,
-    masterDescription: toDisplayValue(getFirstDefinedValue(source, descriptionKeys)),
-    position: toDisplayValue(getFirstDefinedValue(source, positionKeys)) || row.position,
+      toDisplayValue(getFirstDefinedValue(source, lookupKeys.short)) ||
+      row.masterShort,
+    masterDescription: toDisplayValue(
+      getFirstDefinedValue(source, descriptionKeys),
+    ),
+    position:
+      toDisplayValue(getFirstDefinedValue(source, positionKeys)) ||
+      row.position,
   };
 }
 
@@ -425,7 +491,11 @@ function extractDetailSource(payload: unknown): Record<string, unknown> | null {
   const objectPayload = payload as Record<string, unknown>;
   const nestedData = objectPayload.data;
 
-  if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
+  if (
+    nestedData &&
+    typeof nestedData === "object" &&
+    !Array.isArray(nestedData)
+  ) {
     return nestedData as Record<string, unknown>;
   }
 
@@ -442,24 +512,40 @@ function mergeRowWithDetail(
   const positionKeys = lookupKeys.position ?? DEFAULT_POSITION_KEYS;
 
   const recordId =
-    typeof idValue === "string" || typeof idValue === "number" ? idValue : row.__recordId;
+    typeof idValue === "string" || typeof idValue === "number"
+      ? idValue
+      : row.__recordId;
 
   return {
     ...row,
     __recordId: recordId,
     __source: source,
     masterId: toDisplayValue(idValue) || row.masterId,
-    masterCode: toDisplayValue(getFirstDefinedValue(source, lookupKeys.code)) || row.masterCode,
-    masterName: toDisplayValue(getFirstDefinedValue(source, lookupKeys.name)) || row.masterName,
-    masterShort: toDisplayValue(getFirstDefinedValue(source, lookupKeys.short)) || row.masterShort,
-    masterAlias: toDisplayValue(getFirstDefinedValue(source, lookupKeys.alias)) || row.masterAlias,
+    masterCode:
+      toDisplayValue(getFirstDefinedValue(source, lookupKeys.code)) ||
+      row.masterCode,
+    masterName:
+      toDisplayValue(getFirstDefinedValue(source, lookupKeys.name)) ||
+      row.masterName,
+    masterShort:
+      toDisplayValue(getFirstDefinedValue(source, lookupKeys.short)) ||
+      row.masterShort,
+    masterAlias:
+      toDisplayValue(getFirstDefinedValue(source, lookupKeys.alias)) ||
+      row.masterAlias,
     masterActive:
-      toDisplayValue(getFirstDefinedValue(source, activeKeys)) || row.masterActive,
-    position: toDisplayValue(getFirstDefinedValue(source, positionKeys)) || row.position,
+      toDisplayValue(getFirstDefinedValue(source, activeKeys)) ||
+      row.masterActive,
+    position:
+      toDisplayValue(getFirstDefinedValue(source, positionKeys)) ||
+      row.position,
   };
 }
 
-function resolveRecordId(row: MasterTableRow, idKeys: readonly string[]): string | number {
+function resolveRecordId(
+  row: MasterTableRow,
+  idKeys: readonly string[],
+): string | number {
   if (row.__source) {
     const sourceId = getFirstDefinedValue(row.__source, idKeys);
 
@@ -505,6 +591,8 @@ export default function CrudMasterPage({
   formDescription,
   customFields,
   createInitialValues,
+  getByIdMethod,
+  buildGetByIdRequest,
   mapFormValues,
   buildRequestPayload,
 }: CrudMasterPageProps) {
@@ -516,17 +604,25 @@ export default function CrudMasterPage({
     loading: detailsLoading,
     error: detailsError,
     reset: resetDetailsState,
-  } = useApi<unknown>(apiEndpoints.getById);
+  } = useApi<unknown, Record<string, unknown>>(apiEndpoints.getById, {
+    method: getByIdMethod ?? "GET",
+    toast: {
+      success: false,
+    },
+  });
   const {
     run: upsertRecord,
     loading: saveLoading,
     error: saveError,
     reset: resetSaveState,
-  } = useApi<unknown, Record<string, unknown>>(apiEndpoints.create, { method: "POST" });
-  const { run: deleteRecord, loading: deleteLoading, error: deleteError } = useApi<unknown>(
-    apiEndpoints.delete,
-    { method: "DELETE" },
-  );
+  } = useApi<unknown, Record<string, unknown>>(apiEndpoints.create, {
+    method: "POST",
+  });
+  const {
+    run: deleteRecord,
+    loading: deleteLoading,
+    error: deleteError,
+  } = useApi<unknown>(apiEndpoints.delete, { method: "DELETE" });
 
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
@@ -547,7 +643,10 @@ export default function CrudMasterPage({
 
       const payload = await getAll(query);
       const paginationInfo = extractPaginationInfo(payload);
-      const fallbackTotal = extractRows(payload, lookupKeys.array ?? DEFAULT_ARRAY_KEYS).length;
+      const fallbackTotal = extractRows(
+        payload,
+        lookupKeys.array ?? DEFAULT_ARRAY_KEYS,
+      ).length;
       const resolvedTotal = paginationInfo.totalEntries ?? fallbackTotal;
 
       setTotalEntries(Math.max(0, resolvedTotal));
@@ -562,7 +661,9 @@ export default function CrudMasterPage({
       if (paginationInfo.pageSize !== null) {
         const nextPageSize = paginationInfo.pageSize;
         setPageSize((existingPageSize) =>
-          existingPageSize === nextPageSize ? existingPageSize : toSafePageSize(nextPageSize),
+          existingPageSize === nextPageSize
+            ? existingPageSize
+            : toSafePageSize(nextPageSize),
         );
       }
     },
@@ -598,14 +699,16 @@ export default function CrudMasterPage({
       },
       {
         key: "masterCode",
-        header: tableColumnHeaders?.masterCode ?? codeColumnHeader ?? `${title} Code`,
+        header:
+          tableColumnHeaders?.masterCode ?? codeColumnHeader ?? `${title} Code`,
         accessor: "masterCode",
         align: tableColumnLayout?.masterCode?.align,
         width: tableColumnLayout?.masterCode?.width,
       },
       {
         key: "masterName",
-        header: tableColumnHeaders?.masterName ?? nameColumnHeader ?? `${title} Name`,
+        header:
+          tableColumnHeaders?.masterName ?? nameColumnHeader ?? `${title} Name`,
         accessor: "masterName",
         align: tableColumnLayout?.masterName?.align,
         width: tableColumnLayout?.masterName?.width,
@@ -625,12 +728,23 @@ export default function CrudMasterPage({
         width: tableColumnLayout?.masterActive?.width,
       },
     ],
-    [codeColumnHeader, nameColumnHeader, tableColumnHeaders, tableColumnLayout, title],
+    [
+      codeColumnHeader,
+      nameColumnHeader,
+      tableColumnHeaders,
+      tableColumnLayout,
+      title,
+    ],
   );
 
-  const [selectedRowId, setSelectedRowId] = useState<string | number | null>(null);
-  const [editingItemId, setEditingItemId] = useState<string | number | null>(null);
-  const [pendingDeleteRow, setPendingDeleteRow] = useState<MasterTableRow | null>(null);
+  const [selectedRowId, setSelectedRowId] = useState<string | number | null>(
+    null,
+  );
+  const [editingItemId, setEditingItemId] = useState<string | number | null>(
+    null,
+  );
+  const [pendingDeleteRow, setPendingDeleteRow] =
+    useState<MasterTableRow | null>(null);
 
   useEffect(() => {
     if (selectedRowId === null) {
@@ -647,7 +761,11 @@ export default function CrudMasterPage({
       return "";
     }
 
-    return pendingDeleteRow.masterName || pendingDeleteRow.masterCode || pendingDeleteRow.masterId;
+    return (
+      pendingDeleteRow.masterName ||
+      pendingDeleteRow.masterCode ||
+      pendingDeleteRow.masterId
+    );
   }, [pendingDeleteRow]);
 
   const openCreateModal = useCallback(() => {
@@ -669,16 +787,29 @@ export default function CrudMasterPage({
 
       void (async () => {
         try {
-          const payload = await getById({
-            url: `${apiEndpoints.getById}/${encodeURIComponent(String(updateId))}`,
-          });
+          const request = buildGetByIdRequest?.({
+            recordId: updateId,
+            action: "update",
+            rowSource: row.__source,
+          }) ?? {
+            query: {
+              [requestPayloadKeys.id]: String(updateId),
+            },
+          };
+
+          const payload = await getById(request);
           const detailSource = extractDetailSource(payload);
-          const detailRow = detailSource ? mergeRowWithDetail(row, detailSource, lookupKeys) : row;
+          const detailRow = detailSource
+            ? mergeRowWithDetail(row, detailSource, lookupKeys)
+            : row;
           setEditingItemId(resolveRecordId(detailRow, lookupKeys.id));
           const defaultValues = mapRowToFormState(detailRow, lookupKeys);
           modalControllerRef.current?.openModal("master-update", {
             values: mapFormValues
-              ? mapFormValues({ source: detailRow.__source, defaults: defaultValues })
+              ? mapFormValues({
+                  source: detailRow.__source,
+                  defaults: defaultValues,
+                })
               : defaultValues,
           });
         } catch {
@@ -688,9 +819,11 @@ export default function CrudMasterPage({
     },
     [
       apiEndpoints.getById,
+      buildGetByIdRequest,
       getById,
       lookupKeys,
       mapFormValues,
+      requestPayloadKeys.id,
       resetDetailsState,
       resetSaveState,
     ],
@@ -706,15 +839,28 @@ export default function CrudMasterPage({
 
       void (async () => {
         try {
-          const payload = await getById({
-            url: `${apiEndpoints.getById}/${encodeURIComponent(String(viewId))}`,
-          });
+          const request = buildGetByIdRequest?.({
+            recordId: viewId,
+            action: "view",
+            rowSource: row.__source,
+          }) ?? {
+            query: {
+              [requestPayloadKeys.id]: String(viewId),
+            },
+          };
+
+          const payload = await getById(request);
           const detailSource = extractDetailSource(payload);
-          const detailRow = detailSource ? mergeRowWithDetail(row, detailSource, lookupKeys) : row;
+          const detailRow = detailSource
+            ? mergeRowWithDetail(row, detailSource, lookupKeys)
+            : row;
           const defaultValues = mapRowToFormState(detailRow, lookupKeys);
           modalControllerRef.current?.openModal("master-view", {
             values: mapFormValues
-              ? mapFormValues({ source: detailRow.__source, defaults: defaultValues })
+              ? mapFormValues({
+                  source: detailRow.__source,
+                  defaults: defaultValues,
+                })
               : defaultValues,
           });
         } catch {
@@ -724,9 +870,11 @@ export default function CrudMasterPage({
     },
     [
       apiEndpoints.getById,
+      buildGetByIdRequest,
       getById,
       lookupKeys,
       mapFormValues,
+      requestPayloadKeys.id,
       resetDetailsState,
       resetSaveState,
     ],
@@ -841,10 +989,14 @@ export default function CrudMasterPage({
         const deleteId = resolveRecordId(row, lookupKeys.id);
 
         await deleteRecord({
-          url: `${apiEndpoints.delete}/${encodeURIComponent(String(deleteId))}`,
+          query: {
+            [requestPayloadKeys.id]: String(deleteId),
+          },
         });
 
-        setSelectedRowId((current) => (current === row.__rowId ? null : current));
+        setSelectedRowId((current) =>
+          current === row.__rowId ? null : current,
+        );
         if (editingItemId === deleteId) {
           setEditingItemId(null);
           modalControllerRef.current?.closeModal();
@@ -866,6 +1018,7 @@ export default function CrudMasterPage({
     lookupKeys.id,
     pageSize,
     pendingDeleteRow,
+    requestPayloadKeys.id,
     saveLoading,
     searchTerm,
   ]);
@@ -1005,11 +1158,15 @@ export default function CrudMasterPage({
           <section className={styles.content}>
             {error ? (
               <div className={styles.errorBox}>
-                <p className={styles.errorText}>Unable to load {entityLabel} data: {error}</p>
+                <p className={styles.errorText}>
+                  Unable to load {entityLabel} data: {error}
+                </p>
                 <button
                   type="button"
                   className={styles.retryButton}
-                  onClick={() => void loadRecords(searchTerm, currentPage, pageSize)}
+                  onClick={() =>
+                    void loadRecords(searchTerm, currentPage, pageSize)
+                  }
                 >
                   Retry
                 </button>
@@ -1047,7 +1204,9 @@ export default function CrudMasterPage({
                 onDelete={handleRowDelete}
                 isViewDisabled={() => saveLoading || detailsLoading}
                 isUpdateDisabled={() => saveLoading || detailsLoading}
-                isDeleteDisabled={() => deleteLoading || saveLoading || detailsLoading}
+                isDeleteDisabled={() =>
+                  deleteLoading || saveLoading || detailsLoading
+                }
                 actionsAsIcons
                 updateLabel="Update"
                 deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
@@ -1066,7 +1225,11 @@ export default function CrudMasterPage({
                 pageSizeOptions={[10, 20, 25, 50]}
                 fullViewHeight={false}
                 stickyHeader
-                emptyText={loading ? `Loading ${entityLabel} data...` : `No ${entityLabel} data found`}
+                emptyText={
+                  loading
+                    ? `Loading ${entityLabel} data...`
+                    : `No ${entityLabel} data found`
+                }
               />
             </section>
           </section>
@@ -1074,7 +1237,9 @@ export default function CrudMasterPage({
       </div>
       <ERPDynamicModalForm
         title={formTitle ?? `${title} Form`}
-        description={formDescription ?? `Create and update ${entityLabelPlural}.`}
+        description={
+          formDescription ?? `Create and update ${entityLabelPlural}.`
+        }
         variants={variants}
         showDefaultCards={false}
         hideSectionHeader

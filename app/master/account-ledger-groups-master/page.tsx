@@ -129,23 +129,26 @@ function buildAccountGroupFormFields(
       name: "masterName",
       label: "Group Name",
       required: true,
+      colSpan: 2,
       validation: {
         minLength: 2,
         minLengthMessage: "Group Name must be at least 2 characters.",
       },
     },
-    {
-      name: "masterAlias",
-      label: "Group Alias",
-    },
+    // {
+    //   name: "masterAlias",
+    //   label: "Group Alias",
+    // },
     {
       name: "masterShortName",
       label: "Group Short",
+      colSpan: 2,
     },
     {
       name: "accGroupParentId",
       label: "Group Parent",
       type: "select",
+      colSpan: 2,
       searchable: true,
       options: parentGroupOptions,
       
@@ -154,17 +157,16 @@ function buildAccountGroupFormFields(
       name: "position",
       label: "Group Sort",
       type: "number",
+      colSpan: 1,
       min: 0,
       step: 1,
       validation: {
         minMessage: "Group Sort must be 0 or greater.",
       },
-      colSpan: 1,
     },
     {
       name: "masterDescription",
       label: "Group Description",
-       type: "textarea",
        colSpan:2
     }
   ];
@@ -517,22 +519,22 @@ export default function AccountLedgerGroupsMasterPage() {
 
   return (
     <CrudMasterPage
-      title="Account Ledger Group"
-      entityLabel="account ledger group"
-      entityLabelPlural="account ledger groups"
+      title="Account Group"
+      entityLabel="account group"
+      entityLabelPlural="account groups"
       apiEndpoints={API_ENDPOINTS}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
-      listTitle="Account Ledger Group List"
-      createLabel="Add Account Ledger Group"
+      listTitle="Account Group List"
+      createLabel="Add"
       codeColumnHeader="Group Code"
       nameColumnHeader="Group Name"
       tableColumnHeaders={tableColumnHeaders}
       nameFieldLabel="Group Name"
       nameFieldPlaceholder="Sundry Debtors"
-      formTitle="Account Ledger Group Form"
-      formDescription="Create and update account ledger groups."
+      formTitle="Account Group Form"
+      formDescription="Create and update account groups."
       customFields={accountGroupFormFields}
       createInitialValues={ACCOUNT_GROUP_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {

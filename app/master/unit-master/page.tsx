@@ -177,7 +177,7 @@ const UNIT_CODE_OPTIONS: ERPDynamicSelectOption[] = UNIT_UQC_LIST.map(({ uqc, un
 
 function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
   return [
-     {
+    {
       name: "unitName",
       label: "Unit Name",
       required: true,
@@ -213,6 +213,12 @@ function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDyna
       min: 0,
       step: 1,
       colSpan: 1,
+    },
+    {
+      name: "__heading_pack_unit",
+      label: "Pack Unit Details",
+      type: "heading",
+     
     },
     {
       name: "unitIsPackUnit",

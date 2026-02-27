@@ -1,5 +1,4 @@
 import type { ErpHeaderItem, ERPMenuObject } from "./types";
-
 export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
   {
     label: "1 Sales",
@@ -30,9 +29,20 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
   {
     label: "2 Purchase",
     children: [
+      {
+        label: "Suppliers",
+        href: "/master/suppliers",
+      },
       { label: "Purchase Entry" },
       { label: "Purchase Return" },
       { label: "Vendor Ledger" },
+
+      {
+        label: "Master",
+        children: [
+          { label: "supplier groups", href: "/master/supplier-groups" }        
+        ],
+      }
     ],
   },
  {
@@ -59,11 +69,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
 
       ],
     },
-
     { label: "Allow to Change Master Price" },
   ],
   },
-
   { label: "4 Stock" },
   {
     label: "5 Accounts",
@@ -74,20 +82,8 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       },
       { label: "Account Ledger Master", href: "/master/account-ledger-master" },
       {
-        label:"Companies",href:"/master/companies"
-      },
-      {
-        label:"Company Group Master",href:"/master/company-group-master"
-      },
-      {
-        label:"Branches",href:"/master/branches-master"
-      },
-      {
         label:"Employee Designation Master",href:"/master/employee-designation-master"
-      },
-      {
-        label:"Employee Master",href:"/master/employee-master"
-      },
+      },      
       {
         label:"GSP Company Service",href:"/master/gsp-company-service"
       },
@@ -121,7 +117,14 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       },
     ],
   },
-  { label: "7 Settings" },
+  { label: "7 Settings",
+    children:[
+      {label:"Company Master",href:"/master/companies"},
+      {label:"Branch Master",href:"/master/branches-master"},
+      {label:"Employee Master",href:"/master/employee-master"},
+      {label:"Permissions",href:"/master/permissions"},
+    ]
+  },
   { label: "8 Transport" },
 ];
 export const DEFAULT_QUICK_TABS: ErpHeaderItem[] = [

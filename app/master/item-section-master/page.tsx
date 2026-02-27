@@ -134,8 +134,7 @@ const SECTION_INITIAL_FORM_VALUES = {
   masterShortName: "",
   position: "0",
   secParentId: "",
-  secLevel: "0",
-  secPathIds: "",
+  secLevel: "0",  
   secColorCode: "",
   secIcon: "",
   secPhotoUrl: "",
@@ -177,7 +176,7 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
     },
     {
       name: "secParentId",
-      label: "Parent Section ID",
+      label: "Parent Section ",
       type: "select",
       colSpan:2,
       searchable: true,
@@ -257,35 +256,9 @@ function toInteger(value: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function toReferenceValue(value: string): string | Record<string, never> {
+function toReferenceValue(value: string): string {
   const normalized = value.trim();
-  if (!normalized) {
-    return {};
-  }
-
   return normalized;
-}
-
-function toPathIds(value: string): string[] {
-  if (!value.trim()) {
-    return [];
-  }
-
-  return value
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
-function toPathIdsDisplay(value: unknown): string {
-  if (Array.isArray(value)) {
-    return value
-      .map((entry) => toDisplayValue(entry))
-      .filter(Boolean)
-      .join(",");
-  }
-
-  return toDisplayValue(value);
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -418,7 +391,6 @@ export default function ItemSectionMasterPage() {
       createInitialValues={SECTION_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
-
         return {
           ...SECTION_INITIAL_FORM_VALUES,
           masterName:
@@ -451,7 +423,6 @@ export default function ItemSectionMasterPage() {
         const sectionShort = (values.masterShortName ?? "").trim() || searchCode || sectionAlias;
         const sectionDescription = (values.masterDescription ?? "").trim();
         const sectionSort = toInteger(values.position ?? "", 0);
-        const sectionLevel = toInteger(values.secLevel ?? "", 0);
         const uploadedImage = files.secPhoto;
         const secPhoto =
           uploadedImage && uploadedImage.size > 0
@@ -465,8 +436,6 @@ export default function ItemSectionMasterPage() {
           sec_description: sectionDescription,
           sec_parent_id: toReferenceValue(values.secParentId ?? ""),
           sec_sort: sectionSort,
-          sec_level: sectionLevel >= 0 ? sectionLevel : 0,
-          sec_path_ids: toPathIds(values.secPathIds ?? ""),
           sec_position: sectionSort,
           sec_color_code: (values.secColorCode ?? "").trim(),
           sec_icon: (values.secIcon ?? "").trim(),

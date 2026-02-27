@@ -163,6 +163,28 @@
   border-bottom: 1px solid #e4e8ed;
 }
 
+.sectionToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.sectionToggleInput {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid #9eb4c8;
+  border-radius: 3px;
+  accent-color: var(--erp-modal-accent);
+  cursor: pointer;
+}
+
+.sectionToggleInput:disabled {
+  cursor: not-allowed;
+}
+
 .sectionHeading {
   margin: 0;
   color: #26384b;
@@ -172,18 +194,6 @@
   text-transform: none;
   border-bottom: 0;
   padding-bottom: 0;
-}
-
-.sectionHeading::before {
-  content: "";
-  display: inline-block;
-  width: 0.72rem;
-  height: 0.72rem;
-  margin-right: 0.45rem;
-  border: 1px solid #8fb3d8;
-  border-radius: 3px;
-  background: #dcecff;
-  vertical-align: middle;
 }
 
 .sectionHeadingDescription {
@@ -211,10 +221,12 @@
   border-radius: 2px;
   width: 100%;
   min-height: 10px;
-  padding: .46rem .62rem;
-  font-size: .8rem;
+  padding: 0.46rem 0.62rem;
+  font-size: 0.8rem;
   line-height: 1.3;
-  transition: border-color .16s, box-shadow .16s;
+  transition:
+    border-color 0.16s,
+    box-shadow 0.16s;
 }
 
 .control::placeholder {

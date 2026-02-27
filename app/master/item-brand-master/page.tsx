@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
@@ -41,8 +35,21 @@ const FILE_CONSTRAINTS = {
   ] as const,
 } as const;
 
-const ARRAY_KEYS = ["data", "items", "results", "rows", "list", "brands", "itemBrands"] as const;
-const PAGINATION_CONTAINER_KEYS = ["meta", "pagination", "pageInfo", "pager"] as const;
+const ARRAY_KEYS = [
+  "data",
+  "items",
+  "results",
+  "rows",
+  "list",
+  "brands",
+  "itemBrands",
+] as const;
+const PAGINATION_CONTAINER_KEYS = [
+  "meta",
+  "pagination",
+  "pageInfo",
+  "pager",
+] as const;
 const TOTAL_ENTRIES_KEYS = [
   "total",
   "totalCount",
@@ -54,8 +61,20 @@ const TOTAL_ENTRIES_KEYS = [
   "totalItems",
   "total_items",
 ] as const;
-const CURRENT_PAGE_KEYS = ["page", "currentPage", "current_page", "pageNo", "page_no"] as const;
-const PAGE_SIZE_KEYS = ["limit", "pageSize", "page_size", "perPage", "per_page"] as const;
+const CURRENT_PAGE_KEYS = [
+  "page",
+  "currentPage",
+  "current_page",
+  "pageNo",
+  "page_no",
+] as const;
+const PAGE_SIZE_KEYS = [
+  "limit",
+  "pageSize",
+  "page_size",
+  "perPage",
+  "per_page",
+] as const;
 
 const BRAND_ID_KEYS = [
   "brand_id",
@@ -102,9 +121,20 @@ const BRAND_ALIAS_KEYS = [
   "itembrandalias",
   "item_brand_alias",
 ] as const;
-const BRAND_ACTIVE_KEYS = ["itb_active", "active", "is_active", "isActive", "isactive", "status"] as const;
+const BRAND_ACTIVE_KEYS = [
+  "itb_active",
+  "active",
+  "is_active",
+  "isActive",
+  "isactive",
+  "status",
+] as const;
 const BRAND_POSITION_KEYS = ["position", "itb_sort", "sort"] as const;
-const BRAND_DESCRIPTION_KEYS = ["itb_description", "description", "desc"] as const;
+const BRAND_DESCRIPTION_KEYS = [
+  "itb_description",
+  "description",
+  "desc",
+] as const;
 
 const INITIAL_FORM_STATE = {
   itemBrandName: "",
@@ -220,7 +250,11 @@ function toDisplayValue(value: unknown): string {
     return value.trim();
   }
 
-  if (typeof value === "number" || typeof value === "bigint" || typeof value === "boolean") {
+  if (
+    typeof value === "number" ||
+    typeof value === "bigint" ||
+    typeof value === "boolean"
+  ) {
     return String(value);
   }
 
@@ -280,7 +314,9 @@ function findPaginationNumber(
   for (const candidate of candidates) {
     for (const key of keys) {
       const value = candidate[key];
-      const normalized = allowZero ? toNonNegativeInt(value) : toPositiveInt(value);
+      const normalized = allowZero
+        ? toNonNegativeInt(value)
+        : toPositiveInt(value);
       if (normalized !== null) {
         return normalized;
       }
@@ -318,14 +354,18 @@ function extractRows(payload: unknown): unknown[] {
         }
       }
 
-      const nestedArray = Object.values(nestedObject).find((entry) => Array.isArray(entry));
+      const nestedArray = Object.values(nestedObject).find((entry) =>
+        Array.isArray(entry),
+      );
       if (Array.isArray(nestedArray)) {
         return nestedArray;
       }
     }
   }
 
-  const firstArray = Object.values(objectPayload).find((value) => Array.isArray(value));
+  const firstArray = Object.values(objectPayload).find((value) =>
+    Array.isArray(value),
+  );
   return Array.isArray(firstArray) ? firstArray : [];
 }
 
@@ -363,7 +403,10 @@ function extractPaginationInfo(payload: unknown): {
   };
 }
 
-function buildItemBrandRows(payload: unknown, serialOffset = 0): ItemBrandTableRow[] {
+function buildItemBrandRows(
+  payload: unknown,
+  serialOffset = 0,
+): ItemBrandTableRow[] {
   return extractRows(payload).map((item, index) => {
     const serialNo = serialOffset + index + 1;
 
@@ -378,7 +421,12 @@ function buildItemBrandRows(payload: unknown, serialOffset = 0): ItemBrandTableR
       const positionValue = getFirstDefinedValue(row, BRAND_POSITION_KEYS);
 
       const preferredKey =
-        brandIdValue ?? row.id ?? row._id ?? row.brandId ?? row.code ?? serialNo;
+        brandIdValue ??
+        row.id ??
+        row._id ??
+        row.brandId ??
+        row.code ??
+        serialNo;
       const rowId =
         typeof preferredKey === "string" || typeof preferredKey === "number"
           ? preferredKey
@@ -427,21 +475,39 @@ function mapRowToFormState(row: ItemBrandTableRow): ItemBrandFormState {
   }
   const source = row.__source;
   return {
-    itemBrandName: toDisplayValue(getFirstDefinedValue(source, BRAND_NAME_KEYS)) || row.brandName,
-    searchCode: toDisplayValue(getFirstDefinedValue(source, BRAND_CODE_KEYS)) || row.brandCode,
-    itemAlias: toDisplayValue(getFirstDefinedValue(source, BRAND_ALIAS_KEYS)) || row.brandAlias,
-    itemShortName: toDisplayValue(getFirstDefinedValue(source, BRAND_SHORT_KEYS)) || row.brandShort,
-    itemDescription: toDisplayValue(getFirstDefinedValue(source, BRAND_DESCRIPTION_KEYS)),
-    position: toDisplayValue(getFirstDefinedValue(source, BRAND_POSITION_KEYS)) || row.position,
+    itemBrandName:
+      toDisplayValue(getFirstDefinedValue(source, BRAND_NAME_KEYS)) ||
+      row.brandName,
+    searchCode:
+      toDisplayValue(getFirstDefinedValue(source, BRAND_CODE_KEYS)) ||
+      row.brandCode,
+    itemAlias:
+      toDisplayValue(getFirstDefinedValue(source, BRAND_ALIAS_KEYS)) ||
+      row.brandAlias,
+    itemShortName:
+      toDisplayValue(getFirstDefinedValue(source, BRAND_SHORT_KEYS)) ||
+      row.brandShort,
+    itemDescription: toDisplayValue(
+      getFirstDefinedValue(source, BRAND_DESCRIPTION_KEYS),
+    ),
+    position:
+      toDisplayValue(getFirstDefinedValue(source, BRAND_POSITION_KEYS)) ||
+      row.position,
   };
 }
-function extractItemBrandDetailSource(payload: unknown): Record<string, unknown> | null {
+function extractItemBrandDetailSource(
+  payload: unknown,
+): Record<string, unknown> | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return null;
   }
   const objectPayload = payload as Record<string, unknown>;
   const nestedData = objectPayload.data;
-  if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
+  if (
+    nestedData &&
+    typeof nestedData === "object" &&
+    !Array.isArray(nestedData)
+  ) {
     return nestedData as Record<string, unknown>;
   }
   return objectPayload;
@@ -460,17 +526,30 @@ function mergeRowWithItemBrandDetail(
     __recordId: recordId,
     __source: source,
     brandId: toDisplayValue(brandIdValue) || row.brandId,
-    brandCode: toDisplayValue(getFirstDefinedValue(source, BRAND_CODE_KEYS)) || row.brandCode,
-    brandName: toDisplayValue(getFirstDefinedValue(source, BRAND_NAME_KEYS)) || row.brandName,
-    brandShort: toDisplayValue(getFirstDefinedValue(source, BRAND_SHORT_KEYS)) || row.brandShort,
-    brandAlias: toDisplayValue(getFirstDefinedValue(source, BRAND_ALIAS_KEYS)) || row.brandAlias,
-    brandActive: toDisplayValue(getFirstDefinedValue(source, BRAND_ACTIVE_KEYS)) || row.brandActive,
-    position: toDisplayValue(getFirstDefinedValue(source, BRAND_POSITION_KEYS)) || row.position,
+    brandCode:
+      toDisplayValue(getFirstDefinedValue(source, BRAND_CODE_KEYS)) ||
+      row.brandCode,
+    brandName:
+      toDisplayValue(getFirstDefinedValue(source, BRAND_NAME_KEYS)) ||
+      row.brandName,
+    brandShort:
+      toDisplayValue(getFirstDefinedValue(source, BRAND_SHORT_KEYS)) ||
+      row.brandShort,
+    brandAlias:
+      toDisplayValue(getFirstDefinedValue(source, BRAND_ALIAS_KEYS)) ||
+      row.brandAlias,
+    brandActive:
+      toDisplayValue(getFirstDefinedValue(source, BRAND_ACTIVE_KEYS)) ||
+      row.brandActive,
+    position:
+      toDisplayValue(getFirstDefinedValue(source, BRAND_POSITION_KEYS)) ||
+      row.position,
   };
 }
 function resolveItbId(row: ItemBrandTableRow): string | number {
   if (row.__source) {
-    const sourceItbId = row.__source.brand_id ?? row.__source.brandId ?? row.__source.itb_id;
+    const sourceItbId =
+      row.__source.brand_id ?? row.__source.brandId ?? row.__source.itb_id;
     if (typeof sourceItbId === "string" || typeof sourceItbId === "number") {
       return sourceItbId;
     }
@@ -494,11 +573,14 @@ function useItemBrandData() {
     loading: saveLoading,
     error: saveError,
     reset: resetSaveState,
-  } = useApi<unknown, CreateItemBrandRequest>(API_ENDPOINTS.CREATE, { method: "POST" });
-  const { run: deleteItemBrand, loading: deleteLoading, error: deleteError } = useApi<unknown>(
-    API_ENDPOINTS.DELETE,
-    { method: "DELETE" },
-  );
+  } = useApi<unknown, CreateItemBrandRequest>(API_ENDPOINTS.CREATE, {
+    method: "POST",
+  });
+  const {
+    run: deleteItemBrand,
+    loading: deleteLoading,
+    error: deleteError,
+  } = useApi<unknown>(API_ENDPOINTS.DELETE, { method: "DELETE" });
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -530,7 +612,10 @@ function useItemBrandData() {
     };
   }, [currentPage, loadItemBrands, pageSize, searchTerm]);
   const serialOffset = Math.max(0, (currentPage - 1) * pageSize);
-  const rows = useMemo(() => buildItemBrandRows(data, serialOffset), [data, serialOffset]);
+  const rows = useMemo(
+    () => buildItemBrandRows(data, serialOffset),
+    [data, serialOffset],
+  );
   return {
     data,
     error,
@@ -583,9 +668,14 @@ export default function ItemBrandMasterPage() {
     resetSaveState,
     rows,
   } = useItemBrandData();
-  const [selectedRowId, setSelectedRowId] = useState<string | number | null>(null);
-  const [editingItemId, setEditingItemId] = useState<string | number | null>(null);
-  const [pendingDeleteRow, setPendingDeleteRow] = useState<ItemBrandTableRow | null>(null);
+  const [selectedRowId, setSelectedRowId] = useState<string | number | null>(
+    null,
+  );
+  const [editingItemId, setEditingItemId] = useState<string | number | null>(
+    null,
+  );
+  const [pendingDeleteRow, setPendingDeleteRow] =
+    useState<ItemBrandTableRow | null>(null);
   const selectedRow = useMemo(
     () => rows.find((row) => row.__rowId === selectedRowId) ?? null,
     [rows, selectedRowId],
@@ -602,7 +692,11 @@ export default function ItemBrandMasterPage() {
     if (!pendingDeleteRow) {
       return "";
     }
-    return pendingDeleteRow.brandName || pendingDeleteRow.brandCode || pendingDeleteRow.brandId;
+    return (
+      pendingDeleteRow.brandName ||
+      pendingDeleteRow.brandCode ||
+      pendingDeleteRow.brandId
+    );
   }, [pendingDeleteRow]);
   const openCreateModal = useCallback(() => {
     resetSaveState();
@@ -622,10 +716,14 @@ export default function ItemBrandMasterPage() {
       void (async () => {
         try {
           const payload = await getItemBrandById({
-            url: `${API_ENDPOINTS.GET_BY_ID}/${encodeURIComponent(String(updateItbId))}`,
+            query: {
+              brand_id: String(updateItbId),
+            },
           });
           const detailSource = extractItemBrandDetailSource(payload);
-          const detailRow = detailSource ? mergeRowWithItemBrandDetail(row, detailSource) : row;
+          const detailRow = detailSource
+            ? mergeRowWithItemBrandDetail(row, detailSource)
+            : row;
           setEditingItemId(resolveItbId(detailRow));
           modalControllerRef.current?.openModal("item-brand-update", {
             values: mapRowToFormState(detailRow),
@@ -635,7 +733,8 @@ export default function ItemBrandMasterPage() {
         }
       })();
     },
-    [getItemBrandById, resetDetailsState, resetSaveState],  );
+    [getItemBrandById, resetDetailsState, resetSaveState],
+  );
   const openViewModalForRow = useCallback(
     (row: ItemBrandTableRow) => {
       resetSaveState();
@@ -646,10 +745,14 @@ export default function ItemBrandMasterPage() {
       void (async () => {
         try {
           const payload = await getItemBrandById({
-            url: `${API_ENDPOINTS.GET_BY_ID}/${encodeURIComponent(String(viewItbId))}`,
+            query: {
+              brand_id: String(viewItbId),
+            },
           });
           const detailSource = extractItemBrandDetailSource(payload);
-          const detailRow = detailSource ? mergeRowWithItemBrandDetail(row, detailSource) : row;
+          const detailRow = detailSource
+            ? mergeRowWithItemBrandDetail(row, detailSource)
+            : row;
 
           modalControllerRef.current?.openModal("item-brand-view", {
             values: mapRowToFormState(detailRow),
@@ -686,13 +789,22 @@ export default function ItemBrandMasterPage() {
         brand_level: 0,
         brand_photo: {},
         brand_photo_url: "",
-        ...(shouldUpdate && editingItemId !== null ? { brand_id: editingItemId } : {}),
+        ...(shouldUpdate && editingItemId !== null
+          ? { brand_id: editingItemId }
+          : {}),
       };
       await upsertItemBrand({ body: payload });
       setEditingItemId(null);
       await loadItemBrands(searchTerm, currentPage, pageSize);
     },
-    [currentPage, editingItemId, loadItemBrands, pageSize, searchTerm, upsertItemBrand],
+    [
+      currentPage,
+      editingItemId,
+      loadItemBrands,
+      pageSize,
+      searchTerm,
+      upsertItemBrand,
+    ],
   );
   const handleModalCancel = useCallback(() => {
     if (saveLoading) {
@@ -726,9 +838,13 @@ export default function ItemBrandMasterPage() {
         const row = pendingDeleteRow;
         const deleteItbId = resolveItbId(row);
         await deleteItemBrand({
-          url: `${API_ENDPOINTS.DELETE}/${encodeURIComponent(String(deleteItbId))}`,
+          query: {
+            brand_id: String(deleteItbId),
+          },
         });
-        setSelectedRowId((current) => (current === row.__rowId ? null : current));
+        setSelectedRowId((current) =>
+          current === row.__rowId ? null : current,
+        );
         if (editingItemId === deleteItbId) {
           setEditingItemId(null);
           modalControllerRef.current?.closeModal();
@@ -757,49 +873,49 @@ export default function ItemBrandMasterPage() {
         name: "itemBrandName",
         label: "Item Brand Name",
         required: true,
-        colSpan:2,
+        colSpan: 2,
         validation: {
           minLength: 2,
           minLengthMessage: "Item Brand Name must be at least 2 characters.",
         },
-      },      
+      },
       {
         name: "itemAlias",
         label: "Alias",
-        colSpan:2
+        colSpan: 2,
       },
       {
         name: "itemShortName",
         label: "Short Name",
-        colSpan:2
+        colSpan: 2,
       },
       {
         name: "position",
         label: "Position",
         type: "number",
-        colSpan:1,
+        colSpan: 1,
         min: 0,
         step: 1,
         validation: {
           minMessage: "Position must be 0 or greater.",
         },
       },
-      
+
       {
         name: "itemDescription",
         label: "Description",
         colSpan: 2,
       },
       {
-      name: "brandPhoto",
-      label: "Image",
-      type: "file",
-      accept: "image/*",
-      maxFileSizeBytes: FILE_CONSTRAINTS.MAX_UPLOAD_IMAGE_BYTES,
-      allowedMimeTypes: [...FILE_CONSTRAINTS.ALLOWED_MIME_TYPES],
-      helperText: "Optional. Sent as base64 in sec_photo.",
-      colSpan: 2,
-    },
+        name: "brandPhoto",
+        label: "Image",
+        type: "file",
+        accept: "image/*",
+        maxFileSizeBytes: FILE_CONSTRAINTS.MAX_UPLOAD_IMAGE_BYTES,
+        allowedMimeTypes: [...FILE_CONSTRAINTS.ALLOWED_MIME_TYPES],
+        helperText: "Optional. Sent as base64 in sec_photo.",
+        colSpan: 2,
+      },
     ],
     [],
   );
@@ -885,11 +1001,15 @@ export default function ItemBrandMasterPage() {
           <section className={styles.content}>
             {error ? (
               <div className={styles.errorBox}>
-                <p className={styles.errorText}>Unable to load brand data: {error}</p>
+                <p className={styles.errorText}>
+                  Unable to load brand data: {error}
+                </p>
                 <button
                   type="button"
                   className={styles.retryButton}
-                  onClick={() => void loadItemBrands(searchTerm, currentPage, pageSize)}
+                  onClick={() =>
+                    void loadItemBrands(searchTerm, currentPage, pageSize)
+                  }
                 >
                   Retry
                 </button>
@@ -897,7 +1017,9 @@ export default function ItemBrandMasterPage() {
             ) : null}
             {deleteError ? (
               <div className={styles.errorBox}>
-                <p className={styles.errorText}>Unable to delete selected brand: {deleteError}</p>
+                <p className={styles.errorText}>
+                  Unable to delete selected brand: {deleteError}
+                </p>
               </div>
             ) : null}
             {detailsError ? (
@@ -925,7 +1047,9 @@ export default function ItemBrandMasterPage() {
                 onDelete={handleRowDelete}
                 isViewDisabled={() => saveLoading || detailsLoading}
                 isUpdateDisabled={() => saveLoading || detailsLoading}
-                isDeleteDisabled={() => deleteLoading || saveLoading || detailsLoading}
+                isDeleteDisabled={() =>
+                  deleteLoading || saveLoading || detailsLoading
+                }
                 actionsAsIcons
                 updateLabel="Update"
                 deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
@@ -944,7 +1068,9 @@ export default function ItemBrandMasterPage() {
                 pageSizeOptions={[10, 20, 25, 50]}
                 fullViewHeight={false}
                 stickyHeader
-                emptyText={loading ? "Loading brand data..." : "No brand data found"}
+                emptyText={
+                  loading ? "Loading brand data..." : "No brand data found"
+                }
               />
             </section>
           </section>

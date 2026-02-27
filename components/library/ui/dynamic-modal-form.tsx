@@ -162,7 +162,10 @@ export type ERPDynamicModalFormProps = {
   closeOnSubmit?: boolean;
   resetOnSubmit?: boolean;
   validateOnChange?: boolean;
-  onValidationError?: (errors: Record<string, string>, variantKey: string) => void;
+  onValidationError?: (
+    errors: Record<string, string>,
+    variantKey: string,
+  ) => void;
   onControllerReady?: (controller: ERPDynamicModalController) => void;
   showDefaultCards?: boolean;
   hideSectionHeader?: boolean;
@@ -170,7 +173,9 @@ export type ERPDynamicModalFormProps = {
   className?: string;
   cardGridClassName?: string;
 };
-function resolvePalette(accent: ERPDynamicModalVariant["accent"]): ModalAccentPalette {
+function resolvePalette(
+  accent: ERPDynamicModalVariant["accent"],
+): ModalAccentPalette {
   if (!accent) {
     return DEFAULT_ACCENT;
   }
@@ -227,7 +232,10 @@ function parseMultiSelectValue(value: string | undefined): string[] {
 function formatMultiSelectValue(values: string[]): string {
   return values.join(",");
 }
-function getMultiSelectOptionLabels(field: ERPDynamicModalField, values: string[]): string[] {
+function getMultiSelectOptionLabels(
+  field: ERPDynamicModalField,
+  values: string[],
+): string[] {
   return values.map((value) => getSelectOptionLabel(field, value) || value);
 }
 function validateFieldValue(
@@ -257,12 +265,23 @@ function validateFieldValue(
     if (!selectedFile) {
       return null;
     }
-    if (field.allowedMimeTypes?.length && !field.allowedMimeTypes.includes(selectedFile.type)) {
-      return validation?.patternMessage ?? `${field.label} file type is not allowed.`;
+    if (
+      field.allowedMimeTypes?.length &&
+      !field.allowedMimeTypes.includes(selectedFile.type)
+    ) {
+      return (
+        validation?.patternMessage ?? `${field.label} file type is not allowed.`
+      );
     }
-    if (field.maxFileSizeBytes !== undefined && selectedFile.size > field.maxFileSizeBytes) {
+    if (
+      field.maxFileSizeBytes !== undefined &&
+      selectedFile.size > field.maxFileSizeBytes
+    ) {
       const maxMB = (field.maxFileSizeBytes / (1024 * 1024)).toFixed(1);
-      return validation?.maxMessage ?? `${field.label} must be smaller than ${maxMB} MB.`;
+      return (
+        validation?.maxMessage ??
+        `${field.label} must be smaller than ${maxMB} MB.`
+      );
     }
     return null;
   }
@@ -272,13 +291,19 @@ function validateFieldValue(
   if (isEmptyValue(rawValue)) {
     return null;
   }
-  if (validation?.minLength !== undefined && value.length < validation.minLength) {
+  if (
+    validation?.minLength !== undefined &&
+    value.length < validation.minLength
+  ) {
     return (
       validation.minLengthMessage ??
       `${field.label} must be at least ${validation.minLength} characters.`
     );
   }
-  if (validation?.maxLength !== undefined && value.length > validation.maxLength) {
+  if (
+    validation?.maxLength !== undefined &&
+    value.length > validation.maxLength
+  ) {
     return (
       validation.maxLengthMessage ??
       `${field.label} must be at most ${validation.maxLength} characters.`
@@ -293,7 +318,10 @@ function validateFieldValue(
   if (fieldType === "email" && !validation?.pattern) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(value)) {
-      return validation?.patternMessage ?? `${field.label} must be a valid email address.`;
+      return (
+        validation?.patternMessage ??
+        `${field.label} must be a valid email address.`
+      );
     }
   }
   if (fieldType === "number") {
@@ -304,22 +332,33 @@ function validateFieldValue(
     if (field.min !== undefined) {
       const minValue = Number(field.min);
       if (!Number.isNaN(minValue) && numericValue < minValue) {
-        return validation?.minMessage ?? `${field.label} must be at least ${field.min}.`;
+        return (
+          validation?.minMessage ??
+          `${field.label} must be at least ${field.min}.`
+        );
       }
     }
     if (field.max !== undefined) {
       const maxValue = Number(field.max);
       if (!Number.isNaN(maxValue) && numericValue > maxValue) {
-        return validation?.maxMessage ?? `${field.label} must be at most ${field.max}.`;
+        return (
+          validation?.maxMessage ??
+          `${field.label} must be at most ${field.max}.`
+        );
       }
     }
   }
   if (fieldType === "date") {
     if (field.min !== undefined && value < String(field.min)) {
-      return validation?.minMessage ?? `${field.label} cannot be before ${field.min}.`;
+      return (
+        validation?.minMessage ??
+        `${field.label} cannot be before ${field.min}.`
+      );
     }
     if (field.max !== undefined && value > String(field.max)) {
-      return validation?.maxMessage ?? `${field.label} cannot be after ${field.max}.`;
+      return (
+        validation?.maxMessage ?? `${field.label} cannot be after ${field.max}.`
+      );
     }
   }
   if (validation?.custom) {
@@ -333,8 +372,9 @@ function validateFieldValue(
 function resolveVisibleFields(
   variant: ERPDynamicModalVariant,
   values: Record<string, string>,
+  sectionExpandedState?: Record<string, boolean>,
 ): ERPDynamicModalField[] {
-  return variant.fields.filter((field) => {
+  const baseVisibleFields = variant.fields.filter((field) => {
     if (!field.visibleWhen) {
       return true;
     }
@@ -344,7 +384,47 @@ function resolveVisibleFields(
       return true;
     }
   });
+
+  if (!sectionExpandedState) {
+    return baseVisibleFields;
+  }
+
+  const resolved: ERPDynamicModalField[] = [];
+  let currentSectionName: string | null = null;
+
+  for (const field of baseVisibleFields) {
+    const fieldType = field.type ?? "text";
+    if (fieldType === "heading") {
+      currentSectionName = field.name;
+      resolved.push(field);
+      continue;
+    }
+
+    if (
+      currentSectionName &&
+      sectionExpandedState[currentSectionName] === false
+    ) {
+      continue;
+    }
+
+    resolved.push(field);
+  }
+
+  return resolved;
 }
+
+function buildSectionExpandedState(
+  fields: ERPDynamicModalField[],
+): Record<string, boolean> {
+  const sectionState: Record<string, boolean> = {};
+  for (const field of fields) {
+    if ((field.type ?? "text") === "heading") {
+      sectionState[field.name] = true;
+    }
+  }
+  return sectionState;
+}
+
 function IconPlaceholder() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
@@ -379,12 +459,19 @@ export function ERPDynamicModalForm({
   cardGridClassName,
 }: ERPDynamicModalFormProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeVariantKey, setActiveVariantKey] = useState<string>(variants[0]?.key ?? "");
+  const [activeVariantKey, setActiveVariantKey] = useState<string>(
+    variants[0]?.key ?? "",
+  );
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [fileData, setFileData] = useState<Record<string, File | null>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
+  const [searchQueries, setSearchQueries] = useState<Record<string, string>>(
+    {},
+  );
   const [openSearchField, setOpenSearchField] = useState<string | null>(null);
+  const [sectionExpandedByVariant, setSectionExpandedByVariant] = useState<
+    Record<string, Record<string, boolean>>
+  >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const activeVariant = useMemo(
     () => variants.find((variant) => variant.key === activeVariantKey),
@@ -423,6 +510,10 @@ export function ERPDynamicModalForm({
       setFieldErrors({});
       setSearchQueries({});
       setOpenSearchField(null);
+      setSectionExpandedByVariant((current) => ({
+        ...current,
+        [variantKey]: buildSectionExpandedState(variant.fields),
+      }));
       setIsOpen(true);
       onOpenChange?.(true, variantKey);
     },
@@ -446,7 +537,8 @@ export function ERPDynamicModalForm({
   const validateVariant = useCallback(
     (variant: ERPDynamicModalVariant, values: Record<string, string>) => {
       const nextErrors: Record<string, string> = {};
-      for (const field of resolveVisibleFields(variant, values)) {
+      const sectionState = sectionExpandedByVariant[variant.key];
+      for (const field of resolveVisibleFields(variant, values, sectionState)) {
         const fieldError = validateFieldValue(field, values, fileData);
         if (fieldError) {
           nextErrors[field.name] = fieldError;
@@ -454,14 +546,45 @@ export function ERPDynamicModalForm({
       }
       return nextErrors;
     },
-    [fileData],
+    [fileData, sectionExpandedByVariant],
   );
+
+  const activeSectionExpandedState = useMemo(
+    () =>
+      activeVariant ? sectionExpandedByVariant[activeVariant.key] : undefined,
+    [activeVariant, sectionExpandedByVariant],
+  );
+
   const visibleFields = useMemo(() => {
     if (!activeVariant) {
       return [];
     }
-    return resolveVisibleFields(activeVariant, formData);
-  }, [activeVariant, formData]);
+    return resolveVisibleFields(
+      activeVariant,
+      formData,
+      activeSectionExpandedState,
+    );
+  }, [activeSectionExpandedState, activeVariant, formData]);
+
+  const toggleSectionExpanded = useCallback(
+    (sectionName: string) => {
+      if (!activeVariant) {
+        return;
+      }
+      setSectionExpandedByVariant((current) => {
+        const variantSections = current[activeVariant.key] ?? {};
+        const currentValue = variantSections[sectionName] ?? true;
+        return {
+          ...current,
+          [activeVariant.key]: {
+            ...variantSections,
+            [sectionName]: !currentValue,
+          },
+        };
+      });
+    },
+    [activeVariant],
+  );
   useEffect(() => {
     if (!activeVariant) {
       return;
@@ -503,14 +626,19 @@ export function ERPDynamicModalForm({
   }, [activeVariant, visibleFields]);
 
   const handleChange = (
-    event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
+    event: ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
   ) => {
     const target = event.target;
     const { name } = target;
-    const isFileInput = target instanceof HTMLInputElement && target.type === "file";
-    const isCheckboxInput = target instanceof HTMLInputElement && target.type === "checkbox";
-    const isMultiSelectInput = target instanceof HTMLSelectElement && target.multiple;
-    const nextFile = isFileInput ? target.files?.[0] ?? null : null;
+    const isFileInput =
+      target instanceof HTMLInputElement && target.type === "file";
+    const isCheckboxInput =
+      target instanceof HTMLInputElement && target.type === "checkbox";
+    const isMultiSelectInput =
+      target instanceof HTMLSelectElement && target.multiple;
+    const nextFile = isFileInput ? (target.files?.[0] ?? null) : null;
     const nextValue = isFileInput
       ? nextFile
         ? nextFile.name
@@ -519,9 +647,11 @@ export function ERPDynamicModalForm({
         ? target.checked
           ? "true"
           : "false"
-      : isMultiSelectInput
-        ? formatMultiSelectValue(Array.from(target.selectedOptions).map((option) => option.value))
-        : target.value;
+        : isMultiSelectInput
+          ? formatMultiSelectValue(
+              Array.from(target.selectedOptions).map((option) => option.value),
+            )
+          : target.value;
 
     if (isFileInput) {
       setFileData((current) => ({
@@ -565,7 +695,8 @@ export function ERPDynamicModalForm({
   const handleSearchableSelectInput = useCallback(
     (field: ERPDynamicModalField, query: string) => {
       const fieldName = field.name;
-      const isMultipleSelect = (field.type ?? "text") === "select" && field.multiple;
+      const isMultipleSelect =
+        (field.type ?? "text") === "select" && field.multiple;
       setSearchQueries((current) => ({
         ...current,
         [fieldName]: query,
@@ -601,11 +732,14 @@ export function ERPDynamicModalForm({
   const handleSearchableSelectChoose = useCallback(
     (field: ERPDynamicModalField, option: ERPDynamicSelectOption) => {
       const fieldName = field.name;
-      const isMultipleSelect = (field.type ?? "text") === "select" && field.multiple;
+      const isMultipleSelect =
+        (field.type ?? "text") === "select" && field.multiple;
       setFormData((current) => {
         const nextFieldValue = isMultipleSelect
           ? (() => {
-              const existingValues = parseMultiSelectValue(current[fieldName] ?? "");
+              const existingValues = parseMultiSelectValue(
+                current[fieldName] ?? "",
+              );
               const isSelected = existingValues.includes(option.value);
               const updatedValues = isSelected
                 ? existingValues.filter((value) => value !== option.value)
@@ -709,32 +843,50 @@ export function ERPDynamicModalForm({
     "--erp-modal-border": "#cfdae6",
     "--erp-modal-surface": "#ffffff",
   } as CSSProperties;
-  const formId = activeVariant ? `erp-modal-form-${activeVariant.key}` : "erp-modal-form";
+  const formId = activeVariant
+    ? `erp-modal-form-${activeVariant.key}`
+    : "erp-modal-form";
   return (
     <section className={cx("space-y-6", className)}>
       {!hideSectionHeader ? (
         <header className="space-y-2">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h2>
-          {description ? <p className="max-w-3xl text-sm text-slate-600">{description}</p> : null}
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+            {title}
+          </h2>
+          {description ? (
+            <p className="max-w-3xl text-sm text-slate-600">{description}</p>
+          ) : null}
         </header>
       ) : null}
       {showDefaultCards ? (
-        <div className={cx("grid gap-6 md:grid-cols-2 xl:grid-cols-3", cardGridClassName)}>
+        <div
+          className={cx(
+            "grid gap-6 md:grid-cols-2 xl:grid-cols-3",
+            cardGridClassName,
+          )}
+        >
           {variants.map((variant) => {
             const palette = resolvePalette(variant.accent);
             return (
-            <article
-              key={variant.key}
-              className="rounded-[4px] border border-slate-200 bg-white p-6 shadow-[0_10px_26px_rgba(15,35,56,0.08)] transition hover:-translate-y-[2px] hover:shadow-[0_16px_32px_rgba(15,35,56,0.14)]"
-            >
-              <div
-                className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-[4px]"
-                style={{ backgroundColor: palette.iconBg, color: palette.iconFg }}
+              <article
+                key={variant.key}
+                className="rounded-[4px] border border-slate-200 bg-white p-6 shadow-[0_10px_26px_rgba(15,35,56,0.08)] transition hover:-translate-y-[2px] hover:shadow-[0_16px_32px_rgba(15,35,56,0.14)]"
               >
+                <div
+                  className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-[4px]"
+                  style={{
+                    backgroundColor: palette.iconBg,
+                    color: palette.iconFg,
+                  }}
+                >
                   {variant.icon ?? <IconPlaceholder />}
                 </div>
-                <h3 className="text-xl font-semibold text-slate-900">{variant.cardTitle}</h3>
-                <p className="mt-2 text-sm text-slate-600">{variant.cardDescription}</p>
+                <h3 className="text-xl font-semibold text-slate-900">
+                  {variant.cardTitle}
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  {variant.cardDescription}
+                </p>
                 <button
                   type="button"
                   className={styles.cardButton}
@@ -781,7 +933,11 @@ export function ERPDynamicModalForm({
                   onClick={closeModal}
                   aria-label="Close modal"
                 >
-                  <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    className="h-5 w-5"
+                  >
                     <path
                       d="M6 18 18 6M6 6l12 12"
                       fill="none"
@@ -794,34 +950,70 @@ export function ERPDynamicModalForm({
               </div>
             </header>
             <div className={styles.scrollArea}>
-              <form id={formId} onSubmit={handleSubmit} noValidate className={styles.formGrid}>
+              <form
+                id={formId}
+                onSubmit={handleSubmit}
+                noValidate
+                className={styles.formGrid}
+              >
                 {visibleFields.map((field) => {
                   const fieldValue = formData[field.name] ?? "";
                   const selectedFile = fileData[field.name] ?? null;
                   const fieldError = fieldErrors[field.name];
                   const inputType = field.type ?? "text";
                   if (inputType === "heading") {
+                    const sectionExpanded =
+                      activeSectionExpandedState?.[field.name] ?? true;
+                    const sectionToggleId = `${formId}-${field.name}-section-toggle`;
                     return (
                       <div
                         key={field.name}
-                        className={cx(styles.field, styles.fieldWide, styles.sectionHeadingField)}
+                        className={cx(
+                          styles.field,
+                          styles.fieldWide,
+                          styles.sectionHeadingField,
+                        )}
                       >
-                        <p className={styles.sectionHeading}>{field.label}</p>
+                        <label
+                          className={styles.sectionToggle}
+                          htmlFor={sectionToggleId}
+                        >
+                          <input
+                            id={sectionToggleId}
+                            type="checkbox"
+                            className={styles.sectionToggleInput}
+                            checked={sectionExpanded}
+                            disabled={isSubmitting}
+                            onChange={() => toggleSectionExpanded(field.name)}
+                          />
+                          <span className={styles.sectionHeading}>
+                            {field.label}
+                          </span>
+                        </label>
                         {field.helperText ? (
-                          <p className={styles.sectionHeadingDescription}>{field.helperText}</p>
+                          <p className={styles.sectionHeadingDescription}>
+                            {field.helperText}
+                          </p>
                         ) : null}
                       </div>
                     );
                   }
-                  const isMultiSelect = inputType === "select" && field.multiple;
-                  const selectedValues = isMultiSelect ? parseMultiSelectValue(fieldValue) : [];
+                  const isMultiSelect =
+                    inputType === "select" && field.multiple;
+                  const selectedValues = isMultiSelect
+                    ? parseMultiSelectValue(fieldValue)
+                    : [];
                   const selectedLabels = isMultiSelect
                     ? getMultiSelectOptionLabels(field, selectedValues)
                     : [];
                   const selectedLabel = getSelectOptionLabel(field, fieldValue);
                   const searchQuery = searchQueries[field.name];
                   const searchInputValue =
-                    searchQuery !== undefined ? searchQuery : isMultiSelect ? "" : selectedLabel;
+                    searchQuery !== undefined
+                      ? searchQuery
+                      : isMultiSelect
+                        ? ""
+                        : selectedLabel;
                   const normalizedQuery = searchInputValue.trim().toLowerCase();
                   const filteredOptions =
                     field.searchable && inputType === "select"
@@ -829,16 +1021,24 @@ export function ERPDynamicModalForm({
                           if (!normalizedQuery) {
                             return true;
                           }
-                          const valueMatch = option.value.toLowerCase().includes(normalizedQuery);
-                          const labelMatch = option.label.toLowerCase().includes(normalizedQuery);
+                          const valueMatch = option.value
+                            .toLowerCase()
+                            .includes(normalizedQuery);
+                          const labelMatch = option.label
+                            .toLowerCase()
+                            .includes(normalizedQuery);
                           return valueMatch || labelMatch;
                         })
                       : [];
                   const controlId = `${formId}-${field.name}`;
-                  const helpId = field.helperText ? `${controlId}-help` : undefined;
+                  const helpId = field.helperText
+                    ? `${controlId}-help`
+                    : undefined;
                   const fileId = selectedFile ? `${controlId}-file` : undefined;
                   const errorId = fieldError ? `${controlId}-error` : undefined;
-                  const describedBy = [helpId, fileId, errorId].filter(Boolean).join(" ") || undefined;
+                  const describedBy =
+                    [helpId, fileId, errorId].filter(Boolean).join(" ") ||
+                    undefined;
                   const commonProps = {
                     id: controlId,
                     name: field.name,
@@ -852,13 +1052,17 @@ export function ERPDynamicModalForm({
                   return (
                     <div
                       key={field.name}
-                      className={cx(styles.field, field.colSpan === 2 && styles.fieldWide)}
+                      className={cx(
+                        styles.field,
+                        field.colSpan === 2 && styles.fieldWide,
+                      )}
                     >
                       <label className={styles.label} htmlFor={commonProps.id}>
                         {field.label}{" "}
-                        {field.required ? <span className={styles.requiredMark}>*</span> : null}
+                        {field.required ? (
+                          <span className={styles.requiredMark}>*</span>
+                        ) : null}
                       </label>
-
                       {inputType === "select" && field.searchable ? (
                         <div className={styles.searchSelect}>
                           <input
@@ -866,8 +1070,13 @@ export function ERPDynamicModalForm({
                             type="text"
                             name={`${field.name}-search`}
                             value={searchInputValue}
-                            placeholder={field.placeholder ?? `Search ${field.label}`}
-                            className={cx(styles.control, fieldError && styles.controlInvalid)}
+                            placeholder={
+                              field.placeholder ?? `Search ${field.label}`
+                            }
+                            className={cx(
+                              styles.control,
+                              fieldError && styles.controlInvalid,
+                            )}
                             role="combobox"
                             aria-autocomplete="list"
                             aria-expanded={openSearchField === field.name}
@@ -882,7 +1091,10 @@ export function ERPDynamicModalForm({
                               }, 100);
                             }}
                             onChange={(event) =>
-                              handleSearchableSelectInput(field, event.currentTarget.value)
+                              handleSearchableSelectInput(
+                                field,
+                                event.currentTarget.value,
+                              )
                             }
                           />
                           <button
@@ -904,7 +1116,8 @@ export function ERPDynamicModalForm({
                               aria-hidden="true"
                               className={cx(
                                 styles.searchSelectChevron,
-                                openSearchField === field.name && styles.searchSelectChevronOpen,
+                                openSearchField === field.name &&
+                                  styles.searchSelectChevronOpen,
                               )}
                             >
                               <path
@@ -931,7 +1144,8 @@ export function ERPDynamicModalForm({
                                       styles.searchSelectOption,
                                       (isMultiSelect
                                         ? selectedValues.includes(option.value)
-                                        : option.value === fieldValue) && styles.searchSelectOptionActive,
+                                        : option.value === fieldValue) &&
+                                        styles.searchSelectOptionActive,
                                     )}
                                     role="option"
                                     aria-selected={
@@ -941,21 +1155,31 @@ export function ERPDynamicModalForm({
                                     }
                                     onMouseDown={(event) => {
                                       event.preventDefault();
-                                      handleSearchableSelectChoose(field, option);
+                                      handleSearchableSelectChoose(
+                                        field,
+                                        option,
+                                      );
                                     }}
                                   >
                                     {option.label}
                                   </li>
                                 ))
                               ) : (
-                                <li className={styles.searchSelectEmpty} role="option" aria-disabled>
+                                <li
+                                  className={styles.searchSelectEmpty}
+                                  role="option"
+                                  aria-disabled
+                                >
                                   No matching options
                                 </li>
                               )}
                             </ul>
                           ) : null}
                           {isMultiSelect && selectedLabels.length ? (
-                            <div className={styles.searchSelectTokens} aria-live="polite">
+                            <div
+                              className={styles.searchSelectTokens}
+                              aria-live="polite"
+                            >
                               {selectedLabels.map((label, index) => (
                                 <span
                                   key={`${field.name}-selected-${selectedValues[index] ?? index}`}
@@ -972,14 +1196,22 @@ export function ERPDynamicModalForm({
                           {...commonProps}
                           value={isMultiSelect ? selectedValues : fieldValue}
                           multiple={isMultiSelect}
-                          className={cx(styles.control, fieldError && styles.controlInvalid)}
+                          className={cx(
+                            styles.control,
+                            fieldError && styles.controlInvalid,
+                          )}
                           style={field.controlStyle}
                         >
                           {!isMultiSelect ? (
-                            <option value="">{field.placeholder ?? `Select ${field.label}`}</option>
+                            <option value="">
+                              {field.placeholder ?? `Select ${field.label}`}
+                            </option>
                           ) : null}
                           {field.options?.map((option) => (
-                            <option key={`${field.name}-${option.value}`} value={option.value}>
+                            <option
+                              key={`${field.name}-${option.value}`}
+                              value={option.value}
+                            >
                               {option.label}
                             </option>
                           ))}
@@ -990,7 +1222,10 @@ export function ERPDynamicModalForm({
                             {...commonProps}
                             type="checkbox"
                             checked={fieldValue === "true"}
-                            className={cx(styles.checkboxControl, fieldError && styles.checkboxControlInvalid)}
+                            className={cx(
+                              styles.checkboxControl,
+                              fieldError && styles.checkboxControlInvalid,
+                            )}
                             style={field.controlStyle}
                           />
                         </div>
@@ -1013,7 +1248,11 @@ export function ERPDynamicModalForm({
                             {...commonProps}
                             type="file"
                             accept={field.accept}
-                            className={cx(styles.control, styles.fileInput, fieldError && styles.controlInvalid)}
+                            className={cx(
+                              styles.control,
+                              styles.fileInput,
+                              fieldError && styles.controlInvalid,
+                            )}
                             style={field.controlStyle}
                           />
                           <p id={fileId} className={styles.fileMeta}>
@@ -1025,14 +1264,21 @@ export function ERPDynamicModalForm({
                       ) : (
                         <input
                           {...commonProps}
-                          value={inputType === "color" ? fieldValue || "#000000" : fieldValue}
+                          value={
+                            inputType === "color"
+                              ? fieldValue || "#000000"
+                              : fieldValue
+                          }
                           type={inputType}
                           inputMode={field.inputMode}
                           min={field.min}
                           max={field.max}
                           step={field.step}
                           //placeholder={field.placeholder}
-                          className={cx(styles.control, fieldError && styles.controlInvalid)}
+                          className={cx(
+                            styles.control,
+                            fieldError && styles.controlInvalid,
+                          )}
                           style={field.controlStyle}
                         />
                       )}
