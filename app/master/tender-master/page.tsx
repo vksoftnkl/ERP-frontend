@@ -16,6 +16,8 @@ const API_ENDPOINTS = {
   delete: "/tender-masters/delete",
 } as const;
 
+const GRID_TABLE_NAME = "tender_master";
+
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 
 const LOOKUP_QUERY_TENDER_TYPES = {
@@ -460,6 +462,7 @@ export default function TenderMasterPage() {
       entityLabel="tender"
       entityLabelPlural="tenders"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

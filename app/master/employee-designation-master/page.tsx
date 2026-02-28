@@ -18,6 +18,8 @@ const API_ENDPOINTS = {
   delete: "/employee-designation-masters/delete",
 } as const;
 
+const GRID_TABLE_NAME = "employee_designations";
+
 const LOOKUP_KEYS = {
   id: ["edId", "ed_id", "id", "_id"],
   code: ["edCode", "ed_code", "code"],
@@ -106,6 +108,7 @@ export default function EmployeeDesignationMasterPage() {
       entityLabel="employee designation"
       entityLabelPlural="employee designations"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

@@ -1,4 +1,6 @@
 .tableShell {
+  position: relative;
+  isolation: isolate;
   width: 100%;
   flex: 1;
   height: var(--erp-table-shell-height, auto);
@@ -11,6 +13,8 @@
   background: #fff;
   overflow: hidden;
   .toolbar {
+    position: relative;
+    z-index: 120;
     border-bottom: 1px solid #dbe4ee;
     padding: 1.2rem 1.45rem 1rem;
     background: #fff;
@@ -84,6 +88,8 @@
     }
   }
   .tableViewport {
+    position: relative;
+    z-index: 10;
     flex: var(--erp-table-viewport-flex, 1 1 auto);
     min-height: 0;
     overflow-x: auto;
@@ -96,7 +102,7 @@
     width: 100%;
     min-width: var(--erp-table-min-width, 980px);
     border-collapse: collapse;
-    table-layout: fixed;
+    table-layout: auto;
     background: #fff;
   }
   .headerCell,
@@ -106,9 +112,11 @@
     font-size: 1.01rem;
     line-height: 1.25;
     vertical-align: middle;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   .headerCell {
     background: #f7f9fc;
@@ -121,11 +129,14 @@
     .headerText {
       font-size: clamp(0.78rem, 0.2vw + 0.72rem, 0.92rem);
       line-height: 1.2;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     &.stickyHeaderCell {
       position: sticky;
       top: 0;
-      z-index: 3;
+      z-index: 110;
     }
     &.sortableHeaderCell {
       cursor: pointer;
@@ -145,6 +156,7 @@
     padding: 0;
     cursor: pointer;
     text-align: inherit;
+    white-space: normal;
     &.headerButtonActive {
       font-weight: 700;
     }
@@ -247,7 +259,15 @@
     background: #fff;
     box-shadow: 0 14px 32px rgba(18, 30, 45, 0.18);
     padding: 6px;
-    z-index: 30;
+    z-index: 20;
+  }
+  .actionsDropdownUp {
+    top: auto;
+    bottom: -4px;
+  }
+  .actionsDropdownLeft {
+    left: auto;
+    right: calc(100% + 8px);
   }
   .actionsDropdownItem {
     width: 100%;
@@ -291,9 +311,10 @@
   }
   .leadingActionsValue {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: inherit;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .actionButton {
     min-height: 30px;
@@ -382,6 +403,8 @@
     color: #8f1f1f;
   }
   .paginationBar {
+    position: relative;
+    z-index: 120;
     border-top: 1px solid #dbe4ee;
     background: #fff;
     padding: 0.95rem 1.45rem;
@@ -523,6 +546,15 @@
       top: calc(100% + 6px);
       left: 0;
       right: auto;
+      bottom: auto;
+    }
+
+    .actionsDropdownUp,
+    .actionsDropdownLeft {
+      top: calc(100% + 6px);
+      left: 0;
+      right: auto;
+      bottom: auto;
     }
 
     .leadingActionsRow {

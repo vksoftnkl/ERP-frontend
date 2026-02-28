@@ -14,6 +14,15 @@ import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  fetchGridColumns,
+  selectGridColumns,
+  selectGridColumnsError,
+  selectGridColumnsLoading,
+  selectGridColumnsRequested,
+  type GridColumnConfig,
+} from "@/store/slices/gridColumnsSlice";
 import styles from "../state-master/page.module.scss";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
 const API_ENDPOINTS = {
@@ -26,7 +35,22 @@ const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const GRID_DETAILS_ENDPOINT = "/grid-details/list";
 const STATE_CODE_LOOKUP_ENDPOINT = "/state-code-masters/list";
+const ACCOUNT_LEDGER_TABLE_NAME = "acc_ledger_master";
+const ACCOUNT_LEDGER_TABLE_NAME_ALIASES = [
+  ACCOUNT_LEDGER_TABLE_NAME,
+  "account_ledger_master",
+  "account_ledgers",
+] as const;
+const GRID_DETAILS_QUERY = {
+  grid_status: "true",
+  search: ACCOUNT_LEDGER_TABLE_NAME,
+  page: "1",
+  limit: "20",
+} as const;
+const GRID_COLUMNS_PAGE = 1;
+const GRID_COLUMNS_LIMIT = 20;
 const LOOKUP_QUERY_COMPANIES = {
   module: "companies",
   limit: "20",
@@ -75,6 +99,28 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "ledRemarks",
   sort: "ledSort",
 } as const;
+const LEDGER_COMPANY_NAME_KEYS = [
+  "companyName",
+  "company_name",
+  "ledCompanyName",
+  "led_company_name",
+] as const;
+const LEDGER_BRANCH_NAME_KEYS = [
+  "branchName",
+  "branch_name",
+  "ledBranchName",
+  "led_branch_name",
+] as const;
+const LEDGER_GROUP_NAME_KEYS = [
+  "groupName",
+  "group_name",
+  "ledGroupName",
+  "led_group_name",
+  "accGroupName",
+  "acc_group_name",
+] as const;
+const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
+const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 const LOOKUP_ARRAY_KEYS = ["items", "data", "results", "rows", "list"] as const;
 const PAGINATION_CONTAINER_KEYS = [
   "meta",
@@ -339,10 +385,6 @@ function buildLedgerFormFields(
       label: "Email",
       type: "email",
     },
-     {
-      name: "ledAddr1",
-      label: "Address 1",
-    },
     {
       name: "ledTel",
       label: "Tel",
@@ -350,32 +392,42 @@ function buildLedgerFormFields(
     },
 
     {
-      name: "ledAddr2",
-      label: "Address 2",
-    },
-    {
       name: "ledPhone1",
       label: "Phone 1",
       type: "tel",
     },
-    {
-      name: "ledAddr3",
-      label: "Address 3",
-    },
+
     {
       name: "ledPhone2",
       label: "Phone 2",
       type: "tel",
     },      
-    {
-      name: "ledCity",
-      label: "City",
-    },
+
     {
       name: "ledWhatsappNo",
       label: "Whatsapp No",
       type: "tel",
     }, 
+
+     {
+      name: "ledAddr1",
+      label: "Address 1",
+    },
+
+    {
+      name: "ledAddr2",
+      label: "Address 2",
+    },
+
+
+    {
+      name: "ledAddr3",
+      label: "Address 3",
+    },
+    {
+      name: "ledCity",
+      label: "City",
+    },
     {
       name: "ledDistrict",
       label: "District",
@@ -405,22 +457,29 @@ function buildLedgerFormFields(
       name: "ledRegionName",
       label: "Region Name",
     },
-    {
-      name: "ledRegionCity",
-      label: "Region City",
-    },
+
     {
       name: "ledRegionAddr1",
       label: "Region Address 1",
     },
 
     {
-      name: "ledRegionDistrict",
-      label: "Region District",
-    },
-    {
       name: "ledRegionAddr2",
       label: "Region Address 2",
+    },
+
+    {
+      name: "ledRegionAddr3",
+      label: "Region Address 3",
+    },
+    {
+      name: "ledRegionCity",
+      label: "Region City",
+    },
+
+    {
+      name: "ledRegionDistrict",
+      label: "Region District",
     },
     {
       name: "ledRegionStateName",
@@ -429,10 +488,6 @@ function buildLedgerFormFields(
       searchable: true,
       options: stateNameOptions,
       placeholder: "Search state",
-    },
-    {
-      name: "ledRegionAddr3",
-      label: "Region Address 3",
     },
     {
       name: "ledRegionCountry",
@@ -756,11 +811,101 @@ type LedgerTableRow = {
   ledgerName: string;
   ledgerShort: string;
   ledgerStatus: string;
+  companyName: string;
+  branchName: string;
+  groupName: string;
 };
 type PaginationInfo = {
   totalEntries: number | null;
   currentPage: number | null;
   pageSize: number | null;
+};
+type LedgerColumnAccessor = keyof Pick<
+  LedgerTableRow,
+  | "serialNo"
+  | "ledgerId"
+  | "ledgerCode"
+  | "ledgerName"
+  | "ledgerShort"
+  | "ledgerStatus"
+  | "companyName"
+  | "branchName"
+  | "groupName"
+>;
+const DEFAULT_LEDGER_SERIAL_COLUMN: ReusableTableColumn<LedgerTableRow> = {
+  key: "serialNo",
+  header: "S.No",
+  accessor: "serialNo",
+  width: "56px",
+  sortable: false,
+};
+const DEFAULT_LEDGER_COLUMNS: ReusableTableColumn<LedgerTableRow>[] = [
+  DEFAULT_LEDGER_SERIAL_COLUMN,
+  {
+    key: "ledgerCode",
+    header: "Ledger Code",
+    accessor: "ledgerCode",
+    width: "220px",
+  },
+  {
+    key: "ledgerName",
+    header: "Ledger Name",
+    accessor: "ledgerName",
+    width: "320px",
+  },
+  {
+    key: "ledgerShort",
+    header: "Short Name",
+    accessor: "ledgerShort",
+    width: "180px",
+  },
+  {
+    key: "ledgerStatus",
+    header: "Status",
+    accessor: "ledgerStatus",
+    width: "120px",
+  },
+];
+const LEDGER_COLUMN_ACCESSOR_MAP: Record<string, LedgerColumnAccessor> = {
+  sno: "serialNo",
+  srno: "serialNo",
+  serialno: "serialNo",
+  serialnumber: "serialNo",
+  code: "ledgerCode",
+  ledgercode: "ledgerCode",
+  ledgeralias: "ledgerCode",
+  ledger_alias: "ledgerCode",
+  ledalias: "ledgerCode",
+  led_alias: "ledgerCode",
+  alias: "ledgerCode",
+  name: "ledgerName",
+  ledgername: "ledgerName",
+  ledgernames: "ledgerName",
+  ledger_names: "ledgerName",
+  ledname: "ledgerName",
+  led_name: "ledgerName",
+  short: "ledgerShort",
+  shortname: "ledgerShort",
+  ledgershort: "ledgerShort",
+  ledger_short: "ledgerShort",
+  ledshort: "ledgerShort",
+  led_short: "ledgerShort",
+  status: "ledgerStatus",
+  active: "ledgerStatus",
+  isactive: "ledgerStatus",
+  is_active: "ledgerStatus",
+  ledisactive: "ledgerStatus",
+  led_is_active: "ledgerStatus",
+  id: "ledgerId",
+  ledgerid: "ledgerId",
+  ledid: "ledgerId",
+  led_id: "ledgerId",
+  companyname: "companyName",
+  company_name: "companyName",
+  branchname: "branchName",
+  branch_name: "branchName",
+  groupname: "groupName",
+  group_name: "groupName",
 };
 const LEDGER_FIELD_NAME_SET = new Set<string>(
   Object.keys(LEDGER_INITIAL_FORM_VALUES),
@@ -969,6 +1114,162 @@ function buildSectionExpandedState(
     return state;
   }, {});
 }
+function normalizeColumnToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9_]+/g, "");
+}
+function normalizeGridColumnColor(value: string | undefined): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+  return normalized || undefined;
+}
+function resolveLedgerAccessor(
+  ...candidates: Array<string | undefined>
+): LedgerColumnAccessor | null {
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const normalized = normalizeColumnToken(candidate);
+    const mapped = LEDGER_COLUMN_ACCESSOR_MAP[normalized];
+    if (mapped) {
+      return mapped;
+    }
+
+    const compact = normalized.replace(/_/g, "");
+    const compactMapped = LEDGER_COLUMN_ACCESSOR_MAP[compact];
+    if (compactMapped) {
+      return compactMapped;
+    }
+  }
+
+  return null;
+}
+function resolveNumericId(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.floor(value);
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(normalized, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+
+  return null;
+}
+function resolveAccountLedgerGridId(payload: unknown): number | null {
+  const rows = extractRows(payload, LOOKUP_ARRAY_KEYS);
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+
+    const source = row as Record<string, unknown>;
+    const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
+    if (gridId === null) {
+      continue;
+    }
+
+    const gridSql = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_SQL_KEYS)).toLowerCase();
+    if (
+      !gridSql ||
+      ACCOUNT_LEDGER_TABLE_NAME_ALIASES.some((tableName) => gridSql.includes(tableName))
+    ) {
+      return gridId;
+    }
+  }
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+
+    const source = row as Record<string, unknown>;
+    const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
+    if (gridId !== null) {
+      return gridId;
+    }
+  }
+
+  return null;
+}
+function buildColumnsFromGridColumns(
+  gridColumns: GridColumnConfig[],
+): ReusableTableColumn<LedgerTableRow>[] {
+  const columns: ReusableTableColumn<LedgerTableRow>[] = [];
+  const seenColumnKeys = new Set<string>();
+
+  const visibleColumns = gridColumns
+    .filter((column) => column.visible)
+    .sort((left, right) => left.order - right.order);
+
+  for (const gridColumn of visibleColumns) {
+    const accessor = resolveLedgerAccessor(
+      gridColumn.accessorKey,
+      gridColumn.key,
+      gridColumn.header,
+    );
+    if (!accessor) {
+      continue;
+    }
+
+    const keyBase =
+      normalizeColumnToken(gridColumn.key || gridColumn.accessorKey || gridColumn.header || accessor) ||
+      accessor;
+    const uniqueKey = seenColumnKeys.has(keyBase)
+      ? `${keyBase}-${columns.length + 1}`
+      : keyBase;
+    seenColumnKeys.add(uniqueKey);
+
+    const columnColor = normalizeGridColumnColor(gridColumn.color);
+    const tableColumn: ReusableTableColumn<LedgerTableRow> = {
+      key: uniqueKey,
+      header: gridColumn.header,
+      accessor,
+      align: gridColumn.align ?? "left",
+      width: gridColumn.width ?? (accessor === "serialNo" ? "56px" : undefined),
+      sortable: gridColumn.sortable ?? accessor !== "serialNo",
+      headerStyle: columnColor ? { backgroundColor: columnColor } : undefined,
+      cellStyle: columnColor ? { backgroundColor: columnColor } : undefined,
+    };
+
+    columns.push(tableColumn);
+  }
+
+  if (columns.length === 0) {
+    return DEFAULT_LEDGER_COLUMNS;
+  }
+
+  const serialColumnIndex = columns.findIndex((column) => column.accessor === "serialNo");
+  if (serialColumnIndex < 0) {
+    columns.unshift({ ...DEFAULT_LEDGER_SERIAL_COLUMN });
+    return columns;
+  }
+
+  if (serialColumnIndex > 0) {
+    const [serialColumn] = columns.splice(serialColumnIndex, 1);
+    columns.unshift({
+      ...serialColumn,
+      accessor: "serialNo",
+      sortable: false,
+    });
+  }
+
+  return columns;
+}
 function extractDetailSource(payload: unknown): Record<string, unknown> | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return null;
@@ -1057,6 +1358,9 @@ function buildLedgerRows(payload: unknown, serialOffset: number): LedgerTableRow
       const nameValue = getFirstDefinedValue(row, LOOKUP_KEYS.name);
       const shortValue = getFirstDefinedValue(row, LOOKUP_KEYS.short);
       const activeValue = getFirstDefinedValue(row, LOOKUP_KEYS.active);
+      const companyNameValue = getFirstDefinedValue(row, LEDGER_COMPANY_NAME_KEYS);
+      const branchNameValue = getFirstDefinedValue(row, LEDGER_BRANCH_NAME_KEYS);
+      const groupNameValue = getFirstDefinedValue(row, LEDGER_GROUP_NAME_KEYS);
       const preferredKey = idValue ?? row.id ?? row._id ?? row.code ?? serialNo;
       const rowId =
         typeof preferredKey === "string" || typeof preferredKey === "number"
@@ -1072,6 +1376,9 @@ function buildLedgerRows(payload: unknown, serialOffset: number): LedgerTableRow
         ledgerName: toDisplayValue(nameValue),
         ledgerShort: toDisplayValue(shortValue),
         ledgerStatus: toDisplayValue(activeValue),
+        companyName: toDisplayValue(companyNameValue),
+        branchName: toDisplayValue(branchNameValue),
+        groupName: toDisplayValue(groupNameValue),
       };
     }
     return {
@@ -1084,6 +1391,9 @@ function buildLedgerRows(payload: unknown, serialOffset: number): LedgerTableRow
       ledgerName: toDisplayValue(item),
       ledgerShort: "",
       ledgerStatus: "",
+      companyName: "",
+      branchName: "",
+      groupName: "",
     };
   });
 }
@@ -1118,7 +1428,9 @@ function validateLedgerForm(values: LedgerFormValues): string | null {
   return null;
 }
 export default function AccountLedgerMasterPage() {
+  const dispatch = useAppDispatch();
   const { data, error, loading, getAll } = useApi<unknown>(API_ENDPOINTS.list);
+  const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const {
     run: getById,
     loading: detailsLoading,
@@ -1164,6 +1476,7 @@ export default function AccountLedgerMasterPage() {
   const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [totalEntries, setTotalEntries] = useState(0);
+  const [accountLedgerGridId, setAccountLedgerGridId] = useState<number | null>(null);
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | number | null>(null);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -1176,6 +1489,58 @@ export default function AccountLedgerMasterPage() {
   const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [pendingDeleteRow, setPendingDeleteRow] = useState<LedgerTableRow | null>(null);
+  const selectedGridId = accountLedgerGridId ?? -1;
+  const gridColumns = useAppSelector((state) => selectGridColumns(state, selectedGridId));
+  const gridColumnsLoading = useAppSelector((state) =>
+    selectGridColumnsLoading(state, selectedGridId),
+  );
+  const gridColumnsRequested = useAppSelector((state) =>
+    selectGridColumnsRequested(state, selectedGridId),
+  );
+  const gridColumnsError = useAppSelector((state) =>
+    selectGridColumnsError(state, selectedGridId),
+  );
+
+  useEffect(() => {
+    let mounted = true;
+
+    void (async () => {
+      try {
+        const payload = await getGridDetails(GRID_DETAILS_QUERY);
+        if (!mounted) {
+          return;
+        }
+        setAccountLedgerGridId(resolveAccountLedgerGridId(payload));
+      } catch {
+        if (mounted) {
+          setAccountLedgerGridId(null);
+        }
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [getGridDetails]);
+
+  useEffect(() => {
+    if (
+      accountLedgerGridId === null ||
+      gridColumnsRequested ||
+      gridColumnsLoading
+    ) {
+      return;
+    }
+
+    void dispatch(
+      fetchGridColumns({
+        gridId: accountLedgerGridId,
+        page: GRID_COLUMNS_PAGE,
+        limit: GRID_COLUMNS_LIMIT,
+      }),
+    );
+  }, [accountLedgerGridId, dispatch, gridColumnsLoading, gridColumnsRequested]);
+
   useEffect(() => {
     if (openSearchField === null) {
       return;
@@ -1359,40 +1724,8 @@ export default function AccountLedgerMasterPage() {
     }
   }, [rows, selectedRowId]);
   const columns = useMemo<ReusableTableColumn<LedgerTableRow>[]>(
-    () => [
-      {
-        key: "serialNo",
-        header: "S.No",
-        accessor: "serialNo",
-        width: "56px",
-        sortable: false,
-      },
-      {
-        key: "ledgerCode",
-        header: "Ledger Code",
-        accessor: "ledgerCode",
-        width: "220px",
-      },
-      {
-        key: "ledgerName",
-        header: "Ledger Name",
-        accessor: "ledgerName",
-        width: "320px",
-      },
-      {
-        key: "ledgerShort",
-        header: "Short Name",
-        accessor: "ledgerShort",
-        width: "180px",
-      },
-      {
-        key: "ledgerStatus",
-        header: "Status",
-        accessor: "ledgerStatus",
-        width: "120px",
-      },
-    ],
-    [],
+    () => buildColumnsFromGridColumns(gridColumns),
+    [gridColumns],
   );
   const openCreateModal = useCallback(() => {
     resetSaveState();
@@ -1956,6 +2289,34 @@ export default function AccountLedgerMasterPage() {
                 <p className={styles.errorText}>
                   Unable to delete selected account ledger: {deleteError}
                 </p>
+              </div>
+            ) : null}
+            {gridColumnsError ? (
+              <div className={styles.errorBox}>
+                <p className={styles.errorText}>
+                  Unable to load table headers: {gridColumnsError}. Showing
+                  default headers.
+                </p>
+                <button
+                  type="button"
+                  className={styles.retryButton}
+                  onClick={() => {
+                    if (accountLedgerGridId === null) {
+                      return;
+                    }
+
+                    void dispatch(
+                      fetchGridColumns({
+                        gridId: accountLedgerGridId,
+                        page: GRID_COLUMNS_PAGE,
+                        limit: GRID_COLUMNS_LIMIT,
+                      }),
+                    );
+                  }}
+                  disabled={gridColumnsLoading || accountLedgerGridId === null}
+                >
+                  {gridColumnsLoading ? "Loading..." : "Retry Headers"}
+                </button>
               </div>
             ) : null}
             <section className={styles.tableSection}>

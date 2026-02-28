@@ -13,6 +13,8 @@ const API_ENDPOINTS = {
   create: "/item-sections/create",
   delete: "/item-sections/delete",
 } as const;
+
+const GRID_TABLE_NAME = "item_section_master";
 const LOOKUP_KEYS = {
   id: [
     "sec_id",
@@ -376,6 +378,7 @@ export default function ItemSectionMasterPage() {
       entityLabel="item section"
       entityLabelPlural="item sections"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

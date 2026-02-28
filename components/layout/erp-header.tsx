@@ -1,8 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./erp-header.module.css";
+import { clearAuthSession } from "@/lib/auth/session";
+import {
+  canUseClientSideRouting,
+  toInternalRoute,
+} from "@/lib/navigation/safe-route";
 import {
   ARIA_LABELS,
   DEFAULT_CUSTOMER_OPTIONS,
@@ -30,13 +35,21 @@ function cx(...tokens: Array<string | false | undefined>): string {
 }
 // Components
 function MenuLink({ item, className, hasSubmenu, onNavigate }: MenuLinkProps) {
-  const handleClick = useCallback(() => {
+  const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
     item.onClick?.();
     if (item.href && item.href !== "#") {
+      event.currentTarget.blur();
       onNavigate(item.href);
       return;
     }
+
+    if (item.onClick && !hasSubmenu) {
+      event.currentTarget.blur();
+      return;
+    }
+
     if (!item.onClick && !hasSubmenu) {
+      event.currentTarget.blur();
       window.alert(`Navigating to ${item.label}`);
     }
   }, [item.href, item.onClick, item.label, hasSubmenu, onNavigate]);
@@ -115,6 +128,8 @@ function HeaderRight({
   onCartClick,
   goLabel,
   onGoClick,
+  logoutLabel,
+  onLogout,
 }: HeaderRightProps) {
   const handleCustomerChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
     const next = event.target.value;
@@ -150,6 +165,9 @@ function HeaderRight({
       <button type="button" className={styles.goButton} onClick={onGoClick}>
         {goLabel}
       </button>
+      <button type="button" className={styles.logoutButton} onClick={onLogout}>
+        {logoutLabel}
+      </button>
     </div>
   );
 }
@@ -160,6 +178,7 @@ function TabStrip({
   onBillNumberChange,
   billPlaceholder,
   onNavigate,
+  quickTabsRef,
 }: TabStripProps) {
   const handleBillNumberChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const next = event.target.value;
@@ -168,7 +187,7 @@ function TabStrip({
 
   return (
     <section className={styles.tabStrip}>
-      <div className={styles.quickTabs}>
+      <div ref={quickTabsRef} className={styles.quickTabs}>
         <MenuTree
           items={quickTabs}
           rootListClassName={styles.quickTabsList}
@@ -200,11 +219,15 @@ export default function ErpHeader({
   onCartClick,
   goLabel = "Go",
   onGoClick,
+  logoutLabel = "Logout",
+  onLogout,
   billNumber,
   onBillNumberChange,
   billPlaceholder = "Enter Bill No",
 }: ErpHeaderProps) {
   const router = useRouter();
+  const primaryMenuRef = useRef<HTMLElement | null>(null);
+  const quickTabsRef = useRef<HTMLDivElement | null>(null);
   // State management
   const [localCustomer, setLocalCustomer] = useState(
     selectedCustomer ?? customerOptions[0] ?? ""
@@ -237,6 +260,43 @@ export default function ErpHeader({
   );
   const resolvedCustomer = selectedCustomer ?? localCustomer;
   const resolvedBillNumber = billNumber ?? localBillNumber;
+
+  useEffect(() => {
+    const handlePointerDownCapture = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      const active = document.activeElement;
+      if (!(active instanceof HTMLElement)) {
+        return;
+      }
+
+      const isInsidePrimaryMenu = !!primaryMenuRef.current?.contains(target);
+      const isInsideQuickTabs = !!quickTabsRef.current?.contains(target);
+
+      if (isInsidePrimaryMenu || isInsideQuickTabs) {
+        return;
+      }
+
+      const activeInPrimaryMenu = !!primaryMenuRef.current?.contains(active);
+      const activeInQuickTabs = !!quickTabsRef.current?.contains(active);
+
+      if (activeInPrimaryMenu || activeInQuickTabs) {
+        active.blur();
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDownCapture, true);
+    return () => {
+      document.removeEventListener(
+        "pointerdown",
+        handlePointerDownCapture,
+        true,
+      );
+    };
+  }, []);
   // Event handlers
   const handleCustomerChange = useCallback((value: string) => {
     if (selectedCustomer === undefined) {
@@ -251,12 +311,40 @@ export default function ErpHeader({
     onBillNumberChange?.(value);
   }, [billNumber, onBillNumberChange]);
   const handleNavigate = useCallback((destination: string) => {
-    router.push(destination);
+    const route = toInternalRoute(destination);
+    if (!route) {
+      return;
+    }
+
+    if (!canUseClientSideRouting()) {
+      window.location.assign(route);
+      return;
+    }
+
+    router.push(route);
   }, [router]);
+  const handleLogout = useCallback(() => {
+    if (onLogout) {
+      onLogout();
+      return;
+    }
+
+    clearAuthSession();
+    if (!canUseClientSideRouting()) {
+      window.location.replace("/login");
+      return;
+    }
+
+    router.replace("/login");
+  }, [onLogout, router]);
   return (
     <div className={styles.headerShell}>
       <header className={styles.topHeader}>
-        <nav className={styles.primaryMenu} aria-label={ARIA_LABELS.MAIN_MENU}>
+        <nav
+          ref={primaryMenuRef}
+          className={styles.primaryMenu}
+          aria-label={ARIA_LABELS.MAIN_MENU}
+        >
           <MenuTree
             items={primaryMenu}
             rootListClassName={styles.primaryMenuList}
@@ -274,6 +362,8 @@ export default function ErpHeader({
           onCartClick={onCartClick}
           goLabel={goLabel}
           onGoClick={onGoClick}
+          logoutLabel={logoutLabel}
+          onLogout={handleLogout}
         />
       </header>
       <TabStrip
@@ -282,6 +372,7 @@ export default function ErpHeader({
         onBillNumberChange={handleBillNumberChange}
         billPlaceholder={billPlaceholder}
         onNavigate={handleNavigate}
+        quickTabsRef={quickTabsRef}
       />
     </div>
   );

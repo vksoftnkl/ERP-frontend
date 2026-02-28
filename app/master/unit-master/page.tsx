@@ -16,6 +16,8 @@ const API_ENDPOINTS = {
   delete: "/units/delete",
 } as const;
 
+const GRID_TABLE_NAME = "units";
+
 const LOOKUP_KEYS = {
   id: [
     "unit_id",
@@ -485,6 +487,7 @@ export default function UnitMasterPage() {
       entityLabel="unit"
       entityLabelPlural="units"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

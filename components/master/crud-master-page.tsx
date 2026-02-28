@@ -4,6 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  fetchGridColumns,
+  selectGridColumns,
+  selectGridColumnsError,
+  selectGridColumnsLoading,
+  selectGridColumnsRequested,
+  type GridColumnConfig,
+} from "@/store/slices/gridColumnsSlice";
 import {
   ERPDynamicModalForm,
   type ERPDynamicModalController,
@@ -15,6 +24,11 @@ import {
 const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
+const GRID_DETAILS_ENDPOINT = "/grid-details/list";
+const GRID_COLUMNS_PAGE = 1;
+const GRID_COLUMNS_LIMIT = 20;
+const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
+const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 
 const DEFAULT_ARRAY_KEYS = [
   "data",
@@ -87,6 +101,14 @@ type MasterTableRow = {
   masterActive: string;
   position: string;
 };
+
+type MasterColumnAccessor =
+  | "serialNo"
+  | "masterCode"
+  | "masterName"
+  | "masterShort"
+  | "position"
+  | "masterActive";
 
 type MasterFormState = {
   masterName: string;
@@ -186,6 +208,8 @@ export type CrudMasterPageProps = {
   formDescription?: string;
   customFields?: ERPDynamicModalField[];
   createInitialValues?: Record<string, string>;
+  gridTableName?: string;
+  gridTableNameAliases?: readonly string[];
   getByIdMethod?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   buildGetByIdRequest?: (params: {
     recordId: string | number;
@@ -570,6 +594,286 @@ function toSafePageSize(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : DEFAULT_PAGE_SIZE;
 }
 
+function normalizeColumnToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9_]+/g, "");
+}
+
+function resolveNumericId(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.floor(value);
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(normalized, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+
+  return null;
+}
+
+function resolveGridIdByTableName(
+  payload: unknown,
+  tableNames: readonly string[],
+): number | null {
+  const rows = extractRows(payload, DEFAULT_ARRAY_KEYS);
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+
+    const source = row as Record<string, unknown>;
+    const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
+    if (gridId === null) {
+      continue;
+    }
+
+    const gridSql = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_SQL_KEYS)).toLowerCase();
+    if (!gridSql || tableNames.some((tableName) => gridSql.includes(tableName))) {
+      return gridId;
+    }
+  }
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+
+    const source = row as Record<string, unknown>;
+    const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
+    if (gridId !== null) {
+      return gridId;
+    }
+  }
+
+  return null;
+}
+
+function buildMasterFallbackColumns(
+  title: string,
+  codeColumnHeader: string | undefined,
+  nameColumnHeader: string | undefined,
+  tableColumnHeaders: CrudMasterTableColumnHeaders | undefined,
+  tableColumnLayout: CrudMasterTableColumnLayout | undefined,
+): ReusableTableColumn<MasterTableRow>[] {
+  return [
+    {
+      key: "serialNo",
+      header: tableColumnHeaders?.serialNo ?? "S.No",
+      accessor: "serialNo",
+      align: tableColumnLayout?.serialNo?.align,
+      width: tableColumnLayout?.serialNo?.width,
+      sortable: false,
+    },
+    {
+      key: "masterCode",
+      header:
+        tableColumnHeaders?.masterCode ?? codeColumnHeader ?? `${title} Code`,
+      accessor: "masterCode",
+      align: tableColumnLayout?.masterCode?.align,
+      width: tableColumnLayout?.masterCode?.width,
+    },
+    {
+      key: "masterName",
+      header:
+        tableColumnHeaders?.masterName ?? nameColumnHeader ?? `${title} Name`,
+      accessor: "masterName",
+      align: tableColumnLayout?.masterName?.align,
+      width: tableColumnLayout?.masterName?.width,
+    },
+    {
+      key: "masterShort",
+      header: tableColumnHeaders?.masterShort ?? "Short Name",
+      accessor: "masterShort",
+      align: tableColumnLayout?.masterShort?.align,
+      width: tableColumnLayout?.masterShort?.width,
+    },
+    {
+      key: "masterActive",
+      header: tableColumnHeaders?.masterActive ?? "Status",
+      accessor: "masterActive",
+      align: tableColumnLayout?.masterActive?.align,
+      width: tableColumnLayout?.masterActive?.width,
+    },
+  ];
+}
+
+function resolveMasterAccessorFromGridColumn(
+  column: GridColumnConfig,
+  lookupKeys: CrudMasterLookupKeys,
+): MasterColumnAccessor | null {
+  const candidates = [column.accessorKey, column.key, column.header];
+  const activeKeys = lookupKeys.active ?? DEFAULT_ACTIVE_KEYS;
+  const positionKeys = lookupKeys.position ?? DEFAULT_POSITION_KEYS;
+  const normalizedCodeKeys = new Set(lookupKeys.code.map(normalizeColumnToken));
+  const normalizedNameKeys = new Set(lookupKeys.name.map(normalizeColumnToken));
+  const normalizedShortKeys = new Set(lookupKeys.short.map(normalizeColumnToken));
+  const normalizedAliasKeys = new Set(lookupKeys.alias.map(normalizeColumnToken));
+  const normalizedActiveKeys = new Set(activeKeys.map(normalizeColumnToken));
+  const normalizedPositionKeys = new Set(positionKeys.map(normalizeColumnToken));
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const normalized = normalizeColumnToken(candidate);
+    if (!normalized) {
+      continue;
+    }
+
+    if (
+      normalized === "sno" ||
+      normalized === "srno" ||
+      normalized === "serialno" ||
+      normalized === "serialnumber"
+    ) {
+      return "serialNo";
+    }
+
+    if (
+      normalized === "status" ||
+      normalized === "active" ||
+      normalized === "isactive" ||
+      normalized === "is_active" ||
+      normalizedActiveKeys.has(normalized)
+    ) {
+      return "masterActive";
+    }
+
+    if (
+      normalized === "position" ||
+      normalized === "sort" ||
+      normalized === "order" ||
+      normalizedPositionKeys.has(normalized)
+    ) {
+      return "position";
+    }
+
+    if (
+      normalized === "short" ||
+      normalized === "shortname" ||
+      normalized === "short_name" ||
+      normalizedShortKeys.has(normalized)
+    ) {
+      return "masterShort";
+    }
+
+    if (
+      normalized === "name" ||
+      normalized.endsWith("name") ||
+      normalizedNameKeys.has(normalized)
+    ) {
+      return "masterName";
+    }
+
+    if (
+      normalized === "code" ||
+      normalized.endsWith("code") ||
+      normalized.includes("alias") ||
+      normalizedCodeKeys.has(normalized) ||
+      normalizedAliasKeys.has(normalized)
+    ) {
+      return "masterCode";
+    }
+
+    const compact = normalized.replace(/_/g, "");
+    if (!compact) {
+      continue;
+    }
+    if (
+      normalizedCodeKeys.has(compact) ||
+      normalizedAliasKeys.has(compact) ||
+      compact.endsWith("code") ||
+      compact.includes("alias")
+    ) {
+      return "masterCode";
+    }
+    if (
+      normalizedNameKeys.has(compact) ||
+      compact.endsWith("name")
+    ) {
+      return "masterName";
+    }
+    if (normalizedShortKeys.has(compact) || compact.includes("short")) {
+      return "masterShort";
+    }
+    if (normalizedActiveKeys.has(compact) || compact.includes("active")) {
+      return "masterActive";
+    }
+    if (normalizedPositionKeys.has(compact) || compact.includes("sort")) {
+      return "position";
+    }
+  }
+
+  return null;
+}
+
+function buildColumnsFromGridColumns(
+  gridColumns: GridColumnConfig[],
+  lookupKeys: CrudMasterLookupKeys,
+  fallbackColumns: ReusableTableColumn<MasterTableRow>[],
+): ReusableTableColumn<MasterTableRow>[] {
+  const visibleColumns = gridColumns
+    .filter((column) => column.visible)
+    .sort((left, right) => left.order - right.order);
+
+  const columns: ReusableTableColumn<MasterTableRow>[] = [];
+  const seenAccessors = new Set<MasterColumnAccessor>();
+
+  for (const column of visibleColumns) {
+    const accessor = resolveMasterAccessorFromGridColumn(column, lookupKeys);
+    if (!accessor || seenAccessors.has(accessor)) {
+      continue;
+    }
+    seenAccessors.add(accessor);
+
+    columns.push({
+      key: normalizeColumnToken(column.key || column.accessorKey || column.header || accessor),
+      header: column.header,
+      accessor,
+      align: column.align,
+      width: column.width,
+      sortable: column.sortable ?? accessor !== "serialNo",
+      headerStyle: column.color ? { backgroundColor: column.color } : undefined,
+      cellStyle: column.color ? { backgroundColor: column.color } : undefined,
+    });
+  }
+
+  if (columns.length === 0) {
+    return fallbackColumns;
+  }
+
+  const serialIndex = columns.findIndex((column) => column.accessor === "serialNo");
+  if (serialIndex < 0) {
+    const serialFallback = fallbackColumns.find((column) => column.accessor === "serialNo");
+    if (serialFallback) {
+      columns.unshift(serialFallback);
+    }
+    return columns;
+  }
+
+  if (serialIndex > 0) {
+    const [serialColumn] = columns.splice(serialIndex, 1);
+    columns.unshift({
+      ...serialColumn,
+      accessor: "serialNo",
+      sortable: false,
+    });
+  }
+
+  return columns;
+}
+
 export default function CrudMasterPage({
   title,
   entityLabel,
@@ -591,14 +895,18 @@ export default function CrudMasterPage({
   formDescription,
   customFields,
   createInitialValues,
+  gridTableName,
+  gridTableNameAliases,
   getByIdMethod,
   buildGetByIdRequest,
   mapFormValues,
   buildRequestPayload,
 }: CrudMasterPageProps) {
+  const dispatch = useAppDispatch();
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
 
   const { data, error, loading, getAll } = useApi<unknown>(apiEndpoints.list);
+  const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const {
     run: getById,
     loading: detailsLoading,
@@ -628,6 +936,88 @@ export default function CrudMasterPage({
   const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [totalEntries, setTotalEntries] = useState(0);
+  const [gridId, setGridId] = useState<number | null>(null);
+  const selectedGridId = gridId ?? -1;
+  const gridColumns = useAppSelector((state) =>
+    selectGridColumns(state, selectedGridId),
+  );
+  const gridColumnsLoading = useAppSelector((state) =>
+    selectGridColumnsLoading(state, selectedGridId),
+  );
+  const gridColumnsRequested = useAppSelector((state) =>
+    selectGridColumnsRequested(state, selectedGridId),
+  );
+  const gridColumnsError = useAppSelector((state) =>
+    selectGridColumnsError(state, selectedGridId),
+  );
+
+  const normalizedGridTableNames = useMemo(() => {
+    const base = gridTableName?.trim().toLowerCase();
+    if (!base) {
+      return [] as string[];
+    }
+
+    const merged = [
+      base,
+      ...(gridTableNameAliases ?? []),
+    ]
+      .map((name) => name.trim().toLowerCase())
+      .filter(Boolean);
+
+    return Array.from(new Set(merged));
+  }, [gridTableName, gridTableNameAliases]);
+
+  useEffect(() => {
+    if (normalizedGridTableNames.length === 0) {
+      setGridId(null);
+      return;
+    }
+
+    let mounted = true;
+
+    void (async () => {
+      try {
+        const payload = await getGridDetails({
+          grid_status: "true",
+          search: normalizedGridTableNames[0],
+          page: "1",
+          limit: "20",
+        });
+
+        if (!mounted) {
+          return;
+        }
+
+        setGridId(resolveGridIdByTableName(payload, normalizedGridTableNames));
+      } catch {
+        if (mounted) {
+          setGridId(null);
+        }
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [getGridDetails, normalizedGridTableNames]);
+
+  useEffect(() => {
+    if (
+      gridId === null ||
+      gridColumnsRequested ||
+      gridColumnsLoading
+    ) {
+      return;
+    }
+
+    void dispatch(
+      fetchGridColumns({
+        gridId,
+        page: GRID_COLUMNS_PAGE,
+        limit: GRID_COLUMNS_LIMIT,
+      }),
+    );
+  }, [dispatch, gridColumnsLoading, gridColumnsRequested, gridId]);
 
   const loadRecords = useCallback(
     async (term: string, page: number, limit: number) => {
@@ -687,47 +1077,15 @@ export default function CrudMasterPage({
     [data, lookupKeys, serialOffset],
   );
 
-  const columns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
-    () => [
-      {
-        key: "serialNo",
-        header: tableColumnHeaders?.serialNo ?? "S.No",
-        accessor: "serialNo",
-        align: tableColumnLayout?.serialNo?.align,
-        width: tableColumnLayout?.serialNo?.width,
-        sortable: false,
-      },
-      {
-        key: "masterCode",
-        header:
-          tableColumnHeaders?.masterCode ?? codeColumnHeader ?? `${title} Code`,
-        accessor: "masterCode",
-        align: tableColumnLayout?.masterCode?.align,
-        width: tableColumnLayout?.masterCode?.width,
-      },
-      {
-        key: "masterName",
-        header:
-          tableColumnHeaders?.masterName ?? nameColumnHeader ?? `${title} Name`,
-        accessor: "masterName",
-        align: tableColumnLayout?.masterName?.align,
-        width: tableColumnLayout?.masterName?.width,
-      },
-      {
-        key: "masterShort",
-        header: tableColumnHeaders?.masterShort ?? "Short Name",
-        accessor: "masterShort",
-        align: tableColumnLayout?.masterShort?.align,
-        width: tableColumnLayout?.masterShort?.width,
-      },
-      {
-        key: "masterActive",
-        header: tableColumnHeaders?.masterActive ?? "Status",
-        accessor: "masterActive",
-        align: tableColumnLayout?.masterActive?.align,
-        width: tableColumnLayout?.masterActive?.width,
-      },
-    ],
+  const fallbackColumns = useMemo(
+    () =>
+      buildMasterFallbackColumns(
+        title,
+        codeColumnHeader,
+        nameColumnHeader,
+        tableColumnHeaders,
+        tableColumnLayout,
+      ),
     [
       codeColumnHeader,
       nameColumnHeader,
@@ -735,6 +1093,14 @@ export default function CrudMasterPage({
       tableColumnLayout,
       title,
     ],
+  );
+
+  const columns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
+    () =>
+      normalizedGridTableNames.length > 0
+        ? buildColumnsFromGridColumns(gridColumns, lookupKeys, fallbackColumns)
+        : fallbackColumns,
+    [fallbackColumns, gridColumns, lookupKeys, normalizedGridTableNames.length],
   );
 
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(
@@ -1184,6 +1550,34 @@ export default function CrudMasterPage({
                 <p className={styles.errorText}>
                   Unable to load selected {entityLabel} details: {detailsError}
                 </p>
+              </div>
+            ) : null}
+            {normalizedGridTableNames.length > 0 && gridColumnsError ? (
+              <div className={styles.errorBox}>
+                <p className={styles.errorText}>
+                  Unable to load table headers: {gridColumnsError}. Showing
+                  default headers.
+                </p>
+                <button
+                  type="button"
+                  className={styles.retryButton}
+                  onClick={() => {
+                    if (gridId === null) {
+                      return;
+                    }
+
+                    void dispatch(
+                      fetchGridColumns({
+                        gridId,
+                        page: GRID_COLUMNS_PAGE,
+                        limit: GRID_COLUMNS_LIMIT,
+                      }),
+                    );
+                  }}
+                  disabled={gridColumnsLoading || gridId === null}
+                >
+                  {gridColumnsLoading ? "Loading..." : "Retry Headers"}
+                </button>
               </div>
             ) : null}
             <section className={styles.tableSection}>

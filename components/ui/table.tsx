@@ -34,6 +34,10 @@ export type ReusableTableColumn<T> = {
 type RowKeyResolver<T> = keyof T | ((row: T, rowIndex: number) => Key);
 type RowActionHandler<T> = (row: T, rowIndex: number) => void;
 type RowActionDisabledResolver<T> = (row: T, rowIndex: number) => boolean;
+type ActionMenuPlacement = {
+  vertical: "down" | "up";
+  horizontal: "right" | "left";
+};
 export type ReusableTableProps<T extends Record<string, unknown>> = {
   columns: ReusableTableColumn<T>[];
   rows: T[];
@@ -95,6 +99,33 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
 };
 function cx(...tokens: Array<string | undefined | false>): string {
   return tokens.filter(Boolean).join(" ");
+}
+
+const ACTION_MENU_ESTIMATED_WIDTH = 190;
+const ACTION_MENU_ESTIMATED_HEIGHT = 220;
+const DEFAULT_TABLE_MAX_HEIGHT = "calc(100dvh - 250px)";
+const SERIAL_NUMBER_COLUMN_WIDTH = "20px";
+const DEFAULT_ACTION_MENU_PLACEMENT: ActionMenuPlacement = {
+  vertical: "down",
+  horizontal: "right",
+};
+
+function resolveActionMenuPlacement(trigger: HTMLElement): ActionMenuPlacement {
+  const viewport = trigger.closest<HTMLElement>('[data-erp-table-viewport="true"]');
+  const bounds = viewport?.getBoundingClientRect() ?? document.documentElement.getBoundingClientRect();
+  const triggerRect = trigger.getBoundingClientRect();
+
+  const spaceRight = bounds.right - triggerRect.right;
+  const spaceLeft = triggerRect.left - bounds.left;
+  const horizontal =
+    spaceRight < ACTION_MENU_ESTIMATED_WIDTH && spaceLeft > spaceRight ? "left" : "right";
+
+  const spaceBelow = bounds.bottom - triggerRect.top;
+  const spaceAbove = triggerRect.bottom - bounds.top;
+  const vertical =
+    spaceBelow < ACTION_MENU_ESTIMATED_HEIGHT && spaceAbove > spaceBelow ? "up" : "down";
+
+  return { vertical, horizontal };
 }
 function getColumnAlignClass(align: ReusableTableColumn<Record<string, unknown>>["align"]): string {
   if (align === "right") return styles.alignRight;
@@ -186,6 +217,59 @@ function isActionsColumn<T extends Record<string, unknown>>(column: ReusableTabl
     return true;
   }
   return false;
+}
+function isSerialNumberColumn<T extends Record<string, unknown>>(
+  column: ReusableTableColumn<T>,
+): boolean {
+  const normalize = (value: string): string =>
+    value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  const normalizedKey = normalize(column.key);
+  if (normalizedKey === "serialno" || normalizedKey === "sno" || normalizedKey === "srno") {
+    return true;
+  }
+
+  if (typeof column.accessor === "string") {
+    const normalizedAccessor = normalize(column.accessor);
+    if (
+      normalizedAccessor === "serialno" ||
+      normalizedAccessor === "sno" ||
+      normalizedAccessor === "srno"
+    ) {
+      return true;
+    }
+  }
+
+  if (typeof column.header === "string") {
+    const normalizedHeader = normalize(column.header);
+    if (
+      normalizedHeader === "serialno" ||
+      normalizedHeader === "sno" ||
+      normalizedHeader === "srno"
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+function resolveColumnWidth<T extends Record<string, unknown>>(
+  column: ReusableTableColumn<T>,
+): CSSProperties | undefined {
+  if (isSerialNumberColumn(column)) {
+    return {
+      width: SERIAL_NUMBER_COLUMN_WIDTH,
+      minWidth: SERIAL_NUMBER_COLUMN_WIDTH,
+      maxWidth: SERIAL_NUMBER_COLUMN_WIDTH,
+    };
+  }
+
+  const normalizedWidth = column.width?.trim();
+  if (!normalizedWidth) {
+    return undefined;
+  }
+
+  return { width: normalizedWidth };
 }
 function getCellContent<T extends Record<string, unknown>>(
   row: T,
@@ -331,6 +415,9 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const [internalCurrentPage, setInternalCurrentPage] = useState(defaultCurrentPage);
   const [internalPageSize, setInternalPageSize] = useState(defaultPageSize);
   const [openActionMenuKey, setOpenActionMenuKey] = useState<Key | null>(null);
+  const [openActionMenuPlacement, setOpenActionMenuPlacement] = useState<ActionMenuPlacement>(
+    DEFAULT_ACTION_MENU_PLACEMENT,
+  );
   const resolvedOnUpdate = onUpdate ?? onEdit;
   const resolvedIsUpdateDisabled = isUpdateDisabled ?? isEditDisabled;
   const resolvedUpdateLabel = updateLabel ?? editLabel ?? "Edit";
@@ -440,6 +527,9 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const compactViewportRowThreshold = paginated ? effectivePageSize : 8;
   const shouldUseCompactViewport =
     fullViewHeight && renderedRowCount < compactViewportRowThreshold;
+  const resolvedTableMaxHeight = fullViewHeight
+    ? "none"
+    : tableMaxHeight ?? DEFAULT_TABLE_MAX_HEIGHT;
 
   useEffect(() => {
     if (openActionMenuKey === null) {
@@ -566,7 +656,14 @@ export function ReusableTable<T extends Record<string, unknown>>({
   };
   const handleActionMenuToggle = (event: MouseEvent<HTMLButtonElement>, rowActionKey: Key) => {
     event.stopPropagation();
-    setOpenActionMenuKey((current) => (current === rowActionKey ? null : rowActionKey));
+    const willOpen = openActionMenuKey !== rowActionKey;
+    if (!willOpen) {
+      setOpenActionMenuKey(null);
+      return;
+    }
+
+    setOpenActionMenuPlacement(resolveActionMenuPlacement(event.currentTarget));
+    setOpenActionMenuKey(rowActionKey);
   };
   const renderActionMenu = (
     row: T,
@@ -590,7 +687,15 @@ export function ReusableTable<T extends Record<string, unknown>>({
         <FiMoreVertical className={styles.actionsTriggerIcon} aria-hidden="true" />
       </button>
       {openActionMenuKey === resolvedKey ? (
-        <div className={styles.actionsDropdown} role="menu" aria-label="Row actions">
+        <div
+          className={cx(
+            styles.actionsDropdown,
+            openActionMenuPlacement.vertical === "up" && styles.actionsDropdownUp,
+            openActionMenuPlacement.horizontal === "left" && styles.actionsDropdownLeft,
+          )}
+          role="menu"
+          aria-label="Row actions"
+        >
           {resolvedOnUpdate ? (
             <button
               type="button"
@@ -648,7 +753,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
       className={cx(styles.tableShell, wrapperClassName)}
       style={
         {
-          "--erp-table-shell-height": fullViewHeight ? "100vh" : "auto",
+          "--erp-table-shell-height": fullViewHeight ? "100vh" : "100%",
           "--erp-table-shell-min-height": fullViewHeight ? "100vh" : "0px",
         } as CSSProperties
       }
@@ -688,9 +793,10 @@ export function ReusableTable<T extends Record<string, unknown>>({
       ) : null}
       <div
         className={styles.tableViewport}
+        data-erp-table-viewport="true"
         style={
           {
-            "--erp-table-max-height": fullViewHeight ? "none" : tableMaxHeight ?? "none",
+            "--erp-table-max-height": resolvedTableMaxHeight,
             "--erp-table-viewport-flex": shouldUseCompactViewport ? "0 1 auto" : "1 1 auto",
           } as CSSProperties
         }
@@ -700,9 +806,10 @@ export function ReusableTable<T extends Record<string, unknown>>({
           style={{ "--erp-table-min-width": minWidth } as CSSProperties}
         >
           <colgroup>
-            {displayColumns.map((column) => (
-              <col key={column.key} style={column.width ? { width: column.width } : undefined} />
-            ))}
+            {displayColumns.map((column) => {
+              const widthStyle = resolveColumnWidth(column);
+              return <col key={column.key} style={widthStyle} />;
+            })}
           </colgroup>
           <thead className={styles.head}>
             <tr>
@@ -711,10 +818,18 @@ export function ReusableTable<T extends Record<string, unknown>>({
                 const sortDirection =
                   effectiveSortState.key === column.key ? effectiveSortState.direction : null;
                 const headerContent = renderColumnHeaderContent(column.header);
+                const widthStyle = resolveColumnWidth(column);
                 return (
                   <th
                     key={column.key}
-                    style={column.headerStyle}
+                    style={
+                      column.headerStyle || widthStyle
+                        ? {
+                            ...(column.headerStyle ?? {}),
+                            ...(widthStyle ?? {}),
+                          }
+                        : undefined
+                    }
                     className={cx(
                       styles.headerCell,
                       getColumnAlignClass(column.align),
@@ -798,12 +913,20 @@ export function ReusableTable<T extends Record<string, unknown>>({
                         typeof column.cellStyle === "function"
                           ? column.cellStyle(row, rowIndex)
                           : column.cellStyle;
+                      const widthStyle = resolveColumnWidth(column);
 
                       return (
                         <td
                           key={column.key}
                           data-label={getCellLabel(column.header, column.key, column.mobileLabel)}
-                          style={resolvedCellStyle}
+                          style={
+                            resolvedCellStyle || widthStyle
+                              ? {
+                                  ...(resolvedCellStyle ?? {}),
+                                  ...(widthStyle ?? {}),
+                                }
+                              : undefined
+                          }
                           className={cx(
                             styles.cell,
                             getColumnAlignClass(column.align),

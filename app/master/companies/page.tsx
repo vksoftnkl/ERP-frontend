@@ -20,6 +20,8 @@ const API_ENDPOINTS = {
   delete: "/company-masters/delete",
 } as const;
 
+const GRID_TABLE_NAME = "companys";
+
 const LOOKUP_KEYS = {
   id: ["compId", "comp_id", "id", "_id"],
   code: ["compCode", "comp_code", "code"],
@@ -127,6 +129,7 @@ export default function CompaniesMasterPage() {
       entityLabel="company"
       entityLabelPlural="companies"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

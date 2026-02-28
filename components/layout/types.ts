@@ -1,3 +1,5 @@
+import type React from "react";
+
 export type ErpHeaderItem = {
   label: string;
   href?: string;
@@ -17,6 +19,8 @@ export type ErpHeaderProps = {
   onCartClick?: () => void;
   goLabel?: string;
   onGoClick?: () => void;
+  logoutLabel?: string;
+  onLogout?: () => void;
   billNumber?: string;
   onBillNumberChange?: (value: string) => void;
   billPlaceholder?: string;
@@ -47,6 +51,8 @@ export type HeaderRightProps = {
   onCartClick?: () => void;
   goLabel: string;
   onGoClick?: () => void;
+  logoutLabel: string;
+  onLogout?: () => void;
 };
 
 export type TabStripProps = {
@@ -55,6 +61,7 @@ export type TabStripProps = {
   onBillNumberChange?: (value: string) => void;
   billPlaceholder: string;
   onNavigate: (destination: string) => void;
+  quickTabsRef?: React.RefObject<HTMLDivElement | null>;
 };
 
 export type ERPMenuObject = {

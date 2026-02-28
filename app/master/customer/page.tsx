@@ -16,6 +16,8 @@ const API_ENDPOINTS = {
   delete: "/customers/delete",
 } as const;
 
+const GRID_TABLE_NAME = "customers";
+
 const AREA_LOOKUP_ENDPOINT = "/areas/list";
 const CUSTOMER_GROUP_LOOKUP_ENDPOINT = "/customer-groups/list";
 
@@ -484,6 +486,7 @@ export default function CustomerPage() {
       entityLabel="customer"
       entityLabelPlural="customers"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

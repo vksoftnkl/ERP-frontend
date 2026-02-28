@@ -369,12 +369,19 @@ function normalizeGridColumnAdjustmentRow(
     return null;
   }
 
+  const notesAccessor = normalizeKey(row.grid_column_notes ?? row.gridColumnNotes);
+  const accessorKey = notesAccessor || columnName;
+  const visibility = toBoolean(row.grid_column_visibility);
+  const isDeleted = toBoolean(row.grid_column_is_deleted);
+  const sortable = toBoolean(row.grid_column_filter);
+
   return {
-    key: columnName,
-    accessorKey: columnName,
+    key: accessorKey,
+    accessorKey,
     header: columnName,
     order: normalizeOrder(row.grid_column_number, fallbackOrder),
-    visible: true,
+    visible: isDeleted === true ? false : visibility ?? true,
+    sortable: sortable ?? undefined,
     align: normalizeAlign(row.grid_column_alignment),
     width: normalizeWidth(row.grid_column_width),
     color: normalizeColor(row.grid_column_color),

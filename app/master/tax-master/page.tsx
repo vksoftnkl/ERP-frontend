@@ -10,6 +10,8 @@ const API_ENDPOINTS = {
   delete: "/item-taxes/delete",
 } as const;
 
+const GRID_TABLE_NAME = "item_tax_master";
+
 const LOOKUP_KEYS = {
   id: ["tax_id", "taxId", "id", "_id", "itt_id", "itemtaxid", "item_tax_id", "itemTaxId"],
   code: [
@@ -57,6 +59,7 @@ export default function TaxMasterPage() {
       entityLabel="tax"
       entityLabelPlural="taxes"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

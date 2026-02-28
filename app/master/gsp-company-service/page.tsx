@@ -28,6 +28,8 @@ const API_ENDPOINTS = {
   delete: "/gsp-company-services/delete",
 } as const;
 
+const GRID_TABLE_NAME = "gsp_company_service";
+
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 
 const LOOKUP_QUERY_COMPANIES = {
@@ -238,6 +240,7 @@ export default function GspCompanyServiceMasterPage() {
       entityLabel="gsp company service"
       entityLabelPlural="gsp company services"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

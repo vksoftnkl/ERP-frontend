@@ -28,6 +28,8 @@ const API_ENDPOINTS = {
   delete: "/ledger-shipping-addresses/delete",
 } as const;
 
+const GRID_TABLE_NAME = "acc_ship_addrs";
+
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 
 const LOOKUP_QUERY_ACCOUNT_LEDGERS = {
@@ -309,6 +311,7 @@ export default function LedgerShippingAddressMasterPage() {
       entityLabel="ledger shipping address"
       entityLabelPlural="ledger shipping addresses"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

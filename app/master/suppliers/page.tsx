@@ -30,6 +30,8 @@ const API_ENDPOINTS = {
   delete: "/suppliers/delete",
 } as const;
 
+const GRID_TABLE_NAME = "suppliers";
+
 const SUPPLIER_GROUP_LOOKUP_ENDPOINT = "/supplier-groups/list";
 const SUPPLIER_GROUP_LOOKUP_QUERY = {
   page: "1",
@@ -595,6 +597,7 @@ export default function SuppliersMasterPage() {
       entityLabel="supplier"
       entityLabelPlural="suppliers"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

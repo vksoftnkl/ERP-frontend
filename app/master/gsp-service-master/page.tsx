@@ -17,6 +17,8 @@ const API_ENDPOINTS = {
   delete: "/tender-type-masters/delete",
 } as const;
 
+const GRID_TABLE_NAME = "tender_type_master";
+
 const LOOKUP_KEYS = {
   id: ["ttmTypeId", "ttm_type_id", "id", "_id"],
   code: ["ttmTypeName", "ttm_type_name", "code"],
@@ -73,6 +75,7 @@ export default function GspServiceMasterPage() {
       entityLabel="gsp service"
       entityLabelPlural="gsp services"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

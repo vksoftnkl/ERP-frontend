@@ -16,6 +16,8 @@ const API_ENDPOINTS = {
   delete: "/cities/delete",
 } as const;
 
+const GRID_TABLE_NAME = "city_master";
+
 const STATE_LOOKUP_ENDPOINT = "/states/list";
 
 const LOOKUP_REQUEST_QUERY = {
@@ -301,6 +303,7 @@ export default function CityMasterPage() {
       entityLabel="city"
       entityLabelPlural="cities"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

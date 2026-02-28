@@ -2,20 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
-import type { CrudMasterTableColumnHeaders } from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import {
-  fetchGridColumns,
-  selectGridColumns,
-  selectGridColumnsLoading,
-  selectGridColumnsRequested,
-  type GridColumnConfig,
-} from "@/store/slices/gridColumnsSlice";
 import styles from "../state-master/page.module.scss";
 
 const API_ENDPOINTS = {
@@ -26,21 +17,10 @@ const API_ENDPOINTS = {
 } as const;
 
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const GRID_DETAILS_ENDPOINT = "/grid-details/list";
+const GRID_TABLE_NAME = "account_groups";
 
 const LOOKUP_QUERY_ACCOUNT_GROUPS = {
   module: "accountGroups",
-  limit: "20",
-} as const;
-
-const GRID_COLUMNS_PAGE = 1;
-const GRID_COLUMNS_LIMIT = 20;
-const ACCOUNT_GROUP_TABLE_NAME = "account_groups";
-
-const GRID_DETAILS_QUERY = {
-  grid_status: "true",
-  search: ACCOUNT_GROUP_TABLE_NAME,
-  page: "1",
   limit: "20",
 } as const;
 
@@ -68,45 +48,6 @@ const REQUEST_PAYLOAD_KEYS = {
 const GROUP_PARENT_ID_KEYS = ["accGroupParentId", "acc_group_parent_id"] as const;
 
 const LOOKUP_ARRAY_KEYS = ["items", "data", "results", "rows", "list"] as const;
-const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
-const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
-const TABLE_COLUMN_HEADER_ORDER = [
-  "serialNo",
-  "masterCode",
-  "masterName",
-  "masterShort",
-  "position",
-  "masterActive",
-] as const;
-
-type TableColumnHeaderKey = (typeof TABLE_COLUMN_HEADER_ORDER)[number];
-
-const TABLE_COLUMN_TOKEN_MAP: Record<string, TableColumnHeaderKey> = {
-  sno: "serialNo",
-  srno: "serialNo",
-  serialno: "serialNo",
-  serialnumber: "serialNo",
-  code: "masterCode",
-  groupcode: "masterCode",
-  groupalias: "masterCode",
-  alias: "masterCode",
-  accgroupalias: "masterCode",
-  name: "masterName",
-  groupname: "masterName",
-  accgroupname: "masterName",
-  short: "masterShort",
-  shortname: "masterShort",
-  groupshort: "masterShort",
-  accgroupshort: "masterShort",
-  position: "position",
-  sort: "position",
-  order: "position",
-  accgroupsort: "position",
-  status: "masterActive",
-  active: "masterActive",
-  isactive: "masterActive",
-  accgroupisactive: "masterActive",
-};
 
 const DEFAULT_SELECT_OPTION: ERPDynamicSelectOption = {
   value: "",
@@ -296,151 +237,12 @@ function buildLookupOptions(payload: unknown, includeEmptyOption = false): ERPDy
   return [DEFAULT_SELECT_OPTION, ...options];
 }
 
-function normalizeColumnToken(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9_]+/g, "");
-}
-
-function resolveNumericId(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.floor(value);
-  }
-
-  if (typeof value === "string") {
-    const normalized = value.trim();
-    if (!normalized) {
-      return null;
-    }
-
-    const parsed = Number.parseInt(normalized, 10);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  if (typeof value === "bigint") {
-    return Number(value);
-  }
-
-  return null;
-}
-
-function resolveAccountGroupGridId(payload: unknown): number | null {
-  const rows = extractRows(payload, LOOKUP_ARRAY_KEYS);
-
-  for (const row of rows) {
-    if (!row || typeof row !== "object" || Array.isArray(row)) {
-      continue;
-    }
-
-    const source = row as Record<string, unknown>;
-    const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
-    if (gridId === null) {
-      continue;
-    }
-
-    const gridSql = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_SQL_KEYS)).toLowerCase();
-    if (!gridSql || gridSql.includes(ACCOUNT_GROUP_TABLE_NAME)) {
-      return gridId;
-    }
-  }
-
-  for (const row of rows) {
-    if (!row || typeof row !== "object" || Array.isArray(row)) {
-      continue;
-    }
-
-    const source = row as Record<string, unknown>;
-    const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
-    if (gridId !== null) {
-      return gridId;
-    }
-  }
-
-  return null;
-}
-
-function resolveHeaderKeyFromGridColumn(column: GridColumnConfig): TableColumnHeaderKey | null {
-  const candidates = [column.accessorKey, column.key, column.header];
-
-  for (const candidate of candidates) {
-    if (!candidate) {
-      continue;
-    }
-
-    const normalized = normalizeColumnToken(candidate);
-    if (!normalized) {
-      continue;
-    }
-
-    const direct = TABLE_COLUMN_TOKEN_MAP[normalized];
-    if (direct) {
-      return direct;
-    }
-
-    const compact = normalized.replace(/_/g, "");
-    const compactMatch = TABLE_COLUMN_TOKEN_MAP[compact];
-    if (compactMatch) {
-      return compactMatch;
-    }
-  }
-
-  return null;
-}
-
-function buildTableColumnHeadersFromGridColumns(
-  gridColumns: GridColumnConfig[],
-): CrudMasterTableColumnHeaders {
-  const headers: CrudMasterTableColumnHeaders = {};
-  const fallbackHeaders: string[] = [];
-
-  const visibleColumns = gridColumns
-    .filter((column) => column.visible)
-    .sort((left, right) => left.order - right.order);
-
-  for (const column of visibleColumns) {
-    const headerLabel = column.header.trim();
-    if (!headerLabel) {
-      continue;
-    }
-
-    const target = resolveHeaderKeyFromGridColumn(column);
-    if (target && !headers[target]) {
-      headers[target] = headerLabel;
-      continue;
-    }
-
-    fallbackHeaders.push(headerLabel);
-  }
-
-  for (const target of TABLE_COLUMN_HEADER_ORDER) {
-    if (headers[target]) {
-      continue;
-    }
-
-    const fallbackHeader = fallbackHeaders.shift();
-    if (fallbackHeader) {
-      headers[target] = fallbackHeader;
-    }
-  }
-
-  return headers;
-}
-
 export default function AccountLedgerGroupsMasterPage() {
-  const dispatch = useAppDispatch();
   const { getAll: getParentGroupLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
 
   const [parentGroupOptions, setParentGroupOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_SELECT_OPTION,
   ]);
-  const [accountGroupGridId, setAccountGroupGridId] = useState<number | null>(null);
-  const selectedGridId = accountGroupGridId ?? -1;
-  const gridColumns = useAppSelector((state) => selectGridColumns(state, selectedGridId));
-  const gridColumnsLoading = useAppSelector((state) =>
-    selectGridColumnsLoading(state, selectedGridId),
-  );
-  const gridColumnsRequested = useAppSelector((state) =>
-    selectGridColumnsRequested(state, selectedGridId),
-  );
 
   useEffect(() => {
     let mounted = true;
@@ -468,53 +270,9 @@ export default function AccountLedgerGroupsMasterPage() {
     };
   }, [getParentGroupLookup]);
 
-  useEffect(() => {
-    let mounted = true;
-
-    void (async () => {
-      try {
-        const gridDetailsPayload = await getGridDetails(GRID_DETAILS_QUERY);
-
-        if (!mounted) {
-          return;
-        }
-
-        setAccountGroupGridId(resolveAccountGroupGridId(gridDetailsPayload));
-      } catch {
-        if (!mounted) {
-          return;
-        }
-
-        setAccountGroupGridId(null);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [getGridDetails]);
-
-  useEffect(() => {
-    if (accountGroupGridId === null || gridColumnsRequested || gridColumnsLoading) {
-      return;
-    }
-
-    void dispatch(
-      fetchGridColumns({
-        gridId: accountGroupGridId,
-        page: GRID_COLUMNS_PAGE,
-        limit: GRID_COLUMNS_LIMIT,
-      }),
-    );
-  }, [accountGroupGridId, dispatch, gridColumnsLoading, gridColumnsRequested]);
-
   const accountGroupFormFields = useMemo(
     () => buildAccountGroupFormFields(parentGroupOptions),
     [parentGroupOptions],
-  );
-  const tableColumnHeaders = useMemo(
-    () => buildTableColumnHeadersFromGridColumns(gridColumns),
-    [gridColumns],
   );
 
   return (
@@ -523,6 +281,7 @@ export default function AccountLedgerGroupsMasterPage() {
       entityLabel="account group"
       entityLabelPlural="account groups"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
@@ -530,7 +289,6 @@ export default function AccountLedgerGroupsMasterPage() {
       createLabel="Add"
       codeColumnHeader="Group Code"
       nameColumnHeader="Group Name"
-      tableColumnHeaders={tableColumnHeaders}
       nameFieldLabel="Group Name"
       nameFieldPlaceholder="Sundry Debtors"
       formTitle="Account Group Form"

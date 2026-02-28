@@ -16,6 +16,8 @@ const API_ENDPOINTS = {
   delete: "/godowns/delete",
 } as const;
 
+const GRID_TABLE_NAME = "godown_locations";
+
 const BRANCH_LOOKUP_ENDPOINT = "/branch-masters/list";
 
 const LOOKUP_REQUEST_QUERY = {
@@ -529,6 +531,7 @@ export default function GodownMasterPage() {
       entityLabel="godown location"
       entityLabelPlural="godown locations"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

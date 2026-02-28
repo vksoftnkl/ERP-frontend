@@ -26,6 +26,8 @@ const API_ENDPOINTS = {
   delete: "/ledger-bank-accounts/delete",
 } as const;
 
+const GRID_TABLE_NAME = "acc_ledger_bank_accounts";
+
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 
 const LOOKUP_QUERY_COMPANIES = {
@@ -269,6 +271,7 @@ export default function LedgerBankAccountMasterPage() {
       entityLabel="ledger bank account"
       entityLabelPlural="ledger bank accounts"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

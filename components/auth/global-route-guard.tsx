@@ -1,16 +1,9 @@
 "use client";
-
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth/session";
 
-const PUBLIC_EXACT_ROUTES = new Set([
-  "/",
-  "/login",
-  "/ui-library",
-  "/erp-advanced-fixed",
-]);
-
+const PUBLIC_EXACT_ROUTES = new Set(["/login", "/ui-library", "/erp-advanced-fixed"]);
 const PUBLIC_PREFIX_ROUTES = ["/login/", "/ui-library/", "/erp-advanced-fixed/"];
 
 function isPublicRoute(pathname: string): boolean {
@@ -28,49 +21,38 @@ function normalizeNextRoute(nextRoute: string | null): string {
   if (!nextRoute || !nextRoute.startsWith("/") || nextRoute.startsWith("//")) {
     return "/";
   }
-
   return nextRoute.startsWith("/login") ? "/" : nextRoute;
 }
 
 export default function GlobalRouteGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
   const router = useRouter();
+
+  // Computed synchronously — no useState needed.
+  // `null` during SSR (window unavailable), boolean on the client.
+  const auth = typeof window !== "undefined" ? isAuthenticated() : null;
   const publicRoute = isPublicRoute(pathname);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
 
   useEffect(() => {
-    setAuthenticated(isAuthenticated());
-    setAuthChecked(true);
-  }, [pathname]);
+    if (auth === null) return;
 
-  useEffect(() => {
-    if (!authChecked) {
-      return;
-    }
-
-    if (!authenticated && !publicRoute) {
+    if (!auth && !publicRoute) {
       const query = window.location.search.replace(/^\?/, "");
-      const target = toRelativePath(pathname, query);
-      router.replace(`/login?next=${encodeURIComponent(target)}`);
+      router.replace(`/login?next=${encodeURIComponent(toRelativePath(pathname, query))}`);
       return;
     }
 
-    if (authenticated && pathname === "/login") {
-      const nextRoute = normalizeNextRoute(
-        new URLSearchParams(window.location.search).get("next")
-      );
-      router.replace(nextRoute);
+    if (auth && pathname === "/login") {
+      const next = new URLSearchParams(window.location.search).get("next");
+      router.replace(normalizeNextRoute(next));
     }
-  }, [authChecked, authenticated, pathname, publicRoute, router]);
+  }, [auth, pathname, publicRoute, router]);
 
-  if (!publicRoute && !authChecked) {
-    return null;
-  }
+  // Block render while auth is unknown on a protected route
+  if (auth === null && !publicRoute) return null;
 
-  if (authChecked && ((!authenticated && !publicRoute) || (authenticated && pathname === "/login"))) {
-    return null;
-  }
+  // Block render during redirect to avoid flash
+  if (auth !== null && ((!auth && !publicRoute) || (auth && pathname === "/login"))) return null;
 
   return <>{children}</>;
 }

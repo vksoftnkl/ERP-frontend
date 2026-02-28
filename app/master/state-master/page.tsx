@@ -11,6 +11,8 @@ const API_ENDPOINTS = {
   delete: "/states/delete",
 } as const;
 
+const GRID_TABLE_NAME = "state_master";
+
 const LOOKUP_KEYS = {
   id: ["stmId", "stm_id", "state_id", "stateId", "id", "_id"],
   code: ["stmAlias", "stm_alias", "stmShort", "stm_short", "state_code", "code"],
@@ -171,6 +173,7 @@ export default function StateMasterPage() {
       entityLabel="state"
       entityLabelPlural="states"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

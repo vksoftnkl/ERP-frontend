@@ -16,6 +16,8 @@ const API_ENDPOINTS = {
   delete: "/item-categories/delete",
 } as const;
 
+const GRID_TABLE_NAME = "category_master";
+
 // const TAX_LOOKUP_ENDPOINT = "/item-taxes/list";
 // const UNIT_LOOKUP_ENDPOINT = "/units/list";
 
@@ -507,6 +509,7 @@ export default function ItemCategoryMasterPage() {
       entityLabel="item category"
       entityLabelPlural="item categories"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

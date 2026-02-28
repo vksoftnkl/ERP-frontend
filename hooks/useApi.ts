@@ -1,32 +1,47 @@
 import axios from "axios";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { clearAuthSession, getAuthSession } from "@/lib/auth/session";
-
 type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-
 type UseApiToastOptions = {
   success?: boolean;
   error?: boolean;
   successMessage?: string;
   errorMessage?: string;
 };
-
 type UseApiOptions<TBody> = {
   method?: ApiMethod;
   headers?: Record<string, string>;
   body?: TBody; // optional default body
   toast?: UseApiToastOptions;
 };
-
 type UseApiRunOverride<TBody> = {
   body?: TBody;
   query?: Record<string, string>;
   url?: string;
 };
-
 const DEFAULT_API_PORT = "3010";
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+const API_INVALIDATION_EVENT = "erp:api-data-invalidated";
+const COLLECTION_ACTION_SEGMENTS = new Set([
+  "list",
+  "get",
+  "create",
+  "update",
+  "delete",
+  "save",
+  "remove",
+  "edit",
+  "upsert",
+  "bulk-create",
+  "bulk-update",
+  "bulk-delete",
+]);
+
+type ApiInvalidationEventDetail = {
+  scope: string;
+  sourcePath: string;
+};
 
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/g, "");
@@ -170,6 +185,62 @@ function getPathname(requestUrl: string): string {
     return trimmedUrl.toLowerCase().split("?")[0];
   }
 }
+
+function normalizePathnameForMatching(requestUrl: string): string {
+  const normalized = getPathname(requestUrl).trim().toLowerCase().replace(/\/+$/g, "");
+  return normalized || "/";
+}
+
+function splitPathSegments(pathname: string): string[] {
+  return pathname.split("/").filter(Boolean);
+}
+
+function isCollectionListRequest(requestUrl: string): boolean {
+  const segments = splitPathSegments(normalizePathnameForMatching(requestUrl));
+  if (segments.length === 0) {
+    return false;
+  }
+
+  return segments[segments.length - 1] === "list";
+}
+
+function resolveInvalidationScope(requestUrl: string): string {
+  const segments = splitPathSegments(normalizePathnameForMatching(requestUrl));
+  if (segments.length === 0) {
+    return "/";
+  }
+
+  const lastSegment = segments[segments.length - 1];
+  if (COLLECTION_ACTION_SEGMENTS.has(lastSegment)) {
+    segments.pop();
+  }
+
+  if (segments.length === 0) {
+    return "/";
+  }
+
+  return `/${segments.join("/")}`;
+}
+
+function scopesMatch(listenerScope: string, changedScope: string): boolean {
+  return listenerScope === changedScope;
+}
+
+function emitApiInvalidation(requestUrl: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const detail: ApiInvalidationEventDetail = {
+    scope: resolveInvalidationScope(requestUrl),
+    sourcePath: normalizePathnameForMatching(requestUrl),
+  };
+
+  window.dispatchEvent(
+    new CustomEvent<ApiInvalidationEventDetail>(API_INVALIDATION_EVENT, { detail })
+  );
+}
+
 function isLoginEndpoint(requestUrl: string): boolean {
   const pathname = getPathname(requestUrl);
   return pathname === "/auth/login" || pathname.endsWith("/auth/login");
@@ -221,6 +292,7 @@ export function useApi<TResp = unknown, TBody = unknown>(
   const [error, setError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+  const lastRunOverrideRef = useRef<UseApiRunOverride<TBody> | undefined>(undefined);
 
   const run = useCallback(
     async (override?: UseApiRunOverride<TBody>) => {
@@ -228,7 +300,14 @@ export function useApi<TResp = unknown, TBody = unknown>(
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
-      const requestUrl = override?.url ?? url;
+      const requestOverride = override
+        ? {
+            ...override,
+            query: override.query ? { ...override.query } : undefined,
+          }
+        : undefined;
+      lastRunOverrideRef.current = requestOverride;
+      const requestUrl = requestOverride?.url ?? url;
       const loginRequest = isLoginEndpoint(requestUrl);
       const requestHeaders = buildHeaders(requestUrl, headers);
       const hasAuthorization = Object.keys(requestHeaders).some(
@@ -259,16 +338,19 @@ export function useApi<TResp = unknown, TBody = unknown>(
           method,
           baseURL: API_BASE || undefined,
           headers: requestHeaders,
-          params: override?.query,
+          params: requestOverride?.query,
           data:
             method === "GET" || method === "DELETE"
               ? undefined
-              : override?.body ?? defaultBody ?? {},
+              : requestOverride?.body ?? defaultBody ?? {},
           signal: controller.signal,
         });
 
         const json = resp.data as TResp;
         setData(json);
+        if (!loginRequest && isMutationMethod(method)) {
+          emitApiInvalidation(requestUrl);
+        }
         if (shouldToastSuccess) {
           showSuccessToast(successMessage);
         }
@@ -313,6 +395,32 @@ export function useApi<TResp = unknown, TBody = unknown>(
     },
     [url, method, headers, defaultBody, toastOptions]
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (method !== "GET" || !isCollectionListRequest(url)) {
+      return;
+    }
+
+    const listenerScope = resolveInvalidationScope(url);
+    const handleInvalidation = (event: Event) => {
+      const customEvent = event as CustomEvent<ApiInvalidationEventDetail>;
+      const changedScope = customEvent.detail?.scope;
+      if (!changedScope || !scopesMatch(listenerScope, changedScope)) {
+        return;
+      }
+
+      void run(lastRunOverrideRef.current);
+    };
+
+    window.addEventListener(API_INVALIDATION_EVENT, handleInvalidation as EventListener);
+    return () => {
+      window.removeEventListener(API_INVALIDATION_EVENT, handleInvalidation as EventListener);
+    };
+  }, [method, run, url]);
 
   const reset = useCallback(() => {
     setData(null);

@@ -4,6 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { extractAuthToken, setAuthSession } from "@/lib/auth/session";
+import {
+  canUseClientSideRouting,
+  normalizeInternalRoute,
+} from "@/lib/navigation/safe-route";
 
 type Errors = {
   username?: string;
@@ -18,11 +22,8 @@ type LoginRequest = {
 type LoginResponse = Record<string, unknown>;
 
 function normalizeNextRoute(nextRoute: string | null): string {
-  if (!nextRoute || !nextRoute.startsWith("/") || nextRoute.startsWith("//")) {
-    return "/";
-  }
-
-  return nextRoute.startsWith("/login") ? "/" : nextRoute;
+  const normalizedRoute = normalizeInternalRoute(nextRoute, "/");
+  return normalizedRoute.startsWith("/login") ? "/" : normalizedRoute;
 }
 
 export default function LoginPage() {
@@ -65,13 +66,22 @@ export default function LoginPage() {
       const hasSession = setAuthSession(token);
       if (!hasSession) {
         setAuthError("Token missing in login response.");
-        router.replace("/login");
+        if (canUseClientSideRouting()) {
+          router.replace("/login");
+        } else {
+          window.location.replace("/login");
+        }
         return;
       }
 
       const nextRoute = normalizeNextRoute(
         new URLSearchParams(window.location.search).get("next")
       );
+      if (!canUseClientSideRouting()) {
+        window.location.assign(nextRoute);
+        return;
+      }
+
       router.push(nextRoute);
     } catch {
       // error state is handled by useApi

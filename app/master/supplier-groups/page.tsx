@@ -15,6 +15,8 @@ const API_ENDPOINTS = {
   create: "/supplier-groups/create",
   delete: "/supplier-groups/delete",
 } as const;
+
+const GRID_TABLE_NAME = "supplier_groups";
 const LOOKUP_KEYS = {
   id: ["spgId", "spg_id", "supplier_group_id", "supplierGroupId", "id", "_id"],
   code: ["spgAlias", "spg_alias", "spgShort", "spg_short", "code"],
@@ -106,6 +108,7 @@ export default function SupplierGroupsPage() {
       entityLabel="supplier group"
       entityLabelPlural="supplier groups"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

@@ -17,6 +17,8 @@ const API_ENDPOINTS = {
   delete: "/gsp-provider-masters/delete",
 } as const;
 
+const GRID_TABLE_NAME = "gsp_provider_master";
+
 const LOOKUP_KEYS = {
   id: ["gspProviderId", "gsp_provider_id", "id", "_id"],
   code: ["gspProviderCode", "gsp_provider_code", "code"],
@@ -145,6 +147,7 @@ export default function GspProviderMasterPage() {
       entityLabel="gsp provider"
       entityLabelPlural="gsp providers"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

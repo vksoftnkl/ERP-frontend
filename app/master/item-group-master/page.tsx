@@ -27,9 +27,19 @@ const API_ENDPOINTS = {
   CREATE: "/item-groups/create",
   DELETE: "/item-groups/delete",
 } as const;
-const ITEM_GROUP_GRID_ID = 1;
+const GRID_DETAILS_ENDPOINT = "/grid-details/list";
+const ITEM_GROUP_TABLE_NAME = "item_group_master";
+const GRID_DETAILS_QUERY = {
+  grid_status: "true",
+  search: ITEM_GROUP_TABLE_NAME,
+  page: "1",
+  limit: "20",
+} as const;
 const GRID_COLUMNS_PAGE = 1;
 const GRID_COLUMNS_LIMIT = 20;
+const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
+const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
+const TABLE_MAX_HEIGHT = "calc(100dvh - 250px)";
 const FILE_CONSTRAINTS = {
   MAX_UPLOAD_IMAGE_BYTES: 5 * 1024 * 1024,
   ALLOWED_MIME_TYPES: [
@@ -427,6 +437,73 @@ function getFirstDefinedValue(
     }
   }
   return undefined;
+}
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+function resolveNumericId(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (/^\d+$/.test(normalized)) {
+      return Number(normalized);
+    }
+  }
+  return null;
+}
+function extractGridDetailsRows(payload: unknown): Record<string, unknown>[] {
+  if (Array.isArray(payload)) {
+    return payload.filter(isRecord);
+  }
+  if (!isRecord(payload)) {
+    return [];
+  }
+  const directRows = getFirstDefinedValue(payload, [
+    "items",
+    "data",
+    "results",
+    "rows",
+    "list",
+  ]);
+  if (Array.isArray(directRows)) {
+    return directRows.filter(isRecord);
+  }
+  for (const containerKey of ["data", "result", "payload"] as const) {
+    const nested = payload[containerKey];
+    if (!isRecord(nested)) {
+      continue;
+    }
+    const nestedRows = getFirstDefinedValue(nested, [
+      "items",
+      "data",
+      "results",
+      "rows",
+      "list",
+    ]);
+    if (Array.isArray(nestedRows)) {
+      return nestedRows.filter(isRecord);
+    }
+  }
+  return [];
+}
+function resolveItemGroupGridId(payload: unknown): number | null {
+  const rows = extractGridDetailsRows(payload);
+  for (const row of rows) {
+    const gridId = resolveNumericId(getFirstDefinedValue(row, GRID_DETAIL_ID_KEYS));
+    const gridSql = String(getFirstDefinedValue(row, GRID_DETAIL_SQL_KEYS) ?? "").toLowerCase();
+    if (gridId !== null && gridSql.includes(ITEM_GROUP_TABLE_NAME)) {
+      return gridId;
+    }
+  }
+  for (const row of rows) {
+    const gridId = resolveNumericId(getFirstDefinedValue(row, GRID_DETAIL_ID_KEYS));
+    if (gridId !== null) {
+      return gridId;
+    }
+  }
+  return null;
 }
 function toDisplayValue(value: unknown): string {
   if (value === undefined || value === null) {
@@ -842,32 +919,63 @@ function useItemGroupSelection(rows: ItemGroupTableRow[]) {
 export default function ItemGroupMasterPage() {
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const dispatch = useAppDispatch();
+  const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
+  const [itemGroupGridId, setItemGroupGridId] = useState<number | null>(null);
+  const selectedGridId = itemGroupGridId ?? -1;
 
   const gridColumns = useAppSelector((state) =>
-    selectGridColumns(state, ITEM_GROUP_GRID_ID),
+    selectGridColumns(state, selectedGridId),
   );
   const gridColumnsLoading = useAppSelector((state) =>
-    selectGridColumnsLoading(state, ITEM_GROUP_GRID_ID),
+    selectGridColumnsLoading(state, selectedGridId),
   );
   const gridColumnsRequested = useAppSelector((state) =>
-    selectGridColumnsRequested(state, ITEM_GROUP_GRID_ID),
+    selectGridColumnsRequested(state, selectedGridId),
   );
   const gridColumnsError = useAppSelector((state) =>
-    selectGridColumnsError(state, ITEM_GROUP_GRID_ID),
+    selectGridColumnsError(state, selectedGridId),
   );
 
   useEffect(() => {
-    if (gridColumnsRequested || gridColumnsLoading) {
+    let isMounted = true;
+
+    const loadGridId = async () => {
+      try {
+        const payload = await getGridDetails(GRID_DETAILS_QUERY);
+        if (!isMounted) {
+          return;
+        }
+        setItemGroupGridId(resolveItemGroupGridId(payload));
+      } catch {
+        if (isMounted) {
+          setItemGroupGridId(null);
+        }
+      }
+    };
+
+    void loadGridId();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [getGridDetails]);
+
+  useEffect(() => {
+    if (
+      itemGroupGridId === null ||
+      gridColumnsRequested ||
+      gridColumnsLoading
+    ) {
       return;
     }
     void dispatch(
       fetchGridColumns({
-        gridId: ITEM_GROUP_GRID_ID,
+        gridId: itemGroupGridId,
         page: GRID_COLUMNS_PAGE,
         limit: GRID_COLUMNS_LIMIT,
       }),
     );
-  }, [dispatch, gridColumnsLoading, gridColumnsRequested]);
+  }, [dispatch, gridColumnsLoading, gridColumnsRequested, itemGroupGridId]);
 
   // Custom hooks
   const {
@@ -1324,16 +1432,19 @@ export default function ItemGroupMasterPage() {
                 <button
                   type="button"
                   className={styles.retryButton}
-                  onClick={() =>
+                  onClick={() => {
+                    if (itemGroupGridId === null) {
+                      return;
+                    }
                     void dispatch(
                       fetchGridColumns({
-                        gridId: ITEM_GROUP_GRID_ID,
+                        gridId: itemGroupGridId,
                         page: GRID_COLUMNS_PAGE,
                         limit: GRID_COLUMNS_LIMIT,
                       }),
-                    )
-                  }
-                  disabled={gridColumnsLoading}
+                    );
+                  }}
+                  disabled={gridColumnsLoading || itemGroupGridId === null}
                 >
                   {gridColumnsLoading ? "Loading..." : "Retry Headers"}
                 </button>
@@ -1376,6 +1487,7 @@ export default function ItemGroupMasterPage() {
                 pageSize={pageSize}
                 onPageSizeChange={setPageSize}
                 pageSizeOptions={[10, 20, 25, 50]}
+                tableMaxHeight={TABLE_MAX_HEIGHT}
                 fullViewHeight={false}
                 stickyHeader
                 emptyText={

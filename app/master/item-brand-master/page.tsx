@@ -4,6 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  fetchGridColumns,
+  selectGridColumns,
+  selectGridColumnsError,
+  selectGridColumnsLoading,
+  selectGridColumnsRequested,
+  type GridColumnConfig,
+} from "@/store/slices/gridColumnsSlice";
 import styles from "../state-master/page.module.scss";
 import {
   ERPDynamicModalForm,
@@ -19,6 +28,18 @@ const API_ENDPOINTS = {
   CREATE: "/item-brands/create",
   DELETE: "/item-brands/delete",
 } as const;
+const GRID_DETAILS_ENDPOINT = "/grid-details/list";
+const ITEM_BRAND_TABLE_NAME = "item_brand_master";
+const GRID_DETAILS_QUERY = {
+  grid_status: "true",
+  search: ITEM_BRAND_TABLE_NAME,
+  page: "1",
+  limit: "20",
+} as const;
+const GRID_COLUMNS_PAGE = 1;
+const GRID_COLUMNS_LIMIT = 20;
+const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
+const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 
 const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
@@ -159,6 +180,11 @@ type ItemBrandTableRow = {
   position: string;
 };
 
+type ItemBrandColumnAccessor = keyof Pick<
+  ItemBrandTableRow,
+  "serialNo" | "brandId" | "brandCode" | "brandName" | "brandShort" | "position" | "brandActive"
+>;
+
 type ItemBrandFormState = {
   itemBrandName: string;
   searchCode: string;
@@ -227,6 +253,79 @@ const DEFAULT_ITEM_BRAND_COLUMNS: ReusableTableColumn<ItemBrandTableRow>[] = [
     width: "120px",
   },
 ];
+
+const ITEM_BRAND_COLUMN_ACCESSOR_MAP: Record<string, ItemBrandColumnAccessor> = {
+  sno: "serialNo",
+  srno: "serialNo",
+  serialno: "serialNo",
+  serialnumber: "serialNo",
+  code: "brandCode",
+  brandcode: "brandCode",
+  brandalias: "brandCode",
+  brand_alias: "brandCode",
+  itbalias: "brandCode",
+  itb_alias: "brandCode",
+  alias: "brandCode",
+  name: "brandName",
+  brandname: "brandName",
+  itbname: "brandName",
+  itb_name: "brandName",
+  short: "brandShort",
+  shortname: "brandShort",
+  brandshort: "brandShort",
+  brand_short: "brandShort",
+  itbshort: "brandShort",
+  itb_short: "brandShort",
+  status: "brandActive",
+  active: "brandActive",
+  isactive: "brandActive",
+  is_active: "brandActive",
+  itbactive: "brandActive",
+  itb_active: "brandActive",
+  position: "position",
+  sort: "position",
+  order: "position",
+  itbsort: "position",
+  itb_sort: "position",
+  id: "brandId",
+  brandid: "brandId",
+  brand_id: "brandId",
+  itbid: "brandId",
+  itb_id: "brandId",
+};
+
+function normalizeColumnToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9_]+/g, "");
+}
+
+function normalizeGridColumnColor(value: string | undefined): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized || undefined;
+}
+
+function resolveItemBrandAccessor(
+  ...candidates: Array<string | undefined>
+): ItemBrandColumnAccessor | null {
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    const normalized = normalizeColumnToken(candidate);
+    const mapped = ITEM_BRAND_COLUMN_ACCESSOR_MAP[normalized];
+    if (mapped) {
+      return mapped;
+    }
+    const compact = normalized.replace(/_/g, "");
+    const compactMapped = ITEM_BRAND_COLUMN_ACCESSOR_MAP[compact];
+    if (compactMapped) {
+      return compactMapped;
+    }
+  }
+  return null;
+}
 
 function getFirstDefinedValue(
   row: Record<string, unknown>,
@@ -367,6 +466,128 @@ function extractRows(payload: unknown): unknown[] {
     Array.isArray(value),
   );
   return Array.isArray(firstArray) ? firstArray : [];
+}
+
+function resolveNumericId(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.floor(value);
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(normalized, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+
+  return null;
+}
+
+function resolveItemBrandGridId(payload: unknown): number | null {
+  const rows = extractRows(payload);
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+
+    const source = row as Record<string, unknown>;
+    const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
+    if (gridId === null) {
+      continue;
+    }
+
+    const gridSql = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_SQL_KEYS)).toLowerCase();
+    if (!gridSql || gridSql.includes(ITEM_BRAND_TABLE_NAME)) {
+      return gridId;
+    }
+  }
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+
+    const source = row as Record<string, unknown>;
+    const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
+    if (gridId !== null) {
+      return gridId;
+    }
+  }
+
+  return null;
+}
+
+function buildColumnsFromGridColumns(
+  gridColumns: GridColumnConfig[],
+): ReusableTableColumn<ItemBrandTableRow>[] {
+  const columns: ReusableTableColumn<ItemBrandTableRow>[] = [];
+  const seenAccessors = new Set<ItemBrandColumnAccessor>();
+
+  const visibleColumns = gridColumns
+    .filter((column) => column.visible)
+    .sort((left, right) => left.order - right.order);
+
+  for (const gridColumn of visibleColumns) {
+    const accessor = resolveItemBrandAccessor(
+      gridColumn.accessorKey,
+      gridColumn.key,
+      gridColumn.header,
+    );
+    if (!accessor || seenAccessors.has(accessor)) {
+      continue;
+    }
+    seenAccessors.add(accessor);
+
+    const columnColor = normalizeGridColumnColor(gridColumn.color);
+    const tableColumn: ReusableTableColumn<ItemBrandTableRow> = {
+      key:
+        normalizeColumnToken(
+          gridColumn.key || gridColumn.accessorKey || gridColumn.header || accessor,
+        ) || accessor,
+      header: gridColumn.header,
+      accessor,
+      align: gridColumn.align ?? "left",
+      width: gridColumn.width ?? (accessor === "serialNo" ? "56px" : undefined),
+      sortable: gridColumn.sortable ?? accessor !== "serialNo",
+      headerStyle: columnColor ? { backgroundColor: columnColor } : undefined,
+      cellStyle: columnColor ? { backgroundColor: columnColor } : undefined,
+    };
+
+    if (accessor === "position") {
+      tableColumn.sortAccessor = (row) => Number(row.position || 0);
+    }
+
+    columns.push(tableColumn);
+  }
+
+  if (columns.length === 0) {
+    return DEFAULT_ITEM_BRAND_COLUMNS;
+  }
+
+  const serialColumnIndex = columns.findIndex((column) => column.accessor === "serialNo");
+  if (serialColumnIndex < 0) {
+    columns.unshift(DEFAULT_ITEM_BRAND_COLUMNS[0]);
+    return columns;
+  }
+
+  if (serialColumnIndex > 0) {
+    const [serialColumn] = columns.splice(serialColumnIndex, 1);
+    columns.unshift({
+      ...serialColumn,
+      accessor: "serialNo",
+      sortable: false,
+    });
+  }
+
+  return columns;
 }
 
 function extractPaginationInfo(payload: unknown): {
@@ -643,7 +864,9 @@ function useItemBrandData() {
   };
 }
 export default function ItemBrandMasterPage() {
+  const dispatch = useAppDispatch();
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
+  const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const {
     error,
     loading,
@@ -668,6 +891,18 @@ export default function ItemBrandMasterPage() {
     resetSaveState,
     rows,
   } = useItemBrandData();
+  const [itemBrandGridId, setItemBrandGridId] = useState<number | null>(null);
+  const selectedGridId = itemBrandGridId ?? -1;
+  const gridColumns = useAppSelector((state) => selectGridColumns(state, selectedGridId));
+  const gridColumnsLoading = useAppSelector((state) =>
+    selectGridColumnsLoading(state, selectedGridId),
+  );
+  const gridColumnsRequested = useAppSelector((state) =>
+    selectGridColumnsRequested(state, selectedGridId),
+  );
+  const gridColumnsError = useAppSelector((state) =>
+    selectGridColumnsError(state, selectedGridId),
+  );
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(
     null,
   );
@@ -676,6 +911,52 @@ export default function ItemBrandMasterPage() {
   );
   const [pendingDeleteRow, setPendingDeleteRow] =
     useState<ItemBrandTableRow | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    void (async () => {
+      try {
+        const payload = await getGridDetails(GRID_DETAILS_QUERY);
+        if (!mounted) {
+          return;
+        }
+        setItemBrandGridId(resolveItemBrandGridId(payload));
+      } catch {
+        if (mounted) {
+          setItemBrandGridId(null);
+        }
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [getGridDetails]);
+
+  useEffect(() => {
+    if (
+      itemBrandGridId === null ||
+      gridColumnsRequested ||
+      gridColumnsLoading
+    ) {
+      return;
+    }
+
+    void dispatch(
+      fetchGridColumns({
+        gridId: itemBrandGridId,
+        page: GRID_COLUMNS_PAGE,
+        limit: GRID_COLUMNS_LIMIT,
+      }),
+    );
+  }, [dispatch, gridColumnsLoading, gridColumnsRequested, itemBrandGridId]);
+
+  const columns = useMemo<ReusableTableColumn<ItemBrandTableRow>[]>(
+    () => buildColumnsFromGridColumns(gridColumns),
+    [gridColumns],
+  );
+
   const selectedRow = useMemo(
     () => rows.find((row) => row.__rowId === selectedRowId) ?? null,
     [rows, selectedRowId],
@@ -1029,9 +1310,36 @@ export default function ItemBrandMasterPage() {
                 </p>
               </div>
             ) : null}
+            {gridColumnsError ? (
+              <div className={styles.errorBox}>
+                <p className={styles.errorText}>
+                  Unable to load table headers: {gridColumnsError}. Showing
+                  default headers.
+                </p>
+                <button
+                  type="button"
+                  className={styles.retryButton}
+                  onClick={() => {
+                    if (itemBrandGridId === null) {
+                      return;
+                    }
+                    void dispatch(
+                      fetchGridColumns({
+                        gridId: itemBrandGridId,
+                        page: GRID_COLUMNS_PAGE,
+                        limit: GRID_COLUMNS_LIMIT,
+                      }),
+                    );
+                  }}
+                  disabled={gridColumnsLoading || itemBrandGridId === null}
+                >
+                  {gridColumnsLoading ? "Loading..." : "Retry Headers"}
+                </button>
+              </div>
+            ) : null}
             <section className={styles.tableSection}>
               <ReusableTable
-                columns={DEFAULT_ITEM_BRAND_COLUMNS}
+                columns={columns}
                 rows={rows}
                 rowKey="__rowId"
                 title="Item Brand List"
