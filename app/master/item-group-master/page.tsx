@@ -12,7 +12,7 @@ import {
   type GridColumnConfig,
 } from "@/store/slices/gridColumnsSlice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import styles from "./page.module.scss";
+import styles from "../state-master/page.module.scss";
 import {
   ERPDynamicModalForm,
   type ERPDynamicModalController,

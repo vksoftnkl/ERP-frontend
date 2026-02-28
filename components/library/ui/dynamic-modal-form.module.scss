@@ -56,9 +56,9 @@
 }
 
 .header {
-  border-bottom: 1px solid #dce3eb;
-  background: #fff;
-  padding: 0.95rem 1.35rem;
+  //border-bottom: 1px solid #dce3eb;
+background: #dfe7f0;
+  padding: 0.5rem;
 }
 
 .headerRow {
@@ -89,10 +89,10 @@
   justify-content: center;
   width: 2rem;
   height: 2rem;
-  border: 1px solid #ccd7e2;
+  //border: 1px solid #ccd7e2;
   border-radius: 4px;
-  background: #fff;
-  color: #43596e;
+  // background: #fff;
+  // color: #43596e;
   cursor: pointer;
   transition:
     border-color 0.16s ease,
@@ -131,16 +131,16 @@
 
 .formGrid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.75rem;
-  padding: 0.75rem;
+  grid-template-columns: 5fr;
+  gap: 1rem;
+  padding:1rem 1.5rem;
 }
 
 .field {
   display: grid;
-  grid-template-columns: minmax(8rem, 10.5rem) minmax(0, 1fr);
-  column-gap: 0.85rem;
-  row-gap: 0.34rem;
+  grid-template-columns: minmax(2rem, 8rem) minmax(0, 1fr);
+  column-gap: 0.1rem;
+  row-gap: 0.1rem;
   align-items: start;
 }
 
@@ -155,7 +155,7 @@
 .sectionHeadingField {
   grid-column: 1 / -1;
   grid-template-columns: 1fr;
-  gap: 0.22rem;
+  gap: 0.2rem;
   margin: 0.12rem -1.35rem 0;
   padding: 0.7rem 1.35rem;
   background: #f7f8fa;
@@ -205,9 +205,9 @@
 .label {
   margin: 0;
   color: #2a3d50;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   font-weight: 500;
-  padding-top: 0.52rem;
+  padding-top: 0.4rem;
 }
 
 .requiredMark {
@@ -221,9 +221,9 @@
   border-radius: 2px;
   width: 100%;
   min-height: 10px;
-  padding: 0.46rem 0.62rem;
-  font-size: 0.8rem;
-  line-height: 1.3;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1;
   transition:
     border-color 0.16s,
     box-shadow 0.16s;
@@ -409,7 +409,7 @@
 .fileMeta {
   margin: 0;
   color: #5e7588;
-  font-size: 0.76rem;
+  font-size: 0.5rem;
 }
 
 .textarea {
@@ -421,7 +421,7 @@
 .errorText {
   grid-column: 2;
   margin: 0;
-  font-size: 0.78rem;
+  font-size: 0.5rem;
 }
 
 .helpText {
@@ -440,7 +440,7 @@
   gap: 0.72rem;
   flex-wrap: wrap;
   border-top: 1px solid #dce3eb;
-  padding: 0.78rem 1.35rem;
+  padding: 0.5rem;
   background: #f8fafc;
 }
 
@@ -457,12 +457,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 38px;
-  min-width: 110px;
-  border-radius: 2px;
+  min-height: 3px;
+  min-width: 80px;
+  border-radius: 4px;
   border: 1px solid transparent;
-  padding: 0.4rem 0.95rem;
-  font-size: 0.9rem;
+  padding: 0.4rem;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   transition:
@@ -508,7 +508,7 @@
 @media (min-width: 920px) {
   .formGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem 1.35rem;
+    // gap: 1rem 1.35rem;
   }
 }
 
@@ -523,7 +523,7 @@
   }
 
   .header {
-    padding: 0.8rem 1rem;
+    padding:  1rem;
   }
 
   .headerTitle {

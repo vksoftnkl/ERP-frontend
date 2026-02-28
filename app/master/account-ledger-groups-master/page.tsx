@@ -16,7 +16,7 @@ import {
   selectGridColumnsRequested,
   type GridColumnConfig,
 } from "@/store/slices/gridColumnsSlice";
-import styles from "./page.module.scss";
+import styles from "../state-master/page.module.scss";
 
 const API_ENDPOINTS = {
   list: "/account-groups/list",

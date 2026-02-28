@@ -1,7 +1,7 @@
 "use client";
 
 import CrudMasterPage from "@/components/master/crud-master-page";
-import styles from "./page.module.scss";
+import styles from "../state-master/page.module.scss";
 
 const API_ENDPOINTS = {
   list: "/item-taxes/list",

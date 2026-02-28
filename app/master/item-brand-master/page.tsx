@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
-import styles from "./page.module.scss";
+import styles from "../state-master/page.module.scss";
 import {
   ERPDynamicModalForm,
   type ERPDynamicModalController,

@@ -7,7 +7,7 @@ import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
-import styles from "./page.module.scss";
+import styles from "../state-master/page.module.scss";
 
 const API_ENDPOINTS = {
   list: "/cities/list",

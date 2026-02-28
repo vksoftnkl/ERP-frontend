@@ -10,19 +10,16 @@
   border-radius: 4px;
   background: #fff;
   overflow: hidden;
-
   .toolbar {
     border-bottom: 1px solid #dbe4ee;
     padding: 1.2rem 1.45rem 1rem;
     background: #fff;
-
     .toolbarTitle {
       margin: 0 0 0.8rem;
       color: #0f2440;
       font-size: 1.08rem;
       font-weight: 700;
     }
-
     .tableTools {
       min-height: 40px;
       display: flex;
@@ -30,11 +27,9 @@
       justify-content: flex-start;
       gap: 0.78rem;
       flex-wrap: wrap;
-
       .searchField {
         position: relative;
         width: min(100%, 250px);
-
         .searchIcon {
           position: absolute;
           top: 50%;
@@ -45,7 +40,6 @@
           pointer-events: none;
           transform: translateY(-50%);
         }
-
         .searchInput {
           width: 100%;
           height: 2.6rem;
@@ -55,14 +49,12 @@
           color: #1b344a;
           font-size: 1.01rem;
           padding: 0 0.8rem 0 2.2rem;
-
           &:focus-visible {
             outline: 2px solid #2f66dd;
             outline-offset: 0;
           }
         }
       }
-
       .createButton {
         display: inline-flex;
         align-items: center;
@@ -77,16 +69,13 @@
         font-weight: 600;
         cursor: pointer;
         transition: filter 0.15s ease;
-
         &:hover:not(:disabled) {
           filter: brightness(0.95);
         }
-
         &:disabled {
           opacity: 0.65;
           cursor: not-allowed;
         }
-
         .createIcon {
           width: 1rem;
           height: 1rem;
@@ -94,7 +83,6 @@
       }
     }
   }
-
   .tableViewport {
     flex: var(--erp-table-viewport-flex, 1 1 auto);
     min-height: 0;
@@ -104,7 +92,6 @@
     -webkit-overflow-scrolling: touch;
     max-height: var(--erp-table-max-height, none);
   }
-
   .table {
     width: 100%;
     min-width: var(--erp-table-min-width, 980px);
@@ -112,11 +99,10 @@
     table-layout: fixed;
     background: #fff;
   }
-
   .headerCell,
   .cell {
     border-bottom: 1px solid #dbe4ee;
-    padding: 0.88rem 1.45rem;
+    padding: 0.5rem;
     font-size: 1.01rem;
     line-height: 1.25;
     vertical-align: middle;
@@ -124,7 +110,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-
   .headerCell {
     background: #f7f9fc;
     color: #4a5f74;
@@ -133,23 +118,19 @@
     text-transform: uppercase;
     letter-spacing: 0.07em;
     font-size: 0.92rem;
-
     .headerText {
       font-size: clamp(0.78rem, 0.2vw + 0.72rem, 0.92rem);
       line-height: 1.2;
     }
-
     &.stickyHeaderCell {
       position: sticky;
       top: 0;
       z-index: 3;
     }
-
     &.sortableHeaderCell {
       cursor: pointer;
     }
   }
-
   .headerButton {
     width: 100%;
     border: 0;
@@ -164,69 +145,55 @@
     padding: 0;
     cursor: pointer;
     text-align: inherit;
-
     &.headerButtonActive {
       font-weight: 700;
     }
-
     .sortIndicator {
       font-size: 0.7rem;
       line-height: 1;
       color: #495867;
     }
   }
-
   .rowEven {
     background: #fff;
   }
-
   .rowOdd {
     background: #fff;
   }
-
   .activeRow {
     background: #eef4ff !important;
     color: #0f243b;
   }
-
   .rowClickable {
     cursor: pointer;
-
     &:focus-visible {
       outline: 2px solid #2f66dd;
       outline-offset: -2px;
     }
   }
-
   .alignLeft {
     text-align: left;
   }
-
   .alignCenter {
     text-align: center;
   }
-
   .alignRight {
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
-
   .emptyCell {
     text-align: center;
-    padding: 1.3rem 1rem;
+    padding: 0.5rem;
     color: #5f7184;
   }
-
   .actionsCell {
     overflow: visible;
     text-overflow: clip;
   }
-
   .leadingActionsCell {
     overflow: visible;
     text-overflow: clip;
   }
-
   .actionsGroup {
     display: inline-flex;
     align-items: center;
@@ -234,7 +201,6 @@
     gap: 8px;
     flex-wrap: nowrap;
   }
-
   .actionsMenuRoot {
     position: relative;
     display: inline-flex;
@@ -242,7 +208,6 @@
     justify-content: center;
     flex: 0 0 auto;
   }
-
   .actionsTrigger {
     width: 24px;
     height: 28px;
@@ -258,23 +223,19 @@
     transition:
       background-color 0.16s ease,
       color 0.16s ease;
-
     &:hover {
       background: #edf2f7;
       color: #5f6f82;
     }
-
     &:focus-visible {
       outline: 2px solid #3f6fe0;
       outline-offset: 0;
     }
   }
-
   .actionsTriggerIcon {
     width: 17px;
     height: 17px;
   }
-
   .actionsDropdown {
     position: absolute;
     top: -4px;
@@ -288,7 +249,6 @@
     padding: 6px;
     z-index: 30;
   }
-
   .actionsDropdownItem {
     width: 100%;
     display: flex;
@@ -304,30 +264,24 @@
     padding: 0.5rem 0.62rem;
     cursor: pointer;
     transition: background-color 0.14s ease;
-
     &:hover:not(:disabled) {
       background: #eef2f7;
     }
-
     &:focus-visible {
       outline: 2px solid #3f6fe0;
       outline-offset: 1px;
     }
-
     &:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
   }
-
   .actionsDropdownDelete {
     color: #dc2626;
-
     &:hover:not(:disabled) {
       background: #fff1f2;
     }
   }
-
   .leadingActionsRow {
     display: flex;
     align-items: center;
@@ -335,14 +289,12 @@
     max-width: 100%;
     min-width: 0;
   }
-
   .leadingActionsValue {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: inherit;
   }
-
   .actionButton {
     min-height: 30px;
     border: 1px solid #bed0e0;
@@ -352,17 +304,14 @@
     line-height: 1.2;
     cursor: pointer;
     transition: filter 0.15s ease;
-
     &:not(:disabled):hover {
       filter: brightness(0.96);
     }
-
     &:disabled {
       cursor: not-allowed;
       opacity: 0.55;
     }
   }
-
   .iconActionButton {
     width: 26px;
     min-width: 26px;
@@ -371,50 +320,40 @@
     padding: 0;
     border: 0;
     background: transparent;
-
     &.viewButton,
     &.updateButton,
     &.deleteButton {
       border: 0;
       background: transparent;
     }
-
     &.viewButton {
       color: #2563eb;
-
       &:hover:not(:disabled) {
         background: #e9f1ff;
       }
     }
-
     &.updateButton,
     &.editButton {
       color: #059669;
-
       &:hover:not(:disabled) {
         background: #e9fbf3;
       }
     }
-
     &.deleteButton {
       color: #dc2626;
-
       &:hover:not(:disabled) {
         background: #fff1f1;
       }
     }
-
     &:hover:not(:disabled) {
       filter: none;
     }
   }
-
   .actionIcon {
     width: 16px;
     height: 16px;
     flex-shrink: 0;
   }
-
   .srOnly {
     position: absolute;
     width: 1px;
@@ -426,26 +365,22 @@
     white-space: nowrap;
     border: 0;
   }
-
   .updateButton,
   .editButton {
     background: #e9f5ff;
     border-color: #7aa8c9;
     color: #0f4b78;
   }
-
   .viewButton {
     background: #edf3ff;
     border-color: #94acd1;
     color: #244f8a;
   }
-
   .deleteButton {
     background: #fff0f0;
     border-color: #c88a8a;
     color: #8f1f1f;
   }
-
   .paginationBar {
     border-top: 1px solid #dbe4ee;
     background: #fff;
@@ -455,7 +390,6 @@
     justify-content: space-between;
     gap: 0.8rem;
     flex-wrap: wrap;
-
     .paginationInfo {
       font-size: 0.97rem;
       color: #4d5560;
@@ -463,12 +397,10 @@
       align-items: center;
       gap: 10px;
       flex-wrap: wrap;
-
       .pageSizeControl {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-
         .pageSizeSelect {
           min-height: 2rem;
           border: 1px solid #bdccdc;
