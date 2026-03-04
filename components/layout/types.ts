@@ -4,6 +4,7 @@ export type ErpHeaderItem = {
   label: string;
   href?: string;
   onClick?: () => void;
+  menuSeparator?: boolean;
   children?: ErpHeaderItem[];
 };
 
@@ -31,6 +32,7 @@ export type MenuLinkProps = {
   className: string;
   hasSubmenu: boolean;
   onNavigate: (destination: string) => void;
+  onMenuClose: () => void;
 };
 
 export type MenuTreeProps = {
@@ -38,6 +40,7 @@ export type MenuTreeProps = {
   rootListClassName: string;
   rootLinkClassName: string;
   onNavigate: (destination: string) => void;
+  onMenuClose: () => void;
   depth?: number;
 };
 
@@ -61,6 +64,7 @@ export type TabStripProps = {
   onBillNumberChange?: (value: string) => void;
   billPlaceholder: string;
   onNavigate: (destination: string) => void;
+  onMenuClose: () => void;
   quickTabsRef?: React.RefObject<HTMLDivElement | null>;
 };
 

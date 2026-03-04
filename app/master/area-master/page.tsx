@@ -84,6 +84,7 @@ function buildAreaFormFields(cityOptions: ERPDynamicSelectOption[]): ERPDynamicM
       name: "masterName",
       label: "Area Name",
       required: true,
+      colSpan: 2,
       validation: {
         minLength: 2,
         minLengthMessage: "Area Name must be at least 2 characters.",
@@ -92,15 +93,18 @@ function buildAreaFormFields(cityOptions: ERPDynamicSelectOption[]): ERPDynamicM
     {
       name: "masterAlias",
       label: "Alias",
+      colSpan: 2,
     },
     {
       name: "masterShortName",
       label: "Short Name",
+      colSpan: 2,
     },
     {
       name: "areaCityId",
       label: "City",
       type: "select",
+      colSpan: 2,
       searchable: true,
       required: true,
       options: cityOptions,
@@ -113,6 +117,7 @@ function buildAreaFormFields(cityOptions: ERPDynamicSelectOption[]): ERPDynamicM
       name: "areaDistanceKm",
       label: "Distance (KM)",
       type: "number",
+      colSpan: 2,
       min: 0,
       step: 1,
       placeholder: "0",
@@ -123,7 +128,7 @@ function buildAreaFormFields(cityOptions: ERPDynamicSelectOption[]): ERPDynamicM
     {
       name: "areaCollectionDays",
       label: "Collection Days",
-      placeholder: "1,3,5",
+      colSpan: 2,
       helperText: "Comma-separated day numbers.",
     },
     {

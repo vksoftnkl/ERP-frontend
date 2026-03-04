@@ -1,5 +1,5 @@
 "use client";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth/session";
 
@@ -27,11 +27,12 @@ function normalizeNextRoute(nextRoute: string | null): string {
 export default function GlobalRouteGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
   const router = useRouter();
-
-  // Computed synchronously — no useState needed.
-  // `null` during SSR (window unavailable), boolean on the client.
-  const auth = typeof window !== "undefined" ? isAuthenticated() : null;
+  const [auth, setAuth] = useState<boolean | null>(null);
   const publicRoute = isPublicRoute(pathname);
+
+  useEffect(() => {
+    setAuth(isAuthenticated());
+  }, [pathname]);
 
   useEffect(() => {
     if (auth === null) return;

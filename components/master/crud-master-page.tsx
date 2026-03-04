@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
@@ -208,6 +215,9 @@ export type CrudMasterPageProps = {
   formDescription?: string;
   customFields?: ERPDynamicModalField[];
   createInitialValues?: Record<string, string>;
+  modalPanelStyle?: CSSProperties;
+  modalFormGridColumns?: number;
+  modalStackLabels?: boolean;
   gridTableName?: string;
   gridTableNameAliases?: readonly string[];
   getByIdMethod?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -895,6 +905,9 @@ export default function CrudMasterPage({
   formDescription,
   customFields,
   createInitialValues,
+  modalPanelStyle,
+  modalFormGridColumns,
+  modalStackLabels,
   gridTableName,
   gridTableNameAliases,
   getByIdMethod,
@@ -1638,6 +1651,9 @@ export default function CrudMasterPage({
         showDefaultCards={false}
         hideSectionHeader
         submitError={saveError}
+        panelStyle={modalPanelStyle}
+        formGridColumns={modalFormGridColumns}
+        stackLabels={modalStackLabels}
         onControllerReady={(controller) => {
           modalControllerRef.current = controller;
         }}

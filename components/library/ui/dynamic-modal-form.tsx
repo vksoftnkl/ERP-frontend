@@ -8,6 +8,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { cx } from "@/components/library/cx";
@@ -64,6 +65,8 @@ const ACCENT_PRESETS = {
   },
 } as const;
 const DEFAULT_ACCENT = ACCENT_PRESETS.blue;
+const SEARCH_SELECT_LIST_MAX_HEIGHT = 220;
+const SEARCH_SELECT_LIST_OFFSET = 4;
 export type ERPDynamicFieldType =
   | "heading"
   | "text"
@@ -102,6 +105,7 @@ export type ERPDynamicModalField = {
   name: string;
   label: string;
   type?: ERPDynamicFieldType;
+  defaultExpanded?: boolean;
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
@@ -170,6 +174,9 @@ export type ERPDynamicModalFormProps = {
   showDefaultCards?: boolean;
   hideSectionHeader?: boolean;
   submitError?: string | null;
+  panelStyle?: CSSProperties;
+  formGridColumns?: number;
+  stackLabels?: boolean;
   className?: string;
   cardGridClassName?: string;
 };
@@ -419,7 +426,7 @@ function buildSectionExpandedState(
   const sectionState: Record<string, boolean> = {};
   for (const field of fields) {
     if ((field.type ?? "text") === "heading") {
-      sectionState[field.name] = true;
+      sectionState[field.name] = field.defaultExpanded ?? true;
     }
   }
   return sectionState;
@@ -455,6 +462,9 @@ export function ERPDynamicModalForm({
   showDefaultCards = true,
   hideSectionHeader = false,
   submitError,
+  panelStyle,
+  formGridColumns,
+  stackLabels = false,
   className,
   cardGridClassName,
 }: ERPDynamicModalFormProps) {
@@ -469,6 +479,13 @@ export function ERPDynamicModalForm({
     {},
   );
   const [openSearchField, setOpenSearchField] = useState<string | null>(null);
+  const searchSelectRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [searchDropdownPlacement, setSearchDropdownPlacement] = useState<
+    "down" | "up"
+  >("down");
+  const [searchDropdownMaxHeight, setSearchDropdownMaxHeight] = useState(
+    SEARCH_SELECT_LIST_MAX_HEIGHT,
+  );
   const [sectionExpandedByVariant, setSectionExpandedByVariant] = useState<
     Record<string, Record<string, boolean>>
   >({});
@@ -493,6 +510,8 @@ export function ERPDynamicModalForm({
     setFileData({});
     setSearchQueries({});
     setOpenSearchField(null);
+    setSearchDropdownPlacement("down");
+    setSearchDropdownMaxHeight(SEARCH_SELECT_LIST_MAX_HEIGHT);
     onOpenChange?.(false, activeVariant?.key ?? null);
   }, [activeVariant?.key, onOpenChange]);
   const openModal = useCallback(
@@ -510,6 +529,8 @@ export function ERPDynamicModalForm({
       setFieldErrors({});
       setSearchQueries({});
       setOpenSearchField(null);
+      setSearchDropdownPlacement("down");
+      setSearchDropdownMaxHeight(SEARCH_SELECT_LIST_MAX_HEIGHT);
       setSectionExpandedByVariant((current) => ({
         ...current,
         [variantKey]: buildSectionExpandedState(variant.fields),
@@ -534,6 +555,39 @@ export function ERPDynamicModalForm({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [closeModal, isOpen]);
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const html = document.documentElement;
+    const body = document.body;
+    const appContent = document.querySelector<HTMLElement>(".erp-app-content");
+
+    const previousHtmlOverflow = html.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyOverscroll = body.style.overscrollBehavior;
+    const previousAppOverflow = appContent?.style.overflow ?? "";
+    const previousAppOverscroll = appContent?.style.overscrollBehavior ?? "";
+
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    body.style.overscrollBehavior = "none";
+    if (appContent) {
+      appContent.style.overflow = "hidden";
+      appContent.style.overscrollBehavior = "none";
+    }
+
+    return () => {
+      html.style.overflow = previousHtmlOverflow;
+      body.style.overflow = previousBodyOverflow;
+      body.style.overscrollBehavior = previousBodyOverscroll;
+      if (appContent) {
+        appContent.style.overflow = previousAppOverflow;
+        appContent.style.overscrollBehavior = previousAppOverscroll;
+      }
+    };
+  }, [isOpen]);
   const validateVariant = useCallback(
     (variant: ERPDynamicModalVariant, values: Record<string, string>) => {
       const nextErrors: Record<string, string> = {};
@@ -786,6 +840,67 @@ export function ERPDynamicModalForm({
     [activeVariant, fileData, validateOnChange],
   );
 
+  const updateSearchDropdownLayout = useCallback((fieldName: string) => {
+    const fieldContainer = searchSelectRefs.current[fieldName];
+    if (!fieldContainer) {
+      return;
+    }
+
+    const scrollContainer = fieldContainer.closest<HTMLElement>(
+      '[data-erp-modal-scroll-area="true"]',
+    );
+    const fieldRect = fieldContainer.getBoundingClientRect();
+    const scrollRect = scrollContainer?.getBoundingClientRect();
+
+    const boundaryTop = scrollRect?.top ?? 0;
+    const boundaryBottom = scrollRect?.bottom ?? window.innerHeight;
+    const spaceBelow = Math.max(
+      0,
+      boundaryBottom - fieldRect.bottom - SEARCH_SELECT_LIST_OFFSET,
+    );
+    const spaceAbove = Math.max(
+      0,
+      fieldRect.top - boundaryTop - SEARCH_SELECT_LIST_OFFSET,
+    );
+    const shouldOpenUp =
+      spaceBelow < SEARCH_SELECT_LIST_MAX_HEIGHT && spaceAbove > spaceBelow;
+    const availableSpace = shouldOpenUp ? spaceAbove : spaceBelow;
+    const nextMaxHeight = Math.max(
+      0,
+      Math.min(SEARCH_SELECT_LIST_MAX_HEIGHT, Math.floor(availableSpace)),
+    );
+
+    setSearchDropdownPlacement(shouldOpenUp ? "up" : "down");
+    setSearchDropdownMaxHeight(
+      nextMaxHeight > 0 ? nextMaxHeight : SEARCH_SELECT_LIST_MAX_HEIGHT,
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!openSearchField) {
+      return;
+    }
+
+    const fieldName = openSearchField;
+    const runLayoutUpdate = () => updateSearchDropdownLayout(fieldName);
+    runLayoutUpdate();
+
+    const fieldContainer = searchSelectRefs.current[fieldName];
+    const scrollContainer = fieldContainer?.closest<HTMLElement>(
+      '[data-erp-modal-scroll-area="true"]',
+    );
+
+    window.addEventListener("resize", runLayoutUpdate);
+    scrollContainer?.addEventListener("scroll", runLayoutUpdate, {
+      passive: true,
+    });
+
+    return () => {
+      window.removeEventListener("resize", runLayoutUpdate);
+      scrollContainer?.removeEventListener("scroll", runLayoutUpdate);
+    };
+  }, [openSearchField, updateSearchDropdownLayout]);
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!activeVariant || isSubmitting) {
@@ -846,8 +961,16 @@ export function ERPDynamicModalForm({
   const formId = activeVariant
     ? `erp-modal-form-${activeVariant.key}`
     : "erp-modal-form";
+  const formGridStyle =
+    typeof formGridColumns === "number" &&
+    Number.isFinite(formGridColumns) &&
+    formGridColumns > 0
+      ? ({
+          "--erp-modal-form-columns": String(Math.max(1, Math.floor(formGridColumns))),
+        } as CSSProperties)
+      : undefined;
   return (
-    <section className={cx("space-y-6", className)}>
+    <section className={className}>
       {!hideSectionHeader ? (
         <header className="space-y-2">
           <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
@@ -913,6 +1036,7 @@ export function ERPDynamicModalForm({
           />
           <section
             className={styles.panel}
+            style={panelStyle}
             role="dialog"
             aria-modal="true"
             aria-labelledby={`${formId}-title`}
@@ -949,12 +1073,16 @@ export function ERPDynamicModalForm({
                 </button>
               </div>
             </header>
-            <div className={styles.scrollArea}>
+            <div
+              className={styles.scrollArea}
+              data-erp-modal-scroll-area="true"
+            >
               <form
                 id={formId}
                 onSubmit={handleSubmit}
                 noValidate
                 className={styles.formGrid}
+                style={formGridStyle}
               >
                 {visibleFields.map((field) => {
                   const fieldValue = formData[field.name] ?? "";
@@ -1054,7 +1182,11 @@ export function ERPDynamicModalForm({
                       key={field.name}
                       className={cx(
                         styles.field,
+                        stackLabels &&
+                          inputType !== "checkbox" &&
+                          styles.fieldStacked,
                         field.colSpan === 2 && styles.fieldWide,
+                        inputType === "checkbox" && styles.checkboxField,
                       )}
                     >
                       <label className={styles.label} htmlFor={commonProps.id}>
@@ -1064,7 +1196,12 @@ export function ERPDynamicModalForm({
                         ) : null}
                       </label>
                       {inputType === "select" && field.searchable ? (
-                        <div className={styles.searchSelect}>
+                        <div
+                          className={styles.searchSelect}
+                          ref={(element) => {
+                            searchSelectRefs.current[field.name] = element;
+                          }}
+                        >
                           <input
                             {...commonProps}
                             type="text"
@@ -1133,7 +1270,14 @@ export function ERPDynamicModalForm({
                           {openSearchField === field.name && !field.disabled ? (
                             <ul
                               id={`${controlId}-search-list`}
-                              className={styles.searchSelectList}
+                              className={cx(
+                                styles.searchSelectList,
+                                searchDropdownPlacement === "up" &&
+                                  styles.searchSelectListUp,
+                              )}
+                              style={{
+                                maxHeight: `${searchDropdownMaxHeight}px`,
+                              }}
                               role="listbox"
                             >
                               {filteredOptions.length ? (

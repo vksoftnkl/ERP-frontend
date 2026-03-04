@@ -73,6 +73,7 @@ function buildCityFormFields(stateOptions: ERPDynamicSelectOption[]): ERPDynamic
     {
       name: "masterName",
       label: "City Name",
+      colSpan: 2,
       required: true,
       validation: {
         minLength: 2,
@@ -82,15 +83,18 @@ function buildCityFormFields(stateOptions: ERPDynamicSelectOption[]): ERPDynamic
     {
       name: "masterAlias",
       label: "Alias",
+      colSpan: 2,
     },
     {
       name: "masterShortName",
       label: "Short Name",
+      colSpan: 2,
     },
     {
       name: "cityStateId",
       label: "State",
       type: "select",
+      colSpan: 2,
       searchable: true,
       required: true,
       options: stateOptions,

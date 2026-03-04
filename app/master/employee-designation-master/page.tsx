@@ -66,6 +66,7 @@ const DESIGNATION_FORM_FIELDS: ERPDynamicModalField[] = [
     name: "masterName",
     label: "Designation Name",
     required: true,
+    colSpan: 2,
     validation: {
       minLength: 2,
       minLengthMessage: "Designation Name must be at least 2 characters.",
@@ -74,6 +75,7 @@ const DESIGNATION_FORM_FIELDS: ERPDynamicModalField[] = [
   {
     name: "edCode",
     label: "Designation Code",
+     colSpan: 2,
   },
   {
     name: "edIsDefault",
@@ -96,7 +98,6 @@ const DESIGNATION_FORM_FIELDS: ERPDynamicModalField[] = [
   {
     name: "masterDescription",
     label: "Remarks",
-    type: "textarea",
     colSpan: 2,
   },
 ];

@@ -32,17 +32,20 @@
   align-items: center;
   justify-content: center;
   padding: 1.2rem;
+  overscroll-behavior: contain;
   animation: erp-modal-fade-in 0.2s ease-out;
 }
 
 .backdrop {
   position: absolute;
   inset: 0;
+  z-index: 0;
   background: rgba(12, 18, 27, 0.7);
 }
 
 .panel {
   position: relative;
+  z-index: 1;
   display: flex;
   width: min(40%, 40rem);
   max-height: 50vh;
@@ -112,7 +115,10 @@ background: #dfe7f0;
 }
 
 .scrollArea {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   max-height: calc(88vh - 136px);
 }
 
@@ -148,8 +154,37 @@ background: #dfe7f0;
   grid-column: 2;
 }
 
+.fieldStacked {
+  grid-template-columns: 1fr;
+  row-gap: 0.28rem;
+}
+
+.fieldStacked > :is(.control, .searchSelect, .fileField, .checkboxWrapper),
+.fieldStacked > .helpText,
+.fieldStacked > .errorText {
+  grid-column: 1;
+}
+
+.fieldStacked > .label {
+  padding-top: 0;
+}
+
 .fieldWide {
   grid-column: 1 / -1;
+}
+
+.checkboxField {
+  grid-template-columns: max-content max-content;
+  column-gap: 0.35rem;
+  align-items: center;
+}
+
+.checkboxField > .label {
+  padding-top: 0;
+}
+
+.checkboxField > .checkboxWrapper {
+  min-height: 18px;
 }
 
 .sectionHeadingField {
@@ -299,8 +334,8 @@ background: #dfe7f0;
   left: 0;
   right: 0;
   top: calc(100% + 4px);
-  z-index: 8;
-  max-height: 220px;
+  z-index: 34;
+  max-height: 50px;
   overflow-y: auto;
   border: 1px solid #c9d3de;
   border-radius: 2px;
@@ -309,6 +344,11 @@ background: #dfe7f0;
   margin: 0;
   padding: 4px;
   list-style: none;
+}
+
+.searchSelectListUp {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 
 .searchSelectOption {
@@ -434,6 +474,8 @@ background: #dfe7f0;
 }
 
 .footer {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -507,7 +549,7 @@ background: #dfe7f0;
 
 @media (min-width: 920px) {
   .formGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--erp-modal-form-columns, 2), minmax(0, 1fr));
     // gap: 1rem 1.35rem;
   }
 }
@@ -551,6 +593,22 @@ background: #dfe7f0;
 
   .label {
     padding-top: 0;
+  }
+
+  .checkboxField {
+    grid-template-columns: max-content max-content;
+    column-gap: 0.35rem;
+    align-items: center;
+  }
+
+  .checkboxField > .label {
+    grid-column: 1;
+    padding-top: 0;
+  }
+
+  .checkboxField > .checkboxWrapper {
+    grid-column: 2;
+    min-height: 18px;
   }
 
   .sectionHeadingField {

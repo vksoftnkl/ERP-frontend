@@ -22,8 +22,10 @@ export default function RootLayout({
       <body>
         <Providers>
           <GlobalRouteGuard>
-            <GlobalErpHeader />
-            {children}
+            <div className="erp-app-shell">
+              <GlobalErpHeader />
+              <div className="erp-app-content">{children}</div>
+            </div>
           </GlobalRouteGuard>
           <GlobalToaster />
         </Providers>

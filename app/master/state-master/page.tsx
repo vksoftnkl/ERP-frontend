@@ -1,18 +1,14 @@
 "use client";
-
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { ERPDynamicModalField } from "@/components/library/ui/dynamic-modal-form";
 import styles from "./page.module.scss";
-
 const API_ENDPOINTS = {
   list: "/states/list",
   getById: "/states/get",
   create: "/states/create",
   delete: "/states/delete",
 } as const;
-
 const GRID_TABLE_NAME = "state_master";
-
 const LOOKUP_KEYS = {
   id: ["stmId", "stm_id", "state_id", "stateId", "id", "_id"],
   code: ["stmAlias", "stm_alias", "stmShort", "stm_short", "state_code", "code"],
@@ -24,7 +20,6 @@ const LOOKUP_KEYS = {
   description: ["stmAlias", "stm_alias"],
   array: ["data", "items", "results", "rows", "list", "states"],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "stmId",
   name: "stmName",
@@ -33,9 +28,7 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "stmAlias",
   sort: "stmOrder",
 } as const;
-
 const STATE_IS_ACTIVE_KEYS = ["stmIsActive", "stm_is_active", "isActive", "is_active", "status"] as const;
-
 const STATE_INITIAL_FORM_VALUES = {
   masterName: "",
   masterAlias: "",
@@ -43,11 +36,11 @@ const STATE_INITIAL_FORM_VALUES = {
   position: "0",
   stateIsActive: "true",
 } as const;
-
 const STATE_FORM_FIELDS: ERPDynamicModalField[] = [
   {
     name: "masterName",
     label: "State Name",
+    colSpan: 2,
     required: true,
     validation: {
       minLength: 2,
@@ -57,10 +50,12 @@ const STATE_FORM_FIELDS: ERPDynamicModalField[] = [
   {
     name: "masterAlias",
     label: "Alias",
+     colSpan: 2,
   },
   {
     name: "masterShortName",
     label: "Short Name",
+     colSpan: 2,
   },
   {
     name: "position",
@@ -82,7 +77,6 @@ const STATE_FORM_FIELDS: ERPDynamicModalField[] = [
     ],
   },
 ];
-
 function getFirstDefinedValue(
   source: Record<string, unknown>,
   keys: readonly string[],
@@ -93,15 +87,12 @@ function getFirstDefinedValue(
       return value;
     }
   }
-
   return undefined;
 }
-
 function toDisplayValue(value: unknown): string {
   if (value === undefined || value === null) {
     return "";
   }
-
   if (
     typeof value === "string" ||
     typeof value === "number" ||
@@ -110,7 +101,6 @@ function toDisplayValue(value: unknown): string {
   ) {
     return String(value).trim();
   }
-
   if (typeof value === "object") {
     const nested = value as Record<string, unknown>;
     const fallback = nested.value ?? nested.id ?? nested.code ?? nested.name ?? nested.label;
@@ -123,7 +113,6 @@ function toDisplayValue(value: unknown): string {
       return String(fallback);
     }
   }
-
   return "";
 }
 

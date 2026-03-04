@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./erp-header.module.css";
 import { clearAuthSession } from "@/lib/auth/session";
@@ -8,12 +8,16 @@ import {
   canUseClientSideRouting,
   toInternalRoute,
 } from "@/lib/navigation/safe-route";
+import { useApi } from "@/hooks/useApi";
 import {
   ARIA_LABELS,
   DEFAULT_CUSTOMER_OPTIONS,
   DEFAULT_DATE_FORMAT_OPTIONS,
   DEFAULT_PRIMARY_MENU,
   DEFAULT_QUICK_TABS,
+  MENU_MASTERS_GET_ENDPOINT,
+  applyMenuMasterLabels,
+  extractMenuMasterItems,
 } from "./constants";
 import type {
   ErpHeaderItem,
@@ -24,6 +28,17 @@ import type {
   TabStripProps,
 } from "./types";
 export type { ErpHeaderItem, ErpHeaderProps } from "./types";
+
+const MENU_MASTERS_TOAST_OPTIONS = {
+  success: false,
+  error: false,
+} as const;
+
+const MENU_MASTERS_QUERY = {
+  includeChildren: "true",
+  activeOnly: "true",
+  visibleOnly: "true",
+} as const;
 // Utility functions
 function formatDateLabel(date: Date): string {
   return new Intl.DateTimeFormat("en-GB", DEFAULT_DATE_FORMAT_OPTIONS)
@@ -34,25 +49,32 @@ function cx(...tokens: Array<string | false | undefined>): string {
   return tokens.filter(Boolean).join(" ");
 }
 // Components
-function MenuLink({ item, className, hasSubmenu, onNavigate }: MenuLinkProps) {
+function MenuLink({
+  item,
+  className,
+  hasSubmenu,
+  onNavigate,
+  onMenuClose,
+}: MenuLinkProps) {
   const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
     item.onClick?.();
     if (item.href && item.href !== "#") {
       event.currentTarget.blur();
+      onMenuClose();
       onNavigate(item.href);
       return;
     }
-
     if (item.onClick && !hasSubmenu) {
       event.currentTarget.blur();
+      onMenuClose();
       return;
     }
-
     if (!item.onClick && !hasSubmenu) {
       event.currentTarget.blur();
+      onMenuClose();
       window.alert(`Navigating to ${item.label}`);
     }
-  }, [item.href, item.onClick, item.label, hasSubmenu, onNavigate]);
+  }, [item.href, item.onClick, item.label, hasSubmenu, onNavigate, onMenuClose]);
   return (
     <button
       type="button"
@@ -74,6 +96,7 @@ function MenuTree({
   rootListClassName,
   rootLinkClassName,
   onNavigate,
+  onMenuClose,
   depth = 0,
 }: MenuTreeProps) {
   const isRootLevel = depth === 0;
@@ -93,14 +116,20 @@ function MenuTree({
         const children = item.children ?? [];
         const hasSubmenu = children.length > 0;
         const key = `${item.label}-${depth}-${index}`;
-
         return (
-          <li key={key} className={styles.menuItem}>
+          <li
+            key={key}
+            className={cx(
+              styles.menuItem,
+              !isRootLevel && item.menuSeparator && styles.submenuItemSeparated,
+            )}
+          >
             <MenuLink
               item={item}
               className={isRootLevel ? rootLinkClassName : styles.submenuLink}
               hasSubmenu={hasSubmenu}
               onNavigate={onNavigate}
+              onMenuClose={onMenuClose}
             />
             {hasSubmenu && (
               <MenuTree
@@ -108,6 +137,7 @@ function MenuTree({
                 rootListClassName={rootListClassName}
                 rootLinkClassName={rootLinkClassName}
                 onNavigate={onNavigate}
+                onMenuClose={onMenuClose}
                 depth={depth + 1}
               />
             )}
@@ -178,13 +208,13 @@ function TabStrip({
   onBillNumberChange,
   billPlaceholder,
   onNavigate,
+  onMenuClose,
   quickTabsRef,
 }: TabStripProps) {
   const handleBillNumberChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const next = event.target.value;
     onBillNumberChange?.(next);
   }, [onBillNumberChange]);
-
   return (
     <section className={styles.tabStrip}>
       <div ref={quickTabsRef} className={styles.quickTabs}>
@@ -193,6 +223,7 @@ function TabStrip({
           rootListClassName={styles.quickTabsList}
           rootLinkClassName={styles.quickTab}
           onNavigate={onNavigate}
+          onMenuClose={onMenuClose}
         />
       </div>
       <input
@@ -225,15 +256,60 @@ export default function ErpHeader({
   onBillNumberChange,
   billPlaceholder = "Enter Bill No",
 }: ErpHeaderProps) {
+  const pathname = usePathname();
   const router = useRouter();
   const primaryMenuRef = useRef<HTMLElement | null>(null);
   const quickTabsRef = useRef<HTMLDivElement | null>(null);
+  const shouldUseMenuMasterLabels = primaryMenu === DEFAULT_PRIMARY_MENU;
+  const { getAll: getMenuMasterLabels } = useApi<unknown>(MENU_MASTERS_GET_ENDPOINT, {
+    toast: MENU_MASTERS_TOAST_OPTIONS,
+  });
   // State management
+  const [resolvedPrimaryMenu, setResolvedPrimaryMenu] = useState<ErpHeaderItem[]>(
+    shouldUseMenuMasterLabels ? [] : primaryMenu
+  );
   const [localCustomer, setLocalCustomer] = useState(
     selectedCustomer ?? customerOptions[0] ?? ""
   );
   const [localBillNumber, setLocalBillNumber] = useState(billNumber ?? "");
   // Effects for syncing with props
+  useEffect(() => {
+    if (shouldUseMenuMasterLabels) {
+      setResolvedPrimaryMenu([]);
+      return;
+    }
+
+    setResolvedPrimaryMenu(primaryMenu);
+  }, [primaryMenu, shouldUseMenuMasterLabels]);
+  useEffect(() => {
+    if (!shouldUseMenuMasterLabels) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadMenuMasterLabels = async () => {
+      try {
+        const payload = await getMenuMasterLabels(MENU_MASTERS_QUERY);
+        const menuMasterItems = extractMenuMasterItems(payload);
+        if (cancelled) {
+          return;
+        }
+
+        setResolvedPrimaryMenu(applyMenuMasterLabels(DEFAULT_PRIMARY_MENU, menuMasterItems));
+      } catch {
+        if (!cancelled) {
+          setResolvedPrimaryMenu([]);
+        }
+      }
+    };
+
+    void loadMenuMasterLabels();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getMenuMasterLabels, shouldUseMenuMasterLabels]);
   useEffect(() => {
     if (selectedCustomer !== undefined) {
       setLocalCustomer(selectedCustomer);
@@ -260,34 +336,37 @@ export default function ErpHeader({
   );
   const resolvedCustomer = selectedCustomer ?? localCustomer;
   const resolvedBillNumber = billNumber ?? localBillNumber;
+  const closeFocusedMenu = useCallback(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) {
+      active.blur();
+    }
+  }, []);
 
+  useEffect(() => {
+    closeFocusedMenu();
+  }, [closeFocusedMenu, pathname]);
   useEffect(() => {
     const handlePointerDownCapture = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) {
         return;
       }
-
       const active = document.activeElement;
       if (!(active instanceof HTMLElement)) {
         return;
       }
-
       const isInsidePrimaryMenu = !!primaryMenuRef.current?.contains(target);
       const isInsideQuickTabs = !!quickTabsRef.current?.contains(target);
-
       if (isInsidePrimaryMenu || isInsideQuickTabs) {
         return;
       }
-
       const activeInPrimaryMenu = !!primaryMenuRef.current?.contains(active);
       const activeInQuickTabs = !!quickTabsRef.current?.contains(active);
-
       if (activeInPrimaryMenu || activeInQuickTabs) {
         active.blur();
       }
     };
-
     document.addEventListener("pointerdown", handlePointerDownCapture, true);
     return () => {
       document.removeEventListener(
@@ -315,12 +394,10 @@ export default function ErpHeader({
     if (!route) {
       return;
     }
-
     if (!canUseClientSideRouting()) {
       window.location.assign(route);
       return;
     }
-
     router.push(route);
   }, [router]);
   const handleLogout = useCallback(() => {
@@ -328,13 +405,11 @@ export default function ErpHeader({
       onLogout();
       return;
     }
-
     clearAuthSession();
     if (!canUseClientSideRouting()) {
       window.location.replace("/login");
       return;
     }
-
     router.replace("/login");
   }, [onLogout, router]);
   return (
@@ -346,10 +421,11 @@ export default function ErpHeader({
           aria-label={ARIA_LABELS.MAIN_MENU}
         >
           <MenuTree
-            items={primaryMenu}
+            items={resolvedPrimaryMenu}
             rootListClassName={styles.primaryMenuList}
             rootLinkClassName={styles.primaryMenuItem}
             onNavigate={handleNavigate}
+            onMenuClose={closeFocusedMenu}
           />
         </nav>
         <HeaderRight
@@ -372,6 +448,7 @@ export default function ErpHeader({
         onBillNumberChange={handleBillNumberChange}
         billPlaceholder={billPlaceholder}
         onNavigate={handleNavigate}
+        onMenuClose={closeFocusedMenu}
         quickTabsRef={quickTabsRef}
       />
     </div>

@@ -3,7 +3,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
   {
     label: "1 Sales",
     children: [
-      {label: "Customers", href: "/master/customer"},
+      {label: "Customers", href: "/master/customer"},      
       { label: "Sales Entry", href: "/dashboard" },
       { label: "Sales Return" },
       {
@@ -12,6 +12,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
           { label: "State Master", href: "/master/state-master" },
           { label: "City Master", href: "/master/city-master" },
           { label: "Area Master", href: "/master/area-master" },
+          {label: "Customer Type master", href: "/master/customer-groups"},
         ],
       },
       {
@@ -77,10 +78,10 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
     label: "5 Accounts",
     children: [
       {
-        label: "Account Ledger Groups Master",
+        label: " Ledger Groups Master",
         href: "/master/account-ledger-groups-master",
       },
-      { label: "Account Ledger Master", href: "/master/account-ledger-master" },
+      { label: "Ledger Master", href: "/master/account-ledger-master" },
       {
         label:"Employee Designation Master",href:"/master/employee-designation-master"
       },      
@@ -184,6 +185,232 @@ export const ERP_MENU_OBJECT: ERPMenuObject = {
     "Allow to Change Master Price": null,
   },
 };
+
+export const MENU_MASTERS_GET_ENDPOINT = "/menu-masters/get";
+
+export type MenuMasterItem = {
+  menuId?: number;
+  menuName: string;
+  menuSeparator?: boolean;
+  children?: MenuMasterItem[];
+};
+
+type MenuMasterResponse = {
+  data?: unknown;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sanitizeMenuLabel(label: string): string {
+  const sanitized = label.trim().replace(/^&+/, "").replace(/\s+/g, " ");
+  return sanitized || label;
+}
+
+function toBooleanFlag(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (value === 1) {
+      return true;
+    }
+    if (value === 0) {
+      return false;
+    }
+    return undefined;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1") {
+      return true;
+    }
+    if (normalized === "false" || normalized === "0") {
+      return false;
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeMenuLabel(label: string): string {
+  return label
+    .trim()
+    .replace(/^&+/, "")
+    .toLowerCase()
+    .replace(/&/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^\d+\s+/, "")
+    .trim();
+}
+
+function toMenuMasterItem(value: unknown): MenuMasterItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const rawName = value.menuName;
+  if (typeof rawName !== "string" || rawName.trim().length === 0) {
+    return null;
+  }
+
+  const rawChildren = Array.isArray(value.children) ? value.children : [];
+  const children = rawChildren
+    .map((child) => toMenuMasterItem(child))
+    .filter((child): child is MenuMasterItem => child !== null);
+
+  const item: MenuMasterItem = {
+    menuName: rawName,
+  };
+
+  if (typeof value.menuId === "number" && Number.isFinite(value.menuId)) {
+    item.menuId = value.menuId;
+  }
+
+  const separator =
+    toBooleanFlag(value.menuSeparator) ??
+    toBooleanFlag(value.menu_separator) ??
+    toBooleanFlag(value.menuSeperator) ??
+    toBooleanFlag(value.menu_seperator);
+
+  if (separator === true) {
+    item.menuSeparator = true;
+  }
+
+  if (children.length > 0) {
+    item.children = children;
+  }
+
+  return item;
+}
+
+export function extractMenuMasterItems(payload: unknown): MenuMasterItem[] {
+  if (!isRecord(payload)) {
+    return [];
+  }
+
+  const data = (payload as MenuMasterResponse).data;
+  if (!Array.isArray(data)) {
+    return [];
+  }
+
+  return data
+    .map((row) => toMenuMasterItem(row))
+    .filter((row): row is MenuMasterItem => row !== null);
+}
+
+function buildMenuLookup(items: MenuMasterItem[]): Map<string, MenuMasterItem[]> {
+  const lookup = new Map<string, MenuMasterItem[]>();
+
+  for (const item of items) {
+    const key = normalizeMenuLabel(item.menuName);
+    if (!key) {
+      continue;
+    }
+
+    const bucket = lookup.get(key);
+    if (bucket) {
+      bucket.push(item);
+      continue;
+    }
+
+    lookup.set(key, [item]);
+  }
+
+  return lookup;
+}
+
+type MenuHrefLookup = {
+  byPath: Map<string, string>;
+  byLabel: Map<string, string>;
+};
+
+function buildMenuHrefLookup(baseItems: ErpHeaderItem[]): MenuHrefLookup {
+  const byPath = new Map<string, string>();
+  const byLabel = new Map<string, string>();
+
+  const visit = (items: ErpHeaderItem[], path: string[]) => {
+    for (const item of items) {
+      const normalized = normalizeMenuLabel(item.label);
+      if (!normalized) {
+        continue;
+      }
+
+      const nextPath = [...path, normalized];
+      const pathKey = nextPath.join(" > ");
+
+      if (item.href) {
+        byPath.set(pathKey, item.href);
+        if (!byLabel.has(normalized)) {
+          byLabel.set(normalized, item.href);
+        }
+      }
+
+      if (item.children?.length) {
+        visit(item.children, nextPath);
+      }
+    }
+  };
+
+  visit(baseItems, []);
+
+  return { byPath, byLabel };
+}
+
+function toHeaderItemsFromApi(
+  apiItems: MenuMasterItem[],
+  hrefLookup: MenuHrefLookup,
+  path: string[] = [],
+): ErpHeaderItem[] {
+  return apiItems
+    .map((apiItem) => {
+      const label = sanitizeMenuLabel(apiItem.menuName);
+      const normalized = normalizeMenuLabel(label);
+      if (!normalized) {
+        return null;
+      }
+
+      const nextPath = [...path, normalized];
+      const pathKey = nextPath.join(" > ");
+      const href = hrefLookup.byPath.get(pathKey) ?? hrefLookup.byLabel.get(normalized);
+      const children = toHeaderItemsFromApi(apiItem.children ?? [], hrefLookup, nextPath);
+
+      const nextItem: ErpHeaderItem = { label };
+      if (href) {
+        nextItem.href = href;
+      }
+      if (apiItem.menuSeparator) {
+        nextItem.menuSeparator = true;
+      }
+      if (children.length > 0) {
+        nextItem.children = children;
+      }
+      return nextItem;
+    })
+    .filter((item): item is ErpHeaderItem => item !== null);
+}
+
+export function applyMenuMasterLabels(
+  baseMenu: ErpHeaderItem[],
+  menuMasterItems: MenuMasterItem[],
+): ErpHeaderItem[] {
+  if (menuMasterItems.length === 0) {
+    return [];
+  }
+
+  const labelLookup = buildMenuLookup(menuMasterItems);
+  if (labelLookup.size === 0) {
+    return [];
+  }
+
+  const hrefLookup = buildMenuHrefLookup(baseMenu);
+  return toHeaderItemsFromApi(menuMasterItems, hrefLookup);
+}
+
 export const DEFAULT_CUSTOMER_OPTIONS = ["Customers"];
 export const DEFAULT_DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
   day: "2-digit",
