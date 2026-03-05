@@ -39,6 +39,7 @@ const GRID_COLUMNS_PAGE = 1;
 const GRID_COLUMNS_LIMIT = 20;
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
+const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
 const TABLE_MAX_HEIGHT = "calc(100dvh - 250px)";
 const FILE_CONSTRAINTS = {
   MAX_UPLOAD_IMAGE_BYTES: 5 * 1024 * 1024,
@@ -488,22 +489,42 @@ function extractGridDetailsRows(payload: unknown): Record<string, unknown>[] {
   }
   return [];
 }
-function resolveItemGroupGridId(payload: unknown): number | null {
+type ResolvedGridDetails = {
+  gridId: number | null;
+  gridName: string | null;
+};
+
+function resolveItemGroupGridDetails(payload: unknown): ResolvedGridDetails {
   const rows = extractGridDetailsRows(payload);
   for (const row of rows) {
     const gridId = resolveNumericId(getFirstDefinedValue(row, GRID_DETAIL_ID_KEYS));
     const gridSql = String(getFirstDefinedValue(row, GRID_DETAIL_SQL_KEYS) ?? "").toLowerCase();
     if (gridId !== null && gridSql.includes(ITEM_GROUP_TABLE_NAME)) {
-      return gridId;
+      const gridName = toDisplayValue(
+        getFirstDefinedValue(row, GRID_DETAIL_NAME_KEYS),
+      );
+      return {
+        gridId,
+        gridName: gridName || null,
+      };
     }
   }
   for (const row of rows) {
     const gridId = resolveNumericId(getFirstDefinedValue(row, GRID_DETAIL_ID_KEYS));
     if (gridId !== null) {
-      return gridId;
+      const gridName = toDisplayValue(
+        getFirstDefinedValue(row, GRID_DETAIL_NAME_KEYS),
+      );
+      return {
+        gridId,
+        gridName: gridName || null,
+      };
     }
   }
-  return null;
+  return {
+    gridId: null,
+    gridName: null,
+  };
 }
 function toDisplayValue(value: unknown): string {
   if (value === undefined || value === null) {
@@ -921,6 +942,7 @@ export default function ItemGroupMasterPage() {
   const dispatch = useAppDispatch();
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const [itemGroupGridId, setItemGroupGridId] = useState<number | null>(null);
+  const [itemGroupGridName, setItemGroupGridName] = useState<string | null>(null);
   const selectedGridId = itemGroupGridId ?? -1;
 
   const gridColumns = useAppSelector((state) =>
@@ -945,10 +967,13 @@ export default function ItemGroupMasterPage() {
         if (!isMounted) {
           return;
         }
-        setItemGroupGridId(resolveItemGroupGridId(payload));
+        const resolvedGrid = resolveItemGroupGridDetails(payload);
+        setItemGroupGridId(resolvedGrid.gridId);
+        setItemGroupGridName(resolvedGrid.gridName);
       } catch {
         if (isMounted) {
           setItemGroupGridId(null);
+          setItemGroupGridName(null);
         }
       }
     };
@@ -959,6 +984,11 @@ export default function ItemGroupMasterPage() {
       isMounted = false;
     };
   }, [getGridDetails]);
+
+  const effectiveTitle = useMemo(() => {
+    const normalized = itemGroupGridName?.trim();
+    return normalized || "Item Group";
+  }, [itemGroupGridName]);
 
   useEffect(() => {
     if (
@@ -1317,10 +1347,10 @@ export default function ItemGroupMasterPage() {
     () => [
       {
         key: "item-group-view",
-        cardTitle: "View Item Group",
+        cardTitle: `View ${effectiveTitle}`,
         cardDescription: "View selected item group details.",
         cardButtonLabel: "View",
-        modalTitle: "Item Group Details",
+        modalTitle: `${effectiveTitle} Details`,
         modalDescription: "Read-only view of selected item group data.",
         submitLabel: "Close",
         accent: "indigo",
@@ -1328,10 +1358,10 @@ export default function ItemGroupMasterPage() {
       },
       {
         key: "item-group-create",
-        cardTitle: "Create Item Group",
+        cardTitle: `Create ${effectiveTitle}`,
         cardDescription: "Create a new group for billing workflows.",
         cardButtonLabel: "Create",
-        modalTitle: "New Item Group",
+        modalTitle: `New ${effectiveTitle}`,
         modalDescription: "Configure group details and hierarchy.",
         submitLabel: createLoading ? "Saving..." : "Save",
         accent: "blue",
@@ -1339,17 +1369,17 @@ export default function ItemGroupMasterPage() {
       },
       {
         key: "item-group-update",
-        cardTitle: "Update Item Group",
+        cardTitle: `Update ${effectiveTitle}`,
         cardDescription: "Update an existing group.",
         cardButtonLabel: "Update",
-        modalTitle: "Edit Item Group",
+        modalTitle: `Edit ${effectiveTitle}`,
         modalDescription: "Update selected item group details.",
         submitLabel: createLoading ? "Updating..." : "Update",
         accent: "emerald",
         fields: itemGroupFields,
       },
     ],
-    [createLoading, itemGroupFields, itemGroupViewFields],
+    [createLoading, effectiveTitle, itemGroupFields, itemGroupViewFields],
   );
   const columns = useMemo<ReusableTableColumn<ItemGroupTableRow>[]>(
     () => buildColumnsFromGridColumns(gridColumns),
@@ -1455,14 +1485,14 @@ export default function ItemGroupMasterPage() {
                 columns={columns}
                 rows={rows}
                 rowKey="__rowId"
-                title="Item Group List"
+                title={`${effectiveTitle} List`}
                 minWidth="980px"
                 wrapperClassName={styles.tableWrapper}
                 tableClassName={styles.listTable}
                 activeRowKey={selectedRowId}
                 onRowClick={(row) => setSelectedRowId(row.__rowId)}
                 onCreate={openCreateModal}
-                createLabel="Add Item Group"
+                createLabel={`Add ${effectiveTitle}`}
                 onView={handleRowView}
                 onUpdate={handleRowUpdate}
                 onDelete={handleRowDelete}
@@ -1499,7 +1529,7 @@ export default function ItemGroupMasterPage() {
         </div>
       </div>
       <ERPDynamicModalForm
-        title="Item Group Form"
+        title={`${effectiveTitle} Form`}
         description="Create and update item groups."
         variants={modalVariants}
         showDefaultCards={false}
@@ -1514,7 +1544,7 @@ export default function ItemGroupMasterPage() {
       <DeleteConfirmModal
         isOpen={pendingDeleteRow !== null}
         itemName={pendingDeleteLabel}
-        title="Delete Item Group?"
+        title={`Delete ${effectiveTitle}?`}
         confirmLabel="Delete"
         cancelLabel="Cancel"
         loading={deleteLoading}

@@ -768,6 +768,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
                   <FiSearch className={styles.searchIcon} aria-hidden="true" />
                   <input
                     type="text"
+                    autoComplete="off"
                     value={effectiveSearchQuery}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder={searchPlaceholder}

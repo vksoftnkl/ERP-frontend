@@ -49,7 +49,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
  {
   label: "3 Inventory",
   children: [
-    { label: "Item Master", href: "/item-master" },
+    { label: "Item Master", href: "/master/item-master" },
     { label: "Change Selling" },
     { label: "Change Selling (Purchase)" },
     { label: "Item Group wise Discount" },
@@ -78,7 +78,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
     label: "5 Accounts",
     children: [
       {
-        label: " Ledger Groups Master",
+        label: " Ledger Group Master",
         href: "/master/account-ledger-groups-master",
       },
       { label: "Ledger Master", href: "/master/account-ledger-master" },

@@ -229,6 +229,7 @@ function TabStrip({
       <input
         className={styles.billInput}
         type="text"
+        autoComplete="off"
         placeholder={billPlaceholder}
         aria-label={ARIA_LABELS.BILL_INPUT}
         value={billNumber}

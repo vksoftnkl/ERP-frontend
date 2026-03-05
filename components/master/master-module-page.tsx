@@ -10,6 +10,7 @@ type MasterModulePageProps = {
 
 const MASTER_MENU_LINKS: Array<{ label: string; href: string }> = [
   { label: "Customer Master", href: "/master/customer" },
+  { label: "Item Master", href: "/master/item-master" },
   { label: "Item Group Master", href: "/master/item-group-master" },
   { label: "Item Category Master", href: "/master/item-category-master" },
   { label: "Item Brand Master", href: "/master/item-brand-master" },

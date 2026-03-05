@@ -40,6 +40,7 @@ const GRID_COLUMNS_PAGE = 1;
 const GRID_COLUMNS_LIMIT = 20;
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
+const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
 
 const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
@@ -490,7 +491,12 @@ function resolveNumericId(value: unknown): number | null {
   return null;
 }
 
-function resolveItemBrandGridId(payload: unknown): number | null {
+type ResolvedGridDetails = {
+  gridId: number | null;
+  gridName: string | null;
+};
+
+function resolveItemBrandGridDetails(payload: unknown): ResolvedGridDetails {
   const rows = extractRows(payload);
 
   for (const row of rows) {
@@ -506,7 +512,13 @@ function resolveItemBrandGridId(payload: unknown): number | null {
 
     const gridSql = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_SQL_KEYS)).toLowerCase();
     if (!gridSql || gridSql.includes(ITEM_BRAND_TABLE_NAME)) {
-      return gridId;
+      const gridName = toDisplayValue(
+        getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS),
+      );
+      return {
+        gridId,
+        gridName: gridName || null,
+      };
     }
   }
 
@@ -518,11 +530,20 @@ function resolveItemBrandGridId(payload: unknown): number | null {
     const source = row as Record<string, unknown>;
     const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
     if (gridId !== null) {
-      return gridId;
+      const gridName = toDisplayValue(
+        getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS),
+      );
+      return {
+        gridId,
+        gridName: gridName || null,
+      };
     }
   }
 
-  return null;
+  return {
+    gridId: null,
+    gridName: null,
+  };
 }
 
 function buildColumnsFromGridColumns(
@@ -892,6 +913,7 @@ export default function ItemBrandMasterPage() {
     rows,
   } = useItemBrandData();
   const [itemBrandGridId, setItemBrandGridId] = useState<number | null>(null);
+  const [itemBrandGridName, setItemBrandGridName] = useState<string | null>(null);
   const selectedGridId = itemBrandGridId ?? -1;
   const gridColumns = useAppSelector((state) => selectGridColumns(state, selectedGridId));
   const gridColumnsLoading = useAppSelector((state) =>
@@ -921,10 +943,13 @@ export default function ItemBrandMasterPage() {
         if (!mounted) {
           return;
         }
-        setItemBrandGridId(resolveItemBrandGridId(payload));
+        const resolvedGrid = resolveItemBrandGridDetails(payload);
+        setItemBrandGridId(resolvedGrid.gridId);
+        setItemBrandGridName(resolvedGrid.gridName);
       } catch {
         if (mounted) {
           setItemBrandGridId(null);
+          setItemBrandGridName(null);
         }
       }
     })();
@@ -933,6 +958,11 @@ export default function ItemBrandMasterPage() {
       mounted = false;
     };
   }, [getGridDetails]);
+
+  const effectiveTitle = useMemo(() => {
+    const normalized = itemBrandGridName?.trim();
+    return normalized || "Item Brand";
+  }, [itemBrandGridName]);
 
   useEffect(() => {
     if (
@@ -1214,10 +1244,10 @@ export default function ItemBrandMasterPage() {
     () => [
       {
         key: "item-brand-view",
-        cardTitle: "View Item Brand",
+        cardTitle: `View ${effectiveTitle}`,
         cardDescription: "View selected item brand details.",
         cardButtonLabel: "View",
-        modalTitle: "Item Brand Details",
+        modalTitle: `${effectiveTitle} Details`,
         modalDescription: "Read-only view of selected item brand data.",
         submitLabel: "Close",
         accent: "indigo",
@@ -1225,10 +1255,10 @@ export default function ItemBrandMasterPage() {
       },
       {
         key: "item-brand-create",
-        cardTitle: "Create Item Brand",
+        cardTitle: `Create ${effectiveTitle}`,
         cardDescription: "Create a new brand for items.",
         cardButtonLabel: "Create",
-        modalTitle: "New Item Brand",
+        modalTitle: `New ${effectiveTitle}`,
         modalDescription: "Configure item brand details.",
         submitLabel: saveLoading ? "Saving..." : "Save",
         accent: "blue",
@@ -1236,17 +1266,17 @@ export default function ItemBrandMasterPage() {
       },
       {
         key: "item-brand-update",
-        cardTitle: "Update Item Brand",
+        cardTitle: `Update ${effectiveTitle}`,
         cardDescription: "Update an existing brand.",
         cardButtonLabel: "Update",
-        modalTitle: "Edit Item Brand",
+        modalTitle: `Edit ${effectiveTitle}`,
         modalDescription: "Update selected item brand details.",
         submitLabel: saveLoading ? "Updating..." : "Update",
         accent: "emerald",
         fields: itemBrandFields,
       },
     ],
-    [itemBrandFields, itemBrandViewFields, saveLoading],
+    [effectiveTitle, itemBrandFields, itemBrandViewFields, saveLoading],
   );
   const handleRowUpdate = useCallback(
     (row: ItemBrandTableRow) => {
@@ -1342,14 +1372,14 @@ export default function ItemBrandMasterPage() {
                 columns={columns}
                 rows={rows}
                 rowKey="__rowId"
-                title="Item Brand List"
+                title={`${effectiveTitle} List`}
                 minWidth="980px"
                 wrapperClassName={styles.tableWrapper}
                 tableClassName={styles.listTable}
                 activeRowKey={selectedRowId}
                 onRowClick={(row) => setSelectedRowId(row.__rowId)}
                 onCreate={openCreateModal}
-                createLabel="Add Item Brand"
+                createLabel={`Add ${effectiveTitle}`}
                 onView={handleRowView}
                 onUpdate={handleRowUpdate}
                 onDelete={handleRowDelete}
@@ -1385,7 +1415,7 @@ export default function ItemBrandMasterPage() {
         </div>
       </div>
       <ERPDynamicModalForm
-        title="Item Brand Form"
+        title={`${effectiveTitle} Form`}
         description="Create and update item brands."
         variants={modalVariants}
         showDefaultCards={false}
@@ -1400,7 +1430,7 @@ export default function ItemBrandMasterPage() {
       <DeleteConfirmModal
         isOpen={pendingDeleteRow !== null}
         itemName={pendingDeleteLabel}
-        title="Delete Item Brand?"
+        title={`Delete ${effectiveTitle}?`}
         confirmLabel="Delete"
         cancelLabel="Cancel"
         loading={deleteLoading}

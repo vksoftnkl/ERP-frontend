@@ -36,6 +36,7 @@ const GRID_COLUMNS_PAGE = 1;
 const GRID_COLUMNS_LIMIT = 20;
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
+const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
 
 const DEFAULT_ARRAY_KEYS = [
   "data",
@@ -217,6 +218,7 @@ export type CrudMasterPageProps = {
   createInitialValues?: Record<string, string>;
   modalPanelStyle?: CSSProperties;
   modalFormGridColumns?: number;
+  modalFormDenseGrid?: boolean;
   modalStackLabels?: boolean;
   gridTableName?: string;
   gridTableNameAliases?: readonly string[];
@@ -630,10 +632,15 @@ function resolveNumericId(value: unknown): number | null {
   return null;
 }
 
-function resolveGridIdByTableName(
+type ResolvedGridDetails = {
+  gridId: number | null;
+  gridName: string | null;
+};
+
+function resolveGridDetailsByTableName(
   payload: unknown,
   tableNames: readonly string[],
-): number | null {
+): ResolvedGridDetails {
   const rows = extractRows(payload, DEFAULT_ARRAY_KEYS);
 
   for (const row of rows) {
@@ -649,7 +656,13 @@ function resolveGridIdByTableName(
 
     const gridSql = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_SQL_KEYS)).toLowerCase();
     if (!gridSql || tableNames.some((tableName) => gridSql.includes(tableName))) {
-      return gridId;
+      const gridName = toDisplayValue(
+        getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS),
+      );
+      return {
+        gridId,
+        gridName: gridName || null,
+      };
     }
   }
 
@@ -661,11 +674,20 @@ function resolveGridIdByTableName(
     const source = row as Record<string, unknown>;
     const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
     if (gridId !== null) {
-      return gridId;
+      const gridName = toDisplayValue(
+        getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS),
+      );
+      return {
+        gridId,
+        gridName: gridName || null,
+      };
     }
   }
 
-  return null;
+  return {
+    gridId: null,
+    gridName: null,
+  };
 }
 
 function buildMasterFallbackColumns(
@@ -907,6 +929,7 @@ export default function CrudMasterPage({
   createInitialValues,
   modalPanelStyle,
   modalFormGridColumns,
+  modalFormDenseGrid,
   modalStackLabels,
   gridTableName,
   gridTableNameAliases,
@@ -950,6 +973,7 @@ export default function CrudMasterPage({
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [totalEntries, setTotalEntries] = useState(0);
   const [gridId, setGridId] = useState<number | null>(null);
+  const [gridDisplayName, setGridDisplayName] = useState<string | null>(null);
   const selectedGridId = gridId ?? -1;
   const gridColumns = useAppSelector((state) =>
     selectGridColumns(state, selectedGridId),
@@ -983,6 +1007,7 @@ export default function CrudMasterPage({
   useEffect(() => {
     if (normalizedGridTableNames.length === 0) {
       setGridId(null);
+      setGridDisplayName(null);
       return;
     }
 
@@ -1001,10 +1026,16 @@ export default function CrudMasterPage({
           return;
         }
 
-        setGridId(resolveGridIdByTableName(payload, normalizedGridTableNames));
+        const resolvedGrid = resolveGridDetailsByTableName(
+          payload,
+          normalizedGridTableNames,
+        );
+        setGridId(resolvedGrid.gridId);
+        setGridDisplayName(resolvedGrid.gridName);
       } catch {
         if (mounted) {
           setGridId(null);
+          setGridDisplayName(null);
         }
       }
     })();
@@ -1013,6 +1044,11 @@ export default function CrudMasterPage({
       mounted = false;
     };
   }, [getGridDetails, normalizedGridTableNames]);
+
+  const effectiveTitle = useMemo(() => {
+    const normalized = gridDisplayName?.trim();
+    return normalized || title;
+  }, [gridDisplayName, title]);
 
   useEffect(() => {
     if (
@@ -1093,7 +1129,7 @@ export default function CrudMasterPage({
   const fallbackColumns = useMemo(
     () =>
       buildMasterFallbackColumns(
-        title,
+        effectiveTitle,
         codeColumnHeader,
         nameColumnHeader,
         tableColumnHeaders,
@@ -1101,10 +1137,10 @@ export default function CrudMasterPage({
       ),
     [
       codeColumnHeader,
+      effectiveTitle,
       nameColumnHeader,
       tableColumnHeaders,
       tableColumnLayout,
-      title,
     ],
   );
 
@@ -1467,10 +1503,10 @@ export default function CrudMasterPage({
     () => [
       {
         key: "master-view",
-        cardTitle: `View ${title}`,
+        cardTitle: `View ${effectiveTitle}`,
         cardDescription: `View selected ${entityLabel} details.`,
         cardButtonLabel: "View",
-        modalTitle: `${title} Details`,
+        modalTitle: `${effectiveTitle} Details`,
         modalDescription: `Read-only view of selected ${entityLabel} data.`,
         submitLabel: "Close",
         accent: "indigo",
@@ -1478,10 +1514,10 @@ export default function CrudMasterPage({
       },
       {
         key: "master-create",
-        cardTitle: `Create ${title}`,
+        cardTitle: `Create ${effectiveTitle}`,
         cardDescription: `Create a new ${entityLabel}.`,
         cardButtonLabel: "Create",
-        modalTitle: `New ${title}`,
+        modalTitle: `New ${effectiveTitle}`,
         modalDescription: `Configure ${entityLabel} details.`,
         submitLabel: saveLoading ? "Saving..." : "Save",
         accent: "blue",
@@ -1489,17 +1525,17 @@ export default function CrudMasterPage({
       },
       {
         key: "master-update",
-        cardTitle: `Update ${title}`,
+        cardTitle: `Update ${effectiveTitle}`,
         cardDescription: `Update an existing ${entityLabel}.`,
         cardButtonLabel: "Update",
-        modalTitle: `Edit ${title}`,
+        modalTitle: `Edit ${effectiveTitle}`,
         modalDescription: `Update selected ${entityLabel} details.`,
         submitLabel: saveLoading ? "Updating..." : "Update",
         accent: "emerald",
         fields,
       },
     ],
-    [entityLabel, fields, saveLoading, title, viewFields],
+    [effectiveTitle, entityLabel, fields, saveLoading, viewFields],
   );
 
   const handleRowUpdate = useCallback(
@@ -1598,7 +1634,11 @@ export default function CrudMasterPage({
                 columns={columns}
                 rows={rows}
                 rowKey="__rowId"
-                title={listTitle ?? `${title} List`}
+                title={
+                  gridDisplayName
+                    ? `${gridDisplayName} List`
+                    : listTitle ?? `${title} List`
+                }
                 minWidth="980px"
                 wrapperClassName={styles.tableWrapper}
                 tableClassName={styles.listTable}
@@ -1643,7 +1683,11 @@ export default function CrudMasterPage({
         </div>
       </div>
       <ERPDynamicModalForm
-        title={formTitle ?? `${title} Form`}
+        title={
+          gridDisplayName
+            ? `${gridDisplayName} Form`
+            : formTitle ?? `${title} Form`
+        }
         description={
           formDescription ?? `Create and update ${entityLabelPlural}.`
         }
@@ -1653,6 +1697,7 @@ export default function CrudMasterPage({
         submitError={saveError}
         panelStyle={modalPanelStyle}
         formGridColumns={modalFormGridColumns}
+        denseGrid={modalFormDenseGrid}
         stackLabels={modalStackLabels}
         onControllerReady={(controller) => {
           modalControllerRef.current = controller;
@@ -1663,7 +1708,7 @@ export default function CrudMasterPage({
       <DeleteConfirmModal
         isOpen={pendingDeleteRow !== null}
         itemName={pendingDeleteLabel}
-        title={`Delete ${title}?`}
+        title={`Delete ${effectiveTitle}?`}
         confirmLabel="Delete"
         cancelLabel="Cancel"
         loading={deleteLoading}

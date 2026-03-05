@@ -2,6 +2,7 @@
 import {
   Fragment,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -121,6 +122,7 @@ const LEDGER_GROUP_NAME_KEYS = [
 ] as const;
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
+const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
 const LOOKUP_ARRAY_KEYS = ["items", "data", "results", "rows", "list"] as const;
 const PAGINATION_CONTAINER_KEYS = [
   "meta",
@@ -1169,7 +1171,12 @@ function resolveNumericId(value: unknown): number | null {
 
   return null;
 }
-function resolveAccountLedgerGridId(payload: unknown): number | null {
+type ResolvedGridDetails = {
+  gridId: number | null;
+  gridName: string | null;
+};
+
+function resolveAccountLedgerGridDetails(payload: unknown): ResolvedGridDetails {
   const rows = extractRows(payload, LOOKUP_ARRAY_KEYS);
 
   for (const row of rows) {
@@ -1188,7 +1195,13 @@ function resolveAccountLedgerGridId(payload: unknown): number | null {
       !gridSql ||
       ACCOUNT_LEDGER_TABLE_NAME_ALIASES.some((tableName) => gridSql.includes(tableName))
     ) {
-      return gridId;
+      const gridName = toDisplayValue(
+        getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS),
+      );
+      return {
+        gridId,
+        gridName: gridName || null,
+      };
     }
   }
 
@@ -1200,11 +1213,20 @@ function resolveAccountLedgerGridId(payload: unknown): number | null {
     const source = row as Record<string, unknown>;
     const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
     if (gridId !== null) {
-      return gridId;
+      const gridName = toDisplayValue(
+        getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS),
+      );
+      return {
+        gridId,
+        gridName: gridName || null,
+      };
     }
   }
 
-  return null;
+  return {
+    gridId: null,
+    gridName: null,
+  };
 }
 function buildColumnsFromGridColumns(
   gridColumns: GridColumnConfig[],
@@ -1477,6 +1499,7 @@ export default function AccountLedgerMasterPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [totalEntries, setTotalEntries] = useState(0);
   const [accountLedgerGridId, setAccountLedgerGridId] = useState<number | null>(null);
+  const [accountLedgerGridName, setAccountLedgerGridName] = useState<string | null>(null);
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | number | null>(null);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -1487,6 +1510,9 @@ export default function AccountLedgerMasterPage() {
   const [modalError, setModalError] = useState<string | null>(null);
   const [openSearchField, setOpenSearchField] = useState<string | null>(null);
   const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
+  const [searchActiveOptionIndex, setSearchActiveOptionIndex] = useState<
+    Record<string, number>
+  >({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [pendingDeleteRow, setPendingDeleteRow] = useState<LedgerTableRow | null>(null);
   const selectedGridId = accountLedgerGridId ?? -1;
@@ -1510,10 +1536,13 @@ export default function AccountLedgerMasterPage() {
         if (!mounted) {
           return;
         }
-        setAccountLedgerGridId(resolveAccountLedgerGridId(payload));
+        const resolvedGrid = resolveAccountLedgerGridDetails(payload);
+        setAccountLedgerGridId(resolvedGrid.gridId);
+        setAccountLedgerGridName(resolvedGrid.gridName);
       } catch {
         if (mounted) {
           setAccountLedgerGridId(null);
+          setAccountLedgerGridName(null);
         }
       }
     })();
@@ -1522,6 +1551,11 @@ export default function AccountLedgerMasterPage() {
       mounted = false;
     };
   }, [getGridDetails]);
+
+  const effectiveTitle = useMemo(() => {
+    const normalized = accountLedgerGridName?.trim();
+    return normalized || "Account Ledger";
+  }, [accountLedgerGridName]);
 
   useEffect(() => {
     if (
@@ -1545,16 +1579,33 @@ export default function AccountLedgerMasterPage() {
     if (openSearchField === null) {
       return;
     }
+    const activeField = openSearchField;
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest('[data-ledger-search-select-root="true"]')) {
         return;
       }
       setOpenSearchField(null);
+      setSearchActiveOptionIndex((current) => {
+        if (!(activeField in current)) {
+          return current;
+        }
+        const nextState = { ...current };
+        delete nextState[activeField];
+        return nextState;
+      });
     };
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpenSearchField(null);
+        setSearchActiveOptionIndex((current) => {
+          if (!(activeField in current)) {
+            return current;
+          }
+          const nextState = { ...current };
+          delete nextState[activeField];
+          return nextState;
+        });
       }
     };
     window.addEventListener("mousedown", handlePointerDown);
@@ -1733,6 +1784,7 @@ export default function AccountLedgerMasterPage() {
     setModalError(null);
     setOpenSearchField(null);
     setSearchQueries({});
+    setSearchActiveOptionIndex({});
     setExpandedSections(buildSectionExpandedState(ledgerFormSections));
     setModalMode("create");
     setEditingItemId(null);
@@ -1746,6 +1798,7 @@ export default function AccountLedgerMasterPage() {
       setModalError(null);
       setOpenSearchField(null);
       setSearchQueries({});
+      setSearchActiveOptionIndex({});
       setExpandedSections(buildSectionExpandedState(ledgerFormSections));
       setModalMode(mode);
       setFormValues(createInitialLedgerFormValues());
@@ -1782,6 +1835,7 @@ export default function AccountLedgerMasterPage() {
     setEditingItemId(null);
     setOpenSearchField(null);
     setSearchQueries({});
+    setSearchActiveOptionIndex({});
     setExpandedSections({});
   }, [saveLoading]);
   const handleFieldChange = useCallback(
@@ -1792,6 +1846,150 @@ export default function AccountLedgerMasterPage() {
       }));
     },
     [],
+  );
+  const handleSearchableOptionSelect = useCallback(
+    (fieldName: LedgerFormFieldName, option: ERPDynamicSelectOption) => {
+      if (fieldName === "ledStateName") {
+        const nextStateName = option.value;
+        const nextStateCode = nextStateName
+          ? stateCodeByName[nextStateName] ?? ""
+          : "";
+        setFormValues((current) => ({
+          ...current,
+          ledStateName: nextStateName,
+          ledStateCode: nextStateCode,
+        }));
+      } else {
+        handleFieldChange(fieldName, option.value);
+      }
+
+      setSearchQueries((current) => ({
+        ...current,
+        [fieldName]: option.label,
+      }));
+      setOpenSearchField(null);
+      setSearchActiveOptionIndex((current) => {
+        if (!(fieldName in current)) {
+          return current;
+        }
+        const nextState = { ...current };
+        delete nextState[fieldName];
+        return nextState;
+      });
+    },
+    [handleFieldChange, stateCodeByName],
+  );
+  const handleSearchableFieldKeyDown = useCallback(
+    (
+      fieldName: LedgerFormFieldName,
+      event: ReactKeyboardEvent<HTMLInputElement>,
+      filteredOptions: ERPDynamicSelectOption[],
+      fieldValue: string,
+    ) => {
+      const isSearchOpen = openSearchField === fieldName;
+      const optionCount = filteredOptions.length;
+      const currentIndex =
+        searchActiveOptionIndex[fieldName] !== undefined
+          ? searchActiveOptionIndex[fieldName]
+          : -1;
+
+      const clearActiveIndex = () => {
+        setSearchActiveOptionIndex((current) => {
+          if (!(fieldName in current)) {
+            return current;
+          }
+          const nextState = { ...current };
+          delete nextState[fieldName];
+          return nextState;
+        });
+      };
+
+      if (
+        event.key === "ArrowDown" ||
+        event.key === "ArrowUp" ||
+        event.key === "Home" ||
+        event.key === "End"
+      ) {
+        event.preventDefault();
+        if (!isSearchOpen) {
+          setOpenSearchField(fieldName);
+        }
+        if (optionCount === 0) {
+          clearActiveIndex();
+          return;
+        }
+
+        const selectedIndex = filteredOptions.findIndex(
+          (option) => option.value === fieldValue,
+        );
+        const baseIndex =
+          currentIndex >= 0 && currentIndex < optionCount
+            ? currentIndex
+            : selectedIndex;
+        let nextIndex = baseIndex;
+        if (event.key === "ArrowDown") {
+          nextIndex = baseIndex + 1;
+        } else if (event.key === "ArrowUp") {
+          nextIndex = baseIndex - 1;
+        } else if (event.key === "Home") {
+          nextIndex = 0;
+        } else if (event.key === "End") {
+          nextIndex = optionCount - 1;
+        }
+
+        if (nextIndex < 0) {
+          nextIndex = optionCount - 1;
+        } else if (nextIndex >= optionCount) {
+          nextIndex = 0;
+        }
+
+        setSearchActiveOptionIndex((current) => ({
+          ...current,
+          [fieldName]: nextIndex,
+        }));
+        return;
+      }
+
+      if (event.key === "Enter") {
+        if (!isSearchOpen) {
+          return;
+        }
+        event.preventDefault();
+        if (optionCount === 0) {
+          return;
+        }
+        const selectedIndex = filteredOptions.findIndex(
+          (option) => option.value === fieldValue,
+        );
+        const resolvedIndex =
+          currentIndex >= 0 && currentIndex < optionCount
+            ? currentIndex
+            : selectedIndex >= 0
+              ? selectedIndex
+              : 0;
+        const nextOption = filteredOptions[resolvedIndex];
+        if (nextOption) {
+          handleSearchableOptionSelect(fieldName, nextOption);
+        }
+        return;
+      }
+
+      if (event.key === "Escape" && isSearchOpen) {
+        event.preventDefault();
+        setOpenSearchField(null);
+        clearActiveIndex();
+        return;
+      }
+
+      if (event.key === "Tab" && isSearchOpen) {
+        clearActiveIndex();
+      }
+    },
+    [
+      handleSearchableOptionSelect,
+      openSearchField,
+      searchActiveOptionIndex,
+    ],
   );
   const handleModalSubmit = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
@@ -1908,10 +2106,10 @@ export default function AccountLedgerMasterPage() {
   const effectiveModalError = modalError ?? saveError ?? detailsError;
   const modalTitle =
     modalMode === "create"
-      ? "New Account Ledger"
+      ? `New ${effectiveTitle}`
       : modalMode === "update"
-        ? "Edit Account Ledger"
-        : "Account Ledger Details";
+        ? `Edit ${effectiveTitle}`
+        : `${effectiveTitle} Details`;
 
   const modalStyle = {
     "--erp-modal-accent": "#2563eb",
@@ -1975,6 +2173,7 @@ export default function AccountLedgerMasterPage() {
                 id={field.name}
                 className={dynamicFormStyles.checkboxControl}
                 type="checkbox"
+                autoComplete="off"
                 checked={isChecked}
                 disabled={disabled}
                 style={{
@@ -2013,6 +2212,17 @@ export default function AccountLedgerMasterPage() {
             option.value.toLowerCase().includes(normalizedQuery)
           );
         });
+        const highlightedOptionIndexRaw = searchActiveOptionIndex[fieldName];
+        const highlightedOptionIndex =
+          highlightedOptionIndexRaw !== undefined &&
+          highlightedOptionIndexRaw >= 0 &&
+          highlightedOptionIndexRaw < filteredOptions.length
+            ? highlightedOptionIndexRaw
+            : -1;
+        const activeDescendantId =
+          isSearchOpen && highlightedOptionIndex >= 0
+            ? `${field.name}-search-option-${highlightedOptionIndex}`
+            : undefined;
         return (
           <div
             key={field.name}
@@ -2047,6 +2257,7 @@ export default function AccountLedgerMasterPage() {
                 aria-autocomplete="list"
                 aria-expanded={isSearchOpen}
                 aria-controls={`${field.name}-search-list`}
+                aria-activedescendant={activeDescendantId}
                 autoComplete="off"
                 onFocus={() => {
                   setOpenSearchField(fieldName);
@@ -2057,17 +2268,44 @@ export default function AccountLedgerMasterPage() {
                 }}
                 onBlur={() => {
                   window.setTimeout(() => {
-                    setOpenSearchField((current) =>
-                      current === fieldName ? null : current,
-                    );
+                    setOpenSearchField((current) => {
+                      if (current !== fieldName) {
+                        return current;
+                      }
+                      setSearchActiveOptionIndex((state) => {
+                        if (!(fieldName in state)) {
+                          return state;
+                        }
+                        const nextState = { ...state };
+                        delete nextState[fieldName];
+                        return nextState;
+                      });
+                      return null;
+                    });
                   }, 100);
                 }}
+                onKeyDown={(event) =>
+                  handleSearchableFieldKeyDown(
+                    fieldName,
+                    event,
+                    filteredOptions,
+                    fieldValue,
+                  )
+                }
                 onChange={(event) => {
                   setOpenSearchField(fieldName);
                   setSearchQueries((current) => ({
                     ...current,
                     [fieldName]: event.target.value,
                   }));
+                  setSearchActiveOptionIndex((current) => {
+                    if (!(fieldName in current)) {
+                      return current;
+                    }
+                    const nextState = { ...current };
+                    delete nextState[fieldName];
+                    return nextState;
+                  });
                 }}
               />
               <button
@@ -2079,9 +2317,20 @@ export default function AccountLedgerMasterPage() {
                 disabled={disabled}
                 onMouseDown={(event) => {
                   event.preventDefault();
-                  setOpenSearchField((current) =>
-                    current === fieldName ? null : fieldName,
-                  );
+                  setOpenSearchField((current) => {
+                    const nextField = current === fieldName ? null : fieldName;
+                    if (nextField === null) {
+                      setSearchActiveOptionIndex((state) => {
+                        if (!(fieldName in state)) {
+                          return state;
+                        }
+                        const nextState = { ...state };
+                        delete nextState[fieldName];
+                        return nextState;
+                      });
+                    }
+                    return nextField;
+                  });
                   setSearchQueries((current) => ({
                     ...current,
                     [fieldName]: isSearchOpen ? "" : typedQuery,
@@ -2111,11 +2360,13 @@ export default function AccountLedgerMasterPage() {
                   className={dynamicFormStyles.searchSelectList}
                   role="listbox"
                 >
-                  {filteredOptions.map((option) => (
+                  {filteredOptions.map((option, optionIndex) => (
                     <li
+                      id={`${field.name}-search-option-${optionIndex}`}
                       key={`${fieldName}-${option.value}`}
                       className={`${dynamicFormStyles.searchSelectOption} ${
-                        option.value === fieldValue
+                        option.value === fieldValue ||
+                        optionIndex === highlightedOptionIndex
                           ? dynamicFormStyles.searchSelectOptionActive
                           : ""
                       }`}
@@ -2123,25 +2374,14 @@ export default function AccountLedgerMasterPage() {
                       aria-selected={option.value === fieldValue}
                       onMouseDown={(event) => {
                         event.preventDefault();
-                        if (fieldName === "ledStateName") {
-                          const nextStateName = option.value;
-                          const nextStateCode = nextStateName
-                            ? stateCodeByName[nextStateName] ?? ""
-                            : "";
-                          setFormValues((current) => ({
-                            ...current,
-                            ledStateName: nextStateName,
-                            ledStateCode: nextStateCode,
-                          }));
-                        } else {
-                          handleFieldChange(fieldName, option.value);
-                        }
-                        setSearchQueries((current) => ({
-                          ...current,
-                          [fieldName]: option.label,
-                        }));
-                        setOpenSearchField(null);
+                        handleSearchableOptionSelect(fieldName, option);
                       }}
+                      onMouseEnter={() =>
+                        setSearchActiveOptionIndex((current) => ({
+                          ...current,
+                          [fieldName]: optionIndex,
+                        }))
+                      }
                     >
                       {option.label}
                     </li>
@@ -2173,6 +2413,7 @@ export default function AccountLedgerMasterPage() {
               id={field.name}
               className={`${dynamicFormStyles.control} ${dynamicFormStyles.textarea}`}
               style={controlInlineStyle}
+              autoComplete="off"
               value={fieldValue}
               required={field.required}
               disabled={disabled}
@@ -2240,6 +2481,7 @@ export default function AccountLedgerMasterPage() {
             className={dynamicFormStyles.control}
             style={controlInlineStyle}
             type={inputType}
+            autoComplete="off"
             value={fieldValue}
             required={field.required}
             disabled={disabled}
@@ -2256,11 +2498,13 @@ export default function AccountLedgerMasterPage() {
       expandedSections,
       formValues,
       handleFieldChange,
+      handleSearchableFieldKeyDown,
+      handleSearchableOptionSelect,
       isReadOnlyMode,
       openSearchField,
       saveLoading,
+      searchActiveOptionIndex,
       searchQueries,
-      stateCodeByName,
     ],
   );
   return (
@@ -2324,14 +2568,14 @@ export default function AccountLedgerMasterPage() {
                 columns={columns}
                 rows={rows}
                 rowKey="__rowId"
-                title="Account Ledger List"
+                title={`${effectiveTitle} List`}
                 minWidth="980px"
                 wrapperClassName={styles.tableWrapper}
                 tableClassName={styles.listTable}
                 activeRowKey={selectedRowId}
                 onRowClick={(row) => setSelectedRowId(row.__rowId)}
                 onCreate={openCreateModal}
-                createLabel="Add"
+                createLabel={`Add ${effectiveTitle}`}
                 onView={(row) => {
                   void openExistingModal(row, "view");
                 }}
@@ -2411,6 +2655,7 @@ export default function AccountLedgerMasterPage() {
                 id={modalFormId}
                 className={dynamicFormStyles.formGrid}
                 onSubmit={handleModalSubmit}
+                autoComplete="off"
                 style={{
                   gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                   rowGap: "0.75rem",
@@ -2435,6 +2680,7 @@ export default function AccountLedgerMasterPage() {
                             <input
                               id={toggleId}
                               type="checkbox"
+                              autoComplete="off"
                               className={dynamicFormStyles.sectionToggleInput}
                               checked={isExpanded}
                               disabled={saveLoading || detailsLoading}
@@ -2481,6 +2727,7 @@ export default function AccountLedgerMasterPage() {
                             <input
                               id={toggleId}
                               type="checkbox"
+                              autoComplete="off"
                               className={dynamicFormStyles.sectionToggleInput}
                               checked={isExpanded}
                               disabled={saveLoading || detailsLoading}
@@ -2549,7 +2796,7 @@ export default function AccountLedgerMasterPage() {
       <DeleteConfirmModal
         isOpen={pendingDeleteRow !== null}
         itemName={pendingDeleteLabel}
-        title="Delete Account Ledger?"
+        title={`Delete ${effectiveTitle}?`}
         confirmLabel="Delete"
         cancelLabel="Cancel"
         loading={deleteLoading}

@@ -2,6 +2,7 @@
 import {
   type ChangeEvent,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type InputHTMLAttributes,
   type ReactNode,
   type FormEvent,
@@ -85,6 +86,15 @@ export type ERPDynamicSelectOption = {
   label: string;
   value: string;
 };
+export type ERPDynamicSearchShortcutPayload = {
+  fieldName: string;
+  query: string;
+  value: string;
+  values: Record<string, string>;
+};
+export type ERPDynamicSearchShortcutHandler = (
+  payload: ERPDynamicSearchShortcutPayload,
+) => void | Promise<void>;
 export type ERPDynamicFieldValidation = {
   requiredMessage?: string;
   minLength?: number;
@@ -127,6 +137,10 @@ export type ERPDynamicModalField = {
   allowedMimeTypes?: string[];
   validation?: ERPDynamicFieldValidation;
   visibleWhen?: (values: Record<string, string>) => boolean;
+  // Places the field card in a specific modal grid column track.
+  gridColumnStart?: number;
+  onSearchCreateShortcut?: ERPDynamicSearchShortcutHandler;
+  onSearchEditShortcut?: ERPDynamicSearchShortcutHandler;
 };
 type AccentPreset = keyof typeof ACCENT_PRESETS;
 export type ERPDynamicModalVariant = {
@@ -176,6 +190,7 @@ export type ERPDynamicModalFormProps = {
   submitError?: string | null;
   panelStyle?: CSSProperties;
   formGridColumns?: number;
+  denseGrid?: boolean;
   stackLabels?: boolean;
   className?: string;
   cardGridClassName?: string;
@@ -239,12 +254,6 @@ function parseMultiSelectValue(value: string | undefined): string[] {
 function formatMultiSelectValue(values: string[]): string {
   return values.join(",");
 }
-function getMultiSelectOptionLabels(
-  field: ERPDynamicModalField,
-  values: string[],
-): string[] {
-  return values.map((value) => getSelectOptionLabel(field, value) || value);
-}
 function validateFieldValue(
   field: ERPDynamicModalField,
   values: Record<string, string>,
@@ -296,6 +305,12 @@ function validateFieldValue(
     return validation?.requiredMessage ?? `${field.label} is required.`;
   }
   if (isEmptyValue(rawValue)) {
+    if (validation?.custom) {
+      const customError = validation.custom(rawValue, values, field);
+      if (customError) {
+        return customError;
+      }
+    }
     return null;
   }
   if (
@@ -464,6 +479,7 @@ export function ERPDynamicModalForm({
   submitError,
   panelStyle,
   formGridColumns,
+  denseGrid = true,
   stackLabels = false,
   className,
   cardGridClassName,
@@ -479,7 +495,11 @@ export function ERPDynamicModalForm({
     {},
   );
   const [openSearchField, setOpenSearchField] = useState<string | null>(null);
+  const [searchActiveOptionIndex, setSearchActiveOptionIndex] = useState<
+    Record<string, number>
+  >({});
   const searchSelectRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const searchInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [searchDropdownPlacement, setSearchDropdownPlacement] = useState<
     "down" | "up"
   >("down");
@@ -510,6 +530,7 @@ export function ERPDynamicModalForm({
     setFileData({});
     setSearchQueries({});
     setOpenSearchField(null);
+    setSearchActiveOptionIndex({});
     setSearchDropdownPlacement("down");
     setSearchDropdownMaxHeight(SEARCH_SELECT_LIST_MAX_HEIGHT);
     onOpenChange?.(false, activeVariant?.key ?? null);
@@ -529,6 +550,7 @@ export function ERPDynamicModalForm({
       setFieldErrors({});
       setSearchQueries({});
       setOpenSearchField(null);
+      setSearchActiveOptionIndex({});
       setSearchDropdownPlacement("down");
       setSearchDropdownMaxHeight(SEARCH_SELECT_LIST_MAX_HEIGHT);
       setSectionExpandedByVariant((current) => ({
@@ -549,12 +571,24 @@ export function ERPDynamicModalForm({
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (openSearchField) {
+          setOpenSearchField(null);
+          setSearchActiveOptionIndex((current) => {
+            if (!(openSearchField in current)) {
+              return current;
+            }
+            const nextState = { ...current };
+            delete nextState[openSearchField];
+            return nextState;
+          });
+          return;
+        }
         closeModal();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [closeModal, isOpen]);
+  }, [closeModal, isOpen, openSearchField]);
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -677,6 +711,19 @@ export function ERPDynamicModalForm({
       }
       return current;
     });
+
+    setSearchActiveOptionIndex((current) => {
+      let changed = false;
+      const nextIndexes: Record<string, number> = {};
+      for (const [fieldName, optionIndex] of Object.entries(current)) {
+        if (visibleFieldNames.has(fieldName)) {
+          nextIndexes[fieldName] = optionIndex;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? nextIndexes : current;
+    });
   }, [activeVariant, visibleFields]);
 
   const handleChange = (
@@ -749,38 +796,22 @@ export function ERPDynamicModalForm({
   const handleSearchableSelectInput = useCallback(
     (field: ERPDynamicModalField, query: string) => {
       const fieldName = field.name;
-      const isMultipleSelect =
-        (field.type ?? "text") === "select" && field.multiple;
+      setOpenSearchField(fieldName);
       setSearchQueries((current) => ({
         ...current,
         [fieldName]: query,
       }));
-
-      setFormData((current) => {
-        const nextValues = isMultipleSelect
-          ? { ...current }
-          : {
-              ...current,
-              [fieldName]: "",
-            };
-
-        if (validateOnChange && activeVariant) {
-          const nextError = validateFieldValue(field, nextValues, fileData);
-          setFieldErrors((currentErrors) => {
-            const nextErrors = { ...currentErrors };
-            if (nextError) {
-              nextErrors[fieldName] = nextError;
-            } else {
-              delete nextErrors[fieldName];
-            }
-            return nextErrors;
-          });
+      setSearchActiveOptionIndex((current) => {
+        if (!(fieldName in current)) {
+          return current;
         }
-
-        return nextValues;
+        const nextState = { ...current };
+        delete nextState[fieldName];
+        return nextState;
       });
+
     },
-    [activeVariant, fileData, validateOnChange],
+    [],
   );
 
   const handleSearchableSelectChoose = useCallback(
@@ -835,9 +866,181 @@ export function ERPDynamicModalForm({
         delete nextState[fieldName];
         return nextState;
       });
+      setSearchActiveOptionIndex((current) => {
+        if (!(fieldName in current)) {
+          return current;
+        }
+        const nextState = { ...current };
+        delete nextState[fieldName];
+        return nextState;
+      });
       setOpenSearchField(isMultipleSelect ? fieldName : null);
     },
     [activeVariant, fileData, validateOnChange],
+  );
+
+  const handleSearchableSelectKeyDown = useCallback(
+    (
+      field: ERPDynamicModalField,
+      event: ReactKeyboardEvent<HTMLElement>,
+      filteredOptions: ERPDynamicSelectOption[],
+      fieldValue: string,
+    ) => {
+      const fieldName = field.name;
+      const normalizedShortcutKey = event.key.trim().toLowerCase();
+      const searchQuery = (searchQueries[fieldName] ?? "").trim();
+      const shortcutPayload: ERPDynamicSearchShortcutPayload = {
+        fieldName,
+        query: searchQuery,
+        value: fieldValue,
+        values: { ...formData },
+      };
+      if (
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        normalizedShortcutKey === "c" &&
+        field.onSearchCreateShortcut
+      ) {
+        event.preventDefault();
+        void field.onSearchCreateShortcut(shortcutPayload);
+        return;
+      }
+      if (
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        normalizedShortcutKey === "a" &&
+        field.onSearchEditShortcut
+      ) {
+        event.preventDefault();
+        void field.onSearchEditShortcut(shortcutPayload);
+        return;
+      }
+      const isMultipleSelect =
+        (field.type ?? "text") === "select" && field.multiple;
+      const isSearchOpen = openSearchField === fieldName;
+      const optionCount = filteredOptions.length;
+      const currentIndex =
+        searchActiveOptionIndex[fieldName] !== undefined
+          ? searchActiveOptionIndex[fieldName]
+          : -1;
+
+      const clearActiveIndex = () => {
+        setSearchActiveOptionIndex((current) => {
+          if (!(fieldName in current)) {
+            return current;
+          }
+          const nextState = { ...current };
+          delete nextState[fieldName];
+          return nextState;
+        });
+      };
+
+      if (
+        event.key === "ArrowDown" ||
+        event.key === "ArrowUp" ||
+        event.key === "Home" ||
+        event.key === "End"
+      ) {
+        event.preventDefault();
+
+        if (!isSearchOpen) {
+          setOpenSearchField(fieldName);
+        }
+        if (optionCount === 0) {
+          clearActiveIndex();
+          return;
+        }
+
+        const selectedIndex = isMultipleSelect
+          ? -1
+          : filteredOptions.findIndex((option) => option.value === fieldValue);
+        const baseIndex =
+          currentIndex >= 0 && currentIndex < optionCount
+            ? currentIndex
+            : selectedIndex;
+        let nextIndex = baseIndex;
+
+        if (event.key === "ArrowDown") {
+          nextIndex = baseIndex + 1;
+        } else if (event.key === "ArrowUp") {
+          nextIndex = baseIndex - 1;
+        } else if (event.key === "Home") {
+          nextIndex = 0;
+        } else if (event.key === "End") {
+          nextIndex = optionCount - 1;
+        }
+
+        if (nextIndex < 0) {
+          nextIndex = optionCount - 1;
+        } else if (nextIndex >= optionCount) {
+          nextIndex = 0;
+        }
+
+        setSearchActiveOptionIndex((current) => ({
+          ...current,
+          [fieldName]: nextIndex,
+        }));
+        return;
+      }
+
+      if (event.key === "Enter") {
+        if (!isSearchOpen) {
+          event.preventDefault();
+          setOpenSearchField(fieldName);
+          return;
+        }
+
+        event.preventDefault();
+        if (optionCount === 0) {
+          return;
+        }
+        const selectedIndex = isMultipleSelect
+          ? -1
+          : filteredOptions.findIndex((option) => option.value === fieldValue);
+        const resolvedIndex =
+          currentIndex >= 0 && currentIndex < optionCount
+            ? currentIndex
+            : selectedIndex >= 0
+              ? selectedIndex
+              : 0;
+        const nextOption = filteredOptions[resolvedIndex];
+        if (nextOption) {
+          handleSearchableSelectChoose(field, nextOption);
+        }
+        return;
+      }
+
+      if (event.key === " " && !isSearchOpen) {
+        const target = event.currentTarget;
+        if (target instanceof HTMLDivElement) {
+          event.preventDefault();
+          setOpenSearchField(fieldName);
+          return;
+        }
+      }
+
+      if (event.key === "Escape" && isSearchOpen) {
+        event.preventDefault();
+        setOpenSearchField(null);
+        clearActiveIndex();
+        return;
+      }
+
+      if (event.key === "Tab" && isSearchOpen) {
+        clearActiveIndex();
+      }
+    },
+    [
+      formData,
+      handleSearchableSelectChoose,
+      openSearchField,
+      searchActiveOptionIndex,
+      searchQueries,
+    ],
   );
 
   const updateSearchDropdownLayout = useCallback((fieldName: string) => {
@@ -900,6 +1103,51 @@ export function ERPDynamicModalForm({
       scrollContainer?.removeEventListener("scroll", runLayoutUpdate);
     };
   }, [openSearchField, updateSearchDropdownLayout]);
+  useEffect(() => {
+    if (!openSearchField) {
+      return;
+    }
+
+    const input = searchInputRefs.current[openSearchField];
+    if (!input) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      input.focus();
+      input.select();
+    });
+  }, [openSearchField]);
+  useEffect(() => {
+    if (!openSearchField) {
+      return;
+    }
+
+    const handleOutsidePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      const fieldContainer = searchSelectRefs.current[openSearchField];
+      if (fieldContainer?.contains(target)) {
+        return;
+      }
+      setOpenSearchField(null);
+      setSearchActiveOptionIndex((current) => {
+        if (!(openSearchField in current)) {
+          return current;
+        }
+        const nextState = { ...current };
+        delete nextState[openSearchField];
+        return nextState;
+      });
+    };
+
+    document.addEventListener("mousedown", handleOutsidePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsidePointerDown);
+    };
+  }, [openSearchField]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -961,14 +1209,22 @@ export function ERPDynamicModalForm({
   const formId = activeVariant
     ? `erp-modal-form-${activeVariant.key}`
     : "erp-modal-form";
-  const formGridStyle =
-    typeof formGridColumns === "number" &&
-    Number.isFinite(formGridColumns) &&
-    formGridColumns > 0
-      ? ({
-          "--erp-modal-form-columns": String(Math.max(1, Math.floor(formGridColumns))),
-        } as CSSProperties)
-      : undefined;
+  const formGridStyle = (() => {
+    const styles: CSSProperties = {};
+    if (
+      typeof formGridColumns === "number" &&
+      Number.isFinite(formGridColumns) &&
+      formGridColumns > 0
+    ) {
+      styles["--erp-modal-form-columns" as keyof CSSProperties] = String(
+        Math.max(1, Math.floor(formGridColumns)),
+      ) as never;
+    }
+    if (!denseGrid) {
+      styles.gridAutoFlow = "row";
+    }
+    return Object.keys(styles).length > 0 ? styles : undefined;
+  })();
   return (
     <section className={className}>
       {!hideSectionHeader ? (
@@ -1081,6 +1337,7 @@ export function ERPDynamicModalForm({
                 id={formId}
                 onSubmit={handleSubmit}
                 noValidate
+                autoComplete="off"
                 className={styles.formGrid}
                 style={formGridStyle}
               >
@@ -1109,6 +1366,7 @@ export function ERPDynamicModalForm({
                           <input
                             id={sectionToggleId}
                             type="checkbox"
+                            autoComplete="off"
                             className={styles.sectionToggleInput}
                             checked={sectionExpanded}
                             disabled={isSubmitting}
@@ -1131,20 +1389,27 @@ export function ERPDynamicModalForm({
                   const selectedValues = isMultiSelect
                     ? parseMultiSelectValue(fieldValue)
                     : [];
-                  const selectedLabels = isMultiSelect
-                    ? getMultiSelectOptionLabels(field, selectedValues)
+                  const selectedOptionEntries = isMultiSelect
+                    ? selectedValues.map((selectedValue) => {
+                        const matchedOption = field.options?.find(
+                          (option) => option.value === selectedValue,
+                        );
+                        return {
+                          value: selectedValue,
+                          label: matchedOption?.label ?? selectedValue,
+                        };
+                      })
                     : [];
                   const selectedLabel = getSelectOptionLabel(field, fieldValue);
                   const searchQuery = searchQueries[field.name];
-                  const searchInputValue =
-                    searchQuery !== undefined
-                      ? searchQuery
-                      : isMultiSelect
-                        ? ""
-                        : selectedLabel;
-                  const normalizedQuery = searchInputValue.trim().toLowerCase();
+                  const searchInputValue = searchQuery ?? "";
+                  const shouldUseSearchableSelect = inputType === "select";
+                  const isSearchOpen = openSearchField === field.name;
+                  const normalizedQuery = (searchQuery ?? "")
+                    .trim()
+                    .toLowerCase();
                   const filteredOptions =
-                    field.searchable && inputType === "select"
+                    shouldUseSearchableSelect
                       ? (field.options ?? []).filter((option) => {
                           if (!normalizedQuery) {
                             return true;
@@ -1158,7 +1423,19 @@ export function ERPDynamicModalForm({
                           return valueMatch || labelMatch;
                         })
                       : [];
+                  const highlightedOptionIndexRaw =
+                    searchActiveOptionIndex[field.name];
+                  const highlightedOptionIndex =
+                    highlightedOptionIndexRaw !== undefined &&
+                    highlightedOptionIndexRaw >= 0 &&
+                    highlightedOptionIndexRaw < filteredOptions.length
+                      ? highlightedOptionIndexRaw
+                      : -1;
                   const controlId = `${formId}-${field.name}`;
+                  const activeDescendantId =
+                    isSearchOpen && highlightedOptionIndex >= 0
+                      ? `${controlId}-search-option-${highlightedOptionIndex}`
+                      : undefined;
                   const helpId = field.helperText
                     ? `${controlId}-help`
                     : undefined;
@@ -1173,7 +1450,7 @@ export function ERPDynamicModalForm({
                     required: field.required,
                     disabled: field.disabled || isSubmitting,
                     onChange: handleChange,
-                    autoComplete: field.autoComplete,
+                    autoComplete: "off",
                     "aria-invalid": fieldError ? true : undefined,
                     "aria-describedby": describedBy,
                   };
@@ -1188,87 +1465,158 @@ export function ERPDynamicModalForm({
                         field.colSpan === 2 && styles.fieldWide,
                         inputType === "checkbox" && styles.checkboxField,
                       )}
+                      style={
+                        field.gridColumnStart !== undefined
+                          ? {
+                              gridColumnStart: Math.max(
+                                1,
+                                Math.floor(field.gridColumnStart),
+                              ),
+                            }
+                          : undefined
+                      }
                     >
-                      <label className={styles.label} htmlFor={commonProps.id}>
-                        {field.label}{" "}
-                        {field.required ? (
-                          <span className={styles.requiredMark}>*</span>
-                        ) : null}
-                      </label>
-                      {inputType === "select" && field.searchable ? (
+                      {inputType !== "checkbox" ? (
+                        <label className={styles.label} htmlFor={commonProps.id}>
+                          {field.label}{" "}
+                          {field.required ? (
+                            <span className={styles.requiredMark}>*</span>
+                          ) : null}
+                        </label>
+                      ) : null}
+                      {shouldUseSearchableSelect ? (
                         <div
                           className={styles.searchSelect}
                           ref={(element) => {
                             searchSelectRefs.current[field.name] = element;
                           }}
                         >
-                          <input
-                            {...commonProps}
-                            type="text"
-                            name={`${field.name}-search`}
-                            value={searchInputValue}
-                            placeholder={
-                              field.placeholder ?? `Search ${field.label}`
-                            }
+                          <div
                             className={cx(
-                              styles.control,
+                              styles.searchSelectTrigger,
+                              isMultiSelect && styles.searchMultiSelectControl,
                               fieldError && styles.controlInvalid,
+                              isSearchOpen && styles.searchSelectTriggerOpen,
+                              (field.disabled || isSubmitting) &&
+                                styles.searchSelectTriggerDisabled,
                             )}
                             role="combobox"
-                            aria-autocomplete="list"
-                            aria-expanded={openSearchField === field.name}
+                            aria-expanded={isSearchOpen}
                             aria-controls={`${controlId}-search-list`}
-                            autoComplete="off"
-                            onFocus={() => setOpenSearchField(field.name)}
-                            onBlur={() => {
-                              window.setTimeout(() => {
-                                setOpenSearchField((current) =>
-                                  current === field.name ? null : current,
-                                );
-                              }, 100);
-                            }}
-                            onChange={(event) =>
-                              handleSearchableSelectInput(
-                                field,
-                                event.currentTarget.value,
-                              )
+                            aria-activedescendant={activeDescendantId}
+                            aria-disabled={
+                              field.disabled || isSubmitting ? true : undefined
                             }
-                          />
-                          <button
-                            type="button"
-                            className={styles.searchSelectToggle}
-                            aria-label={`Toggle ${field.label} options`}
-                            aria-expanded={openSearchField === field.name}
-                            aria-controls={`${controlId}-search-list`}
-                            disabled={field.disabled || isSubmitting}
+                            tabIndex={field.disabled || isSubmitting ? -1 : 0}
                             onMouseDown={(event) => {
+                              const target = event.target as HTMLElement;
+                              if (
+                                target.closest(
+                                  '[data-search-select-remove="true"]',
+                                )
+                              ) {
+                                return;
+                              }
                               event.preventDefault();
+                              if (field.disabled || isSubmitting) {
+                                return;
+                              }
                               setOpenSearchField((current) =>
                                 current === field.name ? null : field.name,
                               );
                             }}
+                            onKeyDown={(event) =>
+                              handleSearchableSelectKeyDown(
+                                field,
+                                event,
+                                filteredOptions,
+                                fieldValue,
+                              )
+                            }
                           >
-                            <svg
-                              viewBox="0 0 20 20"
+                            {isMultiSelect ? (
+                              <div className={styles.searchSelectValueTokens}>
+                                {selectedOptionEntries.length ? (
+                                  selectedOptionEntries.map((option) => (
+                                    <span
+                                      key={`${field.name}-selected-${option.value}`}
+                                      className={styles.searchSelectToken}
+                                    >
+                                      <span
+                                        className={styles.searchSelectTokenText}
+                                      >
+                                        {option.label}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        data-search-select-remove="true"
+                                        className={styles.searchSelectTokenRemove}
+                                        aria-label={`Remove ${option.label}`}
+                                        disabled={field.disabled || isSubmitting}
+                                        onMouseDown={(event) => {
+                                          event.preventDefault();
+                                          event.stopPropagation();
+                                          if (field.disabled || isSubmitting) {
+                                            return;
+                                          }
+                                          handleSearchableSelectChoose(
+                                            field,
+                                            option,
+                                          );
+                                        }}
+                                      >
+                                        x
+                                      </button>
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span
+                                    className={
+                                      styles.searchSelectTriggerPlaceholder
+                                    }
+                                  >
+                                    {field.placeholder ?? `Select ${field.label}`}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span
+                                className={cx(
+                                  styles.searchSelectTriggerSingleValue,
+                                  !fieldValue &&
+                                    styles.searchSelectTriggerPlaceholder,
+                                )}
+                              >
+                                {selectedLabel ||
+                                  field.placeholder ||
+                                  `Select ${field.label}`}
+                              </span>
+                            )}
+                            <span
+                              className={styles.searchSelectChevronSlot}
                               aria-hidden="true"
-                              className={cx(
-                                styles.searchSelectChevron,
-                                openSearchField === field.name &&
-                                  styles.searchSelectChevronOpen,
-                              )}
                             >
-                              <path
-                                d="M5 7.5 10 12.5 15 7.5"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </button>
-                          {openSearchField === field.name && !field.disabled ? (
-                            <ul
+                              <svg
+                                viewBox="0 0 20 20"
+                                className={cx(
+                                  styles.searchSelectChevron,
+                                  isSearchOpen &&
+                                    styles.searchSelectChevronOpen,
+                                )}
+                              >
+                                <path
+                                  d="M5 7.5 10 12.5 15 7.5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.8"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </span>
+                          </div>
+                          {isSearchOpen && !field.disabled ? (
+                            <div
                               id={`${controlId}-search-list`}
                               className={cx(
                                 styles.searchSelectList,
@@ -1278,93 +1626,144 @@ export function ERPDynamicModalForm({
                               style={{
                                 maxHeight: `${searchDropdownMaxHeight}px`,
                               }}
-                              role="listbox"
                             >
-                              {filteredOptions.length ? (
-                                filteredOptions.map((option) => (
-                                  <li
-                                    key={`${field.name}-${option.value}`}
-                                    className={cx(
-                                      styles.searchSelectOption,
-                                      (isMultiSelect
-                                        ? selectedValues.includes(option.value)
-                                        : option.value === fieldValue) &&
-                                        styles.searchSelectOptionActive,
-                                    )}
-                                    role="option"
-                                    aria-selected={
-                                      isMultiSelect
-                                        ? selectedValues.includes(option.value)
-                                        : option.value === fieldValue
-                                    }
-                                    onMouseDown={(event) => {
-                                      event.preventDefault();
-                                      handleSearchableSelectChoose(
-                                        field,
-                                        option,
+                              <div className={styles.searchSelectSearchWrap}>
+                                <input
+                                  type="text"
+                                  autoComplete="off"
+                                  value={searchInputValue}
+                                  placeholder={
+                                    field.placeholder ?? `Search ${field.label}`
+                                  }
+                                  className={styles.searchSelectSearchInput}
+                                  role="searchbox"
+                                  ref={(element) => {
+                                    searchInputRefs.current[field.name] =
+                                      element;
+                                  }}
+                                  onFocus={() => setOpenSearchField(field.name)}
+                                  onBlur={() => {
+                                    window.setTimeout(() => {
+                                      const container =
+                                        searchSelectRefs.current[field.name];
+                                      const activeElement =
+                                        document.activeElement;
+                                      if (
+                                        container &&
+                                        activeElement instanceof Node &&
+                                        container.contains(activeElement)
+                                      ) {
+                                        return;
+                                      }
+                                      setOpenSearchField((current) =>
+                                        current === field.name ? null : current,
                                       );
-                                    }}
-                                  >
-                                    {option.label}
-                                  </li>
-                                ))
-                              ) : (
-                                <li
-                                  className={styles.searchSelectEmpty}
-                                  role="option"
-                                  aria-disabled
-                                >
-                                  No matching options
-                                </li>
-                              )}
-                            </ul>
-                          ) : null}
-                          {isMultiSelect && selectedLabels.length ? (
-                            <div
-                              className={styles.searchSelectTokens}
-                              aria-live="polite"
-                            >
-                              {selectedLabels.map((label, index) => (
+                                    }, 0);
+                                  }}
+                                  onMouseDown={(event) => {
+                                    event.stopPropagation();
+                                  }}
+                                  onKeyDown={(event) =>
+                                    handleSearchableSelectKeyDown(
+                                      field,
+                                      event,
+                                      filteredOptions,
+                                      fieldValue,
+                                    )
+                                  }
+                                  onChange={(event) =>
+                                    handleSearchableSelectInput(
+                                      field,
+                                      event.currentTarget.value,
+                                    )
+                                  }
+                                />
                                 <span
-                                  key={`${field.name}-selected-${selectedValues[index] ?? index}`}
-                                  className={styles.searchSelectToken}
+                                  className={styles.searchSelectSearchIcon}
+                                  aria-hidden="true"
                                 >
-                                  {label}
+                                  <svg viewBox="0 0 20 20">
+                                    <path
+                                      d="M8.6 3.5a5.1 5.1 0 1 1 0 10.2 5.1 5.1 0 0 1 0-10.2Zm0 1.6a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm4.7 8.7 3.2 3.2"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="1.7"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
                                 </span>
-                              ))}
+                              </div>
+                              <ul className={styles.searchSelectOptions} role="listbox">
+                                {filteredOptions.length ? (
+                                  filteredOptions.map((option, optionIndex) => (
+                                    <li
+                                      id={`${controlId}-search-option-${optionIndex}`}
+                                      key={`${field.name}-${option.value}`}
+                                      className={cx(
+                                        styles.searchSelectOption,
+                                        optionIndex === highlightedOptionIndex &&
+                                          styles.searchSelectOptionActive,
+                                        (isMultiSelect
+                                          ? selectedValues.includes(option.value)
+                                          : option.value === fieldValue) &&
+                                          styles.searchSelectOptionActive,
+                                      )}
+                                      role="option"
+                                      aria-selected={
+                                        isMultiSelect
+                                          ? selectedValues.includes(option.value)
+                                          : option.value === fieldValue
+                                      }
+                                      onMouseDown={(event) => {
+                                        event.preventDefault();
+                                        handleSearchableSelectChoose(
+                                          field,
+                                          option,
+                                        );
+                                      }}
+                                      onMouseEnter={() =>
+                                        setSearchActiveOptionIndex((current) => ({
+                                          ...current,
+                                          [field.name]: optionIndex,
+                                        }))
+                                      }
+                                    >
+                                      {isMultiSelect ? (
+                                        <input
+                                          type="checkbox"
+                                          autoComplete="off"
+                                          checked={selectedValues.includes(option.value)}
+                                          readOnly
+                                          tabIndex={-1}
+                                          aria-hidden="true"
+                                        />
+                                      ) : null}
+                                      {option.label}
+                                    </li>
+                                  ))
+                                ) : (
+                                  <li
+                                    className={styles.searchSelectEmpty}
+                                    role="option"
+                                    aria-disabled
+                                  >
+                                    No matching options
+                                  </li>
+                                )}
+                              </ul>
                             </div>
                           ) : null}
                         </div>
-                      ) : inputType === "select" ? (
-                        <select
-                          {...commonProps}
-                          value={isMultiSelect ? selectedValues : fieldValue}
-                          multiple={isMultiSelect}
-                          className={cx(
-                            styles.control,
-                            fieldError && styles.controlInvalid,
-                          )}
-                          style={field.controlStyle}
-                        >
-                          {!isMultiSelect ? (
-                            <option value="">
-                              {field.placeholder ?? `Select ${field.label}`}
-                            </option>
-                          ) : null}
-                          {field.options?.map((option) => (
-                            <option
-                              key={`${field.name}-${option.value}`}
-                              value={option.value}
-                            >
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
                       ) : inputType === "checkbox" ? (
-                        <div className={styles.checkboxWrapper}>
+                        <label
+                          className={styles.checkboxWrapper}
+                          htmlFor={commonProps.id}
+                        >
                           <input
                             {...commonProps}
                             type="checkbox"
+                            autoComplete="off"
                             checked={fieldValue === "true"}
                             className={cx(
                               styles.checkboxControl,
@@ -1372,12 +1771,19 @@ export function ERPDynamicModalForm({
                             )}
                             style={field.controlStyle}
                           />
-                        </div>
+                          <span className={styles.checkboxLabel}>
+                            {field.label}
+                            {field.required ? (
+                              <span className={styles.requiredMark}>*</span>
+                            ) : null}
+                          </span>
+                        </label>
                       ) : inputType === "textarea" ? (
                         <textarea
                           {...commonProps}
                           value={fieldValue}
                           rows={field.rows ?? 4}
+                          autoComplete="off"
                           //placeholder={field.placeholder}
                           className={cx(
                             styles.control,
@@ -1391,6 +1797,7 @@ export function ERPDynamicModalForm({
                           <input
                             {...commonProps}
                             type="file"
+                            autoComplete="off"
                             accept={field.accept}
                             className={cx(
                               styles.control,
@@ -1414,6 +1821,7 @@ export function ERPDynamicModalForm({
                               : fieldValue
                           }
                           type={inputType}
+                          autoComplete="off"
                           inputMode={field.inputMode}
                           min={field.min}
                           max={field.max}

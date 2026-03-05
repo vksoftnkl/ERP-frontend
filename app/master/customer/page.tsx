@@ -1,12 +1,18 @@
 "use client";
-
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
+import { toast } from "react-toastify";
 import type {
+  ERPDynamicFieldValidation,
+  ERPDynamicModalController,
+  ERPDynamicModalSubmitPayload,
+  ERPDynamicModalVariant,
   ERPDynamicModalField,
+  ERPDynamicSearchShortcutPayload,
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
+import { ERPDynamicModalForm } from "@/components/library/ui/dynamic-modal-form";
 import styles from "../state-master/page.module.scss";
 import {
   buildLookupOptions,
@@ -23,45 +29,49 @@ import {
   toUpdateId,
   toUpper,
 } from "../_shared/crud-utils";
-
 const API_ENDPOINTS = {
   list: "/customers/list",
   getById: "/customers/get",
   create: "/customers/create",
   delete: "/customers/delete",
 } as const;
-
 const GRID_TABLE_NAME = "customers";
-
-const STATE_LOOKUP_ENDPOINT = "/states/list";
+const STATE_LOOKUP_ENDPOINT = "/state-code-masters/list";
+const STATE_GET_ENDPOINT = "/state-code-masters/get";
+const STATE_UPSERT_ENDPOINT = "/state-code-masters/create";
 const AREA_LOOKUP_ENDPOINT = "/areas/list";
+const AREA_GET_ENDPOINT = "/areas/get";
+const AREA_UPSERT_ENDPOINT = "/areas/create";
 const CUSTOMER_GROUP_LOOKUP_ENDPOINT = "/customer-groups/list";
+const CUSTOMER_GROUP_GET_ENDPOINT = "/customer-groups/get";
+const CUSTOMER_GROUP_UPSERT_ENDPOINT = "/customer-groups/create";
 const COMPANY_LOOKUP_ENDPOINT = "/company-masters/list";
 const BRANCH_LOOKUP_ENDPOINT = "/branch-masters/list";
 const PRICE_LEVEL_LOOKUP_ENDPOINT = "/price-level-masters/get";
-
+const CITY_LOOKUP_ENDPOINT = "/cities/list";
 const LOOKUP_REQUEST_QUERY = {
   page: "1",
   limit: "20",
 } as const;
-
+const STATE_LOOKUP_REQUEST_QUERY = {
+  page: "1",
+  limit: "100",
+  isActive: "true",
+} as const;
 const BRANCH_LOOKUP_REQUEST_QUERY = {
   page: "1",
   limit: "100",
   brIsActive: "true",
 } as const;
-
 const COMPANY_LOOKUP_REQUEST_QUERY = {
   page: "1",
   limit: "100",
   compIsActive: "true",
 } as const;
-
 const PRICE_LEVEL_LOOKUP_REQUEST_QUERY = {
   activeOnly: "true",
   includeDeleted: "false",
 } as const;
-
 const LOOKUP_KEYS = {
   id: ["cusId", "cus_id", "customer_id", "customerId", "id", "_id"],
   code: ["cusCode", "cus_code", "customer_code", "customerCode", "code"],
@@ -73,7 +83,6 @@ const LOOKUP_KEYS = {
   description: ["cusNotes", "cus_notes", "notes", "description", "desc"],
   array: ["data", "items", "results", "rows", "list", "customers"],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "cusId",
   name: "cusName",
@@ -82,43 +91,122 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "cusNotes",
   sort: "cusSortOrder",
 } as const;
-
 const STATE_LOOKUP_KEYS = {
-  code: ["stmAlias", "stm_alias", "stmShort", "stm_short", "state_code", "stateCode", "code"],
-  name: ["stmName", "stm_name", "state_name", "stateName", "name"],
-  array: [...DEFAULT_LOOKUP_ARRAY_KEYS, "states"],
+  code: ["stateCode", "state_code", "code"],
+  name: ["stateName", "state_name", "name", "label"],
+  array: [...DEFAULT_LOOKUP_ARRAY_KEYS, "stateCodes", "state_codes", "states"],
 } as const;
-
+const CITY_LOOKUP_KEYS = {
+  array: [...DEFAULT_LOOKUP_ARRAY_KEYS, "cities"],
+  id: ["ctmId", "ctm_id", "city_id", "cityId", "id", "_id", "value"],
+  label: ["ctmName", "ctm_name", "city_name", "cityName", "name", "label"],
+} as const;
+const STATE_DETAIL_ARRAY_KEYS = [...DEFAULT_LOOKUP_ARRAY_KEYS, "stateCodes", "state_codes", "states"] as const;
+const STATE_DETAIL_KEYS = {
+  code: ["stateCode", "state_code", "code"],
+  name: ["stateName", "state_name", "name", "label"],
+  stateUt: ["stateUt", "state_ut", "state_ut_flag"],
+  tinCode: ["tinCode", "tin_code", "tin"],
+  active: ["isActive", "is_active", "active", "status"],
+} as const;
+const AREA_DETAIL_ARRAY_KEYS = [...DEFAULT_LOOKUP_ARRAY_KEYS, "areas"] as const;
+const AREA_DETAIL_KEYS = {
+  id: ["armId", "arm_id", "area_id", "areaId", "id", "_id"],
+  name: ["armName", "arm_name", "area_name", "areaName", "name"],
+  alias: ["armAlias", "arm_alias", "area_alias", "alias"],
+  short: ["armShort", "arm_short", "area_short", "short_name", "shortName", "short"],
+  cityId: ["armCityId", "arm_city_id", "city_id", "cityId"],
+  distance: ["armDistanceKm", "arm_distance_km", "distance_km", "distanceKm"],
+  collectionDays: ["armCollectionDays", "arm_collection_days", "collection_days", "collectionDays"],
+  sort: ["armSort", "arm_sort", "position", "sort"],
+  active: ["armIsActive", "arm_is_active", "isActive", "is_active", "status"],
+} as const;
+const GROUP_DETAIL_ARRAY_KEYS = [
+  ...DEFAULT_LOOKUP_ARRAY_KEYS,
+  "customerGroups",
+  "customer_groups",
+] as const;
+const GROUP_DETAIL_KEYS = {
+  id: ["cgrId", "cgr_id", "id", "_id"],
+  name: ["cgrName", "cgr_name", "group_name", "groupName", "name"],
+  alias: ["cgrAlias", "cgr_alias", "group_alias", "alias"],
+  short: ["cgrShort", "cgr_short", "short", "shortName"],
+  narration: ["cgrNarration", "cgr_narration", "narration", "description", "desc"],
+  order: ["cgrOrder", "cgr_order", "order", "position", "sort"],
+  discPerc: ["cgrDiscPerc", "cgr_disc_perc", "discPerc", "discount"],
+  collectionDays: ["cgrCollectionDays", "cgr_collection_days", "collectionDays"],
+  debitAllowed: ["cgrDebitAllowed", "cgr_debit_allowed", "debitAllowed"],
+  debitDays: ["cgrDebitDays", "cgr_debit_days", "debitDays"],
+  debitLimit: ["cgrDebitLimit", "cgr_debit_limit", "debitLimit"],
+  billsLimit: ["cgrBillsLimit", "cgr_bills_limit", "billsLimit"],
+  overdueBilling: ["cgrOverdueBilling", "cgr_overdue_billing", "overdueBilling"],
+  active: ["cgrIsActive", "cgr_is_active", "isActive", "is_active", "status"],
+} as const;
 const DEFAULT_STATE_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select State",
 };
-
 const DEFAULT_AREA_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Area",
 };
-
+const DEFAULT_CITY_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Select City",
+};
 const DEFAULT_GROUP_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Customer Group",
 };
-
 const DEFAULT_BRANCH_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Branch",
 };
-
 const DEFAULT_COMPANY_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Company",
 };
-
+const ALL_COMPANY_OPTION_VALUE = "__ALL_COMPANY__";
+const ALL_BRANCH_OPTION_VALUE = "__ALL_BRANCH__";
+const ALL_COMPANY_OPTION: ERPDynamicSelectOption = {
+  value: ALL_COMPANY_OPTION_VALUE,
+  label: "All Company",
+};
+const ALL_BRANCH_OPTION: ERPDynamicSelectOption = {
+  value: ALL_BRANCH_OPTION_VALUE,
+  label: "All Branch",
+};
 const DEFAULT_PRICE_LEVEL_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Price Level",
 };
-
+const AREA_MODAL_PANEL_STYLE: CSSProperties = {
+  width: "min(42vw, 42rem)",
+  maxHeight: "75vh",
+};
+const STATE_MODAL_PANEL_STYLE: CSSProperties = {
+  width: "min(34vw, 34rem)",
+  maxHeight: "75vh",
+};
+const GROUP_MODAL_PANEL_STYLE: CSSProperties = {
+  width: "min(42vw, 42rem)",
+  maxHeight: "75vh",
+};
+const GST_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
+  { value: "REGULAR", label: "Regular" },
+  { value: "COMPOSITION", label: "Composition" },
+  { value: "UNREGISTERED", label: "Unregistered" },
+];
+const GST_TYPE_VALUES = new Set(GST_TYPE_OPTIONS.map((option) => option.value));
+const COLLECTION_DAY_OPTIONS: ERPDynamicSelectOption[] = [
+  { value: "1", label: "Monday" },
+  { value: "2", label: "Tuesday" },
+  { value: "3", label: "Wednesday" },
+  { value: "4", label: "Thursday" },
+  { value: "5", label: "Friday" },
+  { value: "6", label: "Saturday" },
+  { value: "7", label: "Sunday" },
+];
 const CUSTOMER_BOOLEAN_FIELD_NAMES = [
   "cusCreditAllowed",
   "cusEnableSms",
@@ -134,13 +222,11 @@ const CUSTOMER_BOOLEAN_FIELD_NAMES = [
   "cusItcollExempted",
   "cusIsActive",
 ] as const;
-
 const CUSTOMER_DATE_FIELD_NAMES = [
   "cusBirthDate",
   "cusMarriageDate",
   "cusBilledDate",
 ] as const;
-
 const CUSTOMER_TEXT_FIELD_NAMES = [
   "cusTitle",
   "cusShort",
@@ -193,7 +279,6 @@ const CUSTOMER_TEXT_FIELD_NAMES = [
   "cusAreaId",
   "cusGroupId",
 ] as const;
-
 const CUSTOMER_INITIAL_FORM_VALUES: Record<string, string> = {
   cusName: "",
   cusCode: "",
@@ -206,7 +291,6 @@ const CUSTOMER_INITIAL_FORM_VALUES: Record<string, string> = {
   cusCompanyId: "",
   cusBranchId: "",
   cusDefaultSalesman: "",
-
   cusContactPerson: "",
   cusPhone1: "",
   cusPhone2: "",
@@ -215,7 +299,6 @@ const CUSTOMER_INITIAL_FORM_VALUES: Record<string, string> = {
   cusEmail: "",
   cusAadharNo: "",
   cusDistanceKm: "0",
-
   cusAddr1: "",
   cusAddr2: "",
   cusAddr3: "",
@@ -225,7 +308,6 @@ const CUSTOMER_INITIAL_FORM_VALUES: Record<string, string> = {
   cusLandmark: "",
   cusPin: "",
   cusGeoLocation: "",
-
   cusCreditAllowed: "false",
   cusCreditBillLimit: "0",
   cusCreditAmtLimit: "0",
@@ -239,9 +321,7 @@ const CUSTOMER_INITIAL_FORM_VALUES: Record<string, string> = {
   cusAllowPromotion: "false",
   cusAllowLoyalty: "false",
   cusAllowDiscount: "true",
-
   cusCollectionDays: "",
-
   cusGstNo: "",
   cusPanNo: "",
   cusGstType: "",
@@ -249,7 +329,6 @@ const CUSTOMER_INITIAL_FORM_VALUES: Record<string, string> = {
   cusTcsApplicable: "false",
   cusItcollExempted: "false",
   cusItcollType: "",
-
   cusRegionName: "",
   cusRegionAddr1: "",
   cusRegionAddr2: "",
@@ -258,7 +337,6 @@ const CUSTOMER_INITIAL_FORM_VALUES: Record<string, string> = {
   cusRegionDistrict: "",
   cusRegionStateName: "",
   cusRegionCountry: "India",
-
   cusBirthDate: "",
   cusMarriageDate: "",
   cusBilledDate: "",
@@ -267,41 +345,197 @@ const CUSTOMER_INITIAL_FORM_VALUES: Record<string, string> = {
   cusFreightCharge: "false",
   cusLoadingCharge: "false",
   cusUnloadingCharge: "false",
-
   cusSortOrder: "0",
   cusIsActive: "true",
   cusNotes: "",
 };
-
+const AREA_MODAL_INITIAL_VALUES: Record<string, string> = {
+  armName: "",
+  armAlias: "",
+  armShort: "",
+  armCityId: "",
+  armDistanceKm: "",
+  armCollectionDays: "",
+  armSort: "0",
+  armIsActive: "true",
+};
+const STATE_MODAL_INITIAL_VALUES: Record<string, string> = {
+  stateCode: "",
+  stateName: "",
+  stateUt: "false",
+  tinCode: "",
+  isActive: "true",
+};
+const GROUP_MODAL_INITIAL_VALUES: Record<string, string> = {
+  cgrName: "",
+  cgrAlias: "",
+  cgrShort: "",
+  cgrNarration: "",
+  cgrOrder: "0",
+  cgrDiscPerc: "0",
+  cgrCollectionDays: "",
+  cgrDebitAllowed: "false",
+  cgrDebitDays: "0",
+  cgrDebitLimit: "0",
+  cgrBillsLimit: "0",
+  cgrOverdueBilling: "false",
+  cgrIsActive: "true",
+};
 const CUSTOMER_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(62vw, 62rem)",
   maxHeight: "75vh",
 };
+const CUSTOMER_PHONE_PATTERN = "^[0-9+()\\-\\s]{0,20}$";
+const CUSTOMER_BASIC_VALIDATIONS: Record<string, ERPDynamicFieldValidation> = {
+  cusName: {
+    maxLength: 200,
+    maxLengthMessage: "Customer Name must be at most 200 characters.",
+  },
+  cusCode: {
+    maxLength: 50,
+    maxLengthMessage: "Customer Code must be at most 50 characters.",
+  },
+  cusShort: {
+    maxLength: 50,
+    maxLengthMessage: "Short Name must be at most 50 characters.",
+  },
+  cusAddr1: {
+    maxLength: 250,
+    maxLengthMessage: "Address Line 1 must be at most 250 characters.",
+  },
+  cusAddr2: {
+    maxLength: 250,
+    maxLengthMessage: "Address Line 2 must be at most 250 characters.",
+  },
+  cusAddr3: {
+    maxLength: 250,
+    maxLengthMessage: "Address Line 3 must be at most 250 characters.",
+  },
+  cusCity: {
+    maxLength: 250,
+    maxLengthMessage: "City must be at most 250 characters.",
+  },
+  cusDistrict: {
+    maxLength: 250,
+    maxLengthMessage: "District must be at most 250 characters.",
+  },
+  cusLandmark: {
+    maxLength: 200,
+    maxLengthMessage: "Landmark must be at most 200 characters.",
+  },
+  cusPin: {
+    maxLength: 10,
+    maxLengthMessage: "PIN must be at most 10 digits.",
+    pattern: "^[0-9]{0,10}$",
+    patternMessage: "PIN can contain digits only.",
+  },
+  cusTel: {
+    maxLength: 20,
+    maxLengthMessage: "Tel must be at most 20 characters.",
+    pattern: CUSTOMER_PHONE_PATTERN,
+    patternMessage: "Tel can contain digits, spaces, +, -, and parentheses only.",
+  },
+  cusPhone1: {
+    maxLength: 20,
+    maxLengthMessage: "Phone 1 must be at most 20 characters.",
+    pattern: CUSTOMER_PHONE_PATTERN,
+    patternMessage: "Phone 1 can contain digits, spaces, +, -, and parentheses only.",
+  },
+  cusPhone2: {
+    maxLength: 20,
+    maxLengthMessage: "Phone 2 must be at most 20 characters.",
+    pattern: CUSTOMER_PHONE_PATTERN,
+    patternMessage: "Phone 2 can contain digits, spaces, +, -, and parentheses only.",
+  },
+  cusWhatsappNo: {
+    maxLength: 20,
+    maxLengthMessage: "WhatsApp No must be at most 20 characters.",
+    pattern: CUSTOMER_PHONE_PATTERN,
+    patternMessage: "WhatsApp No can contain digits, spaces, +, -, and parentheses only.",
+  },
+  cusEmail: {
+    maxLength: 120,
+    maxLengthMessage: "Email must be at most 120 characters.",
+  },
+  cusTransportName: {
+    maxLength: 200,
+    maxLengthMessage: "Transport Name must be at most 200 characters.",
+  },
+  cusRegionName: {
+    maxLength: 200,
+    maxLengthMessage: "Region Name must be at most 200 characters.",
+  },
+  cusRegionAddr1: {
+    maxLength: 250,
+    maxLengthMessage: "Region Address 1 must be at most 250 characters.",
+  },
+  cusRegionAddr2: {
+    maxLength: 250,
+    maxLengthMessage: "Region Address 2 must be at most 250 characters.",
+  },
+  cusRegionAddr3: {
+    maxLength: 250,
+    maxLengthMessage: "Region Address 3 must be at most 250 characters.",
+  },
+  cusRegionCity: {
+    maxLength: 250,
+    maxLengthMessage: "Region City must be at most 250 characters.",
+  },
+  cusRegionDistrict: {
+    maxLength: 250,
+    maxLengthMessage: "Region District must be at most 250 characters.",
+  },
+  cusRegionCountry: {
+    maxLength: 60,
+    maxLengthMessage: "Region Country must be at most 60 characters.",
+  },
+  cusNotes: {
+    maxLength: 250,
+    maxLengthMessage: "Notes must be at most 250 characters.",
+  },
+};
+
+function withCustomerBasicValidation(field: ERPDynamicModalField): ERPDynamicModalField {
+  const basicValidation = CUSTOMER_BASIC_VALIDATIONS[field.name];
+  if (!basicValidation) {
+    return field;
+  }
+  return {
+    ...field,
+    validation: {
+      ...basicValidation,
+      ...(field.validation ?? {}),
+    },
+  };
+}
 
 function buildCustomerFormFields(
   stateOptions: ERPDynamicSelectOption[],
+  regionStateOptions: ERPDynamicSelectOption[],
   areaOptions: ERPDynamicSelectOption[],
   groupOptions: ERPDynamicSelectOption[],
   companyOptions: ERPDynamicSelectOption[],
   branchOptions: ERPDynamicSelectOption[],
   priceLevelOptions: ERPDynamicSelectOption[],
+  onStateCreateShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
+  onStateEditShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
+  onAreaCreateShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
+  onAreaEditShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
+  onGroupCreateShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
+  onGroupEditShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
 ): ERPDynamicModalField[] {
-  return [
+  const fields: ERPDynamicModalField[] = [
     {
       name: "scopeHeadingPrimary",
       label: "Primary details",
       type: "heading",
     },   
     {
-      name: "cusGroupId",
-      label: "Customer Group",
+      name: "cusCompanyId",
+      label: "Company",
       type: "select",
       searchable: true,
-      required: true,
-      options: groupOptions,
-      validation: {
-        requiredMessage: "Customer Group is required.",
-      },
+      options: companyOptions,
     },
     {
       name: "cusAreaId",
@@ -310,32 +544,55 @@ function buildCustomerFormFields(
       searchable: true,
       required: true,
       options: areaOptions,
+      onSearchCreateShortcut: onAreaCreateShortcut,
+      onSearchEditShortcut: onAreaEditShortcut,
       validation: {
         requiredMessage: "Area is required.",
       },
-    },   
+    },  {
+      name: "cusDefaultSalesman",
+      label: "Salesman ",
+      validation: {
+        pattern: "^[0-9a-fA-F-]{36}$",
+        patternMessage: "Default Salesman Id must be a valid UUID.",
+      },
+    },            
     {
       name: "cusBranchId",
       label: "Branch",
       type: "select",
       searchable: true,
       options: branchOptions,
-    },
-    {
-      name: "cusCompanyId",
-      label: "Company",
+    },{
+      name: "cusGroupId",
+      label: "Customer Group",
       type: "select",
       searchable: true,
-      options: companyOptions,
+      required: true,
+      options: groupOptions,
+      onSearchCreateShortcut: onGroupCreateShortcut,
+      onSearchEditShortcut: onGroupEditShortcut,
+      validation: {
+        requiredMessage: "Customer Group is required.",
+      },
     },
-       {
+    {
+      name: "cusCollectionDays",
+      label: "Collection Days",
+      type: "select",
+      searchable: true,
+      multiple: true,
+      options: COLLECTION_DAY_OPTIONS,
+    },
+    {
       name: "scopeHeadingBasic",
       label: "Basic details",
       type: "heading",
     },
-   {
+    {
       name: "cusName",
       label: "Customer Name",
+      gridColumnStart: 1,
       required: true,
       validation: {
         minLength: 2,
@@ -343,69 +600,246 @@ function buildCustomerFormFields(
       },
     },
     {
-      name: "cusCode",
-      label: "Customer Code",
-    },
-    {
-      name: "cusShort",
-      label: "Short Name",
-    },
-    {
-      name: "cusTitle",
-      label: "Title",
-    },    
-    {
-      name: "cusContactPerson",
-      label: "Contact Person",
+      name: "cusCity",
+      label: "City",
+      gridColumnStart: 2,
     },
     {
       name: "cusPhone1",
       label: "Phone 1",
       type: "tel",
+      gridColumnStart: 3,
     },
+    {
+      name: "cusCode",
+      label: "Customer Code",
+      gridColumnStart: 1,
+    },
+
+    {
+      name: "cusDistrict",
+      label: "District",
+      gridColumnStart: 2,
+    },
+    
     {
       name: "cusPhone2",
       label: "Phone 2",
       type: "tel",
+      gridColumnStart: 3,
+    },
+    {
+      name: "cusShort",
+      label: "Short Name",
+      gridColumnStart: 1,
+    },
+    {
+      name: "cusStateCode",
+      label: "State",
+      type: "select",
+      searchable: true,
+      required: true,
+      options: stateOptions,
+      gridColumnStart: 2,
+      onSearchCreateShortcut: onStateCreateShortcut,
+      onSearchEditShortcut: onStateEditShortcut,
+      validation: {
+        requiredMessage: "State is required.",
+      },
     },
     {
       name: "cusTel",
       label: "Tel",
       type: "tel",
+      gridColumnStart: 3,
     },
     {
-      name: "cusWhatsappNo",
-      label: "WhatsApp No",
-      type: "tel",
-    },
-    {
-      name: "cusEmail",
-      label: "Email",
-      type: "email",
-    },
-     {
       name: "cusPriceLevelId",
       label: "Price Level",
       type: "select",
       searchable: true,
       required: true,
       options: priceLevelOptions,
+      gridColumnStart: 1,
       validation: {
         requiredMessage: "Price Level is required.",
       },
     },
-
     {
-      name: "cusDefaultSalesman",
-      label: "Default Salesman Id (UUID)",
+      name: "cusPin",
+      label: "PIN",
+      gridColumnStart: 2,
+    },
+    {
+      name: "cusWhatsappNo",
+      label: "WhatsApp No",
+      type: "tel",
+      gridColumnStart: 3,
+    },
+    {
+      name: "cusAddr1",
+      label: "Address Line 1",
+      gridColumnStart: 1,
+    },
+    {
+      name: "cusLandmark",
+      label: "Landmark",
+      gridColumnStart: 2,
+    },
+    {
+      name: "cusEmail",
+      label: "Email",
+      type: "email",
+      gridColumnStart: 3,
+    },
+    {
+      name: "cusAddr2",
+      label: "Address Line 2",
+      gridColumnStart: 1,
+    },
+    {
+      name: "cusTransportName",
+      label: "Transport Name",
+      gridColumnStart: 2,
+    },
+    {
+      name: "cusSortOrder",
+      label: "Sort Order",
+      type: "number",
+      gridColumnStart: 3,
+      colSpan: 1,
+      min: 0,
+      step: 1,
       validation: {
-        pattern: "^[0-9a-fA-F-]{36}$",
-        patternMessage: "Default Salesman Id must be a valid UUID.",
+        minMessage: "Sort Order must be 0 or greater.",
+      },
+    },
+    {
+      name: "cusAddr3",
+      label: "Address Line 3",
+      gridColumnStart: 1,
+    },
+    // {
+    //   name: "cusCountry",
+    //   label: "Country",
+    // },
+    // {
+    //   name: "cusGeoLocation",
+    //   label: "Geo Location",
+    // },
+    {
+      name: "creditHeading",
+      label: "Credit Details",
+      type: "heading",
+    },
+    {
+      name: "cusCreditDays",
+      label: "Credit Days",
+      type: "number",
+      gridColumnStart: 1,
+      min: 0,
+      step: 1,
+      validation: {
+        minMessage: "Credit Days must be 0 or greater.",
+      },
+    },
+    {
+      name: "cusCreditAmtLimit",
+      label: "Credit Amount Limit",
+      type: "number",
+      gridColumnStart: 2,
+      min: 0,
+      step: "0.01",
+      validation: {
+        minMessage: "Credit Amount Limit must be 0 or greater.",
+      },
+    },
+    {
+      name: "cusDebitBalance",
+      label: "Debit Balance",
+      type: "number",
+      gridColumnStart: 3,
+      min: 0,
+      step: "0.01",
+      validation: {
+        minMessage: "Debit Balance must be 0 or greater.",
+      },
+    },
+    {
+      name: "cusCreditBillLimit",
+      label: "Credit Bill Limit",
+      type: "number",
+      gridColumnStart: 1,
+      min: 0,
+      step: 1,
+      validation: {
+        minMessage: "Credit Bill Limit must be 0 or greater.",
+      },
+    },
+    {
+      name: "cusDebitGraceDays",
+      label: "Debit Grace Days",
+      type: "number",
+      gridColumnStart: 2,
+      min: 0,
+      step: 1,
+      validation: {
+        minMessage: "Debit Grace Days must be 0 or greater.",
+      },
+    },
+    {
+      name: "taxHeading",
+      label: "Tax Details",
+      type: "heading",
+    },
+    {
+      name: "cusGstType",
+      label: "GST Type",
+      type: "select",
+      searchable: true,
+      options: GST_TYPE_OPTIONS,
+      gridColumnStart: 1,
+    },
+    {
+      name: "cusPanNo",
+      label: "PAN No",
+      gridColumnStart: 2,
+      validation: {
+        pattern: "^[A-Z]{5}[0-9]{4}[A-Z]{1}$",
+        patternMessage: "PAN must be 10 characters (e.g., ABCDE1234F).",
+      },
+    },
+    {
+      name: "cusEcommerceGstin",
+      label: "Ecommerce GSTIN",
+      gridColumnStart: 3,
+      validation: {
+        maxLength: 15,
+        maxLengthMessage: "Ecommerce GSTIN must be at most 15 characters.",
+      },
+    },
+    {
+      name: "cusGstNo",
+      label: "GST No",
+      gridColumnStart: 1,
+      validation: {
+        custom: (value, values) => {
+          const gstType = toGstTypeValue(values.cusGstType ?? "");
+          if (gstType === "REGULAR" && value.trim().length === 0) {
+            return "GST No is required when GST Type is Regular.";
+          }
+          return null;
+        },
+        pattern: "^[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}[1-9A-Za-z]{1}Z[0-9A-Za-z]{1}$",
+        patternMessage: "GST No must be a valid GSTIN (e.g., 27ABCDE1234F1Z5).",
+        maxLength: 15,
+        maxLengthMessage: "GST No must be at most 15 characters.",
       },
     },
     {
       name: "cusAadharNo",
       label: "Aadhar No",
+      gridColumnStart: 2,
       validation: {
         pattern: "^[0-9]{12}$",
         patternMessage: "Aadhar must be 12 digits.",
@@ -415,214 +849,13 @@ function buildCustomerFormFields(
       name: "cusDistanceKm",
       label: "Distance (Km)",
       type: "number",
+      gridColumnStart: 3,
       min: 0,
       step: 1,
       validation: {
         minMessage: "Distance must be 0 or greater.",
       },
     },
-    {
-      name: "cusAddr1",
-      label: "Address Line 1",
-    },
-    {
-      name: "cusAddr2",
-      label: "Address Line 2",
-    },
-    {
-      name: "cusAddr3",
-      label: "Address Line 3",
-    },
-    {
-      name: "cusCity",
-      label: "City",
-    },
-    {
-      name: "cusDistrict",
-      label: "District",
-    },
-    {
-      name: "cusStateCode",
-      label: "State",
-      type: "select",
-      searchable: true,
-      required: true,
-      options: stateOptions,
-      validation: {
-        requiredMessage: "State is required.",
-      },
-    },
-    {
-      name: "cusCountry",
-      label: "Country",
-    },
-    {
-      name: "cusLandmark",
-      label: "Landmark",
-    },
-    {
-      name: "cusPin",
-      label: "PIN",
-    },
-    {
-      name: "cusGeoLocation",
-      label: "Geo Location",
-    },
-    {
-      name: "creditHeading",
-      label: "Credit Details",
-      type: "heading",
-    },
-   
-    {
-      name: "cusCreditBillLimit",
-      label: "Credit Bill Limit",
-      type: "number",
-      min: 0,
-      step: 1,
-      validation: {
-        minMessage: "Credit Bill Limit must be 0 or greater.",
-      },
-    },
-    {
-      name: "cusCreditAmtLimit",
-      label: "Credit Amount Limit",
-      type: "number",
-      min: 0,
-      step: "0.01",
-      validation: {
-        minMessage: "Credit Amount Limit must be 0 or greater.",
-      },
-    },
-    {
-      name: "cusCreditDays",
-      label: "Credit Days",
-      type: "number",
-      min: 0,
-      step: 1,
-      validation: {
-        minMessage: "Credit Days must be 0 or greater.",
-      },
-    },
-    {
-      name: "cusDebitBalance",
-      label: "Debit Balance",
-      type: "number",
-      min: 0,
-      step: "0.01",
-      validation: {
-        minMessage: "Debit Balance must be 0 or greater.",
-      },
-    },
-    {
-      name: "cusDiscPerc",
-      label: "Discount %",
-      type: "number",
-      min: 0,
-      step: "0.001",
-      validation: {
-        minMessage: "Discount % must be 0 or greater.",
-      },
-    },
-    {
-      name: "cusDebitGraceDays",
-      label: "Debit Grace Days",
-      type: "number",
-      min: 0,
-      step: 1,
-      validation: {
-        minMessage: "Debit Grace Days must be 0 or greater.",
-      },
-    },
-    {
-      name: "cusCollectionDays",
-      label: "Collection Days",
-      helperText: "Comma-separated day numbers (example: 1,3,7).",
-    },
-    {
-      name: "cusEnableSms",
-      label: "Enable SMS",
-      type: "checkbox",
-    },
-    {
-      name: "cusOverdueSms",
-      label: "Overdue SMS",
-      type: "checkbox",
-    },
-    {
-      name: "cusOverdueBilling",
-      label: "Overdue Billing",
-      type: "checkbox",
-    },
-    {
-      name: "cusAllowPromotion",
-      label: "Allow Promotion",
-      type: "checkbox",
-    },
-    {
-      name: "cusAllowLoyalty",
-      label: "Allow Loyalty",
-      type: "checkbox",
-    },
-     {
-      name: "cusCreditAllowed",
-      label: "Credit Allowed",
-      type: "checkbox",
-    },
-    {
-      name: "cusAllowDiscount",
-      label: "Allow Discount",
-      type: "checkbox",
-    },
-
-    {
-      name: "taxHeading",
-      label: "Tax Details",
-      type: "heading",
-    },
-    {
-      name: "cusGstNo",
-      label: "GST No",
-      validation: {
-        maxLength: 15,
-        maxLengthMessage: "GST No must be at most 15 characters.",
-      },
-    },
-    {
-      name: "cusPanNo",
-      label: "PAN No",
-      validation: {
-        pattern: "^[A-Z]{5}[0-9]{4}[A-Z]{1}$",
-        patternMessage: "PAN must be 10 characters (e.g., ABCDE1234F).",
-      },
-    },
-    {
-      name: "cusGstType",
-      label: "GST Type",
-    },
-    {
-      name: "cusEcommerceGstin",
-      label: "Ecommerce GSTIN",
-      validation: {
-        maxLength: 15,
-        maxLengthMessage: "Ecommerce GSTIN must be at most 15 characters.",
-      },
-    },
-    {
-      name: "cusTcsApplicable",
-      label: "TCS Applicable",
-      type: "checkbox",
-    },
-    {
-      name: "cusItcollExempted",
-      label: "IT Collection Exempted",
-      type: "checkbox",
-    },
-    {
-      name: "cusItcollType",
-      label: "IT Collection Type",
-    },
-
     {
       name: "regionHeading",
       label: "Region Details",
@@ -656,82 +889,113 @@ function buildCustomerFormFields(
     {
       name: "cusRegionStateName",
       label: "Region State Name",
+      type: "select",
+      searchable: true,
+      options: regionStateOptions,
     },
     {
       name: "cusRegionCountry",
       label: "Region Country",
     },
-
-    {
-      name: "logisticsHeading",
-      label: "Logistics Details",
-      type: "heading",
-    },
-    {
-      name: "cusBirthDate",
-      label: "Birth Date",
-      type: "date",
-    },
-    {
-      name: "cusMarriageDate",
-      label: "Marriage Date",
-      type: "date",
-    },
-    {
-      name: "cusBilledDate",
-      label: "Billed Date",
-      type: "date",
-    },
-    {
-      name: "cusBilledCount",
-      label: "Billed Count",
-      type: "number",
-      min: 0,
-      step: 1,
-      validation: {
-        minMessage: "Billed Count must be 0 or greater.",
-      },
-    },
-    {
-      name: "cusTransportName",
-      label: "Transport Name",
-      colSpan: 1,
-    },
-    {
-      name: "cusFreightCharge",
-      label: "Freight Charge",
-      type: "checkbox",
-    },
-    {
-      name: "cusLoadingCharge",
-      label: "Loading Charge",
-      type: "checkbox",
-    },
-    {
-      name: "cusUnloadingCharge",
-      label: "Unloading Charge",
-      type: "checkbox",
-    },
-
     {
       name: "statusHeading",
       label: "Status and Notes",
       type: "heading",
     },
     {
-      name: "cusSortOrder",
-      label: "Sort Order",
+      name: "cusDiscPerc",
+      label: "Discount %",
       type: "number",
+      gridColumnStart: 1,
       min: 0,
-      step: 1,
+      step: "0.001",
       validation: {
-        minMessage: "Sort Order must be 0 or greater.",
+        minMessage: "Discount % must be 0 or greater.",
       },
     },
     {
-      name: "cusIsActive",
-      label: "Is Active",
+      name: "cusBirthDate",
+      label: "Birth Date",
+      type: "date",
+      gridColumnStart: 2,
+    },
+    {
+      name: "cusMarriageDate",
+      label: "Marriage Date",
+      type: "date",
+      gridColumnStart: 3,
+    },
+    {
+      name: "cusEnableSms",
+      label: "Enable SMS",
       type: "checkbox",
+      gridColumnStart: 1,
+    },
+    {
+      name: "cusOverdueSms",
+      label: "Overdue SMS",
+      type: "checkbox",
+      gridColumnStart: 2,
+    },
+    {
+      name: "cusOverdueBilling",
+      label: "Overdue Billing",
+      type: "checkbox",
+      gridColumnStart: 3,
+    },
+    {
+      name: "cusAllowPromotion",
+      label: "Allow Promotion",
+      type: "checkbox",
+      gridColumnStart: 1,
+    },
+    {
+      name: "cusAllowLoyalty",
+      label: "Allow Loyalty",
+      type: "checkbox",
+      gridColumnStart: 2,
+    },
+    {
+      name: "cusAllowDiscount",
+      label: "Allow Discount",
+      type: "checkbox",
+      gridColumnStart: 3,
+    },
+    {
+      name: "cusTcsApplicable",
+      label: "TCS Allowable",
+      type: "checkbox",
+      gridColumnStart: 1,
+    },
+    {
+      name: "cusItcollExempted",
+      label: "IT Collection Exempted",
+      type: "checkbox",
+      gridColumnStart: 2,
+    },
+    {
+      name: "cusFreightCharge",
+      label: "Freight Charge",
+      type: "checkbox",
+      gridColumnStart: 3,
+    },
+    {
+      name: "cusLoadingCharge",
+      label: "Loading Charge",
+      type: "checkbox",
+      gridColumnStart: 1,
+    },
+    {
+      name: "cusUnloadingCharge",
+      label: "Unloading Charge",
+      type: "checkbox",
+      gridColumnStart: 2,
+    },
+    {
+      name: "cusIsActive",
+      label: "Active",
+      type: "checkbox",
+      gridColumnStart: 3,
     },
     {
       name: "cusNotes",
@@ -740,6 +1004,7 @@ function buildCustomerFormFields(
       rows: 3,
     },
   ];
+  return fields.map(withCustomerBasicValidation);
 }
 function toSnakeCase(value: string): string {
   return value.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
@@ -762,6 +1027,13 @@ function toUpperNullable(value: string): string | null {
   const normalized = value.trim();
   return normalized ? normalized.toUpperCase() : null;
 }
+function toNullableScopeId(value: string, allOptionValue: string): string | null {
+  const normalized = value.trim();
+  if (!normalized || normalized === allOptionValue) {
+    return null;
+  }
+  return normalized;
+}
 function parseCollectionDays(value: string): number[] {
   const normalized = value.trim();
   if (!normalized) {
@@ -772,8 +1044,7 @@ function parseCollectionDays(value: string): number[] {
     .map((entry) => entry.trim())
     .filter(Boolean)
     .map((entry) => Number.parseInt(entry, 10))
-    .filter((entry) => Number.isInteger(entry) && entry >= 0);
-
+    .filter((entry) => Number.isInteger(entry) && entry >= 1 && entry <= 7);
   return Array.from(new Set(parsedValues));
 }
 function toCollectionDaysInput(value: unknown): string {
@@ -782,13 +1053,25 @@ function toCollectionDaysInput(value: unknown): string {
   }
   const normalized = value
     .map((entry) => (typeof entry === "number" ? entry : Number(entry)))
-    .filter((entry) => Number.isInteger(entry) && entry >= 0)
+    .filter((entry) => Number.isInteger(entry) && entry >= 1 && entry <= 7)
     .map((entry) => String(entry));
-
   return Array.from(new Set(normalized)).join(",");
 }
+
+function toGstTypeValue(value: string): string {
+  const normalized = value.trim().toUpperCase();
+  return GST_TYPE_VALUES.has(normalized) ? normalized : "";
+}
+
+function removeEmptyOptions(
+  options: ERPDynamicSelectOption[],
+): ERPDynamicSelectOption[] {
+  return options.filter((option) => option.value.trim().length > 0);
+}
+
 function buildStateLookupData(payload: unknown): {
   options: ERPDynamicSelectOption[];
+  regionStateOptions: ERPDynamicSelectOption[];
   stateNameByCode: Record<string, string>;
   stateCodeByName: Record<string, string>;
 } {
@@ -816,6 +1099,12 @@ function buildStateLookupData(payload: unknown): {
       label: `${name} (${value})`,
     }))
     .sort((left, right) => left.label.localeCompare(right.label));
+  const regionStateOptions = Array.from(new Set(codeToName.values()))
+    .map((name) => ({
+      value: name,
+      label: name,
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label));
   const stateNameByCode: Record<string, string> = {};
   const stateCodeByName: Record<string, string> = {};
   for (const [code, name] of codeToName.entries()) {
@@ -825,38 +1114,530 @@ function buildStateLookupData(payload: unknown): {
     }
   }
   return {
-    options: [DEFAULT_STATE_OPTION, ...options],
+    options,
+    regionStateOptions,
     stateNameByCode,
     stateCodeByName,
   };
 }
+function extractStateCodeDetailSource(payload: unknown): Record<string, unknown> | null {
+  const rows = extractRows(payload, STATE_DETAIL_ARRAY_KEYS);
+  if (rows.length > 0) {
+    const firstRow = rows[0];
+    if (firstRow && typeof firstRow === "object" && !Array.isArray(firstRow)) {
+      return firstRow as Record<string, unknown>;
+    }
+  }
+
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+
+  const objectPayload = payload as Record<string, unknown>;
+  const nestedData = objectPayload.data;
+  if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
+    return nestedData as Record<string, unknown>;
+  }
+
+  return objectPayload;
+}
+function mapStateCodeDetailToFormValues(source: Record<string, unknown>): Record<string, string> {
+  return {
+    ...STATE_MODAL_INITIAL_VALUES,
+    stateCode:
+      toUpper(toDisplayValue(getFirstDefinedValue(source, STATE_DETAIL_KEYS.code))) ||
+      STATE_MODAL_INITIAL_VALUES.stateCode,
+    stateName:
+      toDisplayValue(getFirstDefinedValue(source, STATE_DETAIL_KEYS.name)) ||
+      STATE_MODAL_INITIAL_VALUES.stateName,
+    stateUt: toSelectBoolean(
+      getFirstDefinedValue(source, STATE_DETAIL_KEYS.stateUt),
+      STATE_MODAL_INITIAL_VALUES.stateUt === "true" ? "true" : "false",
+    ),
+    tinCode:
+      toUpper(toDisplayValue(getFirstDefinedValue(source, STATE_DETAIL_KEYS.tinCode))) ||
+      STATE_MODAL_INITIAL_VALUES.tinCode,
+    isActive: toSelectBoolean(
+      getFirstDefinedValue(source, STATE_DETAIL_KEYS.active),
+      STATE_MODAL_INITIAL_VALUES.isActive === "true" ? "true" : "false",
+    ),
+  };
+}
+function buildStateCodeModalFields(disableStateCode: boolean): ERPDynamicModalField[] {
+  return [
+    {
+      name: "stateCode",
+      label: "State Code",
+      required: true,
+      disabled: disableStateCode,
+      placeholder: "MH",
+      helperText: "Two-character code.",
+      validation: {
+        pattern: "^[A-Za-z]{2}$",
+        patternMessage: "State Code must be exactly 2 letters.",
+      },
+    },
+    {
+      name: "stateName",
+      label: "State Name",
+      required: true,
+      validation: {
+        minLength: 2,
+        minLengthMessage: "State Name must be at least 2 characters.",
+      },
+    },
+    {
+      name: "stateUt",
+      label: "State / UT",
+      type: "checkbox",
+    },
+    {
+      name: "tinCode",
+      label: "TIN Code",
+      placeholder: "27",
+      helperText: "Optional 2-character TIN code.",
+      validation: {
+        pattern: "^[A-Za-z0-9]{0,2}$",
+        patternMessage: "TIN Code can be up to 2 letters/numbers.",
+      },
+    },
+    {
+      name: "isActive",
+      label: "Is Active",
+      type: "checkbox",
+    },
+  ];
+}
+function buildAreaOptions(payload: unknown): ERPDynamicSelectOption[] {
+  return removeEmptyOptions(
+    buildLookupOptions(payload, DEFAULT_AREA_OPTION, {
+      arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "areas"],
+      idKeys: ["armId", "arm_id", "area_id", "areaId", "id", "_id", "value"],
+      labelKeys: ["armName", "arm_name", "area_name", "areaName", "name", "label"],
+    }),
+  );
+}
+function buildCityOptions(payload: unknown): ERPDynamicSelectOption[] {
+  return removeEmptyOptions(
+    buildLookupOptions(payload, DEFAULT_CITY_OPTION, {
+      arrayKeys: CITY_LOOKUP_KEYS.array,
+      idKeys: CITY_LOOKUP_KEYS.id,
+      labelKeys: CITY_LOOKUP_KEYS.label,
+    }),
+  );
+}
+function extractAreaDetailSource(payload: unknown): Record<string, unknown> | null {
+  const rows = extractRows(payload, AREA_DETAIL_ARRAY_KEYS);
+  if (rows.length > 0) {
+    const firstRow = rows[0];
+    if (firstRow && typeof firstRow === "object" && !Array.isArray(firstRow)) {
+      return firstRow as Record<string, unknown>;
+    }
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+  const objectPayload = payload as Record<string, unknown>;
+  const nestedData = objectPayload.data;
+  if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
+    return nestedData as Record<string, unknown>;
+  }
+  return objectPayload;
+}
+function mapAreaDetailToFormValues(source: Record<string, unknown>): Record<string, string> {
+  return {
+    ...AREA_MODAL_INITIAL_VALUES,
+    armName:
+      toDisplayValue(getFirstDefinedValue(source, AREA_DETAIL_KEYS.name)) ||
+      AREA_MODAL_INITIAL_VALUES.armName,
+    armAlias:
+      toDisplayValue(getFirstDefinedValue(source, AREA_DETAIL_KEYS.alias)) ||
+      AREA_MODAL_INITIAL_VALUES.armAlias,
+    armShort:
+      toDisplayValue(getFirstDefinedValue(source, AREA_DETAIL_KEYS.short)) ||
+      AREA_MODAL_INITIAL_VALUES.armShort,
+    armCityId:
+      toDisplayValue(getFirstDefinedValue(source, AREA_DETAIL_KEYS.cityId)) ||
+      AREA_MODAL_INITIAL_VALUES.armCityId,
+    armDistanceKm:
+      toDisplayValue(getFirstDefinedValue(source, AREA_DETAIL_KEYS.distance)) ||
+      AREA_MODAL_INITIAL_VALUES.armDistanceKm,
+    armCollectionDays:
+      toCollectionDaysInput(getFirstDefinedValue(source, AREA_DETAIL_KEYS.collectionDays)) ||
+      AREA_MODAL_INITIAL_VALUES.armCollectionDays,
+    armSort:
+      toDisplayValue(getFirstDefinedValue(source, AREA_DETAIL_KEYS.sort)) ||
+      AREA_MODAL_INITIAL_VALUES.armSort,
+    armIsActive: toSelectBoolean(
+      getFirstDefinedValue(source, AREA_DETAIL_KEYS.active),
+      AREA_MODAL_INITIAL_VALUES.armIsActive === "true" ? "true" : "false",
+    ),
+  };
+}
+function buildAreaModalFields(cityOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
+  return [
+    {
+      name: "armName",
+      label: "Area Name",
+      required: true,
+      validation: {
+        minLength: 2,
+        minLengthMessage: "Area Name must be at least 2 characters.",
+      },
+    },
+    {
+      name: "armAlias",
+      label: "Alias",
+    },
+    {
+      name: "armShort",
+      label: "Short Name",
+    },
+    {
+      name: "armCityId",
+      label: "City",
+      type: "select",
+      searchable: true,
+      required: true,
+      options: cityOptions,
+      validation: {
+        requiredMessage: "City is required.",
+      },
+    },
+    {
+      name: "armDistanceKm",
+      label: "Distance (KM)",
+      type: "number",
+      min: 0,
+      step: 1,
+      validation: {
+        minMessage: "Distance must be 0 or greater.",
+      },
+    },
+    {
+      name: "armCollectionDays",
+      label: "Collection Days",
+      type: "select",
+      searchable: true,
+      multiple: true,
+      options: COLLECTION_DAY_OPTIONS,
+    },
+    {
+      name: "armSort",
+      label: "Sort",
+      type: "number",
+      min: 0,
+      step: 1,
+      validation: {
+        minMessage: "Sort must be 0 or greater.",
+      },
+    },
+    {
+      name: "armIsActive",
+      label: "Active",
+      type: "checkbox",
+    },
+  ];
+}
+
+function buildGroupOptions(payload: unknown): ERPDynamicSelectOption[] {
+  return removeEmptyOptions(
+    buildLookupOptions(payload, DEFAULT_GROUP_OPTION, {
+      arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "customerGroups", "customer_groups"],
+      idKeys: ["cgrId", "cgr_id", "group_id", "groupId", "id", "_id", "value"],
+      labelKeys: ["cgrName", "cgr_name", "group_name", "groupName", "name", "label"],
+    }),
+  );
+}
+
+function parseGroupCollectionDays(value: string): number[] {
+  const normalized = value.trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const parsed = normalized
+    .split(",")
+    .map((token) => token.trim())
+    .filter(Boolean)
+    .map((token) => Number.parseInt(token, 10))
+    .filter((token) => Number.isInteger(token) && token >= 0);
+
+  return Array.from(new Set(parsed));
+}
+
+function toGroupCollectionDaysInput(value: unknown): string {
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map((entry) => (typeof entry === "number" ? entry : Number(entry)))
+      .filter((entry) => Number.isInteger(entry) && entry >= 0)
+      .map((entry) => String(entry));
+    return Array.from(new Set(normalized)).join(",");
+  }
+
+  if (typeof value === "string") {
+    return parseGroupCollectionDays(value)
+      .map((entry) => String(entry))
+      .join(",");
+  }
+
+  return "";
+}
+
+function extractGroupDetailSource(payload: unknown): Record<string, unknown> | null {
+  const rows = extractRows(payload, GROUP_DETAIL_ARRAY_KEYS);
+  if (rows.length > 0) {
+    const firstRow = rows[0];
+    if (firstRow && typeof firstRow === "object" && !Array.isArray(firstRow)) {
+      return firstRow as Record<string, unknown>;
+    }
+  }
+
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+
+  const objectPayload = payload as Record<string, unknown>;
+  const nestedData = objectPayload.data;
+  if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
+    return nestedData as Record<string, unknown>;
+  }
+
+  return objectPayload;
+}
+
+function mapGroupDetailToFormValues(source: Record<string, unknown>): Record<string, string> {
+  return {
+    ...GROUP_MODAL_INITIAL_VALUES,
+    cgrName:
+      toDisplayValue(getFirstDefinedValue(source, GROUP_DETAIL_KEYS.name)) ||
+      GROUP_MODAL_INITIAL_VALUES.cgrName,
+    cgrAlias:
+      toDisplayValue(getFirstDefinedValue(source, GROUP_DETAIL_KEYS.alias)) ||
+      GROUP_MODAL_INITIAL_VALUES.cgrAlias,
+    cgrShort:
+      toDisplayValue(getFirstDefinedValue(source, GROUP_DETAIL_KEYS.short)) ||
+      GROUP_MODAL_INITIAL_VALUES.cgrShort,
+    cgrNarration:
+      toDisplayValue(getFirstDefinedValue(source, GROUP_DETAIL_KEYS.narration)) ||
+      GROUP_MODAL_INITIAL_VALUES.cgrNarration,
+    cgrOrder:
+      toDisplayValue(getFirstDefinedValue(source, GROUP_DETAIL_KEYS.order)) ||
+      GROUP_MODAL_INITIAL_VALUES.cgrOrder,
+    cgrDiscPerc:
+      toDisplayValue(getFirstDefinedValue(source, GROUP_DETAIL_KEYS.discPerc)) ||
+      GROUP_MODAL_INITIAL_VALUES.cgrDiscPerc,
+    cgrCollectionDays:
+      toGroupCollectionDaysInput(getFirstDefinedValue(source, GROUP_DETAIL_KEYS.collectionDays)) ||
+      GROUP_MODAL_INITIAL_VALUES.cgrCollectionDays,
+    cgrDebitAllowed: toSelectBoolean(
+      getFirstDefinedValue(source, GROUP_DETAIL_KEYS.debitAllowed),
+      GROUP_MODAL_INITIAL_VALUES.cgrDebitAllowed === "true" ? "true" : "false",
+    ),
+    cgrDebitDays:
+      toDisplayValue(getFirstDefinedValue(source, GROUP_DETAIL_KEYS.debitDays)) ||
+      GROUP_MODAL_INITIAL_VALUES.cgrDebitDays,
+    cgrDebitLimit:
+      toDisplayValue(getFirstDefinedValue(source, GROUP_DETAIL_KEYS.debitLimit)) ||
+      GROUP_MODAL_INITIAL_VALUES.cgrDebitLimit,
+    cgrBillsLimit:
+      toDisplayValue(getFirstDefinedValue(source, GROUP_DETAIL_KEYS.billsLimit)) ||
+      GROUP_MODAL_INITIAL_VALUES.cgrBillsLimit,
+    cgrOverdueBilling: toSelectBoolean(
+      getFirstDefinedValue(source, GROUP_DETAIL_KEYS.overdueBilling),
+      GROUP_MODAL_INITIAL_VALUES.cgrOverdueBilling === "true" ? "true" : "false",
+    ),
+    cgrIsActive: toSelectBoolean(
+      getFirstDefinedValue(source, GROUP_DETAIL_KEYS.active),
+      GROUP_MODAL_INITIAL_VALUES.cgrIsActive === "true" ? "true" : "false",
+    ),
+  };
+}
+
+function buildGroupModalFields(): ERPDynamicModalField[] {
+  return [
+    {
+      name: "cgrName",
+      label: "Group Name",
+      required: true,
+      colSpan: 2,
+      validation: {
+        minLength: 2,
+        minLengthMessage: "Group Name must be at least 2 characters.",
+      },
+    },
+    {
+      name: "cgrShort",
+      label: "Short Name",
+      colSpan: 2,
+    },
+    {
+      name: "cgrOrder",
+      label: "Sort Order",
+      type: "number",
+      min: 0,
+      step: 1,
+      validation: {
+        minMessage: "Sort Order must be 0 or greater.",
+      },
+    },
+    {
+      name: "cgrDiscPerc",
+      label: "Discount %",
+      type: "number",
+      min: 0,
+      step: "0.001",
+      validation: {
+        minMessage: "Discount % must be 0 or greater.",
+      },
+    },
+    {
+      name: "cgrCollectionDays",
+      label: "Collection Days",
+      colSpan: 2,
+      placeholder: "1,7,15",
+      helperText: "Comma-separated day numbers.",
+    },
+    {
+      name: "cgrDebitDays",
+      label: "Debit Days",
+      type: "number",
+      min: 0,
+      step: 1,
+      validation: {
+        minMessage: "Debit Days must be 0 or greater.",
+      },
+    },
+    {
+      name: "cgrDebitLimit",
+      label: "Debit Limit",
+      type: "number",
+      min: 0,
+      step: "0.01",
+      validation: {
+        minMessage: "Debit Limit must be 0 or greater.",
+      },
+    },
+    {
+      name: "cgrBillsLimit",
+      label: "Bills Limit",
+      type: "number",
+      min: 0,
+      step: 1,
+      validation: {
+        minMessage: "Bills Limit must be 0 or greater.",
+      },
+    },
+    {
+      name: "cgrDebitAllowed",
+      label: "Debit Allowed",
+      type: "checkbox",
+    },
+    {
+      name: "cgrOverdueBilling",
+      label: "Overdue Billing",
+      type: "checkbox",
+    },
+    {
+      name: "cgrIsActive",
+      label: "Is Active",
+      type: "checkbox",
+    },
+    {
+      name: "cgrNarration",
+      label: "Narration",
+      colSpan: 2,
+    },
+  ];
+}
+
 export default function CustomerPage() {
+  const stateModalControllerRef = useRef<ERPDynamicModalController | null>(null);
+  const areaModalControllerRef = useRef<ERPDynamicModalController | null>(null);
+  const groupModalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const { getAll: getStateLookup } = useApi<unknown>(STATE_LOOKUP_ENDPOINT);
+  const {
+    getAll: getStateByCode,
+    loading: stateDetailsLoading,
+    error: stateDetailsError,
+    reset: resetStateDetailsState,
+  } = useApi<unknown>(STATE_GET_ENDPOINT, {
+    toast: {
+      success: false,
+    },
+  });
+  const {
+    run: upsertStateCode,
+    loading: stateSaveLoading,
+    error: stateSaveError,
+    reset: resetStateSaveState,
+  } = useApi<unknown, Record<string, unknown>>(STATE_UPSERT_ENDPOINT, {
+    method: "POST",
+  });
   const { getAll: getAreaLookup } = useApi<unknown>(AREA_LOOKUP_ENDPOINT);
+  const {
+    getAll: getAreaById,
+    loading: areaDetailsLoading,
+    error: areaDetailsError,
+    reset: resetAreaDetailsState,
+  } = useApi<unknown>(AREA_GET_ENDPOINT, {
+    toast: {
+      success: false,
+    },
+  });
+  const {
+    run: upsertArea,
+    loading: areaSaveLoading,
+    error: areaSaveError,
+    reset: resetAreaSaveState,
+  } = useApi<unknown, Record<string, unknown>>(AREA_UPSERT_ENDPOINT, {
+    method: "POST",
+  });
+  const { getAll: getCityLookup } = useApi<unknown>(CITY_LOOKUP_ENDPOINT);
   const { getAll: getCustomerGroupLookup } = useApi<unknown>(CUSTOMER_GROUP_LOOKUP_ENDPOINT);
+  const {
+    getAll: getCustomerGroupById,
+    loading: groupDetailsLoading,
+    error: groupDetailsError,
+    reset: resetGroupDetailsState,
+  } = useApi<unknown>(CUSTOMER_GROUP_GET_ENDPOINT, {
+    toast: {
+      success: false,
+    },
+  });
+  const {
+    run: upsertCustomerGroup,
+    loading: groupSaveLoading,
+    error: groupSaveError,
+    reset: resetGroupSaveState,
+  } = useApi<unknown, Record<string, unknown>>(CUSTOMER_GROUP_UPSERT_ENDPOINT, {
+    method: "POST",
+  });
   const { getAll: getCompanyLookup } = useApi<unknown>(COMPANY_LOOKUP_ENDPOINT);
   const { getAll: getBranchLookup } = useApi<unknown>(BRANCH_LOOKUP_ENDPOINT);
   const { getAll: getPriceLevelLookup } = useApi<unknown>(PRICE_LEVEL_LOOKUP_ENDPOINT);
-  const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_STATE_OPTION]);
-  const [areaOptions, setAreaOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_AREA_OPTION]);
-  const [groupOptions, setGroupOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_GROUP_OPTION]);
-  const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([
-    DEFAULT_COMPANY_OPTION,
-  ]);
-  const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_BRANCH_OPTION]);
-  const [priceLevelOptions, setPriceLevelOptions] = useState<ERPDynamicSelectOption[]>([
-    DEFAULT_PRICE_LEVEL_OPTION,
-  ]);
+  const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [regionStateOptions, setRegionStateOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [areaOptions, setAreaOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [cityOptions, setCityOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [groupOptions, setGroupOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [priceLevelOptions, setPriceLevelOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
+  const [editingStateCode, setEditingStateCode] = useState<string | null>(null);
+  const [editingAreaId, setEditingAreaId] = useState<string | null>(null);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   useEffect(() => {
     let mounted = true;
     void (async () => {
       try {
-        const [statePayload, areaPayload, groupPayload, companyPayload, branchPayload, priceLevelPayload] =
+        const [statePayload, areaPayload, cityPayload, groupPayload, companyPayload, branchPayload, priceLevelPayload] =
           await Promise.all([
-            getStateLookup(LOOKUP_REQUEST_QUERY),
+            getStateLookup(STATE_LOOKUP_REQUEST_QUERY),
             getAreaLookup(LOOKUP_REQUEST_QUERY),
+            getCityLookup(LOOKUP_REQUEST_QUERY),
             getCustomerGroupLookup(LOOKUP_REQUEST_QUERY),
             getCompanyLookup(COMPANY_LOOKUP_REQUEST_QUERY),
             getBranchLookup(BRANCH_LOOKUP_REQUEST_QUERY),
@@ -867,55 +1648,51 @@ export default function CustomerPage() {
         }
         const stateLookupData = buildStateLookupData(statePayload);
         setStateOptions(stateLookupData.options);
+        setRegionStateOptions(stateLookupData.regionStateOptions);
         setStateNameByCode(stateLookupData.stateNameByCode);
         setStateCodeByName(stateLookupData.stateCodeByName);
-        setAreaOptions(
-          buildLookupOptions(areaPayload, DEFAULT_AREA_OPTION, {
-            arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "areas"],
-            idKeys: ["armId", "arm_id", "area_id", "areaId", "id", "_id", "value"],
-            labelKeys: ["armName", "arm_name", "area_name", "areaName", "name", "label"],
-          }),
-        );
-        setGroupOptions(
-          buildLookupOptions(groupPayload, DEFAULT_GROUP_OPTION, {
-            arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "customerGroups", "customer_groups"],
-            idKeys: ["cgrId", "cgr_id", "group_id", "groupId", "id", "_id", "value"],
-            labelKeys: ["cgrName", "cgr_name", "group_name", "groupName", "name", "label"],
-          }),
-        );
-        setCompanyOptions(
+        setAreaOptions(buildAreaOptions(areaPayload));
+        setCityOptions(buildCityOptions(cityPayload));
+        setGroupOptions(buildGroupOptions(groupPayload));
+        const companyLookupOptions = removeEmptyOptions(
           buildLookupOptions(companyPayload, DEFAULT_COMPANY_OPTION, {
             arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "companies", "companys"],
             idKeys: ["compId", "comp_id", "company_id", "companyId", "id", "_id", "value"],
             labelKeys: ["compName", "comp_name", "company_name", "companyName", "name", "label"],
           }),
         );
-        setBranchOptions(
+        setCompanyOptions([ALL_COMPANY_OPTION, ...companyLookupOptions]);
+        const branchLookupOptions = removeEmptyOptions(
           buildLookupOptions(branchPayload, DEFAULT_BRANCH_OPTION, {
             arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "branches", "branch_masters"],
             idKeys: ["brId", "br_id", "branch_id", "branchId", "id", "_id", "value"],
             labelKeys: ["brName", "br_name", "branch_name", "branchName", "name", "label"],
           }),
         );
+        setBranchOptions([ALL_BRANCH_OPTION, ...branchLookupOptions]);
         setPriceLevelOptions(
-          buildLookupOptions(priceLevelPayload, DEFAULT_PRICE_LEVEL_OPTION, {
-            arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "priceLevels", "price_levels"],
-            idKeys: ["priceLvlId", "price_lvl_id", "id", "value"],
-            labelKeys: ["priceLvlName", "price_lvl_name", "name", "label"],
-          }),
+          removeEmptyOptions(
+            buildLookupOptions(priceLevelPayload, DEFAULT_PRICE_LEVEL_OPTION, {
+              arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "priceLevels", "price_levels"],
+              idKeys: ["priceLvlId", "price_lvl_id", "id", "value"],
+              labelKeys: ["priceLvlName", "price_lvl_name", "name", "label"],
+            }),
+          ),
         );
       } catch {
         if (!mounted) {
           return;
         }
-        setStateOptions([DEFAULT_STATE_OPTION]);
+        setStateOptions([]);
+        setRegionStateOptions([]);
         setStateNameByCode({});
         setStateCodeByName({});
-        setAreaOptions([DEFAULT_AREA_OPTION]);
-        setGroupOptions([DEFAULT_GROUP_OPTION]);
-        setCompanyOptions([DEFAULT_COMPANY_OPTION]);
-        setBranchOptions([DEFAULT_BRANCH_OPTION]);
-        setPriceLevelOptions([DEFAULT_PRICE_LEVEL_OPTION]);
+        setAreaOptions([]);
+        setCityOptions([]);
+        setGroupOptions([]);
+        setCompanyOptions([]);
+        setBranchOptions([]);
+        setPriceLevelOptions([]);
       }
     })();
     return () => {
@@ -924,181 +1701,748 @@ export default function CustomerPage() {
   }, [
     getAreaLookup,
     getBranchLookup,
+    getCityLookup,
     getCompanyLookup,
     getCustomerGroupLookup,
     getPriceLevelLookup,
     getStateLookup,
   ]);
+  const stateCreateModalFields = useMemo(() => buildStateCodeModalFields(false), []);
+  const stateUpdateModalFields = useMemo(() => buildStateCodeModalFields(true), []);
+  const stateModalVariants = useMemo<ERPDynamicModalVariant[]>(
+    () => [
+      {
+        key: "state-create",
+        cardTitle: "Create State",
+        cardDescription: "Create a new state code.",
+        cardButtonLabel: "Create",
+        modalTitle: "New State",
+        modalDescription: "Create state from customer form.",
+        submitLabel: stateSaveLoading ? "Saving..." : "Save",
+        accent: "blue",
+        fields: stateCreateModalFields,
+      },
+      {
+        key: "state-update",
+        cardTitle: "Update State",
+        cardDescription: "Update existing state code.",
+        cardButtonLabel: "Update",
+        modalTitle: "Edit State",
+        modalDescription: "Update state from customer form.",
+        submitLabel: stateSaveLoading ? "Updating..." : "Update",
+        accent: "emerald",
+        fields: stateUpdateModalFields,
+      },
+    ],
+    [stateCreateModalFields, stateSaveLoading, stateUpdateModalFields],
+  );
+  const refreshStateOptions = useCallback(async () => {
+    const statePayload = await getStateLookup(STATE_LOOKUP_REQUEST_QUERY);
+    const stateLookupData = buildStateLookupData(statePayload);
+    setStateOptions(stateLookupData.options);
+    setRegionStateOptions(stateLookupData.regionStateOptions);
+    setStateNameByCode(stateLookupData.stateNameByCode);
+    setStateCodeByName(stateLookupData.stateCodeByName);
+  }, [getStateLookup]);
+  const resolveStateOptionFromShortcut = useCallback(
+    (payload: ERPDynamicSearchShortcutPayload): ERPDynamicSelectOption | null => {
+      const selectedValue = payload.value.trim().toUpperCase();
+      if (selectedValue) {
+        const selectedOption = stateOptions.find((option) => option.value === selectedValue);
+        if (selectedOption) {
+          return selectedOption;
+        }
+      }
+      const normalizedQuery = payload.query.trim().toLowerCase();
+      if (!normalizedQuery) {
+        return null;
+      }
+      const exactMatch = stateOptions.find((option) => {
+        const label = option.label.trim().toLowerCase();
+        const value = option.value.trim().toLowerCase();
+        return label === normalizedQuery || value === normalizedQuery;
+      });
+      if (exactMatch) {
+        return exactMatch;
+      }
+      const startsWithMatch = stateOptions.find((option) =>
+        option.label.trim().toLowerCase().startsWith(normalizedQuery),
+      );
+      if (startsWithMatch) {
+        return startsWithMatch;
+      }
+      return (
+        stateOptions.find((option) =>
+          option.label.trim().toLowerCase().includes(normalizedQuery),
+        ) ?? null
+      );
+    },
+    [stateOptions],
+  );
+  const handleStateCreateShortcut = useCallback(
+    (payload: ERPDynamicSearchShortcutPayload) => {
+      const query = payload.query.trim();
+      const compactQuery = query.replace(/\s+/g, "");
+      resetStateSaveState();
+      resetStateDetailsState();
+      setEditingStateCode(null);
+      stateModalControllerRef.current?.openModal("state-create", {
+        values: {
+          ...STATE_MODAL_INITIAL_VALUES,
+          stateCode: compactQuery.length === 2 ? toUpper(compactQuery) : "",
+          stateName: query,
+        },
+      });
+    },
+    [resetStateDetailsState, resetStateSaveState],
+  );
+  const handleStateEditShortcut = useCallback(
+    async (payload: ERPDynamicSearchShortcutPayload) => {
+      const matchedOption = resolveStateOptionFromShortcut(payload);
+      if (!matchedOption) {
+        toast.info("Type/select an existing state, then press Alt+A.");
+        return;
+      }
+      const matchedStateCode = matchedOption.value.trim().toUpperCase();
+      if (!matchedStateCode) {
+        toast.info("Select an existing state to edit.");
+        return;
+      }
+      resetStateSaveState();
+      resetStateDetailsState();
+      setEditingStateCode(matchedStateCode);
+      try {
+        const detailPayload = await getStateByCode({
+          stateCode: matchedStateCode,
+        });
+        const detailSource = extractStateCodeDetailSource(detailPayload);
+        stateModalControllerRef.current?.openModal("state-update", {
+          values: detailSource
+            ? mapStateCodeDetailToFormValues(detailSource)
+            : {
+                ...STATE_MODAL_INITIAL_VALUES,
+                stateCode: matchedStateCode,
+                stateName: stateNameByCode[matchedStateCode] ?? matchedOption.label,
+              },
+        });
+      } catch {
+        // Error UI is handled by useApi.
+      }
+    },
+    [
+      getStateByCode,
+      resetStateDetailsState,
+      resetStateSaveState,
+      resolveStateOptionFromShortcut,
+      stateNameByCode,
+    ],
+  );
+  const handleStateModalSubmit = useCallback(
+    async ({ variantKey, values }: ERPDynamicModalSubmitPayload) => {
+      const isUpdate = variantKey === "state-update";
+      const requestedStateCode = toUpper(values.stateCode ?? "");
+      const stateCode = isUpdate && editingStateCode ? editingStateCode : requestedStateCode;
+      const payload: Record<string, unknown> = {
+        stateCode,
+        stateName: (values.stateName ?? "").trim(),
+        stateUt: (values.stateUt ?? "false") === "true",
+        tinCode: toUpperNullable(values.tinCode ?? ""),
+        isActive: (values.isActive ?? "true") === "true",
+      };
+      await upsertStateCode({ body: payload });
+      setEditingStateCode(null);
+      await refreshStateOptions();
+    },
+    [editingStateCode, refreshStateOptions, upsertStateCode],
+  );
+  const handleStateModalCancel = useCallback(() => {
+    if (stateSaveLoading || stateDetailsLoading) {
+      return;
+    }
+    resetStateSaveState();
+    resetStateDetailsState();
+    setEditingStateCode(null);
+  }, [resetStateDetailsState, resetStateSaveState, stateDetailsLoading, stateSaveLoading]);
+  const areaModalFields = useMemo(
+    () => buildAreaModalFields(cityOptions),
+    [cityOptions],
+  );
+  const areaModalVariants = useMemo<ERPDynamicModalVariant[]>(
+    () => [
+      {
+        key: "area-create",
+        cardTitle: "Create Area",
+        cardDescription: "Create a new area.",
+        cardButtonLabel: "Create",
+        modalTitle: "New Area",
+        modalDescription: "Create area from customer form.",
+        submitLabel: areaSaveLoading ? "Saving..." : "Save",
+        accent: "blue",
+        fields: areaModalFields,
+      },
+      {
+        key: "area-update",
+        cardTitle: "Update Area",
+        cardDescription: "Update existing area.",
+        cardButtonLabel: "Update",
+        modalTitle: "Edit Area",
+        modalDescription: "Update area from customer form.",
+        submitLabel: areaSaveLoading ? "Updating..." : "Update",
+        accent: "emerald",
+        fields: areaModalFields,
+      },
+    ],
+    [areaModalFields, areaSaveLoading],
+  );
+  const refreshAreaOptions = useCallback(async () => {
+    const payload = await getAreaLookup(LOOKUP_REQUEST_QUERY);
+    setAreaOptions(buildAreaOptions(payload));
+  }, [getAreaLookup]);
+  const resolveAreaOptionFromShortcut = useCallback(
+    (payload: ERPDynamicSearchShortcutPayload): ERPDynamicSelectOption | null => {
+      const selectedValue = payload.value.trim();
+      if (selectedValue) {
+        const selectedOption = areaOptions.find((option) => option.value === selectedValue);
+        if (selectedOption) {
+          return selectedOption;
+        }
+      }
+      const normalizedQuery = payload.query.trim().toLowerCase();
+      if (!normalizedQuery) {
+        return null;
+      }
+      const exactMatch = areaOptions.find((option) => {
+        const label = option.label.trim().toLowerCase();
+        const value = option.value.trim().toLowerCase();
+        return label === normalizedQuery || value === normalizedQuery;
+      });
+      if (exactMatch) {
+        return exactMatch;
+      }
+      const startsWithMatch = areaOptions.find((option) =>
+        option.label.trim().toLowerCase().startsWith(normalizedQuery),
+      );
+      if (startsWithMatch) {
+        return startsWithMatch;
+      }
+      return (
+        areaOptions.find((option) =>
+          option.label.trim().toLowerCase().includes(normalizedQuery),
+        ) ?? null
+      );
+    },
+    [areaOptions],
+  );
+  const handleAreaCreateShortcut = useCallback(
+    (payload: ERPDynamicSearchShortcutPayload) => {
+      resetAreaSaveState();
+      resetAreaDetailsState();
+      setEditingAreaId(null);
+      areaModalControllerRef.current?.openModal("area-create", {
+        values: {
+          ...AREA_MODAL_INITIAL_VALUES,
+          armName: payload.query.trim(),
+        },
+      });
+    },
+    [resetAreaDetailsState, resetAreaSaveState],
+  );
+  const handleAreaEditShortcut = useCallback(
+    async (payload: ERPDynamicSearchShortcutPayload) => {
+      const matchedOption = resolveAreaOptionFromShortcut(payload);
+      if (!matchedOption) {
+        toast.info("Type/select an existing area, then press Alt+A.");
+        return;
+      }
+      const matchedAreaId = matchedOption.value.trim();
+      if (!matchedAreaId) {
+        toast.info("Select an existing area to edit.");
+        return;
+      }
+      resetAreaSaveState();
+      resetAreaDetailsState();
+      setEditingAreaId(matchedAreaId);
+      try {
+        const detailPayload = await getAreaById({
+          armId: matchedAreaId,
+        });
+        const detailSource = extractAreaDetailSource(detailPayload);
+        areaModalControllerRef.current?.openModal("area-update", {
+          values: detailSource
+            ? mapAreaDetailToFormValues(detailSource)
+            : {
+                ...AREA_MODAL_INITIAL_VALUES,
+                armName: matchedOption.label,
+              },
+        });
+      } catch {
+        // Error UI is handled by useApi.
+      }
+    },
+    [
+      getAreaById,
+      resetAreaDetailsState,
+      resetAreaSaveState,
+      resolveAreaOptionFromShortcut,
+    ],
+  );
+  const handleAreaModalSubmit = useCallback(
+    async ({ variantKey, values }: ERPDynamicModalSubmitPayload) => {
+      const isUpdate = variantKey === "area-update";
+      const armName = (values.armName ?? "").trim();
+      const armAlias = (values.armAlias ?? "").trim();
+      const armShort = (values.armShort ?? "").trim();
+      const armCityId = (values.armCityId ?? "").trim();
+      const armSort = toNonNegativeInteger(values.armSort ?? "0", 0);
+      const armDistanceKm = toNullableInteger(values.armDistanceKm ?? "");
+      const armCollectionDays = parseCollectionDays(values.armCollectionDays ?? "");
+      const armIsActive = (values.armIsActive ?? "true") === "true";
+      const payload: Record<string, unknown> = {
+        armName,
+        armAlias: toNullableString(armAlias),
+        armShort: toNullableString(armShort),
+        armCityId,
+        armSort,
+        armDistanceKm,
+        armCollectionDays,
+        armIsActive,
+      };
+      if (isUpdate) {
+        if (!editingAreaId) {
+          return;
+        }
+        payload.armId = editingAreaId;
+      }
+      await upsertArea({ body: payload });
+      setEditingAreaId(null);
+      await refreshAreaOptions();
+    },
+    [editingAreaId, refreshAreaOptions, upsertArea],
+  );
+  const handleAreaModalCancel = useCallback(() => {
+    if (areaSaveLoading || areaDetailsLoading) {
+      return;
+    }
+    resetAreaSaveState();
+    resetAreaDetailsState();
+    setEditingAreaId(null);
+  }, [areaDetailsLoading, areaSaveLoading, resetAreaDetailsState, resetAreaSaveState]);
+  const groupModalFields = useMemo(() => buildGroupModalFields(), []);
+  const groupModalVariants = useMemo<ERPDynamicModalVariant[]>(
+    () => [
+      {
+        key: "group-create",
+        cardTitle: "Create Customer Group",
+        cardDescription: "Create a new customer group.",
+        cardButtonLabel: "Create",
+        modalTitle: "New Customer Group",
+        modalDescription: "Create customer group from customer form.",
+        submitLabel: groupSaveLoading ? "Saving..." : "Save",
+        accent: "blue",
+        fields: groupModalFields,
+      },
+      {
+        key: "group-update",
+        cardTitle: "Update Customer Group",
+        cardDescription: "Update existing customer group.",
+        cardButtonLabel: "Update",
+        modalTitle: "Edit Customer Group",
+        modalDescription: "Update customer group from customer form.",
+        submitLabel: groupSaveLoading ? "Updating..." : "Update",
+        accent: "emerald",
+        fields: groupModalFields,
+      },
+    ],
+    [groupModalFields, groupSaveLoading],
+  );
+  const refreshGroupOptions = useCallback(async () => {
+    const payload = await getCustomerGroupLookup(LOOKUP_REQUEST_QUERY);
+    setGroupOptions(buildGroupOptions(payload));
+  }, [getCustomerGroupLookup]);
+  const resolveGroupOptionFromShortcut = useCallback(
+    (payload: ERPDynamicSearchShortcutPayload): ERPDynamicSelectOption | null => {
+      const selectedValue = payload.value.trim();
+      if (selectedValue) {
+        const selectedOption = groupOptions.find((option) => option.value === selectedValue);
+        if (selectedOption) {
+          return selectedOption;
+        }
+      }
+      const normalizedQuery = payload.query.trim().toLowerCase();
+      if (!normalizedQuery) {
+        return null;
+      }
+      const exactMatch = groupOptions.find((option) => {
+        const label = option.label.trim().toLowerCase();
+        const value = option.value.trim().toLowerCase();
+        return label === normalizedQuery || value === normalizedQuery;
+      });
+      if (exactMatch) {
+        return exactMatch;
+      }
+      const startsWithMatch = groupOptions.find((option) =>
+        option.label.trim().toLowerCase().startsWith(normalizedQuery),
+      );
+      if (startsWithMatch) {
+        return startsWithMatch;
+      }
+      return (
+        groupOptions.find((option) =>
+          option.label.trim().toLowerCase().includes(normalizedQuery),
+        ) ?? null
+      );
+    },
+    [groupOptions],
+  );
+  const handleGroupCreateShortcut = useCallback(
+    (payload: ERPDynamicSearchShortcutPayload) => {
+      resetGroupSaveState();
+      resetGroupDetailsState();
+      setEditingGroupId(null);
+      groupModalControllerRef.current?.openModal("group-create", {
+        values: {
+          ...GROUP_MODAL_INITIAL_VALUES,
+          cgrName: payload.query.trim(),
+        },
+      });
+    },
+    [resetGroupDetailsState, resetGroupSaveState],
+  );
+  const handleGroupEditShortcut = useCallback(
+    async (payload: ERPDynamicSearchShortcutPayload) => {
+      const matchedOption = resolveGroupOptionFromShortcut(payload);
+      if (!matchedOption) {
+        toast.info("Type/select an existing customer group, then press Alt+A.");
+        return;
+      }
+      const matchedGroupId = matchedOption.value.trim();
+      if (!matchedGroupId) {
+        toast.info("Select an existing customer group to edit.");
+        return;
+      }
+      resetGroupSaveState();
+      resetGroupDetailsState();
+      setEditingGroupId(matchedGroupId);
+      try {
+        const detailPayload = await getCustomerGroupById({
+          cgrId: matchedGroupId,
+        });
+        const detailSource = extractGroupDetailSource(detailPayload);
+        groupModalControllerRef.current?.openModal("group-update", {
+          values: detailSource
+            ? mapGroupDetailToFormValues(detailSource)
+            : {
+                ...GROUP_MODAL_INITIAL_VALUES,
+                cgrName: matchedOption.label,
+              },
+        });
+      } catch {
+        // Error UI is handled by useApi.
+      }
+    },
+    [
+      getCustomerGroupById,
+      resetGroupDetailsState,
+      resetGroupSaveState,
+      resolveGroupOptionFromShortcut,
+    ],
+  );
+  const handleGroupModalSubmit = useCallback(
+    async ({ variantKey, values }: ERPDynamicModalSubmitPayload) => {
+      const isUpdate = variantKey === "group-update";
+      const payload: Record<string, unknown> = {
+        cgrName: (values.cgrName ?? "").trim(),
+        cgrAlias: toNullableString(values.cgrAlias ?? ""),
+        cgrShort: toNullableString(values.cgrShort ?? ""),
+        cgrNarration: toNullableString(values.cgrNarration ?? ""),
+        cgrOrder: toNonNegativeNumber(values.cgrOrder ?? "0", 0),
+        cgrDiscPerc: toNonNegativeNumber(values.cgrDiscPerc ?? "0", 0),
+        cgrCollectionDays: parseGroupCollectionDays(values.cgrCollectionDays ?? ""),
+        cgrDebitAllowed: (values.cgrDebitAllowed ?? "false") === "true",
+        cgrDebitDays: toNonNegativeInteger(values.cgrDebitDays ?? "0", 0),
+        cgrDebitLimit: toNonNegativeNumber(values.cgrDebitLimit ?? "0", 0),
+        cgrBillsLimit: toNonNegativeInteger(values.cgrBillsLimit ?? "0", 0),
+        cgrOverdueBilling: (values.cgrOverdueBilling ?? "false") === "true",
+        cgrIsActive: (values.cgrIsActive ?? "true") === "true",
+      };
+      if (isUpdate) {
+        if (!editingGroupId) {
+          return;
+        }
+        payload.cgrId = editingGroupId;
+      }
+      await upsertCustomerGroup({ body: payload });
+      setEditingGroupId(null);
+      await refreshGroupOptions();
+    },
+    [editingGroupId, refreshGroupOptions, upsertCustomerGroup],
+  );
+  const handleGroupModalCancel = useCallback(() => {
+    if (groupSaveLoading || groupDetailsLoading) {
+      return;
+    }
+    resetGroupSaveState();
+    resetGroupDetailsState();
+    setEditingGroupId(null);
+  }, [groupDetailsLoading, groupSaveLoading, resetGroupDetailsState, resetGroupSaveState]);
   const customerFormFields = useMemo(
     () =>
       buildCustomerFormFields(
         stateOptions,
+        regionStateOptions,
         areaOptions,
         groupOptions,
         companyOptions,
         branchOptions,
         priceLevelOptions,
+        handleStateCreateShortcut,
+        handleStateEditShortcut,
+        handleAreaCreateShortcut,
+        handleAreaEditShortcut,
+        handleGroupCreateShortcut,
+        handleGroupEditShortcut,
       ),
-    [areaOptions, branchOptions, companyOptions, groupOptions, priceLevelOptions, stateOptions],
+    [
+      areaOptions,
+      branchOptions,
+      companyOptions,
+      groupOptions,
+      handleAreaCreateShortcut,
+      handleAreaEditShortcut,
+      handleGroupCreateShortcut,
+      handleGroupEditShortcut,
+      handleStateCreateShortcut,
+      handleStateEditShortcut,
+      priceLevelOptions,
+      regionStateOptions,
+      stateOptions,
+    ],
   );
   return (
-    <CrudMasterPage
-      title="Customer"
-      entityLabel="customer"
-      entityLabelPlural="customers"
-      apiEndpoints={API_ENDPOINTS}
-      gridTableName={GRID_TABLE_NAME}
-      lookupKeys={LOOKUP_KEYS}
-      requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
-      styles={styles}
-      listTitle="Customer List"
-      createLabel="Add Customer"
-      codeColumnHeader="Customer Code"
-      nameColumnHeader="Customer Name"
-      formTitle="Customer Form"
-      formDescription="Create and update customers."
-      customFields={customerFormFields}
-      createInitialValues={CUSTOMER_INITIAL_FORM_VALUES}
-      modalPanelStyle={CUSTOMER_MODAL_PANEL_STYLE}
-      modalFormGridColumns={3}
-      modalStackLabels
-      mapFormValues={({ source, defaults }) => {
-        const rowSource = source ?? {};
-        const mappedValues: Record<string, string> = {
-          ...CUSTOMER_INITIAL_FORM_VALUES,
-        };
-        for (const fieldName of CUSTOMER_TEXT_FIELD_NAMES) {
-          const value = toDisplayValue(getFieldValue(rowSource, fieldName));
-          mappedValues[fieldName] = value || CUSTOMER_INITIAL_FORM_VALUES[fieldName];
-        }
-        for (const fieldName of CUSTOMER_BOOLEAN_FIELD_NAMES) {
-          const fallback =
-            CUSTOMER_INITIAL_FORM_VALUES[fieldName] === "true" ? "true" : "false";
-          mappedValues[fieldName] = toSelectBoolean(
-            getFieldValue(rowSource, fieldName),
-            fallback,
+    <>
+      <CrudMasterPage
+        title="Customer"
+        entityLabel="customer"
+        entityLabelPlural="customers"
+        apiEndpoints={API_ENDPOINTS}
+        gridTableName={GRID_TABLE_NAME}
+        lookupKeys={LOOKUP_KEYS}
+        requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
+        styles={styles}
+        listTitle="Customer List"
+        createLabel="Add Customer"
+        codeColumnHeader="Customer Code"
+        nameColumnHeader="Customer Name"
+        formTitle="Customer Form"
+        formDescription="Create and update customers."
+        customFields={customerFormFields}
+        createInitialValues={CUSTOMER_INITIAL_FORM_VALUES}
+        modalPanelStyle={CUSTOMER_MODAL_PANEL_STYLE}
+        modalFormGridColumns={3}
+        modalFormDenseGrid={false}
+        modalStackLabels
+        mapFormValues={({ source, defaults }) => {
+          const rowSource = source ?? {};
+          const mappedValues: Record<string, string> = {
+            ...CUSTOMER_INITIAL_FORM_VALUES,
+          };
+          for (const fieldName of CUSTOMER_TEXT_FIELD_NAMES) {
+            const value = toDisplayValue(getFieldValue(rowSource, fieldName));
+            mappedValues[fieldName] = value || CUSTOMER_INITIAL_FORM_VALUES[fieldName];
+          }
+          for (const fieldName of CUSTOMER_BOOLEAN_FIELD_NAMES) {
+            const fallback =
+              CUSTOMER_INITIAL_FORM_VALUES[fieldName] === "true" ? "true" : "false";
+            mappedValues[fieldName] = toSelectBoolean(
+              getFieldValue(rowSource, fieldName),
+              fallback,
+            );
+          }
+          for (const fieldName of CUSTOMER_DATE_FIELD_NAMES) {
+            mappedValues[fieldName] = toDateInputValue(getFieldValue(rowSource, fieldName));
+          }
+          const stateCode = toUpper(
+            toDisplayValue(getFieldValue(rowSource, "cusStateCode")),
           );
-        }
-        for (const fieldName of CUSTOMER_DATE_FIELD_NAMES) {
-          mappedValues[fieldName] = toDateInputValue(getFieldValue(rowSource, fieldName));
-        }
-        const stateCode = toUpper(
-          toDisplayValue(getFieldValue(rowSource, "cusStateCode")),
-        );
-        const stateName = toDisplayValue(getFieldValue(rowSource, "cusStateName"));
-        mappedValues.cusStateCode =
-          stateCode || stateCodeByName[stateName] || CUSTOMER_INITIAL_FORM_VALUES.cusStateCode;
-        mappedValues.cusCollectionDays = toCollectionDaysInput(
-          getFieldValue(rowSource, "cusCollectionDays"),
-        );
-        mappedValues.cusName =
-          toDisplayValue(getFieldValue(rowSource, "cusName")) ||
-          toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.name)) ||
-          defaults.masterName ||
-          CUSTOMER_INITIAL_FORM_VALUES.cusName;
-        mappedValues.cusCode =
-          toDisplayValue(getFieldValue(rowSource, "cusCode")) ||
-          toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.code)) ||
-          defaults.searchCode ||
-          CUSTOMER_INITIAL_FORM_VALUES.cusCode;
-        mappedValues.cusShort =
-          toDisplayValue(getFieldValue(rowSource, "cusShort")) ||
-          toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.short)) ||
-          defaults.masterShortName ||
-          CUSTOMER_INITIAL_FORM_VALUES.cusShort;
-        mappedValues.cusSortOrder =
-          toDisplayValue(getFieldValue(rowSource, "cusSortOrder")) ||
-          toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) ||
-          defaults.position ||
-          CUSTOMER_INITIAL_FORM_VALUES.cusSortOrder;
-        mappedValues.cusNotes =
-          toDisplayValue(getFieldValue(rowSource, "cusNotes")) ||
-          toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.description)) ||
-          defaults.masterDescription ||
-          CUSTOMER_INITIAL_FORM_VALUES.cusNotes;
-        return mappedValues;
-      }}
-      buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
-        const cusStateCode = toUpper(values.cusStateCode ?? "");
-        const cusStateName = stateNameByCode[cusStateCode] ?? "";
-        const payload: Record<string, unknown> = {
-          cusTitle: toNullableString(values.cusTitle ?? ""),
-          cusShort: toNullableString(values.cusShort ?? ""),
-          cusCode: toNullableString(values.cusCode ?? ""),
-          cusName: toNullableString(values.cusName ?? ""),
-          cusAddr1: toNullableString(values.cusAddr1 ?? ""),
-          cusAddr2: toNullableString(values.cusAddr2 ?? ""),
-          cusAddr3: toNullableString(values.cusAddr3 ?? ""),
-          cusCity: toNullableString(values.cusCity ?? ""),
-          cusDistrict: toNullableString(values.cusDistrict ?? ""),
-          cusStateName,
-          cusCountry: toNullableString(values.cusCountry ?? ""),
-          cusStateCode,
-          cusLandmark: toNullableString(values.cusLandmark ?? ""),
-          cusPin: toNullableString(values.cusPin ?? ""),
-          cusTel: toNullableString(values.cusTel ?? ""),
-          cusPhone1: toNullableString(values.cusPhone1 ?? ""),
-          cusPhone2: toNullableString(values.cusPhone2 ?? ""),
-          cusWhatsappNo: toNullableString(values.cusWhatsappNo ?? ""),
-          cusEmail: toNullableString(values.cusEmail ?? ""),
-          cusAadharNo: toNullableString(values.cusAadharNo ?? ""),
-          cusContactPerson: toNullableString(values.cusContactPerson ?? ""),
-          cusDistanceKm: toNullableInteger(values.cusDistanceKm ?? ""),
-          cusCreditAllowed: (values.cusCreditAllowed ?? "false") === "true",
-          cusCreditBillLimit: toNonNegativeInteger(values.cusCreditBillLimit ?? "0", 0),
-          cusCreditAmtLimit: toNonNegativeNumber(values.cusCreditAmtLimit ?? "0", 0),
-          cusCreditDays: toNonNegativeInteger(values.cusCreditDays ?? "0", 0),
-          cusDebitBalance: toNonNegativeNumber(values.cusDebitBalance ?? "0", 0),
-          cusDiscPerc: toNonNegativeNumber(values.cusDiscPerc ?? "0", 0),
-          cusDebitGraceDays: toNonNegativeInteger(values.cusDebitGraceDays ?? "0", 0),
-          cusEnableSms: (values.cusEnableSms ?? "false") === "true",
-          cusOverdueSms: (values.cusOverdueSms ?? "false") === "true",
-          cusOverdueBilling: (values.cusOverdueBilling ?? "false") === "true",
-          cusAllowPromotion: (values.cusAllowPromotion ?? "false") === "true",
-          cusAllowLoyalty: (values.cusAllowLoyalty ?? "false") === "true",
-          cusAllowDiscount: (values.cusAllowDiscount ?? "true") === "true",
-          cusSortOrder: toNonNegativeInteger(values.cusSortOrder ?? "0", 0),
-          cusRegionName: toNullableString(values.cusRegionName ?? ""),
-          cusRegionAddr1: toNullableString(values.cusRegionAddr1 ?? ""),
-          cusRegionAddr2: toNullableString(values.cusRegionAddr2 ?? ""),
-          cusRegionAddr3: toNullableString(values.cusRegionAddr3 ?? ""),
-          cusRegionCity: toNullableString(values.cusRegionCity ?? ""),
-          cusRegionDistrict: toNullableString(values.cusRegionDistrict ?? ""),
-          cusRegionStateName: toNullableString(values.cusRegionStateName ?? ""),
-          cusRegionCountry: toNullableString(values.cusRegionCountry ?? ""),
-          cusBirthDate: toNullableDate(values.cusBirthDate ?? ""),
-          cusMarriageDate: toNullableDate(values.cusMarriageDate ?? ""),
-          cusTransportName: toNullableString(values.cusTransportName ?? ""),
-          cusFreightCharge: (values.cusFreightCharge ?? "false") === "true",
-          cusLoadingCharge: (values.cusLoadingCharge ?? "false") === "true",
-          cusUnloadingCharge: (values.cusUnloadingCharge ?? "false") === "true",
-          cusGstNo: toUpperNullable(values.cusGstNo ?? ""),
-          cusPanNo: toUpperNullable(values.cusPanNo ?? ""),
-          cusGstType: toNullableString(values.cusGstType ?? ""),
-          cusEcommerceGstin: toUpperNullable(values.cusEcommerceGstin ?? ""),
-          cusTcsApplicable: (values.cusTcsApplicable ?? "false") === "true",
-          cusItcollExempted: (values.cusItcollExempted ?? "false") === "true",
-          cusItcollType: toNullableString(values.cusItcollType ?? ""),
-          cusGeoLocation: toNullableString(values.cusGeoLocation ?? ""),
-          cusCollectionDays: parseCollectionDays(values.cusCollectionDays ?? ""),
-          cusDefaultSalesman: toNullableString(values.cusDefaultSalesman ?? ""),
-          cusPriceLevelId: toNonNegativeInteger(values.cusPriceLevelId ?? "0", 0),
-          cusBilledDate: toNullableDate(values.cusBilledDate ?? ""),
-          cusBilledCount: toNonNegativeInteger(values.cusBilledCount ?? "0", 0),
-          cusNotes: toNullableString(values.cusNotes ?? ""),
-          cusCompanyId: toNullableString(values.cusCompanyId ?? ""),
-          cusBranchId: toNullableString(values.cusBranchId ?? ""),
-          cusAreaId: (values.cusAreaId ?? "").trim(),
-          cusGroupId: (values.cusGroupId ?? "").trim(),
-          cusIsActive: (values.cusIsActive ?? "true") === "true",
-        };
-
-        if (shouldUpdate && editingItemId !== null) {
-          payload.cusId = toUpdateId(editingItemId);
-        }
-
-        return payload;
-      }}
-    />
+          const stateName = toDisplayValue(getFieldValue(rowSource, "cusStateName"));
+          mappedValues.cusStateCode =
+            stateCode || stateCodeByName[stateName] || CUSTOMER_INITIAL_FORM_VALUES.cusStateCode;
+          mappedValues.cusCollectionDays = toCollectionDaysInput(
+            getFieldValue(rowSource, "cusCollectionDays"),
+          );
+          mappedValues.cusGstType =
+            toGstTypeValue(toDisplayValue(getFieldValue(rowSource, "cusGstType"))) ||
+            CUSTOMER_INITIAL_FORM_VALUES.cusGstType;
+          mappedValues.cusName =
+            toDisplayValue(getFieldValue(rowSource, "cusName")) ||
+            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.name)) ||
+            defaults.masterName ||
+            CUSTOMER_INITIAL_FORM_VALUES.cusName;
+          mappedValues.cusCode =
+            toDisplayValue(getFieldValue(rowSource, "cusCode")) ||
+            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.code)) ||
+            defaults.searchCode ||
+            CUSTOMER_INITIAL_FORM_VALUES.cusCode;
+          mappedValues.cusShort =
+            toDisplayValue(getFieldValue(rowSource, "cusShort")) ||
+            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.short)) ||
+            defaults.masterShortName ||
+            CUSTOMER_INITIAL_FORM_VALUES.cusShort;
+          mappedValues.cusSortOrder =
+            toDisplayValue(getFieldValue(rowSource, "cusSortOrder")) ||
+            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) ||
+            defaults.position ||
+            CUSTOMER_INITIAL_FORM_VALUES.cusSortOrder;
+          mappedValues.cusCompanyId =
+            toDisplayValue(getFieldValue(rowSource, "cusCompanyId")) ||
+            ALL_COMPANY_OPTION_VALUE;
+          mappedValues.cusBranchId =
+            toDisplayValue(getFieldValue(rowSource, "cusBranchId")) ||
+            ALL_BRANCH_OPTION_VALUE;
+          mappedValues.cusNotes =
+            toDisplayValue(getFieldValue(rowSource, "cusNotes")) ||
+            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.description)) ||
+            defaults.masterDescription ||
+            CUSTOMER_INITIAL_FORM_VALUES.cusNotes;
+          return mappedValues;
+        }}
+        buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
+          const cusStateCode = toUpper(values.cusStateCode ?? "");
+          const cusStateName = stateNameByCode[cusStateCode] ?? "";
+          const cusGstType = toGstTypeValue(values.cusGstType ?? "");
+          const cusCreditBillLimit = toNonNegativeInteger(values.cusCreditBillLimit ?? "0", 0);
+          const cusCreditAmtLimit = toNonNegativeNumber(values.cusCreditAmtLimit ?? "0", 0);
+          const cusCreditDays = toNonNegativeInteger(values.cusCreditDays ?? "0", 0);
+          const cusDebitBalance = toNonNegativeNumber(values.cusDebitBalance ?? "0", 0);
+          const cusDiscPerc = toNonNegativeNumber(values.cusDiscPerc ?? "0", 0);
+          const cusDebitGraceDays = toNonNegativeInteger(values.cusDebitGraceDays ?? "0", 0);
+          const cusCreditAllowed =
+            cusCreditBillLimit > 0 || cusCreditAmtLimit > 0 || cusCreditDays > 0;
+          const payload: Record<string, unknown> = {
+            cusTitle: toNullableString(values.cusTitle ?? ""),
+            cusShort: toNullableString(values.cusShort ?? ""),
+            cusCode: toNullableString(values.cusCode ?? ""),
+            cusName: toNullableString(values.cusName ?? ""),
+            cusAddr1: toNullableString(values.cusAddr1 ?? ""),
+            cusAddr2: toNullableString(values.cusAddr2 ?? ""),
+            cusAddr3: toNullableString(values.cusAddr3 ?? ""),
+            cusCity: toNullableString(values.cusCity ?? ""),
+            cusDistrict: toNullableString(values.cusDistrict ?? ""),
+            cusStateName,
+            cusCountry: toNullableString(values.cusCountry ?? ""),
+            cusStateCode,
+            cusLandmark: toNullableString(values.cusLandmark ?? ""),
+            cusPin: toNullableString(values.cusPin ?? ""),
+            cusTel: toNullableString(values.cusTel ?? ""),
+            cusPhone1: toNullableString(values.cusPhone1 ?? ""),
+            cusPhone2: toNullableString(values.cusPhone2 ?? ""),
+            cusWhatsappNo: toNullableString(values.cusWhatsappNo ?? ""),
+            cusEmail: toNullableString(values.cusEmail ?? ""),
+            cusAadharNo: toNullableString(values.cusAadharNo ?? ""),
+            cusContactPerson: toNullableString(values.cusContactPerson ?? ""),
+            cusDistanceKm: toNullableInteger(values.cusDistanceKm ?? ""),
+            cusCreditAllowed,
+            cusCreditBillLimit,
+            cusCreditAmtLimit,
+            cusCreditDays,
+            cusDebitBalance,
+            cusDiscPerc,
+            cusDebitGraceDays,
+            cusEnableSms: (values.cusEnableSms ?? "false") === "true",
+            cusOverdueSms: (values.cusOverdueSms ?? "false") === "true",
+            cusOverdueBilling: (values.cusOverdueBilling ?? "false") === "true",
+            cusAllowPromotion: (values.cusAllowPromotion ?? "false") === "true",
+            cusAllowLoyalty: (values.cusAllowLoyalty ?? "false") === "true",
+            cusAllowDiscount: (values.cusAllowDiscount ?? "true") === "true",
+            cusSortOrder: toNonNegativeInteger(values.cusSortOrder ?? "0", 0),
+            cusRegionName: toNullableString(values.cusRegionName ?? ""),
+            cusRegionAddr1: toNullableString(values.cusRegionAddr1 ?? ""),
+            cusRegionAddr2: toNullableString(values.cusRegionAddr2 ?? ""),
+            cusRegionAddr3: toNullableString(values.cusRegionAddr3 ?? ""),
+            cusRegionCity: toNullableString(values.cusRegionCity ?? ""),
+            cusRegionDistrict: toNullableString(values.cusRegionDistrict ?? ""),
+            cusRegionStateName: toNullableString(values.cusRegionStateName ?? ""),
+            cusRegionCountry: toNullableString(values.cusRegionCountry ?? ""),
+            cusBirthDate: toNullableDate(values.cusBirthDate ?? ""),
+            cusMarriageDate: toNullableDate(values.cusMarriageDate ?? ""),
+            cusTransportName: toNullableString(values.cusTransportName ?? ""),
+            cusFreightCharge: (values.cusFreightCharge ?? "false") === "true",
+            cusLoadingCharge: (values.cusLoadingCharge ?? "false") === "true",
+            cusUnloadingCharge: (values.cusUnloadingCharge ?? "false") === "true",
+            cusGstNo: toUpperNullable(values.cusGstNo ?? ""),
+            cusPanNo: toUpperNullable(values.cusPanNo ?? ""),
+            cusGstType: toNullableString(cusGstType),
+            cusEcommerceGstin: toUpperNullable(values.cusEcommerceGstin ?? ""),
+            cusTcsApplicable: (values.cusTcsApplicable ?? "false") === "true",
+            cusItcollExempted: (values.cusItcollExempted ?? "false") === "true",
+            cusItcollType: toNullableString(values.cusItcollType ?? ""),
+            cusGeoLocation: toNullableString(values.cusGeoLocation ?? ""),
+            cusCollectionDays: parseCollectionDays(values.cusCollectionDays ?? ""),
+            cusDefaultSalesman: toNullableString(values.cusDefaultSalesman ?? ""),
+            cusPriceLevelId: toNonNegativeInteger(values.cusPriceLevelId ?? "0", 0),
+            cusBilledDate: toNullableDate(values.cusBilledDate ?? ""),
+            cusBilledCount: toNonNegativeInteger(values.cusBilledCount ?? "0", 0),
+            cusNotes: toNullableString(values.cusNotes ?? ""),
+            cusCompanyId: toNullableScopeId(
+              values.cusCompanyId ?? "",
+              ALL_COMPANY_OPTION_VALUE,
+            ),
+            cusBranchId: toNullableScopeId(
+              values.cusBranchId ?? "",
+              ALL_BRANCH_OPTION_VALUE,
+            ),
+            cusAreaId: (values.cusAreaId ?? "").trim(),
+            cusGroupId: (values.cusGroupId ?? "").trim(),
+            cusIsActive: (values.cusIsActive ?? "true") === "true",
+          };
+          if (shouldUpdate && editingItemId !== null) {
+            payload.cusId = toUpdateId(editingItemId);
+          }
+          return payload;
+        }}
+      />
+      <ERPDynamicModalForm
+        title="State Form"
+        description="Create and update states."
+        variants={stateModalVariants}
+        showDefaultCards={false}
+        hideSectionHeader
+        submitError={stateSaveError || stateDetailsError}
+        panelStyle={STATE_MODAL_PANEL_STYLE}
+        onControllerReady={(controller) => {
+          stateModalControllerRef.current = controller;
+        }}
+        onSubmit={handleStateModalSubmit}
+        onCancel={handleStateModalCancel}
+      />
+      <ERPDynamicModalForm
+        title="Area Form"
+        description="Create and update areas."
+        variants={areaModalVariants}
+        showDefaultCards={false}
+        hideSectionHeader
+        submitError={areaSaveError || areaDetailsError}
+        panelStyle={AREA_MODAL_PANEL_STYLE}
+        onControllerReady={(controller) => {
+          areaModalControllerRef.current = controller;
+        }}
+        onSubmit={handleAreaModalSubmit}
+        onCancel={handleAreaModalCancel}
+      />
+      <ERPDynamicModalForm
+        title="Customer Group Form"
+        description="Create and update customer groups."
+        variants={groupModalVariants}
+        showDefaultCards={false}
+        hideSectionHeader
+        submitError={groupSaveError || groupDetailsError}
+        panelStyle={GROUP_MODAL_PANEL_STYLE}
+        onControllerReady={(controller) => {
+          groupModalControllerRef.current = controller;
+        }}
+        onSubmit={handleGroupModalSubmit}
+        onCancel={handleGroupModalCancel}
+      />
+    </>
   );
 }

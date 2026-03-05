@@ -91,7 +91,7 @@ export function Label({ className, ...props }: LabelProps) {
 export type InputProps = InputHTMLAttributes<HTMLInputElement>;
 
 export function Input({ className, ...props }: InputProps) {
-  return <input className={cx("ui-input", className)} {...props} />;
+  return <input className={cx("ui-input", className)} {...props} autoComplete="off" />;
 }
 
 export type SelectProps = SelectHTMLAttributes<HTMLSelectElement>;
@@ -103,7 +103,7 @@ export function Select({ className, ...props }: SelectProps) {
 export type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement>;
 
 export function Textarea({ className, ...props }: TextareaProps) {
-  return <textarea className={cx("ui-textarea", className)} {...props} />;
+  return <textarea className={cx("ui-textarea", className)} {...props} autoComplete="off" />;
 }
 
 export type FieldHelpProps = HTMLAttributes<HTMLParagraphElement>;

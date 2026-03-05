@@ -155,7 +155,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form onSubmit={onSubmit} noValidate className="grid gap-3">
+        <form onSubmit={onSubmit} noValidate autoComplete="off" className="grid gap-3">
           {/* username */}
           <div>
             <label
@@ -168,7 +168,7 @@ export default function LoginPage() {
               id="username"
               name="username"
               type="text"
-              autoComplete="username"
+              autoComplete="off"
               required
               value={values.username}
               onChange={onChange}
@@ -194,7 +194,7 @@ export default function LoginPage() {
               id="password"
               name="password"
               type="password"
-              autoComplete="current-password"
+              autoComplete="off"
               required
               value={values.password}
               onChange={onChange}

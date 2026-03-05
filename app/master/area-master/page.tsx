@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
+import { toast } from "react-toastify";
 import type {
+  ERPDynamicModalController,
+  ERPDynamicModalSubmitPayload,
   ERPDynamicModalField,
+  ERPDynamicModalVariant,
+  ERPDynamicSearchShortcutPayload,
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
+import { ERPDynamicModalForm } from "@/components/library/ui/dynamic-modal-form";
 import styles from "../state-master/page.module.scss";
 
 const API_ENDPOINTS = {
@@ -19,10 +25,17 @@ const API_ENDPOINTS = {
 const GRID_TABLE_NAME = "area_master";
 
 const CITY_LOOKUP_ENDPOINT = "/cities/list";
+const CITY_GET_ENDPOINT = "/cities/get";
+const CITY_UPSERT_ENDPOINT = "/cities/create";
+const STATE_LOOKUP_ENDPOINT = "/states/list";
 
 const LOOKUP_REQUEST_QUERY = {
   page: "1",
   limit: "20",
+} as const;
+const STATE_LOOKUP_REQUEST_QUERY = {
+  page: "1",
+  limit: "100",
 } as const;
 
 const LOOKUP_KEYS = {
@@ -61,11 +74,44 @@ const CITY_LOOKUP_KEYS = {
   name: ["ctmName", "ctm_name", "city_name", "cityName", "name"],
   array: ["data", "items", "results", "rows", "list", "cities"],
 } as const;
+const CITY_DETAIL_ARRAY_KEYS = ["data", "items", "results", "rows", "list", "cities"] as const;
+const CITY_DETAIL_KEYS = {
+  id: ["ctmId", "ctm_id", "city_id", "cityId", "id", "_id"],
+  name: ["ctmName", "ctm_name", "city_name", "cityName", "name"],
+  alias: ["ctmAlias", "ctm_alias", "city_alias", "alias"],
+  short: ["ctmShort", "ctm_short", "city_short", "short_name", "shortName", "short"],
+  stateId: ["ctmStateId", "ctm_state_id", "state_id", "stateId"],
+  order: ["ctmOrder", "ctm_order", "order", "position", "sort"],
+  active: ["ctmIsActive", "ctm_is_active", "isActive", "is_active", "status"],
+} as const;
+const STATE_LOOKUP_KEYS = {
+  id: ["stmId", "stm_id", "state_id", "stateId", "id", "_id", "value"],
+  name: ["stmName", "stm_name", "state_name", "stateName", "name", "label"],
+  array: ["data", "items", "results", "rows", "list", "states"],
+} as const;
 
 const DEFAULT_CITY_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select City",
 };
+const DEFAULT_STATE_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Select State",
+};
+const CITY_MODAL_PANEL_STYLE: CSSProperties = {
+  width: "min(42vw, 42rem)",
+  maxHeight: "75vh",
+};
+
+const COLLECTION_DAY_OPTIONS: ERPDynamicSelectOption[] = [
+  { value: "1", label: "Monday" },
+  { value: "2", label: "Tuesday" },
+  { value: "3", label: "Wednesday" },
+  { value: "4", label: "Thursday" },
+  { value: "5", label: "Friday" },
+  { value: "6", label: "Saturday" },
+  { value: "7", label: "Sunday" },
+];
 
 const AREA_INITIAL_FORM_VALUES = {
   masterName: "",
@@ -77,8 +123,20 @@ const AREA_INITIAL_FORM_VALUES = {
   position: "0",
   areaIsActive: "true",
 } as const;
+const CITY_MODAL_INITIAL_VALUES: Record<string, string> = {
+  ctmName: "",
+  ctmAlias: "",
+  ctmShort: "",
+  ctmStateId: "",
+  ctmOrder: "0",
+  ctmIsActive: "true",
+};
 
-function buildAreaFormFields(cityOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
+function buildAreaFormFields(
+  cityOptions: ERPDynamicSelectOption[],
+  onCityCreateShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
+  onCityEditShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
+): ERPDynamicModalField[] {
   return [
     {
       name: "masterName",
@@ -108,6 +166,8 @@ function buildAreaFormFields(cityOptions: ERPDynamicSelectOption[]): ERPDynamicM
       searchable: true,
       required: true,
       options: cityOptions,
+      onSearchCreateShortcut: onCityCreateShortcut,
+      onSearchEditShortcut: onCityEditShortcut,
       placeholder: "Search city",
       validation: {
         requiredMessage: "City is required.",
@@ -128,8 +188,11 @@ function buildAreaFormFields(cityOptions: ERPDynamicSelectOption[]): ERPDynamicM
     {
       name: "areaCollectionDays",
       label: "Collection Days",
+      type: "select",
+      searchable: true,
+      multiple: true,
       colSpan: 2,
-      helperText: "Comma-separated day numbers.",
+      options: COLLECTION_DAY_OPTIONS,
     },
     {
       name: "position",
@@ -227,20 +290,27 @@ function parseCollectionDays(value: string): number[] {
     .map((token) => token.trim())
     .filter(Boolean)
     .map((token) => Number.parseInt(token, 10))
-    .filter((token) => Number.isFinite(token) && token >= 0);
+    .filter((token) => Number.isInteger(token) && token >= 1 && token <= 7);
 
   return Array.from(new Set(parsedValues));
 }
 
 function toCollectionDaysInput(value: unknown): string {
-  if (!Array.isArray(value)) {
-    return "";
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map((entry) => (typeof entry === "number" ? entry : Number(entry)))
+      .filter((entry) => Number.isInteger(entry) && entry >= 1 && entry <= 7)
+      .map((entry) => String(entry));
+    return Array.from(new Set(normalized)).join(",");
   }
 
-  return value
-    .filter((entry) => typeof entry === "number" && Number.isFinite(entry))
-    .map((entry) => String(entry))
-    .join(",");
+  if (typeof value === "string") {
+    return parseCollectionDays(value)
+      .map((entry) => String(entry))
+      .join(",");
+  }
+
+  return "";
 }
 
 function toSelectBoolean(value: unknown, fallback: "true" | "false"): "true" | "false" {
@@ -309,6 +379,85 @@ function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] 
   return Array.isArray(firstArray) ? firstArray : [];
 }
 
+function extractCityDetailSource(payload: unknown): Record<string, unknown> | null {
+  const rows = extractRows(payload, CITY_DETAIL_ARRAY_KEYS);
+  if (rows.length > 0) {
+    const firstRow = rows[0];
+    if (firstRow && typeof firstRow === "object" && !Array.isArray(firstRow)) {
+      return firstRow as Record<string, unknown>;
+    }
+  }
+
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+
+  const objectPayload = payload as Record<string, unknown>;
+  const nestedData = objectPayload.data;
+  if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
+    return nestedData as Record<string, unknown>;
+  }
+
+  return objectPayload;
+}
+
+function mapCityDetailToFormValues(source: Record<string, unknown>): Record<string, string> {
+  return {
+    ...CITY_MODAL_INITIAL_VALUES,
+    ctmName:
+      toDisplayValue(getFirstDefinedValue(source, CITY_DETAIL_KEYS.name)) ||
+      CITY_MODAL_INITIAL_VALUES.ctmName,
+    ctmAlias:
+      toDisplayValue(getFirstDefinedValue(source, CITY_DETAIL_KEYS.alias)) ||
+      CITY_MODAL_INITIAL_VALUES.ctmAlias,
+    ctmShort:
+      toDisplayValue(getFirstDefinedValue(source, CITY_DETAIL_KEYS.short)) ||
+      CITY_MODAL_INITIAL_VALUES.ctmShort,
+    ctmStateId:
+      toDisplayValue(getFirstDefinedValue(source, CITY_DETAIL_KEYS.stateId)) ||
+      CITY_MODAL_INITIAL_VALUES.ctmStateId,
+    ctmOrder:
+      toDisplayValue(getFirstDefinedValue(source, CITY_DETAIL_KEYS.order)) ||
+      CITY_MODAL_INITIAL_VALUES.ctmOrder,
+    ctmIsActive: toSelectBoolean(
+      getFirstDefinedValue(source, CITY_DETAIL_KEYS.active),
+      CITY_MODAL_INITIAL_VALUES.ctmIsActive === "true" ? "true" : "false",
+    ),
+  };
+}
+
+function buildStateOptions(payload: unknown): ERPDynamicSelectOption[] {
+  const optionMap = new Map<string, string>();
+  const rows = extractRows(payload, STATE_LOOKUP_KEYS.array);
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+
+    const source = row as Record<string, unknown>;
+    const stateId = toDisplayValue(getFirstDefinedValue(source, STATE_LOOKUP_KEYS.id));
+    if (!stateId) {
+      continue;
+    }
+
+    const stateName = toDisplayValue(getFirstDefinedValue(source, STATE_LOOKUP_KEYS.name));
+    if (!stateName) {
+      continue;
+    }
+
+    if (!optionMap.has(stateId)) {
+      optionMap.set(stateId, stateName);
+    }
+  }
+
+  const sortedOptions = Array.from(optionMap.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((left, right) => left.label.localeCompare(right.label));
+
+  return [DEFAULT_STATE_OPTION, ...sortedOptions];
+}
+
 function buildCityOptions(payload: unknown): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();
   const rows = extractRows(payload, CITY_LOOKUP_KEYS.array);
@@ -341,24 +490,108 @@ function buildCityOptions(payload: unknown): ERPDynamicSelectOption[] {
   return [DEFAULT_CITY_OPTION, ...sortedOptions];
 }
 
+function buildCityModalFields(stateOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
+  return [
+    {
+      name: "ctmName",
+      label: "City Name",
+      colSpan: 2,
+      required: true,
+      validation: {
+        minLength: 2,
+        minLengthMessage: "City Name must be at least 2 characters.",
+      },
+    },
+    {
+      name: "ctmAlias",
+      label: "Alias",
+      colSpan: 2,
+    },
+    {
+      name: "ctmShort",
+      label: "Short Name",
+      colSpan: 2,
+    },
+    {
+      name: "ctmStateId",
+      label: "State",
+      type: "select",
+      colSpan: 2,
+      searchable: true,
+      required: true,
+      options: stateOptions,
+      placeholder: "Search state",
+      validation: {
+        requiredMessage: "State is required.",
+      },
+    },
+    {
+      name: "ctmOrder",
+      label: "Order",
+      type: "number",
+      min: 0,
+      step: 1,
+      validation: {
+        minMessage: "Order must be 0 or greater.",
+      },
+    },
+    {
+      name: "ctmIsActive",
+      label: "Status",
+      type: "checkbox",
+      options: [
+        { label: "Active", value: "true" },
+        { label: "Inactive", value: "false" },
+      ],
+    },
+  ];
+}
+
 export default function AreaMasterPage() {
+  const cityModalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const { getAll: getCityLookup } = useApi<unknown>(CITY_LOOKUP_ENDPOINT);
+  const {
+    getAll: getCityById,
+    loading: cityDetailsLoading,
+    error: cityDetailsError,
+    reset: resetCityDetailsState,
+  } = useApi<unknown>(CITY_GET_ENDPOINT, {
+    toast: {
+      success: false,
+    },
+  });
+  const {
+    run: upsertCity,
+    loading: citySaveLoading,
+    error: citySaveError,
+    reset: resetCitySaveState,
+  } = useApi<unknown, Record<string, unknown>>(CITY_UPSERT_ENDPOINT, {
+    method: "POST",
+  });
+  const { getAll: getStateLookup } = useApi<unknown>(STATE_LOOKUP_ENDPOINT);
   const [cityOptions, setCityOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_CITY_OPTION]);
+  const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_STATE_OPTION]);
+  const [editingCityId, setEditingCityId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
 
     void (async () => {
       try {
-        const payload = await getCityLookup(LOOKUP_REQUEST_QUERY);
+        const [cityPayload, statePayload] = await Promise.all([
+          getCityLookup(LOOKUP_REQUEST_QUERY),
+          getStateLookup(STATE_LOOKUP_REQUEST_QUERY),
+        ]);
         if (!mounted) {
           return;
         }
 
-        setCityOptions(buildCityOptions(payload));
+        setCityOptions(buildCityOptions(cityPayload));
+        setStateOptions(buildStateOptions(statePayload));
       } catch {
         if (mounted) {
           setCityOptions([DEFAULT_CITY_OPTION]);
+          setStateOptions([DEFAULT_STATE_OPTION]);
         }
       }
     })();
@@ -366,80 +599,257 @@ export default function AreaMasterPage() {
     return () => {
       mounted = false;
     };
+  }, [getCityLookup, getStateLookup]);
+  const cityModalFields = useMemo(() => buildCityModalFields(stateOptions), [stateOptions]);
+  const cityModalVariants = useMemo<ERPDynamicModalVariant[]>(
+    () => [
+      {
+        key: "city-create",
+        cardTitle: "Create City",
+        cardDescription: "Create a new city.",
+        cardButtonLabel: "Create",
+        modalTitle: "New City",
+        modalDescription: "Create city from area form.",
+        submitLabel: citySaveLoading ? "Saving..." : "Save",
+        accent: "blue",
+        fields: cityModalFields,
+      },
+      {
+        key: "city-update",
+        cardTitle: "Update City",
+        cardDescription: "Update existing city.",
+        cardButtonLabel: "Update",
+        modalTitle: "Edit City",
+        modalDescription: "Update city from area form.",
+        submitLabel: citySaveLoading ? "Updating..." : "Update",
+        accent: "emerald",
+        fields: cityModalFields,
+      },
+    ],
+    [cityModalFields, citySaveLoading],
+  );
+  const refreshCityOptions = useCallback(async () => {
+    const payload = await getCityLookup(LOOKUP_REQUEST_QUERY);
+    setCityOptions(buildCityOptions(payload));
   }, [getCityLookup]);
+  const resolveCityOptionFromShortcut = useCallback(
+    (payload: ERPDynamicSearchShortcutPayload): ERPDynamicSelectOption | null => {
+      const selectedValue = payload.value.trim();
+      if (selectedValue) {
+        const selectedOption = cityOptions.find((option) => option.value === selectedValue);
+        if (selectedOption) {
+          return selectedOption;
+        }
+      }
 
-  const areaFormFields = useMemo(() => buildAreaFormFields(cityOptions), [cityOptions]);
+      const normalizedQuery = payload.query.trim().toLowerCase();
+      if (!normalizedQuery) {
+        return null;
+      }
+
+      const exactMatch = cityOptions.find((option) => {
+        const label = option.label.trim().toLowerCase();
+        const value = option.value.trim().toLowerCase();
+        return label === normalizedQuery || value === normalizedQuery;
+      });
+      if (exactMatch) {
+        return exactMatch;
+      }
+
+      const startsWithMatch = cityOptions.find((option) =>
+        option.label.trim().toLowerCase().startsWith(normalizedQuery),
+      );
+      if (startsWithMatch) {
+        return startsWithMatch;
+      }
+
+      return (
+        cityOptions.find((option) =>
+          option.label.trim().toLowerCase().includes(normalizedQuery),
+        ) ?? null
+      );
+    },
+    [cityOptions],
+  );
+  const handleCityCreateShortcut = useCallback(
+    (payload: ERPDynamicSearchShortcutPayload) => {
+      resetCitySaveState();
+      resetCityDetailsState();
+      setEditingCityId(null);
+      cityModalControllerRef.current?.openModal("city-create", {
+        values: {
+          ...CITY_MODAL_INITIAL_VALUES,
+          ctmName: payload.query.trim(),
+        },
+      });
+    },
+    [resetCityDetailsState, resetCitySaveState],
+  );
+  const handleCityEditShortcut = useCallback(
+    async (payload: ERPDynamicSearchShortcutPayload) => {
+      const matchedOption = resolveCityOptionFromShortcut(payload);
+      if (!matchedOption) {
+        toast.info("Type/select an existing city, then press Alt+A.");
+        return;
+      }
+
+      const matchedCityId = matchedOption.value.trim();
+      if (!matchedCityId) {
+        toast.info("Select an existing city to edit.");
+        return;
+      }
+
+      resetCitySaveState();
+      resetCityDetailsState();
+      setEditingCityId(matchedCityId);
+      try {
+        const detailPayload = await getCityById({
+          ctmId: matchedCityId,
+        });
+        const detailSource = extractCityDetailSource(detailPayload);
+        cityModalControllerRef.current?.openModal("city-update", {
+          values: detailSource
+            ? mapCityDetailToFormValues(detailSource)
+            : {
+                ...CITY_MODAL_INITIAL_VALUES,
+                ctmName: matchedOption.label,
+              },
+        });
+      } catch {
+        // Error UI is handled by useApi.
+      }
+    },
+    [
+      getCityById,
+      resetCityDetailsState,
+      resetCitySaveState,
+      resolveCityOptionFromShortcut,
+    ],
+  );
+  const handleCityModalSubmit = useCallback(
+    async ({ variantKey, values }: ERPDynamicModalSubmitPayload) => {
+      const isUpdate = variantKey === "city-update";
+      const payload: Record<string, unknown> = {
+        ctmName: (values.ctmName ?? "").trim(),
+        ctmAlias: (values.ctmAlias ?? "").trim() || null,
+        ctmShort: (values.ctmShort ?? "").trim() || null,
+        ctmStateId: (values.ctmStateId ?? "").trim(),
+        ctmOrder: Math.max(0, toInteger(values.ctmOrder ?? "0", 0)),
+        ctmIsActive: (values.ctmIsActive ?? "true") !== "false",
+      };
+      if (isUpdate) {
+        if (!editingCityId) {
+          return;
+        }
+        payload.ctmId = editingCityId;
+      }
+      await upsertCity({ body: payload });
+      setEditingCityId(null);
+      await refreshCityOptions();
+    },
+    [editingCityId, refreshCityOptions, upsertCity],
+  );
+  const handleCityModalCancel = useCallback(() => {
+    if (citySaveLoading || cityDetailsLoading) {
+      return;
+    }
+    resetCitySaveState();
+    resetCityDetailsState();
+    setEditingCityId(null);
+  }, [cityDetailsLoading, citySaveLoading, resetCityDetailsState, resetCitySaveState]);
+  const areaFormFields = useMemo(
+    () => buildAreaFormFields(cityOptions, handleCityCreateShortcut, handleCityEditShortcut),
+    [cityOptions, handleCityCreateShortcut, handleCityEditShortcut],
+  );
 
   return (
-    <CrudMasterPage
-      title="Area"
-      entityLabel="area"
-      entityLabelPlural="areas"
-      apiEndpoints={API_ENDPOINTS}
-      gridTableName={GRID_TABLE_NAME}
-      lookupKeys={LOOKUP_KEYS}
-      requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
-      styles={styles}
-      listTitle="Area List"
-      createLabel="Add Area"
-      codeColumnHeader="Area Code"
-      nameColumnHeader="Area Name"
-      nameFieldLabel="Area Name"
-      nameFieldPlaceholder="Navrangpura"
-      formTitle="Area Form"
-      formDescription="Create and update areas."
-      customFields={areaFormFields}
-      createInitialValues={AREA_INITIAL_FORM_VALUES}
-      mapFormValues={({ source, defaults }) => {
-        const rowSource = source ?? {};
+    <>
+      <CrudMasterPage
+        title="Area"
+        entityLabel="area"
+        entityLabelPlural="areas"
+        apiEndpoints={API_ENDPOINTS}
+        gridTableName={GRID_TABLE_NAME}
+        lookupKeys={LOOKUP_KEYS}
+        requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
+        styles={styles}
+        listTitle="Area List"
+        createLabel="Add Area"
+        codeColumnHeader="Area Code"
+        nameColumnHeader="Area Name"
+        nameFieldLabel="Area Name"
+        nameFieldPlaceholder="Navrangpura"
+        formTitle="Area Form"
+        formDescription="Create and update areas."
+        customFields={areaFormFields}
+        createInitialValues={AREA_INITIAL_FORM_VALUES}
+        mapFormValues={({ source, defaults }) => {
+          const rowSource = source ?? {};
 
-        return {
-          ...AREA_INITIAL_FORM_VALUES,
-          masterName:
-            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.name)) || defaults.masterName,
-          masterAlias:
-            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.alias)) ||
-            defaults.masterAlias,
-          masterShortName:
-            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.short)) ||
-            defaults.masterShortName,
-          areaCityId: toDisplayValue(getFirstDefinedValue(rowSource, AREA_CITY_ID_KEYS)),
-          areaDistanceKm: toDisplayValue(getFirstDefinedValue(rowSource, AREA_DISTANCE_KEYS)),
-          areaCollectionDays: toCollectionDaysInput(
-            getFirstDefinedValue(rowSource, AREA_COLLECTION_DAYS_KEYS),
-          ),
-          position:
-            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) || defaults.position,
-          areaIsActive: toSelectBoolean(
-            getFirstDefinedValue(rowSource, AREA_IS_ACTIVE_KEYS),
-            "true",
-          ),
-        };
-      }}
-      buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
-        const areaName = (values.masterName ?? "").trim();
-        const areaAlias = (values.masterAlias ?? "").trim();
-        const areaShort = (values.masterShortName ?? "").trim();
-        const areaCityId = (values.areaCityId ?? "").trim();
-        const areaSort = Math.max(0, toInteger(values.position ?? "0", 0));
-        const areaDistanceKm = toNullableInteger(values.areaDistanceKm ?? "");
-        const areaCollectionDays = parseCollectionDays(values.areaCollectionDays ?? "");
-        const areaIsActive = (values.areaIsActive ?? "true") !== "false";
+          return {
+            ...AREA_INITIAL_FORM_VALUES,
+            masterName:
+              toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.name)) ||
+              defaults.masterName,
+            masterAlias:
+              toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.alias)) ||
+              defaults.masterAlias,
+            masterShortName:
+              toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.short)) ||
+              defaults.masterShortName,
+            areaCityId: toDisplayValue(getFirstDefinedValue(rowSource, AREA_CITY_ID_KEYS)),
+            areaDistanceKm: toDisplayValue(getFirstDefinedValue(rowSource, AREA_DISTANCE_KEYS)),
+            areaCollectionDays: toCollectionDaysInput(
+              getFirstDefinedValue(rowSource, AREA_COLLECTION_DAYS_KEYS),
+            ),
+            position:
+              toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) ||
+              defaults.position,
+            areaIsActive: toSelectBoolean(
+              getFirstDefinedValue(rowSource, AREA_IS_ACTIVE_KEYS),
+              "true",
+            ),
+          };
+        }}
+        buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
+          const areaName = (values.masterName ?? "").trim();
+          const areaAlias = (values.masterAlias ?? "").trim();
+          const areaShort = (values.masterShortName ?? "").trim();
+          const areaCityId = (values.areaCityId ?? "").trim();
+          const areaSort = Math.max(0, toInteger(values.position ?? "0", 0));
+          const areaDistanceKm = toNullableInteger(values.areaDistanceKm ?? "");
+          const areaCollectionDays = parseCollectionDays(values.areaCollectionDays ?? "");
+          const areaIsActive = (values.areaIsActive ?? "true") !== "false";
 
-        return {
-          armName: areaName,
-          armAlias: areaAlias || null,
-          armShort: areaShort || null,
-          armCityId: areaCityId,
-          armSort: areaSort,
-          armDistanceKm: areaDistanceKm,
-          armCollectionDays: areaCollectionDays,
-          armIsActive: areaIsActive,
-          ...(shouldUpdate && editingItemId !== null
-            ? { armId: toUpdateAreaId(editingItemId) }
-            : {}),
-        };
-      }}
-    />
+          return {
+            armName: areaName,
+            armAlias: areaAlias || null,
+            armShort: areaShort || null,
+            armCityId: areaCityId,
+            armSort: areaSort,
+            armDistanceKm: areaDistanceKm,
+            armCollectionDays: areaCollectionDays,
+            armIsActive: areaIsActive,
+            ...(shouldUpdate && editingItemId !== null
+              ? { armId: toUpdateAreaId(editingItemId) }
+              : {}),
+          };
+        }}
+      />
+      <ERPDynamicModalForm
+        title="City Form"
+        description="Create and update cities."
+        variants={cityModalVariants}
+        showDefaultCards={false}
+        hideSectionHeader
+        submitError={citySaveError || cityDetailsError}
+        panelStyle={CITY_MODAL_PANEL_STYLE}
+        onControllerReady={(controller) => {
+          cityModalControllerRef.current = controller;
+        }}
+        onSubmit={handleCityModalSubmit}
+        onCancel={handleCityModalCancel}
+      />
+    </>
   );
 }

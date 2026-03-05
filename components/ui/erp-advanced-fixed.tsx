@@ -723,6 +723,7 @@ export default function ERPAdvancedFixed() {
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <input
+                  autoComplete="off"
                   type="text"
                   placeholder="Search..."
                   value={searchQuery[activeTab]}
@@ -940,11 +941,17 @@ export default function ERPAdvancedFixed() {
             </header>
 
             <div className="max-h-[calc(90vh-160px)] overflow-y-auto p-6">
-              <form id="erp-advanced-form" onSubmit={handleSubmit} className="space-y-5">
+              <form
+                id="erp-advanced-form"
+                onSubmit={handleSubmit}
+                autoComplete="off"
+                className="space-y-5"
+              >
                 {formType === "employee" ? (
                   <>
                     <div className="grid gap-4 md:grid-cols-2">
                       <input
+                        autoComplete="off"
                         name="employeeId"
                         value={formData.employeeId}
                         onChange={(event) =>
@@ -955,6 +962,7 @@ export default function ERPAdvancedFixed() {
                         className="rounded-[4px] border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       />
                       <input
+                        autoComplete="off"
                         name="fullName"
                         value={formData.fullName}
                         onChange={(event) =>
@@ -967,6 +975,7 @@ export default function ERPAdvancedFixed() {
                     </div>
                     <div className="grid gap-4 md:grid-cols-2">
                       <input
+                        autoComplete="off"
                         name="department"
                         value={formData.department}
                         onChange={(event) =>
@@ -977,6 +986,7 @@ export default function ERPAdvancedFixed() {
                         className="rounded-[4px] border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       />
                       <input
+                        autoComplete="off"
                         name="position"
                         value={formData.position}
                         onChange={(event) =>
@@ -989,6 +999,7 @@ export default function ERPAdvancedFixed() {
                     </div>
                     <div className="grid gap-4 md:grid-cols-2">
                       <input
+                        autoComplete="off"
                         type="email"
                         name="email"
                         value={formData.email}
@@ -1000,6 +1011,7 @@ export default function ERPAdvancedFixed() {
                         className="rounded-[4px] border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       />
                       <input
+                        autoComplete="off"
                         name="phone"
                         value={formData.phone}
                         onChange={(event) =>
@@ -1011,6 +1023,7 @@ export default function ERPAdvancedFixed() {
                       />
                     </div>
                     <input
+                      autoComplete="off"
                       type="date"
                       name="startDate"
                       value={formData.startDate}
@@ -1027,6 +1040,7 @@ export default function ERPAdvancedFixed() {
                   <>
                     <div className="grid gap-4 md:grid-cols-2">
                       <input
+                        autoComplete="off"
                         name="projectName"
                         value={formData.projectName}
                         onChange={(event) =>
@@ -1037,6 +1051,7 @@ export default function ERPAdvancedFixed() {
                         className="rounded-[4px] border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
                       <input
+                        autoComplete="off"
                         name="projectCode"
                         value={formData.projectCode}
                         onChange={(event) =>
@@ -1048,6 +1063,7 @@ export default function ERPAdvancedFixed() {
                       />
                     </div>
                     <input
+                      autoComplete="off"
                       name="client"
                       value={formData.client}
                       onChange={(event) =>
@@ -1059,6 +1075,7 @@ export default function ERPAdvancedFixed() {
                     />
                     <div className="grid gap-4 md:grid-cols-2">
                       <input
+                        autoComplete="off"
                         type="number"
                         name="budget"
                         value={formData.budget}
@@ -1070,6 +1087,7 @@ export default function ERPAdvancedFixed() {
                         className="rounded-[4px] border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
                       <input
+                        autoComplete="off"
                         type="date"
                         name="deadline"
                         value={formData.deadline}
@@ -1102,6 +1120,7 @@ export default function ERPAdvancedFixed() {
                   <>
                     <div className="grid gap-4 md:grid-cols-2">
                       <input
+                        autoComplete="off"
                         name="itemName"
                         value={formData.itemName}
                         onChange={(event) =>
@@ -1112,6 +1131,7 @@ export default function ERPAdvancedFixed() {
                         className="rounded-[4px] border border-slate-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                       />
                       <input
+                        autoComplete="off"
                         name="sku"
                         value={formData.sku}
                         onChange={(event) =>
@@ -1123,6 +1143,7 @@ export default function ERPAdvancedFixed() {
                       />
                     </div>
                     <input
+                      autoComplete="off"
                       name="category"
                       value={formData.category}
                       onChange={(event) =>
@@ -1134,6 +1155,7 @@ export default function ERPAdvancedFixed() {
                     />
                     <div className="grid gap-4 md:grid-cols-2">
                       <input
+                        autoComplete="off"
                         type="number"
                         name="quantity"
                         value={formData.quantity}
@@ -1145,6 +1167,7 @@ export default function ERPAdvancedFixed() {
                         className="rounded-[4px] border border-slate-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                       />
                       <input
+                        autoComplete="off"
                         type="number"
                         step="0.01"
                         name="unitPrice"
@@ -1158,6 +1181,7 @@ export default function ERPAdvancedFixed() {
                       />
                     </div>
                     <input
+                      autoComplete="off"
                       name="supplier"
                       value={formData.supplier}
                       onChange={(event) =>
