@@ -20,6 +20,15 @@ This project uses Next.js App Router with route groups and feature-oriented fold
 
 - `features/auth/`: Auth-specific UI and logic.
 - `features/landing/`: Landing-page-specific sections and logic.
+- `features/masters/`: Master-module screens and shared master abstractions.
+
+### Master Module Layout
+
+Master routes under `app/master/**` should stay thin and re-export their feature-owned pages.
+
+- `features/masters/shared/`: Shared master utilities, hooks, modal wrappers, and module types.
+- `features/masters/<module>/page.tsx`: Feature-owned screen for that master route.
+- `features/masters/<module>/module.ts`: Typed module definition when the master can be expressed declaratively.
 
 ## Utilities (`lib/`)
 

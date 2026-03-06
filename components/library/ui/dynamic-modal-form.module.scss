@@ -123,7 +123,7 @@ background: #dfe7f0;
   grid-template-columns: 5fr;
   grid-auto-flow: row dense;
   gap: 0.55rem 1.3rem;
-  padding:1rem 1.5rem;
+  padding: 0.45rem 1.5rem 1rem;
 }
 .field {
   display: grid;
@@ -172,6 +172,9 @@ background: #dfe7f0;
   background: #f7f8fa;
   border-top: 1px solid #e4e8ed;
   border-bottom: 1px solid #e4e8ed;
+}
+.formGrid > .sectionHeadingField:first-child {
+  margin-top: 0;
 }
 .sectionToggle {
   display: inline-flex;

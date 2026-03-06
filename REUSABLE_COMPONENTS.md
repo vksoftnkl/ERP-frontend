@@ -51,6 +51,7 @@ Rule: feature components may use hooks/services but should stay domain-focused.
 - `services/`: API clients and request functions.
 - `hooks/`: reusable state/data hooks (loading, caching, form state).
 - `types/`: shared TypeScript interfaces and DTOs.
+- `features/masters/shared/`: master CRUD normalizers, typed module definitions, lookup hooks, and inline-related modal wrappers.
 
 Rule: keep business/data logic out of `components/ui`.
 
@@ -88,3 +89,4 @@ features/
 - No duplicated form/table/filter patterns.
 - Loading, empty, and error states are handled.
 - Domain logic is not mixed into shared UI primitives.
+- Master routes are thin and point to `features/masters/<module>/page.tsx`.

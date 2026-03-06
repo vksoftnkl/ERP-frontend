@@ -139,6 +139,8 @@ export type ERPDynamicModalField = {
   visibleWhen?: (values: Record<string, string>) => boolean;
   // Places the field card in a specific modal grid column track.
   gridColumnStart?: number;
+  // Places the field card in a specific modal grid row track.
+  gridRowStart?: number;
   onSearchCreateShortcut?: ERPDynamicSearchShortcutHandler;
   onSearchEditShortcut?: ERPDynamicSearchShortcutHandler;
 };
@@ -1466,12 +1468,25 @@ export function ERPDynamicModalForm({
                         inputType === "checkbox" && styles.checkboxField,
                       )}
                       style={
-                        field.gridColumnStart !== undefined
+                        field.gridColumnStart !== undefined ||
+                        field.gridRowStart !== undefined
                           ? {
-                              gridColumnStart: Math.max(
-                                1,
-                                Math.floor(field.gridColumnStart),
-                              ),
+                              ...(field.gridColumnStart !== undefined
+                                ? {
+                                    gridColumnStart: Math.max(
+                                      1,
+                                      Math.floor(field.gridColumnStart),
+                                    ),
+                                  }
+                                : {}),
+                              ...(field.gridRowStart !== undefined
+                                ? {
+                                    gridRowStart: Math.max(
+                                      1,
+                                      Math.floor(field.gridRowStart),
+                                    ),
+                                  }
+                                : {}),
                             }
                           : undefined
                       }

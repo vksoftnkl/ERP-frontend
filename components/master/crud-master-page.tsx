@@ -11,6 +11,7 @@ import {
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
+import { useMasterCrud } from "@/features/masters/shared";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   fetchGridColumns,
@@ -941,37 +942,46 @@ export default function CrudMasterPage({
   const dispatch = useAppDispatch();
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
 
-  const { data, error, loading, getAll } = useApi<unknown>(apiEndpoints.list);
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const {
-    run: getById,
-    loading: detailsLoading,
-    error: detailsError,
-    reset: resetDetailsState,
-  } = useApi<unknown, Record<string, unknown>>(apiEndpoints.getById, {
-    method: getByIdMethod ?? "GET",
-    toast: {
-      success: false,
+    list: {
+      data,
+      error,
+      loading,
+      currentPage,
+      pageSize,
+      searchTerm,
+      totalEntries,
+      setCurrentPage,
+      setPageSize,
+      setSearchTerm,
+      loadRecords,
     },
+    details: {
+      run: getById,
+      loading: detailsLoading,
+      error: detailsError,
+      reset: resetDetailsState,
+    },
+    save: {
+      run: upsertRecord,
+      loading: saveLoading,
+      error: saveError,
+      reset: resetSaveState,
+    },
+    remove: {
+      run: deleteRecord,
+      loading: deleteLoading,
+      error: deleteError,
+    },
+  } = useMasterCrud({
+    apiEndpoints,
+    listArrayKeys: lookupKeys.array ?? DEFAULT_ARRAY_KEYS,
+    getByIdMethod: getByIdMethod ?? "GET",
+    debounceMs: DEBOUNCE_MS,
+    defaultPage: DEFAULT_PAGE,
+    defaultPageSize: DEFAULT_PAGE_SIZE,
   });
-  const {
-    run: upsertRecord,
-    loading: saveLoading,
-    error: saveError,
-    reset: resetSaveState,
-  } = useApi<unknown, Record<string, unknown>>(apiEndpoints.create, {
-    method: "POST",
-  });
-  const {
-    run: deleteRecord,
-    loading: deleteLoading,
-    error: deleteError,
-  } = useApi<unknown>(apiEndpoints.delete, { method: "DELETE" });
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [totalEntries, setTotalEntries] = useState(0);
   const [gridId, setGridId] = useState<number | null>(null);
   const [gridDisplayName, setGridDisplayName] = useState<string | null>(null);
   const selectedGridId = gridId ?? -1;
@@ -1067,57 +1077,6 @@ export default function CrudMasterPage({
       }),
     );
   }, [dispatch, gridColumnsLoading, gridColumnsRequested, gridId]);
-
-  const loadRecords = useCallback(
-    async (term: string, page: number, limit: number) => {
-      const normalizedTerm = term.trim();
-      const query: Record<string, string> = {
-        page: String(Math.max(1, page)),
-        limit: String(Math.max(1, limit)),
-      };
-
-      if (normalizedTerm) {
-        query.search = normalizedTerm;
-      }
-
-      const payload = await getAll(query);
-      const paginationInfo = extractPaginationInfo(payload);
-      const fallbackTotal = extractRows(
-        payload,
-        lookupKeys.array ?? DEFAULT_ARRAY_KEYS,
-      ).length;
-      const resolvedTotal = paginationInfo.totalEntries ?? fallbackTotal;
-
-      setTotalEntries(Math.max(0, resolvedTotal));
-
-      if (paginationInfo.currentPage !== null) {
-        const nextPage = paginationInfo.currentPage;
-        setCurrentPage((existingPage) =>
-          existingPage === nextPage ? existingPage : toSafePageNumber(nextPage),
-        );
-      }
-
-      if (paginationInfo.pageSize !== null) {
-        const nextPageSize = paginationInfo.pageSize;
-        setPageSize((existingPageSize) =>
-          existingPageSize === nextPageSize
-            ? existingPageSize
-            : toSafePageSize(nextPageSize),
-        );
-      }
-    },
-    [getAll, lookupKeys.array],
-  );
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void loadRecords(searchTerm, currentPage, pageSize);
-    }, DEBOUNCE_MS);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [currentPage, loadRecords, pageSize, searchTerm]);
 
   const serialOffset = Math.max(0, (currentPage - 1) * pageSize);
 
