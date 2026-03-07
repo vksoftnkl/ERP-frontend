@@ -486,7 +486,6 @@ const CUSTOMER_BASIC_VALIDATIONS: Record<string, ERPDynamicFieldValidation> = {
     maxLengthMessage: "Notes must be at most 250 characters.",
   },
 };
-
 function withCustomerBasicValidation(field: ERPDynamicModalField): ERPDynamicModalField {
   const basicValidation = CUSTOMER_BASIC_VALIDATIONS[field.name];
   if (!basicValidation) {
@@ -500,7 +499,6 @@ function withCustomerBasicValidation(field: ERPDynamicModalField): ERPDynamicMod
     },
   };
 }
-
 function buildCustomerFormFields(
   stateOptions: ERPDynamicSelectOption[],
   regionStateOptions: ERPDynamicSelectOption[],
@@ -913,7 +911,7 @@ function buildCustomerFormFields(
     },
     {
       name: "cusMarriageDate",
-      label: "Marriage Date",
+      label: "Anniversary Date",
       type: "date",
       gridColumnStart: 3,
     },

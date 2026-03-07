@@ -95,6 +95,23 @@ export type ERPDynamicSearchShortcutPayload = {
 export type ERPDynamicSearchShortcutHandler = (
   payload: ERPDynamicSearchShortcutPayload,
 ) => void | Promise<void>;
+export type ERPDynamicFieldValueChangePayload = {
+  field: ERPDynamicModalField;
+  fieldName: string;
+  value: string;
+  values: Record<string, string>;
+  previousValues: Record<string, string>;
+};
+export type ERPDynamicFieldValueChangeResult = {
+  values?: Record<string, string>;
+  errors?: Record<string, string | null | undefined>;
+};
+export type ERPDynamicFieldValueChangeHandler = (
+  payload: ERPDynamicFieldValueChangePayload,
+) =>
+  | ERPDynamicFieldValueChangeResult
+  | void
+  | Promise<ERPDynamicFieldValueChangeResult | void>;
 export type ERPDynamicFieldValidation = {
   requiredMessage?: string;
   minLength?: number;
@@ -143,6 +160,7 @@ export type ERPDynamicModalField = {
   gridRowStart?: number;
   onSearchCreateShortcut?: ERPDynamicSearchShortcutHandler;
   onSearchEditShortcut?: ERPDynamicSearchShortcutHandler;
+  onValueChange?: ERPDynamicFieldValueChangeHandler;
 };
 type AccentPreset = keyof typeof ACCENT_PRESETS;
 export type ERPDynamicModalVariant = {
@@ -512,6 +530,7 @@ export function ERPDynamicModalForm({
     Record<string, Record<string, boolean>>
   >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const fieldValueChangeRequestIdsRef = useRef<Record<string, number>>({});
   const activeVariant = useMemo(
     () => variants.find((variant) => variant.key === activeVariantKey),
     [activeVariantKey, variants],
@@ -535,6 +554,7 @@ export function ERPDynamicModalForm({
     setSearchActiveOptionIndex({});
     setSearchDropdownPlacement("down");
     setSearchDropdownMaxHeight(SEARCH_SELECT_LIST_MAX_HEIGHT);
+    fieldValueChangeRequestIdsRef.current = {};
     onOpenChange?.(false, activeVariant?.key ?? null);
   }, [activeVariant?.key, onOpenChange]);
   const openModal = useCallback(
@@ -555,6 +575,7 @@ export function ERPDynamicModalForm({
       setSearchActiveOptionIndex({});
       setSearchDropdownPlacement("down");
       setSearchDropdownMaxHeight(SEARCH_SELECT_LIST_MAX_HEIGHT);
+      fieldValueChangeRequestIdsRef.current = {};
       setSectionExpandedByVariant((current) => ({
         ...current,
         [variantKey]: buildSectionExpandedState(variant.fields),
@@ -675,6 +696,133 @@ export function ERPDynamicModalForm({
     },
     [activeVariant],
   );
+  const applyResolvedFieldErrors = useCallback(
+    (errors: Record<string, string | null | undefined>) => {
+      setFieldErrors((currentErrors) => {
+        let changed = false;
+        const nextErrors = { ...currentErrors };
+
+        for (const [fieldName, errorMessage] of Object.entries(errors)) {
+          if (errorMessage) {
+            if (nextErrors[fieldName] !== errorMessage) {
+              nextErrors[fieldName] = errorMessage;
+              changed = true;
+            }
+            continue;
+          }
+
+          if (fieldName in nextErrors) {
+            delete nextErrors[fieldName];
+            changed = true;
+          }
+        }
+
+        return changed ? nextErrors : currentErrors;
+      });
+    },
+    [],
+  );
+  const revalidateFieldNames = useCallback(
+    (
+      fieldNames: string[],
+      values: Record<string, string>,
+      files: Record<string, File | null>,
+    ) => {
+      if (!validateOnChange || !activeVariant || fieldNames.length === 0) {
+        return;
+      }
+
+      const fieldNameSet = new Set(fieldNames);
+      setFieldErrors((currentErrors) => {
+        let changed = false;
+        const nextErrors = { ...currentErrors };
+
+        for (const field of activeVariant.fields) {
+          if (!fieldNameSet.has(field.name)) {
+            continue;
+          }
+
+          const nextError = validateFieldValue(field, values, files);
+          const currentError = currentErrors[field.name];
+          if (nextError) {
+            if (currentError !== nextError) {
+              nextErrors[field.name] = nextError;
+              changed = true;
+            }
+            continue;
+          }
+
+          if (currentError !== undefined) {
+            delete nextErrors[field.name];
+            changed = true;
+          }
+        }
+
+        return changed ? nextErrors : currentErrors;
+      });
+    },
+    [activeVariant, validateOnChange],
+  );
+  const applyFieldValueChangeResult = useCallback(
+    (result: ERPDynamicFieldValueChangeResult | void) => {
+      if (!result) {
+        return;
+      }
+
+      if (result.values && Object.keys(result.values).length > 0) {
+        const resultValues = result.values;
+        setFormData((current) => {
+          const nextValues = {
+            ...current,
+            ...resultValues,
+          };
+          revalidateFieldNames(Object.keys(resultValues), nextValues, fileData);
+          return nextValues;
+        });
+      }
+
+      if (result.errors) {
+        applyResolvedFieldErrors(result.errors);
+      }
+    },
+    [applyResolvedFieldErrors, fileData, revalidateFieldNames],
+  );
+  const runFieldValueChangeHandler = useCallback(
+    (
+      field: ERPDynamicModalField,
+      nextValue: string,
+      nextValues: Record<string, string>,
+      previousValues: Record<string, string>,
+    ) => {
+      if (!field.onValueChange) {
+        return;
+      }
+
+      const requestId =
+        (fieldValueChangeRequestIdsRef.current[field.name] ?? 0) + 1;
+      fieldValueChangeRequestIdsRef.current[field.name] = requestId;
+
+      void Promise.resolve(
+        field.onValueChange({
+          field,
+          fieldName: field.name,
+          value: nextValue,
+          values: nextValues,
+          previousValues,
+        }),
+      )
+        .then((result) => {
+          if (fieldValueChangeRequestIdsRef.current[field.name] !== requestId) {
+            return;
+          }
+          applyFieldValueChangeResult(result);
+        })
+        .catch(() => {
+          // Caller-owned error handling can be returned through `errors`.
+        });
+    },
+    [applyFieldValueChangeResult],
+  );
   useEffect(() => {
     if (!activeVariant) {
       return;
@@ -750,11 +898,12 @@ export function ERPDynamicModalForm({
         ? target.checked
           ? "true"
           : "false"
-        : isMultiSelectInput
-          ? formatMultiSelectValue(
+          : isMultiSelectInput
+            ? formatMultiSelectValue(
               Array.from(target.selectedOptions).map((option) => option.value),
             )
           : target.value;
+    const field = activeVariant?.fields.find((item) => item.name === name);
 
     if (isFileInput) {
       setFileData((current) => ({
@@ -769,26 +918,16 @@ export function ERPDynamicModalForm({
         [name]: nextValue,
       };
 
-      if (validateOnChange && activeVariant) {
-        const field = activeVariant.fields.find((item) => item.name === name);
-        if (field) {
-          const nextFiles = isFileInput
-            ? {
-                ...fileData,
-                [name]: nextFile,
-              }
-            : fileData;
-          const nextError = validateFieldValue(field, nextValues, nextFiles);
-          setFieldErrors((currentErrors) => {
-            const nextErrors = { ...currentErrors };
-            if (nextError) {
-              nextErrors[name] = nextError;
-            } else {
-              delete nextErrors[name];
-            }
-            return nextErrors;
-          });
-        }
+      const nextFiles = isFileInput
+        ? {
+            ...fileData,
+            [name]: nextFile,
+          }
+        : fileData;
+
+      if (field) {
+        revalidateFieldNames([name], nextValues, nextFiles);
+        runFieldValueChangeHandler(field, nextValue, nextValues, current);
       }
 
       return nextValues;
@@ -839,19 +978,8 @@ export function ERPDynamicModalForm({
           ...current,
           [fieldName]: nextFieldValue,
         };
-
-        if (validateOnChange && activeVariant) {
-          const nextError = validateFieldValue(field, nextValues, fileData);
-          setFieldErrors((currentErrors) => {
-            const nextErrors = { ...currentErrors };
-            if (nextError) {
-              nextErrors[fieldName] = nextError;
-            } else {
-              delete nextErrors[fieldName];
-            }
-            return nextErrors;
-          });
-        }
+        revalidateFieldNames([fieldName], nextValues, fileData);
+        runFieldValueChangeHandler(field, nextFieldValue, nextValues, current);
 
         return nextValues;
       });
@@ -878,7 +1006,7 @@ export function ERPDynamicModalForm({
       });
       setOpenSearchField(isMultipleSelect ? fieldName : null);
     },
-    [activeVariant, fileData, validateOnChange],
+    [fileData, revalidateFieldNames, runFieldValueChangeHandler],
   );
 
   const handleSearchableSelectKeyDown = useCallback(

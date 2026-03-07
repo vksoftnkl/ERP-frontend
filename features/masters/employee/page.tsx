@@ -203,6 +203,13 @@ function buildEmployeeFormFields(
       label: "Email",
       type: "email",
     },
+    
+    {
+      name: "masterDescription",
+      label: "Remarks",
+      
+      colSpan: 2,
+    },
     {
       name: "empIsActive",
       label: "Status",
@@ -211,12 +218,6 @@ function buildEmployeeFormFields(
         { label: "Active", value: "true" },
         { label: "Inactive", value: "false" },
       ],
-    },
-    {
-      name: "masterDescription",
-      label: "Remarks",
-      type: "textarea",
-      colSpan: 2,
     },
   ];
 }

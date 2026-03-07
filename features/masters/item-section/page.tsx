@@ -383,7 +383,7 @@ export default function ItemSectionMasterPage() {
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
       listTitle="Item Section List"
-      createLabel="Add Item Section"
+      createLabel="Add "
       codeColumnHeader="Section Code"
       nameColumnHeader="Section Name"
       nameFieldLabel="Item Section Name"
