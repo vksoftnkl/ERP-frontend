@@ -329,7 +329,7 @@ function toDisplayValue(value: unknown): string {
   return "";
 }
 
-function toSelectBoolean(value: unknown, defaultValue: "true" | "false"): "true" | "false" {
+function toSelectBoolean(value: unknown, defaultValue: string): "true" | "false" {
   if (typeof value === "boolean") {
     return value ? "true" : "false";
   }
@@ -342,7 +342,10 @@ function toSelectBoolean(value: unknown, defaultValue: "true" | "false"): "true"
     return "false";
   }
 
-  return defaultValue;
+  const normalizedDefaultValue = defaultValue.trim().toLowerCase();
+  return ["1", "true", "yes", "active"].includes(normalizedDefaultValue)
+    ? "true"
+    : "false";
 }
 
 function toInteger(value: string, fallback: number): number {

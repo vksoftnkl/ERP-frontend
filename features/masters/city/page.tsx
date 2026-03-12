@@ -174,7 +174,7 @@ function toInteger(value: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function toSelectBoolean(value: unknown, fallback: "true" | "false"): "true" | "false" {
+function toSelectBoolean(value: unknown, fallback: string): "true" | "false" {
   if (typeof value === "boolean") {
     return value ? "true" : "false";
   }
@@ -193,7 +193,13 @@ function toSelectBoolean(value: unknown, fallback: "true" | "false"): "true" | "
     return value > 0 ? "true" : "false";
   }
 
-  return fallback;
+  const normalizedFallback = fallback.trim().toLowerCase();
+  return normalizedFallback === "true" ||
+    normalizedFallback === "1" ||
+    normalizedFallback === "yes" ||
+    normalizedFallback === "active"
+    ? "true"
+    : "false";
 }
 
 function toUpdateCityId(editingItemId: string | number | null): string {

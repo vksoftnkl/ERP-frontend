@@ -1,9 +1,7 @@
 "use client";
-
 import { ERPDynamicModalForm } from "@/components/library/ui/dynamic-modal-form";
 import type { MasterOption, InlineRelatedMasterDefinition } from "./types";
 import type { ERPDynamicSearchShortcutPayload } from "@/components/library/ui/dynamic-modal-form";
-
 export function resolveOptionFromShortcut(
   payload: ERPDynamicSearchShortcutPayload,
   options: MasterOption[],
@@ -15,19 +13,16 @@ export function resolveOptionFromShortcut(
       return exactMatch;
     }
   }
-
   const query = payload.query.trim().toLowerCase();
   if (!query) {
     return null;
   }
-
   return (
     options.find((option) => option.label.trim().toLowerCase() === query) ??
     options.find((option) => option.label.trim().toLowerCase().includes(query)) ??
     null
   );
 }
-
 export default function InlineRelatedMasterModal({
   title,
   description,

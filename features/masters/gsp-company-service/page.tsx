@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
@@ -20,40 +19,53 @@ import {
   toUpper,
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
-
 const API_ENDPOINTS = {
   list: "/gsp-company-services/list",
   getById: "/gsp-company-services/get",
   create: "/gsp-company-services/create",
   delete: "/gsp-company-services/delete",
 } as const;
-
 const GRID_TABLE_NAME = "gsp_company_service";
-
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-
 const LOOKUP_QUERY_COMPANIES = {
   module: "companies",
   limit: "20",
 } as const;
-
 const LOOKUP_QUERY_PROVIDERS = {
   module: "gspProviders",
   limit: "20",
 } as const;
-
 const LOOKUP_KEYS = {
   id: ["csgCompanyServiceId", "csg_company_service_id", "id", "_id"],
-  code: ["csgServiceType", "csg_service_type", "code"],
+  code: [
+    "companyDisplay",
+    "company_display",
+    "companyName",
+    "company_name",
+    "compName",
+    "comp_name",
+    "csgCompanyId",
+    "csg_company_id",
+    "code",
+  ],
   name: ["csgServiceType", "csg_service_type", "name"],
   short: ["csgEuserName", "csg_euser_name", "short", "shortName"],
-  alias: ["csgCompanyId", "csg_company_id", "alias"],
+  alias: [
+    "providerDisplay",
+    "provider_display",
+    "providerName",
+    "provider_name",
+    "gspProviderName",
+    "gsp_provider_name",
+    "csgGspProviderId",
+    "csg_gsp_provider_id",
+    "alias",
+  ],
   active: ["csgIsActive", "csg_is_active", "isActive", "is_active", "status"],
   position: ["position", "sort"],
   description: ["csgAuthToken", "csg_auth_token", "description", "remarks"],
   array: ["data", "items", "results", "rows", "list", "gspCompanyServices"],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "csgCompanyServiceId",
   name: "csgServiceType",
@@ -62,7 +74,6 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "csgAuthToken",
   sort: "position",
 } as const;
-
 const CSG_COMPANY_ID_KEYS = ["csgCompanyId", "csg_company_id", "companyId", "company_id"] as const;
 const CSG_PROVIDER_ID_KEYS = ["csgGspProviderId", "csg_gsp_provider_id", "providerId", "provider_id"] as const;
 const CSG_SERVICE_TYPE_KEYS = ["csgServiceType", "csg_service_type", "serviceType", "service_type"] as const;
@@ -75,17 +86,14 @@ const CSG_AUTH_TOKEN_VALID_TILL_KEYS = [
   "authTokenValidTill",
 ] as const;
 const CSG_IS_ACTIVE_KEYS = ["csgIsActive", "csg_is_active", "isActive", "is_active", "status"] as const;
-
 const DEFAULT_COMPANY_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Company",
 };
-
 const DEFAULT_PROVIDER_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select GSP Provider",
 };
-
 const INITIAL_FORM_VALUES = {
   csgCompanyId: "",
   csgGspProviderId: "",
@@ -96,7 +104,6 @@ const INITIAL_FORM_VALUES = {
   csgAuthTokenValidTill: "",
   csgIsActive: "true",
 } as const;
-
 function buildGspCompanyServiceFormFields(
   companyOptions: ERPDynamicSelectOption[],
   providerOptions: ERPDynamicSelectOption[],
@@ -129,6 +136,7 @@ function buildGspCompanyServiceFormFields(
       label: "Service Type",
       required: true,
       placeholder: "EINV",
+      helperText: "Examples: EINV, EWAY.",
       validation: {
         requiredMessage: "Service Type is required.",
         maxLength: 20,
@@ -155,7 +163,6 @@ function buildGspCompanyServiceFormFields(
     {
       name: "csgAuthToken",
       label: "Auth Token",
-      type: "textarea",
       colSpan: 2,
     },
     {
@@ -174,32 +181,26 @@ function buildGspCompanyServiceFormFields(
     },
   ];
 }
-
 export default function GspCompanyServiceMasterPage() {
   const { getAll: getCompanyLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getProviderLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-
   const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_COMPANY_OPTION,
   ]);
   const [providerOptions, setProviderOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_PROVIDER_OPTION,
   ]);
-
   useEffect(() => {
     let mounted = true;
-
     void (async () => {
       try {
         const [companiesPayload, providersPayload] = await Promise.all([
           getCompanyLookup(LOOKUP_QUERY_COMPANIES),
           getProviderLookup(LOOKUP_QUERY_PROVIDERS),
         ]);
-
         if (!mounted) {
           return;
         }
-
         setCompanyOptions(
           buildLookupOptions(companiesPayload, DEFAULT_COMPANY_OPTION, {
             arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
@@ -218,22 +219,18 @@ export default function GspCompanyServiceMasterPage() {
         if (!mounted) {
           return;
         }
-
         setCompanyOptions([DEFAULT_COMPANY_OPTION]);
         setProviderOptions([DEFAULT_PROVIDER_OPTION]);
       }
     })();
-
     return () => {
       mounted = false;
     };
   }, [getCompanyLookup, getProviderLookup]);
-
   const formFields = useMemo(
     () => buildGspCompanyServiceFormFields(companyOptions, providerOptions),
     [companyOptions, providerOptions],
   );
-
   return (
     <CrudMasterPage
       title="GSP Company Service"
@@ -246,8 +243,9 @@ export default function GspCompanyServiceMasterPage() {
       styles={styles}
       listTitle="GSP Company Service List"
       createLabel="Add GSP Company Service"
-      codeColumnHeader="Service Type"
+      codeColumnHeader="Company"
       nameColumnHeader="Service Type"
+      tableColumnHeaders={{ masterShort: "E-User Name" }}
       nameFieldLabel="Service Type"
       nameFieldPlaceholder="EINV"
       formTitle="GSP Company Service Form"
@@ -257,7 +255,6 @@ export default function GspCompanyServiceMasterPage() {
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
         const mergedDefaults = { ...INITIAL_FORM_VALUES, ...defaults };
-
         return {
           ...INITIAL_FORM_VALUES,
           csgCompanyId:
@@ -281,7 +278,7 @@ export default function GspCompanyServiceMasterPage() {
           csgAuthTokenValidTill:
             toDateInputValue(getFirstDefinedValue(rowSource, CSG_AUTH_TOKEN_VALID_TILL_KEYS)) ||
             mergedDefaults.csgAuthTokenValidTill,
-          csgIsActive: toSelectBoolean(getFirstDefinedValue(rowSource, CSG_IS_ACTIVE_KEYS), "true"),
+          csgIsActive: toSelectBoolean(getFirstDefinedValue(rowSource, CSG_IS_ACTIVE_KEYS), "true"),        
         };
       }}
       buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
@@ -295,11 +292,9 @@ export default function GspCompanyServiceMasterPage() {
           csgAuthTokenValidTill: toNullableDate(values.csgAuthTokenValidTill ?? ""),
           csgIsActive: (values.csgIsActive ?? "true") === "true",
         };
-
         if (shouldUpdate && editingItemId !== null) {
           payload.csgCompanyServiceId = toUpdateId(editingItemId);
         }
-
         return payload;
       }}
     />

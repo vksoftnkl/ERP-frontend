@@ -6,9 +6,7 @@ import type {
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
 import type { CrudMasterPageProps } from "@/components/master/crud-master-page";
-
 export type MasterOption = ERPDynamicSelectOption;
-
 export type MasterModuleBaseValues = {
   masterName: string;
   searchCode: string;
@@ -17,7 +15,6 @@ export type MasterModuleBaseValues = {
   masterDescription: string;
   position: string;
 };
-
 export type LookupDefinition = {
   query?: Record<string, string>;
   defaultOption: MasterOption;
@@ -25,14 +22,12 @@ export type LookupDefinition = {
   idKeys?: readonly string[];
   labelKeys?: readonly string[];
 };
-
 export type NormalizedListResponse<TRecord> = {
   rows: TRecord[];
   totalEntries: number;
   currentPage: number | null;
   pageSize: number | null;
 };
-
 export type InlineRelatedMasterDefinition = {
   title: string;
   description: string;
@@ -46,12 +41,10 @@ export type InlineRelatedMasterDefinition = {
   onSubmit: (payload: ERPDynamicModalSubmitPayload) => void | Promise<void>;
   onCancel: () => void;
 };
-
 type CrudMasterPropsWithoutMapping = Omit<
   CrudMasterPageProps,
   "createInitialValues" | "mapFormValues" | "buildRequestPayload"
 >;
-
 export type MasterModuleDefinition<
   TRecord extends Record<string, unknown> = Record<string, unknown>,
   TFormValues extends Record<string, string> = MasterModuleBaseValues &
@@ -68,5 +61,6 @@ export type MasterModuleDefinition<
     shouldUpdate: boolean;
     editingItemId: string | number | null;
     files: Record<string, File | null>;
+    sectionExpandedState: Record<string, boolean>;
   }) => TPayload | Promise<TPayload>;
 };

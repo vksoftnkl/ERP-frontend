@@ -2,6 +2,7 @@
 import {
   type ChangeEvent,
   type CSSProperties,
+  Fragment,
   type KeyboardEvent as ReactKeyboardEvent,
   type InputHTMLAttributes,
   type ReactNode,
@@ -70,6 +71,7 @@ const SEARCH_SELECT_LIST_MAX_HEIGHT = 220;
 const SEARCH_SELECT_LIST_OFFSET = 4;
 export type ERPDynamicFieldType =
   | "heading"
+  | "custom"
   | "text"
   | "email"
   | "tel"
@@ -94,6 +96,9 @@ export type ERPDynamicSearchShortcutPayload = {
 };
 export type ERPDynamicSearchShortcutHandler = (
   payload: ERPDynamicSearchShortcutPayload,
+) => void | Promise<void>;
+export type ERPDynamicSearchQueryChangeHandler = (
+  query: string,
 ) => void | Promise<void>;
 export type ERPDynamicFieldValueChangePayload = {
   field: ERPDynamicModalField;
@@ -128,11 +133,25 @@ export type ERPDynamicFieldValidation = {
     field: ERPDynamicModalField,
   ) => string | null | undefined;
 };
+
+export type ERPDynamicCustomFieldRenderProps = {
+  disabled: boolean;
+  error: string | null;
+  field: ERPDynamicModalField;
+  setError: (message: string | null | undefined) => void;
+  setValue: (value: string) => void;
+  value: string;
+  values: Record<string, string>;
+};
+
 export type ERPDynamicModalField = {
   name: string;
   label: string;
   type?: ERPDynamicFieldType;
   defaultExpanded?: boolean;
+  defaultExpandedWhen?: (values: Record<string, string>) => boolean;
+  sectionGridColumns?: number;
+  fieldStyle?: CSSProperties;
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
@@ -158,9 +177,11 @@ export type ERPDynamicModalField = {
   gridColumnStart?: number;
   // Places the field card in a specific modal grid row track.
   gridRowStart?: number;
+  onSearchQueryChange?: ERPDynamicSearchQueryChangeHandler;
   onSearchCreateShortcut?: ERPDynamicSearchShortcutHandler;
   onSearchEditShortcut?: ERPDynamicSearchShortcutHandler;
   onValueChange?: ERPDynamicFieldValueChangeHandler;
+  render?: (props: ERPDynamicCustomFieldRenderProps) => ReactNode;
 };
 type AccentPreset = keyof typeof ACCENT_PRESETS;
 export type ERPDynamicModalVariant = {
@@ -180,6 +201,7 @@ export type ERPDynamicModalSubmitPayload = {
   variant: ERPDynamicModalVariant;
   values: Record<string, string>;
   files: Record<string, File | null>;
+  sectionExpandedState: Record<string, boolean>;
 };
 export type ERPDynamicModalOpenOptions = {
   values?: Record<string, string>;
@@ -214,6 +236,11 @@ export type ERPDynamicModalFormProps = {
   stackLabels?: boolean;
   className?: string;
   cardGridClassName?: string;
+};
+
+type ERPDynamicFormSection = {
+  heading: ERPDynamicModalField | null;
+  fields: ERPDynamicModalField[];
 };
 function resolvePalette(
   accent: ERPDynamicModalVariant["accent"],
@@ -286,6 +313,22 @@ function validateFieldValue(
   if (fieldType === "heading") {
     return null;
   }
+
+  if (fieldType === "custom") {
+    if (field.required && isEmptyValue(rawValue)) {
+      return validation?.requiredMessage ?? `${field.label} is required.`;
+    }
+
+    if (validation?.custom) {
+      const customError = validation.custom(rawValue, values, field);
+      if (customError) {
+        return customError;
+      }
+    }
+
+    return null;
+  }
+
   if (fieldType === "checkbox") {
     const isChecked = rawValue === "true";
     if (field.required && !isChecked) {
@@ -457,11 +500,20 @@ function resolveVisibleFields(
 
 function buildSectionExpandedState(
   fields: ERPDynamicModalField[],
+  values?: Record<string, string>,
 ): Record<string, boolean> {
   const sectionState: Record<string, boolean> = {};
   for (const field of fields) {
     if ((field.type ?? "text") === "heading") {
-      sectionState[field.name] = field.defaultExpanded ?? true;
+      let defaultExpanded = field.defaultExpanded ?? true;
+      if (values && field.defaultExpandedWhen) {
+        try {
+          defaultExpanded = field.defaultExpandedWhen(values);
+        } catch {
+          defaultExpanded = field.defaultExpanded ?? true;
+        }
+      }
+      sectionState[field.name] = defaultExpanded;
     }
   }
   return sectionState;
@@ -563,11 +615,12 @@ export function ERPDynamicModalForm({
       if (!variant) {
         return;
       }
-      setActiveVariantKey(variantKey);
-      setFormData({
+      const nextFormData = {
         ...buildInitialValues(variant, initialValuesByVariant),
         ...(options?.values ?? {}),
-      });
+      };
+      setActiveVariantKey(variantKey);
+      setFormData(nextFormData);
       setFileData({});
       setFieldErrors({});
       setSearchQueries({});
@@ -578,7 +631,7 @@ export function ERPDynamicModalForm({
       fieldValueChangeRequestIdsRef.current = {};
       setSectionExpandedByVariant((current) => ({
         ...current,
-        [variantKey]: buildSectionExpandedState(variant.fields),
+        [variantKey]: buildSectionExpandedState(variant.fields, nextFormData),
       }));
       setIsOpen(true);
       onOpenChange?.(true, variantKey);
@@ -676,6 +729,39 @@ export function ERPDynamicModalForm({
       activeSectionExpandedState,
     );
   }, [activeSectionExpandedState, activeVariant, formData]);
+
+  const visibleSections = useMemo<ERPDynamicFormSection[]>(() => {
+    if (visibleFields.length === 0) {
+      return [];
+    }
+
+    const sections: ERPDynamicFormSection[] = [];
+    let currentSection: ERPDynamicFormSection = {
+      heading: null,
+      fields: [],
+    };
+
+    for (const field of visibleFields) {
+      if ((field.type ?? "text") === "heading") {
+        if (currentSection.heading !== null || currentSection.fields.length > 0) {
+          sections.push(currentSection);
+        }
+        currentSection = {
+          heading: field,
+          fields: [],
+        };
+        continue;
+      }
+
+      currentSection.fields.push(field);
+    }
+
+    if (currentSection.heading !== null || currentSection.fields.length > 0) {
+      sections.push(currentSection);
+    }
+
+    return sections;
+  }, [visibleFields]);
 
   const toggleSectionExpanded = useCallback(
     (sectionName: string) => {
@@ -950,6 +1036,11 @@ export function ERPDynamicModalForm({
         delete nextState[fieldName];
         return nextState;
       });
+      if (field.onSearchQueryChange) {
+        void Promise.resolve(field.onSearchQueryChange(query)).catch(() => {
+          // Search option refresh is optional and caller-owned.
+        });
+      }
 
     },
     [],
@@ -1300,6 +1391,7 @@ export function ERPDynamicModalForm({
         variant: activeVariant,
         values: formData,
         files: fileData,
+        sectionExpandedState: activeSectionExpandedState ?? {},
       });
 
       if (resetOnSubmit) {
@@ -1355,6 +1447,558 @@ export function ERPDynamicModalForm({
     }
     return Object.keys(styles).length > 0 ? styles : undefined;
   })();
+
+  const getSectionGridStyle = (
+    heading: ERPDynamicModalField | null,
+  ): CSSProperties | undefined => {
+    const styles: CSSProperties = {};
+    if (
+      typeof heading?.sectionGridColumns === "number" &&
+      Number.isFinite(heading.sectionGridColumns) &&
+      heading.sectionGridColumns > 0
+    ) {
+      styles["--erp-modal-section-columns" as keyof CSSProperties] = String(
+        Math.max(1, Math.floor(heading.sectionGridColumns)),
+      ) as never;
+    }
+    if (!denseGrid) {
+      styles.gridAutoFlow = "row";
+    }
+    return Object.keys(styles).length > 0 ? styles : undefined;
+  };
+
+  const renderField = (field: ERPDynamicModalField) => {
+    const fieldValue = formData[field.name] ?? "";
+    const selectedFile = fileData[field.name] ?? null;
+    const fieldError = fieldErrors[field.name];
+    const inputType = field.type ?? "text";
+
+    if (inputType === "heading") {
+      return null;
+    }
+
+    const isMultiSelect = inputType === "select" && field.multiple;
+    const selectedValues = isMultiSelect
+      ? parseMultiSelectValue(fieldValue)
+      : [];
+    const selectedOptionEntries = isMultiSelect
+      ? selectedValues.map((selectedValue) => {
+          const matchedOption = field.options?.find(
+            (option) => option.value === selectedValue,
+          );
+          return {
+            value: selectedValue,
+            label: matchedOption?.label ?? selectedValue,
+          };
+        })
+      : [];
+    const selectedLabel = getSelectOptionLabel(field, fieldValue);
+    const searchQuery = searchQueries[field.name];
+    const searchInputValue = searchQuery ?? "";
+    const shouldUseSearchableSelect =
+      inputType === "select" && field.searchable !== false;
+    const isSearchOpen = openSearchField === field.name;
+    const normalizedQuery = (searchQuery ?? "")
+      .trim()
+      .toLowerCase();
+    const filteredOptions =
+      shouldUseSearchableSelect
+        ? (field.options ?? []).filter((option) => {
+            if (!normalizedQuery) {
+              return true;
+            }
+            const valueMatch = option.value
+              .toLowerCase()
+              .includes(normalizedQuery);
+            const labelMatch = option.label
+              .toLowerCase()
+              .includes(normalizedQuery);
+            return valueMatch || labelMatch;
+          })
+        : [];
+    const highlightedOptionIndexRaw =
+      searchActiveOptionIndex[field.name];
+    const highlightedOptionIndex =
+      highlightedOptionIndexRaw !== undefined &&
+      highlightedOptionIndexRaw >= 0 &&
+      highlightedOptionIndexRaw < filteredOptions.length
+        ? highlightedOptionIndexRaw
+        : -1;
+    const controlId = `${formId}-${field.name}`;
+    const activeDescendantId =
+      isSearchOpen && highlightedOptionIndex >= 0
+        ? `${controlId}-search-option-${highlightedOptionIndex}`
+        : undefined;
+    const helpId = field.helperText
+      ? `${controlId}-help`
+      : undefined;
+    const fileId = selectedFile ? `${controlId}-file` : undefined;
+    const errorId = fieldError ? `${controlId}-error` : undefined;
+    const describedBy =
+      [helpId, fileId, errorId].filter(Boolean).join(" ") ||
+      undefined;
+    const commonProps = {
+      id: controlId,
+      name: field.name,
+      required: field.required,
+      disabled: field.disabled || isSubmitting,
+      onChange: handleChange,
+      autoComplete: "off",
+      "aria-invalid": fieldError ? true : undefined,
+      "aria-describedby": describedBy,
+    };
+
+    const setCustomValue = (nextValue: string) => {
+      setFormData((current) => {
+        const nextValues = {
+          ...current,
+          [field.name]: nextValue,
+        };
+
+        revalidateFieldNames([field.name], nextValues, fileData);
+        runFieldValueChangeHandler(field, nextValue, nextValues, current);
+        return nextValues;
+      });
+    };
+
+    const setCustomError = (message: string | null | undefined) => {
+      applyResolvedFieldErrors({
+        [field.name]: message,
+      });
+    };
+
+    return (
+      <div
+        key={field.name}
+        className={cx(
+          styles.field,
+          stackLabels &&
+            inputType !== "checkbox" &&
+            styles.fieldStacked,
+          field.colSpan === 2 && styles.fieldWide,
+          inputType === "checkbox" && styles.checkboxField,
+        )}
+        style={{
+          ...(field.fieldStyle ?? {}),
+          ...(field.gridColumnStart !== undefined
+            ? {
+                gridColumnStart: Math.max(
+                  1,
+                  Math.floor(field.gridColumnStart),
+                ),
+              }
+            : {}),
+          ...(field.gridRowStart !== undefined
+            ? {
+                gridRowStart: Math.max(
+                  1,
+                  Math.floor(field.gridRowStart),
+                ),
+              }
+            : {}),
+        }}
+      >
+        {inputType !== "checkbox" ? (
+          <label className={styles.label} htmlFor={commonProps.id}>
+            {field.label}{" "}
+            {field.required ? (
+              <span className={styles.requiredMark}>*</span>
+            ) : null}
+          </label>
+        ) : null}
+        {inputType === "custom" ? (
+          field.render?.({
+            disabled: Boolean(field.disabled || isSubmitting),
+            error: fieldError ?? null,
+            field,
+            setError: setCustomError,
+            setValue: setCustomValue,
+            value: fieldValue,
+            values: formData,
+          }) ?? null
+        ) : shouldUseSearchableSelect ? (
+          <div
+            className={styles.searchSelect}
+            ref={(element) => {
+              searchSelectRefs.current[field.name] = element;
+            }}
+          >
+            <div
+              className={cx(
+                styles.searchSelectTrigger,
+                isMultiSelect && styles.searchMultiSelectControl,
+                fieldError && styles.controlInvalid,
+                isSearchOpen && styles.searchSelectTriggerOpen,
+                (field.disabled || isSubmitting) &&
+                  styles.searchSelectTriggerDisabled,
+              )}
+              role="combobox"
+              aria-expanded={isSearchOpen}
+              aria-controls={`${controlId}-search-list`}
+              aria-activedescendant={activeDescendantId}
+              aria-disabled={
+                field.disabled || isSubmitting ? true : undefined
+              }
+              tabIndex={field.disabled || isSubmitting ? -1 : 0}
+              onMouseDown={(event) => {
+                const target = event.target as HTMLElement;
+                if (
+                  target.closest(
+                    '[data-search-select-remove="true"]',
+                  )
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                if (field.disabled || isSubmitting) {
+                  return;
+                }
+                setOpenSearchField((current) =>
+                  current === field.name ? null : field.name,
+                );
+              }}
+              onKeyDown={(event) =>
+                handleSearchableSelectKeyDown(
+                  field,
+                  event,
+                  filteredOptions,
+                  fieldValue,
+                )
+              }
+            >
+              {isMultiSelect ? (
+                <div className={styles.searchSelectValueTokens}>
+                  {selectedOptionEntries.length ? (
+                    selectedOptionEntries.map((option) => (
+                      <span
+                        key={`${field.name}-selected-${option.value}`}
+                        className={styles.searchSelectToken}
+                      >
+                        <span
+                          className={styles.searchSelectTokenText}
+                        >
+                          {option.label}
+                        </span>
+                        <button
+                          type="button"
+                          data-search-select-remove="true"
+                          className={styles.searchSelectTokenRemove}
+                          aria-label={`Remove ${option.label}`}
+                          disabled={field.disabled || isSubmitting}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (field.disabled || isSubmitting) {
+                              return;
+                            }
+                            handleSearchableSelectChoose(
+                              field,
+                              option,
+                            );
+                          }}
+                        >
+                          x
+                        </button>
+                      </span>
+                    ))
+                  ) : (
+                    <span
+                      className={
+                        styles.searchSelectTriggerPlaceholder
+                      }
+                    >
+                      {field.placeholder ?? `Select ${field.label}`}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span
+                  className={cx(
+                    styles.searchSelectTriggerSingleValue,
+                    !fieldValue &&
+                      styles.searchSelectTriggerPlaceholder,
+                  )}
+                >
+                  {selectedLabel ||
+                    field.placeholder ||
+                    `Select ${field.label}`}
+                </span>
+              )}
+              <span
+                className={styles.searchSelectChevronSlot}
+                aria-hidden="true"
+              >
+                <svg
+                  viewBox="0 0 20 20"
+                  className={cx(
+                    styles.searchSelectChevron,
+                    isSearchOpen &&
+                      styles.searchSelectChevronOpen,
+                  )}
+                >
+                  <path
+                    d="M5 7.5 10 12.5 15 7.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+            </div>
+            {isSearchOpen && !field.disabled ? (
+              <div
+                id={`${controlId}-search-list`}
+                className={cx(
+                  styles.searchSelectList,
+                  searchDropdownPlacement === "up" &&
+                    styles.searchSelectListUp,
+                )}
+                style={{
+                  maxHeight: `${searchDropdownMaxHeight}px`,
+                }}
+              >
+                <div className={styles.searchSelectSearchWrap}>
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    value={searchInputValue}
+                    placeholder={
+                      field.placeholder ?? `Search ${field.label}`
+                    }
+                    className={styles.searchSelectSearchInput}
+                    role="searchbox"
+                    ref={(element) => {
+                      searchInputRefs.current[field.name] =
+                        element;
+                    }}
+                    onFocus={() => setOpenSearchField(field.name)}
+                    onBlur={() => {
+                      window.setTimeout(() => {
+                        const container =
+                          searchSelectRefs.current[field.name];
+                        const activeElement =
+                          document.activeElement;
+                        if (
+                          container &&
+                          activeElement instanceof Node &&
+                          container.contains(activeElement)
+                        ) {
+                          return;
+                        }
+                        setOpenSearchField((current) =>
+                          current === field.name ? null : current,
+                        );
+                      }, 0);
+                    }}
+                    onMouseDown={(event) => {
+                      event.stopPropagation();
+                    }}
+                    onKeyDown={(event) =>
+                      handleSearchableSelectKeyDown(
+                        field,
+                        event,
+                        filteredOptions,
+                        fieldValue,
+                      )
+                    }
+                    onChange={(event) =>
+                      handleSearchableSelectInput(
+                        field,
+                        event.currentTarget.value,
+                      )
+                    }
+                  />
+                  <span
+                    className={styles.searchSelectSearchIcon}
+                    aria-hidden="true"
+                  >
+                    <svg viewBox="0 0 20 20">
+                      <path
+                        d="M8.6 3.5a5.1 5.1 0 1 1 0 10.2 5.1 5.1 0 0 1 0-10.2Zm0 1.6a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm4.7 8.7 3.2 3.2"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                </div>
+                <ul className={styles.searchSelectOptions} role="listbox">
+                  {filteredOptions.length ? (
+                    filteredOptions.map((option, optionIndex) => (
+                      <li
+                        id={`${controlId}-search-option-${optionIndex}`}
+                        key={`${field.name}-${option.value}`}
+                        className={cx(
+                          styles.searchSelectOption,
+                          optionIndex === highlightedOptionIndex &&
+                            styles.searchSelectOptionActive,
+                          (isMultiSelect
+                            ? selectedValues.includes(option.value)
+                            : option.value === fieldValue) &&
+                            styles.searchSelectOptionActive,
+                        )}
+                        role="option"
+                        aria-selected={
+                          isMultiSelect
+                            ? selectedValues.includes(option.value)
+                            : option.value === fieldValue
+                        }
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          handleSearchableSelectChoose(
+                            field,
+                            option,
+                          );
+                        }}
+                        onMouseEnter={() =>
+                          setSearchActiveOptionIndex((current) => ({
+                            ...current,
+                            [field.name]: optionIndex,
+                          }))
+                        }
+                      >
+                        {isMultiSelect ? (
+                          <input
+                            type="checkbox"
+                            autoComplete="off"
+                            checked={selectedValues.includes(option.value)}
+                            readOnly
+                            tabIndex={-1}
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                        {option.label}
+                      </li>
+                    ))
+                  ) : (
+                    <li
+                      className={styles.searchSelectEmpty}
+                      role="option"
+                      aria-disabled
+                    >
+                      No matching options
+                    </li>
+                  )}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        ) : inputType === "select" ? (
+          <select
+            {...commonProps}
+            value={fieldValue}
+            multiple={isMultiSelect}
+            className={cx(
+              styles.control,
+              fieldError && styles.controlInvalid,
+            )}
+            style={field.controlStyle}
+          >
+            {!isMultiSelect ? (
+              <option value="" hidden>
+                {field.placeholder ?? `Select ${field.label}`}
+              </option>
+            ) : null}
+            {(field.options ?? []).map((option) => (
+              <option key={`${field.name}-${option.value}`} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        ) : inputType === "checkbox" ? (
+          <label
+            className={styles.checkboxWrapper}
+            htmlFor={commonProps.id}
+          >
+            <input
+              {...commonProps}
+              type="checkbox"
+              autoComplete="off"
+              checked={fieldValue === "true"}
+              className={cx(
+                styles.checkboxControl,
+                fieldError && styles.checkboxControlInvalid,
+              )}
+              style={field.controlStyle}
+            />
+            <span className={styles.checkboxLabel}>
+              {field.label}
+              {field.required ? (
+                <span className={styles.requiredMark}>*</span>
+              ) : null}
+            </span>
+          </label>
+        ) : inputType === "textarea" ? (
+          <textarea
+            {...commonProps}
+            value={fieldValue}
+            rows={field.rows ?? 4}
+            autoComplete="off"
+            className={cx(
+              styles.control,
+              styles.textarea,
+              fieldError && styles.controlInvalid,
+            )}
+            style={field.controlStyle}
+          />
+        ) : inputType === "file" ? (
+          <div className={styles.fileField}>
+            <input
+              {...commonProps}
+              type="file"
+              autoComplete="off"
+              accept={field.accept}
+              className={cx(
+                styles.control,
+                styles.fileInput,
+                fieldError && styles.controlInvalid,
+              )}
+              style={field.controlStyle}
+            />
+            <p id={fileId} className={styles.fileMeta}>
+              {selectedFile
+                ? `${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)`
+                : "No file selected"}
+            </p>
+          </div>
+        ) : (
+          <input
+            {...commonProps}
+            value={
+              inputType === "color"
+                ? fieldValue || "#000000"
+                : fieldValue
+            }
+            type={inputType}
+            autoComplete="off"
+            inputMode={field.inputMode}
+            min={field.min}
+            max={field.max}
+            step={field.step}
+            className={cx(
+              styles.control,
+              fieldError && styles.controlInvalid,
+            )}
+            style={field.controlStyle}
+          />
+        )}
+        {field.helperText ? (
+          <p id={helpId} className={styles.helpText}>
+            {field.helperText}
+          </p>
+        ) : null}
+        {fieldError ? (
+          <p id={errorId} className={styles.errorText}>
+            {fieldError}
+          </p>
+        ) : null}
+      </div>
+    );
+  };
   return (
     <section className={className}>
       {!hideSectionHeader ? (
@@ -1471,524 +2115,59 @@ export function ERPDynamicModalForm({
                 className={styles.formGrid}
                 style={formGridStyle}
               >
-                {visibleFields.map((field) => {
-                  const fieldValue = formData[field.name] ?? "";
-                  const selectedFile = fileData[field.name] ?? null;
-                  const fieldError = fieldErrors[field.name];
-                  const inputType = field.type ?? "text";
-                  if (inputType === "heading") {
-                    const sectionExpanded =
-                      activeSectionExpandedState?.[field.name] ?? true;
-                    const sectionToggleId = `${formId}-${field.name}-section-toggle`;
-                    return (
-                      <div
-                        key={field.name}
-                        className={cx(
-                          styles.field,
-                          styles.fieldWide,
-                          styles.sectionHeadingField,
-                        )}
-                      >
-                        <label
-                          className={styles.sectionToggle}
-                          htmlFor={sectionToggleId}
-                        >
-                          <input
-                            id={sectionToggleId}
-                            type="checkbox"
-                            autoComplete="off"
-                            className={styles.sectionToggleInput}
-                            checked={sectionExpanded}
-                            disabled={isSubmitting}
-                            onChange={() => toggleSectionExpanded(field.name)}
-                          />
-                          <span className={styles.sectionHeading}>
-                            {field.label}
-                          </span>
-                        </label>
-                        {field.helperText ? (
-                          <p className={styles.sectionHeadingDescription}>
-                            {field.helperText}
-                          </p>
-                        ) : null}
-                      </div>
-                    );
-                  }
-                  const isMultiSelect =
-                    inputType === "select" && field.multiple;
-                  const selectedValues = isMultiSelect
-                    ? parseMultiSelectValue(fieldValue)
-                    : [];
-                  const selectedOptionEntries = isMultiSelect
-                    ? selectedValues.map((selectedValue) => {
-                        const matchedOption = field.options?.find(
-                          (option) => option.value === selectedValue,
-                        );
-                        return {
-                          value: selectedValue,
-                          label: matchedOption?.label ?? selectedValue,
-                        };
-                      })
-                    : [];
-                  const selectedLabel = getSelectOptionLabel(field, fieldValue);
-                  const searchQuery = searchQueries[field.name];
-                  const searchInputValue = searchQuery ?? "";
-                  const shouldUseSearchableSelect = inputType === "select";
-                  const isSearchOpen = openSearchField === field.name;
-                  const normalizedQuery = (searchQuery ?? "")
-                    .trim()
-                    .toLowerCase();
-                  const filteredOptions =
-                    shouldUseSearchableSelect
-                      ? (field.options ?? []).filter((option) => {
-                          if (!normalizedQuery) {
-                            return true;
-                          }
-                          const valueMatch = option.value
-                            .toLowerCase()
-                            .includes(normalizedQuery);
-                          const labelMatch = option.label
-                            .toLowerCase()
-                            .includes(normalizedQuery);
-                          return valueMatch || labelMatch;
-                        })
-                      : [];
-                  const highlightedOptionIndexRaw =
-                    searchActiveOptionIndex[field.name];
-                  const highlightedOptionIndex =
-                    highlightedOptionIndexRaw !== undefined &&
-                    highlightedOptionIndexRaw >= 0 &&
-                    highlightedOptionIndexRaw < filteredOptions.length
-                      ? highlightedOptionIndexRaw
-                      : -1;
-                  const controlId = `${formId}-${field.name}`;
-                  const activeDescendantId =
-                    isSearchOpen && highlightedOptionIndex >= 0
-                      ? `${controlId}-search-option-${highlightedOptionIndex}`
-                      : undefined;
-                  const helpId = field.helperText
-                    ? `${controlId}-help`
+                {visibleSections.map((section, sectionIndex) => {
+                  const heading = section.heading;
+                  const sectionKey = heading?.name ?? `section-${sectionIndex}`;
+                  const sectionExpanded = heading
+                    ? (activeSectionExpandedState?.[heading.name] ?? true)
+                    : true;
+                  const sectionToggleId = heading
+                    ? `${formId}-${heading.name}-section-toggle`
                     : undefined;
-                  const fileId = selectedFile ? `${controlId}-file` : undefined;
-                  const errorId = fieldError ? `${controlId}-error` : undefined;
-                  const describedBy =
-                    [helpId, fileId, errorId].filter(Boolean).join(" ") ||
-                    undefined;
-                  const commonProps = {
-                    id: controlId,
-                    name: field.name,
-                    required: field.required,
-                    disabled: field.disabled || isSubmitting,
-                    onChange: handleChange,
-                    autoComplete: "off",
-                    "aria-invalid": fieldError ? true : undefined,
-                    "aria-describedby": describedBy,
-                  };
-                  return (
-                    <div
-                      key={field.name}
-                      className={cx(
-                        styles.field,
-                        stackLabels &&
-                          inputType !== "checkbox" &&
-                          styles.fieldStacked,
-                        field.colSpan === 2 && styles.fieldWide,
-                        inputType === "checkbox" && styles.checkboxField,
-                      )}
-                      style={
-                        field.gridColumnStart !== undefined ||
-                        field.gridRowStart !== undefined
-                          ? {
-                              ...(field.gridColumnStart !== undefined
-                                ? {
-                                    gridColumnStart: Math.max(
-                                      1,
-                                      Math.floor(field.gridColumnStart),
-                                    ),
-                                  }
-                                : {}),
-                              ...(field.gridRowStart !== undefined
-                                ? {
-                                    gridRowStart: Math.max(
-                                      1,
-                                      Math.floor(field.gridRowStart),
-                                    ),
-                                  }
-                                : {}),
-                            }
-                          : undefined
-                      }
-                    >
-                      {inputType !== "checkbox" ? (
-                        <label className={styles.label} htmlFor={commonProps.id}>
-                          {field.label}{" "}
-                          {field.required ? (
-                            <span className={styles.requiredMark}>*</span>
-                          ) : null}
-                        </label>
-                      ) : null}
-                      {shouldUseSearchableSelect ? (
-                        <div
-                          className={styles.searchSelect}
-                          ref={(element) => {
-                            searchSelectRefs.current[field.name] = element;
-                          }}
-                        >
-                          <div
-                            className={cx(
-                              styles.searchSelectTrigger,
-                              isMultiSelect && styles.searchMultiSelectControl,
-                              fieldError && styles.controlInvalid,
-                              isSearchOpen && styles.searchSelectTriggerOpen,
-                              (field.disabled || isSubmitting) &&
-                                styles.searchSelectTriggerDisabled,
-                            )}
-                            role="combobox"
-                            aria-expanded={isSearchOpen}
-                            aria-controls={`${controlId}-search-list`}
-                            aria-activedescendant={activeDescendantId}
-                            aria-disabled={
-                              field.disabled || isSubmitting ? true : undefined
-                            }
-                            tabIndex={field.disabled || isSubmitting ? -1 : 0}
-                            onMouseDown={(event) => {
-                              const target = event.target as HTMLElement;
-                              if (
-                                target.closest(
-                                  '[data-search-select-remove="true"]',
-                                )
-                              ) {
-                                return;
-                              }
-                              event.preventDefault();
-                              if (field.disabled || isSubmitting) {
-                                return;
-                              }
-                              setOpenSearchField((current) =>
-                                current === field.name ? null : field.name,
-                              );
-                            }}
-                            onKeyDown={(event) =>
-                              handleSearchableSelectKeyDown(
-                                field,
-                                event,
-                                filteredOptions,
-                                fieldValue,
-                              )
-                            }
-                          >
-                            {isMultiSelect ? (
-                              <div className={styles.searchSelectValueTokens}>
-                                {selectedOptionEntries.length ? (
-                                  selectedOptionEntries.map((option) => (
-                                    <span
-                                      key={`${field.name}-selected-${option.value}`}
-                                      className={styles.searchSelectToken}
-                                    >
-                                      <span
-                                        className={styles.searchSelectTokenText}
-                                      >
-                                        {option.label}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        data-search-select-remove="true"
-                                        className={styles.searchSelectTokenRemove}
-                                        aria-label={`Remove ${option.label}`}
-                                        disabled={field.disabled || isSubmitting}
-                                        onMouseDown={(event) => {
-                                          event.preventDefault();
-                                          event.stopPropagation();
-                                          if (field.disabled || isSubmitting) {
-                                            return;
-                                          }
-                                          handleSearchableSelectChoose(
-                                            field,
-                                            option,
-                                          );
-                                        }}
-                                      >
-                                        x
-                                      </button>
-                                    </span>
-                                  ))
-                                ) : (
-                                  <span
-                                    className={
-                                      styles.searchSelectTriggerPlaceholder
-                                    }
-                                  >
-                                    {field.placeholder ?? `Select ${field.label}`}
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <span
-                                className={cx(
-                                  styles.searchSelectTriggerSingleValue,
-                                  !fieldValue &&
-                                    styles.searchSelectTriggerPlaceholder,
-                                )}
-                              >
-                                {selectedLabel ||
-                                  field.placeholder ||
-                                  `Select ${field.label}`}
-                              </span>
-                            )}
-                            <span
-                              className={styles.searchSelectChevronSlot}
-                              aria-hidden="true"
-                            >
-                              <svg
-                                viewBox="0 0 20 20"
-                                className={cx(
-                                  styles.searchSelectChevron,
-                                  isSearchOpen &&
-                                    styles.searchSelectChevronOpen,
-                                )}
-                              >
-                                <path
-                                  d="M5 7.5 10 12.5 15 7.5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.8"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                            </span>
-                          </div>
-                          {isSearchOpen && !field.disabled ? (
-                            <div
-                              id={`${controlId}-search-list`}
-                              className={cx(
-                                styles.searchSelectList,
-                                searchDropdownPlacement === "up" &&
-                                  styles.searchSelectListUp,
-                              )}
-                              style={{
-                                maxHeight: `${searchDropdownMaxHeight}px`,
-                              }}
-                            >
-                              <div className={styles.searchSelectSearchWrap}>
-                                <input
-                                  type="text"
-                                  autoComplete="off"
-                                  value={searchInputValue}
-                                  placeholder={
-                                    field.placeholder ?? `Search ${field.label}`
-                                  }
-                                  className={styles.searchSelectSearchInput}
-                                  role="searchbox"
-                                  ref={(element) => {
-                                    searchInputRefs.current[field.name] =
-                                      element;
-                                  }}
-                                  onFocus={() => setOpenSearchField(field.name)}
-                                  onBlur={() => {
-                                    window.setTimeout(() => {
-                                      const container =
-                                        searchSelectRefs.current[field.name];
-                                      const activeElement =
-                                        document.activeElement;
-                                      if (
-                                        container &&
-                                        activeElement instanceof Node &&
-                                        container.contains(activeElement)
-                                      ) {
-                                        return;
-                                      }
-                                      setOpenSearchField((current) =>
-                                        current === field.name ? null : current,
-                                      );
-                                    }, 0);
-                                  }}
-                                  onMouseDown={(event) => {
-                                    event.stopPropagation();
-                                  }}
-                                  onKeyDown={(event) =>
-                                    handleSearchableSelectKeyDown(
-                                      field,
-                                      event,
-                                      filteredOptions,
-                                      fieldValue,
-                                    )
-                                  }
-                                  onChange={(event) =>
-                                    handleSearchableSelectInput(
-                                      field,
-                                      event.currentTarget.value,
-                                    )
-                                  }
-                                />
-                                <span
-                                  className={styles.searchSelectSearchIcon}
-                                  aria-hidden="true"
-                                >
-                                  <svg viewBox="0 0 20 20">
-                                    <path
-                                      d="M8.6 3.5a5.1 5.1 0 1 1 0 10.2 5.1 5.1 0 0 1 0-10.2Zm0 1.6a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm4.7 8.7 3.2 3.2"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="1.7"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                    />
-                                  </svg>
-                                </span>
-                              </div>
-                              <ul className={styles.searchSelectOptions} role="listbox">
-                                {filteredOptions.length ? (
-                                  filteredOptions.map((option, optionIndex) => (
-                                    <li
-                                      id={`${controlId}-search-option-${optionIndex}`}
-                                      key={`${field.name}-${option.value}`}
-                                      className={cx(
-                                        styles.searchSelectOption,
-                                        optionIndex === highlightedOptionIndex &&
-                                          styles.searchSelectOptionActive,
-                                        (isMultiSelect
-                                          ? selectedValues.includes(option.value)
-                                          : option.value === fieldValue) &&
-                                          styles.searchSelectOptionActive,
-                                      )}
-                                      role="option"
-                                      aria-selected={
-                                        isMultiSelect
-                                          ? selectedValues.includes(option.value)
-                                          : option.value === fieldValue
-                                      }
-                                      onMouseDown={(event) => {
-                                        event.preventDefault();
-                                        handleSearchableSelectChoose(
-                                          field,
-                                          option,
-                                        );
-                                      }}
-                                      onMouseEnter={() =>
-                                        setSearchActiveOptionIndex((current) => ({
-                                          ...current,
-                                          [field.name]: optionIndex,
-                                        }))
-                                      }
-                                    >
-                                      {isMultiSelect ? (
-                                        <input
-                                          type="checkbox"
-                                          autoComplete="off"
-                                          checked={selectedValues.includes(option.value)}
-                                          readOnly
-                                          tabIndex={-1}
-                                          aria-hidden="true"
-                                        />
-                                      ) : null}
-                                      {option.label}
-                                    </li>
-                                  ))
-                                ) : (
-                                  <li
-                                    className={styles.searchSelectEmpty}
-                                    role="option"
-                                    aria-disabled
-                                  >
-                                    No matching options
-                                  </li>
-                                )}
-                              </ul>
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : inputType === "checkbox" ? (
-                        <label
-                          className={styles.checkboxWrapper}
-                          htmlFor={commonProps.id}
-                        >
-                          <input
-                            {...commonProps}
-                            type="checkbox"
-                            autoComplete="off"
-                            checked={fieldValue === "true"}
-                            className={cx(
-                              styles.checkboxControl,
-                              fieldError && styles.checkboxControlInvalid,
-                            )}
-                            style={field.controlStyle}
-                          />
-                          <span className={styles.checkboxLabel}>
-                            {field.label}
-                            {field.required ? (
-                              <span className={styles.requiredMark}>*</span>
-                            ) : null}
-                          </span>
-                        </label>
-                      ) : inputType === "textarea" ? (
-                        <textarea
-                          {...commonProps}
-                          value={fieldValue}
-                          rows={field.rows ?? 4}
-                          autoComplete="off"
-                          //placeholder={field.placeholder}
-                          className={cx(
-                            styles.control,
-                            styles.textarea,
-                            fieldError && styles.controlInvalid,
-                          )}
-                          style={field.controlStyle}
-                        />
-                      ) : inputType === "file" ? (
-                        <div className={styles.fileField}>
-                          <input
-                            {...commonProps}
-                            type="file"
-                            autoComplete="off"
-                            accept={field.accept}
-                            className={cx(
-                              styles.control,
-                              styles.fileInput,
-                              fieldError && styles.controlInvalid,
-                            )}
-                            style={field.controlStyle}
-                          />
-                          <p id={fileId} className={styles.fileMeta}>
-                            {selectedFile
-                              ? `${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)`
-                              : "No file selected"}
-                          </p>
-                        </div>
-                      ) : (
-                        <input
-                          {...commonProps}
-                          value={
-                            inputType === "color"
-                              ? fieldValue || "#000000"
-                              : fieldValue
-                          }
-                          type={inputType}
-                          autoComplete="off"
-                          inputMode={field.inputMode}
-                          min={field.min}
-                          max={field.max}
-                          step={field.step}
-                          //placeholder={field.placeholder}
-                          className={cx(
-                            styles.control,
-                            fieldError && styles.controlInvalid,
-                          )}
-                          style={field.controlStyle}
-                        />
-                      )}
 
-                      {field.helperText ? (
-                        <p id={helpId} className={styles.helpText}>
-                          {field.helperText}
-                        </p>
+                  return (
+                    <Fragment key={sectionKey}>
+                      {heading ? (
+                        <div
+                          className={cx(
+                            styles.field,
+                            styles.fieldWide,
+                            styles.sectionHeadingField,
+                          )}
+                        >
+                          <label
+                            className={styles.sectionToggle}
+                            htmlFor={sectionToggleId}
+                          >
+                            <input
+                              id={sectionToggleId}
+                              type="checkbox"
+                              autoComplete="off"
+                              className={styles.sectionToggleInput}
+                              checked={sectionExpanded}
+                              disabled={isSubmitting}
+                              onChange={() => toggleSectionExpanded(heading.name)}
+                            />
+                            <span className={styles.sectionHeading}>
+                              {heading.label}
+                            </span>
+                          </label>
+                          {heading.helperText ? (
+                            <p className={styles.sectionHeadingDescription}>
+                              {heading.helperText}
+                            </p>
+                          ) : null}
+                        </div>
                       ) : null}
-                      {fieldError ? (
-                        <p id={errorId} className={styles.errorText}>
-                          {fieldError}
-                        </p>
+                      {sectionExpanded ? (
+                        <div
+                          className={styles.sectionFields}
+                          style={getSectionGridStyle(heading)}
+                        >
+                          {section.fields.map(renderField)}
+                        </div>
                       ) : null}
-                    </div>
+                    </Fragment>
                   );
                 })}
               </form>

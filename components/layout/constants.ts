@@ -82,12 +82,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         href: "/master/account-ledger-groups-master",
       },
       { label: "Ledger Master", href: "/master/account-ledger-master" },
-      {
-        label:"Employee Designation Master",href:"/master/employee-designation-master"
-      },      
-      {
-        label:"GSP Company Service",href:"/master/gsp-company-service"
-      },
+     
       {
         label:"GSP Service Master",href:"/master/gsp-service-master"
       },{
@@ -122,7 +117,21 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
     children:[
       {label:"Company Master",href:"/master/companies"},
       {label:"Branch Master",href:"/master/branches-master"},
-      {label:"Employee Master",href:"/master/employee-master"},
+      {label:"Employee Master",href:"/master/employee-master"},        
+      {
+        label:"GSP Company Service",href:"/master/gsp-company-service"
+      },
+      {
+        label:"master",
+        children:[
+           {
+        label:"Department Master",href:"/master/employee-department-master"
+      },
+      {
+        label:"Designation Master",href:"/master/employee-designation-master"
+      },    
+        ]
+      },
       {label:"Permissions",href:"/master/permissions"},
     ]
   },

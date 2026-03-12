@@ -271,7 +271,7 @@ function toDisplayValue(value: unknown): string {
   return "";
 }
 
-function toSelectBoolean(value: unknown, fallback: "true" | "false"): "true" | "false" {
+function toSelectBoolean(value: unknown, fallback: string): "true" | "false" {
   if (typeof value === "boolean") {
     return value ? "true" : "false";
   }
@@ -290,7 +290,13 @@ function toSelectBoolean(value: unknown, fallback: "true" | "false"): "true" | "
     return value > 0 ? "true" : "false";
   }
 
-  return fallback;
+  const normalizedFallback = fallback.trim().toLowerCase();
+  return normalizedFallback === "true" ||
+    normalizedFallback === "1" ||
+    normalizedFallback === "yes" ||
+    normalizedFallback === "active"
+    ? "true"
+    : "false";
 }
 
 function toNonNegativeInteger(value: string, fallback: number): number {

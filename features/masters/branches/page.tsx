@@ -27,9 +27,18 @@ const API_ENDPOINTS = {
   delete: "/branch-masters/delete",
 } as const;
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const GODOWN_LOOKUP_ENDPOINT = "/godowns/list";
 const STATE_LOOKUP_ENDPOINT = "/state-code-masters/list";
 const LOOKUP_QUERY_COMPANIES = {
   module: "companies",
+  limit: "100",
+} as const;
+const LOOKUP_QUERY_ACCOUNT_LEDGERS = {
+  module: "accountLedgers",
+  limit: "100",
+} as const;
+const GODOWN_LOOKUP_QUERY = {
+  page: "1",
   limit: "100",
 } as const;
 const STATE_LOOKUP_QUERY = {
@@ -60,9 +69,13 @@ const DEFAULT_COMPANY_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Company",
 };
-const DEFAULT_STATE_OPTION: ERPDynamicSelectOption = {
+const DEFAULT_LEDGER_OPTION: ERPDynamicSelectOption = {
   value: "",
-  label: "Select State",
+  label: "Select Ledger",
+};
+const DEFAULT_GODOWN_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Select Godown",
 };
 const COMPANY_LOOKUP_DEFINITION = {
   query: LOOKUP_QUERY_COMPANIES,
@@ -70,12 +83,53 @@ const COMPANY_LOOKUP_DEFINITION = {
   idKeys: ["id", "value"],
   labelKeys: ["name", "label"],
 } as const;
+const ACCOUNT_LEDGER_LOOKUP_DEFINITION = {
+  query: LOOKUP_QUERY_ACCOUNT_LEDGERS,
+  defaultOption: DEFAULT_LEDGER_OPTION,
+  idKeys: ["id", "value"],
+  labelKeys: ["name", "label"],
+} as const;
+const GODOWN_LOOKUP_DEFINITION = {
+  query: GODOWN_LOOKUP_QUERY,
+  defaultOption: DEFAULT_GODOWN_OPTION,
+  arrayKeys: ["data", "items", "results", "rows", "list", "godowns", "godown_locations"],
+  idKeys: [
+    "gdl_id",
+    "gdlId",
+    "gdl_location_id",
+    "godown_id",
+    "godownId",
+    "id",
+    "_id",
+  ],
+  labelKeys: [
+    "gdl_name",
+    "gdlName",
+    "godown_name",
+    "godownName",
+    "name",
+    "label",
+  ],
+} as const;
+const ROUNDING_MODE_OPTIONS: ERPDynamicSelectOption[] = [
+  {
+    value: "rounding off",
+    label: "Rounding Off",
+  },
+  {
+    value: "rounding up",
+    label: "Rounding Up",
+  },
+];
 const STATE_LOOKUP_ARRAY_KEYS = ["items", "data", "results", "rows", "list"] as const;
 const STATE_LOOKUP_NAME_KEYS = ["stateName", "state_name", "name", "label"] as const;
 const STATE_LOOKUP_CODE_KEYS = ["stateCode", "state_code", "code"] as const;
 const BRANCH_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(92vw, 86rem)",
-  maxHeight: "86vh",
+  width: "min(92vw, 60rem)",
+  maxHeight: "76vh",
+};
+const STATUS_CHECKBOX_FIELD_STYLE: CSSProperties = {
+  paddingBlock: "0.45rem",
 };
 const BRANCH_STANDARD_FIELD_NAMES = [
   "compId",
@@ -163,7 +217,7 @@ const BRANCH_INITIAL_FORM_VALUES = {
   brBillGreeting: "",
   brTerms: "",
   brRoundingMode: "",
-  brRoundingValue: "",
+  brRoundingValue: "0.00",
   brDefaultGodownId: "",
   brPosType: "",
   brAllowNegativeStock: "true",
@@ -200,7 +254,7 @@ function buildStateNameOptions(payload: unknown): ERPDynamicSelectOption[] {
     });
   }
   options.sort((left, right) => left.label.localeCompare(right.label));
-  return [DEFAULT_STATE_OPTION, ...removeEmptyOptions(options)];
+  return removeEmptyOptions(options);
 }
 function buildStateCodeByName(payload: unknown): Record<string, string> {
   const codeByName = new Map<string, string>();
@@ -247,6 +301,8 @@ function buildStateNameByCode(payload: unknown): Record<string, string> {
 function buildBranchFormFields(
   companyOptions: ERPDynamicSelectOption[],
   stateOptions: ERPDynamicSelectOption[],
+  ledgerOptions: ERPDynamicSelectOption[],
+  godownOptions: ERPDynamicSelectOption[],
 ): ERPDynamicModalField[] {
   return [
     {
@@ -277,37 +333,9 @@ function buildBranchFormFields(
       },
     },
     {
-      name: "brMailingName",
-      label: "Mailing Name",
-      validation: {
-        maxLength: 150,
-        maxLengthMessage: "Mailing Name must be at most 150 characters.",
-      },
-    },
-    {
-      name: "brShort",
-      label: "Short Name",
-      validation: {
-        maxLength: 50,
-        maxLengthMessage: "Short Name must be at most 50 characters.",
-      },
-    },
-    {
-      name: "brCode",
-      label: "Branch Code",
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "Branch Code must be at most 20 characters.",
-      },
-    },
-    {
-      name: "brType",
-      label: "Branch Type",
-      placeholder: "MAIN",
-      validation: {
-        maxLength: 30,
-        maxLengthMessage: "Branch Type must be at most 30 characters.",
-      },
+      name: "brTel",
+      label: "Telephone",
+      type: "tel",
     },
     {
       name: "brAlias",
@@ -318,6 +346,32 @@ function buildBranchFormFields(
       },
     },    
     {
+      name: "brContactPerson",
+      label: "Contact Person",
+      validation: {
+        maxLength: 150,
+        maxLengthMessage: "Contact Person must be at most 150 characters.",
+      },
+    },
+    {
+      name: "brMail",
+      label: "Email",
+      type: "email",
+    },
+    {
+      name: "brCode",
+      label: "Branch Code",
+      validation: {
+        maxLength: 20,
+        maxLengthMessage: "Branch Code must be at most 20 characters.",
+      },
+    },
+    {
+      name: "brPhone",
+      label: "Phone",
+      type: "tel",
+    },
+    {
       name: "__heading_address",
       label: "Address",
       type: "heading",
@@ -327,11 +381,11 @@ function buildBranchFormFields(
       label: "Address 1",
     },
     {
-      name: "brLandmark",
-      label: "Landmark",
+      name: "brCity",
+      label: "City",
       validation: {
-        maxLength: 150,
-        maxLengthMessage: "Landmark must be at most 150 characters.",
+        maxLength: 100,
+        maxLengthMessage: "City must be at most 100 characters.",
       },
     },
     {
@@ -348,12 +402,24 @@ function buildBranchFormFields(
       label: "Address 2",
     },
     {
-      name: "brCity",
-      label: "City",
+      name: "brDistrict",
+      label: "District",
       validation: {
         maxLength: 100,
-        maxLengthMessage: "City must be at most 100 characters.",
+        maxLengthMessage: "District must be at most 100 characters.",
       },
+    },
+    {
+      name: "brLandmark",
+      label: "Landmark",
+      validation: {
+        maxLength: 100,
+        maxLengthMessage: "Landmark must be at most 100 characters.",
+      },
+    },
+    {
+      name: "brAddr3",
+      label: "Address 3",
     },
     {
       name: "brState",
@@ -364,26 +430,6 @@ function buildBranchFormFields(
       options: stateOptions,
       validation: {
         requiredMessage: "State is required.",
-      },
-    },
-    {
-      name: "brAddr3",
-      label: "Address 3",
-    },
-    {
-      name: "brDistrict",
-      label: "District",
-      validation: {
-        maxLength: 100,
-        maxLengthMessage: "District must be at most 100 characters.",
-      },
-    },
-    {
-      name: "brCountry",
-      label: "Country",
-      validation: {
-        maxLength: 60,
-        maxLengthMessage: "Country must be at most 60 characters.",
       },
     },
     {
@@ -407,6 +453,7 @@ function buildBranchFormFields(
     {
       name: "brRegionCountry",
       label: "Region Country",
+      disabled: true,
       validation: {
         maxLength: 60,
         maxLengthMessage: "Region Country must be at most 60 characters.",
@@ -436,51 +483,15 @@ function buildBranchFormFields(
       label: "Region Address 3",
     },
     {
-      name: "__heading_contact",
-      label: "Contact",
-      type: "heading",
-      defaultExpanded: false,
-    },
-    {
-      name: "brContactPerson",
-      label: "Contact Person",
-      validation: {
-        maxLength: 150,
-        maxLengthMessage: "Contact Person must be at most 150 characters.",
-      },
-    },
-    {
-      name: "brTel",
-      label: "Telephone",
-      type: "tel",
-    },
-    {
-      name: "brPhone",
-      label: "Phone",
-      type: "tel",
-    },
-    {
-      name: "brMail",
-      label: "Email",
-      type: "email",
-    },
-    {
       name: "__heading_billing",
-      label: "Billing & Invoice Setup",
+      label: "Billing & Invoice Setup",   
       type: "heading",
       defaultExpanded: false,
-    },
-    {
-      name: "brBillPrefix",
-      label: "Bill Prefix",
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "Bill Prefix must be at most 20 characters.",
-      },
     },
     {
       name: "brInvoiceSeriesPrefix",
       label: "Invoice Series Prefix",
+      required: true,
       validation: {
         maxLength: 20,
         maxLengthMessage: "Invoice Series Prefix must be at most 20 characters.",
@@ -489,16 +500,26 @@ function buildBranchFormFields(
     {
       name: "brRoundingMode",
       label: "Rounding Mode",
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "Rounding Mode must be at most 20 characters.",
-      },
+      required: true,
+      type: "select",
+      searchable: false,
+      options: ROUNDING_MODE_OPTIONS,
     },
     {
       name: "brRoundingValue",
       label: "Rounding Value",
-      type: "number",
-      step: "0.01",
+      inputMode: "decimal",
+      validation: {
+        custom: (value) => {
+          const normalizedValue = value.trim();
+          if (!normalizedValue) {
+            return null;
+          }
+          return Number.isFinite(Number(normalizedValue))
+            ? null
+            : "Rounding Value must be a valid number.";
+        },
+      },
     },
     {
       name: "brBillGreeting",
@@ -513,28 +534,20 @@ function buildBranchFormFields(
       label: "Terms",
     },
     {
-      name: "__heading_inventory",
-      label: "Inventory & Operations",
-      type: "heading",
-      defaultExpanded: false,
-    },
-    {
       name: "brDefaultGodownId",
       label: "Default Godown Id",
-      placeholder: "Default godown UUID",
-    },
-    {
-      name: "brPosType",
-      label: "POS Type",
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "POS Type must be at most 20 characters.",
-      },
+      type: "select",
+      searchable: true,
+      options: godownOptions,
+      placeholder: "Search godown",
     },
     {
       name: "brBankId",
       label: "Bank Id",
-      placeholder: "Linked bank UUID",
+      type: "select",
+      searchable: true,
+      options: ledgerOptions,
+      placeholder: "Search ledger",
     },    
     {
       name: "__heading_compliance",
@@ -573,21 +586,25 @@ function buildBranchFormFields(
       name: "brAllowNegativeStock",
       label: "Allow Negative Stock",
       type: "checkbox",
+      fieldStyle: STATUS_CHECKBOX_FIELD_STYLE,
     },
     {
       name: "brSmsApplicable",
       label: "SMS Applicable",
       type: "checkbox",
+      fieldStyle: STATUS_CHECKBOX_FIELD_STYLE,
     },
     {
       name: "brIsDefault",
       label: "Default Branch",
       type: "checkbox",
+      fieldStyle: STATUS_CHECKBOX_FIELD_STYLE,
     },
     {
       name: "brIsActive",
       label: "Active",
       type: "checkbox",
+      fieldStyle: STATUS_CHECKBOX_FIELD_STYLE,
     },
   ];
 }
@@ -637,14 +654,34 @@ function mapBranchFormValues(
 }
 export default function BranchesMasterPage() {
   const { getAll: getCompanyLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  const { getAll: getAccountLedgerLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  const { getAll: getGodownLookup } = useApi<unknown>(GODOWN_LOOKUP_ENDPOINT);
   const { getAll: getStateLookup } = useApi<unknown>(STATE_LOOKUP_ENDPOINT);
   const { options: companyOptions } = useMasterOptions({
     definition: COMPANY_LOOKUP_DEFINITION,
     load: getCompanyLookup,
   });
-  const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([
-    DEFAULT_STATE_OPTION,
-  ]);
+  const { options: ledgerOptions } = useMasterOptions({
+    definition: ACCOUNT_LEDGER_LOOKUP_DEFINITION,
+    load: getAccountLedgerLookup,
+  });
+  const { options: godownOptions } = useMasterOptions({
+    definition: GODOWN_LOOKUP_DEFINITION,
+    load: getGodownLookup,
+  });
+  const filteredCompanyOptions = useMemo(
+    () => removeEmptyOptions(companyOptions),
+    [companyOptions],
+  );
+  const filteredLedgerOptions = useMemo(
+    () => removeEmptyOptions(ledgerOptions),
+    [ledgerOptions],
+  );
+  const filteredGodownOptions = useMemo(
+    () => removeEmptyOptions(godownOptions),
+    [godownOptions],
+  );
+  const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
   const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -662,7 +699,7 @@ export default function BranchesMasterPage() {
         if (!mounted) {
           return;
         }
-        setStateOptions([DEFAULT_STATE_OPTION]);
+        setStateOptions([]);
         setStateCodeByName({});
         setStateNameByCode({});
       }
@@ -672,8 +709,19 @@ export default function BranchesMasterPage() {
     };
   }, [getStateLookup]);
   const branchFormFields = useMemo(
-    () => buildBranchFormFields(companyOptions, stateOptions),
-    [companyOptions, stateOptions],
+    () =>
+      buildBranchFormFields(
+        filteredCompanyOptions,
+        stateOptions,
+        filteredLedgerOptions,
+        filteredGodownOptions,
+      ),
+    [
+      filteredCompanyOptions,
+      stateOptions,
+      filteredLedgerOptions,
+      filteredGodownOptions,
+    ],
   );
   return (
     <CrudMasterPage

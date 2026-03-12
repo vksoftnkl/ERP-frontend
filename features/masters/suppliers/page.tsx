@@ -13,6 +13,7 @@ import { useApi } from "@/hooks/useApi";
 import InlineRelatedMasterModal from "@/features/masters/shared/inline-related-master";
 import { toast } from "react-toastify";
 import {
+  type ERPDynamicFieldValueChangeHandler,
   type ERPDynamicModalController,
   type ERPDynamicModalSubmitPayload,
   type ERPDynamicModalVariant,
@@ -39,6 +40,7 @@ import {
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
 import { COLLECTION_DAY_OPTIONS, GST_TYPE_OPTIONS } from "@/utils/constant";
+import { validateGstin } from "@/utils/validation";
 
 const API_ENDPOINTS = {
   list: "/suppliers/list",
@@ -80,6 +82,10 @@ const STATE_LOOKUP_QUERY = {
   limit: "100",
   isActive: "true",
 } as const;
+const GST_LOOKUP_ENDPOINT = "/api/gst/search";
+const GST_LOOKUP_PATTERN = /^[0-9A-Z]{15}$/;
+const GST_LOOKUP_HELPER_TEXT =
+  "Type a 15-character GSTIN to load supplier details automatically.";
 const STATE_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(34vw, 34rem)",
   maxHeight: "75vh",
@@ -118,31 +124,13 @@ const SUPPLIER_IS_ACTIVE_KEYS = [
   "status",
 ] as const;
 
-const DEFAULT_SUPPLIER_GROUP_OPTION: ERPDynamicSelectOption = {
+const DEFAULT_LOOKUP_OPTION: ERPDynamicSelectOption = {
   value: "",
-  label: "Select Supplier Group",
+  label: "",
 };
-const DEFAULT_COMPANY_OPTION: ERPDynamicSelectOption = {
-  value: "",
-  label: "Select Company",
-};
-const DEFAULT_BRANCH_OPTION: ERPDynamicSelectOption = {
-  value: "",
-  label: "Select Branch",
-};
-const ALL_LOOKUP_OPTION_VALUE = "__ALL__";
-const ALL_COMPANY_OPTION: ERPDynamicSelectOption = {
-  value: ALL_LOOKUP_OPTION_VALUE,
-  label: "All",
-};
-const ALL_BRANCH_OPTION: ERPDynamicSelectOption = {
-  value: ALL_LOOKUP_OPTION_VALUE,
-  label: "All",
-};
-const DEFAULT_STATE_OPTION: ERPDynamicSelectOption = {
-  value: "",
-  label: "Select State",
-};
+const PURCHASE_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
+  { value: "Goods Supplier", label: "Goods Supplier" },
+];
 const SUPPLIER_GROUP_LOOKUP_ARRAY_KEYS = [
   ...DEFAULT_LOOKUP_ARRAY_KEYS,
   "supplierGroups",
@@ -178,6 +166,29 @@ const STATE_LOOKUP_CODE_KEYS = [
   "state_code",
   "code",
 ] as const;
+const GST_LOOKUP_SOURCE_KEYS = ["data", "taxpayer", "result"] as const;
+const GST_LEGAL_NAME_KEYS = ["lgnm", "legalName", "legal_name"] as const;
+const GST_TRADE_NAME_KEYS = ["tradeNam", "tradeName", "trade_name"] as const;
+const GST_REGISTRATION_TYPE_KEYS = [
+  "dty",
+  "gstType",
+  "gst_type",
+  "registrationType",
+  "registration_type",
+] as const;
+const GST_PRIMARY_ADDRESS_KEYS = [
+  "pradr",
+  "principalAddress",
+  "primaryAddress",
+  "primary_address",
+] as const;
+const GST_ADDRESS_KEYS = ["addr", "address"] as const;
+const GST_ADDRESS_BUILDING_KEYS = ["bno", "flno", "bnm"] as const;
+const GST_ADDRESS_LOCALITY_KEYS = ["st", "loc"] as const;
+const GST_ADDRESS_DISTRICT_KEYS = ["dst", "district"] as const;
+const GST_ADDRESS_CITY_KEYS = ["city", "loc"] as const;
+const GST_ADDRESS_STATE_KEYS = ["stcd", "state", "stateName", "state_name"] as const;
+const GST_ADDRESS_PIN_KEYS = ["pncd", "pin", "pincode"] as const;
 const STATE_DETAIL_KEYS = {
   code: ["stateCode", "state_code", "code"],
   name: ["stateName", "state_name", "name", "label"],
@@ -269,461 +280,430 @@ function buildSupplierFormFields(
   onStateEditShortcut: (
     payload: ERPDynamicSearchShortcutPayload,
   ) => void | Promise<void>,
+  onSupplierStateValueChange: ERPDynamicFieldValueChangeHandler,
+  onSupplierGstinValueChange: ERPDynamicFieldValueChangeHandler,
 ): ERPDynamicModalField[] {
   return [
-    {
-      name: "scopeHeading",
-      label: "Primary Details",
-      type: "heading",
-      gridColumnStart: 1,
-      gridRowStart: 1,
+  {
+    name: "scopeHeading",
+    label: "Primary Details",
+    type: "heading",
+    gridColumnStart: 1,
+    gridRowStart: 1,
+  },
+  {
+    name: "supGstNo",
+    label: "GST No",
+    gridColumnStart: 1,
+    gridRowStart: 2,
+    placeholder: "24ABCDE1234F1Z5",
+    helperText: GST_LOOKUP_HELPER_TEXT,
+    onValueChange: onSupplierGstinValueChange,
+    validation: {
+      custom: (value, values) => validateSupplierGstin(value, values),
     },
-    {
-      name: "supName",
-      label: "Supplier Name",
-      gridColumnStart: 1,
-      gridRowStart: 2,
-      required: true,
-      validation: {
-        minLength: 2,
-        maxLength: 200,
-        minLengthMessage: "Supplier Name must be at least 2 characters.",
-        maxLengthMessage: "Supplier Name must be at most 200 characters.",
-      },
+  },
+  {
+    name: "supGstType",
+    label: "GST Type",
+    type: "select",
+    gridColumnStart: 1,
+    gridRowStart: 3,
+    searchable: true,
+    options: GST_TYPE_OPTIONS,
+    required: true,
+    validation: {
+      requiredMessage: "GST Type is required.",
     },
-    {
-      name: "supGroupId",
-      label: "Supplier Group",
-      type: "select",
-      gridColumnStart: 2,
-      gridRowStart: 2,
-      searchable: true,
-      required: true,
-      options: supplierGroupOptions,
-      onSearchCreateShortcut: onSupplierGroupCreateShortcut,
-      onSearchEditShortcut: onSupplierGroupEditShortcut,
-      validation: {
-        requiredMessage: "Supplier Group is required.",
-      },
+  },
+  {
+    name: "supName",
+    label: "Supplier Name",
+    gridColumnStart: 2,
+    gridRowStart: 2,
+    required: true,
+    validation: {
+      minLength: 2,
+      maxLength: 200,
+      minLengthMessage: "Supplier Name must be at least 2 characters.",
+      maxLengthMessage: "Supplier Name must be at most 200 characters.",
     },
-    {
-      name: "supCompanyId",
-      label: "Company",
-      type: "select",
-      gridColumnStart: 3,
-      gridRowStart: 2,
-      searchable: true,
-      options: companyOptions,
+  },
+  {
+    name: "supGroupId",
+    label: "Supplier Group",
+    type: "select",
+    gridColumnStart: 2,
+    gridRowStart: 3,
+    searchable: true,
+    required: true,
+    options: supplierGroupOptions,
+    onSearchCreateShortcut: onSupplierGroupCreateShortcut,
+    onSearchEditShortcut: onSupplierGroupEditShortcut,
+    validation: {
+      requiredMessage: "Supplier Group is required.",
     },
-    {
-      name: "supShort",
-      label: "Short Name",
-      gridColumnStart: 1,
-      gridRowStart: 3,
-      validation: {
-        maxLength: 50,
-        maxLengthMessage: "Short Name must be at most 50 characters.",
-      },
+  },
+  {
+    name: "supCompanyId",
+    label: "Company",
+    type: "select",
+    gridColumnStart: 3,
+    gridRowStart: 2,
+    searchable: true,
+    options: companyOptions,
+  },
+  {
+    name: "supShort",
+    label: "Short Name",
+    gridColumnStart: 2,
+    gridRowStart: 5,
+    validation: {
+      maxLength: 50,
+      maxLengthMessage: "Short Name must be at most 50 characters.",
     },
-    {
-      name: "supPurchaseType",
-      label: "Purchase Type",
-      gridColumnStart: 2,
-      gridRowStart: 3,
-      required: true,
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "Purchase Type must be at most 20 characters.",
-      },
+  },
+  {
+    name: "supPurchaseType",
+    label: "Purchase Type",
+    type: "select",
+    gridColumnStart: 2,
+    gridRowStart: 4,
+    searchable: false,
+    required: true,
+    options: PURCHASE_TYPE_OPTIONS,
+    validation: {
+      requiredMessage: "Purchase Type is required.",
     },
-    {
-      name: "supBranchId",
-      label: "Branch",
-      type: "select",
-      gridColumnStart: 3,
-      gridRowStart: 3,
-      searchable: true,
-      options: branchOptions,
+  },
+  {
+    name: "supBranchId",
+    label: "Branch",
+    type: "select",
+    gridColumnStart: 3,
+    gridRowStart: 3,
+    searchable: true,
+    options: branchOptions,
+  },
+  {
+    name: "supPanNo",
+    label: "PAN No",
+    gridColumnStart: 1,
+    gridRowStart: 4,
+    validation: {
+      custom: (value) => validateSupplierPan(value),
     },
-    {
-      name: "supSortOrder",
-      label: "Sort Order",
-      type: "number",
-      gridColumnStart: 1,
-      gridRowStart: 4,
-      step: 1,
-      min: 0,
-      validation: {
-        minMessage: "Sort Order must be 0 or greater.",
-      },
+  },
+  {
+    name: "supDrugLiscenceNo",
+    label: "Drug Licence No",
+    gridColumnStart: 1,
+    gridRowStart: 5,
+    validation: {
+      maxLength: 100,
+      maxLengthMessage: "Drug Licence No must be at most 100 characters.",
     },
-    {
-      name: "contactHeading",
-      label: "Basic Details",
-      type: "heading",
-      gridColumnStart: 1,
-      gridRowStart: 5,
+  },
+  {
+    name: "contactHeading",
+    label: "Address & Contact Details",
+    type: "heading",
+    gridColumnStart: 1,
+    gridRowStart: 6,
+  },
+  {
+    name: "supAddr1",
+    label: "Address Line 1",
+    gridColumnStart: 1,
+    gridRowStart: 7,
+    validation: {
+      maxLength: 250,
+      maxLengthMessage: "Address Line 1 must be at most 250 characters.",
     },
-    {
-      name: "supChequePreName",
-      label: "Cheque Prefix Name",
-      gridColumnStart: 1,
-      gridRowStart: 6,
-      validation: {
-        maxLength: 200,
-        maxLengthMessage: "Cheque Prefix Name must be at most 200 characters.",
-      },
+  },
+  {
+    name: "supDistrict",
+    label: "District",
+    gridColumnStart: 2,
+    gridRowStart: 7,
+    validation: {
+      maxLength: 250,
+      maxLengthMessage: "District must be at most 250 characters.",
     },
-    {
-      name: "supDistrict",
-      label: "District",
-      gridColumnStart: 2,
-      gridRowStart: 6,
-      validation: {
-        maxLength: 250,
-        maxLengthMessage: "District must be at most 250 characters.",
-      },
+  },
+  {
+    name: "supPhone",
+    label: "Phone",
+    type: "tel",
+    gridColumnStart: 3,
+    gridRowStart: 7,
+    validation: {
+      maxLength: 20,
+      maxLengthMessage: "Phone must be at most 20 characters.",
     },
-    {
-      name: "supPhone",
-      label: "Phone",
-      type: "tel",
-      gridColumnStart: 3,
-      gridRowStart: 6,
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "Phone must be at most 20 characters.",
-      },
+  },
+  {
+    name: "supAddr2",
+    label: "Address Line 2",
+    gridColumnStart: 1,
+    gridRowStart: 8,
+    validation: {
+      maxLength: 250,
+      maxLengthMessage: "Address Line 2 must be at most 250 characters.",
     },
-    {
-      name: "supAddr1",
-      label: "Address Line 1",
-      gridColumnStart: 1,
-      gridRowStart: 7,
-      validation: {
-        maxLength: 250,
-        maxLengthMessage: "Address Line 1 must be at most 250 characters.",
-      },
+  },
+  {
+    name: "supStateName",
+    label: "State",
+    type: "select",
+    gridColumnStart: 2,
+    gridRowStart: 8,
+    searchable: true,
+    required: true,
+    options: stateOptions,
+    onSearchCreateShortcut: onStateCreateShortcut,
+    onSearchEditShortcut: onStateEditShortcut,
+    onValueChange: onSupplierStateValueChange,
+    validation: {
+      requiredMessage: "State is required.",
     },
-    {
-      name: "supStateName",
-      label: "State",
-      type: "select",
-      gridColumnStart: 2,
-      gridRowStart: 7,
-      searchable: true,
-      required: true,
-      options: stateOptions,
-      onSearchCreateShortcut: onStateCreateShortcut,
-      onSearchEditShortcut: onStateEditShortcut,
-      validation: {
-        requiredMessage: "State is required.",
-      },
+  },
+  {
+    name: "supWhatsappNo",
+    label: "WhatsApp No",
+    type: "tel",
+    gridColumnStart: 3,
+    gridRowStart: 8,
+    validation: {
+      maxLength: 20,
+      maxLengthMessage: "WhatsApp No must be at most 20 characters.",
     },
-    {
-      name: "supWhatsappNo",
-      label: "WhatsApp No",
-      type: "tel",
-      gridColumnStart: 3,
-      gridRowStart: 7,
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "WhatsApp No must be at most 20 characters.",
-      },
+  },
+  {
+    name: "supAddr3",
+    label: "Address Line 3",
+    gridColumnStart: 1,
+    gridRowStart: 9,
+    validation: {
+      maxLength: 250,
+      maxLengthMessage: "Address Line 3 must be at most 250 characters.",
     },
-    {
-      name: "supAddr2",
-      label: "Address Line 2",
-      gridColumnStart: 1,
-      gridRowStart: 8,
-      validation: {
-        maxLength: 250,
-        maxLengthMessage: "Address Line 2 must be at most 250 characters.",
-      },
+  },
+  {
+    name: "supPincode",
+    label: "PIN No",
+    gridColumnStart: 2,
+    gridRowStart: 9,
+    validation: {
+      maxLength: 10,
+      maxLengthMessage: "PIN No must be at most 10 characters.",
     },
-    // {
-    //   name: "supStateCode",
-    //   label: "State Code",
-    //   disabled: true,
-    //   helperText: "Auto-filled from selected State.",
-    //   validation: {
-    //     pattern: "^[A-Za-z]{0,2}$",
-    //     patternMessage: "State Code can be up to 2 letters.",
-    //   },
-    // },
-    {
-      name: "supTel",
-      label: "Telephone",
-      type: "tel",
-      gridColumnStart: 3,
-      gridRowStart: 8,
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "Telephone must be at most 20 characters.",
-      },
+  },
+  {
+    name: "supTel",
+    label: "Telephone",
+    type: "tel",
+    gridColumnStart: 3,
+    gridRowStart: 9,
+    validation: {
+      maxLength: 20,
+      maxLengthMessage: "Telephone must be at most 20 characters.",
     },
-    {
-      name: "supAddr3",
-      label: "Address Line 3",
-      gridColumnStart: 1,
-      gridRowStart: 9,
-      validation: {
-        maxLength: 250,
-        maxLengthMessage: "Address Line 3 must be at most 250 characters.",
-      },
+  },
+  {
+    name: "supCity",
+    label: "City",
+    gridColumnStart: 1,
+    gridRowStart: 10,
+    validation: {
+      maxLength: 250,
+      maxLengthMessage: "City must be at most 250 characters.",
     },
-    {
-      name: "supPincode",
-      label: "PIN No",
-      gridColumnStart: 2,
-      gridRowStart: 8,
-      validation: {
-        maxLength: 10,
-        maxLengthMessage: "PIN No must be at most 10 characters.",
-      },
+  },
+  {
+    name: "supWebsiteAddress",
+    label: "Website",
+    type: "url",
+    gridColumnStart: 2,
+    gridRowStart: 10,
+    validation: {
+      maxLength: 200,
+      maxLengthMessage: "Website must be at most 200 characters.",
     },
-    {
-      name: "supMailId",
-      label: "Email",
-      type: "email",
-      gridColumnStart: 3,
-      gridRowStart: 9,
-      validation: {
-        maxLength: 120,
-        maxLengthMessage: "Email must be at most 120 characters.",
-      },
+  },
+  {
+    name: "supMailId",
+    label: "Email",
+    type: "email",
+    gridColumnStart: 3,
+    gridRowStart: 10,
+    validation: {
+      maxLength: 120,
+      maxLengthMessage: "Email must be at most 120 characters.",
     },
-    {
-      name: "supCity",
-      label: "City",
-      gridColumnStart: 1,
-      gridRowStart: 10,
-      validation: {
-        maxLength: 250,
-        maxLengthMessage: "City must be at most 250 characters.",
-      },
+  },
+  {
+    name: "creditHeading",
+    label: "Credit Details",
+    type: "heading",
+    gridColumnStart: 1,
+    gridRowStart: 11,
+  },
+  {
+    name: "supCreditDays",
+    label: "Credit Days",
+    type: "number",
+    gridColumnStart: 1,
+    gridRowStart: 12,
+    min: 0,
+    step: 1,
+    validation: {
+      minMessage: "Credit Days must be 0 or greater.",
     },
-    {
-      name: "supWebsiteAddress",
-      label: "Website",
-      type: "url",
-      gridColumnStart: 2,
-      gridRowStart: 9,
-      validation: {
-        maxLength: 200,
-        maxLengthMessage: "Website must be at most 200 characters.",
-      },
+  },
+  {
+    name: "supCashDiscPerc",
+    label: "Cash Discount %",
+    type: "number",
+    gridColumnStart: 2,
+    gridRowStart: 12,
+    min: 0,
+    step: 0.001,
+    validation: {
+      minMessage: "Cash Discount % must be 0 or greater.",
     },
-    {
-      name: "creditHeading",
-      label: "Credit Details",
-      type: "heading",
-      gridColumnStart: 1,
-      gridRowStart: 11,
+  },
+  {
+    name: "supCollectionDays",
+    label: "Collection Days",
+    placeholder: "Select Days",
+    type: "select",
+    gridColumnStart: 3,
+    gridRowStart: 12,
+    searchable: true,
+    multiple: true,
+    options: COLLECTION_DAY_OPTIONS,
+  },
+  {
+    name: "regionHeading",
+    label: "Region Details",
+    type: "heading",
+    gridColumnStart: 1,
+    gridRowStart: 13,
+  },
+  {
+    name: "supRegionName",
+    label: "Region Name",
+    gridColumnStart: 1,
+    gridRowStart: 14,
+    validation: {
+      maxLength: 200,
+      maxLengthMessage: "Region Name must be at most 200 characters.",
     },
-    {
-      name: "supCreditDays",
-      label: "Credit Days",
-      type: "number",
-      gridColumnStart: 1,
-      gridRowStart: 12,
-      min: 0,
-      step: 1,
-      validation: {
-        minMessage: "Credit Days must be 0 or greater.",
-      },
+  },
+  {
+    name: "supRegionAddr3",
+    label: "Region Address 3",
+    gridColumnStart: 2,
+    gridRowStart: 14,
+    validation: {
+      maxLength: 250,
+      maxLengthMessage: "Region Address 3 must be at most 250 characters.",
     },
-    {
-      name: "supCashDiscPerc",
-      label: "Cash Discount %",
-      type: "number",
-      gridColumnStart: 2,
-      gridRowStart: 12,
-      min: 0,
-      step: 0.001,
-      validation: {
-        minMessage: "Cash Discount % must be 0 or greater.",
-      },
+  },
+  {
+    name: "supRegionCountry",
+    label: "Region Country",
+    disabled: true,
+    gridColumnStart: 3,
+    gridRowStart: 14,
+    validation: {
+      maxLength: 60,
+      maxLengthMessage: "Region Country must be at most 60 characters.",
     },
-    {
-      name: "supCollectionDays",
-      label: "Collection Days",
-      placeholder: "Select Days",
-      type: "select",
-      gridColumnStart: 3,
-      gridRowStart: 12,
-      searchable: true,
-      multiple: true,
-      options: COLLECTION_DAY_OPTIONS,
+  },
+  {
+    name: "supRegionAddr1",
+    label: "Region Address 1",
+    gridColumnStart: 1,
+    gridRowStart: 15,
+    validation: {
+      maxLength: 250,
+      maxLengthMessage: "Region Address 1 must be at most 250 characters.",
     },
-    {
-      name: "taxHeading",
-      label: "GST & Tax Details",
-      type: "heading",
-      gridColumnStart: 1,
-      gridRowStart: 13,
+  },
+  {
+    name: "supRegionCity",
+    label: "Region City",
+    gridColumnStart: 2,
+    gridRowStart: 15,
+    validation: {
+      maxLength: 250,
+      maxLengthMessage: "Region City must be at most 250 characters.",
     },
-    {
-      name: "supGstNo",
-      label: "GST No",
-      gridColumnStart: 1,
-      gridRowStart: 14,
-      validation: {
-        maxLength: 15,
-        maxLengthMessage: "GST No must be at most 15 characters.",
-      },
+  },
+  {
+    name: "supRegionAddr2",
+    label: "Region Address 2",
+    gridColumnStart: 1,
+    gridRowStart: 16,
+    validation: {
+      maxLength: 250,
+      maxLengthMessage: "Region Address 2 must be at most 250 characters.",
     },
-    {
-      name: "supGstType",
-      label: "GST Type",
-      type: "select",
-      gridColumnStart: 2,
-      gridRowStart: 14,
-      searchable: true,
-      options: GST_TYPE_OPTIONS,
-      required: true,
-      validation: {
-        requiredMessage: "GST Type is required.",
-      },
+  },
+  {
+    name: "statusHeading",
+    label: "Status & Notes",
+    type: "heading",
+    gridColumnStart: 1,
+    gridRowStart: 17,
+  },
+  {
+    name: "supChequePreName",
+    label: "Cheque  Name",
+    gridColumnStart: 1,
+    gridRowStart: 18,
+    validation: {
+      maxLength: 200,
+      maxLengthMessage: "Cheque Prefix Name must be at most 200 characters.",
     },
-    {
-      name: "supSupCst",
-      label: "SUP CST",
-      gridColumnStart: 3,
-      gridRowStart: 14,
-      validation: {
-        maxLength: 25,
-        maxLengthMessage: "SUP CST must be at most 25 characters.",
-      },
+  },
+  {
+    name: "supSortOrder",
+    label: "Sort Order",
+    type: "number",
+    gridColumnStart: 2,
+    gridRowStart: 18,
+    step: 1,
+    min: 0,
+    validation: {
+      minMessage: "Sort Order must be 0 or greater.",
     },
-    {
-      name: "supPanNo",
-      label: "PAN No",
-      gridColumnStart: 1,
-      gridRowStart: 15,
-      validation: {
-        maxLength: 10,
-        maxLengthMessage: "PAN No must be at most 10 characters.",
-      },
+  },
+  {
+    name: "supIsActive",
+    label: "Status",
+    type: "checkbox",
+    gridColumnStart: 3,
+    gridRowStart: 18,
+    options: [
+      { label: "Active", value: "true" },
+      { label: "Inactive", value: "false" },
+    ],
+  },
+  {
+    name: "supNotes",
+    label: "Notes",
+    gridColumnStart: 1,
+    gridRowStart: 19,
+    colSpan: 2,
+    validation: {
+      maxLength: 250,
+      maxLengthMessage: "Notes must be at most 250 characters.",
     },
-    {
-      name: "supDrugLiscenceNo",
-      label: "Drug Licence No",
-      gridColumnStart: 2,
-      gridRowStart: 15,
-      validation: {
-        maxLength: 100,
-        maxLengthMessage: "Drug Licence No must be at most 100 characters.",
-      },
-    },
-    {
-      name: "regionHeading",
-      label: "Region Details",
-      type: "heading",
-      gridColumnStart: 1,
-      gridRowStart: 16,
-    },
-    {
-      name: "supRegionName",
-      label: "Region Name",
-      gridColumnStart: 1,
-      gridRowStart: 17,
-      validation: {
-        maxLength: 200,
-        maxLengthMessage: "Region Name must be at most 200 characters.",
-      },
-    },
-    {
-      name: "supRegionAddr3",
-      label: "Region Address 3",
-      gridColumnStart: 2,
-      gridRowStart: 17,
-      validation: {
-        maxLength: 250,
-        maxLengthMessage: "Region Address 3 must be at most 250 characters.",
-      },
-    },
-    {
-      name: "supRegionCountry",
-      label: "Region Country",
-      gridColumnStart: 3,
-      gridRowStart: 17,
-      validation: {
-        maxLength: 60,
-        maxLengthMessage: "Region Country must be at most 60 characters.",
-      },
-    },
-    {
-      name: "supRegionAddr1",
-      label: "Region Address 1",
-      gridColumnStart: 1,
-      gridRowStart: 18,
-      validation: {
-        maxLength: 250,
-        maxLengthMessage: "Region Address 1 must be at most 250 characters.",
-      },
-    },
-    {
-      name: "supRegionCity",
-      label: "Region City",
-      gridColumnStart: 2,
-      gridRowStart: 18,
-      validation: {
-        maxLength: 250,
-        maxLengthMessage: "Region City must be at most 250 characters.",
-      },
-    },
-    {
-      name: "supRegionAddr2",
-      label: "Region Address 2",
-      gridColumnStart: 1,
-      gridRowStart: 19,
-      validation: {
-        maxLength: 250,
-        maxLengthMessage: "Region Address 2 must be at most 250 characters.",
-      },
-    },
-    {
-      name: "supRegionStateName",
-      label: "Region State Name",
-      type: "select",
-      searchable: true,
-      options: stateOptions,
-      onSearchCreateShortcut: onStateCreateShortcut,
-      onSearchEditShortcut: onStateEditShortcut,
-      gridColumnStart: 3,
-      gridRowStart: 18,
-    },
-    {
-      name: "statusHeading",
-      label: "Status & Notes",
-      type: "heading",
-      gridColumnStart: 1,
-      gridRowStart: 20,
-    },
-    {
-      name: "supIsActive",
-      label: "Status",
-      type: "checkbox",
-      gridColumnStart: 1,
-      gridRowStart: 21,
-      options: [
-        { label: "Active", value: "true" },
-        { label: "Inactive", value: "false" },
-      ],
-    },
-    {
-      name: "supNotes",
-      label: "Notes",
-      gridColumnStart: 2,
-      gridRowStart: 21,
-      colSpan: 2,
-      validation: {
-        maxLength: 250,
-        maxLengthMessage: "Notes must be at most 250 characters.",
-      },
-    },
-  ];
+  },
+];
 }
 function buildStateCodeByName(payload: unknown): Record<string, string> {
   const codeByName = new Map<string, string>();
@@ -746,68 +726,199 @@ function buildStateCodeByName(payload: unknown): Record<string, string> {
   }
   return Object.fromEntries(codeByName.entries());
 }
+function buildStateNameByCode(payload: unknown): Record<string, string> {
+  const nameByCode = new Map<string, string>();
+  const rows = extractRows(payload, STATE_LOOKUP_ARRAY_KEYS);
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+    const source = row as Record<string, unknown>;
+    const stateName = toDisplayValue(
+      getFirstDefinedValue(source, STATE_LOOKUP_NAME_KEYS),
+    );
+    const stateCode = toDisplayValue(
+      getFirstDefinedValue(source, STATE_LOOKUP_CODE_KEYS),
+    ).toUpperCase();
+    if (!stateName || !stateCode || nameByCode.has(stateCode)) {
+      continue;
+    }
+    nameByCode.set(stateCode, stateName);
+  }
+  return Object.fromEntries(nameByCode.entries());
+}
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+function getObjectValue(
+  source: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> | null {
+  const candidate = getFirstDefinedValue(source, keys);
+  return isRecord(candidate) ? candidate : null;
+}
+function joinDisplayValues(parts: unknown[]): string {
+  return parts
+    .map((part) => toDisplayValue(part))
+    .filter(Boolean)
+    .join(", ");
+}
+function toSupplierLookupGstType(value: string): string {
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) {
+    return "REGULAR";
+  }
+  if (normalized.includes("COMPOSITION")) {
+    return "COMPOSITION";
+  }
+  return "REGULAR";
+}
+function extractGstLookupSource(payload: unknown): Record<string, unknown> | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  return getObjectValue(payload, GST_LOOKUP_SOURCE_KEYS) ?? payload;
+}
+function extractGstAddress(source: Record<string, unknown>): Record<string, unknown> {
+  const primaryAddress = getObjectValue(source, GST_PRIMARY_ADDRESS_KEYS);
+  if (!primaryAddress) {
+    return {};
+  }
+  return getObjectValue(primaryAddress, GST_ADDRESS_KEYS) ?? primaryAddress;
+}
+function setFieldValueIfPresent(
+  target: Record<string, string>,
+  fieldName: string,
+  value: string,
+): void {
+  const normalized = value.trim();
+  if (!normalized) {
+    return;
+  }
+  target[fieldName] = normalized;
+}
+function buildSupplierLookupValues(
+  gstin: string,
+  payload: Record<string, unknown>,
+  stateNameByCode: Record<string, string>,
+): Record<string, string> {
+  const address = extractGstAddress(payload);
+  const legalName = toDisplayValue(getFirstDefinedValue(payload, GST_LEGAL_NAME_KEYS));
+  const tradeName = toDisplayValue(getFirstDefinedValue(payload, GST_TRADE_NAME_KEYS));
+  const city = toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_CITY_KEYS));
+  const district =
+    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_DISTRICT_KEYS)) || city;
+  const stateCode = gstin.slice(0, 2);
+  const stateName =
+    stateNameByCode[stateCode] ||
+    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_STATE_KEYS));
+  const values: Record<string, string> = {
+    supGstNo: gstin,
+    supPanNo: gstin.slice(2, 12),
+    supCountry: "India",
+  };
+
+  setFieldValueIfPresent(values, "supName", tradeName || legalName);
+  setFieldValueIfPresent(
+    values,
+    "supGstType",
+    toSupplierLookupGstType(
+      toDisplayValue(getFirstDefinedValue(payload, GST_REGISTRATION_TYPE_KEYS)),
+    ),
+  );
+  setFieldValueIfPresent(
+    values,
+    "supAddr1",
+    joinDisplayValues(
+      GST_ADDRESS_BUILDING_KEYS.map((key) => getFirstDefinedValue(address, [key])),
+    ),
+  );
+  setFieldValueIfPresent(
+    values,
+    "supAddr2",
+    joinDisplayValues(
+      GST_ADDRESS_LOCALITY_KEYS.map((key) => getFirstDefinedValue(address, [key])),
+    ),
+  );
+  setFieldValueIfPresent(
+    values,
+    "supAddr3",
+    joinDisplayValues([
+      getFirstDefinedValue(address, GST_ADDRESS_DISTRICT_KEYS),
+      getFirstDefinedValue(address, GST_ADDRESS_CITY_KEYS),
+    ]),
+  );
+  setFieldValueIfPresent(values, "supCity", city);
+  setFieldValueIfPresent(values, "supDistrict", district);
+  setFieldValueIfPresent(values, "supStateCode", stateCode);
+  setFieldValueIfPresent(values, "supStateName", stateName);
+  setFieldValueIfPresent(values, "supRegionStateName", stateName);
+  setFieldValueIfPresent(
+    values,
+    "supPincode",
+    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_PIN_KEYS)),
+  );
+
+  return values;
+}
+
+function getLookupErrorMessage(payload: unknown, fallback: string): string {
+  if (!isRecord(payload)) {
+    return fallback;
+  }
+  return (
+    toDisplayValue(getFirstDefinedValue(payload, ["message", "error", "detail"])) ||
+    fallback
+  );
+}
 function removeEmptyOptions(
   options: ERPDynamicSelectOption[],
 ): ERPDynamicSelectOption[] {
   return options.filter((option) => option.value.trim().length > 0);
 }
 function buildSupplierGroupOptions(payload: unknown): ERPDynamicSelectOption[] {
-  return [
-    DEFAULT_SUPPLIER_GROUP_OPTION,
-    ...removeEmptyOptions(
-      buildLookupOptions(payload, DEFAULT_SUPPLIER_GROUP_OPTION, {
-        arrayKeys: SUPPLIER_GROUP_LOOKUP_ARRAY_KEYS,
-        idKeys: SUPPLIER_GROUP_ID_KEYS,
-        labelKeys: SUPPLIER_GROUP_NAME_KEYS,
-      }),
-    ),
-  ];
+  return removeEmptyOptions(
+    buildLookupOptions(payload, DEFAULT_LOOKUP_OPTION, {
+      arrayKeys: SUPPLIER_GROUP_LOOKUP_ARRAY_KEYS,
+      idKeys: SUPPLIER_GROUP_ID_KEYS,
+      labelKeys: SUPPLIER_GROUP_NAME_KEYS,
+    }),
+  );
 }
 function buildStateNameOptions(payload: unknown): ERPDynamicSelectOption[] {
-  return [
-    DEFAULT_STATE_OPTION,
-    ...removeEmptyOptions(
-      buildLookupOptions(payload, DEFAULT_STATE_OPTION, {
-        arrayKeys: STATE_LOOKUP_ARRAY_KEYS,
-        idKeys: STATE_LOOKUP_NAME_KEYS,
-        labelKeys: STATE_LOOKUP_NAME_KEYS,
-      }),
-    ),
-  ];
+  return removeEmptyOptions(
+    buildLookupOptions(payload, DEFAULT_LOOKUP_OPTION, {
+      arrayKeys: STATE_LOOKUP_ARRAY_KEYS,
+      idKeys: STATE_LOOKUP_NAME_KEYS,
+      labelKeys: STATE_LOOKUP_NAME_KEYS,
+    }),
+  );
 }
 function buildCompanyOptions(payload: unknown): ERPDynamicSelectOption[] {
-  return [
-    ALL_COMPANY_OPTION,
-    ...removeEmptyOptions(
-      buildLookupOptions(payload, DEFAULT_COMPANY_OPTION, {
-        arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "companies", "companys"],
-        idKeys: ["compId", "comp_id", "company_id", "companyId", "id", "_id", "value"],
-        labelKeys: ["compName", "comp_name", "company_name", "companyName", "name", "label"],
-      }),
-    ),
-  ];
+  return removeEmptyOptions(
+    buildLookupOptions(payload, DEFAULT_LOOKUP_OPTION, {
+      arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "companies", "companys"],
+      idKeys: ["compId", "comp_id", "company_id", "companyId", "id", "_id", "value"],
+      labelKeys: ["compName", "comp_name", "company_name", "companyName", "name", "label"],
+    }),
+  );
 }
 function buildBranchOptions(payload: unknown): ERPDynamicSelectOption[] {
-  return [
-    ALL_BRANCH_OPTION,
-    ...removeEmptyOptions(
-      buildLookupOptions(payload, DEFAULT_BRANCH_OPTION, {
-        arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "branches", "branch_masters"],
-        idKeys: ["brId", "br_id", "branch_id", "branchId", "id", "_id", "value"],
-        labelKeys: ["brName", "br_name", "branch_name", "branchName", "name", "label"],
-      }),
-    ),
-  ];
+  return removeEmptyOptions(
+    buildLookupOptions(payload, DEFAULT_LOOKUP_OPTION, {
+      arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "branches", "branch_masters"],
+      idKeys: ["brId", "br_id", "branch_id", "branchId", "id", "_id", "value"],
+      labelKeys: ["brName", "br_name", "branch_name", "branchName", "name", "label"],
+    }),
+  );
 }
-
 function toNullableLookupSelection(value: string): string | null {
   const normalized = value.trim();
-  if (!normalized || normalized === ALL_LOOKUP_OPTION_VALUE) {
+  if (!normalized) {
     return null;
   }
   return normalized;
 }
-
 function resolveOptionFromShortcut(
   payload: ERPDynamicSearchShortcutPayload,
   options: ERPDynamicSelectOption[],
@@ -819,12 +930,10 @@ function resolveOptionFromShortcut(
       return selectedOption;
     }
   }
-
   const normalizedQuery = payload.query.trim().toLowerCase();
   if (!normalizedQuery) {
     return null;
   }
-
   const exactMatch = options.find((option) => {
     const label = option.label.trim().toLowerCase();
     const value = option.value.trim().toLowerCase();
@@ -833,21 +942,18 @@ function resolveOptionFromShortcut(
   if (exactMatch) {
     return exactMatch;
   }
-
   const startsWithMatch = options.find((option) =>
     option.label.trim().toLowerCase().startsWith(normalizedQuery),
   );
   if (startsWithMatch) {
     return startsWithMatch;
   }
-
   return (
     options.find((option) =>
       option.label.trim().toLowerCase().includes(normalizedQuery),
     ) ?? null
   );
 }
-
 function extractDetailSource(
   payload: unknown,
   arrayKeys: readonly string[],
@@ -859,20 +965,16 @@ function extractDetailSource(
       return firstRow as Record<string, unknown>;
     }
   }
-
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return null;
   }
-
   const objectPayload = payload as Record<string, unknown>;
   const nestedData = objectPayload.data;
   if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
     return nestedData as Record<string, unknown>;
   }
-
   return objectPayload;
 }
-
 function mapStateDetailToFormValues(source: Record<string, unknown>): Record<string, string> {
   return {
     ...STATE_MODAL_INITIAL_VALUES,
@@ -895,7 +997,6 @@ function mapStateDetailToFormValues(source: Record<string, unknown>): Record<str
     ),
   };
 }
-
 function buildStateModalFields(disableStateCode: boolean): ERPDynamicModalField[] {
   return [
     {
@@ -938,7 +1039,6 @@ function buildStateModalFields(disableStateCode: boolean): ERPDynamicModalField[
     },
   ];
 }
-
 function mapSupplierGroupDetailToFormValues(
   source: Record<string, unknown>,
 ): Record<string, string> {
@@ -989,7 +1089,6 @@ function buildSupplierGroupModalFields(): ERPDynamicModalField[] {
     },
   ];
 }
-
 function parseCollectionDays(value: string): number[] {
   const normalized = value.trim();
   if (!normalized) {
@@ -1025,12 +1124,32 @@ function toNullableInteger(value: string): number | null {
   }
   return parsed;
 }
-
 function toGstTypeValue(value: string): string {
   const normalized = value.trim().toUpperCase();
   return GST_TYPE_VALUES.has(normalized) ? normalized : "";
 }
-
+function validateSupplierGstin(
+  value: string,
+  values: Record<string, string>,
+): string | null {
+  const normalized = value.trim();
+  const gstType = toGstTypeValue(values.supGstType ?? "");
+  if (!normalized) {
+    return gstType === "REGULAR"
+      ? "GST No is required when GST Type is Regular."
+      : null;
+  }
+  return validateGstin(normalized);
+}
+function validateSupplierPan(value: string): string | null {
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) {
+    return null;
+  }
+  return /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(normalized)
+    ? null
+    : "PAN No must be 10 characters (e.g., ABCDE1234F).";
+}
 export default function SuppliersMasterPage() {
   const stateModalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const supplierGroupModalControllerRef =
@@ -1075,35 +1194,27 @@ export default function SuppliersMasterPage() {
   } = useApi<unknown, Record<string, unknown>>(STATE_CREATE_ENDPOINT, {
     method: "POST",
   });
-  const [supplierGroupOptions, setSupplierGroupOptions] = useState<ERPDynamicSelectOption[]>([
-    DEFAULT_SUPPLIER_GROUP_OPTION,
-  ]);
-  const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([
-    ALL_COMPANY_OPTION,
-  ]);
-  const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([
-    ALL_BRANCH_OPTION,
-  ]);
-  const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([
-    DEFAULT_STATE_OPTION,
-  ]);
+  const [supplierGroupOptions, setSupplierGroupOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
+  const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
   const [editingStateCode, setEditingStateCode] = useState<string | null>(null);
   const [editingSupplierGroupId, setEditingSupplierGroupId] = useState<string | null>(
     null,
   );
-
+  const gstLookupCacheRef = useRef<Record<string, Record<string, string>>>({});
   const refreshSupplierGroupOptions = useCallback(async () => {
     const payload = await getSupplierGroupLookup(SUPPLIER_GROUP_LOOKUP_QUERY);
     setSupplierGroupOptions(buildSupplierGroupOptions(payload));
   }, [getSupplierGroupLookup]);
-
   const refreshStateOptions = useCallback(async () => {
     const payload = await getStateLookup(STATE_LOOKUP_QUERY);
     setStateOptions(buildStateNameOptions(payload));
     setStateCodeByName(buildStateCodeByName(payload));
+    setStateNameByCode(buildStateNameByCode(payload));
   }, [getStateLookup]);
-
   useEffect(() => {
     let mounted = true;
     void (async () => {
@@ -1123,13 +1234,15 @@ export default function SuppliersMasterPage() {
         setBranchOptions(buildBranchOptions(branchPayload));
         setStateOptions(buildStateNameOptions(statePayload));
         setStateCodeByName(buildStateCodeByName(statePayload));
+        setStateNameByCode(buildStateNameByCode(statePayload));
       } catch {
         if (mounted) {
-          setSupplierGroupOptions([DEFAULT_SUPPLIER_GROUP_OPTION]);
-          setCompanyOptions([ALL_COMPANY_OPTION]);
-          setBranchOptions([ALL_BRANCH_OPTION]);
-          setStateOptions([DEFAULT_STATE_OPTION]);
+          setSupplierGroupOptions([]);
+          setCompanyOptions([]);
+          setBranchOptions([]);
+          setStateOptions([]);
           setStateCodeByName({});
+          setStateNameByCode({});
         }
       }
     })();
@@ -1137,7 +1250,6 @@ export default function SuppliersMasterPage() {
       mounted = false;
     };
   }, [getBranchLookup, getCompanyLookup, getStateLookup, getSupplierGroupLookup]);
-
   const stateCreateModalFields = useMemo(() => buildStateModalFields(false), []);
   const stateUpdateModalFields = useMemo(() => buildStateModalFields(true), []);
   const stateModalVariants = useMemo<ERPDynamicModalVariant[]>(
@@ -1167,7 +1279,6 @@ export default function SuppliersMasterPage() {
     ],
     [stateCreateModalFields, stateSaveLoading, stateUpdateModalFields],
   );
-
   const supplierGroupModalFields = useMemo(
     () => buildSupplierGroupModalFields(),
     [],
@@ -1199,7 +1310,6 @@ export default function SuppliersMasterPage() {
     ],
     [supplierGroupModalFields, supplierGroupSaveLoading],
   );
-
   const handleStateCreateShortcut = useCallback(
     (payload: ERPDynamicSearchShortcutPayload) => {
       const query = payload.query.trim();
@@ -1217,7 +1327,6 @@ export default function SuppliersMasterPage() {
     },
     [resetStateDetailsState, resetStateSaveState],
   );
-
   const handleStateEditShortcut = useCallback(
     async (payload: ERPDynamicSearchShortcutPayload) => {
       const matchedOption = resolveOptionFromShortcut(payload, stateOptions);
@@ -1260,7 +1369,6 @@ export default function SuppliersMasterPage() {
       stateOptions,
     ],
   );
-
   const handleStateModalSubmit = useCallback(
     async ({ variantKey, values }: ERPDynamicModalSubmitPayload) => {
       const isUpdate = variantKey === "state-update";
@@ -1386,6 +1494,93 @@ export default function SuppliersMasterPage() {
     supplierGroupSaveLoading,
   ]);
 
+  const handleSupplierGstinValueChange =
+    useCallback<ERPDynamicFieldValueChangeHandler>(
+      async ({ value }) => {
+        const normalizedGstin = value.trim().toUpperCase();
+        const normalizedValuePatch =
+          normalizedGstin && normalizedGstin !== value
+            ? { supGstNo: normalizedGstin }
+            : undefined;
+
+        if (!GST_LOOKUP_PATTERN.test(normalizedGstin)) {
+          return {
+            ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
+            errors: { supGstNo: null },
+          };
+        }
+
+        const cachedValues = gstLookupCacheRef.current[normalizedGstin];
+        if (cachedValues) {
+          return {
+            values: cachedValues,
+            errors: { supGstNo: null },
+          };
+        }
+
+        try {
+          const response = await fetch(
+            `${GST_LOOKUP_ENDPOINT}?gstin=${encodeURIComponent(normalizedGstin)}`,
+            {
+              method: "GET",
+              cache: "no-store",
+              headers: {
+                Accept: "application/json",
+              },
+            },
+          );
+          const payload = (await response.json().catch(() => null)) as unknown;
+          if (!response.ok) {
+            return {
+              ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
+              errors: {
+                supGstNo: getLookupErrorMessage(
+                  payload,
+                  "Unable to load GST details for this GSTIN.",
+                ),
+              },
+            };
+          }
+
+          const lookupSource = extractGstLookupSource(payload);
+          if (!lookupSource) {
+            return {
+              ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
+              errors: {
+                supGstNo: "GST details were not available for this GSTIN.",
+              },
+            };
+          }
+
+          const resolvedValues = buildSupplierLookupValues(
+            normalizedGstin,
+            lookupSource,
+            stateNameByCode,
+          );
+          gstLookupCacheRef.current[normalizedGstin] = resolvedValues;
+          return {
+            values: resolvedValues,
+            errors: { supGstNo: null },
+          };
+        } catch {
+          return {
+            ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
+            errors: {
+              supGstNo:
+                "Unable to load GST details right now. Please try again.",
+            },
+          };
+        }
+      },
+      [stateNameByCode],
+    );
+  const handleSupplierStateValueChange =
+    useCallback<ERPDynamicFieldValueChangeHandler>(({ value }) => ({
+      values: {
+        supRegionStateName: value.trim(),
+      },
+    }), []);
+
   const supplierFormFields = useMemo(
     () =>
       buildSupplierFormFields(
@@ -1397,10 +1592,14 @@ export default function SuppliersMasterPage() {
         handleSupplierGroupEditShortcut,
         handleStateCreateShortcut,
         handleStateEditShortcut,
+        handleSupplierStateValueChange,
+        handleSupplierGstinValueChange,
       ),
     [
       branchOptions,
       companyOptions,
+      handleSupplierGstinValueChange,
+      handleSupplierStateValueChange,
       handleStateCreateShortcut,
       handleStateEditShortcut,
       handleSupplierGroupCreateShortcut,
@@ -1497,7 +1696,8 @@ export default function SuppliersMasterPage() {
             supRegionAddr3: toDisplayValue(rowSource.supRegionAddr3),
             supRegionCity: toDisplayValue(rowSource.supRegionCity),
             supRegionDistrict: toDisplayValue(rowSource.supRegionDistrict),
-            supRegionStateName: toDisplayValue(rowSource.supRegionStateName),
+            supRegionStateName:
+              mappedStateName || toDisplayValue(rowSource.supRegionStateName),
             supRegionCountry:
               toDisplayValue(rowSource.supRegionCountry) ||
               SUPPLIER_INITIAL_FORM_VALUES.supRegionCountry,
@@ -1521,6 +1721,8 @@ export default function SuppliersMasterPage() {
           const selectedStateName = (values.supStateName ?? "").trim();
           const resolvedStateCode =
             stateCodeByName[selectedStateName] ?? toUpper(values.supStateCode ?? "");
+          const resolvedRegionStateName =
+            selectedStateName || (values.supRegionStateName ?? "").trim();
 
           const payload: Record<string, unknown> = {
             supCompanyId: toNullableLookupSelection(values.supCompanyId ?? ""),
@@ -1547,9 +1749,9 @@ export default function SuppliersMasterPage() {
             supCreditDays: toNonNegativeInteger(values.supCreditDays ?? "0", 0),
             supCashDiscPerc: toNonNegativeNumber(values.supCashDiscPerc ?? "0", 0),
             supCollectionDays: parseCollectionDays(values.supCollectionDays ?? ""),
-            supGstNo: toNullableString(values.supGstNo ?? ""),
+            supGstNo: toNullableString(toUpper(values.supGstNo ?? "")),
             supStateCode: resolvedStateCode,
-            supPanNo: toNullableString(values.supPanNo ?? ""),
+            supPanNo: toNullableString(toUpper(values.supPanNo ?? "")),
             supGstType: toGstTypeValue(values.supGstType ?? ""),
             supSupCst: toNullableString(values.supSupCst ?? ""),
             supDrugLiscenceNo: toNullableString(values.supDrugLiscenceNo ?? ""),
@@ -1559,7 +1761,7 @@ export default function SuppliersMasterPage() {
             supRegionAddr3: toNullableString(values.supRegionAddr3 ?? ""),
             supRegionCity: toNullableString(values.supRegionCity ?? ""),
             supRegionDistrict: toNullableString(values.supRegionDistrict ?? ""),
-            supRegionStateName: toNullableString(values.supRegionStateName ?? ""),
+            supRegionStateName: toNullableString(resolvedRegionStateName),
             supRegionCountry: toNullableString(values.supRegionCountry ?? ""),
             supBilledDate: toNullableDate(values.supBilledDate ?? ""),
             supSortOrder: toNullableInteger(values.supSortOrder ?? ""),

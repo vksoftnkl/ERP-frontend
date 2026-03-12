@@ -237,12 +237,35 @@ export type CrudMasterPageProps = {
     source: Record<string, unknown> | null;
     defaults: MasterFormState;
   }) => Record<string, string>;
+  augmentDetailSource?: (params: {
+    recordId: string | number;
+    action: "view" | "update";
+    source: Record<string, unknown> | null;
+    rowSource: Record<string, unknown> | null;
+  }) =>
+    | Record<string, unknown>
+    | null
+    | Promise<Record<string, unknown> | null>;
   buildRequestPayload?: (params: {
     values: CrudMasterFormValues;
     shouldUpdate: boolean;
     editingItemId: string | number | null;
     files: Record<string, File | null>;
+    sectionExpandedState: Record<string, boolean>;
   }) => Record<string, unknown> | Promise<Record<string, unknown>>;
+  afterSubmitSuccess?: (params: {
+    response: unknown;
+    payload: Record<string, unknown>;
+    values: CrudMasterFormValues;
+    shouldUpdate: boolean;
+    editingItemId: string | number | null;
+    files: Record<string, File | null>;
+    sectionExpandedState: Record<string, boolean>;
+  }) => void | Promise<void>;
+  afterDeleteSuccess?: (params: {
+    deleteId: string | number;
+    rowSource: Record<string, unknown> | null;
+  }) => void | Promise<void>;
 };
 
 function getFirstDefinedValue(
@@ -937,7 +960,10 @@ export default function CrudMasterPage({
   getByIdMethod,
   buildGetByIdRequest,
   mapFormValues,
+  augmentDetailSource,
   buildRequestPayload,
+  afterSubmitSuccess,
+  afterDeleteSuccess,
 }: CrudMasterPageProps) {
   const dispatch = useAppDispatch();
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
@@ -1173,8 +1199,24 @@ export default function CrudMasterPage({
 
           const payload = await getById(request);
           const detailSource = extractDetailSource(payload);
-          const detailRow = detailSource
-            ? mergeRowWithDetail(row, detailSource, lookupKeys)
+          const supplementalSource =
+            (await Promise.resolve(
+              augmentDetailSource?.({
+                recordId: updateId,
+                action: "update",
+                source: detailSource,
+                rowSource: row.__source,
+              }),
+            )) ?? null;
+          const mergedSource =
+            detailSource || row.__source || supplementalSource
+              ? {
+                  ...(detailSource ?? row.__source ?? {}),
+                  ...(supplementalSource ?? {}),
+                }
+              : null;
+          const detailRow = mergedSource
+            ? mergeRowWithDetail(row, mergedSource, lookupKeys)
             : row;
           setEditingItemId(resolveRecordId(detailRow, lookupKeys.id));
           const defaultValues = mapRowToFormState(detailRow, lookupKeys);
@@ -1197,6 +1239,7 @@ export default function CrudMasterPage({
       getById,
       lookupKeys,
       mapFormValues,
+      augmentDetailSource,
       requestPayloadKeys.id,
       resetDetailsState,
       resetSaveState,
@@ -1225,8 +1268,24 @@ export default function CrudMasterPage({
 
           const payload = await getById(request);
           const detailSource = extractDetailSource(payload);
-          const detailRow = detailSource
-            ? mergeRowWithDetail(row, detailSource, lookupKeys)
+          const supplementalSource =
+            (await Promise.resolve(
+              augmentDetailSource?.({
+                recordId: viewId,
+                action: "view",
+                source: detailSource,
+                rowSource: row.__source,
+              }),
+            )) ?? null;
+          const mergedSource =
+            detailSource || row.__source || supplementalSource
+              ? {
+                  ...(detailSource ?? row.__source ?? {}),
+                  ...(supplementalSource ?? {}),
+                }
+              : null;
+          const detailRow = mergedSource
+            ? mergeRowWithDetail(row, mergedSource, lookupKeys)
             : row;
           const defaultValues = mapRowToFormState(detailRow, lookupKeys);
           modalControllerRef.current?.openModal("master-view", {
@@ -1248,6 +1307,7 @@ export default function CrudMasterPage({
       getById,
       lookupKeys,
       mapFormValues,
+      augmentDetailSource,
       requestPayloadKeys.id,
       resetDetailsState,
       resetSaveState,
@@ -1255,7 +1315,12 @@ export default function CrudMasterPage({
   );
 
   const handleModalSubmit = useCallback(
-    async ({ variantKey, values, files }: ERPDynamicModalSubmitPayload) => {
+    async ({
+      variantKey,
+      values,
+      files,
+      sectionExpandedState,
+    }: ERPDynamicModalSubmitPayload) => {
       if (variantKey === "master-view") {
         return;
       }
@@ -1284,24 +1349,38 @@ export default function CrudMasterPage({
           : {}),
       };
 
+      const formValues: CrudMasterFormValues = {
+        masterName,
+        searchCode,
+        masterAlias,
+        masterShortName,
+        masterDescription,
+        position: values.position ?? "",
+        ...values,
+      };
+
       const payload = await Promise.resolve(
         buildRequestPayload?.({
-          values: {
-            masterName,
-            searchCode,
-            masterAlias,
-            masterShortName,
-            masterDescription,
-            position: values.position ?? "",
-            ...values,
-          },
+          values: formValues,
           shouldUpdate,
           editingItemId,
           files,
+          sectionExpandedState,
         }) ?? defaultPayload,
       );
 
-      await upsertRecord({ body: payload });
+      const response = await upsertRecord({ body: payload });
+      await Promise.resolve(
+        afterSubmitSuccess?.({
+          response,
+          payload,
+          values: formValues,
+          shouldUpdate,
+          editingItemId,
+          files,
+          sectionExpandedState,
+        }),
+      );
       setEditingItemId(null);
       await loadRecords(searchTerm, currentPage, pageSize);
     },
@@ -1320,6 +1399,7 @@ export default function CrudMasterPage({
       searchTerm,
       upsertRecord,
       buildRequestPayload,
+      afterSubmitSuccess,
     ],
   );
 
@@ -1376,6 +1456,12 @@ export default function CrudMasterPage({
           modalControllerRef.current?.closeModal();
         }
         setPendingDeleteRow(null);
+        await Promise.resolve(
+          afterDeleteSuccess?.({
+            deleteId,
+            rowSource: row.__source,
+          }),
+        );
         await loadRecords(searchTerm, currentPage, pageSize);
       } catch {
         // Error UI is driven by deleteError from useApi.
@@ -1395,6 +1481,7 @@ export default function CrudMasterPage({
     requestPayloadKeys.id,
     saveLoading,
     searchTerm,
+    afterDeleteSuccess,
   ]);
 
   const fields = useMemo<ERPDynamicModalField[]>(

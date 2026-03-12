@@ -303,15 +303,15 @@ function buildLedgerFormFields(
       type: "heading",
     },
     {
+      name: "ledGstinNo",
+      label: "GSTIN",
+    },
+    {
       name: "ledGstPartyRegType",
       label: "GST Party Reg Type",
       type: "select",
       options: GST_PARTY_REG_TYPE_OPTIONS,
     },
-     {
-      name: "ledGstinNo",
-      label: "GSTIN",
-    },   
     {
       name: "ledEcommerceGstin",
       label: "Ecommerce GSTIN",
@@ -339,12 +339,6 @@ function buildLedgerFormFields(
         maxLength: 12,
         maxLengthMessage: "Aadhar must be 12 digits.",
       },
-    },
-    {
-      name: "ledIsSez",
-      label: "Is SEZ",
-      type: "checkbox",
-      options: BOOLEAN_OPTIONS,
     },
     // {
     //   name: "__heading_behavior",
@@ -383,72 +377,60 @@ function buildLedgerFormFields(
       label: "Contact Person",
     },
     {
+      name: "ledAddr1",
+      label: "Address 1",
+    },
+    {
+      name: "ledDistrict",
+      label: "district",
+    },
+    {
       name: "ledEmail",
       label: "Email",
       type: "email",
+    },
+    {
+      name: "ledAddr2",
+      label: "Address 2",
+    },
+    {
+      name: "ledPin",
+      label: "pin",
     },
     {
       name: "ledTel",
       label: "Tel",
       type: "tel",
     },
-
-    {
-      name: "ledPhone1",
-      label: "Phone 1",
-      type: "tel",
-    },
-
-    {
-      name: "ledPhone2",
-      label: "Phone 2",
-      type: "tel",
-    },      
-
-    {
-      name: "ledWhatsappNo",
-      label: "Whatsapp No",
-      type: "tel",
-    }, 
-
-     {
-      name: "ledAddr1",
-      label: "Address 1",
-    },
-
-    {
-      name: "ledAddr2",
-      label: "Address 2",
-    },
-
-
     {
       name: "ledAddr3",
       label: "Address 3",
     },
     {
-      name: "ledCity",
-      label: "City",
-    },
-    {
-      name: "ledDistrict",
-      label: "District",
-    },
-    {
       name: "ledStateName",
-      label: "State Name",
+      label: "state",
       type: "select",
       searchable: true,
       options: stateNameOptions,
       placeholder: "Search state",
     },
     {
-      name: "ledCountry",
-      label: "Country",
+      name: "ledPhone1",
+      label: "Phone 1",
+      type: "tel",
     },
     {
-      name: "ledPin",
-      label: "PIN",
+      name: "ledCity",
+      label: "City",
+    },
+    {
+      name: "ledCountry",
+      label: "country",
+    },
+    {
+      name: "ledPhone2",
+      label: "Phone 2",
+      type: "tel",
     },
     {
       name: "__heading_region",
@@ -459,42 +441,38 @@ function buildLedgerFormFields(
       name: "ledRegionName",
       label: "Region Name",
     },
-
-    {
-      name: "ledRegionAddr1",
-      label: "Region Address 1",
-    },
-
-    {
-      name: "ledRegionAddr2",
-      label: "Region Address 2",
-    },
-
     {
       name: "ledRegionAddr3",
-      label: "Address 3",
-    },
-    {
-      name: "ledRegionCity",
-      label: "Region City",
-    },
-
-    {
-      name: "ledRegionDistrict",
-      label: "Region District",
+      label: "Region Address 3",
     },
     {
       name: "ledRegionStateName",
-      label: "Region State Name",
+      label: "Region state",
       type: "select",
       searchable: true,
       options: stateNameOptions,
       placeholder: "Search state",
     },
     {
+      name: "ledRegionAddr1",
+      label: "Region Address 1",
+    },
+    {
+      name: "ledRegionCity",
+      label: "Region city",
+    },
+    {
       name: "ledRegionCountry",
-      label: "Region Country",
-    },   
+      label: "Region country",
+    },
+    {
+      name: "ledRegionAddr2",
+      label: "Region Address 2",
+    },
+    {
+      name: "ledRegionDistrict",
+      label: "Region district",
+    },
     {
       name: "__heading_bank",
       label: "Bank & Payment",
@@ -505,20 +483,20 @@ function buildLedgerFormFields(
       label: "Account Holder Name",
     },
     {
-      name: "ledBankName",
-      label: "Bank Name",
-    },
-    {
       name: "ledBankBranch",
       label: "Bank Branch",
     },
     {
-      name: "ledBankAcNo",
-      label: "Bank A/C No",
-    },
-    {
       name: "ledBankIfsc",
       label: "Bank IFSC",
+    },
+    {
+      name: "ledBankName",
+      label: "Bank Name",
+    },
+    {
+      name: "ledBankAcNo",
+      label: "Bank A/C No",
     },
     {
       name: "ledUpiId",
@@ -626,7 +604,7 @@ function getFieldValue(
 }
 function toSelectBoolean(
   value: unknown,
-  defaultValue: "true" | "false",
+  defaultValue: string,
 ): "true" | "false" {
   if (typeof value === "boolean") {
     return value ? "true" : "false";
@@ -638,7 +616,10 @@ function toSelectBoolean(
   if (["0", "false", "no", "inactive"].includes(normalized)) {
     return "false";
   }
-  return defaultValue;
+  const normalizedDefaultValue = defaultValue.trim().toLowerCase();
+  return ["1", "true", "yes", "active"].includes(normalizedDefaultValue)
+    ? "true"
+    : "false";
 }
 function toNumber(value: string, fallback: number): number {
   const parsed = Number.parseFloat(value.trim());
