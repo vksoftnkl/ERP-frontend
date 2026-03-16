@@ -244,6 +244,15 @@ background: #dfe7f0;
     border-color 0.16s,
     box-shadow 0.16s;
 }
+.control[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.control[type="number"]::-webkit-inner-spin-button,
+.control[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
 .control::placeholder {
   color: #6a7f93;
 }

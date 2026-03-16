@@ -1720,8 +1720,7 @@ export function ERPDynamicModalForm({
                   )}
                 >
                   {selectedLabel ||
-                    field.placeholder ||
-                    `Select ${field.label}`}
+                    (field.placeholder ?? `Select ${field.label}`)}
                 </span>
               )}
               <span

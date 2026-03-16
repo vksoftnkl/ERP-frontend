@@ -1,5 +1,4 @@
 import { ERPDynamicSelectOption } from "@/components/library";
-
 export  const COLLECTION_DAY_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "1", label: "Monday" },
   { value: "2", label: "Tuesday" },
@@ -9,7 +8,6 @@ export  const COLLECTION_DAY_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "6", label: "Saturday" },
   { value: "7", label: "Sunday" },
 ];
-
 export const GST_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "REGULAR", label: "Regular" },
   { value: "COMPOSITION", label: "Composition" },

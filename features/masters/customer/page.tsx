@@ -11,6 +11,7 @@ import type {
   ERPDynamicModalSubmitPayload,
   ERPDynamicModalVariant,
   ERPDynamicModalField,
+  ERPDynamicSearchQueryChangeHandler,
   ERPDynamicSearchShortcutPayload,
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
@@ -45,13 +46,17 @@ const STATE_UPSERT_ENDPOINT = "/state-code-masters/create";
 const AREA_LOOKUP_ENDPOINT = "/areas/list";
 const AREA_GET_ENDPOINT = "/areas/get";
 const AREA_UPSERT_ENDPOINT = "/areas/create";
-const CUSTOMER_GROUP_LOOKUP_ENDPOINT = "/customer-groups/list";
+const CUSTOMER_GROUP_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const CUSTOMER_GROUP_GET_ENDPOINT = "/customer-groups/get";
 const CUSTOMER_GROUP_UPSERT_ENDPOINT = "/customer-groups/create";
 const COMPANY_LOOKUP_ENDPOINT = "/company-masters/list";
 const BRANCH_LOOKUP_ENDPOINT = "/branch-masters/list";
 const PRICE_LEVEL_LOOKUP_ENDPOINT = "/price-level-masters/get";
 const CITY_LOOKUP_ENDPOINT = "/cities/list";
+const CUSTOMER_GROUP_LOOKUP_QUERY = {
+  module: "customerGroups",
+} as const;
+const CUSTOMER_GROUP_SEARCH_DEBOUNCE_MS = 250;
 const LOOKUP_REQUEST_QUERY = {
   page: "1",
   limit: "20",
@@ -544,11 +549,9 @@ function validateCustomerGstin(
 
   return validateGstin(normalized);
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
-
 function getObjectValue(
   source: Record<string, unknown>,
   keys: readonly string[],
@@ -556,14 +559,12 @@ function getObjectValue(
   const candidate = getFirstDefinedValue(source, keys);
   return isRecord(candidate) ? candidate : null;
 }
-
 function joinDisplayValues(parts: unknown[]): string {
   return parts
     .map((part) => toDisplayValue(part))
     .filter(Boolean)
     .join(", ");
 }
-
 function toCustomerLookupGstType(value: string): string {
   const normalized = value.trim().toUpperCase();
   if (!normalized) {
@@ -689,6 +690,7 @@ function buildCustomerFormFields(
   onStateEditShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
   onAreaCreateShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
   onAreaEditShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
+  onGroupSearchQueryChange: ERPDynamicSearchQueryChangeHandler,
   onGroupCreateShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
   onGroupEditShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
   onCustomerGstinValueChange: ERPDynamicFieldValueChangeHandler,
@@ -739,6 +741,7 @@ function buildCustomerFormFields(
       searchable: true,
       required: true,
       options: groupOptions,
+      onSearchQueryChange: onGroupSearchQueryChange,
       onSearchCreateShortcut: onGroupCreateShortcut,
       onSearchEditShortcut: onGroupEditShortcut,
       validation: {
@@ -1511,6 +1514,26 @@ function buildGroupOptions(payload: unknown): ERPDynamicSelectOption[] {
   );
 }
 
+function mergeLookupOptions(
+  currentOptions: ERPDynamicSelectOption[],
+  nextOptions: ERPDynamicSelectOption[],
+): ERPDynamicSelectOption[] {
+  const merged = new Map<string, ERPDynamicSelectOption>();
+  for (const option of currentOptions) {
+    if (!option.value.trim()) {
+      continue;
+    }
+    merged.set(option.value, option);
+  }
+  for (const option of nextOptions) {
+    if (!option.value.trim()) {
+      continue;
+    }
+    merged.set(option.value, option);
+  }
+  return Array.from(merged.values()).sort((left, right) => left.label.localeCompare(right.label));
+}
+
 function parseGroupCollectionDays(value: string): number[] {
   const normalized = value.trim();
   if (!normalized) {
@@ -1791,6 +1814,8 @@ export default function CustomerPage() {
   const [editingAreaId, setEditingAreaId] = useState<string | null>(null);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const gstLookupCacheRef = useRef<Record<string, Record<string, string>>>({});
+  const customerGroupSearchTimeoutRef = useRef<number | null>(null);
+  const customerGroupSearchRequestRef = useRef(0);
   useEffect(() => {
     let mounted = true;
     void (async () => {
@@ -1800,7 +1825,7 @@ export default function CustomerPage() {
             getStateLookup(STATE_LOOKUP_REQUEST_QUERY),
             getAreaLookup(LOOKUP_REQUEST_QUERY),
             getCityLookup(LOOKUP_REQUEST_QUERY),
-            getCustomerGroupLookup(LOOKUP_REQUEST_QUERY),
+            getCustomerGroupLookup(CUSTOMER_GROUP_LOOKUP_QUERY),
             getCompanyLookup(COMPANY_LOOKUP_REQUEST_QUERY),
             getBranchLookup(BRANCH_LOOKUP_REQUEST_QUERY),
             getPriceLevelLookup(PRICE_LEVEL_LOOKUP_REQUEST_QUERY),
@@ -1869,6 +1894,55 @@ export default function CustomerPage() {
     getPriceLevelLookup,
     getStateLookup,
   ]);
+  const loadCustomerGroupOptions = useCallback(
+    async (search = "") => {
+      const normalizedSearch = search.trim();
+      const payload = await getCustomerGroupLookup(
+        normalizedSearch
+          ? {
+              ...CUSTOMER_GROUP_LOOKUP_QUERY,
+              search: normalizedSearch,
+            }
+          : CUSTOMER_GROUP_LOOKUP_QUERY,
+      );
+      return buildGroupOptions(payload);
+    },
+    [getCustomerGroupLookup],
+  );
+  const handleCustomerGroupSearchChange = useCallback<ERPDynamicSearchQueryChangeHandler>(
+    (query) => {
+      const normalizedQuery = query.trim();
+      if (customerGroupSearchTimeoutRef.current !== null) {
+        window.clearTimeout(customerGroupSearchTimeoutRef.current);
+      }
+      if (!normalizedQuery) {
+        return;
+      }
+      const requestId = customerGroupSearchRequestRef.current + 1;
+      customerGroupSearchRequestRef.current = requestId;
+      customerGroupSearchTimeoutRef.current = window.setTimeout(() => {
+        void (async () => {
+          try {
+            const searchedOptions = await loadCustomerGroupOptions(normalizedQuery);
+            if (customerGroupSearchRequestRef.current !== requestId) {
+              return;
+            }
+            setGroupOptions((current) => mergeLookupOptions(current, searchedOptions));
+          } catch {
+            // Keep current options if live lookup search fails.
+          }
+        })();
+      }, CUSTOMER_GROUP_SEARCH_DEBOUNCE_MS);
+    },
+    [loadCustomerGroupOptions],
+  );
+  useEffect(() => {
+    return () => {
+      if (customerGroupSearchTimeoutRef.current !== null) {
+        window.clearTimeout(customerGroupSearchTimeoutRef.current);
+      }
+    };
+  }, []);
   const stateCreateModalFields = useMemo(() => buildStateCodeModalFields(false), []);
   const stateUpdateModalFields = useMemo(() => buildStateCodeModalFields(true), []);
   const stateModalVariants = useMemo<ERPDynamicModalVariant[]>(
@@ -2218,7 +2292,7 @@ export default function CustomerPage() {
     [groupModalFields, groupSaveLoading],
   );
   const refreshGroupOptions = useCallback(async () => {
-    const payload = await getCustomerGroupLookup(LOOKUP_REQUEST_QUERY);
+    const payload = await getCustomerGroupLookup(CUSTOMER_GROUP_LOOKUP_QUERY);
     setGroupOptions(buildGroupOptions(payload));
   }, [getCustomerGroupLookup]);
   const resolveGroupOptionFromShortcut = useCallback(
@@ -2440,6 +2514,7 @@ export default function CustomerPage() {
         handleStateEditShortcut,
         handleAreaCreateShortcut,
         handleAreaEditShortcut,
+        handleCustomerGroupSearchChange,
         handleGroupCreateShortcut,
         handleGroupEditShortcut,
         handleCustomerGstinValueChange,
@@ -2451,6 +2526,7 @@ export default function CustomerPage() {
       groupOptions,
       handleAreaCreateShortcut,
       handleAreaEditShortcut,
+      handleCustomerGroupSearchChange,
       handleCustomerGstinValueChange,
       handleGroupCreateShortcut,
       handleGroupEditShortcut,

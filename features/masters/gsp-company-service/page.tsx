@@ -94,6 +94,16 @@ const DEFAULT_PROVIDER_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select GSP Provider",
 };
+const DEFAULT_SERVICE_TYPE_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Select Service Type",
+};
+const SERVICE_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
+  DEFAULT_SERVICE_TYPE_OPTION,
+  { value: "EINV", label: "EINV" },
+  { value: "EWAY", label: "EWAY" },
+  { value: "BOTH", label: "Both" },
+];
 const INITIAL_FORM_VALUES = {
   csgCompanyId: "",
   csgGspProviderId: "",
@@ -113,6 +123,7 @@ function buildGspCompanyServiceFormFields(
       name: "csgCompanyId",
       label: "Company",
       type: "select",
+      colSpan:2,
       searchable: true,
       required: true,
       options: companyOptions,
@@ -125,6 +136,7 @@ function buildGspCompanyServiceFormFields(
       label: "GSP Provider",
       type: "select",
       searchable: true,
+      colSpan:2,
       required: true,
       options: providerOptions,
       validation: {
@@ -134,19 +146,20 @@ function buildGspCompanyServiceFormFields(
     {
       name: "csgServiceType",
       label: "Service Type",
+      type: "select",
       required: true,
-      placeholder: "EINV",
-      helperText: "Examples: EINV, EWAY.",
+      colSpan:2,
+      options: SERVICE_TYPE_OPTIONS,
+      searchable:false,
       validation: {
         requiredMessage: "Service Type is required.",
-        maxLength: 20,
-        maxLengthMessage: "Service Type must be at most 20 characters.",
       },
     },
     {
       name: "csgEuserName",
       label: "E-User Name",
       required: true,
+      colSpan:2,
       validation: {
         requiredMessage: "E-User Name is required.",
       },
@@ -155,20 +168,11 @@ function buildGspCompanyServiceFormFields(
       name: "csgEuserPassword",
       label: "E-User Password",
       type: "password",
+      colSpan:2,
       required: true,
       validation: {
         requiredMessage: "E-User Password is required.",
       },
-    },
-    {
-      name: "csgAuthToken",
-      label: "Auth Token",
-      colSpan: 2,
-    },
-    {
-      name: "csgAuthTokenValidTill",
-      label: "Token Valid Till",
-      type: "date",
     },
     {
       name: "csgIsActive",
@@ -181,6 +185,17 @@ function buildGspCompanyServiceFormFields(
     },
   ];
 }
+
+function normalizeServiceType(value: unknown): string {
+  const normalizedValue = toDisplayValue(value).trim().toUpperCase();
+
+  if (normalizedValue === "EINV" || normalizedValue === "EWAY" || normalizedValue === "BOTH") {
+    return normalizedValue;
+  }
+
+  return "";
+}
+
 export default function GspCompanyServiceMasterPage() {
   const { getAll: getCompanyLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getProviderLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
@@ -247,7 +262,7 @@ export default function GspCompanyServiceMasterPage() {
       nameColumnHeader="Service Type"
       tableColumnHeaders={{ masterShort: "E-User Name" }}
       nameFieldLabel="Service Type"
-      nameFieldPlaceholder="EINV"
+      nameFieldPlaceholder="Select Service Type"
       formTitle="GSP Company Service Form"
       formDescription="Create and update GSP company service mappings."
       customFields={formFields}
@@ -264,7 +279,7 @@ export default function GspCompanyServiceMasterPage() {
             toDisplayValue(getFirstDefinedValue(rowSource, CSG_PROVIDER_ID_KEYS)) ||
             mergedDefaults.csgGspProviderId,
           csgServiceType:
-            toDisplayValue(getFirstDefinedValue(rowSource, CSG_SERVICE_TYPE_KEYS)) ||
+            normalizeServiceType(getFirstDefinedValue(rowSource, CSG_SERVICE_TYPE_KEYS)) ||
             mergedDefaults.csgServiceType,
           csgEuserName:
             toDisplayValue(getFirstDefinedValue(rowSource, CSG_EUSER_NAME_KEYS)) ||

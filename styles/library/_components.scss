@@ -1,5 +1,4 @@
 @use "./mixins" as mixins;
-
 @layer components {
   .ui-card {
     border-radius: 1rem;
@@ -8,36 +7,30 @@
     box-shadow: var(--ds-shadow-sm);
     overflow: hidden;
   }
-
   .ui-card__head,
   .ui-card__body,
   .ui-card__foot {
     padding: 1rem 1.1rem;
   }
-
   .ui-card__head {
     border-bottom: 1px solid var(--ds-border);
     background: color-mix(in srgb, var(--ds-surface-muted) 68%, transparent);
   }
-
   .ui-card__foot {
     border-top: 1px solid var(--ds-border);
     background: color-mix(in srgb, var(--ds-surface-muted) 60%, transparent);
   }
-
   .ui-card__title {
     margin: 0;
     font-size: 1.02rem;
     font-weight: 650;
     color: var(--ds-text);
   }
-
   .ui-card__description {
     margin-top: 0.35rem;
     font-size: 0.86rem;
     color: var(--ds-text-muted);
   }
-
   .ui-btn {
     display: inline-flex;
     align-items: center;
@@ -56,87 +49,72 @@
     @include mixins.focus-ring;
     @include mixins.interactive-lift;
   }
-
   .ui-btn:disabled {
     opacity: 0.52;
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
   }
-
   .ui-btn--primary {
     background: var(--ds-primary);
     border-color: var(--ds-primary-strong);
     color: #f4fbff;
   }
-
   .ui-btn--secondary {
     background: var(--ds-surface);
     border-color: var(--ds-border);
     color: var(--ds-text);
   }
-
   .ui-btn--ghost {
     background: transparent;
     border-color: var(--ds-border);
     box-shadow: none;
     color: var(--ds-text-muted);
   }
-
   .ui-btn--danger {
     background: var(--ds-danger);
     border-color: var(--ds-danger);
     color: #fff;
   }
-
   .ui-btn--sm {
     min-height: 36px;
     padding: 0.34rem 0.72rem;
     font-size: 0.86rem;
   }
-
   .ui-btn--lg {
     min-height: 48px;
     padding: 0.66rem 1.2rem;
     font-size: 1rem;
   }
-
   .ui-btn--block {
     width: 100%;
   }
-
   .ui-field {
     display: grid;
     gap: 0.38rem;
   }
-
   .ui-label {
     font-size: 0.84rem;
     font-weight: 620;
     color: var(--ds-text-muted);
   }
-
   .ui-input,
   .ui-select,
   .ui-textarea {
     @include mixins.field-base;
   }
-
   .ui-textarea {
     min-height: 100px;
     resize: vertical;
   }
-
   .ui-help {
     font-size: 0.78rem;
     color: var(--ds-text-muted);
   }
-
   .ui-error {
     font-size: 0.78rem;
     color: var(--ds-danger);
   }
-
   .ui-badge {
     display: inline-flex;
     align-items: center;
@@ -147,37 +125,31 @@
     letter-spacing: 0.03em;
     border: 1px solid transparent;
   }
-
   .ui-badge--neutral {
     background: var(--ds-surface-muted);
     color: var(--ds-text-muted);
     border-color: var(--ds-border);
   }
-
   .ui-badge--info {
     background: color-mix(in srgb, var(--ds-primary) 16%, transparent);
     color: color-mix(in srgb, var(--ds-primary) 82%, black 18%);
     border-color: color-mix(in srgb, var(--ds-primary) 26%, transparent);
   }
-
   .ui-badge--success {
     background: color-mix(in srgb, var(--ds-success) 18%, transparent);
     color: color-mix(in srgb, var(--ds-success) 82%, black 18%);
     border-color: color-mix(in srgb, var(--ds-success) 26%, transparent);
   }
-
   .ui-badge--warning {
     background: color-mix(in srgb, var(--ds-warning) 20%, transparent);
     color: color-mix(in srgb, var(--ds-warning) 88%, black 12%);
     border-color: color-mix(in srgb, var(--ds-warning) 30%, transparent);
   }
-
   .ui-badge--danger {
     background: color-mix(in srgb, var(--ds-danger) 16%, transparent);
     color: color-mix(in srgb, var(--ds-danger) 86%, black 14%);
     border-color: color-mix(in srgb, var(--ds-danger) 25%, transparent);
   }
-
   .ui-alert {
     border-radius: var(--ds-radius-md);
     border-left: 4px solid;
@@ -185,13 +157,11 @@
     padding: 0.82rem 0.95rem;
     background: var(--ds-surface);
   }
-
   .ui-alert__title {
     margin: 0;
     font-size: 0.88rem;
     font-weight: 650;
   }
-
   .ui-alert__description {
     margin-top: 0.4rem;
     margin-bottom: 0;
@@ -199,27 +169,22 @@
     font-size: 0.84rem;
     line-height: 1.5;
   }
-
   .ui-alert--info {
     border-left-color: var(--ds-primary);
     background: color-mix(in srgb, var(--ds-primary) 8%, var(--ds-surface) 92%);
   }
-
   .ui-alert--success {
     border-left-color: var(--ds-success);
     background: color-mix(in srgb, var(--ds-success) 9%, var(--ds-surface) 91%);
   }
-
   .ui-alert--warning {
     border-left-color: var(--ds-warning);
     background: color-mix(in srgb, var(--ds-warning) 10%, var(--ds-surface) 90%);
   }
-
   .ui-alert--danger {
     border-left-color: var(--ds-danger);
     background: color-mix(in srgb, var(--ds-danger) 9%, var(--ds-surface) 91%);
   }
-
   .ui-navbar {
     border-radius: 1rem;
     display: flex;
@@ -232,14 +197,12 @@
     background: var(--ds-surface);
     box-shadow: var(--ds-shadow-sm);
   }
-
   .ui-navlinks {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 0.42rem;
   }
-
   .ui-navlink {
     display: inline-flex;
     align-items: center;
@@ -257,18 +220,15 @@
       border-color 0.18s ease,
       background-color 0.18s ease;
   }
-
   .ui-navlink:hover {
     border-color: var(--ds-border);
     color: var(--ds-text);
   }
-
   .ui-navlink--active {
     background: color-mix(in srgb, var(--ds-primary) 14%, transparent);
     border-color: color-mix(in srgb, var(--ds-primary) 32%, transparent);
     color: color-mix(in srgb, var(--ds-primary) 82%, black 18%);
   }
-
   .ui-kpi {
     border-radius: 1rem;
     border: 1px solid var(--ds-border);
@@ -276,29 +236,24 @@
     box-shadow: var(--ds-shadow-sm);
     padding: 0.92rem 1rem;
   }
-
   .ui-kpi__label {
     margin: 0;
     color: var(--ds-text-muted);
     font-size: 0.8rem;
   }
-
   .ui-kpi__value {
     margin: 0.32rem 0 0;
     font-size: clamp(1.15rem, 1.8vw, 1.55rem);
     font-weight: 700;
   }
-
   .ui-kpi__trend {
     margin: 0.42rem 0 0;
     font-size: 0.78rem;
     color: var(--ds-text-muted);
   }
-
   .ui-kpi__trend--up {
     color: var(--ds-success);
   }
-
   .ui-kpi__trend--down {
     color: var(--ds-danger);
   }

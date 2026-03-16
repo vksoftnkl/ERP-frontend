@@ -1,7 +1,13 @@
 "use client";
-import { type CSSProperties } from "react";
-import type { ERPDynamicModalField } from "@/components/library/ui/dynamic-modal-form";
+import { type CSSProperties, useMemo } from "react";
+import type {
+  ERPDynamicFieldValueChangeHandler,
+  ERPDynamicModalField,
+  ERPDynamicSelectOption,
+} from "@/components/library/ui/dynamic-modal-form";
 import CrudMasterPage from "@/components/master/crud-master-page";
+import { useMasterOptions } from "@/features/masters/shared";
+import { useApi } from "@/hooks/useApi";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
   getFirstDefinedValue,
@@ -18,15 +24,26 @@ const API_ENDPOINTS = {
   create: "/item-taxes/create",
   delete: "/item-taxes/delete",
 } as const;
+const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const GRID_TABLE_NAME = "item_tax_master";
-const UUID_PATTERN = "^[0-9a-fA-F-]{36}$";
+const LOOKUP_QUERY_ACCOUNT_LEDGERS = {
+  module: "accountLedgers",
+  limit: "100",
+} as const;
 const LOOKUP_KEYS = {
   id: ["tax_id", "taxId", "id", "_id"],
   code: ["tax_code", "taxCode", "code"],
   name: ["tax_name", "taxName", "name"],
   short: ["tax_taxability_type", "taxTaxabilityType", "short"],
   alias: ["tax_cess_type", "taxCessType", "alias"],
-  active: ["tax_is_active", "taxIsActive", "active", "is_active", "isActive", "status"],
+  active: [
+    "tax_is_active",
+    "taxIsActive",
+    "active",
+    "is_active",
+    "isActive",
+    "status",
+  ],
   position: ["tax_gst_rate_total", "taxGstRateTotal", "position", "sort"],
   description: ["tax_code", "taxCode", "description", "desc"],
   array: ["data", "items", "results", "rows", "list", "taxes", "itemTaxes"],
@@ -38,6 +55,27 @@ const REQUEST_PAYLOAD_KEYS = {
   short: "tax_code",
   description: "tax_cess_type",
   sort: "tax_gst_rate_total",
+} as const;
+const TAXABILITY_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
+  { label: "Taxable", value: "TAXABLE" },
+  { label: "Exempt", value: "EXEMPT" },
+  { label: "Nil Rated", value: "NIL_RATED" },
+  { label: "Non GST", value: "NON_GST" },
+];
+const CESS_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
+  { label: "None", value: "NONE" },
+  { label: "Percent", value: "PERCENT" },
+  { label: "Unit", value: "UNIT" },
+];
+const DEFAULT_LEDGER_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Select Account Ledger",
+};
+const ACCOUNT_LEDGER_LOOKUP_DEFINITION = {
+  query: LOOKUP_QUERY_ACCOUNT_LEDGERS,
+  defaultOption: DEFAULT_LEDGER_OPTION,
+  idKeys: ["id", "value"],
+  labelKeys: ["name", "label"],
 } as const;
 const TAX_INITIAL_FORM_VALUES: Record<string, string> = {
   tax_name: "",
@@ -105,27 +143,148 @@ const TAX_NUMERIC_FIELD_NAMES = [
   "tax_cess_pur_unit",
   "tax_gst_rate_total",
 ] as const;
-const TAX_BOOLEAN_FIELD_NAMES = [
-  "tax_is_reverse_charge",
-  "tax_is_active",
-] as const;
-function buildUuidField(name: string, label: string): ERPDynamicModalField {
+const TAX_BOOLEAN_FIELD_NAMES = ["tax_is_reverse_charge", "tax_is_active"] as const;
+const GST_RATE_PRECISION = 3;
+const GST_RATE_SCALE = 10 ** GST_RATE_PRECISION;
+function toCamelCase(value: string): string {
+  return value.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase());
+}
+function getFieldValue(source: Record<string, unknown>, fieldName: string): unknown {
+  return getFirstDefinedValue(source, [fieldName, toCamelCase(fieldName)]);
+}
+function toNullableUuid(value: string): string | null {
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+}
+function normalizeTaxabilityType(value: string): string {
+  const normalized = toUpper(value);
+  return normalized || "TAXABLE";
+}
+function normalizeCessType(value: string): string {
+  const normalized = toUpper(value);
+  return normalized || "NONE";
+}
+function formatDecimal(value: number, precision: number): string {
+  const fixed = value.toFixed(precision);
+  return fixed.replace(/\.?0+$/, "") || "0";
+}
+function formatGstRateUnits(units: number): string {
+  return formatDecimal(units / GST_RATE_SCALE, GST_RATE_PRECISION);
+}
+function deriveIntrastateGstRate(
+  values: Record<string, string>,
+  cgstFieldName: string,
+  sgstFieldName: string,
+): number {
+  return (
+    toNonNegativeNumber(values[cgstFieldName] ?? "0", 0) +
+    toNonNegativeNumber(values[sgstFieldName] ?? "0", 0)
+  );
+}
+function deriveComponentGstRateTotal(
+  values: Record<string, string>,
+  fieldNames: {
+    cgst: string;
+    sgst: string;
+    igst: string;
+  },
+): number {
+  const igst = toNonNegativeNumber(values[fieldNames.igst] ?? "0", 0);
+  return igst > 0
+    ? igst
+    : deriveIntrastateGstRate(values, fieldNames.cgst, fieldNames.sgst);
+}
+function deriveGstRateTotal(values: Record<string, string>): string {
+  const total =
+    deriveComponentGstRateTotal(values, {
+      cgst: "tax_cgst_perc",
+      sgst: "tax_sgst_perc",
+      igst: "tax_igst_perc",
+    }) ||
+    deriveComponentGstRateTotal(values, {
+      cgst: "tax_cgst_pur_perc",
+      sgst: "tax_sgst_pur_perc",
+      igst: "tax_igst_pur_perc",
+    });
+  return formatDecimal(total, GST_RATE_PRECISION);
+}
+function deriveGstRateUnitsFromTotal(totalValue: string): {
+  totalUnits: number;
+  cgstUnits: number;
+  sgstUnits: number;
+} {
+  const totalUnits = Math.round(
+    toNonNegativeNumber(totalValue, 0) * GST_RATE_SCALE,
+  );
+  const cgstUnits = Math.floor(totalUnits / 2);
+  const sgstUnits = totalUnits - cgstUnits;
+  return {
+    totalUnits,
+    cgstUnits,
+    sgstUnits,
+  };
+}
+function deriveGstRatePayloadValues(totalValue: string): {
+  total: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+} {
+  const { totalUnits, cgstUnits, sgstUnits } =
+    deriveGstRateUnitsFromTotal(totalValue);
+  return {
+    total: Number(formatGstRateUnits(totalUnits)),
+    cgst: Number(formatGstRateUnits(cgstUnits)),
+    sgst: Number(formatGstRateUnits(sgstUnits)),
+    igst: Number(formatGstRateUnits(totalUnits)),
+  };
+}
+function showPercentCessFields(values: Record<string, string>): boolean {
+  return normalizeCessType(values.tax_cess_type ?? "") === "PERCENT";
+}
+function showUnitCessFields(values: Record<string, string>): boolean {
+  return normalizeCessType(values.tax_cess_type ?? "") === "UNIT";
+}
+const handleCessTypeChange: ERPDynamicFieldValueChangeHandler = ({ value }) => {
+  const cessType = normalizeCessType(value);
+  const nextValues: Record<string, string> = {};
+  if (cessType === "PERCENT") {
+    nextValues.tax_cess_unit = "0";
+    nextValues.tax_cess_pur_unit = "0";
+  } else if (cessType === "UNIT") {
+    nextValues.tax_cess_perc = "0";
+    nextValues.tax_cess_pur_perc = "0";
+  } else {
+    nextValues.tax_cess_perc = "0";
+    nextValues.tax_cess_unit = "0";
+    nextValues.tax_cess_pur_perc = "0";
+    nextValues.tax_cess_pur_unit = "0";
+  }
+  return {
+    values: nextValues,
+  };
+};
+function buildLedgerField(
+  name: string,
+  label: string,
+  ledgerOptions: ERPDynamicSelectOption[],
+): ERPDynamicModalField {
   return {
     name,
     label,
-    validation: {
-      pattern: UUID_PATTERN,
-      patternMessage: `${label} must be a valid UUID.`,
-    },
+    type: "select",
+    searchable: true,
+    options: ledgerOptions,
   };
 }
-function buildTaxFormFields(): ERPDynamicModalField[] {
+function buildTaxFormFields(
+  ledgerOptions: ERPDynamicSelectOption[],
+): ERPDynamicModalField[] {
   return [
     {
       name: "taxCoreHeading",
       label: "Tax Core",
-      type: "heading",
-      helperText: "Basic tax slab identity and status.",
+      type: "heading",  
     },
     {
       name: "tax_name",
@@ -149,12 +308,47 @@ function buildTaxFormFields(): ERPDynamicModalField[] {
     {
       name: "tax_taxability_type",
       label: "Taxability Type",
+      type: "select",
+      searchable: true,
       required: true,
+      options: TAXABILITY_TYPE_OPTIONS,
       validation: {
-        maxLength: 30,
-        maxLengthMessage: "Taxability Type must be at most 30 characters.",
+        requiredMessage: "Taxability Type is required.",
       },
-      helperText: "Examples: TAXABLE, EXEMPT, NIL_RATED, NON_GST.",
+    },
+    {
+      name: "tax_gst_rate_total",
+      label: "GST Rate Total %",
+      type: "number",
+      min: 0,
+      step: "0.001",
+      inputMode: "decimal",
+    },
+    {
+      name: "tax_cess_type",
+      label: "Cess Type",
+      type: "select",
+      searchable: false,
+      options: CESS_TYPE_OPTIONS,
+      onValueChange: handleCessTypeChange,
+    },
+    {
+      name: "tax_cess_perc",
+      label: "Cess %",
+      type: "number",
+      min: 0,
+      step: "0.001",
+      inputMode: "decimal",
+      visibleWhen: showPercentCessFields,
+    },
+    {
+      name: "tax_cess_unit",
+      label: "Cess Unit",
+      type: "number",
+      min: 0,
+      step: "0.0001",
+      inputMode: "decimal",
+      visibleWhen: showUnitCessFields,
     },
     {
       name: "tax_is_reverse_charge",
@@ -163,163 +357,99 @@ function buildTaxFormFields(): ERPDynamicModalField[] {
     },
     {
       name: "tax_is_active",
-      label: "Is Active",
+      label: "Active",
       type: "checkbox",
-    },
-    {
-      name: "taxSalesRateHeading",
-      label: "Sales Component Rates",
-      type: "heading",
-    },
-    {
-      name: "tax_cgst_perc",
-      label: "CGST %",
-      type: "number",
-      min: 0,
-      step: "0.001",
-    },
-    {
-      name: "tax_sgst_perc",
-      label: "SGST %",
-      type: "number",
-      min: 0,
-      step: "0.001",
-    },
-    {
-      name: "tax_igst_perc",
-      label: "IGST %",
-      type: "number",
-      min: 0,
-      step: "0.001",
-    },
-    {
-      name: "tax_gst_rate_total",
-      label: "GST Rate Total %",
-      type: "number",
-      min: 0,
-      step: "0.001",
-      helperText: "Convenience total; keep aligned with the component rates.",
-    },
-    {
-      name: "taxPurchaseRateHeading",
-      label: "Purchase Component Rates",
-      type: "heading",
-    },
-    {
-      name: "tax_cgst_pur_perc",
-      label: "Purchase CGST %",
-      type: "number",
-      min: 0,
-      step: "0.001",
-    },
-    {
-      name: "tax_sgst_pur_perc",
-      label: "Purchase SGST %",
-      type: "number",
-      min: 0,
-      step: "0.001",
-    },
-    {
-      name: "tax_igst_pur_perc",
-      label: "Purchase IGST %",
-      type: "number",
-      min: 0,
-      step: "0.001",
-    },
-    {
-      name: "taxCessHeading",
-      label: "Cess",
-      type: "heading",
-    },
-    {
-      name: "tax_cess_type",
-      label: "Cess Type",
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "Cess Type must be at most 20 characters.",
-      },
-      helperText: "Examples: NONE, PERCENT, UNIT.",
-    },
-    {
-      name: "tax_cess_perc",
-      label: "Cess %",
-      type: "number",
-      min: 0,
-      step: "0.001",
-    },
-    {
-      name: "tax_cess_unit",
-      label: "Cess Unit",
-      type: "number",
-      min: 0,
-      step: "0.0001",
-    },
-    {
-      name: "tax_cess_pur_perc",
-      label: "Purchase Cess %",
-      type: "number",
-      min: 0,
-      step: "0.001",
-    },
-    {
-      name: "tax_cess_pur_unit",
-      label: "Purchase Cess Unit",
-      type: "number",
-      min: 0,
-      step: "0.0001",
-    },
+    },    
     {
       name: "taxLedgerBaseHeading",
       label: "Taxable Value Ledgers",
       type: "heading",
-      defaultExpanded: false,
+      defaultExpanded: false,    
     },
-    buildUuidField("tax_sales_ledger_id", "Sales Ledger Id"),
-    buildUuidField("tax_sales_return_ledger_id", "Sales Return Ledger Id"),
-    buildUuidField("tax_purchase_ledger_id", "Purchase Ledger Id"),
-    buildUuidField("tax_purchase_return_ledger_id", "Purchase Return Ledger Id"),
+    buildLedgerField(
+      "tax_sales_ledger_id",
+      "Sales Ledger",
+      ledgerOptions,
+    ),
+    buildLedgerField(
+      "tax_sales_return_ledger_id",
+      "Sales Return Ledger",
+      ledgerOptions,
+    ),
+    buildLedgerField(
+      "tax_purchase_ledger_id",
+      "Purchase Ledger",
+      ledgerOptions,
+    ),
+    buildLedgerField(
+      "tax_purchase_return_ledger_id",
+      "Purchase Return Ledger",
+      ledgerOptions,
+    ),
     {
       name: "taxLedgerOutputHeading",
       label: "Output Tax Ledgers (Sales)",
       type: "heading",
       defaultExpanded: false,
     },
-    buildUuidField("tax_cgst_output_ledger_id", "CGST Output Ledger Id"),
-    buildUuidField("tax_sgst_output_ledger_id", "SGST Output Ledger Id"),
-    buildUuidField("tax_igst_output_ledger_id", "IGST Output Ledger Id"),
-    buildUuidField("tax_cess_output_ledger_id", "Cess Output Ledger Id"),
+    buildLedgerField(
+      "tax_cgst_output_ledger_id",
+      "CGST Output Ledger",
+      ledgerOptions,
+    ),
+    buildLedgerField(
+      "tax_sgst_output_ledger_id",
+      "SGST Output Ledger",
+      ledgerOptions,
+    ),
+    buildLedgerField(
+      "tax_igst_output_ledger_id",
+      "IGST Output Ledger",
+      ledgerOptions,
+    ),
+    buildLedgerField(
+      "tax_cess_output_ledger_id",
+      "Cess Output Ledger",
+      ledgerOptions,
+    ),
     {
       name: "taxLedgerInputHeading",
       label: "Input Tax Ledgers (Purchase)",
       type: "heading",
       defaultExpanded: false,
     },
-    buildUuidField("tax_cgst_input_ledger_id", "CGST Input Ledger Id"),
-    buildUuidField("tax_sgst_input_ledger_id", "SGST Input Ledger Id"),
-    buildUuidField("tax_igst_input_ledger_id", "IGST Input Ledger Id"),
-    buildUuidField("tax_cess_input_ledger_id", "Cess Input Ledger Id"),
-     ];
-}
-const TAX_FORM_FIELDS = buildTaxFormFields();
-function toCamelCase(value: string): string {
-  return value.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase());
-}
-function getFieldValue(source: Record<string, unknown>, fieldName: string): unknown {
-  return getFirstDefinedValue(source, [fieldName, toCamelCase(fieldName)]);
-}
-function toNullableUuid(value: string): string | null {
-  const normalized = value.trim();
-  return normalized ? normalized : null;
-}
-function normalizeTaxabilityType(value: string): string {
-  const normalized = toUpper(value);
-  return normalized || "TAXABLE";
-}
-function normalizeCessType(value: string): string {
-  const normalized = toUpper(value);
-  return normalized || "NONE";
+    buildLedgerField(
+      "tax_cgst_input_ledger_id",
+      "CGST Input Ledger",
+      ledgerOptions,
+    ),
+    buildLedgerField(
+      "tax_sgst_input_ledger_id",
+      "SGST Input Ledger",
+      ledgerOptions,
+    ),
+    buildLedgerField(
+      "tax_igst_input_ledger_id",
+      "IGST Input Ledger",
+      ledgerOptions,
+    ),
+    buildLedgerField(
+      "tax_cess_input_ledger_id",
+      "Cess Input Ledger",
+      ledgerOptions,
+    ),
+  ];
 }
 export default function TaxMasterPage() {
+  const { getAll: getAccountLedgerLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  const { options: ledgerOptions } = useMasterOptions({
+    definition: ACCOUNT_LEDGER_LOOKUP_DEFINITION,
+    load: getAccountLedgerLookup,
+  });
+  const taxFormFields = useMemo(
+    () => buildTaxFormFields(ledgerOptions),
+    [ledgerOptions],
+  );
   return (
     <CrudMasterPage
       title="Tax"
@@ -338,7 +468,7 @@ export default function TaxMasterPage() {
       nameFieldPlaceholder="GST 18%"
       formTitle="Tax Form"
       formDescription="Create and update taxes."
-      customFields={TAX_FORM_FIELDS}
+      customFields={taxFormFields}
       createInitialValues={TAX_INITIAL_FORM_VALUES}
       modalPanelStyle={TAX_MODAL_PANEL_STYLE}
       modalFormGridColumns={3}
@@ -374,7 +504,6 @@ export default function TaxMasterPage() {
           toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.code)) ||
           defaults.searchCode ||
           TAX_INITIAL_FORM_VALUES.tax_code;
-
         mappedValues.tax_taxability_type = normalizeTaxabilityType(
           toDisplayValue(getFieldValue(rowSource, "tax_taxability_type")) ||
             defaults.masterAlias ||
@@ -388,10 +517,24 @@ export default function TaxMasterPage() {
         mappedValues.tax_gst_rate_total =
           toDisplayValue(getFieldValue(rowSource, "tax_gst_rate_total")) ||
           toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) ||
-          mappedValues.tax_gst_rate_total;
+          deriveGstRateTotal(mappedValues);
         return mappedValues;
       }}
       buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
+        const cessType = normalizeCessType(values.tax_cess_type ?? "");
+        const gstRatePayload = deriveGstRatePayloadValues(
+          values.tax_gst_rate_total ?? deriveGstRateTotal(values),
+        );
+        const cessPerc =
+          cessType === "PERCENT"
+            ? toNonNegativeNumber(values.tax_cess_perc ?? "0", 0)
+            : 0;
+        const cessPurPerc = cessPerc;
+        const cessUnit =
+          cessType === "UNIT"
+            ? toNonNegativeNumber(values.tax_cess_unit ?? "0", 0)
+            : 0;
+        const cessPurUnit = cessUnit;
         const payload: Record<string, unknown> = {
           tax_name: (values.tax_name ?? "").trim(),
           tax_code: toNullableString(values.tax_code ?? ""),
@@ -400,36 +543,18 @@ export default function TaxMasterPage() {
           ),
           tax_is_reverse_charge:
             (values.tax_is_reverse_charge ?? "false") === "true",
-          tax_cgst_perc: toNonNegativeNumber(values.tax_cgst_perc ?? "0", 0),
-          tax_sgst_perc: toNonNegativeNumber(values.tax_sgst_perc ?? "0", 0),
-          tax_igst_perc: toNonNegativeNumber(values.tax_igst_perc ?? "0", 0),
-          tax_cgst_pur_perc: toNonNegativeNumber(
-            values.tax_cgst_pur_perc ?? "0",
-            0,
-          ),
-          tax_sgst_pur_perc: toNonNegativeNumber(
-            values.tax_sgst_pur_perc ?? "0",
-            0,
-          ),
-          tax_igst_pur_perc: toNonNegativeNumber(
-            values.tax_igst_pur_perc ?? "0",
-            0,
-          ),
-          tax_cess_type: normalizeCessType(values.tax_cess_type ?? ""),
-          tax_cess_perc: toNonNegativeNumber(values.tax_cess_perc ?? "0", 0),
-          tax_cess_unit: toNonNegativeNumber(values.tax_cess_unit ?? "0", 0),
-          tax_cess_pur_perc: toNonNegativeNumber(
-            values.tax_cess_pur_perc ?? "0",
-            0,
-          ),
-          tax_cess_pur_unit: toNonNegativeNumber(
-            values.tax_cess_pur_unit ?? "0",
-            0,
-          ),
-          tax_gst_rate_total: toNonNegativeNumber(
-            values.tax_gst_rate_total ?? "0",
-            0,
-          ),
+          tax_cgst_perc: gstRatePayload.cgst,
+          tax_sgst_perc: gstRatePayload.sgst,
+          tax_igst_perc: gstRatePayload.igst,
+          tax_cgst_pur_perc: gstRatePayload.cgst,
+          tax_sgst_pur_perc: gstRatePayload.sgst,
+          tax_igst_pur_perc: gstRatePayload.igst,
+          tax_cess_type: cessType,
+          tax_cess_perc: cessPerc,
+          tax_cess_unit: cessUnit,
+          tax_cess_pur_perc: cessPurPerc,
+          tax_cess_pur_unit: cessPurUnit,
+          tax_gst_rate_total: gstRatePayload.total,
           tax_sales_ledger_id: toNullableUuid(values.tax_sales_ledger_id ?? ""),
           tax_sales_return_ledger_id: toNullableUuid(
             values.tax_sales_return_ledger_id ?? "",
