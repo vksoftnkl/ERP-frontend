@@ -45,6 +45,7 @@ type ItemLinkedRecordsEditorProps = {
   addLabel: string;
   actionsLabel?: string;
   autoCreateFirstRowOnMount?: boolean;
+  autoFocusInitialRowOnMount?: boolean;
   autoAppendOnEnter?: LinkedRecordEditorAutoAppendConfig;
   columns: LinkedRecordColumn[];
   createRow: (sourceRow?: LinkedRecordRow) => LinkedRecordRow;
@@ -75,6 +76,7 @@ export default function ItemLinkedRecordsEditor({
   addLabel,
   actionsLabel = "Actions",
   autoCreateFirstRowOnMount = false,
+  autoFocusInitialRowOnMount = true,
   autoAppendOnEnter,
   columns,
   createRow,
@@ -168,7 +170,7 @@ export default function ItemLinkedRecordsEditor({
       columns[0]?.key,
     );
 
-    if (focusColumnKey) {
+    if (autoFocusInitialRowOnMount && focusColumnKey) {
       queueFocus(0, focusColumnKey);
     }
 
@@ -181,6 +183,7 @@ export default function ItemLinkedRecordsEditor({
     disabled,
     parseError,
     rows.length,
+    autoFocusInitialRowOnMount,
   ]);
 
   const handleAddRow = () => {

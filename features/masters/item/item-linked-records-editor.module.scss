@@ -1,4 +1,11 @@
 .editor {
+  --item-linked-control-height: 2.15rem;
+  --item-linked-control-padding-y: 0.45rem;
+  --item-linked-control-padding-x: 0.55rem;
+  --item-linked-control-font-size: 0.82rem;
+}
+
+.editor {
   display: grid;
   gap: 0.9rem;
 }
@@ -112,14 +119,17 @@
 }
 
 .control {
+  box-sizing: border-box;
   width: 100%;
   min-width: 6rem;
+  min-height: var(--item-linked-control-height);
   border: 1px solid #cbd5e1;
   background: #ffffff;
   color: #0f172a;
   border-radius: 4px;
-  padding: 0.45rem 0.55rem;
-  font-size: 0.82rem;
+  padding: var(--item-linked-control-padding-y) var(--item-linked-control-padding-x);
+  font-family: inherit;
+  font-size: var(--item-linked-control-font-size);
   line-height: 1.2;
 }
 .control[type="number"] {
@@ -139,17 +149,21 @@
 }
 
 .searchSelectTrigger {
+  box-sizing: border-box;
   position: relative;
   display: flex;
   align-items: center;
   width: 100%;
   min-width: 0;
+  min-height: var(--item-linked-control-height);
   border: 1px solid #cbd5e1;
   background: #ffffff;
   color: #0f172a;
   border-radius: 4px;
-  padding: 0.45rem 1.9rem 0.45rem 0.55rem;
-  font-size: 0.82rem;
+  padding: var(--item-linked-control-padding-y) 1.9rem var(--item-linked-control-padding-y)
+    var(--item-linked-control-padding-x);
+  font-family: inherit;
+  font-size: var(--item-linked-control-font-size);
   line-height: 1.2;
   text-align: left;
   cursor: pointer;
@@ -223,11 +237,15 @@
 }
 
 .searchSelectSearchInput {
+  box-sizing: border-box;
   width: 100%;
+  min-height: var(--item-linked-control-height);
   border: 1px solid #cbd5e1;
   border-radius: 4px;
-  padding: 0.45rem 1.9rem 0.45rem 0.55rem;
-  font-size: 0.8rem;
+  padding: var(--item-linked-control-padding-y) 1.9rem var(--item-linked-control-padding-y)
+    var(--item-linked-control-padding-x);
+  font-family: inherit;
+  font-size: var(--item-linked-control-font-size);
   line-height: 1.2;
 }
 
@@ -285,7 +303,7 @@
 }
 
 .input {
-  min-height: 2.15rem;
+  min-height: var(--item-linked-control-height);
 }
 
 .checkboxWrap {

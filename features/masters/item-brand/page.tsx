@@ -1367,50 +1367,46 @@ export default function ItemBrandMasterPage() {
                 </button>
               </div>
             ) : null}
-            <section className={styles.tableSection}>
-              <ReusableTable
-                columns={columns}
-                rows={rows}
-                rowKey="__rowId"
-                title={`${effectiveTitle} List`}
-                minWidth="980px"
-                wrapperClassName={styles.tableWrapper}
-                tableClassName={styles.listTable}
-                activeRowKey={selectedRowId}
-                onRowClick={(row) => setSelectedRowId(row.__rowId)}
-                onCreate={openCreateModal}
-                createLabel={`Add ${effectiveTitle}`}
-                onView={handleRowView}
-                onUpdate={handleRowUpdate}
-                onDelete={handleRowDelete}
-                isViewDisabled={() => saveLoading || detailsLoading}
-                isUpdateDisabled={() => saveLoading || detailsLoading}
-                isDeleteDisabled={() =>
-                  deleteLoading || saveLoading || detailsLoading
-                }
-                actionsAsIcons
-                updateLabel="Update"
-                deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
-                searchable
-                searchQuery={searchTerm}
-                onSearchQueryChange={handleSearchChange}
-                searchPlaceholder="Search..."
-                sortable
-                paginated
-                manualPagination
-                totalEntries={totalEntries}
-                currentPage={currentPage}
-                onCurrentPageChange={setCurrentPage}
-                pageSize={pageSize}
-                onPageSizeChange={setPageSize}
-                pageSizeOptions={[10, 20, 25, 50]}
-                fullViewHeight={false}
-                stickyHeader
-                emptyText={
-                  loading ? "Loading brand data..." : "No brand data found"
-                }
-              />
-            </section>
+            <ReusableTable
+              columns={columns}
+              rows={rows}
+              rowKey="__rowId"
+              title={`${effectiveTitle} List`}
+              minWidth="980px"
+              activeRowKey={selectedRowId}
+              onRowClick={(row) => setSelectedRowId(row.__rowId)}
+              onCreate={openCreateModal}
+              createLabel={`Add ${effectiveTitle}`}
+              onView={handleRowView}
+              onUpdate={handleRowUpdate}
+              onDelete={handleRowDelete}
+              isViewDisabled={() => saveLoading || detailsLoading}
+              isUpdateDisabled={() => saveLoading || detailsLoading}
+              isDeleteDisabled={() =>
+                deleteLoading || saveLoading || detailsLoading
+              }
+              actionsAsIcons
+              updateLabel="Update"
+              deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
+              searchable
+              searchQuery={searchTerm}
+              onSearchQueryChange={handleSearchChange}
+              searchPlaceholder="Search..."
+              sortable
+              paginated
+              manualPagination
+              totalEntries={totalEntries}
+              currentPage={currentPage}
+              onCurrentPageChange={setCurrentPage}
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+              pageSizeOptions={[10, 20, 25, 50]}
+              fullViewHeight={false}
+              stickyHeader
+              emptyText={
+                loading ? "Loading brand data..." : "No brand data found"
+              }
+            />
           </section>
         </div>
       </div>

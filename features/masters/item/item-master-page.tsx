@@ -88,6 +88,7 @@ const BRANCH_LOOKUP_QUERY = {
 } as const;
 const ITEM_GROUP_LOOKUP_QUERY = {
   module: "itemGroups",
+  search: " speakers",
 } as const;
 const ITEM_CATEGORY_LOOKUP_QUERY = {
   page: "1",
@@ -923,11 +924,11 @@ function syncItemPriceRowFromProfitInputs(
         costPriceValue === null
           ? null
           : roundDerivedItemPriceValue(
-              normalizedProfitType === "BY RS"
-                ? costPriceValue + marginValue
-                : costPriceValue + (costPriceValue * marginValue) / 100,
-              nextRow.ipm_round_off,
-            );
+            normalizedProfitType === "BY RS"
+              ? costPriceValue + marginValue
+              : costPriceValue + (costPriceValue * marginValue) / 100,
+            nextRow.ipm_round_off,
+          );
 
       setDerivedItemPriceRowValue(nextRow, saleFieldName, nextSaleValue);
     }
@@ -1486,6 +1487,103 @@ function buildItemPriceRowsValueChangeResult(
     values: changedValues,
   };
 }
+function syncPrimaryItemReorderValuesFromRows(
+  values: Record<string, string>,
+  serializedRows: string,
+): Record<string, string> {
+  const nextValues: Record<string, string> = {
+    ...values,
+    [ITEM_REORDER_ROWS_FIELD_NAME]: serializedRows,
+  };
+  const baseUnitId = (nextValues.item_base_unit_id ?? "").trim();
+  const defaultRow = buildEmptyItemReorderRow(baseUnitId);
+  const rows = parseLinkedRecordRows(serializedRows);
+  const managedRow =
+    rows.find((row) => hasLinkedRowContent(row, ITEM_REORDER_CONTENT_FIELD_NAMES)) ??
+    defaultRow;
+  return assignLinkedRowToValues(
+    nextValues,
+    managedRow,
+    ITEM_REORDER_ROW_TEXT_FIELD_NAMES,
+    ITEM_REORDER_ROW_BOOLEAN_FIELD_NAMES,
+    defaultRow,
+  );
+}
+function syncPrimaryItemEanValuesFromRows(
+  values: Record<string, string>,
+  serializedRows: string,
+): Record<string, string> {
+  const nextValues: Record<string, string> = {
+    ...values,
+    [ITEM_EAN_ROWS_FIELD_NAME]: serializedRows,
+  };
+  const baseUnitId = (nextValues.item_base_unit_id ?? "").trim();
+  const defaultRow = buildEmptyItemEanRow(baseUnitId, resolvePreferredItemEanUnitId(nextValues));
+  const rows = parseLinkedRecordRows(serializedRows);
+  const managedRow =
+    rows.find((row) => hasLinkedRowContent(row, ITEM_EAN_CONTENT_FIELD_NAMES)) ??
+    defaultRow;
+  return assignLinkedRowToValues(
+    nextValues,
+    managedRow,
+    ITEM_EAN_ROW_TEXT_FIELD_NAMES,
+    ITEM_EAN_ROW_BOOLEAN_FIELD_NAMES,
+    defaultRow,
+  );
+}
+function buildItemReorderRowsValueChangeResult(
+  values: Record<string, string>,
+  previousValues: Record<string, string>,
+  serializedRows: string,
+): ERPDynamicFieldValueChangeResult | void {
+  const comparisonValues = {
+    ...values,
+    [ITEM_REORDER_ROWS_FIELD_NAME]:
+      previousValues[ITEM_REORDER_ROWS_FIELD_NAME] ??
+      values[ITEM_REORDER_ROWS_FIELD_NAME] ??
+      "",
+  };
+  const nextValues = syncPrimaryItemReorderValuesFromRows(
+    values,
+    serializedRows,
+  );
+  const changedValues = collectChangedFieldValues(
+    comparisonValues,
+    nextValues,
+    [...ITEM_REORDER_ROW_TEXT_FIELD_NAMES, ...ITEM_REORDER_ROW_BOOLEAN_FIELD_NAMES],
+  );
+  if (Object.keys(changedValues).length === 0) {
+    return;
+  }
+  return {
+    values: changedValues,
+  };
+}
+function buildItemEanRowsValueChangeResult(
+  values: Record<string, string>,
+  previousValues: Record<string, string>,
+  serializedRows: string,
+): ERPDynamicFieldValueChangeResult | void {
+  const comparisonValues = {
+    ...values,
+    [ITEM_EAN_ROWS_FIELD_NAME]:
+      previousValues[ITEM_EAN_ROWS_FIELD_NAME] ??
+      values[ITEM_EAN_ROWS_FIELD_NAME] ??
+      "",
+  };
+  const nextValues = syncPrimaryItemEanValuesFromRows(values, serializedRows);
+  const changedValues = collectChangedFieldValues(
+    comparisonValues,
+    nextValues,
+    [...ITEM_EAN_ROW_TEXT_FIELD_NAMES, ...ITEM_EAN_ROW_BOOLEAN_FIELD_NAMES],
+  );
+  if (Object.keys(changedValues).length === 0) {
+    return;
+  }
+  return {
+    values: changedValues,
+  };
+}
 function validateItemPriceRows(value: string, values: Record<string, string>): string | null {
   if ((values.item_price_list ?? "false") !== "true") {
     return null;
@@ -1559,6 +1657,7 @@ function buildCustomFieldEditor(
   options: {
     actionsLabel?: string;
     autoCreateFirstRowOnMount?: boolean;
+    autoFocusInitialRowOnMount?: boolean;
     autoAppendOnEnter?: {
       columnKey: string;
       focusColumnKey?: string;
@@ -1577,6 +1676,7 @@ function buildCustomFieldEditor(
         addLabel={addLabel}
         actionsLabel={options.actionsLabel}
         autoCreateFirstRowOnMount={options.autoCreateFirstRowOnMount}
+        autoFocusInitialRowOnMount={options.autoFocusInitialRowOnMount}
         autoAppendOnEnter={options.autoAppendOnEnter}
         columns={columns}
         createRow={(sourceRow) => createRow(values, sourceRow)}
@@ -1751,12 +1851,12 @@ function applyItemCheckboxControlStyle(
   return fields.map((field) =>
     field.type === "checkbox"
       ? {
-          ...field,
-          controlStyle: {
-            ...ITEM_CHECKBOX_CONTROL_STYLE,
-            ...(field.controlStyle ?? {}),
-          },
-        }
+        ...field,
+        controlStyle: {
+          ...ITEM_CHECKBOX_CONTROL_STYLE,
+          ...(field.controlStyle ?? {}),
+        },
+      }
       : field,
   );
 }
@@ -1766,9 +1866,9 @@ function removeDefaultSelectPlaceholders(
   return fields.map((field) =>
     field.type === "select"
       ? {
-          ...field,
-          placeholder: "",
-        }
+        ...field,
+        placeholder: "",
+      }
       : field,
   );
 }
@@ -1778,9 +1878,9 @@ function removeDefaultLinkedColumnPlaceholders(
   return columns.map((column) =>
     column.type === "select"
       ? {
-          ...column,
-          placeholder: "",
-        }
+        ...column,
+        placeholder: "",
+      }
       : column,
   );
 }
@@ -1902,9 +2002,9 @@ function buildItemFormFields(
   const priceRowColumns = removeDefaultLinkedColumnPlaceholders(
     moveLinkedColumnBefore(
       applyConfiguredLinkedTableColumnConfig(
-      basePriceRowColumns,
-      itemPriceTableColumnsConfig,
-      ITEM_PRICE_TABLE_COLUMN_NAME_TO_KEY,
+        basePriceRowColumns,
+        itemPriceTableColumnsConfig,
+        ITEM_PRICE_TABLE_COLUMN_NAME_TO_KEY,
       ),
       "ipm_conversion_factor",
       "ipm_unit_id",
@@ -1981,647 +2081,654 @@ function buildItemFormFields(
   return removeDefaultSelectPlaceholders(
     applyItemCheckboxControlStyle([
       {
-      name: "itemHeadingCore",
-      label: "Core Details",
-      type: "heading",
+        name: "itemHeadingCore",
+        label: "Core Details",
+        type: "heading",
       },
       {
-      name: "item_name_en",
-      label: "Item Name",
-      required: true,
-      validation: {
-        minLength: 2,
-        maxLength: 200,
-        minLengthMessage: "Item Name must be at least 2 characters.",
-        maxLengthMessage: "Item Name must be at most 200 characters.",
-      },
-      },
-      {
-      name: "item_sku",
-      label: "SKU",
-      validation: {
-        maxLength: 60,
-        maxLengthMessage: "SKU must be at most 60 characters.",
-      },
-      },
-      {
-      name: "item_branch_id",
-      label: "Branch",
-      type: "select",
-      searchable: true,
-      options: branchOptions,
-      },
-      {
-      name: "item_name_ta",
-      label: "Item Name (Local)",
-      validation: {
-        maxLength: 200,
-        maxLengthMessage: "Item Name (Local) must be at most 200 characters.",
-      },
-      },
-      {
-      name: "item_code",
-      label: "Item Code",
-      validation: {
-        maxLength: 50,
-        maxLengthMessage: "Item Code must be at most 50 characters.",
-      },
-      },
-      {
-      name: "item_company_id",
-      label: "Company",
-      type: "select",
-      searchable: true,
-      required: true,
-      options: companyOptions,
-      validation: {
-        requiredMessage: "Company is required.",
-      },
-      },
-      {
-      name: "item_alias",
-      label: "Alias",
-      validation: {
-        maxLength: 200,
-        maxLengthMessage: "Alias must be at most 200 characters.",
-      },
-      },
-      {
-      name: "item_default_barcode",
-      label: "Default Barcode",
-      validation: {
-        maxLength: 200,
-        maxLengthMessage: "Default Barcode must be at most 200 characters.",
-      },
-      },
-    buildUuidTextField("item_company_category_id", "Company Category Id"),
-      {
-      name: "item_default_tax_id",
-      label: "Default Tax",
-      type: "select",
-      searchable: true,
-      options: taxOptions,
-      onValueChange: ({ value, values }) => {
-        const nextFormValues: Record<string, string> = {
-          ...values,
-          item_default_tax_id: value,
-        };
-        const normalizedRows = syncSerializedItemPriceRows(
-          nextFormValues[ITEM_PRICE_ROWS_FIELD_NAME] ?? "",
-          nextFormValues,
-          itemTaxRecordsById,
-          true,
-        );
-        const nextValues = syncPrimaryItemPriceValuesFromRows(
-          nextFormValues,
-          normalizedRows,
-        );
-        const changedValues = collectChangedFieldValues(
-          nextFormValues,
-          nextValues,
-          ITEM_PRICE_SYNC_FIELD_NAMES,
-        );
-        if (Object.keys(changedValues).length === 0) {
-          return;
-        }
-        return {
-          values: changedValues,
-        };
-      },
-      },
-      {
-      name: "item_hsn_code",
-      label: "HSN Code",
-      type: "select",
-      searchable: true,
-      options: hsnOptions,
-      },
-      {
-      name: "item_batch_config",
-      label: "Batch Config",
-      type: "select",
-      searchable: false,
-      options: BATCH_CONFIG_OPTIONS,
-      placeholder: "Select Batch Config",
-      },
-      {
-      name: "itemHeadingLinks",
-      label: "Reference Links",
-      type: "heading",
-      },
-      {
-      name: "item_group_id",
-      label: "Item Group",
-      type: "select",
-      searchable: true,
-      options: groupOptions,
-      onSearchQueryChange: onItemGroupSearchChange,
-      },
-      {
-      name: "item_section_id",
-      label: "Item Section",
-      type: "select",
-      searchable: true,
-      options: sectionOptions,
-      },
-      {
-      name: "item_base_unit_id",
-      label: "Base Unit",
-      type: "select",
-      searchable: true,
-      required: true,
-      options: unitOptions,
-      onValueChange: ({ value, values, previousValues }) => {
-        const currentPriceUnitId = (values.ipm_unit_id ?? "").trim();
-        const currentReorderUnitId = (values.ir_unit_id ?? "").trim();
-        const currentEanUnitId = (values.ean_unit_id ?? "").trim();
-        const previousBaseUnitId = (previousValues.item_base_unit_id ?? "").trim();
-        if (!value.trim()) {
-          return;
-        }
-        const nextValues = { ...values };
-        let hasChanges = false;
-        if (!currentPriceUnitId || currentPriceUnitId === previousBaseUnitId) {
-          nextValues.ipm_unit_id = value;
-          hasChanges = true;
-        }
-        if (!currentReorderUnitId || currentReorderUnitId === previousBaseUnitId) {
-          nextValues.ir_unit_id = value;
-          hasChanges = true;
-        }
-        if (!currentEanUnitId || currentEanUnitId === previousBaseUnitId) {
-          nextValues.ean_unit_id = value;
-          hasChanges = true;
-        }
-        const nextPriceRows = syncSerializedRowUnitIds(
-          values[ITEM_PRICE_ROWS_FIELD_NAME] ?? "",
-          "ipm_unit_id",
-          value,
-          previousBaseUnitId,
-        );
-        if (nextPriceRows !== null) {
-          nextValues[ITEM_PRICE_ROWS_FIELD_NAME] = nextPriceRows;
-          hasChanges = true;
-        }
-        const nextReorderRows = syncSerializedRowUnitIds(
-          values[ITEM_REORDER_ROWS_FIELD_NAME] ?? "",
-          "ir_unit_id",
-          value,
-          previousBaseUnitId,
-        );
-        if (nextReorderRows !== null) {
-          nextValues[ITEM_REORDER_ROWS_FIELD_NAME] = nextReorderRows;
-          hasChanges = true;
-        }
-        const nextEanRows = syncSerializedRowUnitIds(
-          values[ITEM_EAN_ROWS_FIELD_NAME] ?? "",
-          "ean_unit_id",
-          value,
-          previousBaseUnitId,
-        );
-        if (nextEanRows !== null) {
-          nextValues[ITEM_EAN_ROWS_FIELD_NAME] = nextEanRows;
-          hasChanges = true;
-        }
-        if (hasChanges) {
-          return {
-            values: nextValues,
-          };
-        }
-      },
-      validation: {
-        requiredMessage: "Base Unit is required.",
-      },
-      },
-      {
-      name: "item_brand_id",
-      label: "Item Brand",
-      type: "select",
-      searchable: true,
-      options: brandOptions,
-      },
-      {
-      name: "item_supplier_id",
-      label: "Default Supplier",
-      type: "select",
-      searchable: true,
-      options: supplierOptions,
-      },
-      {
-      name: "item_packing_item_ids",
-      label: "Packing Items",
-      type: "select",
-      searchable: true,
-      multiple: true,
-      options: itemOptions,
-      helperText: "Select one or more packing items (optional).",
-      },
-      {
-      name: "item_category_id",
-      label: "Item Category",
-      type: "select",
-      searchable: true,
-      options: categoryOptions,
-      },
-      {
-      name: "item_cust_group",
-      label: "Item Customer Group",
-      type: "select",
-      searchable: true,
-      options: customerGroupOptions,
-      },
-      {
-      name: "itemHeadingInventory",
-      label: "Inventory & Notes",
-      type: "heading",
-      },
-      {
-      name: "item_sort_order",
-      label: "Sort Order",
-      type: "number",
-      min: 0,
-      step: 1,
-      validation: {
-        minMessage: "Sort Order must be 0 or greater.",
-      },
-      },
-      {
-      name: "item_storage_location",
-      label: "Storage Location",
-      validation: {
-        maxLength: 250,
-        maxLengthMessage: "Storage Location must be at most 250 characters.",
-      },
-      },
-    {
-      name: "item_image_url",
-      label: "Image URL",
-      type: "url",
-    },
-    {
-      name: "item_photo_file",
-      label: "Photo File",
-      type: "file",
-      accept: "image/*",
-      helperText: "Optional. If selected, uploaded as base64.",
-    },
-    {
-      name: "item_notes",
-      label: "Notes",
-      rows: 3,
-      colSpan: 2,
-      validation: {
-        maxLength: 250,
-        maxLengthMessage: "Notes must be at most 250 characters.",
-      },
-    },
-    {
-      name: "itemHeadingReorder",
-      label: "Reorder Details",
-      type: "heading",
-      defaultExpanded: true,
-      sectionGridColumns: 4,
-    },
-    {
-      name: ITEM_REORDER_ROWS_FIELD_NAME,
-      label: "",
-      type: "custom",
-      fieldStyle: {
-        gridColumn: "1 / -1",
-      },
-      helperText: "Optional. Use rows when this item needs multiple reorder rules.",
-      validation: {
-        custom: validateItemReorderRows,
-      },
-      render: buildCustomFieldEditor(
-        reorderRowColumns,
-        (values) => buildEmptyItemReorderRow((values.item_base_unit_id ?? "").trim()),
-        "+",
-        "No reorder rows added.",
-        {
-          autoCreateFirstRowOnMount: true,
+        name: "item_name_en",
+        label: "Item Name",
+        required: true,
+        validation: {
+          minLength: 2,
+          maxLength: 200,
+          minLengthMessage: "Item Name must be at least 2 characters.",
+          maxLengthMessage: "Item Name must be at most 200 characters.",
         },
-      ),
-    },
-    {
-      name: "itemHeadingEan",
-      label: "EAN Details",
-      type: "heading",
-      defaultExpanded: true,
-      sectionGridColumns: 4,
-    },
-    {
-      name: ITEM_EAN_ROWS_FIELD_NAME,
-      label: "",
-      type: "custom",
-      fieldStyle: {
-        gridColumn: "1 / -1",
       },
-      helperText:
-        "Scan in the EAN Code column and press Enter from the scanner to open the next row automatically.",
-      validation: {
-        custom: validateItemEanRows,
+      {
+        name: "item_sku",
+        label: "SKU",
+        validation: {
+          maxLength: 60,
+          maxLengthMessage: "SKU must be at most 60 characters.",
+        },
       },
-      render: ({ disabled, setValue, value, values }) => {
-        const eanUnitOptions = buildItemEanUnitOptions(values, unitOptions);
-        const nextEanRowColumns = eanRowColumns.map((column) =>
-          column.key === "ean_unit_id"
-            ? {
+      {
+        name: "item_branch_id",
+        label: "Branch",
+        type: "select",
+        searchable: true,
+        options: branchOptions,
+      },
+      {
+        name: "item_name_ta",
+        label: "Item Name (Local)",
+        validation: {
+          maxLength: 200,
+          maxLengthMessage: "Item Name (Local) must be at most 200 characters.",
+        },
+      },
+      {
+        name: "item_code",
+        label: "Item Code",
+        validation: {
+          maxLength: 50,
+          maxLengthMessage: "Item Code must be at most 50 characters.",
+        },
+      },
+      {
+        name: "item_company_id",
+        label: "Company",
+        type: "select",
+        searchable: true,
+        required: true,
+        options: companyOptions,
+        validation: {
+          requiredMessage: "Company is required.",
+        },
+      },
+      {
+        name: "item_alias",
+        label: "Alias",
+        validation: {
+          maxLength: 200,
+          maxLengthMessage: "Alias must be at most 200 characters.",
+        },
+      },
+      {
+        name: "item_default_barcode",
+        label: "Default Barcode",
+        validation: {
+          maxLength: 200,
+          maxLengthMessage: "Default Barcode must be at most 200 characters.",
+        },
+      },
+      buildUuidTextField("item_company_category_id", "Company Category Id"),
+      {
+        name: "item_default_tax_id",
+        label: "Default Tax",
+        type: "select",
+        searchable: true,
+        options: taxOptions,
+        onValueChange: ({ value, values }) => {
+          const nextFormValues: Record<string, string> = {
+            ...values,
+            item_default_tax_id: value,
+          };
+          const normalizedRows = syncSerializedItemPriceRows(
+            nextFormValues[ITEM_PRICE_ROWS_FIELD_NAME] ?? "",
+            nextFormValues,
+            itemTaxRecordsById,
+            true,
+          );
+          const nextValues = syncPrimaryItemPriceValuesFromRows(
+            nextFormValues,
+            normalizedRows,
+          );
+          const changedValues = collectChangedFieldValues(
+            nextFormValues,
+            nextValues,
+            ITEM_PRICE_SYNC_FIELD_NAMES,
+          );
+          if (Object.keys(changedValues).length === 0) {
+            return;
+          }
+          return {
+            values: changedValues,
+          };
+        },
+      },
+      {
+        name: "item_hsn_code",
+        label: "HSN Code",
+        type: "select",
+        searchable: true,
+        options: hsnOptions,
+      },
+      {
+        name: "item_batch_config",
+        label: "Batch Config",
+        type: "select",
+        searchable: false,
+        options: BATCH_CONFIG_OPTIONS,
+        placeholder: "Select Batch Config",
+      },
+      {
+        name: "itemHeadingLinks",
+        label: "Reference Links",
+        type: "heading",
+      },
+      {
+        name: "item_group_id",
+        label: "Item Group",
+        type: "select",
+        searchable: true,
+        options: groupOptions,
+        onSearchQueryChange: onItemGroupSearchChange,
+      },
+      {
+        name: "item_section_id",
+        label: "Item Section",
+        type: "select",
+        searchable: true,
+        options: sectionOptions,
+      },
+      {
+        name: "item_base_unit_id",
+        label: "Base Unit",
+        type: "select",
+        searchable: true,
+        required: true,
+        options: unitOptions,
+        onValueChange: ({ value, values, previousValues }) => {
+          const currentPriceUnitId = (values.ipm_unit_id ?? "").trim();
+          const currentReorderUnitId = (values.ir_unit_id ?? "").trim();
+          const currentEanUnitId = (values.ean_unit_id ?? "").trim();
+          const previousBaseUnitId = (previousValues.item_base_unit_id ?? "").trim();
+          if (!value.trim()) {
+            return;
+          }
+          const nextValues = { ...values };
+          let hasChanges = false;
+          if (!currentPriceUnitId || currentPriceUnitId === previousBaseUnitId) {
+            nextValues.ipm_unit_id = value;
+            hasChanges = true;
+          }
+          if (!currentReorderUnitId || currentReorderUnitId === previousBaseUnitId) {
+            nextValues.ir_unit_id = value;
+            hasChanges = true;
+          }
+          if (!currentEanUnitId || currentEanUnitId === previousBaseUnitId) {
+            nextValues.ean_unit_id = value;
+            hasChanges = true;
+          }
+          const nextPriceRows = syncSerializedRowUnitIds(
+            values[ITEM_PRICE_ROWS_FIELD_NAME] ?? "",
+            "ipm_unit_id",
+            value,
+            previousBaseUnitId,
+          );
+          if (nextPriceRows !== null) {
+            nextValues[ITEM_PRICE_ROWS_FIELD_NAME] = nextPriceRows;
+            hasChanges = true;
+          }
+          const nextReorderRows = syncSerializedRowUnitIds(
+            values[ITEM_REORDER_ROWS_FIELD_NAME] ?? "",
+            "ir_unit_id",
+            value,
+            previousBaseUnitId,
+          );
+          if (nextReorderRows !== null) {
+            nextValues[ITEM_REORDER_ROWS_FIELD_NAME] = nextReorderRows;
+            hasChanges = true;
+          }
+          const nextEanRows = syncSerializedRowUnitIds(
+            values[ITEM_EAN_ROWS_FIELD_NAME] ?? "",
+            "ean_unit_id",
+            value,
+            previousBaseUnitId,
+          );
+          if (nextEanRows !== null) {
+            nextValues[ITEM_EAN_ROWS_FIELD_NAME] = nextEanRows;
+            hasChanges = true;
+          }
+          if (hasChanges) {
+            return {
+              values: nextValues,
+            };
+          }
+        },
+        validation: {
+          requiredMessage: "Base Unit is required.",
+        },
+      },
+      {
+        name: "item_brand_id",
+        label: "Item Brand",
+        type: "select",
+        searchable: true,
+        options: brandOptions,
+      },
+      {
+        name: "item_supplier_id",
+        label: "Default Supplier",
+        type: "select",
+        searchable: true,
+        options: supplierOptions,
+      },
+      {
+        name: "item_packing_item_ids",
+        label: "Packing Items",
+        type: "select",
+        searchable: true,
+        multiple: true,
+        options: itemOptions,
+        helperText: "Select one or more packing items (optional).",
+      },
+      {
+        name: "item_category_id",
+        label: "Item Category",
+        type: "select",
+        searchable: true,
+        options: categoryOptions,
+      },
+      {
+        name: "item_cust_group",
+        label: "Item Customer Group",
+        type: "select",
+        searchable: true,
+        options: customerGroupOptions,
+      },
+      {
+        name: "itemHeadingPriceTable",
+        label: "Price List Table",
+        type: "heading",
+        defaultExpanded: true,
+        sectionGridColumns: 5,
+      },
+      {
+        name: ITEM_PRICE_ROWS_FIELD_NAME,
+        label: "",
+        type: "custom",
+        fieldStyle: {
+          gridColumn: "1 / -1",
+        },
+        helperText:
+          "Add and edit price rows here. Keep Price List checked in Rules & Status to save these rows.",
+        onValueChange: ({ value, values, previousValues }) =>
+          buildItemPriceRowsValueChangeResult(
+            values,
+            previousValues,
+            value,
+            itemTaxRecordsById,
+          ),
+        validation: {
+          custom: validateItemPriceRows,
+        },
+        render: buildCustomFieldEditor(
+          priceRowColumns,
+          (values) => buildEmptyItemPriceRow((values.item_base_unit_id ?? "").trim()),
+          "+",
+          "No price rows added.",
+          {
+            autoCreateFirstRowOnMount: true,
+            autoFocusInitialRowOnMount: false,
+          },
+        ),
+      },
+      {
+        name: "itemHeadingReorderTable",
+        label: "Reorder Table",
+        type: "heading",
+        defaultExpanded: true,
+        sectionGridColumns: 4,
+      },
+      {
+        name: ITEM_REORDER_ROWS_FIELD_NAME,
+        label: "",
+        type: "custom",
+        fieldStyle: {
+          gridColumn: "1 / -1",
+        },
+        helperText: "Optional. Use rows when this item needs multiple reorder rules.",
+        validation: {
+          custom: validateItemReorderRows,
+        },
+        onValueChange: ({ value, values, previousValues }) =>
+          buildItemReorderRowsValueChangeResult(values, previousValues, value),
+        render: buildCustomFieldEditor(
+          reorderRowColumns,
+          (values) => buildEmptyItemReorderRow((values.item_base_unit_id ?? "").trim()),
+          "+",
+          "No reorder rows added.",
+          {
+            autoCreateFirstRowOnMount: true,
+            autoFocusInitialRowOnMount: false,
+          },
+        ),
+      },
+      {
+        name: "itemHeadingEanTable",
+        label: "EAN Table",
+        type: "heading",
+        defaultExpanded: true,
+        sectionGridColumns: 4,
+      },
+      {
+        name: ITEM_EAN_ROWS_FIELD_NAME,
+        label: "",
+        type: "custom",
+        fieldStyle: {
+          gridColumn: "1 / -1",
+        },
+        helperText:
+          "Scan in the EAN Code column and press Enter from the scanner to open the next row automatically.",
+        validation: {
+          custom: validateItemEanRows,
+        },
+        onValueChange: ({ value, values, previousValues }) =>
+          buildItemEanRowsValueChangeResult(values, previousValues, value),
+        render: ({ disabled, setValue, value, values }) => {
+          const eanUnitOptions = buildItemEanUnitOptions(values, unitOptions);
+          const nextEanRowColumns = eanRowColumns.map((column) =>
+            column.key === "ean_unit_id"
+              ? {
                 ...column,
                 options: eanUnitOptions,
               }
-            : column,
-        );
-        return (
-          <ItemLinkedRecordsEditor
-            addLabel="+"
-            actionsLabel="Remove"
-            autoCreateFirstRowOnMount
-            autoAppendOnEnter={{
-              columnKey: "ean_code",
-              focusColumnKey: "ean_code",
-            }}
-            columns={nextEanRowColumns}
-            createRow={(sourceRow) =>
-              buildEmptyItemEanRow(
-                (values.item_base_unit_id ?? "").trim(),
-                resolvePreferredItemEanUnitId(values),
-                sourceRow,
-              )
-            }
-            disabled={disabled}
-            emptyState="No EAN rows added."
-            onChange={setValue}
-            showRowIndex={false}
-            value={value}
-          />
-        );
-      },
-    },
-    {
-      name: "itemHeadingPriceList",
-      label: "Price List Details",
-      type: "heading",
-      defaultExpanded: true,
-      sectionGridColumns: 5,
-    },
-    {
-      name: ITEM_PRICE_ROWS_FIELD_NAME,
-      label: "",
-      type: "custom",
-      fieldStyle: {
-        gridColumn: "1 / -1",
-      },
-      helperText:
-        "Add and edit price rows here. Keep Price List checked in Rules & Status to save these rows.",
-      onValueChange: ({ value, values, previousValues }) =>
-        buildItemPriceRowsValueChangeResult(
-          values,
-          previousValues,
-          value,
-          itemTaxRecordsById,
-        ),
-      validation: {
-        custom: validateItemPriceRows,
-      },
-      render: buildCustomFieldEditor(
-        priceRowColumns,
-        (values) => buildEmptyItemPriceRow((values.item_base_unit_id ?? "").trim()),
-        "+",
-        "No price rows added.",
-        {
-          autoCreateFirstRowOnMount: true,
+              : column,
+          );
+          return (
+            <ItemLinkedRecordsEditor
+              addLabel="+"
+              actionsLabel="Remove"
+              autoCreateFirstRowOnMount
+              autoFocusInitialRowOnMount={false}
+              autoAppendOnEnter={{
+                columnKey: "ean_code",
+                focusColumnKey: "ean_code",
+              }}
+              columns={nextEanRowColumns}
+              createRow={(sourceRow) =>
+                buildEmptyItemEanRow(
+                  (values.item_base_unit_id ?? "").trim(),
+                  resolvePreferredItemEanUnitId(values),
+                  sourceRow,
+                )
+              }
+              disabled={disabled}
+              emptyState="No EAN rows added."
+              onChange={setValue}
+              showRowIndex={false}
+              value={value}
+            />
+          );
         },
-      ),
-    },
-    {
-      name: "itemHeadingRules",
-      label: "Rules & Status",
-      type: "heading",
-      defaultExpanded: false,
-      sectionGridColumns: 6,
-    },
-    {
-      name: "item_is_active",
-      label: "Is Active",
-      type: "checkbox",
-      controlStyle: {
-        accentColor: "#dc2626",
       },
-      gridRowStart: 1,
-      gridColumnStart: 1,
-    },
-    {
-      name: "item_retail_item",
-      label: "Retail Item",
-      type: "checkbox",
-      gridRowStart: 2,
-      gridColumnStart: 1,
-    },
-    {
-      name: "item_price_list",
-      label: "Price List",
-      type: "checkbox",
-      onValueChange: ({ value, values }) => {
-        if (value !== "true") {
-          return;
-        }
-        return {
-          values: applyItemPriceDefaults(values),
-        };
+      {
+        name: "itemHeadingInventory",
+        label: "Inventory & Notes",
+        type: "heading",
       },
-      gridRowStart: 3,
-      gridColumnStart: 1,
-    },
-    {
-      name: "item_allow_neg_stock",
-      label: "Allow Negative Stock",
-      type: "checkbox",
-      gridRowStart: 1,
-      gridColumnStart: 5,
-    },
-    {
-      name: "item_allow_promo",
-      label: "Allow Promo",
-      type: "checkbox",
-      gridRowStart: 1,
-      gridColumnStart: 6,
-    },
-    {
-      name: "item_allow_purchase",
-      label: "Allow Purchase",
-      type: "checkbox",
-      gridRowStart: 3,
-      gridColumnStart: 2,
-    },
-    {
-      name: "item_is_service",
-      label: "Service Item",
-      type: "checkbox",
-      gridRowStart: 5,
-      gridColumnStart: 1,
-    },
-    {
-      name: "item_allow_freight",
-      label: "Allow Freight",
-      type: "checkbox",
-      gridRowStart: 2,
-      gridColumnStart: 3,
-    },
-    {
-      name: "item_allow_negative_so",
-      label: "Allow Negative SO",
-      type: "checkbox",
-      gridRowStart: 2,
-      gridColumnStart: 5,
-    },
-    {
-      name: "item_allow_loyalty",
-      label: "Allow Loyalty",
-      type: "checkbox",
-      gridRowStart: 2,
-      gridColumnStart: 6,
-    },
-    {
-      name: "item_allow_sales",
-      label: "Allow Sales",
-      type: "checkbox",
-      gridRowStart: 1,
-      gridColumnStart: 2,
-    },
-    {
-      name: "item_allow_loading",
-      label: "Allow Loading",
-      type: "checkbox",
-      gridRowStart: 1,
-      gridColumnStart: 3,
-    },
-    {
-      name: "item_damagable_product",
-      label: "Damagable Product",
-      type: "checkbox",
-      gridRowStart: 1,
-      gridColumnStart: 4,
-    },
-    {
-      name: "item_has_offer",
-      label: "Has Offer",
-      type: "checkbox",
-      controlStyle: {
-        accentColor: "#16a34a",
+      {
+        name: "item_sort_order",
+        label: "Sort Order",
+        type: "number",
+        min: 0,
+        step: 1,
+        validation: {
+          minMessage: "Sort Order must be 0 or greater.",
+        },
       },
-      gridRowStart: 3,
-      gridColumnStart: 5,
-    },
-    {
-      name: "item_allow_sales_return",
-      label: "Allow Sales Return",
-      type: "checkbox",
-      gridRowStart: 2,
-      gridColumnStart: 2,
-    },
-    {
-      name: "item_weigh_scale",
-      label: "Weigh Scale",
-      type: "checkbox",
-      controlStyle: {
-        accentColor: "#ea580c",
+      {
+        name: "item_storage_location",
+        label: "Storage Location",
+        validation: {
+          maxLength: 250,
+          maxLengthMessage: "Storage Location must be at most 250 characters.",
+        },
       },
-      gridRowStart: 5,
-      gridColumnStart: 3,
-    },
-    {
-      name: "item_auto_break",
-      label: "Auto Break",
-      type: "checkbox",
-      controlStyle: {
-        accentColor: "#2563eb",
+      {
+        name: "item_image_url",
+        label: "Image URL",
+        type: "url",
       },
-      gridRowStart: 3,
-      gridColumnStart: 3,
-    },
-    {
-      name: "item_auto_make",
-      label: "Auto Make",
-      type: "checkbox",
-      controlStyle: {
-        accentColor: "#2563eb",
+      {
+        name: "item_photo_file",
+        label: "Photo File",
+        type: "file",
+        accept: "image/*",
+        helperText: "Optional. If selected, uploaded as base64.",
       },
-      gridRowStart: 4,
-      gridColumnStart: 3,
-    },
-    {
-      name: "item_is_batch_based",
-      label: "Batch Based",
-      type: "checkbox",
-      gridRowStart: 4,
-      gridColumnStart: 1,
-    },
-    {
-      name: "item_expiry_days",
-      label: "Expiry Days",
-      type: "number",
-      visibleWhen: (values) => values.item_is_expiry_item === "true",
-      gridRowStart: 5,
-      gridColumnStart: 4,
-    },
-    {
-      name: "item_is_expiry_item",
-      label: "Expiry Item",
-      type: "checkbox",
-      gridRowStart: 4,
-      gridColumnStart: 4,
-    },
-    {
-      name: "item_intimate_before_days",
-      label: "Intimate Before Days",
-      type: "number",
-      visibleWhen: (values) => values.item_is_expiry_item === "true",
-      gridRowStart: 6,
-      gridColumnStart: 4,
-    },
-    {
-      name: "item_allow_po",
-      label: "Allow PO",
-      type: "checkbox",
-      gridRowStart: 4,
-      gridColumnStart: 2,
-    },
-    {
-      name: "item_allow_so",
-      label: "Allow SO",
-      type: "checkbox",
-      gridRowStart: 5,
-      gridColumnStart: 2,
-    },
-    {
-      name: "item_is_kit",
-      label: "Is Kit",
-      type: "checkbox",
-      gridRowStart: 2,
-      gridColumnStart: 4,
-    },
-    {
-      name: "item_is_demand",
-      label: "Is Demand",
-      type: "checkbox",
-      gridRowStart: 3,
-      gridColumnStart: 4,
-    },
-    {
-      name: "item_random_stock",
-      label: "Random Stock",
-      type: "checkbox",
-      gridRowStart: 4,
-      gridColumnStart: 5,
-    },
-    {
-      name: "item_barcode_sticker",
-      label: "Barcode Sticker",
-      type: "checkbox",
-      gridRowStart: 3,
-      gridColumnStart: 6,
-    },
+      {
+        name: "item_notes",
+        label: "Notes",
+        rows: 3,
+        colSpan: 2,
+        validation: {
+          maxLength: 250,
+          maxLengthMessage: "Notes must be at most 250 characters.",
+        },
+      },
+      {
+        name: "itemHeadingRules",
+        label: "Rules & Status",
+        type: "heading",
+        defaultExpanded: false,
+        sectionGridColumns: 6,
+      },
+      {
+        name: "item_is_active",
+        label: "Is Active",
+        type: "checkbox",
+        controlStyle: {
+          accentColor: "#dc2626",
+        },
+        gridRowStart: 1,
+        gridColumnStart: 1,
+      },
+      {
+        name: "item_retail_item",
+        label: "Retail Item",
+        type: "checkbox",
+        gridRowStart: 2,
+        gridColumnStart: 1,
+      },
+      {
+        name: "item_price_list",
+        label: "Price List",
+        type: "checkbox",
+        onValueChange: ({ value, values }) => {
+          if (value !== "true") {
+            return;
+          }
+          return {
+            values: applyItemPriceDefaults(values),
+          };
+        },
+        gridRowStart: 3,
+        gridColumnStart: 1,
+      },
+      {
+        name: "item_allow_neg_stock",
+        label: "Allow Negative Stock",
+        type: "checkbox",
+        gridRowStart: 1,
+        gridColumnStart: 5,
+      },
+      {
+        name: "item_allow_promo",
+        label: "Allow Promo",
+        type: "checkbox",
+        gridRowStart: 1,
+        gridColumnStart: 6,
+      },
+      {
+        name: "item_allow_purchase",
+        label: "Allow Purchase",
+        type: "checkbox",
+        gridRowStart: 3,
+        gridColumnStart: 2,
+      },
+      {
+        name: "item_is_service",
+        label: "Service Item",
+        type: "checkbox",
+        gridRowStart: 5,
+        gridColumnStart: 1,
+      },
+      {
+        name: "item_allow_freight",
+        label: "Allow Freight",
+        type: "checkbox",
+        gridRowStart: 2,
+        gridColumnStart: 3,
+      },
+      {
+        name: "item_allow_negative_so",
+        label: "Allow Negative SO",
+        type: "checkbox",
+        gridRowStart: 2,
+        gridColumnStart: 5,
+      },
+      {
+        name: "item_allow_loyalty",
+        label: "Allow Loyalty",
+        type: "checkbox",
+        gridRowStart: 2,
+        gridColumnStart: 6,
+      },
+      {
+        name: "item_allow_sales",
+        label: "Allow Sales",
+        type: "checkbox",
+        gridRowStart: 1,
+        gridColumnStart: 2,
+      },
+      {
+        name: "item_allow_loading",
+        label: "Allow Loading",
+        type: "checkbox",
+        gridRowStart: 1,
+        gridColumnStart: 3,
+      },
+      {
+        name: "item_damagable_product",
+        label: "Damagable Product",
+        type: "checkbox",
+        gridRowStart: 1,
+        gridColumnStart: 4,
+      },
+      {
+        name: "item_has_offer",
+        label: "Has Offer",
+        type: "checkbox",
+        controlStyle: {
+          accentColor: "#16a34a",
+        },
+        gridRowStart: 3,
+        gridColumnStart: 5,
+      },
+      {
+        name: "item_allow_sales_return",
+        label: "Allow Sales Return",
+        type: "checkbox",
+        gridRowStart: 2,
+        gridColumnStart: 2,
+      },
+      {
+        name: "item_weigh_scale",
+        label: "Weigh Scale",
+        type: "checkbox",
+        controlStyle: {
+          accentColor: "#ea580c",
+        },
+        gridRowStart: 5,
+        gridColumnStart: 3,
+      },
+      {
+        name: "item_auto_break",
+        label: "Auto Break",
+        type: "checkbox",
+        controlStyle: {
+          accentColor: "#2563eb",
+        },
+        gridRowStart: 3,
+        gridColumnStart: 3,
+      },
+      {
+        name: "item_auto_make",
+        label: "Auto Make",
+        type: "checkbox",
+        controlStyle: {
+          accentColor: "#2563eb",
+        },
+        gridRowStart: 4,
+        gridColumnStart: 3,
+      },
+      {
+        name: "item_is_batch_based",
+        label: "Batch Based",
+        type: "checkbox",
+        gridRowStart: 4,
+        gridColumnStart: 1,
+      },
+      {
+        name: "item_expiry_days",
+        label: "Expiry Days",
+        type: "number",
+        visibleWhen: (values) => values.item_is_expiry_item === "true",
+        gridRowStart: 5,
+        gridColumnStart: 4,
+      },
+      {
+        name: "item_is_expiry_item",
+        label: "Expiry Item",
+        type: "checkbox",
+        gridRowStart: 4,
+        gridColumnStart: 4,
+      },
+      {
+        name: "item_intimate_before_days",
+        label: "Intimate Before Days",
+        type: "number",
+        visibleWhen: (values) => values.item_is_expiry_item === "true",
+        gridRowStart: 6,
+        gridColumnStart: 4,
+      },
+      {
+        name: "item_allow_po",
+        label: "Allow PO",
+        type: "checkbox",
+        gridRowStart: 4,
+        gridColumnStart: 2,
+      },
+      {
+        name: "item_allow_so",
+        label: "Allow SO",
+        type: "checkbox",
+        gridRowStart: 5,
+        gridColumnStart: 2,
+      },
+      {
+        name: "item_is_kit",
+        label: "Is Kit",
+        type: "checkbox",
+        gridRowStart: 2,
+        gridColumnStart: 4,
+      },
+      {
+        name: "item_is_demand",
+        label: "Is Demand",
+        type: "checkbox",
+        gridRowStart: 3,
+        gridColumnStart: 4,
+      },
+      {
+        name: "item_random_stock",
+        label: "Random Stock",
+        type: "checkbox",
+        gridRowStart: 4,
+        gridColumnStart: 5,
+      },
+      {
+        name: "item_barcode_sticker",
+        label: "Barcode Sticker",
+        type: "checkbox",
+        gridRowStart: 3,
+        gridColumnStart: 6,
+      },
     ]),
   );
 }
@@ -2677,8 +2784,8 @@ function isUiTableColumnConfigRecord(
   }
   return Boolean(
     toDisplayValue(getFieldValue(value, "uiTblClmName")) ||
-      toDisplayValue(getFieldValue(value, "uiTblClmId")) ||
-      toDisplayValue(getFieldValue(value, "uiTblClmTableId")),
+    toDisplayValue(getFieldValue(value, "uiTblClmId")) ||
+    toDisplayValue(getFieldValue(value, "uiTblClmTableId")),
   );
 }
 function toConfiguredColumnWidth(value: unknown): string | undefined {
@@ -2714,11 +2821,11 @@ function extractUiTableColumnConfigRecords(
     extractedRows.length > 0
       ? extractedRows
       : (() => {
-          const responseSource = extractResponseRecord(payload);
-          return responseSource && isUiTableColumnConfigRecord(responseSource)
-            ? [responseSource]
-            : [];
-        })();
+        const responseSource = extractResponseRecord(payload);
+        return responseSource && isUiTableColumnConfigRecord(responseSource)
+          ? [responseSource]
+          : [];
+      })();
   return rows.filter((row) => {
     if (!normalizedTableId) {
       return true;
@@ -2861,7 +2968,6 @@ function mapItemFormValues(
   const mappedValues: Record<string, string> = {
     ...ITEM_INITIAL_FORM_VALUES,
   };
-
   assignTextFieldsFromSource(
     mappedValues,
     rowSource,
@@ -2886,10 +2992,9 @@ function mapItemFormValues(
     ITEM_PRICE_BOOLEAN_FIELD_NAMES,
     ITEM_PRICE_INITIAL_FORM_VALUES,
   );
-
   mappedValues[ITEM_PRICE_ROWS_FIELD_NAME] = syncSerializedItemPriceRows(
     toDisplayValue(getFieldValue(rowSource, ITEM_PRICE_ROWS_FIELD_NAME)) ||
-      ITEM_INITIAL_FORM_VALUES[ITEM_PRICE_ROWS_FIELD_NAME],
+    ITEM_INITIAL_FORM_VALUES[ITEM_PRICE_ROWS_FIELD_NAME],
     mappedValues,
     itemTaxRecordsById,
   );
@@ -2899,7 +3004,6 @@ function mapItemFormValues(
   mappedValues[ITEM_EAN_ROWS_FIELD_NAME] =
     toDisplayValue(getFieldValue(rowSource, ITEM_EAN_ROWS_FIELD_NAME)) ||
     ITEM_INITIAL_FORM_VALUES[ITEM_EAN_ROWS_FIELD_NAME];
-
   mappedValues.item_name_en =
     toDisplayValue(getFieldValue(rowSource, "item_name_en")) ||
     toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.name)) ||
@@ -2916,8 +3020,8 @@ function mapItemFormValues(
     ITEM_INITIAL_FORM_VALUES.item_alias;
   mappedValues.item_stock_type = toUpper(
     toDisplayValue(getFieldValue(rowSource, "item_stock_type")) ||
-      toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.alias)) ||
-      ITEM_INITIAL_FORM_VALUES.item_stock_type,
+    toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.alias)) ||
+    ITEM_INITIAL_FORM_VALUES.item_stock_type,
   );
   mappedValues.item_hsn_code = toUpper(
     toDisplayValue(getFieldValue(rowSource, "item_hsn_code")),
@@ -2947,21 +3051,17 @@ function mapItemFormValues(
     toDisplayValue(getFieldValue(rowSource, "ipm_unit_id")) ||
     mappedValues.item_base_unit_id ||
     ITEM_PRICE_INITIAL_FORM_VALUES.ipm_unit_id;
-
   if (
     mappedValues.item_price_list !== "true" &&
     hasLinkedRows(mappedValues[ITEM_PRICE_ROWS_FIELD_NAME])
   ) {
     mappedValues.item_price_list = "true";
   }
-
   if (shouldShowItemPriceSection(mappedValues)) {
     Object.assign(mappedValues, applyItemPriceDefaults(mappedValues));
   }
-
   return mappedValues;
 }
-
 async function buildItemRequestPayload({
   editingItemId,
   files,
@@ -3031,23 +3131,24 @@ async function buildItemRequestPayload({
     item_created_by: toNullableString(values.item_created_by ?? ""),
     item_modified_by: toNullableString(values.item_modified_by ?? ""),
   };
-
   const selectedPhoto = files.item_photo_file;
   if (selectedPhoto) {
     payload.item_photo = await fileToBase64(selectedPhoto);
   }
-
   if (shouldUpdate && editingItemId !== null) {
     payload.item_id = toUpdateId(editingItemId);
   }
-
   return payload;
 }
 export default function ItemMasterPageContent() {
-  const { getAll: getLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  const { getAll: getSupplierLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  const { getAll: getCustomerGroupLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  const { getAll: getItemLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getTaxLookup } = useApi<unknown>(TAX_LOOKUP_ENDPOINT);
   const { getAll: listItemTaxes } = useApi<unknown>(ITEM_TAX_MASTER_LIST_ENDPOINT);
-  const { getAll: getUiTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
+  const { getAll: getItemPriceTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
+  const { getAll: getItemReorderTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
+  const { getAll: getItemEanTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
   const { getAll: getCompanyLookup } = useApi<unknown>(COMPANY_LOOKUP_ENDPOINT);
   const { getAll: getBranchLookup } = useApi<unknown>(BRANCH_LOOKUP_ENDPOINT);
   const { getAll: getGroupLookup } = useApi<unknown>(ITEM_GROUP_LOOKUP_ENDPOINT);
@@ -3151,9 +3252,9 @@ export default function ItemMasterPageContent() {
       const payload = await searchGroupLookup(
         normalizedSearch
           ? {
-              ...ITEM_GROUP_LOOKUP_QUERY,
-              search: normalizedSearch,
-            }
+            ...ITEM_GROUP_LOOKUP_QUERY,
+            search: normalizedSearch,
+          }
           : ITEM_GROUP_LOOKUP_QUERY,
       );
       return toLookupOptions(payload, DEFAULT_GROUP_OPTION, GROUP_LOOKUP_KEYS);
@@ -3227,12 +3328,12 @@ export default function ItemMasterPageContent() {
         getTaxLookup(LOOKUP_QUERY_ITEM_TAXES),
         listItemTaxes(ITEM_TAX_LIST_QUERY),
         getHsnLookup(HSN_LOOKUP_QUERY),
-        getLookup(LOOKUP_QUERY_SUPPLIERS),
-        getLookup(LOOKUP_QUERY_CUSTOMER_GROUPS),
-        getLookup(LOOKUP_QUERY_ITEMS),
-        getUiTableColumns(UI_TABLE_COLUMNS_QUERY),
-        getUiTableColumns(UI_REORDER_TABLE_COLUMNS_QUERY),
-        getUiTableColumns(UI_EAN_TABLE_COLUMNS_QUERY),
+        getSupplierLookup(LOOKUP_QUERY_SUPPLIERS),
+        getCustomerGroupLookup(LOOKUP_QUERY_CUSTOMER_GROUPS),
+        getItemLookup(LOOKUP_QUERY_ITEMS),
+        getItemPriceTableColumns(UI_TABLE_COLUMNS_QUERY),
+        getItemReorderTableColumns(UI_REORDER_TABLE_COLUMNS_QUERY),
+        getItemEanTableColumns(UI_EAN_TABLE_COLUMNS_QUERY),
       ]);
       if (!mounted) {
         return;
@@ -3240,19 +3341,19 @@ export default function ItemMasterPageContent() {
       setCompanyOptions(
         companiesPayload.status === "fulfilled"
           ? toLookupOptions(
-              companiesPayload.value,
-              DEFAULT_COMPANY_OPTION,
-              COMPANY_LOOKUP_KEYS,
-            )
+            companiesPayload.value,
+            DEFAULT_COMPANY_OPTION,
+            COMPANY_LOOKUP_KEYS,
+          )
           : [],
       );
       setBranchOptions(
         branchesPayload.status === "fulfilled"
           ? toLookupOptions(
-              branchesPayload.value,
-              DEFAULT_BRANCH_OPTION,
-              BRANCH_LOOKUP_KEYS,
-            )
+            branchesPayload.value,
+            DEFAULT_BRANCH_OPTION,
+            BRANCH_LOOKUP_KEYS,
+          )
           : [],
       );
       setGroupOptions((current) => {
@@ -3271,10 +3372,10 @@ export default function ItemMasterPageContent() {
       setCategoryOptions(
         categoriesPayload.status === "fulfilled"
           ? toLookupOptions(
-              categoriesPayload.value,
-              DEFAULT_CATEGORY_OPTION,
-              CATEGORY_LOOKUP_KEYS,
-            )
+            categoriesPayload.value,
+            DEFAULT_CATEGORY_OPTION,
+            CATEGORY_LOOKUP_KEYS,
+          )
           : [],
       );
       setBrandOptions(
@@ -3285,10 +3386,10 @@ export default function ItemMasterPageContent() {
       setSectionOptions(
         sectionsPayload.status === "fulfilled"
           ? toLookupOptions(
-              sectionsPayload.value,
-              DEFAULT_SECTION_OPTION,
-              SECTION_LOOKUP_KEYS,
-            )
+            sectionsPayload.value,
+            DEFAULT_SECTION_OPTION,
+            SECTION_LOOKUP_KEYS,
+          )
           : [],
       );
       setUnitOptions(
@@ -3330,25 +3431,25 @@ export default function ItemMasterPageContent() {
       setItemPriceTableColumnsConfig(
         uiTableColumnsPayload.status === "fulfilled"
           ? extractUiTableColumnConfigRecords(
-              uiTableColumnsPayload.value,
-              ITEM_PRICE_TABLE_UI_ID,
-            )
+            uiTableColumnsPayload.value,
+            ITEM_PRICE_TABLE_UI_ID,
+          )
           : [],
       );
       setItemReorderTableColumnsConfig(
         uiReorderTableColumnsPayload.status === "fulfilled"
           ? extractUiTableColumnConfigRecords(
-              uiReorderTableColumnsPayload.value,
-              ITEM_REORDER_TABLE_UI_ID,
-            )
+            uiReorderTableColumnsPayload.value,
+            ITEM_REORDER_TABLE_UI_ID,
+          )
           : [],
       );
       setItemEanTableColumnsConfig(
         uiEanTableColumnsPayload.status === "fulfilled"
           ? extractUiTableColumnConfigRecords(
-              uiEanTableColumnsPayload.value,
-              ITEM_EAN_TABLE_UI_ID,
-            )
+            uiEanTableColumnsPayload.value,
+            ITEM_EAN_TABLE_UI_ID,
+          )
           : [],
       );
     })();
@@ -3360,15 +3461,19 @@ export default function ItemMasterPageContent() {
     getBranchLookup,
     getCategoryLookup,
     getCompanyLookup,
+    getCustomerGroupLookup,
     getGodownLookup,
-    getTaxLookup,
     getGroupLookup,
     getHsnLookup,
-    getLookup,
-    listItemTaxes,
+    getItemEanTableColumns,
+    getItemLookup,
+    getItemPriceTableColumns,
+    getItemReorderTableColumns,
     getSectionLookup,
-    getUiTableColumns,
+    getSupplierLookup,
+    getTaxLookup,
     getUnitLookup,
+    listItemTaxes,
   ]);
   const listItemPriceRecords = useCallback(
     async (itemId: string) => {

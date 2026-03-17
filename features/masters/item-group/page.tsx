@@ -1480,51 +1480,47 @@ export default function ItemGroupMasterPage() {
                 </button>
               </div>
             ) : null}
-            <section className={styles.tableSection}>
-              <ReusableTable
-                columns={columns}
-                rows={rows}
-                rowKey="__rowId"
-                title={`${effectiveTitle} List`}
-                minWidth="980px"
-                wrapperClassName={styles.tableWrapper}
-                tableClassName={styles.listTable}
-                activeRowKey={selectedRowId}
-                onRowClick={(row) => setSelectedRowId(row.__rowId)}
-                onCreate={openCreateModal}
-                createLabel={`Add ${effectiveTitle}`}
-                onView={handleRowView}
-                onUpdate={handleRowUpdate}
-                onDelete={handleRowDelete}
-                isViewDisabled={() => createLoading || detailsLoading}
-                isUpdateDisabled={() => createLoading || detailsLoading}
-                isDeleteDisabled={() =>
-                  deleteLoading || createLoading || detailsLoading
-                }
-                actionsAsIcons
-                updateLabel="Update"
-                deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
-                searchable
-                searchQuery={searchTerm}
-                onSearchQueryChange={setSearchTerm}
-                searchPlaceholder="Search..."
-                sortable
-                paginated
-                manualPagination
-                totalEntries={totalEntries}
-                currentPage={currentPage}
-                onCurrentPageChange={setCurrentPage}
-                pageSize={pageSize}
-                onPageSizeChange={setPageSize}
-                pageSizeOptions={[10, 20, 25, 50]}
-                tableMaxHeight={TABLE_MAX_HEIGHT}
-                fullViewHeight={false}
-                stickyHeader
-                emptyText={
-                  loading ? "Loading group data..." : "No group data found"
-                }
-              />
-            </section>
+            <ReusableTable
+              columns={columns}
+              rows={rows}
+              rowKey="__rowId"
+              title={`${effectiveTitle} List`}
+              minWidth="980px"
+              activeRowKey={selectedRowId}
+              onRowClick={(row) => setSelectedRowId(row.__rowId)}
+              onCreate={openCreateModal}
+              createLabel={`Add ${effectiveTitle}`}
+              onView={handleRowView}
+              onUpdate={handleRowUpdate}
+              onDelete={handleRowDelete}
+              isViewDisabled={() => createLoading || detailsLoading}
+              isUpdateDisabled={() => createLoading || detailsLoading}
+              isDeleteDisabled={() =>
+                deleteLoading || createLoading || detailsLoading
+              }
+              actionsAsIcons
+              updateLabel="Update"
+              deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
+              searchable
+              searchQuery={searchTerm}
+              onSearchQueryChange={setSearchTerm}
+              searchPlaceholder="Search..."
+              sortable
+              paginated
+              manualPagination
+              totalEntries={totalEntries}
+              currentPage={currentPage}
+              onCurrentPageChange={setCurrentPage}
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+              pageSizeOptions={[10, 20, 25, 50]}
+              tableMaxHeight={TABLE_MAX_HEIGHT}
+              fullViewHeight={false}
+              stickyHeader
+              emptyText={
+                loading ? "Loading group data..." : "No group data found"
+              }
+            />
           </section>
         </div>
       </div>

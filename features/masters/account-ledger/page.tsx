@@ -2543,56 +2543,52 @@ export default function AccountLedgerMasterPage() {
                 </button>
               </div>
             ) : null}
-            <section className={styles.tableSection}>
-              <ReusableTable
-                columns={columns}
-                rows={rows}
-                rowKey="__rowId"
-                title={`${effectiveTitle} List`}
-                minWidth="980px"
-                wrapperClassName={styles.tableWrapper}
-                tableClassName={styles.listTable}
-                activeRowKey={selectedRowId}
-                onRowClick={(row) => setSelectedRowId(row.__rowId)}
-                onCreate={openCreateModal}
-                createLabel={`Add `}
-                onView={(row) => {
-                  void openExistingModal(row, "view");
-                }}
-                onUpdate={(row) => {
-                  void openExistingModal(row, "update");
-                }}
-                onDelete={handleDeleteRow}
-                isViewDisabled={() => saveLoading || detailsLoading}
-                isUpdateDisabled={() => saveLoading || detailsLoading}
-                isDeleteDisabled={() =>
-                  deleteLoading || saveLoading || detailsLoading
-                }
-                actionsAsIcons
-                updateLabel="Update"
-                deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
-                searchable
-                searchQuery={searchTerm}
-                onSearchQueryChange={handleSearchChange}
-                searchPlaceholder="Search..."
-                sortable
-                paginated
-                manualPagination
-                totalEntries={totalEntries}
-                currentPage={currentPage}
-                onCurrentPageChange={setCurrentPage}
-                pageSize={pageSize}
-                onPageSizeChange={handlePageSizeChange}
-                pageSizeOptions={[10, 20, 25, 50]}
-                fullViewHeight={false}
-                stickyHeader
-                emptyText={
-                  loading
-                    ? "Loading account ledger data..."
-                    : "No account ledger data found"
-                }
-              />
-            </section>
+            <ReusableTable
+              columns={columns}
+              rows={rows}
+              rowKey="__rowId"
+              title={`${effectiveTitle} List`}
+              minWidth="980px"
+              activeRowKey={selectedRowId}
+              onRowClick={(row) => setSelectedRowId(row.__rowId)}
+              onCreate={openCreateModal}
+              createLabel={`Add `}
+              onView={(row) => {
+                void openExistingModal(row, "view");
+              }}
+              onUpdate={(row) => {
+                void openExistingModal(row, "update");
+              }}
+              onDelete={handleDeleteRow}
+              isViewDisabled={() => saveLoading || detailsLoading}
+              isUpdateDisabled={() => saveLoading || detailsLoading}
+              isDeleteDisabled={() =>
+                deleteLoading || saveLoading || detailsLoading
+              }
+              actionsAsIcons
+              updateLabel="Update"
+              deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
+              searchable
+              searchQuery={searchTerm}
+              onSearchQueryChange={handleSearchChange}
+              searchPlaceholder="Search..."
+              sortable
+              paginated
+              manualPagination
+              totalEntries={totalEntries}
+              currentPage={currentPage}
+              onCurrentPageChange={setCurrentPage}
+              pageSize={pageSize}
+              onPageSizeChange={handlePageSizeChange}
+              pageSizeOptions={[10, 20, 25, 50]}
+              fullViewHeight={false}
+              stickyHeader
+              emptyText={
+                loading
+                  ? "Loading account ledger data..."
+                  : "No account ledger data found"
+              }
+            />
           </section>
         </div>
       </div>

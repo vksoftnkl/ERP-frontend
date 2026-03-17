@@ -22,6 +22,12 @@
   outline-offset: 2px;
 }
 .overlay {
+  --erp-modal-control-height: 2.15rem;
+  --erp-modal-control-padding-y: 0.5rem;
+  --erp-modal-control-padding-x: 0.5rem;
+}
+
+.overlay {
   position: fixed;
   inset: 0;
   z-index: var(--erp-modal-overlay-z-index, 320);
@@ -231,15 +237,17 @@ background: #dfe7f0;
   color: #c63e3e;
 }
 .control {
+  box-sizing: border-box;
   color: #1f3448;
   background: #fff;
   border: 1px solid #c9d3de;
   border-radius: 2px;
   width: 100%;
-  min-height: 10px;
-  padding: 0.5rem;
+  min-height: var(--erp-modal-control-height);
+  padding: var(--erp-modal-control-padding-y) var(--erp-modal-control-padding-x);
+  font-family: inherit;
   font-size: 0.75rem;
-  line-height: 1;
+  line-height: 1.1;
   transition:
     border-color 0.16s,
     box-shadow 0.16s;
@@ -277,16 +285,21 @@ background: #dfe7f0;
 }
 
 .searchSelectTrigger {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  min-height: 10px;
+  min-height: var(--erp-modal-control-height);
   border: 1px solid #c9d3de;
   border-radius: 2px;
   background: #fff;
-  padding: 0.5rem 1.9rem 0.5rem 0.5rem;
+  padding: var(--erp-modal-control-padding-y) 1.9rem var(--erp-modal-control-padding-y)
+    var(--erp-modal-control-padding-x);
+  font-family: inherit;
+  font-size: 0.75rem;
+  line-height: 1.1;
   cursor: pointer;
   overflow: hidden;
   transition:

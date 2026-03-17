@@ -8,7 +8,17 @@ import {
   useMemo,
   useState,
 } from "react";
-import { FiCopy, FiEdit, FiEye, FiMoreVertical, FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
+import {
+  FiChevronLeft,
+  FiChevronRight,
+  FiCopy,
+  FiEdit,
+  FiEye,
+  FiMoreVertical,
+  FiPlus,
+  FiSearch,
+  FiTrash2,
+} from "react-icons/fi";
 import styles from "./table.module.scss";
 export type ReusableTableSortDirection = "asc" | "desc";
 export type ReusableTableSortState = {
@@ -104,7 +114,7 @@ function cx(...tokens: Array<string | undefined | false>): string {
 const ACTION_MENU_ESTIMATED_WIDTH = 190;
 const ACTION_MENU_ESTIMATED_HEIGHT = 220;
 const DEFAULT_TABLE_MAX_HEIGHT = "calc(100dvh - 250px)";
-const SERIAL_NUMBER_COLUMN_WIDTH = "20px";
+const SERIAL_NUMBER_COLUMN_WIDTH = "84px";
 const DEFAULT_ACTION_MENU_PLACEMENT: ActionMenuPlacement = {
   vertical: "down",
   horizontal: "right",
@@ -256,20 +266,41 @@ function isSerialNumberColumn<T extends Record<string, unknown>>(
 function resolveColumnWidth<T extends Record<string, unknown>>(
   column: ReusableTableColumn<T>,
 ): CSSProperties | undefined {
+  const normalizedWidth = column.width?.trim();
+
   if (isSerialNumberColumn(column)) {
+    const pixelWidthMatch = normalizedWidth?.match(/^(\d+(?:\.\d+)?)px$/i);
+    const serialWidth =
+      pixelWidthMatch && Number.isFinite(Number(pixelWidthMatch[1]))
+        ? `${Math.max(Number(pixelWidthMatch[1]), Number.parseFloat(SERIAL_NUMBER_COLUMN_WIDTH))}px`
+        : normalizedWidth || SERIAL_NUMBER_COLUMN_WIDTH;
     return {
-      width: SERIAL_NUMBER_COLUMN_WIDTH,
-      minWidth: SERIAL_NUMBER_COLUMN_WIDTH,
-      maxWidth: SERIAL_NUMBER_COLUMN_WIDTH,
+      width: serialWidth,
+      minWidth: serialWidth,
+      maxWidth: serialWidth,
+      whiteSpace: "nowrap",
     };
   }
 
-  const normalizedWidth = column.width?.trim();
   if (!normalizedWidth) {
     return undefined;
   }
 
   return { width: normalizedWidth };
+}
+function getInlineActionColumnIndex<T extends Record<string, unknown>>(
+  columns: ReusableTableColumn<T>[],
+): number {
+  const serialColumnIndex = columns.findIndex(
+    (column) => !isActionsColumn(column) && isSerialNumberColumn(column),
+  );
+  const firstUsableColumnIndex = columns.findIndex((column) => !isActionsColumn(column));
+
+  if (serialColumnIndex >= 0) {
+    return serialColumnIndex;
+  }
+
+  return firstUsableColumnIndex;
 }
 function getCellContent<T extends Record<string, unknown>>(
   row: T,
@@ -379,7 +410,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   showActionsColumn,
   actionsHeader = "Actions",
   actionsColumnWidth = "160px",
-  actionsAsIcons = false,
+  actionsAsIcons: _actionsAsIcons = false,
   onCreate,
   createLabel = "Add New",
   searchable = false,
@@ -447,6 +478,9 @@ export function ReusableTable<T extends Record<string, unknown>>({
           } satisfies ReusableTableColumn<T>,
         ]
       : baseColumns;
+  const inlineActionColumnIndex = shouldRenderInlineActionMenu
+    ? getInlineActionColumnIndex(displayColumns)
+    : -1;
   const sortableColumns = displayColumns.filter((column) => isColumnSortable(column, sortable));
   const normalizedSearchQuery = normalizeString(effectiveSearchQuery);
   const filteredRows = useMemo(() => {
@@ -932,7 +966,9 @@ export function ReusableTable<T extends Record<string, unknown>>({
                             styles.cell,
                             getColumnAlignClass(column.align),
                             shouldRenderActions && styles.actionsCell,
-                            shouldRenderInlineActionMenu && columnIndex === 0 && styles.leadingActionsCell,
+                            shouldRenderInlineActionMenu &&
+                              columnIndex === inlineActionColumnIndex &&
+                              styles.leadingActionsCell,
                             typeof column.cellClassName === "function"
                               ? column.cellClassName(row, rowIndex)
                               : column.cellClassName,
@@ -956,7 +992,8 @@ export function ReusableTable<T extends Record<string, unknown>>({
                             )
                           ) : (
                             <>
-                              {shouldRenderInlineActionMenu && columnIndex === 0 ? (
+                              {shouldRenderInlineActionMenu &&
+                              columnIndex === inlineActionColumnIndex ? (
                                 <div className={styles.leadingActionsRow}>
                                   {renderActionMenu(
                                     row,
@@ -1015,8 +1052,10 @@ export function ReusableTable<T extends Record<string, unknown>>({
               className={styles.paginationButton}
               onClick={() => setPage(effectiveCurrentPage - 1)}
               disabled={effectiveCurrentPage <= 1}
+              aria-label="Go to previous page"
             >
-              Previous
+              <FiChevronLeft className={styles.paginationArrowIcon} aria-hidden="true" />
+              <span className={styles.srOnly}>Previous</span>
             </button>
             {pageList.map((page, index) =>
               page === "ellipsis" ? (
@@ -1042,8 +1081,10 @@ export function ReusableTable<T extends Record<string, unknown>>({
               className={styles.paginationButton}
               onClick={() => setPage(effectiveCurrentPage + 1)}
               disabled={effectiveCurrentPage >= totalPages}
+              aria-label="Go to next page"
             >
-              Next
+              <FiChevronRight className={styles.paginationArrowIcon} aria-hidden="true" />
+              <span className={styles.srOnly}>Next</span>
             </button>
           </div>
         </div>

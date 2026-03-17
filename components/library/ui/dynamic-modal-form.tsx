@@ -572,6 +572,7 @@ export function ERPDynamicModalForm({
   >({});
   const searchSelectRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const searchInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const [searchDropdownPlacement, setSearchDropdownPlacement] = useState<
     "down" | "up"
   >("down");
@@ -665,6 +666,20 @@ export function ERPDynamicModalForm({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [closeModal, isOpen, openSearchField]);
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      scrollArea.scrollTop = 0;
+    });
+  }, [activeVariantKey, isOpen]);
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -2104,6 +2119,7 @@ export function ERPDynamicModalForm({
             </header>
             <div
               className={styles.scrollArea}
+              ref={scrollAreaRef}
               data-erp-modal-scroll-area="true"
             >
               <form
