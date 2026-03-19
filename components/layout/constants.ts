@@ -122,6 +122,12 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         label:"GSP Company Service",href:"/master/gsp-company-service"
       },
       {
+        label:"Grid Designer",href:"/master/grid-designer"
+      },
+      {
+        label:"UI Table Designer",href:"/master/ui-table-designer"
+      },
+      {
         label:"master",
         children:[
            {

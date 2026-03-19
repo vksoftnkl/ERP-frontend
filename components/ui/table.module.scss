@@ -76,7 +76,6 @@
           &::placeholder {
             color: #95a1b0;
           }
-
           &:focus-visible {
             outline: 0;
             border-color: #8ab4ff;
@@ -84,7 +83,6 @@
           }
         }
       }
-
       .createButton {
         display: inline-flex;
         align-items: center;
@@ -104,19 +102,16 @@
           transform 0.16s ease,
           box-shadow 0.16s ease,
           filter 0.16s ease;
-
         &:hover:not(:disabled) {
           transform: translateY(-1px);
           box-shadow: 0 10px 20px rgba(31, 95, 191, 0.24);
           filter: brightness(1.02);
         }
-
         &:disabled {
           opacity: 0.65;
           cursor: not-allowed;
           box-shadow: none;
         }
-
         .createIcon {
           width: 0.95rem;
           height: 0.95rem;
@@ -124,7 +119,6 @@
       }
     }
   }
-
   .tableViewport {
     position: relative;
     z-index: 10;
@@ -137,7 +131,6 @@
     max-height: var(--erp-table-max-height, none);
     background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
   }
-
   .table {
     width: 100%;
     min-width: var(--erp-table-min-width, 980px);
@@ -146,12 +139,10 @@
     table-layout: auto;
     background: transparent;
   }
-
   .head {
     position: relative;
     z-index: 20;
   }
-
   .headerCell,
   .cell {
     border-bottom: 1px solid var(--table-border-soft);
@@ -165,7 +156,6 @@
     overflow-wrap: anywhere;
     word-break: break-word;
   }
-
   .headerCell {
     background: var(--table-surface-muted);
     color: #5d6d80;
@@ -174,7 +164,6 @@
     text-transform: none;
     letter-spacing: 0.01em;
     font-size: 0.78rem;
-
     .headerText {
       display: inline-block;
       font-size: inherit;
@@ -183,19 +172,22 @@
       overflow-wrap: anywhere;
       word-break: break-word;
     }
-
+    &:first-child {
+      border-top-left-radius: 16px;
+    }
+    &:last-child {
+      border-top-right-radius: 16px;
+    }
     &.stickyHeaderCell {
       position: sticky;
       top: 0;
       z-index: 110;
       box-shadow: 0 1px 0 var(--table-border-soft);
     }
-
     &.sortableHeaderCell {
       cursor: pointer;
     }
   }
-
   .headerButton {
     width: 100%;
     border: 0;
@@ -211,11 +203,9 @@
     cursor: pointer;
     text-align: inherit;
     white-space: normal;
-
     &.headerButtonActive {
       color: #244f8a;
     }
-
     .sortIndicator {
       flex: 0 0 auto;
       font-size: 0.68rem;
@@ -223,73 +213,59 @@
       color: #7a8898;
     }
   }
-
   .body {
     background: transparent;
   }
-
   .row {
     transition: background-color 0.16s ease;
   }
-
   .rowEven,
   .rowOdd {
     background: transparent;
   }
-
   .row:hover {
     .cell {
       background: var(--table-hover);
     }
   }
-
   .activeRow {
     .cell {
       background: var(--table-active) !important;
       color: #12365d;
     }
   }
-
   .rowClickable {
     cursor: pointer;
-
     &:focus-visible {
       outline: 2px solid #3b82f6;
       outline-offset: -2px;
     }
   }
-
   .cell {
     color: var(--table-text);
     background: transparent;
   }
-
   .alignLeft {
     text-align: left;
   }
-
   .alignCenter {
     text-align: center;
   }
-
   .alignRight {
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
-
   .emptyCell {
     text-align: center;
     padding: 2.75rem 1rem;
     color: var(--table-text-muted);
     background: #ffffff;
   }
-
   .actionsCell,
   .leadingActionsCell {
     overflow: visible;
     text-overflow: clip;
   }
-
   .actionsGroup {
     display: inline-flex;
     align-items: center;
@@ -297,7 +273,6 @@
     gap: 0.45rem;
     flex-wrap: nowrap;
   }
-
   .actionsMenuRoot {
     position: relative;
     display: inline-flex;
@@ -305,7 +280,6 @@
     justify-content: center;
     flex: 0 0 auto;
   }
-
   .actionsTrigger {
     width: auto;
     height: auto;
@@ -323,24 +297,20 @@
       background-color 0.16s ease,
       color 0.16s ease,
       transform 0.16s ease;
-
     &:hover:not(:disabled) {
       background: transparent;
       color: #4d6076;
       transform: none;
     }
-
     &:focus-visible {
       outline: 0;
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
     }
   }
-
   .actionsTriggerIcon {
     width: 1rem;
     height: 1rem;
   }
-
   .actionsDropdown {
     position: absolute;
     top: -4px;
@@ -354,17 +324,14 @@
     padding: 0.4rem;
     z-index: 20;
   }
-
   .actionsDropdownUp {
     top: auto;
     bottom: -4px;
   }
-
   .actionsDropdownLeft {
     left: auto;
     right: calc(100% + 10px);
   }
-
   .actionsDropdownItem {
     width: 100%;
     display: flex;
@@ -382,30 +349,24 @@
     transition:
       background-color 0.14s ease,
       color 0.14s ease;
-
     &:hover:not(:disabled) {
       background: #f3f7fb;
     }
-
     &:focus-visible {
       outline: 0;
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
     }
-
     &:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
   }
-
   .actionsDropdownDelete {
     color: #d64242;
-
     &:hover:not(:disabled) {
       background: #fff2f3;
     }
   }
-
   .leadingActionsRow {
     display: flex;
     align-items: center;
@@ -413,7 +374,6 @@
     max-width: 100%;
     min-width: 0;
   }
-
   .leadingActionsValue {
     min-width: 0;
     overflow: visible;
@@ -421,7 +381,6 @@
     white-space: normal;
     overflow-wrap: anywhere;
   }
-
   .actionButton {
     width: 2.1rem;
     min-width: 2.1rem;
@@ -442,57 +401,48 @@
       border-color 0.16s ease,
       box-shadow 0.16s ease,
       color 0.16s ease;
-
     &:not(:disabled):hover {
       transform: translateY(-1px);
       box-shadow: 0 10px 18px rgba(15, 35, 60, 0.1);
     }
-
     &:focus-visible {
       outline: 0;
       box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
     }
-
     &:disabled {
       cursor: not-allowed;
       opacity: 0.5;
       box-shadow: none;
     }
   }
-
   .iconActionButton {
     &.viewButton {
       background: #eff6ff;
       border-color: #d7e7ff;
       color: #2b6dd8;
     }
-
     &.updateButton,
     &.editButton {
       background: #eefbf4;
       border-color: #d2eddc;
       color: #16824b;
     }
-
     &.duplicateButton {
       background: #fff7e8;
       border-color: #f2ddb4;
       color: #a16207;
     }
-
     &.deleteButton {
       background: #fff1f2;
       border-color: #f3c5cb;
       color: #d64242;
     }
   }
-
   .actionIcon {
     width: 0.95rem;
     height: 0.95rem;
     flex-shrink: 0;
   }
-
   .srOnly {
     position: absolute;
     width: 1px;
@@ -504,32 +454,27 @@
     white-space: nowrap;
     border: 0;
   }
-
   .updateButton,
   .editButton {
     background: #eefbf4;
     border-color: #d2eddc;
     color: #16824b;
   }
-
   .viewButton {
     background: #eff6ff;
     border-color: #d7e7ff;
     color: #2b6dd8;
   }
-
   .duplicateButton {
     background: #fff7e8;
     border-color: #f2ddb4;
     color: #a16207;
   }
-
   .deleteButton {
     background: #fff1f2;
     border-color: #f3c5cb;
     color: #d64242;
   }
-
   .paginationBar {
     position: relative;
     z-index: 120;
@@ -541,7 +486,6 @@
     justify-content: space-between;
     gap: 0.9rem;
     flex-wrap: wrap;
-
     .paginationInfo {
       font-size: 0.9rem;
       color: var(--table-text-muted);
@@ -549,7 +493,6 @@
       align-items: center;
       gap: 0.85rem;
       flex-wrap: wrap;
-
       .pageSizeControl {
         display: inline-flex;
         align-items: center;
@@ -557,7 +500,6 @@
         color: #7b8795;
         font-size: 0.88rem;
         font-weight: 600;
-
         .pageSizeSelect {
           min-height: 2.15rem;
           border: 1px solid var(--table-border);
@@ -566,7 +508,6 @@
           color: var(--table-text);
           font-size: 0.88rem;
           padding: 0 0.75rem;
-
           &:focus-visible {
             outline: 0;
             border-color: #8ab4ff;
@@ -575,13 +516,11 @@
         }
       }
     }
-
     .paginationControls {
       display: inline-flex;
       align-items: center;
       gap: 0.38rem;
       flex-wrap: wrap;
-
       .paginationButton {
         min-width: 2.1rem;
         height: 2.1rem;
@@ -603,20 +542,17 @@
           border-color 0.16s ease,
           box-shadow 0.16s ease,
           color 0.16s ease;
-
         &:hover:not(:disabled) {
           transform: translateY(-1px);
           border-color: #c7d6e6;
           background: #f8fbff;
           box-shadow: 0 8px 16px rgba(15, 35, 60, 0.08);
         }
-
         &:disabled {
           cursor: not-allowed;
           opacity: 0.45;
           box-shadow: none;
         }
-
         &.paginationButtonActive {
           background: #ffffff;
           border-color: #b8d2fb;
@@ -624,12 +560,10 @@
           box-shadow: inset 0 0 0 1px #dbe9ff;
         }
       }
-
       .paginationArrowIcon {
         width: 0.95rem;
         height: 0.95rem;
       }
-
       .paginationEllipsis {
         padding: 0 0.1rem;
         color: #9aa7b5;
@@ -638,54 +572,44 @@
     }
   }
 }
-
 @media (max-width: 1200px) {
   .tableShell {
     .toolbar {
       padding: 1rem 1.05rem 0.95rem;
     }
-
     .headerCell,
     .cell {
       padding: 0.68rem 0.78rem;
     }
-
     .paginationBar {
       padding: 0.9rem 1rem;
     }
   }
 }
-
 @media (max-width: 960px) {
   .tableShell {
-    border-radius: 0;
-
+    border-radius: 14px;
     .toolbar {
       .tableTools {
         justify-content: flex-start;
       }
     }
-
     .table {
       table-layout: auto;
     }
-
     .headerCell {
       font-size: 0.74rem;
     }
-
     .headerCell,
     .cell {
       padding: 0.64rem 0.74rem;
     }
-
     .actionsDropdown {
       top: calc(100% + 6px);
       left: 0;
       right: auto;
       bottom: auto;
     }
-
     .actionsDropdownUp,
     .actionsDropdownLeft {
       top: calc(100% + 6px);
@@ -693,45 +617,37 @@
       right: auto;
       bottom: auto;
     }
-
     .paginationBar {
       .paginationInfo,
       .paginationControls {
         width: 100%;
       }
-
       .paginationControls {
         justify-content: flex-start;
       }
     }
   }
 }
-
 @media (max-width: 760px) {
   .tableShell {
-    border-radius: 0;
+    border-radius: 14px;
     box-shadow: 0 14px 30px rgba(15, 35, 60, 0.08);
-
     .toolbar {
       padding: 0.95rem;
-
       .tableTools {
         align-items: stretch;
-
         .searchField,
         .createButton {
           width: 100%;
         }
       }
     }
-
     .tableViewport {
       overflow-y: auto;
       overflow-x: hidden;
       padding: 0.6rem;
       background: #f7fafc;
     }
-
     .table {
       min-width: 0 !important;
       border-collapse: separate;
@@ -739,7 +655,6 @@
       table-layout: fixed;
       background: transparent;
     }
-
     .head {
       position: absolute;
       width: 1px;
@@ -749,21 +664,18 @@
       clip-path: inset(50%);
       white-space: nowrap;
     }
-
     .body {
       display: grid;
       gap: 0.75rem;
     }
-
     .row {
       display: block;
       border: 1px solid var(--table-border);
       background: #ffffff;
-      border-radius: 0;
+      border-radius: 18px;
       box-shadow: 0 12px 24px rgba(15, 35, 60, 0.06);
       overflow: hidden;
     }
-
     .cell {
       width: auto !important;
       border-bottom: 1px solid #edf2f7;
@@ -774,11 +686,9 @@
       padding: 0.66rem 0.78rem;
       font-size: 0.84rem;
       text-align: left;
-
       &:last-child {
         border-bottom: 0;
       }
-
       &::before {
         content: attr(data-label);
         font-size: 0.68rem;
@@ -789,45 +699,37 @@
         line-height: 1.25;
       }
     }
-
     .activeRow {
       .cell::before {
         color: #2b6dd8;
       }
     }
-
     .alignCenter,
     .alignRight {
       text-align: left;
     }
-
     .actionsCell {
       padding-top: 0.95rem;
       padding-bottom: 0.95rem;
     }
-
     .actionsGroup {
       justify-content: flex-start;
       flex-wrap: wrap;
     }
-
     .actionsMenuRoot {
       justify-content: flex-start;
       width: auto;
     }
-
     .leadingActionsRow {
       width: 100%;
       align-items: flex-start;
     }
-
     .leadingActionsValue {
       white-space: normal;
       overflow: visible;
       text-overflow: clip;
       overflow-wrap: anywhere;
     }
-
     .paginationBar {
       padding: 0.85rem 0.95rem 1rem;
       gap: 0.7rem;
@@ -839,31 +741,25 @@
     }
   }
 }
-
 @media (max-width: 540px) {
   .tableShell {
     .tableViewport {
       padding: 0.5rem;
     }
-
     .table {
       border-spacing: 0 0.6rem;
     }
-
     .body {
       gap: 0.6rem;
     }
-
     .cell {
       grid-template-columns: minmax(0, 1fr);
       gap: 0.35rem;
       padding: 0.6rem 0.72rem;
-
       &::before {
         font-size: 0.66rem;
       }
     }
-
     .actionButton,
     .actionsTrigger,
     .paginationButton {
@@ -872,7 +768,6 @@
       height: 2rem;
       min-height: 2rem;
     }
-
     .paginationBar {
       .paginationControls {
         gap: 0.3rem;

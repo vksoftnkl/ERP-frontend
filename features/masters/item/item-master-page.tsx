@@ -2331,6 +2331,64 @@ function buildItemFormFields(
         options: customerGroupOptions,
       },
       {
+        name: "itemHeadingEanTable",
+        label: "EAN Table",
+        type: "heading",
+        defaultExpanded: true,
+        sectionGridColumns: 4,
+      },
+      {
+        name: ITEM_EAN_ROWS_FIELD_NAME,
+        label: "",
+        type: "custom",
+        fieldStyle: {
+          gridColumn: "1 / -1",
+        },
+        helperText:
+          "Scan in the EAN Code column and press Enter from the scanner to open the next row automatically.",
+        validation: {
+          custom: validateItemEanRows,
+        },
+        onValueChange: ({ value, values, previousValues }) =>
+          buildItemEanRowsValueChangeResult(values, previousValues, value),
+        render: ({ disabled, setValue, value, values }) => {
+          const eanUnitOptions = buildItemEanUnitOptions(values, unitOptions);
+          const nextEanRowColumns = eanRowColumns.map((column) =>
+            column.key === "ean_unit_id"
+              ? {
+                ...column,
+                options: eanUnitOptions,
+              }
+              : column,
+          );
+          return (
+            <ItemLinkedRecordsEditor
+              addLabel="+"
+              actionsLabel="Remove"
+              autoCreateFirstRowOnMount
+              autoFocusInitialRowOnMount={false}
+              autoAppendOnEnter={{
+                columnKey: "ean_code",
+                focusColumnKey: "ean_code",
+              }}
+              columns={nextEanRowColumns}
+              createRow={(sourceRow) =>
+                buildEmptyItemEanRow(
+                  (values.item_base_unit_id ?? "").trim(),
+                  resolvePreferredItemEanUnitId(values),
+                  sourceRow,
+                )
+              }
+              disabled={disabled}
+              emptyState="No EAN rows added."
+              onChange={setValue}
+              showRowIndex={false}
+              value={value}
+            />
+          );
+        },
+      },
+      {
         name: "itemHeadingPriceTable",
         label: "Price List Table",
         type: "heading",
@@ -2397,64 +2455,6 @@ function buildItemFormFields(
             autoFocusInitialRowOnMount: false,
           },
         ),
-      },
-      {
-        name: "itemHeadingEanTable",
-        label: "EAN Table",
-        type: "heading",
-        defaultExpanded: true,
-        sectionGridColumns: 4,
-      },
-      {
-        name: ITEM_EAN_ROWS_FIELD_NAME,
-        label: "",
-        type: "custom",
-        fieldStyle: {
-          gridColumn: "1 / -1",
-        },
-        helperText:
-          "Scan in the EAN Code column and press Enter from the scanner to open the next row automatically.",
-        validation: {
-          custom: validateItemEanRows,
-        },
-        onValueChange: ({ value, values, previousValues }) =>
-          buildItemEanRowsValueChangeResult(values, previousValues, value),
-        render: ({ disabled, setValue, value, values }) => {
-          const eanUnitOptions = buildItemEanUnitOptions(values, unitOptions);
-          const nextEanRowColumns = eanRowColumns.map((column) =>
-            column.key === "ean_unit_id"
-              ? {
-                ...column,
-                options: eanUnitOptions,
-              }
-              : column,
-          );
-          return (
-            <ItemLinkedRecordsEditor
-              addLabel="+"
-              actionsLabel="Remove"
-              autoCreateFirstRowOnMount
-              autoFocusInitialRowOnMount={false}
-              autoAppendOnEnter={{
-                columnKey: "ean_code",
-                focusColumnKey: "ean_code",
-              }}
-              columns={nextEanRowColumns}
-              createRow={(sourceRow) =>
-                buildEmptyItemEanRow(
-                  (values.item_base_unit_id ?? "").trim(),
-                  resolvePreferredItemEanUnitId(values),
-                  sourceRow,
-                )
-              }
-              disabled={disabled}
-              emptyState="No EAN rows added."
-              onChange={setValue}
-              showRowIndex={false}
-              value={value}
-            />
-          );
-        },
       },
       {
         name: "itemHeadingInventory",

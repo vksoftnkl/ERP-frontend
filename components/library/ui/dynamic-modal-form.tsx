@@ -242,6 +242,40 @@ type ERPDynamicFormSection = {
   heading: ERPDynamicModalField | null;
   fields: ERPDynamicModalField[];
 };
+function buildFormSections(
+  fields: ERPDynamicModalField[],
+): ERPDynamicFormSection[] {
+  if (fields.length === 0) {
+    return [];
+  }
+
+  const sections: ERPDynamicFormSection[] = [];
+  let currentSection: ERPDynamicFormSection = {
+    heading: null,
+    fields: [],
+  };
+
+  for (const field of fields) {
+    if ((field.type ?? "text") === "heading") {
+      if (currentSection.heading !== null || currentSection.fields.length > 0) {
+        sections.push(currentSection);
+      }
+      currentSection = {
+        heading: field,
+        fields: [],
+      };
+      continue;
+    }
+
+    currentSection.fields.push(field);
+  }
+
+  if (currentSection.heading !== null || currentSection.fields.length > 0) {
+    sections.push(currentSection);
+  }
+
+  return sections;
+}
 function resolvePalette(
   accent: ERPDynamicModalVariant["accent"],
 ): ModalAccentPalette {
@@ -746,36 +780,7 @@ export function ERPDynamicModalForm({
   }, [activeSectionExpandedState, activeVariant, formData]);
 
   const visibleSections = useMemo<ERPDynamicFormSection[]>(() => {
-    if (visibleFields.length === 0) {
-      return [];
-    }
-
-    const sections: ERPDynamicFormSection[] = [];
-    let currentSection: ERPDynamicFormSection = {
-      heading: null,
-      fields: [],
-    };
-
-    for (const field of visibleFields) {
-      if ((field.type ?? "text") === "heading") {
-        if (currentSection.heading !== null || currentSection.fields.length > 0) {
-          sections.push(currentSection);
-        }
-        currentSection = {
-          heading: field,
-          fields: [],
-        };
-        continue;
-      }
-
-      currentSection.fields.push(field);
-    }
-
-    if (currentSection.heading !== null || currentSection.fields.length > 0) {
-      sections.push(currentSection);
-    }
-
-    return sections;
+    return buildFormSections(visibleFields);
   }, [visibleFields]);
 
   const toggleSectionExpanded = useCallback(
