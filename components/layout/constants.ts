@@ -125,6 +125,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         label:"Grid Designer",href:"/master/grid-designer"
       },
       {
+        label:"Dropdown Designer",href:"/master/dropdown-designer"
+      },
+      {
         label:"UI Table Designer",href:"/master/ui-table-designer"
       },
       {

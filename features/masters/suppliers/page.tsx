@@ -1,5 +1,4 @@
 "use client";
-
 import {
   CSSProperties,
   useCallback,
@@ -41,14 +40,12 @@ import {
 } from "@/app/master/_shared/crud-utils";
 import { COLLECTION_DAY_OPTIONS, GST_TYPE_OPTIONS } from "@/utils/constant";
 import { validateGstin } from "@/utils/validation";
-
 const API_ENDPOINTS = {
   list: "/suppliers/list",
   getById: "/suppliers/get",
   create: "/suppliers/create",
   delete: "/suppliers/delete",
 } as const;
-
 const GRID_TABLE_NAME = "suppliers";
 const CUSTOMER_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(62vw, 62rem)",
@@ -94,7 +91,6 @@ const SUPPLIER_GROUP_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(42vw, 42rem)",
   maxHeight: "75vh",
 };
-
 const LOOKUP_KEYS = {
   id: ["supId", "sup_id", "supplier_id", "supplierId", "id", "_id"],
   code: ["supPurchaseType", "sup_purchase_type", "supGstNo", "sup_gst_no", "code"],
@@ -106,7 +102,6 @@ const LOOKUP_KEYS = {
   description: ["supNotes", "sup_notes", "notes", "description", "desc"],
   array: ["data", "items", "results", "rows", "list", "suppliers"],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "supId",
   name: "supName",
@@ -115,7 +110,6 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "supNotes",
   sort: "supSortOrder",
 } as const;
-
 const SUPPLIER_IS_ACTIVE_KEYS = [
   "supIsActive",
   "sup_is_active",
@@ -123,7 +117,6 @@ const SUPPLIER_IS_ACTIVE_KEYS = [
   "is_active",
   "status",
 ] as const;
-
 const DEFAULT_LOOKUP_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "",
@@ -217,7 +210,6 @@ const SUPPLIER_GROUP_MODAL_INITIAL_VALUES = {
   spgDesc: "",
   spgIsActive: "true",
 } as const;
-
 const SUPPLIER_INITIAL_FORM_VALUES = {
   supCompanyId: "",
   supBranchId: "",
@@ -262,7 +254,6 @@ const SUPPLIER_INITIAL_FORM_VALUES = {
   supIsActive: "true",
   supStateId: "",
 } as const;
-
 function buildSupplierFormFields(
   supplierGroupOptions: ERPDynamicSelectOption[],
   companyOptions: ERPDynamicSelectOption[],
@@ -1411,7 +1402,6 @@ export default function SuppliersMasterPage() {
     },
     [resetSupplierGroupDetailsState, resetSupplierGroupSaveState],
   );
-
   const handleSupplierGroupEditShortcut = useCallback(
     async (payload: ERPDynamicSearchShortcutPayload) => {
       const selectedGroupId = payload.value.trim();
@@ -1457,7 +1447,6 @@ export default function SuppliersMasterPage() {
       supplierGroupOptions,
     ],
   );
-
   const handleSupplierGroupModalSubmit = useCallback(
     async ({ variantKey, values }: ERPDynamicModalSubmitPayload) => {
       const isUpdate = variantKey === "supplier-group-update";
@@ -1479,7 +1468,6 @@ export default function SuppliersMasterPage() {
     },
     [editingSupplierGroupId, refreshSupplierGroupOptions, upsertSupplierGroup],
   );
-
   const handleSupplierGroupModalCancel = useCallback(() => {
     if (supplierGroupSaveLoading || supplierGroupDetailsLoading) {
       return;
@@ -1493,7 +1481,6 @@ export default function SuppliersMasterPage() {
     supplierGroupDetailsLoading,
     supplierGroupSaveLoading,
   ]);
-
   const handleSupplierGstinValueChange =
     useCallback<ERPDynamicFieldValueChangeHandler>(
       async ({ value }) => {
@@ -1502,14 +1489,12 @@ export default function SuppliersMasterPage() {
           normalizedGstin && normalizedGstin !== value
             ? { supGstNo: normalizedGstin }
             : undefined;
-
         if (!GST_LOOKUP_PATTERN.test(normalizedGstin)) {
           return {
             ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
             errors: { supGstNo: null },
           };
         }
-
         const cachedValues = gstLookupCacheRef.current[normalizedGstin];
         if (cachedValues) {
           return {
@@ -1517,7 +1502,6 @@ export default function SuppliersMasterPage() {
             errors: { supGstNo: null },
           };
         }
-
         try {
           const response = await fetch(
             `${GST_LOOKUP_ENDPOINT}?gstin=${encodeURIComponent(normalizedGstin)}`,
@@ -1541,7 +1525,6 @@ export default function SuppliersMasterPage() {
               },
             };
           }
-
           const lookupSource = extractGstLookupSource(payload);
           if (!lookupSource) {
             return {
@@ -1551,7 +1534,6 @@ export default function SuppliersMasterPage() {
               },
             };
           }
-
           const resolvedValues = buildSupplierLookupValues(
             normalizedGstin,
             lookupSource,
@@ -1580,7 +1562,6 @@ export default function SuppliersMasterPage() {
         supRegionStateName: value.trim(),
       },
     }), []);
-
   const supplierFormFields = useMemo(
     () =>
       buildSupplierFormFields(
@@ -1723,7 +1704,6 @@ export default function SuppliersMasterPage() {
             stateCodeByName[selectedStateName] ?? toUpper(values.supStateCode ?? "");
           const resolvedRegionStateName =
             selectedStateName || (values.supRegionStateName ?? "").trim();
-
           const payload: Record<string, unknown> = {
             supCompanyId: toNullableLookupSelection(values.supCompanyId ?? ""),
             supBranchId: toNullableLookupSelection(values.supBranchId ?? ""),

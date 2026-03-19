@@ -13,7 +13,6 @@ const API_ENDPOINTS = {
   create: "/item-sections/create",
   delete: "/item-sections/delete",
 } as const;
-
 const GRID_TABLE_NAME = "item_section_master";
 const LOOKUP_KEYS = {
   id: [

@@ -11,7 +11,6 @@ import type {
 } from "@/components/library/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
-  buildLookupOptions,
   getFirstDefinedValue,
   toCsvFromArray,
   toDisplayValue,
@@ -29,6 +28,29 @@ import ItemLinkedRecordsEditor, {
   type LinkedRecordColumn,
   type LinkedRecordRow,
 } from "./item-linked-records-editor";
+import {
+  applyConfiguredLinkedTableColumnConfig,
+  assignBooleanFieldsFromSource,
+  assignTextFieldsFromSource,
+  extractArrayRecords,
+  extractResponseRecord,
+  extractUiTableColumnConfigRecords,
+  fileToBase64,
+  getFieldValue,
+  hasLinkedRows,
+  mergeLookupOptionSets,
+  toHsnOptions,
+  toLookupOptions,
+  toOptionalNonNegativeInteger,
+  toOptionalNonNegativeNumber,
+  toTrimmedOrUndefined,
+  toUpperNullable,
+} from "./item-master-page.utils";
+import type {
+  BuildItemRequestPayloadArgs,
+  ItemFormDefaults,
+  ItemPriceTaxContext,
+} from "./type";
 const API_ENDPOINTS = {
   list: "/items/list",
   getById: "/items/get",
@@ -685,80 +707,6 @@ const ITEM_REORDER_CONTENT_FIELD_NAMES = [
   "ir_reorder_type",
 ] as const;
 const ITEM_EAN_CONTENT_FIELD_NAMES = ["ean_code", "ean_godown_id", "ean_remarks"] as const;
-function toSnakeCase(value: string): string {
-  return value.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
-}
-function getFieldValue(source: Record<string, unknown>, fieldName: string): unknown {
-  return getFirstDefinedValue(source, [fieldName, toSnakeCase(fieldName)]);
-}
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-function toOptionalNonNegativeInteger(value: string): number | undefined {
-  const normalized = value.trim();
-  if (!normalized) {
-    return undefined;
-  }
-  const parsed = Number.parseInt(normalized, 10);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return undefined;
-  }
-  return Math.floor(parsed);
-}
-function toOptionalNonNegativeNumber(value: string): number | undefined {
-  const normalized = value.trim();
-  if (!normalized) {
-    return undefined;
-  }
-  const parsed = Number(normalized);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return undefined;
-  }
-  return parsed;
-}
-function toUpperNullable(value: string): string | null {
-  const normalized = toUpper(value);
-  return normalized ? normalized : null;
-}
-function extractArrayRecords(
-  payload: unknown,
-  arrayKeys: readonly string[],
-): Record<string, unknown>[] {
-  if (Array.isArray(payload)) {
-    return payload.filter(isRecord);
-  }
-  if (!isRecord(payload)) {
-    return [];
-  }
-  for (const key of arrayKeys) {
-    const value = payload[key];
-    if (Array.isArray(value)) {
-      return value.filter(isRecord);
-    }
-    if (isRecord(value)) {
-      for (const nestedKey of arrayKeys) {
-        const nestedValue = value[nestedKey];
-        if (Array.isArray(nestedValue)) {
-          return nestedValue.filter(isRecord);
-        }
-      }
-    }
-  }
-  return [];
-}
-function extractResponseRecord(payload: unknown): Record<string, unknown> | null {
-  if (!isRecord(payload)) {
-    return null;
-  }
-  return isRecord(payload.data) ? payload.data : payload;
-}
-function hasLinkedRows(value: string | undefined): boolean {
-  return parseLinkedRecordRows(value ?? "").length > 0;
-}
-function toTrimmedOrUndefined(value: string | undefined): string | undefined {
-  const normalized = value?.trim() ?? "";
-  return normalized || undefined;
-}
 function parseOptionalItemPriceNumber(value: string | undefined): number | null {
   const normalized = value?.trim() ?? "";
   if (!normalized) {
@@ -785,11 +733,6 @@ function formatDerivedItemPriceNumber(value: number): string {
   const normalized = value.toFixed(4).replace(/\.?0+$/, "");
   return normalized === "-0" ? "0" : normalized;
 }
-type ItemPriceTaxContext = {
-  cessPerc: number;
-  cessQty: number;
-  gstPerc: number;
-};
 function normalizeItemPriceProfitType(value: string | undefined): string {
   const normalized = (value ?? "").trim();
   return normalized || ITEM_PRICE_DEFAULT_PROFIT_TYPE;
@@ -2732,233 +2675,6 @@ function buildItemFormFields(
     ]),
   );
 }
-function toLookupOptions(
-  payload: unknown,
-  defaultOption: ERPDynamicSelectOption,
-  lookupOptions?: {
-    arrayKeys?: readonly string[];
-    idKeys?: readonly string[];
-    labelKeys?: readonly string[];
-  },
-): ERPDynamicSelectOption[] {
-  return buildLookupOptions(payload, defaultOption, {
-    arrayKeys: lookupOptions?.arrayKeys ?? DEFAULT_LOOKUP_ARRAY_KEYS,
-    idKeys: lookupOptions?.idKeys ?? ["id", "value"],
-    labelKeys: lookupOptions?.labelKeys ?? ["name", "label"],
-  }).filter((option) => option.value !== defaultOption.value);
-}
-function toHsnOptions(payload: unknown): ERPDynamicSelectOption[] {
-  return buildLookupOptions(payload, DEFAULT_HSN_OPTION, {
-    arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
-    idKeys: ["hsnCode", "hsn_code"],
-    labelKeys: ["hsnCode", "hsn_code"],
-  }).filter((option) => option.value !== DEFAULT_HSN_OPTION.value);
-}
-function mergeLookupOptionSets(
-  currentOptions: ERPDynamicSelectOption[],
-  nextOptions: ERPDynamicSelectOption[],
-): ERPDynamicSelectOption[] {
-  const merged = new Map<string, ERPDynamicSelectOption>();
-  for (const option of currentOptions) {
-    if (!option.value) {
-      continue;
-    }
-    merged.set(option.value, option);
-  }
-  for (const option of nextOptions) {
-    if (!option.value) {
-      continue;
-    }
-    merged.set(option.value, option);
-  }
-  return Array.from(merged.values());
-}
-function normalizeUiTableColumnName(value: string): string {
-  return value.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
-}
-function isUiTableColumnConfigRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  if (!isRecord(value)) {
-    return false;
-  }
-  return Boolean(
-    toDisplayValue(getFieldValue(value, "uiTblClmName")) ||
-    toDisplayValue(getFieldValue(value, "uiTblClmId")) ||
-    toDisplayValue(getFieldValue(value, "uiTblClmTableId")),
-  );
-}
-function toConfiguredColumnWidth(value: unknown): string | undefined {
-  const normalized = toDisplayValue(value);
-  if (!normalized) {
-    return undefined;
-  }
-  const parsed = Number(normalized);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return undefined;
-  }
-  return `${parsed}px`;
-}
-function toConfiguredColumnOrder(
-  configuredColumn: Record<string, unknown>,
-  fallback: number,
-): number {
-  const positionValue = toDisplayValue(
-    getFieldValue(configuredColumn, "uiTblClmColumnPosition"),
-  );
-  const columnNoValue = toDisplayValue(getFieldValue(configuredColumn, "uiTblClmNo"));
-  const parsed = Number(positionValue || columnNoValue || String(fallback));
-
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-function extractUiTableColumnConfigRecords(
-  payload: unknown,
-  tableId: string,
-): Record<string, unknown>[] {
-  const normalizedTableId = tableId.trim();
-  const extractedRows = extractArrayRecords(payload, DEFAULT_LOOKUP_ARRAY_KEYS);
-  const rows =
-    extractedRows.length > 0
-      ? extractedRows
-      : (() => {
-        const responseSource = extractResponseRecord(payload);
-        return responseSource && isUiTableColumnConfigRecord(responseSource)
-          ? [responseSource]
-          : [];
-      })();
-  return rows.filter((row) => {
-    if (!normalizedTableId) {
-      return true;
-    }
-    const rowTableId = toDisplayValue(getFieldValue(row, "uiTblClmTableId"));
-    return !rowTableId || rowTableId === normalizedTableId;
-  });
-}
-function applyConfiguredLinkedTableColumnConfig<
-  TColumnNameToKey extends Record<string, string>,
->(
-  columns: LinkedRecordColumn[],
-  configuredColumns: Record<string, unknown>[],
-  columnNameToKey: TColumnNameToKey,
-): LinkedRecordColumn[] {
-  if (configuredColumns.length === 0) {
-    return columns;
-  }
-  const columnsByKey = new Map(
-    columns.map((column, index) => [column.key, { column, index }]),
-  );
-  const seenKeys = new Set<string>();
-  const orderedColumns: Array<{
-    column: LinkedRecordColumn;
-    index: number;
-    position: number;
-  }> = [];
-  const sortedConfiguredColumns = [...configuredColumns].sort((left, right) => {
-    const leftPosition = toConfiguredColumnOrder(left, 0);
-    const rightPosition = toConfiguredColumnOrder(right, 0);
-    return leftPosition - rightPosition;
-  });
-  for (const configuredColumn of sortedConfiguredColumns) {
-    const normalizedName = normalizeUiTableColumnName(
-      toDisplayValue(getFieldValue(configuredColumn, "uiTblClmName")),
-    );
-    const columnKey = columnNameToKey[normalizedName as keyof TColumnNameToKey];
-
-    if (!columnKey || seenKeys.has(columnKey)) {
-      continue;
-    }
-    const baseColumn = columnsByKey.get(columnKey);
-    if (!baseColumn) {
-      continue;
-    }
-    seenKeys.add(columnKey);
-    if (
-      toSelectBoolean(
-        getFieldValue(configuredColumn, "uiTblClmColumnVisibility"),
-        "true",
-      ) !== "true"
-    ) {
-      continue;
-    }
-    const position = toConfiguredColumnOrder(configuredColumn, baseColumn.index + 1);
-    orderedColumns.push({
-      column: {
-        ...baseColumn.column,
-        width:
-          toConfiguredColumnWidth(
-            getFieldValue(configuredColumn, "uiTblClmColumnWidth"),
-          ) ?? baseColumn.column.width,
-      },
-      index: baseColumn.index,
-      position: Number.isFinite(position) ? position : baseColumn.index,
-    });
-  }
-  const remainingColumns = columns.filter((column) => !seenKeys.has(column.key));
-  if (orderedColumns.length === 0) {
-    return columns;
-  }
-  orderedColumns.sort((left, right) => {
-    if (left.position !== right.position) {
-      return left.position - right.position;
-    }
-    return left.index - right.index;
-  });
-  return [...orderedColumns.map((entry) => entry.column), ...remainingColumns];
-}
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== "string") {
-        reject(new Error("Failed to read file as base64."));
-        return;
-      }
-      const commaIndex = result.indexOf(",");
-      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
-    };
-    reader.onerror = () => {
-      reject(reader.error ?? new Error("Failed to read file."));
-    };
-    reader.readAsDataURL(file);
-  });
-}
-type ItemFormDefaults = {
-  masterAlias: string;
-  masterDescription: string;
-  masterName: string;
-  masterShortName: string;
-  position: string;
-  searchCode: string;
-};
-type BuildItemRequestPayloadArgs = {
-  editingItemId: string | number | null;
-  files: Record<string, File | null>;
-  shouldUpdate: boolean;
-  values: Record<string, string>;
-};
-function assignTextFieldsFromSource(
-  target: Record<string, string>,
-  source: Record<string, unknown>,
-  fieldNames: readonly string[],
-  defaults: Record<string, string>,
-): void {
-  for (const fieldName of fieldNames) {
-    const value = toDisplayValue(getFieldValue(source, fieldName));
-    target[fieldName] = value || defaults[fieldName] || "";
-  }
-}
-function assignBooleanFieldsFromSource(
-  target: Record<string, string>,
-  source: Record<string, unknown>,
-  fieldNames: readonly string[],
-  defaults: Record<string, string>,
-): void {
-  for (const fieldName of fieldNames) {
-    const fallback = defaults[fieldName] === "true" ? "true" : "false";
-    target[fieldName] = toSelectBoolean(getFieldValue(source, fieldName), fallback);
-  }
-}
 function mapItemFormValues(
   source: Record<string, unknown> | null,
   defaults: ItemFormDefaults,
@@ -3412,7 +3128,11 @@ export default function ItemMasterPageContent() {
           ? extractArrayRecords(itemTaxesPayload.value, DEFAULT_LOOKUP_ARRAY_KEYS)
           : [],
       );
-      setHsnOptions(hsnPayload.status === "fulfilled" ? toHsnOptions(hsnPayload.value) : []);
+      setHsnOptions(
+        hsnPayload.status === "fulfilled"
+          ? toHsnOptions(hsnPayload.value, DEFAULT_HSN_OPTION)
+          : [],
+      );
       setSupplierOptions(
         suppliersPayload.status === "fulfilled"
           ? toLookupOptions(suppliersPayload.value, DEFAULT_SUPPLIER_OPTION)

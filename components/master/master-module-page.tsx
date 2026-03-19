@@ -22,6 +22,7 @@ const MASTER_MENU_LINKS: Array<{ label: string; href: string }> = [
   { label: "City Master", href: "/master/city-master" },
   { label: "Area Master", href: "/master/area-master" },
   { label: "Grid Designer", href: "/master/grid-designer" },
+  { label: "Dropdown Designer", href: "/master/dropdown-designer" },
   { label: "UI Table Designer", href: "/master/ui-table-designer" },
 ];
 

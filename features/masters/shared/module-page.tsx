@@ -1,9 +1,7 @@
 "use client";
-
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { CrudMasterPageProps } from "@/components/master/crud-master-page";
 import type { MasterModuleDefinition } from "./types";
-
 export function defineMasterModule<
   TRecord extends Record<string, unknown>,
   TFormValues extends Record<string, string>,
@@ -11,7 +9,6 @@ export function defineMasterModule<
 >(definition: MasterModuleDefinition<TRecord, TFormValues, TPayload>) {
   return definition;
 }
-
 export default function MasterModulePage<
   TRecord extends Record<string, unknown>,
   TFormValues extends Record<string, string>,

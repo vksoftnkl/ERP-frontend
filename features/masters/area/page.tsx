@@ -1,5 +1,4 @@
 "use client";
-
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
@@ -14,21 +13,17 @@ import type {
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
-
 const API_ENDPOINTS = {
   list: "/areas/list",
   getById: "/areas/get",
   create: "/areas/create",
   delete: "/areas/delete",
 } as const;
-
 const GRID_TABLE_NAME = "area_master";
-
 const CITY_LOOKUP_ENDPOINT = "/cities/list";
 const CITY_GET_ENDPOINT = "/cities/get";
 const CITY_UPSERT_ENDPOINT = "/cities/create";
 const STATE_LOOKUP_ENDPOINT = "/states/list";
-
 const LOOKUP_REQUEST_QUERY = {
   page: "1",
   limit: "20",
@@ -37,7 +32,6 @@ const STATE_LOOKUP_REQUEST_QUERY = {
   page: "1",
   limit: "100",
 } as const;
-
 const LOOKUP_KEYS = {
   id: ["armId", "arm_id", "area_id", "areaId", "id", "_id"],
   code: ["armAlias", "arm_alias", "armShort", "arm_short", "area_code", "code"],
@@ -49,7 +43,6 @@ const LOOKUP_KEYS = {
   description: ["armAlias", "arm_alias"],
   array: ["data", "items", "results", "rows", "list", "areas"],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "armId",
   name: "armName",
@@ -58,7 +51,6 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "armAlias",
   sort: "armSort",
 } as const;
-
 const AREA_CITY_ID_KEYS = ["armCityId", "arm_city_id", "city_id", "cityId"] as const;
 const AREA_DISTANCE_KEYS = ["armDistanceKm", "arm_distance_km", "distance_km", "distanceKm"] as const;
 const AREA_COLLECTION_DAYS_KEYS = [
@@ -68,7 +60,6 @@ const AREA_COLLECTION_DAYS_KEYS = [
   "collectionDays",
 ] as const;
 const AREA_IS_ACTIVE_KEYS = ["armIsActive", "arm_is_active", "isActive", "is_active", "status"] as const;
-
 const CITY_LOOKUP_KEYS = {
   id: ["ctmId", "ctm_id", "city_id", "cityId", "id", "_id"],
   name: ["ctmName", "ctm_name", "city_name", "cityName", "name"],
@@ -89,7 +80,6 @@ const STATE_LOOKUP_KEYS = {
   name: ["stmName", "stm_name", "state_name", "stateName", "name", "label"],
   array: ["data", "items", "results", "rows", "list", "states"],
 } as const;
-
 const DEFAULT_CITY_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select City",
@@ -102,7 +92,6 @@ const CITY_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(42vw, 42rem)",
   maxHeight: "75vh",
 };
-
 const COLLECTION_DAY_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "1", label: "Monday" },
   { value: "2", label: "Tuesday" },
@@ -112,7 +101,6 @@ const COLLECTION_DAY_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "6", label: "Saturday" },
   { value: "7", label: "Sunday" },
 ];
-
 const AREA_INITIAL_FORM_VALUES = {
   masterName: "",
   masterAlias: "",
@@ -131,7 +119,6 @@ const CITY_MODAL_INITIAL_VALUES: Record<string, string> = {
   ctmOrder: "0",
   ctmIsActive: "true",
 };
-
 function buildAreaFormFields(
   cityOptions: ERPDynamicSelectOption[],
   onCityCreateShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
@@ -215,7 +202,6 @@ function buildAreaFormFields(
     },
   ];
 }
-
 function getFirstDefinedValue(
   source: Record<string, unknown>,
   keys: readonly string[],
@@ -226,15 +212,12 @@ function getFirstDefinedValue(
       return value;
     }
   }
-
   return undefined;
 }
-
 function toDisplayValue(value: unknown): string {
   if (value === undefined || value === null) {
     return "";
   }
-
   if (
     typeof value === "string" ||
     typeof value === "number" ||
@@ -243,7 +226,6 @@ function toDisplayValue(value: unknown): string {
   ) {
     return String(value).trim();
   }
-
   if (typeof value === "object") {
     const nested = value as Record<string, unknown>;
     const fallback = nested.value ?? nested.id ?? nested.code ?? nested.name ?? nested.label;
@@ -256,45 +238,36 @@ function toDisplayValue(value: unknown): string {
       return String(fallback);
     }
   }
-
   return "";
 }
-
 function toInteger(value: string, fallback: number): number {
   const parsed = Number.parseInt(value.trim(), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-
 function toNullableInteger(value: string): number | null {
   const normalized = value.trim();
   if (!normalized) {
     return null;
   }
-
   const parsed = Number.parseInt(normalized, 10);
   if (!Number.isFinite(parsed)) {
     return null;
   }
-
   return Math.max(0, parsed);
 }
-
 function parseCollectionDays(value: string): number[] {
   const normalized = value.trim();
   if (!normalized) {
     return [];
   }
-
   const parsedValues = normalized
     .split(",")
     .map((token) => token.trim())
     .filter(Boolean)
     .map((token) => Number.parseInt(token, 10))
     .filter((token) => Number.isInteger(token) && token >= 1 && token <= 7);
-
   return Array.from(new Set(parsedValues));
 }
-
 function toCollectionDaysInput(value: unknown): string {
   if (Array.isArray(value)) {
     const normalized = value
@@ -303,21 +276,17 @@ function toCollectionDaysInput(value: unknown): string {
       .map((entry) => String(entry));
     return Array.from(new Set(normalized)).join(",");
   }
-
   if (typeof value === "string") {
     return parseCollectionDays(value)
       .map((entry) => String(entry))
       .join(",");
   }
-
   return "";
 }
-
 function toSelectBoolean(value: unknown, fallback: string): "true" | "false" {
   if (typeof value === "boolean") {
     return value ? "true" : "false";
   }
-
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
     if (normalized === "true" || normalized === "1" || normalized === "yes") {
@@ -327,11 +296,9 @@ function toSelectBoolean(value: unknown, fallback: string): "true" | "false" {
       return "false";
     }
   }
-
   if (typeof value === "number") {
     return value > 0 ? "true" : "false";
   }
-
   const normalizedFallback = fallback.trim().toLowerCase();
   return normalizedFallback === "true" ||
     normalizedFallback === "1" ||
@@ -340,36 +307,28 @@ function toSelectBoolean(value: unknown, fallback: string): "true" | "false" {
     ? "true"
     : "false";
 }
-
 function toUpdateAreaId(editingItemId: string | number | null): string {
   if (typeof editingItemId === "number" && Number.isFinite(editingItemId)) {
     return String(editingItemId);
   }
-
   if (typeof editingItemId === "string") {
     return editingItemId.trim();
   }
-
   return "";
 }
-
 function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] {
   if (Array.isArray(payload)) {
     return payload;
   }
-
   if (!payload || typeof payload !== "object") {
     return [];
   }
-
   const objectPayload = payload as Record<string, unknown>;
-
   for (const key of arrayKeys) {
     const value = objectPayload[key];
     if (Array.isArray(value)) {
       return value;
     }
-
     if (value && typeof value === "object" && !Array.isArray(value)) {
       const nestedObject = value as Record<string, unknown>;
       for (const nestedKey of arrayKeys) {
@@ -380,11 +339,9 @@ function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] 
       }
     }
   }
-
   const firstArray = Object.values(objectPayload).find((entry) => Array.isArray(entry));
   return Array.isArray(firstArray) ? firstArray : [];
 }
-
 function extractCityDetailSource(payload: unknown): Record<string, unknown> | null {
   const rows = extractRows(payload, CITY_DETAIL_ARRAY_KEYS);
   if (rows.length > 0) {
@@ -393,20 +350,16 @@ function extractCityDetailSource(payload: unknown): Record<string, unknown> | nu
       return firstRow as Record<string, unknown>;
     }
   }
-
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return null;
   }
-
   const objectPayload = payload as Record<string, unknown>;
   const nestedData = objectPayload.data;
   if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
     return nestedData as Record<string, unknown>;
   }
-
   return objectPayload;
 }
-
 function mapCityDetailToFormValues(source: Record<string, unknown>): Record<string, string> {
   return {
     ...CITY_MODAL_INITIAL_VALUES,
@@ -431,71 +384,57 @@ function mapCityDetailToFormValues(source: Record<string, unknown>): Record<stri
     ),
   };
 }
-
 function buildStateOptions(payload: unknown): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();
   const rows = extractRows(payload, STATE_LOOKUP_KEYS.array);
-
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       continue;
     }
-
     const source = row as Record<string, unknown>;
     const stateId = toDisplayValue(getFirstDefinedValue(source, STATE_LOOKUP_KEYS.id));
     if (!stateId) {
       continue;
     }
-
     const stateName = toDisplayValue(getFirstDefinedValue(source, STATE_LOOKUP_KEYS.name));
     if (!stateName) {
       continue;
     }
-
     if (!optionMap.has(stateId)) {
       optionMap.set(stateId, stateName);
     }
   }
-
   const sortedOptions = Array.from(optionMap.entries())
     .map(([value, label]) => ({ value, label }))
     .sort((left, right) => left.label.localeCompare(right.label));
 
   return [DEFAULT_STATE_OPTION, ...sortedOptions];
 }
-
 function buildCityOptions(payload: unknown): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();
   const rows = extractRows(payload, CITY_LOOKUP_KEYS.array);
-
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       continue;
     }
-
     const source = row as Record<string, unknown>;
     const cityId = toDisplayValue(getFirstDefinedValue(source, CITY_LOOKUP_KEYS.id));
     if (!cityId) {
       continue;
     }
-
     const cityName = toDisplayValue(getFirstDefinedValue(source, CITY_LOOKUP_KEYS.name));
     if (!cityName) {
       continue;
     }
-
     if (!optionMap.has(cityId)) {
       optionMap.set(cityId, cityName);
     }
   }
-
   const sortedOptions = Array.from(optionMap.entries())
     .map(([value, label]) => ({ value, label }))
     .sort((left, right) => left.label.localeCompare(right.label));
-
   return [DEFAULT_CITY_OPTION, ...sortedOptions];
 }
-
 function buildCityModalFields(stateOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
   return [
     {
@@ -552,7 +491,6 @@ function buildCityModalFields(stateOptions: ERPDynamicSelectOption[]): ERPDynami
     },
   ];
 }
-
 export default function AreaMasterPage() {
   const cityModalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const { getAll: getCityLookup } = useApi<unknown>(CITY_LOOKUP_ENDPOINT);
@@ -578,10 +516,8 @@ export default function AreaMasterPage() {
   const [cityOptions, setCityOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_CITY_OPTION]);
   const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_STATE_OPTION]);
   const [editingCityId, setEditingCityId] = useState<string | null>(null);
-
   useEffect(() => {
     let mounted = true;
-
     void (async () => {
       try {
         const [cityPayload, statePayload] = await Promise.all([
@@ -591,7 +527,6 @@ export default function AreaMasterPage() {
         if (!mounted) {
           return;
         }
-
         setCityOptions(buildCityOptions(cityPayload));
         setStateOptions(buildStateOptions(statePayload));
       } catch {
@@ -601,7 +536,6 @@ export default function AreaMasterPage() {
         }
       }
     })();
-
     return () => {
       mounted = false;
     };
@@ -647,12 +581,10 @@ export default function AreaMasterPage() {
           return selectedOption;
         }
       }
-
       const normalizedQuery = payload.query.trim().toLowerCase();
       if (!normalizedQuery) {
         return null;
       }
-
       const exactMatch = cityOptions.find((option) => {
         const label = option.label.trim().toLowerCase();
         const value = option.value.trim().toLowerCase();
@@ -661,14 +593,12 @@ export default function AreaMasterPage() {
       if (exactMatch) {
         return exactMatch;
       }
-
       const startsWithMatch = cityOptions.find((option) =>
         option.label.trim().toLowerCase().startsWith(normalizedQuery),
       );
       if (startsWithMatch) {
         return startsWithMatch;
       }
-
       return (
         cityOptions.find((option) =>
           option.label.trim().toLowerCase().includes(normalizedQuery),
@@ -698,13 +628,11 @@ export default function AreaMasterPage() {
         toast.info("Type/select an existing city, then press Alt+A.");
         return;
       }
-
       const matchedCityId = matchedOption.value.trim();
       if (!matchedCityId) {
         toast.info("Select an existing city to edit.");
         return;
       }
-
       resetCitySaveState();
       resetCityDetailsState();
       setEditingCityId(matchedCityId);
@@ -767,7 +695,6 @@ export default function AreaMasterPage() {
     () => buildAreaFormFields(cityOptions, handleCityCreateShortcut, handleCityEditShortcut),
     [cityOptions, handleCityCreateShortcut, handleCityEditShortcut],
   );
-
   return (
     <>
       <CrudMasterPage
@@ -791,9 +718,8 @@ export default function AreaMasterPage() {
         createInitialValues={AREA_INITIAL_FORM_VALUES}
         mapFormValues={({ source, defaults }) => {
           const rowSource = source ?? {};
-
           return {
-            ...AREA_INITIAL_FORM_VALUES,
+                        ...AREA_INITIAL_FORM_VALUES,
             masterName:
               toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.name)) ||
               defaults.masterName,
@@ -826,7 +752,6 @@ export default function AreaMasterPage() {
           const areaDistanceKm = toNullableInteger(values.areaDistanceKm ?? "");
           const areaCollectionDays = parseCollectionDays(values.areaCollectionDays ?? "");
           const areaIsActive = (values.areaIsActive ?? "true") !== "false";
-
           return {
             armName: areaName,
             armAlias: areaAlias || null,

@@ -15,7 +15,6 @@ const API_ENDPOINTS = {
   create: "/supplier-groups/create",
   delete: "/supplier-groups/delete",
 } as const;
-
 const GRID_TABLE_NAME = "supplier_groups";
 const LOOKUP_KEYS = {
   id: ["spgId", "spg_id", "supplier_group_id", "supplierGroupId", "id", "_id"],

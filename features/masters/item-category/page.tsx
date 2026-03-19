@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
@@ -8,19 +7,15 @@ import type {
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
-
 const API_ENDPOINTS = {
   list: "/item-categories/list",
   getById: "/item-categories/get",
   create: "/item-categories/create",
   delete: "/item-categories/delete",
 } as const;
-
 const GRID_TABLE_NAME = "category_master";
-
 // const TAX_LOOKUP_ENDPOINT = "/item-taxes/list";
 // const UNIT_LOOKUP_ENDPOINT = "/units/list";
-
 const LOOKUP_KEYS = {
   id: [
     "category_id",
@@ -105,7 +100,6 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "category_description",
   sort: "category_sort",
 } as const;
-
 const CATEGORY_CODE_FORM_KEYS = [
   "category_code",
   "categoryCode",
@@ -115,7 +109,6 @@ const CATEGORY_CODE_FORM_KEYS = [
   "category_short",
   "categoryShort",
 ] as const;
-
 const CATEGORY_PARENT_ID_KEYS = ["category_parent_id", "categoryParentId", "parent_id", "parentId"] as const;
 const CATEGORY_LEVEL_KEYS = ["category_level", "categoryLevel", "level"] as const;
 const CATEGORY_TAX_CLAIM_KEYS = [
@@ -156,18 +149,15 @@ const TAX_LOOKUP_KEYS = {
   name: ["tax_name", "taxName", "name", "gst_name", "item_tax_name", "itemTaxName"],
   array: ["data", "items", "results", "rows", "list", "taxes", "itemTaxes"],
 } as const;
-
 const UNIT_LOOKUP_KEYS = {
   id: ["unit_id", "unitId", "id", "_id", "item_unit_id", "itemUnitId", "uom_id"],
   name: ["unit_name", "unitName", "name", "item_unit_name", "itemUnitName", "uom_name"],
   array: ["data", "items", "results", "rows", "list", "units", "itemUnits"],
 } as const;
-
 const LOOKUP_REQUEST_QUERY = {
   page: "1",
   limit: "20",
 } as const;
-
 const FILE_CONSTRAINTS = {
   MAX_UPLOAD_IMAGE_BYTES: 5 * 1024 * 1024,
   ALLOWED_MIME_TYPES: [
@@ -179,7 +169,6 @@ const FILE_CONSTRAINTS = {
     "image/svg+xml",
   ] as const,
 } as const;
-
 const CATEGORY_INITIAL_FORM_VALUES = {
   masterName: "",
   searchCode: "",
@@ -195,18 +184,15 @@ const CATEGORY_INITIAL_FORM_VALUES = {
   categoryPhotoUrl: "",
   masterDescription: "",
 } as const;
-
 const DEFAULT_SELECT_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "None",
 };
-
 type OptionLookupKeys = {
   id: readonly string[];
   name: readonly string[];
   array: readonly string[];
 };
-
 function buildCategoryFormFields(
   categoryOptions: ERPDynamicSelectOption[],
   taxOptions: ERPDynamicSelectOption[],
@@ -279,7 +265,6 @@ function buildCategoryFormFields(
     },
   ];
 }
-
 function getFirstDefinedValue(
   source: Record<string, unknown>,
   keys: readonly string[],
@@ -290,31 +275,24 @@ function getFirstDefinedValue(
       return value;
     }
   }
-
   return undefined;
 }
-
 function toDisplayValue(value: unknown): string {
   if (value === undefined || value === null) {
     return "";
   }
-
   if (typeof value === "string") {
     return value.trim();
   }
-
   if (typeof value === "number" || typeof value === "bigint") {
     return String(value);
   }
-
   if (typeof value === "boolean") {
     return value ? "true" : "false";
   }
-
   if (typeof value === "object") {
     const nested = value as Record<string, unknown>;
     const fallback = nested.value ?? nested.id ?? nested.code ?? nested.name ?? nested.label;
-
     if (
       typeof fallback === "string" ||
       typeof fallback === "number" ||
@@ -324,15 +302,12 @@ function toDisplayValue(value: unknown): string {
       return String(fallback);
     }
   }
-
   return "";
 }
-
 function toSelectBoolean(value: unknown, defaultValue: string): "true" | "false" {
   if (typeof value === "boolean") {
     return value ? "true" : "false";
   }
-
   const normalized = toDisplayValue(value).toLowerCase();
   if (["1", "true", "yes", "active"].includes(normalized)) {
     return "true";
@@ -340,67 +315,52 @@ function toSelectBoolean(value: unknown, defaultValue: string): "true" | "false"
   if (["0", "false", "no", "inactive"].includes(normalized)) {
     return "false";
   }
-
   const normalizedDefaultValue = defaultValue.trim().toLowerCase();
   return ["1", "true", "yes", "active"].includes(normalizedDefaultValue)
     ? "true"
     : "false";
 }
-
 function toInteger(value: string, fallback: number): number {
   const parsed = Number.parseInt(value.trim(), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-
 function toNullableReference(value: string): string | null {
   const normalized = value.trim();
   return normalized ? normalized : null;
 }
-
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-
     reader.onload = () => {
       if (typeof reader.result !== "string") {
         reject(new Error("Unable to read selected image."));
         return;
       }
-
       resolve(reader.result);
     };
-
     reader.onerror = () => reject(new Error("Unable to read selected image."));
     reader.readAsDataURL(file);
   });
 }
-
 function getBase64FromDataUrl(dataUrl: string): string {
   const commaIndex = dataUrl.indexOf(",");
   return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
 }
-
 function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] {
   if (Array.isArray(payload)) {
     return payload;
   }
-
   if (!payload || typeof payload !== "object") {
     return [];
   }
-
   const objectPayload = payload as Record<string, unknown>;
-
   for (const key of arrayKeys) {
     const value = objectPayload[key];
-
     if (Array.isArray(value)) {
       return value;
     }
-
     if (value && typeof value === "object" && !Array.isArray(value)) {
       const nestedObject = value as Record<string, unknown>;
-
       for (const nestedKey of arrayKeys) {
         const nestedValue = nestedObject[nestedKey];
         if (Array.isArray(nestedValue)) {
@@ -409,11 +369,9 @@ function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] 
       }
     }
   }
-
   const firstArray = Object.values(objectPayload).find((value) => Array.isArray(value));
   return Array.isArray(firstArray) ? firstArray : [];
 }
-
 function buildLookupOptions(
   payload: unknown,
   lookupKeys: OptionLookupKeys,
@@ -421,51 +379,40 @@ function buildLookupOptions(
 ): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();
   const rows = extractRows(payload, lookupKeys.array);
-
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       continue;
     }
-
     const source = row as Record<string, unknown>;
     const id = toDisplayValue(getFirstDefinedValue(source, lookupKeys.id));
     if (!id) {
       continue;
     }
-
     const name = toDisplayValue(getFirstDefinedValue(source, lookupKeys.name));
     const label = name || id;
-
     if (!optionMap.has(id)) {
       optionMap.set(id, label);
     }
   }
-
   const options = Array.from(optionMap.entries())
     .map(([value, label]) => ({ value, label }))
     .sort((left, right) => left.label.localeCompare(right.label));
-
   if (!includeEmptyOption) {
     return options;
   }
-
   return [DEFAULT_SELECT_OPTION, ...options];
 }
-
 export default function ItemCategoryMasterPage() {
   const { getAll: getCategoryOptions } = useApi<unknown>(API_ENDPOINTS.list);
   // const { getAll: getTaxOptions } = useApi<unknown>(TAX_LOOKUP_ENDPOINT);
   // const { getAll: getUnitOptions } = useApi<unknown>(UNIT_LOOKUP_ENDPOINT);
-
   const [categoryOptions, setCategoryOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_SELECT_OPTION,
   ]);
   const [taxOptions, setTaxOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_SELECT_OPTION]);
   const [unitOptions, setUnitOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_SELECT_OPTION]);
-
   useEffect(() => {
     let mounted = true;
-
     void (async () => {
       try {
         const [categoryPayload, 
@@ -475,11 +422,9 @@ export default function ItemCategoryMasterPage() {
           // getTaxOptions(LOOKUP_REQUEST_QUERY),
           // getUnitOptions(LOOKUP_REQUEST_QUERY),
         ]);
-
         if (!mounted) {
           return;
         }
-
         setCategoryOptions(buildLookupOptions(categoryPayload, LOOKUP_KEYS, true));
         // setTaxOptions(buildLookupOptions(taxPayload, TAX_LOOKUP_KEYS, true));
         // setUnitOptions(buildLookupOptions(unitPayload, UNIT_LOOKUP_KEYS, true));
@@ -487,25 +432,21 @@ export default function ItemCategoryMasterPage() {
         if (!mounted) {
           return;
         }
-
         setCategoryOptions([DEFAULT_SELECT_OPTION]);
         setTaxOptions([DEFAULT_SELECT_OPTION]);
         setUnitOptions([DEFAULT_SELECT_OPTION]);
       }
     })();
-
     return () => {
       mounted = false;
     };
   }, [getCategoryOptions, 
     // getTaxOptions, getUnitOptions
   ]);
-
   const categoryFormFields = useMemo(
     () => buildCategoryFormFields(categoryOptions, taxOptions, unitOptions),
     [categoryOptions, taxOptions, unitOptions],
   );
-
   return (
     <CrudMasterPage
       title="Item Category"
@@ -528,7 +469,6 @@ export default function ItemCategoryMasterPage() {
       createInitialValues={CATEGORY_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
-
         return {
           ...CATEGORY_INITIAL_FORM_VALUES,
           masterName:
@@ -581,12 +521,10 @@ export default function ItemCategoryMasterPage() {
         const categorySort = toInteger(values.position ?? "0", 0);
         const categoryLevel = Math.max(0, toInteger(values.categoryLevel ?? "0", 0));
         const uploadedImage = files.categoryPhoto;
-
         const categoryPhoto =
           uploadedImage && uploadedImage.size > 0
             ? getBase64FromDataUrl(await readFileAsDataUrl(uploadedImage))
             : undefined;
-
         return {
           category_name: categoryName,
           category_alias: categoryAlias || null,

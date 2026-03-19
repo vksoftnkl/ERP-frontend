@@ -255,7 +255,7 @@
 }
 
 .columnsUiTable {
-  min-width: 1660px;
+  min-width: 1760px;
 }
 
 .uiTableSelectedRow td {
@@ -332,6 +332,49 @@
   background: transparent;
   padding: 0 6px;
   box-shadow: none;
+}
+
+.colorCodeField {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.colorCodeInput {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.colorPicker {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid #9aa3aa;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f4f6 100%);
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+
+  &:focus {
+    outline: 1px solid #3f87c6;
+    outline-offset: 0;
+  }
+
+  &::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+
+  &::-webkit-color-swatch {
+    border: 0;
+  }
+
+  &::-moz-color-swatch {
+    border: 0;
+  }
 }
 
 .centerCell {

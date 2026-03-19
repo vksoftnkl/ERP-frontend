@@ -8,16 +8,13 @@ import {
   toSelectBoolean,
   toUpdateId,
 } from "@/features/masters/shared";
-
 const API_ENDPOINTS = {
   list: "/states/list",
   getById: "/states/get",
   create: "/states/create",
   delete: "/states/delete",
 } as const;
-
 const GRID_TABLE_NAME = "state_master";
-
 const LOOKUP_KEYS = {
   id: ["stmId", "stm_id", "state_id", "stateId", "id", "_id"],
   code: ["stmAlias", "stm_alias", "stmShort", "stm_short", "state_code", "code"],
@@ -29,7 +26,6 @@ const LOOKUP_KEYS = {
   description: ["stmAlias", "stm_alias"],
   array: ["data", "items", "results", "rows", "list", "states"],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "stmId",
   name: "stmName",
@@ -38,9 +34,7 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "stmAlias",
   sort: "stmOrder",
 } as const;
-
 const STATE_IS_ACTIVE_KEYS = ["stmIsActive", "stm_is_active", "isActive", "is_active", "status"] as const;
-
 const STATE_INITIAL_FORM_VALUES = {
   masterName: "",
   masterAlias: "",
@@ -48,7 +42,6 @@ const STATE_INITIAL_FORM_VALUES = {
   position: "0",
   stateIsActive: "true",
 } as const;
-
 const STATE_FORM_FIELDS: ERPDynamicModalField[] = [
   {
     name: "masterName",
@@ -90,7 +83,6 @@ const STATE_FORM_FIELDS: ERPDynamicModalField[] = [
     ],
   },
 ];
-
 export const stateModule = defineMasterModule({
   title: "State",
   entityLabel: "state",
@@ -112,7 +104,6 @@ export const stateModule = defineMasterModule({
   createInitialValues: STATE_INITIAL_FORM_VALUES,
   mapFormValues: ({ source, defaults }) => {
     const rowSource = source ?? {};
-
     return {
       ...STATE_INITIAL_FORM_VALUES,
       masterName:

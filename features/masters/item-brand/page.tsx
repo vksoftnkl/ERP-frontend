@@ -1,10 +1,10 @@
 "use client";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
 import {
   fetchGridColumns,
   selectGridColumns,
@@ -21,7 +21,6 @@ import {
   type ERPDynamicModalSubmitPayload,
   type ERPDynamicModalVariant,
 } from "@/components/library/ui/dynamic-modal-form";
-
 const API_ENDPOINTS = {
   LIST: "/item-brands/list",
   GET_BY_ID: "/item-brands/get",
@@ -29,7 +28,9 @@ const API_ENDPOINTS = {
   DELETE: "/item-brands/delete",
 } as const;
 const GRID_DETAILS_ENDPOINT = "/grid-details/list";
+const GRID_DETAIL_GET_ENDPOINT = "/grid-details/get";
 const ITEM_BRAND_TABLE_NAME = "item_brand_master";
+const ITEM_BRAND_GRID_DETAIL_ID = getConfiguredModuleGridId(ITEM_BRAND_TABLE_NAME);
 const GRID_DETAILS_QUERY = {
   grid_status: "true",
   search: ITEM_BRAND_TABLE_NAME,
@@ -41,7 +42,6 @@ const GRID_COLUMNS_LIMIT = 20;
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
-
 const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
@@ -56,7 +56,6 @@ const FILE_CONSTRAINTS = {
     "image/svg+xml",
   ] as const,
 } as const;
-
 const ARRAY_KEYS = [
   "data",
   "items",
@@ -97,7 +96,6 @@ const PAGE_SIZE_KEYS = [
   "perPage",
   "per_page",
 ] as const;
-
 const BRAND_ID_KEYS = [
   "brand_id",
   "brandId",
@@ -157,7 +155,6 @@ const BRAND_DESCRIPTION_KEYS = [
   "description",
   "desc",
 ] as const;
-
 const INITIAL_FORM_STATE = {
   itemBrandName: "",
   searchCode: "",
@@ -166,7 +163,6 @@ const INITIAL_FORM_STATE = {
   itemDescription: "",
   position: "",
 } as const;
-
 type ItemBrandTableRow = {
   __rowId: string | number;
   __recordId: string | number;
@@ -180,12 +176,10 @@ type ItemBrandTableRow = {
   brandActive: string;
   position: string;
 };
-
 type ItemBrandColumnAccessor = keyof Pick<
   ItemBrandTableRow,
   "serialNo" | "brandId" | "brandCode" | "brandName" | "brandShort" | "position" | "brandActive"
 >;
-
 type ItemBrandFormState = {
   itemBrandName: string;
   searchCode: string;
@@ -194,7 +188,6 @@ type ItemBrandFormState = {
   itemDescription: string;
   position: string;
 };
-
 type CreateItemBrandRequest = {
   brand_name: string;
   brand_alias: string;
@@ -207,7 +200,6 @@ type CreateItemBrandRequest = {
   brand_photo_url: string;
   brand_id?: string | number;
 };
-
 const DEFAULT_ITEM_BRAND_COLUMNS: ReusableTableColumn<ItemBrandTableRow>[] = [
   {
     key: "serialNo",
@@ -254,7 +246,6 @@ const DEFAULT_ITEM_BRAND_COLUMNS: ReusableTableColumn<ItemBrandTableRow>[] = [
     width: "120px",
   },
 ];
-
 const ITEM_BRAND_COLUMN_ACCESSOR_MAP: Record<string, ItemBrandColumnAccessor> = {
   sno: "serialNo",
   srno: "serialNo",
@@ -294,11 +285,9 @@ const ITEM_BRAND_COLUMN_ACCESSOR_MAP: Record<string, ItemBrandColumnAccessor> = 
   itbid: "brandId",
   itb_id: "brandId",
 };
-
 function normalizeColumnToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9_]+/g, "");
 }
-
 function normalizeGridColumnColor(value: string | undefined): string | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -306,7 +295,6 @@ function normalizeGridColumnColor(value: string | undefined): string | undefined
   const normalized = value.trim();
   return normalized || undefined;
 }
-
 function resolveItemBrandAccessor(
   ...candidates: Array<string | undefined>
 ): ItemBrandColumnAccessor | null {
@@ -327,7 +315,6 @@ function resolveItemBrandAccessor(
   }
   return null;
 }
-
 function getFirstDefinedValue(
   row: Record<string, unknown>,
   keys: readonly string[],
@@ -340,16 +327,13 @@ function getFirstDefinedValue(
   }
   return undefined;
 }
-
 function toDisplayValue(value: unknown): string {
   if (value === undefined || value === null) {
     return "";
   }
-
   if (typeof value === "string") {
     return value.trim();
   }
-
   if (
     typeof value === "number" ||
     typeof value === "bigint" ||
@@ -357,7 +341,6 @@ function toDisplayValue(value: unknown): string {
   ) {
     return String(value);
   }
-
   if (typeof value === "object") {
     const nestedValue = value as Record<string, unknown>;
     const nested =
@@ -368,7 +351,6 @@ function toDisplayValue(value: unknown): string {
       nestedValue.code ??
       nestedValue.name ??
       nestedValue.value;
-
     if (
       typeof nested === "string" ||
       typeof nested === "number" ||
@@ -378,26 +360,21 @@ function toDisplayValue(value: unknown): string {
       return String(nested);
     }
   }
-
   return "";
 }
-
 function toNonNegativeInt(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     const normalized = Math.floor(value);
     return normalized >= 0 ? normalized : null;
   }
-
   if (typeof value === "string") {
     const parsed = Number.parseInt(value.trim(), 10);
     if (Number.isFinite(parsed) && parsed >= 0) {
       return parsed;
     }
   }
-
   return null;
 }
-
 function toPositiveInt(value: unknown): number | null {
   const normalized = toNonNegativeInt(value);
   if (normalized === null || normalized < 1) {
@@ -405,7 +382,6 @@ function toPositiveInt(value: unknown): number | null {
   }
   return normalized;
 }
-
 function findPaginationNumber(
   candidates: Record<string, unknown>[],
   keys: readonly string[],
@@ -422,38 +398,29 @@ function findPaginationNumber(
       }
     }
   }
-
   return null;
 }
-
 function extractRows(payload: unknown): unknown[] {
   if (Array.isArray(payload)) {
     return payload;
   }
-
   if (!payload || typeof payload !== "object") {
     return [];
   }
-
   const objectPayload = payload as Record<string, unknown>;
-
   for (const key of ARRAY_KEYS) {
     const value = objectPayload[key];
-
     if (Array.isArray(value)) {
       return value;
     }
-
     if (value && typeof value === "object") {
       const nestedObject = value as Record<string, unknown>;
-
       for (const nestedKey of ARRAY_KEYS) {
         const nestedValue = nestedObject[nestedKey];
         if (Array.isArray(nestedValue)) {
           return nestedValue;
         }
       }
-
       const nestedArray = Object.values(nestedObject).find((entry) =>
         Array.isArray(entry),
       );
@@ -462,54 +429,77 @@ function extractRows(payload: unknown): unknown[] {
       }
     }
   }
-
   const firstArray = Object.values(objectPayload).find((value) =>
     Array.isArray(value),
   );
   return Array.isArray(firstArray) ? firstArray : [];
 }
-
 function resolveNumericId(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.floor(value);
   }
-
   if (typeof value === "string") {
     const normalized = value.trim();
     if (!normalized) {
       return null;
     }
-
     const parsed = Number.parseInt(normalized, 10);
     return Number.isFinite(parsed) ? parsed : null;
   }
-
   if (typeof value === "bigint") {
     return Number(value);
   }
-
   return null;
 }
-
 type ResolvedGridDetails = {
   gridId: number | null;
   gridName: string | null;
 };
+function extractGridDetailSource(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
 
+  const source = payload as Record<string, unknown>;
+  const nestedData = source.data;
+  if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
+    return nestedData as Record<string, unknown>;
+  }
+
+  return source;
+}
+function resolveItemBrandGridDetailsById(
+  payload: unknown,
+  fallbackGridId: number,
+): ResolvedGridDetails {
+  const source = extractGridDetailSource(payload);
+  if (!source) {
+    return {
+      gridId: fallbackGridId,
+      gridName: null,
+    };
+  }
+
+  const gridId =
+    resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS)) ?? fallbackGridId;
+  const gridName = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS));
+
+  return {
+    gridId,
+    gridName: gridName || null,
+  };
+}
 function resolveItemBrandGridDetails(payload: unknown): ResolvedGridDetails {
   const rows = extractRows(payload);
-
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       continue;
     }
-
     const source = row as Record<string, unknown>;
     const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
     if (gridId === null) {
       continue;
     }
-
     const gridSql = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_SQL_KEYS)).toLowerCase();
     if (!gridSql || gridSql.includes(ITEM_BRAND_TABLE_NAME)) {
       const gridName = toDisplayValue(
@@ -521,12 +511,10 @@ function resolveItemBrandGridDetails(payload: unknown): ResolvedGridDetails {
       };
     }
   }
-
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       continue;
     }
-
     const source = row as Record<string, unknown>;
     const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
     if (gridId !== null) {
@@ -539,23 +527,19 @@ function resolveItemBrandGridDetails(payload: unknown): ResolvedGridDetails {
       };
     }
   }
-
   return {
     gridId: null,
     gridName: null,
   };
 }
-
 function buildColumnsFromGridColumns(
   gridColumns: GridColumnConfig[],
 ): ReusableTableColumn<ItemBrandTableRow>[] {
   const columns: ReusableTableColumn<ItemBrandTableRow>[] = [];
   const seenAccessors = new Set<ItemBrandColumnAccessor>();
-
   const visibleColumns = gridColumns
-    .filter((column) => column.visible)
+      .filter((column) => column.visible)
     .sort((left, right) => left.order - right.order);
-
   for (const gridColumn of visibleColumns) {
     const accessor = resolveItemBrandAccessor(
       gridColumn.accessorKey,
@@ -566,7 +550,6 @@ function buildColumnsFromGridColumns(
       continue;
     }
     seenAccessors.add(accessor);
-
     const columnColor = normalizeGridColumnColor(gridColumn.color);
     const tableColumn: ReusableTableColumn<ItemBrandTableRow> = {
       key:
@@ -581,24 +564,19 @@ function buildColumnsFromGridColumns(
       headerStyle: columnColor ? { backgroundColor: columnColor } : undefined,
       cellStyle: columnColor ? { backgroundColor: columnColor } : undefined,
     };
-
     if (accessor === "position") {
       tableColumn.sortAccessor = (row) => Number(row.position || 0);
     }
-
     columns.push(tableColumn);
   }
-
   if (columns.length === 0) {
     return DEFAULT_ITEM_BRAND_COLUMNS;
   }
-
   const serialColumnIndex = columns.findIndex((column) => column.accessor === "serialNo");
   if (serialColumnIndex < 0) {
     columns.unshift(DEFAULT_ITEM_BRAND_COLUMNS[0]);
     return columns;
   }
-
   if (serialColumnIndex > 0) {
     const [serialColumn] = columns.splice(serialColumnIndex, 1);
     columns.unshift({
@@ -607,10 +585,8 @@ function buildColumnsFromGridColumns(
       sortable: false,
     });
   }
-
   return columns;
 }
-
 function extractPaginationInfo(payload: unknown): {
   totalEntries: number | null;
   currentPage: number | null;
@@ -623,35 +599,29 @@ function extractPaginationInfo(payload: unknown): {
       pageSize: null,
     };
   }
-
   const root = payload as Record<string, unknown>;
   const candidates: Record<string, unknown>[] = [root];
-
   for (const key of PAGINATION_CONTAINER_KEYS) {
     const value = root[key];
     if (value && typeof value === "object" && !Array.isArray(value)) {
       candidates.push(value as Record<string, unknown>);
     }
   }
-
   if (root.data && typeof root.data === "object" && !Array.isArray(root.data)) {
     candidates.push(root.data as Record<string, unknown>);
   }
-
   return {
     totalEntries: findPaginationNumber(candidates, TOTAL_ENTRIES_KEYS, true),
     currentPage: findPaginationNumber(candidates, CURRENT_PAGE_KEYS, false),
     pageSize: findPaginationNumber(candidates, PAGE_SIZE_KEYS, false),
   };
 }
-
 function buildItemBrandRows(
   payload: unknown,
   serialOffset = 0,
 ): ItemBrandTableRow[] {
   return extractRows(payload).map((item, index) => {
     const serialNo = serialOffset + index + 1;
-
     if (item && typeof item === "object" && !Array.isArray(item)) {
       const row = item as Record<string, unknown>;
       const brandIdValue = getFirstDefinedValue(row, BRAND_ID_KEYS);
@@ -661,7 +631,6 @@ function buildItemBrandRows(
       const brandAliasValue = getFirstDefinedValue(row, BRAND_ALIAS_KEYS);
       const brandActiveValue = getFirstDefinedValue(row, BRAND_ACTIVE_KEYS);
       const positionValue = getFirstDefinedValue(row, BRAND_POSITION_KEYS);
-
       const preferredKey =
         brandIdValue ??
         row.id ??
@@ -673,7 +642,6 @@ function buildItemBrandRows(
         typeof preferredKey === "string" || typeof preferredKey === "number"
           ? preferredKey
           : serialNo;
-
       return {
         __rowId: rowId,
         __recordId: rowId,
@@ -688,7 +656,6 @@ function buildItemBrandRows(
         position: toDisplayValue(positionValue),
       };
     }
-
     return {
       __rowId: serialNo,
       __recordId: serialNo,
@@ -888,6 +855,7 @@ export default function ItemBrandMasterPage() {
   const dispatch = useAppDispatch();
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
+  const { getAll: getGridDetailById } = useApi<unknown>(GRID_DETAIL_GET_ENDPOINT);
   const {
     error,
     loading,
@@ -939,16 +907,23 @@ export default function ItemBrandMasterPage() {
 
     void (async () => {
       try {
-        const payload = await getGridDetails(GRID_DETAILS_QUERY);
+        const resolvedGrid =
+          ITEM_BRAND_GRID_DETAIL_ID !== undefined
+            ? resolveItemBrandGridDetailsById(
+                await getGridDetailById({
+                  grid_id: String(ITEM_BRAND_GRID_DETAIL_ID),
+                }),
+                ITEM_BRAND_GRID_DETAIL_ID,
+              )
+            : resolveItemBrandGridDetails(await getGridDetails(GRID_DETAILS_QUERY));
         if (!mounted) {
           return;
         }
-        const resolvedGrid = resolveItemBrandGridDetails(payload);
         setItemBrandGridId(resolvedGrid.gridId);
         setItemBrandGridName(resolvedGrid.gridName);
       } catch {
         if (mounted) {
-          setItemBrandGridId(null);
+          setItemBrandGridId(ITEM_BRAND_GRID_DETAIL_ID ?? null);
           setItemBrandGridName(null);
         }
       }
@@ -957,13 +932,11 @@ export default function ItemBrandMasterPage() {
     return () => {
       mounted = false;
     };
-  }, [getGridDetails]);
-
+  }, [getGridDetailById, getGridDetails]);
   const effectiveTitle = useMemo(() => {
     const normalized = itemBrandGridName?.trim();
     return normalized || "Item Brand";
   }, [itemBrandGridName]);
-
   useEffect(() => {
     if (
       itemBrandGridId === null ||
@@ -972,7 +945,6 @@ export default function ItemBrandMasterPage() {
     ) {
       return;
     }
-
     void dispatch(
       fetchGridColumns({
         gridId: itemBrandGridId,
@@ -981,12 +953,10 @@ export default function ItemBrandMasterPage() {
       }),
     );
   }, [dispatch, gridColumnsLoading, gridColumnsRequested, itemBrandGridId]);
-
   const columns = useMemo<ReusableTableColumn<ItemBrandTableRow>[]>(
     () => buildColumnsFromGridColumns(gridColumns),
     [gridColumns],
   );
-
   const selectedRow = useMemo(
     () => rows.find((row) => row.__rowId === selectedRowId) ?? null,
     [rows, selectedRowId],

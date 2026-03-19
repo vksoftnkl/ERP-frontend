@@ -15,15 +15,12 @@ type UseMasterCrudArgs = {
   defaultPage?: number;
   defaultPageSize?: number;
 };
-
 function toSafePageNumber(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
-
 function toSafePageSize(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
-
 export function useMasterCrud({
   apiEndpoints,
   listArrayKeys,
@@ -57,12 +54,10 @@ export function useMasterCrud({
     loading: deleteLoading,
     error: deleteError,
   } = useApi<unknown>(apiEndpoints.delete, { method: "DELETE" });
-
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(defaultPage);
   const [pageSize, setPageSize] = useState(defaultPageSize);
   const [totalEntries, setTotalEntries] = useState(0);
-
   const loadRecords = useCallback(
     async (term: string, page: number, limit: number) => {
       const normalizedTerm = term.trim();
@@ -70,16 +65,12 @@ export function useMasterCrud({
         page: String(Math.max(1, page)),
         limit: String(Math.max(1, limit)),
       };
-
       if (normalizedTerm) {
         query.search = normalizedTerm;
       }
-
       const payload = await getAll(query);
       const normalized = normalizeListResponse(payload, listArrayKeys);
-
       setTotalEntries(normalized.totalEntries);
-
       if (normalized.currentPage !== null) {
         const nextPage = normalized.currentPage;
         setCurrentPage((existing) =>
@@ -88,7 +79,6 @@ export function useMasterCrud({
             : toSafePageNumber(nextPage, defaultPage),
         );
       }
-
       if (normalized.pageSize !== null) {
         const nextPageSize = normalized.pageSize;
         setPageSize((existing) =>
@@ -97,29 +87,24 @@ export function useMasterCrud({
             : toSafePageSize(nextPageSize, defaultPageSize),
         );
       }
-
       return payload;
     },
     [defaultPage, defaultPageSize, getAll, listArrayKeys],
   );
-
   const reload = useCallback(() => loadRecords(searchTerm, currentPage, pageSize), [
     currentPage,
     loadRecords,
     pageSize,
     searchTerm,
   ]);
-
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       void loadRecords(searchTerm, currentPage, pageSize);
     }, debounceMs);
-
     return () => {
       window.clearTimeout(timeoutId);
     };
   }, [currentPage, debounceMs, loadRecords, pageSize, searchTerm]);
-
   return {
     list: {
       currentPage,

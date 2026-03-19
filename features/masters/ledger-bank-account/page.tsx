@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
@@ -18,28 +17,22 @@ import {
   toUpper,
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
-
 const API_ENDPOINTS = {
   list: "/ledger-bank-accounts/list",
   getById: "/ledger-bank-accounts/get",
   create: "/ledger-bank-accounts/create",
   delete: "/ledger-bank-accounts/delete",
 } as const;
-
 const GRID_TABLE_NAME = "acc_ledger_bank_accounts";
-
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-
 const LOOKUP_QUERY_COMPANIES = {
   module: "companies",
   limit: "20",
 } as const;
-
 const LOOKUP_QUERY_ACCOUNT_LEDGERS = {
   module: "accountLedgers",
   limit: "20",
 } as const;
-
 const LOOKUP_KEYS = {
   id: ["lbaId", "lba_id", "id", "_id"],
   code: ["lbaAccountNo", "lba_account_no", "accountNo", "account_no", "code"],
@@ -51,7 +44,6 @@ const LOOKUP_KEYS = {
   description: ["lbaRemarks", "lba_remarks", "description", "remarks"],
   array: ["data", "items", "results", "rows", "list", "ledgerBankAccounts", "ledger_bank_accounts"],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "lbaId",
   name: "lbaAccountHolder",
@@ -60,7 +52,6 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "lbaRemarks",
   sort: "position",
 } as const;
-
 const LBA_COMPANY_ID_KEYS = ["lbaCompanyId", "lba_company_id", "companyId", "company_id"] as const;
 const LBA_LEDGER_ID_KEYS = ["lbaLedgerId", "lba_ledger_id", "ledgerId", "ledger_id"] as const;
 const LBA_BANK_NAME_KEYS = ["lbaBankName", "lba_bank_name", "bankName", "bank_name"] as const;
@@ -72,17 +63,14 @@ const LBA_UPI_KEYS = ["lbaUpiId", "lba_upi_id", "upiId", "upi_id"] as const;
 const LBA_CHEQUE_NAME_KEYS = ["lbaChequeName", "lba_cheque_name", "chequeName", "cheque_name"] as const;
 const LBA_IS_DEFAULT_KEYS = ["lbaIsDefault", "lba_is_default", "isDefault", "is_default"] as const;
 const LBA_IS_ACTIVE_KEYS = ["lbaIsActive", "lba_is_active", "isActive", "is_active", "status"] as const;
-
 const DEFAULT_COMPANY_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "None",
 };
-
 const DEFAULT_LEDGER_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Account Ledger",
 };
-
 const INITIAL_FORM_VALUES = {
   masterName: "",
   lbaCompanyId: "",
@@ -99,7 +87,6 @@ const INITIAL_FORM_VALUES = {
   lbaIsActive: "true",
   masterDescription: "",
 } as const;
-
 function buildLedgerBankAccountFormFields(
   companyOptions: ERPDynamicSelectOption[],
   ledgerOptions: ERPDynamicSelectOption[],
@@ -205,21 +192,17 @@ function buildLedgerBankAccountFormFields(
     },
   ];
 }
-
 export default function LedgerBankAccountMasterPage() {
   const { getAll: getCompanyLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getLedgerLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-
   const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_COMPANY_OPTION,
   ]);
   const [ledgerOptions, setLedgerOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_LEDGER_OPTION,
   ]);
-
   useEffect(() => {
     let mounted = true;
-
     void (async () => {
       try {
         const [companiesPayload, ledgersPayload] = await Promise.all([
@@ -230,7 +213,6 @@ export default function LedgerBankAccountMasterPage() {
         if (!mounted) {
           return;
         }
-
         setCompanyOptions(
           buildLookupOptions(companiesPayload, DEFAULT_COMPANY_OPTION, {
             arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
@@ -249,22 +231,18 @@ export default function LedgerBankAccountMasterPage() {
         if (!mounted) {
           return;
         }
-
         setCompanyOptions([DEFAULT_COMPANY_OPTION]);
         setLedgerOptions([DEFAULT_LEDGER_OPTION]);
       }
     })();
-
     return () => {
       mounted = false;
     };
   }, [getCompanyLookup, getLedgerLookup]);
-
   const formFields = useMemo(
     () => buildLedgerBankAccountFormFields(companyOptions, ledgerOptions),
     [companyOptions, ledgerOptions],
   );
-
   return (
     <CrudMasterPage
       title="Ledger Bank Account"
@@ -288,7 +266,6 @@ export default function LedgerBankAccountMasterPage() {
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
         const mergedDefaults = { ...INITIAL_FORM_VALUES, ...defaults };
-
         return {
           ...INITIAL_FORM_VALUES,
           masterName:
@@ -344,11 +321,9 @@ export default function LedgerBankAccountMasterPage() {
           lbaIsActive: (values.lbaIsActive ?? "true") === "true",
           lbaRemarks: toNullableString(values.masterDescription ?? ""),
         };
-
         if (shouldUpdate && editingItemId !== null) {
           payload.lbaId = toUpdateId(editingItemId);
         }
-
         return payload;
       }}
     />

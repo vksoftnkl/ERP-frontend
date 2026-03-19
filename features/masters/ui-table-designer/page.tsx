@@ -4,106 +4,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
+import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import styles from "./page.module.scss";
+import type {
+  SaveUiTableColumnRequest,
+  SaveUiTableMasterRequest,
+  UiTableColumnPayload,
+  UiTableColumnRow,
+  UiTableForm,
+  UiTableOption,
+  UiTablePayload,
+} from "./type";
 
-type UiTableForm = {
-  uiTblId: string;
-  uiTblName: string;
-  uiTblEditable: boolean;
-  uiTblIsActive: boolean;
-};
-
-type UiTableColumnRow = {
-  id: string;
-  uiTblClmId: string | null;
-  columnNumber: number;
-  columnName: string;
-  width: string;
-  visible: boolean;
-  focus: boolean;
-  position: string;
-  necessity: boolean;
-  nextColumn: string;
-  previousColumn: string;
-  isActive: boolean;
-};
-
-type UiTableOption = {
-  uiTblId: string;
-  uiTblName: string;
-  uiTblEditable: boolean;
-  uiTblIsActive: boolean;
-};
-
-type UiTablePayload = {
-  uiTblId: string;
-  uiTblName: string | null;
-  uiTblEditable: boolean;
-  uiTblIsActive: boolean;
-  uiTblIsDeleted: boolean;
-  uiTblSyncDate: string | null;
-  uiTblCreatedOn: string;
-  uiTblCreatedBy: string | null;
-  uiTblModifiedOn: string;
-  uiTblModifiedBy: string | null;
-};
-
-type UiTableColumnPayload = {
-  uiTblClmId: string;
-  uiTblClmNo: string;
-  uiTblClmName: string | null;
-  uiTblClmTableId: string | null;
-  uiTblClmColumnWidth: number | null;
-  uiTblClmColumnVisibility: boolean | null;
-  uiTblClmColumnFocus: boolean | null;
-  uiTblClmColumnPosition: number;
-  uiTblClmColumnNecessity: boolean;
-  uiTblClmNextColumn: number | null;
-  uiTblClmPreviousColumn: number | null;
-  uiTblClmIsActive: boolean;
-  uiTblClmIsDeleted: boolean;
-  uiTblClmSyncDate: string | null;
-  uiTblClmCreatedOn: string;
-  uiTblClmCreatedBy: string | null;
-  uiTblClmModifiedOn: string;
-  uiTblClmModifiedBy: string | null;
-};
-
-type ListMeta = {
-  page: number;
-  limit: number;
-  total: number;
-  total_pages: number;
-};
-
-type ApiSuccessResponse<TData, TMeta = Record<string, unknown>> = {
-  success: true;
-  message: string;
-  data: TData;
-  meta?: TMeta;
-};
-
-type SaveUiTableMasterRequest = {
-  uiTblId?: string;
-  uiTblName: string;
-  uiTblEditable: boolean;
-  uiTblIsActive: boolean;
-};
-
-type SaveUiTableColumnRequest = {
-  uiTblClmId?: string;
-  uiTblClmNo?: string;
-  uiTblClmName: string;
-  uiTblClmTableId: string | null;
-  uiTblClmColumnWidth: number | null;
-  uiTblClmColumnVisibility: boolean;
-  uiTblClmColumnFocus: boolean;
-  uiTblClmColumnPosition: number;
-  uiTblClmColumnNecessity: boolean;
-  uiTblClmNextColumn: number | null;
-  uiTblClmPreviousColumn: number | null;
-  uiTblClmIsActive: boolean;
-};
 
 const UI_TABLE_MASTERS_LIST_ENDPOINT = "/ui-table-masters/list";
 const UI_TABLE_MASTERS_GET_ENDPOINT = "/ui-table-masters/get";

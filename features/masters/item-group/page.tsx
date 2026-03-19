@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
+import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
 import {
   fetchGridColumns,
   selectGridColumns,
@@ -28,7 +29,9 @@ const API_ENDPOINTS = {
   DELETE: "/item-groups/delete",
 } as const;
 const GRID_DETAILS_ENDPOINT = "/grid-details/list";
+const GRID_DETAIL_GET_ENDPOINT = "/grid-details/get";
 const ITEM_GROUP_TABLE_NAME = "item_group_master";
+const ITEM_GROUP_GRID_DETAIL_ID = getConfiguredModuleGridId(ITEM_GROUP_TABLE_NAME);
 const GRID_DETAILS_QUERY = {
   grid_status: "true",
   search: ITEM_GROUP_TABLE_NAME,
@@ -494,6 +497,42 @@ type ResolvedGridDetails = {
   gridName: string | null;
 };
 
+function extractGridDetailSource(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+
+  const source = payload as Record<string, unknown>;
+  const nestedData = source.data;
+  if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
+    return nestedData as Record<string, unknown>;
+  }
+
+  return source;
+}
+
+function resolveItemGroupGridDetailsById(
+  payload: unknown,
+  fallbackGridId: number,
+): ResolvedGridDetails {
+  const source = extractGridDetailSource(payload);
+  if (!source) {
+    return {
+      gridId: fallbackGridId,
+      gridName: null,
+    };
+  }
+
+  const gridId =
+    resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS)) ?? fallbackGridId;
+  const gridName = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS));
+
+  return {
+    gridId,
+    gridName: gridName || null,
+  };
+}
+
 function resolveItemGroupGridDetails(payload: unknown): ResolvedGridDetails {
   const rows = extractGridDetailsRows(payload);
   for (const row of rows) {
@@ -941,6 +980,7 @@ export default function ItemGroupMasterPage() {
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const dispatch = useAppDispatch();
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
+  const { getAll: getGridDetailById } = useApi<unknown>(GRID_DETAIL_GET_ENDPOINT);
   const [itemGroupGridId, setItemGroupGridId] = useState<number | null>(null);
   const [itemGroupGridName, setItemGroupGridName] = useState<string | null>(null);
   const selectedGridId = itemGroupGridId ?? -1;
@@ -963,16 +1003,23 @@ export default function ItemGroupMasterPage() {
 
     const loadGridId = async () => {
       try {
-        const payload = await getGridDetails(GRID_DETAILS_QUERY);
+        const resolvedGrid =
+          ITEM_GROUP_GRID_DETAIL_ID !== undefined
+            ? resolveItemGroupGridDetailsById(
+                await getGridDetailById({
+                  grid_id: String(ITEM_GROUP_GRID_DETAIL_ID),
+                }),
+                ITEM_GROUP_GRID_DETAIL_ID,
+              )
+            : resolveItemGroupGridDetails(await getGridDetails(GRID_DETAILS_QUERY));
         if (!isMounted) {
           return;
         }
-        const resolvedGrid = resolveItemGroupGridDetails(payload);
         setItemGroupGridId(resolvedGrid.gridId);
         setItemGroupGridName(resolvedGrid.gridName);
       } catch {
         if (isMounted) {
-          setItemGroupGridId(null);
+          setItemGroupGridId(ITEM_GROUP_GRID_DETAIL_ID ?? null);
           setItemGroupGridName(null);
         }
       }
@@ -983,7 +1030,7 @@ export default function ItemGroupMasterPage() {
     return () => {
       isMounted = false;
     };
-  }, [getGridDetails]);
+  }, [getGridDetailById, getGridDetails]);
 
   const effectiveTitle = useMemo(() => {
     const normalized = itemGroupGridName?.trim();

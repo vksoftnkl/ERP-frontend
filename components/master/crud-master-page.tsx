@@ -12,6 +12,7 @@ import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
 import { useMasterCrud } from "@/features/masters/shared";
+import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   fetchGridColumns,
@@ -33,6 +34,7 @@ const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 const GRID_DETAILS_ENDPOINT = "/grid-details/list";
+const GRID_DETAIL_GET_ENDPOINT = "/grid-details/get";
 const GRID_COLUMNS_PAGE = 1;
 const GRID_COLUMNS_LIMIT = 20;
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
@@ -221,6 +223,7 @@ export type CrudMasterPageProps = {
   modalFormGridColumns?: number;
   modalFormDenseGrid?: boolean;
   modalStackLabels?: boolean;
+  gridDetailId?: number;
   gridTableName?: string;
   gridTableNameAliases?: readonly string[];
   getByIdMethod?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -714,6 +717,42 @@ function resolveGridDetailsByTableName(
   };
 }
 
+function extractGridDetailSource(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+
+  const source = payload as Record<string, unknown>;
+  const nestedData = source.data;
+  if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
+    return nestedData as Record<string, unknown>;
+  }
+
+  return source;
+}
+
+function resolveGridDetailsByIdPayload(
+  payload: unknown,
+  fallbackGridId: number,
+): ResolvedGridDetails {
+  const source = extractGridDetailSource(payload);
+  if (!source) {
+    return {
+      gridId: fallbackGridId,
+      gridName: null,
+    };
+  }
+
+  const gridId =
+    resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS)) ?? fallbackGridId;
+  const gridName = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS));
+
+  return {
+    gridId,
+    gridName: gridName || null,
+  };
+}
+
 function buildMasterFallbackColumns(
   title: string,
   codeColumnHeader: string | undefined,
@@ -955,6 +994,7 @@ export default function CrudMasterPage({
   modalFormGridColumns,
   modalFormDenseGrid,
   modalStackLabels,
+  gridDetailId,
   gridTableName,
   gridTableNameAliases,
   getByIdMethod,
@@ -969,6 +1009,7 @@ export default function CrudMasterPage({
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
 
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
+  const { getAll: getGridDetailById } = useApi<unknown>(GRID_DETAIL_GET_ENDPOINT);
   const {
     list: {
       data,
@@ -1040,8 +1081,19 @@ export default function CrudMasterPage({
     return Array.from(new Set(merged));
   }, [gridTableName, gridTableNameAliases]);
 
+  const configuredGridDetailId = useMemo(() => {
+    if (typeof gridDetailId === "number" && Number.isFinite(gridDetailId)) {
+      return Math.floor(gridDetailId);
+    }
+
+    return getConfiguredModuleGridId(gridTableName);
+  }, [gridDetailId, gridTableName]);
+
   useEffect(() => {
-    if (normalizedGridTableNames.length === 0) {
+    if (
+      configuredGridDetailId === undefined &&
+      normalizedGridTableNames.length === 0
+    ) {
       setGridId(null);
       setGridDisplayName(null);
       return;
@@ -1051,26 +1103,33 @@ export default function CrudMasterPage({
 
     void (async () => {
       try {
-        const payload = await getGridDetails({
-          grid_status: "true",
-          search: normalizedGridTableNames[0],
-          page: "1",
-          limit: "20",
-        });
+        const resolvedGrid =
+          configuredGridDetailId !== undefined
+            ? resolveGridDetailsByIdPayload(
+                await getGridDetailById({
+                  grid_id: String(configuredGridDetailId),
+                }),
+                configuredGridDetailId,
+              )
+            : resolveGridDetailsByTableName(
+                await getGridDetails({
+                  grid_status: "true",
+                  search: normalizedGridTableNames[0],
+                  page: "1",
+                  limit: "20",
+                }),
+                normalizedGridTableNames,
+              );
 
         if (!mounted) {
           return;
         }
 
-        const resolvedGrid = resolveGridDetailsByTableName(
-          payload,
-          normalizedGridTableNames,
-        );
         setGridId(resolvedGrid.gridId);
         setGridDisplayName(resolvedGrid.gridName);
       } catch {
         if (mounted) {
-          setGridId(null);
+          setGridId(configuredGridDetailId ?? null);
           setGridDisplayName(null);
         }
       }
@@ -1079,7 +1138,12 @@ export default function CrudMasterPage({
     return () => {
       mounted = false;
     };
-  }, [getGridDetails, normalizedGridTableNames]);
+  }, [
+    configuredGridDetailId,
+    getGridDetailById,
+    getGridDetails,
+    normalizedGridTableNames,
+  ]);
 
   const effectiveTitle = useMemo(() => {
     const normalized = gridDisplayName?.trim();

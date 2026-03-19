@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
@@ -20,23 +19,18 @@ import {
   toUpper,
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
-
 const API_ENDPOINTS = {
   list: "/ledger-shipping-addresses/list",
   getById: "/ledger-shipping-addresses/get",
   create: "/ledger-shipping-addresses/create",
   delete: "/ledger-shipping-addresses/delete",
 } as const;
-
 const GRID_TABLE_NAME = "acc_ship_addrs";
-
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-
 const LOOKUP_QUERY_ACCOUNT_LEDGERS = {
   module: "accountLedgers",
   limit: "20",
 } as const;
-
 const LOOKUP_KEYS = {
   id: ["saaId", "saa_id", "id", "_id"],
   code: ["saaAddrType", "saa_addr_type", "code"],
@@ -56,7 +50,6 @@ const LOOKUP_KEYS = {
     "ledger_shipping_addresses",
   ],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "saaId",
   name: "saaTrdnm",
@@ -65,7 +58,6 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "saaRemarks",
   sort: "saaSort",
 } as const;
-
 const SAA_LEDGER_ID_KEYS = ["saaLedgerId", "saa_ledger_id", "ledgerId", "ledger_id"] as const;
 const SAA_ADDR_TYPE_KEYS = ["saaAddrType", "saa_addr_type", "addrType", "addr_type"] as const;
 const SAA_CONTACT_NAME_KEYS = ["saaContactName", "saa_contact_name", "contactName", "contact_name"] as const;
@@ -83,12 +75,10 @@ const SAA_GSTIN_KEYS = ["saaGstin", "saa_gstin", "gstin"] as const;
 const SAA_PAN_KEYS = ["saaPan", "saa_pan", "pan"] as const;
 const SAA_IS_DEFAULT_KEYS = ["saaIsDefault", "saa_is_default", "isDefault", "is_default"] as const;
 const SAA_IS_ACTIVE_KEYS = ["saaIsActive", "saa_is_active", "isActive", "is_active", "status"] as const;
-
 const DEFAULT_LEDGER_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Account Ledger",
 };
-
 const INITIAL_FORM_VALUES = {
   masterName: "",
   saaLedgerId: "",
@@ -111,21 +101,17 @@ const INITIAL_FORM_VALUES = {
   saaIsActive: "true",
   masterDescription: "",
 } as const;
-
 function toOptionalNonNegativeInteger(value: string): number | undefined {
   const normalized = value.trim();
   if (!normalized) {
     return undefined;
   }
-
   const parsed = Number.parseInt(normalized, 10);
   if (!Number.isFinite(parsed) || parsed < 0) {
     return undefined;
   }
-
   return Math.floor(parsed);
 }
-
 function buildLedgerShippingAddressFields(
   ledgerOptions: ERPDynamicSelectOption[],
 ): ERPDynamicModalField[] {
@@ -267,23 +253,19 @@ function buildLedgerShippingAddressFields(
     },
   ];
 }
-
 export default function LedgerShippingAddressMasterPage() {
   const { getAll: getLedgerLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const [ledgerOptions, setLedgerOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_LEDGER_OPTION,
   ]);
-
   useEffect(() => {
     let mounted = true;
-
     void (async () => {
       try {
         const payload = await getLedgerLookup(LOOKUP_QUERY_ACCOUNT_LEDGERS);
         if (!mounted) {
           return;
         }
-
         setLedgerOptions(
           buildLookupOptions(payload, DEFAULT_LEDGER_OPTION, {
             arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
@@ -297,14 +279,11 @@ export default function LedgerShippingAddressMasterPage() {
         }
       }
     })();
-
     return () => {
       mounted = false;
     };
   }, [getLedgerLookup]);
-
   const formFields = useMemo(() => buildLedgerShippingAddressFields(ledgerOptions), [ledgerOptions]);
-
   return (
     <CrudMasterPage
       title="Ledger Shipping Address"
@@ -328,7 +307,6 @@ export default function LedgerShippingAddressMasterPage() {
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
         const mergedDefaults = { ...INITIAL_FORM_VALUES, ...defaults };
-
         return {
           ...INITIAL_FORM_VALUES,
           masterName:
@@ -401,11 +379,9 @@ export default function LedgerShippingAddressMasterPage() {
           saaIsActive: (values.saaIsActive ?? "true") === "true",
           saaRemarks: toNullableString(values.masterDescription ?? ""),
         };
-
         if (shouldUpdate && editingItemId !== null) {
           payload.saaId = toUpdateId(editingItemId);
         }
-
         return payload;
       }}
     />

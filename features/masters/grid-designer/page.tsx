@@ -3,106 +3,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
+import type { ApiSuccessResponse } from "@/utils/types";
 import styles from "./page.module.scss";
-type SortOrder = "Ascending" | "Descending";
-type Alignment = "Left" | "Center" | "Right";
-type GridDesignerForm = {
-  gridId: string;
-  gridName: string;
-  gridDescription: string;
-  sortColumn: string;
-  sortOrder: SortOrder;
-  gridSql: string;
-  gridStatus: boolean;
-};
-type GridColumnRow = {
-  id: string;
-  gridSerialId: string | null;
-  columnNumber: number;
-  columnName: string;
-  width: string;
-  alignment: Alignment;
-  visible: boolean;
-  filter: boolean;
-  condition: string;
-  conditionColor: string;
-  grouping: boolean;
-  total: boolean;
-  dataType: string;
-  columnColor: string;
-  notes: string;
-};
-type GridOption = {
-  gridId: string;
-  gridName: string;
-  gridStatus: boolean;
-};
-type GridDetailPayload = {
-  grid_id: string;
-  grid_name: string;
-  grid_description: string | null;
-  grid_sort_column: string | null;
-  grid_sort_order: string | null;
-  grid_sql: string | null;
-  grid_status: boolean;
-  grid_is_deleted: boolean;
-};
-type GridColumnPayload = {
-  grid_serialid: string;
-  grid_id: string;
-  grid_column_number: number;
-  grid_column_name: string;
-  grid_column_width: number | null;
-  grid_column_alignment: string | null;
-  grid_column_visibility: boolean;
-  grid_column_filter: boolean;
-  grid_column_condition: string | null;
-  grid_column_condition_color: string | null;
-  grid_column_group: boolean;
-  grid_column_total: boolean;
-  grid_column_data_type: string | null;
-  grid_column_color: string | null;
-  grid_column_notes: string | null;
-  grid_column_is_deleted: boolean;
-};
-type GridListMeta = {
-  page: number;
-  limit: number;
-  total: number;
-  total_pages: number;
-};
-type ApiSuccessResponse<TData, TMeta = Record<string, unknown>> = {
-  success: true;
-  message: string;
-  data: TData;
-  meta?: TMeta;
-};
-type SaveGridDetailRequest = {
-  grid_id?: string;
-  grid_name: string;
-  grid_description: string | null;
-  grid_sort_column: string | null;
-  grid_sort_order: string | null;
-  grid_sql: string | null;
-  grid_status: boolean;
-};
-type SaveGridColumnRequest = {
-  grid_serialid?: string;
-  grid_id: string;
-  grid_column_number: number;
-  grid_column_name: string;
-  grid_column_width: number | null;
-  grid_column_alignment: string | null;
-  grid_column_visibility: boolean;
-  grid_column_filter: boolean;
-  grid_column_condition: string | null;
-  grid_column_condition_color: string | null;
-  grid_column_group: boolean;
-  grid_column_total: boolean;
-  grid_column_data_type: string | null;
-  grid_column_color: string | null;
-  grid_column_notes: string | null;
-};
+import type {
+  Alignment,
+  GridColumnPayload,
+  GridColumnRow,
+  GridDesignerForm,
+  GridDetailPayload,
+  GridListMeta,
+  GridOption,
+  SaveGridColumnRequest,
+  SaveGridDetailRequest,
+  SortOrder,
+} from "./type";
 const GRID_DETAILS_LIST_ENDPOINT = "/grid-details/list";
 const GRID_DETAILS_GET_ENDPOINT = "/grid-details/get";
 const GRID_DETAILS_CREATE_ENDPOINT = "/grid-details/create";
@@ -115,7 +29,8 @@ const ALIGNMENT_OPTIONS: Alignment[] = ["Left", "Center", "Right"];
 const DATA_TYPE_SUGGESTIONS = ["Text", "NumericTS", "Date", "Number", "Boolean"] as const;
 const GRID_DETAILS_PAGE_SIZE = "100";
 const GRID_COLUMNS_PAGE_SIZE = "100";
-const GRID_COLUMNS_TABLE_MIN_WIDTH = "1660px";
+const GRID_COLUMNS_TABLE_MIN_WIDTH = "1760px";
+const HEX_COLOR_CODE_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 const INITIAL_FORM: GridDesignerForm = {
   gridId: "",
   gridName: "",
@@ -188,6 +103,16 @@ function toNullableNumber(value: string): number | null {
 }
 function formatWidth(value: number | null): string {
   return value === null ? "" : String(value);
+}
+function resolveColorPickerValue(value: string): string {
+  const normalized = value.trim();
+  if (!HEX_COLOR_CODE_PATTERN.test(normalized)) {
+    return "#000000";
+  }
+  if (normalized.length === 4) {
+    return `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`;
+  }
+  return normalized;
 }
 function mapGridColumnPayloadToRow(payload: GridColumnPayload): GridColumnRow {
   return {
@@ -513,14 +438,25 @@ export default function GridDesignerPage() {
       {
         key: "columnColor",
         header: "Column Color",
-        width: "136px",
+        width: "196px",
         mobileLabel: "Column Color",
         render: (row) => (
-          <input
-            className={styles.cellInput}
-            value={row.columnColor}
-            onChange={(event) => updateColumn(row.id, "columnColor", event.target.value)}
-          />
+          <div className={styles.colorCodeField}>
+            <input
+              type="color"
+              className={styles.colorPicker}
+              value={resolveColorPickerValue(row.columnColor)}
+              aria-label={`Select column color for ${row.columnName || `column ${row.columnNumber}`}`}
+              onChange={(event) => updateColumn(row.id, "columnColor", event.target.value)}
+            />
+            <input
+              className={`${styles.cellInput} ${styles.colorCodeInput}`}
+              value={row.columnColor}
+              placeholder="#RRGGBB"
+              spellCheck={false}
+              onChange={(event) => updateColumn(row.id, "columnColor", event.target.value)}
+            />
+          </div>
         ),
       },
       {
