@@ -32,7 +32,7 @@ const API_ENDPOINTS = {
 
 const GRID_TABLE_NAME = "emp_master";
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const STATE_LOOKUP_ENDPOINT = "/state-code-masters/list";
+const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const UUID_PATTERN = "^[0-9a-fA-F-]{36}$";
 
 const EMPLOYEE_MODAL_PANEL_STYLE: CSSProperties = {
@@ -64,7 +64,7 @@ const LOOKUP_QUERY_LOAN_LEDGERS = {
   limit: "20",
 } as const;
 const LOOKUP_QUERY_STATES = {
-  page: "1",
+  module: "states",
   limit: "100",
 } as const;
 const LOOKUP_KEYS = {

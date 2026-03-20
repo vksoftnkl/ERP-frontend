@@ -51,33 +51,29 @@ const CUSTOMER_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(62vw, 62rem)",
   maxHeight: "75vh",
 };
-const SUPPLIER_GROUP_LOOKUP_ENDPOINT = "/supplier-groups/list";
+const SUPPLIER_GROUP_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const SUPPLIER_GROUP_GET_ENDPOINT = "/supplier-groups/get";
 const SUPPLIER_GROUP_CREATE_ENDPOINT = "/supplier-groups/create";
-const COMPANY_LOOKUP_ENDPOINT = "/company-masters/list";
-const BRANCH_LOOKUP_ENDPOINT = "/branch-masters/list";
-const STATE_LOOKUP_ENDPOINT = "/state-code-masters/list";
+const COMPANY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const BRANCH_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const STATE_GET_ENDPOINT = "/state-code-masters/get";
 const STATE_CREATE_ENDPOINT = "/state-code-masters/create";
 const SUPPLIER_GROUP_LOOKUP_QUERY = {
-  page: "1",
+  module: "supplierGroups",
   limit: "20",
-  spgIsActive: "true",
 } as const;
 const COMPANY_LOOKUP_QUERY = {
-  page: "1",
+  module: "companies",
   limit: "100",
-  compIsActive: "true",
 } as const;
 const BRANCH_LOOKUP_QUERY = {
-  page: "1",
+  module: "branches",
   limit: "100",
-  brIsActive: "true",
 } as const;
 const STATE_LOOKUP_QUERY = {
-  page: "1",
+  module: "stateCodes",
   limit: "100",
-  isActive: "true",
 } as const;
 const GST_LOOKUP_ENDPOINT = "/api/gst/search";
 const GST_LOOKUP_PATTERN = /^[0-9A-Z]{15}$/;
@@ -155,6 +151,8 @@ const STATE_LOOKUP_NAME_KEYS = [
   "label",
 ] as const;
 const STATE_LOOKUP_CODE_KEYS = [
+  "id",
+  "value",
   "stateCode",
   "state_code",
   "code",

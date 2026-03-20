@@ -18,10 +18,16 @@ const API_ENDPOINTS = {
 
 const GRID_TABLE_NAME = "godown_locations";
 
-const BRANCH_LOOKUP_ENDPOINT = "/branch-masters/list";
+const BRANCH_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const PARENT_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 
-const LOOKUP_REQUEST_QUERY = {
-  page: "1",
+const BRANCH_LOOKUP_QUERY = {
+  module: "branches",
+  limit: "20",
+} as const;
+
+const PARENT_LOOKUP_QUERY = {
+  module: "godownLocations",
   limit: "20",
 } as const;
 
@@ -483,7 +489,7 @@ function toUpdateGodownId(editingItemId: string | number | null): string | numbe
 
 export default function GodownMasterPage() {
   const { getAll: getBranchLookup } = useApi<unknown>(BRANCH_LOOKUP_ENDPOINT);
-  const { getAll: getParentLookup } = useApi<unknown>(API_ENDPOINTS.list);
+  const { getAll: getParentLookup } = useApi<unknown>(PARENT_LOOKUP_ENDPOINT);
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_BRANCH_OPTION,
   ]);
@@ -497,8 +503,8 @@ export default function GodownMasterPage() {
     void (async () => {
       try {
         const [branchPayload, parentPayload] = await Promise.all([
-          getBranchLookup(LOOKUP_REQUEST_QUERY),
-          getParentLookup(LOOKUP_REQUEST_QUERY),
+          getBranchLookup(BRANCH_LOOKUP_QUERY),
+          getParentLookup(PARENT_LOOKUP_QUERY),
         ]);
 
         if (!mounted) {

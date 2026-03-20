@@ -27,8 +27,8 @@ const API_ENDPOINTS = {
   delete: "/branch-masters/delete",
 } as const;
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const GODOWN_LOOKUP_ENDPOINT = "/godowns/list";
-const STATE_LOOKUP_ENDPOINT = "/state-code-masters/list";
+const GODOWN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const LOOKUP_QUERY_COMPANIES = {
   module: "companies",
   limit: "100",
@@ -38,13 +38,12 @@ const LOOKUP_QUERY_ACCOUNT_LEDGERS = {
   limit: "100",
 } as const;
 const GODOWN_LOOKUP_QUERY = {
-  page: "1",
+  module: "godownLocations",
   limit: "100",
 } as const;
 const STATE_LOOKUP_QUERY = {
-  page: "1",
+  module: "stateCodes",
   limit: "100",
-  isActive: "true",
 } as const;
 const LOOKUP_KEYS = {
   id: ["brId", "br_id", "id", "_id"],
@@ -123,7 +122,7 @@ const ROUNDING_MODE_OPTIONS: ERPDynamicSelectOption[] = [
 ];
 const STATE_LOOKUP_ARRAY_KEYS = ["items", "data", "results", "rows", "list"] as const;
 const STATE_LOOKUP_NAME_KEYS = ["stateName", "state_name", "name", "label"] as const;
-const STATE_LOOKUP_CODE_KEYS = ["stateCode", "state_code", "code"] as const;
+const STATE_LOOKUP_CODE_KEYS = ["id", "value", "stateCode", "state_code", "code"] as const;
 const BRANCH_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(92vw, 60rem)",
   maxHeight: "76vh",

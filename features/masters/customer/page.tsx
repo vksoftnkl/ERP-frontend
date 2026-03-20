@@ -40,45 +40,46 @@ const API_ENDPOINTS = {
   delete: "/customers/delete",
 } as const;
 const GRID_TABLE_NAME = "customers";
-const STATE_LOOKUP_ENDPOINT = "/state-code-masters/list";
+const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const STATE_GET_ENDPOINT = "/state-code-masters/get";
 const STATE_UPSERT_ENDPOINT = "/state-code-masters/create";
-const AREA_LOOKUP_ENDPOINT = "/areas/list";
+const AREA_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const AREA_GET_ENDPOINT = "/areas/get";
 const AREA_UPSERT_ENDPOINT = "/areas/create";
 const CUSTOMER_GROUP_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const CUSTOMER_GROUP_GET_ENDPOINT = "/customer-groups/get";
 const CUSTOMER_GROUP_UPSERT_ENDPOINT = "/customer-groups/create";
-const COMPANY_LOOKUP_ENDPOINT = "/company-masters/list";
-const BRANCH_LOOKUP_ENDPOINT = "/branch-masters/list";
-const PRICE_LEVEL_LOOKUP_ENDPOINT = "/price-level-masters/get";
-const CITY_LOOKUP_ENDPOINT = "/cities/list";
+const COMPANY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const BRANCH_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const PRICE_LEVEL_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const CITY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const CUSTOMER_GROUP_LOOKUP_QUERY = {
   module: "customerGroups",
 } as const;
 const CUSTOMER_GROUP_SEARCH_DEBOUNCE_MS = 250;
-const LOOKUP_REQUEST_QUERY = {
-  page: "1",
+const AREA_LOOKUP_REQUEST_QUERY = {
+  module: "areas",
   limit: "20",
 } as const;
 const STATE_LOOKUP_REQUEST_QUERY = {
-  page: "1",
+  module: "stateCodes",
   limit: "100",
-  isActive: "true",
+} as const;
+const CITY_LOOKUP_REQUEST_QUERY = {
+  module: "cities",
+  limit: "20",
 } as const;
 const BRANCH_LOOKUP_REQUEST_QUERY = {
-  page: "1",
+  module: "branches",
   limit: "100",
-  brIsActive: "true",
 } as const;
 const COMPANY_LOOKUP_REQUEST_QUERY = {
-  page: "1",
+  module: "companies",
   limit: "100",
-  compIsActive: "true",
 } as const;
 const PRICE_LEVEL_LOOKUP_REQUEST_QUERY = {
-  activeOnly: "true",
-  includeDeleted: "false",
+  module: "priceLevels",
+  limit: "100",
 } as const;
 const GST_LOOKUP_ENDPOINT = "/api/gst/search";
 const GST_LOOKUP_PATTERN = /^[0-9A-Z]{15}$/;
@@ -104,7 +105,7 @@ const REQUEST_PAYLOAD_KEYS = {
   sort: "cusSortOrder",
 } as const;
 const STATE_LOOKUP_KEYS = {
-  code: ["stateCode", "state_code", "code"],
+  code: ["id", "value", "stateCode", "state_code", "code"],
   name: ["stateName", "state_name", "name", "label"],
   array: [...DEFAULT_LOOKUP_ARRAY_KEYS, "stateCodes", "state_codes", "states"],
 } as const;
@@ -1823,8 +1824,8 @@ export default function CustomerPage() {
         const [statePayload, areaPayload, cityPayload, groupPayload, companyPayload, branchPayload, priceLevelPayload] =
           await Promise.all([
             getStateLookup(STATE_LOOKUP_REQUEST_QUERY),
-            getAreaLookup(LOOKUP_REQUEST_QUERY),
-            getCityLookup(LOOKUP_REQUEST_QUERY),
+            getAreaLookup(AREA_LOOKUP_REQUEST_QUERY),
+            getCityLookup(CITY_LOOKUP_REQUEST_QUERY),
             getCustomerGroupLookup(CUSTOMER_GROUP_LOOKUP_QUERY),
             getCompanyLookup(COMPANY_LOOKUP_REQUEST_QUERY),
             getBranchLookup(BRANCH_LOOKUP_REQUEST_QUERY),
@@ -2131,7 +2132,7 @@ export default function CustomerPage() {
     [areaModalFields, areaSaveLoading],
   );
   const refreshAreaOptions = useCallback(async () => {
-    const payload = await getAreaLookup(LOOKUP_REQUEST_QUERY);
+    const payload = await getAreaLookup(AREA_LOOKUP_REQUEST_QUERY);
     setAreaOptions(buildAreaOptions(payload));
   }, [getAreaLookup]);
   const resolveAreaOptionFromShortcut = useCallback(

@@ -18,6 +18,7 @@ import {
   ERPDynamicModalForm,
   type ERPDynamicModalController,
   type ERPDynamicModalField,
+  type ERPDynamicSelectOption,
   type ERPDynamicModalSubmitPayload,
   type ERPDynamicModalVariant,
 } from "@/components/library/ui/dynamic-modal-form";
@@ -30,6 +31,7 @@ const API_ENDPOINTS = {
 } as const;
 const GRID_DETAILS_ENDPOINT = "/grid-details/list";
 const GRID_DETAIL_GET_ENDPOINT = "/grid-details/get";
+const PARENT_GROUP_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const ITEM_GROUP_TABLE_NAME = "item_group_master";
 const ITEM_GROUP_GRID_DETAIL_ID = getConfiguredModuleGridId(ITEM_GROUP_TABLE_NAME);
 const GRID_DETAILS_QUERY = {
@@ -40,6 +42,10 @@ const GRID_DETAILS_QUERY = {
 } as const;
 const GRID_COLUMNS_PAGE = 1;
 const GRID_COLUMNS_LIMIT = 20;
+const PARENT_GROUP_LOOKUP_QUERY = {
+  module: "itemGroups",
+  limit: "100",
+} as const;
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
@@ -975,14 +981,43 @@ function useItemGroupSelection(rows: ItemGroupTableRow[]) {
     selectedRow,
   };
 }
+
+function buildItemGroupLookupOptions(payload: unknown): ERPDynamicSelectOption[] {
+  const optionMap = new Map<string, string>();
+
+  for (const row of extractRows(payload)) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+
+    const source = row as Record<string, unknown>;
+    const optionId = toDisplayValue(getFirstDefinedValue(source, GROUP_ID_KEYS)).trim();
+    if (!optionId || optionMap.has(optionId)) {
+      continue;
+    }
+
+    const groupCode = toDisplayValue(getFirstDefinedValue(source, GROUP_CODE_KEYS)).trim();
+    const groupName = toDisplayValue(getFirstDefinedValue(source, GROUP_NAME_KEYS)).trim();
+    optionMap.set(optionId, [groupCode, groupName].filter(Boolean).join(" - ") || optionId);
+  }
+
+  return Array.from(optionMap, ([value, label]) => ({ value, label })).sort((left, right) =>
+    left.label.localeCompare(right.label),
+  );
+}
+
 // Main component
 export default function ItemGroupMasterPage() {
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const dispatch = useAppDispatch();
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const { getAll: getGridDetailById } = useApi<unknown>(GRID_DETAIL_GET_ENDPOINT);
+  const { getAll: getParentGroupLookup } = useApi<unknown>(PARENT_GROUP_LOOKUP_ENDPOINT);
   const [itemGroupGridId, setItemGroupGridId] = useState<number | null>(null);
   const [itemGroupGridName, setItemGroupGridName] = useState<string | null>(null);
+  const [parentGroupLookupOptions, setParentGroupLookupOptions] = useState<
+    ERPDynamicSelectOption[]
+  >([]);
   const selectedGridId = itemGroupGridId ?? -1;
 
   const gridColumns = useAppSelector((state) =>
@@ -1101,33 +1136,44 @@ export default function ItemGroupMasterPage() {
     );
   }, [pendingDeleteRow]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    void (async () => {
+      try {
+        const payload = await getParentGroupLookup(PARENT_GROUP_LOOKUP_QUERY);
+        if (mounted) {
+          setParentGroupLookupOptions(buildItemGroupLookupOptions(payload));
+        }
+      } catch {
+        if (mounted) {
+          setParentGroupLookupOptions([]);
+        }
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [getParentGroupLookup]);
+
   const parentGroupOptions = useMemo(() => {
     const editingId = editingItemId === null ? null : String(editingItemId);
     const currentParentId = selectedRow
       ? mapRowToFormState(selectedRow).parentGroupId.trim()
       : "";
-    const optionMap = new Map<string, string>();
-    for (const row of rows) {
-      const optionId = String(resolveItgId(row)).trim();
-      if (!optionId || optionId === editingId || optionMap.has(optionId)) {
-        continue;
-      }
-      const optionLabel =
-        [row.groupCode, row.groupName].filter(Boolean).join(" - ") || optionId;
-      optionMap.set(optionId, optionLabel);
-    }
-    const options = Array.from(optionMap, ([value, label]) => ({
-      value,
-      label,
-    }));
-    if (currentParentId && !optionMap.has(currentParentId)) {
+    const options = parentGroupLookupOptions.filter(
+      (option) => option.value.trim().length > 0 && option.value !== editingId,
+    );
+
+    if (currentParentId && !options.some((option) => option.value === currentParentId)) {
       options.unshift({
         value: currentParentId,
         label: `Current (${currentParentId})`,
       });
     }
     return options;
-  }, [editingItemId, rows, selectedRow]);
+  }, [editingItemId, parentGroupLookupOptions, selectedRow]);
   // Event handlers
   const openCreateModal = useCallback(() => {
     resetCreateState();

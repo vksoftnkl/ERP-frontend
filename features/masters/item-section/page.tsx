@@ -14,6 +14,11 @@ const API_ENDPOINTS = {
   delete: "/item-sections/delete",
 } as const;
 const GRID_TABLE_NAME = "item_section_master";
+const SECTION_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const SECTION_LOOKUP_QUERY = {
+  module: "itemSections",
+  limit: "20",
+} as const;
 const LOOKUP_KEYS = {
   id: [
     "sec_id",
@@ -342,7 +347,7 @@ function buildSectionOptions(payload: unknown): ERPDynamicSelectOption[] {
 }
 
 export default function ItemSectionMasterPage() {
-  const { getAll: getSectionOptions } = useApi<unknown>(API_ENDPOINTS.list);
+  const { getAll: getSectionOptions } = useApi<unknown>(SECTION_LOOKUP_ENDPOINT);
   const [sectionOptions, setSectionOptions] = useState<ERPDynamicSelectOption[]>([]);
 
   useEffect(() => {
@@ -350,7 +355,7 @@ export default function ItemSectionMasterPage() {
 
     void (async () => {
       try {
-        const payload = await getSectionOptions({ page: "1", limit: "20" });
+        const payload = await getSectionOptions(SECTION_LOOKUP_QUERY);
         if (mounted) {
           setSectionOptions(buildSectionOptions(payload));
         }

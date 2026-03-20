@@ -37,7 +37,7 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const GRID_DETAILS_ENDPOINT = "/grid-details/list";
-const STATE_CODE_LOOKUP_ENDPOINT = "/state-code-masters/list";
+const STATE_CODE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const ACCOUNT_LEDGER_TABLE_NAME = "acc_ledger_master";
 const ACCOUNT_LEDGER_TABLE_NAME_ALIASES = [
   ACCOUNT_LEDGER_TABLE_NAME,
@@ -65,8 +65,8 @@ const LOOKUP_QUERY_ACCOUNT_GROUPS = {
   limit: "20",
 } as const;
 const LOOKUP_QUERY_STATE_CODES = {
-  page: "1",
-  limit: "20",
+  module: "stateCodes",
+  limit: "100",
 } as const;
 const STATE_NAME_SEARCH_FIELD_NAMES = new Set<string>([
   "ledStateName",
@@ -156,6 +156,8 @@ const PAGE_SIZE_KEYS = [
   "per_page",
 ] as const;
 const STATE_CODE_LOOKUP_CODE_KEYS = [
+  "id",
+  "value",
   "stateCode",
   "state_code",
   "code",

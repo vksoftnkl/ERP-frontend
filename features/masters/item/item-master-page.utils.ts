@@ -125,8 +125,8 @@ export function toHsnOptions(
 ): ERPDynamicSelectOption[] {
   return buildLookupOptions(payload, defaultOption, {
     arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
-    idKeys: ["hsnCode", "hsn_code"],
-    labelKeys: ["hsnCode", "hsn_code"],
+    idKeys: ["id", "value", "hsnCode", "hsn_code"],
+    labelKeys: ["name", "label", "hsnCode", "hsn_code"],
   }).filter((option) => option.value !== defaultOption.value);
 }
 

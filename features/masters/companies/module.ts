@@ -40,11 +40,10 @@ const API_ENDPOINTS = {
   delete: "/company-masters/delete",
 } as const;
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const STATE_LOOKUP_ENDPOINT = "/state-code-masters/list";
+const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const STATE_LOOKUP_QUERY = {
-  page: "1",
+  module: "stateCodes",
   limit: "100",
-  isActive: "true",
 } as const;
 const BANK_LEDGER_LOOKUP_QUERY = {
   module: "accountLedgers",
@@ -81,7 +80,7 @@ const EWAY_SETTINGS_SECTION_NAME = "__heading_eway_settings";
 const EINVOICE_SETTINGS_SECTION_NAME = "__heading_einvoice_settings";
 const STATE_LOOKUP_ARRAY_KEYS = ["items", "data", "results", "rows", "list"] as const;
 const STATE_LOOKUP_NAME_KEYS = ["stateName", "state_name", "name", "label"] as const;
-const STATE_LOOKUP_CODE_KEYS = ["stateCode", "state_code", "code"] as const;
+const STATE_LOOKUP_CODE_KEYS = ["id", "value", "stateCode", "state_code", "code"] as const;
 const GST_LOOKUP_ENDPOINT = "/api/gst/search";
 const GST_LOOKUP_PATTERN = /^[0-9A-Z]{15}$/;
 const GST_LOOKUP_HELPER_TEXT =

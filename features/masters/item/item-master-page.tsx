@@ -75,15 +75,15 @@ const ITEM_EAN_CODE_API_ENDPOINTS = {
 const GRID_TABLE_NAME = "item_master";
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const TAX_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const COMPANY_LOOKUP_ENDPOINT = "/company-masters/list";
-const BRANCH_LOOKUP_ENDPOINT = "/branch-masters/list";
+const COMPANY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const BRANCH_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const ITEM_GROUP_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const ITEM_CATEGORY_LOOKUP_ENDPOINT = "/item-categories/list";
-const ITEM_BRAND_LOOKUP_ENDPOINT = "/item-brands/list";
-const ITEM_SECTION_LOOKUP_ENDPOINT = "/item-sections/list";
-const UNIT_LOOKUP_ENDPOINT = "/units/list";
-const GODOWN_LOOKUP_ENDPOINT = "/godowns/list";
-const HSN_LOOKUP_ENDPOINT = "/hsn-code-masters/get";
+const ITEM_CATEGORY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const ITEM_BRAND_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const ITEM_SECTION_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const UNIT_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const GODOWN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const HSN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const UI_TABLE_COLUMNS_ENDPOINT = "/ui-table-columns/list";
 const ITEM_TAX_MASTER_LIST_ENDPOINT = "/item-taxes/list";
 const ITEM_PRICE_QUERY_LIMIT = "100";
@@ -99,41 +99,35 @@ const ITEM_PRICE_ROWS_FIELD_NAME = "item_price_rows_json";
 const ITEM_REORDER_ROWS_FIELD_NAME = "item_reorder_rows_json";
 const ITEM_EAN_ROWS_FIELD_NAME = "item_ean_rows_json";
 const COMPANY_LOOKUP_QUERY = {
-  page: "1",
+  module: "companies",
   limit: "100",
-  compIsActive: "true",
 } as const;
 const BRANCH_LOOKUP_QUERY = {
-  page: "1",
+  module: "branches",
   limit: "100",
-  brIsActive: "true",
 } as const;
 const ITEM_GROUP_LOOKUP_QUERY = {
   module: "itemGroups",
   search: " speakers",
 } as const;
 const ITEM_CATEGORY_LOOKUP_QUERY = {
-  page: "1",
+  module: "itemCategories",
   limit: "100",
-  category_is_active: "true",
 } as const;
 const ITEM_BRAND_LOOKUP_QUERY = {
-  page: "1",
+  module: "itemBrands",
   limit: "100",
-  brand_is_active: "true",
 } as const;
 const ITEM_SECTION_LOOKUP_QUERY = {
-  page: "1",
+  module: "itemSections",
   limit: "100",
-  sec_is_active: "true",
 } as const;
 const UNIT_LOOKUP_QUERY = {
-  page: "1",
+  module: "units",
   limit: "100",
-  unit_is_active: "true",
 } as const;
 const GODOWN_LOOKUP_QUERY = {
-  page: "1",
+  module: "godownLocations",
   limit: "100",
 } as const;
 const UI_TABLE_COLUMNS_QUERY = {
@@ -175,7 +169,8 @@ const LOOKUP_QUERY_ITEMS = {
   limit: "50",
 } as const;
 const HSN_LOOKUP_QUERY = {
-  activeOnly: "true",
+  module: "hsnCodes",
+  limit: "100",
 } as const;
 const COMPANY_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "companies", "companys"],

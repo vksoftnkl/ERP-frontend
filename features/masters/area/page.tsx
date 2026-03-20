@@ -20,16 +20,16 @@ const API_ENDPOINTS = {
   delete: "/areas/delete",
 } as const;
 const GRID_TABLE_NAME = "area_master";
-const CITY_LOOKUP_ENDPOINT = "/cities/list";
+const CITY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const CITY_GET_ENDPOINT = "/cities/get";
 const CITY_UPSERT_ENDPOINT = "/cities/create";
-const STATE_LOOKUP_ENDPOINT = "/states/list";
-const LOOKUP_REQUEST_QUERY = {
-  page: "1",
+const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const CITY_LOOKUP_REQUEST_QUERY = {
+  module: "cities",
   limit: "20",
 } as const;
 const STATE_LOOKUP_REQUEST_QUERY = {
-  page: "1",
+  module: "states",
   limit: "100",
 } as const;
 const LOOKUP_KEYS = {
@@ -521,7 +521,7 @@ export default function AreaMasterPage() {
     void (async () => {
       try {
         const [cityPayload, statePayload] = await Promise.all([
-          getCityLookup(LOOKUP_REQUEST_QUERY),
+          getCityLookup(CITY_LOOKUP_REQUEST_QUERY),
           getStateLookup(STATE_LOOKUP_REQUEST_QUERY),
         ]);
         if (!mounted) {
@@ -569,7 +569,7 @@ export default function AreaMasterPage() {
     [cityModalFields, citySaveLoading],
   );
   const refreshCityOptions = useCallback(async () => {
-    const payload = await getCityLookup(LOOKUP_REQUEST_QUERY);
+    const payload = await getCityLookup(CITY_LOOKUP_REQUEST_QUERY);
     setCityOptions(buildCityOptions(payload));
   }, [getCityLookup]);
   const resolveCityOptionFromShortcut = useCallback(

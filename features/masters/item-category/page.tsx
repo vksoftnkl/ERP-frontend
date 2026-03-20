@@ -14,6 +14,11 @@ const API_ENDPOINTS = {
   delete: "/item-categories/delete",
 } as const;
 const GRID_TABLE_NAME = "category_master";
+const CATEGORY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const CATEGORY_LOOKUP_QUERY = {
+  module: "itemCategories",
+  limit: "20",
+} as const;
 // const TAX_LOOKUP_ENDPOINT = "/item-taxes/list";
 // const UNIT_LOOKUP_ENDPOINT = "/units/list";
 const LOOKUP_KEYS = {
@@ -153,10 +158,6 @@ const UNIT_LOOKUP_KEYS = {
   id: ["unit_id", "unitId", "id", "_id", "item_unit_id", "itemUnitId", "uom_id"],
   name: ["unit_name", "unitName", "name", "item_unit_name", "itemUnitName", "uom_name"],
   array: ["data", "items", "results", "rows", "list", "units", "itemUnits"],
-} as const;
-const LOOKUP_REQUEST_QUERY = {
-  page: "1",
-  limit: "20",
 } as const;
 const FILE_CONSTRAINTS = {
   MAX_UPLOAD_IMAGE_BYTES: 5 * 1024 * 1024,
@@ -403,7 +404,7 @@ function buildLookupOptions(
   return [DEFAULT_SELECT_OPTION, ...options];
 }
 export default function ItemCategoryMasterPage() {
-  const { getAll: getCategoryOptions } = useApi<unknown>(API_ENDPOINTS.list);
+  const { getAll: getCategoryOptions } = useApi<unknown>(CATEGORY_LOOKUP_ENDPOINT);
   // const { getAll: getTaxOptions } = useApi<unknown>(TAX_LOOKUP_ENDPOINT);
   // const { getAll: getUnitOptions } = useApi<unknown>(UNIT_LOOKUP_ENDPOINT);
   const [categoryOptions, setCategoryOptions] = useState<ERPDynamicSelectOption[]>([
@@ -418,7 +419,7 @@ export default function ItemCategoryMasterPage() {
         const [categoryPayload, 
           //taxPayload, unitPayload
         ] = await Promise.all([
-          getCategoryOptions(LOOKUP_REQUEST_QUERY),
+          getCategoryOptions(CATEGORY_LOOKUP_QUERY),
           // getTaxOptions(LOOKUP_REQUEST_QUERY),
           // getUnitOptions(LOOKUP_REQUEST_QUERY),
         ]);

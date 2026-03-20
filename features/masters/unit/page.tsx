@@ -17,6 +17,11 @@ const API_ENDPOINTS = {
 } as const;
 
 const GRID_TABLE_NAME = "units";
+const BASE_UNIT_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const BASE_UNIT_LOOKUP_QUERY = {
+  module: "units",
+  limit: "20",
+} as const;
 
 const LOOKUP_KEYS = {
   id: [
@@ -453,7 +458,7 @@ function buildBaseUnitOptions(payload: unknown): ERPDynamicSelectOption[] {
 }
 
 export default function UnitMasterPage() {
-  const { getAll: getBaseUnitList } = useApi<unknown>(API_ENDPOINTS.list);
+  const { getAll: getBaseUnitList } = useApi<unknown>(BASE_UNIT_LOOKUP_ENDPOINT);
   const [baseUnitOptions, setBaseUnitOptions] = useState<ERPDynamicSelectOption[]>([
     { value: "", label: "None" },
   ]);
@@ -463,7 +468,7 @@ export default function UnitMasterPage() {
 
     void (async () => {
       try {
-        const payload = await getBaseUnitList({ page: "1", limit: "20" });
+        const payload = await getBaseUnitList(BASE_UNIT_LOOKUP_QUERY);
         if (mounted) {
           setBaseUnitOptions(buildBaseUnitOptions(payload));
         }

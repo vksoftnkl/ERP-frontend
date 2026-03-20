@@ -18,10 +18,10 @@ const API_ENDPOINTS = {
 
 const GRID_TABLE_NAME = "city_master";
 
-const STATE_LOOKUP_ENDPOINT = "/states/list";
+const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 
 const LOOKUP_REQUEST_QUERY = {
-  page: "1",
+  module: "states",
   limit: "20",
 } as const;
 
