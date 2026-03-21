@@ -242,6 +242,24 @@ type ERPDynamicFormSection = {
   heading: ERPDynamicModalField | null;
   fields: ERPDynamicModalField[];
 };
+
+function getSectionRowStartOffset(fields: ERPDynamicModalField[]): number | null {
+  const rowStarts = fields
+    .map((field) => field.gridRowStart)
+    .filter(
+      (gridRowStart): gridRowStart is number =>
+        typeof gridRowStart === "number" &&
+        Number.isFinite(gridRowStart) &&
+        gridRowStart > 0,
+    );
+
+  if (rowStarts.length === 0) {
+    return null;
+  }
+
+  return Math.min(...rowStarts);
+}
+
 function buildFormSections(
   fields: ERPDynamicModalField[],
 ): ERPDynamicFormSection[] {
@@ -1487,7 +1505,10 @@ export function ERPDynamicModalForm({
     return Object.keys(styles).length > 0 ? styles : undefined;
   };
 
-  const renderField = (field: ERPDynamicModalField) => {
+  const renderField = (
+    field: ERPDynamicModalField,
+    sectionRowStartOffset?: number | null,
+  ) => {
     const fieldValue = formData[field.name] ?? "";
     const selectedFile = fileData[field.name] ?? null;
     const fieldError = fieldErrors[field.name];
@@ -1587,6 +1608,15 @@ export function ERPDynamicModalForm({
       });
     };
 
+    const normalizedGridRowStart =
+      field.gridRowStart !== undefined
+        ? Math.max(
+            1,
+            Math.floor(field.gridRowStart) -
+              Math.max(0, (sectionRowStartOffset ?? 1) - 1),
+          )
+        : undefined;
+
     return (
       <div
         key={field.name}
@@ -1610,10 +1640,7 @@ export function ERPDynamicModalForm({
             : {}),
           ...(field.gridRowStart !== undefined
             ? {
-                gridRowStart: Math.max(
-                  1,
-                  Math.floor(field.gridRowStart),
-                ),
+                gridRowStart: normalizedGridRowStart,
               }
             : {}),
         }}
@@ -2138,6 +2165,9 @@ export function ERPDynamicModalForm({
                 {visibleSections.map((section, sectionIndex) => {
                   const heading = section.heading;
                   const sectionKey = heading?.name ?? `section-${sectionIndex}`;
+                  const sectionRowStartOffset = getSectionRowStartOffset(
+                    section.fields,
+                  );
                   const sectionExpanded = heading
                     ? (activeSectionExpandedState?.[heading.name] ?? true)
                     : true;
@@ -2184,7 +2214,9 @@ export function ERPDynamicModalForm({
                           className={styles.sectionFields}
                           style={getSectionGridStyle(heading)}
                         >
-                          {section.fields.map(renderField)}
+                          {section.fields.map((field) =>
+                            renderField(field, sectionRowStartOffset),
+                          )}
                         </div>
                       ) : null}
                     </Fragment>

@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
@@ -33,6 +34,7 @@ const API_ENDPOINTS = {
   delete: "/account-ledger-masters/delete",
 } as const;
 const DEBOUNCE_MS = 300;
+const SEARCHABLE_SELECT_OPTIONS_MAX_HEIGHT = 220;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
@@ -1497,6 +1499,7 @@ export default function AccountLedgerMasterPage() {
   >({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [pendingDeleteRow, setPendingDeleteRow] = useState<LedgerTableRow | null>(null);
+  const searchInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const selectedGridId = accountLedgerGridId ?? -1;
   const gridColumns = useAppSelector((state) => selectGridColumns(state, selectedGridId));
   const gridColumnsLoading = useAppSelector((state) =>
@@ -1596,6 +1599,21 @@ export default function AccountLedgerMasterPage() {
       window.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("keydown", handleEscape);
     };
+  }, [openSearchField]);
+  useEffect(() => {
+    if (!openSearchField) {
+      return;
+    }
+
+    const input = searchInputRefs.current[openSearchField];
+    if (!input) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      input.focus();
+      input.select();
+    });
   }, [openSearchField]);
   useEffect(() => {
     let mounted = true;
@@ -1864,7 +1882,7 @@ export default function AccountLedgerMasterPage() {
   const handleSearchableFieldKeyDown = useCallback(
     (
       fieldName: LedgerFormFieldName,
-      event: ReactKeyboardEvent<HTMLInputElement>,
+      event: ReactKeyboardEvent<HTMLElement>,
       filteredOptions: ERPDynamicSelectOption[],
       fieldValue: string,
     ) => {
@@ -1934,6 +1952,8 @@ export default function AccountLedgerMasterPage() {
 
       if (event.key === "Enter") {
         if (!isSearchOpen) {
+          event.preventDefault();
+          setOpenSearchField(fieldName);
           return;
         }
         event.preventDefault();
@@ -1953,6 +1973,12 @@ export default function AccountLedgerMasterPage() {
         if (nextOption) {
           handleSearchableOptionSelect(fieldName, nextOption);
         }
+        return;
+      }
+
+      if (event.key === " " && !isSearchOpen) {
+        event.preventDefault();
+        setOpenSearchField(fieldName);
         return;
       }
 
@@ -2181,9 +2207,8 @@ export default function AccountLedgerMasterPage() {
         const options = field.options ?? [];
         const selectedOption = options.find((option) => option.value === fieldValue);
         const isSearchOpen = openSearchField === fieldName;
-        const typedQuery = searchQueries[fieldName] ?? "";
         const selectedLabel = fieldValue ? selectedOption?.label ?? "" : "";
-        const inputValue = isSearchOpen ? typedQuery : selectedLabel;
+        const typedQuery = searchQueries[fieldName] ?? "";
         const normalizedQuery = typedQuery.trim().toLowerCase();
         const filteredOptions = options.filter((option) => {
           if (!normalizedQuery) {
@@ -2226,46 +2251,17 @@ export default function AccountLedgerMasterPage() {
               data-ledger-search-select-root="true"
               style={controlInlineStyle}
             >
-              <input
+              <button
                 id={field.name}
-                type="text"
-                className={dynamicFormStyles.control}
-                value={inputValue}
-                required={field.required}
+                type="button"
+                className={`${dynamicFormStyles.searchSelectTrigger} ${
+                  isSearchOpen ? dynamicFormStyles.searchSelectTriggerOpen : ""
+                }`}
                 disabled={disabled}
-                placeholder={field.placeholder ?? `Search ${field.label}`}
-                style={controlInlineStyle}
                 role="combobox"
-                aria-autocomplete="list"
                 aria-expanded={isSearchOpen}
                 aria-controls={`${field.name}-search-list`}
                 aria-activedescendant={activeDescendantId}
-                autoComplete="off"
-                onFocus={() => {
-                  setOpenSearchField(fieldName);
-                  setSearchQueries((current) => ({
-                    ...current,
-                    [fieldName]: selectedOption?.label ?? "",
-                  }));
-                }}
-                onBlur={() => {
-                  window.setTimeout(() => {
-                    setOpenSearchField((current) => {
-                      if (current !== fieldName) {
-                        return current;
-                      }
-                      setSearchActiveOptionIndex((state) => {
-                        if (!(fieldName in state)) {
-                          return state;
-                        }
-                        const nextState = { ...state };
-                        delete nextState[fieldName];
-                        return nextState;
-                      });
-                      return null;
-                    });
-                  }, 100);
-                }}
                 onKeyDown={(event) =>
                   handleSearchableFieldKeyDown(
                     fieldName,
@@ -2274,29 +2270,6 @@ export default function AccountLedgerMasterPage() {
                     fieldValue,
                   )
                 }
-                onChange={(event) => {
-                  setOpenSearchField(fieldName);
-                  setSearchQueries((current) => ({
-                    ...current,
-                    [fieldName]: event.target.value,
-                  }));
-                  setSearchActiveOptionIndex((current) => {
-                    if (!(fieldName in current)) {
-                      return current;
-                    }
-                    const nextState = { ...current };
-                    delete nextState[fieldName];
-                    return nextState;
-                  });
-                }}
-              />
-              <button
-                type="button"
-                className={dynamicFormStyles.searchSelectToggle}
-                aria-label={`Toggle ${field.label} options`}
-                aria-expanded={isSearchOpen}
-                aria-controls={`${field.name}-search-list`}
-                disabled={disabled}
                 onMouseDown={(event) => {
                   event.preventDefault();
                   setOpenSearchField((current) => {
@@ -2313,62 +2286,135 @@ export default function AccountLedgerMasterPage() {
                     }
                     return nextField;
                   });
-                  setSearchQueries((current) => ({
-                    ...current,
-                    [fieldName]: isSearchOpen ? "" : typedQuery,
-                  }));
                 }}
               >
-                <svg
-                  viewBox="0 0 20 20"
-                  aria-hidden="true"
-                  className={`${dynamicFormStyles.searchSelectChevron} ${
-                    isSearchOpen ? dynamicFormStyles.searchSelectChevronOpen : ""
+                <span
+                  className={`${dynamicFormStyles.searchSelectTriggerSingleValue} ${
+                    !selectedLabel ? dynamicFormStyles.searchSelectTriggerPlaceholder : ""
                   }`}
                 >
-                  <path
-                    d="M5 7.5 10 12.5 15 7.5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                  {selectedLabel || field.placeholder || `Select ${field.label}`}
+                </span>
+                <span
+                  className={dynamicFormStyles.searchSelectChevronSlot}
+                  aria-hidden="true"
+                >
+                  <svg
+                    viewBox="0 0 20 20"
+                    className={`${dynamicFormStyles.searchSelectChevron} ${
+                      isSearchOpen ? dynamicFormStyles.searchSelectChevronOpen : ""
+                    }`}
+                  >
+                    <path
+                      d="M5 7.5 10 12.5 15 7.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
               </button>
-              {isSearchOpen && !disabled && filteredOptions.length ? (
-                <ul
+              {isSearchOpen && !disabled ? (
+                <div
                   id={`${field.name}-search-list`}
                   className={dynamicFormStyles.searchSelectList}
                   role="listbox"
                 >
-                  {filteredOptions.map((option, optionIndex) => (
-                    <li
-                      id={`${field.name}-search-option-${optionIndex}`}
-                      key={`${fieldName}-${option.value}`}
-                      className={`${dynamicFormStyles.searchSelectOption} ${
-                        option.value === fieldValue ||
-                        optionIndex === highlightedOptionIndex
-                          ? dynamicFormStyles.searchSelectOptionActive
-                          : ""
-                      }`}
-                      role="option"
-                      aria-selected={option.value === fieldValue}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        handleSearchableOptionSelect(fieldName, option);
+                  <div className={dynamicFormStyles.searchSelectSearchWrap}>
+                    <input
+                      ref={(element) => {
+                        searchInputRefs.current[fieldName] = element;
                       }}
-                      onMouseEnter={() =>
-                        setSearchActiveOptionIndex((current) => ({
-                          ...current,
-                          [fieldName]: optionIndex,
-                        }))
+                      type="text"
+                      autoComplete="off"
+                      value={typedQuery}
+                      placeholder={`Search ${field.label}`}
+                      className={dynamicFormStyles.searchSelectSearchInput}
+                      role="searchbox"
+                      onMouseDown={(event) => {
+                        event.stopPropagation();
+                      }}
+                      onKeyDown={(event) =>
+                        handleSearchableFieldKeyDown(
+                          fieldName,
+                          event,
+                          filteredOptions,
+                          fieldValue,
+                        )
                       }
+                      onChange={(event) => {
+                        setSearchQueries((current) => ({
+                          ...current,
+                          [fieldName]: event.target.value,
+                        }));
+                        setSearchActiveOptionIndex((current) => {
+                          if (!(fieldName in current)) {
+                            return current;
+                          }
+                          const nextState = { ...current };
+                          delete nextState[fieldName];
+                          return nextState;
+                        });
+                      }}
+                    />
+                    <span
+                      className={dynamicFormStyles.searchSelectSearchIcon}
+                      aria-hidden="true"
                     >
-                      {option.label}
-                    </li>
-                  ))}
-                </ul>
+                      <svg viewBox="0 0 20 20">
+                        <path
+                          d="M8.6 3.5a5.1 5.1 0 1 1 0 10.2 5.1 5.1 0 0 1 0-10.2Zm0 1.6a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm4.7 8.7 3.2 3.2"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.7"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  </div>
+                  {filteredOptions.length ? (
+                    <ul
+                      className={dynamicFormStyles.searchSelectOptions}
+                      style={{
+                        maxHeight: `${SEARCHABLE_SELECT_OPTIONS_MAX_HEIGHT}px`,
+                      }}
+                    >
+                      {filteredOptions.map((option, optionIndex) => (
+                        <li
+                          id={`${field.name}-search-option-${optionIndex}`}
+                          key={`${fieldName}-${option.value}`}
+                          className={`${dynamicFormStyles.searchSelectOption} ${
+                            option.value === fieldValue ||
+                            optionIndex === highlightedOptionIndex
+                              ? dynamicFormStyles.searchSelectOptionActive
+                              : ""
+                          }`}
+                          role="option"
+                          aria-selected={option.value === fieldValue}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            handleSearchableOptionSelect(fieldName, option);
+                          }}
+                          onMouseEnter={() =>
+                            setSearchActiveOptionIndex((current) => ({
+                              ...current,
+                              [fieldName]: optionIndex,
+                            }))
+                          }
+                        >
+                          {option.label}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className={dynamicFormStyles.searchSelectEmpty}>
+                      No options found.
+                    </div>
+                  )}
+                </div>
               ) : null}
             </div>
           </div>
