@@ -1,0 +1,373 @@
+.headerShell {
+  position: sticky;
+  top: 0;
+  z-index: 150;
+}
+
+.topHeader {
+  background: #7b1111;
+  color: #fff;
+  border-bottom: 1px solid #5f0000;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.primaryMenu {
+  min-width: 0;
+  flex: 1 1 500px;
+  position: relative;
+  z-index: 40;
+}
+
+.primaryMenuList {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.menuItem {
+  position: relative;
+  list-style: none;
+}
+
+.menuLinkButton {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.primaryMenuItem,
+.quickTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  transition:
+    color 0.2s ease,
+    text-decoration-color 0.2s ease;
+}
+
+.primaryMenuItem {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.quickTab {
+  color: #111;
+  font-size: 14px;
+}
+
+.primaryMenuItem:hover,
+.quickTab:hover {
+  text-decoration: underline;
+}
+
+.submenuItemSeparated > .submenuLink {
+  position: relative;
+  margin-bottom: 4px;
+  padding-bottom: 12px;
+}
+
+.submenuItemSeparated > .submenuLink::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 10px;
+  right: 10px;
+  border-bottom: 1px solid #2f3b4f;
+}
+
+.menuLinkWithSubmenu {
+  justify-content: space-between;
+}
+
+.submenuArrow {
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.9;
+  transform: translateY(1px);
+  transition: transform 0.18s ease;
+}
+
+.menuItem:hover > .menuLinkWithSubmenu .submenuArrow,
+.menuItem:focus-within > .menuLinkWithSubmenu .submenuArrow {
+  transform: translate(2px, 1px);
+}
+
+.submenuList {
+  --submenu-shift-x: 0;
+  --submenu-shift-y: 6px;
+
+  position: absolute;
+  margin: 0;
+  padding: 4px 0;
+  min-width: 208px;
+  list-style: none;
+  border: 1px solid #b7c0ce;
+  background: #fff;
+  box-shadow: 0 14px 26px rgba(16, 24, 40, 0.2);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate(var(--submenu-shift-x), var(--submenu-shift-y));
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease,
+    visibility 0.2s ease;
+  z-index: 120;
+}
+
+.submenuLevelOne {
+  top: calc(100% + 6px);
+  left: 0;
+}
+
+.submenuLevelNested {
+  top: -5px;
+  left: calc(100% - 1px);
+  --submenu-shift-x: 8px;
+  --submenu-shift-y: 0;
+}
+
+.menuItem:hover > .submenuList,
+.menuItem:focus-within > .submenuList {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate(0, 0);
+}
+
+.submenuLink {
+  width: 100%;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  color: #1a2941;
+  text-decoration: none;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease,
+    padding-left 0.16s ease;
+}
+
+.submenuLink:hover,
+.menuItem:focus-within > .submenuLink {
+  background: #edf4ff;
+  color: #0f3d8a;
+  padding-left: 14px;
+}
+
+.primaryMenuItem:focus-visible,
+.quickTab:focus-visible,
+.submenuLink:focus-visible {
+  outline: 2px solid #8cb5ff;
+  outline-offset: 2px;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.searchText,
+.date {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.calendar {
+  width: 24px;
+  height: 24px;
+  border-radius: 3px;
+  background: #bf4a4a;
+  border: 1px solid #f0c2c2;
+  display: grid;
+  place-items: center;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.customerSelect {
+  height: 24px;
+  min-width: 160px;
+  border: 1px solid #4f4f4f;
+  background: #fff;
+  color: #111;
+  font-size: 13px;
+  padding: 0 6px;
+}
+
+.cartButton,
+.goButton,
+.logoutButton {
+  height: 24px;
+  border: 1px solid #4f4f4f;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  background: #fff;
+  color: #6e0c0c;
+}
+
+.cartButton {
+  min-width: 40px;
+}
+
+.goButton {
+  min-width: 48px;
+}
+
+.logoutButton {
+  min-width: 68px;
+}
+
+.tabStrip {
+  background: #efefef;
+  border-bottom: 1px solid #b3b3b3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px;
+  flex-wrap: wrap;
+}
+
+.quickTabs {
+  min-width: 0;
+  flex: 1 1 520px;
+  position: relative;
+  z-index: 35;
+}
+
+.quickTabsList {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.billInput {
+  width: 180px;
+  max-width: 100%;
+  height: 24px;
+  border: 1px solid #a4a4a4;
+  padding: 0 8px;
+  font-size: 13px;
+  text-align: center;
+  background: #f8f8f8;
+}
+
+@media (max-width: 820px) {
+  .topHeader {
+    row-gap: 6px;
+  }
+
+  .primaryMenuList {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .primaryMenuList::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .headerRight {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
+  .quickTabsList {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .quickTabsList::-webkit-scrollbar {
+    height: 6px;
+  }
+}
+
+@media (max-width: 700px) {
+  .topHeader {
+    padding: 6px 6px 5px;
+  }
+
+  .primaryMenu {
+    flex: 1 1 100%;
+  }
+
+  .headerRight {
+    width: 100%;
+    gap: 6px;
+  }
+
+  .customerSelect {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .tabStrip {
+    padding: 5px 6px;
+  }
+
+  .quickTabs {
+    flex: 1 1 100%;
+  }
+
+  .billInput {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .topHeader {
+    padding: 5px;
+  }
+
+  .primaryMenuItem,
+  .quickTab,
+  .submenuLink {
+    font-size: 13px;
+  }
+
+  .customerSelect {
+    min-width: 132px;
+    font-size: 12px;
+  }
+
+  .searchText,
+  .date {
+    font-size: 12px;
+  }
+}

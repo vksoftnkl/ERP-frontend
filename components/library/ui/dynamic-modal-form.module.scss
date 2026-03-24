@@ -1,0 +1,743 @@
+.cardButton {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.58rem 0.9rem;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease;
+}
+.cardButton:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.94);
+  box-shadow: 0 14px 24px rgba(15, 32, 52, 0.2);
+}
+.cardButton:focus-visible {
+  outline: 2px solid var(--erp-modal-accent);
+  outline-offset: 2px;
+}
+.overlay {
+  --erp-modal-control-height: 2.15rem;
+  --erp-modal-control-padding-y: 0.5rem;
+  --erp-modal-control-padding-x: 0.5rem;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--erp-modal-overlay-z-index, 320);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2rem;
+  overscroll-behavior: contain;
+  animation: erp-modal-fade-in 0.2s ease-out;
+}
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: rgba(12, 18, 27, 0.7);
+}
+.panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(40%, 40rem);
+  max-height: 50vh;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid #d8dfe7;
+  background: var(--erp-modal-surface, #fff);
+  box-shadow: 0 28px 58px rgba(5, 21, 38, 0.34);
+  animation: erp-modal-slide-up 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.header {
+  //border-bottom: 1px solid #dce3eb;
+background: #dfe7f0;
+  padding: 0.5rem;
+}
+.headerRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+.headerTitle {
+  margin: 0;
+  color: #1a2a3a;
+  font-size: 1.25rem;
+  font-weight: 500;
+  line-height: 1.1;
+}
+.headerDescription {
+  margin: 0.3rem 0 0;
+  color: #5f7387;
+  font-size: 0.88rem;
+}
+.closeButton {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  //border: 1px solid #ccd7e2;
+  border-radius: 4px;
+  // background: #fff;
+  // color: #43596e;
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    color 0.16s ease,
+    background-color 0.16s ease;
+}
+.closeButton:hover {
+  border-color: #b9c8d8;
+  background: #f6f9fc;
+  color: #2f475d;
+}
+.closeButton:focus-visible {
+  outline: 2px solid var(--erp-modal-accent);
+  outline-offset: 2px;
+}
+.scrollArea {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  max-height: calc(88vh - 136px);
+}
+.scrollArea::-webkit-scrollbar {
+  width: 9px;
+}
+.scrollArea::-webkit-scrollbar-track {
+  background: #f3f6f9;
+}
+.scrollArea::-webkit-scrollbar-thumb {
+  background: #c8d4df;
+  border-radius: 4px;
+}
+.formGrid {
+  display: grid;
+  grid-template-columns: 5fr;
+  grid-auto-flow: row dense;
+  gap: 0.55rem 1.3rem;
+  padding: 0.45rem 1.5rem 1rem;
+}
+.field {
+  display: grid;
+  grid-template-columns: minmax(2rem, 8rem) minmax(0, 1fr);
+  column-gap: 0.1rem;
+  row-gap: 0.1rem;
+  align-items: start;
+}
+.field > :is(.control, .searchSelect, .fileField, .checkboxWrapper) {
+  grid-column: 2;
+}
+.fieldStacked {
+  grid-template-columns: 1fr;
+  row-gap: 0.28rem;
+}
+.fieldStacked > :is(.control, .searchSelect, .fileField, .checkboxWrapper),
+.fieldStacked > .helpText,
+.fieldStacked > .errorText {
+  grid-column: 1;
+}
+.fieldStacked > .label {
+  padding-top: 0;
+}
+.fieldWide {
+  grid-column: 1 / -1;
+}
+.checkboxField {
+  grid-template-columns: 1fr;
+  column-gap: 0;
+  align-items: center;
+}
+.checkboxField > .checkboxWrapper {
+  grid-column: 1;
+  min-height: 18px;
+}
+.checkboxField > .helpText,
+.checkboxField > .errorText {
+  grid-column: 1;
+}
+.sectionHeadingField {
+  grid-column: 1 / -1;
+  grid-template-columns: 1fr;
+  gap: 0.2rem;
+  margin: 0.12rem -1.35rem 0;
+  padding: 0.7rem 1.35rem;
+  background: #f7f8fa;
+  border-top: 1px solid #e4e8ed;
+  border-bottom: 1px solid #e4e8ed;
+}
+.sectionFields {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(
+    var(--erp-modal-section-columns, var(--erp-modal-form-columns, 2)),
+    minmax(0, 1fr)
+  );
+  grid-auto-flow: row dense;
+  gap: inherit;
+}
+.formGrid > .sectionHeadingField:first-child {
+  margin-top: 0;
+}
+.sectionToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
+  cursor: pointer;
+}
+.sectionToggleInput {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid #9eb4c8;
+  border-radius: 3px;
+  accent-color: var(--erp-modal-accent);
+  cursor: pointer;
+}
+.sectionToggleInput:disabled {
+  cursor: not-allowed;
+}
+.sectionHeading {
+  margin: 0;
+  color: #26384b;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.sectionHeadingDescription {
+  margin: 0;
+  color: #677d91;
+  font-size: 0.8rem;
+}
+.label {
+  margin: 0;
+  color: #2a3d50;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding-top: 0.4rem;
+}
+.requiredMark {
+  color: #c63e3e;
+}
+.control {
+  box-sizing: border-box;
+  color: #1f3448;
+  background: #fff;
+  border: 1px solid #c9d3de;
+  border-radius: 2px;
+  width: 100%;
+  min-height: var(--erp-modal-control-height);
+  padding: var(--erp-modal-control-padding-y) var(--erp-modal-control-padding-x);
+  font-family: inherit;
+  font-size: 0.75rem;
+  line-height: 1.1;
+  transition:
+    border-color 0.16s,
+    box-shadow 0.16s;
+}
+.control[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.control[type="number"]::-webkit-inner-spin-button,
+.control[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+.control::placeholder {
+  color: #6a7f93;
+}
+.control:focus-visible {
+  outline: 0;
+  border-color: var(--erp-modal-accent);
+  box-shadow: 0 0 0 3px var(--erp-modal-accent-soft-ring);
+}
+.control:disabled {
+  background: #f5f7f9;
+  color: #698196;
+}
+.controlInvalid {
+  border-color: #d14343;
+  box-shadow: 0 0 0 3px rgba(209, 67, 67, 0.16);
+}
+.searchSelect {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.searchSelectTrigger {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--erp-modal-control-height);
+  border: 1px solid #c9d3de;
+  border-radius: 2px;
+  background: #fff;
+  padding: var(--erp-modal-control-padding-y) 1.9rem var(--erp-modal-control-padding-y)
+    var(--erp-modal-control-padding-x);
+  font-family: inherit;
+  font-size: 0.75rem;
+  line-height: 1.1;
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    border-color 0.16s,
+    box-shadow 0.16s;
+}
+
+.searchSelectTrigger:focus-visible,
+.searchSelectTriggerOpen {
+  border-color: var(--erp-modal-accent);
+  box-shadow: 0 0 0 3px var(--erp-modal-accent-soft-ring);
+  outline: 0;
+}
+
+.searchSelectTriggerDisabled {
+  background: #f5f7f9;
+  color: #698196;
+  cursor: not-allowed;
+}
+
+.searchSelectTriggerSingleValue {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  color: #1f3448;
+  font-size: 0.75rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.searchSelectTriggerPlaceholder {
+  color: #6a7f93;
+}
+
+.searchMultiSelectControl {
+  padding: 0.32rem 1.9rem 0.32rem 0.35rem;
+}
+
+.searchSelectValueTokens {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.36rem;
+  width: 100%;
+  max-width: 100%;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.searchSelectChevronSlot {
+  position: absolute;
+  top: 50%;
+  right: 0.45rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  color: #4a6074;
+  pointer-events: none;
+}
+
+/* Backward-compatible class used by custom searchable-select UIs. */
+.searchSelectToggle {
+  position: absolute;
+  top: 50%;
+  right: 0.45rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border: 0;
+  background: transparent;
+  color: #4a6074;
+  cursor: pointer;
+}
+.searchSelectChevron {
+  width: 0.95rem;
+  height: 0.95rem;
+  transition: transform 0.16s ease;
+}
+.searchSelectChevronOpen {
+  transform: rotate(180deg);
+}
+.searchSelectList {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 34;
+  border: 1px solid #c9d3de;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 12px 24px rgba(8, 22, 36, 0.16);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.searchSelectListUp {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.searchSelectSearchWrap {
+  position: relative;
+  padding: 0.45rem;
+  border-bottom: 1px solid #e3e8ef;
+  background: #fff;
+}
+
+.searchSelectSearchInput {
+  width: 100%;
+  border: 1px solid #c9d3de;
+  border-radius: 2px;
+  padding: 0.45rem 1.9rem 0.45rem 0.55rem;
+  font-size: 0.75rem;
+  line-height: 1.1;
+  color: #1f3448;
+  background: #fff;
+}
+
+.searchSelectSearchInput::placeholder {
+  color: #6a7f93;
+}
+
+.searchSelectSearchInput:focus-visible {
+  outline: 0;
+  border-color: var(--erp-modal-accent);
+  box-shadow: 0 0 0 3px var(--erp-modal-accent-soft-ring);
+}
+
+.searchSelectSearchIcon {
+  position: absolute;
+  top: 50%;
+  right: 1rem;
+  transform: translateY(-50%);
+  width: 0.9rem;
+  height: 0.9rem;
+  color: #70869a;
+  pointer-events: none;
+}
+
+.searchSelectSearchIcon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.searchSelectOptions {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.searchSelectOption {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 2px;
+  padding: 0.48rem 0.56rem;
+  font-size: 0.75rem;
+  color: #17354b;
+  cursor: pointer;
+}
+.searchSelectOption:hover {
+  background: #eef4fa;
+}
+.searchSelectOptionActive {
+  background: #dbeafe;
+}
+.searchSelectEmpty {
+  padding: 0.56rem 0.58rem;
+  font-size: 0.75rem;
+  color: #5a7084;
+}
+.searchSelectToken {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 12rem;
+  border: 1px solid #bcc6d0;
+  border-radius: 2px;
+  background: #e6eaee;
+  color: #2f465b;
+  font-size: 0.75rem;
+  line-height: 1.1;
+  padding: 0.2rem 0.3rem 0.2rem 0.42rem;
+  gap: 0.3rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.searchSelectTokenText {
+  display: block;
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.searchSelectTokenRemove {
+  border: 0;
+  background: transparent;
+  color: #657b90;
+  font-size: 0.82rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+.searchSelectTokenRemove:hover {
+  color: #3e5569;
+}
+.searchSelectTokenRemove:focus-visible {
+  outline: 1px solid var(--erp-modal-accent);
+  outline-offset: 1px;
+}
+.fileField {
+  display: grid;
+  gap: 0.4rem;
+}
+.checkboxWrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 40px;
+}
+.checkboxLabel {
+  margin: 0;
+  color: #2a3d50;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding-top: 0;
+}
+.checkboxControl {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1px solid #b8c7d6;
+  border-radius: 3px;
+  accent-color: var(--erp-modal-accent);
+  cursor: pointer;
+}
+.checkboxControlInvalid {
+  outline: 2px solid rgba(209, 67, 67, 0.2);
+  outline-offset: 1px;
+}
+.checkboxControl:disabled {
+  cursor: not-allowed;
+}
+.fileInput {
+  padding-block: 0.44rem;
+}
+.fileInput::file-selector-button {
+  margin-right: 0.6rem;
+  border: 1px solid #bccbd8;
+  border-radius: 2px;
+  background: #f3f8fc;
+  color: #1c3a52;
+  padding: 0.26rem 0.55rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fileInput::file-selector-button:hover {
+  background: #e8f1f8;
+}
+.fileMeta {
+  margin: 0;
+  color: #5e7588;
+  font-size: 0.5rem;
+}
+.textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+.helpText,
+.errorText {
+  grid-column: 2;
+  margin: 0;
+  font-size: 0.5rem;
+}
+.helpText {
+  color: #5a7185;
+}
+.errorText {
+  color: #b42323;
+  font-weight: 540;
+}
+.footer {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.72rem;
+  flex-wrap: wrap;
+  border-top: 1px solid #dce3eb;
+  padding: 0.5rem;
+  background: #f8fafc;
+}
+.submitError {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #b42323;
+  flex: 1 0 100%;
+}
+.cancelButton,
+.submitButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3px;
+  min-width: 80px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  padding: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 0.14s ease,
+    filter 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.cancelButton {
+  border-color: #c3d1df;
+  background: #fff;
+  color: #2f4a61;
+}
+.submitButton {
+  border-color: var(--erp-modal-accent);
+  background: var(--erp-modal-accent);
+  color: #fff;
+}
+.cancelButton:hover,
+.submitButton:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.97);
+}
+.cancelButton:focus-visible,
+.submitButton:focus-visible {
+  outline: 2px solid var(--erp-modal-accent);
+  outline-offset: 2px;
+}
+.cancelButton:disabled,
+.submitButton:disabled,
+.cardButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
+  transform: none;
+  box-shadow: none;
+  filter: none;
+}
+@media (min-width: 920px) {
+  .formGrid {
+    grid-template-columns: repeat(var(--erp-modal-form-columns, 2), minmax(0, 1fr));
+    // gap: 1rem 1.35rem;
+  }
+}
+@media (max-width: 919px) {
+  .overlay {
+    padding: 0.65rem;
+  }
+  .panel {
+    width: 100%;
+    max-height: 92vh;
+  }
+  .header {
+    padding:  1rem;
+  }
+  .headerTitle {
+    font-size: 1.5rem;
+  }
+  .scrollArea {
+    max-height: calc(92vh - 126px);
+  }
+  .formGrid {
+    padding: 0.5rem;
+  }
+  .field {
+    grid-template-columns: 1fr;
+    row-gap: 0.36rem;
+  }
+  .field > :is(.control, .searchSelect, .fileField, .checkboxWrapper),
+  .helpText,
+  .errorText {
+    grid-column: 1;
+  }
+  .label {
+    padding-top: 0;
+  }
+  .checkboxField {
+    grid-template-columns: 1fr;
+    column-gap: 0;
+    align-items: center;
+  }
+  .checkboxField > .checkboxWrapper {
+    grid-column: 1;
+    min-height: 18px;
+  }
+  .sectionHeadingField {
+    margin-inline: -1rem;
+    padding-inline: 1rem;
+  }
+  .sectionFields {
+    grid-template-columns: 1fr;
+  }
+  .footer {
+    padding: 0.72rem 1rem;
+  }
+}
+@keyframes erp-modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes erp-modal-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

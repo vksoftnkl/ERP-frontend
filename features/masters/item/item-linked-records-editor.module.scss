@@ -1,0 +1,319 @@
+.editor {
+  --item-linked-control-height: 2.15rem;
+  --item-linked-control-padding-y: 0.45rem;
+  --item-linked-control-padding-x: 0.55rem;
+  --item-linked-control-font-size: 0.82rem;
+}
+
+.editor {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.summary {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.addButton,
+.removeButton {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
+  border-radius: 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.45rem 0.8rem;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.addButton:hover,
+.removeButton:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.addButton:disabled,
+.removeButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.emptyState {
+  border: 1px dashed #cbd5e1;
+  border-radius: 0.7rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+  color: #475569;
+  font-size: 0.88rem;
+  padding: 1rem 1.1rem;
+}
+
+.parseError {
+  color: #b91c1c;
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid #dbe3ee;
+  border-radius: 0.8rem;
+  background: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.table {
+  width: 100%;
+  min-width: 42rem;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.55rem 0.6rem;
+  vertical-align: middle;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.indexCell {
+  width: 3rem;
+  min-width: 3rem;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.actionsCell {
+  width: 6.5rem;
+  min-width: 6.5rem;
+}
+
+.control {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 6rem;
+  min-height: var(--item-linked-control-height);
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 4px;
+  padding: var(--item-linked-control-padding-y) var(--item-linked-control-padding-x);
+  font-family: inherit;
+  font-size: var(--item-linked-control-font-size);
+  line-height: 1.2;
+}
+.control[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.control[type="number"]::-webkit-inner-spin-button,
+.control[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.searchSelect {
+  position: relative;
+  width: 100%;
+  min-width: 8rem;
+}
+
+.searchSelectTrigger {
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--item-linked-control-height);
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 4px;
+  padding: var(--item-linked-control-padding-y) 1.9rem var(--item-linked-control-padding-y)
+    var(--item-linked-control-padding-x);
+  font-family: inherit;
+  font-size: var(--item-linked-control-font-size);
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+}
+
+.searchSelectTrigger:focus-visible,
+.searchSelectTriggerOpen {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.searchSelectTriggerDisabled {
+  background: #f5f7f9;
+  color: #698196;
+  cursor: not-allowed;
+}
+
+.searchSelectTriggerLabel {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.searchSelectTriggerPlaceholder {
+  color: #64748b;
+}
+
+.searchSelectChevronSlot {
+  position: absolute;
+  top: 50%;
+  right: 0.55rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  color: #475569;
+  pointer-events: none;
+}
+
+.searchSelectChevron {
+  width: 0.95rem;
+  height: 0.95rem;
+  transition: transform 0.16s ease;
+}
+
+.searchSelectChevronOpen {
+  transform: rotate(180deg);
+}
+
+.searchSelectList {
+  position: fixed;
+  z-index: 360;
+  min-width: 8rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+  overflow: hidden;
+}
+
+.searchSelectSearchWrap {
+  position: relative;
+  padding: 0.45rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.searchSelectSearchInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--item-linked-control-height);
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: var(--item-linked-control-padding-y) 1.9rem var(--item-linked-control-padding-y)
+    var(--item-linked-control-padding-x);
+  font-family: inherit;
+  font-size: var(--item-linked-control-font-size);
+  line-height: 1.2;
+}
+
+.searchSelectSearchInput:focus-visible {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.searchSelectSearchIcon {
+  position: absolute;
+  top: 50%;
+  right: 1rem;
+  transform: translateY(-50%);
+  width: 0.9rem;
+  height: 0.9rem;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.searchSelectSearchIcon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.searchSelectOptions {
+  max-height: var(--search-select-options-max-height, 15rem);
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.searchSelectOption {
+  border-radius: 0.4rem;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.8rem;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.searchSelectOption:hover {
+  background: #eef4ff;
+}
+
+.searchSelectOptionActive {
+  background: #dbeafe;
+}
+
+.searchSelectEmpty {
+  padding: 0.55rem;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.input {
+  min-height: var(--item-linked-control-height);
+}
+
+.checkboxWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkbox {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #2563eb;
+}

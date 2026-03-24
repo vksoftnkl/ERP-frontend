@@ -1,0 +1,677 @@
+.page {
+  --grid-designer-page-height: calc(100dvh - 250px);
+  height: var(--grid-designer-page-height);
+  min-height: var(--grid-designer-page-height);
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: #eff4f7;
+  padding: clamp(8px, 1.4vw, 14px);
+}
+
+.workspace {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbarGroup {
+  display: flex;
+  flex: 1 1 560px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.statusBadge {
+  min-height: 34px;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #b7bcc2;
+  background: #f7fafc;
+  color: #30424f;
+  padding: 0 12px;
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+
+.topGrid {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.92fr) minmax(320px, 1.08fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.detailsPanel,
+.descriptionPanel,
+.columnsSection,
+.sqlSection {
+  min-width: 0;
+  border: 1px solid #b7bcc2;
+  background: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.detailsPanel {
+  background: linear-gradient(180deg, #8ccae8 0%, #7fbfdf 32%, #86c4e3 100%);
+  padding: 12px;
+}
+
+.descriptionPanel {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sqlSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #133244;
+}
+
+.fieldStack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 100%;
+}
+
+.inlineField {
+  display: grid;
+  grid-template-columns: minmax(104px, 132px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 12px;
+  color: #001a26;
+  font-size: 0.95rem;
+}
+
+.blockField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.checkboxField {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #0d1f2a;
+  font-size: 0.94rem;
+
+  input {
+    width: 16px;
+    height: 16px;
+    accent-color: #124f87;
+  }
+}
+
+.fieldLabel,
+.sectionLabel {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0d1f2a;
+}
+
+.textField,
+.selectField,
+.cellInput,
+.cellSelect,
+.largeTextField,
+.sqlEditor,
+.cardInput,
+.cardSelect,
+.cardTextarea {
+  width: 100%;
+  border: 1px solid #9aa3aa;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f4f6 100%);
+  color: #111111;
+  font: inherit;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+
+  &:focus {
+    outline: 1px solid #3f87c6;
+    outline-offset: 0;
+  }
+}
+
+.textField,
+.selectField,
+.cardInput,
+.cardSelect {
+  min-height: 34px;
+  padding: 0 8px;
+}
+
+.largeTextField,
+.sqlEditor,
+.cardTextarea {
+  resize: vertical;
+  padding: 8px 10px;
+  font-family: "Courier New", monospace;
+  font-size: 0.91rem;
+  line-height: 1.45;
+}
+
+.largeTextField {
+  min-height: 132px;
+}
+
+.sqlEditor {
+  min-height: 180px;
+}
+
+.cardTextarea {
+  min-height: 96px;
+}
+
+.schemaInfo {
+  border: 1px solid #d8e1e8;
+  background: #f8fbfd;
+  padding: 10px 12px;
+}
+
+.schemaInfoTitle {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #234355;
+}
+
+.schemaList {
+  margin: 0;
+  padding-left: 18px;
+  color: #405969;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.desktopButton {
+  min-height: 34px;
+  border: 1px solid #9e9e9e;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #ffffff 0%, #d9d9d9 100%);
+  color: #111111;
+  padding: 0 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.95),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.08);
+
+  &:hover:not(:disabled) {
+    background: linear-gradient(180deg, #ffffff 0%, #cdcdcd 100%);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    color: #6b6b6b;
+    opacity: 0.7;
+  }
+}
+
+.columnsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.columnsSection {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.columnsUiTableShell {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  margin: 0;
+  border: 1px solid #cfd8de;
+  box-shadow: none;
+  background: #ffffff;
+}
+
+.columnsUiTable {
+  min-width: 1760px;
+}
+
+.uiTableSelectedRow td {
+  background: #e2eef8 !important;
+}
+
+.sectionLabelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+}
+
+.sectionMeta {
+  color: #495c69;
+  font-size: 0.84rem;
+}
+
+.tableViewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: auto;
+  border: 1px solid #cfd8de;
+  background: #ffffff;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable both-edges;
+}
+
+.columnsTable {
+  width: 100%;
+  min-width: 1660px;
+  border-collapse: collapse;
+  table-layout: fixed;
+
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f4e78b;
+    border: 1px solid #b6b092;
+    padding: 10px 6px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  tbody td {
+    border: 1px solid #c0c0c0;
+    background: #fffefe;
+    padding: 0 4px;
+    height: 36px;
+    font-size: 0.92rem;
+    color: #111111;
+  }
+
+  tbody tr:nth-child(even) td {
+    background: #f6f0f0;
+  }
+}
+
+.selectedRow td {
+  background: #e2eef8 !important;
+}
+
+.cellInput,
+.cellSelect {
+  height: 35px;
+  border: 0;
+  background: transparent;
+  padding: 0 6px;
+  box-shadow: none;
+}
+
+.colorCodeField {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.colorCodeInput {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.colorPicker {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid #9aa3aa;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f4f6 100%);
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+
+  &:focus {
+    outline: 1px solid #3f87c6;
+    outline-offset: 0;
+  }
+
+  &::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+
+  &::-webkit-color-swatch {
+    border: 0;
+  }
+
+  &::-moz-color-swatch {
+    border: 0;
+  }
+}
+
+.centerCell {
+  text-align: center;
+
+  input {
+    width: 15px;
+    height: 15px;
+    accent-color: #1d1d1d;
+  }
+}
+
+.serialIdTag {
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid #c8d3dc;
+  background: #f4f8fb;
+  color: #315064;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptyTableCell,
+.emptyColumnsState {
+  text-align: center;
+  color: #5f7280;
+  font-size: 0.9rem;
+}
+
+.emptyTableCell {
+  padding: 18px 10px !important;
+}
+
+.emptyColumnsState {
+  border: 1px dashed #c1ced7;
+  background: #f8fbfd;
+  padding: 28px 16px;
+}
+
+.numberColumn {
+  width: 54px;
+}
+
+.idColumn {
+  width: 112px;
+}
+
+.nameColumn {
+  width: 220px;
+}
+
+.dataTypeColumn {
+  width: 140px;
+}
+
+.widthColumn {
+  width: 100px;
+}
+
+.alignColumn {
+  width: 102px;
+}
+
+.tickColumn {
+  width: 78px;
+}
+
+.conditionColumn {
+  width: 170px;
+}
+
+.colorColumn {
+  width: 136px;
+}
+
+.notesColumn {
+  width: 220px;
+}
+
+.mobileColumnsList {
+  display: none;
+  gap: 10px;
+}
+
+.columnCard {
+  border: 1px solid #c8d3dc;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.selectedColumnCard {
+  border-color: #7aaad5;
+  box-shadow: 0 0 0 1px rgba(63, 135, 198, 0.18);
+  background: linear-gradient(180deg, #ffffff 0%, #f4f9fd 100%);
+}
+
+.columnCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.columnCardTitleGroup {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.columnCardTitle {
+  margin: 0;
+  color: #46606f;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.columnCardSubtitle {
+  margin: 0;
+  color: #133244;
+  font-size: 1rem;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.columnCardGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cardField {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cardFieldWide {
+  grid-column: 1 / -1;
+}
+
+.cardFieldLabel {
+  color: #30424f;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.cardToggleGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cardToggle {
+  min-width: 0;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d5dde5;
+  background: #f7fafc;
+  padding: 0 10px;
+  color: #163040;
+  font-size: 0.9rem;
+
+  input {
+    width: 16px;
+    height: 16px;
+    accent-color: #124f87;
+  }
+}
+
+.actionRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1180px) {
+  .topGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .toolbar {
+    align-items: stretch;
+  }
+
+  .toolbarGroup {
+    width: 100%;
+    flex: 1 1 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .toolbarGroup .desktopButton,
+  .actionRow .desktopButton {
+    width: 100%;
+  }
+
+  .statusBadge {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .inlineField {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .sectionLabelRow,
+  .actionRow {
+    justify-content: flex-start;
+  }
+
+  .cardToggleGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sqlEditor {
+    min-height: 160px;
+  }
+
+  .tableViewport {
+    min-height: 220px;
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    height: auto;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .workspace {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .columnsSection {
+    overflow: visible;
+  }
+
+  .tableViewport {
+    display: none;
+  }
+
+  .mobileColumnsList {
+    display: grid;
+  }
+
+  .columnCardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .actionRow {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .page {
+    padding: 8px;
+  }
+
+  .toolbarGroup,
+  .cardToggleGrid,
+  .actionRow {
+    grid-template-columns: 1fr;
+  }
+
+  .statusBadge {
+    justify-content: flex-start;
+    white-space: normal;
+  }
+
+  .detailsPanel,
+  .descriptionPanel,
+  .columnsSection,
+  .sqlSection,
+  .columnCard {
+    padding: 10px;
+  }
+}

@@ -1,0 +1,427 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.headingBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  border: 1px solid #d3deeb;
+  border-radius: 999px;
+  background: #f7fbff;
+  color: #35516f;
+  padding: 0.34rem 0.72rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.headingRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  color: #162739;
+  font-size: clamp(1.9rem, 2.8vw, 2.45rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.description {
+  max-width: 56rem;
+  margin: 0.45rem 0 0;
+  color: #5f7184;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.badgeRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d8e4ef;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #45617e;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.summaryCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 120px;
+  border: 1px solid #d8e3ee;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+  box-shadow: 0 14px 30px rgba(15, 35, 60, 0.07);
+  padding: 1rem 1.05rem;
+}
+
+.summaryLabel {
+  color: #708094;
+  font-size: 0.73rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.summaryValue {
+  color: #14283c;
+  font-size: clamp(1.4rem, 2.4vw, 1.85rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.summaryHint {
+  margin-top: auto;
+  color: #708094;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.tableShell {
+  margin: 0;
+}
+
+.toolbarNote {
+  margin: 0.35rem 0 0;
+  color: #738296;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.configMeta {
+  margin: 0.3rem 0 0;
+  color: #4c6784;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.rowNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  min-height: 2rem;
+  border-radius: 999px;
+  background: #eef5ff;
+  color: #244f8a;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.stickySerialCell {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #ffffff;
+  background-clip: padding-box;
+  box-shadow: 1px 0 0 #e8eef5;
+}
+
+.stickySerialHeader {
+  z-index: 6;
+  background: #f5f8fb;
+}
+
+.dataRow .stickySerialCell {
+  background: #ffffff;
+}
+
+.dataRow:hover .stickySerialCell {
+  background: #f7fbff;
+}
+
+.cellInput,
+.cellSelect {
+  width: 100%;
+  min-width: 11rem;
+  min-height: 2.45rem;
+  border: 1px solid #d7e0ea;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1b2634;
+  padding: 0.52rem 0.72rem;
+  font: inherit;
+  line-height: 1.35;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.cellInput::placeholder {
+  color: #93a0af;
+}
+
+.cellInput:focus-visible,
+.cellSelect:focus-visible {
+  outline: 0;
+  border-color: #8ab4ff;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+}
+
+.cellSelect {
+  cursor: pointer;
+}
+
+.lookupCell {
+  position: relative;
+  min-width: 11rem;
+}
+
+.lookupTrigger {
+  width: 100%;
+  min-width: 11rem;
+  min-height: 2.45rem;
+  border: 1px solid #d7e0ea;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1b2634;
+  padding: 0.52rem 0.72rem;
+  font: inherit;
+  line-height: 1.35;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.lookupTrigger:focus-visible,
+.lookupSearchInput:focus-visible {
+  outline: 0;
+  border-color: #8ab4ff;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+}
+
+.lookupTriggerOpen {
+  border-color: #8ab4ff;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+}
+
+.lookupTriggerLabel {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lookupPlaceholder {
+  color: #93a0af;
+}
+
+.lookupChevron {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  color: #617488;
+  transition: transform 0.16s ease;
+}
+
+.lookupChevronOpen {
+  transform: rotate(180deg);
+}
+
+.lookupMenu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 12;
+  border: 1px solid #d7e0ea;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 16px 36px rgba(15, 35, 60, 0.18);
+  padding: 0.45rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.lookupSearchWrap {
+  position: relative;
+}
+
+.lookupSearchInput {
+  width: 100%;
+  min-height: 2.45rem;
+  border: 1px solid #d7e0ea;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1b2634;
+  padding: 0.52rem 0.72rem 0.52rem 2.35rem;
+  font: inherit;
+  line-height: 1.35;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.lookupSearchIcon {
+  position: absolute;
+  left: 0.8rem;
+  top: 50%;
+  width: 0.95rem;
+  height: 0.95rem;
+  color: #8c9caf;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.lookupOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-height: 15.5rem;
+  overflow-y: auto;
+}
+
+.lookupOption {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #1b2634;
+  padding: 0.56rem 0.68rem;
+  font: inherit;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.lookupOption:hover {
+  background: #eef5ff;
+}
+
+.lookupOptionActive {
+  background: #dbeafe;
+  color: #173b63;
+  font-weight: 700;
+}
+
+.lookupEmptyState {
+  padding: 0.56rem 0.68rem;
+  color: #6d7f92;
+  font-size: 0.92rem;
+}
+
+.numericInput {
+  min-width: 8.75rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.numericInput::-webkit-outer-spin-button,
+.numericInput::-webkit-inner-spin-button {
+  margin: 0;
+}
+
+.computedValue {
+  display: inline-flex;
+  width: 100%;
+  justify-content: flex-end;
+  color: #183b63;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.actionIcon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.footerValue {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  color: #183b63;
+  font-variant-numeric: tabular-nums;
+}
+
+.footerLabel {
+  color: #738296;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+@media (max-width: 1200px) {
+  .summaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    gap: 1.15rem;
+    padding: 1rem;
+  }
+
+  .summaryGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .summaryCard {
+    min-height: auto;
+  }
+
+  .footerValue {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .cellInput,
+  .cellSelect,
+  .numericInput {
+    min-width: 100%;
+  }
+}
