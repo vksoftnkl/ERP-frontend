@@ -29,8 +29,6 @@ const API_ENDPOINTS = {
   create: "/employee-masters/create",
   delete: "/employee-masters/delete",
 } as const;
-
-const GRID_TABLE_NAME = "emp_master";
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const UUID_PATTERN = "^[0-9a-fA-F-]{36}$";
@@ -788,7 +786,6 @@ export default function EmployeeMasterPage() {
       entityLabel="employee"
       entityLabelPlural="employees"
       apiEndpoints={API_ENDPOINTS}
-      gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
@@ -796,6 +793,7 @@ export default function EmployeeMasterPage() {
       createLabel="Add Employee"
       codeColumnHeader="Employee Code"
       nameColumnHeader="Employee Name"
+      listResponseStyleArrayKey="styles"
       nameFieldLabel="Employee Name"
       nameFieldPlaceholder="Ravi Shah"
       formTitle="Employee Form"

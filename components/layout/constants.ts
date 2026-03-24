@@ -73,7 +73,10 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
     { label: "Allow to Change Master Price" },
   ],
   },
-  { label: "4 Stock" },
+  {
+    label: "4 Stock",
+    children: [{ label: "Opening Stock", href: "/stock/opening-stock" }],
+  },
   {
     label: "5 Accounts",
     children: [
@@ -181,6 +184,9 @@ export const ERP_MENU_OBJECT: ERPMenuObject = {
   Accounts: {
     "Account Ledger Groups Master": null,
     "Account Ledger Master": null,
+  },
+  Stock: {
+    "Opening Stock": null,
   },
   Inventory: {
     "Item Master": "Ctrl+I",

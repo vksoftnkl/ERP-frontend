@@ -1159,21 +1159,17 @@ type ResolvedGridDetails = {
   gridId: number | null;
   gridName: string | null;
 };
-
 function resolveAccountLedgerGridDetails(payload: unknown): ResolvedGridDetails {
   const rows = extractRows(payload, LOOKUP_ARRAY_KEYS);
-
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       continue;
     }
-
     const source = row as Record<string, unknown>;
     const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
     if (gridId === null) {
       continue;
     }
-
     const gridSql = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_SQL_KEYS)).toLowerCase();
     if (
       !gridSql ||
@@ -1188,12 +1184,10 @@ function resolveAccountLedgerGridDetails(payload: unknown): ResolvedGridDetails 
       };
     }
   }
-
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       continue;
     }
-
     const source = row as Record<string, unknown>;
     const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
     if (gridId !== null) {
@@ -1206,7 +1200,6 @@ function resolveAccountLedgerGridDetails(payload: unknown): ResolvedGridDetails 
       };
     }
   }
-
   return {
     gridId: null,
     gridName: null,
@@ -1217,11 +1210,9 @@ function buildColumnsFromGridColumns(
 ): ReusableTableColumn<LedgerTableRow>[] {
   const columns: ReusableTableColumn<LedgerTableRow>[] = [];
   const seenColumnKeys = new Set<string>();
-
   const visibleColumns = gridColumns
     .filter((column) => column.visible)
     .sort((left, right) => left.order - right.order);
-
   for (const gridColumn of visibleColumns) {
     const accessor = resolveLedgerAccessor(
       gridColumn.accessorKey,
@@ -1231,7 +1222,6 @@ function buildColumnsFromGridColumns(
     if (!accessor) {
       continue;
     }
-
     const keyBase =
       normalizeColumnToken(gridColumn.key || gridColumn.accessorKey || gridColumn.header || accessor) ||
       accessor;
@@ -1239,7 +1229,6 @@ function buildColumnsFromGridColumns(
       ? `${keyBase}-${columns.length + 1}`
       : keyBase;
     seenColumnKeys.add(uniqueKey);
-
     const columnColor = normalizeGridColumnColor(gridColumn.color);
     const tableColumn: ReusableTableColumn<LedgerTableRow> = {
       key: uniqueKey,
@@ -1251,14 +1240,11 @@ function buildColumnsFromGridColumns(
       headerStyle: columnColor ? { backgroundColor: columnColor } : undefined,
       cellStyle: columnColor ? { backgroundColor: columnColor } : undefined,
     };
-
     columns.push(tableColumn);
   }
-
   if (columns.length === 0) {
     return DEFAULT_LEDGER_COLUMNS;
   }
-
   const serialColumnIndex = columns.findIndex((column) => column.accessor === "serialNo");
   if (serialColumnIndex < 0) {
     columns.unshift({ ...DEFAULT_LEDGER_SERIAL_COLUMN });

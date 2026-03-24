@@ -1,0 +1,269 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.headingBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  border: 1px solid #d3deeb;
+  border-radius: 999px;
+  background: #f7fbff;
+  color: #35516f;
+  padding: 0.34rem 0.72rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.headingRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  color: #162739;
+  font-size: clamp(1.9rem, 2.8vw, 2.45rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.description {
+  max-width: 56rem;
+  margin: 0.45rem 0 0;
+  color: #5f7184;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.badgeRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d8e4ef;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #45617e;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.summaryCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 120px;
+  border: 1px solid #d8e3ee;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+  box-shadow: 0 14px 30px rgba(15, 35, 60, 0.07);
+  padding: 1rem 1.05rem;
+}
+
+.summaryLabel {
+  color: #708094;
+  font-size: 0.73rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.summaryValue {
+  color: #14283c;
+  font-size: clamp(1.4rem, 2.4vw, 1.85rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.summaryHint {
+  margin-top: auto;
+  color: #708094;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.tableShell {
+  margin: 0;
+}
+
+.toolbarNote {
+  margin: 0.35rem 0 0;
+  color: #738296;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.configMeta {
+  margin: 0.3rem 0 0;
+  color: #4c6784;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.rowNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  min-height: 2rem;
+  border-radius: 999px;
+  background: #eef5ff;
+  color: #244f8a;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.stickySerialCell {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #ffffff;
+  box-shadow: 1px 0 0 #e8eef5;
+}
+
+.stickySerialHeader {
+  z-index: 6;
+  background: #f5f8fb;
+}
+
+.cellInput,
+.cellSelect {
+  width: 100%;
+  min-width: 11rem;
+  min-height: 2.45rem;
+  border: 1px solid #d7e0ea;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1b2634;
+  padding: 0.52rem 0.72rem;
+  font: inherit;
+  line-height: 1.35;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.cellInput::placeholder {
+  color: #93a0af;
+}
+
+.cellInput:focus-visible,
+.cellSelect:focus-visible {
+  outline: 0;
+  border-color: #8ab4ff;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+}
+
+.cellSelect {
+  cursor: pointer;
+}
+
+.numericInput {
+  min-width: 8.75rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.numericInput::-webkit-outer-spin-button,
+.numericInput::-webkit-inner-spin-button {
+  margin: 0;
+}
+
+.computedValue {
+  display: inline-flex;
+  width: 100%;
+  justify-content: flex-end;
+  color: #183b63;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.actionIcon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.footerValue {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  color: #183b63;
+  font-variant-numeric: tabular-nums;
+}
+
+.footerLabel {
+  color: #738296;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+@media (max-width: 1200px) {
+  .summaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    gap: 1.15rem;
+    padding: 1rem;
+  }
+
+  .summaryGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .summaryCard {
+    min-height: auto;
+  }
+
+  .footerValue {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .cellInput,
+  .cellSelect,
+  .numericInput {
+    min-width: 100%;
+  }
+}
