@@ -1,15 +1,15 @@
 "use client";
-
-import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
-import { FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FiChevronDown, FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
+import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import { buildLookupOptions, DEFAULT_LOOKUP_ARRAY_KEYS } from "@/features/masters/shared/normalizers";
 import tableStyles from "@/components/ui/table.module.scss";
 import { useApi } from "@/hooks/useApi";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import styles from "./page.module.scss";
-
 type ColumnAlign = "left" | "center" | "right";
-type ColumnKind = "text" | "number" | "date" | "select";
-
+type ColumnKind = "text" | "number" | "date" | "select" | "lookup";
+type LookupKind = "item" | "godown";
 type UiTableColumnPayload = {
   uiTblClmNo?: string;
   uiTblClmName: string | null;
@@ -17,29 +17,28 @@ type UiTableColumnPayload = {
   uiTblClmColumnVisibility: boolean | null;
   uiTblClmColumnPosition: number | null;
 };
-
 type ColumnSchema = {
   header: string;
   defaultWidth: string;
   align: ColumnAlign;
   kind: ColumnKind;
+  lookupKind?: LookupKind;
   placeholder?: string;
   options?: readonly string[];
   step?: string;
   defaultValue?: string;
 };
-
 type ColumnDefinition = ColumnSchema & {
   key: string;
   width: string;
 };
-
 type OpeningStockRow = {
   id: number;
   values: Record<string, string>;
 };
-
 const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
+const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const ITEM_LIST_ENDPOINT = "/items/list";
 const UI_TABLE_COLUMNS_QUERY = {
   uiTblClmTableId: "5",
   page: "1",
@@ -49,13 +48,76 @@ const UI_TABLE_COLUMNS_TOAST_OPTIONS = {
   success: false,
   error: false,
 } as const;
+const MASTER_LOOKUP_TOAST_OPTIONS = {
+  success: false,
+  error: false,
+} as const;
+const LOOKUP_SEARCH_DEBOUNCE_MS = 250;
 const SERIAL_NUMBER_COLUMN_WIDTH = "76px";
 const ACTION_COLUMN_WIDTH = "90px";
-
 const TRACKING_OPTIONS = ["NONE", "BATCH", "LOT"] as const;
 const PROFIT_TYPE_OPTIONS = ["PERCENT", "VALUE"] as const;
 const CESS_TYPE_OPTIONS = ["NONE", "PERCENT", "PER_UNIT"] as const;
-
+const ITEM_LOOKUP_QUERY = {
+  limit: "50",
+} as const;
+const GODOWN_LOOKUP_QUERY = {
+  module: "godownLocations",
+  limit: "100",
+} as const;
+const DEFAULT_ITEM_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Clear selection",
+};
+const DEFAULT_GODOWN_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Clear selection",
+};
+const ITEM_LOOKUP_KEYS = {
+  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "item_masters", "items"],
+  idKeys: ["item_id", "itemId", "id", "_id", "value"],
+  labelKeys: ["item_name_en", "itemNameEn", "name", "label"],
+} as const;
+const GODOWN_LOOKUP_KEYS = {
+  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "godowns", "godown_locations"],
+  idKeys: [
+    "gdl_id",
+    "gdlId",
+    "gdl_location_id",
+    "godown_id",
+    "godownId",
+    "id",
+    "_id",
+    "value",
+  ],
+  labelKeys: [
+    "gdl_name",
+    "gdlName",
+    "godown_name",
+    "godownName",
+    "name",
+    "label",
+  ],
+} as const;
+const LOOKUP_FIELD_CONFIG: Record<
+  LookupKind,
+  {
+    labelField: string;
+    idField: string;
+    emptyMessage: string;
+  }
+> = {
+  item: {
+    labelField: "itemname",
+    idField: "oslitemid",
+    emptyMessage: "No items found.",
+  },
+  godown: {
+    labelField: "godown",
+    idField: "oslgodownid",
+    emptyMessage: "No godowns found.",
+  },
+};
 const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
   barcode: {
     header: "Barcode",
@@ -75,15 +137,17 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     header: "Item Name",
     defaultWidth: "220px",
     align: "left",
-    kind: "text",
-    placeholder: "Item name",
+    kind: "lookup",
+    lookupKind: "item",
+    placeholder: "Search item",
   },
   godown: {
     header: "Godown",
     defaultWidth: "150px",
     align: "left",
-    kind: "text",
-    placeholder: "Godown",
+    kind: "lookup",
+    lookupKind: "godown",
+    placeholder: "Search godown",
   },
   uom: {
     header: "Uom",
@@ -414,7 +478,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultValue: "0.00",
   },
 };
-
 const FALLBACK_COLUMN_KEYS = [
   "barcode",
   "code",
@@ -433,37 +496,30 @@ const FALLBACK_COLUMN_KEYS = [
   "mrp",
   "remarks",
 ] as const;
-
 const QUANTITY_FORMATTER = new Intl.NumberFormat("en-IN", {
   minimumFractionDigits: 3,
   maximumFractionDigits: 3,
 });
-
 const VALUE_FORMATTER = new Intl.NumberFormat("en-IN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
-
 function cx(...tokens: Array<string | false | undefined>): string {
   return tokens.filter(Boolean).join(" ");
 }
-
 function normalizeColumnName(value: string): string {
   return value.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
 }
-
 function parseDecimal(value: string | undefined): number {
   const parsed = Number.parseFloat(value ?? "");
   return Number.isFinite(parsed) ? parsed : 0;
 }
-
 function toColumnWidth(value: number | null | undefined, fallback: string): string {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return fallback;
   }
   return `${value}px`;
 }
-
 function getAlignClass(align: ColumnAlign): string {
   if (align === "right") {
     return tableStyles.alignRight;
@@ -473,7 +529,6 @@ function getAlignClass(align: ColumnAlign): string {
   }
   return tableStyles.alignLeft;
 }
-
 function createUnknownColumnSchema(header: string): ColumnSchema {
   return {
     header,
@@ -483,7 +538,6 @@ function createUnknownColumnSchema(header: string): ColumnSchema {
     placeholder: header,
   };
 }
-
 function createFallbackColumns(): ColumnDefinition[] {
   return FALLBACK_COLUMN_KEYS.map((key) => {
     const schema = COLUMN_SCHEMA[key];
@@ -493,6 +547,7 @@ function createFallbackColumns(): ColumnDefinition[] {
       width: schema.defaultWidth,
       align: schema.align,
       kind: schema.kind,
+      lookupKind: schema.lookupKind,
       placeholder: schema.placeholder,
       options: schema.options,
       step: schema.step,
@@ -501,14 +556,12 @@ function createFallbackColumns(): ColumnDefinition[] {
     };
   });
 }
-
 function createDefaultRowValues(): Record<string, string> {
   return Object.entries(COLUMN_SCHEMA).reduce<Record<string, string>>((accumulator, [key, schema]) => {
     accumulator[key] = schema.defaultValue ?? "";
     return accumulator;
   }, {});
 }
-
 function createRow(id: number, overrides: Record<string, string> = {}): OpeningStockRow {
   return {
     id,
@@ -518,143 +571,7 @@ function createRow(id: number, overrides: Record<string, string> = {}): OpeningS
     },
   };
 }
-
-const INITIAL_ROWS: OpeningStockRow[] = [
-  createRow(1, {
-    barcode: "8901000000011",
-    code: "RM-1001",
-    itemname: "Raw Sugar - Grade A",
-    godown: "Main Warehouse",
-    uom: "Kg",
-    taxname: "GST 5%",
-    openingqty: "250.000",
-    freeqty: "0.000",
-    baseqty: "250.000",
-    convfactor: "1.000",
-    batchno: "BCH-2401",
-    batchdate: "2026-01-02",
-    mfgdate: "2025-12-15",
-    expirydate: "2027-12-15",
-    costprice: "38.50",
-    costwot: "36.67",
-    profittype: "PERCENT",
-    roundoff: "0.00",
-    priceawot: "40.00",
-    priceamarkup: "8.00",
-    pricea: "42.00",
-    pricebwot: "41.42",
-    pricebmarkup: "13.00",
-    priceb: "43.50",
-    pricecwot: "42.86",
-    pricecmarkup: "17.50",
-    pricec: "45.00",
-    pricedwot: "44.29",
-    pricedmarkup: "21.50",
-    priced: "46.50",
-    mrp: "45.00",
-    msp: "41.50",
-    remarks: "Opening balance migrated",
-    oslitemid: "ITM-1001",
-    oslunitid: "UOM-KG",
-    oslbaseuomid: "UOM-KG",
-    oslgodownid: "GD-01",
-    osltrackingtype: "BATCH",
-    osltaxid: "TAX-5",
-    osltaxperc: "5.000",
-    oslcesstype: "NONE",
-    oslcessperc: "0.000",
-    oslcessperunit: "0.00",
-  }),
-  createRow(2, {
-    barcode: "8901000001450",
-    code: "PK-2104",
-    itemname: "Packaging Pouch - 1 Kg",
-    godown: "Packing Store",
-    uom: "Nos",
-    taxname: "GST 12%",
-    openingqty: "1200.000",
-    freeqty: "25.000",
-    baseqty: "1200.000",
-    convfactor: "1.000",
-    batchno: "",
-    serialno: "",
-    costprice: "4.85",
-    costwot: "4.33",
-    profittype: "VALUE",
-    roundoff: "0.00",
-    priceawot: "5.54",
-    priceamarkup: "0.66",
-    pricea: "6.20",
-    pricebwot: "5.98",
-    pricebmarkup: "1.10",
-    priceb: "6.70",
-    pricecwot: "6.43",
-    pricecmarkup: "1.60",
-    pricec: "7.20",
-    pricedwot: "6.88",
-    pricedmarkup: "2.10",
-    priced: "7.70",
-    mrp: "7.00",
-    msp: "6.40",
-    remarks: "Physical stock as on cutover",
-    oslitemid: "ITM-2104",
-    oslunitid: "UOM-NOS",
-    oslbaseuomid: "UOM-NOS",
-    oslgodownid: "GD-02",
-    osltrackingtype: "NONE",
-    osltaxid: "TAX-12",
-    osltaxperc: "12.000",
-    oslcesstype: "NONE",
-    oslcessperc: "0.000",
-    oslcessperunit: "0.00",
-  }),
-  createRow(3, {
-    barcode: "8901000003218",
-    code: "FG-5007",
-    itemname: "Premium Basmati Rice 5 Kg",
-    godown: "Finished Goods",
-    uom: "Bag",
-    taxname: "GST 5%",
-    openingqty: "85.000",
-    freeqty: "4.000",
-    baseqty: "85.000",
-    convfactor: "1.000",
-    batchno: "LOT-5007-A",
-    serialno: "SR-5007-01",
-    batchdate: "2026-03-01",
-    mfgdate: "2026-02-15",
-    expirydate: "2027-02-15",
-    costprice: "465.00",
-    costwot: "442.86",
-    profittype: "PERCENT",
-    roundoff: "0.00",
-    priceawot: "514.29",
-    priceamarkup: "7.50",
-    pricea: "540.00",
-    pricebwot: "528.57",
-    pricebmarkup: "10.50",
-    priceb: "555.00",
-    pricecwot: "542.86",
-    pricecmarkup: "13.50",
-    pricec: "570.00",
-    pricedwot: "552.38",
-    pricedmarkup: "15.75",
-    priced: "580.00",
-    mrp: "575.00",
-    msp: "548.00",
-    remarks: "Warehouse verified",
-    oslitemid: "ITM-5007",
-    oslunitid: "UOM-BAG",
-    oslbaseuomid: "UOM-BAG",
-    oslgodownid: "GD-03",
-    osltrackingtype: "LOT",
-    osltaxid: "TAX-5",
-    osltaxperc: "5.000",
-    oslcesstype: "NONE",
-    oslcessperc: "0.000",
-    oslcessperunit: "0.00",
-  }),
-];
+const INITIAL_ROWS: OpeningStockRow[] = [createRow(1)];
 function createEmptyRow(nextId: number): OpeningStockRow {
   return createRow(nextId);
 }
@@ -663,7 +580,6 @@ function getNextRowId(rows: OpeningStockRow[]): number {
 }
 function getFilteredRows(rows: OpeningStockRow[], searchQuery: string): OpeningStockRow[] {
   const normalizedQuery = searchQuery.trim().toLowerCase();
-
   if (!normalizedQuery) {
     return rows;
   }
@@ -727,6 +643,7 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Co
       width: toColumnWidth(configuredColumn.uiTblClmColumnWidth, schema.defaultWidth),
       align: schema.align,
       kind: schema.kind,
+      lookupKind: schema.lookupKind,
       placeholder: schema.placeholder,
       options: schema.options,
       step: schema.step,
@@ -743,6 +660,45 @@ function getTableMinWidth(columns: ColumnDefinition[]): string {
     parseDecimal(SERIAL_NUMBER_COLUMN_WIDTH) + parseDecimal(ACTION_COLUMN_WIDTH),
   );
   return `${Math.max(width, 1080)}px`;
+}
+function mergeLookupOptions(
+  currentOptions: ERPDynamicSelectOption[],
+  nextOptions: ERPDynamicSelectOption[],
+): ERPDynamicSelectOption[] {
+  const emptyOption =
+    currentOptions.find((option) => option.value === "") ??
+    nextOptions.find((option) => option.value === "");
+  const merged = new Map<string, string>();
+  for (const option of [...currentOptions, ...nextOptions]) {
+    if (!option.value) {
+      continue;
+    }
+    if (!merged.has(option.value)) {
+      merged.set(option.value, option.label);
+    }
+  }
+  const normalizedOptions = Array.from(merged, ([value, label]) => ({ value, label })).sort(
+    (left, right) => left.label.localeCompare(right.label),
+  );
+  return emptyOption ? [emptyOption, ...normalizedOptions] : normalizedOptions;
+}
+function filterLookupOptions(
+  options: ERPDynamicSelectOption[],
+  searchQuery: string,
+): ERPDynamicSelectOption[] {
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  return options.filter((option) => {
+    if (!option.value.trim()) {
+      return false;
+    }
+    if (!normalizedQuery) {
+      return true;
+    }
+    return (
+      option.label.toLowerCase().includes(normalizedQuery) ||
+      option.value.toLowerCase().includes(normalizedQuery)
+    );
+  });
 }
 function SummaryCard({
   label,
@@ -765,11 +721,57 @@ export default function OpeningStockPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [rows, setRows] = useState<OpeningStockRow[]>(INITIAL_ROWS);
   const [uiColumnConfigs, setUiColumnConfigs] = useState<UiTableColumnPayload[]>([]);
+  const [itemOptions, setItemOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_ITEM_OPTION]);
+  const [godownOptions, setGodownOptions] = useState<ERPDynamicSelectOption[]>([
+    DEFAULT_GODOWN_OPTION,
+  ]);
+  const [openLookupCell, setOpenLookupCell] = useState<{
+    key: string;
+    kind: LookupKind;
+  } | null>(null);
+  const [lookupSearchQuery, setLookupSearchQuery] = useState("");
+  const lookupRootRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const lookupSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const itemSearchTimeoutRef = useRef<number | null>(null);
+  const itemSearchRequestRef = useRef(0);
+  const godownSearchTimeoutRef = useRef<number | null>(null);
+  const godownSearchRequestRef = useRef(0);
   const { getAll: listUiTableColumns, loading: isConfigLoading, error: configError } = useApi<
     ApiSuccessResponse<UiTableColumnPayload[], ListMeta>
   >(UI_TABLE_COLUMNS_LIST_ENDPOINT, {
     toast: UI_TABLE_COLUMNS_TOAST_OPTIONS,
   });
+  const { getAll: getItemList, loading: isItemLookupLoading } = useApi<unknown>(
+    ITEM_LIST_ENDPOINT,
+    {
+      toast: MASTER_LOOKUP_TOAST_OPTIONS,
+    },
+  );
+  const { getAll: getGodownLookup, loading: isGodownLookupLoading } = useApi<unknown>(
+    MASTER_LOOKUP_ENDPOINT,
+    {
+      toast: MASTER_LOOKUP_TOAST_OPTIONS,
+    },
+  );
+  const loadLookupOptions = useCallback(
+    async (lookupKind: LookupKind, search = ""): Promise<ERPDynamicSelectOption[]> => {
+      const normalizedSearch = search.trim();
+      const query =
+        lookupKind === "item"
+          ? normalizedSearch
+            ? { ...ITEM_LOOKUP_QUERY, search: normalizedSearch }
+            : ITEM_LOOKUP_QUERY
+          : normalizedSearch
+            ? { ...GODOWN_LOOKUP_QUERY, search: normalizedSearch }
+            : GODOWN_LOOKUP_QUERY;
+      const payload =
+        lookupKind === "item" ? await getItemList(query) : await getGodownLookup(query);
+      return lookupKind === "item"
+        ? buildLookupOptions(payload, DEFAULT_ITEM_OPTION, ITEM_LOOKUP_KEYS)
+        : buildLookupOptions(payload, DEFAULT_GODOWN_OPTION, GODOWN_LOOKUP_KEYS);
+    },
+    [getGodownLookup, getItemList],
+  );
   useEffect(() => {
     let cancelled = false;
     const loadUiColumnConfig = async () => {
@@ -789,6 +791,72 @@ export default function OpeningStockPage() {
       cancelled = true;
     };
   }, [listUiTableColumns]);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [itemsPayload, godownsPayload] = await Promise.allSettled([
+        loadLookupOptions("item"),
+        loadLookupOptions("godown"),
+      ]);
+      if (cancelled) {
+        return;
+      }
+      if (itemsPayload.status === "fulfilled") {
+        setItemOptions(itemsPayload.value);
+      }
+      if (godownsPayload.status === "fulfilled") {
+        setGodownOptions(godownsPayload.value);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadLookupOptions]);
+  useEffect(() => {
+    if (!openLookupCell) {
+      return;
+    }
+    const animationFrame = window.requestAnimationFrame(() => {
+      lookupSearchInputRef.current?.focus();
+    });
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+    };
+  }, [openLookupCell]);
+  useEffect(() => {
+    if (!openLookupCell) {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent) => {
+      const rootElement = lookupRootRefs.current[openLookupCell.key];
+      if (rootElement && !rootElement.contains(event.target as Node)) {
+        setOpenLookupCell(null);
+        setLookupSearchQuery("");
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenLookupCell(null);
+        setLookupSearchQuery("");
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [openLookupCell]);
+  useEffect(() => {
+    return () => {
+      if (itemSearchTimeoutRef.current !== null) {
+        window.clearTimeout(itemSearchTimeoutRef.current);
+      }
+      if (godownSearchTimeoutRef.current !== null) {
+        window.clearTimeout(godownSearchTimeoutRef.current);
+      }
+    };
+  }, []);
   const columns = resolveConfiguredColumns(uiColumnConfigs);
   const filteredRows = getFilteredRows(rows, searchQuery);
   const visibleTotals = getTotals(filteredRows);
@@ -815,34 +883,113 @@ export default function OpeningStockPage() {
       ),
     );
   };
-
+  const handleLookupSelection = useCallback(
+    (rowId: number, lookupKind: LookupKind, option: ERPDynamicSelectOption) => {
+      const fieldConfig = LOOKUP_FIELD_CONFIG[lookupKind];
+      setRows((currentRows) =>
+        currentRows.map((row) =>
+          row.id === rowId
+            ? {
+                ...row,
+                values: {
+                  ...row.values,
+                  [fieldConfig.labelField]: option.value ? option.label : "",
+                  [fieldConfig.idField]: option.value,
+                },
+              }
+            : row,
+        ),
+      );
+      setOpenLookupCell(null);
+      setLookupSearchQuery("");
+    },
+    [],
+  );
+  const handleLookupSearchChange = useCallback(
+    (lookupKind: LookupKind, search: string) => {
+      const normalizedSearch = search.trim();
+      if (lookupKind === "item") {
+        if (itemSearchTimeoutRef.current !== null) {
+          window.clearTimeout(itemSearchTimeoutRef.current);
+        }
+        if (!normalizedSearch) {
+          return;
+        }
+        const requestId = itemSearchRequestRef.current + 1;
+        itemSearchRequestRef.current = requestId;
+        itemSearchTimeoutRef.current = window.setTimeout(() => {
+          void (async () => {
+            try {
+              const searchedOptions = await loadLookupOptions("item", normalizedSearch);
+              if (itemSearchRequestRef.current !== requestId) {
+                return;
+              }
+              setItemOptions((currentOptions) => mergeLookupOptions(currentOptions, searchedOptions));
+            } catch {
+              // Keep existing options when live item lookup search fails.
+            }
+          })();
+        }, LOOKUP_SEARCH_DEBOUNCE_MS);
+        return;
+      }
+      if (godownSearchTimeoutRef.current !== null) {
+        window.clearTimeout(godownSearchTimeoutRef.current);
+      }
+      if (!normalizedSearch) {
+        return;
+      }
+      const requestId = godownSearchRequestRef.current + 1;
+      godownSearchRequestRef.current = requestId;
+      godownSearchTimeoutRef.current = window.setTimeout(() => {
+        void (async () => {
+          try {
+            const searchedOptions = await loadLookupOptions("godown", normalizedSearch);
+            if (godownSearchRequestRef.current !== requestId) {
+              return;
+            }
+            setGodownOptions((currentOptions) => mergeLookupOptions(currentOptions, searchedOptions));
+          } catch {
+            // Keep existing options when live godown lookup search fails.
+          }
+        })();
+      }, LOOKUP_SEARCH_DEBOUNCE_MS);
+    },
+    [loadLookupOptions],
+  );
   const handleAddRow = () => {
     setRows((currentRows) => [...currentRows, createEmptyRow(getNextRowId(currentRows))]);
   };
-
   const handleRemoveRow = (rowId: number) => {
-    setRows((currentRows) => currentRows.filter((row) => row.id !== rowId));
+    setRows((currentRows) => {
+      const nextRows = currentRows.filter((row) => row.id !== rowId);
+      return nextRows.length > 0 ? nextRows : [createEmptyRow(1)];
+    });
   };
-
   const tableMinWidth = getTableMinWidth(columns);
-
+  const itemOptionsByValue = useMemo(
+    () => new Map(itemOptions.map((option) => [option.value, option.label])),
+    [itemOptions],
+  );
+  const godownOptionsByValue = useMemo(
+    () => new Map(godownOptions.map((option) => [option.value, option.label])),
+    [godownOptions],
+  );
+  const filteredItemOptions = useMemo(
+    () => filterLookupOptions(itemOptions, lookupSearchQuery),
+    [itemOptions, lookupSearchQuery],
+  );
+  const filteredGodownOptions = useMemo(
+    () => filterLookupOptions(godownOptions, lookupSearchQuery),
+    [godownOptions, lookupSearchQuery],
+  );
   return (
     <section className={styles.page}>
       <header className={styles.header}>
         <div className={styles.headingBlock}>
-          <span className={styles.eyebrow}>Inventory / Stock Entry</span>
-          <div className={styles.headingRow}>
+                  <div className={styles.headingRow}>
             <div>
               <h1 className={styles.title}>Opening Stock</h1>
-              <p className={styles.description}>
-                Column name, width, position, and visibility are taken from the UI table column
-                configuration for table id 5.
-              </p>
-            </div>
-            <div className={styles.badgeRow}>
-              <span className={styles.badge}>Draft voucher</span>
-              <span className={styles.badge}>Config driven columns</span>
-            </div>
+            </div>          
           </div>
         </div>
         <div className={styles.summaryGrid}>
@@ -868,16 +1015,8 @@ export default function OpeningStockPage() {
           />
         </div>
       </header>
-
       <div className={cx(tableStyles.tableShell, styles.tableShell)}>
-        <div className={tableStyles.toolbar}>
-          <div>
-            <h2 className={tableStyles.toolbarTitle}>Opening Stock Lines</h2>
-            <p className={styles.toolbarNote}>
-              Search, edit, add, and remove stock lines directly from this page.
-            </p>
-            <p className={styles.configMeta}>{configStatusText}</p>
-          </div>
+        <div className={tableStyles.toolbar}>         
           <div className={tableStyles.tableTools}>
             <div className={tableStyles.searchField}>
               <FiSearch className={tableStyles.searchIcon} aria-hidden="true" />
@@ -896,7 +1035,6 @@ export default function OpeningStockPage() {
             </button>
           </div>
         </div>
-
         <div className={tableStyles.tableViewport} data-erp-table-viewport="true">
           <table
             className={tableStyles.table}
@@ -951,6 +1089,7 @@ export default function OpeningStockPage() {
                   <tr
                     key={row.id}
                     className={cx(
+                      styles.dataRow,
                       tableStyles.row,
                       index % 2 === 0 ? tableStyles.rowOdd : tableStyles.rowEven,
                     )}
@@ -972,6 +1111,30 @@ export default function OpeningStockPage() {
                         styles.cellInput,
                         isNumeric && styles.numericInput,
                       );
+                      const lookupKind = column.lookupKind;
+                      const lookupFieldConfig = lookupKind ? LOOKUP_FIELD_CONFIG[lookupKind] : null;
+                      const cellLookupKey = `${row.id}:${column.key}`;
+                      const isLookupOpen = openLookupCell?.key === cellLookupKey;
+                      const selectedLookupId = lookupFieldConfig
+                        ? row.values[lookupFieldConfig.idField] ?? ""
+                        : "";
+                      const selectedLookupLabel = lookupKind
+                        ? (
+                            lookupKind === "item"
+                              ? itemOptionsByValue.get(selectedLookupId)
+                              : godownOptionsByValue.get(selectedLookupId)
+                          ) ?? value
+                        : value;
+                      const lookupOptions = lookupKind
+                        ? lookupKind === "item"
+                          ? filteredItemOptions
+                          : filteredGodownOptions
+                        : [];
+                      const isLookupLoading = lookupKind
+                        ? lookupKind === "item"
+                          ? isItemLookupLoading
+                          : isGodownLookupLoading
+                        : false;
 
                       return (
                         <td
@@ -979,7 +1142,97 @@ export default function OpeningStockPage() {
                           data-label={column.header}
                           className={cx(tableStyles.cell, getAlignClass(column.align))}
                         >
-                          {column.kind === "select" ? (
+                          {column.kind === "lookup" && lookupKind && lookupFieldConfig ? (
+                            <div
+                              className={styles.lookupCell}
+                              ref={(element) => {
+                                lookupRootRefs.current[cellLookupKey] = element;
+                              }}
+                            >
+                              <button
+                                type="button"
+                                className={cx(
+                                  styles.lookupTrigger,
+                                  isLookupOpen && styles.lookupTriggerOpen,
+                                )}
+                                onClick={() => {
+                                  setOpenLookupCell((currentCell) =>
+                                    currentCell?.key === cellLookupKey
+                                      ? null
+                                      : { key: cellLookupKey, kind: lookupKind },
+                                  );
+                                  setLookupSearchQuery("");
+                                }}
+                                aria-expanded={isLookupOpen}
+                                aria-haspopup="listbox"
+                              >
+                                <span
+                                  className={cx(
+                                    styles.lookupTriggerLabel,
+                                    !selectedLookupLabel && styles.lookupPlaceholder,
+                                  )}
+                                >
+                                  {selectedLookupLabel || column.placeholder || column.header}
+                                </span>
+                                <FiChevronDown
+                                  className={cx(
+                                    styles.lookupChevron,
+                                    isLookupOpen && styles.lookupChevronOpen,
+                                  )}
+                                  aria-hidden="true"
+                                />
+                              </button>
+                              {isLookupOpen ? (
+                                <div className={styles.lookupMenu}>
+                                  <div className={styles.lookupSearchWrap}>
+                                    <FiSearch
+                                      className={styles.lookupSearchIcon}
+                                      aria-hidden="true"
+                                    />
+                                    <input
+                                      ref={lookupSearchInputRef}
+                                      type="text"
+                                      value={lookupSearchQuery}
+                                      onChange={(event) => {
+                                        const nextQuery = event.target.value;
+                                        setLookupSearchQuery(nextQuery);
+                                        handleLookupSearchChange(lookupKind, nextQuery);
+                                      }}
+                                      placeholder={column.placeholder || `Search ${column.header}`}
+                                      className={styles.lookupSearchInput}
+                                      autoComplete="off"
+                                    />
+                                  </div>
+                                  <div className={styles.lookupOptions} role="listbox">
+                                    {lookupOptions.length > 0 ? (
+                                      lookupOptions.map((option) => (
+                                        <button
+                                          key={`${cellLookupKey}-${option.value}`}
+                                          type="button"
+                                          className={cx(
+                                            styles.lookupOption,
+                                            option.value === selectedLookupId &&
+                                              styles.lookupOptionActive,
+                                          )}
+                                          onClick={() =>
+                                            handleLookupSelection(row.id, lookupKind, option)
+                                          }
+                                        >
+                                          {option.label}
+                                        </button>
+                                      ))
+                                    ) : (
+                                      <div className={styles.lookupEmptyState}>
+                                        {isLookupLoading
+                                          ? "Loading options..."
+                                          : LOOKUP_FIELD_CONFIG[lookupKind].emptyMessage}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : column.kind === "select" ? (
                             <select
                               value={value}
                               onChange={(event) =>
@@ -1032,7 +1285,6 @@ export default function OpeningStockPage() {
             </tbody>
           </table>
         </div>
-
         <div className={tableStyles.paginationBar}>
           <div className={tableStyles.paginationInfo}>
             <span>{visibleTotals.lines} visible lines</span>
