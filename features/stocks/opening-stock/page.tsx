@@ -2,9 +2,12 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiChevronDown, FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
-import { buildLookupOptions, DEFAULT_LOOKUP_ARRAY_KEYS } from "@/features/masters/shared/normalizers";
 import tableStyles from "@/components/ui/table.module.scss";
 import { useApi } from "@/hooks/useApi";
+import {
+  useLazyGetGodownOptionsQuery,
+  useLazyGetItemOptionsQuery,
+} from "@/store/api/lookupsApi";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import styles from "./page.module.scss";
 type ColumnAlign = "left" | "center" | "right";
@@ -37,8 +40,6 @@ type OpeningStockRow = {
   values: Record<string, string>;
 };
 const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
-const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const ITEM_LIST_ENDPOINT = "/items/list";
 const UI_TABLE_COLUMNS_QUERY = {
   uiTblClmTableId: "5",
   page: "1",
@@ -48,23 +49,12 @@ const UI_TABLE_COLUMNS_TOAST_OPTIONS = {
   success: false,
   error: false,
 } as const;
-const MASTER_LOOKUP_TOAST_OPTIONS = {
-  success: false,
-  error: false,
-} as const;
 const LOOKUP_SEARCH_DEBOUNCE_MS = 250;
 const SERIAL_NUMBER_COLUMN_WIDTH = "76px";
 const ACTION_COLUMN_WIDTH = "90px";
 const TRACKING_OPTIONS = ["NONE", "BATCH", "LOT"] as const;
 const PROFIT_TYPE_OPTIONS = ["PERCENT", "VALUE"] as const;
 const CESS_TYPE_OPTIONS = ["NONE", "PERCENT", "PER_UNIT"] as const;
-const ITEM_LOOKUP_QUERY = {
-  limit: "50",
-} as const;
-const GODOWN_LOOKUP_QUERY = {
-  module: "godownLocations",
-  limit: "100",
-} as const;
 const DEFAULT_ITEM_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Clear selection",
@@ -73,32 +63,6 @@ const DEFAULT_GODOWN_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Clear selection",
 };
-const ITEM_LOOKUP_KEYS = {
-  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "item_masters", "items"],
-  idKeys: ["item_id", "itemId", "id", "_id", "value"],
-  labelKeys: ["item_name_en", "itemNameEn", "name", "label"],
-} as const;
-const GODOWN_LOOKUP_KEYS = {
-  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "godowns", "godown_locations"],
-  idKeys: [
-    "gdl_id",
-    "gdlId",
-    "gdl_location_id",
-    "godown_id",
-    "godownId",
-    "id",
-    "_id",
-    "value",
-  ],
-  labelKeys: [
-    "gdl_name",
-    "gdlName",
-    "godown_name",
-    "godownName",
-    "name",
-    "label",
-  ],
-} as const;
 const LOOKUP_FIELD_CONFIG: Record<
   LookupKind,
   {
@@ -741,36 +705,24 @@ export default function OpeningStockPage() {
   >(UI_TABLE_COLUMNS_LIST_ENDPOINT, {
     toast: UI_TABLE_COLUMNS_TOAST_OPTIONS,
   });
-  const { getAll: getItemList, loading: isItemLookupLoading } = useApi<unknown>(
-    ITEM_LIST_ENDPOINT,
-    {
-      toast: MASTER_LOOKUP_TOAST_OPTIONS,
-    },
-  );
-  const { getAll: getGodownLookup, loading: isGodownLookupLoading } = useApi<unknown>(
-    MASTER_LOOKUP_ENDPOINT,
-    {
-      toast: MASTER_LOOKUP_TOAST_OPTIONS,
-    },
-  );
+  const [triggerItemOptions, { isFetching: isItemLookupLoading }] =
+    useLazyGetItemOptionsQuery();
+  const [triggerGodownOptions, { isFetching: isGodownLookupLoading }] =
+    useLazyGetGodownOptionsQuery();
   const loadLookupOptions = useCallback(
     async (lookupKind: LookupKind, search = ""): Promise<ERPDynamicSelectOption[]> => {
       const normalizedSearch = search.trim();
-      const query =
-        lookupKind === "item"
-          ? normalizedSearch
-            ? { ...ITEM_LOOKUP_QUERY, search: normalizedSearch }
-            : ITEM_LOOKUP_QUERY
-          : normalizedSearch
-            ? { ...GODOWN_LOOKUP_QUERY, search: normalizedSearch }
-            : GODOWN_LOOKUP_QUERY;
-      const payload =
-        lookupKind === "item" ? await getItemList(query) : await getGodownLookup(query);
       return lookupKind === "item"
-        ? buildLookupOptions(payload, DEFAULT_ITEM_OPTION, ITEM_LOOKUP_KEYS)
-        : buildLookupOptions(payload, DEFAULT_GODOWN_OPTION, GODOWN_LOOKUP_KEYS);
+        ? triggerItemOptions(
+            normalizedSearch ? { search: normalizedSearch } : undefined,
+            true,
+          ).unwrap()
+        : triggerGodownOptions(
+            normalizedSearch ? { search: normalizedSearch } : undefined,
+            true,
+          ).unwrap();
     },
-    [getGodownLookup, getItemList],
+    [triggerGodownOptions, triggerItemOptions],
   );
   useEffect(() => {
     let cancelled = false;

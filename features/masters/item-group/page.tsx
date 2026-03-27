@@ -4,15 +4,9 @@ import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
 import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
-import {
-  fetchGridColumns,
-  selectGridColumns,
-  selectGridColumnsError,
-  selectGridColumnsLoading,
-  selectGridColumnsRequested,
-  type GridColumnConfig,
-} from "@/store/slices/gridColumnsSlice";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { getApiErrorMessage } from "@/store/api/baseApi";
+import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
+import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
   ERPDynamicModalForm,
@@ -1009,7 +1003,6 @@ function buildItemGroupLookupOptions(payload: unknown): ERPDynamicSelectOption[]
 // Main component
 export default function ItemGroupMasterPage() {
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
-  const dispatch = useAppDispatch();
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const { getAll: getGridDetailById } = useApi<unknown>(GRID_DETAIL_GET_ENDPOINT);
   const { getAll: getParentGroupLookup } = useApi<unknown>(PARENT_GROUP_LOOKUP_ENDPOINT);
@@ -1019,19 +1012,23 @@ export default function ItemGroupMasterPage() {
     ERPDynamicSelectOption[]
   >([]);
   const selectedGridId = itemGroupGridId ?? -1;
-
-  const gridColumns = useAppSelector((state) =>
-    selectGridColumns(state, selectedGridId),
+  const {
+    data: gridColumnsData,
+    error: gridColumnsQueryError,
+    isFetching: gridColumnsLoading,
+    refetch: refetchGridColumns,
+  } = useGetGridColumnsQuery(
+    {
+      gridId: selectedGridId,
+      page: GRID_COLUMNS_PAGE,
+      limit: GRID_COLUMNS_LIMIT,
+    },
+    {
+      skip: itemGroupGridId === null,
+    },
   );
-  const gridColumnsLoading = useAppSelector((state) =>
-    selectGridColumnsLoading(state, selectedGridId),
-  );
-  const gridColumnsRequested = useAppSelector((state) =>
-    selectGridColumnsRequested(state, selectedGridId),
-  );
-  const gridColumnsError = useAppSelector((state) =>
-    selectGridColumnsError(state, selectedGridId),
-  );
+  const gridColumns = gridColumnsData ?? [];
+  const gridColumnsError = getApiErrorMessage(gridColumnsQueryError);
 
   useEffect(() => {
     let isMounted = true;
@@ -1071,23 +1068,6 @@ export default function ItemGroupMasterPage() {
     const normalized = itemGroupGridName?.trim();
     return normalized || "Item Group";
   }, [itemGroupGridName]);
-
-  useEffect(() => {
-    if (
-      itemGroupGridId === null ||
-      gridColumnsRequested ||
-      gridColumnsLoading
-    ) {
-      return;
-    }
-    void dispatch(
-      fetchGridColumns({
-        gridId: itemGroupGridId,
-        page: GRID_COLUMNS_PAGE,
-        limit: GRID_COLUMNS_LIMIT,
-      }),
-    );
-  }, [dispatch, gridColumnsLoading, gridColumnsRequested, itemGroupGridId]);
 
   // Custom hooks
   const {
@@ -1559,13 +1539,7 @@ export default function ItemGroupMasterPage() {
                     if (itemGroupGridId === null) {
                       return;
                     }
-                    void dispatch(
-                      fetchGridColumns({
-                        gridId: itemGroupGridId,
-                        page: GRID_COLUMNS_PAGE,
-                        limit: GRID_COLUMNS_LIMIT,
-                      }),
-                    );
+                    void refetchGridColumns();
                   }}
                   disabled={gridColumnsLoading || itemGroupGridId === null}
                 >

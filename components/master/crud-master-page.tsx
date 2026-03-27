@@ -14,15 +14,9 @@ import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
 import { useMasterCrud } from "@/features/masters/shared";
 import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import {
-  fetchGridColumns,
-  selectGridColumns,
-  selectGridColumnsError,
-  selectGridColumnsLoading,
-  selectGridColumnsRequested,
-  type GridColumnConfig,
-} from "@/store/slices/gridColumnsSlice";
+import { getApiErrorMessage } from "@/store/api/baseApi";
+import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
+import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import {
   ERPDynamicModalForm,
   type ERPDynamicModalController,
@@ -1456,7 +1450,6 @@ export default function CrudMasterPage({
   afterSubmitSuccess,
   afterDeleteSuccess,
 }: CrudMasterPageProps) {
-  const dispatch = useAppDispatch();
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
 
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
@@ -1504,18 +1497,23 @@ export default function CrudMasterPage({
   const [gridId, setGridId] = useState<number | null>(null);
   const [gridDisplayName, setGridDisplayName] = useState<string | null>(null);
   const selectedGridId = gridId ?? -1;
-  const gridColumns = useAppSelector((state) =>
-    selectGridColumns(state, selectedGridId),
+  const {
+    data: gridColumnsData,
+    error: gridColumnsQueryError,
+    isFetching: gridColumnsLoading,
+    refetch: refetchGridColumns,
+  } = useGetGridColumnsQuery(
+    {
+      gridId: selectedGridId,
+      page: GRID_COLUMNS_PAGE,
+      limit: GRID_COLUMNS_LIMIT,
+    },
+    {
+      skip: gridId === null,
+    },
   );
-  const gridColumnsLoading = useAppSelector((state) =>
-    selectGridColumnsLoading(state, selectedGridId),
-  );
-  const gridColumnsRequested = useAppSelector((state) =>
-    selectGridColumnsRequested(state, selectedGridId),
-  );
-  const gridColumnsError = useAppSelector((state) =>
-    selectGridColumnsError(state, selectedGridId),
-  );
+  const gridColumns = gridColumnsData ?? [];
+  const gridColumnsError = getApiErrorMessage(gridColumnsQueryError);
 
   const normalizedGridTableNames = useMemo(() => {
     const base = gridTableName?.trim().toLowerCase();
@@ -1601,24 +1599,6 @@ export default function CrudMasterPage({
     const normalized = gridDisplayName?.trim();
     return normalized || title;
   }, [gridDisplayName, title]);
-
-  useEffect(() => {
-    if (
-      gridId === null ||
-      gridColumnsRequested ||
-      gridColumnsLoading
-    ) {
-      return;
-    }
-
-    void dispatch(
-      fetchGridColumns({
-        gridId,
-        page: GRID_COLUMNS_PAGE,
-        limit: GRID_COLUMNS_LIMIT,
-      }),
-    );
-  }, [dispatch, gridColumnsLoading, gridColumnsRequested, gridId]);
 
   const serialOffset = Math.max(0, (currentPage - 1) * pageSize);
 
@@ -2245,14 +2225,7 @@ export default function CrudMasterPage({
                     if (gridId === null) {
                       return;
                     }
-
-                    void dispatch(
-                      fetchGridColumns({
-                        gridId,
-                        page: GRID_COLUMNS_PAGE,
-                        limit: GRID_COLUMNS_LIMIT,
-                      }),
-                    );
+                    void refetchGridColumns();
                   }}
                   disabled={gridColumnsLoading || gridId === null}
                 >

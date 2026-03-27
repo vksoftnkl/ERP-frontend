@@ -8,16 +8,12 @@ import {
   canUseClientSideRouting,
   toInternalRoute,
 } from "@/lib/navigation/safe-route";
-import { useApi } from "@/hooks/useApi";
 import {
   ARIA_LABELS,
   DEFAULT_CUSTOMER_OPTIONS,
   DEFAULT_DATE_FORMAT_OPTIONS,
   DEFAULT_PRIMARY_MENU,
   DEFAULT_QUICK_TABS,
-  MENU_MASTERS_GET_ENDPOINT,
-  applyMenuMasterLabels,
-  extractMenuMasterItems,
 } from "./constants";
 import type {
   ErpHeaderItem,
@@ -27,18 +23,10 @@ import type {
   MenuTreeProps,
   TabStripProps,
 } from "./types";
+import { useGetPrimaryMenuQuery } from "@/store/api/shellApi";
+import { useAppDispatch } from "@/store/hooks";
+import { authSessionChanged } from "@/store/slices/authSlice";
 export type { ErpHeaderItem, ErpHeaderProps } from "./types";
-
-const MENU_MASTERS_TOAST_OPTIONS = {
-  success: false,
-  error: false,
-} as const;
-
-const MENU_MASTERS_QUERY = {
-  includeChildren: "true",
-  activeOnly: "true",
-  visibleOnly: "true",
-} as const;
 // Utility functions
 function formatDateLabel(date: Date): string {
   return new Intl.DateTimeFormat("en-GB", DEFAULT_DATE_FORMAT_OPTIONS)
@@ -257,60 +245,19 @@ export default function ErpHeader({
   onBillNumberChange,
   billPlaceholder = "Enter Bill No",
 }: ErpHeaderProps) {
+  const dispatch = useAppDispatch();
   const pathname = usePathname();
   const router = useRouter();
   const primaryMenuRef = useRef<HTMLElement | null>(null);
   const quickTabsRef = useRef<HTMLDivElement | null>(null);
   const shouldUseMenuMasterLabels = primaryMenu === DEFAULT_PRIMARY_MENU;
-  const { getAll: getMenuMasterLabels } = useApi<unknown>(MENU_MASTERS_GET_ENDPOINT, {
-    toast: MENU_MASTERS_TOAST_OPTIONS,
+  const { data: primaryMenuFromApi } = useGetPrimaryMenuQuery(undefined, {
+    skip: !shouldUseMenuMasterLabels,
   });
-  // State management
-  const [resolvedPrimaryMenu, setResolvedPrimaryMenu] = useState<ErpHeaderItem[]>(
-    shouldUseMenuMasterLabels ? [] : primaryMenu
-  );
   const [localCustomer, setLocalCustomer] = useState(
     selectedCustomer ?? customerOptions[0] ?? ""
   );
   const [localBillNumber, setLocalBillNumber] = useState(billNumber ?? "");
-  // Effects for syncing with props
-  useEffect(() => {
-    if (shouldUseMenuMasterLabels) {
-      setResolvedPrimaryMenu([]);
-      return;
-    }
-
-    setResolvedPrimaryMenu(primaryMenu);
-  }, [primaryMenu, shouldUseMenuMasterLabels]);
-  useEffect(() => {
-    if (!shouldUseMenuMasterLabels) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadMenuMasterLabels = async () => {
-      try {
-        const payload = await getMenuMasterLabels(MENU_MASTERS_QUERY);
-        const menuMasterItems = extractMenuMasterItems(payload);
-        if (cancelled) {
-          return;
-        }
-
-        setResolvedPrimaryMenu(applyMenuMasterLabels(DEFAULT_PRIMARY_MENU, menuMasterItems));
-      } catch {
-        if (!cancelled) {
-          setResolvedPrimaryMenu([]);
-        }
-      }
-    };
-
-    void loadMenuMasterLabels();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [getMenuMasterLabels, shouldUseMenuMasterLabels]);
   useEffect(() => {
     if (selectedCustomer !== undefined) {
       setLocalCustomer(selectedCustomer);
@@ -334,6 +281,10 @@ export default function ErpHeader({
   const resolvedDateText = useMemo(
     () => dateText ?? formatDateLabel(new Date()),
     [dateText]
+  );
+  const resolvedPrimaryMenu = useMemo(
+    () => (shouldUseMenuMasterLabels ? primaryMenuFromApi ?? [] : primaryMenu),
+    [primaryMenu, primaryMenuFromApi, shouldUseMenuMasterLabels],
   );
   const resolvedCustomer = selectedCustomer ?? localCustomer;
   const resolvedBillNumber = billNumber ?? localBillNumber;
@@ -406,13 +357,15 @@ export default function ErpHeader({
       onLogout();
       return;
     }
+
+    dispatch(authSessionChanged(null));
     clearAuthSession();
     if (!canUseClientSideRouting()) {
       window.location.replace("/login");
       return;
     }
     router.replace("/login");
-  }, [onLogout, router]);
+  }, [dispatch, onLogout, router]);
   return (
     <div className={styles.headerShell}>
       <header className={styles.topHeader}>

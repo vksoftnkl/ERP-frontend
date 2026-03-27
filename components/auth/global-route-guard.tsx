@@ -1,7 +1,11 @@
 "use client";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { isAuthenticated } from "@/lib/auth/session";
+import { useAppSelector } from "@/store/hooks";
+import {
+  selectAuthInitialized,
+  selectIsAuthenticated,
+} from "@/store/slices/authSlice";
 
 const PUBLIC_EXACT_ROUTES = new Set(["/login", "/ui-library", "/erp-advanced-fixed"]);
 const PUBLIC_PREFIX_ROUTES = ["/login/", "/ui-library/", "/erp-advanced-fixed/"];
@@ -27,33 +31,32 @@ function normalizeNextRoute(nextRoute: string | null): string {
 export default function GlobalRouteGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
   const router = useRouter();
-  const [auth, setAuth] = useState<boolean | null>(null);
+  const authInitialized = useAppSelector(selectAuthInitialized);
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const publicRoute = isPublicRoute(pathname);
 
   useEffect(() => {
-    setAuth(isAuthenticated());
-  }, [pathname]);
+    if (!authInitialized) {
+      return;
+    }
 
-  useEffect(() => {
-    if (auth === null) return;
-
-    if (!auth && !publicRoute) {
+    if (!isAuthenticated && !publicRoute) {
       const query = window.location.search.replace(/^\?/, "");
       router.replace(`/login?next=${encodeURIComponent(toRelativePath(pathname, query))}`);
       return;
     }
 
-    if (auth && pathname === "/login") {
+    if (isAuthenticated && pathname === "/login") {
       const next = new URLSearchParams(window.location.search).get("next");
       router.replace(normalizeNextRoute(next));
     }
-  }, [auth, pathname, publicRoute, router]);
+  }, [authInitialized, isAuthenticated, pathname, publicRoute, router]);
 
-  // Block render while auth is unknown on a protected route
-  if (auth === null && !publicRoute) return null;
+  if (!authInitialized && !publicRoute) return null;
 
-  // Block render during redirect to avoid flash
-  if (auth !== null && ((!auth && !publicRoute) || (auth && pathname === "/login"))) return null;
+  if ((!isAuthenticated && !publicRoute) || (isAuthenticated && pathname === "/login")) {
+    return null;
+  }
 
   return <>{children}</>;
 }

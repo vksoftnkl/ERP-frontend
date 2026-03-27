@@ -62,7 +62,8 @@ const ITEM_PRICE_API_ENDPOINTS = {
   create: "/item-prices/create",
   delete: "/item-prices/delete",
 } as const;
-const ITEM_UNIT_CONVERSION_API_ENDPOINTS = ITEM_PRICE_API_ENDPOINTS;
+// Item unit conversion CRUD is handled by the item price master endpoints.
+// The request payload shape differs, but the URLs are the same.
 const ITEM_REORDER_API_ENDPOINTS = {
   list: "/item-reorders/list",
   create: "/item-reorders/create",
@@ -582,6 +583,17 @@ const ITEM_MODAL_PANEL_STYLE: CSSProperties = {
   height: "80vh",
   maxHeight: "80vh",
 };
+const ITEM_INLINE_SECTION_HEADING_STYLE: CSSProperties = {
+  gridColumn: "1 / -1",
+  marginTop: "0.35rem",
+  paddingTop: "0.65rem",
+  borderTop: "1px solid #e2e8f0",
+  color: "#475569",
+  fontSize: "0.78rem",
+  fontWeight: 700,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+};
 const ITEM_CHECKBOX_CONTROL_STYLE: CSSProperties = {
   width: "14px",
   height: "14px",
@@ -746,11 +758,7 @@ const ITEM_EAN_ROW_TEXT_FIELD_NAMES = [
 ] as const;
 const ITEM_EAN_ROW_BOOLEAN_FIELD_NAMES = ["ean_is_default", "ean_is_active"] as const;
 const ITEM_PRICE_CONTENT_FIELD_NAMES = ITEM_PRICE_TEXT_FIELD_NAMES.filter(
-  (fieldName) =>
-    fieldName !== "ipm_id" &&
-    fieldName !== "ipm_unit_id" &&
-    fieldName !== "ipm_godown_id" &&
-    fieldName !== "ipm_profit_type",
+  (fieldName) => fieldName !== "ipm_id",
 );
 const ITEM_UNIT_CONVERSION_CONTENT_FIELD_NAMES = ["iuc_unit_id"] as const;
 const ITEM_REORDER_CONTENT_FIELD_NAMES = [
@@ -1737,6 +1745,47 @@ function collectChangedFieldValues(
   }
   return changedValues;
 }
+function normalizeComparisonString(value: unknown): string {
+  return toDisplayValue(value).trim();
+}
+function normalizeComparisonBoolean(
+  value: unknown,
+  fallback: "true" | "false" = "false",
+): string {
+  return toSelectBoolean(value, fallback);
+}
+function normalizeComparisonInteger(value: unknown): string {
+  const normalized = toDisplayValue(value).trim();
+  if (!normalized) {
+    return "";
+  }
+  const parsed = Number.parseInt(normalized, 10);
+  return Number.isFinite(parsed) ? String(parsed) : normalized;
+}
+function shouldRecreateItemUnitConversionPayloadRow(
+  existingRow: Record<string, unknown> | undefined,
+  desiredRow: Record<string, unknown>,
+): boolean {
+  if (!existingRow) {
+    return true;
+  }
+  return (
+    normalizeComparisonString(getFieldValue(existingRow, "iuc_company_id")) !==
+      normalizeComparisonString(desiredRow.iuc_company_id) ||
+    normalizeComparisonString(getFieldValue(existingRow, "iuc_unit_id")) !==
+      normalizeComparisonString(desiredRow.iuc_unit_id) ||
+    normalizeComparisonString(getFieldValue(existingRow, "iuc_base_unit_id")) !==
+      normalizeComparisonString(desiredRow.iuc_base_unit_id) ||
+    normalizeComparisonInteger(getFieldValue(existingRow, "iuc_unit_slno")) !==
+      normalizeComparisonInteger(desiredRow.iuc_unit_slno) ||
+    normalizeComparisonBoolean(getFieldValue(existingRow, "iuc_is_default_unit")) !==
+      normalizeComparisonBoolean(desiredRow.iuc_is_default_unit) ||
+    normalizeComparisonBoolean(getFieldValue(existingRow, "iuc_is_base_unit")) !==
+      normalizeComparisonBoolean(desiredRow.iuc_is_base_unit) ||
+    normalizeComparisonBoolean(getFieldValue(existingRow, "iuc_is_active"), "true") !==
+      normalizeComparisonBoolean(desiredRow.iuc_is_active, "true")
+  );
+}
 function selectManagedItemPriceLinkedRow(
   rows: LinkedRecordRow[],
   values: Record<string, string>,
@@ -2130,7 +2179,6 @@ function validateItemUnitConversionRows(
   if (activeDefaultRows > 1) {
     return "Only one active default unit conversion row is allowed.";
   }
-
   return null;
 }
 function validateItemReorderRows(value: string, values: Record<string, string>): string | null {
@@ -2138,17 +2186,17 @@ function validateItemReorderRows(value: string, values: Record<string, string>):
   if (rows.length === 0) {
     return null;
   }
-  const baseUnitId = (values.item_base_unit_id ?? "").trim();
-  for (const [index, row] of rows.entries()) {
-    const unitId = (row.ir_unit_id ?? "").trim() || baseUnitId;
-    if (!unitId) {
-      return `Reorder row ${index + 1}: Unit is required.`;
-    }
-    const reorderType = (row.ir_reorder_type ?? "").trim();
-    if (!reorderType) {
-      return `Reorder row ${index + 1}: Reorder Type is required.`;
-    }
-  }
+ // const baseUnitId = (values.item_base_unit_id ?? "").trim();
+  // for (const [index, row] of rows.entries()) {
+  //   const unitId = (row.ir_unit_id ?? "").trim() || baseUnitId;
+  //   if (!unitId) {
+  //     return `Reorder row ${index + 1}: Unit is required.`;
+  //   }
+  //   const reorderType = (row.ir_reorder_type ?? "").trim();
+  //   if (!reorderType) {
+  //     return `Reorder row ${index + 1}: Reorder Type is required.`;
+  //   }
+  // }
   return null;
 }
 function validateItemEanRows(value: string, values: Record<string, string>): string | null {
@@ -2156,17 +2204,17 @@ function validateItemEanRows(value: string, values: Record<string, string>): str
   if (rows.length === 0) {
     return null;
   }
-  const baseUnitId = (values.item_base_unit_id ?? "").trim();
-  for (const [index, row] of rows.entries()) {
-    const unitId = (row.ean_unit_id ?? "").trim() || baseUnitId;
-    if (!unitId) {
-      return `EAN row ${index + 1}: Unit is required.`;
-    }
-    const eanCode = (row.ean_code ?? "").trim();
-    if (!eanCode) {
-      return `EAN row ${index + 1}: EAN Code is required.`;
-    }
-  }
+  // const baseUnitId = (values.item_base_unit_id ?? "").trim();
+  // for (const [index, row] of rows.entries()) {
+  //   const unitId = (row.ean_unit_id ?? "").trim() || baseUnitId;
+  //   if (!unitId) {
+  //     return `EAN row ${index + 1}: Unit is required.`;
+  //   }
+  //   const eanCode = (row.ean_code ?? "").trim();
+  //   if (!eanCode) {
+  //     return `EAN row ${index + 1}: EAN Code is required.`;
+  //   }
+  // }
   return null;
 }
 function buildCustomFieldEditor(
@@ -2236,6 +2284,15 @@ function buildManagedItemPriceRows(values: Record<string, string>): LinkedRecord
     hasLinkedRowContent(row, ITEM_PRICE_CONTENT_FIELD_NAMES),
   );
 }
+function buildManagedItemPriceRowsByUnitId(
+  values: Record<string, string>,
+): Map<string, LinkedRecordRow> {
+  return new Map(
+    buildManagedItemPriceRows(values)
+      .map((row) => [(row.ipm_unit_id ?? "").trim(), row] as const)
+      .filter(([unitId]) => Boolean(unitId)),
+  );
+}
 function buildManagedItemReorderRows(values: Record<string, string>): LinkedRecordRow[] {
   return parseLinkedRecordRows(values[ITEM_REORDER_ROWS_FIELD_NAME] ?? "").filter((row) =>
     hasLinkedRowContent(row, ITEM_REORDER_CONTENT_FIELD_NAMES),
@@ -2276,6 +2333,29 @@ function applyItemUnitConversionDefaults(
       buildDefaultBaseItemUnitConversionRow(baseUnitId),
     ]);
   }
+  return nextValues;
+}
+function normalizeItemLinkedSubmissionValues(
+  values: Record<string, string>,
+  itemTaxRecordsById: ReadonlyMap<string, Record<string, unknown>>,
+): Record<string, string> {
+  const nextValues = applyItemUnitConversionDefaults({ ...values });
+  nextValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] =
+    syncSerializedItemUnitConversionRowsFromPriceRows(
+      nextValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ?? "",
+      nextValues[ITEM_PRICE_ROWS_FIELD_NAME] ?? "",
+      nextValues,
+    );
+  nextValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] =
+    syncSerializedItemUnitConversionRows(
+      nextValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ?? "",
+      nextValues,
+    );
+  nextValues[ITEM_PRICE_ROWS_FIELD_NAME] = syncSerializedItemPriceRows(
+    nextValues[ITEM_PRICE_ROWS_FIELD_NAME] ?? "",
+    nextValues,
+    itemTaxRecordsById,
+  );
   return nextValues;
 }
 function selectManagedItemPriceRecord(
@@ -2900,9 +2980,7 @@ function buildItemFormFields(
         label: "Item Name",
         required: true,
         validation: {
-          minLength: 2,
           maxLength: 200,
-          minLengthMessage: "Item Name must be at least 2 characters.",
           maxLengthMessage: "Item Name must be at most 200 characters.",
         },
       },
@@ -2913,13 +2991,6 @@ function buildItemFormFields(
           maxLength: 60,
           maxLengthMessage: "SKU must be at most 60 characters.",
         },
-      },
-      {
-        name: "item_branch_id",
-        label: "Branch",
-        type: "select",
-        searchable: true,
-        options: branchOptions,
       },
       {
         name: "item_name_ta",
@@ -2938,17 +3009,6 @@ function buildItemFormFields(
         },
       },
       {
-        name: "item_company_id",
-        label: "Company",
-        type: "select",
-        searchable: true,
-        required: true,
-        options: companyOptions,
-        validation: {
-          requiredMessage: "Company is required.",
-        },
-      },
-      {
         name: "item_alias",
         label: "Alias",
         validation: {
@@ -2964,48 +3024,6 @@ function buildItemFormFields(
           maxLengthMessage: "Default Barcode must be at most 200 characters.",
         },
       },
-      buildUuidTextField("item_company_category_id", "Company Category Id"),
-      {
-        name: "item_default_tax_id",
-        label: "Default Tax",
-        type: "select",
-        searchable: true,
-        options: taxOptions,
-        onValueChange: ({ value, values }) => {
-          const nextFormValues: Record<string, string> = {
-            ...values,
-            item_default_tax_id: value,
-          };
-          const normalizedRows = syncSerializedItemPriceRows(
-            nextFormValues[ITEM_PRICE_ROWS_FIELD_NAME] ?? "",
-            nextFormValues,
-            itemTaxRecordsById,
-            true,
-          );
-          const nextValues = syncPrimaryItemPriceValuesFromRows(
-            nextFormValues,
-            normalizedRows,
-          );
-          const changedValues = collectChangedFieldValues(
-            nextFormValues,
-            nextValues,
-            ITEM_PRICE_SYNC_FIELD_NAMES,
-          );
-          if (Object.keys(changedValues).length === 0) {
-            return;
-          }
-          return {
-            values: changedValues,
-          };
-        },
-      },
-      {
-        name: "item_hsn_code",
-        label: "HSN Code",
-        type: "select",
-        searchable: true,
-        options: hsnOptions,
-      },
       {
         name: "item_batch_config",
         label: "Batch Config",
@@ -3015,26 +3033,10 @@ function buildItemFormFields(
         placeholder: "Select Batch Config",
       },
       {
-        name: "item_group_id",
-        label: "Item Group",
-        type: "select",
-        searchable: true,
-        options: groupOptions,
-        onSearchQueryChange: onItemGroupSearchChange,
-      },
-      {
-        name: "item_section_id",
-        label: "Item Section",
-        type: "select",
-        searchable: true,
-        options: sectionOptions,
-      },
-      {
         name: "item_base_unit_id",
         label: "Base Unit",
         type: "select",
         searchable: true,
-        required: true,
         options: unitOptions,
         onValueChange: ({ value, values, previousValues }) => {
           const currentReorderUnitId = (values.ir_unit_id ?? "").trim();
@@ -3106,23 +3108,6 @@ function buildItemFormFields(
             };
           }
         },
-        validation: {
-          requiredMessage: "Base Unit is required.",
-        },
-      },
-      {
-        name: "item_brand_id",
-        label: "Item Brand",
-        type: "select",
-        searchable: true,
-        options: brandOptions,
-      },
-      {
-        name: "item_supplier_id",
-        label: "Default Supplier",
-        type: "select",
-        searchable: true,
-        options: supplierOptions,
       },
       {
         name: "item_packing_item_ids",
@@ -3134,11 +3119,105 @@ function buildItemFormFields(
         helperText: "Select one or more packing items (optional).",
       },
       {
+        name: "itemInlineReferenceLinksHeading",
+        label: "",
+        type: "custom",
+        fieldStyle: {
+          gridColumn: "1 / -1",
+        },
+        render: () => <div style={ITEM_INLINE_SECTION_HEADING_STYLE}>Reference Links</div>,
+      },
+      {
+        name: "item_company_id",
+        label: "Company",
+        type: "select",
+        searchable: true,
+        options: companyOptions,
+      },
+      {
+        name: "item_branch_id",
+        label: "Branch",
+        type: "select",
+        searchable: true,
+        options: branchOptions,
+      },
+      buildUuidTextField("item_company_category_id", "Company Category Id"),
+      {
+        name: "item_group_id",
+        label: "Item Group",
+        type: "select",
+        searchable: true,
+        options: groupOptions,
+        onSearchQueryChange: onItemGroupSearchChange,
+      },
+      {
         name: "item_category_id",
         label: "Item Category",
         type: "select",
         searchable: true,
         options: categoryOptions,
+      },
+      {
+        name: "item_section_id",
+        label: "Item Section",
+        type: "select",
+        searchable: true,
+        options: sectionOptions,
+      },
+      {
+        name: "item_brand_id",
+        label: "Item Brand",
+        type: "select",
+        searchable: true,
+        options: brandOptions,
+      },
+      {
+        name: "item_hsn_code",
+        label: "HSN Code",
+        type: "select",
+        searchable: true,
+        options: hsnOptions,
+      },
+      {
+        name: "item_default_tax_id",
+        label: "Default Tax",
+        type: "select",
+        searchable: true,
+        options: taxOptions,
+        onValueChange: ({ value, values }) => {
+          const nextFormValues: Record<string, string> = {
+            ...values,
+            item_default_tax_id: value,
+          };
+          const normalizedRows = syncSerializedItemPriceRows(
+            nextFormValues[ITEM_PRICE_ROWS_FIELD_NAME] ?? "",
+            nextFormValues,
+            itemTaxRecordsById,
+            true,
+          );
+          const nextValues = syncPrimaryItemPriceValuesFromRows(
+            nextFormValues,
+            normalizedRows,
+          );
+          const changedValues = collectChangedFieldValues(
+            nextFormValues,
+            nextValues,
+            ITEM_PRICE_SYNC_FIELD_NAMES,
+          );
+          if (Object.keys(changedValues).length === 0) {
+            return;
+          }
+          return {
+            values: changedValues,
+          };
+        },
+      },
+      {
+        name: "item_supplier_id",
+        label: "Default Supplier",
+        type: "select",
+        searchable: true,
+        options: supplierOptions,
       },
       {
         name: "item_cust_group",
@@ -3148,8 +3227,17 @@ function buildItemFormFields(
         options: customerGroupOptions,
       },
       {
+        name: "itemInlinePriceListHeading",
+        label: "",
+        type: "custom",
+        fieldStyle: {
+          gridColumn: "1 / -1",
+        },
+        render: () => <div style={ITEM_INLINE_SECTION_HEADING_STYLE}>Price List Table</div>,
+      },
+      {
         name: ITEM_PRICE_ROWS_FIELD_NAME,
-        label: "Price List Table",
+        label: "",
         type: "custom",
         fieldStyle: {
           gridColumn: "1 / -1",
@@ -3167,19 +3255,18 @@ function buildItemFormFields(
           custom: validateItemPriceRows,
         },
         render: ({ disabled, setValue, value, values }) => {
-          const selectableUnitOptions = buildSelectableItemUnitOptions(values, unitOptions);
           const nextPriceRowColumns = priceRowColumns.map((column) =>
             column.key === "ipm_unit_id"
               ? {
                 ...column,
-                options: selectableUnitOptions,
+                options: unitOptions,
                 optionsResolver: (params: {
                   rowIndex: number;
                   rows: LinkedRecordRow[];
                 }) =>
                   buildItemPriceUnitOptions(
                     params.rows,
-                    selectableUnitOptions,
+                    unitOptions,
                     params.rowIndex,
                   ),
               }
@@ -3836,10 +3923,10 @@ export default function ItemMasterPageContent() {
   const { getAll: getGodownLookup } = useApi<unknown>(GODOWN_LOOKUP_ENDPOINT);
   const { getAll: getHsnLookup } = useApi<unknown>(HSN_LOOKUP_ENDPOINT);
   const { getAll: listItemUnitConversions } = useApi<unknown>(
-    ITEM_UNIT_CONVERSION_API_ENDPOINTS.list,
+    ITEM_PRICE_API_ENDPOINTS.list,
   );
   const { run: upsertItemUnitConversion } = useApi<unknown, unknown>(
-    ITEM_UNIT_CONVERSION_API_ENDPOINTS.create,
+    ITEM_PRICE_API_ENDPOINTS.create,
     {
       method: "POST",
       toast: {
@@ -3848,7 +3935,7 @@ export default function ItemMasterPageContent() {
     },
   );
   const { run: removeItemUnitConversion } = useApi<unknown, unknown>(
-    ITEM_UNIT_CONVERSION_API_ENDPOINTS.delete,
+    ITEM_PRICE_API_ENDPOINTS.delete,
     {
       method: "DELETE",
       toast: {
@@ -4236,11 +4323,76 @@ export default function ItemMasterPageContent() {
   );
   const buildItemUnitConversionPayloadRows = useCallback(
     (itemId: string, values: Record<string, string>) => {
-      const baseUnitId = (values.item_base_unit_id ?? "").trim();
-      return buildManagedItemUnitConversionRows(values).map((row) => {
+      const normalizedValues = normalizeItemLinkedSubmissionValues(
+        values,
+        itemTaxRecordsById,
+      );
+      const baseUnitId = (normalizedValues.item_base_unit_id ?? "").trim();
+      const itemPriceRows = buildManagedItemPriceRows(normalizedValues);
+      const hiddenUnitConversionRowsByUnitId = new Map(
+        buildManagedItemUnitConversionRows(normalizedValues)
+          .map((row) => [(row.iuc_unit_id ?? "").trim(), row] as const)
+          .filter(([unitId]) => Boolean(unitId)),
+      );
+
+      if (itemPriceRows.length > 0) {
+        const seenUnitIds = new Set<string>();
+        return itemPriceRows.flatMap((priceRow, index) => {
+          const unitId = (priceRow.ipm_unit_id ?? "").trim() || baseUnitId;
+          if (!unitId || seenUnitIds.has(unitId)) {
+            return [];
+          }
+          seenUnitIds.add(unitId);
+          const matchingUnitConversionRow = hiddenUnitConversionRowsByUnitId.get(unitId);
+          const payload: Record<string, unknown> = {
+            iuc_company_id: (normalizedValues.item_company_id ?? "").trim(),
+            iuc_item_id: itemId,
+            iuc_unit_id: unitId,
+            iuc_base_unit_id: baseUnitId,
+            iuc_to_base_factor: toOptionalNonNegativeNumber(
+              (priceRow.ipm_to_base_factor ?? "").trim() ||
+                (matchingUnitConversionRow?.iuc_to_base_factor ?? "").trim() ||
+                (unitId === baseUnitId ? "1" : ""),
+            ),
+            iuc_unit_slno:
+              toOptionalNonNegativeInteger(
+                priceRow.ipm_unit_slno ??
+                  matchingUnitConversionRow?.iuc_unit_slno ??
+                  String(index + 1),
+              ) ?? index + 1,
+            iul_unit_factor: toOptionalNonNegativeNumber(
+              (priceRow.ipm_unit_factor ?? "").trim() ||
+                (matchingUnitConversionRow?.iul_unit_factor ?? "").trim() ||
+                (unitId === baseUnitId ? "1" : ""),
+            ),
+            iuc_is_default_unit: (priceRow.ipm_is_default_unit ?? "false") === "true",
+            iuc_is_base_unit: (priceRow.ipm_is_base_unit ?? "false") === "true",
+            iuc_is_big_unit: (priceRow.ipm_is_big_unit ?? "false") === "true",
+            iuc_uom_weight: toOptionalNonNegativeNumber(
+              (matchingUnitConversionRow?.iuc_uom_weight ?? "").trim() || "0",
+            ),
+            iuc_uom_remarks: toNullableString(
+              matchingUnitConversionRow?.iuc_uom_remarks ?? "",
+            ),
+            iuc_is_active:
+              (matchingUnitConversionRow?.iuc_is_active ?? "true") === "true",
+          };
+
+          const itemUnitConversionId = toTrimmedOrUndefined(
+            matchingUnitConversionRow?.iuc_id,
+          );
+          if (itemUnitConversionId) {
+            payload.iuc_id = itemUnitConversionId;
+          }
+
+          return [payload];
+        });
+      }
+
+      return buildManagedItemUnitConversionRows(normalizedValues).map((row) => {
         const unitId = (row.iuc_unit_id ?? "").trim() || baseUnitId;
         const payload: Record<string, unknown> = {
-          iuc_company_id: (values.item_company_id ?? "").trim(),
+          iuc_company_id: (normalizedValues.item_company_id ?? "").trim(),
           iuc_item_id: itemId,
           iuc_unit_id: unitId,
           iuc_base_unit_id: baseUnitId,
@@ -4270,7 +4422,7 @@ export default function ItemMasterPageContent() {
         return payload;
       });
     },
-    [],
+    [itemTaxRecordsById],
   );
   const buildItemPricePayloadRows = useCallback(
     (itemId: string, values: Record<string, string>) => {
@@ -4285,12 +4437,17 @@ export default function ItemMasterPageContent() {
           ipm_item_id: itemId,
           ipm_unit_id: unitId,
           ipm_godown_id: (row.ipm_godown_id ?? "").trim(),
+          ipm_base_unit_id: toNullableString(baseUnitId),
           ipm_profit_type: normalizeItemPriceProfitType(row.ipm_profit_type),
           ipm_unit_slno: toOptionalNonNegativeInteger(
             matchingUnitConversion?.iuc_unit_slno ?? row.ipm_unit_slno ?? "",
           ),
           ipm_to_base_factor: toOptionalNonNegativeNumber(
             (matchingUnitConversion?.iuc_to_base_factor ?? row.ipm_to_base_factor ?? "").trim() ||
+            "1",
+          ),
+          ipm_unit_factor: toOptionalNonNegativeNumber(
+            (matchingUnitConversion?.iul_unit_factor ?? row.ipm_unit_factor ?? "").trim() ||
             "1",
           ),
           ipm_cost_price: toOptionalNonNegativeNumber(row.ipm_cost_price ?? ""),
@@ -4329,6 +4486,13 @@ export default function ItemMasterPageContent() {
           ipm_disc_qty: toOptionalNonNegativeNumber(row.ipm_disc_qty ?? ""),
           ipm_addl_cess: toOptionalNonNegativeNumber(row.ipm_addl_cess ?? ""),
           ipm_round_off: toOptionalNonNegativeNumber(row.ipm_round_off ?? ""),
+          ipm_is_default_unit:
+            (matchingUnitConversion?.iuc_is_default_unit ??
+              row.ipm_is_default_unit ??
+              "false") === "true",
+          ipm_is_base_unit:
+            (matchingUnitConversion?.iuc_is_base_unit ?? row.ipm_is_base_unit ?? "false") ===
+            "true",
           ipm_is_big_unit:
             (matchingUnitConversion?.iuc_is_big_unit ?? row.ipm_is_big_unit ?? "false") ===
             "true",
@@ -4479,27 +4643,62 @@ export default function ItemMasterPageContent() {
     async (itemId: string, values: Record<string, string>) => {
       const existingRows = await listItemUnitConversionRecords(itemId);
       const desiredRows = buildItemUnitConversionPayloadRows(itemId, values);
-      const desiredIds = new Set(
-        desiredRows
-          .map((row) => (typeof row.iuc_id === "string" ? row.iuc_id : ""))
-          .filter(Boolean),
+      const existingRowsById = new Map(
+        existingRows
+          .map((row) => [toDisplayValue(getFieldValue(row, "iuc_id")), row] as const)
+          .filter(([iucId]) => Boolean(iucId)),
       );
-      const deleteIds = extractLinkedRowIds(existingRows, "iuc_id").filter(
-        (existingId) => !desiredIds.has(existingId),
-      );
-      if (deleteIds.length > 0) {
+      const desiredIds = new Set<string>();
+      const deleteIds = new Set<string>();
+      const updateRows: Record<string, unknown>[] = [];
+      const createRows: Record<string, unknown>[] = [];
+
+      for (const desiredRow of desiredRows) {
+        const desiredId =
+          typeof desiredRow.iuc_id === "string" ? desiredRow.iuc_id.trim() : "";
+        if (!desiredId) {
+          createRows.push(desiredRow);
+          continue;
+        }
+        desiredIds.add(desiredId);
+        const existingRow = existingRowsById.get(desiredId);
+        if (shouldRecreateItemUnitConversionPayloadRow(existingRow, desiredRow)) {
+          if (existingRow) {
+            deleteIds.add(desiredId);
+          }
+          const { iuc_id: _ignoredId, ...createRow } = desiredRow;
+          createRows.push(createRow);
+          continue;
+        }
+        updateRows.push(desiredRow);
+      }
+
+      for (const existingId of extractLinkedRowIds(existingRows, "iuc_id")) {
+        if (!desiredIds.has(existingId)) {
+          deleteIds.add(existingId);
+        }
+      }
+
+      if (deleteIds.size > 0) {
         await removeItemUnitConversion({
-          body: deleteIds.map((iucId) => ({
+          body: Array.from(deleteIds).map((iucId) => ({
             iuc_id: iucId,
           })),
         });
       }
-      if (desiredRows.length === 0) {
+      if (updateRows.length === 0 && createRows.length === 0) {
         return;
       }
-      await upsertItemUnitConversion({
-        body: desiredRows,
-      });
+      if (updateRows.length > 0) {
+        await upsertItemUnitConversion({
+          body: updateRows,
+        });
+      }
+      if (createRows.length > 0) {
+        await upsertItemUnitConversion({
+          body: createRows,
+        });
+      }
     },
     [
       buildItemUnitConversionPayloadRows,
@@ -4780,7 +4979,6 @@ export default function ItemMasterPageContent() {
       modalStackLabels
       modalSectionNavigationMode="tabs"
       modalHideFieldHelperText
-      modalHideFieldErrorText
       modalFocusFirstInvalidFieldOnValidationError
       modalEnableArrowKeyFieldNavigation
       augmentDetailSource={({ recordId, source, rowSource }) =>
@@ -4803,11 +5001,15 @@ export default function ItemMasterPageContent() {
         if (!savedItemId) {
           return;
         }
-        await syncLinkedItemUnitConversion(savedItemId, values);
+        const normalizedValues = normalizeItemLinkedSubmissionValues(
+          values,
+          itemTaxRecordsById,
+        );
+        await syncLinkedItemUnitConversion(savedItemId, normalizedValues);
         await Promise.all([
-          syncLinkedItemPrice(savedItemId, values),
-          syncLinkedItemReorder(savedItemId, values),
-          syncLinkedItemEanCode(savedItemId, values),
+          syncLinkedItemPrice(savedItemId, normalizedValues),
+          syncLinkedItemReorder(savedItemId, normalizedValues),
+          syncLinkedItemEanCode(savedItemId, normalizedValues),
         ]);
       }}
       afterDeleteSuccess={async ({ deleteId, rowSource }) => {

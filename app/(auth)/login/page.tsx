@@ -2,24 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useApi } from "@/hooks/useApi";
 import { extractAuthToken, setAuthSession } from "@/lib/auth/session";
 import {
   canUseClientSideRouting,
   normalizeInternalRoute,
 } from "@/lib/navigation/safe-route";
+import { getApiErrorMessage } from "@/store/api/baseApi";
+import { useLoginMutation } from "@/store/api/authApi";
+import { useAppDispatch } from "@/store/hooks";
+import { authSessionChanged } from "@/store/slices/authSlice";
 
 type Errors = {
   username?: string;
   password?: string;
 };
-
-type LoginRequest = {
-  user_name: string;
-  user_password: string;
-};
-
-type LoginResponse = Record<string, unknown>;
 
 function normalizeNextRoute(nextRoute: string | null): string {
   const normalizedRoute = normalizeInternalRoute(nextRoute, "/");
@@ -27,14 +23,13 @@ function normalizeNextRoute(nextRoute: string | null): string {
 }
 
 export default function LoginPage() {
+  const dispatch = useAppDispatch();
   const router = useRouter();
   const [values, setValues] = useState({ username: "", password: "" });
   const [errors, setErrors] = useState<Errors>({});
   const [authError, setAuthError] = useState<string | null>(null);
-  const { run: login, loading, error } = useApi<LoginResponse, LoginRequest>(
-    "/auth/login",
-    { method: "POST" }
-  );
+  const [login, { isLoading, error }] = useLoginMutation();
+  const loginError = getApiErrorMessage(error);
 
   const validate = () => {
     const next: Errors = {};
@@ -57,11 +52,9 @@ export default function LoginPage() {
 
     try {
       const response = await login({
-        body: {
-          user_name: values.username.trim(),
-          user_password: values.password,
-        },
-      });
+        user_name: values.username.trim(),
+        user_password: values.password,
+      }).unwrap();
       const token = extractAuthToken(response);
       const hasSession = setAuthSession(token);
       if (!hasSession) {
@@ -73,6 +66,7 @@ export default function LoginPage() {
         }
         return;
       }
+      dispatch(authSessionChanged(token));
 
       const nextRoute = normalizeNextRoute(
         new URLSearchParams(window.location.search).get("next")
@@ -84,7 +78,7 @@ export default function LoginPage() {
 
       router.push(nextRoute);
     } catch {
-      // error state is handled by useApi
+      // Error state is surfaced by the RTK Query mutation hook.
     }
   };
 
@@ -213,7 +207,7 @@ export default function LoginPage() {
           {/* button */}
           <button
             type="submit"
-            disabled={loading}
+            disabled={isLoading}
             className={[
               "mt-1 rounded-xl px-4 py-3 font-bold text-[0.96rem] text-white",
               "bg-[linear-gradient(120deg,#0d7ebf,#0b6ca4)]",
@@ -223,10 +217,10 @@ export default function LoginPage() {
               "disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0",
             ].join(" ")}
           >
-            {loading ? "LOGGING IN..." : "LOGIN"}
+            {isLoading ? "LOGGING IN..." : "LOGIN"}
           </button>
-          {error && (
-            <p className="text-sm text-rose-600">{error}</p>
+          {loginError && (
+            <p className="text-sm text-rose-600">{loginError}</p>
           )}
           {authError && (
             <p className="text-sm text-rose-600">{authError}</p>

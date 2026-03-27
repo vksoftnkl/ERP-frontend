@@ -15,15 +15,9 @@ import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import {
-  fetchGridColumns,
-  selectGridColumns,
-  selectGridColumnsError,
-  selectGridColumnsLoading,
-  selectGridColumnsRequested,
-  type GridColumnConfig,
-} from "@/store/slices/gridColumnsSlice";
+import { getApiErrorMessage } from "@/store/api/baseApi";
+import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
+import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import styles from "@/app/master/state-master/page.module.scss";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
 const API_ENDPOINTS = {
@@ -1576,7 +1570,6 @@ function toSafePageSize(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : DEFAULT_PAGE_SIZE;
 }
 export default function AccountLedgerMasterPage() {
-  const dispatch = useAppDispatch();
   const { data, error, loading, getAll } = useApi<unknown>(API_ENDPOINTS.list);
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const {
@@ -1647,16 +1640,23 @@ export default function AccountLedgerMasterPage() {
   const formRef = useRef<HTMLFormElement | null>(null);
   const sectionTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const selectedGridId = accountLedgerGridId ?? -1;
-  const gridColumns = useAppSelector((state) => selectGridColumns(state, selectedGridId));
-  const gridColumnsLoading = useAppSelector((state) =>
-    selectGridColumnsLoading(state, selectedGridId),
+  const {
+    data: gridColumnsData,
+    error: gridColumnsQueryError,
+    isFetching: gridColumnsLoading,
+    refetch: refetchGridColumns,
+  } = useGetGridColumnsQuery(
+    {
+      gridId: selectedGridId,
+      page: GRID_COLUMNS_PAGE,
+      limit: GRID_COLUMNS_LIMIT,
+    },
+    {
+      skip: accountLedgerGridId === null,
+    },
   );
-  const gridColumnsRequested = useAppSelector((state) =>
-    selectGridColumnsRequested(state, selectedGridId),
-  );
-  const gridColumnsError = useAppSelector((state) =>
-    selectGridColumnsError(state, selectedGridId),
-  );
+  const gridColumns = gridColumnsData ?? [];
+  const gridColumnsError = getApiErrorMessage(gridColumnsQueryError);
 
   useEffect(() => {
     let mounted = true;
@@ -1687,24 +1687,6 @@ export default function AccountLedgerMasterPage() {
     const normalized = accountLedgerGridName?.trim();
     return normalized || "Account Ledger";
   }, [accountLedgerGridName]);
-
-  useEffect(() => {
-    if (
-      accountLedgerGridId === null ||
-      gridColumnsRequested ||
-      gridColumnsLoading
-    ) {
-      return;
-    }
-
-    void dispatch(
-      fetchGridColumns({
-        gridId: accountLedgerGridId,
-        page: GRID_COLUMNS_PAGE,
-        limit: GRID_COLUMNS_LIMIT,
-      }),
-    );
-  }, [accountLedgerGridId, dispatch, gridColumnsLoading, gridColumnsRequested]);
 
   useEffect(() => {
     if (openSearchField === null) {
@@ -2920,14 +2902,7 @@ export default function AccountLedgerMasterPage() {
                     if (accountLedgerGridId === null) {
                       return;
                     }
-
-                    void dispatch(
-                      fetchGridColumns({
-                        gridId: accountLedgerGridId,
-                        page: GRID_COLUMNS_PAGE,
-                        limit: GRID_COLUMNS_LIMIT,
-                      }),
-                    );
+                    void refetchGridColumns();
                   }}
                   disabled={gridColumnsLoading || accountLedgerGridId === null}
                 >

@@ -6,6 +6,7 @@ import Providers from "@/store/provider";
 import GlobalErpHeader from "@/components/layout/global-erp-header";
 import GlobalRouteGuard from "@/components/auth/global-route-guard";
 import GlobalToaster from "@/components/feedback/global-toaster";
+import GlobalTamilInputAssist from "@/components/feedback/global-tamil-input-assist";
 
 export const metadata: Metadata = {
   title: "ERP Client | Operations Platform",
@@ -28,6 +29,7 @@ export default function RootLayout({
             </div>
           </GlobalRouteGuard>
           <GlobalToaster />
+          <GlobalTamilInputAssist />
         </Providers>
       </body>
     </html>

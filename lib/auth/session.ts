@@ -1,11 +1,19 @@
 const AUTH_CACHE_KEY = "erp_client_auth_token";
+export const AUTH_SESSION_EVENT = "erp:auth-session-changed";
+
+export type AuthSessionChangeDetail = {
+  token: string | null;
+};
+
 type JsonRecord = Record<string, unknown>;
+
 function asRecord(value: unknown): JsonRecord | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
   return value as JsonRecord;
 }
+
 function pickFirstString(values: Array<unknown>): string | null {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) {
@@ -14,6 +22,19 @@ function pickFirstString(values: Array<unknown>): string | null {
   }
   return null;
 }
+
+function emitAuthSessionChange(token: string | null): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent<AuthSessionChangeDetail>(AUTH_SESSION_EVENT, {
+      detail: { token },
+    }),
+  );
+}
+
 export function extractAuthToken(payload: unknown): string | null {
   if (typeof payload === "string" && payload.trim()) {
     return payload.trim();
@@ -56,22 +77,27 @@ export function setAuthSession(token?: string | null): boolean {
   if (!value) {
     clearAuthSession();
     return false;
-    }
+  }
   window.sessionStorage.setItem(AUTH_CACHE_KEY, value);
+  emitAuthSessionChange(value);
   return true;
 }
+
 export function clearAuthSession(): void {
   if (typeof window === "undefined") {
     return;
   }
   window.sessionStorage.removeItem(AUTH_CACHE_KEY);
+  emitAuthSessionChange(null);
 }
+
 export function getAuthSession(): string | null {
   if (typeof window === "undefined") {
     return null;
   }
   return window.sessionStorage.getItem(AUTH_CACHE_KEY);
 }
+
 export function isAuthenticated(): boolean {
   return Boolean(getAuthSession()?.trim());
 }

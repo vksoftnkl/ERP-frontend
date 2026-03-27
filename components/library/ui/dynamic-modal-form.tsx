@@ -71,9 +71,7 @@ const SEARCH_SELECT_LIST_MAX_HEIGHT = 220;
 const SEARCH_SELECT_LIST_OFFSET = 4;
 const FIELD_CONTAINER_SELECTOR = "[data-erp-modal-field-name]";
 const PRIMARY_FIELD_CONTROL_SELECTOR = '[data-erp-modal-field-control="true"]';
-
 type FieldNavigationDirection = "left" | "right" | "up" | "down";
-
 type FocusableFieldTarget = {
   container: HTMLElement;
   control: HTMLElement;
@@ -146,7 +144,6 @@ export type ERPDynamicFieldValidation = {
     field: ERPDynamicModalField,
   ) => string | null | undefined;
 };
-
 export type ERPDynamicCustomFieldRenderProps = {
   disabled: boolean;
   error: string | null;
@@ -156,7 +153,6 @@ export type ERPDynamicCustomFieldRenderProps = {
   value: string;
   values: Record<string, string>;
 };
-
 export type ERPDynamicModalField = {
   name: string;
   label: string;
@@ -256,12 +252,10 @@ export type ERPDynamicModalFormProps = {
   className?: string;
   cardGridClassName?: string;
 };
-
 type ERPDynamicFormSection = {
   heading: ERPDynamicModalField | null;
   fields: ERPDynamicModalField[];
 };
-
 function getSectionRowStartOffset(fields: ERPDynamicModalField[]): number | null {
   const rowStarts = fields
     .map((field) => field.gridRowStart)
@@ -271,27 +265,22 @@ function getSectionRowStartOffset(fields: ERPDynamicModalField[]): number | null
         Number.isFinite(gridRowStart) &&
         gridRowStart > 0,
     );
-
   if (rowStarts.length === 0) {
     return null;
   }
-
   return Math.min(...rowStarts);
 }
-
 function buildFormSections(
   fields: ERPDynamicModalField[],
 ): ERPDynamicFormSection[] {
   if (fields.length === 0) {
     return [];
   }
-
   const sections: ERPDynamicFormSection[] = [];
   let currentSection: ERPDynamicFormSection = {
     heading: null,
     fields: [],
   };
-
   for (const field of fields) {
     if ((field.type ?? "text") === "heading") {
       if (currentSection.heading !== null || currentSection.fields.length > 0) {
@@ -303,14 +292,11 @@ function buildFormSections(
       };
       continue;
     }
-
     currentSection.fields.push(field);
   }
-
   if (currentSection.heading !== null || currentSection.fields.length > 0) {
     sections.push(currentSection);
   }
-
   return sections;
 }
 function resolvePalette(
@@ -379,7 +365,6 @@ function getFocusableFieldControl(container: HTMLElement): HTMLElement | null {
   if (primaryControl) {
     return primaryControl;
   }
-
   return container.querySelector<HTMLElement>(
     [
       'input:not([type="hidden"]):not([disabled])',
@@ -392,29 +377,24 @@ function getFocusableFieldControl(container: HTMLElement): HTMLElement | null {
     ].join(", "),
   );
 }
-
 function getFocusableFieldTargets(root: HTMLElement): FocusableFieldTarget[] {
   const fieldContainers = Array.from(
     root.querySelectorAll<HTMLElement>(FIELD_CONTAINER_SELECTOR),
   );
-
   return fieldContainers
     .map((container) => {
       const control = getFocusableFieldControl(container);
       if (!control || control.getClientRects().length === 0) {
         return null;
       }
-
       const rect = container.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) {
         return null;
       }
-
       const fieldName = container.dataset.erpModalFieldName;
       if (!fieldName) {
         return null;
       }
-
       return {
         container,
         control,
@@ -426,7 +406,6 @@ function getFocusableFieldTargets(root: HTMLElement): FocusableFieldTarget[] {
     })
     .filter((target): target is FocusableFieldTarget => target !== null);
 }
-
 function findNextFieldTarget(
   targets: FocusableFieldTarget[],
   currentTarget: FocusableFieldTarget,
@@ -435,12 +414,10 @@ function findNextFieldTarget(
   const isHorizontal = direction === "left" || direction === "right";
   let bestTarget: FocusableFieldTarget | null = null;
   let bestScore = Number.POSITIVE_INFINITY;
-
   for (const candidate of targets) {
     if (candidate.fieldName === currentTarget.fieldName) {
       continue;
     }
-
     const primaryDelta = isHorizontal
       ? candidate.centerX - currentTarget.centerX
       : candidate.centerY - currentTarget.centerY;
@@ -448,11 +425,9 @@ function findNextFieldTarget(
       direction === "left" || direction === "up"
         ? primaryDelta < -6
         : primaryDelta > 6;
-
     if (!isInDirection) {
       continue;
     }
-
     const overlap = isHorizontal
       ? Math.max(
           0,
@@ -469,16 +444,13 @@ function findNextFieldTarget(
       : Math.abs(candidate.centerX - currentTarget.centerX);
     const score =
       (overlap > 0 ? 0 : 100000) + Math.abs(primaryDelta) * 100 + crossDistance;
-
     if (score < bestScore) {
       bestScore = score;
       bestTarget = candidate;
     }
   }
-
   return bestTarget;
 }
-
 function getFirstFocusableFieldTarget(
   root: HTMLElement,
 ): FocusableFieldTarget | null {
@@ -486,17 +458,14 @@ function getFirstFocusableFieldTarget(
   if (targets.length === 0) {
     return null;
   }
-
   return [...targets].sort((left, right) => {
     const topDifference = left.rect.top - right.rect.top;
     if (Math.abs(topDifference) > 6) {
       return topDifference;
     }
-
     return left.rect.left - right.rect.left;
   })[0] ?? null;
 }
-
 function focusFieldControl(control: HTMLElement) {
   control.focus();
   if (
@@ -527,22 +496,18 @@ function validateFieldValue(
   if (fieldType === "heading") {
     return null;
   }
-
   if (fieldType === "custom") {
     if (field.required && isEmptyValue(rawValue)) {
       return validation?.requiredMessage ?? `${field.label} is required.`;
     }
-
     if (validation?.custom) {
       const customError = validation.custom(rawValue, values, field);
       if (customError) {
         return customError;
       }
     }
-
     return null;
   }
-
   if (fieldType === "checkbox") {
     const isChecked = rawValue === "true";
     if (field.required && !isChecked) {
@@ -683,14 +648,11 @@ function resolveVisibleFields(
       return true;
     }
   });
-
   if (!sectionExpandedState) {
     return baseVisibleFields;
   }
-
   const resolved: ERPDynamicModalField[] = [];
   let currentSectionName: string | null = null;
-
   for (const field of baseVisibleFields) {
     const fieldType = field.type ?? "text";
     if (fieldType === "heading") {
@@ -698,20 +660,16 @@ function resolveVisibleFields(
       resolved.push(field);
       continue;
     }
-
     if (
       currentSectionName &&
       sectionExpandedState[currentSectionName] === false
     ) {
       continue;
     }
-
     resolved.push(field);
   }
-
   return resolved;
 }
-
 function buildSectionExpandedState(
   fields: ERPDynamicModalField[],
   values?: Record<string, string>,
@@ -732,7 +690,6 @@ function buildSectionExpandedState(
   }
   return sectionState;
 }
-
 function IconPlaceholder() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
@@ -904,12 +861,10 @@ export function ERPDynamicModalForm({
     if (!isOpen) {
       return;
     }
-
     const scrollArea = scrollAreaRef.current;
     if (!scrollArea) {
       return;
     }
-
     window.requestAnimationFrame(() => {
       scrollArea.scrollTop = 0;
     });
@@ -918,17 +873,14 @@ export function ERPDynamicModalForm({
     if (!isOpen) {
       return;
     }
-
     const html = document.documentElement;
     const body = document.body;
     const appContent = document.querySelector<HTMLElement>(".erp-app-content");
-
     const previousHtmlOverflow = html.style.overflow;
     const previousBodyOverflow = body.style.overflow;
     const previousBodyOverscroll = body.style.overscrollBehavior;
     const previousAppOverflow = appContent?.style.overflow ?? "";
     const previousAppOverscroll = appContent?.style.overscrollBehavior ?? "";
-
     html.style.overflow = "hidden";
     body.style.overflow = "hidden";
     body.style.overscrollBehavior = "none";
@@ -936,7 +888,6 @@ export function ERPDynamicModalForm({
       appContent.style.overflow = "hidden";
       appContent.style.overscrollBehavior = "none";
     }
-
     return () => {
       html.style.overflow = previousHtmlOverflow;
       body.style.overflow = previousBodyOverflow;
@@ -965,24 +916,20 @@ export function ERPDynamicModalForm({
     },
     [fileData, sectionExpandedByVariant, sectionNavigationMode],
   );
-
   const activeSectionExpandedState = useMemo(
     () =>
       activeVariant ? sectionExpandedByVariant[activeVariant.key] : undefined,
     [activeVariant, sectionExpandedByVariant],
   );
-
   const allVisibleFields = useMemo(() => {
     if (!activeVariant) {
       return [];
     }
     return resolveVisibleFields(activeVariant, formData);
   }, [activeVariant, formData]);
-
   const visibleSections = useMemo<ERPDynamicFormSection[]>(() => {
     return buildFormSections(allVisibleFields);
   }, [allVisibleFields]);
-
   const toggleSectionExpanded = useCallback(
     (sectionName: string) => {
       if (!activeVariant) {
@@ -1042,7 +989,6 @@ export function ERPDynamicModalForm({
       if (sectionNavigationMode !== "tabs" || tabSections.length === 0) {
         return;
       }
-
       if (event.key === "ArrowDown") {
         event.preventDefault();
         if (activeSectionKey !== sectionKey) {
@@ -1054,18 +1000,15 @@ export function ERPDynamicModalForm({
             if (!formElement) {
               return;
             }
-
             const firstFieldTarget = getFirstFocusableFieldTarget(formElement);
             if (!firstFieldTarget) {
               return;
             }
-
             focusFieldControl(firstFieldTarget.control);
           });
         });
         return;
       }
-
       let nextIndex = sectionIndex;
       if (event.key === "ArrowRight") {
         nextIndex = (sectionIndex + 1) % tabSections.length;
@@ -1078,7 +1021,6 @@ export function ERPDynamicModalForm({
       } else {
         return;
       }
-
       event.preventDefault();
       const nextSection = tabSections[nextIndex];
       if (!nextSection) {
@@ -1095,12 +1037,10 @@ export function ERPDynamicModalForm({
     if (sectionNavigationMode !== "tabs" || !activeVariant || tabSections.length === 0) {
       return;
     }
-
     const activeKey = activeSectionByVariant[activeVariant.key];
     if (activeKey && tabSections.some((section) => section.key === activeKey)) {
       return;
     }
-
     setActiveSectionByVariant((current) => ({
       ...current,
       [activeVariant.key]: tabSections[0]?.key ?? "section-0",
@@ -1111,7 +1051,6 @@ export function ERPDynamicModalForm({
       setFieldErrors((currentErrors) => {
         let changed = false;
         const nextErrors = { ...currentErrors };
-
         for (const [fieldName, errorMessage] of Object.entries(errors)) {
           if (errorMessage) {
             if (nextErrors[fieldName] !== errorMessage) {
@@ -1120,13 +1059,11 @@ export function ERPDynamicModalForm({
             }
             continue;
           }
-
           if (fieldName in nextErrors) {
             delete nextErrors[fieldName];
             changed = true;
           }
         }
-
         return changed ? nextErrors : currentErrors;
       });
     },
@@ -1141,17 +1078,14 @@ export function ERPDynamicModalForm({
       if (!validateOnChange || !activeVariant || fieldNames.length === 0) {
         return;
       }
-
       const fieldNameSet = new Set(fieldNames);
       setFieldErrors((currentErrors) => {
         let changed = false;
         const nextErrors = { ...currentErrors };
-
         for (const field of activeVariant.fields) {
           if (!fieldNameSet.has(field.name)) {
             continue;
           }
-
           const nextError = validateFieldValue(field, values, files);
           const currentError = currentErrors[field.name];
           if (nextError) {
@@ -1161,13 +1095,11 @@ export function ERPDynamicModalForm({
             }
             continue;
           }
-
           if (currentError !== undefined) {
             delete nextErrors[field.name];
             changed = true;
           }
         }
-
         return changed ? nextErrors : currentErrors;
       });
     },
@@ -1178,7 +1110,6 @@ export function ERPDynamicModalForm({
       if (!result) {
         return;
       }
-
       if (result.values && Object.keys(result.values).length > 0) {
         const resultValues = result.values;
         setFormData((current) => {
@@ -1190,7 +1121,6 @@ export function ERPDynamicModalForm({
           return nextValues;
         });
       }
-
       if (result.errors) {
         applyResolvedFieldErrors(result.errors);
       }
@@ -1207,11 +1137,9 @@ export function ERPDynamicModalForm({
       if (!field.onValueChange) {
         return;
       }
-
       const requestId =
         (fieldValueChangeRequestIdsRef.current[field.name] ?? 0) + 1;
       fieldValueChangeRequestIdsRef.current[field.name] = requestId;
-
       void Promise.resolve(
         field.onValueChange({
           field,
@@ -1253,7 +1181,6 @@ export function ERPDynamicModalForm({
     setSearchQueries((current) => {
       let changed = false;
       const nextQueries: Record<string, string> = {};
-
       for (const [fieldName, query] of Object.entries(current)) {
         if (visibleFieldNames.has(fieldName)) {
           nextQueries[fieldName] = query;
@@ -1261,17 +1188,14 @@ export function ERPDynamicModalForm({
           changed = true;
         }
       }
-
       return changed ? nextQueries : current;
     });
-
     setOpenSearchField((current) => {
       if (current && !visibleFieldNames.has(current)) {
         return null;
       }
       return current;
     });
-
     setSearchActiveOptionIndex((current) => {
       let changed = false;
       const nextIndexes: Record<string, number> = {};
@@ -1285,7 +1209,6 @@ export function ERPDynamicModalForm({
       return changed ? nextIndexes : current;
     });
   }, [activeVariant, allVisibleFields]);
-
   const handleChange = (
     event: ChangeEvent<
       HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
@@ -1774,7 +1697,6 @@ export function ERPDynamicModalForm({
               : event.key === "ArrowDown"
                 ? "down"
                 : null;
-
       if (!direction) {
         return;
       }
@@ -2010,7 +1932,7 @@ export function ERPDynamicModalForm({
             : {}),
         }}
       >
-        {inputType !== "checkbox" ? (
+        {inputType !== "checkbox" && field.label.trim().length > 0 ? (
           <label className={styles.label} htmlFor={commonProps.id}>
             {field.label}{" "}
             {field.required ? (
@@ -2598,7 +2520,6 @@ export function ERPDynamicModalForm({
                     const sectionToggleId = heading
                       ? `${formId}-${heading.name}-section-toggle`
                       : undefined;
-
                     return (
                       <Fragment key={sectionKey}>
                         {heading ? (
@@ -2649,7 +2570,6 @@ export function ERPDynamicModalForm({
                 )}
               </form>
             </div>
-
             <footer className={styles.footer}>
               {submitError ? (
                 <p className={styles.submitError} role="alert">
@@ -2679,5 +2599,4 @@ export function ERPDynamicModalForm({
     </section>
   );
 }
-
 export default ERPDynamicModalForm;

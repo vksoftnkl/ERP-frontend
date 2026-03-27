@@ -67,12 +67,32 @@ Use `.env.local` for local config.
 - `HTTPS_CERT_PATH` (optional): Cert path for `npm run start`
 - `HTTPS_KEY_PATH` (optional): Key path for `npm run start`
 - `HTTPS_PASSPHRASE` (optional): Passphrase for encrypted private keys
+- `GOOGLE_TRANSLATE_PROJECT_ID` (optional): Google Cloud project ID used for Tamil transliteration suggestions
+- `GOOGLE_TRANSLATE_CLIENT_EMAIL` (optional): Service account client email for Cloud Translation Advanced
+- `GOOGLE_TRANSLATE_PRIVATE_KEY` (optional): Service account private key for Cloud Translation Advanced
+- `GOOGLE_TRANSLATE_LOCATION` (optional): Translation location, defaults to `global`
+- `GOOGLE_TRANSLATE_SOURCE_LANGUAGE` (optional): Source language code, defaults to `ta`
+- `GOOGLE_TRANSLATE_TARGET_LANGUAGE` (optional): Target language code, defaults to `ta`
+- `GOOGLE_TRANSLATE_TIMEOUT_MS` (optional): Upstream request timeout in milliseconds, defaults to `4000`
 
 Example:
 
 ```bash
 NEXT_PUBLIC_API_BASE=https://api.example.com
 ```
+
+Tamil suggestions can be backed by Google Cloud Translation Advanced by adding a service account to `.env.local`:
+
+```bash
+GOOGLE_TRANSLATE_PROJECT_ID=your-gcp-project-id
+GOOGLE_TRANSLATE_CLIENT_EMAIL=translator@your-gcp-project-id.iam.gserviceaccount.com
+GOOGLE_TRANSLATE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GOOGLE_TRANSLATE_LOCATION=global
+GOOGLE_TRANSLATE_SOURCE_LANGUAGE=ta
+GOOGLE_TRANSLATE_TARGET_LANGUAGE=ta
+```
+
+If these variables are not set, the app falls back to the built-in local Tamil transliteration logic.
 
 ## Project Structure
 

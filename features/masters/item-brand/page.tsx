@@ -3,16 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
-import {
-  fetchGridColumns,
-  selectGridColumns,
-  selectGridColumnsError,
-  selectGridColumnsLoading,
-  selectGridColumnsRequested,
-  type GridColumnConfig,
-} from "@/store/slices/gridColumnsSlice";
+import { getApiErrorMessage } from "@/store/api/baseApi";
+import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
+import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
   ERPDynamicModalForm,
@@ -852,7 +846,6 @@ function useItemBrandData() {
   };
 }
 export default function ItemBrandMasterPage() {
-  const dispatch = useAppDispatch();
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const { getAll: getGridDetailById } = useApi<unknown>(GRID_DETAIL_GET_ENDPOINT);
@@ -883,16 +876,23 @@ export default function ItemBrandMasterPage() {
   const [itemBrandGridId, setItemBrandGridId] = useState<number | null>(null);
   const [itemBrandGridName, setItemBrandGridName] = useState<string | null>(null);
   const selectedGridId = itemBrandGridId ?? -1;
-  const gridColumns = useAppSelector((state) => selectGridColumns(state, selectedGridId));
-  const gridColumnsLoading = useAppSelector((state) =>
-    selectGridColumnsLoading(state, selectedGridId),
+  const {
+    data: gridColumnsData,
+    error: gridColumnsQueryError,
+    isFetching: gridColumnsLoading,
+    refetch: refetchGridColumns,
+  } = useGetGridColumnsQuery(
+    {
+      gridId: selectedGridId,
+      page: GRID_COLUMNS_PAGE,
+      limit: GRID_COLUMNS_LIMIT,
+    },
+    {
+      skip: itemBrandGridId === null,
+    },
   );
-  const gridColumnsRequested = useAppSelector((state) =>
-    selectGridColumnsRequested(state, selectedGridId),
-  );
-  const gridColumnsError = useAppSelector((state) =>
-    selectGridColumnsError(state, selectedGridId),
-  );
+  const gridColumns = gridColumnsData ?? [];
+  const gridColumnsError = getApiErrorMessage(gridColumnsQueryError);
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(
     null,
   );
@@ -937,22 +937,6 @@ export default function ItemBrandMasterPage() {
     const normalized = itemBrandGridName?.trim();
     return normalized || "Item Brand";
   }, [itemBrandGridName]);
-  useEffect(() => {
-    if (
-      itemBrandGridId === null ||
-      gridColumnsRequested ||
-      gridColumnsLoading
-    ) {
-      return;
-    }
-    void dispatch(
-      fetchGridColumns({
-        gridId: itemBrandGridId,
-        page: GRID_COLUMNS_PAGE,
-        limit: GRID_COLUMNS_LIMIT,
-      }),
-    );
-  }, [dispatch, gridColumnsLoading, gridColumnsRequested, itemBrandGridId]);
   const columns = useMemo<ReusableTableColumn<ItemBrandTableRow>[]>(
     () => buildColumnsFromGridColumns(gridColumns),
     [gridColumns],
@@ -1323,13 +1307,7 @@ export default function ItemBrandMasterPage() {
                     if (itemBrandGridId === null) {
                       return;
                     }
-                    void dispatch(
-                      fetchGridColumns({
-                        gridId: itemBrandGridId,
-                        page: GRID_COLUMNS_PAGE,
-                        limit: GRID_COLUMNS_LIMIT,
-                      }),
-                    );
+                    void refetchGridColumns();
                   }}
                   disabled={gridColumnsLoading || itemBrandGridId === null}
                 >
