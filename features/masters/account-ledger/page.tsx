@@ -1,6 +1,5 @@
 "use client";
 import {
-  Fragment,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
@@ -897,6 +896,19 @@ const LEDGER_FIELD_NAME_SET = new Set<string>(
   Object.keys(LEDGER_INITIAL_FORM_VALUES),
 );
 const LEDGER_ASIDE_SECTION_KEYS = new Set<string>(["__heading_control"]);
+const LEDGER_FIELD_CONTAINER_SELECTOR = "[data-ledger-modal-field-name]";
+const LEDGER_PRIMARY_FIELD_CONTROL_SELECTOR =
+  '[data-ledger-modal-field-control="true"]';
+
+type LedgerFieldNavigationDirection = "left" | "right" | "up" | "down";
+type LedgerFocusableFieldTarget = {
+  control: HTMLElement;
+  fieldName: string;
+  rect: DOMRect;
+  centerX: number;
+  centerY: number;
+};
+
 function isLedgerFieldName(value: string): value is LedgerFormFieldName {
   return LEDGER_FIELD_NAME_SET.has(value);
 }
@@ -1092,13 +1104,172 @@ function toLedgerFormSections(fields: ERPDynamicModalField[]): LedgerFormSection
   return sections;
 }
 
-function buildSectionExpandedState(
-  sections: LedgerFormSection[],
-): Record<string, boolean> {
-  return sections.reduce<Record<string, boolean>>((state, section) => {
-    state[section.key] = section.key !== "__heading_region";
-    return state;
-  }, {});
+function getLedgerFocusableFieldControl(container: HTMLElement): HTMLElement | null {
+  const primaryControl = container.querySelector<HTMLElement>(
+    LEDGER_PRIMARY_FIELD_CONTROL_SELECTOR,
+  );
+  if (primaryControl) {
+    return primaryControl;
+  }
+
+  return container.querySelector<HTMLElement>(
+    [
+      'input:not([type="hidden"]):not([disabled])',
+      "textarea:not([disabled])",
+      "select:not([disabled])",
+      '[role="combobox"]:not([disabled])',
+      "button:not([disabled])",
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(", "),
+  );
+}
+function getLedgerFocusableFieldTargets(
+  root: HTMLElement,
+): LedgerFocusableFieldTarget[] {
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(LEDGER_FIELD_CONTAINER_SELECTOR),
+  )
+    .map((container) => {
+      const control = getLedgerFocusableFieldControl(container);
+      if (!control || control.getClientRects().length === 0) {
+        return null;
+      }
+
+      const fieldName = container.dataset.ledgerModalFieldName;
+      if (!fieldName) {
+        return null;
+      }
+
+      const rect = container.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) {
+        return null;
+      }
+
+      return {
+        control,
+        fieldName,
+        rect,
+        centerX: rect.left + rect.width / 2,
+        centerY: rect.top + rect.height / 2,
+      };
+    })
+    .filter((target): target is LedgerFocusableFieldTarget => target !== null);
+}
+function findNextLedgerFieldTarget(
+  targets: LedgerFocusableFieldTarget[],
+  currentTarget: LedgerFocusableFieldTarget,
+  direction: LedgerFieldNavigationDirection,
+): LedgerFocusableFieldTarget | null {
+  const isHorizontal = direction === "left" || direction === "right";
+  let bestTarget: LedgerFocusableFieldTarget | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (const candidate of targets) {
+    if (candidate.fieldName === currentTarget.fieldName) {
+      continue;
+    }
+
+    const primaryDelta = isHorizontal
+      ? candidate.centerX - currentTarget.centerX
+      : candidate.centerY - currentTarget.centerY;
+    const isInDirection =
+      direction === "left" || direction === "up"
+        ? primaryDelta < -6
+        : primaryDelta > 6;
+
+    if (!isInDirection) {
+      continue;
+    }
+
+    const overlap = isHorizontal
+      ? Math.max(
+          0,
+          Math.min(currentTarget.rect.bottom, candidate.rect.bottom) -
+            Math.max(currentTarget.rect.top, candidate.rect.top),
+        )
+      : Math.max(
+          0,
+          Math.min(currentTarget.rect.right, candidate.rect.right) -
+            Math.max(currentTarget.rect.left, candidate.rect.left),
+        );
+    const crossDistance = isHorizontal
+      ? Math.abs(candidate.centerY - currentTarget.centerY)
+      : Math.abs(candidate.centerX - currentTarget.centerX);
+    const score =
+      (overlap > 0 ? 0 : 100000) + Math.abs(primaryDelta) * 100 + crossDistance;
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestTarget = candidate;
+    }
+  }
+
+  return bestTarget;
+}
+function getFirstLedgerFocusableFieldTarget(
+  root: HTMLElement,
+): LedgerFocusableFieldTarget | null {
+  const targets = getLedgerFocusableFieldTargets(root);
+  if (targets.length === 0) {
+    return null;
+  }
+
+  return [...targets].sort((left, right) => {
+    const topDifference = left.rect.top - right.rect.top;
+    if (Math.abs(topDifference) > 6) {
+      return topDifference;
+    }
+
+    return left.rect.left - right.rect.left;
+  })[0] ?? null;
+}
+function focusLedgerFieldControl(control: HTMLElement) {
+  control.focus();
+  if (
+    control instanceof HTMLInputElement ||
+    control instanceof HTMLTextAreaElement
+  ) {
+    try {
+      const selectionIndex = control.value.length;
+      control.setSelectionRange(selectionIndex, selectionIndex);
+    } catch {
+      // Ignore unsupported input types.
+    }
+  }
+  control.scrollIntoView({
+    block: "nearest",
+    inline: "nearest",
+  });
+}
+function getLedgerValidationError(
+  values: LedgerFormValues,
+): { fieldName: LedgerFormFieldName; message: string } | null {
+  if (!(values.masterName ?? "").trim()) {
+    return {
+      fieldName: "masterName",
+      message: "Ledger Name is required.",
+    };
+  }
+  if (!(values.ledCompanyId ?? "").trim()) {
+    return {
+      fieldName: "ledCompanyId",
+      message: "Company is required.",
+    };
+  }
+  if (!(values.ledBranchId ?? "").trim()) {
+    return {
+      fieldName: "ledBranchId",
+      message: "Branch is required.",
+    };
+  }
+  if (!(values.ledGroupId ?? "").trim()) {
+    return {
+      fieldName: "ledGroupId",
+      message: "Account Group is required.",
+    };
+  }
+
+  return null;
 }
 function normalizeColumnToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9_]+/g, "");
@@ -1404,21 +1575,6 @@ function toSafePageNumber(value: number): number {
 function toSafePageSize(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : DEFAULT_PAGE_SIZE;
 }
-function validateLedgerForm(values: LedgerFormValues): string | null {
-  if (!(values.masterName ?? "").trim()) {
-    return "Ledger Name is required.";
-  }
-  if (!(values.ledCompanyId ?? "").trim()) {
-    return "Company is required.";
-  }
-  if (!(values.ledBranchId ?? "").trim()) {
-    return "Branch is required.";
-  }
-  if (!(values.ledGroupId ?? "").trim()) {
-    return "Account Group is required.";
-  }
-  return null;
-}
 export default function AccountLedgerMasterPage() {
   const dispatch = useAppDispatch();
   const { data, error, loading, getAll } = useApi<unknown>(API_ENDPOINTS.list);
@@ -1483,9 +1639,13 @@ export default function AccountLedgerMasterPage() {
   const [searchActiveOptionIndex, setSearchActiveOptionIndex] = useState<
     Record<string, number>
   >({});
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [activeSectionKey, setActiveSectionKey] = useState("general");
+  const [validationFieldName, setValidationFieldName] =
+    useState<LedgerFormFieldName | null>(null);
   const [pendingDeleteRow, setPendingDeleteRow] = useState<LedgerTableRow | null>(null);
   const searchInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const sectionTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const selectedGridId = accountLedgerGridId ?? -1;
   const gridColumns = useAppSelector((state) => selectGridColumns(state, selectedGridId));
   const gridColumnsLoading = useAppSelector((state) =>
@@ -1693,20 +1853,21 @@ export default function AccountLedgerMasterPage() {
     () => toLedgerFormSections(ledgerFormFields),
     [ledgerFormFields],
   );
-  const mainSections = useMemo(
-    () =>
-      ledgerFormSections.filter(
-        (section) => !LEDGER_ASIDE_SECTION_KEYS.has(section.key),
-      ),
-    [ledgerFormSections],
-  );
-  const asideSections = useMemo(
-    () =>
-      ledgerFormSections.filter((section) =>
-        LEDGER_ASIDE_SECTION_KEYS.has(section.key),
-      ),
-    [ledgerFormSections],
-  );
+  const activeLedgerSection =
+    ledgerFormSections.find((section) => section.key === activeSectionKey) ??
+    ledgerFormSections[0] ??
+    null;
+  useEffect(() => {
+    if (ledgerFormSections.length === 0) {
+      return;
+    }
+
+    if (ledgerFormSections.some((section) => section.key === activeSectionKey)) {
+      return;
+    }
+
+    setActiveSectionKey(ledgerFormSections[0]?.key ?? "general");
+  }, [activeSectionKey, ledgerFormSections]);
   const loadRecords = useCallback(
     async (term: string, page: number, limit: number) => {
       const normalizedTerm = term.trim();
@@ -1768,10 +1929,11 @@ export default function AccountLedgerMasterPage() {
     resetSaveState();
     resetDetailsState();
     setModalError(null);
+    setValidationFieldName(null);
     setOpenSearchField(null);
     setSearchQueries({});
     setSearchActiveOptionIndex({});
-    setExpandedSections(buildSectionExpandedState(ledgerFormSections));
+    setActiveSectionKey(ledgerFormSections[0]?.key ?? "general");
     setModalMode("create");
     setEditingItemId(null);
     setFormValues(createInitialLedgerFormValues());
@@ -1782,10 +1944,11 @@ export default function AccountLedgerMasterPage() {
       resetSaveState();
       resetDetailsState();
       setModalError(null);
+      setValidationFieldName(null);
       setOpenSearchField(null);
       setSearchQueries({});
       setSearchActiveOptionIndex({});
-      setExpandedSections(buildSectionExpandedState(ledgerFormSections));
+      setActiveSectionKey(ledgerFormSections[0]?.key ?? "general");
       setModalMode(mode);
       setFormValues(createInitialLedgerFormValues());
       setIsFormModalOpen(true);
@@ -1819,10 +1982,11 @@ export default function AccountLedgerMasterPage() {
     setIsFormModalOpen(false);
     setModalError(null);
     setEditingItemId(null);
+    setValidationFieldName(null);
     setOpenSearchField(null);
     setSearchQueries({});
     setSearchActiveOptionIndex({});
-    setExpandedSections({});
+    setActiveSectionKey("general");
   }, [saveLoading]);
   const handleFieldChange = useCallback(
     (fieldName: LedgerFormFieldName, value: string) => {
@@ -1830,6 +1994,24 @@ export default function AccountLedgerMasterPage() {
         ...current,
         [fieldName]: value,
       }));
+      setValidationFieldName((current) =>
+        current === fieldName ? null : current,
+      );
+    },
+    [],
+  );
+  const handleCheckboxKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+      if (event.currentTarget.disabled) {
+        return;
+      }
+
+      event.currentTarget.click();
     },
     [],
   );
@@ -1985,6 +2167,146 @@ export default function AccountLedgerMasterPage() {
       searchActiveOptionIndex,
     ],
   );
+  const handleSectionTabKeyDown = useCallback(
+    (
+      event: ReactKeyboardEvent<HTMLButtonElement>,
+      sectionIndex: number,
+      sectionKey: string,
+    ) => {
+      if (ledgerFormSections.length === 0) {
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        if (activeSectionKey !== sectionKey) {
+          setActiveSectionKey(sectionKey);
+        }
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            const formElement = formRef.current;
+            if (!formElement) {
+              return;
+            }
+
+            const firstFieldTarget = getFirstLedgerFocusableFieldTarget(formElement);
+            if (!firstFieldTarget) {
+              return;
+            }
+
+            focusLedgerFieldControl(firstFieldTarget.control);
+          });
+        });
+        return;
+      }
+
+      let nextIndex = sectionIndex;
+      if (event.key === "ArrowRight") {
+        nextIndex = (sectionIndex + 1) % ledgerFormSections.length;
+      } else if (event.key === "ArrowLeft") {
+        nextIndex =
+          (sectionIndex - 1 + ledgerFormSections.length) % ledgerFormSections.length;
+      } else if (event.key === "Home") {
+        nextIndex = 0;
+      } else if (event.key === "End") {
+        nextIndex = ledgerFormSections.length - 1;
+      } else {
+        return;
+      }
+
+      event.preventDefault();
+      const nextSection = ledgerFormSections[nextIndex];
+      if (!nextSection) {
+        return;
+      }
+
+      setActiveSectionKey(nextSection.key);
+      window.requestAnimationFrame(() => {
+        sectionTabRefs.current[nextSection.key]?.focus();
+      });
+    },
+    [activeSectionKey, ledgerFormSections],
+  );
+  const handleLedgerFieldArrowNavigation = useCallback(
+    (event: ReactKeyboardEvent<HTMLFormElement>) => {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+
+      const direction =
+        event.key === "ArrowLeft"
+          ? "left"
+          : event.key === "ArrowRight"
+            ? "right"
+            : event.key === "ArrowUp"
+              ? "up"
+              : event.key === "ArrowDown"
+                ? "down"
+                : null;
+
+      if (!direction) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      if (
+        target.closest('[data-ledger-modal-search-dropdown="true"]') ||
+        target.getAttribute("role") === "searchbox"
+      ) {
+        return;
+      }
+
+      const currentContainer = target.closest<HTMLElement>(
+        LEDGER_FIELD_CONTAINER_SELECTOR,
+      );
+      if (!currentContainer) {
+        return;
+      }
+
+      const formElement = formRef.current;
+      if (!formElement) {
+        return;
+      }
+
+      const currentFieldName = currentContainer.dataset.ledgerModalFieldName;
+      const targets = getLedgerFocusableFieldTargets(formElement);
+      const currentFieldTarget = currentFieldName
+        ? targets.find((entry) => entry.fieldName === currentFieldName)
+        : undefined;
+      if (!currentFieldTarget) {
+        return;
+      }
+
+      const nextTarget = findNextLedgerFieldTarget(
+        targets,
+        currentFieldTarget,
+        direction,
+      );
+      if (!nextTarget) {
+        if (direction === "up" && activeSectionKey) {
+          const activeTab = sectionTabRefs.current[activeSectionKey];
+          if (activeTab) {
+            event.preventDefault();
+            activeTab.focus();
+          }
+        }
+        return;
+      }
+
+      event.preventDefault();
+      focusLedgerFieldControl(nextTarget.control);
+    },
+    [activeSectionKey],
+  );
   const handleModalSubmit = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -1992,11 +2314,24 @@ export default function AccountLedgerMasterPage() {
         closeModal();
         return;
       }
-      const validationError = validateLedgerForm(formValues);
+      const validationError = getLedgerValidationError(formValues);
       if (validationError) {
-        setModalError(validationError);
+        setModalError(null);
+        setValidationFieldName(validationError.fieldName);
+        window.requestAnimationFrame(() => {
+          const invalidField = document.getElementById(validationError.fieldName);
+          if (!(invalidField instanceof HTMLElement)) {
+            return;
+          }
+          invalidField.focus();
+          invalidField.scrollIntoView({
+            block: "nearest",
+            inline: "nearest",
+          });
+        });
         return;
       }
+      setValidationFieldName(null);
       const shouldUpdate = modalMode === "update";
       const payload = buildLedgerRequestPayload(
         formValues,
@@ -2114,6 +2449,7 @@ export default function AccountLedgerMasterPage() {
 
   const modalPanelStyle = {
     width: "min(62vw,62rem)",
+    height: "75vh",
     maxHeight: "75vh",
   } as CSSProperties;
 
@@ -2127,6 +2463,7 @@ export default function AccountLedgerMasterPage() {
       const inputType = field.type ?? "text";
       const fieldValue = formValues[fieldName] ?? "";
       const disabled = isReadOnlyMode || detailsLoading || saveLoading;
+      const isValidationInvalid = validationFieldName === fieldName;
       const wrapperClassName = dynamicFormStyles.field;
       const wrapperInlineStyle: CSSProperties = {
         gridTemplateColumns: "1fr",
@@ -2149,6 +2486,7 @@ export default function AccountLedgerMasterPage() {
         return (
           <div
             key={field.name}
+            data-ledger-modal-field-name={fieldName}
             className={wrapperClassName}
             style={wrapperInlineStyle}
           >
@@ -2165,11 +2503,15 @@ export default function AccountLedgerMasterPage() {
             >
               <input
                 id={field.name}
-                className={dynamicFormStyles.checkboxControl}
+                data-ledger-modal-field-control="true"
+                className={`${dynamicFormStyles.checkboxControl} ${
+                  isValidationInvalid ? dynamicFormStyles.checkboxControlInvalid : ""
+                }`}
                 type="checkbox"
                 autoComplete="off"
                 checked={isChecked}
                 disabled={disabled}
+                onKeyDown={handleCheckboxKeyDown}
                 style={{
                   marginRight: "4px",
                   width: "14px",
@@ -2219,6 +2561,7 @@ export default function AccountLedgerMasterPage() {
         return (
           <div
             key={field.name}
+            data-ledger-modal-field-name={fieldName}
             className={wrapperClassName}
             style={wrapperInlineStyle}
           >
@@ -2240,9 +2583,10 @@ export default function AccountLedgerMasterPage() {
               <button
                 id={field.name}
                 type="button"
+                data-ledger-modal-field-control="true"
                 className={`${dynamicFormStyles.searchSelectTrigger} ${
-                  isSearchOpen ? dynamicFormStyles.searchSelectTriggerOpen : ""
-                }`}
+                  isValidationInvalid ? dynamicFormStyles.controlInvalid : ""
+                } ${isSearchOpen ? dynamicFormStyles.searchSelectTriggerOpen : ""}`}
                 disabled={disabled}
                 role="combobox"
                 aria-expanded={isSearchOpen}
@@ -2305,6 +2649,7 @@ export default function AccountLedgerMasterPage() {
               {isSearchOpen && !disabled ? (
                 <div
                   id={`${field.name}-search-list`}
+                  data-ledger-modal-search-dropdown="true"
                   className={dynamicFormStyles.searchSelectList}
                   role="listbox"
                 >
@@ -2410,6 +2755,7 @@ export default function AccountLedgerMasterPage() {
         return (
           <div
             key={field.name}
+            data-ledger-modal-field-name={fieldName}
             className={wrapperClassName}
             style={wrapperInlineStyle}
           >
@@ -2425,7 +2771,10 @@ export default function AccountLedgerMasterPage() {
             </label>
             <textarea
               id={field.name}
-              className={`${dynamicFormStyles.control} ${dynamicFormStyles.textarea}`}
+              data-ledger-modal-field-control="true"
+              className={`${dynamicFormStyles.control} ${dynamicFormStyles.textarea} ${
+                isValidationInvalid ? dynamicFormStyles.controlInvalid : ""
+              }`}
               style={controlInlineStyle}
               autoComplete="off"
               value={fieldValue}
@@ -2442,6 +2791,7 @@ export default function AccountLedgerMasterPage() {
         return (
           <div
             key={field.name}
+            data-ledger-modal-field-name={fieldName}
             className={wrapperClassName}
             style={wrapperInlineStyle}
           >
@@ -2457,7 +2807,10 @@ export default function AccountLedgerMasterPage() {
             </label>
             <select
               id={field.name}
-              className={dynamicFormStyles.control}
+              data-ledger-modal-field-control="true"
+              className={`${dynamicFormStyles.control} ${
+                isValidationInvalid ? dynamicFormStyles.controlInvalid : ""
+              }`}
               style={controlInlineStyle}
               value={fieldValue}
               required={field.required}
@@ -2477,6 +2830,7 @@ export default function AccountLedgerMasterPage() {
       return (
         <div
           key={field.name}
+          data-ledger-modal-field-name={fieldName}
           className={wrapperClassName}
           style={wrapperInlineStyle}
         >
@@ -2492,7 +2846,10 @@ export default function AccountLedgerMasterPage() {
           </label>
           <input
             id={field.name}
-            className={dynamicFormStyles.control}
+            data-ledger-modal-field-control="true"
+            className={`${dynamicFormStyles.control} ${
+              isValidationInvalid ? dynamicFormStyles.controlInvalid : ""
+            }`}
             style={controlInlineStyle}
             type={inputType}
             autoComplete="off"
@@ -2509,8 +2866,8 @@ export default function AccountLedgerMasterPage() {
     },
     [
       detailsLoading,
-      expandedSections,
       formValues,
+      handleCheckboxKeyDown,
       handleFieldChange,
       handleSearchableFieldKeyDown,
       handleSearchableOptionSelect,
@@ -2519,6 +2876,7 @@ export default function AccountLedgerMasterPage() {
       saveLoading,
       searchActiveOptionIndex,
       searchQueries,
+      validationFieldName,
     ],
   );
   return (
@@ -2660,11 +3018,48 @@ export default function AccountLedgerMasterPage() {
                   </svg>
                 </button>
               </div>
-            </header>            <div className={dynamicFormStyles.scrollArea}>
+            </header>
+            <div className={dynamicFormStyles.scrollArea}>
+              {ledgerFormSections.length > 0 ? (
+                <div
+                  className={dynamicFormStyles.sectionTabs}
+                  role="tablist"
+                  aria-label="Ledger form sections"
+                >
+                  {ledgerFormSections.map((section, sectionIndex) => (
+                    <button
+                      key={section.key}
+                      ref={(element) => {
+                        sectionTabRefs.current[section.key] = element;
+                      }}
+                      type="button"
+                      role="tab"
+                      aria-selected={section.key === activeSectionKey}
+                      aria-controls={`${modalFormId}-${section.key}-panel`}
+                      id={`${modalFormId}-${section.key}-tab`}
+                      tabIndex={section.key === activeSectionKey ? 0 : -1}
+                      className={`${dynamicFormStyles.sectionTab} ${
+                        section.key === activeSectionKey
+                          ? dynamicFormStyles.sectionTabActive
+                          : ""
+                      }`}
+                      onClick={() => setActiveSectionKey(section.key)}
+                      onKeyDown={(event) =>
+                        handleSectionTabKeyDown(event, sectionIndex, section.key)
+                      }
+                    >
+                      {section.title}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <form
                 id={modalFormId}
+                ref={formRef}
                 className={dynamicFormStyles.formGrid}
                 onSubmit={handleModalSubmit}
+                onKeyDown={handleLedgerFieldArrowNavigation}
+                noValidate
                 autoComplete="off"
                 style={{
                   gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
@@ -2672,107 +3067,34 @@ export default function AccountLedgerMasterPage() {
                   columnGap: "2rem",
                 }}
               >
-                {mainSections.map((section) => {
-                  const isExpanded =
-                    expandedSections[section.key] ?? section.key !== "__heading_region";
-                  const toggleId = `${modalFormId}-${section.key}-toggle`;
-                  return (
-                    <Fragment key={section.key}>
-                      {section.key !== "general" ? (
-                        <div
-                          className={`${dynamicFormStyles.field} ${dynamicFormStyles.fieldWide} ${dynamicFormStyles.sectionHeadingField}`}
-                          style={{ marginBottom: "0.5rem" }}
-                        >
-                          <label
-                            className={dynamicFormStyles.sectionToggle}
-                            htmlFor={toggleId}
-                          >
-                            <input
-                              id={toggleId}
-                              type="checkbox"
-                              autoComplete="off"
-                              className={dynamicFormStyles.sectionToggleInput}
-                              checked={isExpanded}
-                              disabled={saveLoading || detailsLoading}
-                              onChange={() =>
-                                setExpandedSections((current) => ({
-                                  ...current,
-                                  [section.key]: !(current[section.key] ?? true),
-                                }))
-                              }
-                            />
-                            <span className={dynamicFormStyles.sectionHeading}>
-                              {section.title}
-                            </span>
-                          </label>
-                          {section.helperText ? (
-                            <p className={dynamicFormStyles.sectionHeadingDescription}>
-                              {section.helperText}
-                            </p>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {isExpanded
-                        ? section.fields.map((field) => renderLedgerField(field))
-                        : null}
-                    </Fragment>
-                  );
-                })}
-                {asideSections.map((section) => {
-                  const isExpanded =
-                    expandedSections[section.key] ?? section.key !== "__heading_region";
-                  const toggleId = `${modalFormId}-${section.key}-toggle`;
-                  return (
-                    <Fragment key={section.key}>
-                      {section.key !== "general" ? (
-                        <div
-                          className={`${dynamicFormStyles.field} ${dynamicFormStyles.fieldWide} ${dynamicFormStyles.sectionHeadingField}`}
-                          style={{ marginBottom: "0.5rem" }}
-                        >
-                          <label
-                            className={dynamicFormStyles.sectionToggle}
-                            htmlFor={toggleId}
-                          >
-                            <input
-                              id={toggleId}
-                              type="checkbox"
-                              autoComplete="off"
-                              className={dynamicFormStyles.sectionToggleInput}
-                              checked={isExpanded}
-                              disabled={saveLoading || detailsLoading}
-                              onChange={() =>
-                                setExpandedSections((current) => ({
-                                  ...current,
-                                  [section.key]: !(current[section.key] ?? true),
-                                }))
-                              }
-                            />
-                            <span className={dynamicFormStyles.sectionHeading}>
-                              {section.title}
-                            </span>
-                          </label>
-                          {section.helperText ? (
-                            <p className={dynamicFormStyles.sectionHeadingDescription}>
-                              {section.helperText}
-                            </p>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      {isExpanded
-                        ? section.fields.map((field) =>
-                            renderLedgerField(field, true),
-                          )
-                        : null}
-                    </Fragment>
-                  );
-                })}
-              {effectiveModalError ? (
-                <p className={dynamicFormStyles.submitError} role="alert">
-                  {effectiveModalError}
-                </p>
-              ) : null}
-            </form>
+                {activeLedgerSection ? (
+                  <div
+                    id={`${modalFormId}-${activeLedgerSection.key}-panel`}
+                    role="tabpanel"
+                    aria-labelledby={`${modalFormId}-${activeLedgerSection.key}-tab`}
+                    className={dynamicFormStyles.sectionFields}
+                    style={
+                      LEDGER_ASIDE_SECTION_KEYS.has(activeLedgerSection.key)
+                        ? ({
+                            "--erp-modal-section-columns": "1",
+                          } as CSSProperties)
+                        : undefined
+                    }
+                  >
+                    {activeLedgerSection.fields.map((field) =>
+                      renderLedgerField(
+                        field,
+                        LEDGER_ASIDE_SECTION_KEYS.has(activeLedgerSection.key),
+                      ),
+                    )}
+                  </div>
+                ) : null}
+                {effectiveModalError ? (
+                  <p className={dynamicFormStyles.submitError} role="alert">
+                    {effectiveModalError}
+                  </p>
+                ) : null}
+              </form>
             </div>
             <footer className={dynamicFormStyles.footer}>
               <button

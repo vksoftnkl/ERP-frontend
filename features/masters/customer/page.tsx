@@ -410,6 +410,7 @@ const GROUP_MODAL_INITIAL_VALUES: Record<string, string> = {
 };
 const CUSTOMER_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(62vw, 62rem)",
+  height: "75vh",
   maxHeight: "75vh",
 };
 const CUSTOMER_PHONE_PATTERN = "^[0-9+()\\-\\s]{0,20}$";
@@ -2561,6 +2562,11 @@ export default function CustomerPage() {
         modalFormGridColumns={3}
         modalFormDenseGrid={false}
         modalStackLabels
+        modalSectionNavigationMode="tabs"
+        modalHideFieldHelperText
+        modalHideFieldErrorText
+        modalFocusFirstInvalidFieldOnValidationError
+        modalEnableArrowKeyFieldNavigation
         mapFormValues={({ source, defaults }) => {
           const rowSource = source ?? {};
           const mappedValues: Record<string, string> = {

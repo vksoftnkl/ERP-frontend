@@ -62,6 +62,7 @@ const ITEM_PRICE_API_ENDPOINTS = {
   create: "/item-prices/create",
   delete: "/item-prices/delete",
 } as const;
+const ITEM_UNIT_CONVERSION_API_ENDPOINTS = ITEM_PRICE_API_ENDPOINTS;
 const ITEM_REORDER_API_ENDPOINTS = {
   list: "/item-reorders/list",
   create: "/item-reorders/create",
@@ -85,17 +86,23 @@ const UNIT_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const GODOWN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const HSN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const UI_TABLE_COLUMNS_ENDPOINT = "/ui-table-columns/list";
+const WIDGET_MASTER_LIST_ENDPOINT = "/widget-masters/list";
 const ITEM_TAX_MASTER_LIST_ENDPOINT = "/item-taxes/list";
 const ITEM_PRICE_QUERY_LIMIT = "100";
+const ITEM_UNIT_CONVERSION_QUERY_LIMIT = "100";
 const ITEM_REORDER_QUERY_LIMIT = "100";
 const ITEM_EAN_CODE_QUERY_LIMIT = "100";
 const UI_TABLE_COLUMNS_QUERY_LIMIT = "100";
+const ITEM_WIDGET_QUERY_LIMIT = "100";
 const ITEM_GROUP_SEARCH_DEBOUNCE_MS = 250;
 const ITEM_REORDER_TABLE_UI_ID = "2";
 const ITEM_PRICE_TABLE_UI_ID = "3";
 const ITEM_EAN_TABLE_UI_ID = "4";
+const ITEM_MASTER_WIDGET_GROUP_ID = "5";
+const ITEM_MASTER_WIDGET_TYPE = "web";
 const UUID_PATTERN = "^[0-9a-fA-F-]{36}$";
 const ITEM_PRICE_ROWS_FIELD_NAME = "item_price_rows_json";
+const ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME = "item_unit_conversion_rows_json";
 const ITEM_REORDER_ROWS_FIELD_NAME = "item_reorder_rows_json";
 const ITEM_EAN_ROWS_FIELD_NAME = "item_ean_rows_json";
 const COMPANY_LOOKUP_QUERY = {
@@ -147,6 +154,12 @@ const UI_EAN_TABLE_COLUMNS_QUERY = {
   limit: UI_TABLE_COLUMNS_QUERY_LIMIT,
   uiTblClmTableId: ITEM_EAN_TABLE_UI_ID,
   uiTblClmIsActive: "true",
+} as const;
+const ITEM_MASTER_WIDGET_QUERY = {
+  page: "1",
+  limit: ITEM_WIDGET_QUERY_LIMIT,
+  widgetGroupId: ITEM_MASTER_WIDGET_GROUP_ID,
+  widgetType: ITEM_MASTER_WIDGET_TYPE,
 } as const;
 const LOOKUP_QUERY_ITEM_TAXES = {
   module: "itemTaxes",
@@ -309,11 +322,11 @@ const BATCH_CONFIG_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "1", label: "MRP & Selling Wise" },
   { value: "2", label: "Batch Wise" },
 ];
-const ITEM_PRICE_DEFAULT_PROFIT_TYPE = "BY %";
+const ITEM_PRICE_DEFAULT_PROFIT_TYPE = "BY_PERCENT";
 const ITEM_PRICE_PROFIT_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
-  { value: "BY %", label: "BY %" },
-  { value: "BY RS", label: "BY RS" },
-  { value: "BY USER", label: "BY USER" },
+  { value: "BY_PERCENT", label: "BY %" },
+  { value: "BY_AMOUNT", label: "BY Amount" },
+  { value: "MANUAL", label: "BY User" },
 ];
 const ITEM_PRICE_ROUND_OFF_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "0.01", label: "0.01" },
@@ -332,54 +345,59 @@ const ITEM_REORDER_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
 ];
 const ITEM_PRICE_MARGIN_SALE_FIELD_PAIRS = [
   {
-    marginFieldName: "ipm_price_a_margin",
+    marginFieldName: "ipm_price_a_markup_perc",
     saleFieldName: "ipm_sales_price_a",
     saleWotFieldName: "ipm_price_a_wot",
   },
   {
-    marginFieldName: "ipm_price_b_margin",
+    marginFieldName: "ipm_price_b_markup_perc",
     saleFieldName: "ipm_sales_price_b",
     saleWotFieldName: "ipm_price_b_wot",
   },
   {
-    marginFieldName: "ipm_price_c_margin",
+    marginFieldName: "ipm_price_c_markup_perc",
     saleFieldName: "ipm_sales_price_c",
     saleWotFieldName: "ipm_price_c_wot",
   },
   {
-    marginFieldName: "ipm_price_d_margin",
+    marginFieldName: "ipm_price_d_markup_perc",
     saleFieldName: "ipm_sales_price_d",
     saleWotFieldName: "ipm_price_d_wot",
   },
 ] as const;
 const ITEM_PRICE_TABLE_COLUMN_NAME_TO_KEY = {
   unit: "ipm_unit_id",
+  unitfactor: "ipm_unit_factor",
   godown: "ipm_godown_id",
+  default: "ipm_is_default_unit",
+  isdefault: "ipm_is_default_unit",
+  base: "ipm_is_base_unit",
+  isbase: "ipm_is_base_unit",
   costwot: "ipm_cost_wot",
   cost: "ipm_cost_price",
+  costremarks: "ipm_cost_remarks",
   profittype: "ipm_profit_type",
   roundoff: "ipm_round_off",
-  amargin: "ipm_price_a_margin",
+  amargin: "ipm_price_a_markup_perc",
   salea: "ipm_sales_price_a",
-  bmargin: "ipm_price_b_margin",
+  bmargin: "ipm_price_b_markup_perc",
   saleb: "ipm_sales_price_b",
-  cmargin: "ipm_price_c_margin",
+  cmargin: "ipm_price_c_markup_perc",
   salec: "ipm_sales_price_c",
-  dmargin: "ipm_price_d_margin",
+  dmargin: "ipm_price_d_markup_perc",
   saled: "ipm_sales_price_d",
   max: "ipm_max_price",
   min: "ipm_min_price",
   disc: "ipm_disc_perc",
   discqty: "ipm_disc_qty",
-  conv: "ipm_conversion_factor",
-  conversionfactor: "ipm_conversion_factor",
+  conv: "ipm_to_base_factor",
+  conversionfactor: "ipm_to_base_factor",
   cess: "ipm_addl_cess",
-  weight: "ipm_uom_weight",
   loading: "ipm_loading_charge",
   freight: "ipm_freight_charge",
-  bigunit: "ipm_big_unit",
-  remarks: "ipm_remarks",
-  points: "ipm_points",
+  bigunit: "ipm_is_big_unit",
+  remarks: "ipm_uom_remarks",
+  points: "ipm_loyalty_points",
 } as const;
 const ITEM_REORDER_TABLE_COLUMN_NAME_TO_KEY = {
   minlevel: "ir_min_level",
@@ -404,11 +422,12 @@ const ITEM_EAN_TABLE_COLUMN_NAME_TO_KEY = {
   remarks: "ean_remarks",
 } as const;
 const ITEM_PRICE_INITIAL_FORM_VALUES: Record<string, string> = {
-  ipm_unit_rate_id: "",
+  ipm_id: "",
   ipm_unit_id: "",
   ipm_godown_id: "",
   ipm_unit_slno: "",
-  ipm_conversion_factor: "1",
+  ipm_to_base_factor: "1",
+  ipm_unit_factor: "1",
   ipm_cost_price: "",
   ipm_cost_wot: "",
   ipm_sales_price_a: "",
@@ -419,10 +438,10 @@ const ITEM_PRICE_INITIAL_FORM_VALUES: Record<string, string> = {
   ipm_price_b_wot: "",
   ipm_price_c_wot: "",
   ipm_price_d_wot: "",
-  ipm_price_a_margin: "",
-  ipm_price_b_margin: "",
-  ipm_price_c_margin: "",
-  ipm_price_d_margin: "",
+  ipm_price_a_markup_perc: "",
+  ipm_price_b_markup_perc: "",
+  ipm_price_c_markup_perc: "",
+  ipm_price_d_markup_perc: "",
   ipm_max_price: "",
   ipm_min_price: "",
   ipm_disc_perc: "",
@@ -430,12 +449,14 @@ const ITEM_PRICE_INITIAL_FORM_VALUES: Record<string, string> = {
   ipm_addl_cess: "",
   ipm_profit_type: "",
   ipm_round_off: "",
-  ipm_big_unit: "false",
-  ipm_uom_weight: "",
+  ipm_is_default_unit: "false",
+  ipm_is_base_unit: "false",
+  ipm_is_big_unit: "false",
   ipm_loading_charge: "",
   ipm_freight_charge: "",
-  ipm_points: "",
-  ipm_remarks: "",
+  ipm_loyalty_points: "",
+  ipm_uom_remarks: "",
+  ipm_cost_remarks: "",
   ipm_is_active: "true",
 };
 const ITEM_REORDER_INITIAL_FORM_VALUES: Record<string, string> = {
@@ -461,6 +482,19 @@ const ITEM_EAN_INITIAL_FORM_VALUES: Record<string, string> = {
   ean_remarks: "",
   ean_is_default: "false",
   ean_is_active: "true",
+};
+const ITEM_UNIT_CONVERSION_INITIAL_FORM_VALUES: Record<string, string> = {
+  iuc_id: "",
+  iuc_unit_id: "",
+  iuc_unit_slno: "",
+  iuc_to_base_factor: "1",
+  iul_unit_factor: "1",
+  iuc_is_default_unit: "false",
+  iuc_is_base_unit: "false",
+  iuc_is_big_unit: "false",
+  iuc_uom_weight: "0",
+  iuc_uom_remarks: "",
+  iuc_is_active: "true",
 };
 const ITEM_INITIAL_FORM_VALUES: Record<string, string> = {
   item_name_en: "",
@@ -507,6 +541,7 @@ const ITEM_INITIAL_FORM_VALUES: Record<string, string> = {
   item_image_url: "",
   item_photo_file: "",
   [ITEM_PRICE_ROWS_FIELD_NAME]: "",
+  [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]: "",
   [ITEM_REORDER_ROWS_FIELD_NAME]: "",
   [ITEM_EAN_ROWS_FIELD_NAME]: "",
   item_is_service: "false",
@@ -544,6 +579,7 @@ const ITEM_INITIAL_FORM_VALUES: Record<string, string> = {
 };
 const ITEM_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(84vw, 88rem)",
+  height: "80vh",
   maxHeight: "80vh",
 };
 const ITEM_CHECKBOX_CONTROL_STYLE: CSSProperties = {
@@ -591,6 +627,7 @@ const ITEM_TEXT_FIELD_NAMES = [
   "item_notes",
   "item_image_url",
   ITEM_PRICE_ROWS_FIELD_NAME,
+  ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME,
   ITEM_REORDER_ROWS_FIELD_NAME,
   ITEM_EAN_ROWS_FIELD_NAME,
 ] as const;
@@ -626,11 +663,12 @@ const ITEM_BOOLEAN_FIELD_NAMES = [
   "item_is_active",
 ] as const;
 const ITEM_PRICE_TEXT_FIELD_NAMES = [
-  "ipm_unit_rate_id",
+  "ipm_id",
   "ipm_unit_id",
   "ipm_godown_id",
   "ipm_unit_slno",
-  "ipm_conversion_factor",
+  "ipm_to_base_factor",
+  "ipm_unit_factor",
   "ipm_cost_price",
   "ipm_cost_wot",
   "ipm_sales_price_a",
@@ -641,10 +679,10 @@ const ITEM_PRICE_TEXT_FIELD_NAMES = [
   "ipm_price_b_wot",
   "ipm_price_c_wot",
   "ipm_price_d_wot",
-  "ipm_price_a_margin",
-  "ipm_price_b_margin",
-  "ipm_price_c_margin",
-  "ipm_price_d_margin",
+  "ipm_price_a_markup_perc",
+  "ipm_price_b_markup_perc",
+  "ipm_price_c_markup_perc",
+  "ipm_price_d_markup_perc",
   "ipm_max_price",
   "ipm_min_price",
   "ipm_disc_perc",
@@ -652,17 +690,37 @@ const ITEM_PRICE_TEXT_FIELD_NAMES = [
   "ipm_addl_cess",
   "ipm_profit_type",
   "ipm_round_off",
-  "ipm_uom_weight",
   "ipm_loading_charge",
   "ipm_freight_charge",
-  "ipm_points",
-  "ipm_remarks",
+  "ipm_loyalty_points",
+  "ipm_uom_remarks",
+  "ipm_cost_remarks",
 ] as const;
-const ITEM_PRICE_BOOLEAN_FIELD_NAMES = ["ipm_big_unit", "ipm_is_active"] as const;
+const ITEM_PRICE_BOOLEAN_FIELD_NAMES = [
+  "ipm_is_default_unit",
+  "ipm_is_base_unit",
+  "ipm_is_big_unit",
+  "ipm_is_active",
+] as const;
 const ITEM_PRICE_SYNC_FIELD_NAMES = [
   ...ITEM_PRICE_TEXT_FIELD_NAMES,
   ...ITEM_PRICE_BOOLEAN_FIELD_NAMES,
   ITEM_PRICE_ROWS_FIELD_NAME,
+] as const;
+const ITEM_UNIT_CONVERSION_ROW_TEXT_FIELD_NAMES = [
+  "iuc_id",
+  "iuc_unit_id",
+  "iuc_unit_slno",
+  "iuc_to_base_factor",
+  "iul_unit_factor",
+  "iuc_uom_weight",
+  "iuc_uom_remarks",
+] as const;
+const ITEM_UNIT_CONVERSION_ROW_BOOLEAN_FIELD_NAMES = [
+  "iuc_is_default_unit",
+  "iuc_is_base_unit",
+  "iuc_is_big_unit",
+  "iuc_is_active",
 ] as const;
 const ITEM_REORDER_ROW_TEXT_FIELD_NAMES = [
   "ir_id",
@@ -689,11 +747,12 @@ const ITEM_EAN_ROW_TEXT_FIELD_NAMES = [
 const ITEM_EAN_ROW_BOOLEAN_FIELD_NAMES = ["ean_is_default", "ean_is_active"] as const;
 const ITEM_PRICE_CONTENT_FIELD_NAMES = ITEM_PRICE_TEXT_FIELD_NAMES.filter(
   (fieldName) =>
-    fieldName !== "ipm_unit_rate_id" &&
+    fieldName !== "ipm_id" &&
     fieldName !== "ipm_unit_id" &&
     fieldName !== "ipm_godown_id" &&
     fieldName !== "ipm_profit_type",
 );
+const ITEM_UNIT_CONVERSION_CONTENT_FIELD_NAMES = ["iuc_unit_id"] as const;
 const ITEM_REORDER_CONTENT_FIELD_NAMES = [
   "ir_min_level",
   "ir_max_level",
@@ -702,6 +761,38 @@ const ITEM_REORDER_CONTENT_FIELD_NAMES = [
   "ir_reorder_type",
 ] as const;
 const ITEM_EAN_CONTENT_FIELD_NAMES = ["ean_code", "ean_godown_id", "ean_remarks"] as const;
+const WIDGET_NUMBER_KEYS = ["widgetNo", "widget_no", "id", "_id"] as const;
+const WIDGET_GROUP_ID_KEYS = ["widgetGroupId", "widget_group_id", "groupId", "group_id"] as const;
+const WIDGET_NAME_KEYS = ["widgetName", "widget_name", "name"] as const;
+const WIDGET_POSITION_KEYS = ["widgetPosition", "widget_position", "position", "sort"] as const;
+const WIDGET_VISIBILITY_KEYS = [
+  "widgetVisibility",
+  "widget_visibility",
+  "visible",
+  "isVisible",
+] as const;
+const WIDGET_GUI_NAME_KEYS = ["widgetGuiName", "widget_gui_name", "guiName", "gui_name"] as const;
+const WIDGET_SECONDARY_TEXT_KEYS = [
+  "widgetSecondaryText",
+  "widget_secondary_text",
+  "secondaryText",
+  "secondary_text",
+] as const;
+
+type ItemWidgetConfigRecord = {
+  widgetNo: string;
+  widgetGroupId: string;
+  widgetName: string;
+  widgetPosition: number;
+  widgetVisibility: boolean;
+  widgetGuiName: string;
+  widgetSecondaryText: string;
+};
+
+type ItemFormSection = {
+  heading: ERPDynamicModalField | null;
+  fields: ERPDynamicModalField[];
+};
 function parseOptionalItemPriceNumber(value: string | undefined): number | null {
   const normalized = value?.trim() ?? "";
   if (!normalized) {
@@ -730,7 +821,16 @@ function formatDerivedItemPriceNumber(value: number): string {
 }
 function normalizeItemPriceProfitType(value: string | undefined): string {
   const normalized = (value ?? "").trim();
-  return normalized || ITEM_PRICE_DEFAULT_PROFIT_TYPE;
+  if (normalized === "BY %" || normalized === "BY_PERCENT") {
+    return "BY_PERCENT";
+  }
+  if (normalized === "BY RS" || normalized === "BY_AMOUNT") {
+    return "BY_AMOUNT";
+  }
+  if (normalized === "BY USER" || normalized === "MANUAL") {
+    return "MANUAL";
+  }
+  return ITEM_PRICE_DEFAULT_PROFIT_TYPE;
 }
 function toDerivedItemPriceString(value: number | null): string {
   return value === null ? "" : formatDerivedItemPriceNumber(value);
@@ -854,7 +954,7 @@ function syncItemPriceRowFromProfitInputs(
   let nextRow = { ...row };
   const normalizedProfitType = normalizeItemPriceProfitType(nextRow.ipm_profit_type);
   setItemPriceRowValue(nextRow, "ipm_profit_type", normalizedProfitType);
-  if (normalizedProfitType !== "BY USER") {
+  if (normalizedProfitType !== "MANUAL") {
     const costPriceValue = parseOptionalItemPriceNumber(nextRow.ipm_cost_price);
     for (const { marginFieldName, saleFieldName } of ITEM_PRICE_MARGIN_SALE_FIELD_PAIRS) {
       const marginValue = parseOptionalItemPriceNumber(nextRow[marginFieldName]) ?? 0;
@@ -862,7 +962,7 @@ function syncItemPriceRowFromProfitInputs(
         costPriceValue === null
           ? null
           : roundDerivedItemPriceValue(
-            normalizedProfitType === "BY RS"
+            normalizedProfitType === "BY_AMOUNT"
               ? costPriceValue + marginValue
               : costPriceValue + (costPriceValue * marginValue) / 100,
             nextRow.ipm_round_off,
@@ -880,7 +980,7 @@ function syncItemPriceRowFromSaleInputs(
   let nextRow = syncItemPriceRowSaleWotValues(row, taxContext);
   const normalizedProfitType = normalizeItemPriceProfitType(nextRow.ipm_profit_type);
   setItemPriceRowValue(nextRow, "ipm_profit_type", normalizedProfitType);
-  if (normalizedProfitType === "BY USER") {
+  if (normalizedProfitType === "MANUAL") {
     return nextRow;
   }
   const costPriceValue = parseOptionalItemPriceNumber(nextRow.ipm_cost_price);
@@ -893,7 +993,7 @@ function syncItemPriceRowFromSaleInputs(
     const nextMarginValue =
       saleValue === null
         ? null
-        : normalizedProfitType === "BY RS"
+        : normalizedProfitType === "BY_AMOUNT"
           ? saleValue - costPriceValue
           : costPriceValue > 0
             ? ((saleValue - costPriceValue) / costPriceValue) * 100
@@ -911,7 +1011,7 @@ function recalculateItemPriceRowsFromCostWot(
   for (let index = rowIndex - 1; index >= 0; index -= 1) {
     const nextCostWot = parseOptionalItemPriceNumber(nextRows[index + 1]?.ipm_cost_wot);
     const conversionFactor = parseOptionalItemPriceNumber(
-      nextRows[index + 1]?.ipm_conversion_factor,
+      nextRows[index + 1]?.ipm_to_base_factor,
     );
     setDerivedItemPriceRowValue(
       nextRows[index],
@@ -924,7 +1024,7 @@ function recalculateItemPriceRowsFromCostWot(
   for (let index = rowIndex + 1; index < nextRows.length; index += 1) {
     const previousCostWot = parseOptionalItemPriceNumber(nextRows[index - 1]?.ipm_cost_wot);
     const conversionFactor = parseOptionalItemPriceNumber(
-      nextRows[index]?.ipm_conversion_factor,
+      nextRows[index]?.ipm_to_base_factor,
     );
     setDerivedItemPriceRowValue(
       nextRows[index],
@@ -956,7 +1056,7 @@ function recalculateItemPriceRowsFromCostPrice(
   for (let index = rowIndex - 1; index >= 0; index -= 1) {
     const nextCost = parseOptionalItemPriceNumber(nextRows[index + 1]?.ipm_cost_price);
     const conversionFactor = parseOptionalItemPriceNumber(
-      nextRows[index + 1]?.ipm_conversion_factor,
+      nextRows[index + 1]?.ipm_to_base_factor,
     );
     setDerivedItemPriceRowValue(
       nextRows[index],
@@ -967,7 +1067,7 @@ function recalculateItemPriceRowsFromCostPrice(
   for (let index = rowIndex + 1; index < nextRows.length; index += 1) {
     const previousCost = parseOptionalItemPriceNumber(nextRows[index - 1]?.ipm_cost_price);
     const conversionFactor = parseOptionalItemPriceNumber(
-      nextRows[index]?.ipm_conversion_factor,
+      nextRows[index]?.ipm_to_base_factor,
     );
     setDerivedItemPriceRowValue(
       nextRows[index],
@@ -1000,7 +1100,7 @@ function recalculateItemPriceRowsFromConversion(
     const previousCost = parseOptionalItemPriceNumber(nextRows[index - 1]?.ipm_cost_price);
     const previousCostWot = parseOptionalItemPriceNumber(nextRows[index - 1]?.ipm_cost_wot);
     const conversionFactor = parseOptionalItemPriceNumber(
-      nextRows[index]?.ipm_conversion_factor,
+      nextRows[index]?.ipm_to_base_factor,
     );
     setDerivedItemPriceRowValue(
       nextRows[index],
@@ -1084,14 +1184,194 @@ function detectChangedItemPriceField(
   }
   return null;
 }
-function buildEmptyItemPriceRow(baseUnitId: string): LinkedRecordRow {
+function buildEmptyItemPriceRow(
+  baseUnitId: string,
+  options: {
+    useBaseDefaults?: boolean;
+  } = {},
+): LinkedRecordRow {
+  const normalizedBaseUnitId = baseUnitId.trim();
   return {
     ...ITEM_PRICE_INITIAL_FORM_VALUES,
-    ipm_unit_rate_id: "",
-    ipm_unit_id: baseUnitId.trim(),
+    ipm_id: "",
+    ipm_unit_id: normalizedBaseUnitId,
+    ipm_to_base_factor: "1",
+    ipm_unit_factor: "1",
     ipm_profit_type: ITEM_PRICE_DEFAULT_PROFIT_TYPE,
+    ipm_is_default_unit: options.useBaseDefaults ? "true" : "false",
+    ipm_is_base_unit: options.useBaseDefaults ? "true" : "false",
     ipm_is_active: ITEM_PRICE_INITIAL_FORM_VALUES.ipm_is_active,
   };
+}
+function buildDefaultBaseItemUnitConversionRow(baseUnitId: string): LinkedRecordRow {
+  return {
+    ...ITEM_UNIT_CONVERSION_INITIAL_FORM_VALUES,
+    iuc_unit_id: baseUnitId.trim(),
+    iuc_unit_slno: "1",
+    iuc_to_base_factor: "1",
+    iul_unit_factor: "1",
+    iuc_is_default_unit: "true",
+    iuc_is_base_unit: "true",
+    iuc_is_active: ITEM_UNIT_CONVERSION_INITIAL_FORM_VALUES.iuc_is_active,
+  };
+}
+function buildEmptyItemUnitConversionRow(
+  baseUnitId: string,
+  nextUnitSlno = 1,
+): LinkedRecordRow {
+  return {
+    ...ITEM_UNIT_CONVERSION_INITIAL_FORM_VALUES,
+    iuc_unit_slno: String(nextUnitSlno),
+    iuc_to_base_factor: "1",
+    iul_unit_factor: "1",
+    iuc_uom_weight: ITEM_UNIT_CONVERSION_INITIAL_FORM_VALUES.iuc_uom_weight,
+    iuc_is_active: ITEM_UNIT_CONVERSION_INITIAL_FORM_VALUES.iuc_is_active,
+    ...(nextUnitSlno <= 1 ? buildDefaultBaseItemUnitConversionRow(baseUnitId) : {}),
+  };
+}
+function buildItemUnitConversionRowsByUnitId(
+  values: Record<string, string>,
+): Map<string, LinkedRecordRow> {
+  return new Map(
+    buildManagedItemUnitConversionRows(values)
+      .filter((row) => (row.iuc_is_active ?? "true") === "true")
+      .map((row) => [(row.iuc_unit_id ?? "").trim(), row] as const)
+      .filter(([unitId]) => Boolean(unitId)),
+  );
+}
+function syncSerializedItemUnitConversionRowsFromPriceRows(
+  serializedItemUnitConversionRows: string,
+  serializedPriceRows: string,
+  values: Record<string, string>,
+): string {
+  const baseUnitId = (values.item_base_unit_id ?? "").trim();
+  if (!baseUnitId) {
+    return serializedItemUnitConversionRows;
+  }
+  const priceRows = parseLinkedRecordRows(serializedPriceRows).filter(
+    (row) =>
+      Boolean((row.ipm_unit_id ?? "").trim()) ||
+      hasLinkedRowContent(row, ITEM_PRICE_CONTENT_FIELD_NAMES),
+  );
+  if (priceRows.length === 0) {
+    return syncSerializedItemUnitConversionRows(
+      serializedItemUnitConversionRows,
+      values,
+    );
+  }
+  const existingRows = parseLinkedRecordRows(serializedItemUnitConversionRows);
+  const existingRowsByUnitId = new Map(
+    existingRows
+      .map((row) => [(row.iuc_unit_id ?? "").trim(), row] as const)
+      .filter(([unitId]) => Boolean(unitId)),
+  );
+  const priceRowUnitIds = new Set<string>();
+  const nextRows: LinkedRecordRow[] = [];
+  for (const [index, row] of priceRows.entries()) {
+    const unitId = (row.ipm_unit_id ?? "").trim();
+    if (!unitId || priceRowUnitIds.has(unitId)) {
+      continue;
+    }
+    priceRowUnitIds.add(unitId);
+    const existingRow = existingRowsByUnitId.get(unitId);
+    nextRows.push({
+      ...buildEmptyItemUnitConversionRow(baseUnitId, index + 1),
+      ...existingRow,
+      iuc_unit_id: unitId,
+      iuc_unit_slno:
+        (row.ipm_unit_slno ?? "").trim() ||
+        (existingRow?.iuc_unit_slno ?? "").trim() ||
+        String(index + 1),
+      iuc_to_base_factor:
+        (row.ipm_to_base_factor ?? "").trim() ||
+        (existingRow?.iuc_to_base_factor ?? "").trim() ||
+        (unitId === baseUnitId ? "1" : ""),
+      iul_unit_factor:
+        (row.ipm_unit_factor ?? "").trim() ||
+        (existingRow?.iul_unit_factor ?? "").trim() ||
+        "1",
+      iuc_is_default_unit:
+        (row.ipm_is_default_unit ?? "false") === "true" ? "true" : "false",
+      iuc_is_base_unit:
+        (row.ipm_is_base_unit ?? "false") === "true" ? "true" : "false",
+      iuc_is_big_unit:
+        (row.ipm_is_big_unit ?? "false") === "true" ? "true" : "false",
+    });
+  }
+  return syncSerializedItemUnitConversionRows(
+    serializeLinkedRecordRows(nextRows),
+    values,
+  );
+}
+function syncItemPriceRowsWithUnitConversions(
+  serializedRows: string,
+  values: Record<string, string>,
+): string {
+  const rows = parseLinkedRecordRows(serializedRows);
+  if (rows.length === 0) {
+    return serializedRows;
+  }
+  const baseUnitId = (values.item_base_unit_id ?? "").trim();
+  const itemUnitConversionsByUnitId = buildItemUnitConversionRowsByUnitId(values);
+  let hasChanges = false;
+  const nextRows = rows.map((row) => {
+    const unitId = (row.ipm_unit_id ?? "").trim() || baseUnitId;
+    const matchingUnitConversion = itemUnitConversionsByUnitId.get(unitId);
+    if (!matchingUnitConversion) {
+      return row;
+    }
+    const nextRow = { ...row };
+    const nextFactor =
+      (matchingUnitConversion.iuc_to_base_factor ?? "").trim() ||
+      (unitId === baseUnitId ? "1" : "");
+    const nextUnitFactor =
+      (matchingUnitConversion.iul_unit_factor ?? "").trim() ||
+      (unitId === baseUnitId ? "1" : "");
+    const nextUnitSlno = (matchingUnitConversion.iuc_unit_slno ?? "").trim();
+    const nextIsDefaultUnit =
+      (matchingUnitConversion.iuc_is_default_unit ?? "false") === "true"
+        ? "true"
+        : "false";
+    const nextIsBaseUnit =
+      (matchingUnitConversion.iuc_is_base_unit ?? "false") === "true"
+        ? "true"
+        : "false";
+    const nextIsBigUnit =
+      (matchingUnitConversion.iuc_is_big_unit ?? "false") === "true"
+        ? "true"
+        : "false";
+
+    if ((nextRow.ipm_unit_id ?? "").trim() !== unitId) {
+      nextRow.ipm_unit_id = unitId;
+      hasChanges = true;
+    }
+    if ((nextRow.ipm_to_base_factor ?? "") !== nextFactor) {
+      nextRow.ipm_to_base_factor = nextFactor;
+      hasChanges = true;
+    }
+    if ((nextRow.ipm_unit_factor ?? "") !== nextUnitFactor) {
+      nextRow.ipm_unit_factor = nextUnitFactor;
+      hasChanges = true;
+    }
+    if ((nextRow.ipm_unit_slno ?? "") !== nextUnitSlno) {
+      nextRow.ipm_unit_slno = nextUnitSlno;
+      hasChanges = true;
+    }
+    if ((nextRow.ipm_is_default_unit ?? "false") !== nextIsDefaultUnit) {
+      nextRow.ipm_is_default_unit = nextIsDefaultUnit;
+      hasChanges = true;
+    }
+    if ((nextRow.ipm_is_base_unit ?? "false") !== nextIsBaseUnit) {
+      nextRow.ipm_is_base_unit = nextIsBaseUnit;
+      hasChanges = true;
+    }
+    if ((nextRow.ipm_is_big_unit ?? "false") !== nextIsBigUnit) {
+      nextRow.ipm_is_big_unit = nextIsBigUnit;
+      hasChanges = true;
+    }
+    return nextRow;
+  });
+  return hasChanges ? serializeLinkedRecordRows(nextRows) : serializedRows;
 }
 function syncSerializedItemPriceRows(
   serializedRows: string,
@@ -1103,20 +1383,40 @@ function syncSerializedItemPriceRows(
   if (rows.length === 0) {
     return serializedRows;
   }
+  const conversionSyncedRows = syncItemPriceRowsWithUnitConversions(
+    serializedRows,
+    values,
+  );
+  const effectiveRows =
+    conversionSyncedRows === serializedRows
+      ? rows
+      : parseLinkedRecordRows(conversionSyncedRows);
   const previousRows = parseLinkedRecordRows(values[ITEM_PRICE_ROWS_FIELD_NAME] ?? "");
   const taxContext = resolveItemPriceTaxContext(values, itemTaxRecordsById);
-  const changedField = detectChangedItemPriceField(previousRows, rows);
-  let nextRows = rows;
+  const changedField = detectChangedItemPriceField(previousRows, effectiveRows);
+  let nextRows = effectiveRows;
   if (forceRecalculateAll) {
-    nextRows = recalculateAllItemPriceRowsForTaxContext(rows, taxContext);
+    nextRows = recalculateAllItemPriceRowsForTaxContext(effectiveRows, taxContext);
   } else if (!changedField) {
-    nextRows = normalizeItemPriceRows(rows);
+    nextRows = normalizeItemPriceRows(effectiveRows);
   } else if (changedField.fieldName === "ipm_cost_wot") {
-    nextRows = recalculateItemPriceRowsFromCostWot(rows, changedField.rowIndex, taxContext);
+    nextRows = recalculateItemPriceRowsFromCostWot(
+      effectiveRows,
+      changedField.rowIndex,
+      taxContext,
+    );
   } else if (changedField.fieldName === "ipm_cost_price") {
-    nextRows = recalculateItemPriceRowsFromCostPrice(rows, changedField.rowIndex, taxContext);
-  } else if (changedField.fieldName === "ipm_conversion_factor") {
-    nextRows = recalculateItemPriceRowsFromConversion(rows, changedField.rowIndex, taxContext);
+    nextRows = recalculateItemPriceRowsFromCostPrice(
+      effectiveRows,
+      changedField.rowIndex,
+      taxContext,
+    );
+  } else if (changedField.fieldName === "ipm_to_base_factor") {
+    nextRows = recalculateItemPriceRowsFromConversion(
+      effectiveRows,
+      changedField.rowIndex,
+      taxContext,
+    );
   } else if (
     changedField.fieldName === "ipm_profit_type" ||
     changedField.fieldName === "ipm_round_off" ||
@@ -1124,7 +1424,7 @@ function syncSerializedItemPriceRows(
       ({ marginFieldName }) => marginFieldName === changedField.fieldName,
     )
   ) {
-    const recalculatedRows = cloneItemPriceRows(rows);
+    const recalculatedRows = cloneItemPriceRows(effectiveRows);
     recalculatedRows[changedField.rowIndex] = syncItemPriceRowFromProfitInputs(
       recalculatedRows[changedField.rowIndex] ?? {},
       taxContext,
@@ -1135,17 +1435,16 @@ function syncSerializedItemPriceRows(
       ({ saleFieldName }) => saleFieldName === changedField.fieldName,
     )
   ) {
-    const recalculatedRows = cloneItemPriceRows(rows);
+    const recalculatedRows = cloneItemPriceRows(effectiveRows);
     recalculatedRows[changedField.rowIndex] = syncItemPriceRowFromSaleInputs(
       recalculatedRows[changedField.rowIndex] ?? {},
       taxContext,
     );
     nextRows = recalculatedRows;
   } else {
-    nextRows = normalizeItemPriceRows(rows);
+    nextRows = normalizeItemPriceRows(effectiveRows);
   }
-
-  return nextRows === rows ? serializedRows : serializeLinkedRecordRows(nextRows);
+  return nextRows === effectiveRows ? conversionSyncedRows : serializeLinkedRecordRows(nextRows);
 }
 function buildEmptyItemReorderRow(baseUnitId: string): LinkedRecordRow {
   return {
@@ -1174,7 +1473,7 @@ function collectLinkedRowUnitIds(
     .map((row) => (row[fieldName] ?? "").trim())
     .filter(Boolean);
 }
-function buildItemEanUnitOptions(
+function buildSelectableItemUnitOptions(
   values: Record<string, string>,
   unitOptions: ERPDynamicSelectOption[],
 ): ERPDynamicSelectOption[] {
@@ -1186,8 +1485,12 @@ function buildItemEanUnitOptions(
     }
   };
   addUnitId(values.item_base_unit_id);
-  addUnitId(values.ipm_unit_id);
-  addUnitId(values.ean_unit_id);
+  for (const unitId of buildManagedItemUnitConversionRows(values)
+    .filter((row) => (row.iuc_is_active ?? "true") === "true")
+    .map((row) => (row.iuc_unit_id ?? "").trim())
+    .filter(Boolean)) {
+    selectableUnitIds.add(unitId);
+  }
   for (const unitId of collectLinkedRowUnitIds(
     parseLinkedRecordRows(values[ITEM_PRICE_ROWS_FIELD_NAME] ?? ""),
     "ipm_unit_id",
@@ -1207,6 +1510,30 @@ function buildItemEanUnitOptions(
     (option) => !option.value || selectableUnitIds.has(option.value),
   );
 }
+function buildItemEanUnitOptions(
+  values: Record<string, string>,
+  unitOptions: ERPDynamicSelectOption[],
+): ERPDynamicSelectOption[] {
+  return buildSelectableItemUnitOptions(values, unitOptions);
+}
+function buildItemUnitConversionUnitOptions(
+  rows: LinkedRecordRow[],
+  unitOptions: ERPDynamicSelectOption[],
+  rowIndex: number,
+): ERPDynamicSelectOption[] {
+  const currentUnitId = (rows[rowIndex]?.iuc_unit_id ?? "").trim();
+  const usedUnitIds = new Set(
+    rows
+      .map((row, index) => (index === rowIndex ? "" : (row.iuc_unit_id ?? "").trim()))
+      .filter(Boolean),
+  );
+  return unitOptions.filter(
+    (option) =>
+      !option.value ||
+      option.value === currentUnitId ||
+      !usedUnitIds.has(option.value),
+  );
+}
 function buildItemPriceUnitOptions(
   rows: LinkedRecordRow[],
   unitOptions: ERPDynamicSelectOption[],
@@ -1218,7 +1545,6 @@ function buildItemPriceUnitOptions(
       .map((row, index) => (index === rowIndex ? "" : (row.ipm_unit_id ?? "").trim()))
       .filter(Boolean),
   );
-
   return unitOptions.filter(
     (option) =>
       !option.value ||
@@ -1230,6 +1556,13 @@ function resolvePreferredItemEanUnitId(values: Record<string, string>): string {
   const primaryPriceUnitId = (values.ipm_unit_id ?? "").trim();
   if (primaryPriceUnitId) {
     return primaryPriceUnitId;
+  }
+  const itemUnitConversionIds = collectLinkedRowUnitIds(
+    parseLinkedRecordRows(values[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ?? ""),
+    "iuc_unit_id",
+  );
+  if (itemUnitConversionIds.length > 0) {
+    return itemUnitConversionIds[itemUnitConversionIds.length - 1] ?? "";
   }
   const priceRowUnitIds = collectLinkedRowUnitIds(
     parseLinkedRecordRows(values[ITEM_PRICE_ROWS_FIELD_NAME] ?? ""),
@@ -1266,6 +1599,82 @@ function syncSerializedRowUnitIds(
     return row;
   });
   return hasChanges ? serializeLinkedRecordRows(nextRows) : null;
+}
+function syncSerializedItemUnitConversionRows(
+  serializedRows: string,
+  values: Record<string, string>,
+): string {
+  const baseUnitId = (values.item_base_unit_id ?? "").trim();
+  const rows = parseLinkedRecordRows(serializedRows);
+  if (!baseUnitId || rows.length === 0) {
+    return serializedRows;
+  }
+  let hasChanges = false;
+  const nextRows = rows.map((row, index) => {
+    const nextRow = { ...row };
+    if (!(nextRow.iuc_unit_slno ?? "").trim()) {
+      nextRow.iuc_unit_slno = String(index + 1);
+      hasChanges = true;
+    }
+    if (!(nextRow.iuc_is_active ?? "").trim()) {
+      nextRow.iuc_is_active = ITEM_UNIT_CONVERSION_INITIAL_FORM_VALUES.iuc_is_active;
+      hasChanges = true;
+    }
+    if ((nextRow.iuc_is_base_unit ?? "false") === "true") {
+      if ((nextRow.iuc_unit_id ?? "").trim() !== baseUnitId) {
+        nextRow.iuc_unit_id = baseUnitId;
+        hasChanges = true;
+      }
+      if ((nextRow.iuc_to_base_factor ?? "") !== "1") {
+        nextRow.iuc_to_base_factor = "1";
+        hasChanges = true;
+      }
+      if ((nextRow.iul_unit_factor ?? "") !== "1") {
+        nextRow.iul_unit_factor = "1";
+        hasChanges = true;
+      }
+    }
+    return nextRow;
+  });
+  return hasChanges ? serializeLinkedRecordRows(nextRows) : serializedRows;
+}
+function syncSerializedItemUnitConversionRowsForBaseUnitChange(
+  serializedRows: string,
+  nextBaseUnitId: string,
+): string {
+  const normalizedBaseUnitId = nextBaseUnitId.trim();
+  if (!normalizedBaseUnitId) {
+    return serializedRows;
+  }
+  const rows = parseLinkedRecordRows(serializedRows);
+  if (rows.length === 0) {
+    return serializeLinkedRecordRows([
+      buildDefaultBaseItemUnitConversionRow(normalizedBaseUnitId),
+    ]);
+  }
+  let hasBaseRow = false;
+  const nextRows = rows.map((row) => {
+    if ((row.iuc_is_base_unit ?? "false") !== "true") {
+      return row;
+    }
+    hasBaseRow = true;
+    return {
+      ...row,
+      iuc_unit_id: normalizedBaseUnitId,
+      iuc_to_base_factor: "1",
+      iul_unit_factor: "1",
+    };
+  });
+  if (!hasBaseRow) {
+    return serializeLinkedRecordRows([
+      buildDefaultBaseItemUnitConversionRow(normalizedBaseUnitId),
+      ...nextRows,
+    ]);
+  }
+  const normalizedRows = serializeLinkedRecordRows(nextRows);
+  return syncSerializedItemUnitConversionRows(normalizedRows, {
+    item_base_unit_id: normalizedBaseUnitId,
+  });
 }
 function mapSourceToLinkedRow(
   source: Record<string, unknown>,
@@ -1332,10 +1741,10 @@ function selectManagedItemPriceLinkedRow(
   rows: LinkedRecordRow[],
   values: Record<string, string>,
 ): LinkedRecordRow | null {
-  const currentPriceRowId = (values.ipm_unit_rate_id ?? "").trim();
+  const currentPriceRowId = (values.ipm_id ?? "").trim();
   if (currentPriceRowId) {
     const matchingRow = rows.find(
-      (row) => (row.ipm_unit_rate_id ?? "").trim() === currentPriceRowId,
+      (row) => (row.ipm_id ?? "").trim() === currentPriceRowId,
     );
     if (matchingRow) {
       return matchingRow;
@@ -1402,21 +1811,90 @@ function buildItemPriceRowsValueChangeResult(
 ): ERPDynamicFieldValueChangeResult | void {
   const comparisonValues = {
     ...values,
+    [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]:
+      previousValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ??
+      values[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ??
+      "",
     [ITEM_PRICE_ROWS_FIELD_NAME]:
       previousValues[ITEM_PRICE_ROWS_FIELD_NAME] ??
       values[ITEM_PRICE_ROWS_FIELD_NAME] ??
       "",
   };
+  const nextUnitConversionRows = syncSerializedItemUnitConversionRowsFromPriceRows(
+    values[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ?? "",
+    serializedRows,
+    values,
+  );
   const normalizedRows = syncSerializedItemPriceRows(
     serializedRows,
-    comparisonValues,
+    {
+      ...comparisonValues,
+      [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]: nextUnitConversionRows,
+    },
     itemTaxRecordsById,
   );
-  const nextValues = syncPrimaryItemPriceValuesFromRows(values, normalizedRows);
+  const finalUnitConversionRows = syncSerializedItemUnitConversionRowsFromPriceRows(
+    nextUnitConversionRows,
+    normalizedRows,
+    {
+      ...values,
+      [ITEM_PRICE_ROWS_FIELD_NAME]: normalizedRows,
+    },
+  );
+  const nextValues = syncPrimaryItemPriceValuesFromRows(
+    {
+      ...values,
+      [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]: finalUnitConversionRows,
+    },
+    normalizedRows,
+  );
   const changedValues = collectChangedFieldValues(
-    values,
+    comparisonValues,
     nextValues,
-    ITEM_PRICE_SYNC_FIELD_NAMES,
+    [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME, ...ITEM_PRICE_SYNC_FIELD_NAMES],
+  );
+  if (Object.keys(changedValues).length === 0) {
+    return;
+  }
+  return {
+    values: changedValues,
+  };
+}
+function buildItemUnitConversionRowsValueChangeResult(
+  values: Record<string, string>,
+  previousValues: Record<string, string>,
+  serializedRows: string,
+  itemTaxRecordsById: ReadonlyMap<string, Record<string, unknown>>,
+): ERPDynamicFieldValueChangeResult | void {
+  const normalizedRows = syncSerializedItemUnitConversionRows(serializedRows, values);
+  const comparisonValues = {
+    ...values,
+    [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]:
+      previousValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ??
+      values[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ??
+      "",
+  };
+  const nextValues: Record<string, string> = {
+    ...values,
+    [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]: normalizedRows,
+  };
+  const nextPriceRows = syncSerializedItemPriceRows(
+    nextValues[ITEM_PRICE_ROWS_FIELD_NAME] ?? "",
+    {
+      ...nextValues,
+      [ITEM_PRICE_ROWS_FIELD_NAME]:
+        previousValues[ITEM_PRICE_ROWS_FIELD_NAME] ??
+        values[ITEM_PRICE_ROWS_FIELD_NAME] ??
+        "",
+    },
+    itemTaxRecordsById,
+  );
+  nextValues[ITEM_PRICE_ROWS_FIELD_NAME] = nextPriceRows;
+  const syncedPriceValues = syncPrimaryItemPriceValuesFromRows(nextValues, nextPriceRows);
+  const changedValues = collectChangedFieldValues(
+    comparisonValues,
+    syncedPriceValues,
+    [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME, ...ITEM_PRICE_SYNC_FIELD_NAMES],
   );
   if (Object.keys(changedValues).length === 0) {
     return;
@@ -1532,10 +2010,24 @@ function validateItemPriceRows(value: string, values: Record<string, string>): s
   }
   const baseUnitId = (values.item_base_unit_id ?? "").trim();
   const usedUnitIds = new Set<string>();
+  let defaultRows = 0;
+  let baseRows = 0;
   for (const [index, row] of rows.entries()) {
     const unitId = (row.ipm_unit_id ?? "").trim() || baseUnitId;
     if (!unitId) {
       return `Price row ${index + 1}: Unit is required.`;
+    }
+    const toBaseFactor = parseOptionalItemPriceNumber(row.ipm_to_base_factor);
+    if (toBaseFactor === null || toBaseFactor <= 0) {
+      return `Price row ${index + 1}: Conv must be greater than 0.`;
+    }
+    const unitFactor = parseOptionalItemPriceNumber(row.ipm_unit_factor);
+    if (unitFactor === null || unitFactor <= 0) {
+      return `Price row ${index + 1}: Unit Factor must be greater than 0.`;
+    }
+    const godownId = (row.ipm_godown_id ?? "").trim();
+    if (!godownId) {
+      return `Price row ${index + 1}: Godown is required.`;
     }
     if (usedUnitIds.has(unitId)) {
       return `Price row ${index + 1}: Unit is already used in another price row.`;
@@ -1545,7 +2037,100 @@ function validateItemPriceRows(value: string, values: Record<string, string>): s
     if (!profitType) {
       return `Price row ${index + 1}: Profit Type is required.`;
     }
+    const isDefaultUnit = (row.ipm_is_default_unit ?? "false") === "true";
+    const isBaseUnit = (row.ipm_is_base_unit ?? "false") === "true";
+    if (isDefaultUnit) {
+      defaultRows += 1;
+    }
+    if (isBaseUnit) {
+      baseRows += 1;
+      if (unitId !== baseUnitId) {
+        return `Price row ${index + 1}: Base row unit must match the item Base Unit.`;
+      }
+      if (toBaseFactor !== 1) {
+        return `Price row ${index + 1}: Base row Conv must be 1.`;
+      }
+      if (unitFactor !== 1) {
+        return `Price row ${index + 1}: Base row Unit Factor must be 1.`;
+      }
+    }
   }
+  if (baseRows > 1) {
+    return "Only one base price row is allowed.";
+  }
+  if (defaultRows > 1) {
+    return "Only one default price row is allowed.";
+  }
+  return null;
+}
+function validateItemUnitConversionRows(
+  value: string,
+  values: Record<string, string>,
+): string | null {
+  const baseUnitId = (values.item_base_unit_id ?? "").trim();
+  if (!baseUnitId) {
+    return null;
+  }
+  const rows = buildManagedItemUnitConversionRows(values);
+  if (rows.length === 0) {
+    return "Add at least one unit conversion row.";
+  }
+  const usedUnitIds = new Set<string>();
+  let activeBaseRows = 0;
+  let activeDefaultRows = 0;
+  for (const [index, row] of rows.entries()) {
+    const unitId = (row.iuc_unit_id ?? "").trim();
+    if (!unitId) {
+      return `Unit conversion row ${index + 1}: Unit is required.`;
+    }
+    if (usedUnitIds.has(unitId)) {
+      return `Unit conversion row ${index + 1}: Unit is already used in another conversion row.`;
+    }
+    usedUnitIds.add(unitId);
+    const factor = parseOptionalItemPriceNumber(row.iuc_to_base_factor);
+    if (factor === null || factor <= 0) {
+      return `Unit conversion row ${index + 1}: To Base must be greater than 0.`;
+    }
+    const unitFactor = parseOptionalItemPriceNumber(row.iul_unit_factor);
+    if (unitFactor === null || unitFactor <= 0) {
+      return `Unit conversion row ${index + 1}: Unit Factor must be greater than 0.`;
+    }
+    const weight = parseOptionalItemPriceNumber(row.iuc_uom_weight);
+    if (weight !== null && weight < 0) {
+      return `Unit conversion row ${index + 1}: Weight cannot be negative.`;
+    }
+    const isActive = (row.iuc_is_active ?? "true") === "true";
+    const isBaseUnit = (row.iuc_is_base_unit ?? "false") === "true";
+    const isDefaultUnit = (row.iuc_is_default_unit ?? "false") === "true";
+    if (isActive && isBaseUnit) {
+      activeBaseRows += 1;
+    }
+    if (isActive && isDefaultUnit) {
+      activeDefaultRows += 1;
+    }
+    if (!isBaseUnit) {
+      continue;
+    }
+    if (unitId !== baseUnitId) {
+      return `Unit conversion row ${index + 1}: Base row unit must match the item Base Unit.`;
+    }
+    if (factor !== 1) {
+      return `Unit conversion row ${index + 1}: Base row To Base must be 1.`;
+    }
+    if (unitFactor !== 1) {
+      return `Unit conversion row ${index + 1}: Base row Unit Factor must be 1.`;
+    }
+  }
+  if (activeBaseRows === 0) {
+    return "Add one active base unit conversion row.";
+  }
+  if (activeBaseRows > 1) {
+    return "Only one active base unit conversion row is allowed.";
+  }
+  if (activeDefaultRows > 1) {
+    return "Only one active default unit conversion row is allowed.";
+  }
+
   return null;
 }
 function validateItemReorderRows(value: string, values: Record<string, string>): string | null {
@@ -1641,6 +2226,11 @@ function shouldShowItemReorderSection(values: Record<string, string>): boolean {
     (fieldName) => (values[fieldName] ?? "").trim() !== "",
   );
 }
+function buildManagedItemUnitConversionRows(values: Record<string, string>): LinkedRecordRow[] {
+  return parseLinkedRecordRows(values[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ?? "").filter(
+    (row) => hasLinkedRowContent(row, ITEM_UNIT_CONVERSION_CONTENT_FIELD_NAMES),
+  );
+}
 function buildManagedItemPriceRows(values: Record<string, string>): LinkedRecordRow[] {
   return parseLinkedRecordRows(values[ITEM_PRICE_ROWS_FIELD_NAME] ?? "").filter((row) =>
     hasLinkedRowContent(row, ITEM_PRICE_CONTENT_FIELD_NAMES),
@@ -1660,10 +2250,6 @@ function applyItemPriceDefaults(
   values: Record<string, string>,
 ): Record<string, string> {
   const nextValues = { ...values };
-  const baseUnitId = (nextValues.item_base_unit_id ?? "").trim();
-  if (!(nextValues.ipm_unit_id ?? "").trim()) {
-    nextValues.ipm_unit_id = baseUnitId;
-  }
   if (!(nextValues.ipm_profit_type ?? "").trim()) {
     nextValues.ipm_profit_type = ITEM_PRICE_DEFAULT_PROFIT_TYPE;
   }
@@ -1672,7 +2258,22 @@ function applyItemPriceDefaults(
   }
   if (!hasLinkedRows(nextValues[ITEM_PRICE_ROWS_FIELD_NAME])) {
     nextValues[ITEM_PRICE_ROWS_FIELD_NAME] = serializeLinkedRecordRows([
-      buildEmptyItemPriceRow(baseUnitId),
+      buildEmptyItemPriceRow(""),
+    ]);
+  }
+  return nextValues;
+}
+function applyItemUnitConversionDefaults(
+  values: Record<string, string>,
+): Record<string, string> {
+  const nextValues = { ...values };
+  const baseUnitId = (nextValues.item_base_unit_id ?? "").trim();
+  if (!baseUnitId) {
+    return nextValues;
+  }
+  if (!hasLinkedRows(nextValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME])) {
+    nextValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] = serializeLinkedRecordRows([
+      buildDefaultBaseItemUnitConversionRow(baseUnitId),
     ]);
   }
   return nextValues;
@@ -1822,28 +2423,223 @@ function removeDefaultLinkedColumnPlaceholders(
       : column,
   );
 }
-function moveLinkedColumnBefore(
-  columns: LinkedRecordColumn[],
-  columnKey: string,
-  beforeColumnKey: string,
-): LinkedRecordColumn[] {
-  const sourceIndex = columns.findIndex((column) => column.key === columnKey);
-  const targetIndex = columns.findIndex(
-    (column) => column.key === beforeColumnKey,
-  );
-  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
-    return columns;
+function normalizeItemWidgetKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function buildItemFormSections(
+  fields: ERPDynamicModalField[],
+): ItemFormSection[] {
+  if (fields.length === 0) {
+    return [];
   }
-  const nextColumns = [...columns];
-  const [movedColumn] = nextColumns.splice(sourceIndex, 1);
-  if (!movedColumn) {
-    return columns;
+  const sections: ItemFormSection[] = [];
+  let currentSection: ItemFormSection = {
+    heading: null,
+    fields: [],
+  };
+  for (const field of fields) {
+    if ((field.type ?? "text") === "heading") {
+      if (currentSection.heading !== null || currentSection.fields.length > 0) {
+        sections.push(currentSection);
+      }
+      currentSection = {
+        heading: field,
+        fields: [],
+      };
+      continue;
+    }
+    currentSection.fields.push(field);
   }
-  const nextTargetIndex = nextColumns.findIndex(
-    (column) => column.key === beforeColumnKey,
+  if (currentSection.heading !== null || currentSection.fields.length > 0) {
+    sections.push(currentSection);
+  }
+  return sections;
+}
+function flattenItemFormSections(sections: ItemFormSection[]): ERPDynamicModalField[] {
+  return sections.flatMap((section) =>
+    section.heading ? [section.heading, ...section.fields] : section.fields,
   );
-  nextColumns.splice(nextTargetIndex < 0 ? nextColumns.length : nextTargetIndex, 0, movedColumn);
-  return nextColumns;
+}
+function resolveItemWidgetMatchKey(
+  widget: ItemWidgetConfigRecord,
+  type: "heading" | "field",
+): string {
+  const candidates =
+    type === "heading"
+      ? [widget.widgetName, widget.widgetGuiName, widget.widgetSecondaryText]
+      : [widget.widgetGuiName, widget.widgetName, widget.widgetSecondaryText];
+  for (const candidate of candidates) {
+    const normalized = normalizeItemWidgetKey(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return "";
+}
+function resolveItemWidgetLabel(widget: ItemWidgetConfigRecord): string {
+  return (
+    widget.widgetSecondaryText.trim() ||
+    widget.widgetGuiName.trim() ||
+    widget.widgetName.trim()
+  );
+}
+function combineItemWidgetVisibility(
+  visibleWhen: ERPDynamicModalField["visibleWhen"],
+  widgetVisibility: boolean,
+): ERPDynamicModalField["visibleWhen"] {
+  if (widgetVisibility && !visibleWhen) {
+    return undefined;
+  }
+  return (values) => {
+    if (!widgetVisibility) {
+      return false;
+    }
+    if (!visibleWhen) {
+      return true;
+    }
+    try {
+      return visibleWhen(values);
+    } catch {
+      return true;
+    }
+  };
+}
+function applyItemWidgetOverrides(
+  field: ERPDynamicModalField,
+  widget: ItemWidgetConfigRecord | undefined,
+): ERPDynamicModalField {
+  if (!widget) {
+    return field;
+  }
+  const nextLabel = resolveItemWidgetLabel(widget);
+  return {
+    ...field,
+    label: nextLabel || field.label,
+    visibleWhen: combineItemWidgetVisibility(field.visibleWhen, widget.widgetVisibility),
+  };
+}
+function reorderConfiguredItems<T>(
+  items: Array<{
+    item: T;
+    originalIndex: number;
+    configuredPosition: number | null;
+  }>,
+): T[] {
+  const configuredItems = items
+    .filter(
+      (
+        item,
+      ): item is {
+        item: T;
+        originalIndex: number;
+        configuredPosition: number;
+      } => item.configuredPosition !== null,
+    )
+    .sort((left, right) => {
+      if (left.configuredPosition !== right.configuredPosition) {
+        return left.configuredPosition - right.configuredPosition;
+      }
+      return left.originalIndex - right.originalIndex;
+    });
+  if (configuredItems.length < 2) {
+    return items.map((item) => item.item);
+  }
+  let configuredItemIndex = 0;
+  return items.map((item) =>
+    item.configuredPosition === null
+      ? item.item
+      : configuredItems[configuredItemIndex++]?.item ?? item.item,
+  );
+}
+function toItemWidgetConfigRecords(payload: unknown): ItemWidgetConfigRecord[] {
+  return extractArrayRecords(payload)
+    .map((record) => ({
+      widgetNo: toDisplayValue(getFirstDefinedValue(record, WIDGET_NUMBER_KEYS)),
+      widgetGroupId: toDisplayValue(getFirstDefinedValue(record, WIDGET_GROUP_ID_KEYS)),
+      widgetName: toDisplayValue(getFirstDefinedValue(record, WIDGET_NAME_KEYS)),
+      widgetPosition: toNonNegativeInteger(
+        toDisplayValue(getFirstDefinedValue(record, WIDGET_POSITION_KEYS)),
+        0,
+      ),
+      widgetVisibility:
+        toSelectBoolean(getFirstDefinedValue(record, WIDGET_VISIBILITY_KEYS), "true") ===
+        "true",
+      widgetGuiName: toDisplayValue(getFirstDefinedValue(record, WIDGET_GUI_NAME_KEYS)),
+      widgetSecondaryText: toDisplayValue(
+        getFirstDefinedValue(record, WIDGET_SECONDARY_TEXT_KEYS),
+      ),
+    }))
+    .filter((record) => Boolean(record.widgetNo));
+}
+function applyItemWidgetConfigToFields(
+  fields: ERPDynamicModalField[],
+  widgets: ItemWidgetConfigRecord[],
+  rootWidgetGroupId: string,
+): ERPDynamicModalField[] {
+  if (widgets.length === 0) {
+    return fields;
+  }
+  const sections = buildItemFormSections(fields);
+  const sectionWidgets = widgets.filter(
+    (widget) => widget.widgetGroupId === rootWidgetGroupId,
+  );
+  const sectionWidgetByKey = new Map(
+    sectionWidgets
+      .map((widget) => [resolveItemWidgetMatchKey(widget, "heading"), widget] as const)
+      .filter(([key]) => Boolean(key)),
+  );
+  const nextSections = sections.map((section, sectionIndex) => {
+    const headingWidget =
+      section.heading
+        ? sectionWidgetByKey.get(normalizeItemWidgetKey(section.heading.label))
+        : undefined;
+    const sectionHidden = headingWidget?.widgetVisibility === false;
+    const childWidgetByKey = new Map(
+      widgets
+        .filter((widget) => widget.widgetGroupId === headingWidget?.widgetNo)
+        .map((widget) => [resolveItemWidgetMatchKey(widget, "field"), widget] as const)
+        .filter(([key]) => Boolean(key)),
+    );
+    const nextHeading = section.heading
+      ? applyItemWidgetOverrides(section.heading, headingWidget)
+      : null;
+    const nextFields = reorderConfiguredItems(
+      section.fields.map((field, fieldIndex) => {
+        const matchingWidget = childWidgetByKey.get(normalizeItemWidgetKey(field.label));
+        const effectiveWidget =
+          sectionHidden && matchingWidget
+            ? {
+              ...matchingWidget,
+              widgetVisibility: false,
+            }
+            : matchingWidget;
+        return {
+          item: sectionHidden
+            ? {
+              ...field,
+              visibleWhen: combineItemWidgetVisibility(field.visibleWhen, false),
+            }
+            : applyItemWidgetOverrides(field, effectiveWidget),
+          originalIndex: fieldIndex,
+          configuredPosition: matchingWidget?.widgetPosition ?? null,
+        };
+      }),
+    );
+    return {
+      item: {
+        heading: nextHeading,
+        fields: nextFields,
+      },
+      originalIndex: sectionIndex,
+      configuredPosition: headingWidget?.widgetPosition ?? null,
+    };
+  });
+  return flattenItemFormSections(reorderConfiguredItems(nextSections));
 }
 function buildItemFormFields(
   companyOptions: ERPDynamicSelectOption[],
@@ -1863,6 +2659,7 @@ function buildItemFormFields(
   itemPriceTableColumnsConfig: Record<string, unknown>[],
   itemReorderTableColumnsConfig: Record<string, unknown>[],
   itemEanTableColumnsConfig: Record<string, unknown>[],
+  itemWidgetConfigRecords: ItemWidgetConfigRecord[],
   onItemGroupSearchChange?: ERPDynamicSearchQueryChangeHandler,
 ): ERPDynamicModalField[] {
   const basePriceRowColumns: LinkedRecordColumn[] = [
@@ -1871,10 +2668,27 @@ function buildItemFormFields(
       label: "Unit",
       type: "select",
       searchable: true,
-      options: unitOptions,
-      optionsResolver: ({ rowIndex, rows }) =>
-        buildItemPriceUnitOptions(rows, unitOptions, rowIndex),
       width: "10rem",
+    },
+    {
+      key: "ipm_to_base_factor",
+      label: "Conv",
+      type: "number",
+      min: 0.0001,
+      step: "0.0001",
+      width: "7rem",
+    },
+    {
+      key: "ipm_is_default_unit",
+      label: "Default",
+      type: "checkbox",
+      width: "6rem",
+    },
+    {
+      key: "ipm_is_base_unit",
+      label: "Base",
+      type: "checkbox",
+      width: "6rem",
     },
     {
       key: "ipm_godown_id",
@@ -1882,7 +2696,7 @@ function buildItemFormFields(
       type: "select",
       searchable: true,
       options: godownOptions,
-      placeholder: "Global Price",
+      placeholder: "Select Godown",
       width: "11rem",
     },
     {
@@ -1908,46 +2722,103 @@ function buildItemFormFields(
       options: ITEM_PRICE_ROUND_OFF_OPTIONS,
       width: "7rem",
     },
-    { key: "ipm_price_a_margin", label: "A Margin", type: "number", min: 0, step: "0.0001", width: "7rem" },
+    { key: "ipm_price_a_markup_perc", label: "A Margin", type: "number", min: 0, step: "0.0001", width: "7rem" },
     { key: "ipm_sales_price_a", label: "Sale A", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_price_b_margin", label: "B Margin", type: "number", min: 0, step: "0.0001", width: "7rem" },
+    { key: "ipm_price_b_markup_perc", label: "B Margin", type: "number", min: 0, step: "0.0001", width: "7rem" },
     { key: "ipm_sales_price_b", label: "Sale B", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_price_c_margin", label: "C Margin", type: "number", min: 0, step: "0.0001", width: "7rem" },
+    { key: "ipm_price_c_markup_perc", label: "C Margin", type: "number", min: 0, step: "0.0001", width: "7rem" },
     { key: "ipm_sales_price_c", label: "Sale C", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_price_d_margin", label: "D Margin", type: "number", min: 0, step: "0.0001", width: "7rem" },
+    { key: "ipm_price_d_markup_perc", label: "D Margin", type: "number", min: 0, step: "0.0001", width: "7rem" },
     { key: "ipm_sales_price_d", label: "Sale D", type: "number", min: 0, step: "0.0001", width: "7rem" },
     { key: "ipm_max_price", label: "Max", type: "number", min: 0, step: "0.0001", width: "7rem" },
     { key: "ipm_min_price", label: "Min", type: "number", min: 0, step: "0.0001", width: "7rem" },
     { key: "ipm_disc_perc", label: "Disc %", type: "number", min: 0, step: "0.001", width: "7rem" },
     { key: "ipm_disc_qty", label: "Disc Qty", type: "number", min: 0, step: "0.0001", width: "7rem" },
+    { key: "ipm_addl_cess", label: "Cess", type: "number", min: 0, step: "0.0001", width: "7rem" },
+    { key: "ipm_loading_charge", label: "Loading", type: "number", min: 0, step: "0.0001", width: "7rem" },
+    { key: "ipm_freight_charge", label: "Freight", type: "number", min: 0, step: "0.0001", width: "7rem" },
+    { key: "ipm_is_big_unit", label: "Big Unit", type: "checkbox", width: "6rem" },
+    { key: "ipm_uom_remarks", label: "Remarks", width: "12rem" },
+    { key: "ipm_cost_remarks", label: "Cost Remarks", width: "12rem" },
+    { key: "ipm_loyalty_points", label: "Points", type: "number", min: 0, step: "1", width: "6rem" },
+  ];
+  const priceRowColumns = removeDefaultLinkedColumnPlaceholders(
+    applyConfiguredLinkedTableColumnConfig(
+      basePriceRowColumns,
+      itemPriceTableColumnsConfig,
+      ITEM_PRICE_TABLE_COLUMN_NAME_TO_KEY,
+    ),
+  );
+  const unitConversionRowColumns = removeDefaultLinkedColumnPlaceholders([
     {
-      key: "ipm_conversion_factor",
-      label: "Conv",
+      key: "iuc_unit_id",
+      label: "Unit",
+      type: "select",
+      searchable: true,
+      options: unitOptions,
+      optionsResolver: ({ rowIndex, rows }) =>
+        buildItemUnitConversionUnitOptions(rows, unitOptions, rowIndex),
+      readOnlyResolver: ({ row }) =>
+        (row.iuc_is_base_unit ?? "false") === "true",
+      width: "10rem",
+    },
+    { key: "iuc_unit_slno", label: "Sl No", type: "number", min: 1, step: "1", width: "6rem" },
+    {
+      key: "iuc_to_base_factor",
+      label: "To Base",
+      type: "number",
+      min: 0.0001,
+      step: "0.0001",
+      width: "7rem",
+      readOnlyResolver: ({ row }) => (row.iuc_is_base_unit ?? "false") === "true",
+    },
+    {
+      key: "iul_unit_factor",
+      label: "Unit Factor",
+      type: "number",
+      min: 0.0001,
+      step: "0.0001",
+      width: "7rem",
+      readOnlyResolver: ({ row }) => (row.iuc_is_base_unit ?? "false") === "true",
+    },
+    {
+      key: "iuc_is_default_unit",
+      label: "Default",
+      type: "checkbox",
+      width: "6rem",
+    },
+    {
+      key: "iuc_is_base_unit",
+      label: "Base",
+      type: "checkbox",
+      width: "6rem",
+    },
+    {
+      key: "iuc_is_big_unit",
+      label: "Big Unit",
+      type: "checkbox",
+      width: "6rem",
+    },
+    {
+      key: "iuc_uom_weight",
+      label: "Weight",
       type: "number",
       min: 0,
       step: "0.0001",
       width: "7rem",
-      readOnlyResolver: ({ rowIndex }) => rowIndex === 0,
     },
-    { key: "ipm_addl_cess", label: "Cess", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_uom_weight", label: "Weight", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_loading_charge", label: "Loading", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_freight_charge", label: "Freight", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_big_unit", label: "Big Unit", type: "checkbox", width: "6rem" },
-    { key: "ipm_remarks", label: "Remarks", width: "12rem" },
-    { key: "ipm_points", label: "Points", type: "number", min: 0, step: "1", width: "6rem" },
-  ];
-  const priceRowColumns = removeDefaultLinkedColumnPlaceholders(
-    moveLinkedColumnBefore(
-      applyConfiguredLinkedTableColumnConfig(
-        basePriceRowColumns,
-        itemPriceTableColumnsConfig,
-        ITEM_PRICE_TABLE_COLUMN_NAME_TO_KEY,
-      ),
-      "ipm_conversion_factor",
-      "ipm_unit_id",
-    ),
-  );
+    {
+      key: "iuc_uom_remarks",
+      label: "Remarks",
+      width: "12rem",
+    },
+    {
+      key: "iuc_is_active",
+      label: "Active",
+      type: "checkbox",
+      width: "6rem",
+    },
+  ]);
   const baseReorderRowColumns: LinkedRecordColumn[] = [
     { key: "ir_min_level", label: "Min Level", type: "number", min: 0, step: "0.0001", width: "7rem" },
     { key: "ir_max_level", label: "Max Level", type: "number", min: 0, step: "0.0001", width: "7rem" },
@@ -2016,8 +2887,9 @@ function buildItemFormFields(
       ITEM_EAN_TABLE_COLUMN_NAME_TO_KEY,
     ),
   );
-  return removeDefaultSelectPlaceholders(
-    applyItemCheckboxControlStyle([
+  return applyItemWidgetConfigToFields(
+    removeDefaultSelectPlaceholders(
+      applyItemCheckboxControlStyle([
       {
         name: "itemHeadingCore",
         label: "Core Details",
@@ -2143,11 +3015,6 @@ function buildItemFormFields(
         placeholder: "Select Batch Config",
       },
       {
-        name: "itemHeadingLinks",
-        label: "Reference Links",
-        type: "heading",
-      },
-      {
         name: "item_group_id",
         label: "Item Group",
         type: "select",
@@ -2170,7 +3037,6 @@ function buildItemFormFields(
         required: true,
         options: unitOptions,
         onValueChange: ({ value, values, previousValues }) => {
-          const currentPriceUnitId = (values.ipm_unit_id ?? "").trim();
           const currentReorderUnitId = (values.ir_unit_id ?? "").trim();
           const currentEanUnitId = (values.ean_unit_id ?? "").trim();
           const previousBaseUnitId = (previousValues.item_base_unit_id ?? "").trim();
@@ -2179,26 +3045,12 @@ function buildItemFormFields(
           }
           const nextValues = { ...values };
           let hasChanges = false;
-          if (!currentPriceUnitId || currentPriceUnitId === previousBaseUnitId) {
-            nextValues.ipm_unit_id = value;
-            hasChanges = true;
-          }
           if (!currentReorderUnitId || currentReorderUnitId === previousBaseUnitId) {
             nextValues.ir_unit_id = value;
             hasChanges = true;
           }
           if (!currentEanUnitId || currentEanUnitId === previousBaseUnitId) {
             nextValues.ean_unit_id = value;
-            hasChanges = true;
-          }
-          const nextPriceRows = syncSerializedRowUnitIds(
-            values[ITEM_PRICE_ROWS_FIELD_NAME] ?? "",
-            "ipm_unit_id",
-            value,
-            previousBaseUnitId,
-          );
-          if (nextPriceRows !== null) {
-            nextValues[ITEM_PRICE_ROWS_FIELD_NAME] = nextPriceRows;
             hasChanges = true;
           }
           const nextReorderRows = syncSerializedRowUnitIds(
@@ -2219,6 +3071,33 @@ function buildItemFormFields(
           );
           if (nextEanRows !== null) {
             nextValues[ITEM_EAN_ROWS_FIELD_NAME] = nextEanRows;
+            hasChanges = true;
+          }
+          const nextItemUnitConversionRows =
+            syncSerializedItemUnitConversionRowsForBaseUnitChange(
+              values[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ?? "",
+              value,
+            );
+          if (
+            nextItemUnitConversionRows !==
+            (values[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ?? "")
+          ) {
+            nextValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] = nextItemUnitConversionRows;
+            hasChanges = true;
+          }
+          const nextSyncedPriceRows = syncSerializedItemPriceRows(
+            nextValues[ITEM_PRICE_ROWS_FIELD_NAME] ?? "",
+            {
+              ...nextValues,
+              [ITEM_PRICE_ROWS_FIELD_NAME]:
+                previousValues[ITEM_PRICE_ROWS_FIELD_NAME] ??
+                values[ITEM_PRICE_ROWS_FIELD_NAME] ??
+                "",
+            },
+            itemTaxRecordsById,
+          );
+          if (nextSyncedPriceRows !== (nextValues[ITEM_PRICE_ROWS_FIELD_NAME] ?? "")) {
+            nextValues[ITEM_PRICE_ROWS_FIELD_NAME] = nextSyncedPriceRows;
             hasChanges = true;
           }
           if (hasChanges) {
@@ -2267,6 +3146,105 @@ function buildItemFormFields(
         type: "select",
         searchable: true,
         options: customerGroupOptions,
+      },
+      {
+        name: ITEM_PRICE_ROWS_FIELD_NAME,
+        label: "Price List Table",
+        type: "custom",
+        fieldStyle: {
+          gridColumn: "1 / -1",
+        },
+        helperText:
+          "Add and edit price rows here. Unit conversion values are maintained from this section while the Unit Conversion block stays hidden.",
+        onValueChange: ({ value, values, previousValues }) =>
+          buildItemPriceRowsValueChangeResult(
+            values,
+            previousValues,
+            value,
+            itemTaxRecordsById,
+          ),
+        validation: {
+          custom: validateItemPriceRows,
+        },
+        render: ({ disabled, setValue, value, values }) => {
+          const selectableUnitOptions = buildSelectableItemUnitOptions(values, unitOptions);
+          const nextPriceRowColumns = priceRowColumns.map((column) =>
+            column.key === "ipm_unit_id"
+              ? {
+                ...column,
+                options: selectableUnitOptions,
+                optionsResolver: (params: {
+                  rowIndex: number;
+                  rows: LinkedRecordRow[];
+                }) =>
+                  buildItemPriceUnitOptions(
+                    params.rows,
+                    selectableUnitOptions,
+                    params.rowIndex,
+                  ),
+              }
+              : column,
+          );
+          return (
+            <ItemLinkedRecordsEditor
+              addLabel="+"
+              autoCreateFirstRowOnMount
+              autoFocusInitialRowOnMount={false}
+              columns={nextPriceRowColumns}
+              createRow={() => buildEmptyItemPriceRow("")}
+              disabled={disabled}
+              emptyState="No price rows added."
+              onChange={setValue}
+              value={value}
+            />
+          );
+        },
+      },
+      {
+        name: "itemHeadingUnitConversionTable",
+        label: "Unit Conversion",
+        type: "heading",
+        defaultExpanded: true,
+        sectionGridColumns: 4,
+        visibleWhen: () => false,
+      },
+      {
+        name: ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME,
+        label: "",
+        type: "custom",
+        visibleWhen: () => false,
+        fieldStyle: {
+          gridColumn: "1 / -1",
+        },
+        helperText:
+          "Maintain the valid units for this item here. Price rows can only use units from this section.",
+        validation: {
+          custom: validateItemUnitConversionRows,
+        },
+        onValueChange: ({ value, values, previousValues }) =>
+          buildItemUnitConversionRowsValueChangeResult(
+            values,
+            previousValues,
+            value,
+            itemTaxRecordsById,
+          ),
+        render: buildCustomFieldEditor(
+          unitConversionRowColumns,
+          (values) => {
+            const rows = buildManagedItemUnitConversionRows(values);
+            const nextUnitSlno = rows.length + 1;
+            return buildEmptyItemUnitConversionRow(
+              (values.item_base_unit_id ?? "").trim(),
+              nextUnitSlno,
+            );
+          },
+          "+",
+          "No unit conversions added.",
+          {
+            autoCreateFirstRowOnMount: true,
+            autoFocusInitialRowOnMount: false,
+          },
+        ),
       },
       {
         name: "itemHeadingEanTable",
@@ -2325,43 +3303,6 @@ function buildItemFormFields(
             />
           );
         },
-      },
-      {
-        name: "itemHeadingPriceTable",
-        label: "Price List Table",
-        type: "heading",
-        defaultExpanded: true,
-        sectionGridColumns: 5,
-      },
-      {
-        name: ITEM_PRICE_ROWS_FIELD_NAME,
-        label: "",
-        type: "custom",
-        fieldStyle: {
-          gridColumn: "1 / -1",
-        },
-        helperText:
-          "Add and edit price rows here. Keep Price List checked in Rules & Status to save these rows.",
-        onValueChange: ({ value, values, previousValues }) =>
-          buildItemPriceRowsValueChangeResult(
-            values,
-            previousValues,
-            value,
-            itemTaxRecordsById,
-          ),
-        validation: {
-          custom: validateItemPriceRows,
-        },
-        render: buildCustomFieldEditor(
-          priceRowColumns,
-          (values) => buildEmptyItemPriceRow((values.item_base_unit_id ?? "").trim()),
-          "+",
-          "No price rows added.",
-          {
-            autoCreateFirstRowOnMount: true,
-            autoFocusInitialRowOnMount: false,
-          },
-        ),
       },
       {
         name: "itemHeadingReorderTable",
@@ -2472,7 +3413,7 @@ function buildItemFormFields(
             return;
           }
           return {
-            values: applyItemPriceDefaults(values),
+            values: applyItemPriceDefaults(applyItemUnitConversionDefaults(values)),
           };
         },
         gridRowStart: 3,
@@ -2667,7 +3608,10 @@ function buildItemFormFields(
         gridRowStart: 3,
         gridColumnStart: 6,
       },
-    ]),
+      ]),
+    ),
+    itemWidgetConfigRecords,
+    ITEM_MASTER_WIDGET_GROUP_ID,
   );
 }
 function mapItemFormValues(
@@ -2702,6 +3646,11 @@ function mapItemFormValues(
     rowSource,
     ITEM_PRICE_BOOLEAN_FIELD_NAMES,
     ITEM_PRICE_INITIAL_FORM_VALUES,
+  );
+  mappedValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] = syncSerializedItemUnitConversionRows(
+    toDisplayValue(getFieldValue(rowSource, ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME)) ||
+    ITEM_INITIAL_FORM_VALUES[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME],
+    mappedValues,
   );
   mappedValues[ITEM_PRICE_ROWS_FIELD_NAME] = syncSerializedItemPriceRows(
     toDisplayValue(getFieldValue(rowSource, ITEM_PRICE_ROWS_FIELD_NAME)) ||
@@ -2768,8 +3717,23 @@ function mapItemFormValues(
   ) {
     mappedValues.item_price_list = "true";
   }
+  Object.assign(mappedValues, applyItemUnitConversionDefaults(mappedValues));
+  mappedValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] = syncSerializedItemUnitConversionRows(
+    mappedValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME],
+    mappedValues,
+  );
+  mappedValues[ITEM_PRICE_ROWS_FIELD_NAME] = syncSerializedItemPriceRows(
+    mappedValues[ITEM_PRICE_ROWS_FIELD_NAME],
+    mappedValues,
+    itemTaxRecordsById,
+  );
   if (shouldShowItemPriceSection(mappedValues)) {
     Object.assign(mappedValues, applyItemPriceDefaults(mappedValues));
+    mappedValues[ITEM_PRICE_ROWS_FIELD_NAME] = syncSerializedItemPriceRows(
+      mappedValues[ITEM_PRICE_ROWS_FIELD_NAME],
+      mappedValues,
+      itemTaxRecordsById,
+    );
   }
   return mappedValues;
 }
@@ -2860,6 +3824,7 @@ export default function ItemMasterPageContent() {
   const { getAll: getItemPriceTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
   const { getAll: getItemReorderTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
   const { getAll: getItemEanTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
+  const { getAll: getItemMasterWidgets } = useApi<unknown>(WIDGET_MASTER_LIST_ENDPOINT);
   const { getAll: getCompanyLookup } = useApi<unknown>(COMPANY_LOOKUP_ENDPOINT);
   const { getAll: getBranchLookup } = useApi<unknown>(BRANCH_LOOKUP_ENDPOINT);
   const { getAll: getGroupLookup } = useApi<unknown>(ITEM_GROUP_LOOKUP_ENDPOINT);
@@ -2870,6 +3835,27 @@ export default function ItemMasterPageContent() {
   const { getAll: getUnitLookup } = useApi<unknown>(UNIT_LOOKUP_ENDPOINT);
   const { getAll: getGodownLookup } = useApi<unknown>(GODOWN_LOOKUP_ENDPOINT);
   const { getAll: getHsnLookup } = useApi<unknown>(HSN_LOOKUP_ENDPOINT);
+  const { getAll: listItemUnitConversions } = useApi<unknown>(
+    ITEM_UNIT_CONVERSION_API_ENDPOINTS.list,
+  );
+  const { run: upsertItemUnitConversion } = useApi<unknown, unknown>(
+    ITEM_UNIT_CONVERSION_API_ENDPOINTS.create,
+    {
+      method: "POST",
+      toast: {
+        success: false,
+      },
+    },
+  );
+  const { run: removeItemUnitConversion } = useApi<unknown, unknown>(
+    ITEM_UNIT_CONVERSION_API_ENDPOINTS.delete,
+    {
+      method: "DELETE",
+      toast: {
+        success: false,
+      },
+    },
+  );
   const { getAll: listItemPrices } = useApi<unknown>(ITEM_PRICE_API_ENDPOINTS.list);
   const { run: upsertItemPrice } = useApi<unknown, unknown>(
     ITEM_PRICE_API_ENDPOINTS.create,
@@ -2942,6 +3928,9 @@ export default function ItemMasterPageContent() {
   >([]);
   const [itemEanTableColumnsConfig, setItemEanTableColumnsConfig] = useState<
     Record<string, unknown>[]
+  >([]);
+  const [itemWidgetConfigRecords, setItemWidgetConfigRecords] = useState<
+    ItemWidgetConfigRecord[]
   >([]);
   const itemGroupSearchTimeoutRef = useRef<number | null>(null);
   const itemGroupSearchRequestRef = useRef(0);
@@ -3027,6 +4016,7 @@ export default function ItemMasterPageContent() {
         uiTableColumnsPayload,
         uiReorderTableColumnsPayload,
         uiEanTableColumnsPayload,
+        itemMasterWidgetsPayload,
       ] = await Promise.allSettled([
         getCompanyLookup(COMPANY_LOOKUP_QUERY),
         getBranchLookup(BRANCH_LOOKUP_QUERY),
@@ -3045,6 +4035,7 @@ export default function ItemMasterPageContent() {
         getItemPriceTableColumns(UI_TABLE_COLUMNS_QUERY),
         getItemReorderTableColumns(UI_REORDER_TABLE_COLUMNS_QUERY),
         getItemEanTableColumns(UI_EAN_TABLE_COLUMNS_QUERY),
+        getItemMasterWidgets(ITEM_MASTER_WIDGET_QUERY),
       ]);
       if (!mounted) {
         return;
@@ -3167,6 +4158,11 @@ export default function ItemMasterPageContent() {
           )
           : [],
       );
+      setItemWidgetConfigRecords(
+        itemMasterWidgetsPayload.status === "fulfilled"
+          ? toItemWidgetConfigRecords(itemMasterWidgetsPayload.value)
+          : [],
+      );
     })();
     return () => {
       mounted = false;
@@ -3181,6 +4177,7 @@ export default function ItemMasterPageContent() {
     getGroupLookup,
     getHsnLookup,
     getItemEanTableColumns,
+    getItemMasterWidgets,
     getItemLookup,
     getItemPriceTableColumns,
     getItemReorderTableColumns,
@@ -3190,6 +4187,16 @@ export default function ItemMasterPageContent() {
     getUnitLookup,
     listItemTaxes,
   ]);
+  const listItemUnitConversionRecords = useCallback(
+    async (itemId: string) => {
+      const payload = await listItemUnitConversions({
+        iuc_item_id: itemId,
+        limit: ITEM_UNIT_CONVERSION_QUERY_LIMIT,
+      });
+      return extractArrayRecords(payload, DEFAULT_LOOKUP_ARRAY_KEYS);
+    },
+    [listItemUnitConversions],
+  );
   const listItemPriceRecords = useCallback(
     async (itemId: string) => {
       const payload = await listItemPrices({
@@ -3227,19 +4234,64 @@ export default function ItemMasterPageContent() {
         .filter((value): value is string => Boolean(value)),
     [],
   );
+  const buildItemUnitConversionPayloadRows = useCallback(
+    (itemId: string, values: Record<string, string>) => {
+      const baseUnitId = (values.item_base_unit_id ?? "").trim();
+      return buildManagedItemUnitConversionRows(values).map((row) => {
+        const unitId = (row.iuc_unit_id ?? "").trim() || baseUnitId;
+        const payload: Record<string, unknown> = {
+          iuc_company_id: (values.item_company_id ?? "").trim(),
+          iuc_item_id: itemId,
+          iuc_unit_id: unitId,
+          iuc_base_unit_id: baseUnitId,
+          iuc_to_base_factor: toOptionalNonNegativeNumber(
+            (row.iuc_to_base_factor ?? "").trim() || (unitId === baseUnitId ? "1" : ""),
+          ),
+          iuc_unit_slno:
+            toOptionalNonNegativeInteger(row.iuc_unit_slno ?? "") ?? 0,
+          iul_unit_factor: toOptionalNonNegativeNumber(
+            (row.iul_unit_factor ?? "").trim() || (unitId === baseUnitId ? "1" : ""),
+          ),
+          iuc_is_default_unit: (row.iuc_is_default_unit ?? "false") === "true",
+          iuc_is_base_unit: (row.iuc_is_base_unit ?? "false") === "true",
+          iuc_is_big_unit: (row.iuc_is_big_unit ?? "false") === "true",
+          iuc_uom_weight: toOptionalNonNegativeNumber(
+            (row.iuc_uom_weight ?? "").trim() || "0",
+          ),
+          iuc_uom_remarks: toNullableString(row.iuc_uom_remarks ?? ""),
+          iuc_is_active: (row.iuc_is_active ?? "true") === "true",
+        };
+
+        const itemUnitConversionId = toTrimmedOrUndefined(row.iuc_id);
+        if (itemUnitConversionId) {
+          payload.iuc_id = itemUnitConversionId;
+        }
+
+        return payload;
+      });
+    },
+    [],
+  );
   const buildItemPricePayloadRows = useCallback(
     (itemId: string, values: Record<string, string>) => {
       const baseUnitId = (values.item_base_unit_id ?? "").trim();
+      const itemUnitConversionsByUnitId = buildItemUnitConversionRowsByUnitId(values);
       return buildManagedItemPriceRows(values).map((row) => {
+        const unitId = (row.ipm_unit_id ?? "").trim() || baseUnitId;
+        const matchingUnitConversion = itemUnitConversionsByUnitId.get(unitId);
         const payload: Record<string, unknown> = {
+          ipm_company_id: toNullableString(values.item_company_id ?? ""),
+          ipm_branch_id: toNullableString(values.item_branch_id ?? ""),
           ipm_item_id: itemId,
-          ipm_unit_id: (row.ipm_unit_id ?? "").trim() || baseUnitId,
-          ipm_godown_id: toNullableString(row.ipm_godown_id ?? ""),
-          ipm_profit_type:
-            (row.ipm_profit_type ?? "").trim() || ITEM_PRICE_DEFAULT_PROFIT_TYPE,
-          ipm_unit_slno: toOptionalNonNegativeInteger(row.ipm_unit_slno ?? ""),
-          ipm_conversion_factor: toOptionalNonNegativeNumber(
-            (row.ipm_conversion_factor ?? "").trim() || "1",
+          ipm_unit_id: unitId,
+          ipm_godown_id: (row.ipm_godown_id ?? "").trim(),
+          ipm_profit_type: normalizeItemPriceProfitType(row.ipm_profit_type),
+          ipm_unit_slno: toOptionalNonNegativeInteger(
+            matchingUnitConversion?.iuc_unit_slno ?? row.ipm_unit_slno ?? "",
+          ),
+          ipm_to_base_factor: toOptionalNonNegativeNumber(
+            (matchingUnitConversion?.iuc_to_base_factor ?? row.ipm_to_base_factor ?? "").trim() ||
+            "1",
           ),
           ipm_cost_price: toOptionalNonNegativeNumber(row.ipm_cost_price ?? ""),
           ipm_cost_wot: toOptionalNonNegativeNumber(row.ipm_cost_wot ?? ""),
@@ -3259,17 +4311,17 @@ export default function ItemMasterPageContent() {
           ipm_price_b_wot: toOptionalNonNegativeNumber(row.ipm_price_b_wot ?? ""),
           ipm_price_c_wot: toOptionalNonNegativeNumber(row.ipm_price_c_wot ?? ""),
           ipm_price_d_wot: toOptionalNonNegativeNumber(row.ipm_price_d_wot ?? ""),
-          ipm_price_a_margin: toOptionalNonNegativeNumber(
-            row.ipm_price_a_margin ?? "",
+          ipm_price_a_markup_perc: toOptionalNonNegativeNumber(
+            row.ipm_price_a_markup_perc ?? "",
           ),
-          ipm_price_b_margin: toOptionalNonNegativeNumber(
-            row.ipm_price_b_margin ?? "",
+          ipm_price_b_markup_perc: toOptionalNonNegativeNumber(
+            row.ipm_price_b_markup_perc ?? "",
           ),
-          ipm_price_c_margin: toOptionalNonNegativeNumber(
-            row.ipm_price_c_margin ?? "",
+          ipm_price_c_markup_perc: toOptionalNonNegativeNumber(
+            row.ipm_price_c_markup_perc ?? "",
           ),
-          ipm_price_d_margin: toOptionalNonNegativeNumber(
-            row.ipm_price_d_margin ?? "",
+          ipm_price_d_markup_perc: toOptionalNonNegativeNumber(
+            row.ipm_price_d_markup_perc ?? "",
           ),
           ipm_min_price: toOptionalNonNegativeNumber(row.ipm_min_price ?? ""),
           ipm_max_price: toOptionalNonNegativeNumber(row.ipm_max_price ?? ""),
@@ -3277,24 +4329,26 @@ export default function ItemMasterPageContent() {
           ipm_disc_qty: toOptionalNonNegativeNumber(row.ipm_disc_qty ?? ""),
           ipm_addl_cess: toOptionalNonNegativeNumber(row.ipm_addl_cess ?? ""),
           ipm_round_off: toOptionalNonNegativeNumber(row.ipm_round_off ?? ""),
-          ipm_big_unit: (row.ipm_big_unit ?? "false") === "true",
-          ipm_uom_weight: toOptionalNonNegativeNumber(row.ipm_uom_weight ?? ""),
+          ipm_is_big_unit:
+            (matchingUnitConversion?.iuc_is_big_unit ?? row.ipm_is_big_unit ?? "false") ===
+            "true",
           ipm_loading_charge: toOptionalNonNegativeNumber(
             row.ipm_loading_charge ?? "",
           ),
           ipm_freight_charge: toOptionalNonNegativeNumber(
             row.ipm_freight_charge ?? "",
           ),
-          ipm_points: toOptionalNonNegativeInteger(
-            (row.ipm_points ?? "").trim() || "0",
+          ipm_loyalty_points: toOptionalNonNegativeNumber(
+            (row.ipm_loyalty_points ?? "").trim() || "0",
           ),
-          ipm_remarks: toNullableString(row.ipm_remarks ?? ""),
+          ipm_uom_remarks: toNullableString(row.ipm_uom_remarks ?? ""),
+          ipm_cost_remarks: toNullableString(row.ipm_cost_remarks ?? ""),
           ipm_is_active: (row.ipm_is_active ?? "true") === "true",
         };
 
-        const itemPriceId = toTrimmedOrUndefined(row.ipm_unit_rate_id);
+        const itemPriceId = toTrimmedOrUndefined(row.ipm_id);
         if (itemPriceId) {
-          payload.ipm_unit_rate_id = itemPriceId;
+          payload.ipm_id = itemPriceId;
         }
 
         return payload;
@@ -3364,17 +4418,32 @@ export default function ItemMasterPageContent() {
   const deleteLinkedItemPrices = useCallback(
     async (itemId: string) => {
       const rows = await listItemPriceRecords(itemId);
-      const itemPriceIds = extractLinkedRowIds(rows, "ipm_unit_rate_id");
+      const itemPriceIds = extractLinkedRowIds(rows, "ipm_id");
       if (itemPriceIds.length === 0) {
         return;
       }
       await removeItemPrice({
-        body: itemPriceIds.map((ipmUnitRateId) => ({
-          ipm_unit_rate_id: ipmUnitRateId,
+        body: itemPriceIds.map((ipmId) => ({
+          ipm_id: ipmId,
         })),
       });
     },
     [extractLinkedRowIds, listItemPriceRecords, removeItemPrice],
+  );
+  const deleteLinkedItemUnitConversions = useCallback(
+    async (itemId: string) => {
+      const rows = await listItemUnitConversionRecords(itemId);
+      const itemUnitConversionIds = extractLinkedRowIds(rows, "iuc_id");
+      if (itemUnitConversionIds.length === 0) {
+        return;
+      }
+      await removeItemUnitConversion({
+        body: itemUnitConversionIds.map((iucId) => ({
+          iuc_id: iucId,
+        })),
+      });
+    },
+    [extractLinkedRowIds, listItemUnitConversionRecords, removeItemUnitConversion],
   );
   const deleteLinkedItemReorders = useCallback(
     async (itemId: string) => {
@@ -3406,24 +4475,56 @@ export default function ItemMasterPageContent() {
     },
     [extractLinkedRowIds, listItemEanCodeRecords, removeItemEanCode],
   );
+  const syncLinkedItemUnitConversion = useCallback(
+    async (itemId: string, values: Record<string, string>) => {
+      const existingRows = await listItemUnitConversionRecords(itemId);
+      const desiredRows = buildItemUnitConversionPayloadRows(itemId, values);
+      const desiredIds = new Set(
+        desiredRows
+          .map((row) => (typeof row.iuc_id === "string" ? row.iuc_id : ""))
+          .filter(Boolean),
+      );
+      const deleteIds = extractLinkedRowIds(existingRows, "iuc_id").filter(
+        (existingId) => !desiredIds.has(existingId),
+      );
+      if (deleteIds.length > 0) {
+        await removeItemUnitConversion({
+          body: deleteIds.map((iucId) => ({
+            iuc_id: iucId,
+          })),
+        });
+      }
+      if (desiredRows.length === 0) {
+        return;
+      }
+      await upsertItemUnitConversion({
+        body: desiredRows,
+      });
+    },
+    [
+      buildItemUnitConversionPayloadRows,
+      extractLinkedRowIds,
+      listItemUnitConversionRecords,
+      removeItemUnitConversion,
+      upsertItemUnitConversion,
+    ],
+  );
   const syncLinkedItemPrice = useCallback(
     async (itemId: string, values: Record<string, string>) => {
       const existingRows = await listItemPriceRecords(itemId);
       const desiredRows = buildItemPricePayloadRows(itemId, values);
       const desiredIds = new Set(
         desiredRows
-          .map((row) =>
-            typeof row.ipm_unit_rate_id === "string" ? row.ipm_unit_rate_id : "",
-          )
+          .map((row) => (typeof row.ipm_id === "string" ? row.ipm_id : ""))
           .filter(Boolean),
       );
-      const deleteIds = extractLinkedRowIds(existingRows, "ipm_unit_rate_id").filter(
+      const deleteIds = extractLinkedRowIds(existingRows, "ipm_id").filter(
         (existingId) => !desiredIds.has(existingId),
       );
       if (deleteIds.length > 0) {
         await removeItemPrice({
-          body: deleteIds.map((ipmUnitRateId) => ({
-            ipm_unit_rate_id: ipmUnitRateId,
+          body: deleteIds.map((ipmId) => ({
+            ipm_id: ipmId,
           })),
         });
       }
@@ -3511,7 +4612,8 @@ export default function ItemMasterPageContent() {
       const preferredUnitId = toDisplayValue(
         getFieldValue(itemSource, "item_base_unit_id"),
       );
-      const [priceRows, reorderRows, eanRows] = await Promise.all([
+      const [itemUnitConversionRows, priceRows, reorderRows, eanRows] = await Promise.all([
+        listItemUnitConversionRecords(itemId),
         listItemPriceRecords(itemId),
         listItemReorderRecords(itemId),
         listItemEanCodeRecords(itemId),
@@ -3522,9 +4624,26 @@ export default function ItemMasterPageContent() {
         preferredUnitId,
       );
       const managedEanRow = selectManagedItemEanCodeRecord(eanRows, preferredUnitId);
+      const serializedItemUnitConversionRows = syncSerializedItemUnitConversionRows(
+        serializeLinkedRecordRows(
+          itemUnitConversionRows.map((row) =>
+            mapSourceToLinkedRow(
+              row,
+              ITEM_UNIT_CONVERSION_ROW_TEXT_FIELD_NAMES,
+              ITEM_UNIT_CONVERSION_ROW_BOOLEAN_FIELD_NAMES,
+              buildEmptyItemUnitConversionRow(preferredUnitId, 2),
+            ),
+          ),
+        ),
+        {
+          item_base_unit_id: preferredUnitId,
+        },
+      );
       const itemPriceSyncValues: Record<string, string> = {
         item_default_tax_id:
           toDisplayValue(getFieldValue(itemSource, "item_default_tax_id")),
+        item_base_unit_id: preferredUnitId,
+        [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]: serializedItemUnitConversionRows,
         [ITEM_PRICE_ROWS_FIELD_NAME]: "",
       };
       const serializedPriceRows = syncSerializedItemPriceRows(
@@ -3565,6 +4684,7 @@ export default function ItemMasterPageContent() {
         !managedPriceRow &&
         !managedReorderRow &&
         !managedEanRow &&
+        !serializedItemUnitConversionRows &&
         !serializedPriceRows &&
         !serializedReorderRows &&
         !serializedEanRows
@@ -3575,6 +4695,7 @@ export default function ItemMasterPageContent() {
         ...(managedPriceRow ?? {}),
         ...(managedReorderRow ?? {}),
         ...(managedEanRow ?? {}),
+        [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]: serializedItemUnitConversionRows,
         [ITEM_PRICE_ROWS_FIELD_NAME]: serializedPriceRows,
         [ITEM_REORDER_ROWS_FIELD_NAME]: serializedReorderRows,
         [ITEM_EAN_ROWS_FIELD_NAME]: serializedEanRows,
@@ -3583,6 +4704,7 @@ export default function ItemMasterPageContent() {
     },
     [
       itemTaxRecordsById,
+      listItemUnitConversionRecords,
       listItemEanCodeRecords,
       listItemPriceRecords,
       listItemReorderRecords,
@@ -3608,6 +4730,7 @@ export default function ItemMasterPageContent() {
         itemPriceTableColumnsConfig,
         itemReorderTableColumnsConfig,
         itemEanTableColumnsConfig,
+        itemWidgetConfigRecords,
         handleItemGroupSearchChange,
       ),
     [
@@ -3622,6 +4745,7 @@ export default function ItemMasterPageContent() {
       itemOptions,
       itemEanTableColumnsConfig,
       itemTaxRecordsById,
+      itemWidgetConfigRecords,
       itemPriceTableColumnsConfig,
       itemReorderTableColumnsConfig,
       handleItemGroupSearchChange,
@@ -3654,6 +4778,11 @@ export default function ItemMasterPageContent() {
       modalPanelStyle={ITEM_MODAL_PANEL_STYLE}
       modalFormGridColumns={3}
       modalStackLabels
+      modalSectionNavigationMode="tabs"
+      modalHideFieldHelperText
+      modalHideFieldErrorText
+      modalFocusFirstInvalidFieldOnValidationError
+      modalEnableArrowKeyFieldNavigation
       augmentDetailSource={({ recordId, source, rowSource }) =>
         augmentItemDetailSource({
           recordId,
@@ -3674,6 +4803,7 @@ export default function ItemMasterPageContent() {
         if (!savedItemId) {
           return;
         }
+        await syncLinkedItemUnitConversion(savedItemId, values);
         await Promise.all([
           syncLinkedItemPrice(savedItemId, values),
           syncLinkedItemReorder(savedItemId, values),
@@ -3688,6 +4818,7 @@ export default function ItemMasterPageContent() {
           return;
         }
         await Promise.all([
+          deleteLinkedItemUnitConversions(deletedItemId),
           deleteLinkedItemPrices(deletedItemId),
           deleteLinkedItemReorders(deletedItemId),
           deleteLinkedItemEanCodes(deletedItemId),

@@ -125,6 +125,7 @@ const STATE_LOOKUP_NAME_KEYS = ["stateName", "state_name", "name", "label"] as c
 const STATE_LOOKUP_CODE_KEYS = ["id", "value", "stateCode", "state_code", "code"] as const;
 const BRANCH_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(92vw, 60rem)",
+  height: "76vh",
   maxHeight: "76vh",
 };
 const STATUS_CHECKBOX_FIELD_STYLE: CSSProperties = {
@@ -745,6 +746,11 @@ export default function BranchesMasterPage() {
       modalFormGridColumns={3}
       modalFormDenseGrid={false}
       modalStackLabels={true}
+      modalSectionNavigationMode="tabs"
+      modalHideFieldHelperText
+      modalHideFieldErrorText
+      modalFocusFirstInvalidFieldOnValidationError
+      modalEnableArrowKeyFieldNavigation
       mapFormValues={({ source, defaults }) =>
         mapBranchFormValues(source, defaults, stateNameByCode)
       }

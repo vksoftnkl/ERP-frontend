@@ -293,6 +293,13 @@ export function useApi<TResp = unknown, TBody = unknown>(
 
   const abortRef = useRef<AbortController | null>(null);
   const lastRunOverrideRef = useRef<UseApiRunOverride<TBody> | undefined>(undefined);
+  const headersRef = useRef(headers);
+  const defaultBodyRef = useRef(defaultBody);
+  const toastOptionsRef = useRef(toastOptions);
+
+  headersRef.current = headers;
+  defaultBodyRef.current = defaultBody;
+  toastOptionsRef.current = toastOptions;
 
   const run = useCallback(
     async (override?: UseApiRunOverride<TBody>) => {
@@ -309,21 +316,23 @@ export function useApi<TResp = unknown, TBody = unknown>(
       lastRunOverrideRef.current = requestOverride;
       const requestUrl = requestOverride?.url ?? url;
       const loginRequest = isLoginEndpoint(requestUrl);
-      const requestHeaders = buildHeaders(requestUrl, headers);
+      const requestHeaders = buildHeaders(requestUrl, headersRef.current);
       const hasAuthorization = Object.keys(requestHeaders).some(
         (headerName) => headerName.toLowerCase() === "authorization"
       );
+      const activeToastOptions = toastOptionsRef.current;
       const shouldToastSuccess =
-        (toastOptions?.success ?? isMutationMethod(method)) && !loginRequest;
-      const shouldToastError = toastOptions?.error ?? true;
-      const successMessage = toastOptions?.successMessage ?? defaultSuccessMessage(method);
+        (activeToastOptions?.success ?? isMutationMethod(method)) && !loginRequest;
+      const shouldToastError = activeToastOptions?.error ?? true;
+      const successMessage =
+        activeToastOptions?.successMessage ?? defaultSuccessMessage(method);
 
       if (!loginRequest && !hasAuthorization) {
         const message = "Session expired. Please login again.";
         clearAuthSession();
         setError(message);
         if (shouldToastError) {
-          showErrorToast(toastOptions?.errorMessage ?? message);
+          showErrorToast(activeToastOptions?.errorMessage ?? message);
         }
         redirectToLogin();
         throw new Error(message);
@@ -342,7 +351,7 @@ export function useApi<TResp = unknown, TBody = unknown>(
           data:
             method === "GET" || method === "DELETE"
               ? undefined
-              : requestOverride?.body ?? defaultBody ?? {},
+              : requestOverride?.body ?? defaultBodyRef.current ?? {},
           signal: controller.signal,
         });
 
@@ -378,7 +387,7 @@ export function useApi<TResp = unknown, TBody = unknown>(
           }
           setError(message);
           if (shouldToastError) {
-            showErrorToast(toastOptions?.errorMessage ?? message);
+            showErrorToast(activeToastOptions?.errorMessage ?? message);
           }
           throw e;
         }
@@ -386,14 +395,14 @@ export function useApi<TResp = unknown, TBody = unknown>(
         const message = normalizeMessage(e, "Something went wrong");
         setError(message);
         if (shouldToastError) {
-          showErrorToast(toastOptions?.errorMessage ?? message);
+          showErrorToast(activeToastOptions?.errorMessage ?? message);
         }
         throw e;
       } finally {
         setLoading(false);
       }
     },
-    [url, method, headers, defaultBody, toastOptions]
+    [url, method]
   );
 
   useEffect(() => {

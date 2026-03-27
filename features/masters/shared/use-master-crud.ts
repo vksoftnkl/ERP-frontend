@@ -11,6 +11,11 @@ type UseMasterCrudArgs = {
   apiEndpoints: CrudMasterApiEndpoints;
   listArrayKeys?: readonly string[];
   getByIdMethod?: ApiMethod;
+  buildListQuery?: (params: {
+    searchTerm: string;
+    currentPage: number;
+    pageSize: number;
+  }) => Record<string, string>;
   debounceMs?: number;
   defaultPage?: number;
   defaultPageSize?: number;
@@ -25,6 +30,7 @@ export function useMasterCrud({
   apiEndpoints,
   listArrayKeys,
   getByIdMethod = "GET",
+  buildListQuery,
   debounceMs = 300,
   defaultPage = 1,
   defaultPageSize = 20,
@@ -61,13 +67,18 @@ export function useMasterCrud({
   const loadRecords = useCallback(
     async (term: string, page: number, limit: number) => {
       const normalizedTerm = term.trim();
-      const query: Record<string, string> = {
-        page: String(Math.max(1, page)),
-        limit: String(Math.max(1, limit)),
-      };
-      if (normalizedTerm) {
-        query.search = normalizedTerm;
-      }
+      const safePage = Math.max(1, page);
+      const safeLimit = Math.max(1, limit);
+      const query =
+        buildListQuery?.({
+          searchTerm: normalizedTerm,
+          currentPage: safePage,
+          pageSize: safeLimit,
+        }) ?? {
+          page: String(safePage),
+          limit: String(safeLimit),
+          ...(normalizedTerm ? { search: normalizedTerm } : {}),
+        };
       const payload = await getAll(query);
       const normalized = normalizeListResponse(payload, listArrayKeys);
       setTotalEntries(normalized.totalEntries);
@@ -89,7 +100,7 @@ export function useMasterCrud({
       }
       return payload;
     },
-    [defaultPage, defaultPageSize, getAll, listArrayKeys],
+    [buildListQuery, defaultPage, defaultPageSize, getAll, listArrayKeys],
   );
   const reload = useCallback(() => loadRecords(searchTerm, currentPage, pageSize), [
     currentPage,

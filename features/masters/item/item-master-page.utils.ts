@@ -1,5 +1,4 @@
 "use client";
-
 import type { ERPDynamicSelectOption } from "@/components/library/ui/dynamic-modal-form";
 import {
   buildLookupOptions,
@@ -13,22 +12,18 @@ import {
   parseLinkedRecordRows,
   type LinkedRecordColumn,
 } from "./item-linked-records-editor";
-
 export function toSnakeCase(value: string): string {
   return value.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 }
-
 export function getFieldValue(
   source: Record<string, unknown>,
   fieldName: string,
 ): unknown {
   return getFirstDefinedValue(source, [fieldName, toSnakeCase(fieldName)]);
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
-
 export function toOptionalNonNegativeInteger(value: string): number | undefined {
   const normalized = value.trim();
   if (!normalized) {
@@ -40,7 +35,6 @@ export function toOptionalNonNegativeInteger(value: string): number | undefined 
   }
   return Math.floor(parsed);
 }
-
 export function toOptionalNonNegativeNumber(value: string): number | undefined {
   const normalized = value.trim();
   if (!normalized) {
@@ -52,12 +46,10 @@ export function toOptionalNonNegativeNumber(value: string): number | undefined {
   }
   return parsed;
 }
-
 export function toUpperNullable(value: string): string | null {
   const normalized = toUpper(value);
   return normalized ? normalized : null;
 }
-
 export function extractArrayRecords(
   payload: unknown,
   arrayKeys: readonly string[] = DEFAULT_LOOKUP_ARRAY_KEYS,
@@ -84,7 +76,6 @@ export function extractArrayRecords(
   }
   return [];
 }
-
 export function extractResponseRecord(
   payload: unknown,
 ): Record<string, unknown> | null {
@@ -93,16 +84,13 @@ export function extractResponseRecord(
   }
   return isRecord(payload.data) ? payload.data : payload;
 }
-
 export function hasLinkedRows(value: string | undefined): boolean {
   return parseLinkedRecordRows(value ?? "").length > 0;
 }
-
 export function toTrimmedOrUndefined(value: string | undefined): string | undefined {
   const normalized = value?.trim() ?? "";
   return normalized || undefined;
 }
-
 export function toLookupOptions(
   payload: unknown,
   defaultOption: ERPDynamicSelectOption,
@@ -118,7 +106,6 @@ export function toLookupOptions(
     labelKeys: lookupOptions?.labelKeys ?? ["name", "label"],
   }).filter((option) => option.value !== defaultOption.value);
 }
-
 export function toHsnOptions(
   payload: unknown,
   defaultOption: ERPDynamicSelectOption,
@@ -129,7 +116,6 @@ export function toHsnOptions(
     labelKeys: ["name", "label", "hsnCode", "hsn_code"],
   }).filter((option) => option.value !== defaultOption.value);
 }
-
 export function mergeLookupOptionSets(
   currentOptions: ERPDynamicSelectOption[],
   nextOptions: ERPDynamicSelectOption[],
@@ -149,11 +135,9 @@ export function mergeLookupOptionSets(
   }
   return Array.from(merged.values());
 }
-
 function normalizeUiTableColumnName(value: string): string {
   return value.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
 }
-
 function isUiTableColumnConfigRecord(
   value: unknown,
 ): value is Record<string, unknown> {
@@ -166,7 +150,6 @@ function isUiTableColumnConfigRecord(
       toDisplayValue(getFieldValue(value, "uiTblClmTableId")),
   );
 }
-
 function toConfiguredColumnWidth(value: unknown): string | undefined {
   const normalized = toDisplayValue(value);
   if (!normalized) {
@@ -178,7 +161,6 @@ function toConfiguredColumnWidth(value: unknown): string | undefined {
   }
   return `${parsed}px`;
 }
-
 function toConfiguredColumnOrder(
   configuredColumn: Record<string, unknown>,
   fallback: number,
@@ -188,10 +170,8 @@ function toConfiguredColumnOrder(
   );
   const columnNoValue = toDisplayValue(getFieldValue(configuredColumn, "uiTblClmNo"));
   const parsed = Number(positionValue || columnNoValue || String(fallback));
-
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-
 export function extractUiTableColumnConfigRecords(
   payload: unknown,
   tableId: string,
@@ -215,7 +195,6 @@ export function extractUiTableColumnConfigRecords(
     return !rowTableId || rowTableId === normalizedTableId;
   });
 }
-
 export function applyConfiguredLinkedTableColumnConfig<
   TColumnNameToKey extends Record<string, string>,
 >(
@@ -287,7 +266,6 @@ export function applyConfiguredLinkedTableColumnConfig<
   });
   return [...orderedColumns.map((entry) => entry.column), ...remainingColumns];
 }
-
 export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -306,7 +284,6 @@ export function fileToBase64(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
-
 export function assignTextFieldsFromSource(
   target: Record<string, string>,
   source: Record<string, unknown>,
@@ -318,7 +295,6 @@ export function assignTextFieldsFromSource(
     target[fieldName] = value || defaults[fieldName] || "";
   }
 }
-
 export function assignBooleanFieldsFromSource(
   target: Record<string, string>,
   source: Record<string, unknown>,

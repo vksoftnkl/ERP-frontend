@@ -69,6 +69,19 @@ const ACCENT_PRESETS = {
 const DEFAULT_ACCENT = ACCENT_PRESETS.blue;
 const SEARCH_SELECT_LIST_MAX_HEIGHT = 220;
 const SEARCH_SELECT_LIST_OFFSET = 4;
+const FIELD_CONTAINER_SELECTOR = "[data-erp-modal-field-name]";
+const PRIMARY_FIELD_CONTROL_SELECTOR = '[data-erp-modal-field-control="true"]';
+
+type FieldNavigationDirection = "left" | "right" | "up" | "down";
+
+type FocusableFieldTarget = {
+  container: HTMLElement;
+  control: HTMLElement;
+  fieldName: string;
+  rect: DOMRect;
+  centerX: number;
+  centerY: number;
+};
 export type ERPDynamicFieldType =
   | "heading"
   | "custom"
@@ -184,6 +197,7 @@ export type ERPDynamicModalField = {
   render?: (props: ERPDynamicCustomFieldRenderProps) => ReactNode;
 };
 type AccentPreset = keyof typeof ACCENT_PRESETS;
+type ERPDynamicSectionNavigationMode = "accordion" | "tabs";
 export type ERPDynamicModalVariant = {
   key: string;
   cardTitle: string;
@@ -234,6 +248,11 @@ export type ERPDynamicModalFormProps = {
   formGridColumns?: number;
   denseGrid?: boolean;
   stackLabels?: boolean;
+  sectionNavigationMode?: ERPDynamicSectionNavigationMode;
+  hideFieldHelperText?: boolean;
+  hideFieldErrorText?: boolean;
+  focusFirstInvalidFieldOnValidationError?: boolean;
+  enableArrowKeyFieldNavigation?: boolean;
   className?: string;
   cardGridClassName?: string;
 };
@@ -352,6 +371,149 @@ function parseMultiSelectValue(value: string | undefined): string[] {
 }
 function formatMultiSelectValue(values: string[]): string {
   return values.join(",");
+}
+function getFocusableFieldControl(container: HTMLElement): HTMLElement | null {
+  const primaryControl = container.querySelector<HTMLElement>(
+    PRIMARY_FIELD_CONTROL_SELECTOR,
+  );
+  if (primaryControl) {
+    return primaryControl;
+  }
+
+  return container.querySelector<HTMLElement>(
+    [
+      'input:not([type="hidden"]):not([disabled])',
+      "textarea:not([disabled])",
+      "select:not([disabled])",
+      '[role="combobox"][tabindex]:not([tabindex="-1"]):not([aria-disabled="true"])',
+      "button:not([disabled])",
+      '[contenteditable="true"]',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(", "),
+  );
+}
+
+function getFocusableFieldTargets(root: HTMLElement): FocusableFieldTarget[] {
+  const fieldContainers = Array.from(
+    root.querySelectorAll<HTMLElement>(FIELD_CONTAINER_SELECTOR),
+  );
+
+  return fieldContainers
+    .map((container) => {
+      const control = getFocusableFieldControl(container);
+      if (!control || control.getClientRects().length === 0) {
+        return null;
+      }
+
+      const rect = container.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) {
+        return null;
+      }
+
+      const fieldName = container.dataset.erpModalFieldName;
+      if (!fieldName) {
+        return null;
+      }
+
+      return {
+        container,
+        control,
+        fieldName,
+        rect,
+        centerX: rect.left + rect.width / 2,
+        centerY: rect.top + rect.height / 2,
+      };
+    })
+    .filter((target): target is FocusableFieldTarget => target !== null);
+}
+
+function findNextFieldTarget(
+  targets: FocusableFieldTarget[],
+  currentTarget: FocusableFieldTarget,
+  direction: FieldNavigationDirection,
+): FocusableFieldTarget | null {
+  const isHorizontal = direction === "left" || direction === "right";
+  let bestTarget: FocusableFieldTarget | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (const candidate of targets) {
+    if (candidate.fieldName === currentTarget.fieldName) {
+      continue;
+    }
+
+    const primaryDelta = isHorizontal
+      ? candidate.centerX - currentTarget.centerX
+      : candidate.centerY - currentTarget.centerY;
+    const isInDirection =
+      direction === "left" || direction === "up"
+        ? primaryDelta < -6
+        : primaryDelta > 6;
+
+    if (!isInDirection) {
+      continue;
+    }
+
+    const overlap = isHorizontal
+      ? Math.max(
+          0,
+          Math.min(currentTarget.rect.bottom, candidate.rect.bottom) -
+            Math.max(currentTarget.rect.top, candidate.rect.top),
+        )
+      : Math.max(
+          0,
+          Math.min(currentTarget.rect.right, candidate.rect.right) -
+            Math.max(currentTarget.rect.left, candidate.rect.left),
+        );
+    const crossDistance = isHorizontal
+      ? Math.abs(candidate.centerY - currentTarget.centerY)
+      : Math.abs(candidate.centerX - currentTarget.centerX);
+    const score =
+      (overlap > 0 ? 0 : 100000) + Math.abs(primaryDelta) * 100 + crossDistance;
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestTarget = candidate;
+    }
+  }
+
+  return bestTarget;
+}
+
+function getFirstFocusableFieldTarget(
+  root: HTMLElement,
+): FocusableFieldTarget | null {
+  const targets = getFocusableFieldTargets(root);
+  if (targets.length === 0) {
+    return null;
+  }
+
+  return [...targets].sort((left, right) => {
+    const topDifference = left.rect.top - right.rect.top;
+    if (Math.abs(topDifference) > 6) {
+      return topDifference;
+    }
+
+    return left.rect.left - right.rect.left;
+  })[0] ?? null;
+}
+
+function focusFieldControl(control: HTMLElement) {
+  control.focus();
+  if (
+    control instanceof HTMLInputElement ||
+    control instanceof HTMLTextAreaElement
+  ) {
+    try {
+      const selectionIndex = control.value.length;
+      control.setSelectionRange(selectionIndex, selectionIndex);
+    } catch {
+      // Some input types do not support text selection.
+    }
+  }
+  control.scrollIntoView({
+    block: "nearest",
+    inline: "nearest",
+  });
 }
 function validateFieldValue(
   field: ERPDynamicModalField,
@@ -605,6 +767,11 @@ export function ERPDynamicModalForm({
   formGridColumns,
   denseGrid = true,
   stackLabels = false,
+  sectionNavigationMode = "accordion",
+  hideFieldHelperText = false,
+  hideFieldErrorText = false,
+  focusFirstInvalidFieldOnValidationError = false,
+  enableArrowKeyFieldNavigation = false,
   className,
   cardGridClassName,
 }: ERPDynamicModalFormProps) {
@@ -631,11 +798,16 @@ export function ERPDynamicModalForm({
   const [searchDropdownMaxHeight, setSearchDropdownMaxHeight] = useState(
     SEARCH_SELECT_LIST_MAX_HEIGHT,
   );
+  const formRef = useRef<HTMLFormElement | null>(null);
   const [sectionExpandedByVariant, setSectionExpandedByVariant] = useState<
     Record<string, Record<string, boolean>>
   >({});
+  const [activeSectionByVariant, setActiveSectionByVariant] = useState<
+    Record<string, string>
+  >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fieldValueChangeRequestIdsRef = useRef<Record<string, number>>({});
+  const sectionTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const activeVariant = useMemo(
     () => variants.find((variant) => variant.key === activeVariantKey),
     [activeVariantKey, variants],
@@ -686,6 +858,16 @@ export function ERPDynamicModalForm({
         ...current,
         [variantKey]: buildSectionExpandedState(variant.fields, nextFormData),
       }));
+      setActiveSectionByVariant((current) => {
+        const nextSections = buildFormSections(
+          resolveVisibleFields(variant, nextFormData),
+        );
+        const firstSectionKey = nextSections[0]?.heading?.name ?? "section-0";
+        return {
+          ...current,
+          [variantKey]: firstSectionKey,
+        };
+      });
       setIsOpen(true);
       onOpenChange?.(true, variantKey);
     },
@@ -769,7 +951,11 @@ export function ERPDynamicModalForm({
     (variant: ERPDynamicModalVariant, values: Record<string, string>) => {
       const nextErrors: Record<string, string> = {};
       const sectionState = sectionExpandedByVariant[variant.key];
-      for (const field of resolveVisibleFields(variant, values, sectionState)) {
+      const fieldsToValidate =
+        sectionNavigationMode === "tabs"
+          ? resolveVisibleFields(variant, values)
+          : resolveVisibleFields(variant, values, sectionState);
+      for (const field of fieldsToValidate) {
         const fieldError = validateFieldValue(field, values, fileData);
         if (fieldError) {
           nextErrors[field.name] = fieldError;
@@ -777,7 +963,7 @@ export function ERPDynamicModalForm({
       }
       return nextErrors;
     },
-    [fileData, sectionExpandedByVariant],
+    [fileData, sectionExpandedByVariant, sectionNavigationMode],
   );
 
   const activeSectionExpandedState = useMemo(
@@ -786,20 +972,16 @@ export function ERPDynamicModalForm({
     [activeVariant, sectionExpandedByVariant],
   );
 
-  const visibleFields = useMemo(() => {
+  const allVisibleFields = useMemo(() => {
     if (!activeVariant) {
       return [];
     }
-    return resolveVisibleFields(
-      activeVariant,
-      formData,
-      activeSectionExpandedState,
-    );
-  }, [activeSectionExpandedState, activeVariant, formData]);
+    return resolveVisibleFields(activeVariant, formData);
+  }, [activeVariant, formData]);
 
   const visibleSections = useMemo<ERPDynamicFormSection[]>(() => {
-    return buildFormSections(visibleFields);
-  }, [visibleFields]);
+    return buildFormSections(allVisibleFields);
+  }, [allVisibleFields]);
 
   const toggleSectionExpanded = useCallback(
     (sectionName: string) => {
@@ -820,6 +1002,110 @@ export function ERPDynamicModalForm({
     },
     [activeVariant],
   );
+  const tabSections = useMemo(
+    () =>
+      visibleSections.map((section, index) => ({
+        key: section.heading?.name ?? `section-${index}`,
+        label: section.heading?.label ?? `Section ${index + 1}`,
+        section,
+      })),
+    [visibleSections],
+  );
+  const activeSectionKey =
+    activeVariant
+      ? activeSectionByVariant[activeVariant.key] ?? tabSections[0]?.key
+      : undefined;
+  const activeTabSection =
+    sectionNavigationMode === "tabs"
+      ? tabSections.find((section) => section.key === activeSectionKey) ??
+        tabSections[0] ??
+        null
+      : null;
+  const setActiveSection = useCallback(
+    (sectionKey: string) => {
+      if (!activeVariant) {
+        return;
+      }
+      setActiveSectionByVariant((current) => ({
+        ...current,
+        [activeVariant.key]: sectionKey,
+      }));
+    },
+    [activeVariant],
+  );
+  const handleSectionTabKeyDown = useCallback(
+    (
+      event: ReactKeyboardEvent<HTMLButtonElement>,
+      sectionIndex: number,
+      sectionKey: string,
+    ) => {
+      if (sectionNavigationMode !== "tabs" || tabSections.length === 0) {
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        if (activeSectionKey !== sectionKey) {
+          setActiveSection(sectionKey);
+        }
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            const formElement = formRef.current;
+            if (!formElement) {
+              return;
+            }
+
+            const firstFieldTarget = getFirstFocusableFieldTarget(formElement);
+            if (!firstFieldTarget) {
+              return;
+            }
+
+            focusFieldControl(firstFieldTarget.control);
+          });
+        });
+        return;
+      }
+
+      let nextIndex = sectionIndex;
+      if (event.key === "ArrowRight") {
+        nextIndex = (sectionIndex + 1) % tabSections.length;
+      } else if (event.key === "ArrowLeft") {
+        nextIndex = (sectionIndex - 1 + tabSections.length) % tabSections.length;
+      } else if (event.key === "Home") {
+        nextIndex = 0;
+      } else if (event.key === "End") {
+        nextIndex = tabSections.length - 1;
+      } else {
+        return;
+      }
+
+      event.preventDefault();
+      const nextSection = tabSections[nextIndex];
+      if (!nextSection) {
+        return;
+      }
+      setActiveSection(nextSection.key);
+      window.requestAnimationFrame(() => {
+        sectionTabRefs.current[nextSection.key]?.focus();
+      });
+    },
+    [activeSectionKey, sectionNavigationMode, setActiveSection, tabSections],
+  );
+  useEffect(() => {
+    if (sectionNavigationMode !== "tabs" || !activeVariant || tabSections.length === 0) {
+      return;
+    }
+
+    const activeKey = activeSectionByVariant[activeVariant.key];
+    if (activeKey && tabSections.some((section) => section.key === activeKey)) {
+      return;
+    }
+
+    setActiveSectionByVariant((current) => ({
+      ...current,
+      [activeVariant.key]: tabSections[0]?.key ?? "section-0",
+    }));
+  }, [activeSectionByVariant, activeVariant, sectionNavigationMode, tabSections]);
   const applyResolvedFieldErrors = useCallback(
     (errors: Record<string, string | null | undefined>) => {
       setFieldErrors((currentErrors) => {
@@ -951,7 +1237,7 @@ export function ERPDynamicModalForm({
     if (!activeVariant) {
       return;
     }
-    const visibleFieldNames = new Set(visibleFields.map((field) => field.name));
+    const visibleFieldNames = new Set(allVisibleFields.map((field) => field.name));
     setFieldErrors((current) => {
       let changed = false;
       const nextErrors: Record<string, string> = {};
@@ -998,7 +1284,7 @@ export function ERPDynamicModalForm({
       }
       return changed ? nextIndexes : current;
     });
-  }, [activeVariant, visibleFields]);
+  }, [activeVariant, allVisibleFields]);
 
   const handleChange = (
     event: ChangeEvent<
@@ -1028,36 +1314,43 @@ export function ERPDynamicModalForm({
             )
           : target.value;
     const field = activeVariant?.fields.find((item) => item.name === name);
-
     if (isFileInput) {
       setFileData((current) => ({
         ...current,
         [name]: nextFile,
       }));
     }
-
     setFormData((current) => {
       const nextValues = {
         ...current,
         [name]: nextValue,
       };
-
       const nextFiles = isFileInput
         ? {
             ...fileData,
             [name]: nextFile,
           }
         : fileData;
-
       if (field) {
         revalidateFieldNames([name], nextValues, nextFiles);
         runFieldValueChangeHandler(field, nextValue, nextValues, current);
       }
-
       return nextValues;
     });
   };
-
+  const handleCheckboxKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+      if (event.currentTarget.disabled) {
+        return;
+      }
+      event.currentTarget.click();
+    },
+    [],
+  );
   const handleSearchableSelectInput = useCallback(
     (field: ERPDynamicModalField, query: string) => {
       const fieldName = field.name;
@@ -1079,11 +1372,9 @@ export function ERPDynamicModalForm({
           // Search option refresh is optional and caller-owned.
         });
       }
-
     },
     [],
   );
-
   const handleSearchableSelectChoose = useCallback(
     (field: ERPDynamicModalField, option: ERPDynamicSelectOption) => {
       const fieldName = field.name;
@@ -1102,17 +1393,14 @@ export function ERPDynamicModalForm({
               return formatMultiSelectValue(updatedValues);
             })()
           : option.value;
-
         const nextValues = {
           ...current,
           [fieldName]: nextFieldValue,
         };
         revalidateFieldNames([fieldName], nextValues, fileData);
         runFieldValueChangeHandler(field, nextFieldValue, nextValues, current);
-
         return nextValues;
       });
-
       setSearchQueries((current) => {
         if (isMultipleSelect) {
           return {
@@ -1120,7 +1408,6 @@ export function ERPDynamicModalForm({
             [fieldName]: "",
           };
         }
-
         const nextState = { ...current };
         delete nextState[fieldName];
         return nextState;
@@ -1137,7 +1424,6 @@ export function ERPDynamicModalForm({
     },
     [fileData, revalidateFieldNames, runFieldValueChangeHandler],
   );
-
   const handleSearchableSelectKeyDown = useCallback(
     (
       field: ERPDynamicModalField,
@@ -1186,7 +1472,6 @@ export function ERPDynamicModalForm({
         searchActiveOptionIndex[fieldName] !== undefined
           ? searchActiveOptionIndex[fieldName]
           : -1;
-
       const clearActiveIndex = () => {
         setSearchActiveOptionIndex((current) => {
           if (!(fieldName in current)) {
@@ -1197,7 +1482,6 @@ export function ERPDynamicModalForm({
           return nextState;
         });
       };
-
       if (
         event.key === "ArrowDown" ||
         event.key === "ArrowUp" ||
@@ -1205,7 +1489,6 @@ export function ERPDynamicModalForm({
         event.key === "End"
       ) {
         event.preventDefault();
-
         if (!isSearchOpen) {
           setOpenSearchField(fieldName);
         }
@@ -1213,7 +1496,6 @@ export function ERPDynamicModalForm({
           clearActiveIndex();
           return;
         }
-
         const selectedIndex = isMultipleSelect
           ? -1
           : filteredOptions.findIndex((option) => option.value === fieldValue);
@@ -1222,7 +1504,6 @@ export function ERPDynamicModalForm({
             ? currentIndex
             : selectedIndex;
         let nextIndex = baseIndex;
-
         if (event.key === "ArrowDown") {
           nextIndex = baseIndex + 1;
         } else if (event.key === "ArrowUp") {
@@ -1232,27 +1513,23 @@ export function ERPDynamicModalForm({
         } else if (event.key === "End") {
           nextIndex = optionCount - 1;
         }
-
         if (nextIndex < 0) {
           nextIndex = optionCount - 1;
         } else if (nextIndex >= optionCount) {
           nextIndex = 0;
         }
-
         setSearchActiveOptionIndex((current) => ({
           ...current,
           [fieldName]: nextIndex,
         }));
         return;
       }
-
       if (event.key === "Enter") {
         if (!isSearchOpen) {
           event.preventDefault();
           setOpenSearchField(fieldName);
           return;
         }
-
         event.preventDefault();
         if (optionCount === 0) {
           return;
@@ -1272,7 +1549,6 @@ export function ERPDynamicModalForm({
         }
         return;
       }
-
       if (event.key === " " && !isSearchOpen) {
         const target = event.currentTarget;
         if (target instanceof HTMLDivElement) {
@@ -1281,14 +1557,12 @@ export function ERPDynamicModalForm({
           return;
         }
       }
-
       if (event.key === "Escape" && isSearchOpen) {
         event.preventDefault();
         setOpenSearchField(null);
         clearActiveIndex();
         return;
       }
-
       if (event.key === "Tab" && isSearchOpen) {
         clearActiveIndex();
       }
@@ -1301,19 +1575,16 @@ export function ERPDynamicModalForm({
       searchQueries,
     ],
   );
-
   const updateSearchDropdownLayout = useCallback((fieldName: string) => {
     const fieldContainer = searchSelectRefs.current[fieldName];
     if (!fieldContainer) {
       return;
     }
-
     const scrollContainer = fieldContainer.closest<HTMLElement>(
       '[data-erp-modal-scroll-area="true"]',
     );
     const fieldRect = fieldContainer.getBoundingClientRect();
     const scrollRect = scrollContainer?.getBoundingClientRect();
-
     const boundaryTop = scrollRect?.top ?? 0;
     const boundaryBottom = scrollRect?.bottom ?? window.innerHeight;
     const spaceBelow = Math.max(
@@ -1331,32 +1602,26 @@ export function ERPDynamicModalForm({
       0,
       Math.min(SEARCH_SELECT_LIST_MAX_HEIGHT, Math.floor(availableSpace)),
     );
-
     setSearchDropdownPlacement(shouldOpenUp ? "up" : "down");
     setSearchDropdownMaxHeight(
       nextMaxHeight > 0 ? nextMaxHeight : SEARCH_SELECT_LIST_MAX_HEIGHT,
     );
   }, []);
-
   useEffect(() => {
     if (!openSearchField) {
       return;
     }
-
     const fieldName = openSearchField;
     const runLayoutUpdate = () => updateSearchDropdownLayout(fieldName);
     runLayoutUpdate();
-
     const fieldContainer = searchSelectRefs.current[fieldName];
     const scrollContainer = fieldContainer?.closest<HTMLElement>(
       '[data-erp-modal-scroll-area="true"]',
     );
-
     window.addEventListener("resize", runLayoutUpdate);
     scrollContainer?.addEventListener("scroll", runLayoutUpdate, {
       passive: true,
     });
-
     return () => {
       window.removeEventListener("resize", runLayoutUpdate);
       scrollContainer?.removeEventListener("scroll", runLayoutUpdate);
@@ -1366,12 +1631,10 @@ export function ERPDynamicModalForm({
     if (!openSearchField) {
       return;
     }
-
     const input = searchInputRefs.current[openSearchField];
     if (!input) {
       return;
     }
-
     window.requestAnimationFrame(() => {
       input.focus();
       input.select();
@@ -1381,7 +1644,6 @@ export function ERPDynamicModalForm({
     if (!openSearchField) {
       return;
     }
-
     const handleOutsidePointerDown = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) {
@@ -1401,28 +1663,66 @@ export function ERPDynamicModalForm({
         return nextState;
       });
     };
-
     document.addEventListener("mousedown", handleOutsidePointerDown);
     return () => {
       document.removeEventListener("mousedown", handleOutsidePointerDown);
     };
   }, [openSearchField]);
-
+  const focusFirstInvalidField = useCallback(
+    (
+      variant: ERPDynamicModalVariant,
+      values: Record<string, string>,
+      validationErrors: Record<string, string>,
+    ) => {
+      const [firstErrorFieldName] = Object.keys(validationErrors);
+      if (!firstErrorFieldName) {
+        return;
+      }
+      if (sectionNavigationMode === "tabs") {
+        const nextSections = buildFormSections(resolveVisibleFields(variant, values));
+        const matchingSection = nextSections.find((section) =>
+          section.fields.some((field) => field.name === firstErrorFieldName),
+        );
+        if (matchingSection) {
+          setActiveSectionByVariant((current) => ({
+            ...current,
+            [variant.key]: matchingSection.heading?.name ?? "section-0",
+          }));
+        }
+      }
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const element = document.getElementById(
+            `erp-modal-form-${variant.key}-${firstErrorFieldName}`,
+          );
+          if (!(element instanceof HTMLElement)) {
+            return;
+          }
+          element.focus();
+          element.scrollIntoView({
+            block: "nearest",
+            inline: "nearest",
+          });
+        });
+      });
+    },
+    [sectionNavigationMode],
+  );
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!activeVariant || isSubmitting) {
       return;
     }
-
     const validationErrors = validateVariant(activeVariant, formData);
     if (Object.keys(validationErrors).length > 0) {
       setFieldErrors(validationErrors);
       onValidationError?.(validationErrors, activeVariant.key);
+      if (focusFirstInvalidFieldOnValidationError) {
+        focusFirstInvalidField(activeVariant, formData, validationErrors);
+      }
       return;
     }
-
     setIsSubmitting(true);
-
     try {
       await onSubmit?.({
         variantKey: activeVariant.key,
@@ -1431,13 +1731,11 @@ export function ERPDynamicModalForm({
         files: fileData,
         sectionExpandedState: activeSectionExpandedState ?? {},
       });
-
       if (resetOnSubmit) {
         setFormData(buildInitialValues(activeVariant, initialValuesByVariant));
         setFileData({});
         setFieldErrors({});
       }
-
       if (closeOnSubmit) {
         closeModal();
       }
@@ -1447,7 +1745,6 @@ export function ERPDynamicModalForm({
       setIsSubmitting(false);
     }
   };
-
   const handleCancel = () => {
     if (!activeVariant) {
       closeModal();
@@ -1456,6 +1753,80 @@ export function ERPDynamicModalForm({
     onCancel?.(activeVariant.key);
     closeModal();
   };
+  const handleFieldArrowNavigation = useCallback(
+    (event: ReactKeyboardEvent<HTMLFormElement>) => {
+      if (
+        !enableArrowKeyFieldNavigation ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+      const direction =
+        event.key === "ArrowLeft"
+          ? "left"
+          : event.key === "ArrowRight"
+            ? "right"
+            : event.key === "ArrowUp"
+              ? "up"
+              : event.key === "ArrowDown"
+                ? "down"
+                : null;
+
+      if (!direction) {
+        return;
+      }
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      if (
+        target.closest('[data-erp-modal-search-dropdown="true"]') ||
+        target.getAttribute("role") === "searchbox"
+      ) {
+        return;
+      }
+      const currentContainer = target.closest<HTMLElement>(FIELD_CONTAINER_SELECTOR);
+      if (!currentContainer) {
+        return;
+      }
+      if (currentContainer.dataset.erpModalFieldType === "custom") {
+        return;
+      }
+      const formElement = formRef.current;
+      if (!formElement) {
+        return;
+      }
+      const targets = getFocusableFieldTargets(formElement);
+      const currentFieldName = currentContainer.dataset.erpModalFieldName;
+      const currentFieldTarget = currentFieldName
+        ? targets.find((entry) => entry.fieldName === currentFieldName)
+        : undefined;
+      if (!currentFieldTarget) {
+        return;
+      }
+      const nextTarget = findNextFieldTarget(targets, currentFieldTarget, direction);
+      if (!nextTarget) {
+        if (
+          direction === "up" &&
+          sectionNavigationMode === "tabs" &&
+          activeSectionKey
+        ) {
+          const activeTab = sectionTabRefs.current[activeSectionKey];
+          if (activeTab) {
+            event.preventDefault();
+            activeTab.focus();
+          }
+        }
+        return;
+      }
+      event.preventDefault();
+      focusFieldControl(nextTarget.control);
+    },
+    [activeSectionKey, enableArrowKeyFieldNavigation, sectionNavigationMode],
+  );
   if (variants.length === 0) {
     return null;
   }
@@ -1485,7 +1856,6 @@ export function ERPDynamicModalForm({
     }
     return Object.keys(styles).length > 0 ? styles : undefined;
   })();
-
   const getSectionGridStyle = (
     heading: ERPDynamicModalField | null,
   ): CSSProperties | undefined => {
@@ -1504,7 +1874,6 @@ export function ERPDynamicModalForm({
     }
     return Object.keys(styles).length > 0 ? styles : undefined;
   };
-
   const renderField = (
     field: ERPDynamicModalField,
     sectionRowStartOffset?: number | null,
@@ -1513,11 +1882,9 @@ export function ERPDynamicModalForm({
     const selectedFile = fileData[field.name] ?? null;
     const fieldError = fieldErrors[field.name];
     const inputType = field.type ?? "text";
-
     if (inputType === "heading") {
       return null;
     }
-
     const isMultiSelect = inputType === "select" && field.multiple;
     const selectedValues = isMultiSelect
       ? parseMultiSelectValue(fieldValue)
@@ -1570,11 +1937,12 @@ export function ERPDynamicModalForm({
       isSearchOpen && highlightedOptionIndex >= 0
         ? `${controlId}-search-option-${highlightedOptionIndex}`
         : undefined;
-    const helpId = field.helperText
+    const helpId = !hideFieldHelperText && field.helperText
       ? `${controlId}-help`
       : undefined;
     const fileId = selectedFile ? `${controlId}-file` : undefined;
-    const errorId = fieldError ? `${controlId}-error` : undefined;
+    const errorId =
+      fieldError && !hideFieldErrorText ? `${controlId}-error` : undefined;
     const describedBy =
       [helpId, fileId, errorId].filter(Boolean).join(" ") ||
       undefined;
@@ -1588,26 +1956,22 @@ export function ERPDynamicModalForm({
       "aria-invalid": fieldError ? true : undefined,
       "aria-describedby": describedBy,
     };
-
     const setCustomValue = (nextValue: string) => {
       setFormData((current) => {
         const nextValues = {
           ...current,
           [field.name]: nextValue,
         };
-
         revalidateFieldNames([field.name], nextValues, fileData);
         runFieldValueChangeHandler(field, nextValue, nextValues, current);
         return nextValues;
       });
     };
-
     const setCustomError = (message: string | null | undefined) => {
       applyResolvedFieldErrors({
         [field.name]: message,
       });
     };
-
     const normalizedGridRowStart =
       field.gridRowStart !== undefined
         ? Math.max(
@@ -1616,10 +1980,11 @@ export function ERPDynamicModalForm({
               Math.max(0, (sectionRowStartOffset ?? 1) - 1),
           )
         : undefined;
-
     return (
       <div
         key={field.name}
+        data-erp-modal-field-name={field.name}
+        data-erp-modal-field-type={inputType}
         className={cx(
           styles.field,
           stackLabels &&
@@ -1671,6 +2036,8 @@ export function ERPDynamicModalForm({
             }}
           >
             <div
+              id={controlId}
+              data-erp-modal-field-control="true"
               className={cx(
                 styles.searchSelectTrigger,
                 isMultiSelect && styles.searchMultiSelectControl,
@@ -1683,6 +2050,8 @@ export function ERPDynamicModalForm({
               aria-expanded={isSearchOpen}
               aria-controls={`${controlId}-search-list`}
               aria-activedescendant={activeDescendantId}
+              aria-invalid={fieldError ? true : undefined}
+              aria-describedby={describedBy}
               aria-disabled={
                 field.disabled || isSubmitting ? true : undefined
               }
@@ -1796,6 +2165,7 @@ export function ERPDynamicModalForm({
             {isSearchOpen && !field.disabled ? (
               <div
                 id={`${controlId}-search-list`}
+                data-erp-modal-search-dropdown="true"
                 className={cx(
                   styles.searchSelectList,
                   searchDropdownPlacement === "up" &&
@@ -1936,6 +2306,7 @@ export function ERPDynamicModalForm({
         ) : inputType === "select" ? (
           <select
             {...commonProps}
+            data-erp-modal-field-control="true"
             value={fieldValue}
             multiple={isMultiSelect}
             className={cx(
@@ -1963,7 +2334,9 @@ export function ERPDynamicModalForm({
             <input
               {...commonProps}
               type="checkbox"
+              data-erp-modal-field-control="true"
               autoComplete="off"
+              onKeyDown={handleCheckboxKeyDown}
               checked={fieldValue === "true"}
               className={cx(
                 styles.checkboxControl,
@@ -1981,6 +2354,7 @@ export function ERPDynamicModalForm({
         ) : inputType === "textarea" ? (
           <textarea
             {...commonProps}
+            data-erp-modal-field-control="true"
             value={fieldValue}
             rows={field.rows ?? 4}
             autoComplete="off"
@@ -1996,6 +2370,7 @@ export function ERPDynamicModalForm({
             <input
               {...commonProps}
               type="file"
+              data-erp-modal-field-control="true"
               autoComplete="off"
               accept={field.accept}
               className={cx(
@@ -2014,6 +2389,7 @@ export function ERPDynamicModalForm({
         ) : (
           <input
             {...commonProps}
+            data-erp-modal-field-control="true"
             value={
               inputType === "color"
                 ? fieldValue || "#000000"
@@ -2032,12 +2408,12 @@ export function ERPDynamicModalForm({
             style={field.controlStyle}
           />
         )}
-        {field.helperText ? (
+        {!hideFieldHelperText && field.helperText ? (
           <p id={helpId} className={styles.helpText}>
             {field.helperText}
           </p>
         ) : null}
-        {fieldError ? (
+        {!hideFieldErrorText && fieldError ? (
           <p id={errorId} className={styles.errorText}>
             {fieldError}
           </p>
@@ -2154,74 +2530,123 @@ export function ERPDynamicModalForm({
               ref={scrollAreaRef}
               data-erp-modal-scroll-area="true"
             >
+              {sectionNavigationMode === "tabs" && tabSections.length > 0 ? (
+                <div className={styles.sectionTabs} role="tablist" aria-label="Form sections">
+                  {tabSections.map((section, sectionIndex) => (
+                    <button
+                      key={section.key}
+                      ref={(element) => {
+                        sectionTabRefs.current[section.key] = element;
+                      }}
+                      type="button"
+                      role="tab"
+                      aria-selected={section.key === activeSectionKey}
+                      aria-controls={`${formId}-${section.key}-panel`}
+                      id={`${formId}-${section.key}-tab`}
+                      tabIndex={section.key === activeSectionKey ? 0 : -1}
+                      className={cx(
+                        styles.sectionTab,
+                        section.key === activeSectionKey && styles.sectionTabActive,
+                      )}
+                      onClick={() => setActiveSection(section.key)}
+                      onKeyDown={(event) =>
+                        handleSectionTabKeyDown(event, sectionIndex, section.key)
+                      }
+                    >
+                      {section.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <form
                 id={formId}
+                ref={formRef}
                 onSubmit={handleSubmit}
+                onKeyDown={handleFieldArrowNavigation}
                 noValidate
                 autoComplete="off"
                 className={styles.formGrid}
                 style={formGridStyle}
               >
-                {visibleSections.map((section, sectionIndex) => {
-                  const heading = section.heading;
-                  const sectionKey = heading?.name ?? `section-${sectionIndex}`;
-                  const sectionRowStartOffset = getSectionRowStartOffset(
-                    section.fields,
-                  );
-                  const sectionExpanded = heading
-                    ? (activeSectionExpandedState?.[heading.name] ?? true)
-                    : true;
-                  const sectionToggleId = heading
-                    ? `${formId}-${heading.name}-section-toggle`
-                    : undefined;
+                {sectionNavigationMode === "tabs" ? (
+                  activeTabSection ? (
+                    <div
+                      id={`${formId}-${activeTabSection.key}-panel`}
+                      role="tabpanel"
+                      aria-labelledby={`${formId}-${activeTabSection.key}-tab`}
+                      className={styles.sectionFields}
+                      style={getSectionGridStyle(activeTabSection.section.heading)}
+                    >
+                      {activeTabSection.section.fields.map((field) =>
+                        renderField(
+                          field,
+                          getSectionRowStartOffset(activeTabSection.section.fields),
+                        ),
+                      )}
+                    </div>
+                  ) : null
+                ) : (
+                  visibleSections.map((section, sectionIndex) => {
+                    const heading = section.heading;
+                    const sectionKey = heading?.name ?? `section-${sectionIndex}`;
+                    const sectionRowStartOffset = getSectionRowStartOffset(
+                      section.fields,
+                    );
+                    const sectionExpanded = heading
+                      ? (activeSectionExpandedState?.[heading.name] ?? true)
+                      : true;
+                    const sectionToggleId = heading
+                      ? `${formId}-${heading.name}-section-toggle`
+                      : undefined;
 
-                  return (
-                    <Fragment key={sectionKey}>
-                      {heading ? (
-                        <div
-                          className={cx(
-                            styles.field,
-                            styles.fieldWide,
-                            styles.sectionHeadingField,
-                          )}
-                        >
-                          <label
-                            className={styles.sectionToggle}
-                            htmlFor={sectionToggleId}
+                    return (
+                      <Fragment key={sectionKey}>
+                        {heading ? (
+                          <div
+                            className={cx(
+                              styles.field,
+                              styles.fieldWide,
+                              styles.sectionHeadingField,
+                            )}
                           >
-                            <input
-                              id={sectionToggleId}
-                              type="checkbox"
-                              autoComplete="off"
-                              className={styles.sectionToggleInput}
-                              checked={sectionExpanded}
-                              disabled={isSubmitting}
-                              onChange={() => toggleSectionExpanded(heading.name)}
-                            />
-                            <span className={styles.sectionHeading}>
-                              {heading.label}
-                            </span>
-                          </label>
-                          {heading.helperText ? (
-                            <p className={styles.sectionHeadingDescription}>
-                              {heading.helperText}
-                            </p>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      {sectionExpanded ? (
-                        <div
-                          className={styles.sectionFields}
-                          style={getSectionGridStyle(heading)}
-                        >
-                          {section.fields.map((field) =>
-                            renderField(field, sectionRowStartOffset),
-                          )}
-                        </div>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
+                            <label
+                              className={styles.sectionToggle}
+                              htmlFor={sectionToggleId}
+                            >
+                              <input
+                                id={sectionToggleId}
+                                type="checkbox"
+                                autoComplete="off"
+                                className={styles.sectionToggleInput}
+                                checked={sectionExpanded}
+                                disabled={isSubmitting}
+                                onChange={() => toggleSectionExpanded(heading.name)}
+                              />
+                              <span className={styles.sectionHeading}>
+                                {heading.label}
+                              </span>
+                            </label>
+                            {heading.helperText ? (
+                              <p className={styles.sectionHeadingDescription}>
+                                {heading.helperText}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {sectionExpanded ? (
+                          <div
+                            className={styles.sectionFields}
+                            style={getSectionGridStyle(heading)}
+                          >
+                            {section.fields.map((field) =>
+                              renderField(field, sectionRowStartOffset),
+                            )}
+                          </div>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })
+                )}
               </form>
             </div>
 

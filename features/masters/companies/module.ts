@@ -131,6 +131,7 @@ const APPLICABILITY_CHECKBOX_FIELD_STYLE: CSSProperties = {
 };
 const COMPANY_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(92vw, 70rem)",
+  height: "86vh",
   maxHeight: "86vh",
 };
 const COMPANY_STANDARD_FIELD_NAMES = [
@@ -1023,6 +1024,11 @@ export function useCompaniesModule() {
         modalFormGridColumns: 3,
         modalFormDenseGrid: false,
         modalStackLabels: true,
+        modalSectionNavigationMode: "tabs",
+        modalHideFieldHelperText: true,
+        modalHideFieldErrorText: true,
+        modalFocusFirstInvalidFieldOnValidationError: true,
+        modalEnableArrowKeyFieldNavigation: true,
         mapFormValues: ({ source, defaults }) =>
           mapCompanyFormValues(source, defaults, stateNameByCode),
         buildRequestPayload: ({

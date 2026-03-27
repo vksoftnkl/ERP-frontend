@@ -50,7 +50,7 @@ export type ParsedLinkedRecordRowsResult = {
 export const SEARCH_SELECT_VIEWPORT_PADDING = 12;
 export const SEARCH_SELECT_OFFSET = 4;
 
-const ROW_ID_KEYS = ["ipm_unit_rate_id", "ir_id", "ean_id"] as const;
+const ROW_ID_KEYS = ["iuc_id", "ipm_id", "ir_id", "ean_id"] as const;
 
 function toStringValue(value: unknown): string {
   if (typeof value === "string") {

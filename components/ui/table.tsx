@@ -53,6 +53,7 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   rows: T[];
   rowKey: RowKeyResolver<T>;
   title?: ReactNode;
+  toolbarContent?: ReactNode;
   fullViewHeight?: boolean;
   minWidth?: string;
   activeRowIndex?: number;
@@ -383,6 +384,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   rows,
   rowKey,
   title,
+  toolbarContent,
   fullViewHeight = true,
   minWidth = "min(980px, 100%)",
   activeRowIndex,
@@ -556,7 +558,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
     const set = new Set<number>([...pageSizeOptions, effectivePageSize].filter((option) => option > 0));
     return Array.from(set).sort((left, right) => left - right);
   }, [effectivePageSize, pageSizeOptions]);
-  const showToolbar = Boolean(title || searchable || onCreate);
+  const showToolbar = Boolean(title || toolbarContent || searchable || onCreate);
   const renderedRowCount = Math.max(1, paginatedRows.length);
   const compactViewportRowThreshold = paginated ? effectivePageSize : 8;
   const shouldUseCompactViewport =
@@ -795,6 +797,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
       {showToolbar ? (
         <div className={styles.toolbar}>
           {title ? <h3 className={styles.toolbarTitle}>{title}</h3> : null}
+          {toolbarContent ? <div className={styles.toolbarContent}>{toolbarContent}</div> : null}
           {searchable || onCreate ? (
             <div className={styles.tableTools}>
               {searchable ? (

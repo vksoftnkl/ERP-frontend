@@ -163,6 +163,8 @@ type MasterTableRow = {
   position: string;
 };
 
+export type CrudMasterTableRow = MasterTableRow;
+
 type MasterColumnAccessor =
   | "serialNo"
   | "masterCode"
@@ -275,6 +277,8 @@ export type CrudMasterPageProps = {
   nameColumnHeader?: string;
   tableColumnHeaders?: CrudMasterTableColumnHeaders;
   tableColumnLayout?: CrudMasterTableColumnLayout;
+  customTableColumns?: ReusableTableColumn<MasterTableRow>[];
+  toolbarContent?: ReactNode;
   listResponseStyleColumns?: CrudMasterListResponseStyleColumn[];
   listResponseStyleArrayKey?: string;
   nameFieldLabel?: string;
@@ -287,10 +291,21 @@ export type CrudMasterPageProps = {
   modalFormGridColumns?: number;
   modalFormDenseGrid?: boolean;
   modalStackLabels?: boolean;
+  modalSectionNavigationMode?: "accordion" | "tabs";
+  modalHideFieldHelperText?: boolean;
+  modalHideFieldErrorText?: boolean;
+  modalFocusFirstInvalidFieldOnValidationError?: boolean;
+  modalEnableArrowKeyFieldNavigation?: boolean;
   gridDetailId?: number;
   gridTableName?: string;
   gridTableNameAliases?: readonly string[];
   getByIdMethod?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  buildListQuery?: (params: {
+    searchTerm: string;
+    currentPage: number;
+    pageSize: number;
+  }) => Record<string, string>;
+  listStateResetKey?: string | number | null;
   buildGetByIdRequest?: (params: {
     recordId: string | number;
     action: "view" | "update";
@@ -1409,6 +1424,8 @@ export default function CrudMasterPage({
   nameColumnHeader,
   tableColumnHeaders,
   tableColumnLayout,
+  customTableColumns,
+  toolbarContent,
   listResponseStyleColumns,
   listResponseStyleArrayKey,
   nameFieldLabel,
@@ -1421,10 +1438,17 @@ export default function CrudMasterPage({
   modalFormGridColumns,
   modalFormDenseGrid,
   modalStackLabels,
+  modalSectionNavigationMode,
+  modalHideFieldHelperText,
+  modalHideFieldErrorText,
+  modalFocusFirstInvalidFieldOnValidationError,
+  modalEnableArrowKeyFieldNavigation,
   gridDetailId,
   gridTableName,
   gridTableNameAliases,
   getByIdMethod,
+  buildListQuery,
+  listStateResetKey,
   buildGetByIdRequest,
   mapFormValues,
   augmentDetailSource,
@@ -1472,6 +1496,7 @@ export default function CrudMasterPage({
     apiEndpoints,
     listArrayKeys: lookupKeys.array ?? DEFAULT_ARRAY_KEYS,
     getByIdMethod: getByIdMethod ?? "GET",
+    buildListQuery,
     debounceMs: DEBOUNCE_MS,
     defaultPage: DEFAULT_PAGE,
     defaultPageSize: DEFAULT_PAGE_SIZE,
@@ -1662,12 +1687,15 @@ export default function CrudMasterPage({
 
   const columns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
     () =>
-      listResponseColumns.length > 0
-        ? listResponseColumns
-        : normalizedGridTableNames.length > 0
-        ? buildColumnsFromGridColumns(gridColumns, lookupKeys, fallbackColumns)
-        : fallbackColumns,
+      customTableColumns && customTableColumns.length > 0
+        ? customTableColumns
+        : listResponseColumns.length > 0
+          ? listResponseColumns
+          : normalizedGridTableNames.length > 0
+            ? buildColumnsFromGridColumns(gridColumns, lookupKeys, fallbackColumns)
+            : fallbackColumns,
     [
+      customTableColumns,
       fallbackColumns,
       gridColumns,
       listResponseColumns,
@@ -1684,6 +1712,24 @@ export default function CrudMasterPage({
   );
   const [pendingDeleteRow, setPendingDeleteRow] =
     useState<MasterTableRow | null>(null);
+  const previousListStateResetKeyRef = useRef<string | number | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (listStateResetKey === undefined) {
+      previousListStateResetKeyRef.current = undefined;
+      return;
+    }
+
+    if (previousListStateResetKeyRef.current === undefined) {
+      previousListStateResetKeyRef.current = listStateResetKey;
+      return;
+    }
+
+    if (previousListStateResetKeyRef.current !== listStateResetKey) {
+      previousListStateResetKeyRef.current = listStateResetKey;
+      setCurrentPage(DEFAULT_PAGE);
+    }
+  }, [listStateResetKey, setCurrentPage]);
 
   useEffect(() => {
     if (selectedRowId === null) {
@@ -2223,11 +2269,12 @@ export default function CrudMasterPage({
                   ? `${gridDisplayName} List`
                   : listTitle ?? `${title} List`
               }
+              toolbarContent={toolbarContent}
               minWidth="980px"
               activeRowKey={selectedRowId}
               onRowClick={(row) => setSelectedRowId(row.__rowId)}
               onCreate={openCreateModal}
-              createLabel="Add"
+              createLabel={createLabel ?? "Add"}
               onView={handleRowView}
               onUpdate={handleRowUpdate}
               onDelete={handleRowDelete}
@@ -2280,6 +2327,13 @@ export default function CrudMasterPage({
         formGridColumns={modalFormGridColumns}
         denseGrid={modalFormDenseGrid}
         stackLabels={modalStackLabels}
+        sectionNavigationMode={modalSectionNavigationMode}
+        hideFieldHelperText={modalHideFieldHelperText}
+        hideFieldErrorText={modalHideFieldErrorText}
+        focusFirstInvalidFieldOnValidationError={
+          modalFocusFirstInvalidFieldOnValidationError
+        }
+        enableArrowKeyFieldNavigation={modalEnableArrowKeyFieldNavigation}
         onControllerReady={(controller) => {
           modalControllerRef.current = controller;
         }}

@@ -49,6 +49,7 @@ const API_ENDPOINTS = {
 const GRID_TABLE_NAME = "suppliers";
 const CUSTOMER_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(62vw, 62rem)",
+  height: "75vh",
   maxHeight: "75vh",
 };
 const SUPPLIER_GROUP_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
@@ -1607,6 +1608,11 @@ export default function SuppliersMasterPage() {
         modalPanelStyle={CUSTOMER_MODAL_PANEL_STYLE}
         modalFormGridColumns={3}
         modalStackLabels
+        modalSectionNavigationMode="tabs"
+        modalHideFieldHelperText
+        modalHideFieldErrorText
+        modalFocusFirstInvalidFieldOnValidationError
+        modalEnableArrowKeyFieldNavigation
         formTitle="Supplier Form"
         formDescription="Create and update suppliers."
         customFields={supplierFormFields}

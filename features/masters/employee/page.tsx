@@ -35,6 +35,7 @@ const UUID_PATTERN = "^[0-9a-fA-F-]{36}$";
 
 const EMPLOYEE_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(92vw, 62rem)",
+  height: "75vh",
   maxHeight: "75vh",
 };
 const FILE_CONSTRAINTS = {
@@ -804,6 +805,11 @@ export default function EmployeeMasterPage() {
       modalFormGridColumns={3}
       modalFormDenseGrid={false}
       modalStackLabels
+      modalSectionNavigationMode="tabs"
+      modalHideFieldHelperText
+      modalHideFieldErrorText
+      modalFocusFirstInvalidFieldOnValidationError
+      modalEnableArrowKeyFieldNavigation
       mapFormValues={({ source, defaults }) =>
         mapEmployeeFormValues(source, defaults)
       }

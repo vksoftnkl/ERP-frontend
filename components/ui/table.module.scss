@@ -41,6 +41,12 @@
       letter-spacing: -0.02em;
       line-height: 1.2;
     }
+    .toolbarContent {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.85rem;
+      align-items: center;
+    }
     .tableTools {
       min-height: 44px;
       display: flex;
@@ -590,6 +596,9 @@
   .tableShell {
     border-radius: 14px;
     .toolbar {
+      .toolbarContent {
+        width: 100%;
+      }
       .tableTools {
         justify-content: flex-start;
       }
@@ -634,6 +643,9 @@
     box-shadow: 0 14px 30px rgba(15, 35, 60, 0.08);
     .toolbar {
       padding: 0.95rem;
+      .toolbarContent {
+        width: 100%;
+      }
       .tableTools {
         align-items: stretch;
         .searchField,
