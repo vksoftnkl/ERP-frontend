@@ -3,7 +3,6 @@ export type ItemPriceTaxContext = {
   cessQty: number;
   gstPerc: number;
 };
-
 export type ItemFormDefaults = {
   masterAlias: string;
   masterDescription: string;
@@ -12,7 +11,6 @@ export type ItemFormDefaults = {
   position: string;
   searchCode: string;
 };
-
 export type BuildItemRequestPayloadArgs = {
   editingItemId: string | number | null;
   files: Record<string, File | null>;

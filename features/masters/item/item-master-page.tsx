@@ -1762,6 +1762,36 @@ function normalizeComparisonInteger(value: unknown): string {
   const parsed = Number.parseInt(normalized, 10);
   return Number.isFinite(parsed) ? String(parsed) : normalized;
 }
+type ItemPriceScope = {
+  branchId: string;
+  companyId: string;
+};
+
+function resolveItemPriceScope(
+  source: Record<string, unknown> | null | undefined,
+): ItemPriceScope {
+  return {
+    companyId: normalizeComparisonString(getFieldValue(source ?? {}, "item_company_id")),
+    branchId: normalizeComparisonString(getFieldValue(source ?? {}, "item_branch_id")),
+  };
+}
+
+function filterItemPriceRowsByScope(
+  rows: Record<string, unknown>[],
+  scope: ItemPriceScope,
+): Record<string, unknown>[] {
+  return rows.filter(
+    (row) =>
+      normalizeComparisonString(getFieldValue(row, "ipm_company_id")) ===
+        scope.companyId &&
+      normalizeComparisonString(getFieldValue(row, "ipm_branch_id")) === scope.branchId,
+  );
+}
+
+function toSingleOrArrayPayload<T>(items: T[]): T | T[] {
+  return items.length === 1 ? items[0] : items;
+}
+
 function shouldRecreateItemUnitConversionPayloadRow(
   existingRow: Record<string, unknown> | undefined,
   desiredRow: Record<string, unknown>,
@@ -4285,12 +4315,19 @@ export default function ItemMasterPageContent() {
     [listItemUnitConversions],
   );
   const listItemPriceRecords = useCallback(
-    async (itemId: string) => {
+    async (
+      itemId: string,
+      scopeSource?: Record<string, unknown> | null,
+    ) => {
+      const scope = scopeSource ? resolveItemPriceScope(scopeSource) : null;
       const payload = await listItemPrices({
         ipm_item_id: itemId,
         limit: ITEM_PRICE_QUERY_LIMIT,
+        ...(scope?.companyId ? { ipm_company_id: scope.companyId } : {}),
+        ...(scope?.branchId ? { ipm_branch_id: scope.branchId } : {}),
       });
-      return extractArrayRecords(payload, DEFAULT_LOOKUP_ARRAY_KEYS);
+      const rows = extractArrayRecords(payload, DEFAULT_LOOKUP_ARRAY_KEYS);
+      return scope ? filterItemPriceRowsByScope(rows, scope) : rows;
     },
     [listItemPrices],
   );
@@ -4587,9 +4624,11 @@ export default function ItemMasterPageContent() {
         return;
       }
       await removeItemPrice({
-        body: itemPriceIds.map((ipmId) => ({
-          ipm_id: ipmId,
-        })),
+        body: toSingleOrArrayPayload(
+          itemPriceIds.map((ipmId) => ({
+            ipm_id: ipmId,
+          })),
+        ),
       });
     },
     [extractLinkedRowIds, listItemPriceRecords, removeItemPrice],
@@ -4710,7 +4749,7 @@ export default function ItemMasterPageContent() {
   );
   const syncLinkedItemPrice = useCallback(
     async (itemId: string, values: Record<string, string>) => {
-      const existingRows = await listItemPriceRecords(itemId);
+      const existingRows = await listItemPriceRecords(itemId, values);
       const desiredRows = buildItemPricePayloadRows(itemId, values);
       const desiredIds = new Set(
         desiredRows
@@ -4722,16 +4761,18 @@ export default function ItemMasterPageContent() {
       );
       if (deleteIds.length > 0) {
         await removeItemPrice({
-          body: deleteIds.map((ipmId) => ({
-            ipm_id: ipmId,
-          })),
+          body: toSingleOrArrayPayload(
+            deleteIds.map((ipmId) => ({
+              ipm_id: ipmId,
+            })),
+          ),
         });
       }
       if ((values.item_price_list ?? "false") !== "true" || desiredRows.length === 0) {
         return;
       }
       await upsertItemPrice({
-        body: desiredRows,
+        body: toSingleOrArrayPayload(desiredRows),
       });
     },
     [buildItemPricePayloadRows, extractLinkedRowIds, listItemPriceRecords, removeItemPrice, upsertItemPrice],
@@ -4813,7 +4854,7 @@ export default function ItemMasterPageContent() {
       );
       const [itemUnitConversionRows, priceRows, reorderRows, eanRows] = await Promise.all([
         listItemUnitConversionRecords(itemId),
-        listItemPriceRecords(itemId),
+        listItemPriceRecords(itemId, itemSource),
         listItemReorderRecords(itemId),
         listItemEanCodeRecords(itemId),
       ]);

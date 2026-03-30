@@ -1,5 +1,4 @@
 "use client";
-
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
@@ -25,7 +24,6 @@ import {
 } from "./item-linked-records-editor.shared";
 import { useItemLinkedRecordsSearchSelect } from "./use-item-linked-records-search-select";
 import styles from "./item-linked-records-editor.module.scss";
-
 export type {
   LinkedRecordColumn,
   LinkedRecordOption,
@@ -35,12 +33,10 @@ export {
   parseLinkedRecordRows,
   serializeLinkedRecordRows,
 } from "./item-linked-records-editor.shared";
-
 type LinkedRecordEditorAutoAppendConfig = {
   columnKey: string;
   focusColumnKey?: string;
 };
-
 type ItemLinkedRecordsEditorProps = {
   addLabel: string;
   actionsLabel?: string;
@@ -55,12 +51,10 @@ type ItemLinkedRecordsEditorProps = {
   showRowIndex?: boolean;
   value: string;
 };
-
 type FocusTarget = {
   columnKey: string;
   rowIndex: number;
 };
-
 function resolveFocusColumnKey(
   autoAppendOnEnter: LinkedRecordEditorAutoAppendConfig | undefined,
   fallbackColumnKey?: string,
@@ -71,7 +65,6 @@ function resolveFocusColumnKey(
     fallbackColumnKey
   );
 }
-
 export default function ItemLinkedRecordsEditor({
   addLabel,
   actionsLabel = "Actions",
@@ -106,53 +99,42 @@ export default function ItemLinkedRecordsEditor({
     searchSelectOverlayPosition,
     setActiveOptionIndex,
   } = useItemLinkedRecordsSearchSelect({ cellRefs });
-
   const updateRows = (nextRows: LinkedRecordRow[]) => {
     onChange(serializeLinkedRecordRows(nextRows));
   };
-
   const queueFocus = (rowIndex: number, columnKey: string) => {
     pendingFocusRef.current = {
       rowIndex,
       columnKey,
     };
   };
-
   const registerCellRef =
     (rowIndex: number, columnKey: string) =>
     (element: LinkedRecordCellElement | null) => {
       const cellKey = getCellKey(rowIndex, columnKey);
-
       if (element) {
         cellRefs.current.set(cellKey, element);
         return;
       }
-
       cellRefs.current.delete(cellKey);
     };
-
   useEffect(() => {
     if (!pendingFocusRef.current) {
       return;
     }
-
     const target = pendingFocusRef.current;
     const element = cellRefs.current.get(
       getCellKey(target.rowIndex, target.columnKey),
     );
-
     if (!element) {
       return;
     }
-
     pendingFocusRef.current = null;
     element.focus();
-
     if (element instanceof HTMLInputElement) {
       element.select();
     }
   }, [rows]);
-
   useEffect(() => {
     if (
       disabled ||
@@ -163,17 +145,14 @@ export default function ItemLinkedRecordsEditor({
     ) {
       return;
     }
-
     hasSeededInitialRowRef.current = true;
     const focusColumnKey = resolveFocusColumnKey(
       autoAppendOnEnter,
       columns[0]?.key,
     );
-
     if (autoFocusInitialRowOnMount && focusColumnKey) {
       queueFocus(0, focusColumnKey);
     }
-
     updateRows([createRow()]);
   }, [
     autoAppendOnEnter,
@@ -185,21 +164,16 @@ export default function ItemLinkedRecordsEditor({
     rows.length,
     autoFocusInitialRowOnMount,
   ]);
-
   const handleAddRow = () => {
     const focusColumnKey = resolveFocusColumnKey(autoAppendOnEnter);
-
     if (focusColumnKey) {
       queueFocus(rows.length, focusColumnKey);
     }
-
     updateRows([...rows, createRow()]);
   };
-
   const handleRemoveRow = (rowIndex: number) => {
     updateRows(rows.filter((_, index) => index !== rowIndex));
   };
-
   const handleCellChange = (
     rowIndex: number,
     columnKey: string,
@@ -207,7 +181,6 @@ export default function ItemLinkedRecordsEditor({
   ) => {
     updateRows(setLinkedRecordRowValue(rows, rowIndex, columnKey, nextValue));
   };
-
   const handleSearchableSelectChoose = (
     rowIndex: number,
     columnKey: string,
@@ -217,7 +190,6 @@ export default function ItemLinkedRecordsEditor({
     handleCellChange(rowIndex, columnKey, option.value);
     closeSearchableSelect(cellKey);
   };
-
   const handleAutoAppendRow = (
     rowIndex: number,
     columnKey: string,
@@ -230,22 +202,17 @@ export default function ItemLinkedRecordsEditor({
       columnKey,
       nextValue,
     );
-
     if (!focusColumnKey) {
       updateRows(nextRows);
       return;
     }
-
     queueFocus(rowIndex + 1, focusColumnKey);
-
     if (rowIndex < nextRows.length - 1) {
       updateRows(nextRows);
       return;
     }
-
     updateRows([...nextRows, createRow(nextRows[rowIndex])]);
   };
-
   const handleInputKeyDown = (
     event: ReactKeyboardEvent<HTMLInputElement>,
     rowIndex: number,
@@ -259,16 +226,13 @@ export default function ItemLinkedRecordsEditor({
     ) {
       return;
     }
-
     const nextValue = event.currentTarget.value.trim();
     if (!nextValue) {
       return;
     }
-
     event.preventDefault();
     handleAutoAppendRow(rowIndex, columnKey, nextValue);
   };
-
   const handleSearchableSelectKeyDown = (
     event: ReactKeyboardEvent<HTMLElement>,
     rowIndex: number,
@@ -280,7 +244,6 @@ export default function ItemLinkedRecordsEditor({
     if (disabled) {
       return;
     }
-
     const isSearchOpen = openSearchCell === cellKey;
     const highlightedIndex = searchActiveOptionIndex[cellKey] ?? -1;
 
@@ -289,7 +252,6 @@ export default function ItemLinkedRecordsEditor({
       closeSearchableSelect(cellKey);
       return;
     }
-
     if (event.key === "ArrowDown") {
       event.preventDefault();
 
@@ -297,7 +259,6 @@ export default function ItemLinkedRecordsEditor({
         openSearchableSelect(cellKey, filteredOptions, cellValue, 0);
         return;
       }
-
       setActiveOptionIndex(
         cellKey,
         filteredOptions.length > 0
@@ -306,10 +267,8 @@ export default function ItemLinkedRecordsEditor({
       );
       return;
     }
-
     if (event.key === "ArrowUp") {
       event.preventDefault();
-
       if (!isSearchOpen) {
         openSearchableSelect(
           cellKey,
@@ -319,27 +278,22 @@ export default function ItemLinkedRecordsEditor({
         );
         return;
       }
-
       setActiveOptionIndex(
         cellKey,
         filteredOptions.length > 0 ? Math.max(highlightedIndex - 1, 0) : -1,
       );
       return;
     }
-
     if (event.key === "Enter") {
       event.preventDefault();
-
       if (!isSearchOpen) {
         openSearchableSelect(cellKey, filteredOptions, cellValue);
         return;
       }
-
       const nextOption =
         highlightedIndex >= 0
           ? filteredOptions[highlightedIndex]
           : filteredOptions[0];
-
       if (nextOption) {
         handleSearchableSelectChoose(
           rowIndex,
@@ -350,13 +304,11 @@ export default function ItemLinkedRecordsEditor({
       }
       return;
     }
-
     if (event.key === " " && !isSearchOpen) {
       event.preventDefault();
       openSearchableSelect(cellKey, filteredOptions, cellValue);
     }
   };
-
   const renderCellControl = (
     row: LinkedRecordRow,
     rowIndex: number,
@@ -367,7 +319,6 @@ export default function ItemLinkedRecordsEditor({
     const columnType = column.type ?? "text";
     const columnOptions = resolveColumnOptions(column, row, rowIndex, rows);
     const isReadOnly = resolveColumnReadOnly(column, row, rowIndex, rows);
-
     if (columnType === "select" && column.searchable === true) {
       return (
         <ItemLinkedRecordsSearchSelectCell
@@ -414,7 +365,6 @@ export default function ItemLinkedRecordsEditor({
         />
       );
     }
-
     if (columnType === "select") {
       return (
         <select
@@ -441,7 +391,6 @@ export default function ItemLinkedRecordsEditor({
         </select>
       );
     }
-
     if (columnType === "checkbox") {
       return (
         <label className={styles.checkboxWrap}>
@@ -461,7 +410,6 @@ export default function ItemLinkedRecordsEditor({
         </label>
       );
     }
-
     return (
       <input
         type={columnType}
@@ -484,7 +432,6 @@ export default function ItemLinkedRecordsEditor({
       />
     );
   };
-
   return (
     <div className={styles.editor}>
       <div className={styles.toolbar}>

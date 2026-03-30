@@ -1,5 +1,4 @@
 "use client";
-
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MutableRefObject,
@@ -16,7 +15,6 @@ import {
   type SearchSelectOverlayPosition,
 } from "./item-linked-records-editor.shared";
 import styles from "./item-linked-records-editor.module.scss";
-
 type SearchableSelectCellProps = {
   activeOptionIndex: number;
   cellKey: string;
@@ -52,7 +50,6 @@ type SearchableSelectCellProps = {
   searchSelectListRef: MutableRefObject<HTMLDivElement | null>;
   setActiveOptionIndex: (cellKey: string, optionIndex: number) => void;
 };
-
 export default function ItemLinkedRecordsSearchSelectCell({
   activeOptionIndex,
   cellKey,
@@ -80,7 +77,6 @@ export default function ItemLinkedRecordsSearchSelectCell({
   const selectedOptionLabel =
     selectableOptions.find((option) => option.value === cellValue)?.label ?? "";
   const placeholder = getSelectPlaceholder(column);
-
   return (
     <div
       className={styles.searchSelect}
