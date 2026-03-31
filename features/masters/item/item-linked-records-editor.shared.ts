@@ -16,6 +16,7 @@ export type LinkedRecordColumnOptionsResolverParams = {
 
 export type LinkedRecordColumn = {
   key: string;
+  bindingKey?: string;
   label: string;
   type?: "text" | "number" | "select" | "checkbox";
   placeholder?: string;

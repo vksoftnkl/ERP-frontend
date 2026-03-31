@@ -47,6 +47,9 @@ type ItemLinkedRecordsEditorProps = {
   createRow: (sourceRow?: LinkedRecordRow) => LinkedRecordRow;
   disabled?: boolean;
   emptyState: string;
+  exclusiveTrueColumnKeys?: string[];
+  mutuallyExclusiveTrueColumnKeyGroups?: string[][];
+  removeDisabledRowIndexes?: number[];
   onChange: (value: string) => void;
   showRowIndex?: boolean;
   value: string;
@@ -75,6 +78,9 @@ export default function ItemLinkedRecordsEditor({
   createRow,
   disabled = false,
   emptyState,
+  exclusiveTrueColumnKeys = [],
+  mutuallyExclusiveTrueColumnKeyGroups = [],
+  removeDisabledRowIndexes = [],
   onChange,
   showRowIndex = true,
   value,
@@ -172,6 +178,9 @@ export default function ItemLinkedRecordsEditor({
     updateRows([...rows, createRow()]);
   };
   const handleRemoveRow = (rowIndex: number) => {
+    if (removeDisabledRowIndexes.includes(rowIndex)) {
+      return;
+    }
     updateRows(rows.filter((_, index) => index !== rowIndex));
   };
   const handleCellChange = (
@@ -179,7 +188,38 @@ export default function ItemLinkedRecordsEditor({
     columnKey: string,
     nextValue: string,
   ) => {
-    updateRows(setLinkedRecordRowValue(rows, rowIndex, columnKey, nextValue));
+    let nextRows = setLinkedRecordRowValue(rows, rowIndex, columnKey, nextValue);
+    if (nextValue === "true") {
+      const conflictingKeys = new Set(
+        mutuallyExclusiveTrueColumnKeyGroups
+          .filter((group) => group.includes(columnKey))
+          .flatMap((group) => group.filter((key) => key !== columnKey)),
+      );
+      if (conflictingKeys.size > 0) {
+        nextRows = nextRows.map((row, index) =>
+          index !== rowIndex
+            ? row
+            : Array.from(conflictingKeys).reduce<LinkedRecordRow>(
+                (nextRow, key) => ({
+                  ...nextRow,
+                  [key]: "false",
+                }),
+                row,
+              ),
+        );
+      }
+      if (exclusiveTrueColumnKeys.includes(columnKey)) {
+        nextRows = nextRows.map((row, index) =>
+          index === rowIndex
+            ? row
+            : {
+                ...row,
+                [columnKey]: "false",
+              },
+        );
+      }
+    }
+    updateRows(nextRows);
   };
   const handleSearchableSelectChoose = (
     rowIndex: number,
@@ -314,7 +354,8 @@ export default function ItemLinkedRecordsEditor({
     rowIndex: number,
     column: LinkedRecordColumn,
   ) => {
-    const cellValue = row[column.key] ?? "";
+    const boundColumnKey = column.bindingKey ?? column.key;
+    const cellValue = row[boundColumnKey] ?? "";
     const cellKey = getCellKey(rowIndex, column.key);
     const columnType = column.type ?? "text";
     const columnOptions = resolveColumnOptions(column, row, rowIndex, rows);
@@ -333,7 +374,7 @@ export default function ItemLinkedRecordsEditor({
           onChoose={(option) =>
             handleSearchableSelectChoose(
               rowIndex,
-              column.key,
+              boundColumnKey,
               cellKey,
               option,
             )
@@ -375,7 +416,7 @@ export default function ItemLinkedRecordsEditor({
           onChange={(event) =>
             handleCellChange(
               rowIndex,
-              column.key,
+              boundColumnKey,
               event.currentTarget.value,
             )
           }
@@ -402,7 +443,7 @@ export default function ItemLinkedRecordsEditor({
             onChange={(event) =>
               handleCellChange(
                 rowIndex,
-                column.key,
+                boundColumnKey,
                 event.currentTarget.checked ? "true" : "false",
               )
             }
@@ -424,11 +465,11 @@ export default function ItemLinkedRecordsEditor({
         onChange={(event) =>
           handleCellChange(
             rowIndex,
-            column.key,
+            boundColumnKey,
             event.currentTarget.value,
           )
         }
-        onKeyDown={(event) => handleInputKeyDown(event, rowIndex, column.key)}
+        onKeyDown={(event) => handleInputKeyDown(event, rowIndex, boundColumnKey)}
       />
     );
   };
@@ -485,7 +526,7 @@ export default function ItemLinkedRecordsEditor({
                     <button
                       type="button"
                       className={styles.removeButton}
-                      disabled={disabled}
+                      disabled={disabled || removeDisabledRowIndexes.includes(rowIndex)}
                       onClick={() => handleRemoveRow(rowIndex)}
                     >
                       Remove
