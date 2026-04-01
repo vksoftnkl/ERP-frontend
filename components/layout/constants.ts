@@ -1,4 +1,5 @@
 import type { ErpHeaderItem, ERPMenuObject } from "./types";
+import type { ERPDynamicSelectOption } from "@/components/library/ui";
 export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
   {
     label: "1 Sales",
@@ -438,7 +439,9 @@ export function applyMenuMasterLabels(
   return toHeaderItemsFromApi(menuMasterItems, hrefLookup);
 }
 
-export const DEFAULT_CUSTOMER_OPTIONS = ["Customers"];
+export const DEFAULT_BRANCH_OPTIONS: ERPDynamicSelectOption[] = [
+  { value: "", label: "Select Branch" },
+];
 export const DEFAULT_DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
   day: "2-digit",
   month: "2-digit",
@@ -446,7 +449,7 @@ export const DEFAULT_DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
 };
 export const ARIA_LABELS = {
   MAIN_MENU: "Main ERP modules",
-  CUSTOMER_SELECT: "Customer selection",
+  BRANCH_SELECT: "Branch selection",
   CART_BUTTON: (count: number) => `Cart items: ${count}`,
   BILL_INPUT: "Bill number",
 } as const;

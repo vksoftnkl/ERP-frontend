@@ -10,7 +10,7 @@ import {
 } from "@/lib/navigation/safe-route";
 import {
   ARIA_LABELS,
-  DEFAULT_CUSTOMER_OPTIONS,
+  DEFAULT_BRANCH_OPTIONS,
   DEFAULT_DATE_FORMAT_OPTIONS,
   DEFAULT_PRIMARY_MENU,
   DEFAULT_QUICK_TABS,
@@ -35,6 +35,11 @@ function formatDateLabel(date: Date): string {
 }
 function cx(...tokens: Array<string | false | undefined>): string {
   return tokens.filter(Boolean).join(" ");
+}
+
+function getDefaultBranchValue(options: Array<{ value: string }>): string {
+  const firstNamedBranch = options.find((option) => option.value.trim().length > 0);
+  return firstNamedBranch?.value ?? options[0]?.value ?? "";
 }
 // Components
 function MenuLink({
@@ -139,9 +144,9 @@ function MenuTree({
 function HeaderRight({
   searchMenuCount,
   dateText,
-  customerOptions,
-  selectedCustomer,
-  onCustomerChange,
+  branchOptions,
+  selectedBranch,
+  onBranchChange,
   cartCount,
   onCartClick,
   goLabel,
@@ -149,10 +154,10 @@ function HeaderRight({
   logoutLabel,
   onLogout,
 }: HeaderRightProps) {
-  const handleCustomerChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleBranchChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
     const next = event.target.value;
-    onCustomerChange?.(next);
-  }, [onCustomerChange]);
+    onBranchChange?.(next);
+  }, [onBranchChange]);
   return (
     <div className={styles.headerRight}>
       <span className={styles.searchText}>{searchMenuCount} Search Menu :</span>
@@ -161,14 +166,14 @@ function HeaderRight({
         CAL
       </span>
       <select
-        className={styles.customerSelect}
-        aria-label={ARIA_LABELS.CUSTOMER_SELECT}
-        value={selectedCustomer}
-        onChange={handleCustomerChange}
+        className={styles.branchSelect}
+        aria-label={ARIA_LABELS.BRANCH_SELECT}
+        value={selectedBranch}
+        onChange={handleBranchChange}
       >
-        {customerOptions.map((option, index) => (
-          <option key={`${option}-${index}`} value={option}>
-            {option}
+        {branchOptions.map((option, index) => (
+          <option key={`${option.value}-${index}`} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
@@ -232,9 +237,9 @@ export default function ErpHeader({
   quickTabs = DEFAULT_QUICK_TABS,
   searchMenuCount = 0,
   dateText,
-  customerOptions = DEFAULT_CUSTOMER_OPTIONS,
-  selectedCustomer,
-  onCustomerChange,
+  branchOptions = DEFAULT_BRANCH_OPTIONS,
+  selectedBranch,
+  onBranchChange,
   cartCount = 0,
   onCartClick,
   goLabel = "Go",
@@ -254,24 +259,24 @@ export default function ErpHeader({
   const { data: primaryMenuFromApi } = useGetPrimaryMenuQuery(undefined, {
     skip: !shouldUseMenuMasterLabels,
   });
-  const [localCustomer, setLocalCustomer] = useState(
-    selectedCustomer ?? customerOptions[0] ?? ""
+  const [localBranch, setLocalBranch] = useState(
+    selectedBranch ?? getDefaultBranchValue(branchOptions)
   );
   const [localBillNumber, setLocalBillNumber] = useState(billNumber ?? "");
   useEffect(() => {
-    if (selectedCustomer !== undefined) {
-      setLocalCustomer(selectedCustomer);
+    if (selectedBranch !== undefined) {
+      setLocalBranch(selectedBranch);
     }
-  }, [selectedCustomer]);
+  }, [selectedBranch]);
   useEffect(() => {
     if (
-      selectedCustomer === undefined &&
-      customerOptions.length > 0 &&
-      !customerOptions.includes(localCustomer)
+      selectedBranch === undefined &&
+      branchOptions.length > 0 &&
+      !branchOptions.some((option) => option.value === localBranch)
     ) {
-      setLocalCustomer(customerOptions[0]);
+      setLocalBranch(getDefaultBranchValue(branchOptions));
     }
-  }, [customerOptions, localCustomer, selectedCustomer]);
+  }, [branchOptions, localBranch, selectedBranch]);
   useEffect(() => {
     if (billNumber !== undefined) {
       setLocalBillNumber(billNumber);
@@ -286,7 +291,7 @@ export default function ErpHeader({
     () => (shouldUseMenuMasterLabels ? primaryMenuFromApi ?? [] : primaryMenu),
     [primaryMenu, primaryMenuFromApi, shouldUseMenuMasterLabels],
   );
-  const resolvedCustomer = selectedCustomer ?? localCustomer;
+  const resolvedBranch = selectedBranch ?? localBranch;
   const resolvedBillNumber = billNumber ?? localBillNumber;
   const closeFocusedMenu = useCallback(() => {
     const active = document.activeElement;
@@ -329,12 +334,12 @@ export default function ErpHeader({
     };
   }, []);
   // Event handlers
-  const handleCustomerChange = useCallback((value: string) => {
-    if (selectedCustomer === undefined) {
-      setLocalCustomer(value);
+  const handleBranchChange = useCallback((value: string) => {
+    if (selectedBranch === undefined) {
+      setLocalBranch(value);
     }
-    onCustomerChange?.(value);
-  }, [selectedCustomer, onCustomerChange]);
+    onBranchChange?.(value);
+  }, [selectedBranch, onBranchChange]);
   const handleBillNumberChange = useCallback((value: string) => {
     if (billNumber === undefined) {
       setLocalBillNumber(value);
@@ -385,9 +390,9 @@ export default function ErpHeader({
         <HeaderRight
           searchMenuCount={searchMenuCount}
           dateText={resolvedDateText}
-          customerOptions={customerOptions}
-          selectedCustomer={resolvedCustomer}
-          onCustomerChange={handleCustomerChange}
+          branchOptions={branchOptions}
+          selectedBranch={resolvedBranch}
+          onBranchChange={handleBranchChange}
           cartCount={cartCount}
           onCartClick={onCartClick}
           goLabel={goLabel}

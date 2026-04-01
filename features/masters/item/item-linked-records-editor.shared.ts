@@ -1,19 +1,15 @@
 import type { CSSProperties } from "react";
-
 export type LinkedRecordRow = Record<string, string>;
-
 export type LinkedRecordOption = {
   label: string;
   value: string;
 };
-
 export type LinkedRecordColumnOptionsResolverParams = {
   column: LinkedRecordColumn;
   row: LinkedRecordRow;
   rowIndex: number;
   rows: LinkedRecordRow[];
 };
-
 export type LinkedRecordColumn = {
   key: string;
   bindingKey?: string;
@@ -33,47 +29,36 @@ export type LinkedRecordColumn = {
   step?: number | string;
   width?: string;
 };
-
 export type LinkedRecordCellElement =
   | HTMLButtonElement
   | HTMLInputElement
   | HTMLSelectElement;
-
 export type SearchSelectOverlayPosition = CSSProperties & {
   "--search-select-options-max-height": string;
 };
-
 export type ParsedLinkedRecordRowsResult = {
   parseError: string | null;
   rows: LinkedRecordRow[];
 };
-
 export const SEARCH_SELECT_VIEWPORT_PADDING = 12;
 export const SEARCH_SELECT_OFFSET = 4;
-
 const ROW_ID_KEYS = ["iuc_id", "ipm_id", "ir_id", "ean_id"] as const;
-
 function toStringValue(value: unknown): string {
   if (typeof value === "string") {
     return value;
   }
-
   if (typeof value === "boolean") {
     return value ? "true" : "false";
   }
-
   if (typeof value === "number" || typeof value === "bigint") {
     return String(value);
   }
-
   return "";
 }
-
 function normalizeRow(value: unknown): LinkedRecordRow | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
-
   return Object.entries(value as Record<string, unknown>).reduce<LinkedRecordRow>(
     (result, [key, entryValue]) => {
       result[key] = toStringValue(entryValue);
@@ -82,33 +67,27 @@ function normalizeRow(value: unknown): LinkedRecordRow | null {
     {},
   );
 }
-
 export function getCellKey(rowIndex: number, columnKey: string): string {
   return `${rowIndex}:${columnKey}`;
 }
-
 export function getColumnStyle(
   column: LinkedRecordColumn,
 ): CSSProperties | undefined {
   if (!column.width) {
     return undefined;
   }
-
   return {
     width: column.width,
     minWidth: column.width,
   };
 }
-
 export function getRowKey(row: LinkedRecordRow, rowIndex: number): string {
   const rowId = ROW_ID_KEYS.map((key) => row[key]).find(Boolean);
   return `${rowId ?? "row"}-${rowIndex}`;
 }
-
 export function getSelectPlaceholder(column: LinkedRecordColumn): string {
   return column.placeholder ?? `Select ${column.label}`;
 }
-
 export function buildColumnOptions(
   column: LinkedRecordColumn,
   options: LinkedRecordOption[] = column.options ?? [],
@@ -116,11 +95,9 @@ export function buildColumnOptions(
   if (column.placeholder === "") {
     return options;
   }
-
   if (options.some((option) => option.value === "")) {
     return options;
   }
-
   return [
     {
       value: "",
@@ -129,17 +106,14 @@ export function buildColumnOptions(
     ...options,
   ];
 }
-
 export function filterColumnOptions(
   options: LinkedRecordOption[],
   query: string | undefined,
 ): LinkedRecordOption[] {
   const normalizedQuery = (query ?? "").trim().toLowerCase();
-
   if (!normalizedQuery) {
     return options;
   }
-
   return options.filter((option) => {
     const normalizedLabel = option.label.toLowerCase();
     const normalizedValue = option.value.toLowerCase();
@@ -149,7 +123,6 @@ export function filterColumnOptions(
     );
   });
 }
-
 export function resolveColumnOptions(
   column: LinkedRecordColumn,
   row: LinkedRecordRow,
@@ -165,7 +138,6 @@ export function resolveColumnOptions(
       })
     : (column.options ?? []);
 }
-
 export function resolveColumnReadOnly(
   column: LinkedRecordColumn,
   row: LinkedRecordRow,
@@ -175,7 +147,6 @@ export function resolveColumnReadOnly(
   if (column.readOnly === true) {
     return true;
   }
-
   return column.readOnlyResolver
     ? column.readOnlyResolver({
         column,
@@ -185,19 +156,16 @@ export function resolveColumnReadOnly(
       })
     : false;
 }
-
 export function parseLinkedRecordRowsResult(
   value: string,
 ): ParsedLinkedRecordRowsResult {
   const normalizedValue = value.trim();
-
   if (!normalizedValue) {
     return {
       parseError: null,
       rows: [],
     };
   }
-
   try {
     const parsed = JSON.parse(normalizedValue);
 
@@ -207,7 +175,6 @@ export function parseLinkedRecordRowsResult(
         rows: [],
       };
     }
-
     return {
       parseError: null,
       rows: parsed
@@ -221,15 +188,12 @@ export function parseLinkedRecordRowsResult(
     };
   }
 }
-
 export function parseLinkedRecordRows(value: string): LinkedRecordRow[] {
   return parseLinkedRecordRowsResult(value).rows;
 }
-
 export function serializeLinkedRecordRows(rows: LinkedRecordRow[]): string {
   return rows.length > 0 ? JSON.stringify(rows) : "";
 }
-
 export function setLinkedRecordRowValue(
   rows: LinkedRecordRow[],
   rowIndex: number,

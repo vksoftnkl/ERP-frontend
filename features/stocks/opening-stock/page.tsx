@@ -1,12 +1,19 @@
 "use client";
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiChevronDown, FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
+import { FiChevronDown, FiMoreVertical, FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
+import { toast } from "react-toastify";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import tableStyles from "@/components/ui/table.module.scss";
 import { useApi } from "@/hooks/useApi";
 import {
+  type ItemPriceDetailsPayload,
+  type ItemTaxDetailPayload,
   useLazyGetGodownOptionsQuery,
   useLazyGetItemOptionsQuery,
+  useLazyGetItemPriceDetailsQuery,
+  useLazyGetItemTaxByIdQuery,
+  useLazyGetTaxOptionsQuery,
+  useLazyGetUnitOptionsQuery,
 } from "@/store/api/lookupsApi";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import styles from "./page.module.scss";
@@ -28,7 +35,6 @@ type ColumnSchema = {
   lookupKind?: LookupKind;
   placeholder?: string;
   options?: readonly string[];
-  step?: string;
   defaultValue?: string;
 };
 type ColumnDefinition = ColumnSchema & {
@@ -50,8 +56,7 @@ const UI_TABLE_COLUMNS_TOAST_OPTIONS = {
   error: false,
 } as const;
 const LOOKUP_SEARCH_DEBOUNCE_MS = 250;
-const SERIAL_NUMBER_COLUMN_WIDTH = "76px";
-const ACTION_COLUMN_WIDTH = "90px";
+const SERIAL_NUMBER_COLUMN_WIDTH = "112px";
 const TRACKING_OPTIONS = ["NONE", "BATCH", "LOT"] as const;
 const PROFIT_TYPE_OPTIONS = ["PERCENT", "VALUE"] as const;
 const CESS_TYPE_OPTIONS = ["NONE", "PERCENT", "PER_UNIT"] as const;
@@ -133,7 +138,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.000",
-    step: "0.001",
     defaultValue: "0.000",
   },
   freeqty: {
@@ -142,7 +146,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.000",
-    step: "0.001",
     defaultValue: "0.000",
   },
   baseqty: {
@@ -151,7 +154,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.000",
-    step: "0.001",
     defaultValue: "0.000",
   },
   convfactor: {
@@ -160,7 +162,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "1.000",
-    step: "0.001",
     defaultValue: "1.000",
   },
   batchno: {
@@ -201,7 +202,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   costwot: {
@@ -210,7 +210,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   profittype: {
@@ -227,7 +226,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   priceawot: {
@@ -236,7 +234,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   priceamarkup: {
@@ -245,7 +242,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   pricea: {
@@ -254,7 +250,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   pricebwot: {
@@ -263,7 +258,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   pricebmarkup: {
@@ -272,7 +266,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   priceb: {
@@ -281,7 +274,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   pricecwot: {
@@ -290,7 +282,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   pricecmarkup: {
@@ -299,7 +290,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   pricec: {
@@ -308,7 +298,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   pricedwot: {
@@ -317,7 +306,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   pricedmarkup: {
@@ -326,7 +314,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   priced: {
@@ -335,7 +322,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   mrp: {
@@ -344,7 +330,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   msp: {
@@ -353,7 +338,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
   remarks: {
@@ -412,7 +396,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.000",
-    step: "0.001",
     defaultValue: "0.000",
   },
   oslcesstype: {
@@ -429,7 +412,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.000",
-    step: "0.001",
     defaultValue: "0.000",
   },
   oslcessperunit: {
@@ -438,7 +420,6 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "right",
     kind: "number",
     placeholder: "0.00",
-    step: "0.01",
     defaultValue: "0.00",
   },
 };
@@ -460,6 +441,50 @@ const FALLBACK_COLUMN_KEYS = [
   "mrp",
   "remarks",
 ] as const;
+const HIDDEN_INTERNAL_COLUMN_KEYS = new Set([
+  "oslitemid",
+  "oslunitid",
+  "oslbaseuomid",
+  "oslgodownid",
+  "osltaxid",
+]);
+const ITEM_AUTOFILL_FIELD_KEYS = [
+  "barcode",
+  "code",
+  "godown",
+  "uom",
+  "taxname",
+  "baseqty",
+  "convfactor",
+  "costprice",
+  "costwot",
+  "profittype",
+  "roundoff",
+  "priceawot",
+  "priceamarkup",
+  "pricea",
+  "pricebwot",
+  "pricebmarkup",
+  "priceb",
+  "pricecwot",
+  "pricecmarkup",
+  "pricec",
+  "pricedwot",
+  "pricedmarkup",
+  "priced",
+  "mrp",
+  "msp",
+  "remarks",
+  "oslunitid",
+  "oslbaseuomid",
+  "oslgodownid",
+  "osltrackingtype",
+  "osltaxid",
+  "osltaxperc",
+  "oslcesstype",
+  "oslcessperc",
+  "oslcessperunit",
+] as const;
 const QUANTITY_FORMATTER = new Intl.NumberFormat("en-IN", {
   minimumFractionDigits: 3,
   maximumFractionDigits: 3,
@@ -477,6 +502,127 @@ function normalizeColumnName(value: string): string {
 function parseDecimal(value: string | undefined): number {
   const parsed = Number.parseFloat(value ?? "");
   return Number.isFinite(parsed) ? parsed : 0;
+}
+function formatQuantityValue(value: number): string {
+  return QUANTITY_FORMATTER.format(value).replace(/,/g, "");
+}
+function getTodayInputValue(): string {
+  const today = new Date();
+  const localDate = new Date(today.getTime() - today.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 10);
+}
+function toInputValue(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  return typeof value === "string" ? value : String(value);
+}
+function normalizeOpeningStockProfitType(value: string | null | undefined): string {
+  const normalized = (value ?? "").trim().toUpperCase();
+  if (normalized === "BY_AMOUNT" || normalized === "BY RS" || normalized === "VALUE") {
+    return "VALUE";
+  }
+  return "PERCENT";
+}
+function normalizeOpeningStockCessType(value: string | null | undefined): string {
+  const normalized = (value ?? "").trim().toUpperCase();
+  if (normalized === "PER_UNIT" || normalized === "UNIT") {
+    return "PER_UNIT";
+  }
+  if (normalized === "PERCENT") {
+    return "PERCENT";
+  }
+  return "NONE";
+}
+function resolveTrackingType(item: ItemPriceDetailsPayload["item"]): string {
+  return item.item_is_batch_based || item.item_is_expiry_item ? "BATCH" : "NONE";
+}
+function buildTaxSelectionValues(taxDetail: ItemTaxDetailPayload | ItemPriceDetailsPayload["item_tax"]): Record<string, string> {
+  return {
+    taxname: toInputValue(taxDetail?.tax_name),
+    osltaxid: toInputValue(taxDetail?.tax_id),
+    osltaxperc: toInputValue(taxDetail?.tax_gst_rate_total),
+    oslcesstype: normalizeOpeningStockCessType(taxDetail?.tax_cess_type),
+    oslcessperc: toInputValue(taxDetail?.tax_cess_perc),
+    oslcessperunit: toInputValue(taxDetail?.tax_cess_unit),
+  };
+}
+function buildPriceSelectionValues(
+  detail: ItemPriceDetailsPayload,
+  priceRecord: ItemPriceDetailsPayload["item_prices"][number] | null,
+  unitOptionsByValue: Map<string, string>,
+  godownOptionsByValue: Map<string, string>,
+  currentValues: Record<string, string>,
+): Record<string, string> {
+  const resolvedUnitId = priceRecord?.ipm_unit_id ?? detail.item.item_base_unit_id ?? "";
+  const convFactor = priceRecord?.ipm_to_base_factor ?? 1;
+  const openingQty = parseDecimal(currentValues.openingqty);
+  const resolvedGodownId = priceRecord?.ipm_godown_id ?? "";
+  return {
+    uom: unitOptionsByValue.get(resolvedUnitId) ?? "",
+    godown: godownOptionsByValue.get(resolvedGodownId) ?? "",
+    baseqty: formatQuantityValue(openingQty * convFactor),
+    convfactor: toInputValue(convFactor),
+    costprice: toInputValue(priceRecord?.ipm_cost_price),
+    costwot: toInputValue(priceRecord?.ipm_cost_wot),
+    profittype: normalizeOpeningStockProfitType(priceRecord?.ipm_profit_type),
+    roundoff: toInputValue(priceRecord?.ipm_round_off),
+    priceawot: toInputValue(priceRecord?.ipm_price_a_wot),
+    priceamarkup: toInputValue(priceRecord?.ipm_price_a_markup_perc),
+    pricea: toInputValue(priceRecord?.ipm_sales_price_a),
+    pricebwot: toInputValue(priceRecord?.ipm_price_b_wot),
+    pricebmarkup: toInputValue(priceRecord?.ipm_price_b_markup_perc),
+    priceb: toInputValue(priceRecord?.ipm_sales_price_b),
+    pricecwot: toInputValue(priceRecord?.ipm_price_c_wot),
+    pricecmarkup: toInputValue(priceRecord?.ipm_price_c_markup_perc),
+    pricec: toInputValue(priceRecord?.ipm_sales_price_c),
+    pricedwot: toInputValue(priceRecord?.ipm_price_d_wot),
+    pricedmarkup: toInputValue(priceRecord?.ipm_price_d_markup_perc),
+    priced: toInputValue(priceRecord?.ipm_sales_price_d),
+    mrp: toInputValue(priceRecord?.ipm_max_price),
+    msp: toInputValue(priceRecord?.ipm_min_price),
+    remarks: toInputValue(
+      priceRecord?.ipm_uom_remarks ?? priceRecord?.ipm_cost_remarks ?? detail.item.item_notes,
+    ),
+    oslunitid: toInputValue(resolvedUnitId),
+    oslbaseuomid: toInputValue(priceRecord?.ipm_base_unit_id ?? detail.item.item_base_unit_id),
+    oslgodownid: toInputValue(resolvedGodownId),
+  };
+}
+function resolveItemPriceRecordByUnitId(
+  detail: ItemPriceDetailsPayload,
+  unitId: string,
+): ItemPriceDetailsPayload["item_prices"][number] | null {
+  const normalizedUnitId = unitId.trim();
+  if (!normalizedUnitId) {
+    return resolveDefaultItemPriceRecord(detail.item_prices);
+  }
+  return (
+    detail.item_prices.find((record) => record.ipm_unit_id === normalizedUnitId) ??
+    resolveDefaultItemPriceRecord(detail.item_prices)
+  );
+}
+function buildUomOptions(
+  detail: ItemPriceDetailsPayload | null | undefined,
+  unitOptionsByValue: Map<string, string>,
+): ERPDynamicSelectOption[] {
+  if (!detail) {
+    return [];
+  }
+  const optionMap = new Map<string, string>();
+  for (const [index, priceRecord] of detail.item_prices.entries()) {
+    if (!priceRecord.ipm_unit_id.trim()) {
+      continue;
+    }
+    if (optionMap.has(priceRecord.ipm_unit_id)) {
+      continue;
+    }
+    optionMap.set(
+      priceRecord.ipm_unit_id,
+      unitOptionsByValue.get(priceRecord.ipm_unit_id) ?? `UOM ${index + 1}`,
+    );
+  }
+  return Array.from(optionMap, ([value, label]) => ({ value, label }));
 }
 function toColumnWidth(value: number | null | undefined, fallback: string): string {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
@@ -514,17 +660,31 @@ function createFallbackColumns(): ColumnDefinition[] {
       lookupKind: schema.lookupKind,
       placeholder: schema.placeholder,
       options: schema.options,
-      step: schema.step,
       defaultValue: schema.defaultValue,
       defaultWidth: schema.defaultWidth,
     };
-  });
+  }).filter((column) => !HIDDEN_INTERNAL_COLUMN_KEYS.has(column.key));
 }
 function createDefaultRowValues(): Record<string, string> {
   return Object.entries(COLUMN_SCHEMA).reduce<Record<string, string>>((accumulator, [key, schema]) => {
     accumulator[key] = schema.defaultValue ?? "";
     return accumulator;
   }, {});
+}
+function createItemAutofillResetValues(): Record<string, string> {
+  const defaultValues = createDefaultRowValues();
+  return ITEM_AUTOFILL_FIELD_KEYS.reduce<Record<string, string>>((accumulator, key) => {
+    accumulator[key] = defaultValues[key] ?? "";
+    return accumulator;
+  }, {});
+}
+const ITEM_AUTOFILL_RESET_VALUES = createItemAutofillResetValues();
+function buildPendingItemSelectionValues(option: ERPDynamicSelectOption): Record<string, string> {
+  return {
+    ...ITEM_AUTOFILL_RESET_VALUES,
+    itemname: option.value ? option.label : "",
+    oslitemid: option.value,
+  };
 }
 function createRow(id: number, overrides: Record<string, string> = {}): OpeningStockRow {
   return {
@@ -597,7 +757,7 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Co
       continue;
     }
     const key = normalizeColumnName(header);
-    if (!key || seenKeys.has(key)) {
+    if (!key || seenKeys.has(key) || HIDDEN_INTERNAL_COLUMN_KEYS.has(key)) {
       continue;
     }
     const schema = COLUMN_SCHEMA[key] ?? createUnknownColumnSchema(header);
@@ -610,7 +770,6 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Co
       lookupKind: schema.lookupKind,
       placeholder: schema.placeholder,
       options: schema.options,
-      step: schema.step,
       defaultValue: schema.defaultValue,
       defaultWidth: schema.defaultWidth,
     });
@@ -621,7 +780,7 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Co
 function getTableMinWidth(columns: ColumnDefinition[]): string {
   const width = columns.reduce(
     (total, column) => total + parseDecimal(column.width),
-    parseDecimal(SERIAL_NUMBER_COLUMN_WIDTH) + parseDecimal(ACTION_COLUMN_WIDTH),
+    parseDecimal(SERIAL_NUMBER_COLUMN_WIDTH),
   );
   return `${Math.max(width, 1080)}px`;
 }
@@ -664,6 +823,41 @@ function filterLookupOptions(
     );
   });
 }
+function resolveDefaultItemPriceRecord(
+  itemPrices: ItemPriceDetailsPayload["item_prices"],
+): ItemPriceDetailsPayload["item_prices"][number] | null {
+  return itemPrices.find((record) => record.ipm_is_default_unit) ?? itemPrices[0] ?? null;
+}
+function buildItemAutofillValues(
+  detail: ItemPriceDetailsPayload,
+  unitOptionsByValue: Map<string, string>,
+  godownOptionsByValue: Map<string, string>,
+  currentValues: Record<string, string>,
+  selectedLabel: string,
+): Record<string, string> {
+  const defaultPrice = resolveDefaultItemPriceRecord(detail.item_prices);
+  return {
+    ...ITEM_AUTOFILL_RESET_VALUES,
+    itemname: detail.item.item_name_en?.trim() || selectedLabel,
+    oslitemid: detail.item.item_id,
+    barcode: toInputValue(detail.item.item_default_barcode),
+    code: toInputValue(detail.item.item_code),
+    ...buildPriceSelectionValues(
+      detail,
+      defaultPrice,
+      unitOptionsByValue,
+      godownOptionsByValue,
+      currentValues,
+    ),
+    osltrackingtype: resolveTrackingType(detail.item),
+    ...(detail.item_tax
+      ? buildTaxSelectionValues(detail.item_tax)
+      : {
+          taxname: "",
+          osltaxid: toInputValue(detail.item.item_default_tax_id),
+        }),
+  };
+}
 function SummaryCard({
   label,
   value,
@@ -683,9 +877,13 @@ function SummaryCard({
 }
 export default function OpeningStockPage() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [voucherDate, setVoucherDate] = useState(() => getTodayInputValue());
   const [rows, setRows] = useState<OpeningStockRow[]>(INITIAL_ROWS);
   const [uiColumnConfigs, setUiColumnConfigs] = useState<UiTableColumnPayload[]>([]);
+  const [itemDetailsByItemId, setItemDetailsByItemId] = useState<Record<string, ItemPriceDetailsPayload>>({});
   const [itemOptions, setItemOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_ITEM_OPTION]);
+  const [taxOptions, setTaxOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [unitOptions, setUnitOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [godownOptions, setGodownOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_GODOWN_OPTION,
   ]);
@@ -693,11 +891,14 @@ export default function OpeningStockPage() {
     key: string;
     kind: LookupKind;
   } | null>(null);
+  const [openRowActionMenuId, setOpenRowActionMenuId] = useState<number | null>(null);
   const [lookupSearchQuery, setLookupSearchQuery] = useState("");
   const lookupRootRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const rowActionRootRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const lookupSearchInputRef = useRef<HTMLInputElement | null>(null);
   const itemSearchTimeoutRef = useRef<number | null>(null);
   const itemSearchRequestRef = useRef(0);
+  const itemDetailRequestRef = useRef<Record<number, number>>({});
   const godownSearchTimeoutRef = useRef<number | null>(null);
   const godownSearchRequestRef = useRef(0);
   const { getAll: listUiTableColumns, loading: isConfigLoading, error: configError } = useApi<
@@ -707,8 +908,12 @@ export default function OpeningStockPage() {
   });
   const [triggerItemOptions, { isFetching: isItemLookupLoading }] =
     useLazyGetItemOptionsQuery();
+  const [triggerTaxOptions] = useLazyGetTaxOptionsQuery();
+  const [triggerUnitOptions] = useLazyGetUnitOptionsQuery();
   const [triggerGodownOptions, { isFetching: isGodownLookupLoading }] =
     useLazyGetGodownOptionsQuery();
+  const [triggerItemPriceDetails] = useLazyGetItemPriceDetailsQuery();
+  const [triggerItemTaxById] = useLazyGetItemTaxByIdQuery();
   const loadLookupOptions = useCallback(
     async (lookupKind: LookupKind, search = ""): Promise<ERPDynamicSelectOption[]> => {
       const normalizedSearch = search.trim();
@@ -723,6 +928,20 @@ export default function OpeningStockPage() {
           ).unwrap();
     },
     [triggerGodownOptions, triggerItemOptions],
+  );
+  const loadUnitOptions = useCallback(
+    async (search = ""): Promise<ERPDynamicSelectOption[]> => {
+      const normalizedSearch = search.trim();
+      return triggerUnitOptions(
+        normalizedSearch ? { search: normalizedSearch } : undefined,
+        true,
+      ).unwrap();
+    },
+    [triggerUnitOptions],
+  );
+  const loadTaxOptions = useCallback(
+    async (): Promise<ERPDynamicSelectOption[]> => triggerTaxOptions(undefined, true).unwrap(),
+    [triggerTaxOptions],
   );
   useEffect(() => {
     let cancelled = false;
@@ -746,8 +965,10 @@ export default function OpeningStockPage() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [itemsPayload, godownsPayload] = await Promise.allSettled([
+      const [itemsPayload, taxesPayload, unitsPayload, godownsPayload] = await Promise.allSettled([
         loadLookupOptions("item"),
+        loadTaxOptions(),
+        loadUnitOptions(),
         loadLookupOptions("godown"),
       ]);
       if (cancelled) {
@@ -756,6 +977,12 @@ export default function OpeningStockPage() {
       if (itemsPayload.status === "fulfilled") {
         setItemOptions(itemsPayload.value);
       }
+      if (taxesPayload.status === "fulfilled") {
+        setTaxOptions(taxesPayload.value);
+      }
+      if (unitsPayload.status === "fulfilled") {
+        setUnitOptions(unitsPayload.value);
+      }
       if (godownsPayload.status === "fulfilled") {
         setGodownOptions(godownsPayload.value);
       }
@@ -763,7 +990,7 @@ export default function OpeningStockPage() {
     return () => {
       cancelled = true;
     };
-  }, [loadLookupOptions]);
+  }, [loadLookupOptions, loadTaxOptions, loadUnitOptions]);
   useEffect(() => {
     if (!openLookupCell) {
       return;
@@ -776,20 +1003,26 @@ export default function OpeningStockPage() {
     };
   }, [openLookupCell]);
   useEffect(() => {
-    if (!openLookupCell) {
+    if (!openLookupCell && openRowActionMenuId === null) {
       return;
     }
     const handlePointerDown = (event: MouseEvent) => {
-      const rootElement = lookupRootRefs.current[openLookupCell.key];
-      if (rootElement && !rootElement.contains(event.target as Node)) {
+      const lookupRootElement = openLookupCell ? lookupRootRefs.current[openLookupCell.key] : null;
+      if (lookupRootElement && !lookupRootElement.contains(event.target as Node)) {
         setOpenLookupCell(null);
         setLookupSearchQuery("");
+      }
+      const actionRootElement =
+        openRowActionMenuId !== null ? rowActionRootRefs.current[openRowActionMenuId] : null;
+      if (actionRootElement && !actionRootElement.contains(event.target as Node)) {
+        setOpenRowActionMenuId(null);
       }
     };
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpenLookupCell(null);
         setLookupSearchQuery("");
+        setOpenRowActionMenuId(null);
       }
     };
     document.addEventListener("mousedown", handlePointerDown);
@@ -798,7 +1031,7 @@ export default function OpeningStockPage() {
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [openLookupCell]);
+  }, [openLookupCell, openRowActionMenuId]);
   useEffect(() => {
     return () => {
       if (itemSearchTimeoutRef.current !== null) {
@@ -809,6 +1042,52 @@ export default function OpeningStockPage() {
       }
     };
   }, []);
+  const unitOptionsByValue = useMemo(
+    () =>
+      new Map(
+        unitOptions
+          .filter((option) => option.value.trim().length > 0)
+          .map((option) => [option.value, option.label]),
+      ),
+    [unitOptions],
+  );
+  const taxOptionsByValue = useMemo(
+    () =>
+      new Map(
+        taxOptions
+          .filter((option) => option.value.trim().length > 0)
+          .map((option) => [option.value, option.label]),
+      ),
+    [taxOptions],
+  );
+  const taxSelectOptions = useMemo(
+    () => taxOptions.filter((option) => option.value.trim().length > 0),
+    [taxOptions],
+  );
+  useEffect(() => {
+    if (unitOptionsByValue.size === 0) {
+      return;
+    }
+    setRows((currentRows) =>
+      currentRows.map((row) => {
+        const unitId = row.values.oslunitid?.trim() ?? "";
+        if (!unitId) {
+          return row;
+        }
+        const unitLabel = unitOptionsByValue.get(unitId);
+        if (!unitLabel || row.values.uom === unitLabel) {
+          return row;
+        }
+        return {
+          ...row,
+          values: {
+            ...row.values,
+            uom: unitLabel,
+          },
+        };
+      }),
+    );
+  }, [unitOptionsByValue]);
   const columns = resolveConfiguredColumns(uiColumnConfigs);
   const filteredRows = getFilteredRows(rows, searchQuery);
   const visibleTotals = getTotals(filteredRows);
@@ -820,24 +1099,147 @@ export default function OpeningStockPage() {
       : configError
         ? "Column config unavailable. Using fallback columns."
         : "Using fallback columns.";
+  const itemOptionsByValue = useMemo(
+    () => new Map(itemOptions.map((option) => [option.value, option.label])),
+    [itemOptions],
+  );
+  const godownOptionsByValue = useMemo(
+    () => new Map(godownOptions.map((option) => [option.value, option.label])),
+    [godownOptions],
+  );
   const handleRowChange = (rowId: number, field: string, value: string) => {
     setRows((currentRows) =>
       currentRows.map((row) =>
         row.id === rowId
-          ? {
-              ...row,
-              values: {
+          ? (() => {
+              const nextValues = {
                 ...row.values,
                 [field]: value,
-              },
-            }
+              };
+              if (field === "openingqty" || field === "convfactor") {
+                nextValues.baseqty = formatQuantityValue(
+                  parseDecimal(field === "openingqty" ? value : nextValues.openingqty) *
+                    parseDecimal(field === "convfactor" ? value : nextValues.convfactor),
+                );
+              }
+              return {
+                ...row,
+                values: nextValues,
+              };
+            })()
           : row,
       ),
     );
   };
+  const handleUomChange = useCallback(
+    (rowId: number, unitId: string) => {
+      setRows((currentRows) =>
+        currentRows.map((row) => {
+          if (row.id !== rowId) {
+            return row;
+          }
+          const itemId = row.values.oslitemid?.trim() ?? "";
+          const itemDetail = itemId ? itemDetailsByItemId[itemId] : undefined;
+          if (!itemDetail) {
+            return row;
+          }
+          const priceRecord = resolveItemPriceRecordByUnitId(itemDetail, unitId);
+          return {
+            ...row,
+            values: {
+              ...row.values,
+              ...buildPriceSelectionValues(
+                itemDetail,
+                priceRecord,
+                unitOptionsByValue,
+                godownOptionsByValue,
+                row.values,
+              ),
+            },
+          };
+        }),
+      );
+    },
+    [godownOptionsByValue, itemDetailsByItemId, unitOptionsByValue],
+  );
+  const handleTaxChange = useCallback(
+    (rowId: number, taxId: string) => {
+      if (!taxId.trim()) {
+        setRows((currentRows) =>
+          currentRows.map((row) =>
+            row.id === rowId
+              ? {
+                  ...row,
+                  values: {
+                    ...row.values,
+                    ...buildTaxSelectionValues({
+                      tax_id: "",
+                      tax_name: "",
+                      tax_gst_rate_total: 0,
+                      tax_cess_type: "NONE",
+                      tax_cess_perc: 0,
+                      tax_cess_unit: 0,
+                    }),
+                  },
+                }
+              : row,
+          ),
+        );
+        return;
+      }
+      void (async () => {
+        try {
+          const taxDetail = await triggerItemTaxById({ taxId }, true).unwrap();
+          setRows((currentRows) =>
+            currentRows.map((row) =>
+              row.id === rowId
+                ? {
+                    ...row,
+                    values: {
+                      ...row.values,
+                      ...buildTaxSelectionValues(taxDetail),
+                    },
+                  }
+                : row,
+            ),
+          );
+        } catch (error) {
+          const message =
+            error && typeof error === "object" && "message" in error && typeof error.message === "string"
+              ? error.message
+              : "Failed to load tax details.";
+          toast.error(message, {
+            toastId: `opening-stock-tax-details:${taxId}`,
+          });
+        }
+      })();
+    },
+    [triggerItemTaxById],
+  );
   const handleLookupSelection = useCallback(
     (rowId: number, lookupKind: LookupKind, option: ERPDynamicSelectOption) => {
-      const fieldConfig = LOOKUP_FIELD_CONFIG[lookupKind];
+      if (lookupKind !== "item") {
+        const fieldConfig = LOOKUP_FIELD_CONFIG[lookupKind];
+        setRows((currentRows) =>
+          currentRows.map((row) =>
+            row.id === rowId
+              ? {
+                  ...row,
+                  values: {
+                    ...row.values,
+                    [fieldConfig.labelField]: option.value ? option.label : "",
+                    [fieldConfig.idField]: option.value,
+                  },
+                }
+              : row,
+          ),
+        );
+        setOpenLookupCell(null);
+        setLookupSearchQuery("");
+        return;
+      }
+      const requestId = (itemDetailRequestRef.current[rowId] ?? 0) + 1;
+      itemDetailRequestRef.current[rowId] = requestId;
       setRows((currentRows) =>
         currentRows.map((row) =>
           row.id === rowId
@@ -845,8 +1247,7 @@ export default function OpeningStockPage() {
                 ...row,
                 values: {
                   ...row.values,
-                  [fieldConfig.labelField]: option.value ? option.label : "",
-                  [fieldConfig.idField]: option.value,
+                  ...buildPendingItemSelectionValues(option),
                 },
               }
             : row,
@@ -854,8 +1255,83 @@ export default function OpeningStockPage() {
       );
       setOpenLookupCell(null);
       setLookupSearchQuery("");
+      if (!option.value) {
+        return;
+      }
+      const cachedDetail = itemDetailsByItemId[option.value];
+      if (cachedDetail) {
+        setRows((currentRows) =>
+          currentRows.map((row) => {
+            if (row.id !== rowId || (row.values.oslitemid ?? "").trim() !== option.value) {
+              return row;
+            }
+            return {
+              ...row,
+              values: {
+                ...row.values,
+                ...buildItemAutofillValues(
+                  cachedDetail,
+                  unitOptionsByValue,
+                  godownOptionsByValue,
+                  row.values,
+                  option.label,
+                ),
+              },
+            };
+          }),
+        );
+        return;
+      }
+      void (async () => {
+        try {
+          const detail = await triggerItemPriceDetails({ itemId: option.value }, true).unwrap();
+          if (itemDetailRequestRef.current[rowId] !== requestId) {
+            return;
+          }
+          setItemDetailsByItemId((current) => ({
+            ...current,
+            [detail.item.item_id]: detail,
+          }));
+          setRows((currentRows) =>
+            currentRows.map((row) => {
+              if (row.id !== rowId || (row.values.oslitemid ?? "").trim() !== option.value) {
+                return row;
+              }
+              return {
+                ...row,
+                values: {
+                  ...row.values,
+                  ...buildItemAutofillValues(
+                    detail,
+                    unitOptionsByValue,
+                    godownOptionsByValue,
+                    row.values,
+                    option.label,
+                  ),
+                },
+              };
+            }),
+          );
+        } catch (error) {
+          if (itemDetailRequestRef.current[rowId] !== requestId) {
+            return;
+          }
+          const message =
+            error && typeof error === "object" && "message" in error && typeof error.message === "string"
+              ? error.message
+              : "Failed to load item price details.";
+          toast.error(message, {
+            toastId: `opening-stock-item-price-details:${option.value}`,
+          });
+        }
+      })();
     },
-    [],
+    [
+      godownOptionsByValue,
+      itemDetailsByItemId,
+      triggerItemPriceDetails,
+      unitOptionsByValue,
+    ],
   );
   const handleLookupSearchChange = useCallback(
     (lookupKind: LookupKind, search: string) => {
@@ -912,20 +1388,42 @@ export default function OpeningStockPage() {
     setRows((currentRows) => [...currentRows, createEmptyRow(getNextRowId(currentRows))]);
   };
   const handleRemoveRow = (rowId: number) => {
+    setOpenRowActionMenuId((currentId) => (currentId === rowId ? null : currentId));
     setRows((currentRows) => {
       const nextRows = currentRows.filter((row) => row.id !== rowId);
       return nextRows.length > 0 ? nextRows : [createEmptyRow(1)];
     });
   };
   const tableMinWidth = getTableMinWidth(columns);
-  const itemOptionsByValue = useMemo(
-    () => new Map(itemOptions.map((option) => [option.value, option.label])),
-    [itemOptions],
-  );
-  const godownOptionsByValue = useMemo(
-    () => new Map(godownOptions.map((option) => [option.value, option.label])),
-    [godownOptions],
-  );
+  useEffect(() => {
+    if (godownOptionsByValue.size === 0 && taxOptionsByValue.size === 0) {
+      return;
+    }
+    setRows((currentRows) =>
+      currentRows.map((row) => {
+        const nextValues = { ...row.values };
+        const godownId = row.values.oslgodownid?.trim() ?? "";
+        const taxId = row.values.osltaxid?.trim() ?? "";
+        const godownLabel = godownId ? godownOptionsByValue.get(godownId) : "";
+        const taxLabel = taxId ? taxOptionsByValue.get(taxId) : "";
+        let changed = false;
+        if (godownLabel && nextValues.godown !== godownLabel) {
+          nextValues.godown = godownLabel;
+          changed = true;
+        }
+        if (taxLabel && nextValues.taxname !== taxLabel) {
+          nextValues.taxname = taxLabel;
+          changed = true;
+        }
+        return changed
+          ? {
+              ...row,
+              values: nextValues,
+            }
+          : row;
+      }),
+    );
+  }, [godownOptionsByValue, taxOptionsByValue]);
   const filteredItemOptions = useMemo(
     () => filterLookupOptions(itemOptions, lookupSearchQuery),
     [itemOptions, lookupSearchQuery],
@@ -938,10 +1436,10 @@ export default function OpeningStockPage() {
     <section className={styles.page}>
       <header className={styles.header}>
         <div className={styles.headingBlock}>
-                  <div className={styles.headingRow}>
+          <div className={styles.headingRow}>
             <div>
               <h1 className={styles.title}>Opening Stock</h1>
-            </div>          
+            </div>
           </div>
         </div>
         <div className={styles.summaryGrid}>
@@ -968,7 +1466,7 @@ export default function OpeningStockPage() {
         </div>
       </header>
       <div className={cx(tableStyles.tableShell, styles.tableShell)}>
-        <div className={tableStyles.toolbar}>         
+        <div className={tableStyles.toolbar}>
           <div className={tableStyles.tableTools}>
             <div className={tableStyles.searchField}>
               <FiSearch className={tableStyles.searchIcon} aria-hidden="true" />
@@ -981,6 +1479,15 @@ export default function OpeningStockPage() {
                 autoComplete="off"
               />
             </div>
+            <label className={styles.toolbarDateField}>
+              <span className={styles.toolbarDateLabel}>Voucher Date</span>
+              <input
+                type="date"
+                value={voucherDate}
+                onChange={(event) => setVoucherDate(event.target.value)}
+                className={styles.toolbarDateInput}
+              />
+            </label>
             <button type="button" className={tableStyles.createButton} onClick={handleAddRow}>
               <FiPlus className={tableStyles.createIcon} aria-hidden="true" />
               <span>Add line</span>
@@ -997,7 +1504,6 @@ export default function OpeningStockPage() {
               {columns.map((column) => (
                 <col key={column.key} style={{ width: column.width }} />
               ))}
-              <col style={{ width: ACTION_COLUMN_WIDTH }} />
             </colgroup>
             <thead className={tableStyles.head}>
               <tr>
@@ -1021,9 +1527,6 @@ export default function OpeningStockPage() {
                     <span className={tableStyles.headerText}>{column.header}</span>
                   </th>
                 ))}
-                <th className={cx(tableStyles.headerCell, tableStyles.alignCenter)}>
-                  <span className={tableStyles.headerText}>Actions</span>
-                </th>
               </tr>
             </thead>
             <tbody className={tableStyles.body}>
@@ -1031,7 +1534,7 @@ export default function OpeningStockPage() {
                 <tr className={cx(tableStyles.row, tableStyles.rowOdd)}>
                   <td
                     className={cx(tableStyles.cell, tableStyles.emptyCell)}
-                    colSpan={columns.length + 2}
+                    colSpan={columns.length + 1}
                   >
                     No stock lines match the current search.
                   </td>
@@ -1054,11 +1557,65 @@ export default function OpeningStockPage() {
                         styles.stickySerialCell,
                       )}
                     >
-                      <span className={styles.rowNumber}>{index + 1}</span>
+                      <div className={styles.serialCellContent}>
+                        <span className={styles.rowNumber}>{index + 1}</span>
+                        <div
+                          className={tableStyles.actionsMenuRoot}
+                          ref={(element) => {
+                            rowActionRootRefs.current[row.id] = element;
+                          }}
+                        >
+                          <button
+                            type="button"
+                            className={tableStyles.actionsTrigger}
+                            aria-label={`Open actions for row ${index + 1}`}
+                            aria-haspopup="menu"
+                            aria-expanded={openRowActionMenuId === row.id}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setOpenRowActionMenuId((currentId) =>
+                                currentId === row.id ? null : row.id,
+                              );
+                            }}
+                            onMouseDown={(event) => event.stopPropagation()}
+                          >
+                            <FiMoreVertical
+                              className={tableStyles.actionsTriggerIcon}
+                              aria-hidden="true"
+                            />
+                          </button>
+                          {openRowActionMenuId === row.id ? (
+                            <div
+                              className={tableStyles.actionsDropdown}
+                              role="menu"
+                              aria-label={`Actions for row ${index + 1}`}
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className={cx(
+                                  tableStyles.actionsDropdownItem,
+                                  tableStyles.actionsDropdownDelete,
+                                )}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleRemoveRow(row.id);
+                                }}
+                              >
+                                <FiTrash2 className={styles.actionIcon} aria-hidden="true" />
+                                <span>Remove row</span>
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
                     </td>
                     {columns.map((column) => {
                       const value = row.values[column.key] ?? "";
                       const isNumeric = column.kind === "number";
+                      const currentItemId = row.values.oslitemid?.trim() ?? "";
+                      const currentItemDetail = currentItemId ? itemDetailsByItemId[currentItemId] : undefined;
+                      const uomSelectOptions = buildUomOptions(currentItemDetail, unitOptionsByValue);
                       const sharedClassName = cx(
                         styles.cellInput,
                         isNumeric && styles.numericInput,
@@ -1094,7 +1651,36 @@ export default function OpeningStockPage() {
                           data-label={column.header}
                           className={cx(tableStyles.cell, getAlignClass(column.align))}
                         >
-                          {column.kind === "lookup" && lookupKind && lookupFieldConfig ? (
+                          {column.key === "uom" ? (
+                            <select
+                              value={row.values.oslunitid ?? ""}
+                              onChange={(event) => handleUomChange(row.id, event.target.value)}
+                              className={styles.cellSelect}
+                              disabled={!currentItemDetail || uomSelectOptions.length === 0}
+                            >
+                              <option value="">
+                                {currentItemDetail ? "Select Uom" : "Select item first"}
+                              </option>
+                              {uomSelectOptions.map((option) => (
+                                <option key={`${row.id}-uom-${option.value}`} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : column.key === "taxname" ? (
+                            <select
+                              value={row.values.osltaxid ?? ""}
+                              onChange={(event) => handleTaxChange(row.id, event.target.value)}
+                              className={styles.cellSelect}
+                            >
+                              <option value="">None</option>
+                              {taxSelectOptions.map((option) => (
+                                <option key={`${row.id}-tax-${option.value}`} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : column.kind === "lookup" && lookupKind && lookupFieldConfig ? (
                             <div
                               className={styles.lookupCell}
                               ref={(element) => {
@@ -1207,30 +1793,11 @@ export default function OpeningStockPage() {
                               }
                               className={sharedClassName}
                               placeholder={column.placeholder}
-                              step={column.kind === "number" ? column.step : undefined}
                             />
                           )}
                         </td>
                       );
                     })}
-                    <td
-                      data-label="Actions"
-                      className={cx(
-                        tableStyles.cell,
-                        tableStyles.actionsCell,
-                        tableStyles.alignCenter,
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRow(row.id)}
-                        className={cx(tableStyles.actionButton, tableStyles.deleteButton)}
-                        aria-label={`Remove row ${index + 1}`}
-                        title="Remove row"
-                      >
-                        <FiTrash2 className={styles.actionIcon} aria-hidden="true" />
-                      </button>
-                    </td>
                   </tr>
                 ))
               )}

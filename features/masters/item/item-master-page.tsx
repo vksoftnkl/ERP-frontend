@@ -321,7 +321,7 @@ const DEFAULT_PACKING_OPTION: ERPDynamicSelectOption = {
 };
 const BATCH_CONFIG_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "0", label: "None" },
-  { value: "1", label: "MRP & Selling Wise" },
+  { value: "1", label: "MRP" },
   { value: "2", label: "Batch Wise" },
 ];
 const ITEM_PRICE_DEFAULT_PROFIT_TYPE = "BY_PERCENT";
@@ -1189,7 +1189,6 @@ function recalculateAllItemPriceRowsForTaxContext(
     const nextRow = { ...row };
     const costWotValue = parseOptionalItemPriceNumber(nextRow.ipm_cost_wot);
     const costPriceValue = parseOptionalItemPriceNumber(nextRow.ipm_cost_price);
-
     if (costPriceValue !== null) {
       setDerivedItemPriceRowValue(
         nextRow,
@@ -1308,7 +1307,6 @@ function buildItemUnitConversionRowsByUnitId(
       .filter(([unitId]) => Boolean(unitId)),
   );
 }
-
 function resolveLinkedBaseUnitId(
   values: Record<string, string>,
   options: {
@@ -1328,7 +1326,6 @@ function resolveLinkedBaseUnitId(
       return unitId;
     }
   }
-
   const unitConversionRows =
     options.unitConversionRows ??
     parseLinkedRecordRows(values[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ?? "");
@@ -1341,10 +1338,8 @@ function resolveLinkedBaseUnitId(
       return unitId;
     }
   }
-
   return (values.item_base_unit_id ?? "").trim();
 }
-
 function syncSerializedItemUnitConversionRowsFromPriceRows(
   serializedItemUnitConversionRows: string,
   serializedPriceRows: string,
@@ -1440,7 +1435,6 @@ function syncItemPriceRowsWithUnitConversions(
       (matchingUnitConversion.iuc_is_default_unit ?? "false") === "true"
         ? "true"
         : "false";
-
     if ((nextRow.ipm_unit_id ?? "").trim() !== unitId) {
       nextRow.ipm_unit_id = unitId;
       hasChanges = true;

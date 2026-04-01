@@ -11,11 +11,9 @@ import {
   type LinkedRecordOption,
   type SearchSelectOverlayPosition,
 } from "./item-linked-records-editor.shared";
-
 type UseItemLinkedRecordsSearchSelectParams = {
   cellRefs: MutableRefObject<Map<string, LinkedRecordCellElement>>;
 };
-
 function removeStateEntry<TValue>(
   current: Record<string, TValue>,
   cellKey: string,
@@ -23,12 +21,10 @@ function removeStateEntry<TValue>(
   if (!(cellKey in current)) {
     return current;
   }
-
   const nextState = { ...current };
   delete nextState[cellKey];
   return nextState;
 }
-
 function resolveOverlayPosition(trigger: HTMLElement): SearchSelectOverlayPosition {
   const triggerRect = trigger.getBoundingClientRect();
   const maxWidth = Math.max(
@@ -53,7 +49,6 @@ function resolveOverlayPosition(trigger: HTMLElement): SearchSelectOverlayPositi
     96,
     Math.floor(shouldOpenUpward ? availableSpaceAbove : availableSpaceBelow),
   );
-
   return {
     left,
     width,
@@ -71,7 +66,6 @@ function resolveOverlayPosition(trigger: HTMLElement): SearchSelectOverlayPositi
         }),
   };
 }
-
 function resolveInitialHighlightedIndex(
   options: LinkedRecordOption[],
   currentValue: string,
@@ -80,18 +74,14 @@ function resolveInitialHighlightedIndex(
   if (preferredIndex !== undefined) {
     return preferredIndex;
   }
-
   const selectedIndex = options.findIndex(
     (option) => option.value === currentValue,
   );
-
   if (selectedIndex >= 0) {
     return selectedIndex;
   }
-
   return options.length > 0 ? 0 : -1;
 }
-
 export function useItemLinkedRecordsSearchSelect({
   cellRefs,
 }: UseItemLinkedRecordsSearchSelectParams) {

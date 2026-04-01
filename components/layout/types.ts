@@ -1,4 +1,5 @@
 import type React from "react";
+import type { ERPDynamicSelectOption } from "@/components/library/ui";
 
 export type ErpHeaderItem = {
   label: string;
@@ -13,9 +14,9 @@ export type ErpHeaderProps = {
   quickTabs?: ErpHeaderItem[];
   searchMenuCount?: number;
   dateText?: string;
-  customerOptions?: string[];
-  selectedCustomer?: string;
-  onCustomerChange?: (value: string) => void;
+  branchOptions?: ERPDynamicSelectOption[];
+  selectedBranch?: string;
+  onBranchChange?: (value: string) => void;
   cartCount?: number;
   onCartClick?: () => void;
   goLabel?: string;
@@ -47,9 +48,9 @@ export type MenuTreeProps = {
 export type HeaderRightProps = {
   searchMenuCount: number;
   dateText: string;
-  customerOptions: string[];
-  selectedCustomer: string;
-  onCustomerChange?: (value: string) => void;
+  branchOptions: ERPDynamicSelectOption[];
+  selectedBranch: string;
+  onBranchChange?: (value: string) => void;
   cartCount: number;
   onCartClick?: () => void;
   goLabel: string;

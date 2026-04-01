@@ -82,6 +82,44 @@
   gap: 0.85rem;
 }
 
+.toolbarDateField {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+}
+
+.toolbarDateLabel {
+  color: #5d6d80;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.toolbarDateInput {
+  width: min(100%, 190px);
+  min-width: 170px;
+  min-height: 2.75rem;
+  border: 1px solid #d7e0ea;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1b2634;
+  padding: 0.52rem 0.72rem;
+  font: inherit;
+  line-height: 1.35;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.toolbarDateInput:focus-visible {
+  outline: 0;
+  border-color: #8ab4ff;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+}
+
 .summaryCard {
   display: flex;
   flex-direction: column;
@@ -146,6 +184,14 @@
   color: #244f8a;
   font-size: 0.84rem;
   font-weight: 700;
+}
+
+.serialCellContent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  width: 100%;
 }
 
 .stickySerialCell {
@@ -408,6 +454,17 @@
 
   .summaryGrid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .toolbarDateField {
+    width: 100%;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .toolbarDateInput {
+    width: 100%;
+    min-width: 100%;
   }
 
   .summaryCard {

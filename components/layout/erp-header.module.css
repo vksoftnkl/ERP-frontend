@@ -213,7 +213,7 @@
   font-weight: 800;
 }
 
-.customerSelect {
+.branchSelect {
   height: 24px;
   min-width: 160px;
   border: 1px solid #4f4f4f;
@@ -332,7 +332,7 @@
     gap: 6px;
   }
 
-  .customerSelect {
+  .branchSelect {
     flex: 1 1 100%;
     min-width: 0;
   }
@@ -361,7 +361,7 @@
     font-size: 13px;
   }
 
-  .customerSelect {
+  .branchSelect {
     min-width: 132px;
     font-size: 12px;
   }
