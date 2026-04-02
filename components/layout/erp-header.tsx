@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./erp-header.module.css";
 import { clearAuthSession } from "@/lib/auth/session";
+import { clearBusinessContextSession } from "@/components/layout/business-context";
 import {
   canUseClientSideRouting,
   toInternalRoute,
@@ -11,6 +12,7 @@ import {
 import {
   ARIA_LABELS,
   DEFAULT_BRANCH_OPTIONS,
+  DEFAULT_COMPANY_OPTIONS,
   DEFAULT_DATE_FORMAT_OPTIONS,
   ERP_HEADER_ICON_COMPONENTS,
   DEFAULT_PRIMARY_MENU,
@@ -41,6 +43,11 @@ function cx(...tokens: Array<string | false | undefined>): string {
 function getDefaultBranchValue(options: Array<{ value: string }>): string {
   const firstNamedBranch = options.find((option) => option.value.trim().length > 0);
   return firstNamedBranch?.value ?? options[0]?.value ?? "";
+}
+
+function getDefaultCompanyValue(options: Array<{ value: string }>): string {
+  const firstNamedCompany = options.find((option) => option.value.trim().length > 0);
+  return firstNamedCompany?.value ?? options[0]?.value ?? "";
 }
 
 function getMenuItemElement(element: HTMLElement): HTMLLIElement | null {
@@ -299,6 +306,9 @@ function MenuTree({
 function HeaderRight({
   searchMenuCount,
   dateText,
+  companyOptions,
+  selectedCompany,
+  onCompanyChange,
   branchOptions,
   selectedBranch,
   onBranchChange,
@@ -309,6 +319,10 @@ function HeaderRight({
   logoutLabel,
   onLogout,
 }: HeaderRightProps) {
+  const handleCompanyChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
+    const next = event.target.value;
+    onCompanyChange?.(next);
+  }, [onCompanyChange]);
   const handleBranchChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
     const next = event.target.value;
     onBranchChange?.(next);
@@ -321,7 +335,19 @@ function HeaderRight({
         CAL
       </span>
       <select
-        className={styles.branchSelect}
+        className={styles.contextSelect}
+        aria-label={ARIA_LABELS.COMPANY_SELECT}
+        value={selectedCompany}
+        onChange={handleCompanyChange}
+      >
+        {companyOptions.map((option, index) => (
+          <option key={`${option.value}-company-${index}`} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <select
+        className={styles.contextSelect}
         aria-label={ARIA_LABELS.BRANCH_SELECT}
         value={selectedBranch}
         onChange={handleBranchChange}
@@ -392,6 +418,9 @@ export default function ErpHeader({
   quickTabs = DEFAULT_QUICK_TABS,
   searchMenuCount = 0,
   dateText,
+  companyOptions = DEFAULT_COMPANY_OPTIONS,
+  selectedCompany,
+  onCompanyChange,
   branchOptions = DEFAULT_BRANCH_OPTIONS,
   selectedBranch,
   onBranchChange,
@@ -414,10 +443,27 @@ export default function ErpHeader({
   const { data: primaryMenuFromApi } = useGetPrimaryMenuQuery(undefined, {
     skip: !shouldUseMenuMasterLabels,
   });
+  const [localCompany, setLocalCompany] = useState(
+    selectedCompany ?? getDefaultCompanyValue(companyOptions)
+  );
   const [localBranch, setLocalBranch] = useState(
     selectedBranch ?? getDefaultBranchValue(branchOptions)
   );
   const [localBillNumber, setLocalBillNumber] = useState(billNumber ?? "");
+  useEffect(() => {
+    if (selectedCompany !== undefined) {
+      setLocalCompany(selectedCompany);
+    }
+  }, [selectedCompany]);
+  useEffect(() => {
+    if (
+      selectedCompany === undefined &&
+      companyOptions.length > 0 &&
+      !companyOptions.some((option) => option.value === localCompany)
+    ) {
+      setLocalCompany(getDefaultCompanyValue(companyOptions));
+    }
+  }, [companyOptions, localCompany, selectedCompany]);
   useEffect(() => {
     if (selectedBranch !== undefined) {
       setLocalBranch(selectedBranch);
@@ -446,6 +492,7 @@ export default function ErpHeader({
     () => (shouldUseMenuMasterLabels ? primaryMenuFromApi ?? [] : primaryMenu),
     [primaryMenu, primaryMenuFromApi, shouldUseMenuMasterLabels],
   );
+  const resolvedCompany = selectedCompany ?? localCompany;
   const resolvedBranch = selectedBranch ?? localBranch;
   const resolvedBillNumber = billNumber ?? localBillNumber;
   const closeFocusedMenu = useCallback(() => {
@@ -489,6 +536,12 @@ export default function ErpHeader({
     };
   }, []);
   // Event handlers
+  const handleCompanyChange = useCallback((value: string) => {
+    if (selectedCompany === undefined) {
+      setLocalCompany(value);
+    }
+    onCompanyChange?.(value);
+  }, [onCompanyChange, selectedCompany]);
   const handleBranchChange = useCallback((value: string) => {
     if (selectedBranch === undefined) {
       setLocalBranch(value);
@@ -518,8 +571,9 @@ export default function ErpHeader({
       return;
     }
 
-    dispatch(authSessionChanged(null));
+    dispatch(authSessionChanged({ token: null, userId: null }));
     clearAuthSession();
+    clearBusinessContextSession();
     if (!canUseClientSideRouting()) {
       window.location.replace("/login");
       return;
@@ -545,6 +599,9 @@ export default function ErpHeader({
         <HeaderRight
           searchMenuCount={searchMenuCount}
           dateText={resolvedDateText}
+          companyOptions={companyOptions}
+          selectedCompany={resolvedCompany}
+          onCompanyChange={handleCompanyChange}
           branchOptions={branchOptions}
           selectedBranch={resolvedBranch}
           onBranchChange={handleBranchChange}

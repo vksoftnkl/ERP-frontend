@@ -2,9 +2,16 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiChevronDown, FiMoreVertical, FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
 import { toast } from "react-toastify";
+import { useBusinessContext } from "@/components/layout/business-context";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import tableStyles from "@/components/ui/table.module.scss";
+import { extractRows } from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";
+import {
+  getAuthSessionId,
+  getAuthUserId,
+  getOrCreateClientDeviceId,
+} from "@/lib/auth/session";
 import {
   type ItemPriceDetailsPayload,
   type ItemTaxDetailPayload,
@@ -16,6 +23,10 @@ import {
   useLazyGetUnitOptionsQuery,
 } from "@/store/api/lookupsApi";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
+import type {
+  OpeningStockSaveDetail,
+  OpeningStockSaveRequest,
+} from "./opening-stock.types";
 import styles from "./page.module.scss";
 type ColumnAlign = "left" | "center" | "right";
 type ColumnKind = "text" | "number" | "date" | "select" | "lookup";
@@ -45,7 +56,13 @@ type OpeningStockRow = {
   id: number;
   values: Record<string, string>;
 };
+type AccountLedgerRecord = {
+  ledId: string;
+  ledName: string;
+};
 const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
+const ACCOUNT_LEDGER_LIST_ENDPOINT = "/account-ledger-masters/list";
+const OPENING_STOCK_SAVE_ENDPOINT = "/opening-stocks";
 const UI_TABLE_COLUMNS_QUERY = {
   uiTblClmTableId: "5",
   page: "1",
@@ -55,6 +72,7 @@ const UI_TABLE_COLUMNS_TOAST_OPTIONS = {
   success: false,
   error: false,
 } as const;
+const OPENING_STOCK_LEDGER_NAME = "opening stock";
 const LOOKUP_SEARCH_DEBOUNCE_MS = 250;
 const SERIAL_NUMBER_COLUMN_WIDTH = "112px";
 const TRACKING_OPTIONS = ["NONE", "BATCH", "LOT"] as const;
@@ -511,6 +529,32 @@ function getTodayInputValue(): string {
   const localDate = new Date(today.getTime() - today.getTimezoneOffset() * 60_000);
   return localDate.toISOString().slice(0, 10);
 }
+function toNullableTrimmedString(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+function toIsoDateTime(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized ? `${normalized}T00:00:00.000Z` : null;
+}
+function getUtcYear(value: string | null | undefined): number | null {
+  if (!value?.trim()) {
+    return null;
+  }
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.valueOf()) ? null : parsedDate.getUTCFullYear();
+}
+function formatAccountingYear(
+  financialYearFrom: string | null | undefined,
+  financialYearTo: string | null | undefined,
+): string | null {
+  const startYear = getUtcYear(financialYearFrom);
+  const endYear = getUtcYear(financialYearTo);
+  if (startYear === null || endYear === null) {
+    return null;
+  }
+  return `${startYear}-${endYear}`;
+}
 function toInputValue(value: string | number | null | undefined): string {
   if (value === null || value === undefined) {
     return "";
@@ -671,10 +715,10 @@ function createDefaultRowValues(): Record<string, string> {
     return accumulator;
   }, {});
 }
+const DEFAULT_ROW_VALUES = createDefaultRowValues();
 function createItemAutofillResetValues(): Record<string, string> {
-  const defaultValues = createDefaultRowValues();
   return ITEM_AUTOFILL_FIELD_KEYS.reduce<Record<string, string>>((accumulator, key) => {
-    accumulator[key] = defaultValues[key] ?? "";
+    accumulator[key] = DEFAULT_ROW_VALUES[key] ?? "";
     return accumulator;
   }, {});
 }
@@ -690,7 +734,7 @@ function createRow(id: number, overrides: Record<string, string> = {}): OpeningS
   return {
     id,
     values: {
-      ...createDefaultRowValues(),
+      ...DEFAULT_ROW_VALUES,
       ...overrides,
     },
   };
@@ -714,6 +758,11 @@ function getFilteredRows(rows: OpeningStockRow[], searchQuery: string): OpeningS
 function getRowStockValue(row: OpeningStockRow): number {
   return parseDecimal(row.values.openingqty) * parseDecimal(row.values.costprice);
 }
+function isPristineRow(row: OpeningStockRow): boolean {
+  return Object.entries(DEFAULT_ROW_VALUES).every(
+    ([key, defaultValue]) => (row.values[key] ?? "") === defaultValue,
+  );
+}
 function getTotals(rows: OpeningStockRow[]): {
   lines: number;
   qty: number;
@@ -729,6 +778,75 @@ function getTotals(rows: OpeningStockRow[]): {
     }),
     { lines: 0, qty: 0, freeQty: 0, value: 0 },
   );
+}
+function getRowValidationMessage(row: OpeningStockRow, rowNumber: number): string | null {
+  if (!toNullableTrimmedString(row.values.oslitemid)) {
+    return `Row ${rowNumber} is missing an item.`;
+  }
+  if (!toNullableTrimmedString(row.values.oslunitid)) {
+    return `Row ${rowNumber} is missing a unit.`;
+  }
+  if (!toNullableTrimmedString(row.values.oslgodownid)) {
+    return `Row ${rowNumber} is missing a godown.`;
+  }
+  if (parseDecimal(row.values.openingqty) <= 0) {
+    return `Row ${rowNumber} must have opening quantity greater than zero.`;
+  }
+  return null;
+}
+function buildOpeningStockDetailPayload(row: OpeningStockRow): OpeningStockSaveDetail {
+  return {
+    osl_barcode: toNullableTrimmedString(row.values.barcode),
+    osl_item_id: row.values.oslitemid.trim(),
+    osl_unit_id: row.values.oslunitid.trim(),
+    osl_base_uom_id: toNullableTrimmedString(row.values.oslbaseuomid),
+    osl_godown_id: row.values.oslgodownid.trim(),
+    osl_tracking_type: row.values.osltrackingtype?.trim() || "NONE",
+    osl_tax_id: toNullableTrimmedString(row.values.osltaxid),
+    osl_tax_perc: parseDecimal(row.values.osltaxperc),
+    osl_cess_type: row.values.oslcesstype?.trim() || "NONE",
+    osl_cess_perc: parseDecimal(row.values.oslcessperc),
+    osl_cess_per_unit: parseDecimal(row.values.oslcessperunit),
+    osl_qty: parseDecimal(row.values.openingqty),
+    osl_free_qty: parseDecimal(row.values.freeqty),
+    osl_base_qty: parseDecimal(row.values.baseqty),
+    osl_conv_factor: parseDecimal(row.values.convfactor) || 1,
+    osl_batch_no: toNullableTrimmedString(row.values.batchno),
+    osl_serial_no: toNullableTrimmedString(row.values.serialno),
+    osl_batch_date: toIsoDateTime(row.values.batchdate),
+    osl_mfg_date: toIsoDateTime(row.values.mfgdate),
+    osl_expiry_date: toIsoDateTime(row.values.expirydate),
+    osl_cost_rate: parseDecimal(row.values.costprice),
+    osl_cost_rate_wot: parseDecimal(row.values.costwot),
+    osl_sale_rate_a_wot: parseDecimal(row.values.priceawot),
+    osl_markup_perc_a: parseDecimal(row.values.priceamarkup),
+    osl_sale_rate_a: parseDecimal(row.values.pricea),
+    osl_sale_rate_b_wot: parseDecimal(row.values.pricebwot),
+    osl_markup_perc_b: parseDecimal(row.values.pricebmarkup),
+    osl_sale_rate_b: parseDecimal(row.values.priceb),
+    osl_sale_rate_c_wot: parseDecimal(row.values.pricecwot),
+    osl_markup_perc_c: parseDecimal(row.values.pricecmarkup),
+    osl_sale_rate_c: parseDecimal(row.values.pricec),
+    osl_sale_rate_d_wot: parseDecimal(row.values.pricedwot),
+    osl_markup_perc_d: parseDecimal(row.values.pricedmarkup),
+    osl_sale_rate_d: parseDecimal(row.values.priced),
+    osl_mrp_rate: parseDecimal(row.values.mrp),
+    osl_min_rate: parseDecimal(row.values.msp),
+    osl_remarks: toNullableTrimmedString(row.values.remarks),
+    item_code: toNullableTrimmedString(row.values.code),
+    item_name: toNullableTrimmedString(row.values.itemname),
+    godown_name: toNullableTrimmedString(row.values.godown),
+    uom_name: toNullableTrimmedString(row.values.uom),
+    tax_name: toNullableTrimmedString(row.values.taxname),
+    profit_type: toNullableTrimmedString(row.values.profittype),
+    round_off: parseDecimal(row.values.roundoff),
+  };
+}
+function buildOpeningStockNarration(rows: OpeningStockRow[]): string | null {
+  const remarks = rows
+    .map((row) => toNullableTrimmedString(row.values.remarks))
+    .filter((value): value is string => Boolean(value));
+  return remarks.length > 0 ? remarks.join(" | ") : null;
 }
 function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): ColumnDefinition[] {
   if (configuredColumns.length === 0) {

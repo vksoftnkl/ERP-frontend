@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { extractAuthToken, setAuthSession } from "@/lib/auth/session";
+import { extractAuthToken, extractAuthUserId, setAuthSession } from "@/lib/auth/session";
 import {
   canUseClientSideRouting,
   normalizeInternalRoute,
@@ -56,7 +56,8 @@ export default function LoginPage() {
         user_password: values.password,
       }).unwrap();
       const token = extractAuthToken(response);
-      const hasSession = setAuthSession(token);
+      const userId = extractAuthUserId(response);
+      const hasSession = setAuthSession(token, userId);
       if (!hasSession) {
         setAuthError("Token missing in login response.");
         if (canUseClientSideRouting()) {
@@ -66,7 +67,7 @@ export default function LoginPage() {
         }
         return;
       }
-      dispatch(authSessionChanged(token));
+      dispatch(authSessionChanged({ token, userId }));
 
       const nextRoute = normalizeNextRoute(
         new URLSearchParams(window.location.search).get("next")

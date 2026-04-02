@@ -25,6 +25,9 @@ export type ErpHeaderProps = {
   quickTabs?: ErpHeaderItem[];
   searchMenuCount?: number;
   dateText?: string;
+  companyOptions?: ERPDynamicSelectOption[];
+  selectedCompany?: string;
+  onCompanyChange?: (value: string) => void;
   branchOptions?: ERPDynamicSelectOption[];
   selectedBranch?: string;
   onBranchChange?: (value: string) => void;
@@ -60,6 +63,9 @@ export type MenuTreeProps = {
 export type HeaderRightProps = {
   searchMenuCount: number;
   dateText: string;
+  companyOptions: ERPDynamicSelectOption[];
+  selectedCompany: string;
+  onCompanyChange?: (value: string) => void;
   branchOptions: ERPDynamicSelectOption[];
   selectedBranch: string;
   onBranchChange?: (value: string) => void;

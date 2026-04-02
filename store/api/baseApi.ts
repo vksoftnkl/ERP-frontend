@@ -48,7 +48,7 @@ const baseQueryWithAuthHandling: BaseQueryFn<string | FetchArgs, unknown, ApiErr
         : extractApiErrorMessage(data, "Request failed.");
     if (status === 401 || status === 403) {
       clearAuthSession();
-      api.dispatch(authSessionChanged(null));
+      api.dispatch(authSessionChanged({ token: null, userId: null }));
     }
     return {
       error: {
