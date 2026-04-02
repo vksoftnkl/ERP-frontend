@@ -1,8 +1,32 @@
-import type { ErpHeaderItem, ERPMenuObject } from "./types";
+import type { IconType } from "react-icons";
+import {
+  FiBarChart2,
+  FiBox,
+  FiCreditCard,
+  FiPackage,
+  FiSettings,
+  FiShoppingBag,
+  FiShoppingCart,
+  FiTruck,
+} from "react-icons/fi";
+import type { ErpHeaderIconKey, ErpHeaderItem, ERPMenuObject } from "./types";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
+
+export const ERP_HEADER_ICON_COMPONENTS: Record<ErpHeaderIconKey, IconType> = {
+  sales: FiShoppingBag,
+  purchase: FiShoppingCart,
+  inventory: FiBox,
+  stock: FiPackage,
+  accounts: FiCreditCard,
+  reports: FiBarChart2,
+  settings: FiSettings,
+  transport: FiTruck,
+};
+
 export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
   {
-    label: "1 Sales",
+    label: "Sales",
+    iconKey: "sales",
     children: [
       {label: "Customers", href: "/master/customer"},      
       { label: "Sales Entry", href: "/dashboard" },
@@ -29,7 +53,8 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
     ],
   },
   {
-    label: "2 Purchase",
+    label: "Purchase",
+    iconKey: "purchase",
     children: [
       {
         label: "Suppliers",
@@ -48,7 +73,8 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
     ],
   },
  {
-  label: "3 Inventory",
+  label: "Inventory",
+  iconKey: "inventory",
   children: [
     { label: "Item Master", href: "/master/item-master" },
     { label: "Change Selling" },
@@ -75,11 +101,13 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
   ],
   },
   {
-    label: "4 Stock",
+    label: "Stock",
+    iconKey: "stock",
     children: [{ label: "Opening Stock", href: "/stock/opening-stock" }],
   },
   {
-    label: "5 Accounts",
+    label: "Accounts",
+    iconKey: "accounts",
     children: [
       {
         label: " Ledger Group Master",
@@ -103,7 +131,8 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
     ],
   },
   {
-    label: "6 Reports",
+    label: "Reports",
+    iconKey: "reports",
     children: [
       { label: "Day Book" },
       { label: "Sales Register" },
@@ -117,7 +146,8 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       },
     ],
   },
-  { label: "7 Settings",
+  { label: "Settings",
+    iconKey: "settings",
     children:[
       {label:"Company Master",href:"/master/companies"},
       {label:"Branch Master",href:"/master/branches-master"},
@@ -151,7 +181,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       {label:"Permissions",href:"/master/permissions"},
     ]
   },
-  { label: "8 Transport" },
+  { label: "Transport", iconKey: "transport" },
 ];
 export const DEFAULT_QUICK_TABS: ErpHeaderItem[] = [
   { label: "Sales Entry" },
@@ -232,7 +262,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function sanitizeMenuLabel(label: string): string {
-  const sanitized = label.trim().replace(/^&+/, "").replace(/\s+/g, " ");
+  const sanitized = label
+    .trim()
+    .replace(/^&+/, "")
+    .replace(/^\d+\s+/, "")
+    .replace(/\s+/g, " ");
   return sanitized || label;
 }
 
@@ -352,14 +386,19 @@ function buildMenuLookup(items: MenuMasterItem[]): Map<string, MenuMasterItem[]>
   return lookup;
 }
 
-type MenuHrefLookup = {
-  byPath: Map<string, string>;
-  byLabel: Map<string, string>;
+type MenuPresentation = {
+  href?: string;
+  iconKey?: ErpHeaderIconKey;
 };
 
-function buildMenuHrefLookup(baseItems: ErpHeaderItem[]): MenuHrefLookup {
-  const byPath = new Map<string, string>();
-  const byLabel = new Map<string, string>();
+type MenuPresentationLookup = {
+  byPath: Map<string, MenuPresentation>;
+  byLabel: Map<string, MenuPresentation>;
+};
+
+function buildMenuPresentationLookup(baseItems: ErpHeaderItem[]): MenuPresentationLookup {
+  const byPath = new Map<string, MenuPresentation>();
+  const byLabel = new Map<string, MenuPresentation>();
 
   const visit = (items: ErpHeaderItem[], path: string[]) => {
     for (const item of items) {
@@ -371,10 +410,19 @@ function buildMenuHrefLookup(baseItems: ErpHeaderItem[]): MenuHrefLookup {
       const nextPath = [...path, normalized];
       const pathKey = nextPath.join(" > ");
 
-      if (item.href) {
-        byPath.set(pathKey, item.href);
+      if (item.href || item.iconKey) {
+        const presentation: MenuPresentation = {};
+
+        if (item.href) {
+          presentation.href = item.href;
+        }
+        if (item.iconKey) {
+          presentation.iconKey = item.iconKey;
+        }
+
+        byPath.set(pathKey, presentation);
         if (!byLabel.has(normalized)) {
-          byLabel.set(normalized, item.href);
+          byLabel.set(normalized, presentation);
         }
       }
 
@@ -391,7 +439,7 @@ function buildMenuHrefLookup(baseItems: ErpHeaderItem[]): MenuHrefLookup {
 
 function toHeaderItemsFromApi(
   apiItems: MenuMasterItem[],
-  hrefLookup: MenuHrefLookup,
+  presentationLookup: MenuPresentationLookup,
   path: string[] = [],
 ): ErpHeaderItem[] {
   return apiItems
@@ -404,12 +452,21 @@ function toHeaderItemsFromApi(
 
       const nextPath = [...path, normalized];
       const pathKey = nextPath.join(" > ");
-      const href = hrefLookup.byPath.get(pathKey) ?? hrefLookup.byLabel.get(normalized);
-      const children = toHeaderItemsFromApi(apiItem.children ?? [], hrefLookup, nextPath);
+      const presentation =
+        presentationLookup.byPath.get(pathKey) ??
+        presentationLookup.byLabel.get(normalized);
+      const children = toHeaderItemsFromApi(
+        apiItem.children ?? [],
+        presentationLookup,
+        nextPath,
+      );
 
       const nextItem: ErpHeaderItem = { label };
-      if (href) {
-        nextItem.href = href;
+      if (presentation?.href) {
+        nextItem.href = presentation.href;
+      }
+      if (presentation?.iconKey) {
+        nextItem.iconKey = presentation.iconKey;
       }
       if (apiItem.menuSeparator) {
         nextItem.menuSeparator = true;
@@ -435,8 +492,8 @@ export function applyMenuMasterLabels(
     return [];
   }
 
-  const hrefLookup = buildMenuHrefLookup(baseMenu);
-  return toHeaderItemsFromApi(menuMasterItems, hrefLookup);
+  const presentationLookup = buildMenuPresentationLookup(baseMenu);
+  return toHeaderItemsFromApi(menuMasterItems, presentationLookup);
 }
 
 export const DEFAULT_BRANCH_OPTIONS: ERPDynamicSelectOption[] = [

@@ -48,6 +48,20 @@
   cursor: pointer;
 }
 
+.menuLinkContent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.menuIcon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  opacity: 0.92;
+}
+
 .primaryMenuItem,
 .quickTab {
   display: inline-flex;
@@ -89,7 +103,7 @@
   bottom: 0;
   left: 10px;
   right: 10px;
-  border-bottom: 1px solid #2f3b4f;
+  border-bottom: 1px solid rgba(47, 59, 79, 0.28);
 }
 
 .menuLinkWithSubmenu {
@@ -104,7 +118,6 @@
   transition: transform 0.18s ease;
 }
 
-.menuItem:hover > .menuLinkWithSubmenu .submenuArrow,
 .menuItem:focus-within > .menuLinkWithSubmenu .submenuArrow {
   transform: translate(2px, 1px);
 }
@@ -118,7 +131,6 @@
   padding: 4px 0;
   min-width: 208px;
   list-style: none;
-  border: 1px solid #b7c0ce;
   background: #fff;
   box-shadow: 0 14px 26px rgba(16, 24, 40, 0.2);
   opacity: 0;
@@ -144,7 +156,6 @@
   --submenu-shift-y: 0;
 }
 
-.menuItem:hover > .submenuList,
 .menuItem:focus-within > .submenuList {
   opacity: 1;
   visibility: visible;
@@ -178,11 +189,20 @@
   padding-left: 14px;
 }
 
-.primaryMenuItem:focus-visible,
-.quickTab:focus-visible,
-.submenuLink:focus-visible {
-  outline: 2px solid #8cb5ff;
+.primaryMenuItem:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.65);
   outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.quickTab:focus-visible {
+  outline: 1px solid rgba(123, 17, 17, 0.35);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.submenuLink:focus-visible {
+  outline: none;
 }
 
 .headerRight {

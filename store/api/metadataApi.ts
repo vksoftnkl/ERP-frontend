@@ -3,13 +3,11 @@ import {
   type GridColumnConfig,
 } from "@/store/slices/gridColumnsSlice";
 import { baseApi } from "@/store/api/baseApi";
-
 export type GridColumnsQueryArg = {
   gridId: number;
   page?: number;
   limit?: number;
 };
-
 export const metadataApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getGridColumns: builder.query<GridColumnConfig[], GridColumnsQueryArg>({
@@ -27,5 +25,4 @@ export const metadataApi = baseApi.injectEndpoints({
     }),
   }),
 });
-
 export const { useGetGridColumnsQuery } = metadataApi;

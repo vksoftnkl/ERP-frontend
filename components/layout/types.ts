@@ -1,9 +1,20 @@
 import type React from "react";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 
+export type ErpHeaderIconKey =
+  | "sales"
+  | "purchase"
+  | "inventory"
+  | "stock"
+  | "accounts"
+  | "reports"
+  | "settings"
+  | "transport";
+
 export type ErpHeaderItem = {
   label: string;
   href?: string;
+  iconKey?: ErpHeaderIconKey;
   onClick?: () => void;
   menuSeparator?: boolean;
   children?: ErpHeaderItem[];
@@ -31,6 +42,7 @@ export type ErpHeaderProps = {
 export type MenuLinkProps = {
   item: ErpHeaderItem;
   className: string;
+  depth: number;
   hasSubmenu: boolean;
   onNavigate: (destination: string) => void;
   onMenuClose: () => void;

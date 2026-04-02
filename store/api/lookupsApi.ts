@@ -5,75 +5,61 @@ import {
   extractDetailSource,
 } from "@/features/masters/shared/normalizers";
 import { baseApi } from "@/store/api/baseApi";
-
 const ITEM_LIST_ENDPOINT = "/items/list";
 const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const ITEM_PRICE_DETAILS_ENDPOINT = "/item-price-details/get";
 const ITEM_TAX_LIST_ENDPOINT = "/item-taxes/list";
 const ITEM_TAX_GET_ENDPOINT = "/item-taxes/get";
-
 const ITEM_LOOKUP_QUERY = {
   limit: "50",
 } as const;
-
 const UNIT_LOOKUP_QUERY = {
   module: "units",
   limit: "100",
 } as const;
-
 const GODOWN_LOOKUP_QUERY = {
   module: "godownLocations",
   limit: "100",
 } as const;
-
 const BRANCH_LOOKUP_QUERY = {
   module: "branches",
   limit: "100",
 } as const;
-
 const ITEM_TAX_LIST_QUERY = {
   page: "1",
   limit: "100",
   tax_is_active: "true",
 } as const;
-
 const DEFAULT_ITEM_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Clear selection",
 };
-
 const DEFAULT_GODOWN_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Clear selection",
 };
-
 const DEFAULT_BRANCH_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Branch",
 };
-
 const DEFAULT_UNIT_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Clear selection",
 };
-
 const DEFAULT_TAX_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "None",
 };
-
 const ITEM_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "item_masters", "items"],
   idKeys: ["item_id", "itemId", "id", "_id", "value"],
   labelKeys: ["item_name_en", "itemNameEn", "name", "label"],
 } as const;
-
 const UNIT_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "units", "itemUnits"],
   idKeys: ["unit_id", "unitId", "item_unit_id", "itemUnitId", "uom_id", "id", "_id", "value"],
   labelKeys: ["unit_name", "unitName", "item_unit_name", "itemUnitName", "uom_name", "name", "label"],
 } as const;
-
 const GODOWN_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "godowns", "godown_locations"],
   idKeys: [
@@ -95,31 +81,25 @@ const GODOWN_LOOKUP_KEYS = {
     "label",
   ],
 } as const;
-
 const BRANCH_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "branches", "branch_masters"],
   idKeys: ["brId", "br_id", "branch_id", "branchId", "id", "_id", "value"],
   labelKeys: ["brName", "br_name", "branch_name", "branchName", "name", "label"],
 } as const;
-
 const ITEM_TAX_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "itemTaxes"],
   idKeys: ["taxId", "tax_id", "id", "_id", "value"],
   labelKeys: ["taxName", "tax_name", "name", "label"],
 } as const;
-
 export type LookupSearchArg = {
   search?: string;
 };
-
 export type ItemPriceDetailsQueryArg = {
   itemId: string;
 };
-
 export type ItemTaxQueryArg = {
   taxId: string;
 };
-
 export type ItemPriceDetailsItem = {
   item_id: string;
   item_code: string | null;
@@ -131,7 +111,6 @@ export type ItemPriceDetailsItem = {
   item_is_expiry_item: boolean;
   item_notes?: string | null;
 };
-
 export type ItemPriceDetailsPrice = {
   ipm_unit_id: string;
   ipm_godown_id: string;
@@ -159,7 +138,6 @@ export type ItemPriceDetailsPrice = {
   ipm_uom_remarks: string | null;
   ipm_cost_remarks: string | null;
 };
-
 export type ItemPriceDetailsTax = {
   tax_id: string;
   tax_name: string;
@@ -168,7 +146,6 @@ export type ItemPriceDetailsTax = {
   tax_cess_perc: number;
   tax_cess_unit: number;
 };
-
 export type ItemTaxDetailPayload = {
   tax_id: string;
   tax_name: string;
@@ -177,13 +154,11 @@ export type ItemTaxDetailPayload = {
   tax_cess_perc: number;
   tax_cess_unit: number;
 };
-
 export type ItemPriceDetailsPayload = {
   item: ItemPriceDetailsItem;
   item_prices: ItemPriceDetailsPrice[];
   item_tax: ItemPriceDetailsTax | null;
 };
-
 export const lookupsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getItemOptions: builder.query<ERPDynamicSelectOption[], LookupSearchArg | void>({
@@ -259,7 +234,6 @@ export const lookupsApi = baseApi.injectEndpoints({
     }),
   }),
 });
-
 export const {
   useGetBranchOptionsQuery,
   useLazyGetGodownOptionsQuery,

@@ -6,13 +6,11 @@ import {
   extractMenuMasterItems,
 } from "@/components/layout/constants";
 import { baseApi } from "@/store/api/baseApi";
-
 const MENU_MASTERS_QUERY = {
   includeChildren: "true",
   activeOnly: "true",
   visibleOnly: "true",
 } as const;
-
 export const shellApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getPrimaryMenu: builder.query<ErpHeaderItem[], void>({
@@ -27,5 +25,4 @@ export const shellApi = baseApi.injectEndpoints({
     }),
   }),
 });
-
 export const { useGetPrimaryMenuQuery } = shellApi;

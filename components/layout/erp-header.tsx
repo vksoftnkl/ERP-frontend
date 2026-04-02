@@ -12,6 +12,7 @@ import {
   ARIA_LABELS,
   DEFAULT_BRANCH_OPTIONS,
   DEFAULT_DATE_FORMAT_OPTIONS,
+  ERP_HEADER_ICON_COMPONENTS,
   DEFAULT_PRIMARY_MENU,
   DEFAULT_QUICK_TABS,
 } from "./constants";
@@ -41,14 +42,93 @@ function getDefaultBranchValue(options: Array<{ value: string }>): string {
   const firstNamedBranch = options.find((option) => option.value.trim().length > 0);
   return firstNamedBranch?.value ?? options[0]?.value ?? "";
 }
+
+function getMenuItemElement(element: HTMLElement): HTMLLIElement | null {
+  return element.closest(`li.${styles.menuItem}`);
+}
+
+function getDirectMenuButton(element: Element | null): HTMLButtonElement | null {
+  if (!(element instanceof HTMLElement)) {
+    return null;
+  }
+
+  for (const child of Array.from(element.children)) {
+    if (child instanceof HTMLButtonElement) {
+      return child;
+    }
+  }
+
+  return null;
+}
+
+function getDirectSubmenu(element: Element | null): HTMLUListElement | null {
+  if (!(element instanceof HTMLElement)) {
+    return null;
+  }
+
+  for (const child of Array.from(element.children)) {
+    if (child instanceof HTMLUListElement) {
+      return child;
+    }
+  }
+
+  return null;
+}
+
+function getMenuButtonsInList(list: Element | null): HTMLButtonElement[] {
+  if (!(list instanceof HTMLElement)) {
+    return [];
+  }
+
+  return Array.from(list.children)
+    .map((child) => getDirectMenuButton(child))
+    .filter((button): button is HTMLButtonElement => button !== null);
+}
+
+function focusSiblingButton(button: HTMLButtonElement, offset: number): boolean {
+  const menuItem = getMenuItemElement(button);
+  const siblings = getMenuButtonsInList(menuItem?.parentElement ?? null);
+  const currentIndex = siblings.indexOf(button);
+  if (currentIndex === -1 || siblings.length === 0) {
+    return false;
+  }
+
+  const nextIndex = (currentIndex + offset + siblings.length) % siblings.length;
+  siblings[nextIndex]?.focus();
+  return true;
+}
+
+function focusChildMenuButton(button: HTMLButtonElement, useLastChild = false): boolean {
+  const menuItem = getMenuItemElement(button);
+  const submenu = getDirectSubmenu(menuItem);
+  const submenuButtons = getMenuButtonsInList(submenu);
+  if (submenuButtons.length === 0) {
+    return false;
+  }
+
+  const target = useLastChild ? submenuButtons[submenuButtons.length - 1] : submenuButtons[0];
+  target?.focus();
+  return true;
+}
+
+function focusParentMenuButton(button: HTMLButtonElement): boolean {
+  const menuItem = getMenuItemElement(button);
+  const parentList = menuItem?.parentElement;
+  const parentMenuItem = parentList?.closest(`li.${styles.menuItem}`) ?? null;
+  const parentButton = getDirectMenuButton(parentMenuItem);
+  parentButton?.focus();
+  return parentButton !== null;
+}
 // Components
 function MenuLink({
   item,
   className,
+  depth,
   hasSubmenu,
   onNavigate,
   onMenuClose,
 }: MenuLinkProps) {
+  const Icon = item.iconKey ? ERP_HEADER_ICON_COMPONENTS[item.iconKey] : undefined;
   const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
     item.onClick?.();
     if (item.href && item.href !== "#") {
@@ -68,14 +148,87 @@ function MenuLink({
       window.alert(`Navigating to ${item.label}`);
     }
   }, [item.href, item.onClick, item.label, hasSubmenu, onNavigate, onMenuClose]);
+  const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>) => {
+    const { currentTarget, key } = event;
+    const isRootLevel = depth === 0;
+
+    if (key === "Enter" || key === " ") {
+      event.preventDefault();
+      if (hasSubmenu && focusChildMenuButton(currentTarget)) {
+        return;
+      }
+      currentTarget.click();
+      return;
+    }
+
+    if (isRootLevel) {
+      if (key === "ArrowRight") {
+        event.preventDefault();
+        focusSiblingButton(currentTarget, 1);
+        return;
+      }
+
+      if (key === "ArrowLeft") {
+        event.preventDefault();
+        focusSiblingButton(currentTarget, -1);
+        return;
+      }
+
+      if (key === "ArrowDown") {
+        if (hasSubmenu) {
+          event.preventDefault();
+          focusChildMenuButton(currentTarget);
+        }
+        return;
+      }
+
+      if (key === "ArrowUp") {
+        if (hasSubmenu) {
+          event.preventDefault();
+          focusChildMenuButton(currentTarget, true);
+        }
+      }
+      return;
+    }
+
+    if (key === "ArrowDown") {
+      event.preventDefault();
+      focusSiblingButton(currentTarget, 1);
+      return;
+    }
+
+    if (key === "ArrowUp") {
+      event.preventDefault();
+      focusSiblingButton(currentTarget, -1);
+      return;
+    }
+
+    if (key === "ArrowRight") {
+      if (hasSubmenu) {
+        event.preventDefault();
+        focusChildMenuButton(currentTarget);
+      }
+      return;
+    }
+
+    if (key === "ArrowLeft") {
+      event.preventDefault();
+      focusParentMenuButton(currentTarget);
+    }
+  }, [depth, hasSubmenu]);
   return (
     <button
       type="button"
       className={cx(styles.menuLinkButton, className, hasSubmenu && styles.menuLinkWithSubmenu)}
       onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      role="menuitem"
       aria-haspopup={hasSubmenu ? "menu" : undefined}
     >
-      <span>{item.label}</span>
+      <span className={styles.menuLinkContent}>
+        {Icon ? <Icon className={styles.menuIcon} aria-hidden="true" /> : null}
+        <span>{item.label}</span>
+      </span>
       {hasSubmenu && (
         <span className={styles.submenuArrow} aria-hidden="true">
           &#9656;
@@ -95,6 +248,7 @@ function MenuTree({
   const isRootLevel = depth === 0;
   return (
     <ul
+      data-menu-depth={depth}
       className={
         isRootLevel
           ? rootListClassName
@@ -103,7 +257,7 @@ function MenuTree({
               depth === 1 ? styles.submenuLevelOne : styles.submenuLevelNested,
             )
       }
-      role={isRootLevel ? undefined : "menu"}
+      role={isRootLevel ? "menubar" : "menu"}
     >
       {items.map((item, index) => {
         const children = item.children ?? [];
@@ -120,6 +274,7 @@ function MenuTree({
             <MenuLink
               item={item}
               className={isRootLevel ? rootLinkClassName : styles.submenuLink}
+              depth={depth}
               hasSubmenu={hasSubmenu}
               onNavigate={onNavigate}
               onMenuClose={onMenuClose}
