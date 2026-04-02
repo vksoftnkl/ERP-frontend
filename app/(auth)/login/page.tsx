@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { extractAuthToken, extractAuthUserId, setAuthSession } from "@/lib/auth/session";
+import clientPackageJson from "../../../package.json";
+import {
+  extractAuthToken,
+  extractAuthUserId,
+  getOrCreateClientDeviceId,
+  setAuthSession,
+} from "@/lib/auth/session";
 import {
   canUseClientSideRouting,
   normalizeInternalRoute,
@@ -11,6 +17,8 @@ import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useLoginMutation } from "@/store/api/authApi";
 import { useAppDispatch } from "@/store/hooks";
 import { authSessionChanged } from "@/store/slices/authSlice";
+
+const CLIENT_APP_VERSION = `erp-client@${clientPackageJson.version}`;
 
 type Errors = {
   username?: string;
@@ -54,6 +62,8 @@ export default function LoginPage() {
       const response = await login({
         user_name: values.username.trim(),
         user_password: values.password,
+        device_id: getOrCreateClientDeviceId() ?? undefined,
+        app_version: CLIENT_APP_VERSION,
       }).unwrap();
       const token = extractAuthToken(response);
       const userId = extractAuthUserId(response);

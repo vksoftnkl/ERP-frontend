@@ -165,12 +165,25 @@
   line-height: 1.45;
 }
 
+.updateButton {
+  border-color: #0f7a43;
+  background: linear-gradient(180deg, #1f9d5a 0%, #0f7a43 100%);
+}
+
+.updateButton:hover:not(:disabled) {
+  box-shadow: 0 10px 20px rgba(15, 122, 67, 0.24);
+}
+
 .configMeta {
   margin: 0.3rem 0 0;
   color: #4c6784;
   font-size: 0.82rem;
   font-weight: 700;
   line-height: 1.4;
+}
+
+.configMetaError {
+  color: #9d3d33;
 }
 
 .rowNumber {

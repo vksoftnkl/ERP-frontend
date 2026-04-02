@@ -2,6 +2,8 @@ import { baseApi } from "@/store/api/baseApi";
 export type LoginRequest = {
   user_name: string;
   user_password: string;
+  device_id?: string;
+  app_version?: string;
 };
 export type LoginResponse = Record<string, unknown>;
 export const authApi = baseApi.injectEndpoints({

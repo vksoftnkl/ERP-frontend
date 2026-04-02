@@ -537,23 +537,19 @@ function toIsoDateTime(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? `${normalized}T00:00:00.000Z` : null;
 }
-function getUtcYear(value: string | null | undefined): number | null {
-  if (!value?.trim()) {
+function formatAccountingYear(referenceDate: string | null | undefined): string | null {
+  const normalized = referenceDate?.trim() || getTodayInputValue();
+  const parsedMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+  if (!parsedMatch) {
     return null;
   }
-  const parsedDate = new Date(value);
-  return Number.isNaN(parsedDate.valueOf()) ? null : parsedDate.getUTCFullYear();
-}
-function formatAccountingYear(
-  financialYearFrom: string | null | undefined,
-  financialYearTo: string | null | undefined,
-): string | null {
-  const startYear = getUtcYear(financialYearFrom);
-  const endYear = getUtcYear(financialYearTo);
-  if (startYear === null || endYear === null) {
+  const year = Number(parsedMatch[1]);
+  const month = Number(parsedMatch[2]);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
     return null;
   }
-  return `${startYear}-${endYear}`;
+  const startYear = month >= 4 ? year : year - 1;
+  return `${startYear}-${startYear + 1}`;
 }
 function toInputValue(value: string | number | null | undefined): string {
   if (value === null || value === undefined) {
@@ -629,7 +625,7 @@ function buildPriceSelectionValues(
       priceRecord?.ipm_uom_remarks ?? priceRecord?.ipm_cost_remarks ?? detail.item.item_notes,
     ),
     oslunitid: toInputValue(resolvedUnitId),
-    oslbaseuomid: toInputValue(priceRecord?.ipm_base_unit_id ?? detail.item.item_base_unit_id),
+    oslbaseuomid: toInputValue(priceRecord?.ipm_id),
     oslgodownid: toInputValue(resolvedGodownId),
   };
 }
@@ -789,8 +785,8 @@ function getRowValidationMessage(row: OpeningStockRow, rowNumber: number): strin
   if (!toNullableTrimmedString(row.values.oslgodownid)) {
     return `Row ${rowNumber} is missing a godown.`;
   }
-  if (parseDecimal(row.values.openingqty) <= 0) {
-    return `Row ${rowNumber} must have opening quantity greater than zero.`;
+  if (!row.values.openingqty?.trim()) {
+    return `Row ${rowNumber} is missing opening quantity.`;
   }
   return null;
 }
@@ -1019,10 +1015,31 @@ export default function OpeningStockPage() {
   const itemDetailRequestRef = useRef<Record<number, number>>({});
   const godownSearchTimeoutRef = useRef<number | null>(null);
   const godownSearchRequestRef = useRef(0);
+  const {
+    activeCompany,
+    activeBranch,
+    loading: isBusinessContextLoading,
+    error: businessContextError,
+  } = useBusinessContext();
   const { getAll: listUiTableColumns, loading: isConfigLoading, error: configError } = useApi<
     ApiSuccessResponse<UiTableColumnPayload[], ListMeta>
   >(UI_TABLE_COLUMNS_LIST_ENDPOINT, {
     toast: UI_TABLE_COLUMNS_TOAST_OPTIONS,
+  });
+  const { run: listAccountLedgers } = useApi<unknown>(ACCOUNT_LEDGER_LIST_ENDPOINT, {
+    toast: {
+      success: false,
+      error: false,
+    },
+  });
+  const { run: saveOpeningStock, loading: isSavingOpeningStock } = useApi<
+    unknown,
+    OpeningStockSaveRequest
+  >(OPENING_STOCK_SAVE_ENDPOINT, {
+    method: "POST",
+    toast: {
+      successMessage: "Opening stock updated successfully.",
+    },
   });
   const [triggerItemOptions, { isFetching: isItemLookupLoading }] =
     useLazyGetItemOptionsQuery();
@@ -1207,9 +1224,17 @@ export default function OpeningStockPage() {
     );
   }, [unitOptionsByValue]);
   const columns = resolveConfiguredColumns(uiColumnConfigs);
+  const draftRows = useMemo(() => rows.filter((row) => !isPristineRow(row)), [rows]);
+  const draftTotals = useMemo(() => getTotals(draftRows), [draftRows]);
   const filteredRows = getFilteredRows(rows, searchQuery);
   const visibleTotals = getTotals(filteredRows);
   const trackingRows = filteredRows.filter((row) => row.values.osltrackingtype !== "NONE").length;
+  const accountingYear = formatAccountingYear(voucherDate);
+  const contextStatusText = !activeCompany
+    ? "Select a company in the header to enable opening stock posting."
+    : !activeBranch
+      ? "Select a branch in the header to enable opening stock posting."
+      : `Posting to ${activeCompany.compName} / ${activeBranch.brName}${accountingYear ? ` for ${accountingYear}` : ""}.`;
   const configStatusText = isConfigLoading
     ? "Loading column config..."
     : uiColumnConfigs.length > 0
@@ -1512,6 +1537,142 @@ export default function OpeningStockPage() {
       return nextRows.length > 0 ? nextRows : [createEmptyRow(1)];
     });
   };
+  const handleUpdateStock = useCallback(async () => {
+    if (!activeCompany) {
+      toast.error("Select a company in the header before updating stock.", {
+        toastId: "opening-stock-save:missing-company",
+      });
+      return;
+    }
+    if (!activeBranch) {
+      toast.error("Select a branch in the header before updating stock.", {
+        toastId: "opening-stock-save:missing-branch",
+      });
+      return;
+    }
+    if (!accountingYear) {
+      toast.error("The selected company does not have a valid financial year.", {
+        toastId: "opening-stock-save:missing-fin-year",
+      });
+      return;
+    }
+    const voucherDateIso = toIsoDateTime(voucherDate);
+    if (!voucherDateIso) {
+      toast.error("Select a valid voucher date before updating stock.", {
+        toastId: "opening-stock-save:missing-voucher-date",
+      });
+      return;
+    }
+    const userId = getAuthUserId();
+    if (!userId) {
+      toast.error("User session is missing. Please login again.", {
+        toastId: "opening-stock-save:missing-user",
+      });
+      return;
+    }
+    if (draftRows.length === 0) {
+      toast.error("Add at least one stock row before updating stock.", {
+        toastId: "opening-stock-save:no-rows",
+      });
+      return;
+    }
+
+    for (const [index, row] of draftRows.entries()) {
+      const validationMessage = getRowValidationMessage(row, index + 1);
+      if (validationMessage) {
+        toast.error(validationMessage, {
+          toastId: `opening-stock-save:row-${index + 1}`,
+        });
+        return;
+      }
+    }
+
+    let matchingLedgers: AccountLedgerRecord[] = [];
+    try {
+      const ledgerPayload = await listAccountLedgers({
+        query: {
+          ledCompanyId: activeCompany.compId,
+          ledIsActive: "true",
+          page: "1",
+          limit: "100",
+        },
+      });
+      matchingLedgers = extractRows<AccountLedgerRecord>(ledgerPayload).filter(
+        (ledger): ledger is AccountLedgerRecord =>
+          typeof ledger?.ledId === "string" &&
+          typeof ledger?.ledName === "string" &&
+          ledger.ledName.trim().toLowerCase() === OPENING_STOCK_LEDGER_NAME,
+      );
+    } catch {
+      toast.error("Failed to load the Opening Stock ledger.", {
+        toastId: "opening-stock-save:ledger-request-failed",
+      });
+      return;
+    }
+
+    if (matchingLedgers.length === 0) {
+      toast.error("No active account ledger named Opening Stock was found for the selected company.", {
+        toastId: "opening-stock-save:ledger-missing",
+      });
+      return;
+    }
+    if (matchingLedgers.length > 1) {
+      toast.error("More than one active account ledger named Opening Stock exists for the selected company.", {
+        toastId: "opening-stock-save:ledger-ambiguous",
+      });
+      return;
+    }
+
+    const requestPayload: OpeningStockSaveRequest = {
+      header: {
+        avh_voucher_type_id: 1,
+        osh_acc_year: accountingYear,
+        osh_company_id: activeCompany.compId,
+        osh_branch_id: activeBranch.brId,
+        osh_voucher_date: voucherDateIso,
+        avh_party_id: matchingLedgers[0].ledId,
+        avh_bill_date: voucherDateIso,
+        avh_opposite_ledger_id: null,
+        avh_employee_id: [],
+        osh_device_type: "WEB",
+        osh_counter_id: "COUNTER-1",
+        osh_session_id: getAuthSessionId(),
+        osh_device_id: getOrCreateClientDeviceId(),
+        osh_status: "DRAFT",
+        osh_ref_no: null,
+        osh_narration: buildOpeningStockNarration(draftRows),
+        osh_total_lines: draftTotals.lines,
+        osh_total_qty: draftTotals.qty,
+        osh_total_value: draftTotals.value,
+        osh_user_id: userId,
+      },
+      details: draftRows.map(buildOpeningStockDetailPayload),
+    };
+
+    try {
+      await saveOpeningStock({
+        body: requestPayload,
+      });
+      setRows([createEmptyRow(1)]);
+      setSearchQuery("");
+      setLookupSearchQuery("");
+      setOpenLookupCell(null);
+      setOpenRowActionMenuId(null);
+    } catch {
+      // Toasting is handled in useApi.
+    }
+  }, [
+    accountingYear,
+    activeBranch,
+    activeCompany,
+    draftRows,
+    draftTotals.lines,
+    draftTotals.qty,
+    draftTotals.value,
+    listAccountLedgers,
+    saveOpeningStock,
+    voucherDate,
+  ]);
   const tableMinWidth = getTableMinWidth(columns);
   useEffect(() => {
     if (godownOptionsByValue.size === 0 && taxOptionsByValue.size === 0) {
@@ -1610,7 +1771,28 @@ export default function OpeningStockPage() {
               <FiPlus className={tableStyles.createIcon} aria-hidden="true" />
               <span>Add line</span>
             </button>
+            <button
+              type="button"
+              className={cx(tableStyles.createButton, styles.updateButton)}
+              onClick={handleUpdateStock}
+              disabled={isSavingOpeningStock || isBusinessContextLoading}
+            >
+              <span>{isSavingOpeningStock ? "Updating..." : "Update Stock"}</span>
+            </button>
           </div>
+          <p className={styles.toolbarNote}>
+            Update Stock posts all non-empty rows. Search only changes what is visible in the grid.
+          </p>
+          <p
+            className={cx(
+              styles.configMeta,
+              Boolean(!activeCompany || !activeBranch || businessContextError) &&
+                styles.configMetaError,
+            )}
+          >
+            {businessContextError ? `${businessContextError} ` : ""}
+            {contextStatusText} {configStatusText}
+          </p>
         </div>
         <div className={tableStyles.tableViewport} data-erp-table-viewport="true">
           <table

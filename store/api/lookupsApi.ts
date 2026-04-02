@@ -112,6 +112,7 @@ export type ItemPriceDetailsItem = {
   item_notes?: string | null;
 };
 export type ItemPriceDetailsPrice = {
+  ipm_id: string;
   ipm_unit_id: string;
   ipm_godown_id: string;
   ipm_base_unit_id: string | null;
