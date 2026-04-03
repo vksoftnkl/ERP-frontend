@@ -1,9 +1,19 @@
 "use client";
-import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiChevronDown, FiMoreVertical, FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
+import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { FiChevronDown, FiDownload, FiMoreVertical, FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { useBusinessContext } from "@/components/layout/business-context";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import tableStyles from "@/components/ui/table.module.scss";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";
@@ -24,8 +34,12 @@ import {
 } from "@/store/api/lookupsApi";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import type {
+  OpeningStockDocumentPayload,
+  OpeningStockHeaderPayload,
+  OpeningStockListMeta,
   OpeningStockSaveDetail,
   OpeningStockSaveRequest,
+  OpeningStockSuccessResponse,
 } from "./opening-stock.types";
 import styles from "./page.module.scss";
 type ColumnAlign = "left" | "center" | "right";
@@ -60,9 +74,26 @@ type AccountLedgerRecord = {
   ledId: string;
   ledName: string;
 };
+type LoadedOpeningStockMeta = {
+  voucherId: string;
+  voucherLabel: string;
+  voucherDate: string;
+  companyId: string;
+  branchId: string;
+};
+type TableFieldNavigationDirection = "left" | "right" | "up" | "down";
+type TableFocusableFieldTarget = {
+  fieldKey: string;
+  rowIndex: number;
+  columnIndex: number;
+  container: HTMLElement;
+  control: HTMLElement;
+};
 const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
 const ACCOUNT_LEDGER_LIST_ENDPOINT = "/account-ledger-masters/list";
 const OPENING_STOCK_SAVE_ENDPOINT = "/opening-stocks";
+const OPENING_STOCK_LIST_ENDPOINT = "/opening-stocks/list";
+const OPENING_STOCK_GET_ENDPOINT = "/opening-stocks/get";
 const UI_TABLE_COLUMNS_QUERY = {
   uiTblClmTableId: "5",
   page: "1",
@@ -73,6 +104,8 @@ const UI_TABLE_COLUMNS_TOAST_OPTIONS = {
   error: false,
 } as const;
 const OPENING_STOCK_LEDGER_NAME = "opening stock";
+const TABLE_FIELD_CONTAINER_SELECTOR = '[data-opening-stock-field-container="true"]';
+const TABLE_FIELD_CONTROL_SELECTOR = '[data-opening-stock-field-control="true"]';
 const LOOKUP_SEARCH_DEBOUNCE_MS = 250;
 const SERIAL_NUMBER_COLUMN_WIDTH = "112px";
 const TRACKING_OPTIONS = ["NONE", "BATCH", "LOT"] as const;
@@ -537,6 +570,22 @@ function toIsoDateTime(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? `${normalized}T00:00:00.000Z` : null;
 }
+function toInputDateValue(value: string | null | undefined): string {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return "";
+  }
+  const isoDateMatch = /^\d{4}-\d{2}-\d{2}/.exec(normalized);
+  if (isoDateMatch) {
+    return isoDateMatch[0];
+  }
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  const localDate = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 10);
+}
 function formatAccountingYear(referenceDate: string | null | undefined): string | null {
   const normalized = referenceDate?.trim() || getTodayInputValue();
   const parsedMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
@@ -705,6 +754,20 @@ function createFallbackColumns(): ColumnDefinition[] {
     };
   }).filter((column) => !HIDDEN_INTERNAL_COLUMN_KEYS.has(column.key));
 }
+function toConfiguredNumberInputValue(
+  columnKey: keyof typeof COLUMN_SCHEMA,
+  value: number | null | undefined,
+): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_ROW_VALUES[columnKey] ?? "";
+  }
+  const defaultValue = COLUMN_SCHEMA[columnKey]?.defaultValue;
+  const decimalPlaces = defaultValue?.includes(".") ? defaultValue.split(".")[1].length : 0;
+  if (decimalPlaces > 0) {
+    return value.toFixed(decimalPlaces);
+  }
+  return String(value);
+}
 function createDefaultRowValues(): Record<string, string> {
   return Object.entries(COLUMN_SCHEMA).reduce<Record<string, string>>((accumulator, [key, schema]) => {
     accumulator[key] = schema.defaultValue ?? "";
@@ -738,6 +801,95 @@ function createRow(id: number, overrides: Record<string, string> = {}): OpeningS
 const INITIAL_ROWS: OpeningStockRow[] = [createRow(1)];
 function createEmptyRow(nextId: number): OpeningStockRow {
   return createRow(nextId);
+}
+function getTableFocusableFieldTargets(root: HTMLElement): TableFocusableFieldTarget[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(TABLE_FIELD_CONTAINER_SELECTOR))
+    .map((container) => {
+      const control = container.querySelector<HTMLElement>(TABLE_FIELD_CONTROL_SELECTOR);
+      if (!control || control.hasAttribute("disabled")) {
+        return null;
+      }
+      const rowIndex = Number(container.dataset.openingStockRowIndex ?? "");
+      const columnIndex = Number(container.dataset.openingStockColumnIndex ?? "");
+      if (!Number.isFinite(rowIndex) || !Number.isFinite(columnIndex)) {
+        return null;
+      }
+      return {
+        fieldKey: `${rowIndex}:${columnIndex}`,
+        rowIndex,
+        columnIndex,
+        container,
+        control,
+      };
+    })
+    .filter((target): target is TableFocusableFieldTarget => target !== null);
+}
+function findNextTableFieldTarget(
+  targets: TableFocusableFieldTarget[],
+  currentTarget: TableFocusableFieldTarget,
+  direction: TableFieldNavigationDirection,
+): TableFocusableFieldTarget | null {
+  const targetMap = new Map(targets.map((target) => [target.fieldKey, target]));
+  const maxRowIndex = Math.max(...targets.map((target) => target.rowIndex));
+  const maxColumnIndex = Math.max(...targets.map((target) => target.columnIndex));
+  if (direction === "left" || direction === "right") {
+    const delta = direction === "left" ? -1 : 1;
+    for (
+      let nextColumnIndex = currentTarget.columnIndex + delta;
+      nextColumnIndex >= 0 && nextColumnIndex <= maxColumnIndex;
+      nextColumnIndex += delta
+    ) {
+      const candidate = targetMap.get(`${currentTarget.rowIndex}:${nextColumnIndex}`);
+      if (candidate) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+  const delta = direction === "up" ? -1 : 1;
+  for (
+    let nextRowIndex = currentTarget.rowIndex + delta;
+    nextRowIndex >= 0 && nextRowIndex <= maxRowIndex;
+    nextRowIndex += delta
+  ) {
+    const candidate = targetMap.get(`${nextRowIndex}:${currentTarget.columnIndex}`);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
+}
+function focusTableFieldControl(control: HTMLElement) {
+  control.focus();
+  if (
+    control instanceof HTMLInputElement ||
+    control instanceof HTMLTextAreaElement
+  ) {
+    try {
+      const selectionIndex = control.value.length;
+      control.setSelectionRange(selectionIndex, selectionIndex);
+    } catch {
+      // Some input types do not support text selection.
+    }
+  }
+  control.scrollIntoView({
+    block: "nearest",
+    inline: "nearest",
+  });
+}
+function buildLoadedLookupOptions(
+  entries: Array<{ value: string | null | undefined; label: string | null | undefined }>,
+): ERPDynamicSelectOption[] {
+  const options = new Map<string, string>();
+  for (const entry of entries) {
+    const value = entry.value?.trim() ?? "";
+    const label = entry.label?.trim() ?? "";
+    if (!value || !label || options.has(value)) {
+      continue;
+    }
+    options.set(value, label);
+  }
+  return Array.from(options, ([value, label]) => ({ value, label }));
 }
 function getNextRowId(rows: OpeningStockRow[]): number {
   return rows.reduce((highestId, row) => Math.max(highestId, row.id), 0) + 1;
@@ -837,6 +989,63 @@ function buildOpeningStockDetailPayload(row: OpeningStockRow): OpeningStockSaveD
     profit_type: toNullableTrimmedString(row.values.profittype),
     round_off: parseDecimal(row.values.roundoff),
   };
+}
+function mapOpeningStockDetailToRow(
+  detail: OpeningStockDocumentPayload["details"][number],
+  rowId: number,
+): OpeningStockRow {
+  return createRow(rowId, {
+    barcode: toInputValue(detail.osl_barcode),
+    code: toInputValue(detail.osl_item_code),
+    itemname: toInputValue(detail.osl_item_name),
+    godown: toInputValue(detail.osl_godown_name),
+    uom: toInputValue(detail.osl_unit_name),
+    taxname: toInputValue(detail.osl_tax_name),
+    openingqty: toConfiguredNumberInputValue("openingqty", detail.osl_qty),
+    freeqty: toConfiguredNumberInputValue("freeqty", detail.osl_free_qty),
+    baseqty: toConfiguredNumberInputValue("baseqty", detail.osl_base_qty),
+    convfactor: toConfiguredNumberInputValue("convfactor", detail.osl_conv_factor),
+    batchno: toInputValue(detail.osl_batch_no),
+    serialno: toInputValue(detail.osl_serial_no),
+    batchdate: toInputDateValue(detail.osl_batch_date),
+    mfgdate: toInputDateValue(detail.osl_mfg_date),
+    expirydate: toInputDateValue(detail.osl_expiry_date),
+    costprice: toConfiguredNumberInputValue("costprice", detail.osl_cost_rate),
+    costwot: toConfiguredNumberInputValue("costwot", detail.osl_cost_rate_wot),
+    profittype: DEFAULT_ROW_VALUES.profittype ?? "",
+    roundoff: DEFAULT_ROW_VALUES.roundoff ?? "",
+    priceawot: toConfiguredNumberInputValue("priceawot", detail.osl_sale_rate_a_wot),
+    priceamarkup: toConfiguredNumberInputValue("priceamarkup", detail.osl_markup_perc_a),
+    pricea: toConfiguredNumberInputValue("pricea", detail.osl_sale_rate_a),
+    pricebwot: toConfiguredNumberInputValue("pricebwot", detail.osl_sale_rate_b_wot),
+    pricebmarkup: toConfiguredNumberInputValue("pricebmarkup", detail.osl_markup_perc_b),
+    priceb: toConfiguredNumberInputValue("priceb", detail.osl_sale_rate_b),
+    pricecwot: toConfiguredNumberInputValue("pricecwot", detail.osl_sale_rate_c_wot),
+    pricecmarkup: toConfiguredNumberInputValue("pricecmarkup", detail.osl_markup_perc_c),
+    pricec: toConfiguredNumberInputValue("pricec", detail.osl_sale_rate_c),
+    pricedwot: toConfiguredNumberInputValue("pricedwot", detail.osl_sale_rate_d_wot),
+    pricedmarkup: toConfiguredNumberInputValue("pricedmarkup", detail.osl_markup_perc_d),
+    priced: toConfiguredNumberInputValue("priced", detail.osl_sale_rate_d),
+    mrp: toConfiguredNumberInputValue("mrp", detail.osl_mrp_rate),
+    msp: toConfiguredNumberInputValue("msp", detail.osl_min_rate),
+    remarks: toInputValue(detail.osl_remarks),
+    oslitemid: toInputValue(detail.osl_item_id),
+    oslunitid: toInputValue(detail.osl_unit_id),
+    oslbaseuomid: toInputValue(detail.osl_base_uom_id),
+    oslgodownid: toInputValue(detail.osl_godown_id),
+    osltrackingtype: toInputValue(detail.osl_tracking_type || "NONE"),
+    osltaxid: toInputValue(detail.osl_tax_id),
+    osltaxperc: toConfiguredNumberInputValue("osltaxperc", detail.osl_tax_perc),
+    oslcesstype: normalizeOpeningStockCessType(detail.osl_cess_type),
+    oslcessperc: toConfiguredNumberInputValue("oslcessperc", detail.osl_cess_perc),
+    oslcessperunit: toConfiguredNumberInputValue("oslcessperunit", detail.osl_cess_per_unit),
+  });
+}
+function mapOpeningStockDocumentToRows(document: OpeningStockDocumentPayload): OpeningStockRow[] {
+  if (document.details.length === 0) {
+    return [createEmptyRow(1)];
+  }
+  return document.details.map((detail, index) => mapOpeningStockDetailToRow(detail, index + 1));
 }
 function buildOpeningStockNarration(rows: OpeningStockRow[]): string | null {
   const remarks = rows
@@ -1001,12 +1210,17 @@ export default function OpeningStockPage() {
   const [godownOptions, setGodownOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_GODOWN_OPTION,
   ]);
+  const [loadedVoucherId, setLoadedVoucherId] = useState<string | null>(null);
+  const [loadedDocumentMeta, setLoadedDocumentMeta] = useState<LoadedOpeningStockMeta | null>(null);
+  const [isLoadingStock, setIsLoadingStock] = useState(false);
+  const [isLoadConfirmOpen, setIsLoadConfirmOpen] = useState(false);
   const [openLookupCell, setOpenLookupCell] = useState<{
     key: string;
     kind: LookupKind;
   } | null>(null);
   const [openRowActionMenuId, setOpenRowActionMenuId] = useState<number | null>(null);
   const [lookupSearchQuery, setLookupSearchQuery] = useState("");
+  const tableRef = useRef<HTMLTableElement | null>(null);
   const lookupRootRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const rowActionRootRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const lookupSearchInputRef = useRef<HTMLInputElement | null>(null);
@@ -1030,6 +1244,20 @@ export default function OpeningStockPage() {
     toast: {
       success: false,
       error: false,
+    },
+  });
+  const { run: listOpeningStocks } = useApi<
+    OpeningStockSuccessResponse<OpeningStockHeaderPayload[], OpeningStockListMeta>
+  >(OPENING_STOCK_LIST_ENDPOINT, {
+    toast: {
+      success: false,
+    },
+  });
+  const { run: getOpeningStockDocument } = useApi<
+    OpeningStockSuccessResponse<OpeningStockDocumentPayload>
+  >(OPENING_STOCK_GET_ENDPOINT, {
+    toast: {
+      success: false,
     },
   });
   const { run: saveOpeningStock, loading: isSavingOpeningStock } = useApi<
@@ -1242,6 +1470,9 @@ export default function OpeningStockPage() {
       : configError
         ? "Column config unavailable. Using fallback columns."
         : "Using fallback columns.";
+  const loadedDocumentStatusText = loadedDocumentMeta
+    ? `Loaded ${loadedDocumentMeta.voucherLabel} dated ${loadedDocumentMeta.voucherDate}. Update Stock will save changes back to this document.`
+    : null;
   const itemOptionsByValue = useMemo(
     () => new Map(itemOptions.map((option) => [option.value, option.label])),
     [itemOptions],
@@ -1249,6 +1480,58 @@ export default function OpeningStockPage() {
   const godownOptionsByValue = useMemo(
     () => new Map(godownOptions.map((option) => [option.value, option.label])),
     [godownOptions],
+  );
+  useEffect(() => {
+    if (!loadedVoucherId || !loadedDocumentMeta || isBusinessContextLoading) {
+      return;
+    }
+    const currentCompanyId = activeCompany?.compId ?? null;
+    const currentBranchId = activeBranch?.brId ?? null;
+    if (
+      currentCompanyId === loadedDocumentMeta.companyId &&
+      currentBranchId === loadedDocumentMeta.branchId
+    ) {
+      return;
+    }
+    setLoadedVoucherId(null);
+    setLoadedDocumentMeta(null);
+  }, [
+    activeBranch?.brId,
+    activeCompany?.compId,
+    isBusinessContextLoading,
+    loadedDocumentMeta,
+    loadedVoucherId,
+  ]);
+  const prefetchLoadedItemDetails = useCallback(
+    async (details: OpeningStockDocumentPayload["details"]) => {
+      const itemIds = Array.from(
+        new Set(
+          details
+            .map((detail) => detail.osl_item_id.trim())
+            .filter((itemId): itemId is string => itemId.length > 0),
+        ),
+      );
+      if (itemIds.length === 0) {
+        return;
+      }
+      const itemDetails = await Promise.allSettled(
+        itemIds.map((itemId) => triggerItemPriceDetails({ itemId }, true).unwrap()),
+      );
+      const nextItemDetailsById: Record<string, ItemPriceDetailsPayload> = {};
+      for (const itemDetail of itemDetails) {
+        if (itemDetail.status !== "fulfilled") {
+          continue;
+        }
+        nextItemDetailsById[itemDetail.value.item.item_id] = itemDetail.value;
+      }
+      if (Object.keys(nextItemDetailsById).length > 0) {
+        setItemDetailsByItemId((current) => ({
+          ...current,
+          ...nextItemDetailsById,
+        }));
+      }
+    },
+    [triggerItemPriceDetails],
   );
   const handleRowChange = (rowId: number, field: string, value: string) => {
     setRows((currentRows) =>
@@ -1274,6 +1557,87 @@ export default function OpeningStockPage() {
       ),
     );
   };
+  const handleTableFieldArrowNavigation = useCallback(
+    (event: ReactKeyboardEvent<HTMLTableElement>) => {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+
+      const direction =
+        event.key === "ArrowLeft"
+          ? "left"
+          : event.key === "ArrowRight"
+            ? "right"
+            : event.key === "ArrowUp"
+              ? "up"
+              : event.key === "ArrowDown"
+                ? "down"
+                : null;
+
+      if (!direction) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      if (
+        target.closest('[data-opening-stock-lookup-menu="true"]') ||
+        target.getAttribute("role") === "searchbox"
+      ) {
+        return;
+      }
+
+      const currentContainer = target.closest<HTMLElement>(TABLE_FIELD_CONTAINER_SELECTOR);
+      if (!currentContainer) {
+        return;
+      }
+
+      const tableElement = tableRef.current;
+      if (!tableElement) {
+        return;
+      }
+
+      const currentRowIndex = Number(currentContainer.dataset.openingStockRowIndex ?? "");
+      const currentColumnIndex = Number(currentContainer.dataset.openingStockColumnIndex ?? "");
+      if (!Number.isFinite(currentRowIndex) || !Number.isFinite(currentColumnIndex)) {
+        return;
+      }
+
+      const targets = getTableFocusableFieldTargets(tableElement);
+      const currentTarget = targets.find(
+        (entry) =>
+          entry.rowIndex === currentRowIndex &&
+          entry.columnIndex === currentColumnIndex,
+      );
+      if (!currentTarget) {
+        return;
+      }
+
+      const nextTarget = findNextTableFieldTarget(targets, currentTarget, direction);
+      if (!nextTarget) {
+        return;
+      }
+
+      event.preventDefault();
+      if (openLookupCell) {
+        setOpenLookupCell(null);
+        setLookupSearchQuery("");
+      }
+      if (openRowActionMenuId !== null) {
+        setOpenRowActionMenuId(null);
+      }
+      focusTableFieldControl(nextTarget.control);
+    },
+    [openLookupCell, openRowActionMenuId],
+  );
   const handleUomChange = useCallback(
     (rowId: number, unitId: string) => {
       setRows((currentRows) =>
@@ -1537,6 +1901,125 @@ export default function OpeningStockPage() {
       return nextRows.length > 0 ? nextRows : [createEmptyRow(1)];
     });
   };
+  const loadLatestOpeningStock = useCallback(async () => {
+    if (!activeCompany) {
+      toast.error("Select a company in the header before loading stock.", {
+        toastId: "opening-stock-load:missing-company",
+      });
+      return;
+    }
+    if (!activeBranch) {
+      toast.error("Select a branch in the header before loading stock.", {
+        toastId: "opening-stock-load:missing-branch",
+      });
+      return;
+    }
+    if (!accountingYear) {
+      toast.error("The selected company does not have a valid financial year.", {
+        toastId: "opening-stock-load:missing-fin-year",
+      });
+      return;
+    }
+
+    setIsLoadConfirmOpen(false);
+    setIsLoadingStock(true);
+    try {
+      const listPayload = await listOpeningStocks({
+        query: {
+          osh_company_id: activeCompany.compId,
+          osh_branch_id: activeBranch.brId,
+          osh_acc_year: accountingYear,
+          page: "1",
+          limit: "1",
+        },
+      });
+      const latestDocumentHeader = Array.isArray(listPayload?.data) ? listPayload.data[0] : null;
+      if (!latestDocumentHeader?.avh_voucher_id) {
+        toast.info("No saved opening stock was found for the selected company and branch.", {
+          toastId: "opening-stock-load:not-found",
+        });
+        return;
+      }
+
+      const documentPayload = await getOpeningStockDocument({
+        query: {
+          avh_voucher_id: latestDocumentHeader.avh_voucher_id,
+        },
+      });
+      const document = documentPayload?.data;
+      if (!document) {
+        toast.info("No saved opening stock was found for the selected company and branch.", {
+          toastId: "opening-stock-load:empty-document",
+        });
+        return;
+      }
+
+      const documentRows = mapOpeningStockDocumentToRows(document);
+      const loadedItems = buildLoadedLookupOptions(
+        document.details.map((detail) => ({
+          value: detail.osl_item_id,
+          label: detail.osl_item_name,
+        })),
+      );
+      const loadedGodowns = buildLoadedLookupOptions(
+        document.details.map((detail) => ({
+          value: detail.osl_godown_id,
+          label: detail.osl_godown_name,
+        })),
+      );
+      const loadedUnits = buildLoadedLookupOptions(
+        document.details.map((detail) => ({
+          value: detail.osl_unit_id,
+          label: detail.osl_unit_name,
+        })),
+      );
+      const loadedTaxes = buildLoadedLookupOptions(
+        document.details.map((detail) => ({
+          value: detail.osl_tax_id,
+          label: detail.osl_tax_name,
+        })),
+      );
+
+      setItemOptions((current) => mergeLookupOptions(current, loadedItems));
+      setGodownOptions((current) => mergeLookupOptions(current, loadedGodowns));
+      setUnitOptions((current) => mergeLookupOptions(current, loadedUnits));
+      setTaxOptions((current) => mergeLookupOptions(current, loadedTaxes));
+      setRows(documentRows);
+      setVoucherDate(toInputDateValue(document.header.osh_voucher_date) || voucherDate);
+      setSearchQuery("");
+      setLookupSearchQuery("");
+      setOpenLookupCell(null);
+      setOpenRowActionMenuId(null);
+      setLoadedVoucherId(document.header.avh_voucher_id);
+      setLoadedDocumentMeta({
+        voucherId: document.header.avh_voucher_id,
+        voucherLabel: document.header.avh_voucher_refno || document.header.osh_voucher_no,
+        voucherDate: toInputDateValue(document.header.osh_voucher_date),
+        companyId: document.header.osh_company_id,
+        branchId: document.header.osh_branch_id,
+      });
+      void prefetchLoadedItemDetails(document.details);
+    } catch {
+      // Toasting is handled in useApi.
+    } finally {
+      setIsLoadingStock(false);
+    }
+  }, [
+    accountingYear,
+    activeBranch,
+    activeCompany,
+    getOpeningStockDocument,
+    listOpeningStocks,
+    prefetchLoadedItemDetails,
+    voucherDate,
+  ]);
+  const handleLoadStock = useCallback(() => {
+    if (draftRows.length > 0) {
+      setIsLoadConfirmOpen(true);
+      return;
+    }
+    void loadLatestOpeningStock();
+  }, [draftRows.length, loadLatestOpeningStock]);
   const handleUpdateStock = useCallback(async () => {
     if (!activeCompany) {
       toast.error("Select a company in the header before updating stock.", {
@@ -1625,6 +2108,7 @@ export default function OpeningStockPage() {
 
     const requestPayload: OpeningStockSaveRequest = {
       header: {
+        avh_voucher_id: loadedVoucherId ?? undefined,
         avh_voucher_type_id: 1,
         osh_acc_year: accountingYear,
         osh_company_id: activeCompany.compId,
@@ -1658,6 +2142,9 @@ export default function OpeningStockPage() {
       setLookupSearchQuery("");
       setOpenLookupCell(null);
       setOpenRowActionMenuId(null);
+      setLoadedVoucherId(null);
+      setLoadedDocumentMeta(null);
+      setIsLoadConfirmOpen(false);
     } catch {
       // Toasting is handled in useApi.
     }
@@ -1669,6 +2156,7 @@ export default function OpeningStockPage() {
     draftTotals.lines,
     draftTotals.qty,
     draftTotals.value,
+    loadedVoucherId,
     listAccountLedgers,
     saveOpeningStock,
     voucherDate,
@@ -1773,16 +2261,29 @@ export default function OpeningStockPage() {
             </button>
             <button
               type="button"
+              className={cx(tableStyles.createButton, styles.loadButton)}
+              onClick={handleLoadStock}
+              disabled={isLoadingStock || isSavingOpeningStock || isBusinessContextLoading}
+            >
+              <FiDownload className={tableStyles.createIcon} aria-hidden="true" />
+              <span>{isLoadingStock ? "Loading..." : "Load the Stock"}</span>
+            </button>
+            <button
+              type="button"
               className={cx(tableStyles.createButton, styles.updateButton)}
               onClick={handleUpdateStock}
-              disabled={isSavingOpeningStock || isBusinessContextLoading}
+              disabled={isSavingOpeningStock || isLoadingStock || isBusinessContextLoading}
             >
               <span>{isSavingOpeningStock ? "Updating..." : "Update Stock"}</span>
             </button>
           </div>
           <p className={styles.toolbarNote}>
-            Update Stock posts all non-empty rows. Search only changes what is visible in the grid.
+            Load the Stock fetches the latest saved opening stock. Update Stock posts all non-empty
+            rows currently shown in the grid.
           </p>
+          {loadedDocumentStatusText ? (
+            <p className={styles.loadedMeta}>{loadedDocumentStatusText}</p>
+          ) : null}
           <p
             className={cx(
               styles.configMeta,
@@ -1796,6 +2297,8 @@ export default function OpeningStockPage() {
         </div>
         <div className={tableStyles.tableViewport} data-erp-table-viewport="true">
           <table
+            ref={tableRef}
+            onKeyDown={handleTableFieldArrowNavigation}
             className={tableStyles.table}
             style={{ "--erp-table-min-width": tableMinWidth } as CSSProperties}
           >
@@ -1910,7 +2413,7 @@ export default function OpeningStockPage() {
                         </div>
                       </div>
                     </td>
-                    {columns.map((column) => {
+                    {columns.map((column, columnIndex) => {
                       const value = row.values[column.key] ?? "";
                       const isNumeric = column.kind === "number";
                       const currentItemId = row.values.oslitemid?.trim() ?? "";
@@ -1949,10 +2452,14 @@ export default function OpeningStockPage() {
                         <td
                           key={column.key}
                           data-label={column.header}
+                          data-opening-stock-field-container="true"
+                          data-opening-stock-row-index={index}
+                          data-opening-stock-column-index={columnIndex}
                           className={cx(tableStyles.cell, getAlignClass(column.align))}
                         >
                           {column.key === "uom" ? (
                             <select
+                              data-opening-stock-field-control="true"
                               value={row.values.oslunitid ?? ""}
                               onChange={(event) => handleUomChange(row.id, event.target.value)}
                               className={styles.cellSelect}
@@ -1969,6 +2476,7 @@ export default function OpeningStockPage() {
                             </select>
                           ) : column.key === "taxname" ? (
                             <select
+                              data-opening-stock-field-control="true"
                               value={row.values.osltaxid ?? ""}
                               onChange={(event) => handleTaxChange(row.id, event.target.value)}
                               className={styles.cellSelect}
@@ -1989,6 +2497,7 @@ export default function OpeningStockPage() {
                             >
                               <button
                                 type="button"
+                                data-opening-stock-field-control="true"
                                 className={cx(
                                   styles.lookupTrigger,
                                   isLookupOpen && styles.lookupTriggerOpen,
@@ -2021,7 +2530,10 @@ export default function OpeningStockPage() {
                                 />
                               </button>
                               {isLookupOpen ? (
-                                <div className={styles.lookupMenu}>
+                                <div
+                                  className={styles.lookupMenu}
+                                  data-opening-stock-lookup-menu="true"
+                                >
                                   <div className={styles.lookupSearchWrap}>
                                     <FiSearch
                                       className={styles.lookupSearchIcon}
@@ -2072,6 +2584,7 @@ export default function OpeningStockPage() {
                             </div>
                           ) : column.kind === "select" ? (
                             <select
+                              data-opening-stock-field-control="true"
                               value={value}
                               onChange={(event) =>
                                 handleRowChange(row.id, column.key, event.target.value)
@@ -2086,6 +2599,7 @@ export default function OpeningStockPage() {
                             </select>
                           ) : (
                             <input
+                              data-opening-stock-field-control="true"
                               type={column.kind === "date" ? "date" : isNumeric ? "number" : "text"}
                               value={value}
                               onChange={(event) =>
@@ -2116,6 +2630,23 @@ export default function OpeningStockPage() {
           </div>
         </div>
       </div>
+      <DeleteConfirmModal
+        isOpen={isLoadConfirmOpen}
+        title="Replace current rows?"
+        message="Loading stock will replace the current non-empty rows with the latest saved opening stock from the backend."
+        confirmLabel="Load stock"
+        cancelLabel="Keep current rows"
+        loading={isLoadingStock}
+        loadingLabel="Loading stock..."
+        onConfirm={() => {
+          void loadLatestOpeningStock();
+        }}
+        onCancel={() => {
+          if (!isLoadingStock) {
+            setIsLoadConfirmOpen(false);
+          }
+        }}
+      />
     </section>
   );
 }

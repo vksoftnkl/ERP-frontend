@@ -168,6 +168,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         label:"UI Table Designer",href:"/master/ui-table-designer"
       },
       {
+        label:"Audit Logs",href:"/master/audit-logs"
+      },
+      {
         label:"master",
         children:[
            {

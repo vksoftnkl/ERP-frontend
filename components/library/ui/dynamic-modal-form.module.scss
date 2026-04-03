@@ -209,8 +209,8 @@ background: #dfe7f0;
   background: #f3f7fb;
 }
 .sectionTab:focus-visible {
-  outline: 2px solid var(--erp-modal-accent);
-  outline-offset: 2px;
+  outline: none;
+  border-color: #d8e1ea;
 }
 .sectionTabActive {
   background: #fff;

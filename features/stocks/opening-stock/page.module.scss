@@ -165,6 +165,15 @@
   line-height: 1.45;
 }
 
+.loadButton {
+  border-color: #365b9d;
+  background: linear-gradient(180deg, #4f76bb 0%, #365b9d 100%);
+}
+
+.loadButton:hover:not(:disabled) {
+  box-shadow: 0 10px 20px rgba(54, 91, 157, 0.24);
+}
+
 .updateButton {
   border-color: #0f7a43;
   background: linear-gradient(180deg, #1f9d5a 0%, #0f7a43 100%);
@@ -180,6 +189,14 @@
   font-size: 0.82rem;
   font-weight: 700;
   line-height: 1.4;
+}
+
+.loadedMeta {
+  margin: 0.2rem 0 0;
+  color: #365b9d;
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.45;
 }
 
 .configMetaError {

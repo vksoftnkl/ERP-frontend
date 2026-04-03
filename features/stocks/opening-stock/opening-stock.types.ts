@@ -1,4 +1,5 @@
 export type OpeningStockSaveHeader = {
+  avh_voucher_id?: string;
   avh_voucher_type_id: number;
   osh_acc_year: string;
   osh_company_id: string;
@@ -71,4 +72,127 @@ export type OpeningStockSaveDetail = {
 export type OpeningStockSaveRequest = {
   header: OpeningStockSaveHeader;
   details: OpeningStockSaveDetail[];
+};
+
+export type OpeningStockSuccessResponse<T, TMeta = Record<string, unknown>> = {
+  success: true;
+  message: string;
+  data: T;
+  meta?: TMeta;
+};
+
+export type OpeningStockHeaderPayload = {
+  avh_voucher_id: string;
+  avh_voucher_refno: string;
+  avh_voucher_type_id: number;
+  avh_bill_refno: string;
+  avh_user_refno: string | null;
+  avh_bill_date: string | null;
+  avh_party_id: string;
+  avh_opposite_ledger_id: string | null;
+  avh_employee_id: string[];
+  avh_pay_notes: string | null;
+  avh_remarks: string | null;
+  avh_voucher_status: string;
+  avh_user_id: string;
+  avh_session_id: string | null;
+  avh_device_type: string;
+  avh_device_id: string | null;
+  avh_counter_id: string;
+  osh_id: string;
+  osh_acc_year: string;
+  osh_company_id: string;
+  osh_branch_id: string;
+  osh_voucher_no: string;
+  osh_voucher_date: string;
+  osh_ref_no: string | null;
+  osh_narration: string | null;
+  osh_total_lines: number;
+  osh_total_qty: number;
+  osh_total_value: number;
+  osh_status: string;
+  osh_user_id: string;
+  osh_session_id: string | null;
+  osh_device_type: string;
+  osh_device_id: string | null;
+  osh_counter_id: string | null;
+  osh_is_active: boolean;
+  osh_is_deleted: boolean;
+  osh_created_on: string;
+  osh_created_by: string | null;
+  osh_updated_on: string | null;
+  osh_updated_by: string | null;
+};
+
+export type OpeningStockDetailPayload = {
+  osl_id: string;
+  osl_voucher_id: string;
+  osl_opening_id: string;
+  osl_line_no: number;
+  osl_acc_year: string;
+  osl_company_id: string;
+  osl_branch_id: string;
+  osl_item_id: string;
+  osl_item_code: string | null;
+  osl_item_name: string | null;
+  osl_unit_id: string;
+  osl_unit_name: string | null;
+  osl_base_uom_id: string | null;
+  osl_base_uom_name: string | null;
+  osl_godown_id: string;
+  osl_godown_name: string | null;
+  osl_tracking_type: string;
+  osl_barcode: string | null;
+  osl_batch_no: string | null;
+  osl_batch_date: string | null;
+  osl_mfg_date: string | null;
+  osl_expiry_date: string | null;
+  osl_serial_no: string | null;
+  osl_qty: number;
+  osl_base_qty: number;
+  osl_free_qty: number;
+  osl_conv_factor: number;
+  osl_tax_id: string | null;
+  osl_tax_name: string | null;
+  osl_tax_perc: number;
+  osl_cess_type: string;
+  osl_cess_perc: number;
+  osl_cess_per_unit: number;
+  osl_cost_rate: number;
+  osl_cost_rate_wot: number;
+  osl_stock_value: number;
+  osl_stock_value_wot: number;
+  osl_sale_rate_a: number;
+  osl_sale_rate_b: number;
+  osl_sale_rate_c: number;
+  osl_sale_rate_d: number;
+  osl_sale_rate_a_wot: number;
+  osl_sale_rate_b_wot: number;
+  osl_sale_rate_c_wot: number;
+  osl_sale_rate_d_wot: number;
+  osl_markup_perc_a: number;
+  osl_markup_perc_b: number;
+  osl_markup_perc_c: number;
+  osl_markup_perc_d: number;
+  osl_mrp_rate: number;
+  osl_min_rate: number;
+  osl_remarks: string | null;
+  osl_is_active: boolean;
+  osl_is_deleted: boolean;
+  osl_created_on: string;
+  osl_created_by: string | null;
+  osl_updated_on: string | null;
+  osl_updated_by: string | null;
+};
+
+export type OpeningStockDocumentPayload = {
+  header: OpeningStockHeaderPayload;
+  details: OpeningStockDetailPayload[];
+};
+
+export type OpeningStockListMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
 };

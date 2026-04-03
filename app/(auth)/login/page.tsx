@@ -173,6 +173,7 @@ export default function LoginPage() {
               id="username"
               name="username"
               type="text"
+              data-tamil-input="off"
               autoComplete="off"
               required
               value={values.username}
@@ -199,6 +200,7 @@ export default function LoginPage() {
               id="password"
               name="password"
               type="password"
+              data-tamil-input="off"
               autoComplete="off"
               required
               value={values.password}
