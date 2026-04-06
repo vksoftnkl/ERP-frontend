@@ -14,12 +14,12 @@ import styles from "./page.module.scss";
 const AUDIT_LOG_LIST_ENDPOINT = "/audit-logs/list";
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
-const FETCH_PAGE_LIMIT = 100;
+const DOWNLOAD_PAGE_LIMIT = 100;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 const TABLE_COLUMN_COUNT = 9;
 const EMPTY_META: ListMeta = {
   page: DEFAULT_PAGE,
-  limit: FETCH_PAGE_LIMIT,
+  limit: DEFAULT_PAGE_SIZE,
   total: 0,
   total_pages: 0,
 };
@@ -267,6 +267,12 @@ export default function AuditLogsPage() {
   >(AUDIT_LOG_LIST_ENDPOINT, {
     toast: { success: false, error: true },
   });
+  const { getAll: exportAuditLogs } = useApi<ApiSuccessResponse<AuditLogListItem[], ListMeta>>(
+    AUDIT_LOG_LIST_ENDPOINT,
+    {
+      toast: { success: false, error: true },
+    },
+  );
   const isDateRangeInvalid = Boolean(
     draftFilters.dateFrom && draftFilters.dateTo && draftFilters.dateFrom > draftFilters.dateTo,
   );
@@ -275,53 +281,34 @@ export default function AuditLogsPage() {
     () => hasPendingFilterChanges(draftFilters, appliedFilters),
     [draftFilters, appliedFilters],
   );
-  const totalItems = logs.length;
-  const safeTotalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const paginatedLogs = useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize;
-    return logs.slice(startIndex, startIndex + pageSize);
-  }, [currentPage, logs, pageSize]);
+  const totalItems = meta.total;
+  const safeTotalPages = Math.max(
+    1,
+    meta.total_pages || Math.ceil(Math.max(meta.total, 1) / Math.max(meta.limit, 1)),
+  );
+  const paginatedLogs = logs;
   const pageStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const pageEnd = totalItems === 0 ? 0 : Math.min(pageStart + paginatedLogs.length - 1, totalItems);
+  const pageEnd = totalItems === 0 ? 0 : Math.min(pageStart + logs.length - 1, totalItems);
   const selectedLogChangeCount = countChangedFields(selectedLog?.log_changed_fields);
   const fetchAuditLogs = useCallback(async () => {
     try {
-      const firstPage = await listAuditLogs(
-        buildAuditLogQuery(appliedFilters, DEFAULT_PAGE, FETCH_PAGE_LIMIT),
-      );
-      if (!firstPage) {
+      const response = await listAuditLogs(buildAuditLogQuery(appliedFilters, currentPage, pageSize));
+      if (!response) {
         return;
       }
-      const firstMeta = firstPage.meta ?? {
-        page: DEFAULT_PAGE,
-        limit: FETCH_PAGE_LIMIT,
-        total: firstPage.data.length,
-        total_pages: Math.ceil(firstPage.data.length / Math.max(1, FETCH_PAGE_LIMIT)),
-      };
-      const totalPages = Math.max(
-        1,
-        firstMeta.total_pages ||
-          (firstMeta.total > 0 ? Math.ceil(firstMeta.total / Math.max(1, firstMeta.limit)) : 1),
-      );
-      let combinedLogs = [...firstPage.data];
-      for (let page = DEFAULT_PAGE + 1; page <= totalPages; page += 1) {
-        const nextPage = await listAuditLogs(buildAuditLogQuery(appliedFilters, page, FETCH_PAGE_LIMIT));
-        if (!nextPage) {
-          break;
-        }
-        combinedLogs = combinedLogs.concat(nextPage.data);
-      }
-      setLogs(combinedLogs);
+      setLogs(response.data);
       setMeta({
-        page: DEFAULT_PAGE,
-        limit: FETCH_PAGE_LIMIT,
-        total: firstMeta.total ?? combinedLogs.length,
-        total_pages: totalPages,
+        page: response.meta?.page ?? currentPage,
+        limit: response.meta?.limit ?? pageSize,
+        total: response.meta?.total ?? response.data.length,
+        total_pages:
+          response.meta?.total_pages ??
+          Math.max(1, Math.ceil((response.meta?.total ?? response.data.length) / Math.max(pageSize, 1))),
       });
     } catch {
       // Error state is already surfaced by useApi.
     }
-  }, [appliedFilters, listAuditLogs]);
+  }, [appliedFilters, currentPage, listAuditLogs, pageSize]);
   useEffect(() => {
     void fetchAuditLogs();
   }, [fetchAuditLogs, refreshKey]);
@@ -358,55 +345,78 @@ export default function AuditLogsPage() {
     setCurrentPage(DEFAULT_PAGE);
   };
   const handleDownload = useCallback(() => {
-    if (logs.length === 0) {
-      return;
-    }
-    const csvLines = [
-      toCsvRow([
-        "Log ID",
-        "Date",
-        "Action",
-        "User",
-        "Screen",
-        "Table",
-        "Entity",
-        "Changes",
-        "Notes",
-      ]),
-      ...logs.map((row) =>
+    const exportRows = async () => {
+      if (meta.total === 0) {
+        return;
+      }
+      const firstPage = await exportAuditLogs(
+        buildAuditLogQuery(appliedFilters, DEFAULT_PAGE, DOWNLOAD_PAGE_LIMIT),
+      );
+      if (!firstPage) {
+        return;
+      }
+      const totalPages = Math.max(
+        1,
+        firstPage.meta?.total_pages ??
+          Math.ceil((firstPage.meta?.total ?? firstPage.data.length) / DOWNLOAD_PAGE_LIMIT),
+      );
+      let combinedLogs = [...firstPage.data];
+      for (let page = DEFAULT_PAGE + 1; page <= totalPages; page += 1) {
+        const nextPage = await exportAuditLogs(
+          buildAuditLogQuery(appliedFilters, page, DOWNLOAD_PAGE_LIMIT),
+        );
+        if (!nextPage) {
+          break;
+        }
+        combinedLogs = combinedLogs.concat(nextPage.data);
+      }
+      const csvLines = [
         toCsvRow([
-          row.log_id,
-          formatDateTime(row.log_date),
-          formatActionLabel(row.log_action),
-          getRowUserLabel(row),
-          row.screen_name,
-          row.log_table_name,
-          getRowEntityLabel(row),
-          formatChangeSummary(row.log_changed_fields),
-          row.log_notes ?? "",
+          "Log ID",
+          "Date",
+          "Action",
+          "User",
+          "Screen",
+          "Table",
+          "Entity",
+          "Changes",
+          "Notes",
         ]),
-      ),
-    ];
-    const blob = new Blob([csvLines.join("\n")], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const downloadUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(downloadUrl);
-  }, [logs]);
+        ...combinedLogs.map((row) =>
+          toCsvRow([
+            row.log_id,
+            formatDateTime(row.log_date),
+            formatActionLabel(row.log_action),
+            getRowUserLabel(row),
+            row.screen_name,
+            row.log_table_name,
+            getRowEntityLabel(row),
+            formatChangeSummary(row.log_changed_fields),
+            row.log_notes ?? "",
+          ]),
+        ),
+      ];
+      const blob = new Blob([csvLines.join("\n")], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+    };
+    void exportRows();
+  }, [appliedFilters, exportAuditLogs, meta.total]);
   const tableSummary =
     totalItems === 0 ? "Showing 0 of 0 items" : `Showing ${pageStart}-${pageEnd} of ${totalItems} items`;
   return (
     <main className={styles.page}>
       <div className={styles.canvas}>
         <header className={styles.pageHeader}>
-          <div className={styles.pageHeading}>
-            <p className={styles.breadcrumbs}>Dashboard / Settings / Audit logs</p>
+          <div className={styles.pageHeading}>            
             <h1 className={styles.pageTitle}>Audit logs</h1>
             <p className={styles.pageSubtitle}>
               Review every insert, update, approval, and cancel event with full audit detail.
@@ -592,7 +602,7 @@ export default function AuditLogsPage() {
               </div>
               <div className={styles.tableFooterNote}>
                 <span className={styles.metaText}>
-                  Rows stack automatically on smaller screens. Use the scrollbar inside the table to browse all loaded rows.
+                  Rows stack automatically on smaller screens. Use the pagination controls to browse the filtered result set.
                 </span>
               </div>
             </div>
@@ -723,7 +733,6 @@ export default function AuditLogsPage() {
                   Captured on {formatDateTime(selectedLog.log_date)} for {selectedLog.log_table_name}
                 </p>
               </div>
-
               <button
                 className={styles.modalClose}
                 type="button"
@@ -735,10 +744,10 @@ export default function AuditLogsPage() {
             </header>
             <div className={styles.modalContent}>
               <section className={styles.metaGrid}>
-                <div className={styles.metaCard}>
+                {/* <div className={styles.metaCard}>
                   <p className={styles.metaLabel}>Log ID</p>
                   <p className={styles.metaValue}>{selectedLog.log_id}</p>
-                </div>
+                </div> */}
                 <div className={styles.metaCard}>
                   <p className={styles.metaLabel}>Action</p>
                   <p className={styles.metaValue}>{formatActionLabel(selectedLog.log_action)}</p>
