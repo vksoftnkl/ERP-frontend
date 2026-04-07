@@ -1,0 +1,259 @@
+.page {
+  min-height: 100%;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.08), transparent 34%),
+    linear-gradient(180deg, #f7fbfb 0%, #eef4f4 100%);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.sidebar,
+.editor {
+  display: grid;
+  gap: 20px;
+}
+
+.panelCard {
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.cardBody {
+  display: grid;
+  gap: 18px;
+}
+
+.cardFoot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 14px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.footNote {
+  color: rgba(15, 23, 42, 0.7);
+  font-size: 0.92rem;
+}
+
+.headActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tableTitleCell {
+  display: grid;
+  gap: 4px;
+}
+
+.tableSubtleText {
+  color: rgba(15, 23, 42, 0.6);
+  font-size: 0.84rem;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sectionHeader {
+  display: grid;
+  gap: 4px;
+  grid-column: 1 / -1;
+  padding-top: 8px;
+}
+
+.sectionEyebrow {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #0f766e;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.fieldSpan2 {
+  grid-column: span 2;
+}
+
+.fieldSpan3 {
+  grid-column: 1 / -1;
+}
+
+.checkboxGrid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.checkboxCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(248, 250, 252, 0.9);
+  color: #0f172a;
+  font-size: 0.94rem;
+  font-weight: 500;
+}
+
+.checkboxCard input {
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.childrenGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.headTitleWithIcon {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.headTitleWithIcon svg {
+  flex: 0 0 auto;
+  inline-size: 18px;
+  block-size: 18px;
+  color: #0f766e;
+  margin-top: 3px;
+}
+
+.childForm {
+  display: grid;
+  gap: 14px;
+}
+
+.compactGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.childActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.inlineActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.checkboxStack {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.inlineStatusBar {
+  position: fixed;
+  inset-inline-end: 24px;
+  inset-block-end: 24px;
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #fff;
+  font-size: 0.92rem;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.24);
+  z-index: 40;
+}
+
+@media (max-width: 1280px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    order: 2;
+  }
+
+  .editor {
+    order: 1;
+  }
+}
+
+@media (max-width: 960px) {
+  .page {
+    padding: 16px;
+  }
+
+  .formGrid,
+  .compactGrid,
+  .checkboxGrid,
+  .metricsGrid,
+  .childrenGrid,
+  .filters {
+    grid-template-columns: 1fr;
+  }
+
+  .fieldSpan2,
+  .fieldSpan3 {
+    grid-column: auto;
+  }
+
+  .cardHead,
+  .childActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .headActions,
+  .inlineActions,
+  .checkboxStack {
+    justify-content: stretch;
+  }
+
+  .inlineActions :global(.ui-btn),
+  .headActions :global(.ui-btn) {
+    width: 100%;
+  }
+}

@@ -29,6 +29,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
     iconKey: "sales",
     children: [
       {label: "Customers", href: "/master/customer"},      
+      { label: "Promotion Loyalty Points", href: "/sales/promotion-loyalty-points" },
       { label: "Sales Entry", href: "/dashboard" },
       { label: "Sales Return" },
       {
@@ -218,6 +219,12 @@ export const DEFAULT_QUICK_TABS: ErpHeaderItem[] = [
   },
 ];
 export const ERP_MENU_OBJECT: ERPMenuObject = {
+  Sales: {
+    Customers: null,
+    "Promotion Loyalty Points": null,
+    "Sales Entry": null,
+    "Sales Return": null,
+  },
   Accounts: {
     "Account Ledger Groups Master": null,
     "Account Ledger Master": null,
