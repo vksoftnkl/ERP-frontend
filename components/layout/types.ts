@@ -20,6 +20,11 @@ export type ErpHeaderItem = {
   children?: ErpHeaderItem[];
 };
 
+export type RecentPageOption = {
+  path: string;
+  label: string;
+};
+
 export type ErpHeaderProps = {
   primaryMenu?: ErpHeaderItem[];
   quickTabs?: ErpHeaderItem[];
@@ -63,6 +68,9 @@ export type MenuTreeProps = {
 export type HeaderRightProps = {
   searchMenuCount: number;
   dateText: string;
+  recentPages: RecentPageOption[];
+  selectedRecentPage: string;
+  onRecentPageChange: (value: string) => void;
   companyOptions: ERPDynamicSelectOption[];
   selectedCompany: string;
   onCompanyChange?: (value: string) => void;

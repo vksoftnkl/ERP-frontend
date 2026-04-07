@@ -512,6 +512,7 @@ export const DEFAULT_DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
 };
 export const ARIA_LABELS = {
   MAIN_MENU: "Main ERP modules",
+  RECENT_PAGES_SELECT: "Recent pages",
   COMPANY_SELECT: "Company selection",
   BRANCH_SELECT: "Branch selection",
   CART_BUTTON: (count: number) => `Cart items: ${count}`,

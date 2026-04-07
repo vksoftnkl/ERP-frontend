@@ -6,6 +6,12 @@ import styles from "./erp-header.module.css";
 import { clearAuthSession } from "@/lib/auth/session";
 import { clearBusinessContextSession } from "@/components/layout/business-context";
 import {
+  clearRecentPagesSession,
+  isTrackableRecentPagePath,
+  readRecentPages,
+  upsertRecentPage,
+} from "@/lib/navigation/recent-pages";
+import {
   canUseClientSideRouting,
   toInternalRoute,
 } from "@/lib/navigation/safe-route";
@@ -24,6 +30,7 @@ import type {
   HeaderRightProps,
   MenuLinkProps,
   MenuTreeProps,
+  RecentPageOption,
   TabStripProps,
 } from "./types";
 import { useGetPrimaryMenuQuery } from "@/store/api/shellApi";
@@ -48,6 +55,45 @@ function getDefaultBranchValue(options: Array<{ value: string }>): string {
 function getDefaultCompanyValue(options: Array<{ value: string }>): string {
   const firstNamedCompany = options.find((option) => option.value.trim().length > 0);
   return firstNamedCompany?.value ?? options[0]?.value ?? "";
+}
+
+function toTitleCaseLabel(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
+function toFallbackRecentPageLabel(pathname: string): string {
+  const lastSegment = pathname.split("/").filter(Boolean).pop() ?? "";
+  if (!lastSegment) {
+    return "Home";
+  }
+
+  return toTitleCaseLabel(lastSegment.replace(/[-_]+/g, " ").trim()) || "Recent Page";
+}
+
+function buildRouteLabelLookup(items: ErpHeaderItem[]): Map<string, string> {
+  const lookup = new Map<string, string>();
+
+  const visit = (menuItems: ErpHeaderItem[]) => {
+    for (const item of menuItems) {
+      const route = toInternalRoute(item.href);
+      const label = item.label.trim();
+
+      if (route && label && !lookup.has(route)) {
+        lookup.set(route, label);
+      }
+
+      if (item.children?.length) {
+        visit(item.children);
+      }
+    }
+  };
+
+  visit(items);
+  return lookup;
 }
 
 function getMenuItemElement(element: HTMLElement): HTMLLIElement | null {
@@ -306,6 +352,9 @@ function MenuTree({
 function HeaderRight({
   searchMenuCount,
   dateText,
+  recentPages,
+  selectedRecentPage,
+  onRecentPageChange,
   companyOptions,
   selectedCompany,
   onCompanyChange,
@@ -327,6 +376,10 @@ function HeaderRight({
     const next = event.target.value;
     onBranchChange?.(next);
   }, [onBranchChange]);
+  const handleRecentPageChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
+    const next = event.target.value;
+    onRecentPageChange(next);
+  }, [onRecentPageChange]);
   return (
     <div className={styles.headerRight}>
       <span className={styles.searchText}>{searchMenuCount} Search Menu :</span>
@@ -334,6 +387,22 @@ function HeaderRight({
       <span className={styles.calendar} aria-hidden="true">
         CAL
       </span>
+      <select
+        className={styles.recentPagesSelect}
+        aria-label={ARIA_LABELS.RECENT_PAGES_SELECT}
+        value={selectedRecentPage}
+        onChange={handleRecentPageChange}
+        disabled={recentPages.length === 0}
+      >
+        <option value="" disabled>
+          Recent Pages
+        </option>
+        {recentPages.map((page) => (
+          <option key={page.path} value={page.path}>
+            {page.label}
+          </option>
+        ))}
+      </select>
       <select
         className={styles.contextSelect}
         aria-label={ARIA_LABELS.COMPANY_SELECT}
@@ -450,6 +519,8 @@ export default function ErpHeader({
     selectedBranch ?? getDefaultBranchValue(branchOptions)
   );
   const [localBillNumber, setLocalBillNumber] = useState(billNumber ?? "");
+  const [recentPages, setRecentPages] = useState<RecentPageOption[]>([]);
+  const [selectedRecentPage, setSelectedRecentPage] = useState("");
   useEffect(() => {
     if (selectedCompany !== undefined) {
       setLocalCompany(selectedCompany);
@@ -495,6 +566,21 @@ export default function ErpHeader({
   const resolvedCompany = selectedCompany ?? localCompany;
   const resolvedBranch = selectedBranch ?? localBranch;
   const resolvedBillNumber = billNumber ?? localBillNumber;
+  const routeLabelLookup = useMemo(
+    () => buildRouteLabelLookup(resolvedPrimaryMenu),
+    [resolvedPrimaryMenu],
+  );
+  const resolvedCurrentPageLabel = useMemo(() => {
+    if (!pathname) {
+      return "";
+    }
+
+    return routeLabelLookup.get(pathname) ?? toFallbackRecentPageLabel(pathname);
+  }, [pathname, routeLabelLookup]);
+  const recentPageOptions = useMemo(
+    () => recentPages.filter((page) => page.path !== pathname),
+    [pathname, recentPages],
+  );
   const closeFocusedMenu = useCallback(() => {
     const active = document.activeElement;
     if (active instanceof HTMLElement) {
@@ -505,6 +591,27 @@ export default function ErpHeader({
   useEffect(() => {
     closeFocusedMenu();
   }, [closeFocusedMenu, pathname]);
+  useEffect(() => {
+    if (!pathname) {
+      setRecentPages(readRecentPages());
+      return;
+    }
+
+    if (!isTrackableRecentPagePath(pathname)) {
+      setRecentPages(readRecentPages());
+      return;
+    }
+
+    setRecentPages(
+      upsertRecentPage({
+        path: pathname,
+        label: resolvedCurrentPageLabel,
+      }),
+    );
+  }, [pathname, resolvedCurrentPageLabel]);
+  useEffect(() => {
+    setSelectedRecentPage("");
+  }, [pathname]);
   useEffect(() => {
     const handlePointerDownCapture = (event: PointerEvent) => {
       const target = event.target;
@@ -565,7 +672,18 @@ export default function ErpHeader({
     }
     router.push(route);
   }, [router]);
+  const handleRecentPageChange = useCallback((value: string) => {
+    if (!value) {
+      return;
+    }
+
+    setSelectedRecentPage("");
+    handleNavigate(value);
+  }, [handleNavigate]);
   const handleLogout = useCallback(() => {
+    clearRecentPagesSession();
+    setRecentPages([]);
+
     if (onLogout) {
       onLogout();
       return;
@@ -599,6 +717,9 @@ export default function ErpHeader({
         <HeaderRight
           searchMenuCount={searchMenuCount}
           dateText={resolvedDateText}
+          recentPages={recentPageOptions}
+          selectedRecentPage={selectedRecentPage}
+          onRecentPageChange={handleRecentPageChange}
           companyOptions={companyOptions}
           selectedCompany={resolvedCompany}
           onCompanyChange={handleCompanyChange}

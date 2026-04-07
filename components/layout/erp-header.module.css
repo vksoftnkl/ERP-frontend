@@ -243,6 +243,17 @@
   padding: 0 6px;
 }
 
+.recentPagesSelect {
+  height: 24px;
+  min-width: 200px;
+  max-width: 220px;
+  border: 1px solid #4f4f4f;
+  background: #fff;
+  color: #111;
+  font-size: 13px;
+  padding: 0 6px;
+}
+
 .cartButton,
 .goButton,
 .logoutButton {
@@ -357,6 +368,12 @@
     min-width: 0;
   }
 
+  .recentPagesSelect {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
   .tabStrip {
     padding: 5px 6px;
   }
@@ -382,6 +399,11 @@
   }
 
   .contextSelect {
+    min-width: 132px;
+    font-size: 12px;
+  }
+
+  .recentPagesSelect {
     min-width: 132px;
     font-size: 12px;
   }
