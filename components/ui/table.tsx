@@ -610,6 +610,58 @@ export function ReusableTable<T extends Record<string, unknown>>({
   }, [openActionMenuKey]);
 
   useEffect(() => {
+    if (!paginated) {
+      return;
+    }
+
+    const handlePaginationKeydown = (event: KeyboardEvent) => {
+      // Only handle pagination shortcuts when not typing in an input
+      const target = event.target as HTMLElement;
+      const isInputElement =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLSelectElement ||
+        target instanceof HTMLTextAreaElement;
+
+      if (isInputElement && event.key !== "Escape") {
+        return;
+      }
+
+      switch (event.key) {
+        case "ArrowLeft":
+          if (!isInputElement) {
+            event.preventDefault();
+            setPage(Math.max(1, effectiveCurrentPage - 1));
+          }
+          break;
+        case "ArrowRight":
+          if (!isInputElement) {
+            event.preventDefault();
+            setPage(Math.min(totalPages, effectiveCurrentPage + 1));
+          }
+          break;
+        case "Home":
+          if (!isInputElement) {
+            event.preventDefault();
+            setPage(1);
+          }
+          break;
+        case "End":
+          if (!isInputElement) {
+            event.preventDefault();
+            setPage(totalPages);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handlePaginationKeydown);
+
+    return () => {
+      window.removeEventListener("keydown", handlePaginationKeydown);
+    };
+  }, [paginated, effectiveCurrentPage, totalPages]);
+
+  useEffect(() => {
     if (!paginated || effectiveCurrentPage === requestedCurrentPage) {
       return;
     }
@@ -1025,73 +1077,94 @@ export function ReusableTable<T extends Record<string, unknown>>({
             )}
           </tbody>
         </table>
+        {paginated ? (
+          <div className={styles.paginationBar}>
+            <div className={styles.paginationInfo}>
+              <span>
+                {paginationLabel} {pageStart} to {pageEnd} of {resolvedTotalEntries} entries
+              </span>
+              {showPageSizeSelector ? (
+                <label className={styles.pageSizeControl}>
+                  <span>Show:</span>
+                  <select
+                    value={effectivePageSize}
+                    onChange={(event) => setPageSize(Number(event.target.value))}
+                    className={styles.pageSizeSelect}
+                  >
+                    {normalizedPageSizeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+            <div className={styles.paginationControls}>
+              <button
+                type="button"
+                className={styles.paginationButton}
+                onClick={() => setPage(effectiveCurrentPage - 1)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setPage(effectiveCurrentPage - 1);
+                  }
+                }}
+                disabled={effectiveCurrentPage <= 1}
+                aria-label="Go to previous page"
+                title="Previous page (Alt+Left)"
+              >
+                <FiChevronLeft className={styles.paginationArrowIcon} aria-hidden="true" />
+                <span className={styles.srOnly}>Previous</span>
+              </button>
+              {pageList.map((page, index) =>
+                page === "ellipsis" ? (
+                  <span key={`ellipsis-${index}`} className={styles.paginationEllipsis}>
+                    ...
+                  </span>
+                ) : (
+                  <button
+                    key={`page-${page}`}
+                    type="button"
+                    className={cx(
+                      styles.paginationButton,
+                      page === effectiveCurrentPage && styles.paginationButtonActive,
+                    )}
+                    onClick={() => setPage(page)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setPage(page);
+                      }
+                    }}
+                    title={`Go to page ${page}`}
+                  >
+                    {page}
+                  </button>
+                ),
+              )}
+              <button
+                type="button"
+                className={styles.paginationButton}
+                onClick={() => setPage(effectiveCurrentPage + 1)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setPage(effectiveCurrentPage + 1);
+                  }
+                }}
+                disabled={effectiveCurrentPage >= totalPages}
+                aria-label="Go to next page"
+                title="Next page (Alt+Right)"
+              >
+                <FiChevronRight className={styles.paginationArrowIcon} aria-hidden="true" />
+                <span className={styles.srOnly}>Next</span>
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
-      {paginated ? (
-        <div className={styles.paginationBar}>
-          <div className={styles.paginationInfo}>
-            <span>
-              {paginationLabel} {pageStart} to {pageEnd} of {resolvedTotalEntries} entries
-            </span>
-            {showPageSizeSelector ? (
-              <label className={styles.pageSizeControl}>
-                <span>Show:</span>
-                <select
-                  value={effectivePageSize}
-                  onChange={(event) => setPageSize(Number(event.target.value))}
-                  className={styles.pageSizeSelect}
-                >
-                  {normalizedPageSizeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-          </div>
-          <div className={styles.paginationControls}>
-            <button
-              type="button"
-              className={styles.paginationButton}
-              onClick={() => setPage(effectiveCurrentPage - 1)}
-              disabled={effectiveCurrentPage <= 1}
-              aria-label="Go to previous page"
-            >
-              <FiChevronLeft className={styles.paginationArrowIcon} aria-hidden="true" />
-              <span className={styles.srOnly}>Previous</span>
-            </button>
-            {pageList.map((page, index) =>
-              page === "ellipsis" ? (
-                <span key={`ellipsis-${index}`} className={styles.paginationEllipsis}>
-                  ...
-                </span>
-              ) : (
-                <button
-                  key={`page-${page}`}
-                  type="button"
-                  className={cx(
-                    styles.paginationButton,
-                    page === effectiveCurrentPage && styles.paginationButtonActive,
-                  )}
-                  onClick={() => setPage(page)}
-                >
-                  {page}
-                </button>
-              ),
-            )}
-            <button
-              type="button"
-              className={styles.paginationButton}
-              onClick={() => setPage(effectiveCurrentPage + 1)}
-              disabled={effectiveCurrentPage >= totalPages}
-              aria-label="Go to next page"
-            >
-              <FiChevronRight className={styles.paginationArrowIcon} aria-hidden="true" />
-              <span className={styles.srOnly}>Next</span>
-            </button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

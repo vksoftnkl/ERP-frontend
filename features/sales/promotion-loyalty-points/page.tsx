@@ -1,7 +1,15 @@
 "use client";
-import { type FormEvent, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type FormEvent,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
-import { FiGift, FiPlus, FiRefreshCw, FiSave } from "react-icons/fi";
+import { FiGift, FiPlus, FiRefreshCw, FiSave, FiMoreVertical } from "react-icons/fi";
 import {
   Alert,
   Badge,
@@ -28,7 +36,7 @@ import {
 } from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";
 import type { ApiSuccessResponse } from "@/utils/types";
-import styles from "./page.module.scss";
+import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
 import type {
   LoyaltyGiftPayload,
   LoyaltyPartyPayload,
@@ -83,6 +91,10 @@ const CUSTOMER_TYPE_OPTIONS = [
   { value: "CUSTOMER_GROUP", label: "Customer Group" },
   { value: "CUSTOMER", label: "Customer" },
 ] as const;
+const DEFAULT_PARTY_SCOPE_TYPE: PartyScopeType =
+  CUSTOMER_TYPE_OPTIONS.find((option) => option.value !== "ALL")?.value === "CUSTOMER"
+    ? "CUSTOMER"
+    : "CUSTOMER_GROUP";
 const ITEM_TYPE_OPTIONS = [
   { value: "ALL", label: "All Items" },
   { value: "ITEM_GROUP", label: "Item Group" },
@@ -111,6 +123,26 @@ const DEFAULT_ITEM_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "All Items",
 };
+const DEFAULT_ITEM_GROUP_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "All Item Groups",
+};
+const DEFAULT_ITEM_CATEGORY_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "All Item Categories",
+};
+const DEFAULT_ITEM_BRAND_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "All Item Brands",
+};
+const DEFAULT_ITEM_SECTION_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "All Item Sections",
+};
+const DEFAULT_POINT_SCOPE_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Applies to all items",
+};
 const DEFAULT_UNIT_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Any Unit",
@@ -123,6 +155,16 @@ const DEFAULT_REQUIRED_UNIT_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Unit",
 };
+const DEFAULT_PARTY_CUSTOMER_GROUP_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Select Customer Group",
+};
+const DEFAULT_PARTY_CUSTOMER_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Select Customer",
+};
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type SchemeFormState = {
   ls_id: string;
   ls_code: string;
@@ -198,9 +240,22 @@ type DeleteDialogState =
   | { kind: "scheme"; id: string; label: string }
   | { kind: "point"; id: string; label: string }
   | { kind: "gift"; id: string; label: string }
+  | { kind: "party"; id: string; label: string }
   | null;
 type BadgeVariant = "neutral" | "info" | "success" | "warning" | "danger";
 type EditorTab = "scheme" | "points" | "gifts" | "party";
+type PointScopeDescriptor = {
+  headerLabel: string;
+  options: ERPDynamicSelectOption[];
+  defaultOption: ERPDynamicSelectOption;
+};
+type PartyScopeType = "CUSTOMER_GROUP" | "CUSTOMER";
+const EDITOR_TABS: ReadonlyArray<{ key: EditorTab; label: string }> = [
+  { key: "scheme", label: "Scheme" },
+  { key: "points", label: "Points" },
+  { key: "gifts", label: "Gifts" },
+  { key: "party", label: "Party Scope" },
+];
 type LookupConfig = {
   arrayKeys: readonly string[];
   idKeys: readonly string[];
@@ -211,7 +266,26 @@ const ITEM_LOOKUP_KEYS: LookupConfig = {
   idKeys: ["item_id", "itemId", "id", "_id", "value"],
   labelKeys: ["item_name_en", "itemNameEn", "item_name", "name", "label"],
 };
-
+const ITEM_GROUP_LOOKUP_KEYS: LookupConfig = {
+  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "groups", "itemGroups"],
+  idKeys: ["group_id", "groupId", "itg_id", "item_group_id", "itemGroupId", "id", "_id", "value"],
+  labelKeys: ["group_name", "groupName", "itg_name", "item_group_name", "itemGroupName", "name", "label"],
+};
+const ITEM_CATEGORY_LOOKUP_KEYS: LookupConfig = {
+  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "categories", "itemCategories", "item_categories"],
+  idKeys: ["category_id", "categoryId", "item_category_id", "itemCategoryId", "id", "_id", "value"],
+  labelKeys: ["category_name", "categoryName", "item_category_name", "itemCategoryName", "name", "label"],
+};
+const ITEM_BRAND_LOOKUP_KEYS: LookupConfig = {
+  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "brands", "itemBrands"],
+  idKeys: ["brand_id", "brandId", "item_brand_id", "itemBrandId", "id", "_id", "value"],
+  labelKeys: ["brand_name", "brandName", "item_brand_name", "itemBrandName", "name", "label"],
+};
+const ITEM_SECTION_LOOKUP_KEYS: LookupConfig = {
+  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "sections", "itemSections", "item_sections"],
+  idKeys: ["sec_id", "secId", "section_id", "sectionId", "item_section_id", "itemSectionId", "id", "_id", "value"],
+  labelKeys: ["sec_name", "secName", "section_name", "sectionName", "item_section_name", "itemSectionName", "name", "label"],
+};
 const UNIT_LOOKUP_KEYS: LookupConfig = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "units", "itemUnits"],
   idKeys: ["unit_id", "unitId", "item_unit_id", "itemUnitId", "id", "_id", "value"],
@@ -252,6 +326,27 @@ function buildOptionLabelMap(options: ERPDynamicSelectOption[]): Map<string, str
       .map((option) => [option.value, option.label]),
   );
 }
+function withFallbackOption(
+  options: ERPDynamicSelectOption[],
+  value: string,
+  labelMap: Map<string, string>,
+): ERPDynamicSelectOption[] {
+  const normalizedValue = value.trim();
+  if (!normalizedValue || options.some((option) => option.value === normalizedValue)) {
+    return options;
+  }
+
+  const fallbackOption: ERPDynamicSelectOption = {
+    value: normalizedValue,
+    label: `Previous value: ${labelMap.get(normalizedValue) ?? normalizedValue}`,
+  };
+
+  if (options[0]?.value === "") {
+    return [options[0], fallbackOption, ...options.slice(1)];
+  }
+
+  return [fallbackOption, ...options];
+}
 function toDateInputValue(value: string | null | undefined): string {
   return value ? value.slice(0, 10) : "";
 }
@@ -273,6 +368,12 @@ function toOptionalInteger(value: string): number | undefined {
   if (!normalized) return undefined;
   const parsed = Number.parseInt(normalized, 10);
   return Number.isInteger(parsed) ? parsed : undefined;
+}
+function isPartyScopeType(value: string | null | undefined): value is PartyScopeType {
+  return value === "CUSTOMER_GROUP" || value === "CUSTOMER";
+}
+function isUuid(value: string | null | undefined): boolean {
+  return Boolean(value && UUID_PATTERN.test(value.trim()));
 }
 function buildEmptySchemeForm(companyId: string, branchId: string): SchemeFormState {
   return {
@@ -311,15 +412,15 @@ function buildEmptySchemeForm(companyId: string, branchId: string): SchemeFormSt
     ls_is_active: true,
   };
 }
-function buildEmptyPartyRow(nextSlno = 1): EditablePartyRow {
+function buildEmptyPartyRow(nextSlno = 1, scopeType: PartyScopeType = "CUSTOMER_GROUP"): EditablePartyRow {
   return {
     lps_id: "",
     lps_ls_id: "",
     lps_slno: nextSlno,
-    lps_scope_type: "CUSTOMER_GROUP",
+    lps_scope_type: scopeType,
     lps_scope_id: "",
     lps_is_exclude: false,
-    lps_notes: null,
+    lps_notes: "",
     lps_is_active: true,
     lps_is_deleted: false,
     lps_sync_date: null,
@@ -376,12 +477,13 @@ function mapSchemeToForm(scheme: LoyaltySchemePayload): SchemeFormState {
 function buildPartyRequest(
   row: EditablePartyRow,
   schemeId?: string,
+  scopeType?: PartyScopeType,
 ): SaveLoyaltyPartyRequest {
   return {
     ...(row.lps_id ? { lps_id: row.lps_id } : {}),
     ...(schemeId ? { lps_ls_id: schemeId } : {}),
     lps_slno: row.lps_slno,
-    lps_scope_type: row.lps_scope_type,
+    lps_scope_type: scopeType ?? row.lps_scope_type,
     lps_scope_id: row.lps_scope_id.trim(),
     lps_is_exclude: row.lps_is_exclude,
     lps_notes: row.lps_notes?.trim() ? row.lps_notes.trim() : null,
@@ -428,6 +530,7 @@ function buildSchemeRequest(
   form: SchemeFormState,
   partyRows: EditablePartyRow[],
 ): SaveLoyaltySchemeRequest {
+  const schemePartyScopeType = isPartyScopeType(form.ls_cust_type) ? form.ls_cust_type : undefined;
   return {
     ...(form.ls_id ? { ls_id: form.ls_id } : {}),
     ls_code: toNullableString(form.ls_code),
@@ -463,7 +566,9 @@ function buildSchemeRequest(
     ls_expiry_basis: form.ls_expiry_basis,
     ls_remarks: toNullableString(form.ls_remarks),
     ls_is_active: form.ls_is_active,
-    parties: partyRows.filter(shouldPersistPartyRow).map((row) => buildPartyRequest(row)),
+    parties: partyRows
+      .filter(shouldPersistPartyRow)
+      .map((row) => buildPartyRequest(row, undefined, schemePartyScopeType)),
   };
 }
 function buildEmptyPointForm(): PointFormState {
@@ -509,7 +614,6 @@ function buildPointRequest(schemeId: string, form: PointFormState): SaveLoyaltyP
     lspt_is_active: form.lspt_is_active,
   };
 }
-
 function buildEmptyGiftForm(): GiftFormState {
   return {
     lsg_id: "",
@@ -523,7 +627,6 @@ function buildEmptyGiftForm(): GiftFormState {
     lsg_is_active: true,
   };
 }
-
 function mapGiftToForm(gift: LoyaltyGiftPayload): GiftFormState {
   return {
     lsg_id: gift.lsg_id,
@@ -537,7 +640,6 @@ function mapGiftToForm(gift: LoyaltyGiftPayload): GiftFormState {
     lsg_is_active: gift.lsg_is_active,
   };
 }
-
 function buildGiftRequest(schemeId: string, form: GiftFormState): SaveLoyaltyGiftRequest {
   return {
     ...(form.lsg_id ? { lsg_id: form.lsg_id } : {}),
@@ -600,19 +702,6 @@ function getTypeVariant(type: string): BadgeVariant {
   if (type === "GIFT") return "warning";
   return "success";
 }
-function getPartyScopeLabel(
-  party: LoyaltyPartyPayload,
-  customerNameMap: Map<string, string>,
-  customerGroupNameMap: Map<string, string>,
-): string {
-  if (party.lps_scope_type === "CUSTOMER_GROUP") {
-    return resolveLabel(party.lps_scope_id, customerGroupNameMap, party.lps_scope_id);
-  }
-  if (party.lps_scope_type === "CUSTOMER") {
-    return resolveLabel(party.lps_scope_id, customerNameMap, party.lps_scope_id);
-  }
-  return party.lps_scope_id;
-}
 export default function PromotionLoyaltyPointsPage() {
   const {
     activeCompany,
@@ -628,6 +717,7 @@ export default function PromotionLoyaltyPointsPage() {
   const [pointRows, setPointRows] = useState<EditablePointRow[]>([]);
   const [giftRows, setGiftRows] = useState<EditableGiftRow[]>([]);
   const [partyRows, setPartyRows] = useState<EditablePartyRow[]>([]);
+  const [editorSubmitError, setEditorSubmitError] = useState<string | null>(null);
   const [schemeSearch, setSchemeSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -635,6 +725,10 @@ export default function PromotionLoyaltyPointsPage() {
   const [listMeta, setListMeta] = useState<PromotionLoyaltyPointsListMeta | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>(null);
   const [itemChoices, setItemChoices] = useState<ERPDynamicSelectOption[]>([]);
+  const [itemGroupChoices, setItemGroupChoices] = useState<ERPDynamicSelectOption[]>([]);
+  const [itemCategoryChoices, setItemCategoryChoices] = useState<ERPDynamicSelectOption[]>([]);
+  const [itemBrandChoices, setItemBrandChoices] = useState<ERPDynamicSelectOption[]>([]);
+  const [itemSectionChoices, setItemSectionChoices] = useState<ERPDynamicSelectOption[]>([]);
   const [unitChoices, setUnitChoices] = useState<ERPDynamicSelectOption[]>([]);
   const [customerChoices, setCustomerChoices] = useState<ERPDynamicSelectOption[]>([]);
   const [customerGroupChoices, setCustomerGroupChoices] = useState<ERPDynamicSelectOption[]>([]);
@@ -650,10 +744,64 @@ export default function PromotionLoyaltyPointsPage() {
       ),
     [businessBranchOptions],
   );
-  const itemOptionsForPoint = useMemo(
-    () => withDefaultOption(itemChoices, DEFAULT_ITEM_OPTION),
-    [itemChoices],
+  const pointScopeDescriptor = useMemo<PointScopeDescriptor>(() => {
+    switch (schemeForm.ls_item_type) {
+      case "ITEM_GROUP":
+        return {
+          headerLabel: "Item Group",
+          options: itemGroupChoices,
+          defaultOption: DEFAULT_ITEM_GROUP_OPTION,
+        };
+      case "ITEM_BRAND":
+        return {
+          headerLabel: "Item Brand",
+          options: itemBrandChoices,
+          defaultOption: DEFAULT_ITEM_BRAND_OPTION,
+        };
+      case "ITEM_CATEGORY":
+        return {
+          headerLabel: "Item Category",
+          options: itemCategoryChoices,
+          defaultOption: DEFAULT_ITEM_CATEGORY_OPTION,
+        };
+      case "ITEM_SECTION":
+        return {
+          headerLabel: "Item Section",
+          options: itemSectionChoices,
+          defaultOption: DEFAULT_ITEM_SECTION_OPTION,
+        };
+      case "ALL":
+        return {
+          headerLabel: "Item Scope",
+          options: itemChoices,
+          defaultOption: DEFAULT_POINT_SCOPE_OPTION,
+        };
+      case "ITEM":
+      default:
+        return {
+          headerLabel: "Item",
+          options: itemChoices,
+          defaultOption: DEFAULT_ITEM_OPTION,
+        };
+    }
+  }, [
+    itemBrandChoices,
+    itemCategoryChoices,
+    itemChoices,
+    itemGroupChoices,
+    itemSectionChoices,
+    schemeForm.ls_item_type,
+  ]);
+  const pointScopeOptionsForPoint = useMemo(
+    () => withDefaultOption(pointScopeDescriptor.options, pointScopeDescriptor.defaultOption),
+    [pointScopeDescriptor],
   );
+  const pointExceedsHeader = useMemo(() => {
+    const applyOnLabel = APPLY_ON_OPTIONS.find(
+      (option) => option.value === schemeForm.ls_apply_on,
+    )?.label;
+    return applyOnLabel ? `${applyOnLabel} Exceeds` : "Exceeds";
+  }, [schemeForm.ls_apply_on]);
   const unitOptionsForPoint = useMemo(
     () => withDefaultOption(unitChoices, DEFAULT_UNIT_OPTION),
     [unitChoices],
@@ -671,8 +819,82 @@ export default function PromotionLoyaltyPointsPage() {
     () => buildOptionLabelMap(customerGroupChoices),
     [customerGroupChoices],
   );
+  const schemePartyScopeType = useMemo<PartyScopeType | null>(
+    () => (isPartyScopeType(schemeForm.ls_cust_type) ? schemeForm.ls_cust_type : null),
+    [schemeForm.ls_cust_type],
+  );
+  const partyScopeColumnHeader =
+    schemePartyScopeType === "CUSTOMER_GROUP"
+      ? "Customer Group"
+      : schemePartyScopeType === "CUSTOMER"
+        ? "Customer"
+        : "Scope";
+  const customerOptionsForParty = useMemo(
+    () => withDefaultOption(customerChoices, DEFAULT_PARTY_CUSTOMER_OPTION),
+    [customerChoices],
+  );
+  const customerGroupOptionsForParty = useMemo(
+    () => withDefaultOption(customerGroupChoices, DEFAULT_PARTY_CUSTOMER_GROUP_OPTION),
+    [customerGroupChoices],
+  );
+  const pointScopeLabelMap = useMemo(
+    () =>
+      buildOptionLabelMap([
+        ...itemChoices,
+        ...itemGroupChoices,
+        ...itemCategoryChoices,
+        ...itemBrandChoices,
+        ...itemSectionChoices,
+      ]),
+    [itemBrandChoices, itemCategoryChoices, itemChoices, itemGroupChoices, itemSectionChoices],
+  );
   const branchLabelMap = useMemo(() => buildOptionLabelMap(branchOptions), [branchOptions]);
+  const getPartyScopeTypeForRow = (row: EditablePartyRow): PartyScopeType | null => {
+    const rowScopeType = isPartyScopeType(row.lps_scope_type) ? row.lps_scope_type : null;
+    return schemePartyScopeType ?? rowScopeType;
+  };
+  const getPartyScopeOptionsForRow = (row: EditablePartyRow): ERPDynamicSelectOption[] => {
+    const effectiveScopeType = getPartyScopeTypeForRow(row);
+    const baseOptions =
+      effectiveScopeType === "CUSTOMER_GROUP"
+        ? customerGroupOptionsForParty
+        : effectiveScopeType === "CUSTOMER"
+          ? customerOptionsForParty
+          : [{ value: "", label: "Select customer scope in Scheme tab" }];
 
+    if (!isUuid(row.lps_scope_id)) {
+      return baseOptions;
+    }
+
+    return withFallbackOption(
+      baseOptions,
+      row.lps_scope_id,
+      effectiveScopeType === "CUSTOMER_GROUP" ? customerGroupLabelMap : customerLabelMap,
+    );
+  };
+  const getPartyRowValidationMessage = (
+    row: EditablePartyRow,
+    rowIndex: number,
+  ): string | null => {
+    if (!shouldPersistPartyRow(row)) {
+      return null;
+    }
+
+    const effectiveScopeType = getPartyScopeTypeForRow(row);
+    const rowLabel = `Party Scope row ${row.lps_slno || rowIndex + 1}`;
+
+    if (!effectiveScopeType) {
+      return `${rowLabel} requires a customer scope in the Scheme tab.`;
+    }
+
+    if (!isUuid(row.lps_scope_id)) {
+      return `${rowLabel} requires a valid ${
+        effectiveScopeType === "CUSTOMER_GROUP" ? "customer group" : "customer"
+      } selection.`;
+    }
+
+    return null;
+  };
   const { getAll: listSchemes, loading: listLoading, error: listError } = useApi<
     ApiSuccessResponse<LoyaltySchemePayload[], PromotionLoyaltyPointsListMeta>
   >(LOYALTY_LIST_ENDPOINT, {
@@ -739,6 +961,18 @@ export default function PromotionLoyaltyPointsPage() {
   const { getAll: getItemLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, {
     toast: { success: false, error: false },
   });
+  const { getAll: getItemGroupLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, {
+    toast: { success: false, error: false },
+  });
+  const { getAll: getItemCategoryLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, {
+    toast: { success: false, error: false },
+  });
+  const { getAll: getItemBrandLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, {
+    toast: { success: false, error: false },
+  });
+  const { getAll: getItemSectionLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, {
+    toast: { success: false, error: false },
+  });
   const { getAll: getUnitLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, {
     toast: { success: false, error: false },
   });
@@ -749,6 +983,7 @@ export default function PromotionLoyaltyPointsPage() {
     toast: { success: false, error: false },
   });
   const resetSchemeEditor = (nextBranchId = selectedBranchId) => {
+    setEditorSubmitError(null);
     setSelectedScheme(null);
     setSchemeForm(buildEmptySchemeForm(selectedCompanyId, nextBranchId));
     setPointRows([]);
@@ -758,6 +993,7 @@ export default function PromotionLoyaltyPointsPage() {
   const loadSchemeDetail = async (schemeId: string) => {
     const response = await getSchemeById({ query: { ls_id: schemeId } });
     if (!response?.data) return;
+    setEditorSubmitError(null);
     setSelectedScheme(response.data);
     setSchemeForm(mapSchemeToForm(response.data));
     setPointRows((response.data.points ?? []).map((row) => createPointRow(row)));
@@ -809,14 +1045,30 @@ export default function PromotionLoyaltyPointsPage() {
   useEffect(() => {
     const loadLookups = async () => {
       try {
-        const [itemsPayload, unitsPayload, customersPayload, customerGroupsPayload] =
-          await Promise.all([
-            getItemLookup({ module: "items", limit: "100" }),
-            getUnitLookup({ module: "units", limit: "100" }),
-            getCustomerLookup({ module: "customers", limit: "100" }),
-            getCustomerGroupLookup({ module: "customerGroups", limit: "100" }),
-          ]);
+        const [
+          itemsPayload,
+          itemGroupsPayload,
+          itemCategoriesPayload,
+          itemBrandsPayload,
+          itemSectionsPayload,
+          unitsPayload,
+          customersPayload,
+          customerGroupsPayload,
+        ] = await Promise.all([
+          getItemLookup({ module: "items", limit: "100" }),
+          getItemGroupLookup({ module: "itemGroups", limit: "100" }),
+          getItemCategoryLookup({ module: "itemCategories", limit: "100" }),
+          getItemBrandLookup({ module: "itemBrands", limit: "100" }),
+          getItemSectionLookup({ module: "itemSections", limit: "100" }),
+          getUnitLookup({ module: "units", limit: "100" }),
+          getCustomerLookup({ module: "customers", limit: "100" }),
+          getCustomerGroupLookup({ module: "customerGroups", limit: "100" }),
+        ]);
         setItemChoices(buildLookupChoices(itemsPayload, ITEM_LOOKUP_KEYS));
+        setItemGroupChoices(buildLookupChoices(itemGroupsPayload, ITEM_GROUP_LOOKUP_KEYS));
+        setItemCategoryChoices(buildLookupChoices(itemCategoriesPayload, ITEM_CATEGORY_LOOKUP_KEYS));
+        setItemBrandChoices(buildLookupChoices(itemBrandsPayload, ITEM_BRAND_LOOKUP_KEYS));
+        setItemSectionChoices(buildLookupChoices(itemSectionsPayload, ITEM_SECTION_LOOKUP_KEYS));
         setUnitChoices(buildLookupChoices(unitsPayload, UNIT_LOOKUP_KEYS));
         setCustomerChoices(buildLookupChoices(customersPayload, CUSTOMER_LOOKUP_KEYS));
         setCustomerGroupChoices(
@@ -827,7 +1079,16 @@ export default function PromotionLoyaltyPointsPage() {
       }
     };
     void loadLookups();
-  }, [getCustomerGroupLookup, getCustomerLookup, getItemLookup, getUnitLookup]);
+  }, [
+    getCustomerGroupLookup,
+    getCustomerLookup,
+    getItemBrandLookup,
+    getItemCategoryLookup,
+    getItemGroupLookup,
+    getItemLookup,
+    getItemSectionLookup,
+    getUnitLookup,
+  ]);
   useEffect(() => {
     void reloadSchemes();
   }, [selectedCompanyId, branchFilter, deferredSchemeSearch, statusFilter, typeFilter]);
@@ -903,21 +1164,44 @@ export default function PromotionLoyaltyPointsPage() {
     );
   };
   const updatePartyRow = (rowKey: string, patch: Partial<EditablePartyRow>) => {
+    setEditorSubmitError(null);
     setPartyRows((previous) =>
       previous.map((row) => (row._rowKey === rowKey ? { ...row, ...patch } : row)),
     );
   };
   const addPointRow = () => {
-    setPointRows((previous) => [...previous, createPointRow()]);
+    setPointRows((previous) => {
+      const nextSlno =
+        previous.reduce(
+          (maxSlno, row) => Math.max(maxSlno, Number.parseInt(row.lspt_slno || "0", 10) || 0),
+          0,
+        ) + 1;
+      return [...previous, { ...createPointRow(), lspt_slno: String(nextSlno) }];
+    });
   };
   const addGiftRow = () => {
-    setGiftRows((previous) => [...previous, createGiftRow()]);
+    setGiftRows((previous) => {
+      const nextSlno =
+        previous.reduce(
+          (maxSlno, row) => Math.max(maxSlno, Number.parseInt(row.lsg_slno || "0", 10) || 0),
+          0,
+        ) + 1;
+      return [...previous, { ...createGiftRow(), lsg_slno: String(nextSlno) }];
+    });
   };
   const addPartyRow = () => {
+    setEditorSubmitError(null);
+    const nextScopeType = schemePartyScopeType ?? DEFAULT_PARTY_SCOPE_TYPE;
+    if (!schemePartyScopeType) {
+      setSchemeForm((previous) => ({
+        ...previous,
+        ls_cust_type: nextScopeType,
+      }));
+    }
     setPartyRows((previous) => {
       const nextSlno =
         previous.reduce((maxSlno, row) => Math.max(maxSlno, row.lps_slno || 0), 0) + 1;
-      return [...previous, buildEmptyPartyRow(nextSlno)];
+      return [...previous, buildEmptyPartyRow(nextSlno, nextScopeType)];
     });
   };
   const cancelPointRow = (rowKey: string) => {
@@ -1005,8 +1289,21 @@ export default function PromotionLoyaltyPointsPage() {
       }
     }
   };
-  const handleSchemeSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleSchemeSubmit = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    setEditorSubmitError(null);
+    const nextActiveTab = activeTab;
+    const partyValidationError = partyRows.reduce<string | null>(
+      (error, row, rowIndex) => error ?? getPartyRowValidationMessage(row, rowIndex),
+      null,
+    );
+
+    if (partyValidationError) {
+      setEditorSubmitError(partyValidationError);
+      setActiveTab("party");
+      return;
+    }
+
     const payload = buildSchemeRequest(schemeForm, partyRows);
     const response = await saveScheme({ body: payload });
     const savedScheme = response?.data;
@@ -1023,8 +1320,9 @@ export default function PromotionLoyaltyPointsPage() {
 
     await reloadSchemes();
     await loadSchemeDetail(savedScheme.ls_id);
+    setEditorSubmitError(null);
     setIsEditorOpen(true);
-    setActiveTab("scheme");
+    setActiveTab(nextActiveTab);
   };
   const confirmDelete = async () => {
     if (!deleteDialog) return;
@@ -1042,8 +1340,12 @@ export default function PromotionLoyaltyPointsPage() {
     }
     if (deleteDialog.kind === "point") {
       await deletePoint({ query: { lspt_id: deleteDialog.id } });
-    } else {
+    } else if (deleteDialog.kind === "gift") {
       await deleteGift({ query: { lsg_id: deleteDialog.id } });
+    } else if (deleteDialog.kind === "party") {
+      setPartyRows((previous) =>
+        previous.filter((item) => item.lps_id !== deleteDialog.id),
+      );
     }
     setDeleteDialog(null);
     await reloadSchemes();
@@ -1057,6 +1359,13 @@ export default function PromotionLoyaltyPointsPage() {
   const canSaveChildRows = Boolean(selectedScheme?.ls_id || schemeForm.ls_id.trim());
   const schemeColumns: ReusableTableColumn<LoyaltySchemePayload>[] = [
     {
+      key: "slno",
+      header: "Sl No",
+      render: (row, index) => index + 1,
+      width: "70px",
+      align: "center",
+    },
+    {
       key: "ls_code",
       header: "Code",
       render: (row) => row.ls_code || "Auto",
@@ -1066,9 +1375,9 @@ export default function PromotionLoyaltyPointsPage() {
       key: "ls_name",
       header: "Scheme",
       render: (row) => (
-        <div className={styles.tableTitleCell}>
+        <div className="grid gap-1">
           <strong>{row.ls_name}</strong>
-          <span className={styles.tableSubtleText}>
+          <span className="text-erp-text-subtle text-xs-compact">
             {resolveLabel(row.ls_branch_id, branchLabelMap, "All Branches")}
           </span>
         </div>
@@ -1119,79 +1428,30 @@ export default function PromotionLoyaltyPointsPage() {
       key: "lps_slno",
       header: "Sl No",
       render: (row) => (
-        <Input
-          value={String(row.lps_slno)}
-          onChange={(event) =>
-            updatePartyRow(row._rowKey, {
-              lps_slno: Number.parseInt(event.target.value || "0", 10) || 0,
-            })
-          }
-          type="number"
-          min="1"
-          step="1"
-        />
+        <div className="px-3 py-2 text-center">{row.lps_slno}</div>
       ),
-      width: "96px",
-      align: "center",
-    },
-    {
-      key: "lps_scope_type",
-      header: "Scope Type",
-      render: (row) => {
-        return (
-          <Select
-            value={row.lps_scope_type}
-            onChange={(event) =>
-              updatePartyRow(row._rowKey, {
-                lps_scope_type: event.target.value,
-                lps_scope_id: "",
-              })
-            }
-          >
-            <option value="CUSTOMER_GROUP">Customer Group</option>
-            <option value="CUSTOMER">Customer</option>
-          </Select>
-        );
-      },
-      width: "150px",
-      align: "center",
+      width: "80px",
     },
     {
       key: "lps_scope_id",
-      header: "Scope",
+      header: partyScopeColumnHeader,
       render: (row) => {
-        const options =
-          row.lps_scope_type === "CUSTOMER_GROUP"
-            ? customerGroupChoices
-            : row.lps_scope_type === "CUSTOMER"
-              ? customerChoices
-              : [];
-
-        if (!options.length) {
-          return (
-            <Input
-              value={row.lps_scope_id}
-              onChange={(event) => updatePartyRow(row._rowKey, { lps_scope_id: event.target.value })}
-              placeholder="Scope id"
-            />
-          );
-        }
-        const hasValue = options.some((option) => option.value === row.lps_scope_id);
-        const fallbackLabel = getPartyScopeLabel(row, customerLabelMap, customerGroupLabelMap);
+        const effectiveScopeType = getPartyScopeTypeForRow(row);
+        const options = getPartyScopeOptionsForRow(row);
         return (
-          <Select
-            value={row.lps_scope_id}
-            onChange={(event) => updatePartyRow(row._rowKey, { lps_scope_id: event.target.value })}
-          >
-            {!hasValue && row.lps_scope_id ? (
-              <option value={row.lps_scope_id}>{fallbackLabel}</option>
-            ) : null}
-            {options.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
+          <div className="px-3 py-2">
+            <Select
+              value={isUuid(row.lps_scope_id) ? row.lps_scope_id : ""}
+              onChange={(event) => updatePartyRow(row._rowKey, { lps_scope_id: event.target.value })}
+              disabled={!effectiveScopeType || options.length <= 1}
+            >
+              {options.map((option) => (
+                <option key={option.value || "__party-scope-default"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </div>
         );
       },
       width: "260px",
@@ -1201,57 +1461,340 @@ export default function PromotionLoyaltyPointsPage() {
       header: "Exclude",
       render: (row) => {
         return (
-          <label className={styles.tableCheck}>
-            <input
-              type="checkbox"
-              checked={row.lps_is_exclude}
-              onChange={(event) =>
-                updatePartyRow(row._rowKey, { lps_is_exclude: event.target.checked })
-              }
-            />
-            <span>{row.lps_is_exclude ? "Yes" : "No"}</span>
-          </label>
+          <div className="px-3 py-2">
+            <label className="flex items-center gap-2 min-h-9 whitespace-nowrap">
+              <input
+                className={dynamicFormStyles.checkboxControl}
+                type="checkbox"
+                checked={row.lps_is_exclude}
+                onChange={(event) =>
+                  updatePartyRow(row._rowKey, { lps_is_exclude: event.target.checked })
+                }
+              />
+              <span className={dynamicFormStyles.checkboxLabel}>
+                {row.lps_is_exclude ? "Yes" : "No"}
+              </span>
+            </label>
+          </div>
         );
       },
       width: "100px",
-      align: "center",
     },
     {
       key: "lps_is_active",
       header: "Active",
       render: (row) => {
         return (
-          <label className={styles.tableCheck}>
-            <input
-              type="checkbox"
-              checked={row.lps_is_active}
-              onChange={(event) =>
-                updatePartyRow(row._rowKey, { lps_is_active: event.target.checked })
-              }
-            />
-            <span>{row.lps_is_active ? "Yes" : "No"}</span>
-          </label>
+          <div className="px-3 py-2">
+            <label className="flex items-center gap-2 min-h-9 whitespace-nowrap">
+              <input
+                className={dynamicFormStyles.checkboxControl}
+                type="checkbox"
+                checked={row.lps_is_active}
+                onChange={(event) =>
+                  updatePartyRow(row._rowKey, { lps_is_active: event.target.checked })
+                }
+              />
+              <span className={dynamicFormStyles.checkboxLabel}>
+                {row.lps_is_active ? "Yes" : "No"}
+              </span>
+            </label>
+          </div>
         );
       },
       width: "100px",
-      align: "center",
     },
   ];
+  const pointColumns: ReusableTableColumn<EditablePointRow>[] = [
+    {
+      key: "serialNo",
+      header: "Sl No",
+      render: (row) => (
+        <div className="px-3 py-2 text-center">{row.lspt_slno}</div>
+      ),
+      width: "80px",
+      align: "center",
+    },
+    {
+      key: "lspt_item_id",
+      header: pointScopeDescriptor.headerLabel,
+      render: (row) => {
+        const scopeOptions = getPointScopeOptionsForRow(row);
+        return (
+          <Select
+            value={row.lspt_item_id}
+            onChange={(event) =>
+              updatePointRow(row._rowKey, { lspt_item_id: event.target.value })
+            }
+          >
+            {scopeOptions.map((option) => (
+              <option
+                key={option.value || "__point-scope-all"}
+                value={option.value}
+              >
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        );
+      },
+    },
+    {
+      key: "lspt_unit_id",
+      header: "Unit",
+      render: (row) => (
+        <Select
+          value={row.lspt_unit_id}
+          onChange={(event) =>
+            updatePointRow(row._rowKey, { lspt_unit_id: event.target.value })
+          }
+        >
+          {unitOptionsForPoint.map((option) => (
+            <option key={option.value || "__any-unit"} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      ),
+    },
+    {
+      key: "lspt_exceeds",
+      header: pointExceedsHeader,
+      render: (row) => (
+        <Input
+          value={row.lspt_exceeds}
+          onChange={(event) =>
+            updatePointRow(row._rowKey, { lspt_exceeds: event.target.value })
+          }
+          type="number"
+        />
+      ),
+    },
+    {
+      key: "lspt_each",
+      header: "Each",
+      render: (row) => (
+        <Input
+          value={row.lspt_each}
+          onChange={(event) =>
+            updatePointRow(row._rowKey, { lspt_each: event.target.value })
+          }
+          type="number"
+        />
+      ),
+    },
+    {
+      key: "lspt_factor",
+      header: "Factor",
+      render: (row) => (
+        <Input
+          value={row.lspt_factor}
+          onChange={(event) =>
+            updatePointRow(row._rowKey, { lspt_factor: event.target.value })
+          }
+          type="number"
+        />
+      ),
+    },
+    {
+      key: "lspt_points",
+      header: "Points",
+      render: (row) => (
+        <Input
+          value={row.lspt_points}
+          onChange={(event) =>
+            updatePointRow(row._rowKey, { lspt_points: event.target.value })
+          }
+          type="number"
+        />
+      ),
+    },
+    {
+      key: "lspt_notes",
+      header: "Notes",
+      render: (row) => (
+        <Input
+          value={row.lspt_notes}
+          onChange={(event) =>
+            updatePointRow(row._rowKey, { lspt_notes: event.target.value })
+          }
+          placeholder="Notes"
+        />
+      ),
+    },
+    {
+      key: "lspt_is_active",
+      header: "Active",
+      render: (row) => (
+        <label className="flex items-center gap-2 min-h-9 whitespace-nowrap">
+          <input
+            className={dynamicFormStyles.checkboxControl}
+            type="checkbox"
+            checked={row.lspt_is_active}
+            onChange={(event) =>
+              updatePointRow(row._rowKey, {
+                lspt_is_active: event.target.checked,
+              })
+            }
+          />
+          <span className={dynamicFormStyles.checkboxLabel}>
+            {row.lspt_is_active ? "Yes" : "No"}
+          </span>
+        </label>
+      ),
+    },
+  ];
+  const giftColumns: ReusableTableColumn<EditableGiftRow>[] = [
+    {
+      key: "serialNo",
+      header: "Sl No",
+      render: (row) => (
+        <div className="px-3 py-2 text-center">{row.lsg_slno}</div>
+      ),
+      width: "80px",
+      align: "center",
+    },
+    {
+      key: "lsg_item_id",
+      header: "Item",
+      render: (row) => (
+        <Select
+          value={row.lsg_item_id}
+          onChange={(event) =>
+            updateGiftRow(row._rowKey, { lsg_item_id: event.target.value })
+          }
+        >
+          {itemOptionsForGift.map((option) => (
+            <option key={option.value || "__gift-item"} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      ),
+    },
+    {
+      key: "lsg_unit_id",
+      header: "Unit",
+      render: (row) => (
+        <Select
+          value={row.lsg_unit_id}
+          onChange={(event) =>
+            updateGiftRow(row._rowKey, { lsg_unit_id: event.target.value })
+          }
+        >
+          {unitOptionsForGift.map((option) => (
+            <option key={option.value || "__gift-unit"} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      ),
+    },
+    {
+      key: "lsg_item_qty",
+      header: "Qty",
+      render: (row) => (
+        <Input
+          value={row.lsg_item_qty}
+          onChange={(event) =>
+            updateGiftRow(row._rowKey, { lsg_item_qty: event.target.value })
+          }
+          type="number"
+        />
+      ),
+    },
+    {
+      key: "lsg_redeem_points",
+      header: "Redeem Points",
+      render: (row) => (
+        <Input
+          value={row.lsg_redeem_points}
+          onChange={(event) =>
+            updateGiftRow(row._rowKey, { lsg_redeem_points: event.target.value })
+          }
+          type="number"
+        />
+      ),
+    },
+    {
+      key: "lsg_notes",
+      header: "Notes",
+      render: (row) => (
+        <Input
+          value={row.lsg_notes}
+          onChange={(event) =>
+            updateGiftRow(row._rowKey, { lsg_notes: event.target.value })
+          }
+          placeholder="Notes"
+        />
+      ),
+    },
+    {
+      key: "lsg_repeat",
+      header: "Repeat",
+      render: (row) => (
+        <label className="flex items-center gap-2 min-h-9 whitespace-nowrap">
+          <input
+            className={dynamicFormStyles.checkboxControl}
+            type="checkbox"
+            checked={row.lsg_repeat}
+            onChange={(event) =>
+              updateGiftRow(row._rowKey, { lsg_repeat: event.target.checked })
+            }
+          />
+          <span className={dynamicFormStyles.checkboxLabel}>
+            {row.lsg_repeat ? "Yes" : "No"}
+          </span>
+        </label>
+      ),
+    },
+    {
+      key: "lsg_is_active",
+      header: "Active",
+      render: (row) => (
+        <label className="flex items-center gap-2 min-h-9 whitespace-nowrap">
+          <input
+            className={dynamicFormStyles.checkboxControl}
+            type="checkbox"
+            checked={row.lsg_is_active}
+            onChange={(event) =>
+              updateGiftRow(row._rowKey, { lsg_is_active: event.target.checked })
+            }
+          />
+          <span className={dynamicFormStyles.checkboxLabel}>
+            {row.lsg_is_active ? "Yes" : "No"}
+          </span>
+        </label>
+      ),
+    },
+  ];
+  const getPointScopeOptionsForRow = (row: EditablePointRow) =>
+    withFallbackOption(pointScopeOptionsForPoint, row.lspt_item_id, pointScopeLabelMap);
+  const editorModalStyle = {
+    "--erp-modal-overlay-z-index": "2000",
+    "--erp-modal-accent": "#0f766e",
+    "--erp-modal-surface": "#ffffff",
+  } as CSSProperties;
+  const editorPanelStyle = {
+    width: "min(1280px, calc(100vw - 24px))",
+    height: "min(860px, calc(100dvh - 24px))",
+    maxHeight: "calc(100dvh - 24px)",
+  } as CSSProperties;
   return (
-    <main className={styles.page}>
-      <div className={styles.layout}>    
-          <Card as="section" className={styles.panelCard}>
-            <CardHead className={styles.cardHead}>                    
+    <main className="h-shell-offset min-h-shell-offset px-6 py-4 pb-6 box-border overflow-auto overscroll-contain bg-gradient-to-b from-erp-slate-light to-[#eef4f4] bg-erp-gradient-teal">
+      <div className="h-full min-h-0 grid">
+          <Card as="section" className="h-full min-h-0 grid grid-rows-[auto_minmax(0,1fr)] overflow-hidden  rounded-lg shadow-erp-panel">
+            <CardHead className="flex items-start justify-between gap-4 pb-4 border-b border-erp-border">
               <div>
-                 <div className={styles.headTitleWithIcon}>
-                <FiGift aria-hidden="true" />
+                 <div className="flex items-start gap-3">
+                <FiGift aria-hidden="true" className="flex-shrink-0 w-[18px] h-[18px] text-erp-teal mt-[3px]" />
                 </div>
                 <CardTitle>Loyalty Schemes</CardTitle>
                 <CardDescription>
                   Manage promotion loyalty rules for the active company context.
                 </CardDescription>
               </div>
-              <div className={styles.headActions}>
+              <div className="flex flex-wrap justify-end gap-2.5">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1269,13 +1812,13 @@ export default function PromotionLoyaltyPointsPage() {
                 </Button>
               </div>
             </CardHead>
-            <CardBody className={styles.cardBody}>
+            <CardBody className="min-h-0 flex flex-col gap-[18px]">
               {!selectedCompanyId.trim() ? (
                 <Alert kind="warning" title="Select a company first">
                   Choose the active company from the header before opening loyalty schemes.
                 </Alert>
               ) : null}
-              <div className={styles.filters}>
+              <div className="grid grid-cols-4 gap-3">
                 <Field>
                   <Label htmlFor="loyalty-search">Search</Label>
                   <Input
@@ -1335,7 +1878,7 @@ export default function PromotionLoyaltyPointsPage() {
                   {listError}
                 </Alert>
               ) : null}
-              <div className={styles.tableResponsive}>
+              <div className="w-full flex-1 min-h-0 overflow-auto">
                 <ReusableTable<LoyaltySchemePayload>
                   columns={schemeColumns}
                   rows={schemeRows}
@@ -1362,6 +1905,12 @@ export default function PromotionLoyaltyPointsPage() {
                   //title={`Schemes${listMeta ? ` (${listMeta.total})` : ""}`}
                   stickyHeader
                   tableMaxHeight="calc(100dvh - 320px)"
+                  paginated={true}
+                  pageSize={10}
+                  defaultPageSize={10}
+                  pageSizeOptions={[5, 10, 15, 25, 50]}
+                  totalEntries={listMeta?.total ?? 0}
+                  showPageSizeSelector={true}
                 />
               </div>
             </CardBody>
@@ -1369,74 +1918,98 @@ export default function PromotionLoyaltyPointsPage() {
       </div>
       {isEditorOpen && typeof document !== "undefined"
         ? createPortal(
-            <div className={styles.modalOverlay} onClick={closeEditorModal}>
+            <div className={dynamicFormStyles.overlay} style={editorModalStyle}>
+              <div
+                className={dynamicFormStyles.backdrop}
+                onClick={closeEditorModal}
+                aria-hidden
+              />
               <div
                 ref={editorDialogRef}
-                className={styles.modalDialog}
-                onClick={(event) => event.stopPropagation()}
-                onMouseDown={(event) => event.stopPropagation()}
+                className={dynamicFormStyles.panel}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="loyalty-editor-title"
+                aria-describedby="loyalty-editor-description"
                 tabIndex={-1}
+                style={editorPanelStyle}
               >
-            <div className={styles.modalHeader}>
-              <div>
-                <h2 id="loyalty-editor-title" className={styles.modalTitle}>
-                  {selectedScheme ? `Edit Scheme: ${selectedScheme.ls_name}` : "Create Loyalty Scheme"}
-                </h2>
-                <p className={styles.modalSubTitle}>
-                  Maintain scheme header, point rules, gift rules, and party scope in one place.
-                </p>
-              </div>
-              <div className={styles.modalHeaderActions}>
-                <Button variant="ghost" onClick={closeEditorModal}>
-                  Close
-                </Button>
-              </div>
-            </div>
-            <div className={styles.modalTabs}>
-              <button
-                type="button"
-                className={activeTab === "scheme" ? styles.modalTabActive : styles.modalTab}
-                onClick={() => setActiveTab("scheme")}
-              >
-                Scheme
-              </button>
-              <button
-                type="button"
-                className={activeTab === "points" ? styles.modalTabActive : styles.modalTab}
-                onClick={() => setActiveTab("points")}
-              >
-                Points
-              </button>
-              <button
-                type="button"
-                className={activeTab === "gifts" ? styles.modalTabActive : styles.modalTab}
-                onClick={() => setActiveTab("gifts")}
-              >
-                Gifts
-              </button>
-              <button
-                type="button"
-                className={activeTab === "party" ? styles.modalTabActive : styles.modalTab}
-                onClick={() => setActiveTab("party")}
-              >
-                Party Scope
-              </button>
-            </div>
-            <div className={styles.modalContent}>
-              {activeTab === "scheme" ? (
-                <form className={styles.modalForm} onSubmit={(event) => void handleSchemeSubmit(event)}>
+                <header className={dynamicFormStyles.header}>
+                  <div className={dynamicFormStyles.headerRow}>
+                    <div>
+                      <h2 id="loyalty-editor-title" className={dynamicFormStyles.headerTitle}>
+                        {selectedScheme
+                          ? `Edit Scheme: ${selectedScheme.ls_name}`
+                          : "Create Loyalty Scheme"}
+                      </h2>
+                      <p
+                        id="loyalty-editor-description"
+                        className={dynamicFormStyles.headerDescription}
+                      >
+                        Maintain scheme header, point rules, gift rules, and party scope in one
+                        place.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className={dynamicFormStyles.closeButton}
+                      onClick={closeEditorModal}
+                      aria-label="Close loyalty scheme editor"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+                        <path
+                          d="M6 18 18 6M6 6l12 12"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </header>
+                <div className={dynamicFormStyles.scrollArea}>
+                  <div
+                    className={`${dynamicFormStyles.sectionTabs} sticky top-0 z-modal shadow-erp-tab-underline`}
+                    role="tablist"
+                    aria-label="Loyalty scheme sections"
+                  >
+                    {EDITOR_TABS.map((tab) => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeTab === tab.key}
+                        aria-controls={`loyalty-editor-panel-${tab.key}`}
+                        id={`loyalty-editor-tab-${tab.key}`}
+                        tabIndex={activeTab === tab.key ? 0 : -1}
+                        className={`${dynamicFormStyles.sectionTab} ${
+                          activeTab === tab.key ? dynamicFormStyles.sectionTabActive : ""
+                        }`}
+                        onClick={() => setActiveTab(tab.key)}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="min-h-full grid content-start gap-[18px] px-6 py-[22px] pb-6 bg-gradient-to-b from-white to-[#f8fbfb] bg-erp-gradient-modal">
+                    {activeTab === "scheme" ? (
+                      <form
+                        className="grid gap-[18px]"
+                        onSubmit={(event) => void handleSchemeSubmit(event)}
+                        id="loyalty-editor-panel-scheme"
+                        role="tabpanel"
+                        aria-labelledby="loyalty-editor-tab-scheme"
+                      >
                   {detailError ? (
                     <Alert kind="danger" title="Unable to load scheme details">
                       {detailError}
                     </Alert>
                   ) : null}
-                  <div className={styles.formGrid}>
-                    <div className={styles.sectionHeader}>
-                      <span className={styles.sectionEyebrow}>Scheme Header</span>
-                      <h3 className={styles.sectionTitle}>Definition</h3>
+                  <div className="grid grid-cols-4 gap-4 form">
+                    <div className="grid gap-1 col-span-full pt-2">
+                      <span className="text-eyebrow text-erp-teal uppercase">Scheme Header</span>
+                      <h3 className="m-0 text-section-title font-bold text-erp-slate">Definition</h3>
                     </div>
                     <Field>
                       <Label htmlFor="scheme-code">Scheme Code</Label>
@@ -1449,7 +2022,7 @@ export default function PromotionLoyaltyPointsPage() {
                         placeholder="Optional code"
                       />
                     </Field>
-                    <Field className={styles.fieldSpan2}>
+                    <Field >
                       <Label htmlFor="scheme-name">Scheme Name</Label>
                       <Input
                         id="scheme-name"
@@ -1499,8 +2072,7 @@ export default function PromotionLoyaltyPointsPage() {
                         id="scheme-company"
                         value={activeCompany?.compName ?? "Select Company from header"}
                         disabled
-                      />
-                      <FieldHelp>The loyalty page is scoped to the active company in the header.</FieldHelp>
+                      />                    
                     </Field>
                     <Field>
                       <Label htmlFor="scheme-branch">Branch</Label>
@@ -1579,7 +2151,7 @@ export default function PromotionLoyaltyPointsPage() {
                         }
                       />
                     </Field>
-                    <Field className={styles.fieldSpan2}>
+                    <Field className="col-span-2">
                       <Label htmlFor="scheme-weekdays">Valid Weekdays</Label>
                       <Input
                         id="scheme-weekdays"
@@ -1593,9 +2165,9 @@ export default function PromotionLoyaltyPointsPage() {
                         placeholder="MON,TUE,WED"
                       />
                     </Field>
-                    <div className={styles.sectionHeader}>
-                      <span className={styles.sectionEyebrow}>Applicability</span>
-                      <h3 className={styles.sectionTitle}>Calculation Rules</h3>
+                    <div className="grid gap-1 col-span-full pt-2">
+                      <span className="text-eyebrow text-erp-teal uppercase">Applicability</span>
+                      <h3 className="m-0 text-section-title font-bold text-erp-slate">Calculation Rules</h3>
                     </div>
                     <Field>
                       <Label htmlFor="scheme-apply-on">Apply On</Label>
@@ -1711,17 +2283,15 @@ export default function PromotionLoyaltyPointsPage() {
                         ))}
                       </Select>
                     </Field>
-                    <div className={styles.sectionHeader}>
-                      <span className={styles.sectionEyebrow}>Redemption</span>
-                      <h3 className={styles.sectionTitle}>Points Settings</h3>
+                    <div className="grid gap-1 col-span-full pt-2">
+                      <span className="text-eyebrow text-erp-teal uppercase">Redemption</span>
+                      <h3 className="m-0 text-section-title font-bold text-erp-slate">Points Settings</h3>
                     </div>
                     <Field>
                       <Label htmlFor="scheme-redeem-value">Value Per Point</Label>
                       <Input
                         id="scheme-redeem-value"
                         type="number"
-                        min="0"
-                        step="0.001"
                         value={schemeForm.ls_redeem_value_per_point}
                         onChange={(event) =>
                           setSchemeForm((previous) => ({
@@ -1737,7 +2307,6 @@ export default function PromotionLoyaltyPointsPage() {
                         id="scheme-min-redeem-points"
                         type="number"
                         min="0"
-                        step="0.001"
                         value={schemeForm.ls_min_redeem_points}
                         onChange={(event) =>
                           setSchemeForm((previous) => ({
@@ -1753,7 +2322,6 @@ export default function PromotionLoyaltyPointsPage() {
                         id="scheme-max-redeem-points"
                         type="number"
                         min="0"
-                        step="0.001"
                         value={schemeForm.ls_max_redeem_points_per_bill}
                         onChange={(event) =>
                           setSchemeForm((previous) => ({
@@ -1769,7 +2337,6 @@ export default function PromotionLoyaltyPointsPage() {
                         id="scheme-max-redeem-percent"
                         type="number"
                         min="0"
-                        step="0.001"
                         value={schemeForm.ls_max_redeem_percent_per_bill}
                         onChange={(event) =>
                           setSchemeForm((previous) => ({
@@ -1785,7 +2352,6 @@ export default function PromotionLoyaltyPointsPage() {
                         id="scheme-redeem-min-bill"
                         type="number"
                         min="0"
-                        step="0.001"
                         value={schemeForm.ls_redeem_min_bill_amount}
                         onChange={(event) =>
                           setSchemeForm((previous) => ({
@@ -1801,7 +2367,6 @@ export default function PromotionLoyaltyPointsPage() {
                         id="scheme-valid-days"
                         type="number"
                         min="0"
-                        step="1"
                         value={schemeForm.ls_points_valid_days}
                         onChange={(event) =>
                           setSchemeForm((previous) => ({
@@ -1830,11 +2395,10 @@ export default function PromotionLoyaltyPointsPage() {
                         ))}
                       </Select>
                     </Field>
-                    <Field className={styles.fieldSpan3}>
+                    <Field className="col-span-full">
                       <Label htmlFor="scheme-remarks">Remarks</Label>
-                      <Textarea
+                      <Input
                         id="scheme-remarks"
-                        rows={3}
                         value={schemeForm.ls_remarks}
                         onChange={(event) =>
                           setSchemeForm((previous) => ({
@@ -1844,9 +2408,10 @@ export default function PromotionLoyaltyPointsPage() {
                         }
                       />
                     </Field>
-                    <div className={styles.checkboxGrid}>
-                      <label className={styles.checkboxCard}>
+                    <div className="col-span-full grid grid-cols-4 gap-checkbox">
+                      <label className="flex items-center gap-2.5 p-[11px] px-3 rounded-field bg-[rgba(248,250,252,0.9)] text-erp-slate text-input font-medium">
                         <input
+                          className={dynamicFormStyles.checkboxControl}
                           type="checkbox"
                           checked={schemeForm.ls_auto_apply}
                           onChange={(event) =>
@@ -1856,10 +2421,11 @@ export default function PromotionLoyaltyPointsPage() {
                             }))
                           }
                         />
-                        Auto Apply
+                        <span className={dynamicFormStyles.checkboxLabel}>Auto Apply</span>
                       </label>
-                      <label className={styles.checkboxCard}>
+                      <label className="flex items-center gap-2.5 p-[11px] px-3 rounded-field  bg-[rgba(248,250,252,0.9)] text-erp-slate text-input font-medium">
                         <input
+                          className={dynamicFormStyles.checkboxControl}
                           type="checkbox"
                           checked={schemeForm.ls_include_tax_for_points}
                           onChange={(event) =>
@@ -1869,10 +2435,11 @@ export default function PromotionLoyaltyPointsPage() {
                             }))
                           }
                         />
-                        Include Tax
+                        <span className={dynamicFormStyles.checkboxLabel}>Include Tax</span>
                       </label>
-                      <label className={styles.checkboxCard}>
+                      <label className="flex items-center gap-2.5 p-[11px] px-3 rounded-field  bg-[rgba(248,250,252,0.9)] text-erp-slate text-input font-medium">
                         <input
+                          className={dynamicFormStyles.checkboxControl}
                           type="checkbox"
                           checked={schemeForm.ls_recur_apl}
                           onChange={(event) =>
@@ -1882,10 +2449,11 @@ export default function PromotionLoyaltyPointsPage() {
                             }))
                           }
                         />
-                        Recur Apply
+                        <span className={dynamicFormStyles.checkboxLabel}>Recur Apply</span>
                       </label>
-                      <label className={styles.checkboxCard}>
+                      <label className="flex items-center gap-2.5 p-[11px] px-3 rounded-field  bg-[rgba(248,250,252,0.9)] text-erp-slate text-input font-medium">
                         <input
+                          className={dynamicFormStyles.checkboxControl}
                           type="checkbox"
                           checked={schemeForm.ls_bal_apl}
                           onChange={(event) =>
@@ -1895,10 +2463,11 @@ export default function PromotionLoyaltyPointsPage() {
                             }))
                           }
                         />
-                        Balance Apply
+                        <span className={dynamicFormStyles.checkboxLabel}>Balance Apply</span>
                       </label>
-                      <label className={styles.checkboxCard}>
+                      <label className="flex items-center gap-2.5 p-[11px] px-3 rounded-field  bg-[rgba(248,250,252,0.9)] text-erp-slate text-input font-medium">
                         <input
+                          className={dynamicFormStyles.checkboxControl}
                           type="checkbox"
                           checked={schemeForm.ls_allow_point_redeem}
                           onChange={(event) =>
@@ -1908,10 +2477,11 @@ export default function PromotionLoyaltyPointsPage() {
                             }))
                           }
                         />
-                        Allow Point Redeem
+                        <span className={dynamicFormStyles.checkboxLabel}>Allow Point Redeem</span>
                       </label>
-                      <label className={styles.checkboxCard}>
+                      <label className="flex items-center gap-2.5 p-[11px] px-3 rounded-field  bg-[rgba(248,250,252,0.9)] text-erp-slate text-input font-medium">
                         <input
+                          className={dynamicFormStyles.checkboxControl}
                           type="checkbox"
                           checked={schemeForm.ls_allow_gift_redeem}
                           onChange={(event) =>
@@ -1921,10 +2491,11 @@ export default function PromotionLoyaltyPointsPage() {
                             }))
                           }
                         />
-                        Allow Gift Redeem
+                        <span className={dynamicFormStyles.checkboxLabel}>Allow Gift Redeem</span>
                       </label>
-                      <label className={styles.checkboxCard}>
+                      <label className="flex items-center gap-2.5 p-[11px] px-3 rounded-field  bg-[rgba(248,250,252,0.9)] text-erp-slate text-input font-medium">
                         <input
+                          className={dynamicFormStyles.checkboxControl}
                           type="checkbox"
                           checked={schemeForm.ls_is_active}
                           onChange={(event) =>
@@ -1934,450 +2505,158 @@ export default function PromotionLoyaltyPointsPage() {
                             }))
                           }
                         />
-                        Active
+                        <span className={dynamicFormStyles.checkboxLabel}>Active</span>
                       </label>
                     </div>
-                  </div>
-                  <div className={styles.modalFooter}>
-                    <Button
-                      variant="ghost"
-                      type="button"
-                      onClick={() => resetSchemeEditor(selectedBranchId)}
-                    >
-                      Reset
-                    </Button>
-                    <Button
-                      variant="primary"
-                      type="submit"
-                      disabled={schemeSaving || !selectedCompanyId.trim()}
-                    >
-                      <FiSave aria-hidden="true" />
-                      {schemeSaving ? "Saving..." : schemeForm.ls_id ? "Update Scheme" : "Save Scheme"}
-                    </Button>
-                  </div>
-                </form>
-              ) : null}
-              {activeTab === "points" ? (
-                <div className={styles.modalPanel}>
-                  <Alert kind="info" title="Draft point rules">
-                    {canSaveChildRows
-                      ? "You can save point rows individually, or save the scheme to persist every draft row together."
-                      : "Add point rows while creating the scheme. They will be saved automatically after the scheme header is created."}
-                  </Alert>
-                  <div className={styles.inlineActions}>
-                    <Button variant="primary" type="button" onClick={addPointRow}>
-                      <FiPlus aria-hidden="true" />
-                      Add Point Row
-                    </Button>
-                  </div>
-                  <div className={styles.tableEditorWrap}>
-                    <table className={styles.editorTable}>
-                      <thead>
-                        <tr>
-                          <th>Sl No</th>
-                          <th>Item</th>
-                          <th>Unit</th>
-                          <th>Exceeds</th>
-                          <th>Each</th>
-                          <th>Factor</th>
-                          <th>Points</th>
-                          <th>Notes</th>
-                          <th>Active</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pointRows.length === 0 ? (
-                          <tr>
-                            <td colSpan={10} className={styles.emptyRow}>
-                              No point rows. Click “Add Point Row”.
-                            </td>
-                          </tr>
-                        ) : (
-                          pointRows.map((row) => (
-                            <tr key={row._rowKey}>
-                                  <td>
-                                    <Input
-                                      value={row.lspt_slno}
-                                      onChange={(event) =>
-                                        updatePointRow(row._rowKey, { lspt_slno: event.target.value })
-                                      }
-                                      type="number"
-                                      min="1"
-                                      step="1"
-                                    />
-                                  </td>
-                                  <td>
-                                    <Select
-                                      value={row.lspt_item_id}
-                                      onChange={(event) =>
-                                        updatePointRow(row._rowKey, { lspt_item_id: event.target.value })
-                                      }
-                                    >
-                                      {itemOptionsForPoint.map((option) => (
-                                        <option key={option.value || "__all-items"} value={option.value}>
-                                          {option.label}
-                                        </option>
-                                      ))}
-                                    </Select>
-                                  </td>
-                                  <td>
-                                    <Select
-                                      value={row.lspt_unit_id}
-                                      onChange={(event) =>
-                                        updatePointRow(row._rowKey, { lspt_unit_id: event.target.value })
-                                      }
-                                    >
-                                      {unitOptionsForPoint.map((option) => (
-                                        <option key={option.value || "__any-unit"} value={option.value}>
-                                          {option.label}
-                                        </option>
-                                      ))}
-                                    </Select>
-                                  </td>
-                                  <td>
-                                    <Input
-                                      value={row.lspt_exceeds}
-                                      onChange={(event) =>
-                                        updatePointRow(row._rowKey, { lspt_exceeds: event.target.value })
-                                      }
-                                      type="number"
-                                      min="0"
-                                      step="0.001"
-                                    />
-                                  </td>
-                                  <td>
-                                    <Input
-                                      value={row.lspt_each}
-                                      onChange={(event) =>
-                                        updatePointRow(row._rowKey, { lspt_each: event.target.value })
-                                      }
-                                      type="number"
-                                      min="0.001"
-                                      step="0.001"
-                                    />
-                                  </td>
-                                  <td>
-                                    <Input
-                                      value={row.lspt_factor}
-                                      onChange={(event) =>
-                                        updatePointRow(row._rowKey, { lspt_factor: event.target.value })
-                                      }
-                                      type="number"
-                                      min="0.001"
-                                      step="0.001"
-                                    />
-                                  </td>
-                                  <td>
-                                    <Input
-                                      value={row.lspt_points}
-                                      onChange={(event) =>
-                                        updatePointRow(row._rowKey, { lspt_points: event.target.value })
-                                      }
-                                      type="number"
-                                      min="0"
-                                      step="0.001"
-                                    />
-                                  </td>
-                                  <td>
-                                    <Input
-                                      value={row.lspt_notes}
-                                      onChange={(event) =>
-                                        updatePointRow(row._rowKey, { lspt_notes: event.target.value })
-                                      }
-                                      placeholder="Notes"
-                                    />
-                                  </td>
-                                  <td>
-                                    <label className={styles.tableCheck}>
-                                      <input
-                                        type="checkbox"
-                                        checked={row.lspt_is_active}
-                                        onChange={(event) =>
-                                          updatePointRow(row._rowKey, {
-                                            lspt_is_active: event.target.checked,
-                                          })
-                                        }
-                                      />
-                                      <span>{row.lspt_is_active ? "Yes" : "No"}</span>
-                                    </label>
-                                  </td>
-                                  <td>
-                                    <div className={styles.rowActions}>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="primary"
-                                        onClick={() => {
-                                          void savePointRow(row._rowKey);
-                                        }}
-                                        disabled={row._saving || !canSaveChildRows}
-                                      >
-                                        {row._saving
-                                          ? "Saving..."
-                                          : canSaveChildRows
-                                            ? "Save"
-                                            : "Save Scheme First"}
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => cancelPointRow(row._rowKey)}
-                                      >
-                                        Cancel
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => {
-                                          if (!row.lspt_id) {
-                                            setPointRows((previous) =>
-                                              previous.filter((item) => item._rowKey !== row._rowKey),
-                                            );
-                                            return;
-                                          }
-                                          setDeleteDialog({
-                                            kind: "point",
-                                            id: row.lspt_id,
-                                            label: `Point Rule ${row.lspt_slno || ""}`.trim(),
-                                          });
-                                        }}
-                                      >
-                                        Delete
-                                      </Button>
-                                    </div>
-                                  </td>
-                                </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
+                        </div>
+                      </form>
+                    ) : null}
+                    {activeTab === "points" ? (
+                      <div
+                        className="grid gap-[18px]"
+                        id="loyalty-editor-panel-points"
+                        role="tabpanel"
+                        aria-labelledby="loyalty-editor-tab-points"
+                      >
+                        <div className="w-full flex-1 min-h-0 overflow-auto">
+                          <ReusableTable<EditablePointRow>
+                            columns={pointColumns}
+                            rows={pointRows}
+                            rowKey="_rowKey"
+                            emptyText="No point rows. Click Add Point Row."
+                            onCreate={addPointRow}
+                            createLabel="Add Point Row"
+                            onDelete={(row) => {
+                              if (!row.lspt_id) {
+                                setPointRows((previous) =>
+                                  previous.filter((item) => item._rowKey !== row._rowKey),
+                                );
+                                return;
+                              }
+                              setDeleteDialog({
+                                kind: "point",
+                                id: row.lspt_id,
+                                label: `Point Rule ${row.lspt_slno || ""}`.trim(),
+                              });
+                            }}
+                            deleteLabel="Delete"
+                            tableMaxHeight="400px"
+                            stickyHeader
+                            paginated={true}
+                            pageSize={5}
+                            defaultPageSize={5}
+                            pageSizeOptions={[5, 10, 15]}
+                            totalEntries={pointRows.length}
+                            showPageSizeSelector={true}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                    {activeTab === "gifts" ? (
+                      <div
+                        className="grid gap-[18px]"
+                        id="loyalty-editor-panel-gifts"
+                        role="tabpanel"
+                        aria-labelledby="loyalty-editor-tab-gifts"
+                      >
+                        <div className="w-full flex-1 min-h-0 overflow-auto">
+                          <ReusableTable<EditableGiftRow>
+                            columns={giftColumns}
+                            rows={giftRows}
+                            rowKey="_rowKey"
+                            emptyText="No gift rows. Click Add Gift Row."
+                            onCreate={addGiftRow}
+                            createLabel="Add Gift Row"
+                            onDelete={(row) => {
+                              if (!row.lsg_id) {
+                                setGiftRows((previous) =>
+                                  previous.filter((item) => item._rowKey !== row._rowKey),
+                                );
+                                return;
+                              }
+                              setDeleteDialog({
+                                kind: "gift",
+                                id: row.lsg_id,
+                                label: `Gift Rule ${row.lsg_slno || ""}`.trim(),
+                              });
+                            }}
+                            deleteLabel="Delete"
+                            tableMaxHeight="400px"
+                            stickyHeader
+                            paginated={true}
+                            pageSize={5}
+                            defaultPageSize={5}
+                            pageSizeOptions={[5, 10, 15]}
+                            totalEntries={giftRows.length}
+                            showPageSizeSelector={true}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                    {activeTab === "party" ? (
+                      <div
+                        className="grid gap-[18px]"
+                        id="loyalty-editor-panel-party"
+                        role="tabpanel"
+                        aria-labelledby="loyalty-editor-tab-party"
+                      >
+                        <div className="w-full flex-1 min-h-0 overflow-auto">
+                          <ReusableTable<EditablePartyRow>
+                            columns={partyColumns}
+                            rows={partyRows}
+                            rowKey="_rowKey"
+                            emptyText={`No party rows. Click 'Add Party ${partyScopeColumnHeader}'.`}
+                            onCreate={addPartyRow}
+                            createLabel={`Add Party ${partyScopeColumnHeader}`}
+                            stickyHeader
+                            paginated={true}
+                            pageSize={5}
+                            defaultPageSize={5}
+                            pageSizeOptions={[5, 10, 15]}
+                            totalEntries={partyRows.length}
+                            showPageSizeSelector={true}
+                            onDelete={(row) => {
+                              setDeleteDialog({
+                                kind: "party",
+                                id: row.lps_id,
+                                label: `${partyScopeColumnHeader} ${row.lps_scope_id || ""}`.trim(),
+                              });
+                            }}
+                            deleteLabel="Delete"
+                            tableMaxHeight="400px"
+                          />
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
-              ) : null}
-              {activeTab === "gifts" ? (
-                <div className={styles.modalPanel}>
-                  <Alert kind="info" title="Draft gift rules">
-                    {canSaveChildRows
-                      ? "You can save gift rows individually, or save the scheme to persist every draft row together."
-                      : "Add gift rows while creating the scheme. They will be saved automatically after the scheme header is created."}
-                  </Alert>
-                  <div className={styles.inlineActions}>
-                    <Button variant="primary" type="button" onClick={addGiftRow}>
-                      <FiPlus aria-hidden="true" />
-                      Add Gift Row
-                    </Button>
-                  </div>
-                  <div className={styles.tableEditorWrap}>
-                    <table className={styles.editorTable}>
-                      <thead>
-                        <tr>
-                          <th>Sl No</th>
-                          <th>Item</th>
-                          <th>Unit</th>
-                          <th>Qty</th>
-                          <th>Redeem Points</th>
-                          <th>Notes</th>
-                          <th>Repeat</th>
-                          <th>Active</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {giftRows.length === 0 ? (
-                          <tr>
-                            <td colSpan={9} className={styles.emptyRow}>
-                              No gift rows. Click “Add Gift Row”.
-                            </td>
-                          </tr>
-                        ) : (
-                          giftRows.map((row) => (
-                            <tr key={row._rowKey}>
-                                  <td>
-                                    <Input
-                                      value={row.lsg_slno}
-                                      onChange={(event) =>
-                                        updateGiftRow(row._rowKey, { lsg_slno: event.target.value })
-                                      }
-                                      type="number"
-                                      min="1"
-                                      step="1"
-                                    />
-                                  </td>
-                                  <td>
-                                    <Select
-                                      value={row.lsg_item_id}
-                                      onChange={(event) =>
-                                        updateGiftRow(row._rowKey, { lsg_item_id: event.target.value })
-                                      }
-                                    >
-                                      {itemOptionsForGift.map((option) => (
-                                        <option key={option.value || "__gift-item"} value={option.value}>
-                                          {option.label}
-                                        </option>
-                                      ))}
-                                    </Select>
-                                  </td>
-                                  <td>
-                                    <Select
-                                      value={row.lsg_unit_id}
-                                      onChange={(event) =>
-                                        updateGiftRow(row._rowKey, { lsg_unit_id: event.target.value })
-                                      }
-                                    >
-                                      {unitOptionsForGift.map((option) => (
-                                        <option key={option.value || "__gift-unit"} value={option.value}>
-                                          {option.label}
-                                        </option>
-                                      ))}
-                                    </Select>
-                                  </td>
-                                  <td>
-                                    <Input
-                                      value={row.lsg_item_qty}
-                                      onChange={(event) =>
-                                        updateGiftRow(row._rowKey, { lsg_item_qty: event.target.value })
-                                      }
-                                      type="number"
-                                      min="0.001"
-                                      step="0.001"
-                                    />
-                                  </td>
-                                  <td>
-                                    <Input
-                                      value={row.lsg_redeem_points}
-                                      onChange={(event) =>
-                                        updateGiftRow(row._rowKey, { lsg_redeem_points: event.target.value })
-                                      }
-                                      type="number"
-                                      min="0"
-                                      step="0.001"
-                                    />
-                                  </td>
-                                  <td>
-                                    <Input
-                                      value={row.lsg_notes}
-                                      onChange={(event) =>
-                                        updateGiftRow(row._rowKey, { lsg_notes: event.target.value })
-                                      }
-                                      placeholder="Notes"
-                                    />
-                                  </td>
-                                  <td>
-                                    <label className={styles.tableCheck}>
-                                      <input
-                                        type="checkbox"
-                                        checked={row.lsg_repeat}
-                                        onChange={(event) =>
-                                          updateGiftRow(row._rowKey, { lsg_repeat: event.target.checked })
-                                        }
-                                      />
-                                      <span>{row.lsg_repeat ? "Yes" : "No"}</span>
-                                    </label>
-                                  </td>
-                                  <td>
-                                    <label className={styles.tableCheck}>
-                                      <input
-                                        type="checkbox"
-                                        checked={row.lsg_is_active}
-                                        onChange={(event) =>
-                                          updateGiftRow(row._rowKey, { lsg_is_active: event.target.checked })
-                                        }
-                                      />
-                                      <span>{row.lsg_is_active ? "Yes" : "No"}</span>
-                                    </label>
-                                  </td>
-                                  <td>
-                                    <div className={styles.rowActions}>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="primary"
-                                        onClick={() => {
-                                          void saveGiftRow(row._rowKey);
-                                        }}
-                                        disabled={
-                                          row._saving ||
-                                          !canSaveChildRows ||
-                                          !row.lsg_item_id.trim() ||
-                                          !row.lsg_unit_id.trim()
-                                        }
-                                      >
-                                        {row._saving
-                                          ? "Saving..."
-                                          : canSaveChildRows
-                                            ? "Save"
-                                            : "Save Scheme First"}
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => cancelGiftRow(row._rowKey)}
-                                      >
-                                        Cancel
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => {
-                                          if (!row.lsg_id) {
-                                            setGiftRows((previous) =>
-                                              previous.filter((item) => item._rowKey !== row._rowKey),
-                                            );
-                                            return;
-                                          }
-                                          setDeleteDialog({
-                                            kind: "gift",
-                                            id: row.lsg_id,
-                                            label: `Gift Rule ${row.lsg_slno || ""}`.trim(),
-                                          });
-                                        }}
-                                      >
-                                        Delete
-                                      </Button>
-                                    </div>
-                                  </td>
-                                </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                <div className={`${dynamicFormStyles.footer} flex justify-between pt-3 bg-transparent`}>
+                  {editorSubmitError ? (
+                    <p className={dynamicFormStyles.submitError}>{editorSubmitError}</p>
+                  ) : null}
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    onClick={() => resetSchemeEditor(selectedBranchId)}
+                  >
+                    Reset
+                  </Button>
+                  <Button
+                    variant="primary"
+                    type="button"
+                    onClick={() => void handleSchemeSubmit()}
+                    disabled={schemeSaving || !selectedCompanyId.trim()}
+                  >
+                    <FiSave aria-hidden="true" />
+                    {schemeSaving
+                      ? "Saving..."
+                      : schemeForm.ls_id
+                        ? "Update Scheme"
+                        : "Save Scheme"}
+                  </Button>
                 </div>
-              ) : null}
-              {activeTab === "party" ? (
-                <div className={styles.modalPanel}>
-                  <Alert kind="info" title="Party scope saves with scheme">
-                    Add or edit party scope rows here, then save the scheme header to persist the
-                    latest party scope payload.
-                  </Alert>
-                  <div className={styles.tableResponsive}>
-                    <ReusableTable<EditablePartyRow>
-                      columns={partyColumns}
-                      rows={partyRows}
-                      rowKey="_rowKey"
-                      emptyText="No party scope rows. Click Add Party Row."
-                      title="Party Scope Rows"
-                      onCreate={addPartyRow}
-                      createLabel="Add Party Row"
-                      onDelete={(row) => {
-                        setPartyRows((previous) =>
-                          previous.filter((item) => item._rowKey !== row._rowKey),
-                        );
-                      }}
-                      deleteLabel="Remove Row"
-                      tableMaxHeight="320px"
-                    />
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-          </div>,
+              </div>
+            </div>,
           document.body,
         )
         : null}
@@ -2391,7 +2670,7 @@ export default function PromotionLoyaltyPointsPage() {
         }}
       />
       {(detailLoading || schemeSaving) && selectedScheme ? (
-        <div className={styles.inlineStatusBar}>
+        <div className="fixed bottom-6 right-6 px-4 py-3 rounded-pill bg-[rgba(15,23,42,0.92)] text-white text-sm-compact shadow-lg shadow-[rgba(15,23,42,0.24)] z-status">
           <span>{detailLoading ? "Loading scheme details..." : "Saving scheme..."}</span>
         </div>
       ) : null}
