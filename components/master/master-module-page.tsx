@@ -1,13 +1,10 @@
 "use client";
-
 import { useRouter } from "next/navigation";
 import styles from "./master-module-page.module.css";
-
 type MasterModulePageProps = {
   title: string;
   description: string;
 };
-
 const MASTER_MENU_LINKS: Array<{ label: string; href: string }> = [
   { label: "Customer Master", href: "/master/customer" },
   { label: "Item Master", href: "/master/item-master" },
@@ -26,10 +23,8 @@ const MASTER_MENU_LINKS: Array<{ label: string; href: string }> = [
   { label: "Dropdown Designer", href: "/master/dropdown-designer" },
   { label: "UI Table Designer", href: "/master/ui-table-designer" },
 ];
-
 export default function MasterModulePage({ title, description }: MasterModulePageProps) {
   const router = useRouter();
-
   return (
     <main className={styles.page}>
       <div className={styles.board}>
@@ -39,7 +34,6 @@ export default function MasterModulePage({ title, description }: MasterModulePag
               <h1 className={styles.title}>{title}</h1>
               <p className={styles.description}>{description}</p>
             </header>
-
             <div className={styles.moduleBody}>
               <p className={styles.shortcutLabel}>Master Screens</p>
               <div className={styles.shortcutGrid}>
@@ -57,7 +51,6 @@ export default function MasterModulePage({ title, description }: MasterModulePag
             </div>
           </section>
         </section>
-
         <footer className={styles.statusBar}>
           <span className={styles.statusText}>Click Menu to open Screen</span>
           <span className={styles.statusCode}>Master Module</span>

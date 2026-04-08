@@ -1,16 +1,20 @@
 .page {
-  min-height: 100%;
-  padding: 24px;
+  --shell-offset: 132px;
+  height: calc(100dvh - var(--shell-offset));
+  min-height: calc(100dvh - var(--shell-offset));
+  padding: 16px 24px 24px;
+  box-sizing: border-box;
+  overflow: auto;
+  overscroll-behavior: contain;
   background:
     radial-gradient(circle at top left, rgba(15, 118, 110, 0.08), transparent 34%),
     linear-gradient(180deg, #f7fbfb 0%, #eef4f4 100%);
 }
 
 .layout {
+  height: 100%;
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
-  gap: 20px;
-  align-items: start;
 }
 
 .sidebar,
@@ -20,6 +24,10 @@
 }
 
 .panelCard {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid rgba(15, 23, 42, 0.08);
   box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
@@ -35,21 +43,10 @@
 }
 
 .cardBody {
-  display: grid;
-  gap: 18px;
-}
-
-.cardFoot {
+  min-height: 0;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 14px;
-  border-top: 1px solid rgba(15, 23, 42, 0.08);
-}
-
-.footNote {
-  color: rgba(15, 23, 42, 0.7);
-  font-size: 0.92rem;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .headActions {
@@ -61,8 +58,9 @@
 
 .filters {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
+  flex: 0 0 auto;
 }
 
 .tableTitleCell {
@@ -75,9 +73,16 @@
   font-size: 0.84rem;
 }
 
+.tableResponsive {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
 .formGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px;
 }
 
@@ -114,7 +119,7 @@
 .checkboxGrid {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px;
 }
 
@@ -136,18 +141,6 @@
   block-size: 16px;
 }
 
-.metricsGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.childrenGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-
 .headTitleWithIcon {
   display: flex;
   align-items: flex-start;
@@ -162,34 +155,9 @@
   margin-top: 3px;
 }
 
-.childForm {
-  display: grid;
-  gap: 14px;
-}
-
-.compactGrid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.childActions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
 .inlineActions {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.checkboxStack {
-  display: flex;
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -204,10 +172,199 @@
   color: #fff;
   font-size: 0.92rem;
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.24);
-  z-index: 40;
+  z-index: 140;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(4px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.modalDialog {
+  width: min(1280px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  border-radius: 24px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.24);
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.modalSubTitle {
+  margin: 6px 0 0;
+  color: rgba(15, 23, 42, 0.65);
+  font-size: 0.92rem;
+}
+
+.modalHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.modalTabs {
+  display: flex;
+  gap: 10px;
+  padding: 14px 24px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: #f8fbfb;
+  overflow-x: auto;
+}
+
+.modalTab,
+.modalTabActive {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.modalTab {
+  background: #fff;
+  color: #334155;
+}
+
+.modalTab:hover {
+  border-color: rgba(15, 118, 110, 0.35);
+  color: #0f766e;
+}
+
+.modalTabActive {
+  background: #0f766e;
+  color: #fff;
+  border-color: #0f766e;
+}
+
+.modalTab:disabled,
+.modalTabActive:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.modalContent {
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 22px 24px 24px;
+  background:
+    radial-gradient(circle at top right, rgba(15, 118, 110, 0.05), transparent 28%),
+    linear-gradient(180deg, #ffffff 0%, #f8fbfb 100%);
+}
+
+.modalForm,
+.modalPanel {
+  display: grid;
+  gap: 18px;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.tableEditorWrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+ // border: 1px solid rgba(15, 23, 42, 0.08);
+ // border-radius: 16px;
+  background: #fff;
+}
+
+.editorTable {
+  width: 100%;
+  min-width: 1100px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.editorTable th,
+.editorTable td {
+  padding: 10px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  vertical-align: top;
+}
+
+.editorTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fbfb;
+  color: #0f172a;
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.editorTable td :global(input),
+.editorTable td :global(select),
+.editorTable td :global(textarea) {
+  width: 100%;
+}
+
+.emptyRow {
+  text-align: center;
+  color: rgba(15, 23, 42, 0.65);
+  padding: 20px;
+}
+
+.rowActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tableCheck {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  white-space: nowrap;
 }
 
 @media (max-width: 1280px) {
+  .page {
+    height: auto;
+  }
+
   .layout {
     grid-template-columns: 1fr;
   }
@@ -223,16 +380,15 @@
 
 @media (max-width: 960px) {
   .page {
-    padding: 16px;
+    --shell-offset: 118px;
+    height: auto;
+    padding: 12px 16px 16px;
   }
 
+  .filters,
   .formGrid,
-  .compactGrid,
-  .checkboxGrid,
-  .metricsGrid,
-  .childrenGrid,
-  .filters {
-    grid-template-columns: 1fr;
+  .checkboxGrid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .fieldSpan2,
@@ -241,19 +397,83 @@
   }
 
   .cardHead,
-  .childActions {
+  .modalHeader,
+  .modalFooter {
     flex-direction: column;
     align-items: stretch;
   }
 
   .headActions,
-  .inlineActions,
-  .checkboxStack {
+  .inlineActions {
     justify-content: stretch;
   }
 
-  .inlineActions :global(.ui-btn),
-  .headActions :global(.ui-btn) {
+  .modalHeaderActions,
+  .modalFooter {
     width: 100%;
+  }
+
+  .inlineActions :global(.ui-btn),
+  .headActions :global(.ui-btn),
+  .modalHeaderActions :global(.ui-btn),
+  .modalFooter :global(.ui-btn) {
+    width: 100%;
+  }
+
+  .modalDialog {
+    width: 100%;
+    max-height: calc(100dvh - 12px);
+    border-radius: 18px;
+  }
+
+  .modalTabs {
+    gap: 8px;
+    padding-inline: 16px;
+  }
+
+  .modalContent {
+    padding: 16px;
+  }
+
+  .modalHeader {
+    padding: 16px;
+  }
+
+  .rowActions {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    --shell-offset: 110px;
+    height: auto;
+    padding: 10px 12px 12px;
+  }
+
+  .modalOverlay {
+    padding: 8px;
+  }
+
+  .modalDialog {
+    max-height: calc(100dvh - 8px);
+    border-radius: 14px;
+  }
+
+  .modalHeader,
+  .modalContent,
+  .modalTabs {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .tableCheck {
+    white-space: normal;
+  }
+
+  .inlineStatusBar {
+    inset-inline: 12px;
+    inset-block-end: 12px;
+    text-align: center;
   }
 }

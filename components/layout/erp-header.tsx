@@ -172,6 +172,158 @@ function focusParentMenuButton(button: HTMLButtonElement): boolean {
   parentButton?.focus();
   return parentButton !== null;
 }
+
+function RecentPagesDropdown({
+  recentPages,
+  onRecentPageChange,
+  ariaLabel,
+}: {
+  recentPages: RecentPageOption[];
+  onRecentPageChange: (value: string) => void;
+  ariaLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const filteredRecentPages = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return recentPages;
+    }
+
+    return recentPages.filter((page) => {
+      const label = page.label.toLowerCase();
+      const path = page.path.toLowerCase();
+      return label.includes(normalizedQuery) || path.includes(normalizedQuery);
+    });
+  }, [query, recentPages]);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery("");
+  }, []);
+
+  const handleToggle = useCallback(() => {
+    if (recentPages.length === 0) {
+      return;
+    }
+
+    setOpen((value) => !value);
+  }, [recentPages.length]);
+
+  const handleSelect = useCallback(
+    (path: string) => {
+      if (!path) {
+        return;
+      }
+
+      close();
+      onRecentPageChange(path);
+    },
+    [close, onRecentPageChange],
+  );
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    inputRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (shellRef.current?.contains(target)) {
+        return;
+      }
+
+      close();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [close, open]);
+
+  const handleShellKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        close();
+      }
+    },
+    [close],
+  );
+
+  return (
+    <div
+      ref={shellRef}
+      className={styles.recentPagesDropdown}
+      aria-label={ariaLabel}
+      onKeyDown={handleShellKeyDown}
+    >
+      <button
+        type="button"
+        className={styles.recentPagesButton}
+        onClick={handleToggle}
+        disabled={recentPages.length === 0}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        Recent Pages
+      </button>
+      {open && (
+        <div
+          className={styles.recentPagesPopover}
+          role="menu"
+          onPointerDown={() => {
+            inputRef.current?.focus();
+          }}
+        >
+          <input
+            ref={inputRef}
+            className={styles.recentPagesSearch}
+            type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search"
+            autoComplete="off"
+            autoFocus
+          />
+          <ul className={styles.recentPagesList}>
+            {filteredRecentPages.length === 0 ? (
+              <li className={styles.recentPagesEmpty}>No matches</li>
+            ) : (
+              filteredRecentPages.map((page) => (
+                <li key={page.path} className={styles.recentPagesItem}>
+                  <button
+                    type="button"
+                    className={styles.recentPagesItemButton}
+                    onClick={() => handleSelect(page.path)}
+                  >
+                    {page.label}
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 // Components
 function MenuLink({
   item,
@@ -353,7 +505,7 @@ function HeaderRight({
   searchMenuCount,
   dateText,
   recentPages,
-  selectedRecentPage,
+  selectedRecentPage: _selectedRecentPage,
   onRecentPageChange,
   companyOptions,
   selectedCompany,
@@ -376,33 +528,18 @@ function HeaderRight({
     const next = event.target.value;
     onBranchChange?.(next);
   }, [onBranchChange]);
-  const handleRecentPageChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
-    const next = event.target.value;
-    onRecentPageChange(next);
-  }, [onRecentPageChange]);
   return (
     <div className={styles.headerRight}>
-      <span className={styles.searchText}>{searchMenuCount} Search Menu :</span>
+     {/* <span className={styles.searchText}>{searchMenuCount} Search Menu :</span> */}
       <span className={styles.date}>{dateText}</span>
-      <span className={styles.calendar} aria-hidden="true">
+      {/* <span className={styles.calendar} aria-hidden="true">
         CAL
-      </span>
-      <select
-        className={styles.recentPagesSelect}
-        aria-label={ARIA_LABELS.RECENT_PAGES_SELECT}
-        value={selectedRecentPage}
-        onChange={handleRecentPageChange}
-        disabled={recentPages.length === 0}
-      >
-        <option value="" disabled>
-          Recent Pages
-        </option>
-        {recentPages.map((page) => (
-          <option key={page.path} value={page.path}>
-            {page.label}
-          </option>
-        ))}
-      </select>
+      </span> */}
+      <RecentPagesDropdown
+        recentPages={recentPages}
+        onRecentPageChange={onRecentPageChange}
+        ariaLabel={ARIA_LABELS.RECENT_PAGES_SELECT}
+      />
       <select
         className={styles.contextSelect}
         aria-label={ARIA_LABELS.COMPANY_SELECT}
@@ -427,7 +564,7 @@ function HeaderRight({
           </option>
         ))}
       </select>
-      <button
+      {/* <button
         type="button"
         className={styles.cartButton}
         onClick={onCartClick}
@@ -437,7 +574,7 @@ function HeaderRight({
       </button>
       <button type="button" className={styles.goButton} onClick={onGoClick}>
         {goLabel}
-      </button>
+      </button> */}
       <button type="button" className={styles.logoutButton} onClick={onLogout}>
         {logoutLabel}
       </button>

@@ -142,6 +142,7 @@ export type SaveLoyaltySchemeRequest = {
   ls_expiry_basis?: string;
   ls_remarks?: string | null;
   ls_is_active?: boolean;
+  parties?: SaveLoyaltyPartyRequest[];
 };
 
 export type SaveLoyaltyPointRequest = {
@@ -169,4 +170,15 @@ export type SaveLoyaltyGiftRequest = {
   lsg_repeat?: boolean;
   lsg_notes?: string | null;
   lsg_is_active?: boolean;
+};
+
+export type SaveLoyaltyPartyRequest = {
+  lps_id?: string;
+  lps_ls_id?: string;
+  lps_slno?: number;
+  lps_scope_type?: string;
+  lps_scope_id?: string;
+  lps_is_exclude?: boolean;
+  lps_notes?: string | null;
+  lps_is_active?: boolean;
 };
