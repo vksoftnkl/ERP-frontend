@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
@@ -8,23 +7,18 @@ import type {
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
-
 const API_ENDPOINTS = {
   list: "/cities/list",
   getById: "/cities/get",
   create: "/cities/create",
   delete: "/cities/delete",
 } as const;
-
 const GRID_TABLE_NAME = "city_master";
-
 const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-
 const LOOKUP_REQUEST_QUERY = {
   module: "states",
   limit: "20",
 } as const;
-
 const LOOKUP_KEYS = {
   id: ["ctmId", "ctm_id", "city_id", "cityId", "id", "_id"],
   code: ["ctmAlias", "ctm_alias", "ctmShort", "ctm_short", "city_code", "code"],
@@ -36,7 +30,6 @@ const LOOKUP_KEYS = {
   description: ["ctmAlias", "ctm_alias"],
   array: ["data", "items", "results", "rows", "list", "cities"],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "ctmId",
   name: "ctmName",
@@ -45,7 +38,6 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "ctmAlias",
   sort: "ctmOrder",
 } as const;
-
 const CITY_STATE_ID_KEYS = ["ctmStateId", "ctm_state_id", "state_id", "stateId"] as const;
 const CITY_IS_ACTIVE_KEYS = ["ctmIsActive", "ctm_is_active", "isActive", "is_active", "status"] as const;
 const STATE_LOOKUP_KEYS = {
@@ -53,12 +45,10 @@ const STATE_LOOKUP_KEYS = {
   name: ["stmName", "stm_name", "state_name", "stateName", "name"],
   array: ["data", "items", "results", "rows", "list", "states"],
 } as const;
-
 const DEFAULT_STATE_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select State",
 };
-
 const CITY_INITIAL_FORM_VALUES = {
   masterName: "",
   masterAlias: "",
@@ -67,7 +57,6 @@ const CITY_INITIAL_FORM_VALUES = {
   position: "0",
   cityIsActive: "true",
 } as const;
-
 function buildCityFormFields(stateOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
   return [
     {
@@ -124,7 +113,6 @@ function buildCityFormFields(stateOptions: ERPDynamicSelectOption[]): ERPDynamic
     },
   ];
 }
-
 function getFirstDefinedValue(
   source: Record<string, unknown>,
   keys: readonly string[],
@@ -135,15 +123,12 @@ function getFirstDefinedValue(
       return value;
     }
   }
-
   return undefined;
 }
-
 function toDisplayValue(value: unknown): string {
   if (value === undefined || value === null) {
     return "";
   }
-
   if (
     typeof value === "string" ||
     typeof value === "number" ||
@@ -152,7 +137,6 @@ function toDisplayValue(value: unknown): string {
   ) {
     return String(value).trim();
   }
-
   if (typeof value === "object") {
     const nested = value as Record<string, unknown>;
     const fallback = nested.value ?? nested.id ?? nested.code ?? nested.name ?? nested.label;
@@ -165,20 +149,16 @@ function toDisplayValue(value: unknown): string {
       return String(fallback);
     }
   }
-
   return "";
 }
-
 function toInteger(value: string, fallback: number): number {
   const parsed = Number.parseInt(value.trim(), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-
 function toSelectBoolean(value: unknown, fallback: string): "true" | "false" {
   if (typeof value === "boolean") {
     return value ? "true" : "false";
   }
-
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
     if (normalized === "true" || normalized === "1" || normalized === "yes") {
@@ -188,11 +168,9 @@ function toSelectBoolean(value: unknown, fallback: string): "true" | "false" {
       return "false";
     }
   }
-
   if (typeof value === "number") {
     return value > 0 ? "true" : "false";
   }
-
   const normalizedFallback = fallback.trim().toLowerCase();
   return normalizedFallback === "true" ||
     normalizedFallback === "1" ||
@@ -201,36 +179,28 @@ function toSelectBoolean(value: unknown, fallback: string): "true" | "false" {
     ? "true"
     : "false";
 }
-
 function toUpdateCityId(editingItemId: string | number | null): string {
   if (typeof editingItemId === "number" && Number.isFinite(editingItemId)) {
     return String(editingItemId);
   }
-
   if (typeof editingItemId === "string") {
     return editingItemId.trim();
   }
-
   return "";
 }
-
 function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] {
   if (Array.isArray(payload)) {
     return payload;
   }
-
   if (!payload || typeof payload !== "object") {
     return [];
   }
-
   const objectPayload = payload as Record<string, unknown>;
-
   for (const key of arrayKeys) {
     const value = objectPayload[key];
     if (Array.isArray(value)) {
       return value;
     }
-
     if (value && typeof value === "object" && !Array.isArray(value)) {
       const nestedObject = value as Record<string, unknown>;
       for (const nestedKey of arrayKeys) {
@@ -241,57 +211,45 @@ function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] 
       }
     }
   }
-
   const firstArray = Object.values(objectPayload).find((entry) => Array.isArray(entry));
   return Array.isArray(firstArray) ? firstArray : [];
 }
-
 function buildStateOptions(payload: unknown): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();
   const rows = extractRows(payload, STATE_LOOKUP_KEYS.array);
-
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       continue;
     }
-
     const source = row as Record<string, unknown>;
     const stateId = toDisplayValue(getFirstDefinedValue(source, STATE_LOOKUP_KEYS.id));
     if (!stateId) {
       continue;
     }
-
     const stateName = toDisplayValue(getFirstDefinedValue(source, STATE_LOOKUP_KEYS.name));
     if (!stateName) {
       continue;
     }
-
     if (!optionMap.has(stateId)) {
       optionMap.set(stateId, stateName);
     }
   }
-
   const sortedOptions = Array.from(optionMap.entries())
     .map(([value, label]) => ({ value, label }))
     .sort((left, right) => left.label.localeCompare(right.label));
-
   return [DEFAULT_STATE_OPTION, ...sortedOptions];
 }
-
 export default function CityMasterPage() {
   const { getAll: getStateLookup } = useApi<unknown>(STATE_LOOKUP_ENDPOINT);
   const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_STATE_OPTION]);
-
   useEffect(() => {
     let mounted = true;
-
     void (async () => {
       try {
         const payload = await getStateLookup(LOOKUP_REQUEST_QUERY);
         if (!mounted) {
           return;
         }
-
         setStateOptions(buildStateOptions(payload));
       } catch {
         if (mounted) {
@@ -299,14 +257,11 @@ export default function CityMasterPage() {
         }
       }
     })();
-
     return () => {
       mounted = false;
     };
   }, [getStateLookup]);
-
   const cityFormFields = useMemo(() => buildCityFormFields(stateOptions), [stateOptions]);
-
   return (
     <CrudMasterPage
       title="City"
@@ -355,7 +310,6 @@ export default function CityMasterPage() {
         const cityStateId = (values.cityStateId ?? "").trim();
         const cityOrder = Math.max(0, toInteger(values.position ?? "0", 0));
         const cityIsActive = (values.cityIsActive ?? "true") !== "false";
-
         return {
           ctmName: cityName,
           ctmAlias: cityAlias || null,
