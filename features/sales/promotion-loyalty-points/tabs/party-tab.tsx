@@ -1,5 +1,6 @@
 "use client";
-import { Select } from "@/components/library/ui";
+import { useEffect } from "react";
+import { SearchableSelect } from "@/components/library/ui";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
@@ -37,6 +38,12 @@ export function PartyTab({
   customerLabelMap,
   customerGroupLabelMap,
 }: PartyTabProps) {
+  useEffect(() => {
+    if (partyRows.length === 0) {
+      addPartyRow();
+    }
+  }, [addPartyRow, partyRows.length]);
+
   const getEffectiveScopeType = (row: EditablePartyRow): PartyScopeType | null => {
     if (schemePartyScopeType) return schemePartyScopeType;
     const t = row.lps_scope_type;
@@ -61,6 +68,20 @@ export function PartyTab({
     );
   };
 
+  const handleScopeChange = (row: EditablePartyRow, value: string) => {
+    updatePartyRow(row._rowKey, { lps_scope_id: value });
+
+    const nextValue = value.trim();
+    if (!nextValue || nextValue === row.lps_scope_id.trim()) {
+      return;
+    }
+
+    const isLastRow = partyRows[partyRows.length - 1]?._rowKey === row._rowKey;
+    if (isLastRow) {
+      addPartyRow();
+    }
+  };
+
   const columns: ReusableTableColumn<EditablePartyRow>[] = [
     {
       key: "lps_slno",
@@ -76,15 +97,13 @@ export function PartyTab({
         const options = getScopeOptions(row);
         return (
           <div className="px-3 py-2">
-            <Select
+            <SearchableSelect
               value={isUuid(row.lps_scope_id) ? row.lps_scope_id : ""}
-              onChange={(e) => updatePartyRow(row._rowKey, { lps_scope_id: e.target.value })}
+              options={options}
+              onChange={(value) => handleScopeChange(row, value)}
               disabled={!effectiveType || options.length <= 1}
-            >
-              {options.map((o) => (
-                <option key={o.value || "__party-scope-default"} value={o.value}>{o.label}</option>
-              ))}
-            </Select>
+              searchPlaceholder={`Search ${partyScopeColumnHeader.toLowerCase()}`}
+            />
           </div>
         );
       },
@@ -139,20 +158,15 @@ export function PartyTab({
       role="tabpanel"
       aria-labelledby="loyalty-editor-tab-party"
     >
-      <div className="w-full flex-1 min-h-0 overflow-auto">
+      <div className="w-full flex-1 min-h-0">
         <ReusableTable<EditablePartyRow>
           columns={columns}
           rows={partyRows}
           rowKey="_rowKey"
           emptyText={`No party rows. Click 'Add Party ${partyScopeColumnHeader}'.`}
-          onCreate={addPartyRow}
-          createLabel={`Add Party ${partyScopeColumnHeader}`}
+        //   onCreate={addPartyRow}
+        //   createLabel={`Add Party ${partyScopeColumnHeader}`}
           stickyHeader
-          paginated
-          pageSize={5}
-          defaultPageSize={5}
-          pageSizeOptions={[5, 10, 15]}
-          totalEntries={partyRows.length}
           showPageSizeSelector
           onDelete={(row) => {
             if (!row.lps_id) {
@@ -166,6 +180,7 @@ export function PartyTab({
             });
           }}
           deleteLabel="Delete"
+          fullViewHeight={false}
           tableMaxHeight="400px"
         />
       </div>

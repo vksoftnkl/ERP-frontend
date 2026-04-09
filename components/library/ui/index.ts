@@ -40,6 +40,16 @@ export {
 } from "@/components/library/ui/primitives";
 
 export {
+  SearchableMultiSelect,
+  type SearchableMultiSelectProps,
+} from "@/components/library/ui/searchable-multi-select";
+
+export {
+  SearchableSelect,
+  type SearchableSelectProps,
+} from "@/components/library/ui/searchable-select";
+
+export {
   ERPDynamicModalForm,
   type ERPDynamicFieldType,
   type ERPDynamicFieldValidation,

@@ -1,5 +1,6 @@
 "use client";
-import { Input, Select } from "@/components/library/ui";
+import { useEffect } from "react";
+import { Input, SearchableSelect } from "@/components/library/ui";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
@@ -13,30 +14,83 @@ import { withFallbackOption } from "../promotion-loyalty-points.utils";
 type PointsTabProps = {
   pointRows: EditablePointRow[];
   updatePointRow: (rowKey: string, patch: Partial<EditablePointRow>) => void;
+  onPointScopeChange: (row: EditablePointRow, value: string) => void;
   addPointRow: () => void;
   removePointRow: (rowKey: string, rowId?: string) => void;
   setDeleteDialog: (dialog: DeleteDialogState) => void;
   pointScopeDescriptor: PointScopeDescriptor;
   pointScopeOptionsForPoint: ERPDynamicSelectOption[];
   pointScopeLabelMap: Map<string, string>;
-  unitOptionsForPoint: ERPDynamicSelectOption[];
+  getUnitOptionsForPointRow: (row: EditablePointRow) => ERPDynamicSelectOption[];
   pointExceedsHeader: string;
+  hideScopeColumn: boolean;
+  showUnitColumn: boolean;
 };
 
 export function PointsTab({
   pointRows,
   updatePointRow,
+  onPointScopeChange,
   addPointRow,
   removePointRow,
   setDeleteDialog,
   pointScopeDescriptor,
   pointScopeOptionsForPoint,
   pointScopeLabelMap,
-  unitOptionsForPoint,
+  getUnitOptionsForPointRow,
   pointExceedsHeader,
+  hideScopeColumn,
+  showUnitColumn,
 }: PointsTabProps) {
+  useEffect(() => {
+    if (pointRows.length === 0) {
+      addPointRow();
+    }
+  }, [addPointRow, pointRows.length]);
+
   const getPointScopeOptionsForRow = (row: EditablePointRow) =>
     withFallbackOption(pointScopeOptionsForPoint, row.lspt_item_id, pointScopeLabelMap);
+
+  const scopeColumns: ReusableTableColumn<EditablePointRow>[] = hideScopeColumn
+    ? []
+    : [
+        {
+          key: "lspt_item_id",
+          header: pointScopeDescriptor.headerLabel,
+          render: (row) => {
+            const scopeOptions = getPointScopeOptionsForRow(row);
+            return (
+              <SearchableSelect
+                value={row.lspt_item_id}
+                options={scopeOptions}
+                onChange={(value) => onPointScopeChange(row, value)}
+                searchPlaceholder={`Search ${pointScopeDescriptor.headerLabel.toLowerCase()}`}
+              />
+            );
+          },
+        },
+      ];
+
+  const unitColumn: ReusableTableColumn<EditablePointRow>[] = showUnitColumn
+    ? [
+        {
+          key: "lspt_unit_id",
+          header: "Unit",
+          render: (row) => {
+            const unitOptions = getUnitOptionsForPointRow(row);
+            return (
+              <SearchableSelect
+                value={row.lspt_unit_id}
+                options={unitOptions}
+                onChange={(value) => updatePointRow(row._rowKey, { lspt_unit_id: value })}
+                disabled={!row.lspt_item_id.trim()}
+                searchPlaceholder="Search unit"
+              />
+            );
+          },
+        },
+      ]
+    : [];
 
   const columns: ReusableTableColumn<EditablePointRow>[] = [
     {
@@ -46,42 +100,14 @@ export function PointsTab({
       width: "80px",
       align: "center",
     },
-    {
-      key: "lspt_item_id",
-      header: pointScopeDescriptor.headerLabel,
-      render: (row) => {
-        const scopeOptions = getPointScopeOptionsForRow(row);
-        return (
-          <Select
-            value={row.lspt_item_id}
-            onChange={(e) => updatePointRow(row._rowKey, { lspt_item_id: e.target.value })}
-          >
-            {scopeOptions.map((o) => (
-              <option key={o.value || "__point-scope-all"} value={o.value}>{o.label}</option>
-            ))}
-          </Select>
-        );
-      },
-    },
-    {
-      key: "lspt_unit_id",
-      header: "Unit",
-      render: (row) => (
-        <Select
-          value={row.lspt_unit_id}
-          onChange={(e) => updatePointRow(row._rowKey, { lspt_unit_id: e.target.value })}
-        >
-          {unitOptionsForPoint.map((o) => (
-            <option key={o.value || "__any-unit"} value={o.value}>{o.label}</option>
-          ))}
-        </Select>
-      ),
-    },
+    ...scopeColumns,
+    ...unitColumn,
     {
       key: "lspt_exceeds",
       header: pointExceedsHeader,
       render: (row) => (
         <Input
+          className={dynamicFormStyles.control}
           type="text"
           inputMode="decimal"
           value={row.lspt_exceeds}
@@ -94,6 +120,7 @@ export function PointsTab({
       header: "Each",
       render: (row) => (
         <Input
+          className={dynamicFormStyles.control}
           type="text"
           inputMode="decimal"
           value={row.lspt_each}
@@ -106,6 +133,7 @@ export function PointsTab({
       header: "Factor",
       render: (row) => (
         <Input
+          className={dynamicFormStyles.control}
           type="text"
           inputMode="decimal"
           value={row.lspt_factor}
@@ -118,21 +146,11 @@ export function PointsTab({
       header: "Points",
       render: (row) => (
         <Input
+          className={dynamicFormStyles.control}
           type="text"
           inputMode="decimal"
           value={row.lspt_points}
           onChange={(e) => updatePointRow(row._rowKey, { lspt_points: e.target.value })}
-        />
-      ),
-    },
-    {
-      key: "lspt_notes",
-      header: "Notes",
-      render: (row) => (
-        <Input
-          value={row.lspt_notes}
-          onChange={(e) => updatePointRow(row._rowKey, { lspt_notes: e.target.value })}
-          placeholder="Notes"
         />
       ),
     },
@@ -162,14 +180,14 @@ export function PointsTab({
       role="tabpanel"
       aria-labelledby="loyalty-editor-tab-points"
     >
-      <div className="w-full flex-1 min-h-0 overflow-auto">
+      <div className="w-full flex-1 min-h-0">
         <ReusableTable<EditablePointRow>
           columns={columns}
           rows={pointRows}
           rowKey="_rowKey"
           emptyText="No point rows. Click Add Point Row."
-          onCreate={addPointRow}
-          createLabel="Add Point Row"
+        //   onCreate={addPointRow}
+        //   createLabel="Add Point Row"
           onDelete={(row) => {
             if (!row.lspt_id) {
               removePointRow(row._rowKey);
@@ -183,13 +201,9 @@ export function PointsTab({
             });
           }}
           deleteLabel="Delete"
+          fullViewHeight={false}
           tableMaxHeight="400px"
           stickyHeader
-          paginated
-          pageSize={5}
-          defaultPageSize={5}
-          pageSizeOptions={[5, 10, 15]}
-          totalEntries={pointRows.length}
           showPageSizeSelector
         />
       </div>

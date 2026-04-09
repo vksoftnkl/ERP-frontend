@@ -64,6 +64,20 @@ export function toTimeInputValue(value: string | null | undefined): string {
   return value ? value.slice(0, 5) : "";
 }
 
+export function formatDateForDisplay(value: string | null | undefined): string {
+  const normalized = toDateInputValue(value);
+  if (!normalized) {
+    return "";
+  }
+
+  const [year, month, day] = normalized.split("-");
+  if (!year || !month || !day) {
+    return normalized;
+  }
+
+  return `${day}/${month}/${year}`;
+}
+
 export function toNullableString(value: string): string | null {
   const normalized = value.trim();
   return normalized ? normalized : null;

@@ -1,5 +1,6 @@
 "use client";
-import { Input, Select } from "@/components/library/ui";
+import { useEffect } from "react";
+import { Input, SearchableSelect } from "@/components/library/ui";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
@@ -11,22 +12,44 @@ import type {
 type GiftsTabProps = {
   giftRows: EditableGiftRow[];
   updateGiftRow: (rowKey: string, patch: Partial<EditableGiftRow>) => void;
+  onItemChange: (row: EditableGiftRow, value: string) => void;
   addGiftRow: () => void;
   removeGiftRow: (rowKey: string, rowId?: string) => void;
   setDeleteDialog: (dialog: DeleteDialogState) => void;
   itemOptionsForGift: ERPDynamicSelectOption[];
-  unitOptionsForGift: ERPDynamicSelectOption[];
+  getUnitOptionsForGiftRow: (row: EditableGiftRow) => ERPDynamicSelectOption[];
 };
 
 export function GiftsTab({
   giftRows,
   updateGiftRow,
+  onItemChange,
   addGiftRow,
   removeGiftRow,
   setDeleteDialog,
   itemOptionsForGift,
-  unitOptionsForGift,
+  getUnitOptionsForGiftRow,
 }: GiftsTabProps) {
+  useEffect(() => {
+    if (giftRows.length === 0) {
+      addGiftRow();
+    }
+  }, [addGiftRow, giftRows.length]);
+
+  const handleItemChange = (row: EditableGiftRow, value: string) => {
+    onItemChange(row, value);
+
+    const nextValue = value.trim();
+    if (!nextValue || nextValue === row.lsg_item_id.trim()) {
+      return;
+    }
+
+    const isLastRow = giftRows[giftRows.length - 1]?._rowKey === row._rowKey;
+    if (isLastRow) {
+      addGiftRow();
+    }
+  };
+
   const columns: ReusableTableColumn<EditableGiftRow>[] = [
     {
       key: "serialNo",
@@ -39,35 +62,36 @@ export function GiftsTab({
       key: "lsg_item_id",
       header: "Item",
       render: (row) => (
-        <Select
+        <SearchableSelect
           value={row.lsg_item_id}
-          onChange={(e) => updateGiftRow(row._rowKey, { lsg_item_id: e.target.value })}
-        >
-          {itemOptionsForGift.map((o) => (
-            <option key={o.value || "__gift-item"} value={o.value}>{o.label}</option>
-          ))}
-        </Select>
+          options={itemOptionsForGift}
+          onChange={(value) => handleItemChange(row, value)}
+          searchPlaceholder="Search item"
+        />
       ),
     },
     {
       key: "lsg_unit_id",
       header: "Unit",
-      render: (row) => (
-        <Select
-          value={row.lsg_unit_id}
-          onChange={(e) => updateGiftRow(row._rowKey, { lsg_unit_id: e.target.value })}
-        >
-          {unitOptionsForGift.map((o) => (
-            <option key={o.value || "__gift-unit"} value={o.value}>{o.label}</option>
-          ))}
-        </Select>
-      ),
+      render: (row) => {
+        const unitOptions = getUnitOptionsForGiftRow(row);
+        return (
+          <SearchableSelect
+            value={row.lsg_unit_id}
+            options={unitOptions}
+            onChange={(value) => updateGiftRow(row._rowKey, { lsg_unit_id: value })}
+            disabled={!row.lsg_item_id.trim()}
+            searchPlaceholder="Search unit"
+          />
+        );
+      },
     },
     {
       key: "lsg_item_qty",
       header: "Qty",
       render: (row) => (
         <Input
+          className={dynamicFormStyles.control}
           type="text"
           inputMode="decimal"
           value={row.lsg_item_qty}
@@ -80,21 +104,11 @@ export function GiftsTab({
       header: "Redeem Points",
       render: (row) => (
         <Input
+          className={dynamicFormStyles.control}
           type="text"
           inputMode="decimal"
           value={row.lsg_redeem_points}
           onChange={(e) => updateGiftRow(row._rowKey, { lsg_redeem_points: e.target.value })}
-        />
-      ),
-    },
-    {
-      key: "lsg_notes",
-      header: "Notes",
-      render: (row) => (
-        <Input
-          value={row.lsg_notes}
-          onChange={(e) => updateGiftRow(row._rowKey, { lsg_notes: e.target.value })}
-          placeholder="Notes"
         />
       ),
     },
@@ -141,14 +155,14 @@ export function GiftsTab({
       role="tabpanel"
       aria-labelledby="loyalty-editor-tab-gifts"
     >
-      <div className="w-full flex-1 min-h-0 overflow-auto">
+      <div className="w-full flex-1 min-h-0">
         <ReusableTable<EditableGiftRow>
           columns={columns}
           rows={giftRows}
           rowKey="_rowKey"
           emptyText="No gift rows. Click Add Gift Row."
-          onCreate={addGiftRow}
-          createLabel="Add Gift Row"
+        //   onCreate={addGiftRow}
+        //   createLabel="Add Gift Row"
           onDelete={(row) => {
             if (!row.lsg_id) {
               removeGiftRow(row._rowKey);
@@ -162,14 +176,9 @@ export function GiftsTab({
             });
           }}
           deleteLabel="Delete"
+          fullViewHeight={false}
           tableMaxHeight="400px"
           stickyHeader
-          paginated
-          pageSize={5}
-          defaultPageSize={5}
-          pageSizeOptions={[5, 10, 15]}
-          totalEntries={giftRows.length}
-          showPageSizeSelector
         />
       </div>
     </div>
