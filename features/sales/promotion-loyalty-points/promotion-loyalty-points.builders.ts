@@ -63,12 +63,12 @@ export function buildEmptySchemeForm(companyId: string, branchId: string): Schem
     ls_bal_apl: true,
     ls_allow_point_redeem: false,
     ls_allow_gift_redeem: false,
-    ls_redeem_value_per_point: "0",
-    ls_min_redeem_points: "0",
-    ls_max_redeem_points_per_bill: "0",
-    ls_max_redeem_percent_per_bill: "0",
-    ls_redeem_min_bill_amount: "0",
-    ls_points_valid_days: "0",
+    ls_redeem_value_per_point: "",
+    ls_min_redeem_points: "",
+    ls_max_redeem_points_per_bill: "",
+    ls_max_redeem_percent_per_bill: "",
+    ls_redeem_min_bill_amount: "",
+    ls_points_valid_days: "",
     ls_expiry_basis: EXPIRY_OPTIONS.find((option) => option.value === "NONE")?.value ?? EXPIRY_OPTIONS[0].value,
     ls_remarks: "",
     ls_is_active: true,
@@ -130,8 +130,8 @@ export function buildSchemeRequest(
     ls_bill_type: form.ls_bill_type,
     ls_cust_type: form.ls_cust_type,
     ls_item_type: form.ls_item_type,
-    ls_start_date: form.ls_start_date,
-    ls_end_date: form.ls_end_date,
+    ls_start_date: toDateInputValue(form.ls_start_date),
+    ls_end_date: toDateInputValue(form.ls_end_date),
     ...(form.ls_valid_from_time.trim() ? { ls_valid_from_time: form.ls_valid_from_time } : {}),
     ...(form.ls_valid_to_time.trim() ? { ls_valid_to_time: form.ls_valid_to_time } : {}),
     ls_valid_weekdays: toNullableString(form.ls_valid_weekdays),
@@ -166,10 +166,10 @@ export function buildEmptyPointForm(): PointFormState {
     lspt_slno: "",
     lspt_item_id: "",
     lspt_unit_id: "",
-    lspt_exceeds: "0",
-    lspt_each: "1",
-    lspt_factor: "1",
-    lspt_points: "0",
+    lspt_exceeds: "",
+    lspt_each: "",
+    lspt_factor: "",
+    lspt_points: "",
     lspt_notes: "",
     lspt_is_active: true,
   };
@@ -198,8 +198,8 @@ export function buildPointRequest(schemeId: string, form: PointFormState): SaveL
     lspt_item_id: form.lspt_item_id.trim() || null,
     lspt_unit_id: form.lspt_unit_id.trim() || null,
     lspt_exceeds: toOptionalNumber(form.lspt_exceeds) ?? 0,
-    lspt_each: toOptionalNumber(form.lspt_each) ?? 1,
-    lspt_factor: toOptionalNumber(form.lspt_factor) ?? 1,
+    lspt_each: toOptionalNumber(form.lspt_each) ?? 0,
+    lspt_factor: toOptionalNumber(form.lspt_factor) ?? 0,
     lspt_points: toOptionalNumber(form.lspt_points) ?? 0,
     lspt_notes: toNullableString(form.lspt_notes),
     lspt_is_active: form.lspt_is_active,
@@ -219,14 +219,13 @@ export function createPointRow(row?: LoyaltyPointPayload): EditablePointRow {
 export function shouldPersistPointRow(row: EditablePointRow): boolean {
   if (row.lspt_id) return true;
   return Boolean(
-    row.lspt_slno.trim() ||
-      row.lspt_item_id.trim() ||
+    row.lspt_item_id.trim() ||
       row.lspt_unit_id.trim() ||
       row.lspt_notes.trim() ||
-      row.lspt_exceeds.trim() !== "0" ||
-      row.lspt_each.trim() !== "1" ||
-      row.lspt_factor.trim() !== "1" ||
-      row.lspt_points.trim() !== "0" ||
+      row.lspt_exceeds.trim().length > 0 ||
+      row.lspt_each.trim().length > 0 ||
+      row.lspt_factor.trim().length > 0 ||
+      row.lspt_points.trim().length > 0 ||
       !row.lspt_is_active,
   );
 }
@@ -239,8 +238,8 @@ export function buildEmptyGiftForm(): GiftFormState {
     lsg_slno: "",
     lsg_item_id: "",
     lsg_unit_id: "",
-    lsg_item_qty: "1",
-    lsg_redeem_points: "0",
+    lsg_item_qty: "",
+    lsg_redeem_points: "",
     lsg_repeat: false,
     lsg_notes: "",
     lsg_is_active: true,
@@ -289,12 +288,11 @@ export function createGiftRow(row?: LoyaltyGiftPayload): EditableGiftRow {
 export function shouldPersistGiftRow(row: EditableGiftRow): boolean {
   if (row.lsg_id) return true;
   return Boolean(
-    row.lsg_slno.trim() ||
-      row.lsg_item_id.trim() ||
+    row.lsg_item_id.trim() ||
       row.lsg_unit_id.trim() ||
       row.lsg_notes.trim() ||
-      row.lsg_item_qty.trim() !== "1" ||
-      row.lsg_redeem_points.trim() !== "0" ||
+      row.lsg_item_qty.trim().length > 0 ||
+      row.lsg_redeem_points.trim().length > 0 ||
       row.lsg_repeat ||
       !row.lsg_is_active,
   );

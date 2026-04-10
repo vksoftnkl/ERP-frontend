@@ -455,8 +455,9 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const resolvedIsUpdateDisabled = isUpdateDisabled ?? isEditDisabled;
   const resolvedUpdateLabel = updateLabel ?? editLabel ?? "Edit";
   const hasRowActions = Boolean(onView || resolvedOnUpdate || onDuplicate || onDelete);
-  const shouldRenderInlineActionMenu = hasRowActions;
   const hasActionsColumn = columns.some((column) => isActionsColumn(column));
+  const shouldRenderInlineActionMenu =
+    hasRowActions && !hasActionsColumn && showActionsColumn !== true;
   const baseColumns = shouldRenderInlineActionMenu
     ? columns.filter((column) => !isActionsColumn(column))
     : columns;

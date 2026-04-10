@@ -124,6 +124,15 @@ background: #dfe7f0;
   background: #c8d4df;
   border-radius: 4px;
 }
+.scrollAreaHiddenScrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollAreaHiddenScrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
 .formGrid {
   display: grid;
   grid-template-columns: 5fr;
@@ -326,6 +335,7 @@ background: #dfe7f0;
   box-sizing: border-box;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -338,6 +348,7 @@ background: #dfe7f0;
   font-family: inherit;
   font-size: 0.75rem;
   line-height: 1.1;
+  text-align: left;
   cursor: pointer;
   overflow: hidden;
   transition:
@@ -362,6 +373,7 @@ background: #dfe7f0;
   display: block;
   flex: 1;
   min-width: 0;
+  text-align: left;
   color: #1f3448;
   font-size: 0.75rem;
   line-height: 1.1;
@@ -683,6 +695,16 @@ background: #dfe7f0;
   border-color: var(--erp-modal-accent);
   background: var(--erp-modal-accent);
   color: #fff;
+}
+.submitButtonSave {
+  --erp-modal-accent: var(--ds-primary, #0f74c9);
+  border-color: var(--ds-primary-strong, #095f9f);
+  background: var(--ds-primary, #0f74c9);
+}
+.submitButtonUpdate {
+  --erp-modal-accent: var(--ds-success, #1a8c69);
+  border-color: var(--ds-success, #1a8c69);
+  background: var(--ds-success, #1a8c69);
 }
 .cancelButton:hover,
 .submitButton:hover {

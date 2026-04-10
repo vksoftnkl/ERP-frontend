@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { FiGift, FiPlus, FiRefreshCw, FiSave } from "react-icons/fi";
+import { FiGift, FiPlus, FiRefreshCw } from "react-icons/fi";
 import {
   Alert,
   Badge,
@@ -28,7 +28,11 @@ import {
 import { useBusinessContext } from "@/components/layout/business-context";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
-import { extractRows } from "@/features/masters/shared/normalizers";
+import {
+  DEFAULT_LOOKUP_ARRAY_KEYS,
+  extractPaginationInfo,
+  extractRows,
+} from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";
 import type { ApiSuccessResponse } from "@/utils/types";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
@@ -75,6 +79,7 @@ import {
   SCHEME_TYPE_OPTIONS,
   CUSTOMER_LOOKUP_KEYS,
   CUSTOMER_GROUP_LOOKUP_KEYS,
+  BRANCH_LOOKUP_KEYS,
   UNIT_LOOKUP_KEYS,
   APPLY_ON_OPTIONS,
 } from "./promotion-loyalty-points.constant";
@@ -108,6 +113,7 @@ import {
   formatDateForDisplay,
   getStatusVariant,
   getTypeVariant,
+  isValidDateValue,
   isPartyScopeType,
   resolveLabel,
   withFallbackOption,
@@ -121,7 +127,12 @@ import type { ERPDynamicSelectOption } from "@/components/library/ui";
 
 const DEFAULT_PARTY_SCOPE_TYPE: PartyScopeType = "CUSTOMER_GROUP";
 const BRANCH_LIST_ENDPOINT = "/branch-masters/list";
+const BRANCH_LIST_PAGE_LIMIT = 100;
 const ITEM_PRICE_LIST_ENDPOINT = "/item-prices/list";
+const ITEM_LIST_ENDPOINT = "/items/list";
+const UNIT_LIST_ENDPOINT = "/units/list";
+const CUSTOMER_LIST_ENDPOINT = "/customers/list";
+const CUSTOMER_GROUP_LIST_ENDPOINT = "/customer-groups/list";
 const MODAL_FIELD_STYLE_VARS = {
   "--erp-modal-control-height": "2.15rem",
   "--erp-modal-control-padding-y": "0.5rem",
@@ -131,16 +142,44 @@ const MODAL_FIELD_STYLE_VARS = {
 } as CSSProperties;
 
 type BranchRecord = {
-  brId: string;
-  brName: string;
+  brId?: string;
+  br_id?: string;
+  branch_id?: string;
+  branchId?: string;
+  id?: string;
+  _id?: string;
+  value?: string;
+  brName?: string;
+  br_name?: string;
+  branch_name?: string;
+  branchName?: string;
+  name?: string;
+  label?: string;
   brIsDefault?: boolean;
+  br_is_default?: boolean | string | number | null;
+  isDefault?: boolean | string | number | null;
+  is_default?: boolean | string | number | null;
 };
 
 type ItemPriceRecord = {
   ipm_item_id?: string | null;
   ipm_unit_id?: string | null;
+  ipm_base_unit_id?: string | null;
+  item_id?: string | null;
+  itemId?: string | null;
+  ipmItemId?: string | null;
+  unit_id?: string | null;
+  unitId?: string | null;
+  ipmUnitId?: string | null;
+  item_unit_id?: string | null;
+  itemUnitId?: string | null;
+  uom_id?: string | null;
   ipm_is_active?: boolean | string | number | null;
+  is_active?: boolean | string | number | null;
+  isActive?: boolean | string | number | null;
   ipm_is_deleted?: boolean | string | number | null;
+  is_deleted?: boolean | string | number | null;
+  isDeleted?: boolean | string | number | null;
 };
 
 type ItemLookupRecord = Record<string, unknown>;
@@ -201,8 +240,114 @@ function isDeletedItemLookupRow(row: ItemLookupRecord): boolean {
   return deletedFlagKeys.some((key) => isTruthyLookupFlag(row[key]));
 }
 
-function buildGiftUnitScopeKey(itemId: string): string {
-  return itemId.trim();
+function buildGiftUnitScopeKey(itemId: string, branchId = ""): string {
+  return [branchId.trim(), itemId.trim()].join("::");
+}
+
+function extractItemPriceRows(payload: unknown): ItemPriceRecord[] {
+  return extractRows<ItemPriceRecord>(payload, DEFAULT_LOOKUP_ARRAY_KEYS);
+}
+
+function getItemPriceItemId(row: ItemPriceRecord): string {
+  const candidates = [
+    row.ipm_item_id,
+    row.item_id,
+    row.itemId,
+    row.ipmItemId,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return "";
+}
+
+function getItemPriceUnitId(row: ItemPriceRecord): string {
+  const candidates = [
+    row.ipm_unit_id,
+    row.unit_id,
+    row.unitId,
+    row.ipmUnitId,
+    row.item_unit_id,
+    row.itemUnitId,
+    row.uom_id,
+    row.ipm_base_unit_id,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return "";
+}
+
+function isActiveItemPriceRow(row: ItemPriceRecord): boolean {
+  const activeFlag = [
+    row.ipm_is_active,
+    row.is_active,
+    row.isActive,
+  ].find((value) => value != null && value !== "");
+
+  return activeFlag == null ? true : isActiveLookupRow(activeFlag);
+}
+
+function isDeletedItemPriceRow(row: ItemPriceRecord): boolean {
+  return [
+    row.ipm_is_deleted,
+    row.is_deleted,
+    row.isDeleted,
+  ].some(isTruthyLookupFlag);
+}
+
+function readStringField(
+  row: Record<string, unknown>,
+  keys: readonly string[],
+): string {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function getBranchId(row: BranchRecord): string {
+  return readStringField(row, ["brId", "br_id", "branch_id", "branchId", "id", "_id", "value"]);
+}
+
+function getBranchName(row: BranchRecord): string {
+  return readStringField(row, ["brName", "br_name", "branch_name", "branchName", "name", "label"]);
+}
+
+function isDefaultBranch(row: BranchRecord): boolean {
+  return [
+    row.brIsDefault,
+    row.br_is_default,
+    row.isDefault,
+    row.is_default,
+  ].some(isTruthyLookupFlag);
+}
+
+function getSchemeBranchLabel(
+  row: LoyaltySchemePayload,
+  branchLabelMap: Map<string, string>,
+): string {
+  const directBranchName = readStringField(
+    row as unknown as Record<string, unknown>,
+    ["ls_branch_name", "lsBranchName", "branch_name", "branchName", "br_name", "brName"],
+  );
+
+  if (directBranchName) {
+    return directBranchName;
+  }
+
+  return resolveLabel(row.ls_branch_id, branchLabelMap, "All Branches");
 }
 
 export default function PromotionLoyaltyPointsPage() {
@@ -216,6 +361,7 @@ export default function PromotionLoyaltyPointsPage() {
   const [pageCompanyId, setPageCompanyId] = useState(selectedCompanyId);
   const [pageBranchChoices, setPageBranchChoices] = useState<ERPDynamicSelectOption[]>([]);
   const [pageDefaultBranchId, setPageDefaultBranchId] = useState(selectedBranchId);
+  const [schemeBranchChoices, setSchemeBranchChoices] = useState<ERPDynamicSelectOption[]>([]);
   const [schemeRows, setSchemeRows] = useState<LoyaltySchemePayload[]>([]);
   const [selectedScheme, setSelectedScheme] = useState<LoyaltySchemePayload | null>(null);
   const [listMeta, setListMeta] = useState<PromotionLoyaltyPointsListMeta | null>(null);
@@ -234,6 +380,7 @@ export default function PromotionLoyaltyPointsPage() {
   const [deletedPointIds, setDeletedPointIds] = useState<string[]>([]);
   const [deletedGiftIds, setDeletedGiftIds] = useState<string[]>([]);
   const [editorSubmitError, setEditorSubmitError] = useState<string | null>(null);
+  const [showSchemeValidation, setShowSchemeValidation] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<EditorTab>("scheme");
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>(null);
@@ -247,6 +394,7 @@ export default function PromotionLoyaltyPointsPage() {
   const [itemBrandChoices, setItemBrandChoices] = useState<ERPDynamicSelectOption[]>([]);
   const [itemSectionChoices, setItemSectionChoices] = useState<ERPDynamicSelectOption[]>([]);
   const [unitChoices, setUnitChoices] = useState<ERPDynamicSelectOption[]>([]);
+  const [branchLookupChoices, setBranchLookupChoices] = useState<ERPDynamicSelectOption[]>([]);
   const [customerChoices, setCustomerChoices] = useState<ERPDynamicSelectOption[]>([]);
   const [customerGroupChoices, setCustomerGroupChoices] = useState<ERPDynamicSelectOption[]>([]);
   const [giftUnitIdsByScopeKey, setGiftUnitIdsByScopeKey] = useState<Record<string, string[]>>({});
@@ -321,13 +469,92 @@ export default function PromotionLoyaltyPointsPage() {
   const { getAll: getItemBrandLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, { toast: { success: false, error: false } });
   const { getAll: getItemSectionLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, { toast: { success: false, error: false } });
   const { getAll: getUnitLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, { toast: { success: false, error: false } });
+  const { getAll: getBranchLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, { toast: { success: false, error: false } });
   const { getAll: getCustomerLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, { toast: { success: false, error: false } });
   const { getAll: getCustomerGroupLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, { toast: { success: false, error: false } });
 
+  const { getAll: getItemsList } = useApi<unknown>(ITEM_LIST_ENDPOINT, { toast: { success: false, error: false } });
+  const { getAll: getUnitsList } = useApi<unknown>(UNIT_LIST_ENDPOINT, { toast: { success: false, error: false } });
+  const { getAll: getCustomersList } = useApi<unknown>(CUSTOMER_LIST_ENDPOINT, { toast: { success: false, error: false } });
+  const { getAll: getCustomerGroupsList } = useApi<unknown>(CUSTOMER_GROUP_LIST_ENDPOINT, { toast: { success: false, error: false } });
+
+  const loadActiveBranchesForCompany = useCallback(
+    async (companyId: string) => {
+      const normalizedCompanyId = companyId.trim();
+      if (!normalizedCompanyId) {
+        return {
+          choices: [] as ERPDynamicSelectOption[],
+          defaultBranchId: "",
+        };
+      }
+
+      const branchChoiceMap = new Map<string, ERPDynamicSelectOption>();
+      let defaultBranchId = "";
+      let page = 1;
+
+      while (true) {
+        const payload = await loadBranchesForCompany({
+          query: {
+            compId: normalizedCompanyId,
+            brIsActive: "true",
+            page: String(page),
+            limit: String(BRANCH_LIST_PAGE_LIMIT),
+          },
+        });
+
+        const nextBranches = extractRows<BranchRecord>(payload).filter(
+          (branch) => Boolean(getBranchId(branch) && getBranchName(branch)),
+        );
+
+        nextBranches.forEach((branch) => {
+          const branchId = getBranchId(branch);
+          if (!branchChoiceMap.has(branchId)) {
+            branchChoiceMap.set(branchId, {
+              value: branchId,
+              label: getBranchName(branch),
+            });
+          }
+        });
+
+        if (!defaultBranchId) {
+          defaultBranchId = getBranchId(
+            nextBranches.find(isDefaultBranch) ?? nextBranches[0] ?? {},
+          );
+        }
+
+        const paginationInfo = extractPaginationInfo(payload);
+        const pageSize = paginationInfo.pageSize ?? BRANCH_LIST_PAGE_LIMIT;
+        const totalEntries = paginationInfo.totalEntries;
+        const hasMorePages =
+          totalEntries !== null
+            ? page * pageSize < totalEntries
+            : nextBranches.length === BRANCH_LIST_PAGE_LIMIT;
+
+        if (!hasMorePages) {
+          break;
+        }
+
+        page += 1;
+      }
+
+      const choices = Array.from(branchChoiceMap.values());
+
+      return {
+        choices,
+        defaultBranchId: defaultBranchId || choices[0]?.value || "",
+      };
+    },
+    [loadBranchesForCompany],
+  );
+
   // ── Derived options ───────────────────────────────────────────────────────
-  const branchOptions = useMemo(
+  const pageBranchOptions = useMemo(
     () => withDefaultOption(pageBranchChoices, DEFAULT_BRANCH_OPTION),
     [pageBranchChoices],
+  );
+  const schemeBranchOptions = useMemo(
+    () => withDefaultOption(schemeBranchChoices, DEFAULT_BRANCH_OPTION),
+    [schemeBranchChoices],
   );
   const schemePartyScopeType = useMemo<PartyScopeType | null>(
     () => (isPartyScopeType(schemeForm.ls_cust_type) ? schemeForm.ls_cust_type : null),
@@ -377,7 +604,10 @@ export default function PromotionLoyaltyPointsPage() {
   const customerGroupOptionsForParty = useMemo(() => withDefaultOption(customerGroupChoices, DEFAULT_PARTY_CUSTOMER_GROUP_OPTION), [customerGroupChoices]);
   const customerLabelMap = useMemo(() => buildOptionLabelMap(customerChoices), [customerChoices]);
   const customerGroupLabelMap = useMemo(() => buildOptionLabelMap(customerGroupChoices), [customerGroupChoices]);
-  const branchLabelMap = useMemo(() => buildOptionLabelMap(branchOptions), [branchOptions]);
+  const branchLabelMap = useMemo(
+    () => buildOptionLabelMap([...pageBranchOptions, ...schemeBranchOptions, ...branchLookupChoices]),
+    [branchLookupChoices, pageBranchOptions, schemeBranchOptions],
+  );
   const unitLabelMap = useMemo(() => buildOptionLabelMap(unitChoices), [unitChoices]);
 
   const pointScopeLabelMap = useMemo(
@@ -441,7 +671,11 @@ export default function PromotionLoyaltyPointsPage() {
         return [];
       }
 
-      const scopeKey = buildGiftUnitScopeKey(normalizedItemId);
+      const scopedBranchId = schemeForm.ls_branch_id.trim();
+      const scopeKey = buildGiftUnitScopeKey(
+        normalizedItemId,
+        scopedBranchId,
+      );
       const cachedUnitIds = giftUnitIdsByScopeKeyRef.current[scopeKey];
       if (cachedUnitIds && !options?.force) {
         return cachedUnitIds;
@@ -455,22 +689,25 @@ export default function PromotionLoyaltyPointsPage() {
       const request = (async () => {
         const response = await listItemPrices({
           ipm_item_id: normalizedItemId,
+          limit: "100"
         });
-        const rows = response?.data ?? [];
+        const rows = extractItemPriceRows(response);
         const normalizedItemKey = normalizeScopeValue(normalizedItemId);
         const nextUnitIds = Array.from(
           new Set(
             rows
-              .filter((row) => isActiveLookupRow(row.ipm_is_active))
-              .filter((row) => !isTruthyLookupFlag(row.ipm_is_deleted))
-              .filter((row) => normalizeScopeValue(row.ipm_item_id) === normalizedItemKey)
-              .map((row) => (typeof row.ipm_unit_id === "string" ? row.ipm_unit_id.trim() : ""))
+              .filter((row) => isActiveItemPriceRow(row))
+              .filter((row) => !isDeletedItemPriceRow(row))
+              .filter((row) => normalizeScopeValue(getItemPriceItemId(row)) === normalizedItemKey)
+              .map((row) => getItemPriceUnitId(row))
               .filter(Boolean),
           ),
         );
 
         setGiftUnitIdsByScopeKey((prev) =>
-          prev[scopeKey] ? prev : { ...prev, [scopeKey]: nextUnitIds },
+          options?.force || !prev[scopeKey]
+            ? { ...prev, [scopeKey]: nextUnitIds }
+            : prev,
         );
         return nextUnitIds;
       })();
@@ -482,7 +719,7 @@ export default function PromotionLoyaltyPointsPage() {
         delete giftUnitRequestsRef.current[scopeKey];
       }
     },
-    [listItemPrices],
+    [listItemPrices, schemeForm.ls_branch_id],
   );
 
   const getUnitOptionsForGiftRow = useCallback(
@@ -491,7 +728,10 @@ export default function PromotionLoyaltyPointsPage() {
       if (!itemId) {
         return [DEFAULT_REQUIRED_UNIT_OPTION];
       }
-      const scopeKey = buildGiftUnitScopeKey(itemId);
+      const scopeKey = buildGiftUnitScopeKey(
+        itemId,
+        schemeForm.ls_branch_id,
+      );
       const allowedUnitIds = giftUnitIdsByScopeKey[scopeKey];
       const filteredUnitOptions = (allowedUnitIds ?? []).map((unitId) => {
         const normalizedUnitId = unitId.trim();
@@ -509,6 +749,7 @@ export default function PromotionLoyaltyPointsPage() {
     },
     [
       giftUnitIdsByScopeKey,
+      schemeForm.ls_branch_id,
       unitLabelMap,
     ],
   );
@@ -519,7 +760,10 @@ export default function PromotionLoyaltyPointsPage() {
       if (!itemId) {
         return [DEFAULT_UNIT_OPTION];
       }
-      const scopeKey = buildGiftUnitScopeKey(itemId);
+      const scopeKey = buildGiftUnitScopeKey(
+        itemId,
+        schemeForm.ls_branch_id,
+      );
       const allowedUnitIds = giftUnitIdsByScopeKey[scopeKey];
       const filteredUnitOptions = (allowedUnitIds ?? []).map((unitId) => {
         const normalizedUnitId = unitId.trim();
@@ -537,6 +781,7 @@ export default function PromotionLoyaltyPointsPage() {
     },
     [
       giftUnitIdsByScopeKey,
+      schemeForm.ls_branch_id,
       unitLabelMap,
     ],
   );
@@ -640,6 +885,24 @@ export default function PromotionLoyaltyPointsPage() {
     });
   };
 
+  // ── Gift validation ───────────────────────────────────────────────────────
+  const getGiftRowValidationMessage = (row: EditableGiftRow, index: number): string | null => {
+    if (!shouldPersistGiftRow(row)) return null;
+
+    const label = `Gift row ${row.lsg_slno || index + 1}`;
+    if (!row.lsg_unit_id.trim()) return `${label} requires unit.`;
+
+    const qtyValue = row.lsg_item_qty.trim();
+    if (!qtyValue) return `${label} requires qty.`;
+
+    const qtyNumber = Number(qtyValue);
+    if (!Number.isFinite(qtyNumber) || qtyNumber <= 0) {
+      return `${label} requires a valid qty greater than 0.`;
+    }
+
+    return null;
+  };
+
   // ── Party validation ──────────────────────────────────────────────────────
   const getPartyRowValidationMessage = (row: EditablePartyRow, index: number): string | null => {
     const effectiveType = schemePartyScopeType ?? (isPartyScopeType(row.lps_scope_type) ? row.lps_scope_type : null);
@@ -653,6 +916,7 @@ export default function PromotionLoyaltyPointsPage() {
   // ── Data loading ──────────────────────────────────────────────────────────
   const resetSchemeEditor = useCallback((nextCompanyId: string, nextBranchId = "") => {
     setEditorSubmitError(null);
+    setShowSchemeValidation(false);
     setSelectedScheme(null);
     setSchemeForm(buildEmptySchemeForm(nextCompanyId, nextBranchId));
     setPointRows([]);
@@ -662,10 +926,40 @@ export default function PromotionLoyaltyPointsPage() {
     setDeletedGiftIds([]);
   }, []);
 
+  const handlePageCompanyChange = useCallback((value: string) => {
+    const nextCompanyId = value.trim();
+    if (nextCompanyId === pageCompanyId) {
+      return;
+    }
+    setPageCompanyId(nextCompanyId);
+    setBranchFilter("");
+    setPageBranchChoices([]);
+    setPageDefaultBranchId("");
+    setSchemeRows([]);
+    setListMeta(null);
+    resetSchemeEditor(nextCompanyId, "");
+  }, [pageCompanyId, resetSchemeEditor]);
+
+  const handleSchemeCompanyChange = useCallback((value: string) => {
+    const nextCompanyId = value.trim();
+    setSchemeForm((prev) => {
+      if (prev.ls_comp_id === nextCompanyId) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        ls_comp_id: nextCompanyId,
+        ls_branch_id: "",
+      };
+    });
+  }, []);
+
   const loadSchemeDetail = async (schemeId: string) => {
     const response = await getSchemeById({ query: { ls_id: schemeId } });
     if (!response?.data) return;
     setEditorSubmitError(null);
+    setShowSchemeValidation(false);
     setSelectedScheme(response.data);
     setSchemeForm(mapSchemeToForm(response.data));
     setPointRows((response.data.points ?? []).map((r) => createPointRow(r)));
@@ -730,31 +1024,11 @@ export default function PromotionLoyaltyPointsPage() {
       }
 
       try {
-        const payload = await loadBranchesForCompany({
-          query: {
-            compId: pageCompanyId.trim(),
-            brIsActive: "true",
-            limit: "100",
-          },
-        });
-
+        const { choices, defaultBranchId } = await loadActiveBranchesForCompany(pageCompanyId);
         if (ignore) return;
-
-        const nextBranches = extractRows<BranchRecord>(payload).filter(
-          (branch): branch is BranchRecord =>
-            typeof branch?.brId === "string" && typeof branch?.brName === "string",
-        );
-        const nextDefaultBranchId =
-          nextBranches.find((branch) => branch.brIsDefault)?.brId ?? nextBranches[0]?.brId ?? "";
-
-        setPageBranchChoices(
-          nextBranches.map((branch) => ({
-            value: branch.brId,
-            label: branch.brName,
-          })),
-        );
-        setPageDefaultBranchId(nextDefaultBranchId);
-        resetSchemeEditor(pageCompanyId, nextDefaultBranchId);
+        setPageBranchChoices(choices);
+        setPageDefaultBranchId(defaultBranchId);
+        resetSchemeEditor(pageCompanyId, defaultBranchId);
       } catch {
         if (ignore) return;
         setPageBranchChoices([]);
@@ -767,7 +1041,7 @@ export default function PromotionLoyaltyPointsPage() {
     return () => {
       ignore = true;
     };
-  }, [loadBranchesForCompany, pageCompanyId, resetSchemeEditor]);
+  }, [loadActiveBranchesForCompany, pageCompanyId, resetSchemeEditor]);
 
   useEffect(() => {
     if (!pageCompanyId.trim()) {
@@ -784,39 +1058,211 @@ export default function PromotionLoyaltyPointsPage() {
   }, [pageCompanyId, pageDefaultBranchId, resetSchemeEditor, selectedScheme]);
 
   useEffect(() => {
-    const loadLookups = async () => {
+    if (!isEditorOpen) {
+      return;
+    }
+
+    let ignore = false;
+    const targetCompanyId = schemeForm.ls_comp_id.trim();
+
+    const syncSchemeBranches = async () => {
+      if (!targetCompanyId) {
+        setSchemeBranchChoices([]);
+        setSchemeForm((prev) => (
+          prev.ls_comp_id.trim()
+            ? prev
+            : prev.ls_branch_id
+              ? { ...prev, ls_branch_id: "" }
+              : prev
+        ));
+        return;
+      }
+
       try {
-        const [items, groups, categories, brands, sections, units, customers, customerGroups] =
-          await Promise.all([
-            getItemLookup({ module: "items", limit: "100" }),
-            getItemGroupLookup({ module: "itemGroups", limit: "100" }),
-            getItemCategoryLookup({ module: "itemCategories", limit: "100" }),
-            getItemBrandLookup({ module: "itemBrands", limit: "100" }),
-            getItemSectionLookup({ module: "itemSections", limit: "100" }),
-            getUnitLookup({ module: "units", limit: "100" }),
-            getCustomerLookup({ module: "customers", limit: "100" }),
-            getCustomerGroupLookup({ module: "customerGroups", limit: "100" }),
-          ]);
-        setItemChoices(
-          buildLookupChoices(
-            extractRows<ItemLookupRecord>(items).filter((row) => !isDeletedItemLookupRow(row)),
-            ITEM_LOOKUP_KEYS,
-          ),
-        );
-        setItemGroupChoices(buildLookupChoices(groups, ITEM_GROUP_LOOKUP_KEYS));
-        setItemCategoryChoices(buildLookupChoices(categories, ITEM_CATEGORY_LOOKUP_KEYS));
-        setItemBrandChoices(buildLookupChoices(brands, ITEM_BRAND_LOOKUP_KEYS));
-        setItemSectionChoices(buildLookupChoices(sections, ITEM_SECTION_LOOKUP_KEYS));
-        setUnitChoices(buildLookupChoices(units, UNIT_LOOKUP_KEYS));
-        setCustomerChoices(buildLookupChoices(customers, CUSTOMER_LOOKUP_KEYS));
-        setCustomerGroupChoices(buildLookupChoices(customerGroups, CUSTOMER_GROUP_LOOKUP_KEYS));
-      } catch { /* handled by hook */ }
+        const { choices, defaultBranchId } = await loadActiveBranchesForCompany(targetCompanyId);
+        if (ignore) return;
+
+        setSchemeBranchChoices(choices);
+        setSchemeForm((prev) => {
+          if (prev.ls_comp_id.trim() !== targetCompanyId) {
+            return prev;
+          }
+
+          const currentBranchId = prev.ls_branch_id.trim();
+          const hasCurrentBranch = choices.some((branch) => branch.value === currentBranchId);
+          const nextBranchId = hasCurrentBranch ? currentBranchId : defaultBranchId;
+
+          return currentBranchId === nextBranchId
+            ? prev
+            : { ...prev, ls_branch_id: nextBranchId };
+        });
+      } catch {
+        if (ignore) return;
+        setSchemeBranchChoices([]);
+        setSchemeForm((prev) => (
+          prev.ls_comp_id.trim() !== targetCompanyId || !prev.ls_branch_id
+            ? prev
+            : { ...prev, ls_branch_id: "" }
+        ));
+      }
     };
-    void loadLookups();
-  }, [
-    getCustomerGroupLookup, getCustomerLookup, getItemBrandLookup, getItemCategoryLookup,
-    getItemGroupLookup, getItemLookup, getItemSectionLookup, getUnitLookup,
-  ]);
+
+    void syncSchemeBranches();
+
+    return () => {
+      ignore = true;
+    };
+  }, [isEditorOpen, loadActiveBranchesForCompany, schemeForm.ls_comp_id]);
+
+ useEffect(() => {
+  const loadLookups = async () => {
+    const [
+      itemsPayload,
+      itemsListPayload,
+      groupsPayload,
+      categoriesPayload,
+      brandsPayload,
+      sectionsPayload,
+      unitsPayload,
+      unitsListPayload,
+      branchesPayload,
+      customersPayload,
+      customersListPayload,
+      customerGroupsPayload,
+      customerGroupsListPayload,
+    ] = await Promise.allSettled([
+      getItemLookup({ module: "items", limit: "100" }),
+      getItemsList({ limit: "100" }),
+      getItemGroupLookup({ module: "itemGroups", limit: "100" }),
+      getItemCategoryLookup({ module: "itemCategories", limit: "100" }),
+      getItemBrandLookup({ module: "itemBrands", limit: "100" }),
+      getItemSectionLookup({ module: "itemSections", limit: "100" }),
+      getUnitLookup({ module: "units", limit: "100" }),
+      getUnitsList({ limit: "100" }),
+      getBranchLookup({ module: "branches", limit: "100" }),
+      getCustomerLookup({ module: "customers", limit: "100" }),
+      getCustomersList({ limit: "1000" }),
+      getCustomerGroupLookup({ module: "customerGroups", limit: "100" }),
+      getCustomerGroupsList({ limit: "100" }),
+    ]);
+ 
+    // ── Items ────────────────────────────────────────────────────────────────
+    // Pass the RAW payload so buildLookupOptions can extract the array using
+    // its arrayKeys config. Pre-extracting with extractRows() breaks this step.
+    // Deleted-item filtering is done after extraction using the id set built
+    // from the extracted rows.
+    const buildFilteredItemChoices = (payload: unknown): ERPDynamicSelectOption[] => {
+      const rows = extractRows<ItemLookupRecord>(payload, DEFAULT_LOOKUP_ARRAY_KEYS);
+      const deletedIds = new Set(
+        rows
+          .filter(isDeletedItemLookupRow)
+          .map((row) => {
+            const idKeys = ["item_id", "itemId", "id", "_id", "value"] as const;
+            for (const key of idKeys) {
+              const v = (row as Record<string, unknown>)[key];
+              if (typeof v === "string" && v.trim()) return v.trim();
+            }
+            return "";
+          })
+          .filter(Boolean),
+      );
+      return buildLookupChoices(payload, ITEM_LOOKUP_KEYS).filter(
+        (opt) => !deletedIds.has(opt.value),
+      );
+    };
+ 
+    const masterItemChoices =
+      itemsPayload.status === "fulfilled"
+        ? buildFilteredItemChoices(itemsPayload.value)
+        : [];
+    const listItemChoices =
+      itemsListPayload.status === "fulfilled"
+        ? buildFilteredItemChoices(itemsListPayload.value)
+        : [];
+ 
+    setItemChoices(masterItemChoices.length > 0 ? masterItemChoices : listItemChoices);
+ 
+    // ── Item sub-groups (raw payload — already correct) ───────────────────
+    setItemGroupChoices(
+      groupsPayload.status === "fulfilled"
+        ? buildLookupChoices(groupsPayload.value, ITEM_GROUP_LOOKUP_KEYS)
+        : [],
+    );
+    setItemCategoryChoices(
+      categoriesPayload.status === "fulfilled"
+        ? buildLookupChoices(categoriesPayload.value, ITEM_CATEGORY_LOOKUP_KEYS)
+        : [],
+    );
+    setItemBrandChoices(
+      brandsPayload.status === "fulfilled"
+        ? buildLookupChoices(brandsPayload.value, ITEM_BRAND_LOOKUP_KEYS)
+        : [],
+    );
+    setItemSectionChoices(
+      sectionsPayload.status === "fulfilled"
+        ? buildLookupChoices(sectionsPayload.value, ITEM_SECTION_LOOKUP_KEYS)
+        : [],
+    );
+ 
+    // ── Units ─────────────────────────────────────────────────────────────
+    // Same fix: pass raw payload, not pre-extracted rows.
+    const masterUnitChoices =
+      unitsPayload.status === "fulfilled"
+        ? buildLookupChoices(unitsPayload.value, UNIT_LOOKUP_KEYS)
+        : [];
+    const listUnitChoices =
+      unitsListPayload.status === "fulfilled"
+        ? buildLookupChoices(unitsListPayload.value, UNIT_LOOKUP_KEYS)
+        : [];
+ 
+    setUnitChoices(masterUnitChoices.length > 0 ? masterUnitChoices : listUnitChoices);
+ 
+    // ── Branches ──────────────────────────────────────────────────────────
+    setBranchLookupChoices(
+      branchesPayload.status === "fulfilled"
+        ? buildLookupChoices(branchesPayload.value, BRANCH_LOOKUP_KEYS)
+        : [],
+    );
+ 
+    // ── Customers ─────────────────────────────────────────────────────────
+    // Same fix: pass raw payload.
+    const masterCustomerChoices =
+      customersPayload.status === "fulfilled"
+        ? buildLookupChoices(customersPayload.value, CUSTOMER_LOOKUP_KEYS)
+        : [];
+    const listCustomerChoices =
+      customersListPayload.status === "fulfilled"
+        ? buildLookupChoices(customersListPayload.value, CUSTOMER_LOOKUP_KEYS)
+        : [];
+ 
+    setCustomerChoices(
+      masterCustomerChoices.length > 0 ? masterCustomerChoices : listCustomerChoices,
+    );
+ 
+    // ── Customer Groups ───────────────────────────────────────────────────
+    // Same fix: pass raw payload.
+    const masterCustomerGroupChoices =
+      customerGroupsPayload.status === "fulfilled"
+        ? buildLookupChoices(customerGroupsPayload.value, CUSTOMER_GROUP_LOOKUP_KEYS)
+        : [];
+    const listCustomerGroupChoices =
+      customerGroupsListPayload.status === "fulfilled"
+        ? buildLookupChoices(customerGroupsListPayload.value, CUSTOMER_GROUP_LOOKUP_KEYS)
+        : [];
+ 
+    setCustomerGroupChoices(
+      masterCustomerGroupChoices.length > 0
+        ? masterCustomerGroupChoices
+        : listCustomerGroupChoices,
+    );
+  };
+ 
+  void loadLookups();
+}, [
+  getCustomerGroupLookup, getCustomerLookup, getItemBrandLookup, getItemCategoryLookup,
+  getBranchLookup, getItemGroupLookup, getItemLookup, getItemSectionLookup, getUnitLookup,
+  getCustomerGroupsList, getCustomersList, getItemsList, getUnitsList,
+]);
 
   useEffect(() => {
     const uniqueItemIds = Array.from(
@@ -923,7 +1369,11 @@ export default function PromotionLoyaltyPointsPage() {
   const openEditModal = async (schemeId: string, tab: EditorTab = "scheme") => {
     await loadSchemeDetail(schemeId); setActiveTab(tab); setIsEditorOpen(true);
   };
-  const closeEditorModal = () => { setIsEditorOpen(false); setActiveTab("scheme"); };
+  const closeEditorModal = () => {
+    setIsEditorOpen(false);
+    setActiveTab("scheme");
+    setShowSchemeValidation(false);
+  };
 
   // ── Save / persist ────────────────────────────────────────────────────────
   const persistDraftRows = async (schemeId: string) => {
@@ -947,7 +1397,41 @@ export default function PromotionLoyaltyPointsPage() {
   const handleSchemeSubmit = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
     setEditorSubmitError(null);
+    setShowSchemeValidation(true);
     const nextActiveTab = activeTab;
+
+    // Validate required fields
+    if (!schemeForm.ls_name.trim()) {
+      setEditorSubmitError("Scheme Name is required");
+      setActiveTab("scheme");
+      return;
+    }
+    if (!schemeForm.ls_start_date.trim()) {
+      setEditorSubmitError("Start Date is required");
+      setActiveTab("scheme");
+      return;
+    }
+    if (!isValidDateValue(schemeForm.ls_start_date)) {
+      setEditorSubmitError("Start Date must be in dd/mm/yyyy format");
+      setActiveTab("scheme");
+      return;
+    }
+    if (!schemeForm.ls_end_date.trim()) {
+      setEditorSubmitError("End Date is required");
+      setActiveTab("scheme");
+      return;
+    }
+    if (!isValidDateValue(schemeForm.ls_end_date)) {
+      setEditorSubmitError("End Date must be in dd/mm/yyyy format");
+      setActiveTab("scheme");
+      return;
+    }
+
+    const giftError = giftRows.reduce<string | null>(
+      (err, row, i) => err ?? getGiftRowValidationMessage(row, i),
+      null,
+    );
+    if (giftError) { setEditorSubmitError(giftError); setActiveTab("gifts"); return; }
 
     const partyError = partyRows.reduce<string | null>(
       (err, row, i) => err ?? getPartyRowValidationMessage(row, i),
@@ -1001,7 +1485,7 @@ export default function PromotionLoyaltyPointsPage() {
         <div className="grid gap-1">
           <strong>{r.ls_name}</strong>
           <span className="text-erp-text-subtle text-xs-compact">
-            {resolveLabel(r.ls_branch_id, branchLabelMap, "All Branches")}
+            {getSchemeBranchLabel(r, branchLabelMap)}
           </span>
         </div>
       ),
@@ -1121,7 +1605,7 @@ export default function PromotionLoyaltyPointsPage() {
                   id="loyalty-filter-company"
                   value={pageCompanyId}
                   options={companyOptions}
-                  onChange={setPageCompanyId}
+                  onChange={handlePageCompanyChange}
                   searchPlaceholder="Search company"
                 />
               </Field>
@@ -1130,14 +1614,14 @@ export default function PromotionLoyaltyPointsPage() {
                 <SearchableSelect
                   id="loyalty-filter-branch"
                   value={branchFilter}
-                  options={branchOptions}
+                  options={pageBranchOptions}
                   onChange={setBranchFilter}
                   searchPlaceholder="Search branch"
                 />
               </Field>
             </div>
             {listError ? <Alert kind="danger" title="Unable to load loyalty schemes">{listError}</Alert> : null}
-            <div className="w-full flex-1 min-h-0">
+            <div className="w-full flex-1 min-h-0 pb-4">
               <ReusableTable<LoyaltySchemePayload>
                 columns={schemeColumns}
                 rows={schemeRows}
@@ -1195,7 +1679,7 @@ export default function PromotionLoyaltyPointsPage() {
                 </div>
               </header>
 
-              <div className={dynamicFormStyles.scrollArea}>
+              <div className={`${dynamicFormStyles.scrollArea} ${dynamicFormStyles.scrollAreaHiddenScrollbar}`}>
                 <div
                   className={`${dynamicFormStyles.sectionTabs} sticky top-0 z-modal shadow-erp-tab-underline`}
                   role="tablist"
@@ -1224,10 +1708,10 @@ export default function PromotionLoyaltyPointsPage() {
                       setSchemeForm={setSchemeForm}
                       onItemTypeChange={handleSchemeItemTypeChange}
                       companyOptions={companyOptions}
-                      onCompanyChange={setPageCompanyId}
-                      branchOptions={branchOptions}
+                      onCompanyChange={handleSchemeCompanyChange}
+                      branchOptions={schemeBranchOptions}
                       detailError={detailError}
-                      onSubmit={(e) => void handleSchemeSubmit(e)}
+                      showValidationErrors={showSchemeValidation}
                     />
                   )}
                   {activeTab === "points" && (
@@ -1277,21 +1761,33 @@ export default function PromotionLoyaltyPointsPage() {
                 </div>
               </div>
 
-              <div className={`${dynamicFormStyles.footer} flex justify-between pt-3 `}>
-                {editorSubmitError ? <p className={dynamicFormStyles.submitError}>{editorSubmitError}</p> : null}
-                <Button variant="ghost" type="button" onClick={() => resetSchemeEditor(pageCompanyId, pageDefaultBranchId)}>
-                  Reset
-                </Button>
-                <Button
-                  variant="primary"
+              <footer className={dynamicFormStyles.footer}>
+                {editorSubmitError ? (
+                  <p className={dynamicFormStyles.submitError} role="alert">
+                    {editorSubmitError}
+                  </p>
+                ) : null}
+                <button
                   type="button"
+                  className={dynamicFormStyles.cancelButton}
+                  onClick={closeEditorModal}
+                  disabled={schemeSaving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={`${dynamicFormStyles.submitButton} ${
+                    schemeForm.ls_id
+                      ? dynamicFormStyles.submitButtonUpdate
+                      : dynamicFormStyles.submitButtonSave
+                  }`}
                   onClick={() => void handleSchemeSubmit()}
                   disabled={schemeSaving || !pageCompanyId.trim()}
                 >
-                  <FiSave aria-hidden="true" />
-                  {schemeSaving ? "Saving..." : schemeForm.ls_id ? "Update Scheme" : "Save Scheme"}
-                </Button>
-              </div>
+                  {schemeSaving ? "Saving..." : schemeForm.ls_id ? "Update" : "Save"}
+                </button>
+              </footer>
             </div>
           </div>,
           document.body,

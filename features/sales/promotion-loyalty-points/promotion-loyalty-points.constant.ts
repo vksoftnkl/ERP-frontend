@@ -14,11 +14,11 @@ export const SCHEME_STATUS_OPTIONS = [
   { value: "CANCELLED", label: "Cancelled" },
 ] as const;
 export const APPLY_ON_OPTIONS = [
-  { value: "BILL_AMOUNT", label: "Bill Amount" },
-  { value: "ITEM_AMOUNT", label: "Item Amount" },
-  { value: "BILL_QTY", label: "Bill Qty" },
-  { value: "ITEM_QTY", label: "Item Qty" },
-  { value: "MASTER_PV", label: "Master PV" },
+  { value: "BILL_AMOUNT", label: "Based on Bill Amount" },
+  { value: "ITEM_AMOUNT", label: "Based on Item Amount" },
+  { value: "BILL_QTY", label: "Based on Bill Qty" },
+  { value: "ITEM_QTY", label: "Based on Item Qty" },
+  { value: "MASTER_PV", label: "Based on Master PV" },
 ] as const;
 export const AMOUNT_TYPE_OPTIONS = [
   { value: "NET_AMOUNT", label: "Net Amount" },
@@ -37,11 +37,11 @@ export const CUSTOMER_TYPE_OPTIONS = [
 ] as const;
 export const ITEM_TYPE_OPTIONS = [
   { value: "ALL", label: "All Items" },
-  { value: "ITEM_GROUP", label: "Item Group" },
-  { value: "ITEM_BRAND", label: "Item Brand" },
-  { value: "ITEM_CATEGORY", label: "Item Category" },
-  { value: "ITEM_SECTION", label: "Item Section" },
-  { value: "ITEM", label: "Item" },
+  { value: "ITEM_GROUP", label: " Based on  Item Group" },
+  { value: "ITEM_BRAND", label: "Based on  Item Brand" },
+  { value: "ITEM_CATEGORY", label: "Based on  Item Category" },
+  { value: "ITEM_SECTION", label: "Based on  Item Section" },
+  { value: "ITEM", label: "Based on  Item" },
 ] as const;
 export const ROUNDING_OPTIONS = [
   { value: "FLOOR", label: "Floor" },
@@ -49,11 +49,11 @@ export const ROUNDING_OPTIONS = [
   { value: "CEIL", label: "Ceil" },
 ] as const;
 export const EXPIRY_OPTIONS = [
-  { value: "EARN_DATE", label: "Earn Date" },
-  { value: "SCHEME_END_DATE", label: "Scheme End Date" },
-  { value: "MONTH_END", label: "Month End" },
-  { value: "YEAR_END", label: "Year End" },
-  { value: "NONE", label: "None" },
+  { value: "EARN_DATE", label: "Based on  Earn Date" },
+  { value: "SCHEME_END_DATE", label: "Based on Scheme End Date" },
+  { value: "MONTH_END", label: "Based on Month End" },
+  { value: "YEAR_END", label: "Based on Year End" },
+  { value: "NONE", label: "Based on None" },
 ] as const;
 export const WEEKDAY_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "MON", label: "Monday" },
@@ -112,8 +112,13 @@ export const ITEM_SECTION_LOOKUP_KEYS: LookupConfig = {
 };
 export const UNIT_LOOKUP_KEYS: LookupConfig = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "units", "itemUnits"],
-  idKeys: ["unit_id", "unitId", "item_unit_id", "itemUnitId", "id", "_id", "value"],
-  labelKeys: ["unit_name", "unitName", "item_unit_name", "name", "label"],
+  idKeys: ["unit_id", "unitId", "item_unit_id", "itemUnitId", "uom_id", "id", "_id", "value"],
+  labelKeys: ["unit_name", "unitName", "item_unit_name", "itemUnitName", "uom_name", "name", "label"],
+};
+export const BRANCH_LOOKUP_KEYS: LookupConfig = {
+  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "branches", "branch_masters"],
+  idKeys: ["brId", "br_id", "branch_id", "branchId", "id", "_id", "value"],
+  labelKeys: ["brName", "br_name", "branch_name", "branchName", "name", "label"],
 };
 export const CUSTOMER_LOOKUP_KEYS: LookupConfig = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "customers"],

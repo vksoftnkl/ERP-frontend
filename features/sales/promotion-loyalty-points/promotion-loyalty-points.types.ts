@@ -65,6 +65,9 @@ export type LoyaltySchemePayload = {
   ls_id: string;
   ls_code: string | null;
   ls_name: string;
+  ls_branch_name?: string | null;
+  branch_name?: string | null;
+  branchName?: string | null;
   ls_type: string;
   ls_status: string;
   ls_auto_apply: boolean;

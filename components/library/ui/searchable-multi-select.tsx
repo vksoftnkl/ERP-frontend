@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -219,10 +220,15 @@ export function SearchableMultiSelect({
     [closeDropdown, filteredOptions, highlightedIndex, isOpen, toggleSelection],
   );
 
+  // Run placement calculation synchronously before paint to prevent flicker
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    updatePlacement();
+  }, [isOpen, updatePlacement]);
+
   useEffect(() => {
     if (!isOpen) return;
 
-    updatePlacement();
     const rafId = window.requestAnimationFrame(() => searchInputRef.current?.focus());
 
     const handlePointerDown = (event: MouseEvent) => {

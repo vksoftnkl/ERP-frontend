@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Input, SearchableSelect } from "@/components/library/ui";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
@@ -30,10 +30,18 @@ export function GiftsTab({
   itemOptionsForGift,
   getUnitOptionsForGiftRow,
 }: GiftsTabProps) {
+  const hasAutoAddedDefaultRowRef = useRef(false);
+
   useEffect(() => {
     if (giftRows.length === 0) {
-      addGiftRow();
+      if (!hasAutoAddedDefaultRowRef.current) {
+        hasAutoAddedDefaultRowRef.current = true;
+        addGiftRow();
+      }
+      return;
     }
+
+    hasAutoAddedDefaultRowRef.current = false;
   }, [addGiftRow, giftRows.length]);
 
   const handleItemChange = (row: EditableGiftRow, value: string) => {
@@ -50,17 +58,41 @@ export function GiftsTab({
     }
   };
 
+  const isUnitRequiredInvalid = (row: EditableGiftRow) =>
+    Boolean(row.lsg_item_id.trim() && !row.lsg_unit_id.trim());
+
+  const isQtyRequiredInvalid = (row: EditableGiftRow) => {
+    if (!row.lsg_item_id.trim()) {
+      return false;
+    }
+
+    const qtyValue = row.lsg_item_qty.trim();
+    if (!qtyValue) {
+      return true;
+    }
+
+    const qtyNumber = Number(qtyValue);
+    return !Number.isFinite(qtyNumber) || qtyNumber <= 0;
+  };
+
   const columns: ReusableTableColumn<EditableGiftRow>[] = [
+    {
+      key: "actions",
+      header: "",
+      width: "10px",
+      align: "center",
+    },
     {
       key: "serialNo",
       header: "Sl No",
       render: (row) => <div className="px-3 py-2 text-center">{row.lsg_slno}</div>,
-      width: "80px",
+      width: "10px",
       align: "center",
     },
     {
       key: "lsg_item_id",
       header: "Item",
+         width: "300px",
       render: (row) => (
         <SearchableSelect
           value={row.lsg_item_id}
@@ -72,7 +104,12 @@ export function GiftsTab({
     },
     {
       key: "lsg_unit_id",
-      header: "Unit",
+      header: (
+        <span>
+          Unit <span className="text-red-500">*</span>
+        </span>
+      ),
+         width: "220px",
       render: (row) => {
         const unitOptions = getUnitOptionsForGiftRow(row);
         return (
@@ -81,6 +118,7 @@ export function GiftsTab({
             options={unitOptions}
             onChange={(value) => updateGiftRow(row._rowKey, { lsg_unit_id: value })}
             disabled={!row.lsg_item_id.trim()}
+            invalid={isUnitRequiredInvalid(row)}
             searchPlaceholder="Search unit"
           />
         );
@@ -88,13 +126,20 @@ export function GiftsTab({
     },
     {
       key: "lsg_item_qty",
-      header: "Qty",
+      header: (
+        <span>
+          Qty <span className="text-red-500">*</span>
+        </span>
+      ),
       render: (row) => (
         <Input
-          className={dynamicFormStyles.control}
+          className={`${dynamicFormStyles.control} ${
+            isQtyRequiredInvalid(row) ? dynamicFormStyles.controlInvalid : ""
+          }`}
           type="text"
           inputMode="decimal"
           value={row.lsg_item_qty}
+          aria-invalid={isQtyRequiredInvalid(row) ? true : undefined}
           onChange={(e) => updateGiftRow(row._rowKey, { lsg_item_qty: e.target.value })}
         />
       ),
@@ -102,6 +147,7 @@ export function GiftsTab({
     {
       key: "lsg_redeem_points",
       header: "Redeem Points",
+         width: "80px",
       render: (row) => (
         <Input
           className={dynamicFormStyles.control}
@@ -177,7 +223,7 @@ export function GiftsTab({
           }}
           deleteLabel="Delete"
           fullViewHeight={false}
-          tableMaxHeight="400px"
+          tableMaxHeight="none"
           stickyHeader
         />
       </div>

@@ -4,6 +4,30 @@ import type { BadgeVariant, LookupConfig } from "./promotion-loyalty-points.loca
 
 export const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})/;
+const DISPLAY_DATE_PATTERN = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+function isValidDateParts(year: string, month: string, day: string): boolean {
+  const parsedYear = Number(year);
+  const parsedMonth = Number(month);
+  const parsedDay = Number(day);
+  if (
+    !Number.isInteger(parsedYear) ||
+    !Number.isInteger(parsedMonth) ||
+    !Number.isInteger(parsedDay) ||
+    parsedMonth < 1 ||
+    parsedMonth > 12 ||
+    parsedDay < 1 ||
+    parsedDay > 31
+  ) {
+    return false;
+  }
+  const date = new Date(Date.UTC(parsedYear, parsedMonth - 1, parsedDay));
+  return (
+    date.getUTCFullYear() === parsedYear &&
+    date.getUTCMonth() === parsedMonth - 1 &&
+    date.getUTCDate() === parsedDay
+  );
+}
 
 export function stripEmptyOptions(options: ERPDynamicSelectOption[]): ERPDynamicSelectOption[] {
   return options.filter((o) => o.value.trim().length > 0);
@@ -57,7 +81,22 @@ export function withFallbackOption(
 }
 
 export function toDateInputValue(value: string | null | undefined): string {
-  return value ? value.slice(0, 10) : "";
+  const normalized = value?.trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const isoMatch = normalized.match(ISO_DATE_PATTERN);
+  if (isoMatch && isValidDateParts(isoMatch[1], isoMatch[2], isoMatch[3])) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+
+  const displayMatch = normalized.match(DISPLAY_DATE_PATTERN);
+  if (displayMatch && isValidDateParts(displayMatch[3], displayMatch[2], displayMatch[1])) {
+    return `${displayMatch[3]}-${displayMatch[2]}-${displayMatch[1]}`;
+  }
+
+  return normalized.slice(0, 10);
 }
 
 export function toTimeInputValue(value: string | null | undefined): string {
@@ -76,6 +115,15 @@ export function formatDateForDisplay(value: string | null | undefined): string {
   }
 
   return `${day}/${month}/${year}`;
+}
+
+export function isValidDateValue(value: string | null | undefined): boolean {
+  const normalized = toDateInputValue(value);
+  const isoMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  return Boolean(
+    isoMatch && isValidDateParts(isoMatch[1], isoMatch[2], isoMatch[3]),
+  );
 }
 
 export function toNullableString(value: string): string | null {
@@ -119,8 +167,9 @@ export function resolveLabel(
   map: Map<string, string>,
   fallback = "Not set",
 ): string {
-  if (!value) return fallback;
-  return map.get(value) ?? value;
+  const normalized = value?.trim();
+  if (!normalized) return fallback;
+  return map.get(normalized) ?? normalized;
 }
 
 export function getStatusVariant(status: string): BadgeVariant {

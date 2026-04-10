@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { SearchableSelect } from "@/components/library/ui";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
@@ -38,10 +38,18 @@ export function PartyTab({
   customerLabelMap,
   customerGroupLabelMap,
 }: PartyTabProps) {
+  const hasAutoAddedDefaultRowRef = useRef(false);
+
   useEffect(() => {
     if (partyRows.length === 0) {
-      addPartyRow();
+      if (!hasAutoAddedDefaultRowRef.current) {
+        hasAutoAddedDefaultRowRef.current = true;
+        addPartyRow();
+      }
+      return;
     }
+
+    hasAutoAddedDefaultRowRef.current = false;
   }, [addPartyRow, partyRows.length]);
 
   const getEffectiveScopeType = (row: EditablePartyRow): PartyScopeType | null => {
@@ -84,10 +92,17 @@ export function PartyTab({
 
   const columns: ReusableTableColumn<EditablePartyRow>[] = [
     {
+      key: "actions",
+      header: "",
+      width: "10px",
+      align: "center",
+    },
+    {
       key: "lps_slno",
       header: "Sl No",
       render: (row) => <div className="px-3 py-2 text-center">{row.lps_slno}</div>,
-      width: "80px",
+      width: "10px",
+      align: "center",
     },
     {
       key: "lps_scope_id",
@@ -181,7 +196,7 @@ export function PartyTab({
           }}
           deleteLabel="Delete"
           fullViewHeight={false}
-          tableMaxHeight="400px"
+          tableMaxHeight="none"
         />
       </div>
     </div>

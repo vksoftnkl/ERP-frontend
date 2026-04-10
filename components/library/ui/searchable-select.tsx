@@ -5,11 +5,13 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { cx } from "@/components/library/cx";
 import type { ERPDynamicSelectOption } from "@/components/library/ui/dynamic-modal-form";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
@@ -23,12 +25,15 @@ export type SearchableSelectProps = {
   searchPlaceholder?: string;
   emptyText?: string;
   disabled?: boolean;
+  invalid?: boolean;
   className?: string;
   maxDropdownHeight?: number;
   name?: string;
 };
 
 const DEFAULT_DROPDOWN_MAX_HEIGHT = 280;
+const DROPDOWN_VIEWPORT_PADDING = 8;
+const DROPDOWN_PORTAL_Z_INDEX = 2500;
 
 function normalizeSearchValue(value: string): string {
   return value.trim().toLowerCase();
@@ -43,6 +48,7 @@ export function SearchableSelect({
   searchPlaceholder,
   emptyText = "No options found.",
   disabled = false,
+  invalid = false,
   className,
   maxDropdownHeight = DEFAULT_DROPDOWN_MAX_HEIGHT,
   name,
@@ -52,11 +58,13 @@ export function SearchableSelect({
   const listId = `${controlId}-listbox`;
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [placement, setPlacement] = useState<"down" | "up">("down");
+  const [dropdownStyle, setDropdownStyle] = useState<CSSProperties | undefined>(undefined);
 
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
@@ -94,13 +102,45 @@ export function SearchableSelect({
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
     const preferredHeight = Math.min(maxDropdownHeight, Math.max(180, filteredOptions.length * 36 + 56));
-    setPlacement(spaceBelow < preferredHeight && spaceAbove > spaceBelow ? "up" : "down");
+    const nextPlacement = spaceBelow < preferredHeight && spaceAbove > spaceBelow ? "up" : "down";
+    const availableHeight =
+      nextPlacement === "up"
+        ? spaceAbove - DROPDOWN_VIEWPORT_PADDING - 4
+        : window.innerHeight - rect.bottom - DROPDOWN_VIEWPORT_PADDING - 4;
+    const dropdownWidth = Math.min(
+      rect.width,
+      Math.max(0, window.innerWidth - DROPDOWN_VIEWPORT_PADDING * 2),
+    );
+    const dropdownLeft = Math.max(
+      DROPDOWN_VIEWPORT_PADDING,
+      Math.min(rect.left, window.innerWidth - dropdownWidth - DROPDOWN_VIEWPORT_PADDING),
+    );
+
+    setPlacement(nextPlacement);
+    setDropdownStyle({
+      position: "fixed",
+      left: `${dropdownLeft}px`,
+      right: "auto",
+      width: `${dropdownWidth}px`,
+      maxHeight: `${Math.min(maxDropdownHeight, Math.max(120, availableHeight))}px`,
+      zIndex: DROPDOWN_PORTAL_Z_INDEX,
+      ...(nextPlacement === "up"
+        ? {
+            top: "auto",
+            bottom: `${window.innerHeight - rect.top + 4}px`,
+          }
+        : {
+            top: `${rect.bottom + 4}px`,
+            bottom: "auto",
+          }),
+    });
   }, [filteredOptions.length, maxDropdownHeight]);
 
   const closeDropdown = useCallback((restoreFocus = false) => {
     setIsOpen(false);
     setQuery("");
     setHighlightedIndex(-1);
+    setDropdownStyle(undefined);
     if (restoreFocus) {
       window.requestAnimationFrame(() => triggerRef.current?.focus());
     }
@@ -174,15 +214,21 @@ export function SearchableSelect({
     }
   }, [closeDropdown, commitSelection, filteredOptions, highlightedIndex, isOpen]);
 
+  // Run position calculation synchronously before paint to prevent flicker
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    updatePlacement();
+  }, [isOpen, updatePlacement]);
+
   useEffect(() => {
     if (!isOpen) return;
 
-    updatePlacement();
     const rafId = window.requestAnimationFrame(() => searchInputRef.current?.focus());
 
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
       if (target && wrapperRef.current?.contains(target)) return;
+      if (target && dropdownRef.current?.contains(target)) return;
       closeDropdown();
     };
 
@@ -212,6 +258,83 @@ export function SearchableSelect({
     });
   }, [filteredOptions, isOpen]);
 
+  const dropdown = isOpen ? (
+    <div
+      ref={dropdownRef}
+      id={listId}
+      className={cx(
+        dynamicFormStyles.searchSelectList,
+        placement === "up" && dynamicFormStyles.searchSelectListUp,
+      )}
+      style={dropdownStyle
+        ? dropdownStyle
+        : { maxHeight: `${maxDropdownHeight}px`, visibility: "hidden" }}
+    >
+      <div className={dynamicFormStyles.searchSelectSearchWrap}>
+        <input
+          ref={searchInputRef}
+          type="text"
+          value={query}
+          placeholder={searchPlaceholder ?? "Search options"}
+          className={dynamicFormStyles.searchSelectSearchInput}
+          role="searchbox"
+          onChange={(event) => setQuery(event.currentTarget.value)}
+          onKeyDown={handleSearchKeyDown}
+          onBlur={() => {
+            window.setTimeout(() => {
+              const activeElement = document.activeElement;
+              if (activeElement instanceof Node && wrapperRef.current?.contains(activeElement)) {
+                return;
+              }
+              if (activeElement instanceof Node && dropdownRef.current?.contains(activeElement)) {
+                return;
+              }
+              closeDropdown();
+            }, 0);
+          }}
+        />
+        <span className={dynamicFormStyles.searchSelectSearchIcon} aria-hidden="true">
+          <svg viewBox="0 0 20 20">
+            <path
+              d="M8.6 3.5a5.1 5.1 0 1 1 0 10.2 5.1 5.1 0 0 1 0-10.2Zm0 1.6a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm4.7 8.7 3.2 3.2"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+      </div>
+      <ul className={dynamicFormStyles.searchSelectOptions} role="listbox">
+        {filteredOptions.length ? (
+          filteredOptions.map((option, optionIndex) => (
+            <li
+              id={`${controlId}-option-${optionIndex}`}
+              key={`${controlId}-${option.value || "__empty"}`}
+              className={cx(
+                dynamicFormStyles.searchSelectOption,
+                (optionIndex === highlightedIndex || option.value === value) &&
+                  dynamicFormStyles.searchSelectOptionActive,
+              )}
+              role="option"
+              aria-selected={option.value === value}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                commitSelection(option.value);
+              }}
+              onMouseEnter={() => setHighlightedIndex(optionIndex)}
+            >
+              {option.label}
+            </li>
+          ))
+        ) : (
+          <li className={dynamicFormStyles.searchSelectEmpty}>{emptyText}</li>
+        )}
+      </ul>
+    </div>
+  ) : null;
+
   return (
     <div
       className={cx(dynamicFormStyles.searchSelect, className)}
@@ -225,6 +348,7 @@ export function SearchableSelect({
         type="button"
         className={cx(
           dynamicFormStyles.searchSelectTrigger,
+          invalid && dynamicFormStyles.controlInvalid,
           isOpen && dynamicFormStyles.searchSelectTriggerOpen,
           disabled && dynamicFormStyles.searchSelectTriggerDisabled,
         )}
@@ -232,6 +356,7 @@ export function SearchableSelect({
         aria-expanded={isOpen}
         aria-controls={listId}
         aria-activedescendant={activeDescendantId}
+        aria-invalid={invalid ? true : undefined}
         disabled={disabled}
         onClick={() => (isOpen ? closeDropdown() : openDropdown())}
         onKeyDown={handleTriggerKeyDown}
@@ -266,76 +391,9 @@ export function SearchableSelect({
           </svg>
         </span>
       </button>
-      {isOpen ? (
-        <div
-          id={listId}
-          className={cx(
-            dynamicFormStyles.searchSelectList,
-            placement === "up" && dynamicFormStyles.searchSelectListUp,
-          )}
-          style={{ maxHeight: `${maxDropdownHeight}px` }}
-        >
-          <div className={dynamicFormStyles.searchSelectSearchWrap}>
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={query}
-              placeholder={searchPlaceholder ?? "Search options"}
-              className={dynamicFormStyles.searchSelectSearchInput}
-              role="searchbox"
-              onChange={(event) => setQuery(event.currentTarget.value)}
-              onKeyDown={handleSearchKeyDown}
-              onBlur={() => {
-                window.setTimeout(() => {
-                  const activeElement = document.activeElement;
-                  if (activeElement instanceof Node && wrapperRef.current?.contains(activeElement)) {
-                    return;
-                  }
-                  closeDropdown();
-                }, 0);
-              }}
-            />
-            <span className={dynamicFormStyles.searchSelectSearchIcon} aria-hidden="true">
-              <svg viewBox="0 0 20 20">
-                <path
-                  d="M8.6 3.5a5.1 5.1 0 1 1 0 10.2 5.1 5.1 0 0 1 0-10.2Zm0 1.6a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm4.7 8.7 3.2 3.2"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
-          </div>
-          <ul className={dynamicFormStyles.searchSelectOptions} role="listbox">
-            {filteredOptions.length ? (
-              filteredOptions.map((option, optionIndex) => (
-                <li
-                  id={`${controlId}-option-${optionIndex}`}
-                  key={`${controlId}-${option.value || "__empty"}`}
-                  className={cx(
-                    dynamicFormStyles.searchSelectOption,
-                    (optionIndex === highlightedIndex || option.value === value) &&
-                      dynamicFormStyles.searchSelectOptionActive,
-                  )}
-                  role="option"
-                  aria-selected={option.value === value}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    commitSelection(option.value);
-                  }}
-                  onMouseEnter={() => setHighlightedIndex(optionIndex)}
-                >
-                  {option.label}
-                </li>
-              ))
-            ) : (
-              <li className={dynamicFormStyles.searchSelectEmpty}>{emptyText}</li>
-            )}
-          </ul>
-        </div>
-      ) : null}
+      {dropdown && typeof document !== "undefined"
+        ? createPortal(dropdown, document.body)
+        : dropdown}
     </div>
   );
 }
