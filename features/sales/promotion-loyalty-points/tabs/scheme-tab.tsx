@@ -29,6 +29,7 @@ import {
   isValidDateValue,
   toDateInputValue,
 } from "../promotion-loyalty-points.utils";
+import { handleLinearKeyboardNav } from "./promotion-loyalty-keyboard-events";
 function parseWeekdayValues(value: string): string[] {
   return value
     .split(",")
@@ -71,6 +72,7 @@ export function SchemeTab({
   const weekdayValues = parseWeekdayValues(schemeForm.ls_valid_weekdays);
   const startDatePickerRef = useRef<HTMLInputElement | null>(null);
   const endDatePickerRef = useRef<HTMLInputElement | null>(null);
+  const formNavRef = useRef<HTMLDivElement | null>(null);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const schemeNameError =
     showValidationErrors && !schemeForm.ls_name.trim() ? "Scheme Name is required" : "";
@@ -129,42 +131,56 @@ export function SchemeTab({
           {detailError}
         </Alert>
       ) : null}
-      <div className="grid gap-2.5 form">
+      <div
+        className="grid gap-2.5 form"
+        ref={formNavRef}
+        onKeyDown={(e) => handleLinearKeyboardNav(e, formNavRef.current)}
+      >
         {/* Row 1: Scheme Name, Scheme Code, Scheme Type */}
-        <div className="grid grid-cols-3 gap-2.5">
-          <Field>
-            <Label htmlFor="scheme-name" className={dynamicFormStyles.label}>Scheme Name <span className="text-red-500">*</span></Label>
-            <Input
-              id="scheme-name"
-              className={`${dynamicFormStyles.control} ${
-                isSchemeNameInvalid ? dynamicFormStyles.controlInvalid : ""
-              }`}
-              value={schemeForm.ls_name}
-              aria-invalid={isSchemeNameInvalid ? true : undefined}
-              onChange={(e) => handleFieldChange("ls_name", e.target.value)}
-            />
-            {schemeNameError ? <FieldError>{schemeNameError}</FieldError> : null}
-          </Field>
-          <Field>
-            <Label htmlFor="scheme-code" className={dynamicFormStyles.label}>Scheme Code</Label>
-            <Input
-              id="scheme-code"
-              className={dynamicFormStyles.control}
-              value={schemeForm.ls_code}
-              onChange={(e) => setSchemeForm((p) => ({ ...p, ls_code: e.target.value }))}
-            />
-          </Field>
-          <Field>
-            <Label htmlFor="scheme-type" className={dynamicFormStyles.label}>Scheme Type</Label>
-            <SearchableSelect
-              id="scheme-type"
-              value={schemeForm.ls_type}
-              options={SCHEME_TYPE_OPTIONS}
-              onChange={(value) => setSchemeForm((p) => ({ ...p, ls_type: value }))}
-              searchPlaceholder="Search scheme type"
-            />
-          </Field>
-        </div>
+        <div className="grid grid-cols-4 gap-2.5">
+  <Field>
+    <Label htmlFor="scheme-name" className={dynamicFormStyles.label}>
+      Scheme Name <span className="text-red-500">*</span>
+    </Label>
+    <Input
+      id="scheme-name"
+      className={`${dynamicFormStyles.control} ${
+        isSchemeNameInvalid ? dynamicFormStyles.controlInvalid : ""
+      }`}
+      value={schemeForm.ls_name}
+      aria-invalid={isSchemeNameInvalid ? true : undefined}
+      onChange={(e) => handleFieldChange("ls_name", e.target.value)}
+    />
+    {schemeNameError ? <FieldError>{schemeNameError}</FieldError> : null}
+  </Field>
+
+  <Field>
+    <Label htmlFor="scheme-code" className={dynamicFormStyles.label}>
+      Scheme Code
+    </Label>
+    <Input
+      id="scheme-code"
+      className={dynamicFormStyles.control}
+      value={schemeForm.ls_code}
+      onChange={(e) => setSchemeForm((p) => ({ ...p, ls_code: e.target.value }))}
+    />
+  </Field>
+
+  <Field>
+    <Label htmlFor="scheme-type" className={dynamicFormStyles.label}>
+      Scheme Type
+    </Label>
+    <SearchableSelect
+      id="scheme-type"
+      value={schemeForm.ls_type}
+      options={SCHEME_TYPE_OPTIONS}
+      onChange={(value) => setSchemeForm((p) => ({ ...p, ls_type: value }))}
+      searchPlaceholder="Search scheme type"
+    />
+  </Field>
+
+  <div></div>
+</div>
         {/* Row 2: Start Date, End Date, Valid From Time, Valid To Time */}
         <div className="grid grid-cols-4 gap-2.5">
           <Field>
@@ -281,7 +297,7 @@ export function SchemeTab({
           </Field>
         </div>
         {/* Row 3: Valid Weekdays, Company, Branch */}
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-4 gap-2.5">
           <Field>
             <Label htmlFor="scheme-weekdays" className={dynamicFormStyles.label}>Valid Weekdays</Label>
             <SearchableMultiSelect
@@ -312,6 +328,7 @@ export function SchemeTab({
               onChange={(value) => setSchemeForm((p) => ({ ...p, ls_branch_id: value }))}
             />
           </Field>
+          <div></div>
         </div>
         {/* ── Calculation Rules ─────────────────────────────────────── */}
         <div className="grid gap-1  pt-2">

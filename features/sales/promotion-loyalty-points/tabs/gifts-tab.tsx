@@ -8,6 +8,7 @@ import type {
   DeleteDialogState,
   EditableGiftRow,
 } from "../promotion-loyalty-points.local-types";
+import { handleGridKeyboardNav } from "./promotion-loyalty-keyboard-events";
 
 type GiftsTabProps = {
   giftRows: EditableGiftRow[];
@@ -75,6 +76,15 @@ export function GiftsTab({
     return !Number.isFinite(qtyNumber) || qtyNumber <= 0;
   };
 
+  const getRowIndex = (rowKey: string) =>
+    giftRows.findIndex((entry) => entry._rowKey === rowKey);
+
+  const getColIndex = (key: "item" | "unit" | "qty" | "redeemPoints" | "repeat" | "active") =>
+    ["item", "unit", "qty", "redeemPoints", "repeat", "active"].indexOf(key);
+
+  const maxRow = Math.max(giftRows.length - 1, 0);
+  const maxCol = 5;
+
   const columns: ReusableTableColumn<EditableGiftRow>[] = [
     {
       key: "actions",
@@ -92,15 +102,34 @@ export function GiftsTab({
     {
       key: "lsg_item_id",
       header: "Item",
-         width: "300px",
-      render: (row) => (
-        <SearchableSelect
-          value={row.lsg_item_id}
-          options={itemOptionsForGift}
-          onChange={(value) => handleItemChange(row, value)}
-          searchPlaceholder="Search item"
-        />
-      ),
+      width: "300px",
+      render: (row) => {
+        const rowIndex = getRowIndex(row._rowKey);
+
+        return (
+          <div
+            data-kb-group="gifts"
+            data-kb-row={rowIndex}
+            data-kb-col={getColIndex("item")}
+            onKeyDown={(e) =>
+              handleGridKeyboardNav(e, {
+                group: "gifts",
+                row: rowIndex,
+                col: getColIndex("item"),
+                maxRow,
+                maxCol,
+              })
+            }
+          >
+            <SearchableSelect
+              value={row.lsg_item_id}
+              options={itemOptionsForGift}
+              onChange={(value) => handleItemChange(row, value)}
+              searchPlaceholder="Search item"
+            />
+          </div>
+        );
+      },
     },
     {
       key: "lsg_unit_id",
@@ -109,18 +138,35 @@ export function GiftsTab({
           Unit <span className="text-red-500">*</span>
         </span>
       ),
-         width: "220px",
+      width: "220px",
       render: (row) => {
+        const rowIndex = getRowIndex(row._rowKey);
         const unitOptions = getUnitOptionsForGiftRow(row);
+
         return (
-          <SearchableSelect
-            value={row.lsg_unit_id}
-            options={unitOptions}
-            onChange={(value) => updateGiftRow(row._rowKey, { lsg_unit_id: value })}
-            disabled={!row.lsg_item_id.trim()}
-            invalid={isUnitRequiredInvalid(row)}
-            searchPlaceholder="Search unit"
-          />
+          <div
+            data-kb-group="gifts"
+            data-kb-row={rowIndex}
+            data-kb-col={getColIndex("unit")}
+            onKeyDown={(e) =>
+              handleGridKeyboardNav(e, {
+                group: "gifts",
+                row: rowIndex,
+                col: getColIndex("unit"),
+                maxRow,
+                maxCol,
+              })
+            }
+          >
+            <SearchableSelect
+              value={row.lsg_unit_id}
+              options={unitOptions}
+              onChange={(value) => updateGiftRow(row._rowKey, { lsg_unit_id: value })}
+              disabled={!row.lsg_item_id.trim()}
+              invalid={isUnitRequiredInvalid(row)}
+              searchPlaceholder="Search unit"
+            />
+          </div>
         );
       },
     },
@@ -131,66 +177,142 @@ export function GiftsTab({
           Qty <span className="text-red-500">*</span>
         </span>
       ),
-      render: (row) => (
-        <Input
-          className={`${dynamicFormStyles.control} ${
-            isQtyRequiredInvalid(row) ? dynamicFormStyles.controlInvalid : ""
-          }`}
-          type="text"
-          inputMode="decimal"
-          value={row.lsg_item_qty}
-          aria-invalid={isQtyRequiredInvalid(row) ? true : undefined}
-          onChange={(e) => updateGiftRow(row._rowKey, { lsg_item_qty: e.target.value })}
-        />
-      ),
+      render: (row) => {
+        const rowIndex = getRowIndex(row._rowKey);
+
+        return (
+          <div
+            data-kb-group="gifts"
+            data-kb-row={rowIndex}
+            data-kb-col={getColIndex("qty")}
+            onKeyDown={(e) =>
+              handleGridKeyboardNav(e, {
+                group: "gifts",
+                row: rowIndex,
+                col: getColIndex("qty"),
+                maxRow,
+                maxCol,
+              })
+            }
+          >
+            <Input
+              className={`${dynamicFormStyles.control} ${
+                isQtyRequiredInvalid(row) ? dynamicFormStyles.controlInvalid : ""
+              }`}
+              type="text"
+              inputMode="decimal"
+              value={row.lsg_item_qty}
+              aria-invalid={isQtyRequiredInvalid(row) ? true : undefined}
+              onChange={(e) => updateGiftRow(row._rowKey, { lsg_item_qty: e.target.value })}
+            />
+          </div>
+        );
+      },
     },
     {
       key: "lsg_redeem_points",
       header: "Redeem Points",
-         width: "80px",
-      render: (row) => (
-        <Input
-          className={dynamicFormStyles.control}
-          type="text"
-          inputMode="decimal"
-          value={row.lsg_redeem_points}
-          onChange={(e) => updateGiftRow(row._rowKey, { lsg_redeem_points: e.target.value })}
-        />
-      ),
+      width: "80px",
+      render: (row) => {
+        const rowIndex = getRowIndex(row._rowKey);
+
+        return (
+          <div
+            data-kb-group="gifts"
+            data-kb-row={rowIndex}
+            data-kb-col={getColIndex("redeemPoints")}
+            onKeyDown={(e) =>
+              handleGridKeyboardNav(e, {
+                group: "gifts",
+                row: rowIndex,
+                col: getColIndex("redeemPoints"),
+                maxRow,
+                maxCol,
+              })
+            }
+          >
+            <Input
+              className={dynamicFormStyles.control}
+              type="text"
+              inputMode="decimal"
+              value={row.lsg_redeem_points}
+              onChange={(e) => updateGiftRow(row._rowKey, { lsg_redeem_points: e.target.value })}
+            />
+          </div>
+        );
+      },
     },
     {
       key: "lsg_repeat",
       header: "Repeat",
-      render: (row) => (
-        <label className="flex items-center gap-2 min-h-9 whitespace-nowrap">
-          <input
-            className={dynamicFormStyles.checkboxControl}
-            type="checkbox"
-            checked={row.lsg_repeat}
-            onChange={(e) => updateGiftRow(row._rowKey, { lsg_repeat: e.target.checked })}
-          />
-          <span className={dynamicFormStyles.checkboxLabel}>
-            {row.lsg_repeat ? "Yes" : "No"}
-          </span>
-        </label>
-      ),
+      render: (row) => {
+        const rowIndex = getRowIndex(row._rowKey);
+
+        return (
+          <div
+            data-kb-group="gifts"
+            data-kb-row={rowIndex}
+            data-kb-col={getColIndex("repeat")}
+            onKeyDown={(e) =>
+              handleGridKeyboardNav(e, {
+                group: "gifts",
+                row: rowIndex,
+                col: getColIndex("repeat"),
+                maxRow,
+                maxCol,
+              })
+            }
+          >
+            <label className="flex items-center gap-2 min-h-9 whitespace-nowrap">
+              <input
+                className={dynamicFormStyles.checkboxControl}
+                type="checkbox"
+                checked={row.lsg_repeat}
+                onChange={(e) => updateGiftRow(row._rowKey, { lsg_repeat: e.target.checked })}
+              />
+              <span className={dynamicFormStyles.checkboxLabel}>
+                {row.lsg_repeat ? "Yes" : "No"}
+              </span>
+            </label>
+          </div>
+        );
+      },
     },
     {
       key: "lsg_is_active",
       header: "Active",
-      render: (row) => (
-        <label className="flex items-center gap-2 min-h-9 whitespace-nowrap">
-          <input
-            className={dynamicFormStyles.checkboxControl}
-            type="checkbox"
-            checked={row.lsg_is_active}
-            onChange={(e) => updateGiftRow(row._rowKey, { lsg_is_active: e.target.checked })}
-          />
-          <span className={dynamicFormStyles.checkboxLabel}>
-            {row.lsg_is_active ? "Yes" : "No"}
-          </span>
-        </label>
-      ),
+      render: (row) => {
+        const rowIndex = getRowIndex(row._rowKey);
+
+        return (
+          <div
+            data-kb-group="gifts"
+            data-kb-row={rowIndex}
+            data-kb-col={getColIndex("active")}
+            onKeyDown={(e) =>
+              handleGridKeyboardNav(e, {
+                group: "gifts",
+                row: rowIndex,
+                col: getColIndex("active"),
+                maxRow,
+                maxCol,
+              })
+            }
+          >
+            <label className="flex items-center gap-2 min-h-9 whitespace-nowrap">
+              <input
+                className={dynamicFormStyles.checkboxControl}
+                type="checkbox"
+                checked={row.lsg_is_active}
+                onChange={(e) => updateGiftRow(row._rowKey, { lsg_is_active: e.target.checked })}
+              />
+              <span className={dynamicFormStyles.checkboxLabel}>
+                {row.lsg_is_active ? "Yes" : "No"}
+              </span>
+            </label>
+          </div>
+        );
+      },
     },
   ];
 
@@ -207,13 +329,12 @@ export function GiftsTab({
           rows={giftRows}
           rowKey="_rowKey"
           emptyText="No gift rows. Click Add Gift Row."
-        //   onCreate={addGiftRow}
-        //   createLabel="Add Gift Row"
           onDelete={(row) => {
             if (!row.lsg_id) {
               removeGiftRow(row._rowKey);
               return;
             }
+
             setDeleteDialog({
               kind: "gift",
               id: row.lsg_id,

@@ -10,6 +10,7 @@ import type {
   PartyScopeType,
 } from "../promotion-loyalty-points.local-types";
 import { isUuid, withFallbackOption } from "../promotion-loyalty-points.utils";
+import { handleGridKeyboardNav } from "./promotion-loyalty-keyboard-events";
 
 type PartyTabProps = {
   partyRows: EditablePartyRow[];
@@ -90,28 +91,53 @@ export function PartyTab({
     }
   };
 
+  const getRowIndex = (rowKey: string) =>
+    partyRows.findIndex((entry) => entry._rowKey === rowKey);
+
+  const getColIndex = (key: "scope" | "exclude" | "active") =>
+    ["scope", "exclude", "active"].indexOf(key);
+
+  const maxRow = Math.max(partyRows.length - 1, 0);
+  const maxCol = 2;
+
   const columns: ReusableTableColumn<EditablePartyRow>[] = [
     {
       key: "actions",
       header: "",
-      width: "10px",
+      width: "5px",
       align: "center",
     },
     {
       key: "lps_slno",
       header: "Sl No",
       render: (row) => <div className="px-3 py-2 text-center">{row.lps_slno}</div>,
-      width: "10px",
+      width: "5px",
       align: "center",
     },
     {
       key: "lps_scope_id",
       header: partyScopeColumnHeader,
       render: (row) => {
+        const rowIndex = getRowIndex(row._rowKey);
         const effectiveType = getEffectiveScopeType(row);
         const options = getScopeOptions(row);
+
         return (
-          <div className="px-3 py-2">
+          <div
+            className="px-3 py-2"
+            data-kb-group="party"
+            data-kb-row={rowIndex}
+            data-kb-col={getColIndex("scope")}
+            onKeyDown={(e) =>
+              handleGridKeyboardNav(e, {
+                group: "party",
+                row: rowIndex,
+                col: getColIndex("scope"),
+                maxRow,
+                maxCol,
+              })
+            }
+          >
             <SearchableSelect
               value={isUuid(row.lps_scope_id) ? row.lps_scope_id : ""}
               options={options}
@@ -122,46 +148,82 @@ export function PartyTab({
           </div>
         );
       },
-      width: "260px",
+      width: "700px",
     },
     {
       key: "lps_is_exclude",
       header: "Exclude",
-      render: (row) => (
-        <div className="px-3 py-2">
-          <label className="flex items-center gap-2 min-h-9 whitespace-nowrap">
-            <input
-              className={dynamicFormStyles.checkboxControl}
-              type="checkbox"
-              checked={row.lps_is_exclude}
-              onChange={(e) => updatePartyRow(row._rowKey, { lps_is_exclude: e.target.checked })}
-            />
-            <span className={dynamicFormStyles.checkboxLabel}>
-              {row.lps_is_exclude ? "Yes" : "No"}
-            </span>
-          </label>
-        </div>
-      ),
+      render: (row) => {
+        const rowIndex = getRowIndex(row._rowKey);
+
+        return (
+          <div
+            className="px-3 py-2"
+            data-kb-group="party"
+            data-kb-row={rowIndex}
+            data-kb-col={getColIndex("exclude")}
+            onKeyDown={(e) =>
+              handleGridKeyboardNav(e, {
+                group: "party",
+                row: rowIndex,
+                col: getColIndex("exclude"),
+                maxRow,
+                maxCol,
+              })
+            }
+          >
+            <label className="flex items-center gap-2 min-h-9 whitespace-nowrap">
+              <input
+                className={dynamicFormStyles.checkboxControl}
+                type="checkbox"
+                checked={row.lps_is_exclude}
+                onChange={(e) => updatePartyRow(row._rowKey, { lps_is_exclude: e.target.checked })}
+              />
+              <span className={dynamicFormStyles.checkboxLabel}>
+                {row.lps_is_exclude ? "Yes" : "No"}
+              </span>
+            </label>
+          </div>
+        );
+      },
       width: "100px",
     },
     {
       key: "lps_is_active",
       header: "Active",
-      render: (row) => (
-        <div className="px-3 py-2">
-          <label className="flex items-center gap-2 min-h-9 whitespace-nowrap">
-            <input
-              className={dynamicFormStyles.checkboxControl}
-              type="checkbox"
-              checked={row.lps_is_active}
-              onChange={(e) => updatePartyRow(row._rowKey, { lps_is_active: e.target.checked })}
-            />
-            <span className={dynamicFormStyles.checkboxLabel}>
-              {row.lps_is_active ? "Yes" : "No"}
-            </span>
-          </label>
-        </div>
-      ),
+      render: (row) => {
+        const rowIndex = getRowIndex(row._rowKey);
+
+        return (
+          <div
+            className="px-3 py-2"
+            data-kb-group="party"
+            data-kb-row={rowIndex}
+            data-kb-col={getColIndex("active")}
+            onKeyDown={(e) =>
+              handleGridKeyboardNav(e, {
+                group: "party",
+                row: rowIndex,
+                col: getColIndex("active"),
+                maxRow,
+                maxCol,
+              })
+            }
+          >
+            <label className="flex items-center gap-2 min-h-9 whitespace-nowrap">
+              <input
+                className={dynamicFormStyles.checkboxControl}
+                type="checkbox"
+                checked={row.lps_is_active}
+                onChange={(e) => updatePartyRow(row._rowKey, { lps_is_active: e.target.checked })}
+              />
+              <span className={dynamicFormStyles.checkboxLabel}>
+                {row.lps_is_active ? "Yes" : "No"}
+              </span>
+            </label>
+          </div>
+        );
+      },
       width: "100px",
     },
   ];
@@ -179,8 +241,6 @@ export function PartyTab({
           rows={partyRows}
           rowKey="_rowKey"
           emptyText={`No party rows. Click 'Add Party ${partyScopeColumnHeader}'.`}
-        //   onCreate={addPartyRow}
-        //   createLabel={`Add Party ${partyScopeColumnHeader}`}
           stickyHeader
           showPageSizeSelector
           onDelete={(row) => {
@@ -188,6 +248,7 @@ export function PartyTab({
               removePartyRow(row._rowKey);
               return;
             }
+
             setDeleteDialog({
               kind: "party",
               rowKey: row._rowKey,
