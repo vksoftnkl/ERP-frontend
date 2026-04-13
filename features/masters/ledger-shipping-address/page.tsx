@@ -287,6 +287,7 @@ export default function LedgerShippingAddressMasterPage() {
   return (
     <CrudMasterPage
       title="Ledger Shipping Address"
+      auditHistory={{ screenName: "Ledger Shipping Address" }}
       entityLabel="ledger shipping address"
       entityLabelPlural="ledger shipping addresses"
       apiEndpoints={API_ENDPOINTS}

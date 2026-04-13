@@ -492,6 +492,7 @@ export default function UnitMasterPage() {
   return (
     <CrudMasterPage
       title="Unit"
+      auditHistory={{ screenName: "Units Master" }}
       entityLabel="unit"
       entityLabelPlural="units"
       apiEndpoints={API_ENDPOINTS}

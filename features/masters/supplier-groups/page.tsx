@@ -104,6 +104,7 @@ export default function SupplierGroupsPage() {
   return (
     <CrudMasterPage
       title="Supplier Group"
+      auditHistory={{ screenName: "Supplier Group Master" }}
       entityLabel="supplier group"
       entityLabelPlural="supplier groups"
       apiEndpoints={API_ENDPOINTS}

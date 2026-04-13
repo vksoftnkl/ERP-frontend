@@ -2543,6 +2543,7 @@ export default function CustomerPage() {
     <>
       <CrudMasterPage
         title="Customer"
+        auditHistory={{ screenName: "Customer Master" }}
         entityLabel="customer"
         entityLabelPlural="customers"
         apiEndpoints={API_ENDPOINTS}

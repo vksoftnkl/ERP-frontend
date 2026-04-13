@@ -453,6 +453,7 @@ export default function TaxMasterPage() {
   return (
     <CrudMasterPage
       title="Tax"
+      auditHistory={{ screenName: "Item Tax Master" }}
       entityLabel="tax"
       entityLabelPlural="taxes"
       apiEndpoints={API_ENDPOINTS}

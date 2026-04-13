@@ -85,6 +85,7 @@ const STATE_FORM_FIELDS: ERPDynamicModalField[] = [
 ];
 export const stateModule = defineMasterModule({
   title: "State",
+  auditHistory: { screenName: "State Master" },
   entityLabel: "state",
   entityLabelPlural: "states",
   apiEndpoints: API_ENDPOINTS,

@@ -97,6 +97,7 @@ export default function EmployeeDesignationMasterPage() {
   return (
     <CrudMasterPage
       title="Designation"
+      auditHistory={{ screenName: "Employee Designation Master" }}
       entityLabel=" designation"
       entityLabelPlural="designations"
       apiEndpoints={API_ENDPOINTS}

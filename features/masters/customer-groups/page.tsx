@@ -208,6 +208,7 @@ export default function CustomerGroupsPage() {
   return (
     <CrudMasterPage
       title="Customer Group"
+      auditHistory={{ screenName: "Customer Group Master" }}
       entityLabel="customer group"
       entityLabelPlural="customer groups"
       apiEndpoints={API_ENDPOINTS}

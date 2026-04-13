@@ -265,6 +265,7 @@ export default function CityMasterPage() {
   return (
     <CrudMasterPage
       title="City"
+      auditHistory={{ screenName: "City Master" }}
       entityLabel="city"
       entityLabelPlural="cities"
       apiEndpoints={API_ENDPOINTS}

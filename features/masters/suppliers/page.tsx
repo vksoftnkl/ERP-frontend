@@ -578,6 +578,7 @@ export default function SuppliersMasterPage() {
     <>
       <CrudMasterPage
         title="Supplier"
+        auditHistory={{ screenName: "Supplier Master" }}
         entityLabel="supplier"
         entityLabelPlural="suppliers"
         apiEndpoints={API_ENDPOINTS}

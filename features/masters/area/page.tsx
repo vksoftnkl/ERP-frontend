@@ -699,6 +699,7 @@ export default function AreaMasterPage() {
     <>
       <CrudMasterPage
         title="Area"
+        auditHistory={{ screenName: "Area Master" }}
         entityLabel="area"
         entityLabelPlural="areas"
         apiEndpoints={API_ENDPOINTS}

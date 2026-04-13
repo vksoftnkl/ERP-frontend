@@ -14,6 +14,7 @@ import {
   FiCopy,
   FiEdit,
   FiEye,
+  FiFileText,
   FiMoreVertical,
   FiPlus,
   FiSearch,
@@ -68,16 +69,19 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   onEdit?: RowActionHandler<T>;
   onDuplicate?: RowActionHandler<T>;
   onDelete?: RowActionHandler<T>;
+  onLogs?: RowActionHandler<T>;
   isViewDisabled?: RowActionDisabledResolver<T>;
   isUpdateDisabled?: RowActionDisabledResolver<T>;
   isEditDisabled?: RowActionDisabledResolver<T>;
   isDuplicateDisabled?: RowActionDisabledResolver<T>;
   isDeleteDisabled?: RowActionDisabledResolver<T>;
+  isLogsDisabled?: RowActionDisabledResolver<T>;
   viewLabel?: string;
   updateLabel?: string;
   editLabel?: string;
   duplicateLabel?: string;
   deleteLabel?: string;
+  logsLabel?: string;
   showActionsColumn?: boolean;
   actionsHeader?: ReactNode;
   actionsColumnWidth?: string;
@@ -113,7 +117,7 @@ function cx(...tokens: Array<string | undefined | false>): string {
 }
 
 const ACTION_MENU_ESTIMATED_WIDTH = 190;
-const ACTION_MENU_ESTIMATED_HEIGHT = 220;
+const ACTION_MENU_ESTIMATED_HEIGHT = 260;
 const DEFAULT_TABLE_MAX_HEIGHT = "calc(100dvh - 250px)";
 const SERIAL_NUMBER_COLUMN_WIDTH = "84px";
 const DEFAULT_ACTION_MENU_PLACEMENT: ActionMenuPlacement = {
@@ -204,7 +208,11 @@ function buildPageList(totalPages: number, currentPage: number): Array<number | 
   }
   return pages;
 }
-function ActionIcon({ type }: { type: "view" | "update" | "duplicate" | "delete" }): ReactNode {
+function ActionIcon({
+  type,
+}: {
+  type: "view" | "update" | "duplicate" | "delete" | "logs";
+}): ReactNode {
   if (type === "view") {
     return <FiEye className={styles.actionIcon} aria-hidden="true" />;
   }
@@ -213,6 +221,9 @@ function ActionIcon({ type }: { type: "view" | "update" | "duplicate" | "delete"
   }
   if (type === "duplicate") {
     return <FiCopy className={styles.actionIcon} aria-hidden="true" />;
+  }
+  if (type === "logs") {
+    return <FiFileText className={styles.actionIcon} aria-hidden="true" />;
   }
   return <FiTrash2 className={styles.actionIcon} aria-hidden="true" />;
 }
@@ -399,16 +410,19 @@ export function ReusableTable<T extends Record<string, unknown>>({
   onEdit,
   onDuplicate,
   onDelete,
+  onLogs,
   isViewDisabled,
   isUpdateDisabled,
   isEditDisabled,
   isDuplicateDisabled,
   isDeleteDisabled,
+  isLogsDisabled,
   viewLabel = "View Details",
   updateLabel,
   editLabel,
   duplicateLabel = "Duplicate",
   deleteLabel = "Delete",
+  logsLabel = "Logs",
   showActionsColumn,
   actionsHeader = "Actions",
   actionsColumnWidth = "160px",
@@ -454,7 +468,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const resolvedOnUpdate = onUpdate ?? onEdit;
   const resolvedIsUpdateDisabled = isUpdateDisabled ?? isEditDisabled;
   const resolvedUpdateLabel = updateLabel ?? editLabel ?? "Edit";
-  const hasRowActions = Boolean(onView || resolvedOnUpdate || onDuplicate || onDelete);
+  const hasRowActions = Boolean(onView || resolvedOnUpdate || onDuplicate || onDelete || onLogs);
   const hasActionsColumn = columns.some((column) => isActionsColumn(column));
   const shouldRenderInlineActionMenu =
     hasRowActions && !hasActionsColumn && showActionsColumn !== true;
@@ -762,6 +776,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
     updateDisabled: boolean,
     duplicateDisabled: boolean,
     deleteDisabled: boolean,
+    logsDisabled: boolean,
   ): ReactNode => (
     <div className={styles.actionsMenuRoot} data-erp-actions-root="true">
       <button
@@ -819,6 +834,18 @@ export function ReusableTable<T extends Record<string, unknown>>({
             >
               <ActionIcon type="view" />
               <span>{viewLabel}</span>
+            </button>
+          ) : null}
+          {onLogs ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.actionsDropdownItem}
+              onClick={(event) => handleActionClick(event, onLogs, row, rowIndex)}
+              disabled={logsDisabled}
+            >
+              <ActionIcon type="logs" />
+              <span>{logsLabel}</span>
             </button>
           ) : null}
           {onDelete ? (
@@ -1000,6 +1027,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
                       const duplicateDisabled =
                         !onDuplicate || isDuplicateDisabled?.(row, rowIndex) === true;
                       const deleteDisabled = !onDelete || isDeleteDisabled?.(row, rowIndex) === true;
+                      const logsDisabled = !onLogs || isLogsDisabled?.(row, rowIndex) === true;
                       const resolvedCellStyle =
                         typeof column.cellStyle === "function"
                           ? column.cellStyle(row, rowIndex)
@@ -1041,6 +1069,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
                                   updateDisabled,
                                   duplicateDisabled,
                                   deleteDisabled,
+                                  logsDisabled,
                                 )}
                               </div>
                             ) : (
@@ -1059,6 +1088,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
                                     updateDisabled,
                                     duplicateDisabled,
                                     deleteDisabled,
+                                    logsDisabled,
                                   )}
                                   <div className={styles.leadingActionsValue}>
                                     {getCellContent(row, column, rowIndex)}

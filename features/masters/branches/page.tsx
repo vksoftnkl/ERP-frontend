@@ -726,6 +726,7 @@ export default function BranchesMasterPage() {
   return (
     <CrudMasterPage
       title="Branch"
+      auditHistory={{ screenName: "Branch Master" }}
       entityLabel="branch"
       entityLabelPlural="branches"
       apiEndpoints={API_ENDPOINTS}

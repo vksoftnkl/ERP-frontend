@@ -465,6 +465,7 @@ export default function TenderMasterPage() {
   return (
     <CrudMasterPage
       title="Tender"
+      auditHistory={{ screenName: "Tender Master" }}
       entityLabel="tender"
       entityLabelPlural="tenders"
       apiEndpoints={API_ENDPOINTS}

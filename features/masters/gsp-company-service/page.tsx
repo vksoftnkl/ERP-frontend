@@ -249,6 +249,7 @@ export default function GspCompanyServiceMasterPage() {
   return (
     <CrudMasterPage
       title="GSP Company Service"
+      auditHistory={{ screenName: "GSP Company Service" }}
       entityLabel="gsp company service"
       entityLabelPlural="gsp company services"
       apiEndpoints={API_ENDPOINTS}

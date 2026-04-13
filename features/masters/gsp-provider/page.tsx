@@ -144,6 +144,7 @@ export default function GspProviderMasterPage() {
   return (
     <CrudMasterPage
       title="GSP Provider"
+      auditHistory={{ screenName: "GSP Provider Master" }}
       entityLabel="gsp provider"
       entityLabelPlural="gsp providers"
       apiEndpoints={API_ENDPOINTS}

@@ -1,8 +1,13 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
+import {
+  buildRecordHistoryHref,
+  buildRecordHistoryReturnTo,
+} from "@/features/masters/audit-logs/record-history-route";
 import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
@@ -846,6 +851,9 @@ function useItemBrandData() {
   };
 }
 export default function ItemBrandMasterPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const { getAll: getGridDetailById } = useApi<unknown>(GRID_DETAIL_GET_ENDPOINT);
@@ -1252,6 +1260,23 @@ export default function ItemBrandMasterPage() {
     },
     [handleDeleteRow],
   );
+  const handleRowLogs = useCallback(
+    (row: ItemBrandTableRow) => {
+      const href = buildRecordHistoryHref({
+        screenName: "Item Brand Master",
+        recordPk: row.__recordId,
+        displayName: row.brandName || row.brandCode || row.brandId,
+        returnTo: buildRecordHistoryReturnTo(pathname, searchParams),
+      });
+
+      if (!href) {
+        return;
+      }
+
+      router.push(href);
+    },
+    [pathname, router, searchParams],
+  );
   const handleSearchChange = useCallback(
     (query: string) => {
       setCurrentPage(DEFAULT_PAGE);
@@ -1328,11 +1353,13 @@ export default function ItemBrandMasterPage() {
               onView={handleRowView}
               onUpdate={handleRowUpdate}
               onDelete={handleRowDelete}
+              onLogs={handleRowLogs}
               isViewDisabled={() => saveLoading || detailsLoading}
               isUpdateDisabled={() => saveLoading || detailsLoading}
               isDeleteDisabled={() =>
                 deleteLoading || saveLoading || detailsLoading
               }
+              isLogsDisabled={(row) => `${row.__recordId}`.trim().length === 0}
               actionsAsIcons
               updateLabel="Update"
               deleteLabel={deleteLoading ? "Deleting..." : "Delete"}

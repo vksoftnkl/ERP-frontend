@@ -9,8 +9,14 @@ import {
   useRef,
   useState,
 } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
+import {
+  buildRecordHistoryHref,
+  buildRecordHistoryReturnTo,
+  resolveRecordHistoryDisplayName,
+} from "@/features/masters/audit-logs/record-history-route";
 import { useApi } from "@/hooks/useApi";
 import { useMasterCrud } from "@/features/masters/shared";
 import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
@@ -256,6 +262,12 @@ type CrudMasterListResponseStyleColumn = {
   fallbackHeader?: string;
 };
 
+export type CrudMasterAuditHistoryConfig = {
+  screenName: string;
+  getRecordId?: (row: MasterTableRow) => string | number | null;
+  getDisplayName?: (row: MasterTableRow) => string | null;
+};
+
 export type CrudMasterPageProps = {
   title: string;
   entityLabel: string;
@@ -290,6 +302,7 @@ export type CrudMasterPageProps = {
   modalHideFieldErrorText?: boolean;
   modalFocusFirstInvalidFieldOnValidationError?: boolean;
   modalEnableArrowKeyFieldNavigation?: boolean;
+  auditHistory?: CrudMasterAuditHistoryConfig;
   gridDetailId?: number;
   gridTableName?: string;
   gridTableNameAliases?: readonly string[];
@@ -696,6 +709,38 @@ function resolveRecordId(
   }
 
   return row.__recordId;
+}
+
+function resolveAuditHistoryRecordId(row: MasterTableRow): string | number | null {
+  if (typeof row.__recordId === "string" || typeof row.__recordId === "number") {
+    return row.__recordId;
+  }
+
+  return null;
+}
+
+function resolveAuditHistoryDisplayName(row: MasterTableRow): string | null {
+  if (row.__source) {
+    return resolveRecordHistoryDisplayName(
+      row.masterName,
+      row.masterCode,
+      row.masterAlias,
+      row.masterShort,
+      row.masterId,
+      row.__source.name,
+      row.__source.title,
+      row.__source.label,
+      row.__source.code,
+    );
+  }
+
+  return resolveRecordHistoryDisplayName(
+    row.masterName,
+    row.masterCode,
+    row.masterAlias,
+    row.masterShort,
+    row.masterId,
+  );
 }
 
 function toSafePageNumber(value: number): number {
@@ -1437,6 +1482,7 @@ export default function CrudMasterPage({
   modalHideFieldErrorText,
   modalFocusFirstInvalidFieldOnValidationError,
   modalEnableArrowKeyFieldNavigation,
+  auditHistory,
   gridDetailId,
   gridTableName,
   gridTableNameAliases,
@@ -1450,6 +1496,9 @@ export default function CrudMasterPage({
   afterSubmitSuccess,
   afterDeleteSuccess,
 }: CrudMasterPageProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
 
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
@@ -2148,6 +2197,10 @@ export default function CrudMasterPage({
     ],
     [effectiveTitle, entityLabel, fields, saveLoading, viewFields],
   );
+  const auditHistoryReturnTo = useMemo(
+    () => buildRecordHistoryReturnTo(pathname, searchParams),
+    [pathname, searchParams],
+  );
 
   const handleRowUpdate = useCallback(
     (row: MasterTableRow) => {
@@ -2170,6 +2223,31 @@ export default function CrudMasterPage({
       handleDeleteRow(row);
     },
     [handleDeleteRow],
+  );
+
+  const handleRowLogs = useCallback(
+    (row: MasterTableRow) => {
+      if (!auditHistory) {
+        return;
+      }
+
+      const recordId =
+        auditHistory.getRecordId?.(row) ?? resolveAuditHistoryRecordId(row);
+      const href = buildRecordHistoryHref({
+        screenName: auditHistory.screenName,
+        recordPk: recordId,
+        displayName:
+          auditHistory.getDisplayName?.(row) ?? resolveAuditHistoryDisplayName(row),
+        returnTo: auditHistoryReturnTo,
+      });
+
+      if (!href) {
+        return;
+      }
+
+      router.push(href);
+    },
+    [auditHistory, auditHistoryReturnTo, router],
   );
 
   const handleSearchChange = useCallback((query: string) => {
@@ -2251,11 +2329,21 @@ export default function CrudMasterPage({
               onView={handleRowView}
               onUpdate={handleRowUpdate}
               onDelete={handleRowDelete}
+              onLogs={auditHistory ? handleRowLogs : undefined}
               isViewDisabled={() => saveLoading || detailsLoading}
               isUpdateDisabled={() => saveLoading || detailsLoading}
               isDeleteDisabled={() =>
                 deleteLoading || saveLoading || detailsLoading
               }
+              isLogsDisabled={(row) => {
+                if (!auditHistory) {
+                  return true;
+                }
+
+                const recordId =
+                  auditHistory.getRecordId?.(row) ?? resolveAuditHistoryRecordId(row);
+                return recordId === null || recordId === undefined || `${recordId}`.trim().length === 0;
+              }}
               actionsAsIcons
               updateLabel="Update"
               deleteLabel={deleteLoading ? "Deleting..." : "Delete"}

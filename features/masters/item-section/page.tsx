@@ -379,6 +379,7 @@ export default function ItemSectionMasterPage() {
   return (
     <CrudMasterPage
       title="Item Section"
+      auditHistory={{ screenName: "Item Section Master" }}
       entityLabel="item section"
       entityLabelPlural="item sections"
       apiEndpoints={API_ENDPOINTS}

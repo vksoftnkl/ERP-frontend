@@ -534,6 +534,7 @@ export default function GodownMasterPage() {
   return (
     <CrudMasterPage
       title="Godown Location"
+      auditHistory={{ screenName: "Godown Location Master" }}
       entityLabel="godown location"
       entityLabelPlural="godown locations"
       apiEndpoints={API_ENDPOINTS}

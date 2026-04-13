@@ -1003,6 +1003,7 @@ export function useCompaniesModule() {
     () =>
       defineMasterModule({
         title: "Company",
+        auditHistory: { screenName: "Company Master" },
         entityLabel: "company",
         entityLabelPlural: "companies",
         apiEndpoints: API_ENDPOINTS,
