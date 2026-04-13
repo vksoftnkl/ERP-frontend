@@ -253,6 +253,12 @@ type AuditDiffRow = {
   from: unknown;
   to: unknown;
 };
+type AuditComparisonRow = {
+  field: string;
+  original: unknown;
+  modified: unknown;
+  diff: AuditDiffRow | null;
+};
 function getAuditSummaryField(value: unknown): AuditSummaryField | null {
   const normalizedValue = normalizeStructuredValue(value);
   if (!isRecord(normalizedValue)) {
@@ -306,6 +312,66 @@ function flattenAuditDiff(value: unknown, path = ""): AuditDiffRow[] {
     return [];
   }
   return [{ field: path, from: null, to: normalizedValue }];
+}
+function flattenAuditRecord(value: unknown, path = ""): Array<{ field: string; value: unknown }> {
+  const normalizedValue = normalizeStructuredValue(value);
+  if (normalizedValue === null || normalizedValue === undefined) {
+    return path ? [{ field: path, value: null }] : [];
+  }
+  if (Array.isArray(normalizedValue)) {
+    if (normalizedValue.length === 0) {
+      return path ? [{ field: path, value: [] }] : [];
+    }
+    return normalizedValue.flatMap((item, index) =>
+      flattenAuditRecord(item, path ? `${path} / Item ${index + 1}` : `Item ${index + 1}`),
+    );
+  }
+  if (isRecord(normalizedValue)) {
+    const entries = Object.entries(normalizedValue);
+    if (entries.length === 0) {
+      return path ? [{ field: path, value: {} }] : [];
+    }
+    return entries.flatMap(([key, entryValue]) =>
+      flattenAuditRecord(
+        entryValue,
+        path ? `${path} / ${formatAuditFieldLabel(key)}` : formatAuditFieldLabel(key),
+      ),
+    );
+  }
+  return [{ field: path || "Value", value: normalizedValue }];
+}
+function buildAuditComparisonRows(
+  originalRecord: unknown,
+  modifiedRecord: unknown,
+  changedFields: unknown,
+): AuditComparisonRow[] {
+  const originalEntries = flattenAuditRecord(originalRecord);
+  const modifiedEntries = flattenAuditRecord(modifiedRecord);
+  const diffRows = flattenAuditDiff(changedFields);
+  const originalMap = new Map(originalEntries.map((entry) => [entry.field, entry.value]));
+  const modifiedMap = new Map(modifiedEntries.map((entry) => [entry.field, entry.value]));
+  const diffMap = new Map(diffRows.map((entry) => [entry.field, entry]));
+  const orderedFields: string[] = [];
+  const seenFields = new Set<string>();
+
+  for (const field of [
+    ...diffRows.map((entry) => entry.field),
+    ...originalEntries.map((entry) => entry.field),
+    ...modifiedEntries.map((entry) => entry.field),
+  ]) {
+    if (seenFields.has(field)) {
+      continue;
+    }
+    seenFields.add(field);
+    orderedFields.push(field);
+  }
+
+  return orderedFields.map((field) => ({
+    field,
+    original: originalMap.has(field) ? originalMap.get(field) : null,
+    modified: modifiedMap.has(field) ? modifiedMap.get(field) : null,
+    diff: diffMap.get(field) ?? null,
+  }));
 }
 function truncateValue(value: string | null | undefined, maxLength = 42): string {
   const normalized = value?.trim();
@@ -426,7 +492,6 @@ const META_LABEL_CLASS =
   "m-0 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500";
 const META_VALUE_CLASS =
   "m-0 break-words text-sm leading-6 font-semibold text-slate-800";
-const JSON_CARD_CLASS = "grid gap-3 rounded-[14px] border border-slate-200 bg-white p-3.5";
 const JSON_TITLE_CLASS = "m-0 text-[15px] font-bold text-slate-800";
 const JSON_SUBTITLE_CLASS = "mt-1 text-xs text-slate-500";
 const JSON_COUNT_CLASS =
@@ -447,6 +512,17 @@ const JSON_ARRAY_ITEM_CLASS =
 const JSON_DIFF_ROW_CLASS =
   "grid gap-3 rounded-[12px] border border-slate-200 bg-slate-50 p-3.5";
 const JSON_DIFF_VALUES_CLASS = "grid gap-2 sm:grid-cols-2";
+const DETAIL_JSON_TABLE_SHELL_CLASS = "overflow-hidden rounded-[14px] border border-slate-200 bg-white";
+const DETAIL_JSON_TABLE_HEADER_CLASS =
+  "sticky top-0 z-[2] border-b border-r border-slate-100 bg-slate-50 px-4 py-3 text-left align-top shadow-[0_1px_0_0_rgba(241,245,249,1)] last:border-r-0";
+const DETAIL_JSON_TABLE_CELL_CLASS =
+  "border-r border-slate-100 px-4 py-4 align-top last:border-r-0";
+const DETAIL_JSON_TABLE_ROW_CLASS = "border-b border-slate-100 last:border-b-0";
+const DETAIL_JSON_TABLE_FIELD_CLASS = "min-w-[220px]";
+const DETAIL_JSON_TABLE_VALUE_CLASS = "min-w-[240px]";
+const DETAIL_JSON_TABLE_CHANGE_CLASS = "min-w-[180px]";
+const DETAIL_JSON_BADGE_CLASS =
+  "inline-flex min-h-6 items-center rounded-full border px-2.5 text-[11px] font-bold";
 function renderStructuredAuditValue(value: unknown, path = "root"): ReactNode {
   const normalizedValue = normalizeStructuredValue(value);
   if (normalizedValue === null || normalizedValue === undefined) {
@@ -559,6 +635,20 @@ function AuditDiffContent({
     </div>
   );
 }
+function renderAuditTableValue(value: unknown, key: string): ReactNode {
+  const normalizedValue = normalizeStructuredValue(value);
+  if (normalizedValue === null || normalizedValue === undefined) {
+    return <span className="text-sm font-medium text-slate-400">-</span>;
+  }
+  if (!Array.isArray(normalizedValue) && !isRecord(normalizedValue)) {
+    return (
+      <span className="block whitespace-pre-wrap break-words text-sm leading-6 font-semibold text-slate-800">
+        {formatAuditPrimitiveValue(normalizedValue)}
+      </span>
+    );
+  }
+  return <div className="max-w-full">{renderStructuredAuditValue(normalizedValue, key)}</div>;
+}
 function getActionBadgeClass(value: string): string {
   const variant = resolveActionVariant(value);
   return cx(
@@ -607,6 +697,17 @@ export default function AuditLogsPage() {
   const pageStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const pageEnd = totalItems === 0 ? 0 : Math.min(pageStart + logs.length - 1, totalItems);
   const selectedLogChangeCount = countChangedFields(selectedLog?.log_changed_fields);
+  const selectedLogComparisonRows = useMemo(
+    () =>
+      selectedLog
+        ? buildAuditComparisonRows(
+            selectedLog.log_original_record,
+            selectedLog.log_modified_record,
+            selectedLog.log_changed_fields,
+          )
+        : [],
+    [selectedLog],
+  );
   const fetchAuditLogs = useCallback(async () => {
     try {
       const response = await listAuditLogs(buildAuditLogQuery(appliedFilters, currentPage, pageSize));
@@ -1157,60 +1258,104 @@ export default function AuditLogsPage() {
                   <p className={META_VALUE_CLASS}>{selectedLog.log_notes ?? "-"}</p>
                 </div>
               </section>
-              <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <article className={JSON_CARD_CLASS}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className={JSON_TITLE_CLASS}>Changed fields</h3>
-                      <p className={JSON_SUBTITLE_CLASS}>Computed diff recorded for this action.</p>
-                    </div>
-                    <span className={JSON_COUNT_CLASS}>
-                      {selectedLogChangeCount === 0
-                        ? "No diff"
-                        : `${selectedLogChangeCount} field${selectedLogChangeCount === 1 ? "" : "s"}`}
-                    </span>
-                  </div>
-                  {selectedLog.log_changed_fields === null || selectedLog.log_changed_fields === undefined ? (
-                    <p className={JSON_EMPTY_CLASS}>{getJsonEmptyState("Changed fields")}</p>
-                  ) : (
-                    <AuditDiffContent
-                      value={selectedLog.log_changed_fields}
-                      emptyLabel={getJsonEmptyState("Changed fields")}
-                    />
-                  )}
-                </article>
-                <article className={JSON_CARD_CLASS}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className={JSON_TITLE_CLASS}>Original record</h3>
-                      <p className={JSON_SUBTITLE_CLASS}>State captured before the action.</p>
-                    </div>
-                  </div>
-                  {selectedLog.log_original_record === null || selectedLog.log_original_record === undefined ? (
-                    <p className={JSON_EMPTY_CLASS}>{getJsonEmptyState("Original record")}</p>
-                  ) : (
-                    <AuditRecordContent
-                      value={selectedLog.log_original_record}
-                      emptyLabel={getJsonEmptyState("Original record")}
-                    />
-                  )}
-                </article>
-                <article className={JSON_CARD_CLASS}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className={JSON_TITLE_CLASS}>Modified record</h3>
-                      <p className={JSON_SUBTITLE_CLASS}>State captured after the action.</p>
-                    </div>
-                  </div>
-                  {selectedLog.log_modified_record === null || selectedLog.log_modified_record === undefined ? (
-                    <p className={JSON_EMPTY_CLASS}>{getJsonEmptyState("Modified record")}</p>
-                  ) : (
-                    <AuditRecordContent
-                      value={selectedLog.log_modified_record}
-                      emptyLabel={getJsonEmptyState("Modified record")}
-                    />
-                  )}
-                </article>
+              <section className={DETAIL_JSON_TABLE_SHELL_CLASS}>
+                <div className="max-h-[min(58vh,680px)] overflow-auto [scrollbar-gutter:stable_both-edges]">
+                  <table className="w-full min-w-[1180px] border-separate border-spacing-0">
+                    <thead>
+                      <tr>
+                        <th className={cx(DETAIL_JSON_TABLE_HEADER_CLASS, DETAIL_JSON_TABLE_FIELD_CLASS)}>
+                          <div>
+                            <h3 className={JSON_TITLE_CLASS}>Field</h3>
+                          </div>
+                        </th>
+                        <th className={cx(DETAIL_JSON_TABLE_HEADER_CLASS, DETAIL_JSON_TABLE_CHANGE_CLASS)}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h3 className={JSON_TITLE_CLASS}>Changed fields</h3>
+                            </div>
+                            <span className={JSON_COUNT_CLASS}>
+                              {selectedLogChangeCount === 0
+                                ? "No diff"
+                                : `${selectedLogChangeCount} field${selectedLogChangeCount === 1 ? "" : "s"}`}
+                            </span>
+                          </div>
+                        </th>
+                        <th className={cx(DETAIL_JSON_TABLE_HEADER_CLASS, DETAIL_JSON_TABLE_VALUE_CLASS)}>
+                          <div>
+                            <h3 className={JSON_TITLE_CLASS}>Original record</h3>
+                          </div>
+                        </th>
+                        <th className={cx(DETAIL_JSON_TABLE_HEADER_CLASS, DETAIL_JSON_TABLE_VALUE_CLASS)}>
+                          <div>
+                            <h3 className={JSON_TITLE_CLASS}>Modified record</h3>
+                          </div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedLogComparisonRows.length === 0 ? (
+                        <tr>
+                          <td className="px-4 py-5 text-sm text-slate-500" colSpan={4}>
+                            No audit record data was captured for this entry.
+                          </td>
+                        </tr>
+                      ) : (
+                        selectedLogComparisonRows.map((row, index) => (
+                          <tr
+                            className={cx(
+                              DETAIL_JSON_TABLE_ROW_CLASS,
+                              row.diff ? "bg-amber-50/30" : "bg-white",
+                            )}
+                            key={`${row.field}-${index + 1}`}
+                          >
+                            <td className={cx(DETAIL_JSON_TABLE_CELL_CLASS, DETAIL_JSON_TABLE_FIELD_CLASS)}>
+                              <p className="m-0 text-sm leading-6 font-semibold text-slate-900">{row.field}</p>
+                            </td>
+                            <td className={cx(DETAIL_JSON_TABLE_CELL_CLASS, DETAIL_JSON_TABLE_CHANGE_CLASS)}>
+                              {row.diff ? (
+                                <div className="grid gap-2">
+                                  <span
+                                    className={cx(
+                                      DETAIL_JSON_BADGE_CLASS,
+                                      "w-fit border-amber-200 bg-amber-50 text-amber-700",
+                                    )}
+                                  >
+                                    Changed
+                                  </span>
+                                  <div className="grid gap-2 text-xs text-slate-600">
+                                    <div className="rounded-[10px] border border-slate-200 bg-white px-3 py-2">
+                                      <p className={JSON_FIELD_KEY_CLASS}>From</p>
+                                      {renderAuditTableValue(row.diff.from, `diff-from-${index + 1}`)}
+                                    </div>
+                                    <div className="rounded-[10px] border border-slate-200 bg-white px-3 py-2">
+                                      <p className={JSON_FIELD_KEY_CLASS}>To</p>
+                                      {renderAuditTableValue(row.diff.to, `diff-to-${index + 1}`)}
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span
+                                  className={cx(
+                                    DETAIL_JSON_BADGE_CLASS,
+                                    "border-slate-200 bg-slate-50 text-slate-500",
+                                  )}
+                                >
+                                  No diff
+                                </span>
+                              )}
+                            </td>
+                            <td className={cx(DETAIL_JSON_TABLE_CELL_CLASS, DETAIL_JSON_TABLE_VALUE_CLASS)}>
+                              {renderAuditTableValue(row.original, `original-${index + 1}`)}
+                            </td>
+                            <td className={cx(DETAIL_JSON_TABLE_CELL_CLASS, DETAIL_JSON_TABLE_VALUE_CLASS)}>
+                              {renderAuditTableValue(row.modified, `modified-${index + 1}`)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </section>
             </div>
           </section>
