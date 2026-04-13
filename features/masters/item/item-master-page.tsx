@@ -5137,6 +5137,7 @@ export default function ItemMasterPageContent() {
       title="Item"
       entityLabel="item"
       entityLabelPlural="items"
+      auditHistory={{ screenName: "Item Master" }}
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
       lookupKeys={LOOKUP_KEYS}
