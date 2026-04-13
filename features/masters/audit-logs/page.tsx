@@ -929,9 +929,9 @@ export default function AuditLogsPage() {
                     <th className={TABLE_HEADER_CELL_CLASS}>
                       Table <span className="ml-1 text-[11px] text-slate-400">↕</span>
                     </th>
-                    <th className={TABLE_HEADER_CELL_CLASS}>
+                    {/* <th className={TABLE_HEADER_CELL_CLASS}>
                       Entity <span className="ml-1 text-[11px] text-slate-400">↕</span>
-                    </th>
+                    </th> */}
                     <th className={cx(TABLE_HEADER_CELL_CLASS, "text-center")}>
                       Changes <span className="ml-1 text-[11px] text-slate-400">↕</span>
                     </th>
@@ -985,11 +985,11 @@ export default function AuditLogsPage() {
                           </div>
                         </td>
                         <td className={TABLE_CELL_CLASS}>{row.log_table_name}</td>
-                        <td className={TABLE_CELL_CLASS}>
+                        {/* <td className={TABLE_CELL_CLASS}>
                           <span className="inline-block max-w-full truncate">
                             {truncateValue(getRowEntityLabel(row), 46)}
                           </span>
-                        </td>
+                        </td> */}
                         <td className={cx(TABLE_CELL_CLASS, "text-center")}>
                           <span
                             className={cx(
