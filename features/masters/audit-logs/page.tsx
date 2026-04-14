@@ -1268,7 +1268,7 @@ export default function AuditLogsPage() {
                             <h3 className={JSON_TITLE_CLASS}>Field</h3>
                           </div>
                         </th>
-                        <th className={cx(DETAIL_JSON_TABLE_HEADER_CLASS, DETAIL_JSON_TABLE_CHANGE_CLASS)}>
+                        {/* <th className={cx(DETAIL_JSON_TABLE_HEADER_CLASS, DETAIL_JSON_TABLE_CHANGE_CLASS)}>
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <h3 className={JSON_TITLE_CLASS}>Changed fields</h3>
@@ -1279,7 +1279,7 @@ export default function AuditLogsPage() {
                                 : `${selectedLogChangeCount} field${selectedLogChangeCount === 1 ? "" : "s"}`}
                             </span>
                           </div>
-                        </th>
+                        </th> */}
                         <th className={cx(DETAIL_JSON_TABLE_HEADER_CLASS, DETAIL_JSON_TABLE_VALUE_CLASS)}>
                           <div>
                             <h3 className={JSON_TITLE_CLASS}>Original record</h3>
@@ -1311,7 +1311,7 @@ export default function AuditLogsPage() {
                             <td className={cx(DETAIL_JSON_TABLE_CELL_CLASS, DETAIL_JSON_TABLE_FIELD_CLASS)}>
                               <p className="m-0 text-sm leading-6 font-semibold text-slate-900">{row.field}</p>
                             </td>
-                            <td className={cx(DETAIL_JSON_TABLE_CELL_CLASS, DETAIL_JSON_TABLE_CHANGE_CLASS)}>
+                            {/* <td className={cx(DETAIL_JSON_TABLE_CELL_CLASS, DETAIL_JSON_TABLE_CHANGE_CLASS)}>
                               {row.diff ? (
                                 <div className="grid gap-2">
                                   <span
@@ -1343,7 +1343,7 @@ export default function AuditLogsPage() {
                                   No diff
                                 </span>
                               )}
-                            </td>
+                            </td> */}
                             <td className={cx(DETAIL_JSON_TABLE_CELL_CLASS, DETAIL_JSON_TABLE_VALUE_CLASS)}>
                               {renderAuditTableValue(row.original, `original-${index + 1}`)}
                             </td>

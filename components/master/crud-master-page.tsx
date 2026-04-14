@@ -9,14 +9,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
-import {
-  buildRecordHistoryHref,
-  buildRecordHistoryReturnTo,
-  resolveRecordHistoryDisplayName,
-} from "@/features/masters/audit-logs/record-history-route";
+import { resolveRecordHistoryDisplayName } from "@/features/masters/audit-logs/record-history-route";
+import { RecordHistoryModal } from "@/features/masters/record-history/page";
 import { useApi } from "@/hooks/useApi";
 import { useMasterCrud } from "@/features/masters/shared";
 import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
@@ -1496,10 +1492,12 @@ export default function CrudMasterPage({
   afterSubmitSuccess,
   afterDeleteSuccess,
 }: CrudMasterPageProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
+  const [auditHistoryModal, setAuditHistoryModal] = useState<{
+    displayName: string | null;
+    recordPk: string;
+    screenName: string;
+  } | null>(null);
 
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const { getAll: getGridDetailById } = useApi<unknown>(GRID_DETAIL_GET_ENDPOINT);
@@ -2197,11 +2195,6 @@ export default function CrudMasterPage({
     ],
     [effectiveTitle, entityLabel, fields, saveLoading, viewFields],
   );
-  const auditHistoryReturnTo = useMemo(
-    () => buildRecordHistoryReturnTo(pathname, searchParams),
-    [pathname, searchParams],
-  );
-
   const handleRowUpdate = useCallback(
     (row: MasterTableRow) => {
       setSelectedRowId(row.__rowId);
@@ -2233,21 +2226,20 @@ export default function CrudMasterPage({
 
       const recordId =
         auditHistory.getRecordId?.(row) ?? resolveAuditHistoryRecordId(row);
-      const href = buildRecordHistoryHref({
-        screenName: auditHistory.screenName,
-        recordPk: recordId,
-        displayName:
-          auditHistory.getDisplayName?.(row) ?? resolveAuditHistoryDisplayName(row),
-        returnTo: auditHistoryReturnTo,
-      });
-
-      if (!href) {
+      const normalizedRecordId =
+        recordId === null || recordId === undefined ? "" : String(recordId).trim();
+      if (!normalizedRecordId) {
         return;
       }
 
-      router.push(href);
+      setAuditHistoryModal({
+        screenName: auditHistory.screenName,
+        recordPk: normalizedRecordId,
+        displayName:
+          auditHistory.getDisplayName?.(row) ?? resolveAuditHistoryDisplayName(row),
+      });
     },
-    [auditHistory, auditHistoryReturnTo, router],
+    [auditHistory],
   );
 
   const handleSearchChange = useCallback((query: string) => {
@@ -2411,6 +2403,13 @@ export default function CrudMasterPage({
         loadingLabel="Deleting..."
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
+      />
+      <RecordHistoryModal
+        isOpen={auditHistoryModal !== null}
+        screenName={auditHistoryModal?.screenName}
+        recordPk={auditHistoryModal?.recordPk}
+        displayName={auditHistoryModal?.displayName}
+        onClose={() => setAuditHistoryModal(null)}
       />
     </main>
   );

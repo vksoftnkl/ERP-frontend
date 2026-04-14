@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
@@ -21,10 +20,7 @@ import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
 import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import styles from "@/app/master/state-master/page.module.scss";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
-import {
-  buildRecordHistoryHref,
-  buildRecordHistoryReturnTo,
-} from "@/features/masters/audit-logs/record-history-route";
+import { RecordHistoryModal } from "@/features/masters/record-history/page";
 
 // Import all modular logic
 import {
@@ -433,9 +429,6 @@ function LedgerFieldRenderer({
 }
 
 export default function AccountLedgerMasterPage() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { data, error, loading, getAll } = useApi<unknown>(API_ENDPOINTS.list);
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const {
@@ -486,6 +479,11 @@ export default function AccountLedgerMasterPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [totalEntries, setTotalEntries] = useState(0);
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(null);
+  const [recordHistoryModal, setRecordHistoryModal] = useState<{
+    displayName: string | null;
+    recordPk: string;
+    screenName: string;
+  } | null>(null);
 
   // State for grid details
   const [accountLedgerGridId, setAccountLedgerGridId] = useState<number | null>(null);
@@ -1119,20 +1117,18 @@ export default function AccountLedgerMasterPage() {
 
   const handleRowLogs = useCallback(
     (row: LedgerTableRow) => {
-      const href = buildRecordHistoryHref({
-        screenName: "Account Ledger Master",
-        recordPk: row.__recordId,
-        displayName: row.ledgerName || row.ledgerCode || row.ledgerId,
-        returnTo: buildRecordHistoryReturnTo(pathname, searchParams),
-      });
-
-      if (!href) {
+      const recordPk = `${row.__recordId}`.trim();
+      if (!recordPk) {
         return;
       }
 
-      router.push(href);
+      setRecordHistoryModal({
+        screenName: "Account Ledger Master",
+        recordPk,
+        displayName: row.ledgerName || row.ledgerCode || row.ledgerId,
+      });
     },
-    [pathname, router, searchParams],
+    [],
   );
 
   const handleDeleteCancel = useCallback(() => {
@@ -1493,6 +1489,13 @@ export default function AccountLedgerMasterPage() {
         loadingLabel="Deleting..."
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
+      />
+      <RecordHistoryModal
+        isOpen={recordHistoryModal !== null}
+        screenName={recordHistoryModal?.screenName}
+        recordPk={recordHistoryModal?.recordPk}
+        displayName={recordHistoryModal?.displayName}
+        onClose={() => setRecordHistoryModal(null)}
       />
     </main>
   );

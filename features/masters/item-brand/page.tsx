@@ -1,13 +1,9 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
-import {
-  buildRecordHistoryHref,
-  buildRecordHistoryReturnTo,
-} from "@/features/masters/audit-logs/record-history-route";
+import { RecordHistoryModal } from "@/features/masters/record-history/page";
 import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
@@ -851,9 +847,6 @@ function useItemBrandData() {
   };
 }
 export default function ItemBrandMasterPage() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const { getAll: getGridDetailById } = useApi<unknown>(GRID_DETAIL_GET_ENDPOINT);
@@ -907,6 +900,11 @@ export default function ItemBrandMasterPage() {
   const [editingItemId, setEditingItemId] = useState<string | number | null>(
     null,
   );
+  const [recordHistoryModal, setRecordHistoryModal] = useState<{
+    displayName: string | null;
+    recordPk: string;
+    screenName: string;
+  } | null>(null);
   const [pendingDeleteRow, setPendingDeleteRow] =
     useState<ItemBrandTableRow | null>(null);
 
@@ -1262,20 +1260,18 @@ export default function ItemBrandMasterPage() {
   );
   const handleRowLogs = useCallback(
     (row: ItemBrandTableRow) => {
-      const href = buildRecordHistoryHref({
-        screenName: "Item Brand Master",
-        recordPk: row.__recordId,
-        displayName: row.brandName || row.brandCode || row.brandId,
-        returnTo: buildRecordHistoryReturnTo(pathname, searchParams),
-      });
-
-      if (!href) {
+      const recordPk = `${row.__recordId}`.trim();
+      if (!recordPk) {
         return;
       }
 
-      router.push(href);
+      setRecordHistoryModal({
+        screenName: "Item Brand Master",
+        recordPk,
+        displayName: row.brandName || row.brandCode || row.brandId,
+      });
     },
-    [pathname, router, searchParams],
+    [],
   );
   const handleSearchChange = useCallback(
     (query: string) => {
@@ -1408,6 +1404,13 @@ export default function ItemBrandMasterPage() {
         loadingLabel="Deleting..."
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
+      />
+      <RecordHistoryModal
+        isOpen={recordHistoryModal !== null}
+        screenName={recordHistoryModal?.screenName}
+        recordPk={recordHistoryModal?.recordPk}
+        displayName={recordHistoryModal?.displayName}
+        onClose={() => setRecordHistoryModal(null)}
       />
     </main>
   );

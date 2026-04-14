@@ -544,14 +544,42 @@ function getActionBadgeClass(value: string): string {
   );
 }
 
-export default function RecordHistoryPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+type RecordHistoryViewerProps = {
+  displayName?: string | null;
+  mode?: "modal" | "page";
+  onBack?: (() => void) | undefined;
+  onClose?: (() => void) | undefined;
+  recordPk: string | number | null | undefined;
+  screenName: string | number | null | undefined;
+};
 
-  const screenName = normalizeQueryValue(searchParams.get("screen_name"));
-  const recordPk = normalizeQueryValue(searchParams.get("record_pk"));
-  const displayName = normalizeQueryValue(searchParams.get("display_name"));
-  const returnTo = normalizeQueryValue(searchParams.get("return_to"));
+export type RecordHistoryModalProps = {
+  displayName?: string | null;
+  isOpen: boolean;
+  onClose: () => void;
+  recordPk: string | number | null | undefined;
+  screenName: string | number | null | undefined;
+};
+
+function normalizeViewerValue(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
+function RecordHistoryViewer({
+  displayName: displayNameProp,
+  mode = "page",
+  onBack,
+  onClose,
+  recordPk: recordPkProp,
+  screenName: screenNameProp,
+}: RecordHistoryViewerProps) {
+  const screenName = normalizeViewerValue(screenNameProp);
+  const recordPk = normalizeViewerValue(recordPkProp);
+  const displayName = normalizeViewerValue(displayNameProp);
 
   const [logs, setLogs] = useState<AuditLogListItem[]>([]);
   const [meta, setMeta] = useState<ListMeta>(EMPTY_META);
@@ -643,14 +671,6 @@ export default function RecordHistoryPage() {
     }
   }, [logs, selectedLog]);
 
-  const handleBack = useCallback(() => {
-    if (returnTo) {
-      router.push(returnTo);
-      return;
-    }
-    router.push("/master/audit-logs");
-  }, [returnTo, router]);
-
   const handleRefresh = useCallback(() => {
     setRefreshKey((value) => value + 1);
   }, []);
@@ -663,10 +683,308 @@ export default function RecordHistoryPage() {
     setSelectedLog(null);
   }, []);
 
+  const handleViewerClose = useCallback(() => {
+    setSelectedLog(null);
+    onClose?.();
+  }, [onClose]);
+
   const tableSummary =
     meta.total === 0
       ? "Showing 0 of 0 items"
       : `Showing ${pageStart}-${pageEnd} of ${meta.total} items`;
+
+  const viewerBody = !screenName || !recordPk ? (
+    <section className={cx(PANEL_CLASS, "grid gap-2.5 p-4")}>
+      <h2 className="m-0 text-base font-bold text-slate-900">Missing record context</h2>
+      <p className="m-0 text-[13px] text-slate-500">
+        Open this page from a table row Logs action so it can load one record&apos;s audit
+        history.
+      </p>
+      <div>
+        <button
+          className={BACK_BUTTON_CLASS}
+          type="button"
+          onClick={mode === "modal" ? handleViewerClose : onBack}
+        >
+          <FiArrowLeft aria-hidden="true" />
+          <span>{mode === "modal" ? "Close" : "Go back"}</span>
+        </button>
+      </div>
+    </section>
+  ) : (
+    <>
+      {error ? (
+        <div className="flex flex-col gap-2 rounded-[12px] border border-rose-200 bg-rose-50 px-3 py-2.5 min-[781px]:flex-row min-[781px]:items-center min-[781px]:justify-between">
+          <p className="m-0 text-[13px] text-rose-700">{error}</p>
+          <button className={RETRY_BUTTON_CLASS} type="button" onClick={handleRefresh}>
+            Retry
+          </button>
+        </div>
+      ) : null}
+
+      <section className={cx(PANEL_CLASS, "min-w-0 flex flex-1 flex-col overflow-hidden")}>
+        <div className="px-3 py-2.5">
+          <div className="grid gap-0.5">
+            
+          </div>
+        </div>
+
+        <div className="overflow-auto border-y border-slate-100 [scrollbar-gutter:stable_both-edges]">
+          <table className="w-full min-w-[920px] border-separate border-spacing-0">
+            <thead>
+              <tr>
+                <th className={cx(TABLE_HEADER_CELL_CLASS, "text-center")}>#</th>
+                <th className={TABLE_HEADER_CELL_CLASS}>Date</th>
+                <th className={cx(TABLE_HEADER_CELL_CLASS, "text-center")}>Action</th>
+                <th className={TABLE_HEADER_CELL_CLASS}>User</th>
+                <th className={TABLE_HEADER_CELL_CLASS}>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && logs.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-7 text-center text-sm text-slate-500" colSpan={TABLE_COLUMN_COUNT}>
+                    Loading record history...
+                  </td>
+                </tr>
+              ) : logs.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-7 text-center text-sm text-slate-500" colSpan={TABLE_COLUMN_COUNT}>
+                    No audit history was found for this record.
+                  </td>
+                </tr>
+              ) : (
+                logs.map((row, rowIndex) => (
+                  <tr
+                    key={row.log_id}
+                    className={cx(
+                      "cursor-pointer transition-colors hover:bg-slate-50",
+                      selectedLog?.log_id === row.log_id && "bg-blue-50",
+                    )}
+                    onClick={() => handleOpenDetail(row)}
+                  >
+                    <td className={cx(TABLE_CELL_CLASS, "w-[48px] text-center text-slate-500")}>
+                      {(currentPage - 1) * pageSize + rowIndex + 1}
+                    </td>
+                    <td className={TABLE_CELL_CLASS}>
+                      <div className="grid gap-0.5">
+                        <span className="font-bold text-slate-800">{formatDateOnly(row.log_date)}</span>
+                        <span className="text-[11px] text-slate-400">{formatDateTime(row.log_date)}</span>
+                      </div>
+                    </td>
+                    <td className={cx(TABLE_CELL_CLASS, "text-center")}>
+                      <span className={getActionBadgeClass(row.log_action)}>
+                        {formatActionLabel(row.log_action)}
+                      </span>
+                    </td>
+                    <td className={TABLE_CELL_CLASS}>{getRowUserLabel(row)}</td>
+                    <td className={TABLE_CELL_CLASS}>
+                      <span className="inline-block max-w-full truncate">
+                        {truncateValue(row.log_notes, 72)}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex flex-col gap-2 px-3 py-2.5 min-[781px]:flex-row min-[781px]:items-center min-[781px]:justify-between">
+          <div className="flex flex-col gap-1.5 text-[12px] text-slate-600 min-[781px]:flex-row min-[781px]:flex-wrap min-[781px]:items-center min-[781px]:gap-3">
+           
+            
+          </div>
+
+          <div className="flex flex-col gap-2 min-[781px]:flex-row min-[781px]:flex-wrap min-[781px]:items-center min-[781px]:gap-3">
+            <label className="inline-flex flex-wrap items-center gap-2">
+              <span className="text-[12px] text-slate-600">Rows per page</span>
+              <div className="relative">
+                <select
+                  className={PAGE_SIZE_SELECT_CLASS}
+                  value={pageSize}
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value));
+                    setCurrentPage(DEFAULT_PAGE);
+                  }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <FiChevronDown
+                  className="pointer-events-none absolute top-1/2 right-3 h-3.5 w-3.5 -translate-y-1/2 text-slate-500"
+                  aria-hidden="true"
+                />
+              </div>
+            </label>
+
+            <div className="inline-flex flex-wrap items-center gap-2">
+              <button
+                className={PAGINATION_BUTTON_CLASS}
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(DEFAULT_PAGE, page - 1))}
+                disabled={currentPage <= DEFAULT_PAGE}
+                aria-label="Previous page"
+              >
+                <FiChevronLeft aria-hidden="true" />
+              </button>
+
+              <span className="inline-flex h-7 min-w-[30px] items-center justify-center rounded-[8px] border border-slate-300 bg-white px-2 text-[12px] font-bold text-slate-800">
+                {currentPage}
+              </span>
+
+              <span className="text-[12px] text-slate-500">of {safeTotalPages} pages</span>
+
+              <button
+                className={PAGINATION_BUTTON_CLASS}
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.min(safeTotalPages, page + 1))}
+                disabled={currentPage >= safeTotalPages}
+                aria-label="Next page"
+              >
+                <FiChevronRight aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {selectedLog ? (
+        <div
+          aria-modal="true"
+          className={MODAL_OVERLAY_CLASS}
+          role="dialog"
+          onClick={handleCloseDetail}
+        >
+          <div className="flex min-h-full items-start justify-center">
+            <section className={MODAL_PANEL_CLASS} onClick={(event) => event.stopPropagation()}>
+              <header className="flex items-start justify-between gap-3">
+                <div className="grid gap-0.5">
+                  <p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
+                    Audit detail
+                  </p>
+                  <h2 className="m-0 text-[18px] leading-[1.1] font-bold text-slate-900">
+                    {formatActionLabel(selectedLog.log_action)} log for {selectedLog.screen_name}
+                  </h2>
+                  <p className="m-0 text-[12px] text-slate-500">
+                    Captured on {formatDateTime(selectedLog.log_date)} for {selectedLog.log_table_name}
+                  </p>
+                  <p className="m-0 text-[12px] text-slate-500">
+                    Changed fields: {selectedLogChangeCount}
+                  </p>
+                </div>
+
+                <button
+                  aria-label="Close audit detail"
+                  className={cx(PAGINATION_BUTTON_CLASS, "h-8 w-8 self-start")}
+                  type="button"
+                  onClick={handleCloseDetail}
+                >
+                  <FiX aria-hidden="true" />
+                </button>
+              </header>
+
+              <section className={cx(DETAIL_JSON_TABLE_SHELL_CLASS, "min-h-0 overflow-hidden")}>
+                <div className="max-h-[calc(100vh-260px)] overflow-auto [scrollbar-gutter:stable_both-edges]">
+                  <table className="w-full min-w-[1100px] border-separate border-spacing-0">
+                    <thead>
+                      <tr>
+                        <th className={cx(DETAIL_JSON_TABLE_HEADER_CLASS, DETAIL_JSON_TABLE_FIELD_CLASS)}>
+                          <h3 className={JSON_TITLE_CLASS}>Field</h3>
+                        </th>
+                        <th className={cx(DETAIL_JSON_TABLE_HEADER_CLASS, DETAIL_JSON_TABLE_VALUE_CLASS)}>
+                          <h3 className={JSON_TITLE_CLASS}>Original record</h3>
+                        </th>
+                        <th className={cx(DETAIL_JSON_TABLE_HEADER_CLASS, DETAIL_JSON_TABLE_VALUE_CLASS)}>
+                          <h3 className={JSON_TITLE_CLASS}>Modified record</h3>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedLogComparisonRows.length === 0 ? (
+                        <tr>
+                          <td className="px-4 py-5 text-sm text-slate-500" colSpan={3}>
+                            No audit record data was captured for this entry.
+                          </td>
+                        </tr>
+                      ) : (
+                        selectedLogComparisonRows.map((row, index) => (
+                          <tr
+                            className={cx(
+                              DETAIL_JSON_TABLE_ROW_CLASS,
+                              row.diff ? "bg-amber-50/30" : "bg-white",
+                            )}
+                            key={`${row.field}-${index + 1}`}
+                          >
+                            <td className={cx(DETAIL_JSON_TABLE_CELL_CLASS, DETAIL_JSON_TABLE_FIELD_CLASS)}>
+                              <p className="m-0 text-[13px] leading-5 font-semibold text-slate-900">
+                                {row.field}
+                              </p>
+                            </td>
+                            <td className={cx(DETAIL_JSON_TABLE_CELL_CLASS, DETAIL_JSON_TABLE_VALUE_CLASS)}>
+                              {renderAuditTableValue(row.original, `original-${index + 1}`)}
+                            </td>
+                            <td className={cx(DETAIL_JSON_TABLE_CELL_CLASS, DETAIL_JSON_TABLE_VALUE_CLASS)}>
+                              {renderAuditTableValue(row.modified, `modified-${index + 1}`)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </section>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+
+  if (mode === "modal") {
+    return (
+      <div
+        aria-modal="true"
+        className="fixed inset-0 z-[80] overflow-y-auto bg-slate-950/45 px-3 pt-[80px] pb-4 backdrop-blur-[1px]"
+        role="dialog"
+        onClick={handleViewerClose}
+      >
+        <div className="flex min-h-full items-start justify-center">
+          <section
+            className={cx(
+              MODAL_PANEL_CLASS,
+              "flex w-full max-w-[min(1380px,96vw)] flex-col gap-3",
+            )}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="flex items-start justify-between gap-3">
+              <div className="grid gap-0.5">
+                <p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
+                  Record history
+                </p>
+                <h2 className="m-0 text-[20px] leading-[1.1] font-bold text-slate-900">
+                  {displayName || "Selected record"}
+                </h2>
+               
+              </div>
+              <button
+                aria-label="Close record history"
+                className={cx(PAGINATION_BUTTON_CLASS, "h-8 w-8 self-start")}
+                type="button"
+                onClick={handleViewerClose}
+              >
+                <FiX aria-hidden="true" />
+              </button>
+            </header>
+            {viewerBody}
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-[calc(100vh-72px)] bg-gradient-to-b from-[#f7f7f8] to-[#f1f2f4] text-slate-800">
@@ -682,334 +1000,63 @@ export default function RecordHistoryPage() {
                 : "Audit trail for the selected record only."}
             </p>
           </div>
-
-          <button className={BACK_BUTTON_CLASS} type="button" onClick={handleBack}>
+          <button className={BACK_BUTTON_CLASS} type="button" onClick={onBack}>
             <FiArrowLeft aria-hidden="true" />
             <span>Back</span>
           </button>
         </header>
-
-        {!screenName || !recordPk ? (
-          <section className={cx(PANEL_CLASS, "grid gap-2.5 p-4")}>
-            <h2 className="m-0 text-base font-bold text-slate-900">Missing record context</h2>
-            <p className="m-0 text-[13px] text-slate-500">
-              Open this page from a table row Logs action so it can load one record&apos;s audit
-              history.
-            </p>
-            <div>
-              <button className={BACK_BUTTON_CLASS} type="button" onClick={handleBack}>
-                <FiArrowLeft aria-hidden="true" />
-                <span>Go back</span>
-              </button>
-            </div>
-          </section>
-        ) : (
-          <>
-            {error ? (
-              <div className="flex flex-col gap-2 rounded-[12px] border border-rose-200 bg-rose-50 px-3 py-2.5 min-[781px]:flex-row min-[781px]:items-center min-[781px]:justify-between">
-                <p className="m-0 text-[13px] text-rose-700">{error}</p>
-                <button className={RETRY_BUTTON_CLASS} type="button" onClick={handleRefresh}>
-                  Retry
-                </button>
-              </div>
-            ) : null}
-
-            <section className={cx(PANEL_CLASS, "min-w-0 flex flex-col overflow-hidden")}>
-              {/* ── Table header: label + description only (rows-per-page moved to footer) ── */}
-              <div className="px-3 py-2.5">
-                <div className="grid gap-0.5">
-                  <p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-                    Timeline
-                  </p>
-                  <p className="m-0 text-[12px] text-slate-500">
-                    Only entries for this selected record are shown here. Click a row to open the
-                    audit detail.
-                  </p>
-                </div>
-              </div>
-
-              <div className="overflow-auto border-y border-slate-100 [scrollbar-gutter:stable_both-edges]">
-                <table className="w-full min-w-[920px] border-separate border-spacing-0">
-                  <thead>
-                    <tr>
-                      <th className={cx(TABLE_HEADER_CELL_CLASS, "text-center")}>#</th>
-                      <th className={TABLE_HEADER_CELL_CLASS}>Date</th>
-                      <th className={cx(TABLE_HEADER_CELL_CLASS, "text-center")}>Action</th>
-                      <th className={TABLE_HEADER_CELL_CLASS}>User</th>
-                      <th className={TABLE_HEADER_CELL_CLASS}>Notes</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {loading && logs.length === 0 ? (
-                      <tr>
-                        <td
-                          className="px-4 py-7 text-center text-sm text-slate-500"
-                          colSpan={TABLE_COLUMN_COUNT}
-                        >
-                          Loading record history...
-                        </td>
-                      </tr>
-                    ) : logs.length === 0 ? (
-                      <tr>
-                        <td
-                          className="px-4 py-7 text-center text-sm text-slate-500"
-                          colSpan={TABLE_COLUMN_COUNT}
-                        >
-                          No audit history was found for this record.
-                        </td>
-                      </tr>
-                    ) : (
-                      logs.map((row, rowIndex) => (
-                        <tr
-                          key={row.log_id}
-                          className={cx(
-                            "cursor-pointer transition-colors hover:bg-slate-50",
-                            selectedLog?.log_id === row.log_id && "bg-blue-50",
-                          )}
-                          onClick={() => handleOpenDetail(row)}
-                        >
-                          <td className={cx(TABLE_CELL_CLASS, "w-[48px] text-center text-slate-500")}>
-                            {(currentPage - 1) * pageSize + rowIndex + 1}
-                          </td>
-
-                          <td className={TABLE_CELL_CLASS}>
-                            <div className="grid gap-0.5">
-                              <span className="font-bold text-slate-800">
-                                {formatDateOnly(row.log_date)}
-                              </span>
-                              <span className="text-[11px] text-slate-400">
-                                {formatDateTime(row.log_date)}
-                              </span>
-                            </div>
-                          </td>
-
-                          <td className={cx(TABLE_CELL_CLASS, "text-center")}>
-                            <span className={getActionBadgeClass(row.log_action)}>
-                              {formatActionLabel(row.log_action)}
-                            </span>
-                          </td>
-
-                          <td className={TABLE_CELL_CLASS}>{getRowUserLabel(row)}</td>
-
-                          <td className={TABLE_CELL_CLASS}>
-                            <span className="inline-block max-w-full truncate">
-                              {truncateValue(row.log_notes, 72)}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* ── Footer: summary + rows-per-page + pagination all together ── */}
-              <div className="flex flex-col gap-2 px-3 py-2.5 min-[781px]:flex-row min-[781px]:items-center min-[781px]:justify-between">
-                {/* Left: item summary + column count */}
-                <div className="flex flex-col gap-1.5 text-[12px] text-slate-600 min-[781px]:flex-row min-[781px]:flex-wrap min-[781px]:items-center min-[781px]:gap-3">
-                  <span>{tableSummary}</span>
-                  <span>
-                    Showing {TABLE_COLUMN_COUNT} of {TABLE_COLUMN_COUNT} columns
-                  </span>
-                </div>
-
-                {/* Right: rows-per-page + page navigation */}
-                <div className="flex flex-col gap-2 min-[781px]:flex-row min-[781px]:flex-wrap min-[781px]:items-center min-[781px]:gap-3">
-                  {/* Rows per page */}
-                  <label className="inline-flex flex-wrap items-center gap-2">
-                    <span className="text-[12px] text-slate-600">Rows per page</span>
-                    <div className="relative">
-                      <select
-                        className={PAGE_SIZE_SELECT_CLASS}
-                        value={pageSize}
-                        onChange={(event) => {
-                          setPageSize(Number(event.target.value));
-                          setCurrentPage(DEFAULT_PAGE);
-                        }}
-                      >
-                        {PAGE_SIZE_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                      <FiChevronDown
-                        className="pointer-events-none absolute top-1/2 right-3 h-3.5 w-3.5 -translate-y-1/2 text-slate-500"
-                        aria-hidden="true"
-                      />
-                    </div>
-                  </label>
-
-                  {/* Page navigation */}
-                  <div className="inline-flex flex-wrap items-center gap-2">
-                    <button
-                      className={PAGINATION_BUTTON_CLASS}
-                      type="button"
-                      onClick={() => setCurrentPage((page) => Math.max(DEFAULT_PAGE, page - 1))}
-                      disabled={currentPage <= DEFAULT_PAGE}
-                      aria-label="Previous page"
-                    >
-                      <FiChevronLeft aria-hidden="true" />
-                    </button>
-
-                    <span className="inline-flex h-7 min-w-[30px] items-center justify-center rounded-[8px] border border-slate-300 bg-white px-2 text-[12px] font-bold text-slate-800">
-                      {currentPage}
-                    </span>
-
-                    <span className="text-[12px] text-slate-500">of {safeTotalPages} pages</span>
-
-                    <button
-                      className={PAGINATION_BUTTON_CLASS}
-                      type="button"
-                      onClick={() =>
-                        setCurrentPage((page) => Math.min(safeTotalPages, page + 1))
-                      }
-                      disabled={currentPage >= safeTotalPages}
-                      aria-label="Next page"
-                    >
-                      <FiChevronRight aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {selectedLog ? (
-              <div
-                aria-modal="true"
-                className={MODAL_OVERLAY_CLASS}
-                role="dialog"
-                onClick={handleCloseDetail}
-              >
-                <div className="flex min-h-full items-start justify-center">
-                  <section
-                    className={MODAL_PANEL_CLASS}
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <header className="flex items-start justify-between gap-3">
-                      <div className="grid gap-0.5">
-                        <p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-                          Audit detail
-                        </p>
-
-                        <h2 className="m-0 text-[18px] leading-[1.1] font-bold text-slate-900">
-                          {formatActionLabel(selectedLog.log_action)} log for{" "}
-                          {selectedLog.screen_name}
-                        </h2>
-
-                        <p className="m-0 text-[12px] text-slate-500">
-                          Captured on {formatDateTime(selectedLog.log_date)} for{" "}
-                          {selectedLog.log_table_name}
-                        </p>
-
-                        <p className="m-0 text-[12px] text-slate-500">
-                          Changed fields: {selectedLogChangeCount}
-                        </p>
-                      </div>
-
-                      <button
-                        aria-label="Close audit detail"
-                        className={cx(PAGINATION_BUTTON_CLASS, "h-8 w-8 self-start")}
-                        type="button"
-                        onClick={handleCloseDetail}
-                      >
-                        <FiX aria-hidden="true" />
-                      </button>
-                    </header>
-
-                    <section className={cx(DETAIL_JSON_TABLE_SHELL_CLASS, "min-h-0 overflow-hidden")}>
-                      <div className="max-h-[calc(100vh-260px)] overflow-auto [scrollbar-gutter:stable_both-edges]">
-                        <table className="w-full min-w-[1100px] border-separate border-spacing-0">
-                          <thead>
-                            <tr>
-                              <th
-                                className={cx(
-                                  DETAIL_JSON_TABLE_HEADER_CLASS,
-                                  DETAIL_JSON_TABLE_FIELD_CLASS,
-                                )}
-                              >
-                                <h3 className={JSON_TITLE_CLASS}>Field</h3>
-                              </th>
-
-                              <th
-                                className={cx(
-                                  DETAIL_JSON_TABLE_HEADER_CLASS,
-                                  DETAIL_JSON_TABLE_VALUE_CLASS,
-                                )}
-                              >
-                                <h3 className={JSON_TITLE_CLASS}>Original record</h3>
-                              </th>
-
-                              <th
-                                className={cx(
-                                  DETAIL_JSON_TABLE_HEADER_CLASS,
-                                  DETAIL_JSON_TABLE_VALUE_CLASS,
-                                )}
-                              >
-                                <h3 className={JSON_TITLE_CLASS}>Modified record</h3>
-                              </th>
-                            </tr>
-                          </thead>
-
-                          <tbody>
-                            {selectedLogComparisonRows.length === 0 ? (
-                              <tr>
-                                <td className="px-4 py-5 text-sm text-slate-500" colSpan={3}>
-                                  No audit record data was captured for this entry.
-                                </td>
-                              </tr>
-                            ) : (
-                              selectedLogComparisonRows.map((row, index) => (
-                                <tr
-                                  className={cx(
-                                    DETAIL_JSON_TABLE_ROW_CLASS,
-                                    row.diff ? "bg-amber-50/30" : "bg-white",
-                                  )}
-                                  key={`${row.field}-${index + 1}`}
-                                >
-                                  <td
-                                    className={cx(
-                                      DETAIL_JSON_TABLE_CELL_CLASS,
-                                      DETAIL_JSON_TABLE_FIELD_CLASS,
-                                    )}
-                                  >
-                                    <p className="m-0 text-[13px] leading-5 font-semibold text-slate-900">
-                                      {row.field}
-                                    </p>
-                                  </td>
-
-                                  <td
-                                    className={cx(
-                                      DETAIL_JSON_TABLE_CELL_CLASS,
-                                      DETAIL_JSON_TABLE_VALUE_CLASS,
-                                    )}
-                                  >
-                                    {renderAuditTableValue(row.original, `original-${index + 1}`)}
-                                  </td>
-
-                                  <td
-                                    className={cx(
-                                      DETAIL_JSON_TABLE_CELL_CLASS,
-                                      DETAIL_JSON_TABLE_VALUE_CLASS,
-                                    )}
-                                  >
-                                    {renderAuditTableValue(row.modified, `modified-${index + 1}`)}
-                                  </td>
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </section>
-                  </section>
-                </div>
-              </div>
-            ) : null}
-          </>
-        )}
+        {viewerBody}
       </div>
     </main>
+  );
+}
+
+export function RecordHistoryModal({
+  displayName,
+  isOpen,
+  onClose,
+  recordPk,
+  screenName,
+}: RecordHistoryModalProps) {
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <RecordHistoryViewer
+      displayName={displayName}
+      mode="modal"
+      onClose={onClose}
+      recordPk={recordPk}
+      screenName={screenName}
+    />
+  );
+}
+
+export default function RecordHistoryPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const screenName = normalizeQueryValue(searchParams.get("screen_name"));
+  const recordPk = normalizeQueryValue(searchParams.get("record_pk"));
+  const displayName = normalizeQueryValue(searchParams.get("display_name"));
+  const returnTo = normalizeQueryValue(searchParams.get("return_to"));
+
+  const handleBack = useCallback(() => {
+    if (returnTo) {
+      router.push(returnTo);
+      return;
+    }
+
+    router.push("/master/audit-logs");
+  }, [returnTo, router]);
+
+  return (
+    <RecordHistoryViewer
+      displayName={displayName}
+      mode="page"
+      onBack={handleBack}
+      recordPk={recordPk}
+      screenName={screenName}
+    />
   );
 }
