@@ -108,7 +108,7 @@ const TABLE_FIELD_CONTAINER_SELECTOR = '[data-opening-stock-field-container="tru
 const TABLE_FIELD_CONTROL_SELECTOR = '[data-opening-stock-field-control="true"]';
 const LOOKUP_SEARCH_DEBOUNCE_MS = 250;
 const SERIAL_NUMBER_COLUMN_WIDTH = "112px";
-const TRACKING_OPTIONS = ["NONE", "BATCH", "LOT"] as const;
+const TRACKING_OPTIONS = ["NONE","MRP", "BATCH" ] as const;
 const PROFIT_TYPE_OPTIONS = ["PERCENT", "VALUE"] as const;
 const CESS_TYPE_OPTIONS = ["NONE", "PERCENT", "PER_UNIT"] as const;
 const DEFAULT_ITEM_OPTION: ERPDynamicSelectOption = {
@@ -1176,9 +1176,9 @@ function buildItemAutofillValues(
     ...(detail.item_tax
       ? buildTaxSelectionValues(detail.item_tax)
       : {
-          taxname: "",
-          osltaxid: toInputValue(detail.item.item_default_tax_id),
-        }),
+        taxname: "",
+        osltaxid: toInputValue(detail.item.item_default_tax_id),
+      }),
   };
 }
 function SummaryCard({
@@ -1282,13 +1282,13 @@ export default function OpeningStockPage() {
       const normalizedSearch = search.trim();
       return lookupKind === "item"
         ? triggerItemOptions(
-            normalizedSearch ? { search: normalizedSearch } : undefined,
-            true,
-          ).unwrap()
+          normalizedSearch ? { search: normalizedSearch } : undefined,
+          true,
+        ).unwrap()
         : triggerGodownOptions(
-            normalizedSearch ? { search: normalizedSearch } : undefined,
-            true,
-          ).unwrap();
+          normalizedSearch ? { search: normalizedSearch } : undefined,
+          true,
+        ).unwrap();
     },
     [triggerGodownOptions, triggerItemOptions],
   );
@@ -1538,21 +1538,21 @@ export default function OpeningStockPage() {
       currentRows.map((row) =>
         row.id === rowId
           ? (() => {
-              const nextValues = {
-                ...row.values,
-                [field]: value,
-              };
-              if (field === "openingqty" || field === "convfactor") {
-                nextValues.baseqty = formatQuantityValue(
-                  parseDecimal(field === "openingqty" ? value : nextValues.openingqty) *
-                    parseDecimal(field === "convfactor" ? value : nextValues.convfactor),
-                );
-              }
-              return {
-                ...row,
-                values: nextValues,
-              };
-            })()
+            const nextValues = {
+              ...row.values,
+              [field]: value,
+            };
+            if (field === "openingqty" || field === "convfactor") {
+              nextValues.baseqty = formatQuantityValue(
+                parseDecimal(field === "openingqty" ? value : nextValues.openingqty) *
+                parseDecimal(field === "convfactor" ? value : nextValues.convfactor),
+              );
+            }
+            return {
+              ...row,
+              values: nextValues,
+            };
+          })()
           : row,
       ),
     );
@@ -1676,19 +1676,19 @@ export default function OpeningStockPage() {
           currentRows.map((row) =>
             row.id === rowId
               ? {
-                  ...row,
-                  values: {
-                    ...row.values,
-                    ...buildTaxSelectionValues({
-                      tax_id: "",
-                      tax_name: "",
-                      tax_gst_rate_total: 0,
-                      tax_cess_type: "NONE",
-                      tax_cess_perc: 0,
-                      tax_cess_unit: 0,
-                    }),
-                  },
-                }
+                ...row,
+                values: {
+                  ...row.values,
+                  ...buildTaxSelectionValues({
+                    tax_id: "",
+                    tax_name: "",
+                    tax_gst_rate_total: 0,
+                    tax_cess_type: "NONE",
+                    tax_cess_perc: 0,
+                    tax_cess_unit: 0,
+                  }),
+                },
+              }
               : row,
           ),
         );
@@ -1701,12 +1701,12 @@ export default function OpeningStockPage() {
             currentRows.map((row) =>
               row.id === rowId
                 ? {
-                    ...row,
-                    values: {
-                      ...row.values,
-                      ...buildTaxSelectionValues(taxDetail),
-                    },
-                  }
+                  ...row,
+                  values: {
+                    ...row.values,
+                    ...buildTaxSelectionValues(taxDetail),
+                  },
+                }
                 : row,
             ),
           );
@@ -1731,13 +1731,13 @@ export default function OpeningStockPage() {
           currentRows.map((row) =>
             row.id === rowId
               ? {
-                  ...row,
-                  values: {
-                    ...row.values,
-                    [fieldConfig.labelField]: option.value ? option.label : "",
-                    [fieldConfig.idField]: option.value,
-                  },
-                }
+                ...row,
+                values: {
+                  ...row.values,
+                  [fieldConfig.labelField]: option.value ? option.label : "",
+                  [fieldConfig.idField]: option.value,
+                },
+              }
               : row,
           ),
         );
@@ -1751,12 +1751,12 @@ export default function OpeningStockPage() {
         currentRows.map((row) =>
           row.id === rowId
             ? {
-                ...row,
-                values: {
-                  ...row.values,
-                  ...buildPendingItemSelectionValues(option),
-                },
-              }
+              ...row,
+              values: {
+                ...row.values,
+                ...buildPendingItemSelectionValues(option),
+              },
+            }
             : row,
         ),
       );
@@ -2184,9 +2184,9 @@ export default function OpeningStockPage() {
         }
         return changed
           ? {
-              ...row,
-              values: nextValues,
-            }
+            ...row,
+            values: nextValues,
+          }
           : row;
       }),
     );
@@ -2284,7 +2284,7 @@ export default function OpeningStockPage() {
             className={cx(
               styles.configMeta,
               Boolean(!activeCompany || !activeBranch || businessContextError) &&
-                styles.configMetaError,
+              styles.configMetaError,
             )}
           >
             {businessContextError ? `${businessContextError} ` : ""}
@@ -2428,10 +2428,10 @@ export default function OpeningStockPage() {
                         : "";
                       const selectedLookupLabel = lookupKind
                         ? (
-                            lookupKind === "item"
-                              ? itemOptionsByValue.get(selectedLookupId)
-                              : godownOptionsByValue.get(selectedLookupId)
-                          ) ?? value
+                          lookupKind === "item"
+                            ? itemOptionsByValue.get(selectedLookupId)
+                            : godownOptionsByValue.get(selectedLookupId)
+                        ) ?? value
                         : value;
                       const lookupOptions = lookupKind
                         ? lookupKind === "item"
@@ -2558,7 +2558,7 @@ export default function OpeningStockPage() {
                                           className={cx(
                                             styles.lookupOption,
                                             option.value === selectedLookupId &&
-                                              styles.lookupOptionActive,
+                                            styles.lookupOptionActive,
                                           )}
                                           onClick={() =>
                                             handleLookupSelection(row.id, lookupKind, option)

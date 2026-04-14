@@ -320,9 +320,9 @@ const DEFAULT_PACKING_OPTION: ERPDynamicSelectOption = {
   label: "None",
 };
 const BATCH_CONFIG_OPTIONS: ERPDynamicSelectOption[] = [
-  { value: "0", label: "None" },
-  { value: "1", label: "MRP" },
-  { value: "2", label: "Batch Wise" },
+  { value: "NONE", label: "NONE" },
+  { value: "MRP", label: "MRP" },
+  { value: "BATCH", label: "BATCH" },
 ];
 const ITEM_PRICE_DEFAULT_PROFIT_TYPE = "BY_PERCENT";
 const ITEM_PRICE_PROFIT_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
