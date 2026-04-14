@@ -436,7 +436,7 @@ const DETAIL_JSON_TABLE_FIELD_CLASS = "min-w-[180px]";
 const DETAIL_JSON_TABLE_VALUE_CLASS = "min-w-[220px]";
 
 const MODAL_OVERLAY_CLASS =
-   "fixed inset-0 z-[90] overflow-y-auto bg-slate-950/45 px-3 pt-[80px] pb-4 backdrop-blur-[1px]";
+   "fixed inset-0 z-[210] overflow-y-auto bg-slate-950/45 px-3 pt-[80px] pb-4 backdrop-blur-[1px]";
 const MODAL_PANEL_CLASS = cx(
   PANEL_CLASS,
   "w-full max-w-[min(1320px,96vw)] min-h-0 overflow-hidden bg-slate-50 p-3 max-h-[calc(100vh-72px)] max-[780px]:p-2.5",
@@ -915,7 +915,7 @@ function RecordHistoryViewer({
                           <tr
                             className={cx(
                               DETAIL_JSON_TABLE_ROW_CLASS,
-                              row.diff ? "bg-amber-50/30" : "bg-white",
+                              row.diff ? "bg-amber-100/80" : "bg-white",
                             )}
                             key={`${row.field}-${index + 1}`}
                           >
@@ -948,7 +948,7 @@ function RecordHistoryViewer({
     return (
       <div
         aria-modal="true"
-        className="fixed inset-0 z-[80] overflow-y-auto bg-slate-950/45 px-3 pt-[80px] pb-4 backdrop-blur-[1px]"
+        className="fixed inset-0 z-[200] overflow-y-auto bg-slate-950/45 px-3 pt-[80px] pb-4 backdrop-blur-[1px]"
         role="dialog"
         onClick={handleViewerClose}
       >
@@ -985,7 +985,6 @@ function RecordHistoryViewer({
       </div>
     );
   }
-
   return (
     <main className="min-h-[calc(100vh-72px)] bg-gradient-to-b from-[#f7f7f8] to-[#f1f2f4] text-slate-800">
       <div className="flex min-h-[calc(100vh-72px)] flex-col gap-3 p-3 max-[780px]:gap-2.5 max-[780px]:p-2.5">
@@ -1010,7 +1009,6 @@ function RecordHistoryViewer({
     </main>
   );
 }
-
 export function RecordHistoryModal({
   displayName,
   isOpen,

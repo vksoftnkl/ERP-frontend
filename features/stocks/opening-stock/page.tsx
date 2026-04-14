@@ -2109,7 +2109,7 @@ export default function OpeningStockPage() {
     const requestPayload: OpeningStockSaveRequest = {
       header: {
         avh_voucher_id: loadedVoucherId ?? undefined,
-        avh_voucher_type_id: 1,
+        avh_voucher_type_id: 20,
         osh_acc_year: accountingYear,
         osh_company_id: activeCompany.compId,
         osh_branch_id: activeBranch.brId,
@@ -2209,7 +2209,7 @@ export default function OpeningStockPage() {
             </div>
           </div>
         </div>
-        <div className={styles.summaryGrid}>
+        {/* <div className={styles.summaryGrid}>
           <SummaryCard
             label="Visible Lines"
             value={String(visibleTotals.lines)}
@@ -2230,7 +2230,7 @@ export default function OpeningStockPage() {
             value={String(trackingRows)}
             hint="Rows with tracking enabled"
           />
-        </div>
+        </div> */}
       </header>
       <div className={cx(tableStyles.tableShell, styles.tableShell)}>
         <div className={tableStyles.toolbar}>
@@ -2277,10 +2277,6 @@ export default function OpeningStockPage() {
               <span>{isSavingOpeningStock ? "Updating..." : "Update Stock"}</span>
             </button>
           </div>
-          <p className={styles.toolbarNote}>
-            Load the Stock fetches the latest saved opening stock. Update Stock posts all non-empty
-            rows currently shown in the grid.
-          </p>
           {loadedDocumentStatusText ? (
             <p className={styles.loadedMeta}>{loadedDocumentStatusText}</p>
           ) : null}
