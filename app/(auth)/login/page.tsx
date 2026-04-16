@@ -101,7 +101,7 @@ export default function LoginPage() {
   };
 
   const inputBase =
-    "w-full rounded-xl border px-3.5 py-2.5 text-[0.95rem] outline-none transition " +
+    "w-full rounded-[4px] border px-3.5 py-2.5 text-[0.95rem] outline-none transition " +
     "placeholder:text-slate-500/80 " +
     "bg-white text-slate-900 border-slate-300/90 " +
     "focus:border-sky-500 focus:ring-4 focus:ring-sky-500/20";
@@ -136,11 +136,11 @@ export default function LoginPage() {
         aria-labelledby="login-heading"
         className={[
           "relative w-full max-w-[28rem]",
-          "rounded-[1.2rem] border p-6 sm:p-7",
+          "rounded-[4px] border p-6 sm:p-7",
           "bg-white/90 border-slate-900/10 shadow-[0_1.2rem_3rem_rgba(31,62,87,0.16)]",
           "backdrop-blur-[8px]",
           "animate-[rise_0.5s_ease_both]",
-          "max-[480px]:rounded-[1rem] max-[480px]:p-[1.1rem]",
+          "max-[480px]:rounded-[4px] max-[480px]:p-[1.1rem]",
         ].join(" ")}
       >
         <div className="mb-5">
@@ -215,14 +215,12 @@ export default function LoginPage() {
             )}
           </div>
 
-        
-
           {/* button */}
           <button
             type="submit"
             disabled={isLoading}
             className={[
-              "mt-1 rounded-xl px-4 py-3 font-bold text-[0.96rem] text-white",
+              "mt-1 rounded-[4px] px-4 py-3 font-bold text-[0.96rem] text-white",
               "bg-[linear-gradient(120deg,#0d7ebf,#0b6ca4)]",
               "transition duration-150",
               "hover:-translate-y-[1px] hover:shadow-[0_0.6rem_1.4rem_rgba(13,126,191,0.28)]",
@@ -238,11 +236,8 @@ export default function LoginPage() {
           {authError && (
             <p className="text-sm text-rose-600">{authError}</p>
           )}
-
-        
         </form>
       </section>
-
       {/* Tailwind keyframes (works with arbitrary animate-[...]) */}
       <style jsx global>{`
         @keyframes rise {

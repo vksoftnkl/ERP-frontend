@@ -1,7 +1,8 @@
 "use client";
 import {
   type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
+  type DragEvent as ReactDragEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -9,7 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { FiChevronDown, FiDownload, FiMoreVertical, FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
+import { FiCalendar, FiChevronDown, FiDownload, FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { useBusinessContext } from "@/components/layout/business-context";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
@@ -25,7 +26,6 @@ import {
 import {
   type ItemPriceDetailsPayload,
   type ItemTaxDetailPayload,
-  useLazyGetGodownOptionsQuery,
   useLazyGetItemOptionsQuery,
   useLazyGetItemPriceDetailsQuery,
   useLazyGetItemTaxByIdQuery,
@@ -70,9 +70,18 @@ type OpeningStockRow = {
   id: number;
   values: Record<string, string>;
 };
+type RowValidationIssue = {
+  fieldKey: string;
+  message: string;
+};
 type AccountLedgerRecord = {
   ledId: string;
   ledName: string;
+};
+type GodownLookupRecord = {
+  gdl_id?: string | null;
+  gdl_name?: string | null;
+  gdl_branch_id?: string | null;
 };
 type LoadedOpeningStockMeta = {
   voucherId: string;
@@ -81,16 +90,10 @@ type LoadedOpeningStockMeta = {
   companyId: string;
   branchId: string;
 };
-type TableFieldNavigationDirection = "left" | "right" | "up" | "down";
-type TableFocusableFieldTarget = {
-  fieldKey: string;
-  rowIndex: number;
-  columnIndex: number;
-  container: HTMLElement;
-  control: HTMLElement;
-};
+
 const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
 const ACCOUNT_LEDGER_LIST_ENDPOINT = "/account-ledger-masters/list";
+const GODOWN_LIST_ENDPOINT = "/godowns/list";
 const OPENING_STOCK_SAVE_ENDPOINT = "/opening-stocks";
 const OPENING_STOCK_LIST_ENDPOINT = "/opening-stocks/list";
 const OPENING_STOCK_GET_ENDPOINT = "/opening-stocks/get";
@@ -104,20 +107,58 @@ const UI_TABLE_COLUMNS_TOAST_OPTIONS = {
   error: false,
 } as const;
 const OPENING_STOCK_LEDGER_NAME = "opening stock";
-const TABLE_FIELD_CONTAINER_SELECTOR = '[data-opening-stock-field-container="true"]';
-const TABLE_FIELD_CONTROL_SELECTOR = '[data-opening-stock-field-control="true"]';
 const LOOKUP_SEARCH_DEBOUNCE_MS = 250;
 const SERIAL_NUMBER_COLUMN_WIDTH = "112px";
-const TRACKING_OPTIONS = ["NONE","MRP", "BATCH" ] as const;
-const PROFIT_TYPE_OPTIONS = ["PERCENT", "VALUE"] as const;
+const TRACKING_OPTIONS = [
+  "0", "1", "2"
+] as const;
+const TRACKING_TYPE_OPTION_LABELS: Record<(typeof TRACKING_OPTIONS)[number], string> = {
+  "0": "NONE",
+  "1": "MRP",
+  "2": "BATCH",
+};
+const TRACKING_REQUIRED_FIELD_KEYS: Partial<Record<(typeof TRACKING_OPTIONS)[number], readonly string[]>> = {
+  "1": ["mrp"],
+  "2": ["batchno", "serialno", "mfgdate", "batchdate", "expirydate"],
+};
+const TRACKING_REQUIRED_FIELD_LABELS: Record<string, string> = {
+  mrp: "M.R.P",
+  batchno: "Batch No",
+  serialno: "Serial No",
+  mfgdate: "Mfg Date",
+  batchdate: "Batch Date",
+  expirydate: "Expiry Date",
+};
+const TRACKING_VALIDATION_FIELD_KEYS = Array.from(
+  new Set(Object.values(TRACKING_REQUIRED_FIELD_KEYS).flatMap((fieldKeys) => fieldKeys ?? [])),
+);
+const PROFIT_TYPE_OPTIONS = ["BY_PERCENT", "BY_AMOUNT", "MANUAL"] as const;
+const PROFIT_TYPE_OPTION_LABELS: Record<(typeof PROFIT_TYPE_OPTIONS)[number], string> = {
+  BY_PERCENT: "BY %",
+  BY_AMOUNT: "BY RS",
+  MANUAL: "BY USER",
+};
+const ROUND_OFF_OPTIONS = ["0.01", "0.5", "1", "5", "10", "50", "100"] as const;
 const CESS_TYPE_OPTIONS = ["NONE", "PERCENT", "PER_UNIT"] as const;
+const GODOWN_LOOKUP_QUERY = {
+  page: "1",
+  limit: "100",
+  gdl_is_active: "true",
+} as const;
+const BATCH_TRACKING_FIELD_KEYS = new Set([
+  "batchno",
+  "serialno",
+  "batchdate",
+  "mfgdate",
+  "expirydate",
+]);
 const DEFAULT_ITEM_OPTION: ERPDynamicSelectOption = {
   value: "",
-  label: "Clear selection",
+  label: "",
 };
 const DEFAULT_GODOWN_OPTION: ERPDynamicSelectOption = {
   value: "",
-  label: "Clear selection",
+  label: "",
 };
 const LOOKUP_FIELD_CONFIG: Record<
   LookupKind,
@@ -207,6 +248,14 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     placeholder: "0.000",
     defaultValue: "0.000",
   },
+  freebaseqty: {
+    header: "Free Base Qty",
+    defaultWidth: "110px",
+    align: "right",
+    kind: "number",
+    placeholder: "0.000",
+    defaultValue: "0.000",
+  },
   convfactor: {
     header: "Conv Factor",
     defaultWidth: "110px",
@@ -275,9 +324,9 @@ const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     header: "Round Off",
     defaultWidth: "100px",
     align: "right",
-    kind: "number",
-    placeholder: "0.00",
-    defaultValue: "0.00",
+    kind: "select",
+    options: ROUND_OFF_OPTIONS,
+    defaultValue: "",
   },
   priceawot: {
     header: "Price A Wot",
@@ -478,12 +527,18 @@ const FALLBACK_COLUMN_KEYS = [
   "barcode",
   "code",
   "itemname",
+  "oslitemid",
   "godown",
+  "oslgodownid",
   "uom",
+  "oslunitid",
+  "oslbaseuomid",
   "taxname",
+  "osltaxid",
   "openingqty",
   "freeqty",
   "baseqty",
+  "freebaseqty",
   "convfactor",
   "batchno",
   "serialno",
@@ -492,13 +547,20 @@ const FALLBACK_COLUMN_KEYS = [
   "mrp",
   "remarks",
 ] as const;
-const HIDDEN_INTERNAL_COLUMN_KEYS = new Set([
+const HIDDEN_INTERNAL_COLUMN_KEYS = new Set<string>();
+
+// These columns are always injected into the configured column list if missing,
+// regardless of what the backend UI table config says.
+const ALWAYS_VISIBLE_COLUMN_KEYS = [
+  "freebaseqty",
+  "mrp",
   "oslitemid",
   "oslunitid",
   "oslbaseuomid",
   "oslgodownid",
   "osltaxid",
-]);
+] as const;
+
 const ITEM_AUTOFILL_FIELD_KEYS = [
   "barcode",
   "code",
@@ -506,6 +568,7 @@ const ITEM_AUTOFILL_FIELD_KEYS = [
   "uom",
   "taxname",
   "baseqty",
+  "freebaseqty",
   "convfactor",
   "costprice",
   "costwot",
@@ -544,6 +607,8 @@ const VALUE_FORMATTER = new Intl.NumberFormat("en-IN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DISPLAY_DATE_PATTERN = /^(\d{2})\/(\d{2})\/(\d{4})$/;
 function cx(...tokens: Array<string | false | undefined>): string {
   return tokens.filter(Boolean).join(" ");
 }
@@ -557,38 +622,95 @@ function parseDecimal(value: string | undefined): number {
 function formatQuantityValue(value: number): string {
   return QUANTITY_FORMATTER.format(value).replace(/,/g, "");
 }
+function isValidDateParts(year: string, month: string, day: string): boolean {
+  const parsedYear = Number(year);
+  const parsedMonth = Number(month);
+  const parsedDay = Number(day);
+  if (
+    !Number.isInteger(parsedYear) ||
+    !Number.isInteger(parsedMonth) ||
+    !Number.isInteger(parsedDay)
+  ) {
+    return false;
+  }
+  const candidate = new Date(Date.UTC(parsedYear, parsedMonth - 1, parsedDay));
+  return (
+    candidate.getUTCFullYear() === parsedYear &&
+    candidate.getUTCMonth() === parsedMonth - 1 &&
+    candidate.getUTCDate() === parsedDay
+  );
+}
+function toCanonicalDateValue(value: string | null | undefined): string {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return "";
+  }
+  const isoMatch = normalized.match(ISO_DATE_PATTERN);
+  if (isoMatch && isValidDateParts(isoMatch[1], isoMatch[2], isoMatch[3])) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+  const displayMatch = normalized.match(DISPLAY_DATE_PATTERN);
+  if (displayMatch && isValidDateParts(displayMatch[3], displayMatch[2], displayMatch[1])) {
+    return `${displayMatch[3]}-${displayMatch[2]}-${displayMatch[1]}`;
+  }
+  return "";
+}
+function formatDateForDisplay(value: string | null | undefined): string {
+  const normalized = toCanonicalDateValue(value);
+  if (!normalized) {
+    return "";
+  }
+  const [year, month, day] = normalized.split("-");
+  if (!year || !month || !day) {
+    return "";
+  }
+  return `${day}/${month}/${year}`;
+}
+function formatDateEntry(value: string): string {
+  const normalized = value.trim();
+  if (normalized.includes("-")) {
+    return formatDateForDisplay(normalized);
+  }
+  const digits = normalized.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) {
+    return digits;
+  }
+  if (digits.length <= 4) {
+    return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  }
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+function openDatePicker(input: HTMLInputElement | null) {
+  if (!input) {
+    return;
+  }
+  const pickerInput = input as HTMLInputElement & { showPicker?: () => void };
+  if (typeof pickerInput.showPicker === "function") {
+    pickerInput.showPicker();
+    return;
+  }
+  input.focus();
+  input.click();
+}
 function getTodayInputValue(): string {
   const today = new Date();
   const localDate = new Date(today.getTime() - today.getTimezoneOffset() * 60_000);
-  return localDate.toISOString().slice(0, 10);
+  return formatDateForDisplay(localDate.toISOString().slice(0, 10));
 }
 function toNullableTrimmedString(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
 }
 function toIsoDateTime(value: string | null | undefined): string | null {
-  const normalized = value?.trim();
+  const normalized = toCanonicalDateValue(value);
   return normalized ? `${normalized}T00:00:00.000Z` : null;
 }
 function toInputDateValue(value: string | null | undefined): string {
-  const normalized = value?.trim();
-  if (!normalized) {
-    return "";
-  }
-  const isoDateMatch = /^\d{4}-\d{2}-\d{2}/.exec(normalized);
-  if (isoDateMatch) {
-    return isoDateMatch[0];
-  }
-  const parsed = new Date(normalized);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-  const localDate = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000);
-  return localDate.toISOString().slice(0, 10);
+  return formatDateForDisplay(value);
 }
 function formatAccountingYear(referenceDate: string | null | undefined): string | null {
-  const normalized = referenceDate?.trim() || getTodayInputValue();
-  const parsedMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+  const normalized = toCanonicalDateValue(referenceDate?.trim() || getTodayInputValue());
+  const parsedMatch = normalized.match(ISO_DATE_PATTERN);
   if (!parsedMatch) {
     return null;
   }
@@ -606,12 +728,60 @@ function toInputValue(value: string | number | null | undefined): string {
   }
   return typeof value === "string" ? value : String(value);
 }
+function buildGodownLookupOptions(
+  payload: ApiSuccessResponse<GodownLookupRecord[], ListMeta> | unknown,
+  branchId: string | null | undefined,
+): ERPDynamicSelectOption[] {
+  const normalizedBranchId = branchId?.trim() ?? "";
+  const rows = extractRows<GodownLookupRecord>(payload, [
+    "data",
+    "rows",
+    "items",
+    "results",
+    "list",
+    "godowns",
+    "godown_locations",
+  ]);
+  const optionMap = new Map<string, string>();
+  for (const row of rows) {
+    const value = row.gdl_id?.trim() ?? "";
+    const label = row.gdl_name?.trim() ?? "";
+    const rowBranchId = row.gdl_branch_id?.trim() ?? "";
+    if (!value || !label) {
+      continue;
+    }
+    if (normalizedBranchId && rowBranchId && rowBranchId !== normalizedBranchId) {
+      continue;
+    }
+    if (!optionMap.has(value)) {
+      optionMap.set(value, label);
+    }
+  }
+  const options = Array.from(optionMap, ([value, label]) => ({ value, label })).sort((left, right) =>
+    left.label.localeCompare(right.label),
+  );
+  return [DEFAULT_GODOWN_OPTION, ...options];
+}
 function normalizeOpeningStockProfitType(value: string | null | undefined): string {
   const normalized = (value ?? "").trim().toUpperCase();
   if (normalized === "BY_AMOUNT" || normalized === "BY RS" || normalized === "VALUE") {
-    return "VALUE";
+    return "BY_AMOUNT";
   }
-  return "PERCENT";
+  if (normalized === "MANUAL" || normalized === "BY USER" || normalized === "USER") {
+    return "MANUAL";
+  }
+  return "BY_PERCENT";
+}
+function normalizeOpeningStockRoundOff(value: string | number | null | undefined): string {
+  const normalized = toInputValue(value).trim();
+  if (!normalized) {
+    return "";
+  }
+  const numericValue = parseDecimal(normalized);
+  if (numericValue <= 0) {
+    return "";
+  }
+  return ROUND_OFF_OPTIONS.find((option) => parseDecimal(option) === numericValue) ?? "";
 }
 function normalizeOpeningStockCessType(value: string | null | undefined): string {
   const normalized = (value ?? "").trim().toUpperCase();
@@ -624,7 +794,7 @@ function normalizeOpeningStockCessType(value: string | null | undefined): string
   return "NONE";
 }
 function resolveTrackingType(item: ItemPriceDetailsPayload["item"]): string {
-  return item.item_is_batch_based || item.item_is_expiry_item ? "BATCH" : "NONE";
+  return item.item_is_batch_based || item.item_is_expiry_item ? "2" : "0";
 }
 function buildTaxSelectionValues(taxDetail: ItemTaxDetailPayload | ItemPriceDetailsPayload["item_tax"]): Record<string, string> {
   return {
@@ -646,16 +816,20 @@ function buildPriceSelectionValues(
   const resolvedUnitId = priceRecord?.ipm_unit_id ?? detail.item.item_base_unit_id ?? "";
   const convFactor = priceRecord?.ipm_to_base_factor ?? 1;
   const openingQty = parseDecimal(currentValues.openingqty);
-  const resolvedGodownId = priceRecord?.ipm_godown_id ?? "";
+  const freeQty = parseDecimal(currentValues.freeqty);
+  const requestedGodownId = priceRecord?.ipm_godown_id ?? "";
+  const resolvedGodownId =
+    requestedGodownId && godownOptionsByValue.has(requestedGodownId) ? requestedGodownId : "";
   return {
     uom: unitOptionsByValue.get(resolvedUnitId) ?? "",
     godown: godownOptionsByValue.get(resolvedGodownId) ?? "",
     baseqty: formatQuantityValue(openingQty * convFactor),
+    freebaseqty: formatQuantityValue(freeQty * convFactor),
     convfactor: toInputValue(convFactor),
     costprice: toInputValue(priceRecord?.ipm_cost_price),
     costwot: toInputValue(priceRecord?.ipm_cost_wot),
     profittype: normalizeOpeningStockProfitType(priceRecord?.ipm_profit_type),
-    roundoff: toInputValue(priceRecord?.ipm_round_off),
+    roundoff: normalizeOpeningStockRoundOff(priceRecord?.ipm_round_off),
     priceawot: toInputValue(priceRecord?.ipm_price_a_wot),
     priceamarkup: toInputValue(priceRecord?.ipm_price_a_markup_perc),
     pricea: toInputValue(priceRecord?.ipm_sales_price_a),
@@ -728,6 +902,67 @@ function getAlignClass(align: ColumnAlign): string {
   }
   return tableStyles.alignLeft;
 }
+const MIN_RESIZABLE_COLUMN_WIDTH = 80;
+
+function parseColumnWidth(width: string, fallback = 120): number {
+  const parsed = Number.parseFloat(width);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function reorderColumns(
+  current: ColumnDefinition[],
+  sourceKey: string,
+  targetKey: string,
+): ColumnDefinition[] {
+  if (!sourceKey || !targetKey || sourceKey === targetKey) {
+    return current;
+  }
+
+  const next = [...current];
+  const sourceIndex = next.findIndex((column) => column.key === sourceKey);
+  const targetIndex = next.findIndex((column) => column.key === targetKey);
+
+  if (sourceIndex === -1 || targetIndex === -1) {
+    return current;
+  }
+
+  const [moved] = next.splice(sourceIndex, 1);
+  next.splice(targetIndex, 0, moved);
+  return next;
+}
+
+function mergeResolvedColumns(
+  previous: ColumnDefinition[],
+  incoming: ColumnDefinition[],
+): ColumnDefinition[] {
+  if (previous.length === 0) {
+    return incoming;
+  }
+
+  const incomingMap = new Map(incoming.map((column) => [column.key, column]));
+  const merged: ColumnDefinition[] = [];
+
+  for (const previousColumn of previous) {
+    const latest = incomingMap.get(previousColumn.key);
+    if (!latest) {
+      continue;
+    }
+
+    merged.push({
+      ...latest,
+      width: previousColumn.width || latest.width,
+    });
+    incomingMap.delete(previousColumn.key);
+  }
+
+  for (const incomingColumn of incoming) {
+    if (incomingMap.has(incomingColumn.key)) {
+      merged.push(incomingColumn);
+    }
+  }
+
+  return merged;
+}
 function createUnknownColumnSchema(header: string): ColumnSchema {
   return {
     header,
@@ -770,7 +1005,8 @@ function toConfiguredNumberInputValue(
 }
 function createDefaultRowValues(): Record<string, string> {
   return Object.entries(COLUMN_SCHEMA).reduce<Record<string, string>>((accumulator, [key, schema]) => {
-    accumulator[key] = schema.defaultValue ?? "";
+    const val = schema.defaultValue ?? "";
+    accumulator[key] = (val === "0.00" || val === "0.000") ? "" : val;
     return accumulator;
   }, {});
 }
@@ -802,81 +1038,7 @@ const INITIAL_ROWS: OpeningStockRow[] = [createRow(1)];
 function createEmptyRow(nextId: number): OpeningStockRow {
   return createRow(nextId);
 }
-function getTableFocusableFieldTargets(root: HTMLElement): TableFocusableFieldTarget[] {
-  return Array.from(root.querySelectorAll<HTMLElement>(TABLE_FIELD_CONTAINER_SELECTOR))
-    .map((container) => {
-      const control = container.querySelector<HTMLElement>(TABLE_FIELD_CONTROL_SELECTOR);
-      if (!control || control.hasAttribute("disabled")) {
-        return null;
-      }
-      const rowIndex = Number(container.dataset.openingStockRowIndex ?? "");
-      const columnIndex = Number(container.dataset.openingStockColumnIndex ?? "");
-      if (!Number.isFinite(rowIndex) || !Number.isFinite(columnIndex)) {
-        return null;
-      }
-      return {
-        fieldKey: `${rowIndex}:${columnIndex}`,
-        rowIndex,
-        columnIndex,
-        container,
-        control,
-      };
-    })
-    .filter((target): target is TableFocusableFieldTarget => target !== null);
-}
-function findNextTableFieldTarget(
-  targets: TableFocusableFieldTarget[],
-  currentTarget: TableFocusableFieldTarget,
-  direction: TableFieldNavigationDirection,
-): TableFocusableFieldTarget | null {
-  const targetMap = new Map(targets.map((target) => [target.fieldKey, target]));
-  const maxRowIndex = Math.max(...targets.map((target) => target.rowIndex));
-  const maxColumnIndex = Math.max(...targets.map((target) => target.columnIndex));
-  if (direction === "left" || direction === "right") {
-    const delta = direction === "left" ? -1 : 1;
-    for (
-      let nextColumnIndex = currentTarget.columnIndex + delta;
-      nextColumnIndex >= 0 && nextColumnIndex <= maxColumnIndex;
-      nextColumnIndex += delta
-    ) {
-      const candidate = targetMap.get(`${currentTarget.rowIndex}:${nextColumnIndex}`);
-      if (candidate) {
-        return candidate;
-      }
-    }
-    return null;
-  }
-  const delta = direction === "up" ? -1 : 1;
-  for (
-    let nextRowIndex = currentTarget.rowIndex + delta;
-    nextRowIndex >= 0 && nextRowIndex <= maxRowIndex;
-    nextRowIndex += delta
-  ) {
-    const candidate = targetMap.get(`${nextRowIndex}:${currentTarget.columnIndex}`);
-    if (candidate) {
-      return candidate;
-    }
-  }
-  return null;
-}
-function focusTableFieldControl(control: HTMLElement) {
-  control.focus();
-  if (
-    control instanceof HTMLInputElement ||
-    control instanceof HTMLTextAreaElement
-  ) {
-    try {
-      const selectionIndex = control.value.length;
-      control.setSelectionRange(selectionIndex, selectionIndex);
-    } catch {
-      // Some input types do not support text selection.
-    }
-  }
-  control.scrollIntoView({
-    block: "nearest",
-    inline: "nearest",
-  });
-}
+
 function buildLoadedLookupOptions(
   entries: Array<{ value: string | null | undefined; label: string | null | undefined }>,
 ): ERPDynamicSelectOption[] {
@@ -894,6 +1056,17 @@ function buildLoadedLookupOptions(
 function getNextRowId(rows: OpeningStockRow[]): number {
   return rows.reduce((highestId, row) => Math.max(highestId, row.id), 0) + 1;
 }
+function ensureTrailingEmptyRow(rows: OpeningStockRow[], sourceRowId: number): OpeningStockRow[] {
+  const sourceRowIndex = rows.findIndex((row) => row.id === sourceRowId);
+  if (sourceRowIndex === -1 || sourceRowIndex !== rows.length - 1) {
+    return rows;
+  }
+  const sourceRow = rows[sourceRowIndex];
+  if (isPristineRow(sourceRow)) {
+    return rows;
+  }
+  return [...rows, createEmptyRow(getNextRowId(rows))];
+}
 function getFilteredRows(rows: OpeningStockRow[], searchQuery: string): OpeningStockRow[] {
   const normalizedQuery = searchQuery.trim().toLowerCase();
   if (!normalizedQuery) {
@@ -905,6 +1078,65 @@ function getFilteredRows(rows: OpeningStockRow[], searchQuery: string): OpeningS
 }
 function getRowStockValue(row: OpeningStockRow): number {
   return parseDecimal(row.values.openingqty) * parseDecimal(row.values.costprice);
+}
+function getTrackingTypeValue(row: OpeningStockRow): (typeof TRACKING_OPTIONS)[number] {
+  const trackingType = row.values.osltrackingtype?.trim() ?? "0";
+  if (trackingType === "1" || trackingType === "2") {
+    return trackingType;
+  }
+  return "0";
+}
+function getTrackingRequiredFieldKeys(row: OpeningStockRow): readonly string[] {
+  return TRACKING_REQUIRED_FIELD_KEYS[getTrackingTypeValue(row)] ?? [];
+}
+function getInvalidFieldKey(rowId: number, fieldKey: string): string {
+  return `${rowId}:${fieldKey}`;
+}
+function isTrackingRequiredFieldMissing(row: OpeningStockRow, fieldKey: string): boolean {
+  if (!getTrackingRequiredFieldKeys(row).includes(fieldKey)) {
+    return false;
+  }
+  return !toNullableTrimmedString(row.values[fieldKey]);
+}
+function clearInvalidFieldKeys(
+  current: Record<string, true>,
+  rowId: number,
+  fieldKeys: readonly string[],
+): Record<string, true> {
+  let changed = false;
+  const next = { ...current };
+  for (const fieldKey of fieldKeys) {
+    const invalidFieldKey = getInvalidFieldKey(rowId, fieldKey);
+    if (next[invalidFieldKey]) {
+      delete next[invalidFieldKey];
+      changed = true;
+    }
+  }
+  return changed ? next : current;
+}
+function buildInvalidFieldState(
+  issues: Array<{ rowId: number; fieldKey: string }>,
+): Record<string, true> {
+  return issues.reduce<Record<string, true>>((accumulator, issue) => {
+    accumulator[getInvalidFieldKey(issue.rowId, issue.fieldKey)] = true;
+    return accumulator;
+  }, {});
+}
+function focusOpeningStockField(
+  table: HTMLTableElement | null,
+  rowId: number,
+  fieldKey: string,
+): void {
+  const selector = `[data-opening-stock-row-id="${rowId}"][data-opening-stock-field-key="${fieldKey}"]`;
+  const fieldControl = table?.querySelector<HTMLElement>(selector);
+  if (!fieldControl) {
+    return;
+  }
+  fieldControl.scrollIntoView({
+    block: "nearest",
+    inline: "nearest",
+  });
+  fieldControl.focus();
 }
 function isPristineRow(row: OpeningStockRow): boolean {
   return Object.entries(DEFAULT_ROW_VALUES).every(
@@ -927,20 +1159,44 @@ function getTotals(rows: OpeningStockRow[]): {
     { lines: 0, qty: 0, freeQty: 0, value: 0 },
   );
 }
-function getRowValidationMessage(row: OpeningStockRow, rowNumber: number): string | null {
+function getRowValidationIssues(row: OpeningStockRow, rowNumber: number): RowValidationIssue[] {
+  const issues: RowValidationIssue[] = [];
   if (!toNullableTrimmedString(row.values.oslitemid)) {
-    return `Row ${rowNumber} is missing an item.`;
+    issues.push({
+      fieldKey: "itemname",
+      message: `Row ${rowNumber} is missing an item name.`,
+    });
   }
   if (!toNullableTrimmedString(row.values.oslunitid)) {
-    return `Row ${rowNumber} is missing a unit.`;
+    issues.push({
+      fieldKey: "uom",
+      message: `Row ${rowNumber} is missing a unit.`,
+    });
   }
   if (!toNullableTrimmedString(row.values.oslgodownid)) {
-    return `Row ${rowNumber} is missing a godown.`;
+    issues.push({
+      fieldKey: "godown",
+      message: `Row ${rowNumber} is missing a godown.`,
+    });
   }
   if (!row.values.openingqty?.trim()) {
-    return `Row ${rowNumber} is missing opening quantity.`;
+    issues.push({
+      fieldKey: "openingqty",
+      message: `Row ${rowNumber} is missing opening quantity.`,
+    });
   }
-  return null;
+  for (const missingTrackingFieldKey of getTrackingRequiredFieldKeys(row)) {
+    if (toNullableTrimmedString(row.values[missingTrackingFieldKey])) {
+      continue;
+    }
+    const trackingType = getTrackingTypeValue(row);
+    const fieldLabel = TRACKING_REQUIRED_FIELD_LABELS[missingTrackingFieldKey] ?? missingTrackingFieldKey;
+    issues.push({
+      fieldKey: missingTrackingFieldKey,
+      message: `Row ${rowNumber} requires ${fieldLabel} when tracking type is ${TRACKING_TYPE_OPTION_LABELS[trackingType]}.`,
+    });
+  }
+  return issues;
 }
 function buildOpeningStockDetailPayload(row: OpeningStockRow): OpeningStockSaveDetail {
   return {
@@ -949,7 +1205,7 @@ function buildOpeningStockDetailPayload(row: OpeningStockRow): OpeningStockSaveD
     osl_unit_id: row.values.oslunitid.trim(),
     osl_base_uom_id: toNullableTrimmedString(row.values.oslbaseuomid),
     osl_godown_id: row.values.oslgodownid.trim(),
-    osl_tracking_type: row.values.osltrackingtype?.trim() || "NONE",
+    osl_tracking_type: row.values.osltrackingtype?.trim() || "0",
     osl_tax_id: toNullableTrimmedString(row.values.osltaxid),
     osl_tax_perc: parseDecimal(row.values.osltaxperc),
     osl_cess_type: row.values.oslcesstype?.trim() || "NONE",
@@ -958,6 +1214,7 @@ function buildOpeningStockDetailPayload(row: OpeningStockRow): OpeningStockSaveD
     osl_qty: parseDecimal(row.values.openingqty),
     osl_free_qty: parseDecimal(row.values.freeqty),
     osl_base_qty: parseDecimal(row.values.baseqty),
+    osl_free_base_qty: parseDecimal(row.values.freebaseqty),
     osl_conv_factor: parseDecimal(row.values.convfactor) || 1,
     osl_batch_no: toNullableTrimmedString(row.values.batchno),
     osl_serial_no: toNullableTrimmedString(row.values.serialno),
@@ -1004,6 +1261,7 @@ function mapOpeningStockDetailToRow(
     openingqty: toConfiguredNumberInputValue("openingqty", detail.osl_qty),
     freeqty: toConfiguredNumberInputValue("freeqty", detail.osl_free_qty),
     baseqty: toConfiguredNumberInputValue("baseqty", detail.osl_base_qty),
+    freebaseqty: toConfiguredNumberInputValue("freebaseqty", detail.osl_free_base_qty),
     convfactor: toConfiguredNumberInputValue("convfactor", detail.osl_conv_factor),
     batchno: toInputValue(detail.osl_batch_no),
     serialno: toInputValue(detail.osl_serial_no),
@@ -1033,7 +1291,7 @@ function mapOpeningStockDetailToRow(
     oslunitid: toInputValue(detail.osl_unit_id),
     oslbaseuomid: toInputValue(detail.osl_base_uom_id),
     oslgodownid: toInputValue(detail.osl_godown_id),
-    osltrackingtype: toInputValue(detail.osl_tracking_type || "NONE"),
+    osltrackingtype: toInputValue(detail.osl_tracking_type || "0"),
     osltaxid: toInputValue(detail.osl_tax_id),
     osltaxperc: toConfiguredNumberInputValue("osltaxperc", detail.osl_tax_perc),
     oslcesstype: normalizeOpeningStockCessType(detail.osl_cess_type),
@@ -1098,6 +1356,32 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Co
     });
     seenKeys.add(key);
   }
+
+  // ── FIX: Always inject ALWAYS_VISIBLE_COLUMN_KEYS if absent from backend config ──
+  for (const key of ALWAYS_VISIBLE_COLUMN_KEYS) {
+    if (seenKeys.has(key) || HIDDEN_INTERNAL_COLUMN_KEYS.has(key)) {
+      continue;
+    }
+    const schema = COLUMN_SCHEMA[key];
+    if (!schema) {
+      continue;
+    }
+    resolvedColumns.push({
+      key,
+      header: schema.header,
+      width: schema.defaultWidth,
+      align: schema.align,
+      kind: schema.kind,
+      lookupKind: schema.lookupKind,
+      placeholder: schema.placeholder,
+      options: schema.options,
+      defaultValue: schema.defaultValue,
+      defaultWidth: schema.defaultWidth,
+    });
+    seenKeys.add(key);
+  }
+  // ────────────────────────────────────────────────────────────────────────────────
+
   return resolvedColumns.length > 0 ? resolvedColumns : createFallbackColumns();
 }
 function getTableMinWidth(columns: ColumnDefinition[]): string {
@@ -1155,10 +1439,12 @@ function buildItemAutofillValues(
   detail: ItemPriceDetailsPayload,
   unitOptionsByValue: Map<string, string>,
   godownOptionsByValue: Map<string, string>,
+  taxOptionsByValue: Map<string, string>,
   currentValues: Record<string, string>,
   selectedLabel: string,
 ): Record<string, string> {
   const defaultPrice = resolveDefaultItemPriceRecord(detail.item_prices);
+  const defaultTaxId = toInputValue(detail.item.item_default_tax_id);
   return {
     ...ITEM_AUTOFILL_RESET_VALUES,
     itemname: detail.item.item_name_en?.trim() || selectedLabel,
@@ -1176,8 +1462,8 @@ function buildItemAutofillValues(
     ...(detail.item_tax
       ? buildTaxSelectionValues(detail.item_tax)
       : {
-        taxname: "",
-        osltaxid: toInputValue(detail.item.item_default_tax_id),
+        taxname: taxOptionsByValue.get(defaultTaxId) ?? "",
+        osltaxid: defaultTaxId,
       }),
   };
 }
@@ -1202,6 +1488,7 @@ export default function OpeningStockPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [voucherDate, setVoucherDate] = useState(() => getTodayInputValue());
   const [rows, setRows] = useState<OpeningStockRow[]>(INITIAL_ROWS);
+  const [invalidFieldKeys, setInvalidFieldKeys] = useState<Record<string, true>>({});
   const [uiColumnConfigs, setUiColumnConfigs] = useState<UiTableColumnPayload[]>([]);
   const [itemDetailsByItemId, setItemDetailsByItemId] = useState<Record<string, ItemPriceDetailsPayload>>({});
   const [itemOptions, setItemOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_ITEM_OPTION]);
@@ -1218,12 +1505,12 @@ export default function OpeningStockPage() {
     key: string;
     kind: LookupKind;
   } | null>(null);
-  const [openRowActionMenuId, setOpenRowActionMenuId] = useState<number | null>(null);
   const [lookupSearchQuery, setLookupSearchQuery] = useState("");
   const tableRef = useRef<HTMLTableElement | null>(null);
   const lookupRootRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const rowActionRootRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const lookupSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const voucherDatePickerRef = useRef<HTMLInputElement | null>(null);
+  const rowDatePickerRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const itemSearchTimeoutRef = useRef<number | null>(null);
   const itemSearchRequestRef = useRef(0);
   const itemDetailRequestRef = useRef<Record<number, number>>({});
@@ -1241,6 +1528,14 @@ export default function OpeningStockPage() {
     toast: UI_TABLE_COLUMNS_TOAST_OPTIONS,
   });
   const { run: listAccountLedgers } = useApi<unknown>(ACCOUNT_LEDGER_LIST_ENDPOINT, {
+    toast: {
+      success: false,
+      error: false,
+    },
+  });
+  const { run: listGodowns, loading: isGodownLookupLoading } = useApi<
+    ApiSuccessResponse<GodownLookupRecord[], ListMeta>
+  >(GODOWN_LIST_ENDPOINT, {
     toast: {
       success: false,
       error: false,
@@ -1273,24 +1568,31 @@ export default function OpeningStockPage() {
     useLazyGetItemOptionsQuery();
   const [triggerTaxOptions] = useLazyGetTaxOptionsQuery();
   const [triggerUnitOptions] = useLazyGetUnitOptionsQuery();
-  const [triggerGodownOptions, { isFetching: isGodownLookupLoading }] =
-    useLazyGetGodownOptionsQuery();
   const [triggerItemPriceDetails] = useLazyGetItemPriceDetailsQuery();
   const [triggerItemTaxById] = useLazyGetItemTaxByIdQuery();
   const loadLookupOptions = useCallback(
     async (lookupKind: LookupKind, search = ""): Promise<ERPDynamicSelectOption[]> => {
       const normalizedSearch = search.trim();
-      return lookupKind === "item"
-        ? triggerItemOptions(
-          normalizedSearch ? { search: normalizedSearch } : undefined,
-          true,
-        ).unwrap()
-        : triggerGodownOptions(
+      if (lookupKind === "item") {
+        return triggerItemOptions(
           normalizedSearch ? { search: normalizedSearch } : undefined,
           true,
         ).unwrap();
+      }
+      const activeBranchId = activeBranch?.brId?.trim() ?? "";
+      if (!activeBranchId) {
+        return [DEFAULT_GODOWN_OPTION];
+      }
+      const payload = await listGodowns({
+        query: {
+          ...GODOWN_LOOKUP_QUERY,
+          gdl_branch_id: activeBranchId,
+          ...(normalizedSearch ? { search: normalizedSearch } : {}),
+        },
+      });
+      return buildGodownLookupOptions(payload, activeBranchId);
     },
-    [triggerGodownOptions, triggerItemOptions],
+    [activeBranch?.brId, listGodowns, triggerItemOptions],
   );
   const loadUnitOptions = useCallback(
     async (search = ""): Promise<ERPDynamicSelectOption[]> => {
@@ -1366,7 +1668,7 @@ export default function OpeningStockPage() {
     };
   }, [openLookupCell]);
   useEffect(() => {
-    if (!openLookupCell && openRowActionMenuId === null) {
+    if (!openLookupCell) {
       return;
     }
     const handlePointerDown = (event: MouseEvent) => {
@@ -1375,17 +1677,11 @@ export default function OpeningStockPage() {
         setOpenLookupCell(null);
         setLookupSearchQuery("");
       }
-      const actionRootElement =
-        openRowActionMenuId !== null ? rowActionRootRefs.current[openRowActionMenuId] : null;
-      if (actionRootElement && !actionRootElement.contains(event.target as Node)) {
-        setOpenRowActionMenuId(null);
-      }
     };
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpenLookupCell(null);
         setLookupSearchQuery("");
-        setOpenRowActionMenuId(null);
       }
     };
     document.addEventListener("mousedown", handlePointerDown);
@@ -1394,7 +1690,7 @@ export default function OpeningStockPage() {
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [openLookupCell, openRowActionMenuId]);
+  }, [openLookupCell]);
   useEffect(() => {
     return () => {
       if (itemSearchTimeoutRef.current !== null) {
@@ -1423,10 +1719,6 @@ export default function OpeningStockPage() {
       ),
     [taxOptions],
   );
-  const taxSelectOptions = useMemo(
-    () => taxOptions.filter((option) => option.value.trim().length > 0),
-    [taxOptions],
-  );
   useEffect(() => {
     if (unitOptionsByValue.size === 0) {
       return;
@@ -1451,12 +1743,26 @@ export default function OpeningStockPage() {
       }),
     );
   }, [unitOptionsByValue]);
-  const columns = resolveConfiguredColumns(uiColumnConfigs);
+  const resolvedColumns = useMemo(
+    () => resolveConfiguredColumns(uiColumnConfigs),
+    [uiColumnConfigs],
+  );
+  const [columns, setColumns] = useState<ColumnDefinition[]>([]);
+  const draggingColumnKeyRef = useRef<string | null>(null);
+  const resizingColumnRef = useRef<{
+    key: string;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  useEffect(() => {
+    setColumns((current) => mergeResolvedColumns(current, resolvedColumns));
+  }, [resolvedColumns]);
   const draftRows = useMemo(() => rows.filter((row) => !isPristineRow(row)), [rows]);
   const draftTotals = useMemo(() => getTotals(draftRows), [draftRows]);
   const filteredRows = getFilteredRows(rows, searchQuery);
   const visibleTotals = getTotals(filteredRows);
-  const trackingRows = filteredRows.filter((row) => row.values.osltrackingtype !== "NONE").length;
+  const trackingRows = filteredRows.filter((row) => row.values.osltrackingtype !== "0").length;
   const accountingYear = formatAccountingYear(voucherDate);
   const contextStatusText = !activeCompany
     ? "Select a company in the header to enable opening stock posting."
@@ -1542,11 +1848,23 @@ export default function OpeningStockPage() {
               ...row.values,
               [field]: value,
             };
-            if (field === "openingqty" || field === "convfactor") {
-              nextValues.baseqty = formatQuantityValue(
-                parseDecimal(field === "openingqty" ? value : nextValues.openingqty) *
-                parseDecimal(field === "convfactor" ? value : nextValues.convfactor),
+            if (field === "openingqty" || field === "freeqty" || field === "convfactor") {
+              const convFactor = parseDecimal(
+                field === "convfactor" ? value : nextValues.convfactor,
               );
+              nextValues.baseqty = formatQuantityValue(
+                parseDecimal(field === "openingqty" ? value : nextValues.openingqty) * convFactor,
+              );
+              nextValues.freebaseqty = formatQuantityValue(
+                parseDecimal(field === "freeqty" ? value : nextValues.freeqty) * convFactor,
+              );
+            }
+            if (field === "osltrackingtype" && value !== "2") {
+              nextValues.batchno = "";
+              nextValues.serialno = "";
+              nextValues.batchdate = "";
+              nextValues.mfgdate = "";
+              nextValues.expirydate = "";
             }
             return {
               ...row,
@@ -1556,88 +1874,18 @@ export default function OpeningStockPage() {
           : row,
       ),
     );
-  };
-  const handleTableFieldArrowNavigation = useCallback(
-    (event: ReactKeyboardEvent<HTMLTableElement>) => {
-      if (
-        event.defaultPrevented ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey
-      ) {
-        return;
-      }
-
-      const direction =
-        event.key === "ArrowLeft"
-          ? "left"
-          : event.key === "ArrowRight"
-            ? "right"
-            : event.key === "ArrowUp"
-              ? "up"
-              : event.key === "ArrowDown"
-                ? "down"
-                : null;
-
-      if (!direction) {
-        return;
-      }
-
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) {
-        return;
-      }
-
-      if (
-        target.closest('[data-opening-stock-lookup-menu="true"]') ||
-        target.getAttribute("role") === "searchbox"
-      ) {
-        return;
-      }
-
-      const currentContainer = target.closest<HTMLElement>(TABLE_FIELD_CONTAINER_SELECTOR);
-      if (!currentContainer) {
-        return;
-      }
-
-      const tableElement = tableRef.current;
-      if (!tableElement) {
-        return;
-      }
-
-      const currentRowIndex = Number(currentContainer.dataset.openingStockRowIndex ?? "");
-      const currentColumnIndex = Number(currentContainer.dataset.openingStockColumnIndex ?? "");
-      if (!Number.isFinite(currentRowIndex) || !Number.isFinite(currentColumnIndex)) {
-        return;
-      }
-
-      const targets = getTableFocusableFieldTargets(tableElement);
-      const currentTarget = targets.find(
-        (entry) =>
-          entry.rowIndex === currentRowIndex &&
-          entry.columnIndex === currentColumnIndex,
+    if (field === "osltrackingtype") {
+      setInvalidFieldKeys((current) =>
+        clearInvalidFieldKeys(current, rowId, TRACKING_VALIDATION_FIELD_KEYS),
       );
-      if (!currentTarget) {
-        return;
-      }
+      return;
+    }
+    if (!toNullableTrimmedString(value)) {
+      return;
+    }
+    setInvalidFieldKeys((current) => clearInvalidFieldKeys(current, rowId, [field]));
+  };
 
-      const nextTarget = findNextTableFieldTarget(targets, currentTarget, direction);
-      if (!nextTarget) {
-        return;
-      }
-
-      event.preventDefault();
-      if (openLookupCell) {
-        setOpenLookupCell(null);
-        setLookupSearchQuery("");
-      }
-      if (openRowActionMenuId !== null) {
-        setOpenRowActionMenuId(null);
-      }
-      focusTableFieldControl(nextTarget.control);
-    },
-    [openLookupCell, openRowActionMenuId],
-  );
   const handleUomChange = useCallback(
     (rowId: number, unitId: string) => {
       setRows((currentRows) =>
@@ -1666,62 +1914,11 @@ export default function OpeningStockPage() {
           };
         }),
       );
+      if (toNullableTrimmedString(unitId)) {
+        setInvalidFieldKeys((current) => clearInvalidFieldKeys(current, rowId, ["uom"]));
+      }
     },
     [godownOptionsByValue, itemDetailsByItemId, unitOptionsByValue],
-  );
-  const handleTaxChange = useCallback(
-    (rowId: number, taxId: string) => {
-      if (!taxId.trim()) {
-        setRows((currentRows) =>
-          currentRows.map((row) =>
-            row.id === rowId
-              ? {
-                ...row,
-                values: {
-                  ...row.values,
-                  ...buildTaxSelectionValues({
-                    tax_id: "",
-                    tax_name: "",
-                    tax_gst_rate_total: 0,
-                    tax_cess_type: "NONE",
-                    tax_cess_perc: 0,
-                    tax_cess_unit: 0,
-                  }),
-                },
-              }
-              : row,
-          ),
-        );
-        return;
-      }
-      void (async () => {
-        try {
-          const taxDetail = await triggerItemTaxById({ taxId }, true).unwrap();
-          setRows((currentRows) =>
-            currentRows.map((row) =>
-              row.id === rowId
-                ? {
-                  ...row,
-                  values: {
-                    ...row.values,
-                    ...buildTaxSelectionValues(taxDetail),
-                  },
-                }
-                : row,
-            ),
-          );
-        } catch (error) {
-          const message =
-            error && typeof error === "object" && "message" in error && typeof error.message === "string"
-              ? error.message
-              : "Failed to load tax details.";
-          toast.error(message, {
-            toastId: `opening-stock-tax-details:${taxId}`,
-          });
-        }
-      })();
-    },
-    [triggerItemTaxById],
   );
   const handleLookupSelection = useCallback(
     (rowId: number, lookupKind: LookupKind, option: ERPDynamicSelectOption) => {
@@ -1741,6 +1938,11 @@ export default function OpeningStockPage() {
               : row,
           ),
         );
+        if (option.value) {
+          setInvalidFieldKeys((current) =>
+            clearInvalidFieldKeys(current, rowId, [fieldConfig.labelField]),
+          );
+        }
         setOpenLookupCell(null);
         setLookupSearchQuery("");
         return;
@@ -1748,18 +1950,24 @@ export default function OpeningStockPage() {
       const requestId = (itemDetailRequestRef.current[rowId] ?? 0) + 1;
       itemDetailRequestRef.current[rowId] = requestId;
       setRows((currentRows) =>
-        currentRows.map((row) =>
-          row.id === rowId
-            ? {
-              ...row,
-              values: {
-                ...row.values,
-                ...buildPendingItemSelectionValues(option),
-              },
-            }
-            : row,
+        ensureTrailingEmptyRow(
+          currentRows.map((row) =>
+            row.id === rowId
+              ? {
+                ...row,
+                values: {
+                  ...row.values,
+                  ...buildPendingItemSelectionValues(option),
+                },
+              }
+              : row,
+          ),
+          rowId,
         ),
       );
+      if (option.value) {
+        setInvalidFieldKeys((current) => clearInvalidFieldKeys(current, rowId, ["itemname"]));
+      }
       setOpenLookupCell(null);
       setLookupSearchQuery("");
       if (!option.value) {
@@ -1780,6 +1988,7 @@ export default function OpeningStockPage() {
                   cachedDetail,
                   unitOptionsByValue,
                   godownOptionsByValue,
+                  taxOptionsByValue,
                   row.values,
                   option.label,
                 ),
@@ -1787,6 +1996,35 @@ export default function OpeningStockPage() {
             };
           }),
         );
+        const cachedDefaultTaxId = cachedDetail.item.item_default_tax_id?.trim() ?? "";
+        if (!cachedDetail.item_tax && cachedDefaultTaxId) {
+          void (async () => {
+            try {
+              const taxDetail = await triggerItemTaxById(
+                { taxId: cachedDefaultTaxId },
+                true,
+              ).unwrap();
+              if (itemDetailRequestRef.current[rowId] !== requestId) {
+                return;
+              }
+              setRows((currentRows) =>
+                currentRows.map((row) =>
+                  row.id === rowId && (row.values.oslitemid ?? "").trim() === option.value
+                    ? {
+                      ...row,
+                      values: {
+                        ...row.values,
+                        ...buildTaxSelectionValues(taxDetail),
+                      },
+                    }
+                    : row,
+                ),
+              );
+            } catch {
+              // Keep the fallback tax label and ID when tax detail lookup fails.
+            }
+          })();
+        }
         return;
       }
       void (async () => {
@@ -1812,6 +2050,7 @@ export default function OpeningStockPage() {
                     detail,
                     unitOptionsByValue,
                     godownOptionsByValue,
+                    taxOptionsByValue,
                     row.values,
                     option.label,
                   ),
@@ -1819,6 +2058,33 @@ export default function OpeningStockPage() {
               };
             }),
           );
+          const detailDefaultTaxId = detail.item.item_default_tax_id?.trim() ?? "";
+          if (!detail.item_tax && detailDefaultTaxId) {
+            try {
+              const taxDetail = await triggerItemTaxById(
+                { taxId: detailDefaultTaxId },
+                true,
+              ).unwrap();
+              if (itemDetailRequestRef.current[rowId] !== requestId) {
+                return;
+              }
+              setRows((currentRows) =>
+                currentRows.map((row) =>
+                  row.id === rowId && (row.values.oslitemid ?? "").trim() === option.value
+                    ? {
+                      ...row,
+                      values: {
+                        ...row.values,
+                        ...buildTaxSelectionValues(taxDetail),
+                      },
+                    }
+                    : row,
+                ),
+              );
+            } catch {
+              // Keep the fallback tax label and ID when tax detail lookup fails.
+            }
+          }
         } catch (error) {
           if (itemDetailRequestRef.current[rowId] !== requestId) {
             return;
@@ -1836,6 +2102,8 @@ export default function OpeningStockPage() {
     [
       godownOptionsByValue,
       itemDetailsByItemId,
+      taxOptionsByValue,
+      triggerItemTaxById,
       triggerItemPriceDetails,
       unitOptionsByValue,
     ],
@@ -1891,11 +2159,101 @@ export default function OpeningStockPage() {
     },
     [loadLookupOptions],
   );
+  const handleColumnDragStart = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>, columnKey: string) => {
+      draggingColumnKeyRef.current = columnKey;
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", columnKey);
+    },
+    [],
+  );
+
+  const handleColumnDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const handleColumnDrop = useCallback((targetKey: string) => {
+    const sourceKey = draggingColumnKeyRef.current;
+    draggingColumnKeyRef.current = null;
+
+    if (!sourceKey || sourceKey === targetKey) {
+      return;
+    }
+
+    setColumns((current) => reorderColumns(current, sourceKey, targetKey));
+  }, []);
+
+  const handleColumnDragEnd = useCallback(() => {
+    draggingColumnKeyRef.current = null;
+  }, []);
+
+  const handleColumnResizeStart = useCallback(
+    (
+      event: ReactMouseEvent<HTMLSpanElement>,
+      columnKey: string,
+      width: string,
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      resizingColumnRef.current = {
+        key: columnKey,
+        startX: event.clientX,
+        startWidth: parseColumnWidth(width),
+      };
+
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      const activeResize = resizingColumnRef.current;
+      if (!activeResize) {
+        return;
+      }
+
+      const delta = event.clientX - activeResize.startX;
+      const nextWidth = Math.max(
+        MIN_RESIZABLE_COLUMN_WIDTH,
+        activeResize.startWidth + delta,
+      );
+
+      setColumns((current) =>
+        current.map((column) =>
+          column.key === activeResize.key
+            ? { ...column, width: `${nextWidth}px` }
+            : column,
+        ),
+      );
+    };
+
+    const handleMouseUp = () => {
+      if (!resizingColumnRef.current) {
+        return;
+      }
+
+      resizingColumnRef.current = null;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
   const handleAddRow = () => {
     setRows((currentRows) => [...currentRows, createEmptyRow(getNextRowId(currentRows))]);
   };
   const handleRemoveRow = (rowId: number) => {
-    setOpenRowActionMenuId((currentId) => (currentId === rowId ? null : currentId));
     setRows((currentRows) => {
       const nextRows = currentRows.filter((row) => row.id !== rowId);
       return nextRows.length > 0 ? nextRows : [createEmptyRow(1)];
@@ -1984,12 +2342,12 @@ export default function OpeningStockPage() {
       setGodownOptions((current) => mergeLookupOptions(current, loadedGodowns));
       setUnitOptions((current) => mergeLookupOptions(current, loadedUnits));
       setTaxOptions((current) => mergeLookupOptions(current, loadedTaxes));
+      setInvalidFieldKeys({});
       setRows(documentRows);
       setVoucherDate(toInputDateValue(document.header.osh_voucher_date) || voucherDate);
       setSearchQuery("");
       setLookupSearchQuery("");
       setOpenLookupCell(null);
-      setOpenRowActionMenuId(null);
       setLoadedVoucherId(document.header.avh_voucher_id);
       setLoadedDocumentMeta({
         voucherId: document.header.avh_voucher_id,
@@ -2060,15 +2418,26 @@ export default function OpeningStockPage() {
       return;
     }
 
-    for (const [index, row] of draftRows.entries()) {
-      const validationMessage = getRowValidationMessage(row, index + 1);
-      if (validationMessage) {
-        toast.error(validationMessage, {
-          toastId: `opening-stock-save:row-${index + 1}`,
+    const validationIssues = draftRows.flatMap((row, index) =>
+      getRowValidationIssues(row, index + 1).map((issue) => ({
+        rowId: row.id,
+        ...issue,
+      })),
+    );
+    if (validationIssues.length > 0) {
+      setInvalidFieldKeys(buildInvalidFieldState(validationIssues));
+      const [firstIssue] = validationIssues;
+      if (firstIssue) {
+        window.requestAnimationFrame(() => {
+          focusOpeningStockField(tableRef.current, firstIssue.rowId, firstIssue.fieldKey);
         });
-        return;
+        toast.error(firstIssue.message, {
+          toastId: `opening-stock-save:row-${firstIssue.rowId}-${firstIssue.fieldKey}`,
+        });
       }
+      return;
     }
+    setInvalidFieldKeys({});
 
     let matchingLedgers: AccountLedgerRecord[] = [];
     try {
@@ -2137,11 +2506,11 @@ export default function OpeningStockPage() {
       await saveOpeningStock({
         body: requestPayload,
       });
+      setInvalidFieldKeys({});
       setRows([createEmptyRow(1)]);
       setSearchQuery("");
       setLookupSearchQuery("");
       setOpenLookupCell(null);
-      setOpenRowActionMenuId(null);
       setLoadedVoucherId(null);
       setLoadedDocumentMeta(null);
       setIsLoadConfirmOpen(false);
@@ -2204,38 +2573,14 @@ export default function OpeningStockPage() {
       <header className={styles.header}>
         <div className={styles.headingBlock}>
           <div className={styles.headingRow}>
-            <div>
               <h1 className={styles.title}>Opening Stock</h1>
-            </div>
           </div>
         </div>
-        {/* <div className={styles.summaryGrid}>
-          <SummaryCard
-            label="Visible Lines"
-            value={String(visibleTotals.lines)}
-            hint={`${rows.length} total rows in draft`}
-          />
-          <SummaryCard
-            label="Visible Qty"
-            value={QUANTITY_FORMATTER.format(visibleTotals.qty)}
-            hint={`${QUANTITY_FORMATTER.format(visibleTotals.freeQty)} free quantity`}
-          />
-          <SummaryCard
-            label="Visible Value"
-            value={VALUE_FORMATTER.format(visibleTotals.value)}
-            hint="Opening qty x cost price"
-          />
-          <SummaryCard
-            label="Tracked Rows"
-            value={String(trackingRows)}
-            hint="Rows with tracking enabled"
-          />
-        </div> */}
       </header>
       <div className={cx(tableStyles.tableShell, styles.tableShell)}>
         <div className={tableStyles.toolbar}>
           <div className={tableStyles.tableTools}>
-            <div className={tableStyles.searchField}>
+            {/* <div className={tableStyles.searchField}>
               <FiSearch className={tableStyles.searchIcon} aria-hidden="true" />
               <input
                 type="text"
@@ -2245,20 +2590,42 @@ export default function OpeningStockPage() {
                 className={tableStyles.searchInput}
                 autoComplete="off"
               />
-            </div>
+            </div> */}
             <label className={styles.toolbarDateField}>
               <span className={styles.toolbarDateLabel}>Voucher Date</span>
-              <input
-                type="date"
-                value={voucherDate}
-                onChange={(event) => setVoucherDate(event.target.value)}
-                className={styles.toolbarDateInput}
-              />
+              <div className={styles.toolbarDateControl}>
+                <input
+                  type="text"
+                  value={voucherDate}
+                  onChange={(event) => setVoucherDate(formatDateEntry(event.target.value))}
+                  className={cx(styles.toolbarDateInput, styles.dateInputWithPicker)}
+                  placeholder="dd/mm/yyyy"
+                  inputMode="numeric"
+                  maxLength={10}
+                />
+                <input
+                  ref={voucherDatePickerRef}
+                  type="date"
+                  value={toCanonicalDateValue(voucherDate)}
+                  onChange={(event) => setVoucherDate(formatDateForDisplay(event.target.value))}
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  className={styles.hiddenDatePickerInput}
+                />
+                <button
+                  type="button"
+                  className={styles.datePickerTrigger}
+                  onClick={() => openDatePicker(voucherDatePickerRef.current)}
+                  aria-label="Open voucher date calendar"
+                >
+                  <FiCalendar className={styles.datePickerIcon} aria-hidden="true" />
+                </button>
+              </div>
             </label>
-            <button type="button" className={tableStyles.createButton} onClick={handleAddRow}>
+            {/* <button type="button" className={tableStyles.createButton} onClick={handleAddRow}>
               <FiPlus className={tableStyles.createIcon} aria-hidden="true" />
               <span>Add line</span>
-            </button>
+            </button> */}
             <button
               type="button"
               className={cx(tableStyles.createButton, styles.loadButton)}
@@ -2276,26 +2643,12 @@ export default function OpeningStockPage() {
             >
               <span>{isSavingOpeningStock ? "Updating..." : "Update Stock"}</span>
             </button>
-          </div>
-          {loadedDocumentStatusText ? (
-            <p className={styles.loadedMeta}>{loadedDocumentStatusText}</p>
-          ) : null}
-          <p
-            className={cx(
-              styles.configMeta,
-              Boolean(!activeCompany || !activeBranch || businessContextError) &&
-              styles.configMetaError,
-            )}
-          >
-            {businessContextError ? `${businessContextError} ` : ""}
-            {contextStatusText} {configStatusText}
-          </p>
+          </div>         
         </div>
         <div className={tableStyles.tableViewport} data-erp-table-viewport="true">
           <table
             ref={tableRef}
-            onKeyDown={handleTableFieldArrowNavigation}
-            className={tableStyles.table}
+            className={cx(tableStyles.table, styles.resizableTable)}
             style={{ "--erp-table-min-width": tableMinWidth } as CSSProperties}
           >
             <colgroup>
@@ -2309,7 +2662,8 @@ export default function OpeningStockPage() {
                 <th
                   className={cx(
                     tableStyles.headerCell,
-                    tableStyles.alignLeft,
+                    tableStyles.alignCenter,
+                    styles.headerCellDark,
                     styles.stickySerialCell,
                     styles.stickySerialHeader,
                   )}
@@ -2320,10 +2674,34 @@ export default function OpeningStockPage() {
                 {columns.map((column) => (
                   <th
                     key={column.key}
-                    className={cx(tableStyles.headerCell, getAlignClass(column.align))}
-                    style={{ width: column.width }}
+                    className={cx(
+                      tableStyles.headerCell,
+                      tableStyles.alignCenter,
+                      styles.headerCellDark,
+                      styles.resizableHeaderCell,
+                    )}
+                    style={{
+                      width: column.width,
+                    }}
                   >
-                    <span className={tableStyles.headerText}>{column.header}</span>
+                    <div
+                      draggable
+                      className={styles.draggableHeaderContent}
+                      onDragStart={(event) => handleColumnDragStart(event, column.key)}
+                      onDragOver={handleColumnDragOver}
+                      onDrop={() => handleColumnDrop(column.key)}
+                      onDragEnd={handleColumnDragEnd}
+                    >
+                      <span className={tableStyles.headerText}>{column.header}</span>
+                    </div>
+                    <span
+                      className={styles.columnResizeHandle}
+                      onMouseDown={(event) =>
+                        handleColumnResizeStart(event, column.key, column.width)
+                      }
+                      onDragStart={(event) => event.preventDefault()}
+                      role="presentation"
+                    />
                   </th>
                 ))}
               </tr>
@@ -2358,67 +2736,25 @@ export default function OpeningStockPage() {
                     >
                       <div className={styles.serialCellContent}>
                         <span className={styles.rowNumber}>{index + 1}</span>
-                        <div
-                          className={tableStyles.actionsMenuRoot}
-                          ref={(element) => {
-                            rowActionRootRefs.current[row.id] = element;
-                          }}
+                        <button
+                          type="button"
+                          className={styles.rowDeleteButton}
+                          aria-label={`Delete row ${index + 1}`}
+                          onClick={() => handleRemoveRow(row.id)}
                         >
-                          <button
-                            type="button"
-                            className={tableStyles.actionsTrigger}
-                            aria-label={`Open actions for row ${index + 1}`}
-                            aria-haspopup="menu"
-                            aria-expanded={openRowActionMenuId === row.id}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setOpenRowActionMenuId((currentId) =>
-                                currentId === row.id ? null : row.id,
-                              );
-                            }}
-                            onMouseDown={(event) => event.stopPropagation()}
-                          >
-                            <FiMoreVertical
-                              className={tableStyles.actionsTriggerIcon}
-                              aria-hidden="true"
-                            />
-                          </button>
-                          {openRowActionMenuId === row.id ? (
-                            <div
-                              className={tableStyles.actionsDropdown}
-                              role="menu"
-                              aria-label={`Actions for row ${index + 1}`}
-                            >
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={cx(
-                                  tableStyles.actionsDropdownItem,
-                                  tableStyles.actionsDropdownDelete,
-                                )}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleRemoveRow(row.id);
-                                }}
-                              >
-                                <FiTrash2 className={styles.actionIcon} aria-hidden="true" />
-                                <span>Remove row</span>
-                              </button>
-                            </div>
-                          ) : null}
-                        </div>
+                          <FiTrash2 className={styles.actionIcon} aria-hidden="true" />
+                        </button>
                       </div>
                     </td>
                     {columns.map((column, columnIndex) => {
                       const value = row.values[column.key] ?? "";
                       const isNumeric = column.kind === "number";
+                      const isBatchTrackingSelected =
+                        (row.values.osltrackingtype ?? "").trim() === "2";
+                      const isBatchOnlyField = BATCH_TRACKING_FIELD_KEYS.has(column.key);
                       const currentItemId = row.values.oslitemid?.trim() ?? "";
                       const currentItemDetail = currentItemId ? itemDetailsByItemId[currentItemId] : undefined;
                       const uomSelectOptions = buildUomOptions(currentItemDetail, unitOptionsByValue);
-                      const sharedClassName = cx(
-                        styles.cellInput,
-                        isNumeric && styles.numericInput,
-                      );
                       const lookupKind = column.lookupKind;
                       const lookupFieldConfig = lookupKind ? LOOKUP_FIELD_CONFIG[lookupKind] : null;
                       const cellLookupKey = `${row.id}:${column.key}`;
@@ -2443,7 +2779,26 @@ export default function OpeningStockPage() {
                           ? isItemLookupLoading
                           : isGodownLookupLoading
                         : false;
-
+                      const isDisabledInput =
+                        column.key === "baseqty" ||
+                        column.key === "freebaseqty" ||
+                        column.key === "convfactor" ||
+                        column.key === "osltaxperc" ||
+                        (isBatchOnlyField && !isBatchTrackingSelected);
+                      const hasValidationError = Boolean(
+                        invalidFieldKeys[getInvalidFieldKey(row.id, column.key)],
+                      );
+                      const hasRequiredFieldError =
+                        hasValidationError ||
+                        (!isDisabledInput && isTrackingRequiredFieldMissing(row, column.key));
+                      const isRequiredField = !isDisabledInput &&
+                        getTrackingRequiredFieldKeys(row).includes(column.key);
+                      const sharedClassName = cx(
+                        styles.cellInput,
+                        isNumeric && styles.numericInput,
+                        hasRequiredFieldError && styles.requiredField,
+                      );
+                      const cellDatePickerKey = `${row.id}:${column.key}`;
                       return (
                         <td
                           key={column.key}
@@ -2456,30 +2811,22 @@ export default function OpeningStockPage() {
                           {column.key === "uom" ? (
                             <select
                               data-opening-stock-field-control="true"
+                              data-opening-stock-row-id={row.id}
+                              data-opening-stock-field-key={column.key}
                               value={row.values.oslunitid ?? ""}
                               onChange={(event) => handleUomChange(row.id, event.target.value)}
-                              className={styles.cellSelect}
+                              className={cx(
+                                styles.cellSelect,
+                                hasValidationError && styles.requiredField,
+                              )}
                               disabled={!currentItemDetail || uomSelectOptions.length === 0}
+                              aria-invalid={hasValidationError || undefined}
                             >
                               <option value="">
                                 {currentItemDetail ? "Select Uom" : "Select item first"}
                               </option>
                               {uomSelectOptions.map((option) => (
                                 <option key={`${row.id}-uom-${option.value}`} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          ) : column.key === "taxname" ? (
-                            <select
-                              data-opening-stock-field-control="true"
-                              value={row.values.osltaxid ?? ""}
-                              onChange={(event) => handleTaxChange(row.id, event.target.value)}
-                              className={styles.cellSelect}
-                            >
-                              <option value="">None</option>
-                              {taxSelectOptions.map((option) => (
-                                <option key={`${row.id}-tax-${option.value}`} value={option.value}>
                                   {option.label}
                                 </option>
                               ))}
@@ -2494,9 +2841,12 @@ export default function OpeningStockPage() {
                               <button
                                 type="button"
                                 data-opening-stock-field-control="true"
+                                data-opening-stock-row-id={row.id}
+                                data-opening-stock-field-key={column.key}
                                 className={cx(
                                   styles.lookupTrigger,
                                   isLookupOpen && styles.lookupTriggerOpen,
+                                  hasValidationError && styles.requiredField,
                                 )}
                                 onClick={() => {
                                   setOpenLookupCell((currentCell) =>
@@ -2508,6 +2858,7 @@ export default function OpeningStockPage() {
                                 }}
                                 aria-expanded={isLookupOpen}
                                 aria-haspopup="listbox"
+                                aria-invalid={hasValidationError || undefined}
                               >
                                 <span
                                   className={cx(
@@ -2581,28 +2932,125 @@ export default function OpeningStockPage() {
                           ) : column.kind === "select" ? (
                             <select
                               data-opening-stock-field-control="true"
+                              data-opening-stock-row-id={row.id}
+                              data-opening-stock-field-key={column.key}
                               value={value}
                               onChange={(event) =>
                                 handleRowChange(row.id, column.key, event.target.value)
                               }
-                              className={styles.cellSelect}
+                              className={cx(
+                                styles.cellSelect,
+                                hasRequiredFieldError && styles.requiredField,
+                              )}
+                              aria-invalid={hasRequiredFieldError || undefined}
                             >
+                              {column.key === "roundoff" ? (
+                                <option value="">Select Round Off</option>
+                              ) : null}
                               {(column.options ?? []).map((option) => (
                                 <option key={option} value={option}>
-                                  {option}
+                                  {column.key === "profittype"
+                                    ? PROFIT_TYPE_OPTION_LABELS[
+                                        option as (typeof PROFIT_TYPE_OPTIONS)[number]
+                                      ] ?? option
+                                    : column.key === "osltrackingtype"
+                                      ? TRACKING_TYPE_OPTION_LABELS[
+                                          option as (typeof TRACKING_OPTIONS)[number]
+                                        ] ?? option
+                                      : option}
                                 </option>
                               ))}
                             </select>
+                          ) : column.kind === "date" ? (
+                            <div
+                              className={cx(
+                                styles.dateInputWrap,
+                                hasRequiredFieldError && styles.requiredDateWrap,
+                              )}
+                            >
+                              <input
+                                data-opening-stock-field-control="true"
+                                data-opening-stock-row-id={row.id}
+                                data-opening-stock-field-key={column.key}
+                                type="text"
+                                value={value}
+                                onChange={(event) =>
+                                  handleRowChange(row.id, column.key, formatDateEntry(event.target.value))
+                                }
+                                className={cx(sharedClassName, styles.dateInputWithPicker)}
+                                placeholder="dd/mm/yyyy"
+                                disabled={isDisabledInput}
+                                required={isRequiredField}
+                                aria-invalid={hasRequiredFieldError || undefined}
+                                inputMode="numeric"
+                                maxLength={10}
+                              />
+                              <input
+                                ref={(element) => {
+                                  rowDatePickerRefs.current[cellDatePickerKey] = element;
+                                }}
+                                type="date"
+                                value={toCanonicalDateValue(value)}
+                                onChange={(event) =>
+                                  handleRowChange(
+                                    row.id,
+                                    column.key,
+                                    formatDateForDisplay(event.target.value),
+                                  )
+                                }
+                                tabIndex={-1}
+                                aria-hidden="true"
+                                className={styles.hiddenDatePickerInput}
+                                disabled={isDisabledInput}
+                                required={isRequiredField}
+                              />
+                              <button
+                                type="button"
+                                className={cx(
+                                  styles.datePickerTrigger,
+                                  hasRequiredFieldError && styles.requiredDatePickerTrigger,
+                                )}
+                                onClick={() =>
+                                  openDatePicker(rowDatePickerRefs.current[cellDatePickerKey] ?? null)
+                                }
+                                aria-label={`Open ${column.header} calendar for row ${index + 1}`}
+                                disabled={isDisabledInput}
+                              >
+                                <FiCalendar className={styles.datePickerIcon} aria-hidden="true" />
+                              </button>
+                            </div>
                           ) : (
                             <input
                               data-opening-stock-field-control="true"
-                              type={column.kind === "date" ? "date" : isNumeric ? "number" : "text"}
+                              data-opening-stock-row-id={row.id}
+                              data-opening-stock-field-key={column.key}
+                              type={isNumeric ? "number" : "text"}
                               value={value}
-                              onChange={(event) =>
-                                handleRowChange(row.id, column.key, event.target.value)
-                              }
+                              onChange={(event) => handleRowChange(row.id, column.key, event.target.value)}
                               className={sharedClassName}
-                              placeholder={column.placeholder}
+                              placeholder={(column.placeholder === "0.00" || column.placeholder === "0.000") ? "" : column.placeholder}
+                              readOnly={column.key === "taxname"}
+                              disabled={isDisabledInput}
+                              required={isRequiredField}
+                              aria-invalid={hasRequiredFieldError || undefined}
+                              step={isNumeric ? "any" : undefined}
+                              inputMode={isNumeric ? "decimal" : undefined}
+                              onKeyDown={
+                                isNumeric
+                                  ? (event) => {
+                                    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                                      event.preventDefault();
+                                    }
+                                  }
+                                  : undefined
+                              }
+                              onWheel={
+                                isNumeric
+                                  ? (event) => {
+                                    event.currentTarget.blur();
+                                  }
+                                  : undefined
+                              }
                             />
                           )}
                         </td>
@@ -2621,7 +3069,7 @@ export default function OpeningStockPage() {
             <span>{QUANTITY_FORMATTER.format(visibleTotals.freeQty)} free qty</span>
           </div>
           <div className={styles.footerValue}>
-            <span className={styles.footerLabel}>Visible stock value</span>
+            <span className={styles.footerLabel}>stock value</span>
             <strong>{VALUE_FORMATTER.format(visibleTotals.value)}</strong>
           </div>
         </div>

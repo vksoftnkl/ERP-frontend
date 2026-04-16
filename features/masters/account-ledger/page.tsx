@@ -97,7 +97,9 @@ function LedgerFieldRenderer({
   searchActiveOptionIndex,
   handleFieldChange,
   handleCheckboxKeyDown,
+  handleSearchableFieldInput,
   handleSearchableFieldKeyDown,
+  handleSearchableFieldPointerToggle,
   handleSearchableOptionSelect,
   searchInputRefs,
 }: {
@@ -112,11 +114,18 @@ function LedgerFieldRenderer({
   searchActiveOptionIndex: Record<string, number>;
   handleFieldChange: (fieldName: LedgerFormFieldName, value: string) => void;
   handleCheckboxKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  handleSearchableFieldInput: (
+    fieldName: LedgerFormFieldName,
+    query: string,
+  ) => void;
   handleSearchableFieldKeyDown: (
     fieldName: LedgerFormFieldName,
     event: ReactKeyboardEvent<HTMLElement>,
     filteredOptions: ERPDynamicSelectOption[],
     fieldValue: string,
+  ) => void;
+  handleSearchableFieldPointerToggle: (
+    fieldName: LedgerFormFieldName,
   ) => void;
   handleSearchableOptionSelect: (
     fieldName: LedgerFormFieldName,
@@ -238,6 +247,10 @@ function LedgerFieldRenderer({
             }
             onMouseDown={(event) => {
               event.preventDefault();
+              if (disabled) {
+                return;
+              }
+              handleSearchableFieldPointerToggle(fieldName);
             }}
           >
             <span
@@ -274,10 +287,25 @@ function LedgerFieldRenderer({
                   }}
                   type="text"
                   autoComplete="off"
+                  value={typedQuery}
                   placeholder={`Search ${field.label}`}
                   className={dynamicFormStyles.searchSelectSearchInput}
                   role="searchbox"
                   onMouseDown={(event) => event.stopPropagation()}
+                  onKeyDown={(event) =>
+                    handleSearchableFieldKeyDown(
+                      fieldName,
+                      event,
+                      filteredOptions,
+                      fieldValue,
+                    )
+                  }
+                  onChange={(event) =>
+                    handleSearchableFieldInput(
+                      fieldName,
+                      event.target.value,
+                    )
+                  }
                 />
                 <span className={dynamicFormStyles.searchSelectSearchIcon} aria-hidden="true">
                   <svg viewBox="0 0 20 20">
@@ -819,6 +847,37 @@ export default function AccountLedgerMasterPage() {
     event.currentTarget.click();
   }, []);
 
+  const clearSearchableFieldActiveIndex = useCallback((fieldName: LedgerFormFieldName) => {
+    setSearchActiveOptionIndex((current) => {
+      if (!(fieldName in current)) {
+        return current;
+      }
+      const nextState = { ...current };
+      delete nextState[fieldName];
+      return nextState;
+    });
+  }, []);
+
+  const handleSearchableFieldInput = useCallback(
+    (fieldName: LedgerFormFieldName, query: string) => {
+      setOpenSearchField(fieldName);
+      setSearchQueries((current) => ({
+        ...current,
+        [fieldName]: query,
+      }));
+      clearSearchableFieldActiveIndex(fieldName);
+    },
+    [clearSearchableFieldActiveIndex],
+  );
+
+  const handleSearchableFieldPointerToggle = useCallback(
+    (fieldName: LedgerFormFieldName) => {
+      setOpenSearchField((current) => (current === fieldName ? null : fieldName));
+      clearSearchableFieldActiveIndex(fieldName);
+    },
+    [clearSearchableFieldActiveIndex],
+  );
+
   const handleSearchableOptionSelect = useCallback(
     (fieldName: LedgerFormFieldName, option: ERPDynamicSelectOption) => {
       if (fieldName === "ledStateName") {
@@ -832,16 +891,18 @@ export default function AccountLedgerMasterPage() {
       } else {
         handleFieldChange(fieldName, option.value);
       }
-      setSearchQueries((current) => ({ ...current, [fieldName]: option.label }));
-      setOpenSearchField(null);
-      setSearchActiveOptionIndex((current) => {
-        if (!(fieldName in current)) return current;
+      setSearchQueries((current) => {
+        if (!(fieldName in current)) {
+          return current;
+        }
         const nextState = { ...current };
         delete nextState[fieldName];
         return nextState;
       });
+      setOpenSearchField(null);
+      clearSearchableFieldActiveIndex(fieldName);
     },
-    [handleFieldChange, stateCodeByName],
+    [clearSearchableFieldActiveIndex, handleFieldChange, stateCodeByName],
   );
 
   const handleSearchableFieldKeyDown = useCallback(
@@ -855,15 +916,6 @@ export default function AccountLedgerMasterPage() {
       const optionCount = filteredOptions.length;
       const currentIndex = searchActiveOptionIndex[fieldName] ?? -1;
 
-      const clearActiveIndex = () => {
-        setSearchActiveOptionIndex((current) => {
-          if (!(fieldName in current)) return current;
-          const nextState = { ...current };
-          delete nextState[fieldName];
-          return nextState;
-        });
-      };
-
       if (
         event.key === "ArrowDown" ||
         event.key === "ArrowUp" ||
@@ -875,7 +927,7 @@ export default function AccountLedgerMasterPage() {
           setOpenSearchField(fieldName);
         }
         if (optionCount === 0) {
-          clearActiveIndex();
+          clearSearchableFieldActiveIndex(fieldName);
           return;
         }
 
@@ -931,15 +983,20 @@ export default function AccountLedgerMasterPage() {
       if (event.key === "Escape" && isSearchOpen) {
         event.preventDefault();
         setOpenSearchField(null);
-        clearActiveIndex();
+        clearSearchableFieldActiveIndex(fieldName);
         return;
       }
 
       if (event.key === "Tab" && isSearchOpen) {
-        clearActiveIndex();
+        clearSearchableFieldActiveIndex(fieldName);
       }
     },
-    [handleSearchableOptionSelect, openSearchField, searchActiveOptionIndex],
+    [
+      clearSearchableFieldActiveIndex,
+      handleSearchableOptionSelect,
+      openSearchField,
+      searchActiveOptionIndex,
+    ],
   );
 
   const handleSectionTabKeyDown = useCallback(
@@ -1436,7 +1493,11 @@ export default function AccountLedgerMasterPage() {
                         searchActiveOptionIndex={searchActiveOptionIndex}
                         handleFieldChange={handleFieldChange}
                         handleCheckboxKeyDown={handleCheckboxKeyDown}
+                        handleSearchableFieldInput={handleSearchableFieldInput}
                         handleSearchableFieldKeyDown={handleSearchableFieldKeyDown}
+                        handleSearchableFieldPointerToggle={
+                          handleSearchableFieldPointerToggle
+                        }
                         handleSearchableOptionSelect={handleSearchableOptionSelect}
                         searchInputRefs={searchInputRefs}
                       />

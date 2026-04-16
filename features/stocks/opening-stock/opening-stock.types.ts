@@ -37,6 +37,7 @@ export type OpeningStockSaveDetail = {
   osl_qty: number;
   osl_free_qty: number;
   osl_base_qty: number;
+  osl_free_base_qty: number;
   osl_conv_factor: number;
   osl_batch_no: string | null;
   osl_serial_no: string | null;
@@ -151,6 +152,7 @@ export type OpeningStockDetailPayload = {
   osl_qty: number;
   osl_base_qty: number;
   osl_free_qty: number;
+  osl_free_base_qty: number;
   osl_conv_factor: number;
   osl_tax_id: string | null;
   osl_tax_name: string | null;
