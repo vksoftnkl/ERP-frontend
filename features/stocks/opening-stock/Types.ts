@@ -1,5 +1,3 @@
-// ─── Column / Table types ────────────────────────────────────────────────────
-
 export type ColumnAlign = "left" | "center" | "right";
 export type ColumnKind = "text" | "number" | "date" | "select" | "lookup";
 export type LookupKind = "item" | "godown";
@@ -28,18 +26,25 @@ export type ColumnDefinition = ColumnSchema & {
   width: string;
 };
 
-// ─── Row types ───────────────────────────────────────────────────────────────
-
 export type OpeningStockRow = {
   id: number;
   values: Record<string, string>;
 };
 
-// ─── Internal metadata ───────────────────────────────────────────────────────
+export type RowValidationIssue = {
+  fieldKey: string;
+  message: string;
+};
 
 export type AccountLedgerRecord = {
   ledId: string;
   ledName: string;
+};
+
+export type GodownLookupRecord = {
+  gdl_id?: string | null;
+  gdl_name?: string | null;
+  gdl_branch_id?: string | null;
 };
 
 export type LoadedOpeningStockMeta = {
@@ -50,14 +55,7 @@ export type LoadedOpeningStockMeta = {
   branchId: string;
 };
 
-// ─── Navigation types ────────────────────────────────────────────────────────
-
-export type TableFieldNavigationDirection = "left" | "right" | "up" | "down";
-
-export type TableFocusableFieldTarget = {
-  fieldKey: string;
-  rowIndex: number;
-  columnIndex: number;
-  container: HTMLElement;
-  control: HTMLElement;
+export type LookupCellState = {
+  key: string;
+  kind: LookupKind;
 };

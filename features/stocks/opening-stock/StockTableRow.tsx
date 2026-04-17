@@ -1,154 +1,203 @@
 "use client";
-import type { ReactNode } from "react";
-import { FiMoreVertical, FiTrash2 } from "react-icons/fi";
+
+import type { MutableRefObject, ReactNode, RefObject } from "react";
+import { FiCalendar, FiTrash2 } from "react-icons/fi";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import type { ItemPriceDetailsPayload } from "@/store/api/lookupsApi";
-import { buildUomOptions } from "./Utils";
-import type { ColumnDefinition, LookupKind, OpeningStockRow } from "./Types";
-import { LOOKUP_FIELD_CONFIG } from "./constants";
+import {
+  DELETE_ACTION_COLUMN_WIDTH,
+  PROFIT_TYPE_OPTION_LABELS,
+  TRACKING_TYPE_OPTION_LABELS,
+  LOOKUP_FIELD_CONFIG,
+} from "./constants";
 import { LookupCell } from "./LookupCell";
+import type {
+  ColumnDefinition,
+  LookupCellState,
+  LookupKind,
+  OpeningStockRow,
+} from "./Types";
+import {
+  buildUomOptions,
+  cx,
+  formatDateEntry,
+  formatDateForDisplay,
+  getInvalidFieldKey,
+  getTrackingRequiredFieldKeys,
+  isOpeningStockFieldDisabled,
+  isTrackingRequiredFieldMissing,
+  openDatePicker,
+  toCanonicalDateValue,
+} from "./Utils";
+import styles from "./page.module.scss";
 
 type StockTableRowProps = {
   row: OpeningStockRow;
   rowIndex: number;
   columns: ColumnDefinition[];
-  isEven: boolean;
-  openRowActionMenuId: number | null;
-  openLookupCell: { key: string; kind: LookupKind } | null;
+  invalidFieldKeys: Record<string, true>;
+  itemDetailsByItemId: Record<string, ItemPriceDetailsPayload>;
+  itemOptionsByValue: Map<string, string>;
+  godownOptionsByValue: Map<string, string>;
+  unitOptionsByValue: Map<string, string>;
+  openLookupCell: LookupCellState | null;
   lookupSearchQuery: string;
   filteredItemOptions: ERPDynamicSelectOption[];
   filteredGodownOptions: ERPDynamicSelectOption[];
   isItemLookupLoading: boolean;
   isGodownLookupLoading: boolean;
-  itemOptionsByValue: Map<string, string>;
-  godownOptionsByValue: Map<string, string>;
-  unitOptionsByValue: Map<string, string>;
-  taxSelectOptions: ERPDynamicSelectOption[];
-  itemDetailsByItemId: Record<string, ItemPriceDetailsPayload>;
-  lookupSearchInputRef: React.RefObject<HTMLInputElement | null>;
-  actionRootRef: (element: HTMLDivElement | null) => void;
-  lookupRootRef: (key: string, element: HTMLDivElement | null) => void;
+  lookupSearchInputRef: RefObject<HTMLInputElement | null>;
+  lookupRootRefs: MutableRefObject<Record<string, HTMLDivElement | null>>;
+  rowDatePickerRefs: MutableRefObject<Record<string, HTMLInputElement | null>>;
+  onRemoveRow: (rowId: number) => void;
   onRowChange: (rowId: number, field: string, value: string) => void;
   onUomChange: (rowId: number, unitId: string) => void;
-  onTaxChange: (rowId: number, taxId: string) => void;
-  onLookupSelection: (rowId: number, lookupKind: LookupKind, option: ERPDynamicSelectOption) => void;
+  onLookupSelection: (
+    rowId: number,
+    lookupKind: LookupKind,
+    option: ERPDynamicSelectOption,
+  ) => void;
   onLookupSearchChange: (lookupKind: LookupKind, search: string) => void;
-  onToggleLookup: (cellKey: string, lookupKind: LookupKind) => void;
-  onToggleRowActions: (rowId: number) => void;
-  onRemoveRow: (rowId: number) => void;
-  setLookupSearchQuery: (q: string) => void;
+  onLookupToggle: (cellKey: string, lookupKind: LookupKind) => void;
 };
 
-const cellInputClass =
-  "w-full min-w-44 min-h-10 rounded border border-[#d7e0ea] bg-white px-3 py-2 text-sm text-[#1b2634] font-[inherit] leading-tight transition-all duration-150 placeholder:text-[#93a0af] focus-visible:outline-none focus-visible:border-[#8ab4ff] focus-visible:ring-4 focus-visible:ring-blue-500/20";
+function getSelectOptionLabel(columnKey: string, option: string): string {
+  if (columnKey === "profittype") {
+    return PROFIT_TYPE_OPTION_LABELS[option as keyof typeof PROFIT_TYPE_OPTION_LABELS] ?? option;
+  }
+  if (columnKey === "osltrackingtype") {
+    return TRACKING_TYPE_OPTION_LABELS[option as keyof typeof TRACKING_TYPE_OPTION_LABELS] ?? option;
+  }
+  return option;
+}
 
-const cellSelectClass =
-  "w-full min-w-44 min-h-10 cursor-pointer rounded border border-[#d7e0ea] bg-white px-3 py-2 text-sm text-[#1b2634] font-[inherit] leading-tight transition-all duration-150 focus-visible:outline-none focus-visible:border-[#8ab4ff] focus-visible:ring-4 focus-visible:ring-blue-500/20";
+function getCellPlaceholder(placeholder?: string): string | undefined {
+  return placeholder === "0.00" || placeholder === "0.000" ? "" : placeholder;
+}
 
-const numericInputClass =
-  "w-full min-w-[8.75rem] min-h-10 text-right tabular-nums rounded border border-[#d7e0ea] bg-white px-3 py-2 text-sm text-[#1b2634] font-[inherit] leading-tight transition-all duration-150 placeholder:text-[#93a0af] focus-visible:outline-none focus-visible:border-[#8ab4ff] focus-visible:ring-4 focus-visible:ring-blue-500/20 appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+function getAlignClass(align: ColumnDefinition["align"]): string {
+  if (align === "right") {
+    return styles.alignRight;
+  }
+  if (align === "center") {
+    return styles.alignCenter;
+  }
+  return styles.alignLeft;
+}
 
 export function StockTableRow({
   row,
   rowIndex,
   columns,
-  isEven,
-  openRowActionMenuId,
+  invalidFieldKeys,
+  itemDetailsByItemId,
+  itemOptionsByValue,
+  godownOptionsByValue,
+  unitOptionsByValue,
   openLookupCell,
   lookupSearchQuery,
   filteredItemOptions,
   filteredGodownOptions,
   isItemLookupLoading,
   isGodownLookupLoading,
-  itemOptionsByValue,
-  godownOptionsByValue,
-  unitOptionsByValue,
-  taxSelectOptions,
-  itemDetailsByItemId,
   lookupSearchInputRef,
-  actionRootRef,
-  lookupRootRef,
+  lookupRootRefs,
+  rowDatePickerRefs,
+  onRemoveRow,
   onRowChange,
   onUomChange,
-  onTaxChange,
   onLookupSelection,
   onLookupSearchChange,
-  onToggleLookup,
-  onToggleRowActions,
-  onRemoveRow,
-  setLookupSearchQuery,
+  onLookupToggle,
 }: StockTableRowProps): ReactNode {
   const currentItemId = row.values.oslitemid?.trim() ?? "";
   const currentItemDetail = currentItemId ? itemDetailsByItemId[currentItemId] : undefined;
   const uomSelectOptions = buildUomOptions(currentItemDetail, unitOptionsByValue);
 
   return (
-    <tr className={isEven ? "bg-[#fafcff] hover:bg-[#f7fbff]" : "bg-white hover:bg-[#f7fbff]"}>
-      {/* Serial number + actions */}
-      <td className="sticky left-0 z-[3] border-b border-[#eef3f8] bg-inherit px-2 py-1.5 align-middle shadow-[1px_0_0_#e8eef5]">
-        <div className="inline-flex w-full items-center justify-between gap-1.5">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#eef5ff] text-[0.84rem] font-bold text-[#244f8a]">
-            {rowIndex + 1}
-          </span>
-          <div
-            className="relative"
-            ref={actionRootRef}
+    <tr
+      className={cx(
+        styles.dataRow,
+        styles.row,
+        rowIndex % 2 === 0 ? styles.rowOdd : styles.rowEven,
+      )}
+    >
+      <td
+        data-label=""
+        className={cx(
+          styles.cell,
+          styles.compactCell,
+          styles.alignCenter,
+          styles.stickyActionCell,
+        )}
+        style={{ left: 0 }}
+      >
+        <div className={styles.actionCellContent}>
+          <button
+            type="button"
+            className={styles.rowDeleteButton}
+            aria-label={`Delete row ${rowIndex + 1}`}
+            onClick={() => onRemoveRow(row.id)}
           >
-            <button
-              type="button"
-              className="rounded p-1 text-[#8c9caf] transition-colors hover:bg-[#f0f4f8] hover:text-[#1b2634]"
-              aria-label={`Open actions for row ${rowIndex + 1}`}
-              aria-haspopup="menu"
-              aria-expanded={openRowActionMenuId === row.id}
-              onClick={(event) => { event.stopPropagation(); onToggleRowActions(row.id); }}
-              onMouseDown={(event) => event.stopPropagation()}
-            >
-              <FiMoreVertical className="h-4 w-4" aria-hidden="true" />
-            </button>
-            {openRowActionMenuId === row.id && (
-              <div
-                className="absolute left-0 top-full z-[14] mt-1 min-w-[140px] rounded-lg border border-[#e0e8f0] bg-white py-1 shadow-[0_8px_24px_rgba(15,35,60,0.14)]"
-                role="menu"
-                aria-label={`Actions for row ${rowIndex + 1}`}
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[#c0392b] transition-colors hover:bg-[#fff5f5]"
-                  onClick={(event) => { event.stopPropagation(); onRemoveRow(row.id); }}
-                >
-                  <FiTrash2 className="h-4 w-4" aria-hidden="true" />
-                  <span>Remove row</span>
-                </button>
-              </div>
-            )}
-          </div>
+            <FiTrash2
+              className={styles.actionIcon}
+              aria-hidden="true"
+            />
+          </button>
         </div>
       </td>
-
-      {/* Data columns */}
+      <td
+        data-label="S.No"
+        className={cx(
+          styles.cell,
+          styles.compactCell,
+          styles.alignLeft,
+          styles.stickySerialCell,
+        )}
+        style={{ left: DELETE_ACTION_COLUMN_WIDTH }}
+      >
+        <div className={styles.serialCellContent}>
+          <span className={styles.rowNumber}>{rowIndex + 1}</span>
+        </div>
+      </td>
       {columns.map((column, columnIndex) => {
         const value = row.values[column.key] ?? "";
+        const isNumeric = column.kind === "number";
         const lookupKind = column.lookupKind;
         const lookupFieldConfig = lookupKind ? LOOKUP_FIELD_CONFIG[lookupKind] : null;
         const cellLookupKey = `${row.id}:${column.key}`;
         const isLookupOpen = openLookupCell?.key === cellLookupKey;
         const selectedLookupId = lookupFieldConfig ? row.values[lookupFieldConfig.idField] ?? "" : "";
         const selectedLookupLabel = lookupKind
-          ? ((lookupKind === "item" ? itemOptionsByValue.get(selectedLookupId) : godownOptionsByValue.get(selectedLookupId)) ?? value)
+          ? (
+              lookupKind === "item"
+                ? itemOptionsByValue.get(selectedLookupId)
+                : godownOptionsByValue.get(selectedLookupId)
+            ) ?? value
           : value;
         const lookupOptions = lookupKind
-          ? lookupKind === "item" ? filteredItemOptions : filteredGodownOptions
+          ? lookupKind === "item"
+            ? filteredItemOptions
+            : filteredGodownOptions
           : [];
         const isLookupLoading = lookupKind
-          ? lookupKind === "item" ? isItemLookupLoading : isGodownLookupLoading
+          ? lookupKind === "item"
+            ? isItemLookupLoading
+            : isGodownLookupLoading
           : false;
-
-        const alignClass = column.align === "right"
-          ? "text-right"
-          : column.align === "center"
-            ? "text-center"
-            : "text-left";
+        const isDisabledInput = isOpeningStockFieldDisabled(column.key, row);
+        const hasValidationError = Boolean(invalidFieldKeys[getInvalidFieldKey(row.id, column.key)]);
+        const hasRequiredFieldError =
+          hasValidationError ||
+          (!isDisabledInput && isTrackingRequiredFieldMissing(row, column.key));
+        const isRequiredField =
+          !isDisabledInput && getTrackingRequiredFieldKeys(row).includes(column.key);
+        const sharedClassName = cx(
+          styles.cellInput,
+          isNumeric && styles.numericInput,
+          hasRequiredFieldError && styles.requiredField,
+        );
+        const cellDatePickerKey = `${row.id}:${column.key}`;
 
         return (
           <td
@@ -157,33 +206,27 @@ export function StockTableRow({
             data-opening-stock-field-container="true"
             data-opening-stock-row-index={rowIndex}
             data-opening-stock-column-index={columnIndex}
-            className={`border-b border-[#eef3f8] px-2 py-1.5 align-middle ${alignClass}`}
+            className={cx(styles.cell, styles.compactCell, getAlignClass(column.align))}
           >
             {column.key === "uom" ? (
               <select
                 data-opening-stock-field-control="true"
+                data-opening-stock-row-id={row.id}
+                data-opening-stock-field-key={column.key}
                 value={row.values.oslunitid ?? ""}
                 onChange={(event) => onUomChange(row.id, event.target.value)}
-                className={cellSelectClass}
+                className={cx(styles.cellSelect, hasValidationError && styles.requiredField)}
                 disabled={!currentItemDetail || uomSelectOptions.length === 0}
+                aria-invalid={hasValidationError || undefined}
               >
-                <option value="">{currentItemDetail ? "Select Uom" : "Select item first"}</option>
+                <option value="">
+                  {currentItemDetail ? "Select Uom" : "Select item first"}
+                </option>
                 {uomSelectOptions.map((option) => (
-                  <option key={`${row.id}-uom-${option.value}`} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            ) : column.key === "taxname" ? (
-              <select
-                data-opening-stock-field-control="true"
-                value={row.values.osltaxid ?? ""}
-                onChange={(event) => onTaxChange(row.id, event.target.value)}
-                className={cellSelectClass}
-              >
-                <option value="">None</option>
-                {taxSelectOptions.map((option) => (
-                  <option key={`${row.id}-tax-${option.value}`} value={option.value}>
+                  <option
+                    key={`${row.id}-uom-${option.value}`}
+                    value={option.value}
+                  >
                     {option.label}
                   </option>
                 ))}
@@ -200,34 +243,121 @@ export function StockTableRow({
                 header={column.header}
                 options={lookupOptions}
                 searchQuery={lookupSearchQuery}
-                searchInputRef={isLookupOpen ? lookupSearchInputRef : undefined}
-                rootRef={(element) => lookupRootRef(cellLookupKey, element)}
-                onToggle={() => onToggleLookup(cellLookupKey, lookupKind)}
-                onSearchChange={(search) => {
-                  setLookupSearchQuery(search);
-                  onLookupSearchChange(lookupKind, search);
+                hasValidationError={hasValidationError}
+                searchInputRef={lookupSearchInputRef}
+                rootRef={(element) => {
+                  lookupRootRefs.current[cellLookupKey] = element;
                 }}
+                onToggle={() => onLookupToggle(cellLookupKey, lookupKind)}
+                onSearchChange={(search) => onLookupSearchChange(lookupKind, search)}
                 onSelect={(option) => onLookupSelection(row.id, lookupKind, option)}
               />
             ) : column.kind === "select" ? (
               <select
                 data-opening-stock-field-control="true"
+                data-opening-stock-row-id={row.id}
+                data-opening-stock-field-key={column.key}
                 value={value}
                 onChange={(event) => onRowChange(row.id, column.key, event.target.value)}
-                className={cellSelectClass}
+                className={cx(styles.cellSelect, hasRequiredFieldError && styles.requiredField)}
+                disabled={isDisabledInput}
+                aria-invalid={hasRequiredFieldError || undefined}
               >
+                {column.key === "roundoff" ? <option value="">Select Round Off</option> : null}
                 {(column.options ?? []).map((option) => (
-                  <option key={option} value={option}>{option}</option>
+                  <option
+                    key={option}
+                    value={option}
+                  >
+                    {getSelectOptionLabel(column.key, option)}
+                  </option>
                 ))}
               </select>
+            ) : column.kind === "date" ? (
+              <div
+                className={cx(
+                  styles.dateInputWrap,
+                  hasRequiredFieldError && styles.requiredDateWrap,
+                )}
+              >
+                <input
+                  data-opening-stock-field-control="true"
+                  data-opening-stock-row-id={row.id}
+                  data-opening-stock-field-key={column.key}
+                  type="text"
+                  value={value}
+                  onChange={(event) => onRowChange(row.id, column.key, formatDateEntry(event.target.value))}
+                  className={cx(sharedClassName, styles.dateInputWithPicker)}
+                  placeholder="dd/mm/yyyy"
+                  disabled={isDisabledInput}
+                  required={isRequiredField}
+                  aria-invalid={hasRequiredFieldError || undefined}
+                  inputMode="numeric"
+                  maxLength={10}
+                />
+                <input
+                  ref={(element) => {
+                    rowDatePickerRefs.current[cellDatePickerKey] = element;
+                  }}
+                  type="date"
+                  value={toCanonicalDateValue(value)}
+                  onChange={(event) =>
+                    onRowChange(row.id, column.key, formatDateForDisplay(event.target.value))
+                  }
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  className={styles.hiddenDatePickerInput}
+                  disabled={isDisabledInput}
+                  required={isRequiredField}
+                />
+                <button
+                  type="button"
+                  className={cx(
+                    styles.datePickerTrigger,
+                    hasRequiredFieldError && styles.requiredDatePickerTrigger,
+                  )}
+                  onClick={() => openDatePicker(rowDatePickerRefs.current[cellDatePickerKey] ?? null)}
+                  aria-label={`Open ${column.header} calendar for row ${rowIndex + 1}`}
+                  disabled={isDisabledInput}
+                >
+                  <FiCalendar
+                    className={styles.datePickerIcon}
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
             ) : (
               <input
                 data-opening-stock-field-control="true"
-                type={column.kind === "date" ? "date" : column.kind === "number" ? "number" : "text"}
+                data-opening-stock-row-id={row.id}
+                data-opening-stock-field-key={column.key}
+                type={isNumeric ? "number" : "text"}
                 value={value}
                 onChange={(event) => onRowChange(row.id, column.key, event.target.value)}
-                className={column.kind === "number" ? numericInputClass : cellInputClass}
-                placeholder={column.placeholder}
+                className={sharedClassName}
+                placeholder={getCellPlaceholder(column.placeholder)}
+                readOnly={column.key === "taxname"}
+                disabled={isDisabledInput}
+                required={isRequiredField}
+                aria-invalid={hasRequiredFieldError || undefined}
+                step={isNumeric ? "any" : undefined}
+                inputMode={isNumeric ? "decimal" : undefined}
+                onKeyDown={
+                  isNumeric
+                    ? (event) => {
+                        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                          event.preventDefault();
+                        }
+                      }
+                    : undefined
+                }
+                onWheel={
+                  isNumeric
+                    ? (event) => {
+                        event.currentTarget.blur();
+                      }
+                    : undefined
+                }
               />
             )}
           </td>
