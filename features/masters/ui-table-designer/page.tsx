@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
+import ReusableTable, {
+  type ReusableTableColumn,
+  type ReusableTableRowReorderEdge,
+} from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import styles from "./page.module.scss";
@@ -74,8 +77,73 @@ function resequenceColumns(columns: UiTableColumnRow[]): UiTableColumnRow[] {
   return columns.map((column, index) => ({
     ...column,
     columnNumber: index + 1,
-    position: column.position.trim() ? column.position : String(index + 1),
+    position: String(index + 1),
   }));
+}
+
+function clampPosition(value: number, totalRows: number): number {
+  if (totalRows <= 0) {
+    return 1;
+  }
+
+  const normalizedValue = Number.isFinite(value) ? Math.trunc(value) : 1;
+  return Math.min(Math.max(normalizedValue, 1), totalRows);
+}
+
+function moveColumn(
+  columns: UiTableColumnRow[],
+  sourceId: string,
+  targetId: string,
+  edge: ReusableTableRowReorderEdge,
+): UiTableColumnRow[] {
+  const sourceIndex = columns.findIndex((column) => column.id === sourceId);
+  const targetIndex = columns.findIndex((column) => column.id === targetId);
+
+  if (
+    sourceIndex < 0 ||
+    targetIndex < 0 ||
+    sourceIndex === targetIndex ||
+    sourceId === targetId
+  ) {
+    return columns;
+  }
+
+  const nextColumns = [...columns];
+  const [sourceColumn] = nextColumns.splice(sourceIndex, 1);
+  const targetIndexAfterRemoval = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+  const insertionIndex = edge === "before" ? targetIndexAfterRemoval : targetIndexAfterRemoval + 1;
+
+  if (!sourceColumn || insertionIndex === sourceIndex) {
+    return columns;
+  }
+
+  nextColumns.splice(insertionIndex, 0, sourceColumn);
+  return resequenceColumns(nextColumns);
+}
+
+function moveColumnToPosition(
+  columns: UiTableColumnRow[],
+  columnId: string,
+  requestedPosition: number,
+): UiTableColumnRow[] {
+  const sourceIndex = columns.findIndex((column) => column.id === columnId);
+  if (sourceIndex < 0) {
+    return columns;
+  }
+
+  const targetIndex = clampPosition(requestedPosition, columns.length) - 1;
+  if (targetIndex === sourceIndex) {
+    return columns;
+  }
+
+  const nextColumns = [...columns];
+  const [sourceColumn] = nextColumns.splice(sourceIndex, 1);
+  if (!sourceColumn) {
+    return columns;
+  }
+
+  nextColumns.splice(targetIndex, 0, sourceColumn);
+  return resequenceColumns(nextColumns);
 }
 
 function toNullableNumber(value: string): number | null {
@@ -153,6 +221,7 @@ function buildUiTableColumnRequest(
 export default function UiTableDesignerPage() {
   const [form, setForm] = useState<UiTableForm>(INITIAL_FORM);
   const [columns, setColumns] = useState<UiTableColumnRow[]>([]);
+  const [positionDrafts, setPositionDrafts] = useState<Record<string, string>>({});
   const [tableOptions, setTableOptions] = useState<UiTableOption[]>([]);
   const [selectedColumnId, setSelectedColumnId] = useState("");
   const [isTableListLoading, setIsTableListLoading] = useState(false);
@@ -236,12 +305,96 @@ export default function UiTableDesignerPage() {
     );
   };
 
+  const clearPositionDraft = useCallback((id: string) => {
+    setPositionDrafts((current) => {
+      if (!(id in current)) {
+        return current;
+      }
+
+      const nextDrafts = { ...current };
+      delete nextDrafts[id];
+      return nextDrafts;
+    });
+  }, []);
+
+  const clearAllPositionDrafts = useCallback(() => {
+    setPositionDrafts({});
+  }, []);
+
+  const handleColumnPositionChange = useCallback(
+    (id: string, value: string) => {
+      const parsedPosition = toNullableInteger(value);
+      if (parsedPosition !== null && parsedPosition > 0) {
+        clearAllPositionDrafts();
+        setColumns((current) => moveColumnToPosition(current, id, parsedPosition));
+        setSelectedColumnId(id);
+        return;
+      }
+
+      setPositionDrafts((current) => ({
+        ...current,
+        [id]: value,
+      }));
+    },
+    [clearAllPositionDrafts],
+  );
+
+  const handleColumnPositionBlur = useCallback(
+    (id: string) => {
+      clearPositionDraft(id);
+    },
+    [clearPositionDraft],
+  );
+
+  const handleRowReorder = useCallback(
+    (
+      sourceRow: UiTableColumnRow,
+      _sourceIndex: number,
+      targetRow: UiTableColumnRow,
+      _targetIndex: number,
+      edge: ReusableTableRowReorderEdge,
+    ) => {
+      clearAllPositionDrafts();
+      setColumns((current) => moveColumn(current, sourceRow.id, targetRow.id, edge));
+      setSelectedColumnId(sourceRow.id);
+    },
+    [clearAllPositionDrafts],
+  );
+
   const tableColumnConfigs: ReusableTableColumn<UiTableColumnRow>[] = [
+    {
+      key: "dragHandle",
+      header: "",
+      width: "52px",
+      align: "center",
+      mobileLabel: "Move",
+      render: (row) => (
+        <button
+          type="button"
+          className={styles.rowDragHandle}
+          draggable={!isBusy}
+          disabled={isBusy}
+          aria-label={`Drag ${row.columnName.trim() || `column ${row.columnNumber}`}`}
+          title="Drag to reorder row"
+          data-erp-row-drag-handle="true"
+          onClick={(event) => {
+            event.stopPropagation();
+            setSelectedColumnId(row.id);
+          }}
+          onDragStart={(event) => {
+            setSelectedColumnId(row.id);
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", row.id);
+          }}
+        />
+      ),
+    },
     {
       key: "columnNumber",
       header: "No",
       accessor: "columnNumber",
       width: "56px",
+      align: "center",
       mobileLabel: "No",
     },
     {
@@ -317,8 +470,9 @@ export default function UiTableDesignerPage() {
       render: (row) => (
         <input
           className={styles.cellInput}
-          value={row.position}
-          onChange={(event) => updateColumn(row.id, "position", event.target.value)}
+          value={positionDrafts[row.id] ?? row.position}
+          onChange={(event) => handleColumnPositionChange(row.id, event.target.value)}
+          onBlur={() => handleColumnPositionBlur(row.id)}
         />
       ),
     },
@@ -509,7 +663,8 @@ export default function UiTableDesignerPage() {
           uiTblEditable: detail.uiTblEditable,
           uiTblIsActive: detail.uiTblIsActive,
         });
-        setColumns(nextColumns);
+        setColumns(resequenceColumns(nextColumns));
+        setPositionDrafts({});
         setSelectedColumnId(nextColumns[0]?.id ?? "");
         setStatusText(`Loaded UI table ${detail.uiTblId}.`);
       } catch {
@@ -531,6 +686,7 @@ export default function UiTableDesignerPage() {
         deletedColumnIdsRef.current.clear();
         setForm(createBlankForm());
         setColumns([]);
+        setPositionDrafts({});
         setSelectedColumnId("");
         setStatusText("Ready for a new UI table.");
         return;
@@ -604,6 +760,7 @@ export default function UiTableDesignerPage() {
           return parseColumnNumber(left.uiTblClmNo, 0) - parseColumnNumber(right.uiTblClmNo, 0);
         })
         .map((column, index) => mapUiTableColumnPayloadToRow(column, index));
+      const resequencedColumns = resequenceColumns(nextColumns);
 
       deletedColumnIdsRef.current.clear();
       setForm({
@@ -612,8 +769,9 @@ export default function UiTableDesignerPage() {
         uiTblEditable: savedTable.uiTblEditable,
         uiTblIsActive: savedTable.uiTblIsActive,
       });
-      setColumns(nextColumns);
-      setSelectedColumnId(nextColumns[0]?.id ?? "");
+      setColumns(resequencedColumns);
+      setPositionDrafts({});
+      setSelectedColumnId(resequencedColumns[0]?.id ?? "");
 
       try {
         await refreshTableOptions();
@@ -665,6 +823,7 @@ export default function UiTableDesignerPage() {
       deletedColumnIdsRef.current.clear();
       setForm(createBlankForm());
       setColumns([]);
+      setPositionDrafts({});
       setSelectedColumnId("");
 
       try {
@@ -684,15 +843,17 @@ export default function UiTableDesignerPage() {
     deletedColumnIdsRef.current.clear();
     setForm(createBlankForm());
     setColumns([]);
+    setPositionDrafts({});
     setSelectedColumnId("");
     setStatusText("Ready for a new UI table.");
   }, []);
 
   const handleAddColumn = useCallback(() => {
     const nextColumn = createColumnDraft(columns.length + 1);
-    setColumns((current) => [...current, nextColumn]);
+    clearAllPositionDrafts();
+    setColumns((current) => resequenceColumns([...current, nextColumn]));
     setSelectedColumnId(nextColumn.id);
-  }, [columns.length]);
+  }, [clearAllPositionDrafts, columns.length]);
 
   const handleDeleteColumn = useCallback(() => {
     if (!selectedColumnId) {
@@ -708,9 +869,10 @@ export default function UiTableDesignerPage() {
       columns.filter((column) => column.id !== selectedColumnId),
     );
 
+    clearAllPositionDrafts();
     setColumns(nextColumns);
     setSelectedColumnId(nextColumns[0]?.id ?? "");
-  }, [columns, selectedColumnId]);
+  }, [clearAllPositionDrafts, columns, selectedColumnId]);
 
   useEffect(() => {
     if (didInitialLoadRef.current) {
@@ -735,6 +897,7 @@ export default function UiTableDesignerPage() {
 
       setForm(createBlankForm());
       setColumns([]);
+      setPositionDrafts({});
       setSelectedColumnId("");
       setStatusText("No saved UI tables available. Ready for a new UI table.");
     };
@@ -855,6 +1018,8 @@ export default function UiTableDesignerPage() {
             minWidth={UI_TABLE_COLUMNS_TABLE_MIN_WIDTH}
             activeRowKey={selectedColumnId}
             onRowClick={(row) => setSelectedColumnId(row.id)}
+            reorderableRows
+            onRowReorder={handleRowReorder}
             wrapperClassName={styles.columnsUiTableShell}
             tableClassName={styles.columnsUiTable}
             rowClassName={(row) =>

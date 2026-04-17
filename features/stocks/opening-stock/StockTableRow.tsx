@@ -1,6 +1,11 @@
 "use client";
 
-import type { MutableRefObject, ReactNode, RefObject } from "react";
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  MutableRefObject,
+  ReactNode,
+  RefObject,
+} from "react";
 import { FiCalendar, FiTrash2 } from "react-icons/fi";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import type { ItemPriceDetailsPayload } from "@/store/api/lookupsApi";
@@ -26,6 +31,7 @@ import {
   getTrackingRequiredFieldKeys,
   isOpeningStockFieldDisabled,
   isTrackingRequiredFieldMissing,
+  moveOpeningStockFieldFocus,
   openDatePicker,
   toCanonicalDateValue,
 } from "./Utils";
@@ -83,6 +89,20 @@ function getAlignClass(align: ColumnDefinition["align"]): string {
     return styles.alignCenter;
   }
   return styles.alignLeft;
+}
+
+function handleFieldNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>): boolean {
+  if (event.key !== "Shift" && event.key !== "Enter") {
+    return false;
+  }
+
+  if (event.altKey || event.ctrlKey || event.metaKey) {
+    return false;
+  }
+
+  event.preventDefault();
+  moveOpeningStockFieldFocus(event.currentTarget, event.key === "Shift" ? "left" : "right");
+  return true;
 }
 
 export function StockTableRow({
@@ -249,6 +269,7 @@ export function StockTableRow({
                   lookupRootRefs.current[cellLookupKey] = element;
                 }}
                 onToggle={() => onLookupToggle(cellLookupKey, lookupKind)}
+                onTriggerKeyDown={handleFieldNavigationKeyDown}
                 onSearchChange={(search) => onLookupSearchChange(lookupKind, search)}
                 onSelect={(option) => onLookupSelection(row.id, lookupKind, option)}
               />
@@ -259,6 +280,7 @@ export function StockTableRow({
                 data-opening-stock-field-key={column.key}
                 value={value}
                 onChange={(event) => onRowChange(row.id, column.key, event.target.value)}
+                onKeyDown={handleFieldNavigationKeyDown}
                 className={cx(styles.cellSelect, hasRequiredFieldError && styles.requiredField)}
                 disabled={isDisabledInput}
                 aria-invalid={hasRequiredFieldError || undefined}
@@ -294,6 +316,7 @@ export function StockTableRow({
                   aria-invalid={hasRequiredFieldError || undefined}
                   inputMode="numeric"
                   maxLength={10}
+                  onKeyDown={handleFieldNavigationKeyDown}
                 />
                 <input
                   ref={(element) => {
@@ -342,15 +365,14 @@ export function StockTableRow({
                 aria-invalid={hasRequiredFieldError || undefined}
                 step={isNumeric ? "any" : undefined}
                 inputMode={isNumeric ? "decimal" : undefined}
-                onKeyDown={
-                  isNumeric
-                    ? (event) => {
-                        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-                          event.preventDefault();
-                        }
-                      }
-                    : undefined
-                }
+                onKeyDown={(event) => {
+                  if (handleFieldNavigationKeyDown(event)) {
+                    return;
+                  }
+                  if (isNumeric && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+                    event.preventDefault();
+                  }
+                }}
                 onWheel={
                   isNumeric
                     ? (event) => {

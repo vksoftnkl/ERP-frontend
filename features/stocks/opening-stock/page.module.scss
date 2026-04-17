@@ -247,7 +247,7 @@
 .title {
   margin: 0;
   color: #162739;
-  font-size: clamp(1.9rem, 2.8vw, 2.45rem);
+  font-size: clamp(1rem, 2.8vw, 1rem);
   font-weight: 800;
   letter-spacing: -0.03em;
   line-height: 1.05;
@@ -448,7 +448,7 @@
 .serialCellContent {
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content:center;
   gap: 0.45rem;
   width: 100%;
 }
@@ -501,7 +501,7 @@
   border-radius: 4px;
   background: #ffffff;
   color: #1b2634;
-  padding: 0.52rem 0.72rem;
+  padding: 0.2rem;
   font: inherit;
   line-height: 1.35;
   transition:

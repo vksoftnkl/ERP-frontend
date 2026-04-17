@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode, RefObject } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from "react";
 import { FiChevronDown, FiSearch } from "react-icons/fi";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import { LOOKUP_FIELD_CONFIG } from "./constants";
@@ -23,6 +23,7 @@ type LookupCellProps = {
   searchInputRef: RefObject<HTMLInputElement | null>;
   rootRef: (element: HTMLDivElement | null) => void;
   onToggle: () => void;
+  onTriggerKeyDown?: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   onSearchChange: (search: string) => void;
   onSelect: (option: ERPDynamicSelectOption) => void;
 };
@@ -42,6 +43,7 @@ export function LookupCell({
   searchInputRef,
   rootRef,
   onToggle,
+  onTriggerKeyDown,
   onSearchChange,
   onSelect,
 }: LookupCellProps): ReactNode {
@@ -59,6 +61,7 @@ export function LookupCell({
           hasValidationError && styles.requiredField,
         )}
         onClick={onToggle}
+        onKeyDown={onTriggerKeyDown}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-invalid={hasValidationError || undefined}

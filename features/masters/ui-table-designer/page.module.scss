@@ -359,6 +359,50 @@
   white-space: nowrap;
 }
 
+.rowDragHandle {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #bcc8d1;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #ffffff 0%, #eef3f6 100%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: grab;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+
+  &::before {
+    content: "";
+    width: 12px;
+    height: 14px;
+    background-image: radial-gradient(circle, #486072 1.2px, transparent 1.3px);
+    background-size: 6px 6px;
+    background-position: 0 0;
+  }
+
+  &:hover:not(:disabled) {
+    background: linear-gradient(180deg, #ffffff 0%, #e4edf4 100%);
+  }
+
+  &:active:not(:disabled) {
+    cursor: grabbing;
+    background: linear-gradient(180deg, #edf4f9 0%, #dbe6ef 100%);
+  }
+
+  &:focus-visible {
+    outline: 1px solid #3f87c6;
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+
 .emptyTableCell,
 .emptyColumnsState {
   text-align: center;

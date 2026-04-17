@@ -1,6 +1,7 @@
 "use client";
 import {
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type Key,
   type MouseEvent,
   type ReactNode,
@@ -26,6 +27,7 @@ export type ReusableTableSortState = {
   key: string | null;
   direction: ReusableTableSortDirection;
 };
+export type ReusableTableRowReorderEdge = "before" | "after";
 export type ReusableTableColumn<T> = {
   key: string;
   header: ReactNode;
@@ -61,6 +63,14 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   activeRowKey?: Key | null;
   rowClassName?: (row: T, rowIndex: number) => string | undefined;
   onRowClick?: (row: T, rowIndex: number) => void;
+  reorderableRows?: boolean;
+  onRowReorder?: (
+    sourceRow: T,
+    sourceIndex: number,
+    targetRow: T,
+    targetIndex: number,
+    edge: ReusableTableRowReorderEdge,
+  ) => void;
   wrapperClassName?: string;
   tableClassName?: string;
   emptyText?: string;
@@ -402,6 +412,8 @@ export function ReusableTable<T extends Record<string, unknown>>({
   activeRowKey,
   rowClassName,
   onRowClick,
+  reorderableRows = false,
+  onRowReorder,
   wrapperClassName,
   tableClassName,
   emptyText = "No records found",
@@ -465,6 +477,11 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const [openActionMenuPlacement, setOpenActionMenuPlacement] = useState<ActionMenuPlacement>(
     DEFAULT_ACTION_MENU_PLACEMENT,
   );
+  const [draggingRowKey, setDraggingRowKey] = useState<Key | null>(null);
+  const [dropTarget, setDropTarget] = useState<{
+    key: Key;
+    edge: ReusableTableRowReorderEdge;
+  } | null>(null);
   const resolvedOnUpdate = onUpdate ?? onEdit;
   const resolvedIsUpdateDisabled = isUpdateDisabled ?? isEditDisabled;
   const resolvedUpdateLabel = updateLabel ?? editLabel ?? "Edit";
@@ -581,6 +598,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const resolvedTableMaxHeight = fullViewHeight
     ? "none"
     : tableMaxHeight ?? DEFAULT_TABLE_MAX_HEIGHT;
+  const enableRowReorder = reorderableRows && typeof onRowReorder === "function";
 
   useEffect(() => {
     if (openActionMenuKey === null) {
@@ -623,6 +641,27 @@ export function ReusableTable<T extends Record<string, unknown>>({
       window.removeEventListener("keydown", handleEscape);
     };
   }, [openActionMenuKey]);
+
+  useEffect(() => {
+    if (draggingRowKey === null && dropTarget === null) {
+      return;
+    }
+
+    const isDraggingRowVisible =
+      draggingRowKey === null ||
+      paginatedRows.some((row, index) => resolveRowKey(row, index, rowKey) === draggingRowKey);
+    const isDropTargetVisible =
+      dropTarget === null ||
+      paginatedRows.some((row, index) => resolveRowKey(row, index, rowKey) === dropTarget.key);
+
+    if (!isDraggingRowVisible) {
+      setDraggingRowKey(null);
+    }
+
+    if (!isDropTargetVisible) {
+      setDropTarget(null);
+    }
+  }, [draggingRowKey, dropTarget, paginatedRows, rowKey]);
 
   useEffect(() => {
     if (!paginated) {
@@ -767,6 +806,105 @@ export function ReusableTable<T extends Record<string, unknown>>({
 
     setOpenActionMenuPlacement(resolveActionMenuPlacement(event.currentTarget));
     setOpenActionMenuKey(rowActionKey);
+  };
+  const clearRowReorderState = () => {
+    setDraggingRowKey(null);
+    setDropTarget(null);
+  };
+  const getRowReorderEdge = (
+    event: ReactDragEvent<HTMLTableRowElement>,
+  ): ReusableTableRowReorderEdge => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return event.clientY - bounds.top <= bounds.height / 2 ? "before" : "after";
+  };
+  const handleRowDragStart = (
+    event: ReactDragEvent<HTMLTableRowElement>,
+    resolvedKey: Key,
+  ) => {
+    if (!enableRowReorder) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('[data-erp-row-drag-handle="true"]')) {
+      event.preventDefault();
+      return;
+    }
+
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(resolvedKey));
+    setDraggingRowKey(resolvedKey);
+    setDropTarget(null);
+  };
+  const handleRowDragOver = (
+    event: ReactDragEvent<HTMLTableRowElement>,
+    resolvedKey: Key,
+  ) => {
+    if (!enableRowReorder || draggingRowKey === null) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+
+    if (resolvedKey === draggingRowKey) {
+      setDropTarget(null);
+      return;
+    }
+
+    const nextEdge = getRowReorderEdge(event);
+    setDropTarget((current) =>
+      current?.key === resolvedKey && current.edge === nextEdge
+        ? current
+        : { key: resolvedKey, edge: nextEdge },
+    );
+  };
+  const handleRowDragLeave = (
+    event: ReactDragEvent<HTMLTableRowElement>,
+    resolvedKey: Key,
+  ) => {
+    if (!enableRowReorder) {
+      return;
+    }
+
+    const relatedTarget = event.relatedTarget as Node | null;
+    if (relatedTarget && event.currentTarget.contains(relatedTarget)) {
+      return;
+    }
+
+    setDropTarget((current) => (current?.key === resolvedKey ? null : current));
+  };
+  const handleRowDrop = (
+    event: ReactDragEvent<HTMLTableRowElement>,
+    targetRow: T,
+    targetIndex: number,
+  ) => {
+    if (!enableRowReorder || draggingRowKey === null) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const sourceIndex = paginatedRows.findIndex(
+      (row, rowIndex) => resolveRowKey(row, rowIndex, rowKey) === draggingRowKey,
+    );
+    const sourceRow = sourceIndex >= 0 ? paginatedRows[sourceIndex] : null;
+    const edge = getRowReorderEdge(event);
+
+    clearRowReorderState();
+
+    if (!sourceRow || sourceIndex < 0 || sourceIndex === targetIndex) {
+      return;
+    }
+
+    const targetIndexAfterRemoval = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    const insertionIndex = edge === "before" ? targetIndexAfterRemoval : targetIndexAfterRemoval + 1;
+
+    if (insertionIndex === sourceIndex) {
+      return;
+    }
+
+    onRowReorder(sourceRow, sourceIndex, targetRow, targetIndex, edge);
   };
   const renderActionMenu = (
     row: T,
@@ -998,11 +1136,39 @@ export function ReusableTable<T extends Record<string, unknown>>({
                     className={cx(
                       styles.row,
                       rowIndex % 2 === 0 ? styles.rowOdd : styles.rowEven,
+                      draggingRowKey === resolvedKey && styles.rowDragging,
+                      dropTarget?.key === resolvedKey &&
+                        dropTarget.edge === "before" &&
+                        styles.rowDropBefore,
+                      dropTarget?.key === resolvedKey &&
+                        dropTarget.edge === "after" &&
+                        styles.rowDropAfter,
                       (isActiveByIndex || isActiveByKey) && styles.activeRow,
                       onRowClick && styles.rowClickable,
                       rowClassName?.(row, rowIndex),
                     )}
                     onClick={onRowClick ? () => onRowClick(row, rowIndex) : undefined}
+                    onDragStart={
+                      enableRowReorder
+                        ? (event) => handleRowDragStart(event, resolvedKey)
+                        : undefined
+                    }
+                    onDragOver={
+                      enableRowReorder
+                        ? (event) => handleRowDragOver(event, resolvedKey)
+                        : undefined
+                    }
+                    onDragLeave={
+                      enableRowReorder
+                        ? (event) => handleRowDragLeave(event, resolvedKey)
+                        : undefined
+                    }
+                    onDrop={
+                      enableRowReorder
+                        ? (event) => handleRowDrop(event, row, rowIndex)
+                        : undefined
+                    }
+                    onDragEnd={enableRowReorder ? clearRowReorderState : undefined}
                     onKeyDown={
                       onRowClick
                         ? (event) => {

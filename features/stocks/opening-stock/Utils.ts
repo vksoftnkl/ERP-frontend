@@ -660,6 +660,44 @@ export function focusOpeningStockField(
   fieldControl.focus();
 }
 
+function getOpeningStockFocusableControls(table: HTMLTableElement): HTMLElement[] {
+  return Array.from(
+    table.querySelectorAll<HTMLElement>('[data-opening-stock-field-control="true"]'),
+  ).filter((element) => !element.matches(":disabled"));
+}
+
+export function moveOpeningStockFieldFocus(
+  currentControl: HTMLElement,
+  direction: "left" | "right",
+): void {
+  const table = currentControl.closest("table");
+  if (!(table instanceof HTMLTableElement)) {
+    return;
+  }
+
+  const focusableControls = getOpeningStockFocusableControls(table);
+  const currentIndex = focusableControls.indexOf(currentControl);
+  if (currentIndex === -1) {
+    return;
+  }
+
+  const targetIndex = direction === "left" ? currentIndex - 1 : currentIndex + 1;
+  const targetControl = focusableControls[targetIndex];
+  if (!targetControl) {
+    return;
+  }
+
+  targetControl.scrollIntoView({
+    block: "nearest",
+    inline: "nearest",
+  });
+  targetControl.focus();
+
+  if (targetControl instanceof HTMLInputElement && targetControl.type !== "date") {
+    targetControl.select();
+  }
+}
+
 export function isPristineRow(row: OpeningStockRow): boolean {
   return Object.entries(DEFAULT_ROW_VALUES).every(
     ([key, defaultValue]) => (row.values[key] ?? "") === defaultValue,
