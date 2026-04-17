@@ -549,18 +549,6 @@ const FALLBACK_COLUMN_KEYS = [
 ] as const;
 const HIDDEN_INTERNAL_COLUMN_KEYS = new Set<string>();
 
-// These columns are always injected into the configured column list if missing,
-// regardless of what the backend UI table config says.
-const ALWAYS_VISIBLE_COLUMN_KEYS = [
-  "freebaseqty",
-  "mrp",
-  "oslitemid",
-  "oslunitid",
-  "oslbaseuomid",
-  "oslgodownid",
-  "osltaxid",
-] as const;
-
 const ITEM_AUTOFILL_FIELD_KEYS = [
   "barcode",
   "code",
@@ -793,9 +781,20 @@ function normalizeOpeningStockCessType(value: string | null | undefined): string
   }
   return "NONE";
 }
+
+// ── UPDATED: item_batch_config drives tracking type (0=NONE, 1=MRP, 2=BATCH) ──
+// item_is_batch_based / item_is_expiry_item are kept as a safety fallback when
+// item_batch_config is 0 or unrecognised.
 function resolveTrackingType(item: ItemPriceDetailsPayload["item"]): string {
-  return item.item_is_batch_based || item.item_is_expiry_item ? "2" : "0";
+  const batchConfig = item.item_batch_config;
+  if (batchConfig === 1) return "1"; // MRP tracking
+  if (batchConfig === 2) return "2"; // Batch tracking
+  // Fallback: derive from item flags when batch_config is 0 or unrecognised
+  if (item.item_is_batch_based || item.item_is_expiry_item) return "2";
+  return "0"; // NONE
 }
+// ─────────────────────────────────────────────────────────────────────────────
+
 function buildTaxSelectionValues(taxDetail: ItemTaxDetailPayload | ItemPriceDetailsPayload["item_tax"]): Record<string, string> {
   return {
     taxname: toInputValue(taxDetail?.tax_name),
@@ -939,29 +938,17 @@ function mergeResolvedColumns(
     return incoming;
   }
 
-  const incomingMap = new Map(incoming.map((column) => [column.key, column]));
-  const merged: ColumnDefinition[] = [];
-
-  for (const previousColumn of previous) {
-    const latest = incomingMap.get(previousColumn.key);
-    if (!latest) {
-      continue;
+  const previousMap = new Map(previous.map((column) => [column.key, column]));
+  return incoming.map((column) => {
+    const previousColumn = previousMap.get(column.key);
+    if (!previousColumn) {
+      return column;
     }
-
-    merged.push({
-      ...latest,
-      width: previousColumn.width || latest.width,
-    });
-    incomingMap.delete(previousColumn.key);
-  }
-
-  for (const incomingColumn of incoming) {
-    if (incomingMap.has(incomingColumn.key)) {
-      merged.push(incomingColumn);
-    }
-  }
-
-  return merged;
+    return {
+      ...column,
+      width: previousColumn.width || column.width,
+    };
+  });
 }
 function createUnknownColumnSchema(header: string): ColumnSchema {
   return {
@@ -1121,6 +1108,18 @@ function buildInvalidFieldState(
     accumulator[getInvalidFieldKey(issue.rowId, issue.fieldKey)] = true;
     return accumulator;
   }, {});
+}
+function isValidationFieldSatisfied(row: OpeningStockRow, fieldKey: string): boolean {
+  if (fieldKey === "itemname") {
+    return Boolean(toNullableTrimmedString(row.values.oslitemid));
+  }
+  if (fieldKey === "godown") {
+    return Boolean(toNullableTrimmedString(row.values.oslgodownid));
+  }
+  if (fieldKey === "uom") {
+    return Boolean(toNullableTrimmedString(row.values.oslunitid));
+  }
+  return Boolean(toNullableTrimmedString(row.values[fieldKey]));
 }
 function focusOpeningStockField(
   table: HTMLTableElement | null,
@@ -1357,31 +1356,6 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Co
     seenKeys.add(key);
   }
 
-  // ── FIX: Always inject ALWAYS_VISIBLE_COLUMN_KEYS if absent from backend config ──
-  for (const key of ALWAYS_VISIBLE_COLUMN_KEYS) {
-    if (seenKeys.has(key) || HIDDEN_INTERNAL_COLUMN_KEYS.has(key)) {
-      continue;
-    }
-    const schema = COLUMN_SCHEMA[key];
-    if (!schema) {
-      continue;
-    }
-    resolvedColumns.push({
-      key,
-      header: schema.header,
-      width: schema.defaultWidth,
-      align: schema.align,
-      kind: schema.kind,
-      lookupKind: schema.lookupKind,
-      placeholder: schema.placeholder,
-      options: schema.options,
-      defaultValue: schema.defaultValue,
-      defaultWidth: schema.defaultWidth,
-    });
-    seenKeys.add(key);
-  }
-  // ────────────────────────────────────────────────────────────────────────────────
-
   return resolvedColumns.length > 0 ? resolvedColumns : createFallbackColumns();
 }
 function getTableMinWidth(columns: ColumnDefinition[]): string {
@@ -1514,6 +1488,7 @@ export default function OpeningStockPage() {
   const itemSearchTimeoutRef = useRef<number | null>(null);
   const itemSearchRequestRef = useRef(0);
   const itemDetailRequestRef = useRef<Record<number, number>>({});
+  const taxDetailRequestRef = useRef<Record<number, number>>({});
   const godownSearchTimeoutRef = useRef<number | null>(null);
   const godownSearchRequestRef = useRef(0);
   const {
@@ -1763,6 +1738,29 @@ export default function OpeningStockPage() {
   const filteredRows = getFilteredRows(rows, searchQuery);
   const visibleTotals = getTotals(filteredRows);
   const trackingRows = filteredRows.filter((row) => row.values.osltrackingtype !== "0").length;
+  useEffect(() => {
+    if (Object.keys(invalidFieldKeys).length === 0) {
+      return;
+    }
+    setInvalidFieldKeys((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const invalidFieldKey of Object.keys(current)) {
+        const separatorIndex = invalidFieldKey.indexOf(":");
+        if (separatorIndex === -1) {
+          continue;
+        }
+        const rowId = Number(invalidFieldKey.slice(0, separatorIndex));
+        const fieldKey = invalidFieldKey.slice(separatorIndex + 1);
+        const row = rows.find((candidate) => candidate.id === rowId);
+        if (!row || isValidationFieldSatisfied(row, fieldKey)) {
+          delete next[invalidFieldKey];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [invalidFieldKeys, rows]);
   const accountingYear = formatAccountingYear(voucherDate);
   const contextStatusText = !activeCompany
     ? "Select a company in the header to enable opening stock posting."
@@ -1848,6 +1846,14 @@ export default function OpeningStockPage() {
               ...row.values,
               [field]: value,
             };
+            if (field === "osltaxid") {
+              const normalizedTaxId = value.trim();
+              nextValues.taxname = normalizedTaxId ? taxOptionsByValue.get(normalizedTaxId) ?? "" : "";
+              nextValues.osltaxperc = DEFAULT_ROW_VALUES.osltaxperc ?? "";
+              nextValues.oslcesstype = DEFAULT_ROW_VALUES.oslcesstype ?? "NONE";
+              nextValues.oslcessperc = DEFAULT_ROW_VALUES.oslcessperc ?? "";
+              nextValues.oslcessperunit = DEFAULT_ROW_VALUES.oslcessperunit ?? "";
+            }
             if (field === "openingqty" || field === "freeqty" || field === "convfactor") {
               const convFactor = parseDecimal(
                 field === "convfactor" ? value : nextValues.convfactor,
@@ -1874,6 +1880,40 @@ export default function OpeningStockPage() {
           : row,
       ),
     );
+    if (field === "osltaxid") {
+      const normalizedTaxId = value.trim();
+      const requestId = (taxDetailRequestRef.current[rowId] ?? 0) + 1;
+      taxDetailRequestRef.current[rowId] = requestId;
+      if (!normalizedTaxId) {
+        return;
+      }
+      void (async () => {
+        try {
+          const taxDetail = await triggerItemTaxById(
+            { taxId: normalizedTaxId },
+            true,
+          ).unwrap();
+          if (taxDetailRequestRef.current[rowId] !== requestId) {
+            return;
+          }
+          setRows((currentRows) =>
+            currentRows.map((row) =>
+              row.id === rowId && (row.values.osltaxid ?? "").trim() === normalizedTaxId
+                ? {
+                  ...row,
+                  values: {
+                    ...row.values,
+                    ...buildTaxSelectionValues(taxDetail),
+                  },
+                }
+                : row,
+            ),
+          );
+        } catch {
+          // Keep the typed tax ID and cleared cess fields when tax lookup fails.
+        }
+      })();
+    }
     if (field === "osltrackingtype") {
       setInvalidFieldKeys((current) =>
         clearInvalidFieldKeys(current, rowId, TRACKING_VALIDATION_FIELD_KEYS),
@@ -2648,7 +2688,7 @@ export default function OpeningStockPage() {
         <div className={tableStyles.tableViewport} data-erp-table-viewport="true">
           <table
             ref={tableRef}
-            className={cx(tableStyles.table, styles.resizableTable)}
+            className={cx(tableStyles.table, styles.resizableTable, styles.columnStripedTable)}
             style={{ "--erp-table-min-width": tableMinWidth } as CSSProperties}
           >
             <colgroup>
@@ -2730,6 +2770,7 @@ export default function OpeningStockPage() {
                       data-label="S.No"
                       className={cx(
                         tableStyles.cell,
+                        styles.compactCell,
                         tableStyles.alignLeft,
                         styles.stickySerialCell,
                       )}
@@ -2784,7 +2825,18 @@ export default function OpeningStockPage() {
                         column.key === "freebaseqty" ||
                         column.key === "convfactor" ||
                         column.key === "osltaxperc" ||
-                        (isBatchOnlyField && !isBatchTrackingSelected);
+                        column.key === "osltrackingtype" ||
+                        column.key === "oslcessperc" ||
+                        column.key === "oslcessperunit" ||
+                        column.key === "oslcesstype" ||
+                        column.key === "taxname" ||
+                        column.key === "oslitemid" ||
+                       column.key === "oslunitid" ||
+                       column.key === "osltaxid" ||
+                       column.key === "osluomid" ||
+                       column.key === "oslgodownid" || 
+                       column.key === "oslbaseuomid" ||
+                         (isBatchOnlyField && !isBatchTrackingSelected);
                       const hasValidationError = Boolean(
                         invalidFieldKeys[getInvalidFieldKey(row.id, column.key)],
                       );
@@ -2806,7 +2858,11 @@ export default function OpeningStockPage() {
                           data-opening-stock-field-container="true"
                           data-opening-stock-row-index={index}
                           data-opening-stock-column-index={columnIndex}
-                          className={cx(tableStyles.cell, getAlignClass(column.align))}
+                          className={cx(
+                            tableStyles.cell,
+                            styles.compactCell,
+                            getAlignClass(column.align),
+                          )}
                         >
                           {column.key === "uom" ? (
                             <select
@@ -2942,6 +2998,7 @@ export default function OpeningStockPage() {
                                 styles.cellSelect,
                                 hasRequiredFieldError && styles.requiredField,
                               )}
+                              disabled={isDisabledInput}
                               aria-invalid={hasRequiredFieldError || undefined}
                             >
                               {column.key === "roundoff" ? (
@@ -3064,11 +3121,11 @@ export default function OpeningStockPage() {
         </div>
         <div className={tableStyles.paginationBar}>
           <div className={tableStyles.paginationInfo}>
-            <span>{visibleTotals.lines} visible lines</span>
-            <span>{QUANTITY_FORMATTER.format(visibleTotals.qty)} qty</span>
-            <span>{QUANTITY_FORMATTER.format(visibleTotals.freeQty)} free qty</span>
+            
           </div>
           <div className={styles.footerValue}>
+            <span>{QUANTITY_FORMATTER.format(visibleTotals.qty)} qty</span>
+            <span>{QUANTITY_FORMATTER.format(visibleTotals.freeQty)} free qty</span>
             <span className={styles.footerLabel}>stock value</span>
             <strong>{VALUE_FORMATTER.format(visibleTotals.value)}</strong>
           </div>

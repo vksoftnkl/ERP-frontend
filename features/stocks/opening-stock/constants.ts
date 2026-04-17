@@ -45,12 +45,12 @@ export const CESS_TYPE_OPTIONS = ["NONE", "PERCENT", "PER_UNIT"] as const;
 
 export const DEFAULT_ITEM_OPTION: ERPDynamicSelectOption = {
   value: "",
-  label: "Clear selection",
+  label: "",
 };
 
 export const DEFAULT_GODOWN_OPTION: ERPDynamicSelectOption = {
   value: "",
-  label: "Clear selection",
+  label: "",
 };
 
 // ─── Lookup field config ──────────────────────────────────────────────────────

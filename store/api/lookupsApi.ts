@@ -32,11 +32,11 @@ const ITEM_TAX_LIST_QUERY = {
 } as const;
 const DEFAULT_ITEM_OPTION: ERPDynamicSelectOption = {
   value: "",
-  label: "Clear selection",
+  label: "",
 };
 const DEFAULT_GODOWN_OPTION: ERPDynamicSelectOption = {
   value: "",
-  label: "Clear selection",
+  label: "",
 };
 const DEFAULT_BRANCH_OPTION: ERPDynamicSelectOption = {
   value: "",
@@ -44,7 +44,7 @@ const DEFAULT_BRANCH_OPTION: ERPDynamicSelectOption = {
 };
 const DEFAULT_UNIT_OPTION: ERPDynamicSelectOption = {
   value: "",
-  label: "Clear selection",
+  label: "",
 };
 const DEFAULT_TAX_OPTION: ERPDynamicSelectOption = {
   value: "",
@@ -109,6 +109,7 @@ export type ItemPriceDetailsItem = {
   item_default_tax_id: string | null;
   item_is_batch_based: boolean;
   item_is_expiry_item: boolean;
+  item_batch_config:number;
   item_notes?: string | null;
 };
 export type ItemPriceDetailsPrice = {
@@ -159,6 +160,7 @@ export type ItemPriceDetailsPayload = {
   item: ItemPriceDetailsItem;
   item_prices: ItemPriceDetailsPrice[];
   item_tax: ItemPriceDetailsTax | null;
+  
 };
 export const lookupsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({

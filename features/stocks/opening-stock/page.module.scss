@@ -90,6 +90,10 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  border: 1px solid #d7e0ea;
+  border-radius: 4px;
+  background: #ffffff;
+  overflow: hidden;
 }
 
 .toolbarDateLabel {
@@ -104,9 +108,9 @@
   width: min(100%, 190px);
   min-width: 170px;
   min-height: 2.75rem;
-  border: 1px solid #d7e0ea;
-  border-radius: 4px;
-  background: #ffffff;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: #1b2634;
   padding: 0.52rem 0.72rem;
   font: inherit;
@@ -121,10 +125,13 @@
   padding-right: 2.7rem;
 }
 
-.toolbarDateInput:focus-visible {
-  outline: 0;
+.toolbarDateControl:focus-within {
   border-color: #8ab4ff;
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+}
+
+.toolbarDateInput:focus-visible {
+  outline: 0;
 }
 
 .summaryCard {
@@ -264,12 +271,16 @@
   background: #f7fbff;
 }
 
+.compactCell {
+  padding: 0.2rem;
+}
+
 .cellInput,
 .cellSelect {
   width: 100%;
   min-width: 0;
   min-height: 2.45rem;
-  border: 1px solid #d7e0ea;
+  border: 0;
   border-radius: 4px;
   background: #ffffff;
   color: #1b2634;
@@ -350,13 +361,11 @@
 .cellInput:focus-visible,
 .cellSelect:focus-visible {
   outline: 0;
-  border-color: #8ab4ff;
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
 }
 
 .requiredField,
 .requiredField[readonly] {
-  border-color: #d84c43;
   background: #fff7f6;
 }
 
@@ -365,16 +374,20 @@
 }
 
 .requiredField:focus-visible {
-  border-color: #c83d34;
   box-shadow: 0 0 0 4px rgba(216, 76, 67, 0.16);
 }
 
 .cellInput:disabled,
 .cellSelect:disabled {
-  border-color: #dbe3ec;
   background: #f3f6f9;
   color: #8794a3;
   cursor: not-allowed;
+}
+
+.cellSelect.requiredField:disabled,
+.cellInput.requiredField:disabled {
+  background: #fff7f6;
+  color: #1b2634;
 }
 
 .cellInput[readonly] {
@@ -395,7 +408,7 @@
   width: 100%;
   min-width: 0;
   min-height: 2.45rem;
-  border: 1px solid #d7e0ea;
+  border: 0;
   border-radius: 4px;
   background: #ffffff;
   color: #1b2634;
@@ -417,8 +430,16 @@
 .lookupTrigger:focus-visible,
 .lookupSearchInput:focus-visible {
   outline: 0;
-  border-color: #8ab4ff;
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+}
+
+.lookupTrigger.requiredField {
+  background: #fff7f6;
+}
+
+.lookupTrigger.requiredField:focus-visible,
+.lookupTrigger.requiredField.lookupTriggerOpen {
+  box-shadow: 0 0 0 4px rgba(216, 76, 67, 0.16);
 }
 
 .lookupTriggerOpen {
