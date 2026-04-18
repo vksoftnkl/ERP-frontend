@@ -562,6 +562,33 @@ function toConfiguredNumberInputValue(
   return String(value);
 }
 
+export function getOpeningStockTaxExclusiveInputValue(
+  columnKey: "costwot" | "priceawot" | "pricebwot" | "pricecwot" | "pricedwot",
+  inclusiveValue: string | number | null | undefined,
+  taxPercentage: string | number | null | undefined,
+): string {
+  if (typeof inclusiveValue === "string" && inclusiveValue.trim().length === 0) {
+    return DEFAULT_ROW_VALUES[columnKey] ?? "";
+  }
+
+  const normalizedInclusiveValue =
+    typeof inclusiveValue === "number" ? inclusiveValue : parseDecimal(toInputValue(inclusiveValue));
+  const normalizedTaxPercentage =
+    typeof taxPercentage === "number" ? taxPercentage : parseDecimal(toInputValue(taxPercentage));
+  const divisor = 1 + Math.max(normalizedTaxPercentage, 0) / 100;
+  const taxExclusiveValue =
+    divisor > 0 ? normalizedInclusiveValue / divisor : normalizedInclusiveValue;
+
+  return toConfiguredNumberInputValue(columnKey, taxExclusiveValue);
+}
+
+export function getOpeningStockCostWotInputValue(
+  costPrice: string | number | null | undefined,
+  taxPercentage: string | number | null | undefined,
+): string {
+  return getOpeningStockTaxExclusiveInputValue("costwot", costPrice, taxPercentage);
+}
+
 export function createDefaultRowValues(): Record<string, string> {
   return Object.entries(COLUMN_SCHEMA).reduce<Record<string, string>>((accumulator, [key, schema]) => {
     const value = schema.defaultValue ?? "";

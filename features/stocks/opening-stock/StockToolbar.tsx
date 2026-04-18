@@ -1,10 +1,8 @@
 "use client";
-
 import type { ReactNode, RefObject } from "react";
 import { FiCalendar, FiDownload, FiSearch } from "react-icons/fi";
 import { cx, formatDateEntry, formatDateForDisplay, openDatePicker, toCanonicalDateValue } from "./Utils";
 import styles from "./page.module.scss";
-
 type StockToolbarProps = {
   voucherDate: string;
   voucherRefNo: string;
@@ -18,7 +16,6 @@ type StockToolbarProps = {
   onLoadStock: () => void;
   onUpdateStock: () => void;
 };
-
 export function StockToolbar({
   voucherDate,
   voucherRefNo,
@@ -80,12 +77,10 @@ export function StockToolbar({
                 if (event.key !== "Enter") {
                   return;
                 }
-
                 event.preventDefault();
                 onLoadByRefNo();
               }}
               className={cx(styles.toolbarDateInput, styles.toolbarRefInput)}
-              placeholder="Enter ref no"
               autoComplete="off"
               spellCheck={false}
             />

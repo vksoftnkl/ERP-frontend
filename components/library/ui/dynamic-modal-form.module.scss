@@ -663,7 +663,8 @@ background: #dfe7f0;
   position: relative;
   z-index: 2;
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.72rem;
   flex-wrap: wrap;
   border-top: 1px solid #dce3eb;
@@ -678,14 +679,16 @@ background: #dfe7f0;
   flex: 1 0 100%;
 }
 .footerShortcuts {
-  flex: 1 0 100%;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .footerActions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.72rem;
-  flex: 1 0 100%;
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 .cancelButton,
 .submitButton {
@@ -803,6 +806,13 @@ background: #dfe7f0;
   }
   .footer {
     padding: 0.72rem 1rem 0;
+  }
+  .footerShortcuts,
+  .footerActions {
+    flex: 1 0 100%;
+  }
+  .footerActions {
+    margin-left: 0;
   }
 }
 @keyframes erp-modal-fade-in {

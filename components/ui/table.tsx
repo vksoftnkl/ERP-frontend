@@ -629,6 +629,10 @@ export function ReusableTable<T extends Record<string, unknown>>({
     };
 
     const handleEscape = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
       if (event.key === "Escape") {
         setOpenActionMenuKey(null);
       }
@@ -670,6 +674,10 @@ export function ReusableTable<T extends Record<string, unknown>>({
     }
 
     const handlePaginationKeydown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
       // Only handle pagination shortcuts when not typing in an input
       const target = event.target as HTMLElement;
       const isInputElement =

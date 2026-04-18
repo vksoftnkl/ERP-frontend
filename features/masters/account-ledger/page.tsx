@@ -10,6 +10,10 @@ import {
 } from "react";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
+import {
+  KeyboardShortcutHints,
+  type KeyboardShortcutDefinition,
+} from "@/components/library/ui/keyboard-shortcut-hints";
 import { useApi } from "@/hooks/useApi";
 import type {
   ERPDynamicModalField,
@@ -83,6 +87,25 @@ import {
   getFirstLedgerFocusableFieldTarget,
   focusLedgerFieldControl,
 } from "./form-navigation";
+
+const LEDGER_SECTION_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
+  {
+    label: "Prev",
+    keys: ["ArrowLeft"],
+  },
+  {
+    label: "Next",
+    keys: ["ArrowRight"],
+  },
+  {
+    label: "First",
+    keys: ["Home"],
+  },
+  {
+    label: "Last",
+    keys: ["End"],
+  },
+];
 
 // Form rendering component
 function LedgerFieldRenderer({
@@ -603,6 +626,7 @@ export default function AccountLedgerMasterPage() {
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.preventDefault();
         setOpenSearchField(null);
         setSearchActiveOptionIndex((current) => {
           if (!(activeField in current)) return current;
@@ -830,6 +854,41 @@ export default function AccountLedgerMasterPage() {
     setSearchActiveOptionIndex({});
     setActiveSectionKey("general");
   }, [saveLoading]);
+
+  useEffect(() => {
+    if (!isFormModalOpen) return;
+
+    const handleModalShortcuts = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeModal();
+        return;
+      }
+
+      if (
+        modalMode === "view" ||
+        saveLoading ||
+        detailsLoading ||
+        event.key !== "Enter" ||
+        event.altKey ||
+        event.shiftKey ||
+        (!event.ctrlKey && !event.metaKey)
+      ) {
+        return;
+      }
+
+      const formElement = formRef.current;
+      if (!formElement) return;
+
+      event.preventDefault();
+      formElement.requestSubmit();
+    };
+
+    window.addEventListener("keydown", handleModalShortcuts);
+    return () => window.removeEventListener("keydown", handleModalShortcuts);
+  }, [closeModal, detailsLoading, isFormModalOpen, modalMode, saveLoading]);
 
   // Form field handlers
   const handleFieldChange = useCallback(
@@ -1261,6 +1320,21 @@ export default function AccountLedgerMasterPage() {
     "--erp-modal-border": "#cfdae6",
     "--erp-modal-surface": "#ffffff",
   } as CSSProperties;
+  const ledgerModalFooterShortcuts: KeyboardShortcutDefinition[] = [
+    ...(ledgerFormSections.length > 1 ? LEDGER_SECTION_SHORTCUTS : []),
+    {
+      label: isReadOnlyMode ? "Close" : "Cancel",
+      keys: ["Escape"],
+    },
+    ...(!isReadOnlyMode && !saveLoading && !detailsLoading
+      ? [
+          {
+            label: modalMode === "update" ? "Update" : "Save",
+            keys: ["Ctrl/Cmd", "Enter"],
+          },
+        ]
+      : []),
+  ];
 
   const modalPanelStyle = {
     width: "min(62vw,62rem)",
@@ -1512,30 +1586,38 @@ export default function AccountLedgerMasterPage() {
               </form>
             </div>
             <footer className={dynamicFormStyles.footer}>
-              <button
-                type="button"
-                className={dynamicFormStyles.cancelButton}
-                onClick={closeModal}
-                disabled={saveLoading}
-              >
-                {isReadOnlyMode ? "Close" : "Cancel"}
-              </button>
-              {!isReadOnlyMode ? (
+              <div className={dynamicFormStyles.footerShortcuts}>
+                <KeyboardShortcutHints
+                  shortcuts={ledgerModalFooterShortcuts}
+                  dense
+                />
+              </div>
+              <div className={dynamicFormStyles.footerActions}>
                 <button
-                  type="submit"
-                  form={modalFormId}
-                  className={dynamicFormStyles.submitButton}
-                  disabled={saveLoading || detailsLoading}
+                  type="button"
+                  className={dynamicFormStyles.cancelButton}
+                  onClick={closeModal}
+                  disabled={saveLoading}
                 >
-                  {saveLoading
-                    ? modalMode === "update"
-                      ? "Updating..."
-                      : "Saving..."
-                    : modalMode === "update"
-                      ? "Update"
-                      : "Save"}
+                  {isReadOnlyMode ? "Close" : "Cancel"}
                 </button>
-              ) : null}
+                {!isReadOnlyMode ? (
+                  <button
+                    type="submit"
+                    form={modalFormId}
+                    className={dynamicFormStyles.submitButton}
+                    disabled={saveLoading || detailsLoading}
+                  >
+                    {saveLoading
+                      ? modalMode === "update"
+                        ? "Updating..."
+                        : "Saving..."
+                      : modalMode === "update"
+                        ? "Update"
+                        : "Save"}
+                  </button>
+                ) : null}
+              </div>
             </footer>
           </div>
         </div>

@@ -142,31 +142,33 @@ export default function DeleteConfirmModal({
           </div>
         ) : null}
 
-        {footerShortcuts.length > 0 ? (
-          <div className={styles.footerShortcuts}>
-            <KeyboardShortcutHints
-              shortcuts={footerShortcuts}
-              dense
-            />
+        <div className={styles.footerRow}>
+          {footerShortcuts.length > 0 ? (
+            <div className={styles.footerShortcuts}>
+              <KeyboardShortcutHints
+                shortcuts={footerShortcuts}
+                dense
+              />
+            </div>
+          ) : null}
+          <div className={styles.actions}>
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={loading}
+              className={styles.cancelButton}
+            >
+              {cancelLabel}
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={loading}
+              className={styles.deleteButton}
+            >
+              {loading ? loadingLabel : confirmLabel}
+            </button>
           </div>
-        ) : null}
-        <div className={styles.actions}>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={loading}
-            className={styles.cancelButton}
-          >
-            {cancelLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={loading}
-            className={styles.deleteButton}
-          >
-            {loading ? loadingLabel : confirmLabel}
-          </button>
         </div>
       </div>
     </div>

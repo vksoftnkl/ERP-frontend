@@ -99,15 +99,25 @@
   animation: progressFill 1.4s ease-out infinite;
 }
 
-.actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+.footerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .footerShortcuts {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.actions {
   display: flex;
-  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .cancelButton,
@@ -147,6 +157,17 @@
 .deleteButton:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+@media (max-width: 560px) {
+  .footerShortcuts,
+  .actions {
+    flex: 1 0 100%;
+  }
+
+  .actions {
+    margin-left: 0;
+  }
 }
 
 @keyframes overlayIn {

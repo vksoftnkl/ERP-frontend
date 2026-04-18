@@ -101,6 +101,8 @@ import {
   formatAccountingYear,
   formatQuantityValue,
   getOpeningStockActualConvFactor,
+  getOpeningStockCostWotInputValue,
+  getOpeningStockTaxExclusiveInputValue,
   getRowValidationIssues,
   getTableMinWidth,
   getTodayInputValue,
@@ -641,6 +643,43 @@ export default function OpeningStockPage() {
                   nextValues.oslcessperunit = DEFAULT_ROW_VALUES.oslcessperunit ?? "";
                 }
 
+                if (field === "costprice" || field === "osltaxid" || field === "osltaxperc") {
+                  nextValues.costwot = getOpeningStockCostWotInputValue(
+                    nextValues.costprice,
+                    nextValues.osltaxperc,
+                  );
+                }
+
+                if (
+                  field === "pricea" ||
+                  field === "priceb" ||
+                  field === "pricec" ||
+                  field === "priced" ||
+                  field === "osltaxid" ||
+                  field === "osltaxperc"
+                ) {
+                  nextValues.priceawot = getOpeningStockTaxExclusiveInputValue(
+                    "priceawot",
+                    nextValues.pricea,
+                    nextValues.osltaxperc,
+                  );
+                  nextValues.pricebwot = getOpeningStockTaxExclusiveInputValue(
+                    "pricebwot",
+                    nextValues.priceb,
+                    nextValues.osltaxperc,
+                  );
+                  nextValues.pricecwot = getOpeningStockTaxExclusiveInputValue(
+                    "pricecwot",
+                    nextValues.pricec,
+                    nextValues.osltaxperc,
+                  );
+                  nextValues.pricedwot = getOpeningStockTaxExclusiveInputValue(
+                    "pricedwot",
+                    nextValues.priced,
+                    nextValues.osltaxperc,
+                  );
+                }
+
                 if (field === "openingqty" || field === "freeqty" || field === "convfactor") {
                   const convFactor =
                     field === "convfactor"
@@ -691,13 +730,40 @@ export default function OpeningStockPage() {
             setRows((currentRows) =>
               currentRows.map((row) =>
                 row.id === rowId && (row.values.osltaxid ?? "").trim() === normalizedTaxId
-                  ? {
-                      ...row,
-                      values: {
-                        ...row.values,
-                        ...buildTaxSelectionValues(taxDetail),
-                      },
-                    }
+                  ? (() => {
+                      const nextTaxValues = buildTaxSelectionValues(taxDetail);
+                      return {
+                        ...row,
+                        values: {
+                          ...row.values,
+                          ...nextTaxValues,
+                          costwot: getOpeningStockCostWotInputValue(
+                            row.values.costprice,
+                            nextTaxValues.osltaxperc,
+                          ),
+                          priceawot: getOpeningStockTaxExclusiveInputValue(
+                            "priceawot",
+                            row.values.pricea,
+                            nextTaxValues.osltaxperc,
+                          ),
+                          pricebwot: getOpeningStockTaxExclusiveInputValue(
+                            "pricebwot",
+                            row.values.priceb,
+                            nextTaxValues.osltaxperc,
+                          ),
+                          pricecwot: getOpeningStockTaxExclusiveInputValue(
+                            "pricecwot",
+                            row.values.pricec,
+                            nextTaxValues.osltaxperc,
+                          ),
+                          pricedwot: getOpeningStockTaxExclusiveInputValue(
+                            "pricedwot",
+                            row.values.priced,
+                            nextTaxValues.osltaxperc,
+                          ),
+                        },
+                      };
+                    })()
                   : row,
               ),
             );
@@ -863,13 +929,40 @@ export default function OpeningStockPage() {
               setRows((currentRows) =>
                 currentRows.map((row) =>
                   row.id === rowId && (row.values.oslitemid ?? "").trim() === option.value
-                    ? {
-                        ...row,
-                        values: {
-                          ...row.values,
-                          ...buildTaxSelectionValues(taxDetail),
-                        },
-                      }
+                    ? (() => {
+                        const nextTaxValues = buildTaxSelectionValues(taxDetail);
+                        return {
+                          ...row,
+                          values: {
+                            ...row.values,
+                            ...nextTaxValues,
+                            costwot: getOpeningStockCostWotInputValue(
+                              row.values.costprice,
+                              nextTaxValues.osltaxperc,
+                            ),
+                            priceawot: getOpeningStockTaxExclusiveInputValue(
+                              "priceawot",
+                              row.values.pricea,
+                              nextTaxValues.osltaxperc,
+                            ),
+                            pricebwot: getOpeningStockTaxExclusiveInputValue(
+                              "pricebwot",
+                              row.values.priceb,
+                              nextTaxValues.osltaxperc,
+                            ),
+                            pricecwot: getOpeningStockTaxExclusiveInputValue(
+                              "pricecwot",
+                              row.values.pricec,
+                              nextTaxValues.osltaxperc,
+                            ),
+                            pricedwot: getOpeningStockTaxExclusiveInputValue(
+                              "pricedwot",
+                              row.values.priced,
+                              nextTaxValues.osltaxperc,
+                            ),
+                          },
+                        };
+                      })()
                     : row,
                 ),
               );
@@ -930,13 +1023,40 @@ export default function OpeningStockPage() {
               setRows((currentRows) =>
                 currentRows.map((row) =>
                   row.id === rowId && (row.values.oslitemid ?? "").trim() === option.value
-                    ? {
-                        ...row,
-                        values: {
-                          ...row.values,
-                          ...buildTaxSelectionValues(taxDetail),
-                        },
-                      }
+                    ? (() => {
+                        const nextTaxValues = buildTaxSelectionValues(taxDetail);
+                        return {
+                          ...row,
+                          values: {
+                            ...row.values,
+                            ...nextTaxValues,
+                            costwot: getOpeningStockCostWotInputValue(
+                              row.values.costprice,
+                              nextTaxValues.osltaxperc,
+                            ),
+                            priceawot: getOpeningStockTaxExclusiveInputValue(
+                              "priceawot",
+                              row.values.pricea,
+                              nextTaxValues.osltaxperc,
+                            ),
+                            pricebwot: getOpeningStockTaxExclusiveInputValue(
+                              "pricebwot",
+                              row.values.priceb,
+                              nextTaxValues.osltaxperc,
+                            ),
+                            pricecwot: getOpeningStockTaxExclusiveInputValue(
+                              "pricecwot",
+                              row.values.pricec,
+                              nextTaxValues.osltaxperc,
+                            ),
+                            pricedwot: getOpeningStockTaxExclusiveInputValue(
+                              "pricedwot",
+                              row.values.priced,
+                              nextTaxValues.osltaxperc,
+                            ),
+                          },
+                        };
+                      })()
                     : row,
                 ),
               );
