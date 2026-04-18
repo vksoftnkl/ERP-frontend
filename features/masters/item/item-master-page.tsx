@@ -319,10 +319,13 @@ const DEFAULT_PACKING_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "None",
 };
+const ITEM_BATCH_CONFIG_NONE_VALUE = "0";
+const ITEM_BATCH_CONFIG_MRP_VALUE = "1";
+const ITEM_BATCH_CONFIG_BATCH_VALUE = "2";
 const BATCH_CONFIG_OPTIONS: ERPDynamicSelectOption[] = [
-  { value: "NONE", label: "NONE" },
-  { value: "MRP", label: "MRP" },
-  { value: "BATCH", label: "BATCH" },
+  { value: ITEM_BATCH_CONFIG_NONE_VALUE, label: "NONE" },
+  { value: ITEM_BATCH_CONFIG_MRP_VALUE, label: "MRP" },
+  { value: ITEM_BATCH_CONFIG_BATCH_VALUE, label: "BATCH" },
 ];
 const ITEM_PRICE_DEFAULT_PROFIT_TYPE = "BY_PERCENT";
 const ITEM_PRICE_PROFIT_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
@@ -584,6 +587,23 @@ const ITEM_MODAL_PANEL_STYLE: CSSProperties = {
   height: "80vh",
   maxHeight: "80vh",
 };
+
+function normalizeItemBatchConfigValue(value: unknown): string {
+  const normalized = toDisplayValue(value).trim().toUpperCase();
+  if (!normalized) {
+    return "";
+  }
+  if (normalized === ITEM_BATCH_CONFIG_NONE_VALUE || normalized === "NONE") {
+    return ITEM_BATCH_CONFIG_NONE_VALUE;
+  }
+  if (normalized === ITEM_BATCH_CONFIG_MRP_VALUE || normalized === "MRP") {
+    return ITEM_BATCH_CONFIG_MRP_VALUE;
+  }
+  if (normalized === ITEM_BATCH_CONFIG_BATCH_VALUE || normalized === "BATCH") {
+    return ITEM_BATCH_CONFIG_BATCH_VALUE;
+  }
+  return "";
+}
 const ITEM_INLINE_SECTION_HEADING_STYLE: CSSProperties = {
   gridColumn: "1 / -1",
   marginTop: "0.35rem",
@@ -3921,7 +3941,7 @@ function mapItemFormValues(
     toDisplayValue(getFieldValue(rowSource, "item_hsn_code")),
   );
   mappedValues.item_batch_config =
-    toDisplayValue(getFieldValue(rowSource, "item_batch_config")) ||
+    normalizeItemBatchConfigValue(getFieldValue(rowSource, "item_batch_config")) ||
     ITEM_INITIAL_FORM_VALUES.item_batch_config;
   mappedValues.item_sort_order =
     toDisplayValue(getFieldValue(rowSource, "item_sort_order")) ||
@@ -4029,7 +4049,10 @@ async function buildItemRequestPayload({
     item_barcode_sticker: (values.item_barcode_sticker ?? "false") === "true",
     item_default_tax_id: toNullableString(values.item_default_tax_id ?? ""),
     item_hsn_code: toUpperNullable(values.item_hsn_code ?? ""),
-    item_batch_config: toNonNegativeInteger(values.item_batch_config ?? "0", 0),
+    item_batch_config: toNonNegativeInteger(
+      normalizeItemBatchConfigValue(values.item_batch_config) || "0",
+      0,
+    ),
     item_sort_order: toOptionalNonNegativeInteger(values.item_sort_order ?? ""),
     item_image_url: toNullableString(values.item_image_url ?? ""),
     item_notes: toNullableString(values.item_notes ?? ""),

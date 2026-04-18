@@ -1,7 +1,7 @@
 .page {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.5rem;
   padding: 1rem;
 }
 
@@ -9,7 +9,7 @@
   --table-border: #d9e2ec;
   --table-border-soft: #e8eef5;
   --table-surface: #ffffff;
-  --table-surface-muted: #f5f8fb;
+  --table-surface-muted: linear-gradient(rgb(79, 118, 187) 0%, rgb(54, 91, 157) 100%);
   --table-surface-accent: #fbfdff;
   --table-text: #1b2634;
   --table-text-muted: #6d7c8d;
@@ -36,7 +36,7 @@
   z-index: 120;
   display: grid;
   gap: 0.9rem;
-  padding: 1.15rem 1.25rem 1rem;
+  padding: 0.5rem;
   background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
 }
 
@@ -49,25 +49,22 @@
   flex-wrap: wrap;
 }
 
-.createButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  min-height: 2.75rem;
-  border: 1px solid #1f5fbf;
-  border-radius: 4px;
-  background: linear-gradient(180deg, #2d75e8 0%, #1f5fbf 100%);
-  color: #ffffff;
-  padding: 0 1.1rem;
-  font-size: 0.92rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  transition:
-    transform 0.16s ease,
-    box-shadow 0.16s ease,
-    filter 0.16s ease;
+.createButton  {
+    color: #fff;
+    letter-spacing: .01em;
+    cursor: pointer;
+    background: linear-gradient(#2d75e8 0%, #1f5fbf 100%);
+    border: 1px solid #1f5fbf;
+    border-radius: 4px;
+    justify-content: center;
+    align-items: center;
+    gap: .5rem;
+    min-height: 2rem;
+    padding: 0 1.1rem;
+    font-size: .8rem;
+    font-weight: 600;
+    transition: transform .16s, box-shadow .16s, filter .16s;
+    display: inline-flex;
 }
 
 .createButton:hover:not(:disabled) {
@@ -120,7 +117,7 @@
 
 .headerCell,
 .cell {
-  padding: 0.72rem 0.82rem;
+  padding: 0.5rem;
   font-size: 0.92rem;
   line-height: 1.35;
   vertical-align: middle;
@@ -247,7 +244,7 @@
 .title {
   margin: 0;
   color: #162739;
-  font-size: clamp(1rem, 2.8vw, 1rem);
+  font-size: clamp(1rem, 2.8vw, 1.5rem);
   font-weight: 800;
   letter-spacing: -0.03em;
   line-height: 1.05;
@@ -312,20 +309,17 @@
 }
 
 .toolbarDateInput {
-  width: min(100%, 190px);
-  min-width: 170px;
-  min-height: 2.75rem;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: #1b2634;
-  padding: 0.52rem 0.72rem;
-  font: inherit;
-  line-height: 1.35;
-  transition:
-    border-color 0.16s ease,
-    box-shadow 0.16s ease,
-    background-color 0.16s ease;
+    color: #1b2634;
+    width: min(100%, 190px);
+    min-width: 170px;
+    min-height: 0.25rem;
+    font: inherit;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: .4rem;
+    line-height: 1;
+    transition: border-color .16s, box-shadow .16s, background-color .16s;
 }
 
 .dateInputWithPicker {

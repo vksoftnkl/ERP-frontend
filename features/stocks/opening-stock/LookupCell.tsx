@@ -1,6 +1,6 @@
 "use client";
 
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { FiChevronDown, FiSearch } from "react-icons/fi";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import { LOOKUP_FIELD_CONFIG } from "./constants";
@@ -9,6 +9,8 @@ import { cx } from "./Utils";
 import styles from "./page.module.scss";
 
 type LookupCellProps = {
+  rowId: number;
+  fieldKey: string;
   cellKey: string;
   lookupKind: LookupKind;
   isOpen: boolean;
@@ -28,7 +30,21 @@ type LookupCellProps = {
   onSelect: (option: ERPDynamicSelectOption) => void;
 };
 
+function getInitialHighlightedIndex(
+  options: ERPDynamicSelectOption[],
+  selectedId: string,
+): number {
+  if (options.length === 0) {
+    return -1;
+  }
+
+  const selectedIndex = options.findIndex((option) => option.value === selectedId);
+  return selectedIndex >= 0 ? selectedIndex : 0;
+}
+
 export function LookupCell({
+  rowId,
+  fieldKey,
   cellKey,
   lookupKind,
   isOpen,
@@ -47,6 +63,63 @@ export function LookupCell({
   onSearchChange,
   onSelect,
 }: LookupCellProps): ReactNode {
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const optionRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const listboxId = `${cellKey}-lookup-listbox`;
+  const activeOption = highlightedIndex >= 0 ? options[highlightedIndex] : undefined;
+  const activeOptionId = activeOption ? `${cellKey}-${activeOption.value}-option` : undefined;
+
+  useEffect(() => {
+    setHighlightedIndex(isOpen ? getInitialHighlightedIndex(options, selectedId) : -1);
+  }, [isOpen, options, selectedId]);
+
+  useEffect(() => {
+    if (!isOpen || !activeOption) {
+      return;
+    }
+
+    optionRefs.current[activeOption.value]?.scrollIntoView({
+      block: "nearest",
+    });
+  }, [activeOption, isOpen]);
+
+  function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>): void {
+    if (event.altKey || event.ctrlKey || event.metaKey) {
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      if (options.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      setHighlightedIndex((currentIndex) =>
+        Math.min(currentIndex < 0 ? 0 : currentIndex + 1, options.length - 1),
+      );
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      if (options.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      setHighlightedIndex((currentIndex) => Math.max(currentIndex <= 0 ? 0 : currentIndex - 1, 0));
+      return;
+    }
+
+    if (event.key === "Enter") {
+      if (!activeOption) {
+        return;
+      }
+
+      event.preventDefault();
+      onSelect(activeOption);
+    }
+  }
+
   return (
     <div
       className={styles.lookupCell}
@@ -55,6 +128,8 @@ export function LookupCell({
       <button
         type="button"
         data-opening-stock-field-control="true"
+        data-opening-stock-row-id={rowId}
+        data-opening-stock-field-key={fieldKey}
         className={cx(
           styles.lookupTrigger,
           isOpen && styles.lookupTriggerOpen,
@@ -94,24 +169,36 @@ export function LookupCell({
               type="text"
               value={searchQuery}
               onChange={(event) => onSearchChange(event.target.value)}
+              onKeyDown={handleSearchKeyDown}
               placeholder={placeholder || `Search ${header}`}
               className={styles.lookupSearchInput}
               autoComplete="off"
+              aria-controls={listboxId}
+              aria-activedescendant={activeOptionId}
+              aria-expanded={isOpen}
             />
           </div>
           <div
             className={styles.lookupOptions}
+            id={listboxId}
             role="listbox"
           >
             {options.length > 0 ? (
-              options.map((option) => (
+              options.map((option, index) => (
                 <button
                   key={`${cellKey}-${option.value}`}
+                  id={`${cellKey}-${option.value}-option`}
                   type="button"
                   className={cx(
                     styles.lookupOption,
-                    option.value === selectedId && styles.lookupOptionActive,
+                    index === highlightedIndex && styles.lookupOptionActive,
                   )}
+                  role="option"
+                  aria-selected={option.value === selectedId}
+                  ref={(element) => {
+                    optionRefs.current[option.value] = element;
+                  }}
+                  onMouseEnter={() => setHighlightedIndex(index)}
                   onClick={() => onSelect(option)}
                 >
                   {option.label}

@@ -28,10 +28,13 @@ import {
   formatDateEntry,
   formatDateForDisplay,
   getInvalidFieldKey,
+  getOpeningStockQuantityDecimalCount,
+  getOpeningStockQuantityInputStep,
   getTrackingRequiredFieldKeys,
   isOpeningStockFieldDisabled,
   isTrackingRequiredFieldMissing,
   moveOpeningStockFieldFocus,
+  normalizeOpeningStockQuantityInputValue,
   openDatePicker,
   toCanonicalDateValue,
 } from "./Utils";
@@ -46,6 +49,7 @@ type StockTableRowProps = {
   itemOptionsByValue: Map<string, string>;
   godownOptionsByValue: Map<string, string>;
   unitOptionsByValue: Map<string, string>;
+  unitDecimalCountById: Record<string, number>;
   openLookupCell: LookupCellState | null;
   lookupSearchQuery: string;
   filteredItemOptions: ERPDynamicSelectOption[];
@@ -114,6 +118,7 @@ export function StockTableRow({
   itemOptionsByValue,
   godownOptionsByValue,
   unitOptionsByValue,
+  unitDecimalCountById,
   openLookupCell,
   lookupSearchQuery,
   filteredItemOptions,
@@ -133,6 +138,10 @@ export function StockTableRow({
   const currentItemId = row.values.oslitemid?.trim() ?? "";
   const currentItemDetail = currentItemId ? itemDetailsByItemId[currentItemId] : undefined;
   const uomSelectOptions = buildUomOptions(currentItemDetail, unitOptionsByValue);
+  const quantityDecimalCount = getOpeningStockQuantityDecimalCount(
+    row.values.oslunitid,
+    unitDecimalCountById,
+  );
 
   return (
     <tr
@@ -253,6 +262,8 @@ export function StockTableRow({
               </select>
             ) : column.kind === "lookup" && lookupKind && lookupFieldConfig ? (
               <LookupCell
+                rowId={row.id}
+                fieldKey={column.key}
                 cellKey={cellLookupKey}
                 lookupKind={lookupKind}
                 isOpen={isLookupOpen}
@@ -356,17 +367,40 @@ export function StockTableRow({
                 data-opening-stock-field-key={column.key}
                 type={isNumeric ? "number" : "text"}
                 value={value}
-                onChange={(event) => onRowChange(row.id, column.key, event.target.value)}
+                onChange={(event) =>
+                  onRowChange(
+                    row.id,
+                    column.key,
+                    column.key === "openingqty" || column.key === "freeqty"
+                      ? normalizeOpeningStockQuantityInputValue(
+                          event.target.value,
+                          quantityDecimalCount,
+                        )
+                      : event.target.value,
+                  )
+                }
                 className={sharedClassName}
                 placeholder={getCellPlaceholder(column.placeholder)}
                 readOnly={column.key === "taxname"}
                 disabled={isDisabledInput}
                 required={isRequiredField}
                 aria-invalid={hasRequiredFieldError || undefined}
-                step={isNumeric ? "any" : undefined}
+                step={
+                  isNumeric
+                    ? getOpeningStockQuantityInputStep(column.key, quantityDecimalCount) ?? "any"
+                    : undefined
+                }
                 inputMode={isNumeric ? "decimal" : undefined}
                 onKeyDown={(event) => {
                   if (handleFieldNavigationKeyDown(event)) {
+                    return;
+                  }
+                  if (
+                    (column.key === "openingqty" || column.key === "freeqty") &&
+                    quantityDecimalCount === 0 &&
+                    event.key === "."
+                  ) {
+                    event.preventDefault();
                     return;
                   }
                   if (isNumeric && (event.key === "ArrowUp" || event.key === "ArrowDown")) {

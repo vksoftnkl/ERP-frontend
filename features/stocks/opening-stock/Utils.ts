@@ -14,12 +14,16 @@ import {
   FALLBACK_COLUMN_KEYS,
   HIDDEN_INTERNAL_COLUMN_KEYS,
   ISO_DATE_PATTERN,
+  ISO_DATE_TIME_PATTERN,
   ITEM_AUTOFILL_FIELD_KEYS,
+  OPENING_STOCK_DATE_FIELD_KEYS,
+  OPENING_STOCK_NON_NEGATIVE_NUMBER_FIELD_KEYS,
   PROFIT_TYPE_OPTIONS,
   QUANTITY_FORMATTER,
   ROUND_OFF_OPTIONS,
   SERIAL_NUMBER_COLUMN_WIDTH,
   TRACKING_OPTIONS,
+  TRACKING_TYPE_OPTION_LABELS,
   TRACKING_REQUIRED_FIELD_KEYS,
   TRACKING_REQUIRED_FIELD_LABELS,
 } from "./constants";
@@ -83,6 +87,14 @@ export function toCanonicalDateValue(value: string | null | undefined): string {
   const isoMatch = normalized.match(ISO_DATE_PATTERN);
   if (isoMatch && isValidDateParts(isoMatch[1], isoMatch[2], isoMatch[3])) {
     return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+
+  const isoDateTimeMatch = normalized.match(ISO_DATE_TIME_PATTERN);
+  if (
+    isoDateTimeMatch &&
+    isValidDateParts(isoDateTimeMatch[1], isoDateTimeMatch[2], isoDateTimeMatch[3])
+  ) {
+    return `${isoDateTimeMatch[1]}-${isoDateTimeMatch[2]}-${isoDateTimeMatch[3]}`;
   }
 
   const displayMatch = normalized.match(DISPLAY_DATE_PATTERN);
@@ -220,6 +232,67 @@ export function buildGodownLookupOptions(
   );
 
   return [DEFAULT_GODOWN_OPTION, ...options];
+}
+
+type UnitDecimalRecord = {
+  unit_id?: string | null;
+  unitId?: string | null;
+  item_unit_id?: string | null;
+  itemUnitId?: string | null;
+  uom_id?: string | null;
+  id?: string | null;
+  value?: string | null;
+  unit_decimal_count?: number | string | null;
+  unitDecimalCount?: number | string | null;
+  decimal_count?: number | string | null;
+  decimalCount?: number | string | null;
+};
+
+function toUnitDecimalCount(value: number | string | null | undefined): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+
+  return Math.floor(parsed);
+}
+
+export function buildUnitDecimalCountById(payload: unknown): Record<string, number> {
+  const rows = extractRows<UnitDecimalRecord>(payload, [
+    "data",
+    "rows",
+    "items",
+    "results",
+    "list",
+    "units",
+    "itemUnits",
+  ]);
+  const unitDecimalCountById: Record<string, number> = {};
+
+  for (const row of rows) {
+    const unitId =
+      row.unit_id?.trim() ??
+      row.unitId?.trim() ??
+      row.item_unit_id?.trim() ??
+      row.itemUnitId?.trim() ??
+      row.uom_id?.trim() ??
+      row.id?.trim() ??
+      row.value?.trim() ??
+      "";
+
+    if (!unitId) {
+      continue;
+    }
+
+    unitDecimalCountById[unitId] = toUnitDecimalCount(
+      row.unit_decimal_count ??
+        row.unitDecimalCount ??
+        row.decimal_count ??
+        row.decimalCount,
+    );
+  }
+
+  return unitDecimalCountById;
 }
 
 export function normalizeOpeningStockProfitType(value: string | null | undefined): string {
@@ -579,11 +652,26 @@ export function getRowStockValue(row: OpeningStockRow): number {
 }
 
 function getTrackingTypeValue(row: OpeningStockRow): (typeof TRACKING_OPTIONS)[number] {
-  const trackingType = row.values.osltrackingtype?.trim() ?? "0";
-  if (trackingType === "1" || trackingType === "2") {
-    return trackingType;
+  return normalizeOpeningStockTrackingType(row.values.osltrackingtype);
+}
+
+export function normalizeOpeningStockTrackingType(
+  value: string | null | undefined,
+): (typeof TRACKING_OPTIONS)[number] {
+  const normalized = (value ?? "").trim().toUpperCase();
+  if (normalized === "1" || normalized === "MRP") {
+    return "1";
+  }
+  if (normalized === "2" || normalized === "BATCH") {
+    return "2";
   }
   return "0";
+}
+
+export function toOpeningStockTrackingTypePayloadValue(
+  value: string | null | undefined,
+): string {
+  return TRACKING_TYPE_OPTION_LABELS[normalizeOpeningStockTrackingType(value)];
 }
 
 export function getTrackingRequiredFieldKeys(row: OpeningStockRow): readonly string[] {
@@ -698,6 +786,104 @@ export function moveOpeningStockFieldFocus(
   }
 }
 
+function isOpeningStockQuantityField(fieldKey: string): boolean {
+  return fieldKey === "openingqty" || fieldKey === "freeqty";
+}
+
+export function getOpeningStockQuantityDecimalCount(
+  unitId: string | null | undefined,
+  unitDecimalCountById: Record<string, number>,
+): number {
+  const normalizedUnitId = unitId?.trim() ?? "";
+  if (!normalizedUnitId) {
+    return 0;
+  }
+
+  return unitDecimalCountById[normalizedUnitId] ?? 0;
+}
+
+export function normalizeOpeningStockQuantityInputValue(
+  value: string,
+  decimalCount: number,
+): string {
+  const normalizedValue = value.trim();
+  if (!normalizedValue) {
+    return "";
+  }
+
+  const sanitizedValue = normalizedValue.replace(/[^\d.]/g, "");
+  if (!sanitizedValue) {
+    return "";
+  }
+
+  const hasDecimalSeparator = sanitizedValue.includes(".");
+  const [wholePart = "", ...fractionParts] = sanitizedValue.split(".");
+  const normalizedWholePart = wholePart || (hasDecimalSeparator && decimalCount > 0 ? "0" : "");
+
+  if (!hasDecimalSeparator || decimalCount <= 0) {
+    return normalizedWholePart;
+  }
+
+  const normalizedFractionPart = fractionParts.join("").slice(0, decimalCount);
+  if (sanitizedValue.endsWith(".") && normalizedFractionPart.length === 0) {
+    return `${normalizedWholePart}.`;
+  }
+
+  return `${normalizedWholePart}.${normalizedFractionPart}`;
+}
+
+export function getOpeningStockQuantityInputStep(
+  fieldKey: string,
+  decimalCount: number,
+): string | undefined {
+  if (!isOpeningStockQuantityField(fieldKey)) {
+    return undefined;
+  }
+
+  if (decimalCount <= 0) {
+    return "1";
+  }
+
+  return `0.${"0".repeat(Math.max(decimalCount - 1, 0))}1`;
+}
+
+export function normalizeOpeningStockRowQuantitiesByUnit(
+  row: OpeningStockRow,
+  unitDecimalCountById: Record<string, number>,
+): OpeningStockRow {
+  const decimalCount = getOpeningStockQuantityDecimalCount(
+    row.values.oslunitid,
+    unitDecimalCountById,
+  );
+  const nextOpeningQty = normalizeOpeningStockQuantityInputValue(
+    row.values.openingqty ?? "",
+    decimalCount,
+  );
+  const nextFreeQty = normalizeOpeningStockQuantityInputValue(
+    row.values.freeqty ?? "",
+    decimalCount,
+  );
+
+  if (
+    nextOpeningQty === (row.values.openingqty ?? "") &&
+    nextFreeQty === (row.values.freeqty ?? "")
+  ) {
+    return row;
+  }
+
+  const convFactor = parseDecimal(row.values.convfactor);
+  return {
+    ...row,
+    values: {
+      ...row.values,
+      openingqty: nextOpeningQty,
+      freeqty: nextFreeQty,
+      baseqty: formatQuantityValue(parseDecimal(nextOpeningQty) * convFactor),
+      freebaseqty: formatQuantityValue(parseDecimal(nextFreeQty) * convFactor),
+    },
+  };
+}
+
 export function isPristineRow(row: OpeningStockRow): boolean {
   return Object.entries(DEFAULT_ROW_VALUES).every(
     ([key, defaultValue]) => (row.values[key] ?? "") === defaultValue,
@@ -719,6 +905,10 @@ export function getTotals(rows: OpeningStockRow[]): {
     }),
     { lines: 0, qty: 0, freeQty: 0, value: 0 },
   );
+}
+
+function getOpeningStockFieldLabel(fieldKey: string): string {
+  return TRACKING_REQUIRED_FIELD_LABELS[fieldKey] ?? COLUMN_SCHEMA[fieldKey]?.header ?? fieldKey;
 }
 
 export function getRowValidationIssues(
@@ -755,17 +945,59 @@ export function getRowValidationIssues(
     });
   }
 
+  for (const fieldKey of OPENING_STOCK_NON_NEGATIVE_NUMBER_FIELD_KEYS) {
+    const normalizedValue = row.values[fieldKey]?.trim() ?? "";
+    if (!normalizedValue) {
+      continue;
+    }
+
+    const parsedValue = Number(normalizedValue);
+    if (Number.isFinite(parsedValue) && parsedValue >= 0) {
+      continue;
+    }
+
+    issues.push({
+      fieldKey,
+      message: `Row ${rowNumber} has an invalid ${getOpeningStockFieldLabel(fieldKey)}. Enter a non-negative number.`,
+    });
+  }
+
+  const normalizedDates = Object.fromEntries(
+    OPENING_STOCK_DATE_FIELD_KEYS.map((fieldKey) => [fieldKey, toCanonicalDateValue(row.values[fieldKey])]),
+  ) as Record<(typeof OPENING_STOCK_DATE_FIELD_KEYS)[number], string>;
+
+  for (const fieldKey of OPENING_STOCK_DATE_FIELD_KEYS) {
+    const normalizedValue = row.values[fieldKey]?.trim() ?? "";
+    if (!normalizedValue || normalizedDates[fieldKey]) {
+      continue;
+    }
+
+    issues.push({
+      fieldKey,
+      message: `Row ${rowNumber} has an invalid ${getOpeningStockFieldLabel(fieldKey)}. Use dd/mm/yyyy.`,
+    });
+  }
+
+  if (
+    normalizedDates.mfgdate &&
+    normalizedDates.expirydate &&
+    normalizedDates.expirydate < normalizedDates.mfgdate
+  ) {
+    issues.push({
+      fieldKey: "expirydate",
+      message: `Row ${rowNumber} expiry date must be on or after mfg date.`,
+    });
+  }
+
   for (const missingTrackingFieldKey of getTrackingRequiredFieldKeys(row)) {
     if (toNullableTrimmedString(row.values[missingTrackingFieldKey])) {
       continue;
     }
 
     const trackingType = getTrackingTypeValue(row);
-    const fieldLabel =
-      TRACKING_REQUIRED_FIELD_LABELS[missingTrackingFieldKey] ?? missingTrackingFieldKey;
     issues.push({
       fieldKey: missingTrackingFieldKey,
-      message: `Row ${rowNumber} requires ${fieldLabel} when tracking type is ${trackingType === "1" ? "MRP" : "BATCH"}.`,
+      message: `Row ${rowNumber} requires ${getOpeningStockFieldLabel(missingTrackingFieldKey)} when tracking type is ${trackingType === "1" ? "MRP" : "BATCH"}.`,
     });
   }
 
@@ -786,7 +1018,7 @@ export function buildOpeningStockDetailPayload(row: OpeningStockRow): OpeningSto
     osl_unit_id: row.values.oslunitid.trim(),
     osl_base_uom_id: toNullableTrimmedString(row.values.oslbaseuomid),
     osl_godown_id: row.values.oslgodownid.trim(),
-    osl_tracking_type: row.values.osltrackingtype?.trim() || "0",
+    osl_tracking_type: toOpeningStockTrackingTypePayloadValue(row.values.osltrackingtype),
     osl_tax_id: toNullableTrimmedString(row.values.osltaxid),
     osl_tax_perc: parseDecimal(row.values.osltaxperc),
     osl_cess_type: row.values.oslcesstype?.trim() || "NONE",
@@ -873,7 +1105,7 @@ function mapOpeningStockDetailToRow(
     oslunitid: toInputValue(detail.osl_unit_id),
     oslbaseuomid: toInputValue(detail.osl_base_uom_id),
     oslgodownid: toInputValue(detail.osl_godown_id),
-    osltrackingtype: toInputValue(detail.osl_tracking_type || "0"),
+    osltrackingtype: normalizeOpeningStockTrackingType(detail.osl_tracking_type),
     osltaxid: toInputValue(detail.osl_tax_id),
     osltaxperc: toConfiguredNumberInputValue("osltaxperc", detail.osl_tax_perc),
     oslcesstype: normalizeOpeningStockCessType(detail.osl_cess_type),

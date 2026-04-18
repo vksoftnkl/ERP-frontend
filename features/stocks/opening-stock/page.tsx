@@ -48,6 +48,7 @@ import type {
   LookupCellState,
   LookupKind,
   OpeningStockRow,
+  RowValidationIssue,
   UiTableColumnPayload,
 } from "./Types";
 import {
@@ -67,6 +68,8 @@ import {
   QUANTITY_FORMATTER,
   SERIAL_NUMBER_COLUMN_WIDTH,
   TRACKING_VALIDATION_FIELD_KEYS,
+  UNIT_LIST_ENDPOINT,
+  UNIT_LIST_QUERY,
   UI_TABLE_COLUMNS_LIST_ENDPOINT,
   UI_TABLE_COLUMNS_QUERY,
   UI_TABLE_COLUMNS_TOAST_OPTIONS,
@@ -80,6 +83,7 @@ import {
   buildLoadedLookupOptions,
   buildOpeningStockDetailPayload,
   buildOpeningStockNarration,
+  buildUnitDecimalCountById,
   buildPendingItemSelectionValues,
   buildPriceSelectionValues,
   buildTaxSelectionValues,
@@ -101,6 +105,7 @@ import {
   mapOpeningStockDocumentToRows,
   mergeLookupOptions,
   mergeResolvedColumns,
+  normalizeOpeningStockRowQuantitiesByUnit,
   parseColumnWidth,
   parseDecimal,
   reorderColumns,
@@ -111,6 +116,25 @@ import {
   toNullableTrimmedString,
 } from "./Utils";
 
+function renderValidationToastContent(
+  issues: Array<{ rowId: number; fieldKey: string; message: string }>,
+) {
+  const visibleIssues = issues.slice(0, 5);
+  const remainingCount = issues.length - visibleIssues.length;
+
+  return (
+    <div>
+      <div style={{ fontWeight: 700, marginBottom: "0.35rem" }}>
+        Fix validation errors before updating stock.
+      </div>
+      {visibleIssues.map((issue) => (
+        <div key={`${issue.rowId}-${issue.fieldKey}`}>{issue.message}</div>
+      ))}
+      {remainingCount > 0 ? <div>{`+${remainingCount} more issue(s).`}</div> : null}
+    </div>
+  );
+}
+
 export default function OpeningStockPage() {
   const [voucherDate, setVoucherDate] = useState(() => getTodayInputValue());
   const [rows, setRows] = useState<OpeningStockRow[]>(INITIAL_ROWS);
@@ -119,6 +143,7 @@ export default function OpeningStockPage() {
   const [itemDetailsByItemId, setItemDetailsByItemId] = useState<
     Record<string, ItemPriceDetailsPayload>
   >({});
+  const [unitDecimalCountById, setUnitDecimalCountById] = useState<Record<string, number>>({});
   const [itemOptions, setItemOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_ITEM_OPTION]);
   const [taxOptions, setTaxOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [unitOptions, setUnitOptions] = useState<ERPDynamicSelectOption[]>([]);
@@ -173,6 +198,12 @@ export default function OpeningStockPage() {
   const { run: listGodowns, loading: isGodownLookupLoading } = useApi<
     ApiSuccessResponse<GodownLookupRecord[], ListMeta>
   >(GODOWN_LIST_ENDPOINT, {
+    toast: {
+      success: false,
+      error: false,
+    },
+  });
+  const { run: listUnits } = useApi<unknown>(UNIT_LIST_ENDPOINT, {
     toast: {
       success: false,
       error: false,
@@ -278,10 +309,12 @@ export default function OpeningStockPage() {
     let cancelled = false;
 
     void (async () => {
-      const [itemsPayload, taxesPayload, unitsPayload, godownsPayload] = await Promise.allSettled([
+      const [itemsPayload, taxesPayload, unitsPayload, unitDecimalsPayload, godownsPayload] =
+        await Promise.allSettled([
         loadLookupOptions("item"),
         loadTaxOptions(),
         loadUnitOptions(),
+        listUnits({ query: { ...UNIT_LIST_QUERY } }),
         loadLookupOptions("godown"),
       ]);
 
@@ -298,6 +331,9 @@ export default function OpeningStockPage() {
       if (unitsPayload.status === "fulfilled") {
         setUnitOptions(unitsPayload.value);
       }
+      if (unitDecimalsPayload.status === "fulfilled") {
+        setUnitDecimalCountById(buildUnitDecimalCountById(unitDecimalsPayload.value));
+      }
       if (godownsPayload.status === "fulfilled") {
         setGodownOptions(godownsPayload.value);
       }
@@ -306,7 +342,7 @@ export default function OpeningStockPage() {
     return () => {
       cancelled = true;
     };
-  }, [loadLookupOptions, loadTaxOptions, loadUnitOptions]);
+  }, [listUnits, loadLookupOptions, loadTaxOptions, loadUnitOptions]);
 
   useEffect(() => {
     if (!openLookupCell) {
@@ -427,6 +463,26 @@ export default function OpeningStockPage() {
       }),
     );
   }, [unitOptionsByValue]);
+
+  useEffect(() => {
+    if (Object.keys(unitDecimalCountById).length === 0) {
+      return;
+    }
+
+    setRows((currentRows) => {
+      let changed = false;
+
+      const nextRows = currentRows.map((row) => {
+        const normalizedRow = normalizeOpeningStockRowQuantitiesByUnit(row, unitDecimalCountById);
+        if (normalizedRow !== row) {
+          changed = true;
+        }
+        return normalizedRow;
+      });
+
+      return changed ? nextRows : currentRows;
+    });
+  }, [rows, unitDecimalCountById]);
 
   const resolvedColumns = useMemo(
     () => resolveConfiguredColumns(uiColumnConfigs),
@@ -1200,7 +1256,9 @@ export default function OpeningStockPage() {
       });
       return;
     }
-    const validationIssues = draftRows.flatMap((row, index) =>
+    const validationIssues = draftRows.flatMap<
+      RowValidationIssue & { rowId: number }
+    >((row, index) =>
       getRowValidationIssues(row, index + 1).map((issue) => ({
         rowId: row.id,
         ...issue,
@@ -1213,8 +1271,10 @@ export default function OpeningStockPage() {
         window.requestAnimationFrame(() => {
           focusOpeningStockField(tableRef.current, firstIssue.rowId, firstIssue.fieldKey);
         });
-        toast.error(firstIssue.message, {
-          toastId: `opening-stock-save:row-${firstIssue.rowId}-${firstIssue.fieldKey}`,
+        toast.dismiss("opening-stock-save:validation");
+        toast.error(renderValidationToastContent(validationIssues), {
+          toastId: "opening-stock-save:validation",
+          autoClose: 8000,
         });
       }
       return;
@@ -1344,7 +1404,7 @@ export default function OpeningStockPage() {
       }),
     );
   }, [godownOptionsByValue, taxOptionsByValue]);
-  return (
+  return (<>
     <section className={styles.page}>
       <header className={styles.header}>
         <div className={styles.headingBlock}>
@@ -1456,6 +1516,7 @@ export default function OpeningStockPage() {
                   itemOptionsByValue={itemOptionsByValue}
                   godownOptionsByValue={godownOptionsByValue}
                   unitOptionsByValue={unitOptionsByValue}
+                  unitDecimalCountById={unitDecimalCountById}
                   openLookupCell={openLookupCell}
                   lookupSearchQuery={lookupSearchQuery}
                   filteredItemOptions={filteredItemOptions}
@@ -1478,10 +1539,12 @@ export default function OpeningStockPage() {
         </div>
         <div className={styles.paginationBar}>
           <div className={styles.paginationInfo} />
-          <div className={styles.footerValue}>
-            <span>{QUANTITY_FORMATTER.format(visibleTotals.qty)} qty</span>
-            <span>{QUANTITY_FORMATTER.format(visibleTotals.freeQty)} free qty</span>
-            <span className={styles.footerLabel}>stock value</span>
+          <div className="{styles.footerValue} flex gap-2">
+            <strong className={styles.footerLabel}>qty</strong>
+            <strong>{QUANTITY_FORMATTER.format(visibleTotals.qty)} </strong>
+            <strong className={styles.footerLabel}>free qty</strong>
+            <strong>{QUANTITY_FORMATTER.format(visibleTotals.freeQty)}</strong>
+            <strong className={styles.footerLabel}>stock value</strong>
             <strong>{VALUE_FORMATTER.format(visibleTotals.value)}</strong>
           </div>
         </div>
@@ -1503,6 +1566,6 @@ export default function OpeningStockPage() {
           }
         }}
       />
-    </section>
+    </section></>
   );
 }
