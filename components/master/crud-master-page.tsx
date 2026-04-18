@@ -1,5 +1,4 @@
 "use client";
-
 import {
   type CSSProperties,
   type ReactNode,
@@ -26,7 +25,6 @@ import {
   type ERPDynamicModalSubmitPayload,
   type ERPDynamicModalVariant,
 } from "@/components/library/ui/dynamic-modal-form";
-
 const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
@@ -37,7 +35,6 @@ const GRID_COLUMNS_LIMIT = 20;
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
-
 const DEFAULT_ARRAY_KEYS = [
   "data",
   "items",
@@ -135,7 +132,6 @@ const LIST_RESPONSE_STYLE_COLOR_KEYS = [
   "gridColumnColor",
   "color",
 ] as const;
-
 const INITIAL_FORM_STATE = {
   masterName: "",
   searchCode: "",
@@ -144,7 +140,6 @@ const INITIAL_FORM_STATE = {
   masterDescription: "",
   position: "",
 } as const;
-
 type MasterTableRow = {
   __rowId: string | number;
   __recordId: string | number;
@@ -158,9 +153,7 @@ type MasterTableRow = {
   masterActive: string;
   position: string;
 };
-
 export type CrudMasterTableRow = MasterTableRow;
-
 type MasterColumnAccessor =
   | "serialNo"
   | "masterCode"
@@ -169,7 +162,6 @@ type MasterColumnAccessor =
   | "masterShort"
   | "position"
   | "masterActive";
-
 type MasterFormState = {
   masterName: string;
   searchCode: string;
@@ -178,7 +170,6 @@ type MasterFormState = {
   masterDescription: string;
   position: string;
 };
-
 type CrudMasterFormValues = MasterFormState & Record<string, string>;
 
 type PaginationInfo = {
@@ -186,14 +177,12 @@ type PaginationInfo = {
   currentPage: number | null;
   pageSize: number | null;
 };
-
 export type CrudMasterApiEndpoints = {
   list: string;
   getById: string;
   create: string;
   delete: string;
 };
-
 export type CrudMasterLookupKeys = {
   id: readonly string[];
   code: readonly string[];
@@ -205,7 +194,6 @@ export type CrudMasterLookupKeys = {
   description?: readonly string[];
   array?: readonly string[];
 };
-
 export type CrudMasterRequestPayloadKeys = {
   id: string;
   name: string;
@@ -214,7 +202,6 @@ export type CrudMasterRequestPayloadKeys = {
   description: string;
   sort: string;
 };
-
 export type CrudMasterTableColumnHeaders = {
   serialNo?: string;
   masterCode?: string;
@@ -224,7 +211,6 @@ export type CrudMasterTableColumnHeaders = {
   position?: string;
   masterActive?: string;
 };
-
 export type CrudMasterTableColumnLayout = {
   serialNo?: {
     width?: string;
@@ -251,19 +237,16 @@ export type CrudMasterTableColumnLayout = {
     align?: ReusableTableColumn<Record<string, unknown>>["align"];
   };
 };
-
 type CrudMasterListResponseStyleColumn = {
   accessor: MasterColumnAccessor;
   styleIndex: number;
   fallbackHeader?: string;
 };
-
 export type CrudMasterAuditHistoryConfig = {
   screenName: string;
   getRecordId?: (row: MasterTableRow) => string | number | null;
   getDisplayName?: (row: MasterTableRow) => string | null;
 };
-
 export type CrudMasterPageProps = {
   title: string;
   entityLabel: string;
@@ -352,7 +335,6 @@ export type CrudMasterPageProps = {
     rowSource: Record<string, unknown> | null;
   }) => void | Promise<void>;
 };
-
 function getFirstDefinedValue(
   row: Record<string, unknown>,
   keys: readonly string[],
@@ -365,16 +347,13 @@ function getFirstDefinedValue(
   }
   return undefined;
 }
-
 function toDisplayValue(value: unknown): string {
   if (value === undefined || value === null) {
     return "";
   }
-
   if (typeof value === "string") {
     return value.trim();
   }
-
   if (
     typeof value === "number" ||
     typeof value === "bigint" ||
@@ -382,7 +361,6 @@ function toDisplayValue(value: unknown): string {
   ) {
     return String(value);
   }
-
   if (typeof value === "object") {
     const nestedValue = value as Record<string, unknown>;
     const nested =
@@ -392,7 +370,6 @@ function toDisplayValue(value: unknown): string {
       nestedValue.code ??
       nestedValue.name ??
       nestedValue.label;
-
     if (
       typeof nested === "string" ||
       typeof nested === "number" ||
@@ -402,26 +379,21 @@ function toDisplayValue(value: unknown): string {
       return String(nested);
     }
   }
-
   return "";
 }
-
 function toNonNegativeInt(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     const normalized = Math.floor(value);
     return normalized >= 0 ? normalized : null;
   }
-
   if (typeof value === "string") {
     const parsed = Number.parseInt(value.trim(), 10);
     if (Number.isFinite(parsed) && parsed >= 0) {
       return parsed;
     }
   }
-
   return null;
 }
-
 function toPositiveInt(value: unknown): number | null {
   const normalized = toNonNegativeInt(value);
   if (normalized === null || normalized < 1) {
@@ -429,7 +401,6 @@ function toPositiveInt(value: unknown): number | null {
   }
   return normalized;
 }
-
 function findPaginationNumber(
   candidates: Record<string, unknown>[],
   keys: readonly string[],

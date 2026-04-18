@@ -118,6 +118,7 @@ export type ItemPriceDetailsPrice = {
   ipm_godown_id: string;
   ipm_base_unit_id: string | null;
   ipm_to_base_factor: number;
+  ipm_unit_factor: number;
   ipm_is_default_unit: boolean;
   ipm_cost_price: number;
   ipm_cost_wot: number;

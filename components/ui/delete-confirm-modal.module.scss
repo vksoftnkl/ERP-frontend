@@ -105,6 +105,11 @@
   gap: 10px;
 }
 
+.footerShortcuts {
+  display: flex;
+  justify-content: center;
+}
+
 .cancelButton,
 .deleteButton {
   height: 42px;
@@ -114,6 +119,9 @@
   border: 1px solid transparent;
   cursor: pointer;
   transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .cancelButton {

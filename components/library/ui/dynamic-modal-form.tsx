@@ -14,7 +14,30 @@ import {
   useState,
 } from "react";
 import { cx } from "@/components/library/cx";
+import {
+  KeyboardShortcutHints,
+  type KeyboardShortcutDefinition,
+} from "@/components/library/ui/keyboard-shortcut-hints";
 import styles from "./dynamic-modal-form.module.scss";
+
+const SECTION_NAV_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
+  {
+    label: "Prev",
+    keys: ["ArrowLeft"],
+  },
+  {
+    label: "Next",
+    keys: ["ArrowRight"],
+  },
+  {
+    label: "First",
+    keys: ["Home"],
+  },
+  {
+    label: "Last",
+    keys: ["End"],
+  },
+];
 type FieldInputMode = InputHTMLAttributes<HTMLInputElement>["inputMode"];
 type ModalAccentPalette = {
   accent: string;
@@ -838,6 +861,9 @@ export function ERPDynamicModalForm({
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
       if (event.key === "Escape") {
         if (openSearchField) {
           setOpenSearchField(null);
@@ -852,11 +878,28 @@ export function ERPDynamicModalForm({
           return;
         }
         closeModal();
+        return;
+      }
+      if (
+        event.key === "Enter" &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (event.ctrlKey || event.metaKey)
+      ) {
+        if (!activeVariant || isSubmitting) {
+          return;
+        }
+        const formElement = formRef.current;
+        if (!formElement) {
+          return;
+        }
+        event.preventDefault();
+        formElement.requestSubmit();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [closeModal, isOpen, openSearchField]);
+  }, [activeVariant, closeModal, isOpen, isSubmitting, openSearchField]);
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -1759,6 +1802,26 @@ export function ERPDynamicModalForm({
     "--erp-modal-border": "#cfdae6",
     "--erp-modal-surface": "#ffffff",
   } as CSSProperties;
+  const modalFooterShortcuts: KeyboardShortcutDefinition[] =
+    activeVariant
+      ? [
+          ...(sectionNavigationMode === "tabs" && tabSections.length > 1
+            ? SECTION_NAV_SHORTCUTS
+            : []),
+          {
+            label: "Cancel",
+            keys: ["Escape"],
+          },
+          ...(!isSubmitting
+            ? [
+                {
+                  label: activeVariant.submitLabel,
+                  keys: ["Ctrl/Cmd", "Enter"],
+                },
+              ]
+            : []),
+        ]
+      : [];
   const formId = activeVariant
     ? `erp-modal-form-${activeVariant.key}`
     : "erp-modal-form";
@@ -1828,6 +1891,39 @@ export function ERPDynamicModalForm({
     const shouldUseSearchableSelect =
       inputType === "select" && field.searchable !== false;
     const isSearchOpen = openSearchField === field.name;
+    const searchShortcutHints: KeyboardShortcutDefinition[] =
+      shouldUseSearchableSelect
+        ? [
+            {
+              label: "Navigate",
+              keys: ["ArrowUp", "ArrowDown"],
+            },
+            {
+              label: isMultiSelect ? "Toggle" : "Select",
+              keys: ["Enter"],
+            },
+            {
+              label: "Close",
+              keys: ["Escape"],
+            },
+            ...(field.onSearchCreateShortcut
+              ? [
+                  {
+                    label: "Create",
+                    keys: ["Alt", "C"],
+                  },
+                ]
+              : []),
+            ...(field.onSearchEditShortcut
+              ? [
+                  {
+                    label: "Edit",
+                    keys: ["Alt", "A"],
+                  },
+                ]
+              : []),
+          ]
+        : [];
     const normalizedQuery = (searchQuery ?? "")
       .trim()
       .toLowerCase();
@@ -2222,6 +2318,12 @@ export function ERPDynamicModalForm({
                     </li>
                   )}
                 </ul>
+                <div className={styles.searchSelectShortcutBar}>
+                  <KeyboardShortcutHints
+                    shortcuts={searchShortcutHints}
+                    dense
+                  />
+                </div>
               </div>
             ) : null}
           </div>
@@ -2434,7 +2536,7 @@ export function ERPDynamicModalForm({
                   <svg
                     viewBox="0 0 24 24"
                     aria-hidden="true"
-                    className="h-5 w-5"
+                    className={styles.closeIcon}
                   >
                     <path
                       d="M6 18 18 6M6 6l12 12"
@@ -2576,22 +2678,30 @@ export function ERPDynamicModalForm({
                   {submitError}
                 </p>
               ) : null}
-              <button
-                type="button"
-                className={styles.cancelButton}
-                onClick={handleCancel}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                form={formId}
-                className={styles.submitButton}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Saving..." : activeVariant.submitLabel}
-              </button>
+              <div className={styles.footerShortcuts}>
+                <KeyboardShortcutHints
+                  shortcuts={modalFooterShortcuts}
+                  dense
+                />
+              </div>
+              <div className={styles.footerActions}>
+                <button
+                  type="button"
+                  className={styles.cancelButton}
+                  onClick={handleCancel}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  form={formId}
+                  className={styles.submitButton}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Saving..." : activeVariant.submitLabel}
+                </button>
+              </div>
             </footer>
           </section>
         </div>

@@ -3,10 +3,29 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { FiChevronDown, FiSearch } from "react-icons/fi";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import {
+  KeyboardShortcutHints,
+  type KeyboardShortcutDefinition,
+} from "@/components/library/ui/keyboard-shortcut-hints";
 import { LOOKUP_FIELD_CONFIG } from "./constants";
 import type { LookupKind } from "./Types";
 import { cx } from "./Utils";
 import styles from "./page.module.scss";
+
+const LOOKUP_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
+  {
+    label: "Navigate",
+    keys: ["ArrowUp", "ArrowDown"],
+  },
+  {
+    label: "Select",
+    keys: ["Enter"],
+  },
+  {
+    label: "Close",
+    keys: ["Escape"],
+  },
+];
 
 type LookupCellProps = {
   rowId: number;
@@ -209,6 +228,12 @@ export function LookupCell({
                 {isLoading ? "Loading options..." : LOOKUP_FIELD_CONFIG[lookupKind].emptyMessage}
               </div>
             )}
+          </div>
+          <div className={styles.lookupShortcutBar}>
+            <KeyboardShortcutHints
+              shortcuts={LOOKUP_SHORTCUTS}
+              dense
+            />
           </div>
         </div>
       ) : null}

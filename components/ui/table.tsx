@@ -22,6 +22,7 @@ import {
   FiTrash2,
 } from "react-icons/fi";
 import styles from "./table.module.scss";
+
 export type ReusableTableSortDirection = "asc" | "desc";
 export type ReusableTableSortState = {
   key: string | null;
@@ -1311,7 +1312,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
               }}
               disabled={effectiveCurrentPage <= 1}
               aria-label="Go to previous page"
-              title="Previous page (Alt+Left)"
+              title="Previous page"
             >
               <FiChevronLeft className={styles.paginationArrowIcon} aria-hidden="true" />
               <span className={styles.srOnly}>Previous</span>
@@ -1354,7 +1355,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
               }}
               disabled={effectiveCurrentPage >= totalPages}
               aria-label="Go to next page"
-              title="Next page (Alt+Right)"
+              title="Next page"
             >
               <FiChevronRight className={styles.paginationArrowIcon} aria-hidden="true" />
               <span className={styles.srOnly}>Next</span>

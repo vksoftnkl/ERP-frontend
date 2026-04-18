@@ -13,6 +13,10 @@ import {
 import { toast } from "react-toastify";
 import { useBusinessContext } from "@/components/layout/business-context";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import {
+  KeyboardShortcutHints,
+  type KeyboardShortcutDefinition,
+} from "@/components/library/ui/keyboard-shortcut-hints";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";
@@ -96,6 +100,7 @@ import {
   focusOpeningStockField,
   formatAccountingYear,
   formatQuantityValue,
+  getOpeningStockActualConvFactor,
   getRowValidationIssues,
   getTableMinWidth,
   getTodayInputValue,
@@ -135,8 +140,28 @@ function renderValidationToastContent(
   );
 }
 
+const OPENING_STOCK_TABLE_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
+  {
+    label: "Prev Cell",
+    keys: ["Shift"],
+  },
+  {
+    label: "Next Cell",
+    keys: ["Enter"],
+  },
+  {
+    label: "Close Lookup",
+    keys: ["Escape"],
+  },
+];
+
+type OpeningStockLoadRequest =
+  | { type: "latest" }
+  | { type: "refno"; refNo: string };
+
 export default function OpeningStockPage() {
   const [voucherDate, setVoucherDate] = useState(() => getTodayInputValue());
+  const [voucherRefNo, setVoucherRefNo] = useState("");
   const [rows, setRows] = useState<OpeningStockRow[]>(INITIAL_ROWS);
   const [invalidFieldKeys, setInvalidFieldKeys] = useState<Record<string, true>>({});
   const [uiColumnConfigs, setUiColumnConfigs] = useState<UiTableColumnPayload[]>([]);
@@ -155,7 +180,8 @@ export default function OpeningStockPage() {
     null,
   );
   const [isLoadingStock, setIsLoadingStock] = useState(false);
-  const [isLoadConfirmOpen, setIsLoadConfirmOpen] = useState(false);
+  const [pendingLoadRequest, setPendingLoadRequest] =
+    useState<OpeningStockLoadRequest | null>(null);
   const [openLookupCell, setOpenLookupCell] = useState<LookupCellState | null>(null);
   const [lookupSearchQuery, setLookupSearchQuery] = useState("");
   const [columns, setColumns] = useState<ColumnDefinition[]>([]);
@@ -219,6 +245,13 @@ export default function OpeningStockPage() {
   const { run: getOpeningStockDocument } = useApi<
     OpeningStockSuccessResponse<OpeningStockDocumentPayload>
   >(OPENING_STOCK_GET_ENDPOINT, {
+    toast: {
+      success: false,
+    },
+  });
+  const { run: getOpeningStockDocumentByRefNo } = useApi<
+    OpeningStockSuccessResponse<OpeningStockDocumentPayload>
+  >(OPENING_STOCK_LIST_ENDPOINT, {
     toast: {
       success: false,
     },
@@ -609,9 +642,10 @@ export default function OpeningStockPage() {
                 }
 
                 if (field === "openingqty" || field === "freeqty" || field === "convfactor") {
-                  const convFactor = parseDecimal(
-                    field === "convfactor" ? value : nextValues.convfactor,
-                  );
+                  const convFactor =
+                    field === "convfactor"
+                      ? parseDecimal(nextValues.oslactualconvfactor) || parseDecimal(value) || 1
+                      : getOpeningStockActualConvFactor(nextValues);
                   nextValues.baseqty = formatQuantityValue(
                     parseDecimal(field === "openingqty" ? value : nextValues.openingqty) *
                       convFactor,
@@ -1099,59 +1133,35 @@ export default function OpeningStockPage() {
     setLookupSearchQuery("");
   }, []);
 
-  const loadLatestOpeningStock = useCallback(async () => {
+  const resolveLoadContext = useCallback(() => {
     if (!activeCompany) {
       toast.error("Select a company in the header before loading stock.", {
         toastId: "opening-stock-load:missing-company",
       });
-      return;
+      return null;
     }
     if (!activeBranch) {
       toast.error("Select a branch in the header before loading stock.", {
         toastId: "opening-stock-load:missing-branch",
       });
-      return;
+      return null;
     }
     if (!accountingYear) {
       toast.error("The selected company does not have a valid financial year.", {
         toastId: "opening-stock-load:missing-fin-year",
       });
-      return;
+      return null;
     }
 
-    setIsLoadConfirmOpen(false);
-    setIsLoadingStock(true);
-    try {
-      const listPayload = await listOpeningStocks({
-        query: {
-          osh_company_id: activeCompany.compId,
-          osh_branch_id: activeBranch.brId,
-          osh_acc_year: accountingYear,
-          page: "1",
-          limit: "1",
-        },
-      });
-      const latestDocumentHeader = Array.isArray(listPayload?.data) ? listPayload.data[0] : null;
-      if (!latestDocumentHeader?.avh_voucher_id) {
-        toast.info("No saved opening stock was found for the selected company and branch.", {
-          toastId: "opening-stock-load:not-found",
-        });
-        return;
-      }
+    return {
+      accountingYear,
+      companyId: activeCompany.compId,
+      branchId: activeBranch.brId,
+    };
+  }, [accountingYear, activeBranch, activeCompany]);
 
-      const documentPayload = await getOpeningStockDocument({
-        query: {
-          avh_voucher_id: latestDocumentHeader.avh_voucher_id,
-        },
-      });
-      const document = documentPayload?.data;
-      if (!document) {
-        toast.info("No saved opening stock was found for the selected company and branch.", {
-          toastId: "opening-stock-load:empty-document",
-        });
-        return;
-      }
-
+  const applyLoadedOpeningStockDocument = useCallback(
+    (document: OpeningStockDocumentPayload) => {
       const documentRows = mapOpeningStockDocumentToRows(document);
       const loadedItems = buildLoadedLookupOptions(
         document.details.map((detail) => ({
@@ -1177,13 +1187,18 @@ export default function OpeningStockPage() {
           label: detail.osl_tax_name,
         })),
       );
+
       setItemOptions((current) => mergeLookupOptions(current, loadedItems));
       setGodownOptions((current) => mergeLookupOptions(current, loadedGodowns));
       setUnitOptions((current) => mergeLookupOptions(current, loadedUnits));
       setTaxOptions((current) => mergeLookupOptions(current, loadedTaxes));
       setInvalidFieldKeys({});
       setRows(documentRows);
-      setVoucherDate(toInputDateValue(document.header.osh_voucher_date) || voucherDate);
+      setVoucherDate(
+        (currentVoucherDate) =>
+          toInputDateValue(document.header.osh_voucher_date) || currentVoucherDate,
+      );
+      setVoucherRefNo(document.header.avh_voucher_refno || "");
       setLookupSearchQuery("");
       setOpenLookupCell(null);
       setLoadedVoucherId(document.header.avh_voucher_id);
@@ -1195,28 +1210,159 @@ export default function OpeningStockPage() {
         branchId: document.header.osh_branch_id,
       });
       void prefetchLoadedItemDetails(document.details);
+    },
+    [prefetchLoadedItemDetails],
+  );
+
+  const loadLatestOpeningStock = useCallback(async () => {
+    const loadContext = resolveLoadContext();
+    if (!loadContext) {
+      return;
+    }
+
+    setPendingLoadRequest(null);
+    setIsLoadingStock(true);
+    try {
+      const listPayload = await listOpeningStocks({
+        query: {
+          osh_company_id: loadContext.companyId,
+          osh_branch_id: loadContext.branchId,
+          osh_acc_year: loadContext.accountingYear,
+          page: "1",
+          limit: "1",
+        },
+      });
+      const latestDocumentHeader = Array.isArray(listPayload?.data) ? listPayload.data[0] : null;
+      if (!latestDocumentHeader?.avh_voucher_id) {
+        toast.info("No saved opening stock was found for the selected company and branch.", {
+          toastId: "opening-stock-load:not-found",
+        });
+        return;
+      }
+
+      const documentPayload = await getOpeningStockDocument({
+        query: {
+          avh_voucher_id: latestDocumentHeader.avh_voucher_id,
+        },
+      });
+      const document = documentPayload?.data;
+      if (!document) {
+        toast.info("No saved opening stock was found for the selected company and branch.", {
+          toastId: "opening-stock-load:empty-document",
+        });
+        return;
+      }
+
+      applyLoadedOpeningStockDocument(document);
     } catch {
       // Toasting is handled in useApi.
     } finally {
       setIsLoadingStock(false);
     }
   }, [
-    accountingYear,
-    activeBranch,
-    activeCompany,
+    applyLoadedOpeningStockDocument,
     getOpeningStockDocument,
     listOpeningStocks,
-    prefetchLoadedItemDetails,
-    voucherDate,
+    resolveLoadContext,
   ]);
 
+  const loadOpeningStockByRefNo = useCallback(
+    async (refNo?: string) => {
+      const normalizedRefNo = (refNo ?? voucherRefNo).trim();
+      if (!normalizedRefNo) {
+        toast.error("Enter a reference no before loading stock.", {
+          toastId: "opening-stock-load:missing-refno",
+        });
+        return;
+      }
+
+      const loadContext = resolveLoadContext();
+      if (!loadContext) {
+        return;
+      }
+
+      setPendingLoadRequest(null);
+      setIsLoadingStock(true);
+      try {
+        const documentPayload = await getOpeningStockDocumentByRefNo({
+          query: {
+            avh_voucher_refno: normalizedRefNo,
+            osh_company_id: loadContext.companyId,
+            osh_branch_id: loadContext.branchId,
+            osh_acc_year: loadContext.accountingYear,
+          },
+        });
+        const document = documentPayload?.data;
+        if (!document) {
+          toast.info("No saved opening stock was found for the provided reference no.", {
+            toastId: "opening-stock-load:empty-refno-document",
+          });
+          return;
+        }
+
+        applyLoadedOpeningStockDocument(document);
+      } catch {
+        // Toasting is handled in useApi.
+      } finally {
+        setIsLoadingStock(false);
+      }
+    },
+    [
+      applyLoadedOpeningStockDocument,
+      getOpeningStockDocumentByRefNo,
+      resolveLoadContext,
+      voucherRefNo,
+    ],
+  );
+
   const handleLoadStock = useCallback(() => {
+    if (isLoadingStock || isSavingOpeningStock || isBusinessContextLoading) {
+      return;
+    }
+
     if (draftRows.length > 0) {
-      setIsLoadConfirmOpen(true);
+      setPendingLoadRequest({ type: "latest" });
       return;
     }
     void loadLatestOpeningStock();
-  }, [draftRows.length, loadLatestOpeningStock]);
+  }, [
+    draftRows.length,
+    isBusinessContextLoading,
+    isLoadingStock,
+    isSavingOpeningStock,
+    loadLatestOpeningStock,
+  ]);
+
+  const handleLoadByRefNo = useCallback(() => {
+    if (isLoadingStock || isSavingOpeningStock || isBusinessContextLoading) {
+      return;
+    }
+
+    const normalizedRefNo = voucherRefNo.trim();
+    if (!normalizedRefNo) {
+      toast.error("Enter a reference no before loading stock.", {
+        toastId: "opening-stock-load:missing-refno",
+      });
+      return;
+    }
+
+    if (draftRows.length > 0) {
+      setPendingLoadRequest({
+        type: "refno",
+        refNo: normalizedRefNo,
+      });
+      return;
+    }
+
+    void loadOpeningStockByRefNo(normalizedRefNo);
+  }, [
+    draftRows.length,
+    isBusinessContextLoading,
+    isLoadingStock,
+    isSavingOpeningStock,
+    loadOpeningStockByRefNo,
+    voucherRefNo,
+  ]);
   const handleUpdateStock = useCallback(async () => {
     if (!activeCompany) {
       toast.error("Select a company in the header before updating stock.", {
@@ -1356,7 +1502,8 @@ export default function OpeningStockPage() {
       setOpenLookupCell(null);
       setLoadedVoucherId(null);
       setLoadedDocumentMeta(null);
-      setIsLoadConfirmOpen(false);
+      setVoucherRefNo("");
+      setPendingLoadRequest(null);
     } catch {
       // Toasting is handled in useApi.
     }
@@ -1404,6 +1551,29 @@ export default function OpeningStockPage() {
       }),
     );
   }, [godownOptionsByValue, taxOptionsByValue]);
+
+  const handleConfirmLoad = useCallback(() => {
+    if (!pendingLoadRequest) {
+      return;
+    }
+
+    if (pendingLoadRequest.type === "refno") {
+      void loadOpeningStockByRefNo(pendingLoadRequest.refNo);
+      return;
+    }
+
+    void loadLatestOpeningStock();
+  }, [loadLatestOpeningStock, loadOpeningStockByRefNo, pendingLoadRequest]);
+
+  const loadConfirmMessage =
+    pendingLoadRequest?.type === "refno"
+      ? `Loading reference no "${pendingLoadRequest.refNo}" will replace the current non-empty rows with the saved opening stock from the backend.`
+      : "Loading stock will replace the current non-empty rows with the latest saved opening stock from the backend.";
+  const loadConfirmLabel =
+    pendingLoadRequest?.type === "refno" ? "Load Ref No" : "Load Latest";
+  const loadConfirmLoadingLabel =
+    pendingLoadRequest?.type === "refno" ? "Loading ref no..." : "Loading stock...";
+
   return (<>
     <section className={styles.page}>
       <header className={styles.header}>
@@ -1416,11 +1586,14 @@ export default function OpeningStockPage() {
       <div className={styles.tableShell}>
         <StockToolbar
           voucherDate={voucherDate}
+          voucherRefNo={voucherRefNo}
           voucherDatePickerRef={voucherDatePickerRef}
           isLoadingStock={isLoadingStock}
           isSavingOpeningStock={isSavingOpeningStock}
           isBusinessContextLoading={isBusinessContextLoading}
           onVoucherDateChange={setVoucherDate}
+          onVoucherRefNoChange={setVoucherRefNo}
+          onLoadByRefNo={handleLoadByRefNo}
           onLoadStock={handleLoadStock}
           onUpdateStock={handleUpdateStock}
         />
@@ -1538,8 +1711,13 @@ export default function OpeningStockPage() {
           </table>
         </div>
         <div className={styles.paginationBar}>
-          <div className={styles.paginationInfo} />
-          <div className="{styles.footerValue} flex gap-2">
+          <div className={styles.paginationInfo}>
+            <KeyboardShortcutHints
+              shortcuts={OPENING_STOCK_TABLE_SHORTCUTS}
+              dense
+            />
+          </div>
+          <div className={styles.footerValue}>
             <strong className={styles.footerLabel}>qty</strong>
             <strong>{QUANTITY_FORMATTER.format(visibleTotals.qty)} </strong>
             <strong className={styles.footerLabel}>free qty</strong>
@@ -1550,19 +1728,17 @@ export default function OpeningStockPage() {
         </div>
       </div>
       <DeleteConfirmModal
-        isOpen={isLoadConfirmOpen}
+        isOpen={pendingLoadRequest !== null}
         title="Replace current rows?"
-        message="Loading stock will replace the current non-empty rows with the latest saved opening stock from the backend."
-        confirmLabel="Load stock"
+        message={loadConfirmMessage}
+        confirmLabel={loadConfirmLabel}
         cancelLabel="Keep current rows"
         loading={isLoadingStock}
-        loadingLabel="Loading stock..."
-        onConfirm={() => {
-          void loadLatestOpeningStock();
-        }}
+        loadingLabel={loadConfirmLoadingLabel}
+        onConfirm={handleConfirmLoad}
         onCancel={() => {
           if (!isLoadingStock) {
-            setIsLoadConfirmOpen(false);
+            setPendingLoadRequest(null);
           }
         }}
       />

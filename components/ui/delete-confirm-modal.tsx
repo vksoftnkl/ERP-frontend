@@ -1,5 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
+import {
+  KeyboardShortcutHints,
+  type KeyboardShortcutDefinition,
+} from "@/components/library/ui/keyboard-shortcut-hints";
 import styles from "./delete-confirm-modal.module.scss";
 
 type DeleteConfirmModalProps = {
@@ -35,11 +40,68 @@ export default function DeleteConfirmModal({
   onConfirm,
   onCancel,
 }: DeleteConfirmModalProps) {
+  useEffect(() => {
+    if (!isOpen || loading) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+
+      if (
+        event.key !== "Enter" ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof HTMLButtonElement ||
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLSelectElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLAnchorElement
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      onConfirm();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, loading, onCancel, onConfirm]);
+
   if (!isOpen) {
     return null;
   }
 
   const effectiveMessage = message ?? buildDefaultMessage(itemName);
+  const footerShortcuts: KeyboardShortcutDefinition[] = loading
+    ? []
+    : [
+        {
+          label: cancelLabel,
+          keys: ["Escape"],
+        },
+        {
+          label: confirmLabel,
+          keys: ["Enter"],
+        },
+      ];
 
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={title}>
@@ -80,6 +142,14 @@ export default function DeleteConfirmModal({
           </div>
         ) : null}
 
+        {footerShortcuts.length > 0 ? (
+          <div className={styles.footerShortcuts}>
+            <KeyboardShortcutHints
+              shortcuts={footerShortcuts}
+              dense
+            />
+          </div>
+        ) : null}
         <div className={styles.actions}>
           <button
             type="button"

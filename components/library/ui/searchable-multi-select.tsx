@@ -13,6 +13,10 @@ import {
 } from "react";
 import { cx } from "@/components/library/cx";
 import type { ERPDynamicSelectOption } from "@/components/library/ui/dynamic-modal-form";
+import {
+  KeyboardShortcutHints,
+  type KeyboardShortcutDefinition,
+} from "@/components/library/ui/keyboard-shortcut-hints";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
 
 export type SearchableMultiSelectProps = {
@@ -30,6 +34,20 @@ export type SearchableMultiSelectProps = {
 };
 
 const DEFAULT_DROPDOWN_MAX_HEIGHT = 280;
+const SEARCHABLE_MULTI_SELECT_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
+  {
+    label: "Navigate",
+    keys: ["ArrowUp", "ArrowDown"],
+  },
+  {
+    label: "Toggle",
+    keys: ["Enter", "Space"],
+  },
+  {
+    label: "Close",
+    keys: ["Escape"],
+  },
+];
 
 function normalizeSearchValue(value: string): string {
   return value.trim().toLowerCase();
@@ -393,6 +411,12 @@ export function SearchableMultiSelect({
               <li className={dynamicFormStyles.searchSelectEmpty}>{emptyText}</li>
             )}
           </ul>
+          <div className={dynamicFormStyles.searchSelectShortcutBar}>
+            <KeyboardShortcutHints
+              shortcuts={SEARCHABLE_MULTI_SELECT_SHORTCUTS}
+              dense
+            />
+          </div>
         </div>
       ) : null}
     </div>

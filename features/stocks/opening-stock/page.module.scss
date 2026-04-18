@@ -10,8 +10,8 @@
   --table-border-soft: #e8eef5;
   --table-surface: #ffffff;
   --table-surface-muted: linear-gradient(rgb(79, 118, 187) 0%, rgb(54, 91, 157) 100%);
-  --table-surface-accent: #fbfdff;
-  --table-text: #1b2634;
+    --table-surface-accent: #fbfdff;
+  --table-text:#1b2634;
   --table-text-muted: #6d7c8d;
   --table-text-subtle: #8a97a8;
   --table-hover: #f7fbff;
@@ -117,7 +117,7 @@
 
 .headerCell,
 .cell {
-  padding: 0.5rem;
+  padding: 0.30rem;
   font-size: 0.92rem;
   line-height: 1.35;
   vertical-align: middle;
@@ -207,6 +207,8 @@
 .paginationInfo {
   min-height: 1.25rem;
   flex: 1 1 auto;
+  display: flex;
+  align-items: center;
 }
 .header {
   display: flex;
@@ -322,6 +324,12 @@
     transition: border-color .16s, box-shadow .16s, background-color .16s;
 }
 
+.toolbarRefInput {
+  width: min(100%, 220px);
+  min-width: 190px;
+  text-transform: uppercase;
+}
+
 .dateInputWithPicker {
   padding-right: 2.7rem;
 }
@@ -384,6 +392,15 @@
 .loadButton {
   border-color: #365b9d;
   background: linear-gradient(180deg, #4f76bb 0%, #365b9d 100%);
+}
+
+.refLoadButton {
+  border-color: #7c5a18;
+  background: linear-gradient(180deg, #c9932d 0%, #9b6e16 100%);
+}
+
+.refLoadButton:hover:not(:disabled) {
+  box-shadow: 0 10px 20px rgba(155, 110, 22, 0.24);
 }
 
 .loadButton:hover:not(:disabled) {
@@ -469,7 +486,7 @@
 }
 
 .headerCellDark {
-  color: #000000 !important;
+  color: white !important;
 }
 
 .dataRow .stickyActionCell,
@@ -765,6 +782,11 @@
   padding: 0.56rem 0.68rem;
   color: #6d7f92;
   font-size: 0.92rem;
+}
+
+.lookupShortcutBar {
+  padding-top: 0.1rem;
+  border-top: 1px solid #e4ebf3;
 }
 
 .numericInput {

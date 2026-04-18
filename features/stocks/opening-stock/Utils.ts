@@ -53,6 +53,15 @@ export function parseDecimal(value: string | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+export function getOpeningStockActualConvFactor(values: Record<string, string>): number {
+  const storedActualConvFactor = parseDecimal(values.oslactualconvfactor);
+  if (storedActualConvFactor > 0) {
+    return storedActualConvFactor;
+  }
+
+  return parseDecimal(values.convfactor) || 1;
+}
+
 export function formatQuantityValue(value: number): string {
   return QUANTITY_FORMATTER.format(value).replace(/,/g, "");
 }
@@ -368,7 +377,8 @@ export function buildPriceSelectionValues(
   currentValues: Record<string, string>,
 ): Record<string, string> {
   const resolvedUnitId = priceRecord?.ipm_unit_id ?? detail.item.item_base_unit_id ?? "";
-  const convFactor = priceRecord?.ipm_to_base_factor ?? 1;
+  const actualConvFactor = priceRecord?.ipm_to_base_factor ?? 1;
+  const displayConvFactor = priceRecord?.ipm_unit_factor ?? actualConvFactor;
   const openingQty = parseDecimal(currentValues.openingqty);
   const freeQty = parseDecimal(currentValues.freeqty);
   const requestedGodownId = priceRecord?.ipm_godown_id ?? "";
@@ -378,9 +388,10 @@ export function buildPriceSelectionValues(
   return {
     uom: unitOptionsByValue.get(resolvedUnitId) ?? "",
     godown: godownOptionsByValue.get(resolvedGodownId) ?? "",
-    baseqty: formatQuantityValue(openingQty * convFactor),
-    freebaseqty: formatQuantityValue(freeQty * convFactor),
-    convfactor: toInputValue(convFactor),
+    baseqty: formatQuantityValue(openingQty * actualConvFactor),
+    freebaseqty: formatQuantityValue(freeQty * actualConvFactor),
+    convfactor: toInputValue(displayConvFactor),
+    oslactualconvfactor: toInputValue(actualConvFactor),
     costprice: toInputValue(priceRecord?.ipm_cost_price),
     costwot: toInputValue(priceRecord?.ipm_cost_wot),
     profittype: normalizeOpeningStockProfitType(priceRecord?.ipm_profit_type),
@@ -575,6 +586,7 @@ export function buildPendingItemSelectionValues(
 ): Record<string, string> {
   return {
     ...ITEM_AUTOFILL_RESET_VALUES,
+    oslactualconvfactor: "",
     itemname: option.value ? option.label : "",
     oslitemid: option.value,
   };
@@ -871,7 +883,7 @@ export function normalizeOpeningStockRowQuantitiesByUnit(
     return row;
   }
 
-  const convFactor = parseDecimal(row.values.convfactor);
+  const convFactor = getOpeningStockActualConvFactor(row.values);
   return {
     ...row,
     values: {
@@ -1012,6 +1024,8 @@ export function getRowValidationMessage(
 }
 
 export function buildOpeningStockDetailPayload(row: OpeningStockRow): OpeningStockSaveDetail {
+  const convFactor = getOpeningStockActualConvFactor(row.values);
+
   return {
     osl_barcode: toNullableTrimmedString(row.values.barcode),
     osl_item_id: row.values.oslitemid.trim(),
@@ -1028,7 +1042,7 @@ export function buildOpeningStockDetailPayload(row: OpeningStockRow): OpeningSto
     osl_free_qty: parseDecimal(row.values.freeqty),
     osl_base_qty: parseDecimal(row.values.baseqty),
     osl_free_base_qty: parseDecimal(row.values.freebaseqty),
-    osl_conv_factor: parseDecimal(row.values.convfactor) || 1,
+    osl_conv_factor: convFactor,
     osl_batch_no: toNullableTrimmedString(row.values.batchno),
     osl_serial_no: toNullableTrimmedString(row.values.serialno),
     osl_batch_date: toIsoDateTime(row.values.batchdate),
@@ -1077,6 +1091,7 @@ function mapOpeningStockDetailToRow(
     baseqty: toConfiguredNumberInputValue("baseqty", detail.osl_base_qty),
     freebaseqty: toConfiguredNumberInputValue("freebaseqty", detail.osl_free_base_qty),
     convfactor: toConfiguredNumberInputValue("convfactor", detail.osl_conv_factor),
+    oslactualconvfactor: toConfiguredNumberInputValue("convfactor", detail.osl_conv_factor),
     batchno: toInputValue(detail.osl_batch_no),
     serialno: toInputValue(detail.osl_serial_no),
     batchdate: toInputDateValue(detail.osl_batch_date),

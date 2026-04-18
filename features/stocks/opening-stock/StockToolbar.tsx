@@ -1,28 +1,34 @@
 "use client";
 
 import type { ReactNode, RefObject } from "react";
-import { FiCalendar, FiDownload } from "react-icons/fi";
+import { FiCalendar, FiDownload, FiSearch } from "react-icons/fi";
 import { cx, formatDateEntry, formatDateForDisplay, openDatePicker, toCanonicalDateValue } from "./Utils";
 import styles from "./page.module.scss";
 
 type StockToolbarProps = {
   voucherDate: string;
+  voucherRefNo: string;
   voucherDatePickerRef: RefObject<HTMLInputElement | null>;
   isLoadingStock: boolean;
   isSavingOpeningStock: boolean;
   isBusinessContextLoading: boolean;
   onVoucherDateChange: (value: string) => void;
+  onVoucherRefNoChange: (value: string) => void;
+  onLoadByRefNo: () => void;
   onLoadStock: () => void;
   onUpdateStock: () => void;
 };
 
 export function StockToolbar({
   voucherDate,
+  voucherRefNo,
   voucherDatePickerRef,
   isLoadingStock,
   isSavingOpeningStock,
   isBusinessContextLoading,
   onVoucherDateChange,
+  onVoucherRefNoChange,
+  onLoadByRefNo,
   onLoadStock,
   onUpdateStock,
 }: StockToolbarProps): ReactNode {
@@ -63,6 +69,40 @@ export function StockToolbar({
             </button>
           </div>
         </label>
+        <label className={styles.toolbarDateField}>
+          <span className={styles.toolbarDateLabel}>Ref No</span>
+          <div className={styles.toolbarDateControl}>
+            <input
+              type="text"
+              value={voucherRefNo}
+              onChange={(event) => onVoucherRefNoChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") {
+                  return;
+                }
+
+                event.preventDefault();
+                onLoadByRefNo();
+              }}
+              className={cx(styles.toolbarDateInput, styles.toolbarRefInput)}
+              placeholder="Enter ref no"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+        </label>
+        <button
+          type="button"
+          className={cx(styles.createButton, styles.refLoadButton)}
+          onClick={onLoadByRefNo}
+          disabled={isLoadingStock || isSavingOpeningStock || isBusinessContextLoading}
+        >
+          <FiSearch
+            className={styles.createIcon}
+            aria-hidden="true"
+          />
+          <span>{isLoadingStock ? "Loading..." : "Load Ref No"}</span>
+        </button>
         <button
           type="button"
           className={cx(styles.createButton, styles.loadButton)}
@@ -73,7 +113,7 @@ export function StockToolbar({
             className={styles.createIcon}
             aria-hidden="true"
           />
-          <span>{isLoadingStock ? "Loading..." : "Load the Stock"}</span>
+          <span>{isLoadingStock ? "Loading..." : "Load Latest"}</span>
         </button>
         <button
           type="button"
