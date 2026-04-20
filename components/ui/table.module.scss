@@ -29,7 +29,7 @@
     z-index: 120;
     display: grid;
     gap: 0.9rem;
-    padding: 1.15rem 1.25rem 1rem;
+    padding: 0.5rem;
     background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
     .toolbarTitle {
       margin: 0;
@@ -92,13 +92,13 @@
         align-items: center;
         justify-content: center;
         gap: 0.5rem;
-        min-height: 2.75rem;
+        min-height: 0.5rem;
         border: 1px solid #1f5fbf;
         border-radius: 4px;
         background: linear-gradient(180deg, #2d75e8 0%, #1f5fbf 100%);
         color: #ffffff;
-        padding: 0 1.1rem;
-        font-size: 0.92rem;
+        padding: 0.5rem;
+        font-size: 0.8rem;
         font-weight: 600;
         letter-spacing: 0.01em;
         cursor: pointer;
@@ -117,8 +117,8 @@
           box-shadow: none;
         }
         .createIcon {
-          width: 0.95rem;
-          height: 0.95rem;
+          width: 0.8rem;
+          height: 0.8rem;
         }
       }
     }
