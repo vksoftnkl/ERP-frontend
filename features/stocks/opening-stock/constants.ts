@@ -7,6 +7,7 @@ export const UNIT_LIST_ENDPOINT = "/units/list";
 export const OPENING_STOCK_SAVE_ENDPOINT = "/opening-stocks";
 export const OPENING_STOCK_LIST_ENDPOINT = "/opening-stocks/list";
 export const OPENING_STOCK_GET_ENDPOINT = "/opening-stocks/get";
+export const OPENING_STOCK_DELETE_ENDPOINT = "/opening-stocks/delete";
 export const UI_TABLE_COLUMNS_QUERY = {
   uiTblClmTableId: "5",
   page: "1",
@@ -107,15 +108,13 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     header: "Barcode",
     defaultWidth: "100px",
     align: "left",
-    kind: "text",
-    placeholder: "Barcode",
+    kind: "text",    
   },
   code: {
     header: "Code",
     defaultWidth: "100px",
     align: "left",
     kind: "text",
-    placeholder: "Item code",
   },
   itemname: {
     header: "Item Name",
@@ -123,7 +122,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "left",
     kind: "lookup",
     lookupKind: "item",
-    placeholder: "Search item",
   },
   godown: {
     header: "Godown",
@@ -131,28 +129,24 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     align: "left",
     kind: "lookup",
     lookupKind: "godown",
-    placeholder: "Search godown",
   },
   uom: {
     header: "Uom",
     defaultWidth: "100px",
     align: "left",
     kind: "text",
-    placeholder: "Uom",
   },
   taxname: {
     header: "Tax Name",
     defaultWidth: "120px",
     align: "left",
     kind: "text",
-    placeholder: "Tax name",
   },
   openingqty: {
     header: "Opening Qty",
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.000",
     defaultValue: "0.000",
   },
   freeqty: {
@@ -160,7 +154,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "100px",
     align: "right",
     kind: "number",
-    placeholder: "0.000",
     defaultValue: "0.000",
   },
   baseqty: {
@@ -168,7 +161,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "100px",
     align: "right",
     kind: "number",
-    placeholder: "0.000",
     defaultValue: "0.000",
   },
   freebaseqty: {
@@ -176,7 +168,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.000",
     defaultValue: "0.000",
   },
   convfactor: {
@@ -184,7 +175,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "1.000",
     defaultValue: "1.000",
   },
   batchno: {
@@ -192,14 +182,12 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "120px",
     align: "left",
     kind: "text",
-    placeholder: "Batch no",
   },
   serialno: {
     header: "Serial No",
     defaultWidth: "120px",
     align: "left",
     kind: "text",
-    placeholder: "Serial no",
   },
   batchdate: {
     header: "Batch Date",
@@ -224,7 +212,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   costwot: {
@@ -232,7 +219,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   profittype: {
@@ -256,7 +242,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   priceamarkup: {
@@ -264,7 +249,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "120px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   pricea: {
@@ -272,7 +256,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   pricebwot: {
@@ -280,7 +263,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   pricebmarkup: {
@@ -288,7 +270,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "120px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   priceb: {
@@ -296,7 +277,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   pricecwot: {
@@ -304,7 +284,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   pricecmarkup: {
@@ -312,7 +291,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "120px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   pricec: {
@@ -320,7 +298,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   pricedwot: {
@@ -328,7 +305,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   pricedmarkup: {
@@ -336,7 +312,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "120px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   priced: {
@@ -344,7 +319,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   mrp: {
@@ -352,7 +326,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "100px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   msp: {
@@ -360,7 +333,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "100px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
   remarks: {
@@ -368,35 +340,30 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "220px",
     align: "left",
     kind: "text",
-    placeholder: "Remarks",
   },
   oslitemid: {
     header: "osl item id",
     defaultWidth: "120px",
     align: "left",
     kind: "text",
-    placeholder: "Item id",
   },
   oslunitid: {
     header: "osl unit id",
     defaultWidth: "120px",
     align: "left",
     kind: "text",
-    placeholder: "Unit id",
   },
   oslbaseuomid: {
     header: "osl base uom id",
     defaultWidth: "130px",
     align: "left",
     kind: "text",
-    placeholder: "Base uom id",
   },
   oslgodownid: {
     header: "osl godown id",
     defaultWidth: "130px",
     align: "left",
     kind: "text",
-    placeholder: "Godown id",
   },
   osltrackingtype: {
     header: "osl tracking type",
@@ -411,14 +378,12 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "left",
     kind: "text",
-    placeholder: "Tax id",
   },
   osltaxperc: {
     header: "osl tax perc",
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.000",
     defaultValue: "0.000",
   },
   oslcesstype: {
@@ -434,7 +399,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "110px",
     align: "right",
     kind: "number",
-    placeholder: "0.000",
     defaultValue: "0.000",
   },
   oslcessperunit: {
@@ -442,7 +406,6 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
     defaultWidth: "120px",
     align: "right",
     kind: "number",
-    placeholder: "0.00",
     defaultValue: "0.00",
   },
 };

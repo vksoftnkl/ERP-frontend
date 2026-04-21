@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { FiChevronDown, FiSearch } from "react-icons/fi";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { ERPDynamicSearchShortcutPayload } from "@/components/library/ui/dynamic-modal-form";
 import { LOOKUP_FIELD_CONFIG } from "./constants";
 import type { LookupKind } from "./Types";
 import { cx } from "./Utils";
@@ -21,11 +22,18 @@ type LookupCellProps = {
   header: string;
   options: ERPDynamicSelectOption[];
   searchQuery: string;
+  shortcutValues?: Record<string, string>;
   hasValidationError: boolean;
   searchInputRef: RefObject<HTMLInputElement | null>;
   rootRef: (element: HTMLDivElement | null) => void;
   onToggle: () => void;
   onTriggerKeyDown?: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+  onSearchCreateShortcut?: (
+    payload: ERPDynamicSearchShortcutPayload,
+  ) => void | Promise<void>;
+  onSearchEditShortcut?: (
+    payload: ERPDynamicSearchShortcutPayload,
+  ) => void | Promise<void>;
   onSearchChange: (search: string) => void;
   onSelect: (option: ERPDynamicSelectOption) => void;
 };
@@ -55,16 +63,20 @@ export function LookupCell({
   header,
   options,
   searchQuery,
+  shortcutValues,
   hasValidationError,
   searchInputRef,
   rootRef,
   onToggle,
   onTriggerKeyDown,
+  onSearchCreateShortcut,
+  onSearchEditShortcut,
   onSearchChange,
   onSelect,
 }: LookupCellProps): ReactNode {
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const optionRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const triggerButtonRef = useRef<HTMLButtonElement | null>(null);
   const listboxId = `${cellKey}-lookup-listbox`;
   const activeOption = highlightedIndex >= 0 ? options[highlightedIndex] : undefined;
   const activeOptionId = activeOption ? `${cellKey}-${activeOption.value}-option` : undefined;
@@ -83,7 +95,52 @@ export function LookupCell({
     });
   }, [activeOption, isOpen]);
 
+  function handleShortcutKeyDown(
+    event: ReactKeyboardEvent<HTMLElement>,
+    query: string,
+  ): boolean {
+    const normalizedShortcutKey = event.key.trim().toLowerCase();
+    const shortcutPayload: ERPDynamicSearchShortcutPayload = {
+      fieldName: fieldKey,
+      query,
+      value: selectedId,
+      values: { ...(shortcutValues ?? {}) },
+    };
+
+    if (
+      event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.shiftKey &&
+      normalizedShortcutKey === "c" &&
+      onSearchCreateShortcut
+    ) {
+      event.preventDefault();
+      void onSearchCreateShortcut(shortcutPayload);
+      return true;
+    }
+
+    if (
+      event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.shiftKey &&
+      normalizedShortcutKey === "a" &&
+      onSearchEditShortcut
+    ) {
+      event.preventDefault();
+      void onSearchEditShortcut(shortcutPayload);
+      return true;
+    }
+
+    return false;
+  }
+
   function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>): void {
+    if (handleShortcutKeyDown(event, searchQuery)) {
+      return;
+    }
+
     if (event.altKey || event.ctrlKey || event.metaKey) {
       return;
     }
@@ -116,8 +173,15 @@ export function LookupCell({
       }
 
       event.preventDefault();
-      onSelect(activeOption);
+      handleOptionSelect(activeOption);
     }
+  }
+
+  function handleOptionSelect(option: ERPDynamicSelectOption): void {
+    onSelect(option);
+    window.requestAnimationFrame(() => {
+      triggerButtonRef.current?.focus();
+    });
   }
 
   return (
@@ -126,6 +190,7 @@ export function LookupCell({
       ref={rootRef}
     >
       <button
+        ref={triggerButtonRef}
         type="button"
         data-opening-stock-field-control="true"
         data-opening-stock-row-id={rowId}
@@ -136,7 +201,12 @@ export function LookupCell({
           hasValidationError && styles.requiredField,
         )}
         onClick={onToggle}
-        onKeyDown={onTriggerKeyDown}
+        onKeyDown={(event) => {
+          if (handleShortcutKeyDown(event, searchQuery || selectedLabel)) {
+            return;
+          }
+          onTriggerKeyDown?.(event);
+        }}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-invalid={hasValidationError || undefined}
@@ -199,7 +269,7 @@ export function LookupCell({
                     optionRefs.current[option.value] = element;
                   }}
                   onMouseEnter={() => setHighlightedIndex(index)}
-                  onClick={() => onSelect(option)}
+                  onClick={() => handleOptionSelect(option)}
                 >
                   {option.label}
                 </button>

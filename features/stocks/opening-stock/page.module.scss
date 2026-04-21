@@ -6,16 +6,19 @@
 }
 
 .tableShell {
-  --table-border: #d9e2ec;
-  --table-border-soft: #e8eef5;
+  --table-border: #9ea1a5;
+  --table-border-soft: #9ea1a5;
   --table-surface: #ffffff;
   --table-surface-muted: linear-gradient(rgb(79, 118, 187) 0%, rgb(54, 91, 157) 100%);
-    --table-surface-accent: #fbfdff;
+  --table-surface-accent: #fbfdff;
   --table-text:#1b2634;
   --table-text-muted: #6d7c8d;
   --table-text-subtle: #8a97a8;
   --table-hover: #f7fbff;
   --table-active: #eef5ff;
+  --table-row-selected: #cde643;
+  --table-cell-selected: #7b1111;
+  --table-editor-active: #ffffff;
   --table-shadow: 0 18px 42px rgba(15, 35, 60, 0.08);
   position: relative;
   isolation: isolate;
@@ -140,13 +143,13 @@
 }
 
 .headerCell:first-child {
-  border-top-left-radius: 16px;
+  // border-top-left-radius: 16px;
   border-left: none;
 }
 
-.headerCell:last-child {
-  border-top-right-radius: 16px;
-}
+// .headerCell:last-child {
+//   border-top-right-radius: 16px;
+// }
 
 .headerText {
   display: inline-block;
@@ -165,35 +168,40 @@
 .rowOdd {
   background: transparent;
 }
-
-.row:hover .cell {
-  background: var(--table-hover);
+.row:hover .cell {  background: var(--table-hover);
 }
-
+.dataRow:focus-within .cell {
+  background: var(--table-row-selected);
+}
+.dataRow:focus-within .stickyActionCell,
+.dataRow:focus-within .stickySerialCell {
+  background: var(--table-row-selected);
+}
+.dataRow .cell:focus-within {
+  background: var(--table-cell-selected);
+}
 .cell {
   color: var(--table-text);
   background: transparent;
   border-bottom: 1px solid var(--table-border-soft);
   border-left: 1px solid var(--table-border-soft);
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease;
 }
-
 .cell:first-child {
   border-left: none;
 }
-
 .alignLeft {
   text-align: left;
 }
-
 .alignCenter {
   text-align: center;
 }
-
 .alignRight {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-
 .paginationBar {
   display: flex;
   align-items: center;
@@ -203,7 +211,6 @@
   border-top: 1px solid var(--table-border-soft);
   background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
 }
-
 .paginationInfo {
   min-height: 1.25rem;
   flex: 1 1 auto;
@@ -234,7 +241,6 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-
 .headingRow {
   display: flex;
   align-items: flex-start;
@@ -242,7 +248,6 @@
   gap: 1rem;
   flex-wrap: wrap;
 }
-
 .title {
   margin: 0;
   color: #162739;
@@ -251,7 +256,6 @@
   letter-spacing: -0.03em;
   line-height: 1.05;
 }
-
 .description {
   max-width: 56rem;
   margin: 0.45rem 0 0;
@@ -259,14 +263,12 @@
   font-size: 1rem;
   line-height: 1.55;
 }
-
 .badgeRow {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
 }
-
 .badge {
   display: inline-flex;
   align-items: center;
@@ -278,20 +280,17 @@
   font-size: 0.82rem;
   font-weight: 700;
 }
-
 .summaryGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.85rem;
 }
-
 .toolbarDateField {
   display: inline-flex;
   align-items: center;
   gap: 0.65rem;
   min-height: 2.75rem;
 }
-
 .toolbarDateControl {
   position: relative;
   display: inline-flex;
@@ -301,7 +300,6 @@
   background: #ffffff;
   overflow: hidden;
 }
-
 .toolbarDateLabel {
   color: #5d6d80;
   font-size: 0.78rem;
@@ -309,7 +307,6 @@
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
-
 .toolbarDateInput {
     color: #1b2634;
     width: min(100%, 190px);
@@ -323,26 +320,21 @@
     line-height: 1;
     transition: border-color .16s, box-shadow .16s, background-color .16s;
 }
-
 .toolbarRefInput {
   width: min(100%, 220px);
   min-width: 190px;
   text-transform: uppercase;
 }
-
 .dateInputWithPicker {
   padding-right: 2.7rem;
 }
-
 .toolbarDateControl:focus-within {
   border-color: #8ab4ff;
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
 }
-
 .toolbarDateInput:focus-visible {
   outline: 0;
 }
-
 .summaryCard {
   display: flex;
   flex-direction: column;
@@ -353,7 +345,6 @@
   box-shadow: 0 14px 30px rgba(15, 35, 60, 0.07);
   padding: 1rem 1.05rem;
 }
-
 .summaryLabel {
   color: #708094;
   font-size: 0.73rem;
@@ -361,7 +352,6 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-
 .summaryValue {
   color: #14283c;
   font-size: clamp(1.4rem, 2.4vw, 1.85rem);
@@ -369,53 +359,50 @@
   letter-spacing: -0.03em;
   line-height: 1.1;
 }
-
 .summaryHint {
   margin-top: auto;
   color: #708094;
   font-size: 0.85rem;
   line-height: 1.4;
 }
-
 .resizableTable {
   table-layout: fixed;
   width: var(--erp-table-min-width, 1080px);
 }
-
 .toolbarNote {
   margin: 0.35rem 0 0;
   color: #738296;
   font-size: 0.9rem;
   line-height: 1.45;
 }
-
 .loadButton {
   border-color: #365b9d;
   background: linear-gradient(180deg, #4f76bb 0%, #365b9d 100%);
 }
-
 .refLoadButton {
   border-color: #7c5a18;
   background: linear-gradient(180deg, #c9932d 0%, #9b6e16 100%);
 }
-
 .refLoadButton:hover:not(:disabled) {
   box-shadow: 0 10px 20px rgba(155, 110, 22, 0.24);
 }
-
 .loadButton:hover:not(:disabled) {
   box-shadow: 0 10px 20px rgba(54, 91, 157, 0.24);
 }
-
 .updateButton {
   border-color: #0f7a43;
   background: linear-gradient(180deg, #1f9d5a 0%, #0f7a43 100%);
 }
-
 .updateButton:hover:not(:disabled) {
   box-shadow: 0 10px 20px rgba(15, 122, 67, 0.24);
 }
-
+.deleteStockButton {
+  border-color: #9b1c1c;
+  background: linear-gradient(180deg, #d14343 0%, #9b1c1c 100%);
+}
+.deleteStockButton:hover:not(:disabled) {
+  box-shadow: 0 10px 20px rgba(155, 28, 28, 0.24);
+}
 .configMeta {
   margin: 0.3rem 0 0;
   color: #4c6784;
@@ -423,7 +410,6 @@
   font-weight: 700;
   line-height: 1.4;
 }
-
 .loadedMeta {
   margin: 0.2rem 0 0;
   color: #365b9d;
@@ -431,11 +417,9 @@
   font-weight: 700;
   line-height: 1.45;
 }
-
 .configMetaError {
   color: #9d3d33;
 }
-
 .rowNumber {
   display: inline-flex;
   align-items: center;
@@ -494,10 +478,10 @@
   background: #ffffff;
 }
 
-.dataRow:hover .stickyActionCell,
-.dataRow:hover .stickySerialCell {
-  background: #f7fbff;
-}
+// .dataRow:hover .stickyActionCell,
+// .dataRow:hover .stickySerialCell {
+//   background: #f7fbff;
+// }
 
 .compactCell {
   padding: 0.2rem;
@@ -510,7 +494,7 @@
   min-height: 2.45rem;
   border: 0;
   border-radius: 4px;
-  background: #ffffff;
+  background: transparent;
   color: #1b2634;
   padding: 0.2rem;
   font: inherit;
@@ -573,8 +557,7 @@
 
 .requiredDatePickerTrigger:focus-visible {
   color: #c83d34;
-  box-shadow: inset 0 0 0 2px rgba(216, 76, 67, 0.22);
-  border-radius: 0 4px 4px 0;
+  box-shadow: none;
 }
 
 .datePickerIcon {
@@ -589,7 +572,14 @@
 .cellInput:focus-visible,
 .cellSelect:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+  box-shadow: none;
+}
+
+.cellInput:focus,
+.cellInput:focus-visible,
+.cellSelect:focus,
+.cellSelect:focus-visible {
+  background: var(--table-editor-active);
 }
 
 .requiredField,
@@ -602,24 +592,39 @@
 }
 
 .requiredField:focus-visible {
-  box-shadow: 0 0 0 4px rgba(216, 76, 67, 0.16);
+  box-shadow: none;
 }
 
 .cellInput:disabled,
 .cellSelect:disabled {
-  background: #f3f6f9;
+  background: transparent;
   color: #8794a3;
   cursor: not-allowed;
 }
 
 .cellSelect.requiredField:disabled,
 .cellInput.requiredField:disabled {
-  background: #fff7f6;
+  background: transparent;
   color: #1b2634;
 }
 
 .cellInput[readonly] {
   background: #f8fafc;
+}
+
+.rowSelectionFillWrap {
+  border-radius: 4px;
+  transition: background-color 0.16s ease;
+}
+
+.dataRow:focus-within .rowSelectionFillControl:not(:focus):not(:focus-visible),
+.dataRow:focus-within .rowSelectionFillWrap:not(:focus-within) {
+  background: var(--table-row-selected);
+}
+
+.dataRow .cell:focus-within .rowSelectionFillControl:not(:focus):not(:focus-visible),
+.dataRow .cell:focus-within .rowSelectionFillWrap {
+  background: var(--table-cell-selected);
 }
 
 .cellSelect {
@@ -638,9 +643,9 @@
   min-height: 2.45rem;
   border: 0;
   border-radius: 4px;
-  background: #ffffff;
+  background: transparent;
   color: #1b2634;
-  padding: 0.52rem 0.72rem;
+  //padding: 0.52rem;
   font: inherit;
   line-height: 1.35;
   display: inline-flex;
@@ -658,7 +663,7 @@
 .lookupTrigger:focus-visible,
 .lookupSearchInput:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+  box-shadow: none;
 }
 
 .lookupTrigger.requiredField {
@@ -667,12 +672,12 @@
 
 .lookupTrigger.requiredField:focus-visible,
 .lookupTrigger.requiredField.lookupTriggerOpen {
-  box-shadow: 0 0 0 4px rgba(216, 76, 67, 0.16);
+  box-shadow: none;
 }
 
 .lookupTriggerOpen {
   border-color: #8ab4ff;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+  box-shadow: none;
 }
 
 .lookupTriggerLabel {
@@ -893,7 +898,75 @@
   width: 2px;
   transform: translateX(-50%);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.45);
+  background: transparent;
+}
+
+.inlineMasterOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(3px);
+}
+
+.inlineMasterPanel {
+  width: min(96vw, 92rem);
+  height: min(92vh, 56rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #f7fbff;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.inlineMasterHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem 0.8rem;
+  border-bottom: 1px solid #d6e0eb;
+  background: linear-gradient(180deg, #ffffff 0%, #f6fbff 100%);
+}
+
+.inlineMasterTitle {
+  margin: 0;
+  color: #16324f;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.inlineMasterDescription {
+  margin: 0.2rem 0 0;
+  color: #5f7187;
+  font-size: 0.83rem;
+}
+
+.inlineMasterCloseButton {
+  border: 1px solid #c7d3e0;
+  background: #ffffff;
+  color: #284763;
+  border-radius: 8px;
+  padding: 0.48rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.inlineMasterCloseButton:hover {
+  background: #f4f8fc;
+}
+
+.inlineMasterBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #f7fbff;
 }
 
 @media (max-width: 1200px) {

@@ -14,10 +14,6 @@ import {
 import { createPortal } from "react-dom";
 import { cx } from "@/components/library/cx";
 import type { ERPDynamicSelectOption } from "@/components/library/ui/dynamic-modal-form";
-import {
-  KeyboardShortcutHints,
-  type KeyboardShortcutDefinition,
-} from "@/components/library/ui/keyboard-shortcut-hints";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
 
 export type SearchableSelectProps = {
@@ -38,20 +34,6 @@ export type SearchableSelectProps = {
 const DEFAULT_DROPDOWN_MAX_HEIGHT = 280;
 const DROPDOWN_VIEWPORT_PADDING = 8;
 const DROPDOWN_PORTAL_Z_INDEX = 2500;
-const SEARCHABLE_SELECT_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
-  {
-    label: "Navigate",
-    keys: ["ArrowUp", "ArrowDown"],
-  },
-  {
-    label: "Select",
-    keys: ["Enter"],
-  },
-  {
-    label: "Close",
-    keys: ["Escape"],
-  },
-];
 
 function normalizeSearchValue(value: string): string {
   return value.trim().toLowerCase();
@@ -350,12 +332,6 @@ export function SearchableSelect({
           <li className={dynamicFormStyles.searchSelectEmpty}>{emptyText}</li>
         )}
       </ul>
-      <div className={dynamicFormStyles.searchSelectShortcutBar}>
-        <KeyboardShortcutHints
-          shortcuts={SEARCHABLE_SELECT_SHORTCUTS}
-          dense
-        />
-      </div>
     </div>
   ) : null;
 

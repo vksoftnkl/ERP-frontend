@@ -1,6 +1,8 @@
 "use client";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import CrudMasterPage from "@/components/master/crud-master-page";
+import CrudMasterPage, {
+  type CrudMasterPageController,
+} from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import type {
   ERPDynamicCustomFieldRenderProps,
@@ -844,6 +846,17 @@ type ItemWidgetConfigRecord = {
   widgetVisibility: boolean;
   widgetGuiName: string;
   widgetSecondaryText: string;
+};
+
+type ItemMasterPageContentProps = {
+  inlineModalOnly?: boolean;
+  onCrudControllerReady?: (controller: CrudMasterPageController | null) => void;
+  onModalOpenChange?: (open: boolean, variantKey: string | null) => void;
+  onItemSaved?: (params: {
+    itemId: string;
+    shouldUpdate: boolean;
+    values: Record<string, string>;
+  }) => void | Promise<void>;
 };
 
 type ItemFormSection = {
@@ -4073,7 +4086,12 @@ async function buildItemRequestPayload({
   }
   return payload;
 }
-export default function ItemMasterPageContent() {
+export default function ItemMasterPageContent({
+  inlineModalOnly,
+  onCrudControllerReady,
+  onModalOpenChange,
+  onItemSaved,
+}: ItemMasterPageContentProps = {}) {
   const { getAll: getSupplierLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getCustomerGroupLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getItemLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
@@ -5183,6 +5201,7 @@ export default function ItemMasterPageContent() {
       modalHideFieldHelperText
       modalFocusFirstInvalidFieldOnValidationError
       modalEnableArrowKeyFieldNavigation
+      hideListPage={inlineModalOnly}
       augmentDetailSource={({ recordId, source, rowSource }) =>
         augmentItemDetailSource({
           recordId,
@@ -5194,7 +5213,9 @@ export default function ItemMasterPageContent() {
         mapItemFormValues(source, defaults, itemTaxRecordsById)
       }
       buildRequestPayload={(params) => buildItemRequestPayload(params)}
-      afterSubmitSuccess={async ({ response, payload, values, editingItemId }) => {
+      onCrudControllerReady={onCrudControllerReady}
+      onModalOpenChange={onModalOpenChange}
+      afterSubmitSuccess={async ({ response, payload, values, editingItemId, shouldUpdate }) => {
         const responseSource = extractResponseRecord(response);
         const savedItemId =
           toDisplayValue(getFieldValue(responseSource ?? {}, "item_id")) ||
@@ -5213,6 +5234,11 @@ export default function ItemMasterPageContent() {
           syncLinkedItemReorder(savedItemId, normalizedValues),
           syncLinkedItemEanCode(savedItemId, normalizedValues),
         ]);
+        await onItemSaved?.({
+          itemId: savedItemId,
+          shouldUpdate,
+          values,
+        });
       }}
       afterDeleteSuccess={async ({ deleteId, rowSource }) => {
         const deletedItemId =

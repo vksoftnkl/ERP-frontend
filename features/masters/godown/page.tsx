@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import CrudMasterPage from "@/components/master/crud-master-page";
+import CrudMasterPage, { type CrudMasterPageController } from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import type {
   ERPDynamicModalField,
@@ -202,6 +202,17 @@ const GODOWN_INITIAL_FORM_VALUES = {
   masterDescription: "",
 } as const;
 
+type GodownMasterPageContentProps = {
+  inlineModalOnly?: boolean;
+  onCrudControllerReady?: (controller: CrudMasterPageController | null) => void;
+  onModalOpenChange?: (open: boolean, variantKey: string | null) => void;
+  onGodownSaved?: (params: {
+    godownId: string;
+    shouldUpdate: boolean;
+    values: Record<string, string>;
+  }) => void | Promise<void>;
+};
+
 function buildGodownFormFields(
   branchOptions: ERPDynamicSelectOption[],
   parentOptions: ERPDynamicSelectOption[],
@@ -393,6 +404,19 @@ function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] 
   return Array.isArray(firstArray) ? firstArray : [];
 }
 
+function extractResponseRecord(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+
+  const root = payload as Record<string, unknown>;
+  if (root.data && typeof root.data === "object" && !Array.isArray(root.data)) {
+    return root.data as Record<string, unknown>;
+  }
+
+  return root;
+}
+
 function buildBranchOptions(payload: unknown): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();
   const rows = extractRows(payload, BRANCH_LOOKUP_KEYS.array);
@@ -487,7 +511,12 @@ function toUpdateGodownId(editingItemId: string | number | null): string | numbe
   return "";
 }
 
-export default function GodownMasterPage() {
+export default function GodownMasterPageContent({
+  inlineModalOnly,
+  onCrudControllerReady,
+  onModalOpenChange,
+  onGodownSaved,
+}: GodownMasterPageContentProps = {}) {
   const { getAll: getBranchLookup } = useApi<unknown>(BRANCH_LOOKUP_ENDPOINT);
   const { getAll: getParentLookup } = useApi<unknown>(PARENT_LOOKUP_ENDPOINT);
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([
@@ -552,6 +581,9 @@ export default function GodownMasterPage() {
       formDescription="Create and update godown locations."
       customFields={godownFormFields}
       createInitialValues={GODOWN_INITIAL_FORM_VALUES}
+      onCrudControllerReady={onCrudControllerReady}
+      onModalOpenChange={onModalOpenChange}
+      hideListPage={inlineModalOnly}
       buildGetByIdRequest={({ recordId }) => ({
         query: {
           gdl_id: String(recordId),
@@ -638,6 +670,22 @@ export default function GodownMasterPage() {
           gdl_is_active: gdlIsActive,
           gdl_remarks: gdlRemarks,
         };
+      }}
+      afterSubmitSuccess={async ({ response, payload, values, editingItemId, shouldUpdate }) => {
+        const responseSource = extractResponseRecord(response);
+        const savedGodownId =
+          toDisplayValue(getFirstDefinedValue(responseSource ?? {}, LOOKUP_KEYS.id)) ||
+          toDisplayValue(payload.gdl_id) ||
+          (editingItemId !== null ? String(editingItemId) : "");
+        if (!savedGodownId) {
+          return;
+        }
+
+        await onGodownSaved?.({
+          godownId: savedGodownId,
+          shouldUpdate,
+          values,
+        });
       }}
     />
   );

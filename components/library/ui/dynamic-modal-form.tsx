@@ -1891,39 +1891,6 @@ export function ERPDynamicModalForm({
     const shouldUseSearchableSelect =
       inputType === "select" && field.searchable !== false;
     const isSearchOpen = openSearchField === field.name;
-    const searchShortcutHints: KeyboardShortcutDefinition[] =
-      shouldUseSearchableSelect
-        ? [
-            {
-              label: "Navigate",
-              keys: ["ArrowUp", "ArrowDown"],
-            },
-            {
-              label: isMultiSelect ? "Toggle" : "Select",
-              keys: ["Enter"],
-            },
-            {
-              label: "Close",
-              keys: ["Escape"],
-            },
-            ...(field.onSearchCreateShortcut
-              ? [
-                  {
-                    label: "Create",
-                    keys: ["Alt", "C"],
-                  },
-                ]
-              : []),
-            ...(field.onSearchEditShortcut
-              ? [
-                  {
-                    label: "Edit",
-                    keys: ["Alt", "A"],
-                  },
-                ]
-              : []),
-          ]
-        : [];
     const normalizedQuery = (searchQuery ?? "")
       .trim()
       .toLowerCase();
@@ -2318,12 +2285,6 @@ export function ERPDynamicModalForm({
                     </li>
                   )}
                 </ul>
-                <div className={styles.searchSelectShortcutBar}>
-                  <KeyboardShortcutHints
-                    shortcuts={searchShortcutHints}
-                    dense
-                  />
-                </div>
               </div>
             ) : null}
           </div>

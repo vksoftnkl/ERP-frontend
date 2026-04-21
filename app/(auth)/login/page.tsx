@@ -1,5 +1,4 @@
 "use client";
-
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import clientPackageJson from "../../../package.json";
@@ -17,19 +16,15 @@ import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useLoginMutation } from "@/store/api/authApi";
 import { useAppDispatch } from "@/store/hooks";
 import { authSessionChanged } from "@/store/slices/authSlice";
-
 const CLIENT_APP_VERSION = `erp-client@${clientPackageJson.version}`;
-
 type Errors = {
   username?: string;
   password?: string;
 };
-
 function normalizeNextRoute(nextRoute: string | null): string {
   const normalizedRoute = normalizeInternalRoute(nextRoute, "/");
   return normalizedRoute.startsWith("/login") ? "/" : normalizedRoute;
 }
-
 export default function LoginPage() {
   const dispatch = useAppDispatch();
   const router = useRouter();
@@ -38,26 +33,20 @@ export default function LoginPage() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [login, { isLoading, error }] = useLoginMutation();
   const loginError = getApiErrorMessage(error);
-
   const validate = () => {
     const next: Errors = {};
     const username = values.username.trim();
-
     if (!username) next.username = "User Name is required.";
     else if (username.length < 3) next.username = "Minimum 3 characters.";
-
     if (!values.password) next.password = "Password is required.";
     else if (values.password.length < 4) next.password = "Minimum 4 characters.";
-
     setErrors(next);
     return Object.keys(next).length === 0;
   };
-
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!validate()) return;
     setAuthError(null);
-
     try {
       const response = await login({
         user_name: values.username.trim(),
@@ -78,7 +67,6 @@ export default function LoginPage() {
         return;
       }
       dispatch(authSessionChanged({ token, userId }));
-
       const nextRoute = normalizeNextRoute(
         new URLSearchParams(window.location.search).get("next")
       );
@@ -86,29 +74,24 @@ export default function LoginPage() {
         window.location.assign(nextRoute);
         return;
       }
-
       router.push(nextRoute);
     } catch {
       // Error state is surfaced by the RTK Query mutation hook.
     }
   };
-
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setValues((p) => ({ ...p, [name]: value }));
     setErrors((p) => ({ ...p, [name]: "" }));
     setAuthError(null);
   };
-
   const inputBase =
-    "w-full rounded-[4px] border px-3.5 py-2.5 text-[0.95rem] outline-none transition " +
+    "w-full rounded-[4px] border p-2 text-[0.95rem] outline-none transition " +
     "placeholder:text-slate-500/80 " +
     "bg-white text-slate-900 border-slate-300/90 " +
     "focus:border-sky-500 focus:ring-4 focus:ring-sky-500/20";
-
   const inputError =
     "border-rose-500/80 focus:border-rose-500 focus:ring-rose-500/20";
-
   return (
     <main
       className={[
@@ -136,7 +119,7 @@ export default function LoginPage() {
         aria-labelledby="login-heading"
         className={[
           "relative w-full max-w-[28rem]",
-          "rounded-[4px] border p-6 sm:p-7",
+          "rounded-[4px] border p-4 sm:p-4",
           "bg-white/90 border-slate-900/10 shadow-[0_1.2rem_3rem_rgba(31,62,87,0.16)]",
           "backdrop-blur-[8px]",
           "animate-[rise_0.5s_ease_both]",
@@ -220,7 +203,7 @@ export default function LoginPage() {
             type="submit"
             disabled={isLoading}
             className={[
-              "mt-1 rounded-[4px] px-4 py-3 font-bold text-[0.96rem] text-white",
+              "mt-1 rounded-[4px] p-2 font-bold text-[0.96rem] text-white",
               "bg-[linear-gradient(120deg,#0d7ebf,#0b6ca4)]",
               "transition duration-150",
               "hover:-translate-y-[1px] hover:shadow-[0_0.6rem_1.4rem_rgba(13,126,191,0.28)]",

@@ -17,7 +17,12 @@ import {
   KeyboardShortcutHints,
   type KeyboardShortcutDefinition,
 } from "@/components/library/ui/keyboard-shortcut-hints";
+import type { ERPDynamicSearchShortcutPayload } from "@/components/library/ui/dynamic-modal-form";
+import type { CrudMasterPageController } from "@/components/master/crud-master-page";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
+import GodownMasterPageContent from "@/features/masters/godown/page";
+import ItemMasterPageContent from "@/features/masters/item/item-master-page";
+import { resolveOptionFromShortcut } from "@/features/masters/shared";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";
 import {
@@ -65,6 +70,7 @@ import {
   LOOKUP_FIELD_CONFIG,
   LOOKUP_SEARCH_DEBOUNCE_MS,
   MIN_RESIZABLE_COLUMN_WIDTH,
+  OPENING_STOCK_DELETE_ENDPOINT,
   OPENING_STOCK_GET_ENDPOINT,
   OPENING_STOCK_LEDGER_NAME,
   OPENING_STOCK_LIST_ENDPOINT,
@@ -81,6 +87,7 @@ import {
 } from "./constants";
 import {
   INITIAL_ROWS,
+  OPENING_STOCK_SALE_PRICE_FIELD_PAIRS,
   buildGodownLookupOptions,
   buildInvalidFieldState,
   buildItemAutofillValues,
@@ -101,8 +108,9 @@ import {
   formatAccountingYear,
   formatQuantityValue,
   getOpeningStockActualConvFactor,
+  getOpeningStockCostInputValue,
   getOpeningStockCostWotInputValue,
-  getOpeningStockTaxExclusiveInputValue,
+  getOpeningStockSalePairDerivedValues,
   getRowValidationIssues,
   getTableMinWidth,
   getTodayInputValue,
@@ -122,13 +130,11 @@ import {
   toIsoDateTime,
   toNullableTrimmedString,
 } from "./Utils";
-
 function renderValidationToastContent(
   issues: Array<{ rowId: number; fieldKey: string; message: string }>,
 ) {
   const visibleIssues = issues.slice(0, 5);
   const remainingCount = issues.length - visibleIssues.length;
-
   return (
     <div>
       <div style={{ fontWeight: 700, marginBottom: "0.35rem" }}>
@@ -141,7 +147,6 @@ function renderValidationToastContent(
     </div>
   );
 }
-
 const OPENING_STOCK_TABLE_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   {
     label: "Prev Cell",
@@ -156,11 +161,21 @@ const OPENING_STOCK_TABLE_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
     keys: ["Escape"],
   },
 ];
-
 type OpeningStockLoadRequest =
   | { type: "latest" }
   | { type: "refno"; refNo: string };
-
+type InlineItemMasterRequest = {
+  itemId: string;
+  mode: "create" | "update";
+  query: string;
+  rowId: number;
+};
+type InlineGodownMasterRequest = {
+  godownId: string;
+  mode: "create" | "update";
+  query: string;
+  rowId: number;
+};
 export default function OpeningStockPage() {
   const [voucherDate, setVoucherDate] = useState(() => getTodayInputValue());
   const [voucherRefNo, setVoucherRefNo] = useState("");
@@ -184,10 +199,16 @@ export default function OpeningStockPage() {
   const [isLoadingStock, setIsLoadingStock] = useState(false);
   const [pendingLoadRequest, setPendingLoadRequest] =
     useState<OpeningStockLoadRequest | null>(null);
+  const [isDeleteLoadedStockConfirmOpen, setIsDeleteLoadedStockConfirmOpen] = useState(false);
+  const [isInlineItemMasterOpen, setIsInlineItemMasterOpen] = useState(false);
+  const [inlineItemMasterSession, setInlineItemMasterSession] =
+    useState<InlineItemMasterRequest | null>(null);
+  const [isInlineGodownMasterOpen, setIsInlineGodownMasterOpen] = useState(false);
+  const [inlineGodownMasterSession, setInlineGodownMasterSession] =
+    useState<InlineGodownMasterRequest | null>(null);
   const [openLookupCell, setOpenLookupCell] = useState<LookupCellState | null>(null);
   const [lookupSearchQuery, setLookupSearchQuery] = useState("");
   const [columns, setColumns] = useState<ColumnDefinition[]>([]);
-
   const tableRef = useRef<HTMLTableElement | null>(null);
   const lookupRootRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const lookupSearchInputRef = useRef<HTMLInputElement | null>(null);
@@ -197,6 +218,10 @@ export default function OpeningStockPage() {
   const itemSearchRequestRef = useRef(0);
   const itemDetailRequestRef = useRef<Record<number, number>>({});
   const taxDetailRequestRef = useRef<Record<number, number>>({});
+  const inlineItemMasterControllerRef = useRef<CrudMasterPageController | null>(null);
+  const pendingInlineItemMasterRequestRef = useRef<InlineItemMasterRequest | null>(null);
+  const inlineGodownMasterControllerRef = useRef<CrudMasterPageController | null>(null);
+  const pendingInlineGodownMasterRequestRef = useRef<InlineGodownMasterRequest | null>(null);
   const godownSearchTimeoutRef = useRef<number | null>(null);
   const godownSearchRequestRef = useRef(0);
   const draggingColumnKeyRef = useRef<string | null>(null);
@@ -205,13 +230,11 @@ export default function OpeningStockPage() {
     startX: number;
     startWidth: number;
   } | null>(null);
-
   const {
     activeCompany,
     activeBranch,
     loading: isBusinessContextLoading,
   } = useBusinessContext();
-
   const { getAll: listUiTableColumns } = useApi<
     ApiSuccessResponse<UiTableColumnPayload[], ListMeta>
   >(UI_TABLE_COLUMNS_LIST_ENDPOINT, {
@@ -267,14 +290,21 @@ export default function OpeningStockPage() {
       successMessage: "Opening stock updated successfully.",
     },
   });
-
+  const { run: deleteOpeningStock, loading: isDeletingOpeningStock } = useApi<unknown>(
+    OPENING_STOCK_DELETE_ENDPOINT,
+    {
+      method: "DELETE",
+      toast: {
+        successMessage: "Opening stock deleted successfully.",
+      },
+    },
+  );
   const [triggerItemOptions, { isFetching: isItemLookupLoading }] =
     useLazyGetItemOptionsQuery();
   const [triggerTaxOptions] = useLazyGetTaxOptionsQuery();
   const [triggerUnitOptions] = useLazyGetUnitOptionsQuery();
   const [triggerItemPriceDetails] = useLazyGetItemPriceDetailsQuery();
   const [triggerItemTaxById] = useLazyGetItemTaxByIdQuery();
-
   const loadLookupOptions = useCallback(
     async (lookupKind: LookupKind, search = ""): Promise<ERPDynamicSelectOption[]> => {
       const normalizedSearch = search.trim();
@@ -284,12 +314,10 @@ export default function OpeningStockPage() {
           true,
         ).unwrap();
       }
-
       const activeBranchId = activeBranch?.brId?.trim() ?? "";
       if (!activeBranchId) {
         return [DEFAULT_GODOWN_OPTION];
       }
-
       const payload = await listGodowns({
         query: {
           ...GODOWN_LOOKUP_QUERY,
@@ -301,7 +329,6 @@ export default function OpeningStockPage() {
     },
     [activeBranch?.brId, listGodowns, triggerItemOptions],
   );
-
   const loadUnitOptions = useCallback(
     async (search = ""): Promise<ERPDynamicSelectOption[]> => {
       const normalizedSearch = search.trim();
@@ -312,15 +339,12 @@ export default function OpeningStockPage() {
     },
     [triggerUnitOptions],
   );
-
   const loadTaxOptions = useCallback(
     async (): Promise<ERPDynamicSelectOption[]> => triggerTaxOptions(undefined, true).unwrap(),
     [triggerTaxOptions],
   );
-
   useEffect(() => {
     let cancelled = false;
-
     const loadUiColumnConfig = async () => {
       try {
         const payload = await listUiTableColumns({ ...UI_TABLE_COLUMNS_QUERY });
@@ -333,16 +357,13 @@ export default function OpeningStockPage() {
         }
       }
     };
-
     void loadUiColumnConfig();
     return () => {
       cancelled = true;
     };
   }, [listUiTableColumns]);
-
   useEffect(() => {
     let cancelled = false;
-
     void (async () => {
       const [itemsPayload, taxesPayload, unitsPayload, unitDecimalsPayload, godownsPayload] =
         await Promise.allSettled([
@@ -352,11 +373,9 @@ export default function OpeningStockPage() {
         listUnits({ query: { ...UNIT_LIST_QUERY } }),
         loadLookupOptions("godown"),
       ]);
-
       if (cancelled) {
         return;
       }
-
       if (itemsPayload.status === "fulfilled") {
         setItemOptions(itemsPayload.value);
       }
@@ -373,17 +392,14 @@ export default function OpeningStockPage() {
         setGodownOptions(godownsPayload.value);
       }
     })();
-
     return () => {
       cancelled = true;
     };
   }, [listUnits, loadLookupOptions, loadTaxOptions, loadUnitOptions]);
-
   useEffect(() => {
     if (!openLookupCell) {
       return;
     }
-
     const animationFrame = window.requestAnimationFrame(() => {
       lookupSearchInputRef.current?.focus();
     });
@@ -391,12 +407,10 @@ export default function OpeningStockPage() {
       window.cancelAnimationFrame(animationFrame);
     };
   }, [openLookupCell]);
-
   useEffect(() => {
     if (!openLookupCell) {
       return;
     }
-
     const handlePointerDown = (event: MouseEvent) => {
       const lookupRootElement = openLookupCell ? lookupRootRefs.current[openLookupCell.key] : null;
       if (lookupRootElement && !lookupRootElement.contains(event.target as Node)) {
@@ -404,14 +418,12 @@ export default function OpeningStockPage() {
         setLookupSearchQuery("");
       }
     };
-
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpenLookupCell(null);
         setLookupSearchQuery("");
       }
     };
-
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleEscape);
     return () => {
@@ -419,7 +431,6 @@ export default function OpeningStockPage() {
       document.removeEventListener("keydown", handleEscape);
     };
   }, [openLookupCell]);
-
   useEffect(() => {
     return () => {
       if (itemSearchTimeoutRef.current !== null) {
@@ -430,7 +441,6 @@ export default function OpeningStockPage() {
       }
     };
   }, []);
-
   const unitOptionsByValue = useMemo(
     () =>
       new Map(
@@ -440,7 +450,6 @@ export default function OpeningStockPage() {
       ),
     [unitOptions],
   );
-
   const taxOptionsByValue = useMemo(
     () =>
       new Map(
@@ -450,44 +459,36 @@ export default function OpeningStockPage() {
       ),
     [taxOptions],
   );
-
   const itemOptionsByValue = useMemo(
     () => new Map(itemOptions.map((option) => [option.value, option.label])),
     [itemOptions],
   );
-
   const godownOptionsByValue = useMemo(
     () => new Map(godownOptions.map((option) => [option.value, option.label])),
     [godownOptions],
   );
-
   const filteredItemOptions = useMemo(
     () => filterLookupOptions(itemOptions, lookupSearchQuery),
     [itemOptions, lookupSearchQuery],
   );
-
   const filteredGodownOptions = useMemo(
     () => filterLookupOptions(godownOptions, lookupSearchQuery),
     [godownOptions, lookupSearchQuery],
   );
-
   useEffect(() => {
     if (unitOptionsByValue.size === 0) {
       return;
     }
-
     setRows((currentRows) =>
       currentRows.map((row) => {
         const unitId = row.values.oslunitid?.trim() ?? "";
         if (!unitId) {
           return row;
         }
-
         const unitLabel = unitOptionsByValue.get(unitId);
         if (!unitLabel || row.values.uom === unitLabel) {
           return row;
         }
-
         return {
           ...row,
           values: {
@@ -498,15 +499,12 @@ export default function OpeningStockPage() {
       }),
     );
   }, [unitOptionsByValue]);
-
   useEffect(() => {
     if (Object.keys(unitDecimalCountById).length === 0) {
       return;
     }
-
     setRows((currentRows) => {
       let changed = false;
-
       const nextRows = currentRows.map((row) => {
         const normalizedRow = normalizeOpeningStockRowQuantitiesByUnit(row, unitDecimalCountById);
         if (normalizedRow !== row) {
@@ -514,39 +512,31 @@ export default function OpeningStockPage() {
         }
         return normalizedRow;
       });
-
       return changed ? nextRows : currentRows;
     });
   }, [rows, unitDecimalCountById]);
-
   const resolvedColumns = useMemo(
     () => resolveConfiguredColumns(uiColumnConfigs),
     [uiColumnConfigs],
   );
-
   useEffect(() => {
     setColumns((current) => mergeResolvedColumns(current, resolvedColumns));
   }, [resolvedColumns]);
-
   const draftRows = useMemo(() => rows.filter((row) => !isPristineRow(row)), [rows]);
   const draftTotals = useMemo(() => getTotals(draftRows), [draftRows]);
   const visibleTotals = useMemo(() => getTotals(rows), [rows]);
-
   useEffect(() => {
     if (Object.keys(invalidFieldKeys).length === 0) {
       return;
     }
-
     setInvalidFieldKeys((current) => {
       let changed = false;
       const next = { ...current };
-
       for (const invalidFieldKey of Object.keys(current)) {
         const separatorIndex = invalidFieldKey.indexOf(":");
         if (separatorIndex === -1) {
           continue;
         }
-
         const rowId = Number(invalidFieldKey.slice(0, separatorIndex));
         const fieldKey = invalidFieldKey.slice(separatorIndex + 1);
         const row = rows.find((candidate) => candidate.id === rowId);
@@ -555,18 +545,14 @@ export default function OpeningStockPage() {
           changed = true;
         }
       }
-
       return changed ? next : current;
     });
   }, [invalidFieldKeys, rows]);
-
   const accountingYear = formatAccountingYear(voucherDate);
-
   useEffect(() => {
     if (!loadedVoucherId || !loadedDocumentMeta || isBusinessContextLoading) {
       return;
     }
-
     const currentCompanyId = activeCompany?.compId ?? null;
     const currentBranchId = activeBranch?.brId ?? null;
     if (
@@ -575,7 +561,6 @@ export default function OpeningStockPage() {
     ) {
       return;
     }
-
     setLoadedVoucherId(null);
     setLoadedDocumentMeta(null);
   }, [
@@ -585,7 +570,6 @@ export default function OpeningStockPage() {
     loadedDocumentMeta,
     loadedVoucherId,
   ]);
-
   const prefetchLoadedItemDetails = useCallback(
     async (details: OpeningStockDocumentPayload["details"]) => {
       const itemIds = Array.from(
@@ -598,19 +582,16 @@ export default function OpeningStockPage() {
       if (itemIds.length === 0) {
         return;
       }
-
       const itemDetails = await Promise.allSettled(
         itemIds.map((itemId) => triggerItemPriceDetails({ itemId }, true).unwrap()),
       );
       const nextItemDetailsById: Record<string, ItemPriceDetailsPayload> = {};
-
       for (const itemDetail of itemDetails) {
         if (itemDetail.status !== "fulfilled") {
           continue;
         }
         nextItemDetailsById[itemDetail.value.item.item_id] = itemDetail.value;
       }
-
       if (Object.keys(nextItemDetailsById).length > 0) {
         setItemDetailsByItemId((current) => ({
           ...current,
@@ -620,7 +601,60 @@ export default function OpeningStockPage() {
     },
     [triggerItemPriceDetails],
   );
-
+  const getNextRowValuesWithDerivedPrices = useCallback(
+    (values: OpeningStockRow["values"], sourceField?: string): OpeningStockRow["values"] => {
+      const nextValues = {
+        ...values,
+      };
+      if (sourceField === "costwot") {
+        nextValues.costprice = getOpeningStockCostInputValue(values.costwot, values.osltaxperc);
+      } else {
+        nextValues.costwot = getOpeningStockCostWotInputValue(values.costprice, values.osltaxperc);
+      }
+      const changedSalePair = sourceField
+        ? OPENING_STOCK_SALE_PRICE_FIELD_PAIRS.find(
+            ({ markupField, saleField, saleWotField }) =>
+              sourceField === saleField ||
+              sourceField === saleWotField ||
+              sourceField === markupField,
+          )
+        : undefined;
+      if (changedSalePair) {
+        Object.assign(
+          nextValues,
+          getOpeningStockSalePairDerivedValues(
+            nextValues,
+            changedSalePair,
+            sourceField === changedSalePair.saleWotField
+              ? "saleWot"
+              : sourceField === changedSalePair.markupField
+                ? "markup"
+                : "sale",
+          ),
+        );
+        return nextValues;
+      }
+      if (
+        sourceField === "costwot" ||
+        sourceField === "costprice" ||
+        sourceField === "profittype" ||
+        sourceField === "roundoff"
+      ) {
+        for (const salePair of OPENING_STOCK_SALE_PRICE_FIELD_PAIRS) {
+          Object.assign(
+            nextValues,
+            getOpeningStockSalePairDerivedValues(nextValues, salePair, "markup"),
+          );
+        }
+        return nextValues;
+      }
+      for (const salePair of OPENING_STOCK_SALE_PRICE_FIELD_PAIRS) {
+        Object.assign(nextValues, getOpeningStockSalePairDerivedValues(nextValues, salePair));
+      }
+      return nextValues;
+    },
+    [],
+  );
   const handleRowChange = useCallback(
     (rowId: number, field: string, value: string) => {
       setRows((currentRows) =>
@@ -631,7 +665,6 @@ export default function OpeningStockPage() {
                   ...row.values,
                   [field]: value,
                 };
-
                 if (field === "osltaxid") {
                   const normalizedTaxId = value.trim();
                   nextValues.taxname = normalizedTaxId
@@ -642,44 +675,26 @@ export default function OpeningStockPage() {
                   nextValues.oslcessperc = DEFAULT_ROW_VALUES.oslcessperc ?? "";
                   nextValues.oslcessperunit = DEFAULT_ROW_VALUES.oslcessperunit ?? "";
                 }
-
-                if (field === "costprice" || field === "osltaxid" || field === "osltaxperc") {
-                  nextValues.costwot = getOpeningStockCostWotInputValue(
-                    nextValues.costprice,
-                    nextValues.osltaxperc,
-                  );
-                }
-
+                const changedSalePair = OPENING_STOCK_SALE_PRICE_FIELD_PAIRS.find(
+                  ({ markupField, saleField, saleWotField }) =>
+                    field === saleField ||
+                    field === saleWotField ||
+                    field === markupField,
+                );
                 if (
-                  field === "pricea" ||
-                  field === "priceb" ||
-                  field === "pricec" ||
-                  field === "priced" ||
+                  changedSalePair ||
+                  field === "costwot" ||
+                  field === "costprice" ||
+                  field === "profittype" ||
+                  field === "roundoff" ||
                   field === "osltaxid" ||
                   field === "osltaxperc"
                 ) {
-                  nextValues.priceawot = getOpeningStockTaxExclusiveInputValue(
-                    "priceawot",
-                    nextValues.pricea,
-                    nextValues.osltaxperc,
-                  );
-                  nextValues.pricebwot = getOpeningStockTaxExclusiveInputValue(
-                    "pricebwot",
-                    nextValues.priceb,
-                    nextValues.osltaxperc,
-                  );
-                  nextValues.pricecwot = getOpeningStockTaxExclusiveInputValue(
-                    "pricecwot",
-                    nextValues.pricec,
-                    nextValues.osltaxperc,
-                  );
-                  nextValues.pricedwot = getOpeningStockTaxExclusiveInputValue(
-                    "pricedwot",
-                    nextValues.priced,
-                    nextValues.osltaxperc,
+                  Object.assign(
+                    nextValues,
+                    getNextRowValuesWithDerivedPrices(nextValues, field),
                   );
                 }
-
                 if (field === "openingqty" || field === "freeqty" || field === "convfactor") {
                   const convFactor =
                     field === "convfactor"
@@ -734,34 +749,10 @@ export default function OpeningStockPage() {
                       const nextTaxValues = buildTaxSelectionValues(taxDetail);
                       return {
                         ...row,
-                        values: {
+                        values: getNextRowValuesWithDerivedPrices({
                           ...row.values,
                           ...nextTaxValues,
-                          costwot: getOpeningStockCostWotInputValue(
-                            row.values.costprice,
-                            nextTaxValues.osltaxperc,
-                          ),
-                          priceawot: getOpeningStockTaxExclusiveInputValue(
-                            "priceawot",
-                            row.values.pricea,
-                            nextTaxValues.osltaxperc,
-                          ),
-                          pricebwot: getOpeningStockTaxExclusiveInputValue(
-                            "pricebwot",
-                            row.values.priceb,
-                            nextTaxValues.osltaxperc,
-                          ),
-                          pricecwot: getOpeningStockTaxExclusiveInputValue(
-                            "pricecwot",
-                            row.values.pricec,
-                            nextTaxValues.osltaxperc,
-                          ),
-                          pricedwot: getOpeningStockTaxExclusiveInputValue(
-                            "pricedwot",
-                            row.values.priced,
-                            nextTaxValues.osltaxperc,
-                          ),
-                        },
+                        }),
                       };
                     })()
                   : row,
@@ -786,7 +777,7 @@ export default function OpeningStockPage() {
 
       setInvalidFieldKeys((current) => clearInvalidFieldKeys(current, rowId, [field]));
     },
-    [taxOptionsByValue, triggerItemTaxById],
+    [getNextRowValuesWithDerivedPrices, taxOptionsByValue, triggerItemTaxById],
   );
 
   const handleUomChange = useCallback(
@@ -933,34 +924,10 @@ export default function OpeningStockPage() {
                         const nextTaxValues = buildTaxSelectionValues(taxDetail);
                         return {
                           ...row,
-                          values: {
+                          values: getNextRowValuesWithDerivedPrices({
                             ...row.values,
                             ...nextTaxValues,
-                            costwot: getOpeningStockCostWotInputValue(
-                              row.values.costprice,
-                              nextTaxValues.osltaxperc,
-                            ),
-                            priceawot: getOpeningStockTaxExclusiveInputValue(
-                              "priceawot",
-                              row.values.pricea,
-                              nextTaxValues.osltaxperc,
-                            ),
-                            pricebwot: getOpeningStockTaxExclusiveInputValue(
-                              "pricebwot",
-                              row.values.priceb,
-                              nextTaxValues.osltaxperc,
-                            ),
-                            pricecwot: getOpeningStockTaxExclusiveInputValue(
-                              "pricecwot",
-                              row.values.pricec,
-                              nextTaxValues.osltaxperc,
-                            ),
-                            pricedwot: getOpeningStockTaxExclusiveInputValue(
-                              "pricedwot",
-                              row.values.priced,
-                              nextTaxValues.osltaxperc,
-                            ),
-                          },
+                          }),
                         };
                       })()
                     : row,
@@ -1027,34 +994,10 @@ export default function OpeningStockPage() {
                         const nextTaxValues = buildTaxSelectionValues(taxDetail);
                         return {
                           ...row,
-                          values: {
+                          values: getNextRowValuesWithDerivedPrices({
                             ...row.values,
                             ...nextTaxValues,
-                            costwot: getOpeningStockCostWotInputValue(
-                              row.values.costprice,
-                              nextTaxValues.osltaxperc,
-                            ),
-                            priceawot: getOpeningStockTaxExclusiveInputValue(
-                              "priceawot",
-                              row.values.pricea,
-                              nextTaxValues.osltaxperc,
-                            ),
-                            pricebwot: getOpeningStockTaxExclusiveInputValue(
-                              "pricebwot",
-                              row.values.priceb,
-                              nextTaxValues.osltaxperc,
-                            ),
-                            pricecwot: getOpeningStockTaxExclusiveInputValue(
-                              "pricecwot",
-                              row.values.pricec,
-                              nextTaxValues.osltaxperc,
-                            ),
-                            pricedwot: getOpeningStockTaxExclusiveInputValue(
-                              "pricedwot",
-                              row.values.priced,
-                              nextTaxValues.osltaxperc,
-                            ),
-                          },
+                          }),
                         };
                       })()
                     : row,
@@ -1083,6 +1026,7 @@ export default function OpeningStockPage() {
       })();
     },
     [
+      getNextRowValuesWithDerivedPrices,
       godownOptionsByValue,
       itemDetailsByItemId,
       taxOptionsByValue,
@@ -1092,10 +1036,299 @@ export default function OpeningStockPage() {
     ],
   );
 
+  const handleCloseInlineItemMaster = useCallback((closeModal = true) => {
+    if (closeModal) {
+      inlineItemMasterControllerRef.current?.closeModal();
+    }
+    inlineItemMasterControllerRef.current = null;
+    pendingInlineItemMasterRequestRef.current = null;
+    setInlineItemMasterSession(null);
+    setIsInlineItemMasterOpen(false);
+  }, []);
+
+  const handleCloseInlineGodownMaster = useCallback((closeModal = true) => {
+    if (closeModal) {
+      inlineGodownMasterControllerRef.current?.closeModal();
+    }
+    inlineGodownMasterControllerRef.current = null;
+    pendingInlineGodownMasterRequestRef.current = null;
+    setInlineGodownMasterSession(null);
+    setIsInlineGodownMasterOpen(false);
+  }, []);
+
+  const handleInlineItemMasterControllerReady = useCallback(
+    (controller: CrudMasterPageController | null) => {
+      inlineItemMasterControllerRef.current = controller;
+      if (!controller) {
+        return;
+      }
+
+      const request = pendingInlineItemMasterRequestRef.current;
+      if (!request) {
+        return;
+      }
+      pendingInlineItemMasterRequestRef.current = null;
+
+      if (request.mode === "create") {
+        controller.openCreate({
+          values: request.query
+            ? {
+                item_name_en: request.query,
+              }
+            : undefined,
+        });
+        return;
+      }
+
+      void controller.openUpdateById(request.itemId);
+    },
+    [],
+  );
+
+  const handleInlineGodownMasterControllerReady = useCallback(
+    (controller: CrudMasterPageController | null) => {
+      inlineGodownMasterControllerRef.current = controller;
+      if (!controller) {
+        return;
+      }
+
+      const request = pendingInlineGodownMasterRequestRef.current;
+      if (!request) {
+        return;
+      }
+      pendingInlineGodownMasterRequestRef.current = null;
+
+      if (request.mode === "create") {
+        controller.openCreate({
+          values: request.query
+            ? {
+                masterName: request.query,
+              }
+            : undefined,
+        });
+        return;
+      }
+
+      void controller.openUpdateById(request.godownId);
+    },
+    [],
+  );
+
+  const handleInlineItemMasterModalOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        handleCloseInlineItemMaster(false);
+      }
+    },
+    [handleCloseInlineItemMaster],
+  );
+
+  const handleInlineGodownMasterModalOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        handleCloseInlineGodownMaster(false);
+      }
+    },
+    [handleCloseInlineGodownMaster],
+  );
+
+  const handleItemLookupCreateShortcut = useCallback(
+    (rowId: number, payload: ERPDynamicSearchShortcutPayload) => {
+      const nextRequest: InlineItemMasterRequest = {
+        itemId: "",
+        mode: "create",
+        query: payload.query.trim(),
+        rowId,
+      };
+      setInlineItemMasterSession(nextRequest);
+      pendingInlineItemMasterRequestRef.current = nextRequest;
+      setIsInlineItemMasterOpen(true);
+    },
+    [],
+  );
+
+  const handleItemLookupEditShortcut = useCallback(
+    (rowId: number, payload: ERPDynamicSearchShortcutPayload) => {
+      const matchedOption = resolveOptionFromShortcut(payload, itemOptions);
+      const itemId = payload.value.trim() || matchedOption?.value.trim() || "";
+      if (!itemId) {
+        toast.info("Type/select an existing item, then press Alt+A.");
+        return;
+      }
+
+      const nextRequest: InlineItemMasterRequest = {
+        itemId,
+        mode: "update",
+        query: payload.query.trim(),
+        rowId,
+      };
+      setInlineItemMasterSession(nextRequest);
+      pendingInlineItemMasterRequestRef.current = nextRequest;
+      setIsInlineItemMasterOpen(true);
+    },
+    [itemOptions],
+  );
+
+  const handleGodownLookupCreateShortcut = useCallback(
+    (rowId: number, payload: ERPDynamicSearchShortcutPayload) => {
+      const nextRequest: InlineGodownMasterRequest = {
+        godownId: "",
+        mode: "create",
+        query: payload.query.trim(),
+        rowId,
+      };
+      setInlineGodownMasterSession(nextRequest);
+      pendingInlineGodownMasterRequestRef.current = nextRequest;
+      setIsInlineGodownMasterOpen(true);
+    },
+    [],
+  );
+
+  const handleGodownLookupEditShortcut = useCallback(
+    (rowId: number, payload: ERPDynamicSearchShortcutPayload) => {
+      const matchedOption = resolveOptionFromShortcut(payload, godownOptions);
+      const godownId = payload.value.trim() || matchedOption?.value.trim() || "";
+      if (!godownId) {
+        toast.info("Type/select an existing godown, then press Alt+A.");
+        return;
+      }
+
+      const nextRequest: InlineGodownMasterRequest = {
+        godownId,
+        mode: "update",
+        query: payload.query.trim(),
+        rowId,
+      };
+      setInlineGodownMasterSession(nextRequest);
+      pendingInlineGodownMasterRequestRef.current = nextRequest;
+      setIsInlineGodownMasterOpen(true);
+    },
+    [godownOptions],
+  );
+
+  const handleInlineItemMasterSaved = useCallback(
+    async (params: {
+      itemId: string;
+      shouldUpdate: boolean;
+      values: Record<string, string>;
+    }) => {
+      const activeRequest = inlineItemMasterSession;
+      if (!activeRequest) {
+        handleCloseInlineItemMaster();
+        return;
+      }
+
+      const itemName =
+        params.values.item_name_en?.trim() ||
+        params.values.masterName?.trim() ||
+        activeRequest.query;
+      let refreshedOptions: ERPDynamicSelectOption[] = [];
+
+      try {
+        refreshedOptions = await loadLookupOptions("item", itemName);
+      } catch {
+        refreshedOptions = [];
+      }
+
+      let resolvedOption =
+        refreshedOptions.find((option) => option.value.trim() === params.itemId) ??
+        itemOptions.find((option) => option.value.trim() === params.itemId) ??
+        null;
+
+      if (!resolvedOption && params.itemId.trim()) {
+        resolvedOption = {
+          label: itemName || params.itemId,
+          value: params.itemId,
+        };
+      }
+
+      if (resolvedOption) {
+        setItemOptions((currentOptions) =>
+          mergeLookupOptions(
+            currentOptions.filter((option) => option.value !== resolvedOption?.value),
+            [resolvedOption],
+          ),
+        );
+        handleLookupSelection(activeRequest.rowId, "item", resolvedOption);
+      } else if (refreshedOptions.length > 0) {
+        setItemOptions((currentOptions) => mergeLookupOptions(currentOptions, refreshedOptions));
+      }
+
+      setOpenLookupCell(null);
+      setLookupSearchQuery("");
+      handleCloseInlineItemMaster();
+    },
+    [
+      handleCloseInlineItemMaster,
+      handleLookupSelection,
+      inlineItemMasterSession,
+      itemOptions,
+      loadLookupOptions,
+    ],
+  );
+
+  const handleInlineGodownMasterSaved = useCallback(
+    async (params: {
+      godownId: string;
+      shouldUpdate: boolean;
+      values: Record<string, string>;
+    }) => {
+      const activeRequest = inlineGodownMasterSession;
+      if (!activeRequest) {
+        handleCloseInlineGodownMaster();
+        return;
+      }
+
+      const godownName = params.values.masterName?.trim() || activeRequest.query;
+      let refreshedOptions: ERPDynamicSelectOption[] = [];
+
+      try {
+        refreshedOptions = await loadLookupOptions("godown", godownName);
+      } catch {
+        refreshedOptions = [];
+      }
+
+      let resolvedOption =
+        refreshedOptions.find((option) => option.value.trim() === params.godownId) ??
+        godownOptions.find((option) => option.value.trim() === params.godownId) ??
+        null;
+
+      if (!resolvedOption && params.godownId.trim()) {
+        resolvedOption = {
+          label: godownName || params.godownId,
+          value: params.godownId,
+        };
+      }
+
+      if (resolvedOption) {
+        setGodownOptions((currentOptions) =>
+          mergeLookupOptions(
+            currentOptions.filter((option) => option.value !== resolvedOption?.value),
+            [resolvedOption],
+          ),
+        );
+        handleLookupSelection(activeRequest.rowId, "godown", resolvedOption);
+      } else if (refreshedOptions.length > 0) {
+        setGodownOptions((currentOptions) => mergeLookupOptions(currentOptions, refreshedOptions));
+      }
+
+      setOpenLookupCell(null);
+      setLookupSearchQuery("");
+      handleCloseInlineGodownMaster();
+    },
+    [
+      godownOptions,
+      handleCloseInlineGodownMaster,
+      handleLookupSelection,
+      inlineGodownMasterSession,
+      loadLookupOptions,
+    ],
+  );
+
   const handleLookupSearchChange = useCallback(
     (lookupKind: LookupKind, search: string) => {
       const normalizedSearch = search.trim();
-
+ 
       if (lookupKind === "item") {
         if (itemSearchTimeoutRef.current !== null) {
           window.clearTimeout(itemSearchTimeoutRef.current);
@@ -1251,6 +1484,18 @@ export default function OpeningStockPage() {
       currentCell?.key.startsWith(`${rowId}:`) ? null : currentCell,
     );
     setLookupSearchQuery("");
+  }, []);
+
+  const clearOpeningStockEditor = useCallback(() => {
+    setInvalidFieldKeys({});
+    setRows([createEmptyRow(1)]);
+    setLookupSearchQuery("");
+    setOpenLookupCell(null);
+    setLoadedVoucherId(null);
+    setLoadedDocumentMeta(null);
+    setVoucherRefNo("");
+    setPendingLoadRequest(null);
+    setIsDeleteLoadedStockConfirmOpen(false);
   }, []);
 
   const resolveLoadContext = useCallback(() => {
@@ -1616,14 +1861,7 @@ export default function OpeningStockPage() {
       await saveOpeningStock({
         body: requestPayload,
       });
-      setInvalidFieldKeys({});
-      setRows([createEmptyRow(1)]);
-      setLookupSearchQuery("");
-      setOpenLookupCell(null);
-      setLoadedVoucherId(null);
-      setLoadedDocumentMeta(null);
-      setVoucherRefNo("");
-      setPendingLoadRequest(null);
+      clearOpeningStockEditor();
     } catch {
       // Toasting is handled in useApi.
     }
@@ -1639,7 +1877,50 @@ export default function OpeningStockPage() {
     listAccountLedgers,
     saveOpeningStock,
     voucherDate,
+    clearOpeningStockEditor,
   ]);
+
+  const handleDeleteLoadedStock = useCallback(() => {
+    if (
+      !loadedVoucherId ||
+      isLoadingStock ||
+      isSavingOpeningStock ||
+      isDeletingOpeningStock ||
+      isBusinessContextLoading
+    ) {
+      return;
+    }
+
+    setIsDeleteLoadedStockConfirmOpen(true);
+  }, [
+    isBusinessContextLoading,
+    isDeletingOpeningStock,
+    isLoadingStock,
+    isSavingOpeningStock,
+    loadedVoucherId,
+  ]);
+
+  const handleConfirmDeleteLoadedStock = useCallback(async () => {
+    if (!loadedVoucherId) {
+      setIsDeleteLoadedStockConfirmOpen(false);
+      toast.error("Load an opening stock voucher before deleting it.", {
+        toastId: "opening-stock-delete:missing-voucher",
+      });
+      return;
+    }
+
+    try {
+      await deleteOpeningStock({
+        query: {
+          avh_voucher_id: loadedVoucherId,
+        },
+      });
+      clearOpeningStockEditor();
+    } catch {
+      // Toasting is handled in useApi.
+    }
+  }, [clearOpeningStockEditor, deleteOpeningStock, loadedVoucherId]);
+
   const tableMinWidth = useMemo(() => getTableMinWidth(columns), [columns]);
   useEffect(() => {
     if (godownOptionsByValue.size === 0 && taxOptionsByValue.size === 0) {
@@ -1710,12 +1991,15 @@ export default function OpeningStockPage() {
           voucherDatePickerRef={voucherDatePickerRef}
           isLoadingStock={isLoadingStock}
           isSavingOpeningStock={isSavingOpeningStock}
+          isDeletingOpeningStock={isDeletingOpeningStock}
           isBusinessContextLoading={isBusinessContextLoading}
+          canDeleteLoadedStock={Boolean(loadedVoucherId)}
           onVoucherDateChange={setVoucherDate}
           onVoucherRefNoChange={setVoucherRefNo}
           onLoadByRefNo={handleLoadByRefNo}
           onLoadStock={handleLoadStock}
           onUpdateStock={handleUpdateStock}
+          onDeleteStock={handleDeleteLoadedStock}
         />
         <div
           className={styles.tableViewport}
@@ -1825,6 +2109,24 @@ export default function OpeningStockPage() {
                   onLookupSelection={handleLookupSelection}
                   onLookupSearchChange={handleLookupSearchInputChange}
                   onLookupToggle={handleLookupToggle}
+                  onLookupCreateShortcut={(rowId, lookupKind, payload) => {
+                    if (lookupKind === "item") {
+                      void handleItemLookupCreateShortcut(rowId, payload);
+                      return;
+                    }
+                    if (lookupKind === "godown") {
+                      void handleGodownLookupCreateShortcut(rowId, payload);
+                    }
+                  }}
+                  onLookupEditShortcut={(rowId, lookupKind, payload) => {
+                    if (lookupKind === "item") {
+                      void handleItemLookupEditShortcut(rowId, payload);
+                      return;
+                    }
+                    if (lookupKind === "godown") {
+                      void handleGodownLookupEditShortcut(rowId, payload);
+                    }
+                  }}
                 />
               ))}
             </tbody>
@@ -1847,6 +2149,22 @@ export default function OpeningStockPage() {
           </div>
         </div>
       </div>
+      {isInlineItemMasterOpen ? (
+        <ItemMasterPageContent
+          inlineModalOnly
+          onCrudControllerReady={handleInlineItemMasterControllerReady}
+          onModalOpenChange={handleInlineItemMasterModalOpenChange}
+          onItemSaved={handleInlineItemMasterSaved}
+        />
+      ) : null}
+      {isInlineGodownMasterOpen ? (
+        <GodownMasterPageContent
+          inlineModalOnly
+          onCrudControllerReady={handleInlineGodownMasterControllerReady}
+          onModalOpenChange={handleInlineGodownMasterModalOpenChange}
+          onGodownSaved={handleInlineGodownMasterSaved}
+        />
+      ) : null}
       <DeleteConfirmModal
         isOpen={pendingLoadRequest !== null}
         title="Replace current rows?"
@@ -1859,6 +2177,26 @@ export default function OpeningStockPage() {
         onCancel={() => {
           if (!isLoadingStock) {
             setPendingLoadRequest(null);
+          }
+        }}
+      />
+      <DeleteConfirmModal
+        isOpen={isDeleteLoadedStockConfirmOpen}
+        itemName={loadedDocumentMeta?.voucherLabel || voucherRefNo || loadedVoucherId || undefined}
+        title="Delete Opening Stock?"
+        message={
+          loadedDocumentMeta?.voucherLabel || voucherRefNo
+            ? `Do you really want to delete the loaded opening stock voucher "${loadedDocumentMeta?.voucherLabel || voucherRefNo}"? This action cannot be undone.`
+            : "Do you really want to delete the loaded opening stock voucher? This action cannot be undone."
+        }
+        confirmLabel="Delete Stock"
+        cancelLabel="Cancel"
+        loading={isDeletingOpeningStock}
+        loadingLabel="Deleting..."
+        onConfirm={handleConfirmDeleteLoadedStock}
+        onCancel={() => {
+          if (!isDeletingOpeningStock) {
+            setIsDeleteLoadedStockConfirmOpen(false);
           }
         }}
       />

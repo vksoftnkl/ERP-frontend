@@ -1,6 +1,6 @@
 "use client";
 import type { ReactNode, RefObject } from "react";
-import { FiCalendar, FiDownload, FiSearch } from "react-icons/fi";
+import { FiCalendar, FiDownload, FiSearch, FiTrash2 } from "react-icons/fi";
 import { cx, formatDateEntry, formatDateForDisplay, openDatePicker, toCanonicalDateValue } from "./Utils";
 import styles from "./page.module.scss";
 type StockToolbarProps = {
@@ -9,12 +9,15 @@ type StockToolbarProps = {
   voucherDatePickerRef: RefObject<HTMLInputElement | null>;
   isLoadingStock: boolean;
   isSavingOpeningStock: boolean;
+  isDeletingOpeningStock: boolean;
   isBusinessContextLoading: boolean;
+  canDeleteLoadedStock: boolean;
   onVoucherDateChange: (value: string) => void;
   onVoucherRefNoChange: (value: string) => void;
   onLoadByRefNo: () => void;
   onLoadStock: () => void;
   onUpdateStock: () => void;
+  onDeleteStock: () => void;
 };
 export function StockToolbar({
   voucherDate,
@@ -22,12 +25,15 @@ export function StockToolbar({
   voucherDatePickerRef,
   isLoadingStock,
   isSavingOpeningStock,
+  isDeletingOpeningStock,
   isBusinessContextLoading,
+  canDeleteLoadedStock,
   onVoucherDateChange,
   onVoucherRefNoChange,
   onLoadByRefNo,
   onLoadStock,
   onUpdateStock,
+  onDeleteStock,
 }: StockToolbarProps): ReactNode {
   return (
     <div className={styles.toolbar}>
@@ -90,7 +96,12 @@ export function StockToolbar({
           type="button"
           className={cx(styles.createButton, styles.refLoadButton)}
           onClick={onLoadByRefNo}
-          disabled={isLoadingStock || isSavingOpeningStock || isBusinessContextLoading}
+          disabled={
+            isLoadingStock ||
+            isSavingOpeningStock ||
+            isDeletingOpeningStock ||
+            isBusinessContextLoading
+          }
         >
           <FiSearch
             className={styles.createIcon}
@@ -102,7 +113,12 @@ export function StockToolbar({
           type="button"
           className={cx(styles.createButton, styles.loadButton)}
           onClick={onLoadStock}
-          disabled={isLoadingStock || isSavingOpeningStock || isBusinessContextLoading}
+          disabled={
+            isLoadingStock ||
+            isSavingOpeningStock ||
+            isDeletingOpeningStock ||
+            isBusinessContextLoading
+          }
         >
           <FiDownload
             className={styles.createIcon}
@@ -114,9 +130,32 @@ export function StockToolbar({
           type="button"
           className={cx(styles.createButton, styles.updateButton)}
           onClick={onUpdateStock}
-          disabled={isSavingOpeningStock || isLoadingStock || isBusinessContextLoading}
+          disabled={
+            isSavingOpeningStock ||
+            isLoadingStock ||
+            isDeletingOpeningStock ||
+            isBusinessContextLoading
+          }
         >
           <span>{isSavingOpeningStock ? "Updating..." : "Update Stock"}</span>
+        </button>
+        <button
+          type="button"
+          className={cx(styles.createButton, styles.deleteStockButton)}
+          onClick={onDeleteStock}
+          disabled={
+            !canDeleteLoadedStock ||
+            isDeletingOpeningStock ||
+            isSavingOpeningStock ||
+            isLoadingStock ||
+            isBusinessContextLoading
+          }
+        >
+          <FiTrash2
+            className={styles.createIcon}
+            aria-hidden="true"
+          />
+          <span>{isDeletingOpeningStock ? "Deleting..." : "Delete Stock"}</span>
         </button>
       </div>
     </div>

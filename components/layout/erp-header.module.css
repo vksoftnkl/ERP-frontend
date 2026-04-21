@@ -235,7 +235,10 @@
 
 .contextSelect {
   height: 24px;
-  min-width: 160px;
+  width: 180px;
+  min-width: 180px;
+  max-width: 180px;
+  flex: 0 0 180px;
   border: 1px solid #4f4f4f;
   background: #fff;
   color: #111;
@@ -405,7 +408,211 @@
   text-align: center;
   background: #f8f8f8;
 }
+/* User menu dropdown */
+.userMenuDropdown {
+  position: relative;
+}
 
+.userIconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  color: inherit; /* or your icon color */
+}
+
+.userIconButton:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.userMenuPopover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 120px;
+  z-index: 100;
+}
+
+.userMenuLogoutButton {
+  width: 100%;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.userMenuLogoutButton:hover {
+  background-color: #f5f5f5;
+}
+/* Calendar icon button */
+.calendarIconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  color: inherit;
+}
+
+.calendarIconButton:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Recent pages icon button (replaces .recentPagesButton) */
+.recentPagesIconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  color: inherit;
+}
+
+.recentPagesIconButton:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.recentPagesIconButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Popover header label */
+.recentPagesPopoverHeader {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 4px;
+}
+/* ── Calendar picker ─────────────────────────── */
+.calendarPickerShell {
+  position: relative;
+}
+
+.calendarIconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  color: inherit;
+}
+.calendarIconButton:hover { background-color: rgba(255,255,255,0.15); }
+
+.calendarPopover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 200;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  padding: 12px;
+  width: 240px;
+  color: #222;
+}
+
+.calendarNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.calendarNavBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #444;
+}
+.calendarNavBtn:hover { background: #f0f0f0; }
+
+.calendarMonthYear {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.calendarGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.calendarDayLabel {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  padding: 4px 0;
+}
+.calendarCell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.calendarDay {
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 50%;
+  font-size: 13px;
+  width: 100%;
+  color: #222;
+}
+.calendarDay:hover { background: #f0f0f0; }
+.calendarDayToday {
+  outline: 2px solid #4a90d9;
+  outline-offset: -2px;
+  font-weight: 600;
+}
+.calendarDaySelected {
+  background: #4a90d9 !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+
+.calendarFooter {
+  margin-top: 8px;
+  text-align: center;
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+.calendarTodayBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: #4a90d9;
+  font-weight: 500;
+}
+.calendarTodayBtn:hover { text-decoration: underline; }
 @media (max-width: 820px) {
   .topHeader {
     row-gap: 6px;
@@ -454,7 +661,9 @@
 
   .contextSelect {
     flex: 1 1 100%;
+    width: 100%;
     min-width: 0;
+    max-width: none;
   }
 
   .recentPagesSelect {
@@ -494,7 +703,9 @@
   }
 
   .contextSelect {
+    width: 100%;
     min-width: 132px;
+    max-width: none;
     font-size: 12px;
   }
 

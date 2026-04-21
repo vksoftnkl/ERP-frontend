@@ -82,7 +82,7 @@ export type HeaderRightProps = {
   goLabel: string;
   onGoClick?: () => void;
   logoutLabel: string;
-  onLogout?: () => void;
+  onLogout: () => void;
 };
 
 export type TabStripProps = {

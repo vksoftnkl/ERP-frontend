@@ -1,13 +1,16 @@
 "use client";
 
 import type {
+  FocusEvent as ReactFocusEvent,
   KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
   MutableRefObject,
   ReactNode,
   RefObject,
 } from "react";
 import { FiCalendar, FiTrash2 } from "react-icons/fi";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { ERPDynamicSearchShortcutPayload } from "@/components/library/ui/dynamic-modal-form";
 import type { ItemPriceDetailsPayload } from "@/store/api/lookupsApi";
 import {
   DELETE_ACTION_COLUMN_WIDTH,
@@ -28,6 +31,7 @@ import {
   formatDateEntry,
   formatDateForDisplay,
   getInvalidFieldKey,
+  isOpeningStockFieldHidden,
   getOpeningStockQuantityDecimalCount,
   getOpeningStockQuantityInputStep,
   getTrackingRequiredFieldKeys,
@@ -69,6 +73,16 @@ type StockTableRowProps = {
   ) => void;
   onLookupSearchChange: (lookupKind: LookupKind, search: string) => void;
   onLookupToggle: (cellKey: string, lookupKind: LookupKind) => void;
+  onLookupCreateShortcut?: (
+    rowId: number,
+    lookupKind: LookupKind,
+    payload: ERPDynamicSearchShortcutPayload,
+  ) => void | Promise<void>;
+  onLookupEditShortcut?: (
+    rowId: number,
+    lookupKind: LookupKind,
+    payload: ERPDynamicSearchShortcutPayload,
+  ) => void | Promise<void>;
 };
 
 function getSelectOptionLabel(columnKey: string, option: string): string {
@@ -95,8 +109,19 @@ function getAlignClass(align: ColumnDefinition["align"]): string {
   return styles.alignLeft;
 }
 
+function shouldUseSelectedRowFieldBackground(columnKey: string): boolean {
+  return (
+    columnKey === "taxname" ||
+    columnKey === "batchno" ||
+    columnKey === "serialno" ||
+    columnKey === "batchdate" ||
+    columnKey === "mfgdate" ||
+    columnKey === "expirydate"
+  );
+}
+
 function handleFieldNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>): boolean {
-  if (event.key !== "Shift" && event.key !== "Enter") {
+  if (event.key !== "Enter") {
     return false;
   }
 
@@ -105,8 +130,16 @@ function handleFieldNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>): b
   }
 
   event.preventDefault();
-  moveOpeningStockFieldFocus(event.currentTarget, event.key === "Shift" ? "left" : "right");
+  moveOpeningStockFieldFocus(event.currentTarget, "right");
   return true;
+}
+
+function handleSelectableInputFocus(event: ReactFocusEvent<HTMLInputElement>): void {
+  event.currentTarget.select();
+}
+
+function handleSelectableInputClick(event: ReactMouseEvent<HTMLInputElement>): void {
+  event.currentTarget.select();
 }
 
 export function StockTableRow({
@@ -134,6 +167,8 @@ export function StockTableRow({
   onLookupSelection,
   onLookupSearchChange,
   onLookupToggle,
+  onLookupCreateShortcut,
+  onLookupEditShortcut,
 }: StockTableRowProps): ReactNode {
   const currentItemId = row.values.oslitemid?.trim() ?? "";
   const currentItemDetail = currentItemId ? itemDetailsByItemId[currentItemId] : undefined;
@@ -199,10 +234,10 @@ export function StockTableRow({
         const selectedLookupId = lookupFieldConfig ? row.values[lookupFieldConfig.idField] ?? "" : "";
         const selectedLookupLabel = lookupKind
           ? (
-              lookupKind === "item"
-                ? itemOptionsByValue.get(selectedLookupId)
-                : godownOptionsByValue.get(selectedLookupId)
-            ) ?? value
+            lookupKind === "item"
+              ? itemOptionsByValue.get(selectedLookupId)
+              : godownOptionsByValue.get(selectedLookupId)
+          ) ?? value
           : value;
         const lookupOptions = lookupKind
           ? lookupKind === "item"
@@ -214,6 +249,7 @@ export function StockTableRow({
             ? isItemLookupLoading
             : isGodownLookupLoading
           : false;
+        const isHiddenField = isOpeningStockFieldHidden(column.key, row);
         const isDisabledInput = isOpeningStockFieldDisabled(column.key, row);
         const hasValidationError = Boolean(invalidFieldKeys[getInvalidFieldKey(row.id, column.key)]);
         const hasRequiredFieldError =
@@ -221,10 +257,12 @@ export function StockTableRow({
           (!isDisabledInput && isTrackingRequiredFieldMissing(row, column.key));
         const isRequiredField =
           !isDisabledInput && getTrackingRequiredFieldKeys(row).includes(column.key);
+        const usesSelectedRowFieldBackground = shouldUseSelectedRowFieldBackground(column.key);
         const sharedClassName = cx(
           styles.cellInput,
           isNumeric && styles.numericInput,
           hasRequiredFieldError && styles.requiredField,
+          usesSelectedRowFieldBackground && styles.rowSelectionFillControl,
         );
         const cellDatePickerKey = `${row.id}:${column.key}`;
 
@@ -237,7 +275,7 @@ export function StockTableRow({
             data-opening-stock-column-index={columnIndex}
             className={cx(styles.cell, styles.compactCell, getAlignClass(column.align))}
           >
-            {column.key === "uom" ? (
+            {isHiddenField ? null : column.key === "uom" ? (
               <select
                 data-opening-stock-field-control="true"
                 data-opening-stock-row-id={row.id}
@@ -274,6 +312,7 @@ export function StockTableRow({
                 header={column.header}
                 options={lookupOptions}
                 searchQuery={lookupSearchQuery}
+                shortcutValues={row.values}
                 hasValidationError={hasValidationError}
                 searchInputRef={lookupSearchInputRef}
                 rootRef={(element) => {
@@ -281,6 +320,12 @@ export function StockTableRow({
                 }}
                 onToggle={() => onLookupToggle(cellLookupKey, lookupKind)}
                 onTriggerKeyDown={handleFieldNavigationKeyDown}
+                onSearchCreateShortcut={(payload) =>
+                  onLookupCreateShortcut?.(row.id, lookupKind, payload)
+                }
+                onSearchEditShortcut={(payload) =>
+                  onLookupEditShortcut?.(row.id, lookupKind, payload)
+                }
                 onSearchChange={(search) => onLookupSearchChange(lookupKind, search)}
                 onSelect={(option) => onLookupSelection(row.id, lookupKind, option)}
               />
@@ -311,6 +356,7 @@ export function StockTableRow({
                 className={cx(
                   styles.dateInputWrap,
                   hasRequiredFieldError && styles.requiredDateWrap,
+                  usesSelectedRowFieldBackground && styles.rowSelectionFillWrap,
                 )}
               >
                 <input
@@ -320,6 +366,8 @@ export function StockTableRow({
                   type="text"
                   value={value}
                   onChange={(event) => onRowChange(row.id, column.key, formatDateEntry(event.target.value))}
+                  onFocus={handleSelectableInputFocus}
+                  onClick={handleSelectableInputClick}
                   className={cx(sharedClassName, styles.dateInputWithPicker)}
                   placeholder="dd/mm/yyyy"
                   disabled={isDisabledInput}
@@ -373,12 +421,14 @@ export function StockTableRow({
                     column.key,
                     column.key === "openingqty" || column.key === "freeqty"
                       ? normalizeOpeningStockQuantityInputValue(
-                          event.target.value,
-                          quantityDecimalCount,
-                        )
+                        event.target.value,
+                        quantityDecimalCount,
+                      )
                       : event.target.value,
                   )
                 }
+                onFocus={handleSelectableInputFocus}
+                onClick={handleSelectableInputClick}
                 className={sharedClassName}
                 placeholder={getCellPlaceholder(column.placeholder)}
                 readOnly={column.key === "taxname"}
@@ -410,8 +460,8 @@ export function StockTableRow({
                 onWheel={
                   isNumeric
                     ? (event) => {
-                        event.currentTarget.blur();
-                      }
+                      event.currentTarget.blur();
+                    }
                     : undefined
                 }
               />

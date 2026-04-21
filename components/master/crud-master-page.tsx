@@ -247,6 +247,11 @@ export type CrudMasterAuditHistoryConfig = {
   getRecordId?: (row: MasterTableRow) => string | number | null;
   getDisplayName?: (row: MasterTableRow) => string | null;
 };
+export type CrudMasterPageController = {
+  closeModal: () => void;
+  openCreate: (options?: { values?: Record<string, string> }) => void;
+  openUpdateById: (recordId: string | number) => Promise<void>;
+};
 export type CrudMasterPageProps = {
   title: string;
   entityLabel: string;
@@ -334,6 +339,11 @@ export type CrudMasterPageProps = {
     deleteId: string | number;
     rowSource: Record<string, unknown> | null;
   }) => void | Promise<void>;
+  onCrudControllerReady?: (
+    controller: CrudMasterPageController | null,
+  ) => void;
+  hideListPage?: boolean;
+  onModalOpenChange?: (open: boolean, variantKey: string | null) => void;
 };
 function getFirstDefinedValue(
   row: Record<string, unknown>,
@@ -596,6 +606,45 @@ function mapRowToFormState(
     position:
       toDisplayValue(getFirstDefinedValue(source, positionKeys)) ||
       row.position,
+  };
+}
+
+function createFallbackRowFromSource(
+  recordId: string | number,
+  source: Record<string, unknown> | null,
+  lookupKeys: CrudMasterLookupKeys,
+): MasterTableRow {
+  return {
+    __rowId: String(recordId),
+    __recordId: recordId,
+    __source: source,
+    serialNo: 0,
+    masterId:
+      source
+        ? toDisplayValue(getFirstDefinedValue(source, lookupKeys.id))
+        : String(recordId),
+    masterCode: source
+      ? toDisplayValue(getFirstDefinedValue(source, lookupKeys.code))
+      : "",
+    masterName: source
+      ? toDisplayValue(getFirstDefinedValue(source, lookupKeys.name))
+      : "",
+    masterShort: source
+      ? toDisplayValue(getFirstDefinedValue(source, lookupKeys.short))
+      : "",
+    masterAlias: source
+      ? toDisplayValue(getFirstDefinedValue(source, lookupKeys.alias))
+      : "",
+    masterActive: source
+      ? toDisplayValue(
+          getFirstDefinedValue(source, lookupKeys.active ?? DEFAULT_ACTIVE_KEYS),
+        )
+      : "",
+    position: source
+      ? toDisplayValue(
+          getFirstDefinedValue(source, lookupKeys.position ?? DEFAULT_POSITION_KEYS),
+        )
+      : "",
   };
 }
 
@@ -1462,6 +1511,9 @@ export default function CrudMasterPage({
   buildRequestPayload,
   afterSubmitSuccess,
   afterDeleteSuccess,
+  onCrudControllerReady,
+  hideListPage = false,
+  onModalOpenChange,
 }: CrudMasterPageProps) {
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const [auditHistoryModal, setAuditHistoryModal] = useState<{
@@ -1751,14 +1803,86 @@ export default function CrudMasterPage({
     );
   }, [pendingDeleteRow]);
 
-  const openCreateModal = useCallback(() => {
+  const openCreateModal = useCallback((overrideValues?: Record<string, string>) => {
     resetSaveState();
     resetDetailsState();
     setEditingItemId(null);
     modalControllerRef.current?.openModal("master-create", {
-      values: createInitialValues ?? INITIAL_FORM_STATE,
+      values: overrideValues ?? createInitialValues ?? INITIAL_FORM_STATE,
     });
   }, [createInitialValues, resetDetailsState, resetSaveState]);
+
+  const openUpdateModalById = useCallback(
+    async (
+      recordId: string | number,
+      rowSource: Record<string, unknown> | null = null,
+    ) => {
+      resetSaveState();
+      resetDetailsState();
+      setSelectedRowId(null);
+      setEditingItemId(recordId);
+
+      try {
+        const request = buildGetByIdRequest?.({
+          recordId,
+          action: "update",
+          rowSource,
+        }) ?? {
+          query: {
+            [requestPayloadKeys.id]: String(recordId),
+          },
+        };
+
+        const payload = await getById(request);
+        const detailSource = extractDetailSource(payload);
+        const supplementalSource =
+          (await Promise.resolve(
+            augmentDetailSource?.({
+              recordId,
+              action: "update",
+              source: detailSource,
+              rowSource,
+            }),
+          )) ?? null;
+        const mergedSource =
+          detailSource || rowSource || supplementalSource
+            ? {
+                ...(detailSource ?? rowSource ?? {}),
+                ...(supplementalSource ?? {}),
+              }
+            : null;
+        const detailRow = mergedSource
+          ? mergeRowWithDetail(
+              createFallbackRowFromSource(recordId, mergedSource, lookupKeys),
+              mergedSource,
+              lookupKeys,
+            )
+          : createFallbackRowFromSource(recordId, rowSource, lookupKeys);
+        setEditingItemId(resolveRecordId(detailRow, lookupKeys.id));
+        const defaultValues = mapRowToFormState(detailRow, lookupKeys);
+        modalControllerRef.current?.openModal("master-update", {
+          values: mapFormValues
+            ? mapFormValues({
+                source: detailRow.__source,
+                defaults: defaultValues,
+              })
+            : defaultValues,
+        });
+      } catch {
+        // Error UI is driven by detailsError from useApi.
+      }
+    },
+    [
+      augmentDetailSource,
+      buildGetByIdRequest,
+      getById,
+      lookupKeys,
+      mapFormValues,
+      requestPayloadKeys.id,
+      resetDetailsState,
+      resetSaveState,
+    ],
+  );
 
   const openUpdateModalForRow = useCallback(
     (row: MasterTableRow) => {
@@ -1828,6 +1952,28 @@ export default function CrudMasterPage({
       resetSaveState,
     ],
   );
+
+  const crudController = useMemo<CrudMasterPageController>(
+    () => ({
+      closeModal: () => {
+        modalControllerRef.current?.closeModal();
+      },
+      openCreate: (options) => {
+        openCreateModal(options?.values);
+      },
+      openUpdateById: async (recordId) => {
+        await openUpdateModalById(recordId);
+      },
+    }),
+    [openCreateModal, openUpdateModalById],
+  );
+
+  useEffect(() => {
+    onCrudControllerReady?.(crudController);
+    return () => {
+      onCrudControllerReady?.(null);
+    };
+  }, [crudController, onCrudControllerReady]);
 
   const openViewModalForRow = useCallback(
     (row: MasterTableRow) => {
@@ -2219,121 +2365,125 @@ export default function CrudMasterPage({
   }, []);
 
   return (
-    <main className={styles.page}>
-      <div className={styles.viewport}>
-        <div className={styles.board}>
-          <section className={styles.content}>
-            {error ? (
-              <div className={styles.errorBox}>
-                <p className={styles.errorText}>
-                  Unable to load {entityLabel} data: {error}
-                </p>
-                <button
-                  type="button"
-                  className={styles.retryButton}
-                  onClick={() =>
-                    void loadRecords(searchTerm, currentPage, pageSize)
+    <>
+      {!hideListPage ? (
+        <main className={styles.page}>
+          <div className={styles.viewport}>
+            <div className={styles.board}>
+              <section className={styles.content}>
+                {error ? (
+                  <div className={styles.errorBox}>
+                    <p className={styles.errorText}>
+                      Unable to load {entityLabel} data: {error}
+                    </p>
+                    <button
+                      type="button"
+                      className={styles.retryButton}
+                      onClick={() =>
+                        void loadRecords(searchTerm, currentPage, pageSize)
+                      }
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : null}
+                {deleteError ? (
+                  <div className={styles.errorBox}>
+                    <p className={styles.errorText}>
+                      Unable to delete selected {entityLabel}: {deleteError}
+                    </p>
+                  </div>
+                ) : null}
+                {detailsError ? (
+                  <div className={styles.errorBox}>
+                    <p className={styles.errorText}>
+                      Unable to load selected {entityLabel} details: {detailsError}
+                    </p>
+                  </div>
+                ) : null}
+                {normalizedGridTableNames.length > 0 && gridColumnsError ? (
+                  <div className={styles.errorBox}>
+                    <p className={styles.errorText}>
+                      Unable to load table headers: {gridColumnsError}. Showing
+                      default headers.
+                    </p>
+                    <button
+                      type="button"
+                      className={styles.retryButton}
+                      onClick={() => {
+                        if (gridId === null) {
+                          return;
+                        }
+                        void refetchGridColumns();
+                      }}
+                      disabled={gridColumnsLoading || gridId === null}
+                    >
+                      {gridColumnsLoading ? "Loading..." : "Retry Headers"}
+                    </button>
+                  </div>
+                ) : null}
+                <ReusableTable
+                  columns={columns}
+                  rows={rows}
+                  rowKey="__rowId"
+                  title={
+                    gridDisplayName
+                      ? `${gridDisplayName} List`
+                      : listTitle ?? `${title} List`
                   }
-                >
-                  Retry
-                </button>
-              </div>
-            ) : null}
-            {deleteError ? (
-              <div className={styles.errorBox}>
-                <p className={styles.errorText}>
-                  Unable to delete selected {entityLabel}: {deleteError}
-                </p>
-              </div>
-            ) : null}
-            {detailsError ? (
-              <div className={styles.errorBox}>
-                <p className={styles.errorText}>
-                  Unable to load selected {entityLabel} details: {detailsError}
-                </p>
-              </div>
-            ) : null}
-            {normalizedGridTableNames.length > 0 && gridColumnsError ? (
-              <div className={styles.errorBox}>
-                <p className={styles.errorText}>
-                  Unable to load table headers: {gridColumnsError}. Showing
-                  default headers.
-                </p>
-                <button
-                  type="button"
-                  className={styles.retryButton}
-                  onClick={() => {
-                    if (gridId === null) {
-                      return;
+                  toolbarContent={toolbarContent}
+                  minWidth="980px"
+                  activeRowKey={selectedRowId}
+                  onRowClick={(row) => setSelectedRowId(row.__rowId)}
+                  onCreate={openCreateModal}
+                  createLabel={createLabel ?? "Add"}
+                  onView={handleRowView}
+                  onUpdate={handleRowUpdate}
+                  onDelete={handleRowDelete}
+                  onLogs={auditHistory ? handleRowLogs : undefined}
+                  isViewDisabled={() => saveLoading || detailsLoading}
+                  isUpdateDisabled={() => saveLoading || detailsLoading}
+                  isDeleteDisabled={() =>
+                    deleteLoading || saveLoading || detailsLoading
+                  }
+                  isLogsDisabled={(row) => {
+                    if (!auditHistory) {
+                      return true;
                     }
-                    void refetchGridColumns();
-                  }}
-                  disabled={gridColumnsLoading || gridId === null}
-                >
-                  {gridColumnsLoading ? "Loading..." : "Retry Headers"}
-                </button>
-              </div>
-            ) : null}
-            <ReusableTable
-              columns={columns}
-              rows={rows}
-              rowKey="__rowId"
-              title={
-                gridDisplayName
-                  ? `${gridDisplayName} List`
-                  : listTitle ?? `${title} List`
-              }
-              toolbarContent={toolbarContent}
-              minWidth="980px"
-              activeRowKey={selectedRowId}
-              onRowClick={(row) => setSelectedRowId(row.__rowId)}
-              onCreate={openCreateModal}
-              createLabel={createLabel ?? "Add"}
-              onView={handleRowView}
-              onUpdate={handleRowUpdate}
-              onDelete={handleRowDelete}
-              onLogs={auditHistory ? handleRowLogs : undefined}
-              isViewDisabled={() => saveLoading || detailsLoading}
-              isUpdateDisabled={() => saveLoading || detailsLoading}
-              isDeleteDisabled={() =>
-                deleteLoading || saveLoading || detailsLoading
-              }
-              isLogsDisabled={(row) => {
-                if (!auditHistory) {
-                  return true;
-                }
 
-                const recordId =
-                  auditHistory.getRecordId?.(row) ?? resolveAuditHistoryRecordId(row);
-                return recordId === null || recordId === undefined || `${recordId}`.trim().length === 0;
-              }}
-              actionsAsIcons
-              updateLabel="Update"
-              deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
-              searchable
-              searchQuery={searchTerm}
-              onSearchQueryChange={handleSearchChange}
-              searchPlaceholder="Search..."
-              sortable
-              paginated
-              manualPagination
-              totalEntries={totalEntries}
-              currentPage={currentPage}
-              onCurrentPageChange={setCurrentPage}
-              pageSize={pageSize}
-              onPageSizeChange={setPageSize}
-              pageSizeOptions={[10, 20, 25, 50]}
-              fullViewHeight={false}
-              stickyHeader
-              emptyText={
-                loading
-                  ? `Loading ${entityLabel} data...`
-                  : `No ${entityLabel} data found`
-              }
-            />
-          </section>
-        </div>
-      </div>
+                    const recordId =
+                      auditHistory.getRecordId?.(row) ?? resolveAuditHistoryRecordId(row);
+                    return recordId === null || recordId === undefined || `${recordId}`.trim().length === 0;
+                  }}
+                  actionsAsIcons
+                  updateLabel="Update"
+                  deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
+                  searchable
+                  searchQuery={searchTerm}
+                  onSearchQueryChange={handleSearchChange}
+                  searchPlaceholder="Search..."
+                  sortable
+                  paginated
+                  manualPagination
+                  totalEntries={totalEntries}
+                  currentPage={currentPage}
+                  onCurrentPageChange={setCurrentPage}
+                  pageSize={pageSize}
+                  onPageSizeChange={setPageSize}
+                  pageSizeOptions={[10, 20, 25, 50]}
+                  fullViewHeight={false}
+                  stickyHeader
+                  emptyText={
+                    loading
+                      ? `Loading ${entityLabel} data...`
+                      : `No ${entityLabel} data found`
+                  }
+                />
+              </section>
+            </div>
+          </div>
+        </main>
+      ) : null}
       <ERPDynamicModalForm
         title={
           gridDisplayName
@@ -2361,27 +2511,32 @@ export default function CrudMasterPage({
         onControllerReady={(controller) => {
           modalControllerRef.current = controller;
         }}
+        onOpenChange={onModalOpenChange}
         onSubmit={handleModalSubmit}
         onCancel={handleModalCancel}
       />
-      <DeleteConfirmModal
-        isOpen={pendingDeleteRow !== null}
-        itemName={pendingDeleteLabel}
-        title={`Delete ${effectiveTitle}?`}
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        loading={deleteLoading}
-        loadingLabel="Deleting..."
-        onConfirm={handleDeleteConfirm}
-        onCancel={handleDeleteCancel}
-      />
-      <RecordHistoryModal
-        isOpen={auditHistoryModal !== null}
-        screenName={auditHistoryModal?.screenName}
-        recordPk={auditHistoryModal?.recordPk}
-        displayName={auditHistoryModal?.displayName}
-        onClose={() => setAuditHistoryModal(null)}
-      />
-    </main>
+      {!hideListPage ? (
+        <DeleteConfirmModal
+          isOpen={pendingDeleteRow !== null}
+          itemName={pendingDeleteLabel}
+          title={`Delete ${effectiveTitle}?`}
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          loading={deleteLoading}
+          loadingLabel="Deleting..."
+          onConfirm={handleDeleteConfirm}
+          onCancel={handleDeleteCancel}
+        />
+      ) : null}
+      {!hideListPage ? (
+        <RecordHistoryModal
+          isOpen={auditHistoryModal !== null}
+          screenName={auditHistoryModal?.screenName}
+          recordPk={auditHistoryModal?.recordPk}
+          displayName={auditHistoryModal?.displayName}
+          onClose={() => setAuditHistoryModal(null)}
+        />
+      ) : null}
+    </>
   );
 }

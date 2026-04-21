@@ -562,6 +562,36 @@ function toConfiguredNumberInputValue(
   return String(value);
 }
 
+function parseOptionalOpeningStockNumber(
+  value: string | number | null | undefined,
+): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const normalized = toInputValue(value).trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const parsedValue = Number(normalized);
+  return Number.isFinite(parsedValue) ? parsedValue : null;
+}
+
+function roundDerivedOpeningStockValue(
+  value: number,
+  roundOffValue: string | number | null | undefined,
+): number {
+  const roundOffStep = parseOptionalOpeningStockNumber(roundOffValue);
+  if (roundOffStep === null || roundOffStep <= 0) {
+    return value;
+  }
+
+  return Number(
+    (Math.round((value + Number.EPSILON) / roundOffStep) * roundOffStep).toFixed(4),
+  );
+}
+
 export function getOpeningStockTaxExclusiveInputValue(
   columnKey: "costwot" | "priceawot" | "pricebwot" | "pricecwot" | "pricedwot",
   inclusiveValue: string | number | null | undefined,
@@ -570,7 +600,6 @@ export function getOpeningStockTaxExclusiveInputValue(
   if (typeof inclusiveValue === "string" && inclusiveValue.trim().length === 0) {
     return DEFAULT_ROW_VALUES[columnKey] ?? "";
   }
-
   const normalizedInclusiveValue =
     typeof inclusiveValue === "number" ? inclusiveValue : parseDecimal(toInputValue(inclusiveValue));
   const normalizedTaxPercentage =
@@ -578,10 +607,8 @@ export function getOpeningStockTaxExclusiveInputValue(
   const divisor = 1 + Math.max(normalizedTaxPercentage, 0) / 100;
   const taxExclusiveValue =
     divisor > 0 ? normalizedInclusiveValue / divisor : normalizedInclusiveValue;
-
   return toConfiguredNumberInputValue(columnKey, taxExclusiveValue);
 }
-
 export function getOpeningStockCostWotInputValue(
   costPrice: string | number | null | undefined,
   taxPercentage: string | number | null | undefined,
@@ -589,6 +616,55 @@ export function getOpeningStockCostWotInputValue(
   return getOpeningStockTaxExclusiveInputValue("costwot", costPrice, taxPercentage);
 }
 
+export function getOpeningStockCostInputValue(
+  costWot: string | number | null | undefined,
+  taxPercentage: string | number | null | undefined,
+): string {
+  return getOpeningStockTaxInclusiveInputValue("costprice", costWot, taxPercentage);
+}
+
+export function getOpeningStockTaxInclusiveInputValue(
+  columnKey: "costprice" | "pricea" | "priceb" | "pricec" | "priced",
+  taxExclusiveValue: string | number | null | undefined,
+  taxPercentage: string | number | null | undefined,
+): string {
+  if (typeof taxExclusiveValue === "string" && taxExclusiveValue.trim().length === 0) {
+    return DEFAULT_ROW_VALUES[columnKey] ?? "";
+  }
+  const normalizedTaxExclusiveValue =
+    typeof taxExclusiveValue === "number"
+      ? taxExclusiveValue
+      : parseDecimal(toInputValue(taxExclusiveValue));
+  const normalizedTaxPercentage =
+    typeof taxPercentage === "number" ? taxPercentage : parseDecimal(toInputValue(taxPercentage));
+  const multiplier = 1 + Math.max(normalizedTaxPercentage, 0) / 100;
+  return toConfiguredNumberInputValue(columnKey, normalizedTaxExclusiveValue * multiplier);
+}
+export function getOpeningStockMarkupInputValue(
+  columnKey: "priceamarkup" | "pricebmarkup" | "pricecmarkup" | "pricedmarkup",
+  saleValue: string | number | null | undefined,
+  costValue: string | number | null | undefined,
+  profitType: string | null | undefined,
+): string {
+  if (typeof saleValue === "string" && saleValue.trim().length === 0) {
+    return DEFAULT_ROW_VALUES[columnKey] ?? "";
+  }
+  if (typeof costValue === "string" && costValue.trim().length === 0) {
+    return DEFAULT_ROW_VALUES[columnKey] ?? "";
+  }
+  const normalizedSaleValue =
+    typeof saleValue === "number" ? saleValue : parseDecimal(toInputValue(saleValue));
+  const normalizedCostValue =
+    typeof costValue === "number" ? costValue : parseDecimal(toInputValue(costValue));
+  const normalizedProfitType = normalizeOpeningStockProfitType(profitType);
+  const markupPercentage =
+    normalizedProfitType === "BY_AMOUNT"
+      ? normalizedSaleValue - normalizedCostValue
+      : normalizedCostValue > 0
+        ? ((normalizedSaleValue - normalizedCostValue) / normalizedCostValue) * 100
+        : 0;
+  return toConfiguredNumberInputValue(columnKey, markupPercentage);
+}
 export function createDefaultRowValues(): Record<string, string> {
   return Object.entries(COLUMN_SCHEMA).reduce<Record<string, string>>((accumulator, [key, schema]) => {
     const value = schema.defaultValue ?? "";
@@ -596,18 +672,125 @@ export function createDefaultRowValues(): Record<string, string> {
     return accumulator;
   }, {});
 }
-
 export const DEFAULT_ROW_VALUES = createDefaultRowValues();
-
 export function createItemAutofillResetValues(): Record<string, string> {
   return ITEM_AUTOFILL_FIELD_KEYS.reduce<Record<string, string>>((accumulator, key) => {
     accumulator[key] = DEFAULT_ROW_VALUES[key] ?? "";
     return accumulator;
   }, {});
 }
-
 export const ITEM_AUTOFILL_RESET_VALUES = createItemAutofillResetValues();
+export const OPENING_STOCK_SALE_PRICE_FIELD_PAIRS = [
+  {
+    saleField: "pricea",
+    saleWotField: "priceawot",
+    markupField: "priceamarkup",
+  },
+  {
+    saleField: "priceb",
+    saleWotField: "pricebwot",
+    markupField: "pricebmarkup",
+  },
+  {
+    saleField: "pricec",
+    saleWotField: "pricecwot",
+    markupField: "pricecmarkup",
+  },
+  {
+    saleField: "priced",
+    saleWotField: "pricedwot",
+    markupField: "pricedmarkup",
+  },
+] as const;
 
+type OpeningStockSalePriceFieldPair = (typeof OPENING_STOCK_SALE_PRICE_FIELD_PAIRS)[number];
+
+export function getOpeningStockSalePairDerivedValues(
+  values: Record<string, string>,
+  fieldPair: OpeningStockSalePriceFieldPair,
+  source: "markup" | "sale" | "saleWot" = "sale",
+): Partial<Record<OpeningStockSalePriceFieldPair[keyof OpeningStockSalePriceFieldPair], string>> {
+  if (source === "markup") {
+    const normalizedMarkup = values[fieldPair.markupField]?.trim() ?? "";
+    const normalizedProfitType = normalizeOpeningStockProfitType(values.profittype);
+    const costPriceValue = parseOptionalOpeningStockNumber(values.costprice);
+    if (!normalizedMarkup || costPriceValue === null || normalizedProfitType === "MANUAL") {
+      return {};
+    }
+
+    const markupValue = parseOptionalOpeningStockNumber(normalizedMarkup) ?? 0;
+    const nextSaleValue = roundDerivedOpeningStockValue(
+      normalizedProfitType === "BY_AMOUNT"
+        ? costPriceValue + markupValue
+        : costPriceValue + (costPriceValue * markupValue) / 100,
+      values.roundoff,
+    );
+    const nextSaleInputValue = toConfiguredNumberInputValue(fieldPair.saleField, nextSaleValue);
+
+    return {
+      [fieldPair.saleField]: nextSaleInputValue,
+      [fieldPair.saleWotField]: getOpeningStockTaxExclusiveInputValue(
+        fieldPair.saleWotField,
+        nextSaleInputValue,
+        values.osltaxperc,
+      ),
+    };
+  }
+
+  if (source === "saleWot") {
+    const nextSaleValue = getOpeningStockTaxInclusiveInputValue(
+      fieldPair.saleField,
+      values[fieldPair.saleWotField],
+      values.osltaxperc,
+    );
+    return {
+      [fieldPair.saleField]: nextSaleValue,
+      [fieldPair.markupField]: getOpeningStockMarkupInputValue(
+        fieldPair.markupField,
+        nextSaleValue,
+        values.costprice,
+        values.profittype,
+      ),
+    };
+  }
+  return {
+    [fieldPair.saleWotField]: getOpeningStockTaxExclusiveInputValue(
+      fieldPair.saleWotField,
+      values[fieldPair.saleField],
+      values.osltaxperc,
+    ),
+    [fieldPair.markupField]: getOpeningStockMarkupInputValue(
+      fieldPair.markupField,
+      values[fieldPair.saleField],
+      values.costprice,
+      values.profittype,
+    ),
+  };
+}
+
+const NONE_TRACKING_DISABLED_FIELD_KEYS = new Set([
+  "priceawot",
+  "priceamarkup",
+  "pricea",
+  "pricebwot",
+  "pricebmarkup",
+  "priceb",
+  "pricecwot",
+  "pricecmarkup",
+  "pricec",
+  "pricedwot",
+  "pricedmarkup",
+  "priced",
+  "mrp",
+  "msp",
+]);
+const MANUAL_PROFIT_DISABLED_FIELD_KEYS = new Set([
+  "priceamarkup",
+  "pricebmarkup",
+  "pricecmarkup",
+  "pricedmarkup",
+]);
+const NONE_TRACKING_HIDDEN_FIELD_KEYS = new Set(["profittype", "roundoff"]);
 export function buildPendingItemSelectionValues(
   option: ERPDynamicSelectOption,
 ): Record<string, string> {
@@ -618,7 +801,6 @@ export function buildPendingItemSelectionValues(
     oslitemid: option.value,
   };
 }
-
 export function createRow(
   id: number,
   overrides: Record<string, string> = {},
@@ -631,13 +813,10 @@ export function createRow(
     },
   };
 }
-
 export const INITIAL_ROWS: OpeningStockRow[] = [createRow(1)];
-
 export function createEmptyRow(nextId: number): OpeningStockRow {
   return createRow(nextId);
 }
-
 export function buildLoadedLookupOptions(
   entries: Array<{ value: string | null | undefined; label: string | null | undefined }>,
 ): ERPDynamicSelectOption[] {
@@ -650,14 +829,11 @@ export function buildLoadedLookupOptions(
     }
     options.set(value, label);
   }
-
   return Array.from(options, ([value, label]) => ({ value, label }));
 }
-
 export function getNextRowId(rows: OpeningStockRow[]): number {
   return rows.reduce((highestId, row) => Math.max(highestId, row.id), 0) + 1;
 }
-
 export function ensureTrailingEmptyRow(
   rows: OpeningStockRow[],
   sourceRowId: number,
@@ -666,34 +842,27 @@ export function ensureTrailingEmptyRow(
   if (sourceRowIndex === -1 || sourceRowIndex !== rows.length - 1) {
     return rows;
   }
-
   const sourceRow = rows[sourceRowIndex];
   if (isPristineRow(sourceRow)) {
     return rows;
   }
-
   return [...rows, createEmptyRow(getNextRowId(rows))];
 }
-
 export function getFilteredRows(rows: OpeningStockRow[], searchQuery: string): OpeningStockRow[] {
   const normalizedQuery = searchQuery.trim().toLowerCase();
   if (!normalizedQuery) {
     return rows;
   }
-
   return rows.filter((row) =>
     Object.values(row.values).some((value) => value.toLowerCase().includes(normalizedQuery)),
   );
 }
-
 export function getRowStockValue(row: OpeningStockRow): number {
   return parseDecimal(row.values.openingqty) * parseDecimal(row.values.costprice);
 }
-
 function getTrackingTypeValue(row: OpeningStockRow): (typeof TRACKING_OPTIONS)[number] {
   return normalizeOpeningStockTrackingType(row.values.osltrackingtype);
 }
-
 export function normalizeOpeningStockTrackingType(
   value: string | null | undefined,
 ): (typeof TRACKING_OPTIONS)[number] {
@@ -706,28 +875,23 @@ export function normalizeOpeningStockTrackingType(
   }
   return "0";
 }
-
 export function toOpeningStockTrackingTypePayloadValue(
   value: string | null | undefined,
 ): string {
   return TRACKING_TYPE_OPTION_LABELS[normalizeOpeningStockTrackingType(value)];
 }
-
 export function getTrackingRequiredFieldKeys(row: OpeningStockRow): readonly string[] {
   return TRACKING_REQUIRED_FIELD_KEYS[getTrackingTypeValue(row)] ?? [];
 }
-
 export function getInvalidFieldKey(rowId: number, fieldKey: string): string {
   return `${rowId}:${fieldKey}`;
 }
-
 export function isTrackingRequiredFieldMissing(row: OpeningStockRow, fieldKey: string): boolean {
   if (!getTrackingRequiredFieldKeys(row).includes(fieldKey)) {
     return false;
   }
   return !toNullableTrimmedString(row.values[fieldKey]);
 }
-
 export function clearInvalidFieldKeys(
   current: Record<string, true>,
   rowId: number,
@@ -735,7 +899,6 @@ export function clearInvalidFieldKeys(
 ): Record<string, true> {
   let changed = false;
   const next = { ...current };
-
   for (const fieldKey of fieldKeys) {
     const invalidFieldKey = getInvalidFieldKey(rowId, fieldKey);
     if (next[invalidFieldKey]) {
@@ -743,10 +906,8 @@ export function clearInvalidFieldKeys(
       changed = true;
     }
   }
-
   return changed ? next : current;
 }
-
 export function buildInvalidFieldState(
   issues: Array<{ rowId: number; fieldKey: string }>,
 ): Record<string, true> {
@@ -755,7 +916,6 @@ export function buildInvalidFieldState(
     return accumulator;
   }, {});
 }
-
 export function isValidationFieldSatisfied(row: OpeningStockRow, fieldKey: string): boolean {
   if (fieldKey === "itemname") {
     return Boolean(toNullableTrimmedString(row.values.oslitemid));
@@ -768,7 +928,6 @@ export function isValidationFieldSatisfied(row: OpeningStockRow, fieldKey: strin
   }
   return Boolean(toNullableTrimmedString(row.values[fieldKey]));
 }
-
 export function focusOpeningStockField(
   table: HTMLTableElement | null,
   rowId: number,
@@ -779,20 +938,20 @@ export function focusOpeningStockField(
   if (!fieldControl) {
     return;
   }
-
   fieldControl.scrollIntoView({
     block: "nearest",
     inline: "nearest",
   });
   fieldControl.focus();
+  if (fieldControl instanceof HTMLInputElement && fieldControl.type !== "date") {
+    fieldControl.select();
+  }
 }
-
 function getOpeningStockFocusableControls(table: HTMLTableElement): HTMLElement[] {
   return Array.from(
     table.querySelectorAll<HTMLElement>('[data-opening-stock-field-control="true"]'),
   ).filter((element) => !element.matches(":disabled"));
 }
-
 export function moveOpeningStockFieldFocus(
   currentControl: HTMLElement,
   direction: "left" | "right",
@@ -801,34 +960,28 @@ export function moveOpeningStockFieldFocus(
   if (!(table instanceof HTMLTableElement)) {
     return;
   }
-
   const focusableControls = getOpeningStockFocusableControls(table);
   const currentIndex = focusableControls.indexOf(currentControl);
   if (currentIndex === -1) {
     return;
   }
-
   const targetIndex = direction === "left" ? currentIndex - 1 : currentIndex + 1;
   const targetControl = focusableControls[targetIndex];
   if (!targetControl) {
     return;
   }
-
   targetControl.scrollIntoView({
     block: "nearest",
     inline: "nearest",
   });
   targetControl.focus();
-
   if (targetControl instanceof HTMLInputElement && targetControl.type !== "date") {
     targetControl.select();
   }
 }
-
 function isOpeningStockQuantityField(fieldKey: string): boolean {
   return fieldKey === "openingqty" || fieldKey === "freeqty";
 }
-
 export function getOpeningStockQuantityDecimalCount(
   unitId: string | null | undefined,
   unitDecimalCountById: Record<string, number>,
@@ -837,7 +990,6 @@ export function getOpeningStockQuantityDecimalCount(
   if (!normalizedUnitId) {
     return 0;
   }
-
   return unitDecimalCountById[normalizedUnitId] ?? 0;
 }
 
@@ -1321,8 +1473,14 @@ export function isOpeningStockFieldDisabled(
   columnKey: string,
   row: OpeningStockRow,
 ): boolean {
-  const isBatchTrackingSelected = (row.values.osltrackingtype ?? "").trim() === "2";
+  const trackingType = getTrackingTypeValue(row);
+  const profitType = normalizeOpeningStockProfitType(row.values.profittype);
+  const isBatchTrackingSelected = trackingType === "2";
   const isBatchOnlyField = BATCH_TRACKING_FIELD_KEYS.has(columnKey);
+  const isNoneTrackingRestrictedField =
+    trackingType === "0" && NONE_TRACKING_DISABLED_FIELD_KEYS.has(columnKey);
+  const isManualProfitRestrictedField =
+    profitType === "MANUAL" && MANUAL_PROFIT_DISABLED_FIELD_KEYS.has(columnKey);
 
   return (
     columnKey === "baseqty" ||
@@ -1340,6 +1498,15 @@ export function isOpeningStockFieldDisabled(
     columnKey === "osluomid" ||
     columnKey === "oslgodownid" ||
     columnKey === "oslbaseuomid" ||
-    (isBatchOnlyField && !isBatchTrackingSelected)
+    (isBatchOnlyField && !isBatchTrackingSelected) ||
+    isNoneTrackingRestrictedField ||
+    isManualProfitRestrictedField
   );
+}
+
+export function isOpeningStockFieldHidden(
+  columnKey: string,
+  row: OpeningStockRow,
+): boolean {
+  return getTrackingTypeValue(row) === "0" && NONE_TRACKING_HIDDEN_FIELD_KEYS.has(columnKey);
 }
