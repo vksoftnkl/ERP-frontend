@@ -233,6 +233,8 @@ export default function OpeningStockPage() {
   const {
     activeCompany,
     activeBranch,
+    setCompanySelectionLocked,
+    setBranchSelectionLocked,
     loading: isBusinessContextLoading,
   } = useBusinessContext();
   const { getAll: listUiTableColumns } = useApi<
@@ -525,6 +527,25 @@ export default function OpeningStockPage() {
   const draftRows = useMemo(() => rows.filter((row) => !isPristineRow(row)), [rows]);
   const draftTotals = useMemo(() => getTotals(draftRows), [draftRows]);
   const visibleTotals = useMemo(() => getTotals(rows), [rows]);
+  const hasSelectedGodown = useMemo(
+    () => rows.some((row) => Boolean(row.values.oslgodownid?.trim())),
+    [rows],
+  );
+
+  useEffect(() => {
+    setCompanySelectionLocked(hasSelectedGodown);
+    setBranchSelectionLocked(hasSelectedGodown);
+
+    return () => {
+      setCompanySelectionLocked(false);
+      setBranchSelectionLocked(false);
+    };
+  }, [
+    hasSelectedGodown,
+    setBranchSelectionLocked,
+    setCompanySelectionLocked,
+  ]);
+
   useEffect(() => {
     if (Object.keys(invalidFieldKeys).length === 0) {
       return;

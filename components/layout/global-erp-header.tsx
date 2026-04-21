@@ -16,6 +16,8 @@ export default function GlobalErpHeader() {
     branchOptions,
     selectedCompanyId,
     selectedBranchId,
+    isCompanySelectionLocked,
+    isBranchSelectionLocked,
     setSelectedCompanyId,
     setSelectedBranchId,
   } = useBusinessContext();
@@ -49,9 +51,11 @@ export default function GlobalErpHeader() {
       companyOptions={visibleCompanyOptions}
       selectedCompany={resolvedCompanyId}
       onCompanyChange={setSelectedCompanyId}
+      companyDisabled={isCompanySelectionLocked}
       branchOptions={visibleBranchOptions}
       selectedBranch={resolvedBranchId}
       onBranchChange={setSelectedBranchId}
+      branchDisabled={isBranchSelectionLocked}
       searchMenuCount={0}
       cartCount={6}
       goLabel="K Go"

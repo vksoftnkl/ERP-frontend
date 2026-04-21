@@ -4,7 +4,6 @@
   gap: 0.5rem;
   padding: 1rem;
 }
-
 .tableShell {
   --table-border: #9ea1a5;
   --table-border-soft: #9ea1a5;
@@ -33,7 +32,6 @@
   box-shadow: var(--table-shadow);
   overflow: hidden;
 }
-
 .toolbar {
   position: relative;
   z-index: 120;
@@ -42,7 +40,6 @@
   padding: 0.5rem;
   background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
 }
-
 .tableTools {
   min-height: 44px;
   display: flex;
@@ -51,7 +48,6 @@
   gap: 0.85rem;
   flex-wrap: wrap;
 }
-
 .createButton  {
     color: #fff;
     letter-spacing: .01em;
@@ -69,24 +65,20 @@
     transition: transform .16s, box-shadow .16s, filter .16s;
     display: inline-flex;
 }
-
 .createButton:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgba(31, 95, 191, 0.24);
   filter: brightness(1.02);
 }
-
 .createButton:disabled {
   opacity: 0.65;
   cursor: not-allowed;
   box-shadow: none;
 }
-
 .createIcon {
   width: 0.95rem;
   height: 0.95rem;
 }
-
 .tableViewport {
   position: relative;
   z-index: 10;
@@ -98,7 +90,6 @@
   -webkit-overflow-scrolling: touch;
   background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
 }
-
 .table {
   width: 100%;
   min-width: var(--erp-table-min-width, 980px);
@@ -107,17 +98,14 @@
   table-layout: auto;
   background: transparent;
 }
-
 .head {
   position: sticky;
   top: 0;
   z-index: 100;
 }
-
 .body {
   background: transparent;
 }
-
 .headerCell,
 .cell {
   padding: 0.30rem;
@@ -130,7 +118,6 @@
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-
 .headerCell {
   background: var(--table-surface-muted);
   color: #5d6d80;
@@ -141,16 +128,13 @@
   font-size: 0.78rem;
   border-left: 1px solid var(--table-border);
 }
-
 .headerCell:first-child {
   // border-top-left-radius: 16px;
   border-left: none;
 }
-
 // .headerCell:last-child {
 //   border-top-right-radius: 16px;
 // }
-
 .headerText {
   display: inline-block;
   font-size: inherit;
@@ -159,11 +143,9 @@
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-
 .row {
   transition: background-color 0.16s ease;
 }
-
 .rowEven,
 .rowOdd {
   background: transparent;
@@ -432,14 +414,12 @@
   font-size: 0.84rem;
   font-weight: 700;
 }
-
 .actionCellContent {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
 }
-
 .serialCellContent {
   display: inline-flex;
   align-items: center;
@@ -447,7 +427,6 @@
   gap: 0.45rem;
   width: 100%;
 }
-
 .stickyActionCell,
 .stickySerialCell {
   position: sticky;
@@ -456,11 +435,9 @@
   background-clip: padding-box;
   box-shadow: 1px 0 0 #e8eef5;
 }
-
 .stickyActionCell {
   z-index: 4;
 }
-
 .stickyActionHeader,
 .stickySerialHeader {
   z-index: 6;
@@ -468,25 +445,20 @@
   color: #223446;
   box-shadow: 1px 0 0 #e8eef5;
 }
-
 .headerCellDark {
   color: white !important;
 }
-
 .dataRow .stickyActionCell,
 .dataRow .stickySerialCell {
   background: #ffffff;
 }
-
 // .dataRow:hover .stickyActionCell,
 // .dataRow:hover .stickySerialCell {
 //   background: #f7fbff;
 // }
-
 .compactCell {
   padding: 0.2rem;
 }
-
 .cellInput,
 .cellSelect {
   width: 100%;
@@ -504,13 +476,11 @@
     box-shadow 0.16s ease,
     background-color 0.16s ease;
 }
-
 .dateInputWrap {
   position: relative;
   width: 100%;
   min-width: 0;
 }
-
 .hiddenDatePickerInput {
   pointer-events: none;
   position: absolute;
@@ -520,7 +490,6 @@
   height: 0;
   opacity: 0;
 }
-
 .datePickerTrigger {
   position: absolute;
   inset-block: 0;
@@ -535,108 +504,90 @@
   cursor: pointer;
   transition: color 0.16s ease;
 }
-
 .datePickerTrigger:hover:not(:disabled) {
   color: #244f8a;
 }
-
 .datePickerTrigger:focus-visible {
   outline: 0;
   color: #244f8a;
 }
-
 .datePickerTrigger:disabled {
-  color: #a4afbb;
+  color: #4b5a6b;
+  opacity: 1;
   cursor: not-allowed;
 }
-
 .requiredDateWrap .datePickerTrigger,
 .requiredDatePickerTrigger {
   color: #c83d34;
 }
-
 .requiredDatePickerTrigger:focus-visible {
   color: #c83d34;
   box-shadow: none;
 }
-
 .datePickerIcon {
   width: 1rem;
   height: 1rem;
 }
-
 .cellInput::placeholder {
   color: #93a0af;
 }
-
 .cellInput:focus-visible,
 .cellSelect:focus-visible {
   outline: 0;
   box-shadow: none;
 }
-
 .cellInput:focus,
 .cellInput:focus-visible,
 .cellSelect:focus,
 .cellSelect:focus-visible {
   background: var(--table-editor-active);
 }
-
 .requiredField,
 .requiredField[readonly] {
   background: #fff7f6;
 }
-
 .requiredField::placeholder {
   color: #c26d67;
 }
-
 .requiredField:focus-visible {
   box-shadow: none;
 }
-
 .cellInput:disabled,
 .cellSelect:disabled {
   background: transparent;
-  color: #8794a3;
+  color: #4b5a6b;
+  -webkit-text-fill-color: #4b5a6b;
+  opacity: 1;
   cursor: not-allowed;
 }
-
 .cellSelect.requiredField:disabled,
 .cellInput.requiredField:disabled {
   background: transparent;
   color: #1b2634;
 }
-
 .cellInput[readonly] {
   background: #f8fafc;
 }
-
 .rowSelectionFillWrap {
   border-radius: 4px;
   transition: background-color 0.16s ease;
 }
-
 .dataRow:focus-within .rowSelectionFillControl:not(:focus):not(:focus-visible),
 .dataRow:focus-within .rowSelectionFillWrap:not(:focus-within) {
   background: var(--table-row-selected);
 }
-
 .dataRow .cell:focus-within .rowSelectionFillControl:not(:focus):not(:focus-visible),
 .dataRow .cell:focus-within .rowSelectionFillWrap {
   background: var(--table-cell-selected);
 }
-
 .cellSelect {
   cursor: pointer;
 }
-
 .lookupCell {
   position: relative;
   width: 100%;
   min-width: 0;
 }
-
 .lookupTrigger {
   width: 100%;
   min-width: 0;
@@ -659,27 +610,22 @@
     box-shadow 0.16s ease,
     background-color 0.16s ease;
 }
-
 .lookupTrigger:focus-visible,
 .lookupSearchInput:focus-visible {
   outline: 0;
   box-shadow: none;
 }
-
 .lookupTrigger.requiredField {
   background: #fff7f6;
 }
-
 .lookupTrigger.requiredField:focus-visible,
 .lookupTrigger.requiredField.lookupTriggerOpen {
   box-shadow: none;
 }
-
 .lookupTriggerOpen {
   border-color: #8ab4ff;
   box-shadow: none;
 }
-
 .lookupTriggerLabel {
   min-width: 0;
   flex: 1 1 auto;
@@ -687,11 +633,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .lookupPlaceholder {
   color: #93a0af;
 }
-
 .lookupChevron {
   width: 1rem;
   height: 1rem;
@@ -699,11 +643,9 @@
   color: #617488;
   transition: transform 0.16s ease;
 }
-
 .lookupChevronOpen {
   transform: rotate(180deg);
 }
-
 .lookupMenu {
   position: absolute;
   left: 0;
@@ -719,7 +661,6 @@
   flex-direction: column;
   gap: 0.45rem;
 }
-
 .lookupSearchWrap {
   position: relative;
 }

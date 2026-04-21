@@ -345,21 +345,9 @@ function RecentPagesDropdown({
   ariaLabel: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
   const shellRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const filteredRecentPages = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return recentPages;
-    return recentPages.filter((page) => {
-      const label = page.label.toLowerCase();
-      const path = page.path.toLowerCase();
-      return label.includes(normalizedQuery) || path.includes(normalizedQuery);
-    });
-  }, [query, recentPages]);
-
-  const close = useCallback(() => { setOpen(false); setQuery(""); }, []);
+  const close = useCallback(() => setOpen(false), []);
 
   const handleToggle = useCallback(() => {
     if (recentPages.length === 0) return;
@@ -374,11 +362,6 @@ function RecentPagesDropdown({
     },
     [close, onRecentPageChange],
   );
-
-  useEffect(() => {
-    if (!open) return;
-    inputRef.current?.focus();
-  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -427,27 +410,13 @@ function RecentPagesDropdown({
         </svg>
       </button>
       {open && (
-        <div
-          className={styles.recentPagesPopover}
-          role="menu"
-          onPointerDown={() => { inputRef.current?.focus(); }}
-        >
+        <div className={styles.recentPagesPopover} role="menu">
           <div className={styles.recentPagesPopoverHeader}>Recent Pages</div>
-          <input
-            ref={inputRef}
-            className={styles.recentPagesSearch}
-            type="text"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search"
-            autoComplete="off"
-            autoFocus
-          />
           <ul className={styles.recentPagesList}>
-            {filteredRecentPages.length === 0 ? (
-              <li className={styles.recentPagesEmpty}>No matches</li>
+            {recentPages.length === 0 ? (
+              <li className={styles.recentPagesEmpty}>No recent pages</li>
             ) : (
-              filteredRecentPages.map((page) => (
+              recentPages.map((page) => (
                 <li key={page.path} className={styles.recentPagesItem}>
                   <button
                     type="button"
@@ -670,9 +639,11 @@ function HeaderRight({
   companyOptions,
   selectedCompany,
   onCompanyChange,
+  companyDisabled,
   branchOptions,
   selectedBranch,
   onBranchChange,
+  branchDisabled,
   cartCount,
   onCartClick,
   goLabel,
@@ -699,30 +670,34 @@ function HeaderRight({
       {/* Calendar date picker */}
       <CalendarPicker selectedDate={selectedDate} onDateChange={onDateChange} />
 
-      <RecentPagesDropdown
-        recentPages={recentPages}
-        onRecentPageChange={onRecentPageChange}
-        ariaLabel={ARIA_LABELS.RECENT_PAGES_SELECT}
-      />
+      <div className={styles.companyContextGroup}>
+        <RecentPagesDropdown
+          recentPages={recentPages}
+          onRecentPageChange={onRecentPageChange}
+          ariaLabel={ARIA_LABELS.RECENT_PAGES_SELECT}
+        />
 
-      <select
-        className={styles.contextSelect}
-        aria-label={ARIA_LABELS.COMPANY_SELECT}
-        value={selectedCompany}
-        onChange={handleCompanyChange}
-      >
-        {companyOptions.map((option, index) => (
-          <option key={`${option.value}-company-${index}`} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        <select
+          className={cx(styles.contextSelect, styles.companyContextSelect)}
+          aria-label={ARIA_LABELS.COMPANY_SELECT}
+          value={selectedCompany}
+          onChange={handleCompanyChange}
+          disabled={companyDisabled}
+        >
+          {companyOptions.map((option, index) => (
+            <option key={`${option.value}-company-${index}`} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <select
         className={styles.contextSelect}
         aria-label={ARIA_LABELS.BRANCH_SELECT}
         value={selectedBranch}
         onChange={handleBranchChange}
+        disabled={branchDisabled}
       >
         {branchOptions.map((option, index) => (
           <option key={`${option.value}-${index}`} value={option.value}>
@@ -788,9 +763,11 @@ export default function ErpHeader({
   companyOptions = DEFAULT_COMPANY_OPTIONS,
   selectedCompany,
   onCompanyChange,
+  companyDisabled = false,
   branchOptions = DEFAULT_BRANCH_OPTIONS,
   selectedBranch,
   onBranchChange,
+  branchDisabled = false,
   cartCount = 0,
   onCartClick,
   goLabel = "Go",
@@ -979,9 +956,11 @@ export default function ErpHeader({
           companyOptions={companyOptions}
           selectedCompany={resolvedCompany}
           onCompanyChange={handleCompanyChange}
+          companyDisabled={companyDisabled}
           branchOptions={branchOptions}
           selectedBranch={resolvedBranch}
           onBranchChange={handleBranchChange}
+          branchDisabled={branchDisabled}
           cartCount={cartCount}
           onCartClick={onCartClick}
           goLabel={goLabel}

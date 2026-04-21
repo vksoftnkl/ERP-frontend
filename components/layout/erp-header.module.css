@@ -246,6 +246,18 @@
   padding: 0 6px;
 }
 
+.companyContextGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.companyContextSelect {
+  flex: 0 0 180px;
+}
+
 .recentPagesSelect {
   height: 24px;
   min-width: 200px;
@@ -259,8 +271,9 @@
 
 .recentPagesDropdown {
   position: relative;
-  min-width: 200px;
-  max-width: 220px;
+  min-width: auto;
+  max-width: none;
+  flex: 0 0 auto;
 }
 
 .recentPagesButton {
@@ -284,21 +297,12 @@
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  right: 0;
+  width: 220px;
+  min-width: 220px;
   background: #fff;
   border: 1px solid #4f4f4f;
   box-shadow: 0 14px 26px rgba(16, 24, 40, 0.2);
   z-index: 160;
-}
-
-.recentPagesSearch {
-  width: 100%;
-  height: 26px;
-  border: none;
-  border-bottom: 1px solid rgba(79, 79, 79, 0.55);
-  padding: 0 8px;
-  font-size: 13px;
-  outline: none;
 }
 
 .recentPagesList {
@@ -659,11 +663,21 @@
     gap: 6px;
   }
 
+  .companyContextGroup {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
   .contextSelect {
     flex: 1 1 100%;
     width: 100%;
     min-width: 0;
     max-width: none;
+  }
+
+  .companyContextSelect {
+    flex: 1 1 auto;
+    width: auto;
   }
 
   .recentPagesSelect {
@@ -673,7 +687,6 @@
   }
 
   .recentPagesDropdown {
-    flex: 1 1 100%;
     min-width: 0;
     max-width: none;
   }
@@ -707,6 +720,11 @@
     min-width: 132px;
     max-width: none;
     font-size: 12px;
+  }
+
+  .companyContextSelect {
+    width: auto;
+    min-width: 0;
   }
 
   .recentPagesSelect {

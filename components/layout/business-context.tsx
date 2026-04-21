@@ -52,12 +52,16 @@ type BusinessContextValue = {
   selectedBranchId: string;
   activeCompany: CompanyRecord | null;
   activeBranch: BranchRecord | null;
+  isCompanySelectionLocked: boolean;
+  isBranchSelectionLocked: boolean;
   loading: boolean;
   companyLoading: boolean;
   branchLoading: boolean;
   error: string | null;
   setSelectedCompanyId: (value: string) => void;
   setSelectedBranchId: (value: string) => void;
+  setCompanySelectionLocked: (value: boolean) => void;
+  setBranchSelectionLocked: (value: boolean) => void;
   refresh: () => Promise<void>;
 };
 
@@ -142,6 +146,8 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
   const [selectedBranchId, setSelectedBranchIdState] = useState(
     initialPersistedContext?.branchId ?? "",
   );
+  const [isCompanySelectionLocked, setCompanySelectionLocked] = useState(false);
+  const [isBranchSelectionLocked, setBranchSelectionLocked] = useState(false);
   const {
     run: loadCompanies,
     loading: companyLoading,
@@ -316,15 +322,27 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     selectedBranchId,
     activeCompany,
     activeBranch,
+    isCompanySelectionLocked,
+    isBranchSelectionLocked,
     loading: companyLoading || branchLoading,
     companyLoading,
     branchLoading,
     error: companyError ?? branchError ?? null,
     setSelectedCompanyId: (value) => {
+      if (isCompanySelectionLocked) {
+        return;
+      }
       setSelectedCompanyIdState(value);
       setSelectedBranchIdState("");
     },
-    setSelectedBranchId: setSelectedBranchIdState,
+    setSelectedBranchId: (value) => {
+      if (isBranchSelectionLocked) {
+        return;
+      }
+      setSelectedBranchIdState(value);
+    },
+    setCompanySelectionLocked,
+    setBranchSelectionLocked,
     refresh,
   }), [
     activeBranch,
@@ -335,6 +353,8 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     companies,
     companyError,
     companyLoading,
+    isBranchSelectionLocked,
+    isCompanySelectionLocked,
     refresh,
     selectedBranchId,
     selectedCompanyId,

@@ -33,9 +33,11 @@ export type ErpHeaderProps = {
   companyOptions?: ERPDynamicSelectOption[];
   selectedCompany?: string;
   onCompanyChange?: (value: string) => void;
+  companyDisabled?: boolean;
   branchOptions?: ERPDynamicSelectOption[];
   selectedBranch?: string;
   onBranchChange?: (value: string) => void;
+  branchDisabled?: boolean;
   cartCount?: number;
   onCartClick?: () => void;
   goLabel?: string;
@@ -74,9 +76,11 @@ export type HeaderRightProps = {
   companyOptions: ERPDynamicSelectOption[];
   selectedCompany: string;
   onCompanyChange?: (value: string) => void;
+  companyDisabled: boolean;
   branchOptions: ERPDynamicSelectOption[];
   selectedBranch: string;
   onBranchChange?: (value: string) => void;
+  branchDisabled: boolean;
   cartCount: number;
   onCartClick?: () => void;
   goLabel: string;
