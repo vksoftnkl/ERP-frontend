@@ -196,6 +196,7 @@ export function LookupCell({
         data-opening-stock-row-id={rowId}
         data-opening-stock-field-key={fieldKey}
         className={cx(
+          styles.cellInput,
           styles.lookupTrigger,
           isOpen && styles.lookupTriggerOpen,
           hasValidationError && styles.requiredField,

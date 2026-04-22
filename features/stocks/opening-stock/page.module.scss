@@ -8,7 +8,8 @@
   --table-border: #9ea1a5;
   --table-border-soft: #9ea1a5;
   --table-surface: #ffffff;
-  --table-surface-muted: linear-gradient(rgb(79, 118, 187) 0%, rgb(54, 91, 157) 100%);
+  --table-surface-muted: rgb(54, 91, 157);
+  --table-surface-stockmodal-table : rgb(54, 91, 157);
   --table-surface-accent: #fbfdff;
   --table-text:#1b2634;
   --table-text-muted: #6d7c8d;
@@ -317,6 +318,30 @@
 .toolbarDateInput:focus-visible {
   outline: 0;
 }
+.tableTools .toolbarDateField {
+  min-height: 2rem;
+  gap: 0.55rem;
+}
+.tableTools .toolbarDateControl {
+  min-height: 2rem;
+}
+.tableTools .toolbarDateInput {
+  width: min(100%, 150px);
+  min-width: 150px;
+  min-height: 2rem;
+  padding: 0 0.55rem;
+  font-size: 0.8rem;
+}
+.tableTools .toolbarRefInput {
+  width: min(100%, 160px);
+  min-width: 160px;
+}
+.tableTools .dateInputWithPicker {
+  padding-right: 2.2rem;
+}
+.tableTools .datePickerTrigger {
+  width: 2rem;
+}
 .summaryCard {
   display: flex;
   flex-direction: column;
@@ -594,18 +619,15 @@
 .cellSelect {
   cursor: pointer;
 }
-
 .cellSelectNoArrow {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
   background-image: none;
 }
-
 .cellSelectNoArrow::-ms-expand {
   display: none;
 }
-
 .lookupCell {
   position: relative;
   width: 100%;
@@ -687,7 +709,6 @@
 .lookupSearchWrap {
   position: relative;
 }
-
 .lookupSearchInput {
   width: 100%;
   min-height: 2.45rem;
@@ -703,7 +724,6 @@
     box-shadow 0.16s ease,
     background-color 0.16s ease;
 }
-
 .lookupSearchIcon {
   position: absolute;
   left: 0.8rem;
@@ -714,7 +734,6 @@
   transform: translateY(-50%);
   pointer-events: none;
 }
-
 .lookupOptions {
   display: flex;
   flex-direction: column;
@@ -722,7 +741,6 @@
   max-height: 15.5rem;
   overflow-y: auto;
 }
-
 .lookupOption {
   width: 100%;
   border: 0;
@@ -736,23 +754,19 @@
   cursor: pointer;
   transition: background-color 0.16s ease, color 0.16s ease;
 }
-
 .lookupOption:hover {
   background: #eef5ff;
 }
-
 .lookupOptionActive {
   background: #dbeafe;
   color: #173b63;
   font-weight: 700;
 }
-
 .lookupEmptyState {
   padding: 0.56rem 0.68rem;
   color: #6d7f92;
   font-size: 0.92rem;
 }
-
 .numericInput {
   min-width: 0;
   text-align: right;
@@ -760,14 +774,12 @@
   appearance: textfield;
   -moz-appearance: textfield;
 }
-
 .numericInput::-webkit-outer-spin-button,
 .numericInput::-webkit-inner-spin-button {
   -webkit-appearance: none;
   appearance: none;
   margin: 0;
 }
-
 .computedValue {
   display: inline-flex;
   width: 100%;
@@ -777,12 +789,10 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-
 .actionIcon {
   width: 1rem;
   height: 1rem;
 }
-
 .rowDeleteButton {
   display: inline-flex;
   align-items: center;
@@ -800,13 +810,10 @@
     color 0.16s ease,
     box-shadow 0.16s ease;
 }
-
-
 .rowDeleteButton:focus-visible {
   outline: 0;
   box-shadow: 0 0 0 4px rgba(179, 61, 53, 0.14);
 }
-
 .footerValue {
   display: inline-flex;
   align-items: baseline;
@@ -814,7 +821,6 @@
   color: #183b63;
   font-variant-numeric: tabular-nums;
 }
-
 .footerLabel {
   color: #738296;
   font-size: 0.84rem;
@@ -825,7 +831,6 @@
 .resizableHeaderCell {
   position: relative;
 }
-
 .draggableHeaderContent {
   display: flex;
   align-items: center;
@@ -838,11 +843,9 @@
   user-select: none;
   cursor: grab;
 }
-
 .draggableHeaderContent:active {
   cursor: grabbing;
 }
-
 .columnResizeHandle {
   position: absolute;
   top: -4px;
@@ -852,7 +855,6 @@
   cursor: col-resize;
   z-index: 3;
 }
-
 .columnResizeHandle::after {
   content: "";
   position: absolute;
@@ -864,7 +866,6 @@
   border-radius: 999px;
   background: transparent;
 }
-
 .inlineMasterOverlay {
   position: fixed;
   inset: 0;
@@ -876,7 +877,6 @@
   background: rgba(15, 23, 42, 0.42);
   backdrop-filter: blur(3px);
 }
-
 .inlineMasterPanel {
   width: min(96vw, 92rem);
   height: min(92vh, 56rem);
@@ -887,7 +887,6 @@
   background: #f7fbff;
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
 }
-
 .inlineMasterHeader {
   display: flex;
   align-items: flex-start;
@@ -897,20 +896,17 @@
   border-bottom: 1px solid #d6e0eb;
   background: linear-gradient(180deg, #ffffff 0%, #f6fbff 100%);
 }
-
 .inlineMasterTitle {
   margin: 0;
   color: #16324f;
   font-size: 1.05rem;
   font-weight: 700;
 }
-
 .inlineMasterDescription {
   margin: 0.2rem 0 0;
   color: #5f7187;
   font-size: 0.83rem;
 }
-
 .inlineMasterCloseButton {
   border: 1px solid #c7d3e0;
   background: #ffffff;
@@ -921,18 +917,15 @@
   font-weight: 600;
   cursor: pointer;
 }
-
 .inlineMasterCloseButton:hover {
   background: #f4f8fc;
 }
-
 .inlineMasterBody {
   flex: 1;
   min-height: 0;
   overflow: auto;
   background: #f7fbff;
 }
-
 .stockBrowserModalOverlay {
   position: fixed;
   inset: 0;
@@ -941,7 +934,6 @@
   place-items: center;
   padding: 1rem;
 }
-
 .stockBrowserModalBackdrop {
   position: absolute;
   inset: 0;
@@ -949,11 +941,11 @@
   background: rgba(9, 22, 37, 0.48);
   cursor: pointer;
 }
-
 .stockBrowserModalPanel {
   position: relative;
   z-index: 1;
   width: min(1280px, calc(100vw - 2rem));
+  height: min(760px, calc(100dvh - 2rem));
   max-height: calc(100dvh - 2rem);
   display: flex;
   flex-direction: column;
@@ -963,7 +955,6 @@
   box-shadow: 0 28px 60px rgba(12, 31, 53, 0.24);
   overflow: hidden;
 }
-
 .stockBrowserModalHeader {
   display: flex;
   align-items: flex-start;
@@ -973,12 +964,10 @@
   border-bottom: 1px solid #dbe5ef;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
 }
-
 .stockBrowserModalTitleBlock {
   display: grid;
   gap: 0.28rem;
 }
-
 .stockBrowserModalEyebrow {
   margin: 0;
   color: #58708a;
@@ -987,7 +976,6 @@
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
-
 .stockBrowserModalTitle {
   margin: 0;
   color: #162739;
@@ -996,14 +984,12 @@
   letter-spacing: -0.03em;
   line-height: 1.05;
 }
-
 .stockBrowserModalSubtitle {
   margin: 0;
   color: #64768a;
   font-size: 0.9rem;
   line-height: 1.45;
 }
-
 .stockBrowserModalCloseButton {
   width: 2.5rem;
   height: 2.5rem;
@@ -1015,13 +1001,11 @@
   cursor: pointer;
   transition: background-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
 }
-
 .stockBrowserModalCloseButton:hover {
   background: #f3f8fd;
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgba(24, 51, 82, 0.12);
 }
-
 .stockBrowserModalBody {
   flex: 1;
   min-height: 0;
@@ -1031,12 +1015,191 @@
   padding: 0.5rem;
   overflow: hidden;
 }
-
 .stockBrowserTableShell {
-  border-radius: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #dbe5ef;
+  border-radius: 0;
+  background: #ffffff;
   overflow: hidden;
 }
-
+.stockBrowserTableViewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #ffffff;
+}
+.stockBrowserTable {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+.stockBrowserTableHead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.stockBrowserTableHeadCell {
+  padding: 0.5rem;
+  border-bottom: 1px solid #dbe5ef;
+  border-left: 1px solid #dbe5ef;
+  background: rgb(9, 63, 156);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: center;
+  white-space: nowrap;
+}
+.stockBrowserTableHeadCell:first-child {
+  border-left: 0;
+}
+.stockBrowserTableRow {
+  transition: background-color 0.16s ease;
+}
+.stockBrowserTableRowClickable {
+  cursor: pointer;
+}
+.stockBrowserTableRowClickable:hover .stockBrowserTableCell {
+  background: #f5f9fd;
+}
+.stockBrowserTableRowSelected .stockBrowserTableCell {
+  background: #e8f1ff;
+}
+.stockBrowserTableCell {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e3ebf3;
+  border-left: 1px solid #e3ebf3;
+  background: #ffffff;
+  color: #1b2634;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stockBrowserTableCell:first-child {
+  border-left: 0;
+}
+.stockBrowserTableEmptyCell {
+  padding: 1.35rem 1rem;
+  color: #62758a;
+  text-align: center;
+}
+.stockBrowserRowActionButton {
+  min-height: 1.9rem;
+  padding: 0 0.7rem;
+  border: 1px solid #cad7e4;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #294863;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+.stockBrowserRowActionButton:hover {
+  background: #f3f8fd;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(24, 51, 82, 0.1);
+}
+.stockBrowserTablePagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem;
+  border-top: 1px solid #dbe5ef;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+.stockBrowserTableMeta {
+  color: #536a82;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.stockBrowserTablePaginationControls {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+.stockBrowserPageSizeField {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.stockBrowserPageSizeLabel {
+  color: #5d6d80;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.stockBrowserPageSizeSelect {
+  min-height: 2rem;
+  min-width: 72px;
+  padding: 0 0.55rem;
+  border: 1px solid #d7e0ea;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1b2634;
+  font: inherit;
+  font-size: 0.82rem;
+}
+.stockBrowserPageButtons {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.stockBrowserPageButton {
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0 0.55rem;
+  border: 1px solid #d7e0ea;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #294863;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+.stockBrowserPageButton:hover:not(:disabled) {
+  background: #f3f8fd;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(24, 51, 82, 0.1);
+}
+.stockBrowserPageButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.stockBrowserPageButtonActive {
+  border-color: #0f6fb5;
+  background: #e7f2fb;
+  color: #0f5f9c;
+}
+.stockBrowserPageEllipsis {
+  min-width: 1.5rem;
+  color: #60758a;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+}
 .stockBrowserFilters {
   width: 100%;
   display: flex;
@@ -1044,38 +1207,50 @@
   gap: 0.85rem;
   flex-wrap: wrap;
 }
-
-.stockBrowserSearchControl {
-  min-width: 220px;
+.stockBrowserFilters .toolbarDateField {
+  gap: 0.45rem;
+  min-height: 2.2rem;
 }
-
+.stockBrowserFilters .toolbarDateLabel {
+  font-size: 0.72rem;
+}
+.stockBrowserFilters .toolbarDateControl {
+  min-height: 2rem;
+}
+.stockBrowserFilters .toolbarDateInput {
+  width: min(100%, 148px);
+  min-width: 148px;
+  min-height: 2rem;
+  padding: 0 0.5rem;
+  font-size: 0.8rem;
+}
+.stockBrowserSearchControl {
+  min-width: 188px;
+}
 .stockBrowserSearchIcon {
-  width: 0.95rem;
-  height: 0.95rem;
-  margin-left: 0.7rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-left: 0.55rem;
   color: #64768a;
   flex: 0 0 auto;
 }
-
 .stockBrowserSearchInput {
-  min-width: 200px;
-  padding-left: 0.55rem;
+  min-width: 168px;
+  font-size: 0.8rem;
+  padding-left: 0.45rem;
 }
-
 .stockBrowserErrorBox {
   border: 1px solid #f0c5c1;
   border-radius: 12px;
   background: linear-gradient(180deg, #fff8f7 0%, #fff0ee 100%);
   padding: 0.85rem 1rem;
 }
-
 .stockBrowserErrorText {
   margin: 0;
   color: #9f3c32;
   font-size: 0.9rem;
   line-height: 1.45;
 }
-
 .stockBrowserModalFooter {
   display: flex;
   align-items: center;
@@ -1085,20 +1260,23 @@
   border-top: 1px solid #dbe5ef;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
 }
-
+.stockBrowserFooterShortcuts {
+  min-height: 1.25rem;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+}
 .stockBrowserSelectionText {
   color: #4f647b;
   font-size: 0.88rem;
   font-weight: 700;
   line-height: 1.45;
 }
-
 .stockBrowserModalActions {
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
-
 .stockBrowserSecondaryButton {
   min-height: 2rem;
   padding: 0 1.05rem;
@@ -1111,13 +1289,11 @@
   cursor: pointer;
   transition: background-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
-
 .stockBrowserSecondaryButton:hover {
   background: #f3f8fd;
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgba(24, 51, 82, 0.1);
 }
-
 .stockBrowserPrimaryButton {
   min-height: 2rem;
   padding: 0 1.05rem;
@@ -1130,13 +1306,11 @@
   cursor: pointer;
   transition: background-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
-
 .stockBrowserPrimaryButton:hover:not(:disabled) {
   background: linear-gradient(180deg, #0f6fb5 0%, #0c5e98 100%);
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgba(15, 95, 156, 0.18);
 }
-
 .stockBrowserPrimaryButton:disabled,
 .stockBrowserSecondaryButton:disabled,
 .stockBrowserModalCloseButton:disabled {
@@ -1145,7 +1319,6 @@
   transform: none;
   box-shadow: none;
 }
-
 .auditNotesModalPanel {
   position: relative;
   z-index: 1;
@@ -1159,18 +1332,15 @@
   box-shadow: 0 28px 60px rgba(12, 31, 53, 0.24);
   overflow: hidden;
 }
-
 .auditNotesModalBody {
   display: grid;
   gap: 0.75rem;
   padding: 0.85rem;
 }
-
 .auditNotesField {
   display: grid;
   gap: 0.45rem;
 }
-
 .auditNotesLabel {
   color: #294863;
   font-size: 0.82rem;
@@ -1178,7 +1348,6 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-
 .auditNotesTextarea {
   width: 100%;
   min-height: 9rem;
@@ -1192,117 +1361,107 @@
   padding: 0.8rem 0.9rem;
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
-
 .auditNotesTextarea:focus {
   outline: none;
   border-color: #1780cd;
   box-shadow: 0 0 0 3px rgba(23, 128, 205, 0.16);
 }
-
 .auditNotesTextareaInvalid {
   border-color: #c75a52;
   box-shadow: 0 0 0 3px rgba(199, 90, 82, 0.12);
 }
-
 .auditNotesMetaRow {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
 }
-
 .auditNotesHelperText,
 .auditNotesErrorText {
   margin: 0;
   font-size: 0.82rem;
   line-height: 1.45;
 }
-
 .auditNotesHelperText {
   color: #5a7088;
 }
-
 .auditNotesErrorText {
   color: #b4453e;
   font-weight: 600;
 }
-
 .auditNotesCharCount {
   color: #5a7088;
   font-size: 0.78rem;
   font-weight: 700;
   white-space: nowrap;
 }
-
 @media (max-width: 1200px) {
   .summaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-
 @media (max-width: 760px) {
   .page {
     gap: 1.15rem;
     padding: 1rem;
   }
-
   .summaryGrid {
     grid-template-columns: minmax(0, 1fr);
   }
-
   .toolbarDateField {
     width: 100%;
     flex-wrap: wrap;
     align-items: flex-start;
   }
-
   .toolbarDateInput {
     width: 100%;
     min-width: 100%;
   }
-
   .summaryCard {
     min-height: auto;
   }
-
   .footerValue {
     width: 100%;
     justify-content: space-between;
   }
-
   .cellInput,
   .cellSelect,
   .numericInput {
     min-width: 100%;
   }
-
   .stockBrowserModalPanel {
     width: min(100vw - 1rem, 100%);
+    height: min(760px, calc(100dvh - 1rem));
     max-height: calc(100dvh - 1rem);
   }
-
   .auditNotesModalPanel {
     width: min(100vw - 1rem, 100%);
     max-height: calc(100dvh - 1rem);
   }
-
   .stockBrowserModalHeader,
   .stockBrowserModalBody,
   .stockBrowserModalFooter {
     padding-left: 0.5rem;
     padding-right: 0.5rem;
   }
-
   .stockBrowserModalFooter {
     flex-direction: column;
     align-items: stretch;
   }
-
   .stockBrowserModalActions {
     width: 100%;
     justify-content: flex-end;
   }
-
+  .stockBrowserTablePagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .stockBrowserTablePaginationControls {
+    justify-content: space-between;
+  }
+  .stockBrowserPageButtons {
+    justify-content: flex-start;
+  }
   .auditNotesMetaRow {
     flex-direction: column;
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   KeyboardShortcutHints,
   type KeyboardShortcutDefinition,
@@ -12,6 +12,7 @@ type DeleteConfirmModalProps = {
   itemName?: string;
   title?: string;
   message?: string;
+  iconVariant?: "delete" | "replace";
   confirmLabel?: string;
   cancelLabel?: string;
   loading?: boolean;
@@ -33,6 +34,7 @@ export default function DeleteConfirmModal({
   itemName,
   title = "Are you sure?",
   message,
+  iconVariant = "delete",
   confirmLabel = "Delete",
   cancelLabel = "Cancel",
   loading = false,
@@ -40,6 +42,22 @@ export default function DeleteConfirmModal({
   onConfirm,
   onCancel,
 }: DeleteConfirmModalProps) {
+  const modalRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const focusTimeout = window.setTimeout(() => {
+      modalRef.current?.focus();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(focusTimeout);
+    };
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen || loading) {
       return;
@@ -52,6 +70,8 @@ export default function DeleteConfirmModal({
 
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
         onCancel();
         return;
       }
@@ -78,6 +98,8 @@ export default function DeleteConfirmModal({
       }
 
       event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
       onConfirm();
     };
 
@@ -90,6 +112,7 @@ export default function DeleteConfirmModal({
   }
 
   const effectiveMessage = message ?? buildDefaultMessage(itemName);
+  const hasMessage = effectiveMessage.trim().length > 0;
   const footerShortcuts: KeyboardShortcutDefinition[] = loading
     ? []
     : [
@@ -113,21 +136,34 @@ export default function DeleteConfirmModal({
         aria-label="Close delete confirmation"
       />
 
-      <div className={styles.modal}>
+      <div
+        ref={modalRef}
+        className={styles.modal}
+        tabIndex={-1}
+      >
         <div className={styles.iconWrap} aria-hidden="true">
           <svg className={styles.icon} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-            />
+            {iconVariant === "replace" ? (
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4.5 7.5h11.25m0 0-3-3m3 3-3 3M19.5 16.5H8.25m0 0 3 3m-3-3 3-3"
+              />
+            ) : (
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            )}
           </svg>
         </div>
 
         <div className={styles.content}>
           <h3 className={styles.title}>{title}</h3>
-          <p className={styles.message}>{effectiveMessage}</p>
+          {hasMessage ? <p className={styles.message}>{effectiveMessage}</p> : null}
         </div>
 
         {loading ? (

@@ -1,18 +1,32 @@
 "use client";
-import { type ReactNode, useEffect, useMemo } from "react";
-import { FiRefreshCw, FiSearch, FiX } from "react-icons/fi";
-import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
+import { type ReactNode, useEffect, useMemo, useRef } from "react";
+import { FiChevronLeft, FiChevronRight, FiSearch, FiX } from "react-icons/fi";
+import {
+  KeyboardShortcutHints,
+  type KeyboardShortcutDefinition,
+} from "@/components/library/ui/keyboard-shortcut-hints";
 import type { OpeningStockHeaderPayload } from "./opening-stock.types";
 import styles from "./page.module.scss";
 import { QUANTITY_FORMATTER, VALUE_FORMATTER } from "./constants";
 import { cx, formatDateForDisplay } from "./Utils";
+
 type OpeningStockListFilters = {
   search: string;
   dateFrom: string;
   dateTo: string;
 };
+
+type OpeningStockListColumn = {
+  key: string;
+  header: string;
+  width: string;
+  align?: "left" | "center" | "right";
+  render: (row: OpeningStockHeaderPayload) => ReactNode;
+};
+
 type OpeningStockListModalProps = {
   isOpen: boolean;
+  suspendKeyboardShortcuts?: boolean;
   filters: OpeningStockListFilters;
   rows: OpeningStockHeaderPayload[];
   loading: boolean;
@@ -23,7 +37,6 @@ type OpeningStockListModalProps = {
   selectedVoucherId: string | null;
   selectedVoucherLabel: string | null;
   onClose: () => void;
-  onRefresh: () => void;
   onSearchChange: (value: string) => void;
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
@@ -33,6 +46,27 @@ type OpeningStockListModalProps = {
   onLoadRow: (row: OpeningStockHeaderPayload) => void;
   onLoadSelected: () => void;
 };
+
+const PAGE_SIZE_OPTIONS = [10, 20, 25, 50, 100] as const;
+const OPENING_STOCK_LIST_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
+  {
+    label: "Prev Row",
+    keys: ["ArrowUp"],
+  },
+  {
+    label: "Next Row",
+    keys: ["ArrowDown"],
+  },
+  {
+    label: "Load",
+    keys: ["Enter"],
+  },
+  {
+    label: "Close",
+    keys: ["Esc"],
+  },
+] as const;
+
 function resolveTextValue(
   row: OpeningStockHeaderPayload,
   keys: readonly string[],
@@ -47,8 +81,30 @@ function resolveTextValue(
   }
   return fallback;
 }
+
+function buildPageList(totalPages: number, currentPage: number): Array<number | "ellipsis"> {
+  const pages: Array<number | "ellipsis"> = [];
+  for (let page = 1; page <= totalPages; page += 1) {
+    const shouldShow =
+      page === 1 ||
+      page === totalPages ||
+      (page >= currentPage - 1 && page <= currentPage + 1);
+
+    if (shouldShow) {
+      pages.push(page);
+      continue;
+    }
+
+    if (pages[pages.length - 1] !== "ellipsis") {
+      pages.push("ellipsis");
+    }
+  }
+  return pages;
+}
+
 export function OpeningStockListModal({
   isOpen,
+  suspendKeyboardShortcuts = false,
   filters,
   rows,
   loading,
@@ -59,7 +115,6 @@ export function OpeningStockListModal({
   selectedVoucherId,
   selectedVoucherLabel,
   onClose,
-  onRefresh,
   onSearchChange,
   onDateFromChange,
   onDateToChange,
@@ -69,7 +124,7 @@ export function OpeningStockListModal({
   onLoadRow,
   onLoadSelected,
 }: OpeningStockListModalProps): ReactNode {
-  const columns = useMemo<ReusableTableColumn<OpeningStockHeaderPayload>[]>(
+  const columns = useMemo<OpeningStockListColumn[]>(
     () => [
       {
         key: "refno",
@@ -147,6 +202,18 @@ export function OpeningStockListModal({
     ],
     [],
   );
+
+  const totalPages = Math.max(1, Math.ceil(totalEntries / Math.max(1, pageSize)));
+  const currentStartEntry = totalEntries === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const currentEndEntry = totalEntries === 0 ? 0 : Math.min(currentPage * pageSize, totalEntries);
+  const pageList = useMemo(
+    () => buildPageList(totalPages, Math.min(currentPage, totalPages)),
+    [currentPage, totalPages],
+  );
+  const footerShortcuts = suspendKeyboardShortcuts ? [] : OPENING_STOCK_LIST_SHORTCUTS;
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -157,8 +224,33 @@ export function OpeningStockListModal({
       document.body.style.overflow = previousOverflow;
     };
   }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen) {
+      return;
+    }
+
+    const focusTimeout = window.setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(focusTimeout);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !selectedVoucherId) {
+      return;
+    }
+
+    rowRefs.current[selectedVoucherId]?.scrollIntoView({
+      block: "nearest",
+    });
+  }, [isOpen, rows, selectedVoucherId]);
+
+  useEffect(() => {
+    if (!isOpen || suspendKeyboardShortcuts) {
       return;
     }
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -170,12 +262,40 @@ export function OpeningStockListModal({
         onClose();
         return;
       }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        const target = event.target;
+        if (
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement ||
+          target instanceof HTMLButtonElement ||
+          target instanceof HTMLAnchorElement
+        ) {
+          return;
+        }
+        if (rows.length === 0) {
+          return;
+        }
+
+        event.preventDefault();
+        const currentIndex = rows.findIndex((row) => row.avh_voucher_id === selectedVoucherId);
+        const fallbackIndex = event.key === "ArrowDown" ? 0 : rows.length - 1;
+        const nextIndex =
+          currentIndex === -1
+            ? fallbackIndex
+            : event.key === "ArrowDown"
+              ? Math.min(rows.length - 1, currentIndex + 1)
+              : Math.max(0, currentIndex - 1);
+        const nextRow = rows[nextIndex];
+        if (nextRow) {
+          onSelectRow(nextRow);
+        }
+        return;
+      }
       if (event.key !== "Enter" || !selectedVoucherId || loading) {
         return;
       }
       const target = event.target;
       if (
-        target instanceof HTMLInputElement ||
         target instanceof HTMLSelectElement ||
         target instanceof HTMLTextAreaElement ||
         target instanceof HTMLButtonElement ||
@@ -190,7 +310,16 @@ export function OpeningStockListModal({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, loading, onClose, onLoadSelected, selectedVoucherId]);
+  }, [
+    isOpen,
+    loading,
+    onClose,
+    onLoadSelected,
+    onSelectRow,
+    rows,
+    selectedVoucherId,
+    suspendKeyboardShortcuts,
+  ]);
   if (!isOpen) {
     return null;
   }
@@ -227,87 +356,220 @@ export function OpeningStockListModal({
               <p className={styles.stockBrowserErrorText}>{error}</p>
             </div>
           ) : null}
-          <ReusableTable
-            columns={columns}
-            rows={rows}
-            rowKey="avh_voucher_id"
-           // title="Opening Stock List"
-            toolbarContent={
-              <div className={styles.stockBrowserFilters}>
-                <label className={styles.toolbarDateField}>
-                  <span className={styles.toolbarDateLabel}>Search</span>
-                  <div className={cx(styles.toolbarDateControl, styles.stockBrowserSearchControl)}>
-                    <FiSearch className={styles.stockBrowserSearchIcon} aria-hidden="true" />
-                    <input
-                      type="text"
-                      value={filters.search}
-                      onChange={(event) => onSearchChange(event.target.value)}
-                      placeholder="Search ref no"
-                      autoComplete="off"
-                      spellCheck={false}
-                      className={cx(styles.toolbarDateInput, styles.stockBrowserSearchInput)}
-                    />
-                  </div>
-                </label>
-                <label className={styles.toolbarDateField}>
-                  <span className={styles.toolbarDateLabel}>From Date</span>
-                  <div className={styles.toolbarDateControl}>
-                    <input
-                      type="date"
-                      value={filters.dateFrom}
-                      onChange={(event) => onDateFromChange(event.target.value)}
-                      className={styles.toolbarDateInput}
-                    />
-                  </div>
-                </label>
-                <label className={styles.toolbarDateField}>
-                  <span className={styles.toolbarDateLabel}>To Date</span>
-                  <div className={styles.toolbarDateControl}>
-                    <input
-                      type="date"
-                      value={filters.dateTo}
-                      onChange={(event) => onDateToChange(event.target.value)}
-                      className={styles.toolbarDateInput}
-                    />
-                  </div>
-                </label>
-                <button
-                  type="button"
-                  className={cx(styles.createButton, styles.loadButton)}
-                  onClick={onRefresh}
-                  disabled={loading}
-                >
-                  <FiRefreshCw className={styles.createIcon} aria-hidden="true" />
-                  <span>{loading ? "Refreshing..." : "Refresh"}</span>
-                </button>
+          <div className={styles.stockBrowserFilters}>
+            <label className={styles.toolbarDateField}>
+              <span className={styles.toolbarDateLabel}>Search</span>
+              <div className={cx(styles.toolbarDateControl, styles.stockBrowserSearchControl)}>
+                <FiSearch className={styles.stockBrowserSearchIcon} aria-hidden="true" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={filters.search}
+                  onChange={(event) => onSearchChange(event.target.value)}
+                  placeholder="Search ref no"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className={cx(styles.toolbarDateInput, styles.stockBrowserSearchInput)}
+                />
               </div>
-            }
-            minWidth="1230px"
-            fullViewHeight={false}
-            tableMaxHeight="min(56dvh, 640px)"
-            stickyHeader
-            sortable
-            paginated
-            manualPagination
-            totalEntries={totalEntries}
-            currentPage={currentPage}
-            onCurrentPageChange={onPageChange}
-            pageSize={pageSize}
-            onPageSizeChange={onPageSizeChange}
-            pageSizeOptions={[10, 20, 25, 50, 100]}
-            activeRowKey={selectedVoucherId}
-            onRowClick={(row) => onSelectRow(row)}
-            onRowDoubleClick={(row) => onLoadRow(row)}
-            onView={onLoadRow}
-            viewLabel="Load"
-            actionsAsIcons
-            emptyText={loading ? "Loading opening stock list..." : "No opening stock vouchers found"}
-            wrapperClassName={styles.stockBrowserTableShell}
-          />
+            </label>
+            <label className={styles.toolbarDateField}>
+              <span className={styles.toolbarDateLabel}>From Date</span>
+              <div className={styles.toolbarDateControl}>
+                <input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(event) => onDateFromChange(event.target.value)}
+                  className={styles.toolbarDateInput}
+                />
+              </div>
+            </label>
+            <label className={styles.toolbarDateField}>
+              <span className={styles.toolbarDateLabel}>To Date</span>
+              <div className={styles.toolbarDateControl}>
+                <input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={(event) => onDateToChange(event.target.value)}
+                  className={styles.toolbarDateInput}
+                />
+              </div>
+            </label>
+          </div>
+
+          <div className={styles.stockBrowserTableShell}>
+            <div className={styles.stockBrowserTableViewport}>
+              <table className={styles.stockBrowserTable}>
+                <colgroup>
+                  <col style={{ width: "72px" }} />
+                  {columns.map((column) => (
+                    <col key={column.key} style={{ width: column.width }} />
+                  ))}
+                </colgroup>
+                <thead className={styles.stockBrowserTableHead}>
+                  <tr>
+                    <th
+                      className={cx(
+                        styles.stockBrowserTableHeadCell,
+                        styles.alignCenter,
+                      )}
+                    >
+                      S.No
+                    </th>
+                    {columns.map((column) => (
+                      <th
+                        key={column.key}
+                        className={cx(
+                          styles.stockBrowserTableHeadCell,
+                          column.align === "right" && styles.alignRight,
+                          column.align === "center" && styles.alignCenter,
+                        )}
+                      >
+                        {column.header}
+                      </th>
+                    ))}                   
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.length === 0 ? (
+                    <tr className={styles.stockBrowserTableRow}>
+                      <td
+                        colSpan={columns.length + 1}
+                        className={cx(
+                          styles.stockBrowserTableCell,
+                          styles.stockBrowserTableEmptyCell,
+                        )}
+                      >
+                        {loading
+                          ? "Loading opening stock list..."
+                          : "No opening stock vouchers found"}
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((row, rowIndex) => {
+                      const isSelected = row.avh_voucher_id === selectedVoucherId;
+                      const serialNumber = currentStartEntry + rowIndex;
+                      return (
+                        <tr
+                          key={row.avh_voucher_id}
+                          ref={(element) => {
+                            rowRefs.current[row.avh_voucher_id] = element;
+                          }}
+                          className={cx(
+                            styles.stockBrowserTableRow,
+                            styles.stockBrowserTableRowClickable,
+                            isSelected && styles.stockBrowserTableRowSelected,
+                          )}
+                          onClick={() => onSelectRow(row)}
+                          onDoubleClick={() => onLoadRow(row)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              onSelectRow(row);
+                            }
+                          }}
+                          tabIndex={0}
+                        >
+                          <td
+                            className={cx(
+                              styles.stockBrowserTableCell,
+                              styles.alignCenter,
+                            )}
+                          >
+                            {serialNumber}
+                          </td>
+                          {columns.map((column) => (
+                            <td
+                              key={column.key}
+                              className={cx(
+                                styles.stockBrowserTableCell,
+                                column.align === "right" && styles.alignRight,
+                                column.align === "center" && styles.alignCenter,
+                              )}
+                            >
+                              {column.render(row)}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className={styles.stockBrowserTablePagination}>
+              <div className={styles.stockBrowserTableMeta}>
+                {totalEntries > 0
+                  ? `${currentStartEntry}-${currentEndEntry} of ${totalEntries}`
+                  : "0 records"}
+              </div>
+              <div className={styles.stockBrowserTablePaginationControls}>
+                <label className={styles.stockBrowserPageSizeField}>
+                  <span className={styles.stockBrowserPageSizeLabel}>Rows</span>
+                  <select
+                    value={pageSize}
+                    onChange={(event) => onPageSizeChange(Number(event.target.value))}
+                    className={styles.stockBrowserPageSizeSelect}
+                  >
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className={styles.stockBrowserPageButtons}>
+                  <button
+                    type="button"
+                    className={styles.stockBrowserPageButton}
+                    onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+                    disabled={currentPage <= 1}
+                    aria-label="Previous page"
+                  >
+                    <FiChevronLeft aria-hidden="true" />
+                  </button>
+                  {pageList.map((pageItem, index) =>
+                    pageItem === "ellipsis" ? (
+                      <span
+                        key={`ellipsis-${index}`}
+                        className={styles.stockBrowserPageEllipsis}
+                      >
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={pageItem}
+                        type="button"
+                        className={cx(
+                          styles.stockBrowserPageButton,
+                          pageItem === currentPage && styles.stockBrowserPageButtonActive,
+                        )}
+                        onClick={() => onPageChange(pageItem)}
+                      >
+                        {pageItem}
+                      </button>
+                    ),
+                  )}
+                  <button
+                    type="button"
+                    className={styles.stockBrowserPageButton}
+                    onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage >= totalPages}
+                    aria-label="Next page"
+                  >
+                    <FiChevronRight aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <footer className={styles.stockBrowserModalFooter}>
-          <div className={styles.stockBrowserSelectionText}>
-            {selectedVoucherLabel ? `Selected: ${selectedVoucherLabel}` : "Select a voucher to load."}
+        <footer className={styles.stockBrowserModalFooter}>        
+          <div className={styles.stockBrowserFooterShortcuts}>
+            <KeyboardShortcutHints
+              shortcuts={footerShortcuts}
+              dense
+            />
           </div>
           <div className={styles.stockBrowserModalActions}>
             <button

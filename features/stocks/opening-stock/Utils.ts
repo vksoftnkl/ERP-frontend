@@ -880,14 +880,28 @@ export function toOpeningStockTrackingTypePayloadValue(
 ): string {
   return TRACKING_TYPE_OPTION_LABELS[normalizeOpeningStockTrackingType(value)];
 }
-export function getTrackingRequiredFieldKeys(row: OpeningStockRow): readonly string[] {
-  return TRACKING_REQUIRED_FIELD_KEYS[getTrackingTypeValue(row)] ?? [];
+export function getTrackingRequiredFieldKeys(
+  row: OpeningStockRow,
+  itemDetail?: ItemPriceDetailsPayload,
+): readonly string[] {
+  const trackingType = getTrackingTypeValue(row);
+  const requiredFieldKeys = TRACKING_REQUIRED_FIELD_KEYS[trackingType] ?? [];
+
+  if (trackingType !== "2" || !itemDetail || itemDetail.item.item_is_batch_based) {
+    return requiredFieldKeys;
+  }
+
+  return requiredFieldKeys.filter((fieldKey) => fieldKey !== "batchno");
 }
 export function getInvalidFieldKey(rowId: number, fieldKey: string): string {
   return `${rowId}:${fieldKey}`;
 }
-export function isTrackingRequiredFieldMissing(row: OpeningStockRow, fieldKey: string): boolean {
-  if (!getTrackingRequiredFieldKeys(row).includes(fieldKey)) {
+export function isTrackingRequiredFieldMissing(
+  row: OpeningStockRow,
+  fieldKey: string,
+  itemDetail?: ItemPriceDetailsPayload,
+): boolean {
+  if (!getTrackingRequiredFieldKeys(row, itemDetail).includes(fieldKey)) {
     return false;
   }
   return !toNullableTrimmedString(row.values[fieldKey]);
@@ -1105,6 +1119,7 @@ function getOpeningStockFieldLabel(fieldKey: string): string {
 export function getRowValidationIssues(
   row: OpeningStockRow,
   rowNumber: number,
+  itemDetail?: ItemPriceDetailsPayload,
 ): RowValidationIssue[] {
   const issues: RowValidationIssue[] = [];
 
@@ -1180,7 +1195,7 @@ export function getRowValidationIssues(
     });
   }
 
-  for (const missingTrackingFieldKey of getTrackingRequiredFieldKeys(row)) {
+  for (const missingTrackingFieldKey of getTrackingRequiredFieldKeys(row, itemDetail)) {
     if (toNullableTrimmedString(row.values[missingTrackingFieldKey])) {
       continue;
     }
@@ -1198,8 +1213,9 @@ export function getRowValidationIssues(
 export function getRowValidationMessage(
   row: OpeningStockRow,
   rowNumber: number,
+  itemDetail?: ItemPriceDetailsPayload,
 ): string | null {
-  return getRowValidationIssues(row, rowNumber)[0]?.message ?? null;
+  return getRowValidationIssues(row, rowNumber, itemDetail)[0]?.message ?? null;
 }
 
 export function buildOpeningStockDetailPayload(row: OpeningStockRow): OpeningStockSaveDetail {

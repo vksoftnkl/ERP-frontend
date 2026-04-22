@@ -131,6 +131,7 @@ import {
   resolveItemPriceRecordByUnitId,
   toInputDateValue,
   toIsoDateTime,
+  toCanonicalDateValue,
   toNullableTrimmedString,
 } from "./Utils";
 function renderValidationToastContent(
@@ -203,6 +204,15 @@ const DEFAULT_OPENING_STOCK_LIST_FILTERS: OpeningStockListFilters = {
   dateFrom: "",
   dateTo: "",
 };
+
+function createOpeningStockListFiltersForToday(): OpeningStockListFilters {
+  const today = toCanonicalDateValue(getTodayInputValue());
+  return {
+    search: "",
+    dateFrom: today,
+    dateTo: today,
+  };
+}
 
 const EMPTY_OPENING_STOCK_LIST_META: OpeningStockListMeta = {
   page: 1,
@@ -947,6 +957,8 @@ export default function OpeningStockPage() {
     openingStockListPageSize,
   ]);
   const handleOpenOpeningStockList = useCallback(() => {
+    setOpeningStockListPage(1);
+    setOpeningStockListFilters(createOpeningStockListFiltersForToday());
     setIsOpeningStockListOpen(true);
     setOpeningStockListError(null);
   }, []);
@@ -959,9 +971,6 @@ export default function OpeningStockPage() {
     setOpeningStockListFilters(DEFAULT_OPENING_STOCK_LIST_FILTERS);
     setSelectedOpeningStockListVoucherId(null);
   }, []);
-  const handleRefreshOpeningStockList = useCallback(() => {
-    void loadOpeningStockList();
-  }, [loadOpeningStockList]);
   const handleOpeningStockListSearchChange = useCallback((search: string) => {
     setOpeningStockListPage(1);
     setOpeningStockListFilters((current) => ({ ...current, search }));
@@ -1353,7 +1362,9 @@ export default function OpeningStockPage() {
         ),
       );
       if (option.value) {
-        setInvalidFieldKeys((current) => clearInvalidFieldKeys(current, rowId, ["itemname"]));
+        setInvalidFieldKeys((current) =>
+          clearInvalidFieldKeys(current, rowId, ["itemname", ...TRACKING_VALIDATION_FIELD_KEYS]),
+        );
       }
       setOpenLookupCell(null);
       setLookupSearchQuery("");
@@ -2328,7 +2339,11 @@ export default function OpeningStockPage() {
     const validationIssues = draftRows.flatMap<
       RowValidationIssue & { rowId: number }
     >((row, index) =>
-      getRowValidationIssues(row, index + 1).map((issue) => ({
+      getRowValidationIssues(
+        row,
+        index + 1,
+        itemDetailsByItemId[(row.values.oslitemid ?? "").trim()],
+      ).map((issue) => ({
         rowId: row.id,
         ...issue,
       })),
@@ -2566,12 +2581,6 @@ export default function OpeningStockPage() {
     pendingLoadRequest,
   ]);
 
-  const loadConfirmMessage =
-    pendingLoadRequest?.type === "voucher"
-      ? `Loading voucher "${pendingLoadRequest.label}" will replace the current non-empty rows with the saved opening stock from the backend.`
-      : pendingLoadRequest?.type === "refno"
-      ? `Loading reference no "${pendingLoadRequest.refNo}" will replace the current non-empty rows with the saved opening stock from the backend.`
-      : "Loading stock will replace the current non-empty rows with the latest saved opening stock from the backend.";
   const loadConfirmLabel =
     pendingLoadRequest?.type === "voucher"
       ? "Load Voucher"
@@ -2590,7 +2599,9 @@ export default function OpeningStockPage() {
       <header className={styles.header}>
         <div className={styles.headingBlock}>
           <div className={styles.headingRow}>
-            <h1 className={styles.title}>Opening Stock</h1>
+            <h1 className={styles.title}>
+              {loadedVoucherId && draftRows.length > 0 ? "Opening Stock (Edit)" : "Opening Stock"}
+            </h1>
           </div>
         </div>
       </header>
@@ -2781,7 +2792,8 @@ export default function OpeningStockPage() {
       <DeleteConfirmModal
         isOpen={pendingLoadRequest !== null}
         title="Replace current rows?"
-        message={loadConfirmMessage}
+        message=""
+        iconVariant="replace"
         confirmLabel={loadConfirmLabel}
         cancelLabel="Keep current rows"
         loading={isLoadingStock}
@@ -2834,6 +2846,7 @@ export default function OpeningStockPage() {
       />
       <OpeningStockListModal
         isOpen={isOpeningStockListOpen}
+        suspendKeyboardShortcuts={pendingLoadRequest !== null}
         filters={openingStockListFilters}
         rows={openingStockListRows}
         loading={isOpeningStockListLoading}
@@ -2848,7 +2861,6 @@ export default function OpeningStockPage() {
             : null
         }
         onClose={handleCloseOpeningStockList}
-        onRefresh={handleRefreshOpeningStockList}
         onSearchChange={handleOpeningStockListSearchChange}
         onDateFromChange={handleOpeningStockListDateFromChange}
         onDateToChange={handleOpeningStockListDateToChange}
