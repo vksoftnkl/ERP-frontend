@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { useBusinessContext } from "@/components/layout/business-context";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
@@ -39,6 +40,7 @@ import {
   useLazyGetUnitOptionsQuery,
 } from "@/store/api/lookupsApi";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
+import { OpeningStockListModal } from "./OpeningStockListModal";
 import { StockTableRow } from "./StockTableRow";
 import { StockToolbar } from "./StockToolbar";
 import type {
@@ -160,10 +162,15 @@ const OPENING_STOCK_TABLE_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
     label: "Close Lookup",
     keys: ["Escape"],
   },
+  {
+    label: "Open List",
+    keys: ["F5"],
+  },
 ];
 type OpeningStockLoadRequest =
   | { type: "latest" }
-  | { type: "refno"; refNo: string };
+  | { type: "refno"; refNo: string }
+  | { type: "voucher"; voucherId: string; label: string };
 type InlineItemMasterRequest = {
   itemId: string;
   mode: "create" | "update";
@@ -176,7 +183,90 @@ type InlineGodownMasterRequest = {
   query: string;
   rowId: number;
 };
+
+type OpeningStockListFilters = {
+  search: string;
+  dateFrom: string;
+  dateTo: string;
+};
+
+type OpeningStockEditorState = {
+  loadedVoucherId: string | null;
+  voucherDate: string;
+  voucherRefNo: string;
+  rows: OpeningStockRow[];
+};
+
+const DEFAULT_OPENING_STOCK_LIST_FILTERS: OpeningStockListFilters = {
+  search: "",
+  dateFrom: "",
+  dateTo: "",
+};
+
+const EMPTY_OPENING_STOCK_LIST_META: OpeningStockListMeta = {
+  page: 1,
+  limit: 20,
+  total: 0,
+  total_pages: 0,
+};
+
+function buildOpeningStockEditorSignature({
+  loadedVoucherId,
+  voucherDate,
+  voucherRefNo,
+  rows,
+}: OpeningStockEditorState): string {
+  return JSON.stringify({
+    loadedVoucherId: loadedVoucherId?.trim() || null,
+    voucherDate: voucherDate.trim(),
+    voucherRefNo: voucherRefNo.trim(),
+    rows: rows.filter((row) => !isPristineRow(row)).map((row) => row.values),
+  });
+}
+
+function buildNavigationHref(href: string | URL): string {
+  if (typeof href === "string") {
+    return href;
+  }
+
+  return href.toString();
+}
+
+function isSameNavigationTarget(targetHref: string | URL): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const currentUrl = new URL(window.location.href);
+  const nextUrl = new URL(buildNavigationHref(targetHref), currentUrl);
+  return nextUrl.href === currentUrl.href;
+}
+
+function getOpeningStockVoucherLabel(source: {
+  avh_voucher_refno?: string | null;
+  osh_voucher_no?: string | null;
+  avh_voucher_id?: string | null;
+}): string {
+  return (
+    source.avh_voucher_refno?.trim() ||
+    source.osh_voucher_no?.trim() ||
+    source.avh_voucher_id?.trim() ||
+    "selected voucher"
+  );
+}
+
+function getOpeningStockListErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+  return "Failed to load opening stock list.";
+}
+
 export default function OpeningStockPage() {
+  const router = useRouter();
   const [voucherDate, setVoucherDate] = useState(() => getTodayInputValue());
   const [voucherRefNo, setVoucherRefNo] = useState("");
   const [rows, setRows] = useState<OpeningStockRow[]>(INITIAL_ROWS);
@@ -209,6 +299,21 @@ export default function OpeningStockPage() {
   const [openLookupCell, setOpenLookupCell] = useState<LookupCellState | null>(null);
   const [lookupSearchQuery, setLookupSearchQuery] = useState("");
   const [columns, setColumns] = useState<ColumnDefinition[]>([]);
+  const [isUnsavedChangesConfirmOpen, setIsUnsavedChangesConfirmOpen] = useState(false);
+  const [isOpeningStockListOpen, setIsOpeningStockListOpen] = useState(false);
+  const [openingStockListFilters, setOpeningStockListFilters] = useState<OpeningStockListFilters>(
+    DEFAULT_OPENING_STOCK_LIST_FILTERS,
+  );
+  const [openingStockListRows, setOpeningStockListRows] = useState<OpeningStockHeaderPayload[]>([]);
+  const [openingStockListMeta, setOpeningStockListMeta] = useState<OpeningStockListMeta>(
+    EMPTY_OPENING_STOCK_LIST_META,
+  );
+  const [openingStockListPage, setOpeningStockListPage] = useState(1);
+  const [openingStockListPageSize, setOpeningStockListPageSize] = useState(20);
+  const [selectedOpeningStockListVoucherId, setSelectedOpeningStockListVoucherId] =
+    useState<string | null>(null);
+  const [isOpeningStockListLoading, setIsOpeningStockListLoading] = useState(false);
+  const [openingStockListError, setOpeningStockListError] = useState<string | null>(null);
   const tableRef = useRef<HTMLTableElement | null>(null);
   const lookupRootRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const lookupSearchInputRef = useRef<HTMLInputElement | null>(null);
@@ -230,6 +335,19 @@ export default function OpeningStockPage() {
     startX: number;
     startWidth: number;
   } | null>(null);
+  const pendingUnsafeNavigationRef = useRef<(() => void) | null>(null);
+  const allowUnsafeNavigationRef = useRef(false);
+  const allowUnsafeNavigationTimeoutRef = useRef<number | null>(null);
+  const hasUnsavedChangesRef = useRef(false);
+  const openingStockListRequestRef = useRef(0);
+  const cleanEditorSignatureRef = useRef(
+    buildOpeningStockEditorSignature({
+      loadedVoucherId: null,
+      voucherDate,
+      voucherRefNo,
+      rows,
+    }),
+  );
   const {
     activeCompany,
     activeBranch,
@@ -267,6 +385,14 @@ export default function OpeningStockPage() {
   >(OPENING_STOCK_LIST_ENDPOINT, {
     toast: {
       success: false,
+    },
+  });
+  const { run: listOpeningStockRecords } = useApi<
+    OpeningStockSuccessResponse<OpeningStockHeaderPayload[], OpeningStockListMeta>
+  >(OPENING_STOCK_LIST_ENDPOINT, {
+    toast: {
+      success: false,
+      error: false,
     },
   });
   const { run: getOpeningStockDocument } = useApi<
@@ -524,9 +650,27 @@ export default function OpeningStockPage() {
   useEffect(() => {
     setColumns((current) => mergeResolvedColumns(current, resolvedColumns));
   }, [resolvedColumns]);
+  const editorSignature = useMemo(
+    () =>
+      buildOpeningStockEditorSignature({
+        loadedVoucherId,
+        voucherDate,
+        voucherRefNo,
+        rows,
+      }),
+    [loadedVoucherId, rows, voucherDate, voucherRefNo],
+  );
+  const hasUnsavedChanges = editorSignature !== cleanEditorSignatureRef.current;
   const draftRows = useMemo(() => rows.filter((row) => !isPristineRow(row)), [rows]);
   const draftTotals = useMemo(() => getTotals(draftRows), [draftRows]);
   const visibleTotals = useMemo(() => getTotals(rows), [rows]);
+  const selectedOpeningStockListRow = useMemo(
+    () =>
+      openingStockListRows.find(
+        (row) => row.avh_voucher_id === selectedOpeningStockListVoucherId,
+      ) ?? null,
+    [openingStockListRows, selectedOpeningStockListVoucherId],
+  );
   const hasSelectedGodown = useMemo(
     () => rows.some((row) => Boolean(row.values.oslgodownid?.trim())),
     [rows],
@@ -545,6 +689,371 @@ export default function OpeningStockPage() {
     setBranchSelectionLocked,
     setCompanySelectionLocked,
   ]);
+
+  useEffect(() => {
+    hasUnsavedChangesRef.current = hasUnsavedChanges;
+  }, [hasUnsavedChanges]);
+
+  const markEditorStateAsClean = useCallback((nextState: OpeningStockEditorState) => {
+    cleanEditorSignatureRef.current = buildOpeningStockEditorSignature(nextState);
+  }, []);
+
+  const enableUnsafeNavigationBypass = useCallback(() => {
+    allowUnsafeNavigationRef.current = true;
+    if (allowUnsafeNavigationTimeoutRef.current !== null) {
+      window.clearTimeout(allowUnsafeNavigationTimeoutRef.current);
+    }
+    allowUnsafeNavigationTimeoutRef.current = window.setTimeout(() => {
+      allowUnsafeNavigationRef.current = false;
+      allowUnsafeNavigationTimeoutRef.current = null;
+    }, 10_000);
+  }, []);
+
+  const requestUnsafeNavigationConfirmation = useCallback((navigate: () => void) => {
+    pendingUnsafeNavigationRef.current = navigate;
+    setIsUnsavedChangesConfirmOpen(true);
+  }, []);
+
+  const handleCancelUnsafeNavigation = useCallback(() => {
+    pendingUnsafeNavigationRef.current = null;
+    setIsUnsavedChangesConfirmOpen(false);
+  }, []);
+
+  const handleConfirmUnsafeNavigation = useCallback(() => {
+    const pendingNavigation = pendingUnsafeNavigationRef.current;
+    pendingUnsafeNavigationRef.current = null;
+    setIsUnsavedChangesConfirmOpen(false);
+    if (!pendingNavigation) {
+      return;
+    }
+    enableUnsafeNavigationBypass();
+    pendingNavigation();
+  }, [enableUnsafeNavigationBypass]);
+
+  useEffect(() => {
+    return () => {
+      if (allowUnsafeNavigationTimeoutRef.current !== null) {
+        window.clearTimeout(allowUnsafeNavigationTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChangesRef.current || allowUnsafeNavigationRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
+
+  useEffect(() => {
+    const mutableRouter = router as typeof router & {
+      push: typeof router.push;
+      replace: typeof router.replace;
+      back: typeof router.back;
+      forward: typeof router.forward;
+    };
+    const originalPush = router.push;
+    const originalReplace = router.replace;
+    const originalBack = router.back;
+    const originalForward = router.forward;
+
+    mutableRouter.push = ((href, options) => {
+      if (
+        allowUnsafeNavigationRef.current ||
+        !hasUnsavedChangesRef.current ||
+        isSameNavigationTarget(href)
+      ) {
+        originalPush.call(router, href, options);
+        return;
+      }
+
+      requestUnsafeNavigationConfirmation(() => {
+        originalPush.call(router, href, options);
+      });
+    }) as typeof router.push;
+
+    mutableRouter.replace = ((href, options) => {
+      if (
+        allowUnsafeNavigationRef.current ||
+        !hasUnsavedChangesRef.current ||
+        isSameNavigationTarget(href)
+      ) {
+        originalReplace.call(router, href, options);
+        return;
+      }
+
+      requestUnsafeNavigationConfirmation(() => {
+        originalReplace.call(router, href, options);
+      });
+    }) as typeof router.replace;
+
+    mutableRouter.back = (() => {
+      if (allowUnsafeNavigationRef.current || !hasUnsavedChangesRef.current) {
+        originalBack.call(router);
+        return;
+      }
+
+      requestUnsafeNavigationConfirmation(() => {
+        originalBack.call(router);
+      });
+    }) as typeof router.back;
+
+    mutableRouter.forward = (() => {
+      if (allowUnsafeNavigationRef.current || !hasUnsavedChangesRef.current) {
+        originalForward.call(router);
+        return;
+      }
+
+      requestUnsafeNavigationConfirmation(() => {
+        originalForward.call(router);
+      });
+    }) as typeof router.forward;
+
+    return () => {
+      mutableRouter.push = originalPush;
+      mutableRouter.replace = originalReplace;
+      mutableRouter.back = originalBack;
+      mutableRouter.forward = originalForward;
+    };
+  }, [requestUnsafeNavigationConfirmation, router]);
+
+  useEffect(() => {
+    const handleDocumentClickCapture = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey ||
+        allowUnsafeNavigationRef.current ||
+        !hasUnsavedChangesRef.current
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const anchor = target.closest("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement)) {
+        return;
+      }
+      if (anchor.target && anchor.target !== "_self") {
+        return;
+      }
+      if (anchor.hasAttribute("download")) {
+        return;
+      }
+
+      const currentUrl = new URL(window.location.href);
+      const nextUrl = new URL(anchor.href, currentUrl);
+      if (nextUrl.href === currentUrl.href) {
+        return;
+      }
+
+      event.preventDefault();
+      requestUnsafeNavigationConfirmation(() => {
+        if (nextUrl.origin === currentUrl.origin) {
+          router.push(`${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+          return;
+        }
+
+        window.location.assign(nextUrl.href);
+      });
+    };
+
+    document.addEventListener("click", handleDocumentClickCapture, true);
+    return () => {
+      document.removeEventListener("click", handleDocumentClickCapture, true);
+    };
+  }, [requestUnsafeNavigationConfirmation, router]);
+
+  const loadOpeningStockList = useCallback(async () => {
+    if (!isOpeningStockListOpen) {
+      return;
+    }
+
+    const requestId = openingStockListRequestRef.current + 1;
+    openingStockListRequestRef.current = requestId;
+    setIsOpeningStockListLoading(true);
+    setOpeningStockListError(null);
+    try {
+      const payload = await listOpeningStockRecords({
+        query: {
+          page: String(openingStockListPage),
+          limit: String(openingStockListPageSize),
+          ...(openingStockListFilters.search.trim()
+            ? { search: openingStockListFilters.search.trim() }
+            : {}),
+          ...(openingStockListFilters.dateFrom
+            ? { date_from: openingStockListFilters.dateFrom }
+            : {}),
+          ...(openingStockListFilters.dateTo
+            ? { date_to: openingStockListFilters.dateTo }
+            : {}),
+        },
+      });
+      if (openingStockListRequestRef.current !== requestId) {
+        return;
+      }
+      const nextRows = Array.isArray(payload?.data) ? payload.data : [];
+      const nextMeta = payload?.meta;
+      setOpeningStockListRows(nextRows);
+      setOpeningStockListMeta({
+        page:
+          typeof nextMeta?.page === "number" && Number.isFinite(nextMeta.page)
+            ? nextMeta.page
+            : openingStockListPage,
+        limit:
+          typeof nextMeta?.limit === "number" && Number.isFinite(nextMeta.limit)
+            ? nextMeta.limit
+            : openingStockListPageSize,
+        total:
+          typeof nextMeta?.total === "number" && Number.isFinite(nextMeta.total)
+            ? nextMeta.total
+            : nextRows.length,
+        total_pages:
+          typeof nextMeta?.total_pages === "number" && Number.isFinite(nextMeta.total_pages)
+            ? nextMeta.total_pages
+            : nextRows.length > 0
+              ? 1
+              : 0,
+      });
+    } catch (error) {
+      const aborted =
+        typeof error === "object" &&
+        error !== null &&
+        "name" in error &&
+        (error as { name?: string }).name &&
+        ["AbortError", "CanceledError"].includes((error as { name?: string }).name ?? "");
+      if (aborted) {
+        return;
+      }
+      if (openingStockListRequestRef.current !== requestId) {
+        return;
+      }
+
+      setOpeningStockListRows([]);
+      setOpeningStockListMeta({
+        ...EMPTY_OPENING_STOCK_LIST_META,
+        page: openingStockListPage,
+        limit: openingStockListPageSize,
+      });
+      setOpeningStockListError(getOpeningStockListErrorMessage(error));
+    } finally {
+      if (openingStockListRequestRef.current === requestId) {
+        setIsOpeningStockListLoading(false);
+      }
+    }
+  }, [
+    isOpeningStockListOpen,
+    listOpeningStockRecords,
+    openingStockListFilters.dateFrom,
+    openingStockListFilters.dateTo,
+    openingStockListFilters.search,
+    openingStockListPage,
+    openingStockListPageSize,
+  ]);
+
+  const handleOpenOpeningStockList = useCallback(() => {
+    setIsOpeningStockListOpen(true);
+    setOpeningStockListError(null);
+  }, []);
+
+  const handleCloseOpeningStockList = useCallback(() => {
+    openingStockListRequestRef.current += 1;
+    setIsOpeningStockListOpen(false);
+    setIsOpeningStockListLoading(false);
+    setOpeningStockListError(null);
+  }, []);
+
+  const handleRefreshOpeningStockList = useCallback(() => {
+    void loadOpeningStockList();
+  }, [loadOpeningStockList]);
+
+  const handleOpeningStockListSearchChange = useCallback((search: string) => {
+    setOpeningStockListPage(1);
+    setOpeningStockListFilters((current) => ({ ...current, search }));
+  }, []);
+
+  const handleOpeningStockListDateFromChange = useCallback((dateFrom: string) => {
+    setOpeningStockListPage(1);
+    setOpeningStockListFilters((current) => ({ ...current, dateFrom }));
+  }, []);
+
+  const handleOpeningStockListDateToChange = useCallback((dateTo: string) => {
+    setOpeningStockListPage(1);
+    setOpeningStockListFilters((current) => ({ ...current, dateTo }));
+  }, []);
+
+  const handleOpeningStockListPageSizeChange = useCallback((pageSize: number) => {
+    setOpeningStockListPage(1);
+    setOpeningStockListPageSize(pageSize);
+  }, []);
+
+  const handleOpeningStockListRowSelect = useCallback((row: OpeningStockHeaderPayload) => {
+    setSelectedOpeningStockListVoucherId(row.avh_voucher_id);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpeningStockListOpen) {
+      return;
+    }
+
+    void loadOpeningStockList();
+  }, [isOpeningStockListOpen, loadOpeningStockList]);
+
+  useEffect(() => {
+    if (!isOpeningStockListOpen) {
+      return;
+    }
+
+    setSelectedOpeningStockListVoucherId((current) => {
+      if (current && openingStockListRows.some((row) => row.avh_voucher_id === current)) {
+        return current;
+      }
+      return openingStockListRows[0]?.avh_voucher_id ?? null;
+    });
+  }, [isOpeningStockListOpen, openingStockListRows]);
+
+  useEffect(() => {
+    const handleF5KeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key !== "F5" ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      if (isOpeningStockListOpen) {
+        void loadOpeningStockList();
+        return;
+      }
+
+      handleOpenOpeningStockList();
+    };
+
+    window.addEventListener("keydown", handleF5KeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleF5KeyDown);
+    };
+  }, [handleOpenOpeningStockList, isOpeningStockListOpen, loadOpeningStockList]);
 
   useEffect(() => {
     if (Object.keys(invalidFieldKeys).length === 0) {
@@ -1508,8 +2017,15 @@ export default function OpeningStockPage() {
   }, []);
 
   const clearOpeningStockEditor = useCallback(() => {
+    const nextRows = [createEmptyRow(1)];
+    markEditorStateAsClean({
+      loadedVoucherId: null,
+      voucherDate,
+      voucherRefNo: "",
+      rows: nextRows,
+    });
     setInvalidFieldKeys({});
-    setRows([createEmptyRow(1)]);
+    setRows(nextRows);
     setLookupSearchQuery("");
     setOpenLookupCell(null);
     setLoadedVoucherId(null);
@@ -1517,7 +2033,7 @@ export default function OpeningStockPage() {
     setVoucherRefNo("");
     setPendingLoadRequest(null);
     setIsDeleteLoadedStockConfirmOpen(false);
-  }, []);
+  }, [markEditorStateAsClean, voucherDate]);
 
   const resolveLoadContext = useCallback(() => {
     if (!activeCompany) {
@@ -1549,6 +2065,9 @@ export default function OpeningStockPage() {
   const applyLoadedOpeningStockDocument = useCallback(
     (document: OpeningStockDocumentPayload) => {
       const documentRows = mapOpeningStockDocumentToRows(document);
+      const nextVoucherDate =
+        toInputDateValue(document.header.osh_voucher_date) || voucherDate;
+      const nextVoucherRefNo = document.header.avh_voucher_refno || "";
       const loadedItems = buildLoadedLookupOptions(
         document.details.map((detail) => ({
           value: detail.osl_item_id,
@@ -1574,17 +2093,20 @@ export default function OpeningStockPage() {
         })),
       );
 
+      markEditorStateAsClean({
+        loadedVoucherId: document.header.avh_voucher_id,
+        voucherDate: nextVoucherDate,
+        voucherRefNo: nextVoucherRefNo,
+        rows: documentRows,
+      });
       setItemOptions((current) => mergeLookupOptions(current, loadedItems));
       setGodownOptions((current) => mergeLookupOptions(current, loadedGodowns));
       setUnitOptions((current) => mergeLookupOptions(current, loadedUnits));
       setTaxOptions((current) => mergeLookupOptions(current, loadedTaxes));
       setInvalidFieldKeys({});
       setRows(documentRows);
-      setVoucherDate(
-        (currentVoucherDate) =>
-          toInputDateValue(document.header.osh_voucher_date) || currentVoucherDate,
-      );
-      setVoucherRefNo(document.header.avh_voucher_refno || "");
+      setVoucherDate(nextVoucherDate);
+      setVoucherRefNo(nextVoucherRefNo);
       setLookupSearchQuery("");
       setOpenLookupCell(null);
       setLoadedVoucherId(document.header.avh_voucher_id);
@@ -1597,7 +2119,41 @@ export default function OpeningStockPage() {
       });
       void prefetchLoadedItemDetails(document.details);
     },
-    [prefetchLoadedItemDetails],
+    [markEditorStateAsClean, prefetchLoadedItemDetails, voucherDate],
+  );
+
+  const loadOpeningStockByVoucherId = useCallback(
+    async (voucherId: string) => {
+      const normalizedVoucherId = voucherId.trim();
+      if (!normalizedVoucherId) {
+        return;
+      }
+
+      setPendingLoadRequest(null);
+      setIsLoadingStock(true);
+      try {
+        const documentPayload = await getOpeningStockDocument({
+          query: {
+            avh_voucher_id: normalizedVoucherId,
+          },
+        });
+        const document = documentPayload?.data;
+        if (!document) {
+          toast.info("No saved opening stock was found for the selected voucher.", {
+            toastId: "opening-stock-load:empty-voucher-document",
+          });
+          return;
+        }
+
+        applyLoadedOpeningStockDocument(document);
+        setIsOpeningStockListOpen(false);
+      } catch {
+        // Toasting is handled in useApi.
+      } finally {
+        setIsLoadingStock(false);
+      }
+    },
+    [applyLoadedOpeningStockDocument, getOpeningStockDocument],
   );
 
   const loadLatestOpeningStock = useCallback(async () => {
@@ -1749,6 +2305,54 @@ export default function OpeningStockPage() {
     loadOpeningStockByRefNo,
     voucherRefNo,
   ]);
+
+  const handleLoadOpeningStockListRow = useCallback(
+    (row: OpeningStockHeaderPayload) => {
+      if (
+        isLoadingStock ||
+        isSavingOpeningStock ||
+        isDeletingOpeningStock ||
+        isBusinessContextLoading
+      ) {
+        return;
+      }
+
+      const voucherId = row.avh_voucher_id?.trim() ?? "";
+      if (!voucherId) {
+        return;
+      }
+
+      const voucherLabel = getOpeningStockVoucherLabel(row);
+      setSelectedOpeningStockListVoucherId(voucherId);
+      if (draftRows.length > 0) {
+        setPendingLoadRequest({
+          type: "voucher",
+          voucherId,
+          label: voucherLabel,
+        });
+        return;
+      }
+
+      void loadOpeningStockByVoucherId(voucherId);
+    },
+    [
+      draftRows.length,
+      isBusinessContextLoading,
+      isDeletingOpeningStock,
+      isLoadingStock,
+      isSavingOpeningStock,
+      loadOpeningStockByVoucherId,
+    ],
+  );
+
+  const handleLoadSelectedOpeningStockListRow = useCallback(() => {
+    if (!selectedOpeningStockListRow) {
+      return;
+    }
+
+    handleLoadOpeningStockListRow(selectedOpeningStockListRow);
+  }, [handleLoadOpeningStockListRow, selectedOpeningStockListRow]);
+
   const handleUpdateStock = useCallback(async () => {
     if (!activeCompany) {
       toast.error("Select a company in the header before updating stock.", {
@@ -1979,22 +2583,42 @@ export default function OpeningStockPage() {
       return;
     }
 
+    if (pendingLoadRequest.type === "voucher") {
+      void loadOpeningStockByVoucherId(pendingLoadRequest.voucherId);
+      return;
+    }
+
     if (pendingLoadRequest.type === "refno") {
       void loadOpeningStockByRefNo(pendingLoadRequest.refNo);
       return;
     }
 
     void loadLatestOpeningStock();
-  }, [loadLatestOpeningStock, loadOpeningStockByRefNo, pendingLoadRequest]);
+  }, [
+    loadLatestOpeningStock,
+    loadOpeningStockByRefNo,
+    loadOpeningStockByVoucherId,
+    pendingLoadRequest,
+  ]);
 
   const loadConfirmMessage =
-    pendingLoadRequest?.type === "refno"
+    pendingLoadRequest?.type === "voucher"
+      ? `Loading voucher "${pendingLoadRequest.label}" will replace the current non-empty rows with the saved opening stock from the backend.`
+      : pendingLoadRequest?.type === "refno"
       ? `Loading reference no "${pendingLoadRequest.refNo}" will replace the current non-empty rows with the saved opening stock from the backend.`
       : "Loading stock will replace the current non-empty rows with the latest saved opening stock from the backend.";
   const loadConfirmLabel =
-    pendingLoadRequest?.type === "refno" ? "Load Ref No" : "Load Latest";
+    pendingLoadRequest?.type === "voucher"
+      ? "Load Voucher"
+      : pendingLoadRequest?.type === "refno"
+        ? "Load Ref No"
+        : "Load Latest";
   const loadConfirmLoadingLabel =
-    pendingLoadRequest?.type === "refno" ? "Loading ref no..." : "Loading stock...";
+    pendingLoadRequest?.type === "voucher"
+      ? "Loading voucher..."
+      : pendingLoadRequest?.type === "refno"
+        ? "Loading ref no..."
+        : "Loading stock...";
 
   return (<>
     <section className={styles.page}>
@@ -2017,6 +2641,7 @@ export default function OpeningStockPage() {
           canDeleteLoadedStock={Boolean(loadedVoucherId)}
           onVoucherDateChange={setVoucherDate}
           onVoucherRefNoChange={setVoucherRefNo}
+          onBrowseStockList={handleOpenOpeningStockList}
           onLoadByRefNo={handleLoadByRefNo}
           onLoadStock={handleLoadStock}
           onUpdateStock={handleUpdateStock}
@@ -2220,6 +2845,41 @@ export default function OpeningStockPage() {
             setIsDeleteLoadedStockConfirmOpen(false);
           }
         }}
+      />
+      <DeleteConfirmModal
+        isOpen={isUnsavedChangesConfirmOpen}
+        title="Leave Opening Stock?"
+        message="Unsaved changes will be lost if you leave this page."
+        confirmLabel="Leave Page"
+        cancelLabel="Stay Here"
+        onConfirm={handleConfirmUnsafeNavigation}
+        onCancel={handleCancelUnsafeNavigation}
+      />
+      <OpeningStockListModal
+        isOpen={isOpeningStockListOpen}
+        filters={openingStockListFilters}
+        rows={openingStockListRows}
+        loading={isOpeningStockListLoading}
+        error={openingStockListError}
+        totalEntries={openingStockListMeta.total}
+        currentPage={openingStockListPage}
+        pageSize={openingStockListPageSize}
+        selectedVoucherId={selectedOpeningStockListVoucherId}
+        selectedVoucherLabel={
+          selectedOpeningStockListRow
+            ? getOpeningStockVoucherLabel(selectedOpeningStockListRow)
+            : null
+        }
+        onClose={handleCloseOpeningStockList}
+        onRefresh={handleRefreshOpeningStockList}
+        onSearchChange={handleOpeningStockListSearchChange}
+        onDateFromChange={handleOpeningStockListDateFromChange}
+        onDateToChange={handleOpeningStockListDateToChange}
+        onPageChange={setOpeningStockListPage}
+        onPageSizeChange={handleOpeningStockListPageSizeChange}
+        onSelectRow={handleOpeningStockListRowSelect}
+        onLoadRow={handleLoadOpeningStockListRow}
+        onLoadSelected={handleLoadSelectedOpeningStockListRow}
       />
     </section></>
   );

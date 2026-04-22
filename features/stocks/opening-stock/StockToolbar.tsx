@@ -14,6 +14,7 @@ type StockToolbarProps = {
   canDeleteLoadedStock: boolean;
   onVoucherDateChange: (value: string) => void;
   onVoucherRefNoChange: (value: string) => void;
+  onBrowseStockList: () => void;
   onLoadByRefNo: () => void;
   onLoadStock: () => void;
   onUpdateStock: () => void;
@@ -30,6 +31,7 @@ export function StockToolbar({
   canDeleteLoadedStock,
   onVoucherDateChange,
   onVoucherRefNoChange,
+  onBrowseStockList,
   onLoadByRefNo,
   onLoadStock,
   onUpdateStock,
@@ -92,6 +94,7 @@ export function StockToolbar({
             />
           </div>
         </label>
+  
         <button
           type="button"
           className={cx(styles.createButton, styles.refLoadButton)}

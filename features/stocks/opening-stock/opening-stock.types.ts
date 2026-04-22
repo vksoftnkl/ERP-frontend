@@ -88,6 +88,9 @@ export type OpeningStockHeaderPayload = {
   avh_voucher_type_id: number;
   avh_bill_refno: string;
   avh_user_refno: string | null;
+  avh_user_name?: string | null;
+  osh_user_name?: string | null;
+  user_name?: string | null;
   avh_bill_date: string | null;
   avh_party_id: string;
   avh_opposite_ledger_id: string | null;
@@ -100,6 +103,9 @@ export type OpeningStockHeaderPayload = {
   avh_device_type: string;
   avh_device_id: string | null;
   avh_counter_id: string;
+  avh_counter_name?: string | null;
+  osh_counter_name?: string | null;
+  counter_name?: string | null;
   osh_id: string;
   osh_acc_year: string;
   osh_company_id: string;

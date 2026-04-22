@@ -910,6 +910,191 @@
   background: #f7fbff;
 }
 
+.stockBrowserModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.stockBrowserModalBackdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(9, 22, 37, 0.48);
+  cursor: pointer;
+}
+
+.stockBrowserModalPanel {
+  position: relative;
+  z-index: 1;
+  width: min(1280px, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #d8e3ee;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+  box-shadow: 0 28px 60px rgba(12, 31, 53, 0.24);
+  overflow: hidden;
+}
+
+.stockBrowserModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid #dbe5ef;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.stockBrowserModalTitleBlock {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.stockBrowserModalEyebrow {
+  margin: 0;
+  color: #58708a;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.stockBrowserModalTitle {
+  margin: 0;
+  color: #162739;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.stockBrowserModalSubtitle {
+  margin: 0;
+  color: #64768a;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.stockBrowserModalCloseButton {
+  width: 2.5rem;
+  height: 2.5rem;
+  background: #ffffff;
+  color: #24415f;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.stockBrowserModalCloseButton:hover {
+  background: #f3f8fd;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(24, 51, 82, 0.12);
+}
+
+.stockBrowserModalBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.5rem;
+  overflow: hidden;
+}
+
+.stockBrowserTableShell {
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.stockBrowserFilters {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.stockBrowserSearchControl {
+  min-width: 220px;
+}
+
+.stockBrowserSearchIcon {
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-left: 0.7rem;
+  color: #64768a;
+  flex: 0 0 auto;
+}
+
+.stockBrowserSearchInput {
+  min-width: 200px;
+  padding-left: 0.55rem;
+}
+
+.stockBrowserErrorBox {
+  border: 1px solid #f0c5c1;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff8f7 0%, #fff0ee 100%);
+  padding: 0.85rem 1rem;
+}
+
+.stockBrowserErrorText {
+  margin: 0;
+  color: #9f3c32;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.stockBrowserModalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem;
+  border-top: 1px solid #dbe5ef;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.stockBrowserSelectionText {
+  color: #4f647b;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.stockBrowserModalActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.stockBrowserSecondaryButton {
+  min-height: 2rem;
+  padding: 0 1.05rem;
+  border: 1px solid #cad7e4;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #294863;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.stockBrowserSecondaryButton:hover {
+  background: #f3f8fd;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(24, 51, 82, 0.1);
+}
+
 @media (max-width: 1200px) {
   .summaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -950,5 +1135,27 @@
   .cellSelect,
   .numericInput {
     min-width: 100%;
+  }
+
+  .stockBrowserModalPanel {
+    width: min(100vw - 1rem, 100%);
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .stockBrowserModalHeader,
+  .stockBrowserModalBody,
+  .stockBrowserModalFooter {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  .stockBrowserModalFooter {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .stockBrowserModalActions {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
