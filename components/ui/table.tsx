@@ -64,6 +64,7 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   activeRowKey?: Key | null;
   rowClassName?: (row: T, rowIndex: number) => string | undefined;
   onRowClick?: (row: T, rowIndex: number) => void;
+  onRowDoubleClick?: (row: T, rowIndex: number) => void;
   reorderableRows?: boolean;
   onRowReorder?: (
     sourceRow: T,
@@ -413,6 +414,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   activeRowKey,
   rowClassName,
   onRowClick,
+  onRowDoubleClick,
   reorderableRows = false,
   onRowReorder,
   wrapperClassName,
@@ -1153,10 +1155,13 @@ export function ReusableTable<T extends Record<string, unknown>>({
                         dropTarget.edge === "after" &&
                         styles.rowDropAfter,
                       (isActiveByIndex || isActiveByKey) && styles.activeRow,
-                      onRowClick && styles.rowClickable,
+                      (onRowClick || onRowDoubleClick) && styles.rowClickable,
                       rowClassName?.(row, rowIndex),
                     )}
                     onClick={onRowClick ? () => onRowClick(row, rowIndex) : undefined}
+                    onDoubleClick={
+                      onRowDoubleClick ? () => onRowDoubleClick(row, rowIndex) : undefined
+                    }
                     onDragStart={
                       enableRowReorder
                         ? (event) => handleRowDragStart(event, resolvedKey)
@@ -1192,7 +1197,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
                           }
                         : undefined
                     }
-                    tabIndex={onRowClick ? 0 : undefined}
+                    tabIndex={onRowClick ? 0 : onRowDoubleClick ? 0 : undefined}
                   >
                     {displayColumns.map((column, columnIndex) => {
                       const shouldRenderActions = isActionsColumn(column) && !column.render;

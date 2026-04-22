@@ -40,6 +40,7 @@ import {
   useLazyGetUnitOptionsQuery,
 } from "@/store/api/lookupsApi";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
+import { OpeningStockAuditNotesModal } from "./OpeningStockAuditNotesModal";
 import { OpeningStockListModal } from "./OpeningStockListModal";
 import { StockTableRow } from "./StockTableRow";
 import { StockToolbar } from "./StockToolbar";
@@ -290,6 +291,12 @@ export default function OpeningStockPage() {
   const [pendingLoadRequest, setPendingLoadRequest] =
     useState<OpeningStockLoadRequest | null>(null);
   const [isDeleteLoadedStockConfirmOpen, setIsDeleteLoadedStockConfirmOpen] = useState(false);
+  const [pendingOpeningStockSaveRequest, setPendingOpeningStockSaveRequest] =
+    useState<OpeningStockSaveRequest | null>(null);
+  const [openingStockAuditNotes, setOpeningStockAuditNotes] = useState("");
+  const [openingStockAuditNotesError, setOpeningStockAuditNotesError] = useState<string | null>(
+    null,
+  );
   const [isInlineItemMasterOpen, setIsInlineItemMasterOpen] = useState(false);
   const [inlineItemMasterSession, setInlineItemMasterSession] =
     useState<InlineItemMasterRequest | null>(null);
@@ -490,6 +497,11 @@ export default function OpeningStockPage() {
       cancelled = true;
     };
   }, [listUiTableColumns]);
+  const resetOpeningStockAuditNotesModal = useCallback(() => {
+    setPendingOpeningStockSaveRequest(null);
+    setOpeningStockAuditNotes("");
+    setOpeningStockAuditNotesError(null);
+  }, []);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -675,11 +687,9 @@ export default function OpeningStockPage() {
     () => rows.some((row) => Boolean(row.values.oslgodownid?.trim())),
     [rows],
   );
-
   useEffect(() => {
     setCompanySelectionLocked(hasSelectedGodown);
     setBranchSelectionLocked(hasSelectedGodown);
-
     return () => {
       setCompanySelectionLocked(false);
       setBranchSelectionLocked(false);
@@ -689,15 +699,12 @@ export default function OpeningStockPage() {
     setBranchSelectionLocked,
     setCompanySelectionLocked,
   ]);
-
   useEffect(() => {
     hasUnsavedChangesRef.current = hasUnsavedChanges;
   }, [hasUnsavedChanges]);
-
   const markEditorStateAsClean = useCallback((nextState: OpeningStockEditorState) => {
     cleanEditorSignatureRef.current = buildOpeningStockEditorSignature(nextState);
   }, []);
-
   const enableUnsafeNavigationBypass = useCallback(() => {
     allowUnsafeNavigationRef.current = true;
     if (allowUnsafeNavigationTimeoutRef.current !== null) {
@@ -708,17 +715,14 @@ export default function OpeningStockPage() {
       allowUnsafeNavigationTimeoutRef.current = null;
     }, 10_000);
   }, []);
-
   const requestUnsafeNavigationConfirmation = useCallback((navigate: () => void) => {
     pendingUnsafeNavigationRef.current = navigate;
     setIsUnsavedChangesConfirmOpen(true);
   }, []);
-
   const handleCancelUnsafeNavigation = useCallback(() => {
     pendingUnsafeNavigationRef.current = null;
     setIsUnsavedChangesConfirmOpen(false);
   }, []);
-
   const handleConfirmUnsafeNavigation = useCallback(() => {
     const pendingNavigation = pendingUnsafeNavigationRef.current;
     pendingUnsafeNavigationRef.current = null;
@@ -729,31 +733,26 @@ export default function OpeningStockPage() {
     enableUnsafeNavigationBypass();
     pendingNavigation();
   }, [enableUnsafeNavigationBypass]);
-
   useEffect(() => {
     return () => {
       if (allowUnsafeNavigationTimeoutRef.current !== null) {
         window.clearTimeout(allowUnsafeNavigationTimeoutRef.current);
       }
     };
-  }, []);
-
+    }, []);
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!hasUnsavedChangesRef.current || allowUnsafeNavigationRef.current) {
         return;
       }
-
       event.preventDefault();
       event.returnValue = "";
     };
-
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, []);
-
   useEffect(() => {
     const mutableRouter = router as typeof router & {
       push: typeof router.push;
@@ -765,7 +764,6 @@ export default function OpeningStockPage() {
     const originalReplace = router.replace;
     const originalBack = router.back;
     const originalForward = router.forward;
-
     mutableRouter.push = ((href, options) => {
       if (
         allowUnsafeNavigationRef.current ||
@@ -775,12 +773,10 @@ export default function OpeningStockPage() {
         originalPush.call(router, href, options);
         return;
       }
-
       requestUnsafeNavigationConfirmation(() => {
         originalPush.call(router, href, options);
       });
     }) as typeof router.push;
-
     mutableRouter.replace = ((href, options) => {
       if (
         allowUnsafeNavigationRef.current ||
@@ -790,34 +786,28 @@ export default function OpeningStockPage() {
         originalReplace.call(router, href, options);
         return;
       }
-
       requestUnsafeNavigationConfirmation(() => {
         originalReplace.call(router, href, options);
       });
     }) as typeof router.replace;
-
     mutableRouter.back = (() => {
       if (allowUnsafeNavigationRef.current || !hasUnsavedChangesRef.current) {
         originalBack.call(router);
         return;
       }
-
       requestUnsafeNavigationConfirmation(() => {
         originalBack.call(router);
       });
     }) as typeof router.back;
-
     mutableRouter.forward = (() => {
       if (allowUnsafeNavigationRef.current || !hasUnsavedChangesRef.current) {
         originalForward.call(router);
         return;
       }
-
       requestUnsafeNavigationConfirmation(() => {
         originalForward.call(router);
       });
     }) as typeof router.forward;
-
     return () => {
       mutableRouter.push = originalPush;
       mutableRouter.replace = originalReplace;
@@ -825,7 +815,6 @@ export default function OpeningStockPage() {
       mutableRouter.forward = originalForward;
     };
   }, [requestUnsafeNavigationConfirmation, router]);
-
   useEffect(() => {
     const handleDocumentClickCapture = (event: MouseEvent) => {
       if (
@@ -840,12 +829,10 @@ export default function OpeningStockPage() {
       ) {
         return;
       }
-
       const target = event.target;
       if (!(target instanceof Element)) {
         return;
       }
-
       const anchor = target.closest("a[href]");
       if (!(anchor instanceof HTMLAnchorElement)) {
         return;
@@ -856,35 +843,29 @@ export default function OpeningStockPage() {
       if (anchor.hasAttribute("download")) {
         return;
       }
-
       const currentUrl = new URL(window.location.href);
       const nextUrl = new URL(anchor.href, currentUrl);
       if (nextUrl.href === currentUrl.href) {
         return;
       }
-
       event.preventDefault();
       requestUnsafeNavigationConfirmation(() => {
         if (nextUrl.origin === currentUrl.origin) {
           router.push(`${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
           return;
         }
-
         window.location.assign(nextUrl.href);
       });
     };
-
     document.addEventListener("click", handleDocumentClickCapture, true);
     return () => {
       document.removeEventListener("click", handleDocumentClickCapture, true);
     };
   }, [requestUnsafeNavigationConfirmation, router]);
-
   const loadOpeningStockList = useCallback(async () => {
     if (!isOpeningStockListOpen) {
       return;
     }
-
     const requestId = openingStockListRequestRef.current + 1;
     openingStockListRequestRef.current = requestId;
     setIsOpeningStockListLoading(true);
@@ -944,7 +925,6 @@ export default function OpeningStockPage() {
       if (openingStockListRequestRef.current !== requestId) {
         return;
       }
-
       setOpeningStockListRows([]);
       setOpeningStockListMeta({
         ...EMPTY_OPENING_STOCK_LIST_META,
@@ -966,43 +946,38 @@ export default function OpeningStockPage() {
     openingStockListPage,
     openingStockListPageSize,
   ]);
-
   const handleOpenOpeningStockList = useCallback(() => {
     setIsOpeningStockListOpen(true);
     setOpeningStockListError(null);
   }, []);
-
   const handleCloseOpeningStockList = useCallback(() => {
     openingStockListRequestRef.current += 1;
     setIsOpeningStockListOpen(false);
     setIsOpeningStockListLoading(false);
     setOpeningStockListError(null);
+    setOpeningStockListPage(1);
+    setOpeningStockListFilters(DEFAULT_OPENING_STOCK_LIST_FILTERS);
+    setSelectedOpeningStockListVoucherId(null);
   }, []);
-
   const handleRefreshOpeningStockList = useCallback(() => {
     void loadOpeningStockList();
   }, [loadOpeningStockList]);
-
   const handleOpeningStockListSearchChange = useCallback((search: string) => {
     setOpeningStockListPage(1);
     setOpeningStockListFilters((current) => ({ ...current, search }));
   }, []);
-
   const handleOpeningStockListDateFromChange = useCallback((dateFrom: string) => {
     setOpeningStockListPage(1);
     setOpeningStockListFilters((current) => ({ ...current, dateFrom }));
   }, []);
-
   const handleOpeningStockListDateToChange = useCallback((dateTo: string) => {
     setOpeningStockListPage(1);
     setOpeningStockListFilters((current) => ({ ...current, dateTo }));
   }, []);
-
   const handleOpeningStockListPageSizeChange = useCallback((pageSize: number) => {
     setOpeningStockListPage(1);
     setOpeningStockListPageSize(pageSize);
   }, []);
-
   const handleOpeningStockListRowSelect = useCallback((row: OpeningStockHeaderPayload) => {
     setSelectedOpeningStockListVoucherId(row.avh_voucher_id);
   }, []);
@@ -1048,13 +1023,11 @@ export default function OpeningStockPage() {
 
       handleOpenOpeningStockList();
     };
-
     window.addEventListener("keydown", handleF5KeyDown);
     return () => {
       window.removeEventListener("keydown", handleF5KeyDown);
     };
   }, [handleOpenOpeningStockList, isOpeningStockListOpen, loadOpeningStockList]);
-
   useEffect(() => {
     if (Object.keys(invalidFieldKeys).length === 0) {
       return;
@@ -1238,7 +1211,6 @@ export default function OpeningStockPage() {
                     parseDecimal(field === "freeqty" ? value : nextValues.freeqty) * convFactor,
                   );
                 }
-
                 if (field === "osltrackingtype" && value !== "2") {
                   nextValues.batchno = "";
                   nextValues.serialno = "";
@@ -1246,7 +1218,6 @@ export default function OpeningStockPage() {
                   nextValues.mfgdate = "";
                   nextValues.expirydate = "";
                 }
-
                 return {
                   ...row,
                   values: nextValues,
@@ -1255,23 +1226,19 @@ export default function OpeningStockPage() {
             : row,
         ),
       );
-
       if (field === "osltaxid") {
         const normalizedTaxId = value.trim();
         const requestId = (taxDetailRequestRef.current[rowId] ?? 0) + 1;
         taxDetailRequestRef.current[rowId] = requestId;
-
         if (!normalizedTaxId) {
           return;
         }
-
         void (async () => {
           try {
             const taxDetail = await triggerItemTaxById({ taxId: normalizedTaxId }, true).unwrap();
             if (taxDetailRequestRef.current[rowId] !== requestId) {
               return;
             }
-
             setRows((currentRows) =>
               currentRows.map((row) =>
                 row.id === rowId && (row.values.osltaxid ?? "").trim() === normalizedTaxId
@@ -1293,23 +1260,19 @@ export default function OpeningStockPage() {
           }
         })();
       }
-
       if (field === "osltrackingtype") {
         setInvalidFieldKeys((current) =>
           clearInvalidFieldKeys(current, rowId, TRACKING_VALIDATION_FIELD_KEYS),
         );
         return;
       }
-
       if (!toNullableTrimmedString(value)) {
         return;
       }
-
       setInvalidFieldKeys((current) => clearInvalidFieldKeys(current, rowId, [field]));
     },
     [getNextRowValuesWithDerivedPrices, taxOptionsByValue, triggerItemTaxById],
   );
-
   const handleUomChange = useCallback(
     (rowId: number, unitId: string) => {
       setRows((currentRows) =>
@@ -1317,13 +1280,11 @@ export default function OpeningStockPage() {
           if (row.id !== rowId) {
             return row;
           }
-
           const itemId = row.values.oslitemid?.trim() ?? "";
           const itemDetail = itemId ? itemDetailsByItemId[itemId] : undefined;
           if (!itemDetail) {
             return row;
           }
-
           const priceRecord = resolveItemPriceRecordByUnitId(itemDetail, unitId);
           return {
             ...row,
@@ -1340,19 +1301,16 @@ export default function OpeningStockPage() {
           };
         }),
       );
-
       if (toNullableTrimmedString(unitId)) {
         setInvalidFieldKeys((current) => clearInvalidFieldKeys(current, rowId, ["uom"]));
       }
     },
     [godownOptionsByValue, itemDetailsByItemId, unitOptionsByValue],
   );
-
   const handleLookupSelection = useCallback(
     (rowId: number, lookupKind: LookupKind, option: ERPDynamicSelectOption) => {
       if (lookupKind !== "item") {
         const fieldConfig = LOOKUP_FIELD_CONFIG[lookupKind];
-
         setRows((currentRows) =>
           currentRows.map((row) =>
             row.id === rowId
@@ -1367,21 +1325,17 @@ export default function OpeningStockPage() {
               : row,
           ),
         );
-
         if (option.value) {
           setInvalidFieldKeys((current) =>
             clearInvalidFieldKeys(current, rowId, [fieldConfig.labelField]),
           );
         }
-
         setOpenLookupCell(null);
         setLookupSearchQuery("");
         return;
       }
-
       const requestId = (itemDetailRequestRef.current[rowId] ?? 0) + 1;
       itemDetailRequestRef.current[rowId] = requestId;
-
       setRows((currentRows) =>
         ensureTrailingEmptyRow(
           currentRows.map((row) =>
@@ -1398,18 +1352,14 @@ export default function OpeningStockPage() {
           rowId,
         ),
       );
-
       if (option.value) {
         setInvalidFieldKeys((current) => clearInvalidFieldKeys(current, rowId, ["itemname"]));
       }
-
       setOpenLookupCell(null);
       setLookupSearchQuery("");
-
       if (!option.value) {
         return;
       }
-
       const cachedDetail = itemDetailsByItemId[option.value];
       if (cachedDetail) {
         setRows((currentRows) =>
@@ -1417,7 +1367,6 @@ export default function OpeningStockPage() {
             if (row.id !== rowId || (row.values.oslitemid ?? "").trim() !== option.value) {
               return row;
             }
-
             return {
               ...row,
               values: {
@@ -1434,7 +1383,6 @@ export default function OpeningStockPage() {
             };
           }),
         );
-
         const cachedDefaultTaxId = cachedDetail.item.item_default_tax_id?.trim() ?? "";
         if (!cachedDetail.item_tax && cachedDefaultTaxId) {
           void (async () => {
@@ -1446,7 +1394,6 @@ export default function OpeningStockPage() {
               if (itemDetailRequestRef.current[rowId] !== requestId) {
                 return;
               }
-
               setRows((currentRows) =>
                 currentRows.map((row) =>
                   row.id === rowId && (row.values.oslitemid ?? "").trim() === option.value
@@ -1468,17 +1415,14 @@ export default function OpeningStockPage() {
             }
           })();
         }
-
         return;
       }
-
       void (async () => {
         try {
           const detail = await triggerItemPriceDetails({ itemId: option.value }, true).unwrap();
           if (itemDetailRequestRef.current[rowId] !== requestId) {
             return;
           }
-
           setItemDetailsByItemId((current) => ({
             ...current,
             [detail.item.item_id]: detail,
@@ -1488,7 +1432,6 @@ export default function OpeningStockPage() {
               if (row.id !== rowId || (row.values.oslitemid ?? "").trim() !== option.value) {
                 return row;
               }
-
               return {
                 ...row,
                 values: {
@@ -1505,7 +1448,6 @@ export default function OpeningStockPage() {
               };
             }),
           );
-
           const detailDefaultTaxId = detail.item.item_default_tax_id?.trim() ?? "";
           if (!detail.item_tax && detailDefaultTaxId) {
             try {
@@ -1516,7 +1458,6 @@ export default function OpeningStockPage() {
               if (itemDetailRequestRef.current[rowId] !== requestId) {
                 return;
               }
-
               setRows((currentRows) =>
                 currentRows.map((row) =>
                   row.id === rowId && (row.values.oslitemid ?? "").trim() === option.value
@@ -1541,7 +1482,6 @@ export default function OpeningStockPage() {
           if (itemDetailRequestRef.current[rowId] !== requestId) {
             return;
           }
-
           const message =
             error &&
             typeof error === "object" &&
@@ -1565,7 +1505,6 @@ export default function OpeningStockPage() {
       unitOptionsByValue,
     ],
   );
-
   const handleCloseInlineItemMaster = useCallback((closeModal = true) => {
     if (closeModal) {
       inlineItemMasterControllerRef.current?.closeModal();
@@ -1575,7 +1514,6 @@ export default function OpeningStockPage() {
     setInlineItemMasterSession(null);
     setIsInlineItemMasterOpen(false);
   }, []);
-
   const handleCloseInlineGodownMaster = useCallback((closeModal = true) => {
     if (closeModal) {
       inlineGodownMasterControllerRef.current?.closeModal();
@@ -1585,20 +1523,17 @@ export default function OpeningStockPage() {
     setInlineGodownMasterSession(null);
     setIsInlineGodownMasterOpen(false);
   }, []);
-
   const handleInlineItemMasterControllerReady = useCallback(
     (controller: CrudMasterPageController | null) => {
       inlineItemMasterControllerRef.current = controller;
       if (!controller) {
         return;
       }
-
       const request = pendingInlineItemMasterRequestRef.current;
       if (!request) {
         return;
       }
       pendingInlineItemMasterRequestRef.current = null;
-
       if (request.mode === "create") {
         controller.openCreate({
           values: request.query
@@ -1609,25 +1544,21 @@ export default function OpeningStockPage() {
         });
         return;
       }
-
       void controller.openUpdateById(request.itemId);
     },
     [],
   );
-
   const handleInlineGodownMasterControllerReady = useCallback(
     (controller: CrudMasterPageController | null) => {
       inlineGodownMasterControllerRef.current = controller;
       if (!controller) {
         return;
       }
-
       const request = pendingInlineGodownMasterRequestRef.current;
       if (!request) {
         return;
       }
       pendingInlineGodownMasterRequestRef.current = null;
-
       if (request.mode === "create") {
         controller.openCreate({
           values: request.query
@@ -1638,12 +1569,10 @@ export default function OpeningStockPage() {
         });
         return;
       }
-
       void controller.openUpdateById(request.godownId);
     },
     [],
   );
-
   const handleInlineItemMasterModalOpenChange = useCallback(
     (open: boolean) => {
       if (!open) {
@@ -1652,7 +1581,6 @@ export default function OpeningStockPage() {
     },
     [handleCloseInlineItemMaster],
   );
-
   const handleInlineGodownMasterModalOpenChange = useCallback(
     (open: boolean) => {
       if (!open) {
@@ -1661,7 +1589,6 @@ export default function OpeningStockPage() {
     },
     [handleCloseInlineGodownMaster],
   );
-
   const handleItemLookupCreateShortcut = useCallback(
     (rowId: number, payload: ERPDynamicSearchShortcutPayload) => {
       const nextRequest: InlineItemMasterRequest = {
@@ -1676,7 +1603,6 @@ export default function OpeningStockPage() {
     },
     [],
   );
-
   const handleItemLookupEditShortcut = useCallback(
     (rowId: number, payload: ERPDynamicSearchShortcutPayload) => {
       const matchedOption = resolveOptionFromShortcut(payload, itemOptions);
@@ -1685,7 +1611,6 @@ export default function OpeningStockPage() {
         toast.info("Type/select an existing item, then press Alt+A.");
         return;
       }
-
       const nextRequest: InlineItemMasterRequest = {
         itemId,
         mode: "update",
@@ -1698,7 +1623,6 @@ export default function OpeningStockPage() {
     },
     [itemOptions],
   );
-
   const handleGodownLookupCreateShortcut = useCallback(
     (rowId: number, payload: ERPDynamicSearchShortcutPayload) => {
       const nextRequest: InlineGodownMasterRequest = {
@@ -1713,7 +1637,6 @@ export default function OpeningStockPage() {
     },
     [],
   );
-
   const handleGodownLookupEditShortcut = useCallback(
     (rowId: number, payload: ERPDynamicSearchShortcutPayload) => {
       const matchedOption = resolveOptionFromShortcut(payload, godownOptions);
@@ -1722,7 +1645,6 @@ export default function OpeningStockPage() {
         toast.info("Type/select an existing godown, then press Alt+A.");
         return;
       }
-
       const nextRequest: InlineGodownMasterRequest = {
         godownId,
         mode: "update",
@@ -1735,7 +1657,6 @@ export default function OpeningStockPage() {
     },
     [godownOptions],
   );
-
   const handleInlineItemMasterSaved = useCallback(
     async (params: {
       itemId: string;
@@ -1747,31 +1668,26 @@ export default function OpeningStockPage() {
         handleCloseInlineItemMaster();
         return;
       }
-
       const itemName =
         params.values.item_name_en?.trim() ||
         params.values.masterName?.trim() ||
         activeRequest.query;
       let refreshedOptions: ERPDynamicSelectOption[] = [];
-
       try {
         refreshedOptions = await loadLookupOptions("item", itemName);
       } catch {
         refreshedOptions = [];
       }
-
       let resolvedOption =
         refreshedOptions.find((option) => option.value.trim() === params.itemId) ??
         itemOptions.find((option) => option.value.trim() === params.itemId) ??
         null;
-
       if (!resolvedOption && params.itemId.trim()) {
         resolvedOption = {
           label: itemName || params.itemId,
           value: params.itemId,
         };
       }
-
       if (resolvedOption) {
         setItemOptions((currentOptions) =>
           mergeLookupOptions(
@@ -1783,7 +1699,6 @@ export default function OpeningStockPage() {
       } else if (refreshedOptions.length > 0) {
         setItemOptions((currentOptions) => mergeLookupOptions(currentOptions, refreshedOptions));
       }
-
       setOpenLookupCell(null);
       setLookupSearchQuery("");
       handleCloseInlineItemMaster();
@@ -1796,7 +1711,6 @@ export default function OpeningStockPage() {
       loadLookupOptions,
     ],
   );
-
   const handleInlineGodownMasterSaved = useCallback(
     async (params: {
       godownId: string;
@@ -1808,28 +1722,23 @@ export default function OpeningStockPage() {
         handleCloseInlineGodownMaster();
         return;
       }
-
       const godownName = params.values.masterName?.trim() || activeRequest.query;
       let refreshedOptions: ERPDynamicSelectOption[] = [];
-
       try {
         refreshedOptions = await loadLookupOptions("godown", godownName);
       } catch {
         refreshedOptions = [];
       }
-
       let resolvedOption =
         refreshedOptions.find((option) => option.value.trim() === params.godownId) ??
         godownOptions.find((option) => option.value.trim() === params.godownId) ??
         null;
-
       if (!resolvedOption && params.godownId.trim()) {
         resolvedOption = {
           label: godownName || params.godownId,
           value: params.godownId,
         };
       }
-
       if (resolvedOption) {
         setGodownOptions((currentOptions) =>
           mergeLookupOptions(
@@ -1841,7 +1750,6 @@ export default function OpeningStockPage() {
       } else if (refreshedOptions.length > 0) {
         setGodownOptions((currentOptions) => mergeLookupOptions(currentOptions, refreshedOptions));
       }
-
       setOpenLookupCell(null);
       setLookupSearchQuery("");
       handleCloseInlineGodownMaster();
@@ -1854,19 +1762,16 @@ export default function OpeningStockPage() {
       loadLookupOptions,
     ],
   );
-
   const handleLookupSearchChange = useCallback(
     (lookupKind: LookupKind, search: string) => {
       const normalizedSearch = search.trim();
- 
-      if (lookupKind === "item") {
+       if (lookupKind === "item") {
         if (itemSearchTimeoutRef.current !== null) {
           window.clearTimeout(itemSearchTimeoutRef.current);
         }
         if (!normalizedSearch) {
           return;
         }
-
         const requestId = itemSearchRequestRef.current + 1;
         itemSearchRequestRef.current = requestId;
         itemSearchTimeoutRef.current = window.setTimeout(() => {
@@ -2016,6 +1921,13 @@ export default function OpeningStockPage() {
     setLookupSearchQuery("");
   }, []);
 
+  const handleClearRows = useCallback(() => {
+    setRows([createEmptyRow(1)]);
+    setInvalidFieldKeys({});
+    setLookupSearchQuery("");
+    setOpenLookupCell(null);
+  }, []);
+
   const clearOpeningStockEditor = useCallback(() => {
     const nextRows = [createEmptyRow(1)];
     markEditorStateAsClean({
@@ -2033,7 +1945,28 @@ export default function OpeningStockPage() {
     setVoucherRefNo("");
     setPendingLoadRequest(null);
     setIsDeleteLoadedStockConfirmOpen(false);
-  }, [markEditorStateAsClean, voucherDate]);
+    resetOpeningStockAuditNotesModal();
+  }, [markEditorStateAsClean, resetOpeningStockAuditNotesModal, voucherDate]);
+
+  const submitOpeningStockSave = useCallback(
+    async (requestPayload: OpeningStockSaveRequest, auditNotes?: string | null) => {
+      try {
+        await saveOpeningStock({
+          body:
+            auditNotes === undefined
+              ? requestPayload
+              : {
+                  ...requestPayload,
+                  audit_notes: auditNotes,
+                },
+        });
+        clearOpeningStockEditor();
+      } catch {
+        // Toasting is handled in useApi.
+      }
+    },
+    [clearOpeningStockEditor, saveOpeningStock],
+  );
 
   const resolveLoadContext = useCallback(() => {
     if (!activeCompany) {
@@ -2482,14 +2415,15 @@ export default function OpeningStockPage() {
       },
       details: draftRows.map(buildOpeningStockDetailPayload),
     };
-    try {
-      await saveOpeningStock({
-        body: requestPayload,
-      });
-      clearOpeningStockEditor();
-    } catch {
-      // Toasting is handled in useApi.
+
+    if (loadedVoucherId?.trim()) {
+      setPendingOpeningStockSaveRequest(requestPayload);
+      setOpeningStockAuditNotes("");
+      setOpeningStockAuditNotesError(null);
+      return;
     }
+
+    await submitOpeningStockSave(requestPayload);
   }, [
     accountingYear,
     activeBranch,
@@ -2500,9 +2434,40 @@ export default function OpeningStockPage() {
     draftTotals.value,
     loadedVoucherId,
     listAccountLedgers,
-    saveOpeningStock,
+    submitOpeningStockSave,
     voucherDate,
-    clearOpeningStockEditor,
+  ]);
+
+  const handleOpeningStockAuditNotesChange = useCallback((value: string) => {
+    setOpeningStockAuditNotes(value);
+    setOpeningStockAuditNotesError(null);
+  }, []);
+
+  const handleCancelOpeningStockAuditNotes = useCallback(() => {
+    if (isSavingOpeningStock) {
+      return;
+    }
+
+    resetOpeningStockAuditNotesModal();
+  }, [isSavingOpeningStock, resetOpeningStockAuditNotesModal]);
+
+  const handleConfirmOpeningStockAuditNotes = useCallback(() => {
+    if (!pendingOpeningStockSaveRequest || isSavingOpeningStock) {
+      return;
+    }
+
+    const normalizedAuditNotes = openingStockAuditNotes.trim();
+    if (!normalizedAuditNotes) {
+      setOpeningStockAuditNotesError("Enter audit notes before saving the opening stock update.");
+      return;
+    }
+
+    void submitOpeningStockSave(pendingOpeningStockSaveRequest, normalizedAuditNotes);
+  }, [
+    isSavingOpeningStock,
+    openingStockAuditNotes,
+    pendingOpeningStockSaveRequest,
+    submitOpeningStockSave,
   ]);
 
   const handleDeleteLoadedStock = useCallback(() => {
@@ -2636,17 +2601,19 @@ export default function OpeningStockPage() {
           voucherDatePickerRef={voucherDatePickerRef}
           isLoadingStock={isLoadingStock}
           isSavingOpeningStock={isSavingOpeningStock}
-          isDeletingOpeningStock={isDeletingOpeningStock}
-          isBusinessContextLoading={isBusinessContextLoading}
-          canDeleteLoadedStock={Boolean(loadedVoucherId)}
-          onVoucherDateChange={setVoucherDate}
-          onVoucherRefNoChange={setVoucherRefNo}
-          onBrowseStockList={handleOpenOpeningStockList}
-          onLoadByRefNo={handleLoadByRefNo}
-          onLoadStock={handleLoadStock}
-          onUpdateStock={handleUpdateStock}
-          onDeleteStock={handleDeleteLoadedStock}
-        />
+        isDeletingOpeningStock={isDeletingOpeningStock}
+        isBusinessContextLoading={isBusinessContextLoading}
+        canDeleteLoadedStock={Boolean(loadedVoucherId)}
+        canClearRows={draftRows.length > 0}
+        onVoucherDateChange={setVoucherDate}
+        onVoucherRefNoChange={setVoucherRefNo}
+        onBrowseStockList={handleOpenOpeningStockList}
+        onLoadByRefNo={handleLoadByRefNo}
+        onLoadStock={handleLoadStock}
+        onClearRows={handleClearRows}
+        onUpdateStock={handleUpdateStock}
+        onDeleteStock={handleDeleteLoadedStock}
+      />
         <div
           className={styles.tableViewport}
           data-erp-table-viewport="true"
@@ -2854,6 +2821,16 @@ export default function OpeningStockPage() {
         cancelLabel="Stay Here"
         onConfirm={handleConfirmUnsafeNavigation}
         onCancel={handleCancelUnsafeNavigation}
+      />
+      <OpeningStockAuditNotesModal
+        isOpen={pendingOpeningStockSaveRequest !== null}
+        notes={openingStockAuditNotes}
+        error={openingStockAuditNotesError}
+        loading={isSavingOpeningStock}
+        voucherLabel={loadedDocumentMeta?.voucherLabel || voucherRefNo || loadedVoucherId}
+        onChange={handleOpeningStockAuditNotesChange}
+        onConfirm={handleConfirmOpeningStockAuditNotes}
+        onCancel={handleCancelOpeningStockAuditNotes}
       />
       <OpeningStockListModal
         isOpen={isOpeningStockListOpen}

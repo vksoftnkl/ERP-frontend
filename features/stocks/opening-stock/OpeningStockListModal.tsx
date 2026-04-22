@@ -5,7 +5,7 @@ import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import type { OpeningStockHeaderPayload } from "./opening-stock.types";
 import styles from "./page.module.scss";
 import { QUANTITY_FORMATTER, VALUE_FORMATTER } from "./constants";
-import { cx, toInputDateValue } from "./Utils";
+import { cx, formatDateForDisplay } from "./Utils";
 type OpeningStockListFilters = {
   search: string;
   dateFrom: string;
@@ -87,34 +87,7 @@ export function OpeningStockListModal({
         key: "voucherDate",
         header: "Voucher Date",
         width: "135px",
-        render: (row) => toInputDateValue(row.osh_voucher_date) || "-",
-      },
-      {
-        key: "userName",
-        header: "User Name",
-        width: "180px",
-        render: (row) =>
-          resolveTextValue(row, [
-            "avh_user_name",
-            "osh_user_name",
-            "user_name",
-            "avh_user_refno",
-            "avh_user_id",
-            "osh_user_id",
-          ]),
-      },
-      {
-        key: "counterName",
-        header: "Counter Name",
-        width: "180px",
-        render: (row) =>
-          resolveTextValue(row, [
-            "avh_counter_name",
-            "osh_counter_name",
-            "counter_name",
-            "avh_counter_id",
-            "osh_counter_id",
-          ]),
+        render: (row) => formatDateForDisplay(row.osh_voucher_date) || "-",
       },
       {
         key: "lines",
@@ -142,6 +115,34 @@ export function OpeningStockListModal({
         header: "Status",
         width: "120px",
         render: (row) => row.osh_status?.trim() || row.avh_voucher_status?.trim() || "-",
+      },
+    
+      {
+        key: "counterName",
+        header: "Counter Name",
+        width: "180px",
+        render: (row) =>
+          resolveTextValue(row, [
+            "avh_counter_name",
+            "osh_counter_name",
+            "counter_name",
+            "avh_counter_id",
+            "osh_counter_id",
+          ]),
+      },
+        {
+        key: "userName",
+        header: "User Name",
+        width: "180px",
+        render: (row) =>
+          resolveTextValue(row, [
+            "avh_user_name",
+            "osh_user_name",
+            "user_name",
+            "avh_user_refno",
+            "avh_user_id",
+            "osh_user_id",
+          ]),
       },
     ],
     [],
@@ -209,7 +210,7 @@ export function OpeningStockListModal({
       >
         <header className={styles.stockBrowserModalHeader}>
           <div className={styles.stockBrowserModalTitleBlock}>
-            <p className={styles.stockBrowserModalEyebrow}>Opening Stock</p>            
+            <p className={styles.stockBrowserModalEyebrow}>Opening Stock list</p>            
           </div>
           <button
             type="button"
@@ -230,7 +231,7 @@ export function OpeningStockListModal({
             columns={columns}
             rows={rows}
             rowKey="avh_voucher_id"
-            title="Opening Stock List"
+           // title="Opening Stock List"
             toolbarContent={
               <div className={styles.stockBrowserFilters}>
                 <label className={styles.toolbarDateField}>
@@ -248,7 +249,6 @@ export function OpeningStockListModal({
                     />
                   </div>
                 </label>
-
                 <label className={styles.toolbarDateField}>
                   <span className={styles.toolbarDateLabel}>From Date</span>
                   <div className={styles.toolbarDateControl}>
@@ -260,7 +260,6 @@ export function OpeningStockListModal({
                     />
                   </div>
                 </label>
-
                 <label className={styles.toolbarDateField}>
                   <span className={styles.toolbarDateLabel}>To Date</span>
                   <div className={styles.toolbarDateControl}>
@@ -272,7 +271,6 @@ export function OpeningStockListModal({
                     />
                   </div>
                 </label>
-
                 <button
                   type="button"
                   className={cx(styles.createButton, styles.loadButton)}
@@ -298,7 +296,8 @@ export function OpeningStockListModal({
             onPageSizeChange={onPageSizeChange}
             pageSizeOptions={[10, 20, 25, 50, 100]}
             activeRowKey={selectedVoucherId}
-            onRowClick={onSelectRow}
+            onRowClick={(row) => onSelectRow(row)}
+            onRowDoubleClick={(row) => onLoadRow(row)}
             onView={onLoadRow}
             viewLabel="Load"
             actionsAsIcons
@@ -306,7 +305,6 @@ export function OpeningStockListModal({
             wrapperClassName={styles.stockBrowserTableShell}
           />
         </div>
-
         <footer className={styles.stockBrowserModalFooter}>
           <div className={styles.stockBrowserSelectionText}>
             {selectedVoucherLabel ? `Selected: ${selectedVoucherLabel}` : "Select a voucher to load."}

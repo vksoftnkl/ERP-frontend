@@ -358,18 +358,28 @@
   line-height: 1.45;
 }
 .loadButton {
-  border-color: #365b9d;
-  background: linear-gradient(180deg, #4f76bb 0%, #365b9d 100%);
+  color: #24415f;
+  border-color: #c8d5e3;
+  background: #ffffff;
 }
 .refLoadButton {
-  border-color: #7c5a18;
-  background: linear-gradient(180deg, #c9932d 0%, #9b6e16 100%);
+  color: #24415f;
+  border-color: #c8d5e3;
+  background: #ffffff;
+}
+.clearRowsButton {
+  color: #8b3b34;
+  border-color: #e2c7c4;
+  background: #ffffff;
 }
 .refLoadButton:hover:not(:disabled) {
-  box-shadow: 0 10px 20px rgba(155, 110, 22, 0.24);
+  box-shadow: 0 10px 20px rgba(36, 65, 95, 0.12);
 }
 .loadButton:hover:not(:disabled) {
-  box-shadow: 0 10px 20px rgba(54, 91, 157, 0.24);
+  box-shadow: 0 10px 20px rgba(36, 65, 95, 0.12);
+}
+.clearRowsButton:hover:not(:disabled) {
+  box-shadow: 0 10px 20px rgba(139, 59, 52, 0.12);
 }
 .updateButton {
   border-color: #0f7a43;
@@ -555,15 +565,16 @@
 .cellInput:disabled,
 .cellSelect:disabled {
   background: transparent;
-  color: #4b5a6b;
-  -webkit-text-fill-color: #4b5a6b;
+  color: #000000;
+  -webkit-text-fill-color: #000000;
   opacity: 1;
   cursor: not-allowed;
 }
 .cellSelect.requiredField:disabled,
 .cellInput.requiredField:disabled {
   background: transparent;
-  color: #1b2634;
+  color: #000000;
+  -webkit-text-fill-color: #000000;
 }
 .cellInput[readonly] {
   background: #f8fafc;
@@ -583,6 +594,18 @@
 .cellSelect {
   cursor: pointer;
 }
+
+.cellSelectNoArrow {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: none;
+}
+
+.cellSelectNoArrow::-ms-expand {
+  display: none;
+}
+
 .lookupCell {
   position: relative;
   width: 100%;
@@ -1095,6 +1118,122 @@
   box-shadow: 0 10px 20px rgba(24, 51, 82, 0.1);
 }
 
+.stockBrowserPrimaryButton {
+  min-height: 2rem;
+  padding: 0 1.05rem;
+  border: 1px solid #0f5f9c;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #1780cd 0%, #0f6fb5 100%);
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.stockBrowserPrimaryButton:hover:not(:disabled) {
+  background: linear-gradient(180deg, #0f6fb5 0%, #0c5e98 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(15, 95, 156, 0.18);
+}
+
+.stockBrowserPrimaryButton:disabled,
+.stockBrowserSecondaryButton:disabled,
+.stockBrowserModalCloseButton:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.auditNotesModalPanel {
+  position: relative;
+  z-index: 1;
+  width: min(580px, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #d8e3ee;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+  box-shadow: 0 28px 60px rgba(12, 31, 53, 0.24);
+  overflow: hidden;
+}
+
+.auditNotesModalBody {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+}
+
+.auditNotesField {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.auditNotesLabel {
+  color: #294863;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.auditNotesTextarea {
+  width: 100%;
+  min-height: 9rem;
+  resize: vertical;
+  border: 1px solid #c8d5e3;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #17324a;
+  font: inherit;
+  line-height: 1.5;
+  padding: 0.8rem 0.9rem;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.auditNotesTextarea:focus {
+  outline: none;
+  border-color: #1780cd;
+  box-shadow: 0 0 0 3px rgba(23, 128, 205, 0.16);
+}
+
+.auditNotesTextareaInvalid {
+  border-color: #c75a52;
+  box-shadow: 0 0 0 3px rgba(199, 90, 82, 0.12);
+}
+
+.auditNotesMetaRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.auditNotesHelperText,
+.auditNotesErrorText {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.auditNotesHelperText {
+  color: #5a7088;
+}
+
+.auditNotesErrorText {
+  color: #b4453e;
+  font-weight: 600;
+}
+
+.auditNotesCharCount {
+  color: #5a7088;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 @media (max-width: 1200px) {
   .summaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1142,6 +1281,11 @@
     max-height: calc(100dvh - 1rem);
   }
 
+  .auditNotesModalPanel {
+    width: min(100vw - 1rem, 100%);
+    max-height: calc(100dvh - 1rem);
+  }
+
   .stockBrowserModalHeader,
   .stockBrowserModalBody,
   .stockBrowserModalFooter {
@@ -1157,5 +1301,9 @@
   .stockBrowserModalActions {
     width: 100%;
     justify-content: flex-end;
+  }
+
+  .auditNotesMetaRow {
+    flex-direction: column;
   }
 }

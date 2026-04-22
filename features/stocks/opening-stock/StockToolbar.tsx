@@ -1,6 +1,6 @@
 "use client";
 import type { ReactNode, RefObject } from "react";
-import { FiCalendar, FiDownload, FiSearch, FiTrash2 } from "react-icons/fi";
+import { FiCalendar, FiDownload, FiList, FiRotateCcw, FiSearch, FiTrash2 } from "react-icons/fi";
 import { cx, formatDateEntry, formatDateForDisplay, openDatePicker, toCanonicalDateValue } from "./Utils";
 import styles from "./page.module.scss";
 type StockToolbarProps = {
@@ -12,11 +12,13 @@ type StockToolbarProps = {
   isDeletingOpeningStock: boolean;
   isBusinessContextLoading: boolean;
   canDeleteLoadedStock: boolean;
+  canClearRows: boolean;
   onVoucherDateChange: (value: string) => void;
   onVoucherRefNoChange: (value: string) => void;
   onBrowseStockList: () => void;
   onLoadByRefNo: () => void;
   onLoadStock: () => void;
+  onClearRows: () => void;
   onUpdateStock: () => void;
   onDeleteStock: () => void;
 };
@@ -29,11 +31,13 @@ export function StockToolbar({
   isDeletingOpeningStock,
   isBusinessContextLoading,
   canDeleteLoadedStock,
+  canClearRows,
   onVoucherDateChange,
   onVoucherRefNoChange,
   onBrowseStockList,
   onLoadByRefNo,
   onLoadStock,
+  onClearRows,
   onUpdateStock,
   onDeleteStock,
 }: StockToolbarProps): ReactNode {
@@ -94,7 +98,7 @@ export function StockToolbar({
             />
           </div>
         </label>
-  
+        
         <button
           type="button"
           className={cx(styles.createButton, styles.refLoadButton)}
@@ -127,8 +131,9 @@ export function StockToolbar({
             className={styles.createIcon}
             aria-hidden="true"
           />
-          <span>{isLoadingStock ? "Loading..." : "Load Latest"}</span>
+          <span>{isLoadingStock ? "Loading..." : "Load Stock"}</span>
         </button>
+     
         <button
           type="button"
           className={cx(styles.createButton, styles.updateButton)}
@@ -159,6 +164,41 @@ export function StockToolbar({
             aria-hidden="true"
           />
           <span>{isDeletingOpeningStock ? "Deleting..." : "Delete Stock"}</span>
+        </button>
+        <button
+          type="button"
+          className={cx(styles.createButton, styles.loadButton)}
+          onClick={onBrowseStockList}
+          disabled={
+            isLoadingStock ||
+            isSavingOpeningStock ||
+            isDeletingOpeningStock ||
+            isBusinessContextLoading
+          }
+        >
+          <FiList
+            className={styles.createIcon}
+            aria-hidden="true"
+          />
+          <span>Open List</span>
+        </button>
+           <button
+          type="button"
+          className={cx(styles.createButton, styles.clearRowsButton)}
+          onClick={onClearRows}
+          disabled={
+            !canClearRows ||
+            isLoadingStock ||
+            isSavingOpeningStock ||
+            isDeletingOpeningStock ||
+            isBusinessContextLoading
+          }
+        >
+          <FiRotateCcw
+            className={styles.createIcon}
+            aria-hidden="true"
+          />
+          <span>Clear Rows</span>
         </button>
       </div>
     </div>

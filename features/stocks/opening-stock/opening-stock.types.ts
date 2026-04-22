@@ -72,6 +72,7 @@ export type OpeningStockSaveDetail = {
 
 export type OpeningStockSaveRequest = {
   header: OpeningStockSaveHeader;
+  audit_notes?: string | null;
   details: OpeningStockSaveDetail[];
 };
 

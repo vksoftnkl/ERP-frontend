@@ -1315,7 +1315,11 @@ export function mapOpeningStockDocumentToRows(
     return [createEmptyRow(1)];
   }
 
-  return document.details.map((detail, index) => mapOpeningStockDetailToRow(detail, index + 1));
+  const loadedRows = document.details.map((detail, index) =>
+    mapOpeningStockDetailToRow(detail, index + 1),
+  );
+
+  return [...loadedRows, createEmptyRow(getNextRowId(loadedRows))];
 }
 
 export function buildOpeningStockNarration(rows: OpeningStockRow[]): string | null {

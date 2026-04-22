@@ -1,5 +1,4 @@
 "use client";
-
 import type {
   FocusEvent as ReactFocusEvent,
   KeyboardEvent as ReactKeyboardEvent,
@@ -43,7 +42,6 @@ import {
   toCanonicalDateValue,
 } from "./Utils";
 import styles from "./page.module.scss";
-
 type StockTableRowProps = {
   row: OpeningStockRow;
   rowIndex: number;
@@ -84,7 +82,6 @@ type StockTableRowProps = {
     payload: ERPDynamicSearchShortcutPayload,
   ) => void | Promise<void>;
 };
-
 function getSelectOptionLabel(columnKey: string, option: string): string {
   if (columnKey === "profittype") {
     return PROFIT_TYPE_OPTION_LABELS[option as keyof typeof PROFIT_TYPE_OPTION_LABELS] ?? option;
@@ -94,11 +91,9 @@ function getSelectOptionLabel(columnKey: string, option: string): string {
   }
   return option;
 }
-
 function getCellPlaceholder(placeholder?: string): string | undefined {
   return placeholder === "0.00" || placeholder === "0.000" ? "" : placeholder;
 }
-
 function getAlignClass(align: ColumnDefinition["align"]): string {
   if (align === "right") {
     return styles.alignRight;
@@ -108,7 +103,6 @@ function getAlignClass(align: ColumnDefinition["align"]): string {
   }
   return styles.alignLeft;
 }
-
 function shouldUseSelectedRowFieldBackground(columnKey: string): boolean {
   return (
     columnKey === "taxname" ||
@@ -119,29 +113,23 @@ function shouldUseSelectedRowFieldBackground(columnKey: string): boolean {
     columnKey === "expirydate"
   );
 }
-
 function handleFieldNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>): boolean {
   if (event.key !== "Enter") {
     return false;
   }
-
   if (event.altKey || event.ctrlKey || event.metaKey) {
     return false;
   }
-
   event.preventDefault();
   moveOpeningStockFieldFocus(event.currentTarget, "right");
   return true;
 }
-
 function handleSelectableInputFocus(event: ReactFocusEvent<HTMLInputElement>): void {
   event.currentTarget.select();
 }
-
 function handleSelectableInputClick(event: ReactMouseEvent<HTMLInputElement>): void {
   event.currentTarget.select();
 }
-
 export function StockTableRow({
   row,
   rowIndex,
@@ -177,7 +165,6 @@ export function StockTableRow({
     row.values.oslunitid,
     unitDecimalCountById,
   );
-
   return (
     <tr
       className={cx(
@@ -258,6 +245,8 @@ export function StockTableRow({
         const isRequiredField =
           !isDisabledInput && getTrackingRequiredFieldKeys(row).includes(column.key);
         const usesSelectedRowFieldBackground = shouldUseSelectedRowFieldBackground(column.key);
+        const hidesNativeSelectArrow =
+          column.key === "osltrackingtype" || column.key === "oslcesstype";
         const sharedClassName = cx(
           styles.cellInput,
           isNumeric && styles.numericInput,
@@ -265,7 +254,6 @@ export function StockTableRow({
           usesSelectedRowFieldBackground && styles.rowSelectionFillControl,
         );
         const cellDatePickerKey = `${row.id}:${column.key}`;
-
         return (
           <td
             key={column.key}
@@ -337,7 +325,11 @@ export function StockTableRow({
                 value={value}
                 onChange={(event) => onRowChange(row.id, column.key, event.target.value)}
                 onKeyDown={handleFieldNavigationKeyDown}
-                className={cx(styles.cellSelect, hasRequiredFieldError && styles.requiredField)}
+                className={cx(
+                  styles.cellSelect,
+                  hidesNativeSelectArrow && styles.cellSelectNoArrow,
+                  hasRequiredFieldError && styles.requiredField,
+                )}
                 disabled={isDisabledInput}
                 aria-invalid={hasRequiredFieldError || undefined}
               >
