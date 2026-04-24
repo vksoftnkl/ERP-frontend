@@ -118,12 +118,14 @@ import {
   getTableMinWidth,
   getTodayInputValue,
   getTotals,
+  isOpeningStockBatchNumberEditable,
   isPristineRow,
   isValidationFieldSatisfied,
   mapOpeningStockDocumentToRows,
   mergeLookupOptions,
   mergeResolvedColumns,
   normalizeOpeningStockRowQuantitiesByUnit,
+  normalizeOpeningStockTrackingType,
   parseColumnWidth,
   parseDecimal,
   reorderColumns,
@@ -1177,6 +1179,8 @@ export default function OpeningStockPage() {
                   ...row.values,
                   [field]: value,
                 };
+                const itemId = nextValues.oslitemid?.trim() ?? "";
+                const itemDetail = itemId ? itemDetailsByItemId[itemId] : undefined;
                 if (field === "osltaxid") {
                   const normalizedTaxId = value.trim();
                   nextValues.taxname = normalizedTaxId
@@ -1220,12 +1224,23 @@ export default function OpeningStockPage() {
                     parseDecimal(field === "freeqty" ? value : nextValues.freeqty) * convFactor,
                   );
                 }
-                if (field === "osltrackingtype" && value !== "2") {
-                  nextValues.batchno = "";
-                  nextValues.serialno = "";
-                  nextValues.batchdate = "";
-                  nextValues.mfgdate = "";
-                  nextValues.expirydate = "";
+                if (field === "osltrackingtype") {
+                  const nextTrackingRow = {
+                    ...row,
+                    values: nextValues,
+                  };
+                  const normalizedTrackingType = normalizeOpeningStockTrackingType(value);
+
+                  if (!isOpeningStockBatchNumberEditable(nextTrackingRow, itemDetail)) {
+                    nextValues.batchno = "";
+                  }
+
+                  if (normalizedTrackingType !== "2") {
+                    nextValues.serialno = "";
+                    nextValues.batchdate = "";
+                    nextValues.mfgdate = "";
+                    nextValues.expirydate = "";
+                  }
                 }
                 return {
                   ...row,
@@ -1280,7 +1295,12 @@ export default function OpeningStockPage() {
       }
       setInvalidFieldKeys((current) => clearInvalidFieldKeys(current, rowId, [field]));
     },
-    [getNextRowValuesWithDerivedPrices, taxOptionsByValue, triggerItemTaxById],
+    [
+      getNextRowValuesWithDerivedPrices,
+      itemDetailsByItemId,
+      taxOptionsByValue,
+      triggerItemTaxById,
+    ],
   );
   const handleUomChange = useCallback(
     (rowId: number, unitId: string) => {

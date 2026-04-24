@@ -880,6 +880,19 @@ export function toOpeningStockTrackingTypePayloadValue(
 ): string {
   return TRACKING_TYPE_OPTION_LABELS[normalizeOpeningStockTrackingType(value)];
 }
+
+export function isOpeningStockBatchNumberEditable(
+  row: OpeningStockRow,
+  itemDetail?: ItemPriceDetailsPayload,
+): boolean {
+  if (!itemDetail?.item.item_is_batch_based) {
+    return false;
+  }
+
+  const trackingType = getTrackingTypeValue(row);
+  return trackingType === "1" || trackingType === "2";
+}
+
 export function getTrackingRequiredFieldKeys(
   row: OpeningStockRow,
   itemDetail?: ItemPriceDetailsPayload,
@@ -1492,11 +1505,14 @@ export function buildItemAutofillValues(
 export function isOpeningStockFieldDisabled(
   columnKey: string,
   row: OpeningStockRow,
+  itemDetail?: ItemPriceDetailsPayload,
 ): boolean {
   const trackingType = getTrackingTypeValue(row);
   const profitType = normalizeOpeningStockProfitType(row.values.profittype);
   const isBatchTrackingSelected = trackingType === "2";
   const isBatchOnlyField = BATCH_TRACKING_FIELD_KEYS.has(columnKey);
+  const isBatchNumberField = columnKey === "batchno";
+  const isBatchNumberEditable = isOpeningStockBatchNumberEditable(row, itemDetail);
   const isNoneTrackingRestrictedField =
     trackingType === "0" && NONE_TRACKING_DISABLED_FIELD_KEYS.has(columnKey);
   const isManualProfitRestrictedField =
@@ -1518,7 +1534,8 @@ export function isOpeningStockFieldDisabled(
     columnKey === "osluomid" ||
     columnKey === "oslgodownid" ||
     columnKey === "oslbaseuomid" ||
-    (isBatchOnlyField && !isBatchTrackingSelected) ||
+    (isBatchNumberField && !isBatchNumberEditable) ||
+    (columnKey !== "batchno" && isBatchOnlyField && !isBatchTrackingSelected) ||
     isNoneTrackingRestrictedField ||
     isManualProfitRestrictedField
   );

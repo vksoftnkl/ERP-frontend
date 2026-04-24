@@ -160,7 +160,6 @@ export function StockTableRow({
 }: StockTableRowProps): ReactNode {
   const currentItemId = row.values.oslitemid?.trim() ?? "";
   const currentItemDetail = currentItemId ? itemDetailsByItemId[currentItemId] : undefined;
-  const isBatchNumberEditable = Boolean(currentItemDetail?.item.item_is_batch_based);
   const trackingRequiredFieldKeys = getTrackingRequiredFieldKeys(row, currentItemDetail);
   const uomSelectOptions = buildUomOptions(currentItemDetail, unitOptionsByValue);
   const quantityDecimalCount = getOpeningStockQuantityDecimalCount(
@@ -239,9 +238,11 @@ export function StockTableRow({
             : isGodownLookupLoading
           : false;
         const isHiddenField = isOpeningStockFieldHidden(column.key, row);
-        const isDisabledInput =
-          isOpeningStockFieldDisabled(column.key, row) ||
-          (column.key === "batchno" && !isBatchNumberEditable);
+        const isDisabledInput = isOpeningStockFieldDisabled(
+          column.key,
+          row,
+          currentItemDetail,
+        );
         const hasValidationError = Boolean(invalidFieldKeys[getInvalidFieldKey(row.id, column.key)]);
         const hasRequiredFieldError =
           hasValidationError ||
