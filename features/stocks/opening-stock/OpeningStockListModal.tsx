@@ -5,6 +5,8 @@ import {
   KeyboardShortcutHints,
   type KeyboardShortcutDefinition,
 } from "@/components/library/ui/keyboard-shortcut-hints";
+import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
+import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import type { OpeningStockHeaderPayload } from "./opening-stock.types";
 import styles from "./page.module.scss";
 import { QUANTITY_FORMATTER, VALUE_FORMATTER } from "./constants";
@@ -48,6 +50,9 @@ type OpeningStockListModalProps = {
 };
 
 const PAGE_SIZE_OPTIONS = [10, 20, 25, 50, 100] as const;
+const OPENING_STOCK_LIST_GRID_ID = 16;
+const GRID_COLUMNS_PAGE = 1;
+const GRID_COLUMNS_LIMIT = 100;
 const OPENING_STOCK_LIST_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   {
     label: "Prev Row",
@@ -80,6 +85,142 @@ function resolveTextValue(
     }
   }
   return fallback;
+}
+
+function normalizeColumnToken(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+const DEFAULT_OPENING_STOCK_LIST_COLUMNS: OpeningStockListColumn[] = [
+  {
+    key: "refno",
+    header: "Ref No",
+    width: "180px",
+    render: (row) => row.avh_voucher_refno?.trim() || "-",
+  },
+  {
+    key: "voucherNo",
+    header: "Voucher No",
+    width: "150px",
+    render: (row) => row.osh_voucher_no?.trim() || "-",
+  },
+  {
+    key: "voucherDate",
+    header: "Voucher Date",
+    width: "135px",
+    render: (row) => formatDateForDisplay(row.osh_voucher_date) || "-",
+  },
+  {
+    key: "lines",
+    header: "Lines",
+    width: "92px",
+    align: "right",
+    render: (row) => row.osh_total_lines,
+  },
+  {
+    key: "qty",
+    header: "Qty",
+    width: "128px",
+    align: "right",
+    render: (row) => QUANTITY_FORMATTER.format(row.osh_total_qty),
+  },
+  {
+    key: "value",
+    header: "Value",
+    width: "148px",
+    align: "right",
+    render: (row) => VALUE_FORMATTER.format(row.osh_total_value),
+  },
+  {
+    key: "status",
+    header: "Status",
+    width: "120px",
+    render: (row) => row.osh_status?.trim() || row.avh_voucher_status?.trim() || "-",
+  },
+  {
+    key: "counterName",
+    header: "Counter Name",
+    width: "180px",
+    render: (row) =>
+      resolveTextValue(row, [
+        "avh_counter_name",
+        "osh_counter_name",
+        "counter_name",
+        "avh_counter_id",
+        "osh_counter_id",
+      ]),
+  },
+  {
+    key: "userName",
+    header: "User Name",
+    width: "180px",
+    render: (row) =>
+      resolveTextValue(row, [
+        "avh_user_name",
+        "osh_user_name",
+        "user_name",
+        "avh_user_refno",
+        "avh_user_id",
+        "osh_user_id",
+      ]),
+  },
+];
+
+const OPENING_STOCK_COLUMN_BY_TOKEN = new Map<string, OpeningStockListColumn>();
+DEFAULT_OPENING_STOCK_LIST_COLUMNS.forEach((column) => {
+  [column.key, column.header].forEach((candidate) => {
+    OPENING_STOCK_COLUMN_BY_TOKEN.set(normalizeColumnToken(candidate), column);
+  });
+});
+
+function resolveOpeningStockColumn(
+  gridColumn: GridColumnConfig,
+): OpeningStockListColumn | null {
+  const candidates = [gridColumn.accessorKey, gridColumn.key, gridColumn.header];
+
+  for (const candidate of candidates) {
+    const column = OPENING_STOCK_COLUMN_BY_TOKEN.get(normalizeColumnToken(candidate));
+    if (column) {
+      return column;
+    }
+  }
+
+  return null;
+}
+
+function buildOpeningStockListColumns(
+  gridColumns: GridColumnConfig[],
+): OpeningStockListColumn[] {
+  if (gridColumns.length === 0) {
+    return DEFAULT_OPENING_STOCK_LIST_COLUMNS;
+  }
+
+  const columns: OpeningStockListColumn[] = [];
+  const seenKeys = new Set<string>();
+
+  gridColumns
+    .filter((column) => column.visible)
+    .sort((left, right) => left.order - right.order)
+    .forEach((gridColumn) => {
+      const template = resolveOpeningStockColumn(gridColumn);
+      if (!template) {
+        return;
+      }
+
+      const keyBase = template.key;
+      const key = seenKeys.has(keyBase) ? `${keyBase}-${columns.length + 1}` : keyBase;
+      seenKeys.add(key);
+
+      columns.push({
+        ...template,
+        key,
+        header: gridColumn.header || template.header,
+        width: gridColumn.width ?? template.width,
+        align: gridColumn.align ?? template.align,
+      });
+    });
+
+  return columns;
 }
 
 function buildPageList(totalPages: number, currentPage: number): Array<number | "ellipsis"> {
@@ -124,83 +265,19 @@ export function OpeningStockListModal({
   onLoadRow,
   onLoadSelected,
 }: OpeningStockListModalProps): ReactNode {
+  const { data: gridColumnsData } = useGetGridColumnsQuery(
+    {
+      gridId: OPENING_STOCK_LIST_GRID_ID,
+      page: GRID_COLUMNS_PAGE,
+      limit: GRID_COLUMNS_LIMIT,
+    },
+    {
+      skip: !isOpen,
+    },
+  );
   const columns = useMemo<OpeningStockListColumn[]>(
-    () => [
-      {
-        key: "refno",
-        header: "Ref No",
-        width: "180px",
-        render: (row) => row.avh_voucher_refno?.trim() || "-",
-      },
-      {
-        key: "voucherNo",
-        header: "Voucher No",
-        width: "150px",
-        render: (row) => row.osh_voucher_no?.trim() || "-",
-      },
-      {
-        key: "voucherDate",
-        header: "Voucher Date",
-        width: "135px",
-        render: (row) => formatDateForDisplay(row.osh_voucher_date) || "-",
-      },
-      {
-        key: "lines",
-        header: "Lines",
-        width: "92px",
-        align: "right",
-        render: (row) => row.osh_total_lines,
-      },
-      {
-        key: "qty",
-        header: "Qty",
-        width: "128px",
-        align: "right",
-        render: (row) => QUANTITY_FORMATTER.format(row.osh_total_qty),
-      },
-      {
-        key: "value",
-        header: "Value",
-        width: "148px",
-        align: "right",
-        render: (row) => VALUE_FORMATTER.format(row.osh_total_value),
-      },
-      {
-        key: "status",
-        header: "Status",
-        width: "120px",
-        render: (row) => row.osh_status?.trim() || row.avh_voucher_status?.trim() || "-",
-      },
-    
-      {
-        key: "counterName",
-        header: "Counter Name",
-        width: "180px",
-        render: (row) =>
-          resolveTextValue(row, [
-            "avh_counter_name",
-            "osh_counter_name",
-            "counter_name",
-            "avh_counter_id",
-            "osh_counter_id",
-          ]),
-      },
-        {
-        key: "userName",
-        header: "User Name",
-        width: "180px",
-        render: (row) =>
-          resolveTextValue(row, [
-            "avh_user_name",
-            "osh_user_name",
-            "user_name",
-            "avh_user_refno",
-            "avh_user_id",
-            "osh_user_id",
-          ]),
-      },
-    ],
-    [],
+    () => buildOpeningStockListColumns(gridColumnsData ?? []),
+    [gridColumnsData],
   );
 
   const totalPages = Math.max(1, Math.ceil(totalEntries / Math.max(1, pageSize)));
