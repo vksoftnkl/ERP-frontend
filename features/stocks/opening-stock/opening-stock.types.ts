@@ -21,7 +21,6 @@ export type OpeningStockSaveHeader = {
   osh_total_value: number;
   osh_user_id: string | null;
 };
-
 export type OpeningStockSaveDetail = {
   osl_barcode: string | null;
   osl_item_id: string;
@@ -69,20 +68,17 @@ export type OpeningStockSaveDetail = {
   profit_type: string | null;
   round_off: number;
 };
-
 export type OpeningStockSaveRequest = {
   header: OpeningStockSaveHeader;
   audit_notes?: string | null;
   details: OpeningStockSaveDetail[];
 };
-
 export type OpeningStockSuccessResponse<T, TMeta = Record<string, unknown>> = {
   success: true;
   message: string;
   data: T;
   meta?: TMeta;
 };
-
 export type OpeningStockHeaderPayload = {
   avh_voucher_id: string;
   avh_voucher_refno: string;
@@ -131,7 +127,6 @@ export type OpeningStockHeaderPayload = {
   osh_updated_on: string | null;
   osh_updated_by: string | null;
 };
-
 export type OpeningStockDetailPayload = {
   osl_id: string;
   osl_voucher_id: string;
@@ -193,12 +188,10 @@ export type OpeningStockDetailPayload = {
   osl_updated_on: string | null;
   osl_updated_by: string | null;
 };
-
 export type OpeningStockDocumentPayload = {
   header: OpeningStockHeaderPayload;
   details: OpeningStockDetailPayload[];
 };
-
 export type OpeningStockListMeta = {
   page: number;
   limit: number;
