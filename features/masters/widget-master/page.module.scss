@@ -79,7 +79,7 @@
   min-width: 74px;
   min-height: 24px;
   padding: 0 10px;
-  border-radius: 999px;
+  border-radius: var(--erp-radius);
   border: 1px solid transparent;
   font-size: 12px;
   font-weight: 700;

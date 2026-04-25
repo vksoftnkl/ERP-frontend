@@ -1,8 +1,32 @@
 @import "tailwindcss";
 
 :root {
-  --app-bg: #f3f8fc;
-  --app-text: #102435;
+  --page-bg: #f5f7fb;
+  --card-bg: #ffffff;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --text-soft: #475569;
+  --border: #dbe3ef;
+  --border-light: #e6edf5;
+  --header-bg: #f1f6fc;
+  --row-hover: #f8fbff;
+  --row-selected: #eaf2ff;
+  --table-header-text: #000;
+  --primary: #1f6fde;
+  --primary-hover: #155ec2;
+  --success-bg: #e8f8ee;
+  --success-border: #a8e0bb;
+  --success-text: #16803c;
+  --danger: #ff3b3b;
+  --danger-light: #ffc4c4;
+  --shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  --erp-radius: 4px;
+  --ds-radius-sm: var(--erp-radius);
+  --ds-radius-md: var(--erp-radius);
+  --ds-radius-lg: var(--erp-radius);
+  --app-bg: var(--page-bg);
+  --app-text: var(--text-main);
+  --erp-font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
   color-scheme: light;
 }
 
@@ -10,6 +34,7 @@
 *::before,
 *::after {
   box-sizing: border-box;
+  font-family: inherit;
 }
 
 html,
@@ -18,7 +43,7 @@ body {
   padding: 0;
   height: 100%;
   min-height: 100%;
-  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  font-family: var(--erp-font-family);
   background-color: var(--app-bg);
   color: var(--app-text);
 }
@@ -26,6 +51,33 @@ body {
 body {
   overflow: hidden;
   transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+button,
+input,
+optgroup,
+option,
+select,
+textarea {
+  font-family: inherit;
+}
+
+:where(
+    button,
+    input,
+    select,
+    textarea,
+    [role="button"],
+    [data-erp-table-viewport="true"],
+    [data-erp-table-pagination="true"],
+    table
+  ) {
+  border-radius: var(--erp-radius) !important;
+}
+
+:where(th, [role="columnheader"]) {
+  color: var(--table-header-text) !important;
+  font-weight: 700 !important;
 }
 
 .erp-app-shell {

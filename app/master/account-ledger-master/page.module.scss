@@ -16,7 +16,7 @@
   background: radial-gradient(circle at 18% 10%, #ececee 0, transparent 28%),
     var(--bg-page);
   color: var(--text-primary);
-  font-family: Tahoma, Verdana, "Segoe UI", sans-serif;
+  font-family: var(--erp-font-family);
 }
 .viewport {
   height: 100%;
@@ -85,7 +85,7 @@
   width: 100%;
   height:  0.5rem;
   border: 1px solid var(--focus-blue);
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   background: #fff;
   color: #141414;
   font-size: 13px;
@@ -97,7 +97,7 @@
 .statusStrip {
   min-height: 30px;
   border: 1px solid var(--line-soft);
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   background: #f6f6f6;
   display: flex;
   align-items: center;
@@ -110,7 +110,7 @@
   align-items: center;
   min-height: 20px;
   padding: 0 9px;
-  border-radius: 999px;
+  border-radius: var(--erp-radius);
   border: 1px solid #cbcbcf;
   background: #fff;
   font-size: 12px;
@@ -229,7 +229,7 @@
 .viewModal {
   width: min(760px, 100%);
   border: 1px solid #848488;
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   background: #ececed;
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
   overflow: hidden;
@@ -304,7 +304,7 @@
   width: min(1160px, 100%);
   max-height: 92vh;
   overflow: hidden;
-  border-radius: 4px;
+  border-radius: var(--erp-radius);
   border: 1px solid #d8dfe7;
   background: #fff;
   box-shadow: 0 28px 58px rgba(5, 21, 38, 0.34);
@@ -343,7 +343,7 @@
   width: 2rem;
   height: 2rem;
   border: 1px solid #ccd7e2;
-  border-radius: 4px;
+  border-radius: var(--erp-radius);
   background: #fff;
   color: #43596e;
   font-size: 1rem;
@@ -383,7 +383,7 @@
 }
 .formMain {
   border: 1px solid #dce3eb;
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   background: #f8fafc;
   padding: 0.75rem;
   display: grid;
@@ -391,7 +391,7 @@
 }
 .formSection {
   border: 1px solid #e2e8f0;
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   background: #fff;
   padding: 0.75rem;
   display: grid;
@@ -428,7 +428,7 @@
   width: 100%;
   min-height: 34px;
   border: 1px solid #c9d3de;
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   background: #fff;
   color: #1f3448;
   font-size: 0.84rem;
@@ -451,7 +451,7 @@
   width: 100%;
   min-height: 88px;
   border: 1px solid #c9d3de;
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   background: #fff;
   color: #1f3448;
   font-size: 0.84rem;
@@ -484,7 +484,7 @@
   max-height: 220px;
   overflow-y: auto;
   border: 1px solid #c9d3de;
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   background: #fff;
   box-shadow: 0 12px 24px rgba(8, 22, 36, 0.16);
   margin: 0;
@@ -492,7 +492,7 @@
   list-style: none;
 }
 .searchableSelectOption {
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   padding: 0.48rem 0.56rem;
   font-size: 0.84rem;
   color: #17354b;
@@ -522,7 +522,7 @@
   height: 18px;
   margin: 0;
   border: 1px solid #b8c7d6;
-  border-radius: 3px;
+  border-radius: var(--erp-radius);
   accent-color: #2563eb;
   cursor: pointer;
 }
@@ -539,7 +539,7 @@
 }
 .formAside {
   border: 1px solid #dce3eb;
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   background: #f8fafc;
   padding: 0.75rem;
   display: grid;
@@ -600,7 +600,7 @@
 .cancelButton {
   min-height: 38px;
   min-width: 110px;
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   border: 1px solid transparent;
   padding: 0.4rem 0.95rem;
   font-size: 0.9rem;
@@ -644,7 +644,7 @@
 .buttonIcon {
   width: 16px;
   height: 16px;
-  border-radius: 50%;
+  border-radius: var(--erp-radius);
   font-size: 0.58rem;
   display: inline-flex;
   align-items: center;

@@ -20,7 +20,7 @@
   margin: 2rem 0.75rem 2rem;
   display: flex;
   flex-direction: column;
-  border-radius: 0;
+  border-radius: var(--erp-radius);
   background: linear-gradient(180deg, var(--table-surface) 0%, var(--table-surface-accent) 100%);
   box-shadow: var(--table-shadow);
   overflow: hidden;
@@ -69,7 +69,7 @@
           width: 100%;
           height: 2.35rem;
           border: 1px solid var(--table-border);
-          border-radius: 4px;
+          border-radius: var(--erp-radius);
           background: #ffffff;
           color: var(--table-text);
           font-size: 0.94rem;
@@ -94,7 +94,7 @@
         gap: 0.5rem;
         min-height: 0.5rem;
         border: 1px solid #1f5fbf;
-        border-radius: 4px;
+        border-radius: var(--erp-radius);
         background: linear-gradient(180deg, #2d75e8 0%, #1f5fbf 100%);
         color: #ffffff;
         padding: 0.5rem;
@@ -162,7 +162,7 @@
   }
   .headerCell {
     background: var(--table-surface-muted);
-    color: #5d6d80;
+    color: var(--table-header-text, #000);
     text-align: left;
     font-weight: 700;
     text-transform: none;
@@ -178,11 +178,11 @@
       word-break: break-word;
     }
     &:first-child {
-      border-top-left-radius: 16px;
+      border-top-left-radius: var(--erp-radius);
       border-left: none;
     }
     &:last-child {
-      border-top-right-radius: 16px;
+      border-top-right-radius: var(--erp-radius);
     }
     &.stickyHeaderCell {
       position: sticky;
@@ -210,7 +210,7 @@
     text-align: inherit;
     white-space: normal;
     &.headerButtonActive {
-      color: #244f8a;
+      color: var(--table-header-text, #000);
     }
     .sortIndicator {
       flex: 0 0 auto;
@@ -311,7 +311,7 @@
     width: auto;
     height: auto;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--erp-radius);
     background: transparent;
     color: #708094;
     display: inline-flex;
@@ -345,7 +345,7 @@
     right: auto;
     min-width: 182px;
     border: 1px solid var(--table-border);
-    border-radius: 16px;
+    border-radius: var(--erp-radius);
     background: #ffffff;
     box-shadow: 0 18px 32px rgba(15, 35, 60, 0.14);
     padding: 0.4rem;
@@ -365,7 +365,7 @@
     align-items: center;
     gap: 0.7rem;
     border: 0;
-    border-radius: 12px;
+    border-radius: var(--erp-radius);
     background: transparent;
     color: #394b60;
     font-size: 0.9rem;
@@ -417,7 +417,7 @@
     align-items: center;
     justify-content: center;
     border: 1px solid var(--table-border);
-    border-radius: 999px;
+    border-radius: var(--erp-radius);
     padding: 0;
     background: #ffffff;
     color: #5d6d80;
@@ -530,7 +530,7 @@
         .pageSizeSelect {
           min-height: 2.15rem;
           border: 1px solid var(--table-border);
-          border-radius: 10px;
+          border-radius: var(--erp-radius);
           background: #ffffff;
           color: var(--table-text);
           font-size: 0.88rem;
@@ -552,7 +552,7 @@
         min-width: 2.1rem;
         height: 2.1rem;
         border: 1px solid var(--table-border);
-        border-radius: 10px;
+        border-radius: var(--erp-radius);
         padding: 0 0.68rem;
         font-size: 0.87rem;
         font-weight: 600;
@@ -599,6 +599,72 @@
     }
   }
 }
+
+.actionsDropdownPortal {
+  position: fixed;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  min-width: 182px;
+  border: 1px solid var(--table-border, #d9e2ec);
+  border-radius: var(--erp-radius);
+  background: #ffffff;
+  box-shadow: 0 18px 32px rgba(15, 35, 60, 0.14);
+  padding: 0.4rem;
+  z-index: 10000;
+
+  .actionsDropdownItem {
+    width: 100%;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    border: 0;
+    border-radius: var(--erp-radius);
+    background: transparent;
+    color: var(--table-text-soft, #394b60);
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.25;
+    text-align: left;
+    padding: 0.68rem 0.72rem;
+    cursor: pointer;
+    transition:
+      background-color 0.14s ease,
+      color 0.14s ease;
+
+    &:hover:not(:disabled) {
+      background: #f3f7fb;
+    }
+
+    &:focus-visible {
+      outline: 0;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  .actionsDropdownDelete {
+    color: var(--table-danger, #d64242);
+
+    &:hover:not(:disabled) {
+      background: #fff2f3;
+      color: var(--table-danger, #d64242);
+    }
+  }
+
+  .actionIcon {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+  }
+}
 @media (max-width: 1200px) {
   .tableShell {
     .toolbar {
@@ -615,7 +681,7 @@
 }
 @media (max-width: 960px) {
   .tableShell {
-    border-radius: 14px;
+    border-radius: var(--erp-radius);
     .toolbar {
       .toolbarContent {
         width: 100%;
@@ -660,7 +726,7 @@
 }
 @media (max-width: 760px) {
   .tableShell {
-    border-radius: 14px;
+    border-radius: var(--erp-radius);
     box-shadow: 0 14px 30px rgba(15, 35, 60, 0.08);
     .toolbar {
       padding: 0.95rem;
@@ -705,7 +771,7 @@
       display: block;
       border: 1px solid var(--table-border);
       background: #ffffff;
-      border-radius: 18px;
+      border-radius: var(--erp-radius);
       box-shadow: 0 12px 24px rgba(15, 35, 60, 0.06);
       overflow: hidden;
     }
@@ -804,6 +870,528 @@
     .paginationBar {
       .paginationControls {
         gap: 0.3rem;
+      }
+    }
+  }
+}
+
+/* Compact professional ERP table theme */
+.tableShell {
+  --table-border: var(--border, #dbe3ef);
+  --table-border-soft: var(--border-light, #e6edf5);
+  --table-surface: var(--card-bg, #ffffff);
+  --table-surface-muted: var(--header-bg, #f1f6fc);
+  --table-surface-accent: #ffffff;
+  --table-text: var(--text-main, #0f172a);
+  --table-text-muted: var(--text-muted, #64748b);
+  --table-text-subtle: #8a9bb3;
+  --table-hover: var(--row-hover, #f8fbff);
+  --table-active: var(--row-selected, #eaf2ff);
+  --table-primary: var(--primary, #1f6fde);
+  --table-primary-hover: var(--primary-hover, #155ec2);
+  --table-danger: var(--danger, #ff3b3b);
+  --table-danger-light: var(--danger-light, #ffc4c4);
+  --table-shadow: var(--shadow, 0 4px 14px rgba(15, 23, 42, 0.08));
+
+  height: calc(var(--erp-table-shell-height, 100%) - 32px);
+  min-height: max(0px, calc(var(--erp-table-shell-min-height, 0px) - 32px));
+  margin: 16px;
+  padding: 14px 14px 8px;
+  border: 1px solid var(--table-border);
+  border-radius: var(--erp-radius);
+  background: var(--table-surface);
+  box-shadow: var(--table-shadow);
+  color: var(--table-text);
+  font-family: var(--erp-font-family, Inter, "Segoe UI", Roboto, Arial, sans-serif);
+  overflow: hidden;
+
+  .toolbar {
+    gap: 10px;
+    padding: 0 0 10px;
+    background: var(--table-surface);
+
+    .toolbarTitle {
+      margin: 0;
+      color: var(--table-text);
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0;
+      line-height: 1.25;
+    }
+
+    .toolbarContent {
+      gap: 10px;
+    }
+
+    .tableTools {
+      min-height: 36px;
+      gap: 10px;
+
+      .searchField {
+        width: 320px;
+        max-width: 100%;
+
+        .searchIcon {
+          left: 11px;
+          width: 15px;
+          height: 15px;
+          color: #8a9bb3;
+        }
+
+        .searchInput {
+          height: 34px;
+          border: 1px solid var(--table-border);
+          border-radius: var(--erp-radius);
+          background: #ffffff;
+          color: var(--table-text);
+          font-size: 13px;
+          padding: 0 12px 0 34px;
+
+          &::placeholder {
+            color: #8a9bb3;
+          }
+
+          &:focus-visible,
+          &:focus {
+            border-color: #8bb8ff;
+            box-shadow: 0 0 0 3px rgba(31, 111, 222, 0.12);
+          }
+        }
+      }
+
+      .createButton {
+        height: 36px;
+        min-height: 36px;
+        border: 0;
+        border-radius: var(--erp-radius);
+        background: var(--table-primary);
+        color: #ffffff;
+        padding: 0 16px;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0;
+        transition: background-color 0.16s ease;
+
+        &:hover:not(:disabled) {
+          transform: none;
+          box-shadow: none;
+          background: var(--table-primary-hover);
+          filter: none;
+        }
+
+        .createIcon {
+          width: 15px;
+          height: 15px;
+        }
+      }
+    }
+  }
+
+  .tableViewport {
+    border: 1px solid var(--table-border);
+    border-radius: var(--erp-radius);
+    background: #ffffff;
+    overflow: auto;
+
+    &:last-child {
+      border-radius: var(--erp-radius);
+    }
+  }
+
+  .table {
+    min-width: var(--erp-table-min-width, 900px);
+    background: #ffffff;
+    color: var(--table-text);
+    font-size: 13px;
+  }
+
+  .headerCell,
+  .cell {
+    vertical-align: middle;
+    white-space: nowrap;
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .headerCell {
+    height: 34px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--table-border);
+    border-left: 0;
+    background: var(--table-surface-muted);
+    color: var(--table-header-text, #000);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0;
+
+    &:first-child,
+    &:last-child {
+      border-radius: var(--erp-radius);
+    }
+
+    .headerText {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      line-height: 1.25;
+    }
+  }
+
+  .headerButton {
+    gap: 8px;
+    white-space: nowrap;
+
+    &.headerButtonActive {
+      color: var(--table-header-text, #000);
+    }
+
+    .sortIndicator {
+      color: #8a9bb3;
+      font-size: 11px;
+    }
+  }
+
+  .body,
+  .row,
+  .rowEven,
+  .rowOdd {
+    background: #ffffff;
+  }
+
+  .cell {
+    height: 38px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--table-border-soft);
+    border-left: 0;
+    background: #ffffff;
+    color: var(--table-text);
+    font-size: 13px;
+    font-weight: 400;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .row:last-child {
+    .cell {
+      border-bottom: 0;
+    }
+  }
+
+  .row:hover {
+    .cell {
+      background: var(--table-hover);
+    }
+  }
+
+  .activeRow {
+    .cell {
+      background: var(--table-active) !important;
+      color: var(--table-text);
+    }
+  }
+
+  .emptyCell {
+    height: 76px;
+    color: var(--table-text-muted);
+  }
+
+  .actionsGroup {
+    gap: 6px;
+  }
+
+  .actionsTrigger {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+    border: 0;
+    border-radius: var(--erp-radius);
+    background: #ffffff;
+    color: #334155;
+    margin: 0;
+    padding: 0;
+
+    &:hover:not(:disabled) {
+      background: #f1f5f9;
+      color: var(--table-text);
+      transform: none;
+    }
+  }
+
+  .actionsTriggerIcon,
+  .actionIcon {
+    width: 15px;
+    height: 15px;
+  }
+
+  .actionsDropdown {
+    left: calc(100% + 8px);
+    min-width: 182px;
+    border: 1px solid var(--table-border);
+    border-radius: var(--erp-radius);
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.14);
+    padding: 6px;
+  }
+
+  .actionsDropdownLeft {
+    right: calc(100% + 8px);
+  }
+
+  .actionsDropdownItem {
+    min-height: 32px;
+    border-radius: var(--erp-radius);
+    color: var(--table-text-soft);
+    gap: 8px;
+    padding: 0 10px;
+    font-size: 13px;
+    font-weight: 600;
+
+    &:hover:not(:disabled) {
+      background: #f8fbff;
+      color: var(--table-text);
+    }
+  }
+
+  .actionsDropdownDelete {
+    color: var(--table-danger);
+
+    &:hover:not(:disabled) {
+      background: #fff1f1;
+      color: var(--table-danger);
+    }
+  }
+
+  .leadingActionsRow {
+    gap: 8px;
+  }
+
+  .leadingActionsValue {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .actionButton {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+    border: 1px solid var(--table-border);
+    border-radius: var(--erp-radius);
+    background: #ffffff;
+    color: var(--table-text-soft);
+
+    &:hover:not(:disabled) {
+      transform: none;
+      box-shadow: none;
+      background: #f8fbff;
+    }
+  }
+
+  .viewButton,
+  .updateButton,
+  .editButton {
+    color: var(--table-primary);
+    border-color: #9fc2ff;
+
+    &:hover:not(:disabled) {
+      background: #eff6ff;
+    }
+  }
+
+  .deleteButton {
+    color: var(--table-danger);
+    border-color: var(--table-danger-light);
+
+    &:hover:not(:disabled) {
+      background: #fff1f1;
+    }
+  }
+
+  .paginationBar {
+    min-height: 54px;
+    border: 1px solid var(--table-border);
+    border-top: 0;
+    border-radius: var(--erp-radius);
+    background: #ffffff;
+    color: var(--table-text-soft);
+    gap: 16px;
+    padding: 0 14px;
+    font-size: 13px;
+
+    .paginationInfo {
+      gap: 12px;
+      color: var(--table-text-soft);
+      font-size: 13px;
+
+      .pageSizeControl {
+        gap: 8px;
+        color: var(--table-text-soft);
+        font-size: 13px;
+        font-weight: 500;
+
+        .pageSizeSelect {
+          height: 32px;
+          min-height: 32px;
+          border: 1px solid var(--table-border);
+          border-radius: var(--erp-radius);
+          color: var(--table-text);
+          font-size: 13px;
+          padding: 0 28px 0 10px;
+        }
+      }
+    }
+
+    .paginationControls {
+      gap: 6px;
+
+      .paginationButton {
+        min-width: 32px;
+        height: 32px;
+        border: 1px solid var(--table-border);
+        border-radius: var(--erp-radius);
+        background: #ffffff;
+        color: var(--table-text);
+        padding: 0 10px;
+        font-size: 13px;
+        font-weight: 500;
+
+        &:hover:not(:disabled) {
+          transform: none;
+          box-shadow: none;
+          background: #f8fbff;
+        }
+
+        &.paginationButtonActive {
+          border-color: var(--table-primary);
+          background: var(--table-primary);
+          color: #ffffff;
+          box-shadow: none;
+        }
+      }
+
+      .paginationArrowIcon {
+        width: 15px;
+        height: 15px;
+      }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .tableShell {
+    height: calc(var(--erp-table-shell-height, 100%) - 20px);
+    min-height: max(0px, calc(var(--erp-table-shell-min-height, 0px) - 20px));
+    margin: 10px;
+    padding: 10px;
+    border-radius: var(--erp-radius);
+
+    .toolbar {
+      padding: 0 0 10px;
+
+      .toolbarContent,
+      .tableTools {
+        width: 100%;
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .tableTools {
+        .searchField,
+        .createButton {
+          width: 100%;
+        }
+      }
+    }
+
+    .tableViewport {
+      padding: 0;
+      overflow: auto;
+      background: #ffffff;
+    }
+
+    .table {
+      min-width: var(--erp-table-min-width, 900px) !important;
+      border-spacing: 0;
+      table-layout: auto;
+    }
+
+    .head {
+      position: sticky;
+      width: auto;
+      height: auto;
+      overflow: visible;
+      clip: auto;
+      clip-path: none;
+      white-space: normal;
+    }
+
+    .body {
+      display: table-row-group;
+      gap: 0;
+    }
+
+    .row {
+      display: table-row;
+      border: 0;
+      border-radius: var(--erp-radius);
+      box-shadow: none;
+      overflow: visible;
+    }
+
+    .headerCell,
+    .cell {
+      display: table-cell;
+      width: auto !important;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--table-border-soft);
+      padding: 0 12px;
+      text-align: inherit;
+
+      &::before {
+        content: none;
+      }
+    }
+
+    .headerCell {
+      height: 34px;
+      border-bottom-color: var(--table-border);
+      font-size: 12px;
+    }
+
+    .cell {
+      height: 38px;
+      font-size: 13px;
+    }
+
+    .alignCenter {
+      text-align: center;
+    }
+
+    .alignRight {
+      text-align: right;
+    }
+
+    .leadingActionsRow {
+      align-items: center;
+    }
+
+    .leadingActionsValue {
+      white-space: nowrap;
+    }
+
+    .paginationBar {
+      min-height: 0;
+      align-items: stretch;
+      flex-direction: column;
+      padding: 10px 14px;
+
+      .paginationInfo,
+      .paginationControls {
+        width: 100%;
+        justify-content: space-between;
       }
     }
   }

@@ -9,6 +9,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   FiChevronLeft,
   FiChevronRight,
@@ -52,12 +53,14 @@ type ActionMenuPlacement = {
   vertical: "down" | "up";
   horizontal: "right" | "left";
 };
+type ActionMenuPosition = Pick<CSSProperties, "top" | "left" | "right" | "bottom">;
 export type ReusableTableProps<T extends Record<string, unknown>> = {
   columns: ReusableTableColumn<T>[];
   rows: T[];
   rowKey: RowKeyResolver<T>;
   title?: ReactNode;
   toolbarContent?: ReactNode;
+  toolbarActions?: ReactNode;
   fullViewHeight?: boolean;
   minWidth?: string;
   activeRowIndex?: number;
@@ -130,14 +133,27 @@ function cx(...tokens: Array<string | undefined | false>): string {
 
 const ACTION_MENU_ESTIMATED_WIDTH = 190;
 const ACTION_MENU_ESTIMATED_HEIGHT = 260;
+const ACTION_MENU_GAP = 8;
+const ACTION_MENU_VIEWPORT_PADDING = 8;
 const DEFAULT_TABLE_MAX_HEIGHT = "calc(100dvh - 250px)";
 const SERIAL_NUMBER_COLUMN_WIDTH = "84px";
 const DEFAULT_ACTION_MENU_PLACEMENT: ActionMenuPlacement = {
   vertical: "down",
   horizontal: "right",
 };
+const DEFAULT_ACTION_MENU_POSITION: ActionMenuPosition = {};
 
-function resolveActionMenuPlacement(trigger: HTMLElement): ActionMenuPlacement {
+function clamp(value: number, min: number, max: number): number {
+  if (max < min) {
+    return min;
+  }
+  return Math.min(Math.max(value, min), max);
+}
+
+function resolveActionMenuGeometry(trigger: HTMLElement): {
+  placement: ActionMenuPlacement;
+  position: ActionMenuPosition;
+} {
   const viewport = trigger.closest<HTMLElement>('[data-erp-table-viewport="true"]');
   const bounds = viewport?.getBoundingClientRect() ?? document.documentElement.getBoundingClientRect();
   const triggerRect = trigger.getBoundingClientRect();
@@ -152,7 +168,31 @@ function resolveActionMenuPlacement(trigger: HTMLElement): ActionMenuPlacement {
   const vertical =
     spaceBelow < ACTION_MENU_ESTIMATED_HEIGHT && spaceAbove > spaceBelow ? "up" : "down";
 
-  return { vertical, horizontal };
+  const maxLeft = window.innerWidth - ACTION_MENU_ESTIMATED_WIDTH - ACTION_MENU_VIEWPORT_PADDING;
+  const left =
+    horizontal === "left"
+      ? triggerRect.left - ACTION_MENU_ESTIMATED_WIDTH - ACTION_MENU_GAP
+      : triggerRect.right + ACTION_MENU_GAP;
+  const top =
+    vertical === "up"
+      ? triggerRect.bottom - ACTION_MENU_ESTIMATED_HEIGHT + 4
+      : triggerRect.top - 4;
+  const maxMenuHeight = Math.min(
+    ACTION_MENU_ESTIMATED_HEIGHT,
+    window.innerHeight - ACTION_MENU_VIEWPORT_PADDING * 2,
+  );
+
+  return {
+    placement: { vertical, horizontal },
+    position: {
+      left: clamp(left, ACTION_MENU_VIEWPORT_PADDING, maxLeft),
+      top: clamp(
+        top,
+        ACTION_MENU_VIEWPORT_PADDING,
+        window.innerHeight - maxMenuHeight - ACTION_MENU_VIEWPORT_PADDING,
+      ),
+    },
+  };
 }
 function getColumnAlignClass(align: ReusableTableColumn<Record<string, unknown>>["align"]): string {
   if (align === "right") return styles.alignRight;
@@ -408,6 +448,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   rowKey,
   title,
   toolbarContent,
+  toolbarActions,
   fullViewHeight = true,
   minWidth = "min(980px, 100%)",
   activeRowIndex,
@@ -480,6 +521,9 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const [openActionMenuPlacement, setOpenActionMenuPlacement] = useState<ActionMenuPlacement>(
     DEFAULT_ACTION_MENU_PLACEMENT,
   );
+  const [openActionMenuPosition, setOpenActionMenuPosition] = useState<ActionMenuPosition>(
+    DEFAULT_ACTION_MENU_POSITION,
+  );
   const [draggingRowKey, setDraggingRowKey] = useState<Key | null>(null);
   const [dropTarget, setDropTarget] = useState<{
     key: Key;
@@ -490,8 +534,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const resolvedUpdateLabel = updateLabel ?? editLabel ?? "Edit";
   const hasRowActions = Boolean(onView || resolvedOnUpdate || onDuplicate || onDelete || onLogs);
   const hasActionsColumn = columns.some((column) => isActionsColumn(column));
-  const shouldRenderInlineActionMenu =
-    hasRowActions && !hasActionsColumn && showActionsColumn !== true;
+  const shouldRenderInlineActionMenu = false;
   const baseColumns = shouldRenderInlineActionMenu
     ? columns.filter((column) => !isActionsColumn(column))
     : columns;
@@ -593,7 +636,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
     const set = new Set<number>([...pageSizeOptions, effectivePageSize].filter((option) => option > 0));
     return Array.from(set).sort((left, right) => left - right);
   }, [effectivePageSize, pageSizeOptions]);
-  const showToolbar = Boolean(title || toolbarContent || searchable || onCreate);
+  const showToolbar = Boolean(title || toolbarContent || searchable || onCreate || toolbarActions);
   const renderedRowCount = Math.max(1, paginatedRows.length);
   const compactViewportRowThreshold = paginated ? effectivePageSize : 8;
   const shouldUseCompactViewport =
@@ -646,6 +689,22 @@ export function ReusableTable<T extends Record<string, unknown>>({
     return () => {
       window.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("keydown", handleEscape);
+    };
+  }, [openActionMenuKey]);
+
+  useEffect(() => {
+    if (openActionMenuKey === null) {
+      return;
+    }
+
+    const closeActionMenu = () => setOpenActionMenuKey(null);
+
+    window.addEventListener("resize", closeActionMenu);
+    window.addEventListener("scroll", closeActionMenu, true);
+
+    return () => {
+      window.removeEventListener("resize", closeActionMenu);
+      window.removeEventListener("scroll", closeActionMenu, true);
     };
   }, [openActionMenuKey]);
 
@@ -815,7 +874,9 @@ export function ReusableTable<T extends Record<string, unknown>>({
       return;
     }
 
-    setOpenActionMenuPlacement(resolveActionMenuPlacement(event.currentTarget));
+    const { placement, position } = resolveActionMenuGeometry(event.currentTarget);
+    setOpenActionMenuPlacement(placement);
+    setOpenActionMenuPosition(position);
     setOpenActionMenuKey(rowActionKey);
   };
   const clearRowReorderState = () => {
@@ -926,26 +987,18 @@ export function ReusableTable<T extends Record<string, unknown>>({
     duplicateDisabled: boolean,
     deleteDisabled: boolean,
     logsDisabled: boolean,
-  ): ReactNode => (
-    <div className={styles.actionsMenuRoot} data-erp-actions-root="true">
-      <button
-        type="button"
-        className={styles.actionsTrigger}
-        aria-label="Open row actions"
-        aria-haspopup="menu"
-        aria-expanded={openActionMenuKey === resolvedKey}
-        onClick={(event) => handleActionMenuToggle(event, resolvedKey)}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <FiMoreVertical className={styles.actionsTriggerIcon} aria-hidden="true" />
-      </button>
-      {openActionMenuKey === resolvedKey ? (
+  ): ReactNode => {
+    const isActionMenuOpen = openActionMenuKey === resolvedKey;
+    const actionMenu =
+      isActionMenuOpen && typeof document !== "undefined" ? (
         <div
           className={cx(
-            styles.actionsDropdown,
+            styles.actionsDropdownPortal,
             openActionMenuPlacement.vertical === "up" && styles.actionsDropdownUp,
             openActionMenuPlacement.horizontal === "left" && styles.actionsDropdownLeft,
           )}
+          data-erp-actions-root="true"
+          style={openActionMenuPosition}
           role="menu"
           aria-label="Row actions"
         >
@@ -1010,9 +1063,25 @@ export function ReusableTable<T extends Record<string, unknown>>({
             </button>
           ) : null}
         </div>
-      ) : null}
-    </div>
-  );
+      ) : null;
+
+    return (
+      <div className={styles.actionsMenuRoot} data-erp-actions-root="true">
+        <button
+          type="button"
+          className={styles.actionsTrigger}
+          aria-label="Open row actions"
+          aria-haspopup="menu"
+          aria-expanded={isActionMenuOpen}
+          onClick={(event) => handleActionMenuToggle(event, resolvedKey)}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <FiMoreVertical className={styles.actionsTriggerIcon} aria-hidden="true" />
+        </button>
+        {actionMenu ? createPortal(actionMenu, document.body) : null}
+      </div>
+    );
+  };
   return (
     <div
       className={cx(styles.tableShell, wrapperClassName)}
@@ -1024,13 +1093,17 @@ export function ReusableTable<T extends Record<string, unknown>>({
       }
     >
       {showToolbar ? (
-        <div className={styles.toolbar}>
+        <div className={styles.toolbar} data-erp-table-toolbar="true">
           {title ? <h3 className={styles.toolbarTitle}>{title}</h3> : null}
-          {toolbarContent ? <div className={styles.toolbarContent}>{toolbarContent}</div> : null}
-          {searchable || onCreate ? (
-            <div className={styles.tableTools}>
+          {toolbarContent ? (
+            <div className={styles.toolbarContent} data-erp-table-toolbar-content="true">
+              {toolbarContent}
+            </div>
+          ) : null}
+          {searchable || onCreate || toolbarActions ? (
+            <div className={styles.tableTools} data-erp-table-tools="true">
               {searchable ? (
-                <div className={styles.searchField}>
+                <div className={styles.searchField} data-erp-table-search="true">
                   <FiSearch className={styles.searchIcon} aria-hidden="true" />
                   <input
                     type="text"
@@ -1039,6 +1112,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder={searchPlaceholder}
                     className={styles.searchInput}
+                    data-erp-table-search-input="true"
                   />
                 </div>
               ) : null}
@@ -1049,11 +1123,13 @@ export function ReusableTable<T extends Record<string, unknown>>({
                   onClick={onCreate}
                   aria-label={createLabel}
                   title={createLabel}
+                  data-erp-table-create="true"
                 >
                   <FiPlus className={styles.createIcon} aria-hidden="true" />
                   <span>{createLabel}</span>
                 </button>
               ) : null}
+              {toolbarActions}
             </div>
           ) : null}
         </div>
@@ -1290,7 +1366,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
         </table>
       </div>
       {paginated ? (
-        <div className={styles.paginationBar}>
+        <div className={styles.paginationBar} data-erp-table-pagination="true">
           <div className={styles.paginationInfo}>
             <span>
               {paginationLabel} {pageStart} to {pageEnd} of {resolvedTotalEntries} entries

@@ -1,5 +1,23 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
+import {
+  FiDownload,
+  FiEdit2,
+  FiFileText,
+  FiMoreVertical,
+  FiPlus,
+  FiSearch,
+  FiTrash2,
+} from "react-icons/fi";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
@@ -8,7 +26,7 @@ import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
 import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
-import styles from "@/app/master/state-master/page.module.scss";
+import styles from "@/app/master/item-group-master/page.module.scss";
 import {
   ERPDynamicModalForm,
   type ERPDynamicModalController,
@@ -41,6 +59,10 @@ const PARENT_GROUP_LOOKUP_QUERY = {
   module: "itemGroups",
   limit: "100",
 } as const;
+const ACTION_MENU_WIDTH = 150;
+const ACTION_MENU_HEIGHT = 88;
+const ACTION_MENU_GAP = 6;
+const ACTION_MENU_VIEWPORT_PADDING = 8;
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
@@ -146,6 +168,7 @@ const GROUP_SHORT_KEYS = [
   "item_group_short",
 ] as const;
 const GROUP_ACTIVE_KEYS = [
+  "itg_is_active",
   "itg_active",
   "active",
   "is_active",
@@ -163,6 +186,40 @@ const GROUP_PARENT_ID_KEYS = [
   "parent_id",
   "parentId",
   "parent_group_id",
+  "parentGroupId",
+  "item_group_parent_id",
+] as const;
+const GROUP_PARENT_NAME_KEYS = [
+  "parent_group",
+  "parentGroup",
+  "parent_group_name",
+  "parentGroupName",
+  "parent_name",
+  "parentName",
+  "parent",
+] as const;
+const GROUP_LEVEL_KEYS = [
+  "itg_level",
+  "level",
+  "group_level",
+  "groupLevel",
+  "item_group_level",
+] as const;
+const GROUP_PATH_KEYS = [
+  "itg_path_ids_cache",
+  "path_ids",
+  "pathIds",
+  "group_path_ids",
+] as const;
+const GROUP_ITEM_COUNT_KEYS = [
+  "item_count",
+  "itemCount",
+  "items_count",
+  "itemsCount",
+  "group_item_count",
+  "groupItemCount",
+  "total_items",
+  "totalItems",
 ] as const;
 const INITIAL_FORM_STATE = {
   itemGroupName: "",
@@ -185,6 +242,11 @@ type ItemGroupTableRow = {
   groupShort: string;
   groupAlias: string;
   groupActive: string;
+  groupLevel: number;
+  itemCount: string;
+  parentGroupId: string;
+  parentGroupName: string;
+  pathIds: string[];
   position: string;
 };
 type ItemGroupFormState = {
@@ -195,6 +257,10 @@ type ItemGroupFormState = {
   itemDescription: string;
   position: string;
   parentGroupId: string;
+};
+type ItemGroupRowActionMenu = {
+  rowKey: string | number;
+  position: Pick<CSSProperties, "left" | "top">;
 };
 type CreateItemGroupRequest = {
   itg_name: string;
@@ -215,39 +281,54 @@ type ItemGroupColumnAccessor = keyof Pick<
   | "groupShort"
   | "groupAlias"
   | "groupActive"
+  | "itemCount"
+  | "parentGroupName"
   | "position"
 >;
 const DEFAULT_SERIAL_NO_COLUMN: ReusableTableColumn<ItemGroupTableRow> = {
   key: "serialNo",
-  header: "S.No",
+  header: "Sl.No",
   accessor: "serialNo",
   align: "left",
-  width: "46px",
+  width: "84px",
   sortable: false,
 };
 const DEFAULT_ITEM_GROUP_COLUMNS: ReusableTableColumn<ItemGroupTableRow>[] = [
   DEFAULT_SERIAL_NO_COLUMN,
   {
-    key: "groupCode",
-    header: "Group Code",
-    accessor: "groupCode",
-    align: "left",
-    width: "260px",
-  },
-  {
     key: "groupName",
     header: "Group Name",
     accessor: "groupName",
     align: "left",
-    width: "360px",
+    width: "330px",
   },
   {
-    key: "position",
-    header: "Position",
-    accessor: "position",
+    key: "groupAlias",
+    header: "Alias",
+    accessor: "groupAlias",
     align: "left",
-    width: "80px",
-    sortAccessor: (row) => Number(row.position || 0),
+    width: "220px",
+  },
+  {
+    key: "parentGroupName",
+    header: "Parent Group",
+    accessor: "parentGroupName",
+    align: "left",
+    width: "250px",
+  },
+  {
+    key: "itemCount",
+    header: "Item Count",
+    accessor: "itemCount",
+    align: "center",
+    width: "160px",
+  },
+  {
+    key: "groupActive",
+    header: "Status",
+    accessor: "groupActive",
+    align: "center",
+    width: "150px",
   },
 ];
 const ITEM_GROUP_COLUMN_ACCESSOR_MAP: Record<string, ItemGroupColumnAccessor> =
@@ -283,7 +364,30 @@ const ITEM_GROUP_COLUMN_ACCESSOR_MAP: Record<string, ItemGroupColumnAccessor> =
     alias: "groupAlias",
     itemgroupalias: "groupAlias",
     item_group_alias: "groupAlias",
+    parentgroup: "parentGroupName",
+    parent_group: "parentGroupName",
+    parentgroupname: "parentGroupName",
+    parent_group_name: "parentGroupName",
+    parentname: "parentGroupName",
+    parent_name: "parentGroupName",
+    parent: "parentGroupName",
+    itgparentid: "parentGroupName",
+    itg_parent_id: "parentGroupName",
+    parentid: "parentGroupName",
+    parent_id: "parentGroupName",
+    itemcount: "itemCount",
+    item_count: "itemCount",
+    itemscount: "itemCount",
+    items_count: "itemCount",
+    groupitemcount: "itemCount",
+    group_item_count: "itemCount",
+    totalitems: "itemCount",
+    total_items: "itemCount",
     active: "groupActive",
+    itgactive: "groupActive",
+    itg_active: "groupActive",
+    itgisactive: "groupActive",
+    itg_is_active: "groupActive",
     isactive: "groupActive",
     is_active: "groupActive",
     status: "groupActive",
@@ -369,10 +473,10 @@ function buildColumnsFromGridColumns(
     const columnColor = normalizeGridColumnColor(gridColumn.color);
     const tableColumn: ReusableTableColumn<ItemGroupTableRow> = {
       key: uniqueKey,
-      header: gridColumn.header,
+      header: accessor === "serialNo" ? "Sl.No" : gridColumn.header,
       accessor,
       align: gridColumn.align ?? "left",
-      width: gridColumn.width ?? (accessor === "serialNo" ? "46px" : undefined),
+      width: gridColumn.width ?? (accessor === "serialNo" ? "84px" : undefined),
       sortable: gridColumn.sortable ?? accessor !== "serialNo",
       headerStyle: columnColor ? { backgroundColor: columnColor } : undefined,
       cellStyle: columnColor ? { backgroundColor: columnColor } : undefined,
@@ -380,6 +484,9 @@ function buildColumnsFromGridColumns(
 
     if (accessor === "position") {
       tableColumn.sortAccessor = (row) => Number(row.position || 0);
+    }
+    if (accessor === "itemCount") {
+      tableColumn.sortAccessor = (row) => Number(row.itemCount || 0);
     }
 
     columns.push(tableColumn);
@@ -601,6 +708,14 @@ function toDisplayValue(value: unknown): string {
   }
   return "";
 }
+function toPathIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => toDisplayValue(entry).trim())
+    .filter(Boolean);
+}
 function toNonNegativeInt(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     const normalized = Math.floor(value);
@@ -769,6 +884,11 @@ function buildItemGroupRows(
       const groupAliasValue = getFirstDefinedValue(row, GROUP_ALIAS_KEYS);
       const groupActiveValue = getFirstDefinedValue(row, GROUP_ACTIVE_KEYS);
       const positionValue = getFirstDefinedValue(row, GROUP_POSITION_KEYS);
+      const parentGroupIdValue = getFirstDefinedValue(row, GROUP_PARENT_ID_KEYS);
+      const parentGroupNameValue = getFirstDefinedValue(row, GROUP_PARENT_NAME_KEYS);
+      const groupLevelValue = getFirstDefinedValue(row, GROUP_LEVEL_KEYS);
+      const itemCountValue = getFirstDefinedValue(row, GROUP_ITEM_COUNT_KEYS);
+      const pathIdsValue = getFirstDefinedValue(row, GROUP_PATH_KEYS);
       const preferredKey =
         groupIdValue ??
         row.id ??
@@ -791,6 +911,11 @@ function buildItemGroupRows(
         groupShort: toDisplayValue(groupShortValue),
         groupAlias: toDisplayValue(groupAliasValue),
         groupActive: toDisplayValue(groupActiveValue),
+        groupLevel: toNonNegativeInt(groupLevelValue) ?? 0,
+        itemCount: toDisplayValue(itemCountValue),
+        parentGroupId: toDisplayValue(parentGroupIdValue),
+        parentGroupName: toDisplayValue(parentGroupNameValue),
+        pathIds: toPathIds(pathIdsValue),
         position: toDisplayValue(positionValue),
       };
     }
@@ -805,6 +930,11 @@ function buildItemGroupRows(
       groupShort: "",
       groupAlias: "",
       groupActive: "",
+      groupLevel: 0,
+      itemCount: "",
+      parentGroupId: "",
+      parentGroupName: "",
+      pathIds: [],
       position: "",
     };
   });
@@ -860,6 +990,22 @@ function mergeRowWithItemGroupDetail(
     groupActive:
       toDisplayValue(getFirstDefinedValue(source, GROUP_ACTIVE_KEYS)) ||
       row.groupActive,
+    groupLevel:
+      toNonNegativeInt(getFirstDefinedValue(source, GROUP_LEVEL_KEYS)) ??
+      row.groupLevel,
+    itemCount:
+      toDisplayValue(getFirstDefinedValue(source, GROUP_ITEM_COUNT_KEYS)) ||
+      row.itemCount,
+    parentGroupId:
+      toDisplayValue(getFirstDefinedValue(source, GROUP_PARENT_ID_KEYS)) ||
+      row.parentGroupId,
+    parentGroupName:
+      toDisplayValue(getFirstDefinedValue(source, GROUP_PARENT_NAME_KEYS)) ||
+      row.parentGroupName,
+    pathIds:
+      toPathIds(getFirstDefinedValue(source, GROUP_PATH_KEYS)).length > 0
+        ? toPathIds(getFirstDefinedValue(source, GROUP_PATH_KEYS))
+        : row.pathIds,
     position:
       toDisplayValue(getFirstDefinedValue(source, GROUP_POSITION_KEYS)) ||
       row.position,
@@ -1001,6 +1147,144 @@ function buildItemGroupLookupOptions(payload: unknown): ERPDynamicSelectOption[]
   );
 }
 
+function isItemGroupActive(row: ItemGroupTableRow): boolean {
+  const normalized = row.groupActive.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  return !["false", "0", "inactive", "no", "n"].includes(normalized);
+}
+
+function isChildItemGroup(row: ItemGroupTableRow): boolean {
+  return (
+    row.parentGroupId.trim().length > 0 ||
+    row.groupLevel > 0 ||
+    row.pathIds.length > 1
+  );
+}
+
+function normalizeLookupLabel(label: string): string {
+  const normalized = label.trim();
+  if (!normalized) {
+    return "";
+  }
+  const separatorIndex = normalized.indexOf(" - ");
+  return separatorIndex >= 0
+    ? normalized.slice(separatorIndex + 3).trim() || normalized
+    : normalized;
+}
+
+function buildParentNameById(
+  rows: ItemGroupTableRow[],
+  options: ERPDynamicSelectOption[],
+): Map<string, string> {
+  const parentNameById = new Map<string, string>();
+  for (const option of options) {
+    const value = option.value.trim();
+    const label = normalizeLookupLabel(option.label);
+    if (value && label) {
+      parentNameById.set(value, label);
+    }
+  }
+  for (const row of rows) {
+    const groupName = row.groupName.trim();
+    if (!groupName) {
+      continue;
+    }
+    parentNameById.set(String(row.__recordId), groupName);
+    parentNameById.set(row.groupId, groupName);
+  }
+  return parentNameById;
+}
+
+function resolveParentGroupName(
+  row: ItemGroupTableRow,
+  parentNameById: Map<string, string>,
+): string {
+  const directParentName = row.parentGroupName.trim();
+  if (directParentName) {
+    return normalizeLookupLabel(directParentName);
+  }
+  const parentGroupId = row.parentGroupId.trim();
+  if (!parentGroupId) {
+    return "-";
+  }
+  return parentNameById.get(parentGroupId) ?? parentGroupId;
+}
+
+function escapeCsvValue(value: string | number): string {
+  const normalized = String(value);
+  if (/[",\n\r]/.test(normalized)) {
+    return `"${normalized.replace(/"/g, '""')}"`;
+  }
+  return normalized;
+}
+
+function downloadItemGroupCsv(
+  rows: ItemGroupTableRow[],
+  parentNameById: Map<string, string>,
+): void {
+  const headers = [
+    "Sl.No",
+    "Group Name",
+    "Alias",
+    "Parent Group",
+    "Item Count",
+    "Status",
+  ];
+  const csvRows = rows.map((row) => [
+    row.serialNo,
+    row.groupName || "-",
+    row.groupAlias || row.groupShort || "-",
+    resolveParentGroupName(row, parentNameById),
+    row.itemCount || "-",
+    isItemGroupActive(row) ? "Active" : "Inactive",
+  ]);
+  const csv = [headers, ...csvRows]
+    .map((row) => row.map((value) => escapeCsvValue(value)).join(","))
+    .join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "item-group-master.csv";
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+function clampMenuPosition(value: number, min: number, max: number): number {
+  if (max < min) {
+    return min;
+  }
+  return Math.min(Math.max(value, min), max);
+}
+
+function resolveRowActionMenuPosition(
+  trigger: HTMLButtonElement,
+): ItemGroupRowActionMenu["position"] {
+  const triggerRect = trigger.getBoundingClientRect();
+  const maxLeft =
+    window.innerWidth - ACTION_MENU_WIDTH - ACTION_MENU_VIEWPORT_PADDING;
+  const opensUp =
+    triggerRect.bottom + ACTION_MENU_GAP + ACTION_MENU_HEIGHT >
+    window.innerHeight - ACTION_MENU_VIEWPORT_PADDING;
+  const left = triggerRect.right - ACTION_MENU_WIDTH;
+  const top = opensUp
+    ? triggerRect.top - ACTION_MENU_HEIGHT - ACTION_MENU_GAP
+    : triggerRect.bottom + ACTION_MENU_GAP;
+
+  return {
+    left: clampMenuPosition(left, ACTION_MENU_VIEWPORT_PADDING, maxLeft),
+    top: clampMenuPosition(
+      top,
+      ACTION_MENU_VIEWPORT_PADDING,
+      window.innerHeight - ACTION_MENU_HEIGHT - ACTION_MENU_VIEWPORT_PADDING,
+    ),
+  };
+}
+
 // Main component
 export default function ItemGroupMasterPage() {
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
@@ -1110,6 +1394,8 @@ export default function ItemGroupMasterPage() {
   } | null>(null);
   const [pendingDeleteRow, setPendingDeleteRow] =
     useState<ItemGroupTableRow | null>(null);
+  const [openRowActionMenu, setOpenRowActionMenu] =
+    useState<ItemGroupRowActionMenu | null>(null);
 
   const pendingDeleteLabel = useMemo(() => {
     if (!pendingDeleteRow) {
@@ -1121,6 +1407,51 @@ export default function ItemGroupMasterPage() {
       pendingDeleteRow.groupId
     );
   }, [pendingDeleteRow]);
+
+  useEffect(() => {
+    if (!openRowActionMenu) {
+      return;
+    }
+
+    const closeMenu = () => setOpenRowActionMenu(null);
+    const handlePointerDown = (event: globalThis.MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-item-group-row-actions="true"]')) {
+        return;
+      }
+      closeMenu();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+    };
+  }, [openRowActionMenu]);
+
+  useEffect(() => {
+    if (!openRowActionMenu) {
+      return;
+    }
+
+    const menuRowExists = rows.some(
+      (row) => row.__rowId === openRowActionMenu.rowKey,
+    );
+    if (!menuRowExists) {
+      setOpenRowActionMenu(null);
+    }
+  }, [openRowActionMenu, rows]);
 
   useEffect(() => {
     let mounted = true;
@@ -1160,6 +1491,10 @@ export default function ItemGroupMasterPage() {
     }
     return options;
   }, [editingItemId, parentGroupLookupOptions, selectedRow]);
+  const parentNameById = useMemo(
+    () => buildParentNameById(rows, parentGroupLookupOptions),
+    [parentGroupLookupOptions, rows],
+  );
   // Event handlers
   const openCreateModal = useCallback(() => {
     resetCreateState();
@@ -1169,6 +1504,31 @@ export default function ItemGroupMasterPage() {
       values: INITIAL_FORM_STATE,
     });
   }, [resetCreateState, resetDetailsState]);
+
+  // Ctrl+A shortcut → open Add Item Group modal
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.key !== "a") {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      const isTyping =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable;
+      if (isTyping) {
+        return;
+      }
+      event.preventDefault();
+      openCreateModal();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openCreateModal]);
+
   const openUpdateModalForRow = useCallback(
     (row: ItemGroupTableRow) => {
       resetCreateState();
@@ -1345,6 +1705,9 @@ export default function ItemGroupMasterPage() {
     pendingDeleteRow,
     searchTerm,
   ]);
+  const handleExportRows = useCallback(() => {
+    downloadItemGroupCsv(rows, parentNameById);
+  }, [parentNameById, rows]);
   const itemGroupFields = useMemo<ERPDynamicModalField[]>(
     () => [
       {
@@ -1460,23 +1823,7 @@ export default function ItemGroupMasterPage() {
     ],
     [createLoading, effectiveTitle, itemGroupFields, itemGroupViewFields],
   );
-  const columns = useMemo<ReusableTableColumn<ItemGroupTableRow>[]>(
-    () => buildColumnsFromGridColumns(gridColumns),
-    [gridColumns],
-  );
   // Table event handlers
-  const handleUpdate = useCallback(() => {
-    if (!selectedRow) {
-      return;
-    }
-    openUpdateModalForRow(selectedRow);
-  }, [selectedRow, openUpdateModalForRow]);
-  const handleDelete = useCallback(() => {
-    if (!selectedRow) {
-      return;
-    }
-    handleDeleteRow(selectedRow);
-  }, [selectedRow, handleDeleteRow]);
   const handleRowUpdate = useCallback(
     (row: ItemGroupTableRow) => {
       setSelectedRowId(row.__rowId);
@@ -1511,6 +1858,212 @@ export default function ItemGroupMasterPage() {
       });
     },
     [],
+  );
+  const handleRowActionMenuToggle = useCallback(
+    (
+      event: ReactMouseEvent<HTMLButtonElement>,
+      row: ItemGroupTableRow,
+    ) => {
+      event.stopPropagation();
+      const rowKey = row.__rowId;
+      const position = resolveRowActionMenuPosition(event.currentTarget);
+
+      setOpenRowActionMenu((current) => {
+        if (current?.rowKey === rowKey) {
+          return null;
+        }
+        return {
+          rowKey,
+          position,
+        };
+      });
+    },
+    [],
+  );
+  const handleRowMenuAction = useCallback(
+    (
+      event: ReactMouseEvent<HTMLButtonElement>,
+      action: () => void,
+    ) => {
+      event.stopPropagation();
+      setOpenRowActionMenu(null);
+      action();
+    },
+    [],
+  );
+  const gridDrivenColumns = useMemo(
+    () => buildColumnsFromGridColumns(gridColumns),
+    [gridColumns],
+  );
+  const columns = useMemo<ReusableTableColumn<ItemGroupTableRow>[]>(
+    () => [
+      ...gridDrivenColumns.map((column) => {
+        const enhancedColumn: ReusableTableColumn<ItemGroupTableRow> = {
+          ...column,
+        };
+
+        if (column.accessor === "serialNo") {
+          enhancedColumn.header = "Sl.No";
+          enhancedColumn.width = column.width ?? "84px";
+          enhancedColumn.sortable = false;
+        }
+
+        if (column.accessor === "groupName") {
+          enhancedColumn.render = (row) => (
+            <span
+              className={`${styles.groupNameCell} ${
+                isChildItemGroup(row) ? styles.childGroupNameCell : ""
+              }`}
+            >
+              <span className={styles.groupNameText}>
+                {row.groupName || "-"}
+              </span>
+            </span>
+          );
+        }
+
+        if (column.accessor === "groupAlias") {
+          enhancedColumn.render = (row) => row.groupAlias || row.groupShort || "-";
+        }
+
+        if (column.accessor === "parentGroupName") {
+          enhancedColumn.sortAccessor = (row) =>
+            resolveParentGroupName(row, parentNameById);
+          enhancedColumn.searchAccessor = (row) =>
+            resolveParentGroupName(row, parentNameById);
+          enhancedColumn.render = (row) =>
+            resolveParentGroupName(row, parentNameById);
+        }
+
+        if (column.accessor === "itemCount") {
+          enhancedColumn.align = column.align ?? "center";
+          enhancedColumn.sortAccessor = (row) => Number(row.itemCount || 0);
+          enhancedColumn.render = (row) => row.itemCount || "-";
+        }
+
+        if (column.accessor === "groupActive") {
+          enhancedColumn.align = column.align ?? "center";
+          enhancedColumn.sortAccessor = (row) =>
+            isItemGroupActive(row) ? 1 : 0;
+          enhancedColumn.render = (row) => {
+            const isActive = isItemGroupActive(row);
+            return (
+              <span
+                className={`${styles.statusBadge} ${
+                  isActive ? styles.statusActive : styles.statusInactive
+                }`}
+              >
+                {isActive ? "Active" : "Inactive"}
+              </span>
+            );
+          };
+        }
+
+        if (column.accessor === "position") {
+          enhancedColumn.sortAccessor = (row) => Number(row.position || 0);
+        }
+
+        return enhancedColumn;
+      }),
+      {
+        key: "actions",
+        header: "Actions",
+        align: "center",
+        width: "190px",
+        sortable: false,
+        cellClassName: styles.itemGroupActionsCell,
+        render: (row) => {
+          const stopAction = (
+            event: ReactMouseEvent<HTMLButtonElement>,
+            action: () => void,
+          ) => {
+            event.stopPropagation();
+            action();
+          };
+          const isMoreMenuOpen = openRowActionMenu?.rowKey === row.__rowId;
+          const logsDisabled = `${row.__recordId}`.trim().length === 0;
+          const deleteDisabled = deleteLoading || createLoading || detailsLoading;
+          const moreMenu =
+            isMoreMenuOpen && typeof document !== "undefined"
+              ? createPortal(
+                  <div
+                    className={styles.itemGroupActionMenu}
+                    data-item-group-row-actions="true"
+                    role="menu"
+                    aria-label={`Actions for ${row.groupName || "item group"}`}
+                    style={openRowActionMenu.position}
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={`${styles.itemGroupActionMenuItem} ${styles.itemGroupActionMenuDelete}`}
+                      onClick={(event) =>
+                        handleRowMenuAction(event, () => handleRowDelete(row))
+                      }
+                      disabled={deleteDisabled}
+                    >
+                      <FiTrash2 aria-hidden="true" />
+                      <span>{deleteLoading ? "Deleting..." : "Delete"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={styles.itemGroupActionMenuItem}
+                      onClick={(event) =>
+                        handleRowMenuAction(event, () => handleRowLogs(row))
+                      }
+                      disabled={logsDisabled}
+                    >
+                      <FiFileText aria-hidden="true" />
+                      <span>Logs</span>
+                    </button>
+                  </div>,
+                  document.body,
+                )
+              : null;
+          return (
+            <span className={styles.itemGroupActions} data-item-group-row-actions="true">
+              <button
+                type="button"
+                className={`${styles.itemGroupActionButton} ${styles.editActionButton}`}
+                title="Edit item group"
+                aria-label={`Edit ${row.groupName || "item group"}`}
+                onClick={(event) => stopAction(event, () => handleRowUpdate(row))}
+                disabled={createLoading || detailsLoading}
+              >
+                <FiEdit2 aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className={`${styles.itemGroupActionButton} ${styles.moreActionButton}`}
+                title="More actions"
+                aria-label={`More actions for ${row.groupName || "item group"}`}
+                aria-haspopup="menu"
+                aria-expanded={isMoreMenuOpen}
+                onClick={(event) => handleRowActionMenuToggle(event, row)}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <FiMoreVertical aria-hidden="true" />
+              </button>
+              {moreMenu}
+            </span>
+          );
+        },
+      },
+    ],
+    [
+      createLoading,
+      deleteLoading,
+      detailsLoading,
+      gridDrivenColumns,
+      handleRowDelete,
+      handleRowLogs,
+      handleRowActionMenuToggle,
+      handleRowMenuAction,
+      openRowActionMenu,
+      handleRowUpdate,
+      parentNameById,
+    ],
   );
   return (
     <main className={styles.page}>
@@ -1572,29 +2125,57 @@ export default function ItemGroupMasterPage() {
               columns={columns}
               rows={rows}
               rowKey="__rowId"
-              title={`${effectiveTitle} List`}
-              minWidth="980px"
+              toolbarContent={
+                <div className={styles.itemGroupHeader}>
+                  <div className={styles.itemGroupTitleWrap}>
+                    <h1 className={styles.itemGroupTitle}>{effectiveTitle}</h1>
+                    <p className={styles.itemGroupSubtitle}>
+                      Manage item groups and their hierarchy
+                    </p>
+                  </div>
+                  <div className={styles.itemGroupSearchWrap}>
+                    <FiSearch className={styles.itemGroupSearchIcon} aria-hidden="true" />
+                    <input
+                      type="text"
+                      className={styles.itemGroupSearchInput}
+                      value={searchTerm}
+                      onChange={(event) => setSearchTerm(event.target.value)}
+                      placeholder="Search group name, alias or parent..."
+                      autoComplete="off"
+                      aria-label="Search item groups"
+                    />
+                  </div>
+                </div>
+              }
+              toolbarActions={
+                <div className={styles.itemGroupHeaderActions}>
+                  <button
+                    type="button"
+                    className={styles.itemGroupAddButton}
+                    onClick={openCreateModal}
+                    disabled={createLoading || detailsLoading}
+                  >
+                    <FiPlus aria-hidden="true" />
+                    <span>Add {effectiveTitle}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.itemGroupExportButton}
+                    onClick={handleExportRows}
+                    disabled={rows.length === 0}
+                    aria-label="Export item groups"
+                    title="Export item groups"
+                  >
+                    <FiDownload aria-hidden="true" />
+                  </button>
+                </div>
+              }
+              wrapperClassName={styles.itemGroupTable}
+              tableClassName={styles.itemGroupDataTable}
+              minWidth="1240px"
               activeRowKey={selectedRowId}
               onRowClick={(row) => setSelectedRowId(row.__rowId)}
-              onCreate={openCreateModal}
-              createLabel={`Add ${effectiveTitle}`}
-              onView={handleRowView}
-              onUpdate={handleRowUpdate}
-              onDelete={handleRowDelete}
-              onLogs={handleRowLogs}
-              isViewDisabled={() => createLoading || detailsLoading}
-              isUpdateDisabled={() => createLoading || detailsLoading}
-              isDeleteDisabled={() =>
-                deleteLoading || createLoading || detailsLoading
-              }
-              isLogsDisabled={(row) => `${row.__recordId}`.trim().length === 0}
-              actionsAsIcons
-              updateLabel="Update"
-              deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
-              searchable
-              searchQuery={searchTerm}
-              onSearchQueryChange={setSearchTerm}
-              searchPlaceholder="Search..."
+              onRowDoubleClick={handleRowView}
               sortable
               paginated
               manualPagination

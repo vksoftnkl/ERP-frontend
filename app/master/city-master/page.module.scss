@@ -16,7 +16,7 @@
   background: radial-gradient(circle at 18% 10%, #ececee 0, transparent 28%),
     var(--bg-page);
   color: var(--text-primary);
-  font-family: Tahoma, Verdana, "Segoe UI", sans-serif;
+  font-family: var(--erp-font-family);
 }
 .viewport {
   height: 100%;
@@ -85,7 +85,7 @@
   width: 100%;
   height:  0.5rem;
   border: 1px solid var(--focus-blue);
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   background: #fff;
   color: #141414;
   font-size: 13px;
@@ -97,7 +97,7 @@
 .statusStrip {
   min-height: 30px;
   border: 1px solid var(--line-soft);
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   background: #f6f6f6;
   display: flex;
   align-items: center;
@@ -110,7 +110,7 @@
   align-items: center;
   min-height: 20px;
   padding: 0 9px;
-  border-radius: 999px;
+  border-radius: var(--erp-radius);
   border: 1px solid #cbcbcf;
   background: #fff;
   font-size: 12px;
@@ -229,7 +229,7 @@
 .viewModal {
   width: min(760px, 100%);
   border: 1px solid #848488;
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   background: #ececed;
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
   overflow: hidden;
@@ -336,7 +336,7 @@
   width: 24px;
   height: 24px;
   border: 1px solid #9a9a9a;
-  border-radius: 50%;
+  border-radius: var(--erp-radius);
   background: #dbdbdb;
   color: #585858;
   font-size: 14px;
@@ -484,7 +484,7 @@
   height: 35px;
   min-width: 116px;
   border: 1px solid #acacac;
-  border-radius: 2px;
+  border-radius: var(--erp-radius);
   background: #e8e8e8;
   color: #111;
   font-size: 14px;
@@ -508,7 +508,7 @@
 .buttonIcon {
   width: 16px;
   height: 16px;
-  border-radius: 50%;
+  border-radius: var(--erp-radius);
   font-size: 10px;
   display: inline-flex;
   align-items: center;
