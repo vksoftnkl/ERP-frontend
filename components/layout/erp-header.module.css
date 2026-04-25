@@ -350,6 +350,7 @@
   opacity: 0.72;
 }
 
+.homeButton,
 .cartButton,
 .goButton,
 .logoutButton {
@@ -360,6 +361,18 @@
   font-weight: 700;
   background: #fff;
   color: #6e0c0c;
+}
+
+.homeButton {
+  width: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.homeButton:hover {
+  background: #f6eeee;
 }
 
 .cartButton {

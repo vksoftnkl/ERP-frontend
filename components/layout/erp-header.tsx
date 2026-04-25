@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FiHome } from "react-icons/fi";
 import styles from "./erp-header.module.css";
 import { clearAuthSession } from "@/lib/auth/session";
 import { clearBusinessContextSession } from "@/components/layout/business-context";
@@ -650,9 +651,14 @@ function HeaderRight({
   onGoClick,
   logoutLabel,
   onLogout,
+  onHomeClick,
   selectedDate,
   onDateChange,
-}: HeaderRightProps & { selectedDate: Date; onDateChange: (date: Date) => void }) {
+}: HeaderRightProps & {
+  onHomeClick: () => void;
+  selectedDate: Date;
+  onDateChange: (date: Date) => void;
+}) {
   const handleCompanyChange = useCallback(
     (event: React.ChangeEvent<HTMLSelectElement>) => { onCompanyChange?.(event.target.value); },
     [onCompanyChange],
@@ -665,6 +671,15 @@ function HeaderRight({
   return (
     <div className={styles.headerRight}>
       {/* <span className={styles.searchText}>{searchMenuCount} Search Menu :</span> */}
+      <button
+        type="button"
+        className={styles.homeButton}
+        onClick={onHomeClick}
+        aria-label="Go to home page"
+        title="Home"
+      >
+        <FiHome aria-hidden="true" size={18} />
+      </button>
       <span className={styles.date}>{dateText}</span>
 
       {/* Calendar date picker */}
@@ -920,6 +935,10 @@ export default function ErpHeader({
     handleNavigate(value);
   }, [handleNavigate]);
 
+  const handleHomeClick = useCallback(() => {
+    handleNavigate("/");
+  }, [handleNavigate]);
+
   const handleLogout = useCallback(() => {
     clearRecentPagesSession();
     setRecentPages([]);
@@ -967,6 +986,7 @@ export default function ErpHeader({
           onGoClick={onGoClick}
           logoutLabel={logoutLabel}
           onLogout={handleLogout}
+          onHomeClick={handleHomeClick}
           selectedDate={pickedDate}
           onDateChange={setPickedDate}
         />

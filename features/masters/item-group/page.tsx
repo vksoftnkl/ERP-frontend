@@ -67,6 +67,18 @@ const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
 const TABLE_MAX_HEIGHT = "calc(100dvh - 250px)";
+const ITEM_GROUP_PRIMARY_ACCENT = {
+  accent: "#365b9d",
+  accentStrong: "#2d4d85",
+  softFrom: "#e8eef8",
+  softTo: "#d5dfec",
+  iconBg: "#e8eef8",
+  iconFg: "#365b9d",
+} as const;
+const ITEM_GROUP_MODAL_PANEL_STYLE = {
+  width: "min(52rem, calc(100vw - 2rem))",
+  maxHeight: "min(82vh, 42rem)",
+} satisfies CSSProperties;
 const FILE_CONSTRAINTS = {
   MAX_UPLOAD_IMAGE_BYTES: 5 * 1024 * 1024,
   ALLOWED_MIME_TYPES: [
@@ -281,6 +293,7 @@ type ItemGroupColumnAccessor = keyof Pick<
   | "groupShort"
   | "groupAlias"
   | "groupActive"
+  | "groupLevel"
   | "itemCount"
   | "parentGroupName"
   | "position"
@@ -292,6 +305,14 @@ const DEFAULT_SERIAL_NO_COLUMN: ReusableTableColumn<ItemGroupTableRow> = {
   align: "left",
   width: "84px",
   sortable: false,
+};
+const DEFAULT_GROUP_LEVEL_COLUMN: ReusableTableColumn<ItemGroupTableRow> = {
+  key: "groupLevel",
+  header: "Level",
+  accessor: "groupLevel",
+  align: "center",
+  width: "110px",
+  sortAccessor: (row) => row.groupLevel,
 };
 const DEFAULT_ITEM_GROUP_COLUMNS: ReusableTableColumn<ItemGroupTableRow>[] = [
   DEFAULT_SERIAL_NO_COLUMN,
@@ -316,6 +337,7 @@ const DEFAULT_ITEM_GROUP_COLUMNS: ReusableTableColumn<ItemGroupTableRow>[] = [
     align: "left",
     width: "250px",
   },
+  DEFAULT_GROUP_LEVEL_COLUMN,
   {
     key: "itemCount",
     header: "Item Count",
@@ -383,6 +405,13 @@ const ITEM_GROUP_COLUMN_ACCESSOR_MAP: Record<string, ItemGroupColumnAccessor> =
     group_item_count: "itemCount",
     totalitems: "itemCount",
     total_items: "itemCount",
+    level: "groupLevel",
+    grouplevel: "groupLevel",
+    group_level: "groupLevel",
+    itemgrouplevel: "groupLevel",
+    item_group_level: "groupLevel",
+    itglevel: "groupLevel",
+    itg_level: "groupLevel",
     active: "groupActive",
     itgactive: "groupActive",
     itg_active: "groupActive",
@@ -420,6 +449,15 @@ function normalizeGridColumnColor(
   }
   const normalized = value.trim();
   return normalized || undefined;
+}
+
+function toTitleCase(value: string): string {
+  return value
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
 
 function resolveItemGroupAccessor(
@@ -514,6 +552,31 @@ function buildColumnsFromGridColumns(
   }
 
   return columns;
+}
+
+function ensureItemGroupLevelColumn(
+  columns: ReusableTableColumn<ItemGroupTableRow>[],
+): ReusableTableColumn<ItemGroupTableRow>[] {
+  if (columns.some((column) => column.accessor === "groupLevel")) {
+    return columns;
+  }
+
+  const nextColumns = [...columns];
+  const parentGroupIndex = nextColumns.findIndex(
+    (column) => column.accessor === "parentGroupName",
+  );
+  const groupNameIndex = nextColumns.findIndex(
+    (column) => column.accessor === "groupName",
+  );
+  const insertIndex =
+    parentGroupIndex >= 0
+      ? parentGroupIndex + 1
+      : groupNameIndex >= 0
+        ? groupNameIndex + 1
+        : nextColumns.length;
+
+  nextColumns.splice(insertIndex, 0, { ...DEFAULT_GROUP_LEVEL_COLUMN });
+  return nextColumns;
 }
 // Utility functions
 function toReferenceObject(value: string): string {
@@ -1351,8 +1414,16 @@ export default function ItemGroupMasterPage() {
 
   const effectiveTitle = useMemo(() => {
     const normalized = itemGroupGridName?.trim();
-    return normalized || "Item Group";
+    return normalized ? toTitleCase(normalized) : "Item Group";
   }, [itemGroupGridName]);
+  const screenName = useMemo(() => {
+    const normalized = itemGroupGridName?.trim();
+    return normalized ? toTitleCase(normalized) : "Item Group Master";
+  }, [itemGroupGridName]);
+  const entityTitle = useMemo(
+    () => effectiveTitle.replace(/\s+Master$/i, ""),
+    [effectiveTitle],
+  );
 
   // Custom hooks
   const {
@@ -1711,6 +1782,11 @@ export default function ItemGroupMasterPage() {
   const itemGroupFields = useMemo<ERPDynamicModalField[]>(
     () => [
       {
+        name: "primaryDetails",
+        label: "Primary Details",
+        type: "heading",
+      },
+      {
         name: "itemGroupName",
         label: "Item Group Name",
         required: true,
@@ -1761,6 +1837,11 @@ export default function ItemGroupMasterPage() {
         colSpan: 2,
       },
       {
+        name: "mediaStatus",
+        label: "Media & Status",
+        type: "heading",
+      },
+      {
         name: "itemGroupPhoto",
         label: "Item Group Image",
         type: "file",
@@ -1776,7 +1857,9 @@ export default function ItemGroupMasterPage() {
   const itemGroupViewFields = useMemo<ERPDynamicModalField[]>(
     () =>
       itemGroupFields
-        .filter((field) => field.type !== "file")
+        .filter(
+          (field) => field.type !== "file" && field.name !== "mediaStatus",
+        )
         .map((field) => ({
           ...field,
           disabled: true,
@@ -1792,7 +1875,7 @@ export default function ItemGroupMasterPage() {
         cardTitle: `View ${effectiveTitle}`,
         cardDescription: "View selected item group details.",
         cardButtonLabel: "View",
-        modalTitle: `${effectiveTitle} Details`,
+        modalTitle: ` ${entityTitle} Details`,
         modalDescription: "Read-only view of selected item group data.",
         submitLabel: "Close",
         accent: "indigo",
@@ -1803,10 +1886,10 @@ export default function ItemGroupMasterPage() {
         cardTitle: `Create ${effectiveTitle}`,
         cardDescription: "Create a new group for billing workflows.",
         cardButtonLabel: "Create",
-        modalTitle: `New ${effectiveTitle}`,
+        modalTitle: `New ${entityTitle}`,
         modalDescription: "Configure group details and hierarchy.",
         submitLabel: createLoading ? "Saving..." : "Save",
-        accent: "blue",
+        accent: ITEM_GROUP_PRIMARY_ACCENT,
         fields: itemGroupFields,
       },
       {
@@ -1814,14 +1897,14 @@ export default function ItemGroupMasterPage() {
         cardTitle: `Update ${effectiveTitle}`,
         cardDescription: "Update an existing group.",
         cardButtonLabel: "Update",
-        modalTitle: `Edit ${effectiveTitle}`,
+        modalTitle: `Edit ${entityTitle}`,
         modalDescription: "Update selected item group details.",
         submitLabel: createLoading ? "Updating..." : "Update",
         accent: "emerald",
         fields: itemGroupFields,
       },
     ],
-    [createLoading, effectiveTitle, itemGroupFields, itemGroupViewFields],
+    [createLoading, effectiveTitle, entityTitle, itemGroupFields, itemGroupViewFields],
   );
   // Table event handlers
   const handleRowUpdate = useCallback(
@@ -1852,12 +1935,12 @@ export default function ItemGroupMasterPage() {
       }
 
       setRecordHistoryModal({
-        screenName: "Item Group Master",
+        screenName,
         recordPk,
         displayName: row.groupName || row.groupCode || row.groupId,
       });
     },
-    [],
+    [screenName],
   );
   const handleRowActionMenuToggle = useCallback(
     (
@@ -1897,7 +1980,7 @@ export default function ItemGroupMasterPage() {
   );
   const columns = useMemo<ReusableTableColumn<ItemGroupTableRow>[]>(
     () => [
-      ...gridDrivenColumns.map((column) => {
+      ...ensureItemGroupLevelColumn(gridDrivenColumns).map((column) => {
         const enhancedColumn: ReusableTableColumn<ItemGroupTableRow> = {
           ...column,
         };
@@ -1941,6 +2024,12 @@ export default function ItemGroupMasterPage() {
           enhancedColumn.render = (row) => row.itemCount || "-";
         }
 
+        if (column.accessor === "groupLevel") {
+          enhancedColumn.align = column.align ?? "center";
+          enhancedColumn.sortAccessor = (row) => row.groupLevel;
+          enhancedColumn.render = (row) => String(row.groupLevel);
+        }
+
         if (column.accessor === "groupActive") {
           enhancedColumn.align = column.align ?? "center";
           enhancedColumn.sortAccessor = (row) =>
@@ -1971,6 +2060,7 @@ export default function ItemGroupMasterPage() {
         align: "center",
         width: "190px",
         sortable: false,
+        headerClassName: styles.itemGroupActionsHeaderCell,
         cellClassName: styles.itemGroupActionsCell,
         render: (row) => {
           const stopAction = (
@@ -2156,7 +2246,7 @@ export default function ItemGroupMasterPage() {
                     disabled={createLoading || detailsLoading}
                   >
                     <FiPlus aria-hidden="true" />
-                    <span>Add {effectiveTitle}</span>
+                    <span>Add Item Group</span>
                   </button>
                   <button
                     type="button"
@@ -2201,6 +2291,8 @@ export default function ItemGroupMasterPage() {
         variants={modalVariants}
         showDefaultCards={false}
         hideSectionHeader
+        hideFieldErrorText
+        panelStyle={ITEM_GROUP_MODAL_PANEL_STYLE}
         submitError={createError}
         onControllerReady={(controller) => {
           modalControllerRef.current = controller;

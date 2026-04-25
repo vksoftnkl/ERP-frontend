@@ -1141,6 +1141,11 @@ export default function ItemBrandMasterPage() {
   const itemBrandFields = useMemo<ERPDynamicModalField[]>(
     () => [
       {
+        name: "primaryDetails",
+        label: "Primary Details",
+        type: "heading",
+      },
+      {
         name: "itemBrandName",
         label: "Item Brand Name",
         required: true,
@@ -1176,6 +1181,11 @@ export default function ItemBrandMasterPage() {
         name: "itemDescription",
         label: "Description",
         colSpan: 2,
+      },
+      {
+        name: "mediaStatus",
+        label: "Media & Status",
+        type: "heading",
       },
       {
         name: "brandPhoto",
