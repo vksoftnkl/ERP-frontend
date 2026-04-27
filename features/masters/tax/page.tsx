@@ -364,7 +364,7 @@ function buildTaxFormFields(
       name: "taxLedgerBaseHeading",
       label: "Taxable Value Ledgers",
       type: "heading",
-      defaultExpanded: false,    
+      defaultExpanded: true,
     },
     buildLedgerField(
       "tax_sales_ledger_id",
@@ -390,7 +390,7 @@ function buildTaxFormFields(
       name: "taxLedgerOutputHeading",
       label: "Output Tax Ledgers (Sales)",
       type: "heading",
-      defaultExpanded: false,
+      defaultExpanded: true,
     },
     buildLedgerField(
       "tax_cgst_output_ledger_id",
@@ -416,7 +416,7 @@ function buildTaxFormFields(
       name: "taxLedgerInputHeading",
       label: "Input Tax Ledgers (Purchase)",
       type: "heading",
-      defaultExpanded: false,
+      defaultExpanded: true,
     },
     buildLedgerField(
       "tax_cgst_input_ledger_id",

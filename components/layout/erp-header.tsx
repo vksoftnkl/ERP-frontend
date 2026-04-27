@@ -651,11 +651,9 @@ function HeaderRight({
   onGoClick,
   logoutLabel,
   onLogout,
-  onHomeClick,
   selectedDate,
   onDateChange,
 }: HeaderRightProps & {
-  onHomeClick: () => void;
   selectedDate: Date;
   onDateChange: (date: Date) => void;
 }) {
@@ -671,15 +669,6 @@ function HeaderRight({
   return (
     <div className={styles.headerRight}>
       {/* <span className={styles.searchText}>{searchMenuCount} Search Menu :</span> */}
-      <button
-        type="button"
-        className={styles.homeButton}
-        onClick={onHomeClick}
-        aria-label="Go to home page"
-        title="Home"
-      >
-        <FiHome aria-hidden="true" size={18} />
-      </button>
       <span className={styles.date}>{dateText}</span>
 
       {/* Calendar date picker */}
@@ -953,6 +942,15 @@ export default function ErpHeader({
   return (
     <div className={styles.headerShell}>
       <header className={styles.topHeader}>
+        <button
+          type="button"
+          className={styles.homeButton}
+          onClick={handleHomeClick}
+          aria-label="Go to home page"
+          title="Home"
+        >
+          <FiHome aria-hidden="true" size={18} />
+        </button>
         <nav
           ref={primaryMenuRef}
           className={styles.primaryMenu}
@@ -986,7 +984,6 @@ export default function ErpHeader({
           onGoClick={onGoClick}
           logoutLabel={logoutLabel}
           onLogout={handleLogout}
-          onHomeClick={handleHomeClick}
           selectedDate={pickedDate}
           onDateChange={setPickedDate}
         />

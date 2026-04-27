@@ -10,7 +10,6 @@
   --brand-red: #730000;
   --brand-red-dark: #5f0000;
   --focus-blue: #217bc0;
-
   min-height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -19,12 +18,10 @@
   color: var(--text-primary);
   font-family: var(--erp-font-family);
 }
-
 .viewport {
   height: 100%;
   // padding: 8px;
 }
-
 .board {
   height: 100%;
   min-height: 0;
@@ -35,13 +32,11 @@
   flex-direction: column;
   overflow: hidden;
 }
-
 .actionsStrip {
   padding: 8px 10px;
   border-bottom: 1px solid var(--line-soft);
   background: linear-gradient(180deg, #f5f5f5, #e8e8e8);
 }
-
 .content {
   flex: 1;
   min-height: 0;
@@ -52,19 +47,16 @@
   background: linear-gradient(180deg, #f1f1f2 0, #ececee 100%);
   overflow: hidden;
 }
-
 .contentHeader {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
   gap: 14px;
 }
-
 .titleBlock {
   display: grid;
   gap: 3px;
 }
-
 .title {
   margin: 0;
   font-size: 38px;
@@ -72,20 +64,17 @@
   line-height: 1;
   color: var(--brand-red);
 }
-
 .subtitle {
   margin: 0;
   font-size: 13px;
   color: var(--text-muted);
 }
-
 .searchStrip {
   display: flex;
   flex-direction: column;
   gap: 5px;
   min-width: min(100%, 330px);
 }
-
 .searchLabel {
   font-size: 12px;
   font-weight: 700;
@@ -93,7 +82,6 @@
   color: #27272c;
   text-transform: uppercase;
 }
-
 .searchInput {
   width: 100%;
   height: 0.5rem;
@@ -103,13 +91,11 @@
   color: #141414;
   font-size: 13px;
   padding: 0 9px;
-
   &:focus {
     outline: 1px solid var(--focus-blue);
     outline-offset: 0;
   }
 }
-
 .statusStrip {
   min-height: 30px;
   border: 1px solid var(--line-soft);
@@ -121,7 +107,6 @@
   gap: 10px;
   padding: 0 10px;
 }
-
 .statusChip {
   display: inline-flex;
   align-items: center;
@@ -134,12 +119,10 @@
   font-weight: 700;
   color: #2f2f36;
 }
-
 .statusHint {
   font-size: 12px;
   color: #64646b;
 }
-
 .errorBox {
   display: flex;
   align-items: center;
@@ -151,12 +134,10 @@
   color: #7a1c1c;
   flex-wrap: wrap;
 }
-
 .errorText {
   margin: 0;
   font-size: 14px;
 }
-
 .retryButton {
   height: 30px;
   border: 1px solid #7b1111;
@@ -191,18 +172,15 @@
 //   text-transform: uppercase;
 //   color: #4d4d55;
 // }
-
 // .bottomSection {
 //   border-top: 1px solid var(--line-soft);
 //   background: var(--bg-panel);
 // }
-
 .footerTabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   border-bottom: 1px solid var(--line-soft);
 }
-
 .footerTab {
   min-height: 30px;
   border-right: 1px solid var(--line-soft);
@@ -213,12 +191,10 @@
   background: var(--bg-panel);
   font-size: 13px;
   color: #1f1f1f;
-
   &:last-child {
     border-right: 0;
   }
 }
-
 .footerInfo {
   min-height: 31px;
   background: var(--bg-muted);
@@ -230,12 +206,10 @@
   font-size: 13px;
   color: #0f0f0f;
 }
-
 .footerYear {
   justify-self: center;
   font-weight: 700;
 }
-
 .footerMeta {
   justify-self: end;
   display: flex;
@@ -243,7 +217,6 @@
   gap: 12px;
   white-space: nowrap;
 }
-
 .viewModalBackdrop {
   position: fixed;
   inset: 0;
@@ -255,7 +228,6 @@
   justify-content: center;
   padding: 26px 14px;
 }
-
 .viewModal {
   width: min(760px, 100%);
   border: 1px solid #848488;
@@ -264,7 +236,6 @@
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
   overflow: hidden;
 }
-
 .viewModalHeader {
   min-height: 54px;
   background: linear-gradient(180deg, #f4f4f4, #dededf);
@@ -275,27 +246,22 @@
   justify-content: space-between;
   gap: 10px;
 }
-
 .viewModalBody {
   padding: 14px 12px 16px;
   background: #f3f3f4;
 }
-
 .viewDetailsGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px 16px;
 }
-
 .viewDetailCard {
   display: grid;
   gap: 4px;
-
   &:last-child {
     grid-column: 1 / -1;
   }
 }
-
 .viewDetailLabel {
   margin: 0;
   font-size: 12px;
@@ -305,7 +271,6 @@
   color: #4b4b53;
   font-weight: 700;
 }
-
 .viewDetailValue {
   margin: 0;
   font-size: 14px;
@@ -314,7 +279,6 @@
   line-height: 1.35;
   word-break: break-word;
 }
-
 .viewModalFooter {
   border-top: 1px solid var(--line-soft);
   background: var(--bg-panel);
@@ -323,7 +287,6 @@
   justify-content: flex-end;
   gap: 10px;
 }
-
 .modalBackdrop {
   position: fixed;
   inset: 0;
@@ -334,14 +297,12 @@
   padding: 60px 12px 20px;
   z-index: 200;
 }
-
 .createModal {
   width: min(860px, 100%);
   background: #ececed;
   border: 1px solid #848488;
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
 }
-
 .modalHeader {
   min-height: 54px;
   padding: 6px 10px 6px 14px;
@@ -352,12 +313,10 @@
   justify-content: space-between;
   gap: 10px;
 }
-
 .modalTitleBlock {
   display: grid;
   gap: 1px;
 }
-
 .modalTitle {
   margin: 0;
   font-size: 22px;
@@ -365,18 +324,15 @@
   font-weight: 700;
   color: #45454c;
 }
-
 .modalSubtitle {
   margin: 0;
   font-size: 12px;
   color: #696970;
 }
-
 .windowActionGroup {
   display: flex;
   gap: 8px;
 }
-
 .windowAction {
   width: 24px;
   height: 24px;
@@ -391,25 +347,21 @@
   justify-content: center;
   align-items: center;
   cursor: pointer;
-
   &:hover {
     background: #d1d1d1;
   }
 }
-
 .modalBody {
   padding: 14px 12px 16px;
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
-
 .formLayout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 210px;
   gap: 14px;
 }
-
 .formMain {
   border: 1px solid #b8b8bc;
   background: #f3f3f4;
@@ -417,7 +369,6 @@
   display: grid;
   gap: 10px;
 }
-
 .formSection {
   border: 1px solid #c3c3c8;
   background: #fafafb;
@@ -425,7 +376,6 @@
   display: grid;
   gap: 10px;
 }
-
 .sectionTitle {
   margin: 0;
   font-size: 12px;
@@ -434,29 +384,24 @@
   text-transform: uppercase;
   color: #4b4b53;
 }
-
 .field {
   display: grid;
   gap: 6px;
 }
-
 .fieldRow {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
-
 .fieldLabel {
   font-size: 13px;
   font-weight: 700;
   color: #27272b;
   line-height: 1;
 }
-
 .requiredMark {
   color: #b61924;
 }
-
 .textInput {
   height: 32px;
   border: 1px solid #a7a7a7;
@@ -464,13 +409,11 @@
   color: #111;
   font-size: 14px;
   padding: 0 8px;
-
   &:focus {
     outline: 1px solid #1586de;
     outline-offset: 0;
   }
 }
-
 .textareaInput {
   min-height: 86px;
   border: 1px solid #a7a7a7;
@@ -480,17 +423,14 @@
   font-family: inherit;
   padding: 8px;
   resize: vertical;
-
   &:focus {
     outline: 1px solid #1586de;
     outline-offset: 0;
   }
 }
-
 .positionInput {
   font-variant-numeric: tabular-nums;
 }
-
 .formAside {
   border: 1px solid #b8b8bc;
   background: #f6f6f7;
@@ -499,7 +439,6 @@
   gap: 10px;
   align-content: start;
 }
-
 .imagePanel {
   min-height: 124px;
   border: 1px dashed #93939b;
@@ -511,18 +450,15 @@
   gap: 8px;
   cursor: pointer;
   padding: 10px;
-
   &:hover {
     background: #fff;
   }
 }
-
 .imagePanelLabel {
   font-size: 22px;
   font-weight: 700;
   line-height: 1;
 }
-
 .imagePanelAction {
   min-height: 24px;
   padding: 0 10px;
@@ -534,19 +470,16 @@
   font-weight: 700;
   color: #404047;
 }
-
 .modalError {
   margin: 0;
   color: #8a1212;
   font-size: 13px;
 }
-
 .footerActions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
 }
-
 .saveButton,
 .cancelButton {
   height: 35px;
@@ -564,18 +497,15 @@
   justify-content: center;
   gap: 6px;
   cursor: pointer;
-
   &:hover {
     background: #e0e0e0;
   }
-
   &:disabled {
     cursor: not-allowed;
     opacity: 0.6;
     background: #ececec;
   }
 }
-
 .buttonIcon {
   width: 16px;
   height: 16px;
@@ -586,48 +516,39 @@
   justify-content: center;
   color: #fff;
 }
-
 .saveIcon {
   background: #1f8a39;
 }
-
 .cancelIcon {
   background: #b0222f;
 }
-
 /* Responsive */
 @media (max-width: 1250px) {
   .title {
     font-size: 32px;
   }
 }
-
 @media (max-width: 980px) {
   .contentHeader {
     align-items: start;
     flex-direction: column;
   }
-
   .searchStrip {
     width: 100%;
     max-width: 100%;
   }
-
   .statusStrip {
     flex-wrap: wrap;
     min-height: 0;
     padding: 6px 10px;
   }
-
   .formLayout {
     grid-template-columns: 1fr;
   }
-
   .formAside {
     grid-template-columns: 1fr;
   }
 }
-
 @media (max-width: 900px) {
   .footerInfo {
     grid-template-columns: 1fr;
@@ -635,51 +556,42 @@
     gap: 4px;
     padding: 5px 8px;
   }
-
   .footerMeta {
     justify-self: center;
     flex-wrap: wrap;
     justify-content: center;
   }
 }
-
 @media (max-width: 700px) {
   // .viewport {
   //   padding: 5px;
   // }
-
   // .content {
   //   padding: 8px 6px 0;
   //   gap: 8px;
   // }
-
   .title {
     font-size: 24px;
   }
-
   .subtitle {
     font-size: 12px;
   }
-
   .searchInput {
     height:  0.5rem;
     font-size:  0.5rem;
   }
-
   .footerTabs {
     grid-template-columns: 1fr;
   }
-
   .footerTab {
     min-height: 28px;
     border-right: 0;
     border-bottom: 1px solid #c5c5c5;
-
     &:last-child {
       border-bottom: 0;
     }
   }
-  .modalBackdrop {
+    .modalBackdrop {
     padding-top: 20px;
   }
   .viewModal {
@@ -825,7 +737,6 @@
     border-bottom: 1px solid #d5dfec;
     border-radius: var(--erp-radius);
   }
-
   [data-erp-table-pagination="true"] {
     margin-top: 0rem;
     border: 1px solid #d5dfec;
@@ -833,12 +744,10 @@
     padding: 0.5rem;
     color: #5e7192;
   }
-
   [class*="pageSizeControl"] {
     gap: 0.5rem;
     font-size: 13px;
   }
-
   [class*="pageSizeSelect"] {
     height: 32px !important;
     min-height: 32px !important;
@@ -846,24 +755,20 @@
     padding: 0 0.5rem !important;
     font-size: 13px !important;
   }
-
   [class*="paginationControls"] {
     gap: 0.5rem;
   }
-
   [class*="paginationButton"] {
     min-width: 32px !important;
     height: 32px !important;
     border-radius: var(--erp-radius);
     padding: 0 0.5rem !important;
     font-size: 13px !important;
-
     &:hover:not(:disabled) {
       border-color: #365b9d !important;
       background: #e8eef8 !important;
-      color: #365b9d !important;
+      color: hsl(218, 49%, 41%) !important;
     }
-
     &[class*="paginationButtonActive"] {
       border-color: #365b9d !important;
       background: #e8eef8 !important;
@@ -876,8 +781,8 @@
   th {
     height: 34px !important;
     padding: 0 0.75rem !important;
-    background: #eaf2ff !important;
-    color: #365b9d !important;
+    background: #bacdef !important;
+    color: #1b335c !important;
     font-size: 13.5px !important;
     font-weight: 900 !important;
     border-bottom: 1px solid #d5dfec !important;
@@ -1025,12 +930,10 @@
   padding-left: 0;
   font-weight: 700;
 }
-
 // .groupNameText {
 //   overflow: hidden;
 //   text-overflow: ellipsis;
 // }
-
 .statusBadge {
   min-width: 58px;
   height: 24px;
@@ -1042,19 +945,16 @@
   font-size: 12px;
   font-weight: 700;
 }
-
 .statusActive {
   border: 1px solid var(--success-border);
   background: var(--success-bg);
   color: var(--success-text);
 }
-
 .statusInactive {
   border: 1px solid #cbd5e1;
   background: #f1f5f9;
   color: #64748b;
 }
-
 .itemGroupActions {
   width: 100%;
   display: flex;
@@ -1062,14 +962,12 @@
   justify-content: center;
   gap: 0.5rem;
 }
-
 .itemGroupActionsHeaderCell,
 .itemGroupActionsCell {
   text-align: center !important;
   overflow: visible !important;
   text-overflow: clip !important;
 }
-
 .itemGroupActionButton {
   width: 30px;
   height: 30px;
@@ -1079,38 +977,31 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-
   &:disabled {
     cursor: not-allowed;
     opacity: 0.45;
   }
-
   svg {
     width: 15px;
     height: 15px;
   }
 }
-
 .editActionButton {
   border: 1px solid #9fc2ff;
   color: var(--primary);
-
   &:hover:not(:disabled) {
     background: #eff6ff;
   }
 }
-
 .moreActionButton {
   width: 28px;
   margin-left: 0;
   border: 0;
   color: var(--text-main);
-
   &:hover:not(:disabled) {
     background: #f1f5f9;
   }
 }
-
 .itemGroupActionMenu {
   position: fixed;
   z-index: 10000;
@@ -1123,7 +1014,6 @@
   display: grid;
   gap: 0.5rem;
 }
-
 .itemGroupActionMenuItem {
   width: 100%;
   min-height: 32px;
@@ -1140,67 +1030,54 @@
   font-weight: 600;
   text-align: left;
   cursor: pointer;
-
   svg {
     width: 15px;
     height: 15px;
   }
-
   &:hover:not(:disabled) {
     background: #f8fbff;
     color: var(--text-main);
   }
-
   &:disabled {
     cursor: not-allowed;
     opacity: 0.45;
   }
 }
-
 .itemGroupActionMenuDelete {
   color: var(--danger);
-
   &:hover:not(:disabled) {
     background: #fff1f1;
     color: var(--danger);
   }
 }
-
 @media (max-width: 900px) {
   .viewport {
     padding: 0.5rem;
   }
-
   .itemGroupTable {
     padding: 0.5rem !important;
-
     // Stack toolbar vertically on small screens
     [data-erp-table-toolbar="true"] {
       flex-direction: column !important;
       align-items: stretch !important;
       gap: 0.5rem  !important;
     }
-
     [data-erp-table-toolbar-content="true"] {
       width: 100%;
     }
-
     [data-erp-table-tools="true"] {
       justify-content: flex-start !important;
       flex-wrap: wrap !important;
       padding-top: 0 !important;
     }
   }
-
   .itemGroupHeaderActions {
     width: 100%;
     gap: 0.5rem;
   }
-
   .itemGroupAddButton {
     flex: 1;
   }
-
   .itemGroupExportButton {
     width: auto;
   }

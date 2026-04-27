@@ -2,7 +2,20 @@
 
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FiArrowLeft, FiChevronDown, FiChevronLeft, FiChevronRight, FiX } from "react-icons/fi";
+import {
+  FiArrowLeft,
+  FiCalendar,
+  FiCheckCircle,
+  FiChevronDown,
+  FiClock,
+  FiFilter,
+  FiFileText,
+  FiInfo,
+  FiList,
+  FiRotateCcw,
+  FiUser,
+  FiX,
+} from "react-icons/fi";
 import { useApi } from "@/hooks/useApi";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 
@@ -122,6 +135,10 @@ const DATE_FORMATTER = new Intl.DateTimeFormat("en-IN", {
   dateStyle: "medium",
 });
 
+const TIME_FORMATTER = new Intl.DateTimeFormat("en-IN", {
+  timeStyle: "short",
+});
+
 function formatDateTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -136,6 +153,14 @@ function formatDateOnly(value: string): string {
     return value;
   }
   return DATE_FORMATTER.format(date);
+}
+
+function formatTimeOnly(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return TIME_FORMATTER.format(date);
 }
 
 function formatActionLabel(value: string): string {
@@ -374,24 +399,32 @@ function getRowUserLabel(row: AuditLogListItem): string {
 }
 
 const PANEL_CLASS =
-  "rounded-[4px] border border-slate-200 bg-white/95 shadow-[0_10px_24px_rgba(24,39,58,0.05)]";
+  "rounded-[4px] border border-slate-200 bg-white shadow-[0_18px_52px_rgba(15,23,42,0.18)]";
 
 const BUTTON_BASE_CLASS =
   "inline-flex items-center justify-center border border-transparent transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none";
 
 const BACK_BUTTON_CLASS = cx(
   BUTTON_BASE_CLASS,
-  "min-h-[34px] gap-1.5 rounded-[8px] border-slate-300 bg-white px-3 text-[12px] font-bold text-slate-700 hover:bg-slate-50",
+  "min-h-[34px] gap-1.5 rounded-[4px] border-slate-300 bg-white px-3 text-[12px] font-bold text-slate-700 hover:bg-slate-50",
 );
 
 const RETRY_BUTTON_CLASS = cx(
   BUTTON_BASE_CLASS,
-  "min-h-[32px] rounded-[8px] border-rose-300 bg-white px-3 text-[12px] font-bold text-rose-700 hover:bg-rose-50",
+  "min-h-[32px] rounded-[4px] border-rose-300 bg-white px-3 text-[12px] font-bold text-rose-700 hover:bg-rose-50",
 );
 
 const PAGINATION_BUTTON_CLASS = cx(
   BUTTON_BASE_CLASS,
-  "h-7 w-7 rounded-[7px] border-slate-300 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50",
+  "h-9 min-w-[72px] rounded-[4px] border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-500 hover:border-slate-300 hover:bg-slate-50",
+);
+
+const PAGE_NUMBER_CLASS =
+  "inline-flex h-9 min-w-[40px] items-center justify-center rounded-[4px] border border-slate-300 bg-white px-3 text-[14px] font-semibold text-slate-800 shadow-sm";
+
+const ICON_BUTTON_CLASS = cx(
+  BUTTON_BASE_CLASS,
+  "h-10 w-10 rounded-[4px] border-slate-200 bg-white text-slate-500 shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700",
 );
 
 const INPUT_BASE_CLASS =
@@ -399,47 +432,46 @@ const INPUT_BASE_CLASS =
 
 const PAGE_SIZE_SELECT_CLASS = cx(
   INPUT_BASE_CLASS,
-  "min-h-[34px] min-w-[76px] appearance-none rounded-[8px] py-0 pl-3 pr-8 text-[13px]",
+  "h-9 min-w-[84px] appearance-none rounded-[4px] py-0 pl-4 pr-9 text-[14px] font-semibold",
 );
 
 const TABLE_HEADER_CELL_CLASS =
-  "sticky top-0 z-[1] border-b border-r border-slate-100 bg-slate-50 px-3 py-2.5 text-left align-middle text-[11px] font-bold whitespace-nowrap text-slate-600 last:border-r-0";
+  "sticky top-0 z-[1] border-b border-slate-200 bg-slate-50/90 p-2 text-left align-middle text-[14px] font-bold whitespace-nowrap text-slate-600";
 
 const TABLE_CELL_CLASS =
-  "border-b border-r border-slate-100 px-3 py-2.5 align-middle text-[13px] text-slate-800 last:border-r-0";
+  "border-b border-slate-200 p-2 align-middle text-[15px] text-slate-700";
 
 const JSON_TITLE_CLASS = "m-0 text-[14px] font-bold text-slate-800";
 
 const JSON_FIELD_ROW_CLASS =
-  "grid gap-1 rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-2.5";
+  "grid gap-1 rounded-[4px] border border-slate-200 bg-slate-50 px-3 py-2.5";
 
 const JSON_FIELD_KEY_CLASS =
-  "m-0 text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500";
+  "m-0 text-[11px] font-extrabold uppercase text-slate-500";
 
 const JSON_FIELD_VALUE_CLASS =
   "m-0 break-words text-[13px] leading-5 font-semibold text-slate-800 whitespace-pre-wrap";
 
 const JSON_ARRAY_ITEM_CLASS =
-  "grid gap-1.5 rounded-[8px] border border-white/80 bg-white px-2.5 py-2";
+  "grid gap-1.5 rounded-[4px] border border-white/80 bg-white px-2.5 py-2";
 
 const DETAIL_JSON_TABLE_SHELL_CLASS =
-  "min-h-0 overflow-hidden rounded-[12px] border border-slate-200 bg-white";
+  "min-h-0 overflow-hidden rounded-[4px] border border-slate-200 bg-white";
 
 const DETAIL_JSON_TABLE_HEADER_CLASS =
-  "sticky top-0 z-[2] border-b border-r border-slate-100 bg-slate-50 px-3 py-2.5 text-left align-top shadow-[0_1px_0_0_rgba(241,245,249,1)] last:border-r-0";
+  "sticky top-0 z-[2] border-b border-r border-slate-200 bg-slate-50 p-2 text-left align-middle last:border-r-0";
 
 const DETAIL_JSON_TABLE_CELL_CLASS =
-  "border-r border-slate-100 px-3 py-3 align-top last:border-r-0";
+  "border-r border-slate-200 p-2 align-middle last:border-r-0";
 
 const DETAIL_JSON_TABLE_ROW_CLASS = "border-b border-slate-100 last:border-b-0";
 const DETAIL_JSON_TABLE_FIELD_CLASS = "min-w-[180px]";
 const DETAIL_JSON_TABLE_VALUE_CLASS = "min-w-[220px]";
+const DETAIL_JSON_TABLE_STATUS_CLASS = "min-w-[140px]";
 
-const MODAL_OVERLAY_CLASS =
-   "fixed inset-0 z-[210] overflow-y-auto bg-slate-950/45 px-3 pt-[80px] pb-4 backdrop-blur-[1px]";
 const MODAL_PANEL_CLASS = cx(
   PANEL_CLASS,
-  "w-full max-w-[min(1320px,96vw)] min-h-0 overflow-hidden bg-slate-50 p-3 max-h-[calc(100vh-72px)] max-[780px]:p-2.5",
+  "w-full max-w-[min(1320px,96vw)] min-h-0 overflow-hidden bg-white p-0 max-h-[calc(100vh-72px)]",
 );
 
 function renderStructuredAuditValue(value: unknown, path = "root"): ReactNode {
@@ -535,7 +567,7 @@ function getActionBadgeClass(value: string): string {
   const variant = resolveActionVariant(value);
 
   return cx(
-    "inline-flex min-h-[26px] items-center justify-center rounded-full border px-2.5 text-[11px] font-bold uppercase tracking-[0.04em]",
+    "inline-flex min-h-[26px] items-center justify-center rounded-[4px] border px-2.5 text-[11px] font-bold uppercase tracking-[0.04em]",
     variant === "new" && "border-emerald-200 bg-emerald-50 text-emerald-700",
     variant === "update" && "border-blue-200 bg-blue-50 text-blue-700",
     variant === "approve" && "border-lime-200 bg-lime-50 text-lime-700",
@@ -587,6 +619,7 @@ function RecordHistoryViewer({
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedLog, setSelectedLog] = useState<AuditLogListItem | null>(null);
+  const [showChangedOnly, setShowChangedOnly] = useState(false);
 
   const { getAll: listAuditLogs, loading, error } = useApi<
     ApiSuccessResponse<AuditLogListItem[], ListMeta>
@@ -615,6 +648,18 @@ function RecordHistoryViewer({
         : [],
     [selectedLog],
   );
+
+  const selectedLogChangedRows = useMemo(
+    () => selectedLogComparisonRows.filter((row) => row.diff),
+    [selectedLogComparisonRows],
+  );
+
+  const selectedLogVisibleRows = showChangedOnly
+    ? selectedLogChangedRows
+    : selectedLogComparisonRows;
+  const selectedLogTotalFieldCount = selectedLogComparisonRows.length;
+  const selectedLogChangedFieldCount = selectedLogChangedRows.length || selectedLogChangeCount;
+  const selectedLogUserLabel = selectedLog ? getRowUserLabel(selectedLog) : "-";
 
   const fetchRecordHistory = useCallback(async () => {
     if (!screenName || !recordPk) {
@@ -671,6 +716,10 @@ function RecordHistoryViewer({
     }
   }, [logs, selectedLog]);
 
+  useEffect(() => {
+    setShowChangedOnly(false);
+  }, [selectedLog?.log_id]);
+
   const handleRefresh = useCallback(() => {
     setRefreshKey((value) => value + 1);
   }, []);
@@ -690,8 +739,31 @@ function RecordHistoryViewer({
 
   const tableSummary =
     meta.total === 0
-      ? "Showing 0 of 0 items"
-      : `Showing ${pageStart}-${pageEnd} of ${meta.total} items`;
+      ? "Showing 0 of 0 history records"
+      : `Showing ${pageStart} to ${pageEnd} of ${meta.total} history records`;
+
+  const totalHistoryRecords = meta.total || logs.length;
+  const latestLog = logs[0] ?? null;
+  const latestUserLabel = latestLog ? getRowUserLabel(latestLog) : "-";
+  const historySummaryChips =
+    screenName && recordPk ? (
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="inline-flex min-h-10 items-center gap-2 rounded-[4px] border border-blue-200 bg-blue-50 px-3.5 text-[14px] font-bold text-blue-700">
+          <FiClock className="h-4 w-4" aria-hidden="true" />
+          <span>
+            {totalHistoryRecords} {totalHistoryRecords === 1 ? "Change" : "Changes"}
+          </span>
+        </span>
+        <span className="inline-flex min-h-10 items-center gap-2 rounded-[4px] border border-emerald-200 bg-emerald-50 px-3.5 text-[14px] font-bold text-emerald-700">
+          <FiCalendar className="h-4 w-4" aria-hidden="true" />
+          <span>Last: {latestLog ? formatDateTime(latestLog.log_date) : "-"}</span>
+        </span>
+        <span className="inline-flex min-h-10 items-center gap-2 rounded-[4px] border border-violet-200 bg-violet-50 px-3.5 text-[14px] font-bold text-violet-700">
+          <FiUser className="h-4 w-4" aria-hidden="true" />
+          <span>By {latestUserLabel}</span>
+        </span>
+      </div>
+    ) : null;
 
   const viewerBody = !screenName || !recordPk ? (
     <section className={cx(PANEL_CLASS, "grid gap-2.5 p-4")}>
@@ -714,7 +786,7 @@ function RecordHistoryViewer({
   ) : (
     <>
       {error ? (
-        <div className="flex flex-col gap-2 rounded-[12px] border border-rose-200 bg-rose-50 px-3 py-2.5 min-[781px]:flex-row min-[781px]:items-center min-[781px]:justify-between">
+        <div className="flex flex-col gap-2 rounded-[4px] border border-rose-200 bg-rose-50 px-3 py-2.5 min-[781px]:flex-row min-[781px]:items-center min-[781px]:justify-between">
           <p className="m-0 text-[13px] text-rose-700">{error}</p>
           <button className={RETRY_BUTTON_CLASS} type="button" onClick={handleRefresh}>
             Retry
@@ -722,19 +794,13 @@ function RecordHistoryViewer({
         </div>
       ) : null}
 
-      <section className={cx(PANEL_CLASS, "min-w-0 flex flex-1 flex-col overflow-hidden")}>
-        <div className="px-3 py-2.5">
-          <div className="grid gap-0.5">
-            
-          </div>
-        </div>
-
-        <div className="overflow-auto border-y border-slate-100 [scrollbar-gutter:stable_both-edges]">
+      <section className="min-w-0 flex flex-1 flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-white">
+        <div className="min-h-0 flex-1 overflow-auto [scrollbar-gutter:stable_both-edges]">
           <table className="w-full min-w-[920px] border-separate border-spacing-0">
             <thead>
               <tr>
                 <th className={cx(TABLE_HEADER_CELL_CLASS, "text-center")}>#</th>
-                <th className={TABLE_HEADER_CELL_CLASS}>Date</th>
+                <th className={TABLE_HEADER_CELL_CLASS}>Date &amp; Time</th>
                 <th className={cx(TABLE_HEADER_CELL_CLASS, "text-center")}>Action</th>
                 <th className={TABLE_HEADER_CELL_CLASS}>User</th>
                 <th className={TABLE_HEADER_CELL_CLASS}>Notes</th>
@@ -743,13 +809,13 @@ function RecordHistoryViewer({
             <tbody>
               {loading && logs.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-7 text-center text-sm text-slate-500" colSpan={TABLE_COLUMN_COUNT}>
+                  <td className="p-2 text-center text-sm text-slate-500" colSpan={TABLE_COLUMN_COUNT}>
                     Loading record history...
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-7 text-center text-sm text-slate-500" colSpan={TABLE_COLUMN_COUNT}>
+                  <td className="p-2 text-center text-sm text-slate-500" colSpan={TABLE_COLUMN_COUNT}>
                     No audit history was found for this record.
                   </td>
                 </tr>
@@ -763,13 +829,18 @@ function RecordHistoryViewer({
                     )}
                     onClick={() => handleOpenDetail(row)}
                   >
-                    <td className={cx(TABLE_CELL_CLASS, "w-[48px] text-center text-slate-500")}>
+                    <td className={cx(TABLE_CELL_CLASS, "w-[72px] text-center text-slate-700")}>
                       {(currentPage - 1) * pageSize + rowIndex + 1}
                     </td>
                     <td className={TABLE_CELL_CLASS}>
-                      <div className="grid gap-0.5">
-                        <span className="font-bold text-slate-800">{formatDateOnly(row.log_date)}</span>
-                        <span className="text-[11px] text-slate-400">{formatDateTime(row.log_date)}</span>
+                      <div className="flex items-center gap-4">
+                        <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[4px]  bg-blue-50 text-blue-600">
+                          <FiClock className="h-5 w-5" aria-hidden="true" />
+                        </span>
+                        <span className="grid gap-1">
+                          <span className="font-bold text-slate-900">{formatDateOnly(row.log_date)}</span>
+                          <span className="text-[14px] text-slate-600">{formatTimeOnly(row.log_date)}</span>
+                        </span>
                       </div>
                     </td>
                     <td className={cx(TABLE_CELL_CLASS, "text-center")}>
@@ -777,7 +848,14 @@ function RecordHistoryViewer({
                         {formatActionLabel(row.log_action)}
                       </span>
                     </td>
-                    <td className={TABLE_CELL_CLASS}>{getRowUserLabel(row)}</td>
+                    <td className={TABLE_CELL_CLASS}>
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] text-slate-500">
+                          <FiUser className="h-4 w-4" aria-hidden="true" />
+                        </span>
+                        <span>{getRowUserLabel(row)}</span>
+                      </div>
+                    </td>
                     <td className={TABLE_CELL_CLASS}>
                       <span className="inline-block max-w-full truncate">
                         {truncateValue(row.log_notes, 72)}
@@ -790,15 +868,15 @@ function RecordHistoryViewer({
           </table>
         </div>
 
-        <div className="flex flex-col gap-2 px-3 py-2.5 min-[781px]:flex-row min-[781px]:items-center min-[781px]:justify-between">
-          <div className="flex flex-col gap-1.5 text-[12px] text-slate-600 min-[781px]:flex-row min-[781px]:flex-wrap min-[781px]:items-center min-[781px]:gap-3">
-           
-            
+        <div className="flex flex-col gap-3 border-t border-slate-200 p-2 min-[781px]:flex-row min-[781px]:items-center min-[781px]:justify-between">
+          <div className="inline-flex items-center gap-3 text-[15px] text-slate-600">
+            <FiFileText className="h-5 w-5 shrink-0 text-slate-500" aria-hidden="true" />
+            <span>{tableSummary}</span>
           </div>
 
-          <div className="flex flex-col gap-2 min-[781px]:flex-row min-[781px]:flex-wrap min-[781px]:items-center min-[781px]:gap-3">
+          <div className="flex flex-col gap-3 min-[781px]:flex-row min-[781px]:flex-wrap min-[781px]:items-center min-[781px]:gap-5">
             <label className="inline-flex flex-wrap items-center gap-2">
-              <span className="text-[12px] text-slate-600">Rows per page</span>
+              <span className="text-[15px] text-slate-700">Rows per page</span>
               <div className="relative">
                 <select
                   className={PAGE_SIZE_SELECT_CLASS}
@@ -821,7 +899,7 @@ function RecordHistoryViewer({
               </div>
             </label>
 
-            <div className="inline-flex flex-wrap items-center gap-2">
+            <div className="inline-flex flex-wrap items-center gap-3">
               <button
                 className={PAGINATION_BUTTON_CLASS}
                 type="button"
@@ -829,14 +907,14 @@ function RecordHistoryViewer({
                 disabled={currentPage <= DEFAULT_PAGE}
                 aria-label="Previous page"
               >
-                <FiChevronLeft aria-hidden="true" />
+                Previous
               </button>
 
-              <span className="inline-flex h-7 min-w-[30px] items-center justify-center rounded-[8px] border border-slate-300 bg-white px-2 text-[12px] font-bold text-slate-800">
+              <span className={PAGE_NUMBER_CLASS}>
                 {currentPage}
               </span>
 
-              <span className="text-[12px] text-slate-500">of {safeTotalPages} pages</span>
+              <span className="text-[15px] text-slate-600">/ {safeTotalPages}</span>
 
               <button
                 className={PAGINATION_BUTTON_CLASS}
@@ -845,7 +923,7 @@ function RecordHistoryViewer({
                 disabled={currentPage >= safeTotalPages}
                 aria-label="Next page"
               >
-                <FiChevronRight aria-hidden="true" />
+                Next
               </button>
             </div>
           </div>
@@ -855,40 +933,127 @@ function RecordHistoryViewer({
       {selectedLog ? (
         <div
           aria-modal="true"
-          className={MODAL_OVERLAY_CLASS}
+          className="fixed inset-0 z-[210] overflow-hidden bg-slate-950/45 px-4 py-4 backdrop-blur-[1px]"
           role="dialog"
           onClick={handleCloseDetail}
         >
-          <div className="flex min-h-full items-start justify-center">
-            <section className={MODAL_PANEL_CLASS} onClick={(event) => event.stopPropagation()}>
-              <header className="flex items-start justify-between gap-3">
-                <div className="grid gap-0.5">
-                  <p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-                    Audit detail
-                  </p>
-                  <h2 className="m-0 text-[18px] leading-[1.1] font-bold text-slate-900">
-                    {formatActionLabel(selectedLog.log_action)} log for {selectedLog.screen_name}
-                  </h2>
-                  <p className="m-0 text-[12px] text-slate-500">
-                    Captured on {formatDateTime(selectedLog.log_date)} for {selectedLog.log_table_name}
-                  </p>
-                  <p className="m-0 text-[12px] text-slate-500">
-                    Changed fields: {selectedLogChangeCount}
-                  </p>
+          <div className="flex h-full items-center justify-center">
+            <section
+              className={cx(
+                PANEL_CLASS,
+                "flex h-[calc(100vh-2rem)] w-full max-w-[min(1180px,92vw)] min-h-0 flex-col overflow-hidden bg-white p-2",
+              )}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <header className="flex shrink-0 flex-col gap-3 p-2 min-[781px]:flex-row min-[781px]:items-start min-[781px]:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-[4px] bg-violet-100 text-indigo-700">
+                    <FiFileText className="h-7 w-7" aria-hidden="true" />
+                  </span>
+                  <div className="grid min-w-0 gap-1.5">
+                    <p className="m-0 text-[12px] font-extrabold uppercase text-blue-700">
+                      Audit Detail
+                    </p>
+                    <h2 className="m-0 text-[24px] leading-tight font-bold text-slate-950 max-[780px]:text-[20px]">
+                      {formatActionLabel(selectedLog.log_action)} log for {selectedLog.screen_name}
+                    </h2>
+                    <p className="m-0 flex flex-wrap items-center gap-2 text-[14px] text-slate-600">
+                      <FiCalendar className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                      <span>Captured on {formatDateTime(selectedLog.log_date)}</span>
+                      <span>for</span>
+                      <span className="inline-flex min-h-6 items-center rounded-[4px] bg-blue-50 px-2.5 text-[13px] font-semibold text-blue-700">
+                        {selectedLog.screen_name}
+                      </span>
+                    </p>
+                  </div>
                 </div>
 
-                <button
-                  aria-label="Close audit detail"
-                  className={cx(PAGINATION_BUTTON_CLASS, "h-8 w-8 self-start")}
-                  type="button"
-                  onClick={handleCloseDetail}
-                >
-                  <FiX aria-hidden="true" />
-                </button>
+                <div className="flex items-start gap-8">
+                  <div className="hidden items-center gap-3 pt-7 min-[960px]:flex">
+                    <FiUser className="h-5 w-5 text-slate-600" aria-hidden="true" />
+                    <span className="grid gap-1 text-[13px] text-slate-500">
+                      <span>Captured by</span>
+                      <strong className="text-[15px] text-slate-950">{selectedLogUserLabel}</strong>
+                    </span>
+                  </div>
+                  <button
+                    aria-label="Close audit detail"
+                    className={cx(ICON_BUTTON_CLASS, "h-10 w-10 self-start text-[20px]")}
+                    type="button"
+                    onClick={handleCloseDetail}
+                  >
+                    <FiX aria-hidden="true" />
+                  </button>
+                </div>
               </header>
 
-              <section className={cx(DETAIL_JSON_TABLE_SHELL_CLASS, "min-h-0 overflow-hidden")}>
-                <div className="max-h-[calc(100vh-260px)] overflow-auto [scrollbar-gutter:stable_both-edges]">
+              <section className="grid shrink-0 grid-cols-1 gap-2 p-2 pt-0 min-[720px]:grid-cols-2 min-[1120px]:grid-cols-4">
+                <div className="flex min-h-[64px] items-center gap-3 rounded-[4px] border border-violet-200 bg-violet-50/40 p-2">
+                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] bg-violet-100 text-violet-700">
+                    <FiRotateCcw className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <span className="grid gap-1">
+                    <span className="text-[14px] text-slate-600">Changed Fields</span>
+                    <strong className="text-[22px] leading-none text-violet-700">
+                      {selectedLogChangedFieldCount}
+                    </strong>
+                  </span>
+                </div>
+                <div className="flex min-h-[64px] items-center gap-3 rounded-[4px] border border-emerald-200 bg-emerald-50/40 p-2">
+                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] bg-emerald-100 text-emerald-700">
+                    <FiList className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <span className="grid gap-1">
+                    <span className="text-[14px] text-slate-600">Total Fields</span>
+                    <strong className="text-[22px] leading-none text-emerald-700">
+                      {selectedLogTotalFieldCount}
+                    </strong>
+                  </span>
+                </div>
+                <div className="flex min-h-[64px] items-center gap-3 rounded-[4px] border border-slate-200 bg-white p-2">
+                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] bg-blue-50 text-blue-700">
+                    <FiUser className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <span className="grid gap-1">
+                    <span className="text-[14px] text-slate-600">Captured By</span>
+                    <strong className="text-[17px] text-slate-950">{selectedLogUserLabel}</strong>
+                  </span>
+                </div>
+                <div className="flex min-h-[64px] items-center gap-3 rounded-[4px] border border-amber-200 bg-amber-50/40 p-2">
+                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] bg-amber-100 text-orange-600">
+                    <FiCalendar className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <span className="grid gap-1">
+                    <span className="text-[14px] text-slate-600">Audit Time</span>
+                    <strong className="text-[15px] text-slate-950">
+                      {formatDateTime(selectedLog.log_date)}
+                    </strong>
+                  </span>
+                </div>
+              </section>
+
+              <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-white">
+                <div className="flex flex-col gap-2 border-b border-slate-200 p-2 min-[781px]:flex-row min-[781px]:items-center min-[781px]:justify-between">
+                  <p className="m-0 text-[15px] text-slate-600">
+                    Showing{" "}
+                    <strong className="text-blue-700">{selectedLogVisibleRows.length}</strong> of{" "}
+                    <strong className="text-slate-950">{selectedLogTotalFieldCount}</strong> fields
+                  </p>
+                  <button
+                    className={cx(
+                      BUTTON_BASE_CLASS,
+                      "min-h-8 gap-2 rounded-[4px] border-blue-200 bg-white px-3 text-[14px] font-bold text-blue-700 hover:bg-blue-50",
+                      showChangedOnly && "border-blue-600 bg-blue-50",
+                    )}
+                    type="button"
+                    onClick={() => setShowChangedOnly((value) => !value)}
+                  >
+                    <FiFilter className="h-4 w-4" aria-hidden="true" />
+                    <span>{showChangedOnly ? "Show All Fields" : "Show Changed Only"}</span>
+                  </button>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-auto [scrollbar-gutter:stable_both-edges]">
                   <table className="w-full min-w-[1100px] border-separate border-spacing-0">
                     <thead>
                       <tr>
@@ -901,21 +1066,26 @@ function RecordHistoryViewer({
                         <th className={cx(DETAIL_JSON_TABLE_HEADER_CLASS, DETAIL_JSON_TABLE_VALUE_CLASS)}>
                           <h3 className={JSON_TITLE_CLASS}>Modified record</h3>
                         </th>
+                        <th className={cx(DETAIL_JSON_TABLE_HEADER_CLASS, DETAIL_JSON_TABLE_STATUS_CLASS)}>
+                          <h3 className={JSON_TITLE_CLASS}>Status</h3>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedLogComparisonRows.length === 0 ? (
+                      {selectedLogVisibleRows.length === 0 ? (
                         <tr>
-                          <td className="px-4 py-5 text-sm text-slate-500" colSpan={3}>
-                            No audit record data was captured for this entry.
+                          <td className="p-2 text-sm text-slate-500" colSpan={4}>
+                            {showChangedOnly
+                              ? "No changed fields were found for this audit entry."
+                              : "No audit record data was captured for this entry."}
                           </td>
                         </tr>
                       ) : (
-                        selectedLogComparisonRows.map((row, index) => (
+                        selectedLogVisibleRows.map((row, index) => (
                           <tr
                             className={cx(
                               DETAIL_JSON_TABLE_ROW_CLASS,
-                              row.diff ? "bg-amber-100/80" : "bg-white",
+                              row.diff ? "bg-amber-100/70" : "bg-white",
                             )}
                             key={`${row.field}-${index + 1}`}
                           >
@@ -930,6 +1100,23 @@ function RecordHistoryViewer({
                             <td className={cx(DETAIL_JSON_TABLE_CELL_CLASS, DETAIL_JSON_TABLE_VALUE_CLASS)}>
                               {renderAuditTableValue(row.modified, `modified-${index + 1}`)}
                             </td>
+                            <td className={cx(DETAIL_JSON_TABLE_CELL_CLASS, DETAIL_JSON_TABLE_STATUS_CLASS)}>
+                              <span
+                                className={cx(
+                                  "inline-flex min-h-6 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] font-bold",
+                                  row.diff
+                                    ? "bg-orange-100 text-orange-700"
+                                    : "bg-slate-100 text-slate-600",
+                                )}
+                              >
+                                {row.diff ? (
+                                  <FiInfo className="h-3.5 w-3.5" aria-hidden="true" />
+                                ) : (
+                                  <FiCheckCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                                )}
+                                <span>{row.diff ? "Changed" : "Same"}</span>
+                              </span>
+                            </td>
                           </tr>
                         ))
                       )}
@@ -937,6 +1124,20 @@ function RecordHistoryViewer({
                   </table>
                 </div>
               </section>
+
+              <footer className="mt-2 flex shrink-0 flex-col gap-2 rounded-[4px] border border-slate-200 bg-slate-50 p-2 min-[781px]:flex-row min-[781px]:items-center min-[781px]:justify-between">
+                <p className="m-0 inline-flex items-center gap-2 text-[14px] text-blue-700">
+                  <FiInfo className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>Changed fields are highlighted in yellow.</span>
+                </p>
+                <button
+                  className="inline-flex min-h-9 min-w-[88px] items-center justify-center rounded-[4px] border border-blue-900 bg-blue-900 px-4 text-[14px] font-bold text-white hover:bg-blue-800"
+                  type="button"
+                  onClick={handleCloseDetail}
+                >
+                  Close
+                </button>
+              </footer>
             </section>
           </div>
         </div>
@@ -948,31 +1149,38 @@ function RecordHistoryViewer({
     return (
       <div
         aria-modal="true"
-        className="fixed inset-0 z-[200] overflow-y-auto bg-slate-950/45 px-3 pt-[80px] pb-4 backdrop-blur-[1px]"
+        className="fixed inset-0 z-[200] overflow-hidden bg-slate-950/45 px-3 py-4 backdrop-blur-[1px]"
         role="dialog"
         onClick={handleViewerClose}
       >
-        <div className="flex min-h-full items-start justify-center">
+        <div className="flex h-full items-center justify-center">
           <section
             className={cx(
               MODAL_PANEL_CLASS,
-              "flex w-full max-w-[min(1380px,96vw)] flex-col gap-3",
+              "flex h-[calc(100vh-2rem)] w-full max-w-[min(1290px,92vw)] flex-col gap-4 p-2",
             )}
             onClick={(event) => event.stopPropagation()}
           >
-            <header className="flex items-start justify-between gap-3">
-              <div className="grid gap-0.5">
-                <p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
-                  Record history
-                </p>
-                <h2 className="m-0 text-[20px] leading-[1.1] font-bold text-slate-900">
-                  {displayName || "Selected record"}
-                </h2>
-               
+            <header className="flex shrink-0 flex-col gap-2 min-[781px]:flex-row min-[781px]:items-start min-[781px]:justify-between">
+              <div className="grid min-w-0 gap-2">
+                <div className="flex items-start gap-2.5">
+                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] bg-indigo-50 text-indigo-600">
+                    <FiRotateCcw className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <div className="grid min-w-0 gap-0.5">
+                    <p className="m-0 text-[12px] leading-none font-extrabold uppercase text-slate-600">
+                      Record History
+                    </p>
+                    <h2 className="m-0 text-[28px] leading-tight font-bold text-slate-950 max-[780px]:text-[22px]">
+                      {displayName || "Selected record"}
+                    </h2>
+                  </div>
+                </div>
+                {historySummaryChips}
               </div>
               <button
                 aria-label="Close record history"
-                className={cx(PAGINATION_BUTTON_CLASS, "h-8 w-8 self-start")}
+                className={cx(ICON_BUTTON_CLASS, "h-10 w-10 self-start text-[20px]")}
                 type="button"
                 onClick={handleViewerClose}
               >
@@ -988,16 +1196,22 @@ function RecordHistoryViewer({
   return (
     <main className="min-h-[calc(100vh-72px)] bg-gradient-to-b from-[#f7f7f8] to-[#f1f2f4] text-slate-800">
       <div className="flex min-h-[calc(100vh-72px)] flex-col gap-3 p-3 max-[780px]:gap-2.5 max-[780px]:p-2.5">
-        <header className="flex flex-col gap-2.5 min-[781px]:flex-row min-[781px]:items-start min-[781px]:justify-between">
-          <div className="grid gap-1">
-            <h1 className="m-0 text-[26px] leading-none font-bold tracking-[-0.03em] text-slate-900">
-              Record history
-            </h1>
-            <p className="m-0 max-w-[720px] text-[13px] text-slate-500">
-              {displayName
-                ? `Audit trail for ${displayName}.`
-                : "Audit trail for the selected record only."}
-            </p>
+        <header className="flex flex-col gap-2 min-[781px]:flex-row min-[781px]:items-start min-[781px]:justify-between">
+          <div className="grid gap-2">
+            <div className="flex items-start gap-2.5">
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] bg-indigo-50 text-indigo-600">
+                <FiRotateCcw className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div className="grid gap-0.5">
+                <p className="m-0 text-[11px] leading-none font-extrabold uppercase text-slate-500">
+                  Record History
+                </p>
+                <h1 className="m-0 text-[24px] leading-tight font-bold text-slate-900">
+                  {displayName || "Selected record"}
+                </h1>
+              </div>
+            </div>
+            {historySummaryChips}
           </div>
           <button className={BACK_BUTTON_CLASS} type="button" onClick={onBack}>
             <FiArrowLeft aria-hidden="true" />
