@@ -311,7 +311,7 @@ export function useApi<TResp = unknown, TBody = unknown>(
         if (e?.name === "AbortError" || e?.name === "CanceledError") return; // ignore cancels
         if (axios.isAxiosError(e)) {
           const statusCode = e.response?.status;
-          if (!loginRequest && (statusCode === 401 || statusCode === 403)) {
+          if (!loginRequest && statusCode === 401) {
             clearAuthSession();
             redirectToLogin();
           }

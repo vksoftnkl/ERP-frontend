@@ -1,12 +1,9 @@
 "use client";
-
 import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import type { CrudMasterApiEndpoints } from "@/components/master/crud-master-page";
 import { normalizeListResponse } from "./normalizers";
-
 type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-
 type UseMasterCrudArgs = {
   apiEndpoints: CrudMasterApiEndpoints;
   listArrayKeys?: readonly string[];

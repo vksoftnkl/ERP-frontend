@@ -896,7 +896,7 @@
   height: calc(var(--erp-table-shell-height, 100%) - 32px);
   min-height: max(0px, calc(var(--erp-table-shell-min-height, 0px) - 32px));
   margin: 16px;
-  padding: 14px 14px 8px;
+  //padding: 14px 14px 8px;
   border: 1px solid var(--table-border);
   border-radius: var(--erp-radius);
   background: var(--table-surface);

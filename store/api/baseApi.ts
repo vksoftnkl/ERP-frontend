@@ -46,7 +46,7 @@ const baseQueryWithAuthHandling: BaseQueryFn<string | FetchArgs, unknown, ApiErr
       status === undefined && "error" in error && typeof error.error === "string"
         ? error.error
         : extractApiErrorMessage(data, "Request failed.");
-    if (status === 401 || status === 403) {
+    if (status === 401) {
       clearAuthSession();
       api.dispatch(authSessionChanged({ token: null, userId: null }));
     }

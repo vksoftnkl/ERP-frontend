@@ -1,5 +1,4 @@
 "use client";
-
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -18,20 +17,17 @@ import {
 } from "react-icons/fi";
 import { useApi } from "@/hooks/useApi";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
-
 const AUDIT_LOG_LIST_ENDPOINT = "/audit-logs/list";
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 const TABLE_COLUMN_COUNT = 5;
-
 const EMPTY_META: ListMeta = {
   page: DEFAULT_PAGE,
   limit: DEFAULT_PAGE_SIZE,
   total: 0,
   total_pages: 0,
 };
-
 type AuditLogListItem = {
   log_id: string;
   log_date: string;
@@ -50,42 +46,34 @@ type AuditLogListItem = {
   log_branch_name: string | null;
   log_notes: string | null;
 };
-
 type AuditDiffRow = {
   field: string;
   from: unknown;
   to: unknown;
 };
-
 type AuditComparisonRow = {
   field: string;
   original: unknown;
   modified: unknown;
   diff: AuditDiffRow | null;
 };
-
 function cx(...tokens: Array<string | false | null | undefined>): string {
   return tokens.filter(Boolean).join(" ");
 }
-
 function normalizeQueryValue(value: string | null): string {
   return value?.trim() ?? "";
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
-
 function isDiffLeaf(value: unknown): value is { from: unknown; to: unknown } {
   return isRecord(value) && "from" in value && "to" in value;
 }
-
 function looksLikeJsonString(value: string): boolean {
   const normalized = value.trim();
   if (!normalized) {
     return false;
   }
-
   return (
     normalized.startsWith("{") ||
     normalized.startsWith("[") ||
@@ -95,23 +83,19 @@ function looksLikeJsonString(value: string): boolean {
     /^-?\d+(\.\d+)?$/.test(normalized)
   );
 }
-
 function normalizeStructuredValue(value: unknown): unknown {
   if (typeof value !== "string") {
     return value;
   }
-
   if (!looksLikeJsonString(value)) {
     return value;
   }
-
   try {
     return JSON.parse(value) as unknown;
   } catch {
     return value;
   }
 }
-
 function buildRecordHistoryQuery(
   screenName: string,
   recordPk: string,
@@ -125,20 +109,16 @@ function buildRecordHistoryQuery(
     limit: String(limit),
   };
 }
-
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-IN", {
   dateStyle: "medium",
   timeStyle: "short",
 });
-
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-IN", {
   dateStyle: "medium",
 });
-
 const TIME_FORMATTER = new Intl.DateTimeFormat("en-IN", {
   timeStyle: "short",
 });
-
 function formatDateTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -146,7 +126,6 @@ function formatDateTime(value: string): string {
   }
   return DATE_TIME_FORMATTER.format(date);
 }
-
 function formatDateOnly(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -154,7 +133,6 @@ function formatDateOnly(value: string): string {
   }
   return DATE_FORMATTER.format(date);
 }
-
 function formatTimeOnly(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -162,7 +140,6 @@ function formatTimeOnly(value: string): string {
   }
   return TIME_FORMATTER.format(date);
 }
-
 function formatActionLabel(value: string): string {
   const normalized = value.trim().toLowerCase();
   if (!normalized) {
@@ -173,10 +150,8 @@ function formatActionLabel(value: string): string {
   }
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
-
 function resolveActionVariant(value: string): "new" | "update" | "approve" | "cancel" | "neutral" {
   const normalized = value.trim().toLowerCase();
-
   if (normalized === "new" || normalized === "insert") {
     return "new";
   }
@@ -189,21 +164,16 @@ function resolveActionVariant(value: string): "new" | "update" | "approve" | "ca
   if (normalized === "cancel") {
     return "cancel";
   }
-
   return "neutral";
 }
-
 function countChangedFields(value: unknown): number {
   const normalizedValue = normalizeStructuredValue(value);
-
   if (normalizedValue === null || normalizedValue === undefined) {
     return 0;
   }
-
   if (isDiffLeaf(normalizedValue)) {
     return 1;
   }
-
   if (Array.isArray(normalizedValue)) {
     const nestedCount = normalizedValue.reduce(
       (count: number, item) => count + countChangedFields(item),
@@ -211,7 +181,6 @@ function countChangedFields(value: unknown): number {
     );
     return nestedCount || normalizedValue.length;
   }
-
   if (isRecord(normalizedValue)) {
     const nestedCount = Object.values(normalizedValue).reduce(
       (count: number, item) => count + countChangedFields(item),
@@ -219,16 +188,13 @@ function countChangedFields(value: unknown): number {
     );
     return nestedCount || Object.keys(normalizedValue).length;
   }
-
   return 1;
 }
-
 function formatAuditFieldLabel(value: string): string {
   const normalized = value.trim();
   if (!normalized) {
     return "Field";
   }
-
   return normalized
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/_/g, " ")
@@ -236,24 +202,19 @@ function formatAuditFieldLabel(value: string): string {
     .trim()
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
-
 function isIsoDateString(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value) && !Number.isNaN(Date.parse(value));
 }
-
 function formatAuditPrimitiveValue(value: unknown): string {
   if (value === null || value === undefined) {
     return "null";
   }
-
   if (typeof value === "boolean") {
     return value ? "true" : "false";
   }
-
   if (typeof value === "number" || typeof value === "bigint") {
     return String(value);
   }
-
   if (typeof value === "string") {
     if (value.trim().length === 0) {
       return '""';
@@ -263,21 +224,17 @@ function formatAuditPrimitiveValue(value: unknown): string {
     }
     return value;
   }
-
   try {
     return JSON.stringify(value);
   } catch {
     return String(value);
   }
 }
-
 function flattenAuditDiff(value: unknown, path = ""): AuditDiffRow[] {
   const normalizedValue = normalizeStructuredValue(value);
-
   if (normalizedValue === null || normalizedValue === undefined) {
     return [];
   }
-
   if (isDiffLeaf(normalizedValue)) {
     return [
       {
@@ -287,13 +244,11 @@ function flattenAuditDiff(value: unknown, path = ""): AuditDiffRow[] {
       },
     ];
   }
-
   if (Array.isArray(normalizedValue)) {
     return normalizedValue.flatMap((item, index) =>
       flattenAuditDiff(item, path ? `${path} / Item ${index + 1}` : `Item ${index + 1}`),
     );
   }
-
   if (isRecord(normalizedValue)) {
     return Object.entries(normalizedValue).flatMap(([key, entryValue]) =>
       flattenAuditDiff(
@@ -302,38 +257,29 @@ function flattenAuditDiff(value: unknown, path = ""): AuditDiffRow[] {
       ),
     );
   }
-
   if (!path) {
     return [];
   }
-
   return [{ field: path, from: null, to: normalizedValue }];
 }
-
 function flattenAuditRecord(value: unknown, path = ""): Array<{ field: string; value: unknown }> {
   const normalizedValue = normalizeStructuredValue(value);
-
   if (normalizedValue === null || normalizedValue === undefined) {
     return path ? [{ field: path, value: null }] : [];
   }
-
   if (Array.isArray(normalizedValue)) {
     if (normalizedValue.length === 0) {
       return path ? [{ field: path, value: [] }] : [];
     }
-
     return normalizedValue.flatMap((item, index) =>
       flattenAuditRecord(item, path ? `${path} / Item ${index + 1}` : `Item ${index + 1}`),
     );
   }
-
   if (isRecord(normalizedValue)) {
     const entries = Object.entries(normalizedValue);
-
     if (entries.length === 0) {
       return path ? [{ field: path, value: {} }] : [];
     }
-
     return entries.flatMap(([key, entryValue]) =>
       flattenAuditRecord(
         entryValue,
@@ -341,10 +287,8 @@ function flattenAuditRecord(value: unknown, path = ""): Array<{ field: string; v
       ),
     );
   }
-
   return [{ field: path || "Value", value: normalizedValue }];
 }
-
 function buildAuditComparisonRows(
   originalRecord: unknown,
   modifiedRecord: unknown,
@@ -353,13 +297,11 @@ function buildAuditComparisonRows(
   const originalEntries = flattenAuditRecord(originalRecord);
   const modifiedEntries = flattenAuditRecord(modifiedRecord);
   const diffRows = flattenAuditDiff(changedFields);
-
   const originalMap = new Map(originalEntries.map((entry) => [entry.field, entry.value]));
   const modifiedMap = new Map(modifiedEntries.map((entry) => [entry.field, entry.value]));
   const diffMap = new Map(diffRows.map((entry) => [entry.field, entry]));
   const orderedFields: string[] = [];
   const seenFields = new Set<string>();
-
   for (const field of [
     ...diffRows.map((entry) => entry.field),
     ...originalEntries.map((entry) => entry.field),
@@ -371,7 +313,6 @@ function buildAuditComparisonRows(
     seenFields.add(field);
     orderedFields.push(field);
   }
-
   return orderedFields.map((field) => ({
     field,
     original: originalMap.has(field) ? originalMap.get(field) : null,
@@ -379,119 +320,88 @@ function buildAuditComparisonRows(
     diff: diffMap.get(field) ?? null,
   }));
 }
-
 function truncateValue(value: string | null | undefined, maxLength = 42): string {
   const normalized = value?.trim();
-
   if (!normalized) {
     return "-";
   }
-
   if (normalized.length <= maxLength) {
     return normalized;
   }
-
   return `${normalized.slice(0, maxLength - 1)}…`;
 }
-
 function getRowUserLabel(row: AuditLogListItem): string {
   return row.log_user_name?.trim() || row.log_user_id?.trim() || "-";
 }
-
 const PANEL_CLASS =
   "rounded-[4px] border border-slate-200 bg-white shadow-[0_18px_52px_rgba(15,23,42,0.18)]";
-
 const BUTTON_BASE_CLASS =
   "inline-flex items-center justify-center border border-transparent transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none";
-
 const BACK_BUTTON_CLASS = cx(
   BUTTON_BASE_CLASS,
   "min-h-[34px] gap-1.5 rounded-[4px] border-slate-300 bg-white px-3 text-[12px] font-bold text-slate-700 hover:bg-slate-50",
 );
-
 const RETRY_BUTTON_CLASS = cx(
   BUTTON_BASE_CLASS,
   "min-h-[32px] rounded-[4px] border-rose-300 bg-white px-3 text-[12px] font-bold text-rose-700 hover:bg-rose-50",
 );
-
 const PAGINATION_BUTTON_CLASS = cx(
   BUTTON_BASE_CLASS,
   "h-9 min-w-[72px] rounded-[4px] border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-500 hover:border-slate-300 hover:bg-slate-50",
 );
-
 const PAGE_NUMBER_CLASS =
   "inline-flex h-9 min-w-[40px] items-center justify-center rounded-[4px] border border-slate-300 bg-white px-3 text-[14px] font-semibold text-slate-800 shadow-sm";
-
 const ICON_BUTTON_CLASS = cx(
   BUTTON_BASE_CLASS,
   "h-10 w-10 rounded-[4px] border-slate-200 bg-white text-slate-500 shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700",
 );
-
 const INPUT_BASE_CLASS =
   "w-full border border-slate-300 bg-white text-slate-800 transition-[border-color,box-shadow,background-color] duration-150 focus:border-sky-300 focus:outline-none focus:ring-4 focus:ring-sky-500/10";
-
 const PAGE_SIZE_SELECT_CLASS = cx(
   INPUT_BASE_CLASS,
   "h-9 min-w-[84px] appearance-none rounded-[4px] py-0 pl-4 pr-9 text-[14px] font-semibold",
 );
-
 const TABLE_HEADER_CELL_CLASS =
-  "sticky top-0 z-[1] border-b border-slate-200 bg-slate-50/90 p-2 text-left align-middle text-[14px] font-bold whitespace-nowrap text-slate-600";
-
+  "sticky top-0 z-[1] border-b border-slate-200 bg-slate-50/90 p-2 text-center align-middle text-[14px] font-bold whitespace-nowrap text-slate-600";
 const TABLE_CELL_CLASS =
-  "border-b border-slate-200 p-2 align-middle text-[15px] text-slate-700";
-
+  "border-b border-slate-200 p-2 text-center align-middle text-[15px] text-slate-700";
 const JSON_TITLE_CLASS = "m-0 text-[14px] font-bold text-slate-800";
-
 const JSON_FIELD_ROW_CLASS =
   "grid gap-1 rounded-[4px] border border-slate-200 bg-slate-50 px-3 py-2.5";
-
 const JSON_FIELD_KEY_CLASS =
   "m-0 text-[11px] font-extrabold uppercase text-slate-500";
-
 const JSON_FIELD_VALUE_CLASS =
   "m-0 break-words text-[13px] leading-5 font-semibold text-slate-800 whitespace-pre-wrap";
-
 const JSON_ARRAY_ITEM_CLASS =
   "grid gap-1.5 rounded-[4px] border border-white/80 bg-white px-2.5 py-2";
-
 const DETAIL_JSON_TABLE_SHELL_CLASS =
   "min-h-0 overflow-hidden rounded-[4px] border border-slate-200 bg-white";
-
 const DETAIL_JSON_TABLE_HEADER_CLASS =
   "sticky top-0 z-[2] border-b border-r border-slate-200 bg-slate-50 p-2 text-left align-middle last:border-r-0";
-
 const DETAIL_JSON_TABLE_CELL_CLASS =
   "border-r border-slate-200 p-2 align-middle last:border-r-0";
-
 const DETAIL_JSON_TABLE_ROW_CLASS = "border-b border-slate-100 last:border-b-0";
 const DETAIL_JSON_TABLE_FIELD_CLASS = "min-w-[180px]";
 const DETAIL_JSON_TABLE_VALUE_CLASS = "min-w-[220px]";
 const DETAIL_JSON_TABLE_STATUS_CLASS = "min-w-[140px]";
-
 const MODAL_PANEL_CLASS = cx(
   PANEL_CLASS,
   "w-full max-w-[min(1320px,96vw)] min-h-0 overflow-hidden bg-white p-0 max-h-[calc(100vh-72px)]",
 );
-
 function renderStructuredAuditValue(value: unknown, path = "root"): ReactNode {
   const normalizedValue = normalizeStructuredValue(value);
-
   if (normalizedValue === null || normalizedValue === undefined) {
     return <p className={JSON_FIELD_VALUE_CLASS}>null</p>;
   }
-
   if (Array.isArray(normalizedValue)) {
     if (normalizedValue.length === 0) {
       return <p className={JSON_FIELD_VALUE_CLASS}>[]</p>;
     }
-
     return (
       <div className="grid gap-2">
         {normalizedValue.map((item, index) => {
           const normalizedItem = normalizeStructuredValue(item);
           const isNestedItem = isRecord(normalizedItem) || Array.isArray(normalizedItem);
-
           return (
             <div className={JSON_ARRAY_ITEM_CLASS} key={`${path}-${index + 1}`}>
               {isNestedItem ? (
@@ -510,21 +420,17 @@ function renderStructuredAuditValue(value: unknown, path = "root"): ReactNode {
       </div>
     );
   }
-
   if (isRecord(normalizedValue)) {
     const entries = Object.entries(normalizedValue);
-
     if (entries.length === 0) {
       return <p className={JSON_FIELD_VALUE_CLASS}>{"{}"}</p>;
     }
-
     return (
       <div className="grid gap-2">
         {entries.map(([key, entryValue]) => {
           const normalizedEntryValue = normalizeStructuredValue(entryValue);
           const isNestedEntry =
             isRecord(normalizedEntryValue) || Array.isArray(normalizedEntryValue);
-
           return (
             <div className={JSON_FIELD_ROW_CLASS} key={`${path}-${key}`}>
               <p className={JSON_FIELD_KEY_CLASS}>{formatAuditFieldLabel(key)}</p>
@@ -541,17 +447,13 @@ function renderStructuredAuditValue(value: unknown, path = "root"): ReactNode {
       </div>
     );
   }
-
   return <p className={JSON_FIELD_VALUE_CLASS}>{formatAuditPrimitiveValue(normalizedValue)}</p>;
 }
-
 function renderAuditTableValue(value: unknown, key: string): ReactNode {
   const normalizedValue = normalizeStructuredValue(value);
-
   if (normalizedValue === null || normalizedValue === undefined) {
     return <span className="text-sm font-medium text-slate-400">-</span>;
   }
-
   if (!Array.isArray(normalizedValue) && !isRecord(normalizedValue)) {
     return (
       <span className="block whitespace-pre-wrap break-words text-sm leading-6 font-semibold text-slate-800">
@@ -559,13 +461,10 @@ function renderAuditTableValue(value: unknown, key: string): ReactNode {
       </span>
     );
   }
-
   return <div className="max-w-full">{renderStructuredAuditValue(normalizedValue, key)}</div>;
 }
-
 function getActionBadgeClass(value: string): string {
   const variant = resolveActionVariant(value);
-
   return cx(
     "inline-flex min-h-[26px] items-center justify-center rounded-[4px] border px-2.5 text-[11px] font-bold uppercase tracking-[0.04em]",
     variant === "new" && "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -575,7 +474,6 @@ function getActionBadgeClass(value: string): string {
     variant === "neutral" && "border-slate-200 bg-slate-50 text-slate-600",
   );
 }
-
 type RecordHistoryViewerProps = {
   displayName?: string | null;
   mode?: "modal" | "page";
@@ -584,7 +482,6 @@ type RecordHistoryViewerProps = {
   recordPk: string | number | null | undefined;
   screenName: string | number | null | undefined;
 };
-
 export type RecordHistoryModalProps = {
   displayName?: string | null;
   isOpen: boolean;
@@ -592,15 +489,12 @@ export type RecordHistoryModalProps = {
   recordPk: string | number | null | undefined;
   screenName: string | number | null | undefined;
 };
-
 function normalizeViewerValue(value: string | number | null | undefined): string {
   if (value === null || value === undefined) {
     return "";
   }
-
   return String(value).trim();
 }
-
 function RecordHistoryViewer({
   displayName: displayNameProp,
   mode = "page",
@@ -612,7 +506,6 @@ function RecordHistoryViewer({
   const screenName = normalizeViewerValue(screenNameProp);
   const recordPk = normalizeViewerValue(recordPkProp);
   const displayName = normalizeViewerValue(displayNameProp);
-
   const [logs, setLogs] = useState<AuditLogListItem[]>([]);
   const [meta, setMeta] = useState<ListMeta>(EMPTY_META);
   const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
@@ -620,23 +513,18 @@ function RecordHistoryViewer({
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedLog, setSelectedLog] = useState<AuditLogListItem | null>(null);
   const [showChangedOnly, setShowChangedOnly] = useState(false);
-
   const { getAll: listAuditLogs, loading, error } = useApi<
     ApiSuccessResponse<AuditLogListItem[], ListMeta>
   >(AUDIT_LOG_LIST_ENDPOINT, {
     toast: { success: false, error: true },
   });
-
   const safeTotalPages = Math.max(
     1,
     meta.total_pages || Math.ceil(Math.max(meta.total, 1) / Math.max(meta.limit || pageSize, 1)),
   );
-
   const pageStart = meta.total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const pageEnd = meta.total === 0 ? 0 : Math.min(pageStart + logs.length - 1, meta.total);
-
   const selectedLogChangeCount = countChangedFields(selectedLog?.log_changed_fields);
-
   const selectedLogComparisonRows = useMemo(
     () =>
       selectedLog
@@ -648,19 +536,16 @@ function RecordHistoryViewer({
         : [],
     [selectedLog],
   );
-
   const selectedLogChangedRows = useMemo(
     () => selectedLogComparisonRows.filter((row) => row.diff),
     [selectedLogComparisonRows],
   );
-
   const selectedLogVisibleRows = showChangedOnly
     ? selectedLogChangedRows
     : selectedLogComparisonRows;
   const selectedLogTotalFieldCount = selectedLogComparisonRows.length;
   const selectedLogChangedFieldCount = selectedLogChangedRows.length || selectedLogChangeCount;
   const selectedLogUserLabel = selectedLog ? getRowUserLabel(selectedLog) : "-";
-
   const fetchRecordHistory = useCallback(async () => {
     if (!screenName || !recordPk) {
       setLogs([]);
@@ -668,16 +553,13 @@ function RecordHistoryViewer({
       setSelectedLog(null);
       return;
     }
-
     try {
       const response = await listAuditLogs(
         buildRecordHistoryQuery(screenName, recordPk, currentPage, pageSize),
       );
-
       if (!response) {
         return;
       }
-
       setLogs(response.data);
       setMeta({
         page: response.meta?.page ?? currentPage,
@@ -694,54 +576,43 @@ function RecordHistoryViewer({
       // useApi already exposes the error state.
     }
   }, [currentPage, listAuditLogs, pageSize, recordPk, screenName]);
-
   useEffect(() => {
     void fetchRecordHistory();
   }, [fetchRecordHistory, refreshKey]);
-
   useEffect(() => {
     setCurrentPage(DEFAULT_PAGE);
     setSelectedLog(null);
   }, [recordPk, screenName]);
-
   useEffect(() => {
     if (currentPage > safeTotalPages) {
       setCurrentPage(safeTotalPages);
     }
   }, [currentPage, safeTotalPages]);
-
   useEffect(() => {
     if (selectedLog && !logs.some((row) => row.log_id === selectedLog.log_id)) {
       setSelectedLog(null);
     }
   }, [logs, selectedLog]);
-
   useEffect(() => {
     setShowChangedOnly(false);
   }, [selectedLog?.log_id]);
-
   const handleRefresh = useCallback(() => {
     setRefreshKey((value) => value + 1);
   }, []);
-
   const handleOpenDetail = useCallback((row: AuditLogListItem) => {
     setSelectedLog(row);
   }, []);
-
   const handleCloseDetail = useCallback(() => {
     setSelectedLog(null);
   }, []);
-
   const handleViewerClose = useCallback(() => {
     setSelectedLog(null);
     onClose?.();
   }, [onClose]);
-
   const tableSummary =
     meta.total === 0
       ? "Showing 0 of 0 history records"
       : `Showing ${pageStart} to ${pageEnd} of ${meta.total} history records`;
-
   const totalHistoryRecords = meta.total || logs.length;
   const latestLog = logs[0] ?? null;
   const latestUserLabel = latestLog ? getRowUserLabel(latestLog) : "-";
@@ -764,7 +635,6 @@ function RecordHistoryViewer({
         </span>
       </div>
     ) : null;
-
   const viewerBody = !screenName || !recordPk ? (
     <section className={cx(PANEL_CLASS, "grid gap-2.5 p-4")}>
       <h2 className="m-0 text-base font-bold text-slate-900">Missing record context</h2>
@@ -793,7 +663,6 @@ function RecordHistoryViewer({
           </button>
         </div>
       ) : null}
-
       <section className="min-w-0 flex flex-1 flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-white">
         <div className="min-h-0 flex-1 overflow-auto [scrollbar-gutter:stable_both-edges]">
           <table className="w-full min-w-[920px] border-separate border-spacing-0">
@@ -833,11 +702,11 @@ function RecordHistoryViewer({
                       {(currentPage - 1) * pageSize + rowIndex + 1}
                     </td>
                     <td className={TABLE_CELL_CLASS}>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center justify-center gap-4">
                         <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[4px]  bg-blue-50 text-blue-600">
                           <FiClock className="h-5 w-5" aria-hidden="true" />
                         </span>
-                        <span className="grid gap-1">
+                        <span className="grid gap-1 text-center">
                           <span className="font-bold text-slate-900">{formatDateOnly(row.log_date)}</span>
                           <span className="text-[14px] text-slate-600">{formatTimeOnly(row.log_date)}</span>
                         </span>
@@ -849,7 +718,7 @@ function RecordHistoryViewer({
                       </span>
                     </td>
                     <td className={TABLE_CELL_CLASS}>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center gap-3">
                         <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] text-slate-500">
                           <FiUser className="h-4 w-4" aria-hidden="true" />
                         </span>
@@ -867,13 +736,11 @@ function RecordHistoryViewer({
             </tbody>
           </table>
         </div>
-
         <div className="flex flex-col gap-3 border-t border-slate-200 p-2 min-[781px]:flex-row min-[781px]:items-center min-[781px]:justify-between">
           <div className="inline-flex items-center gap-3 text-[15px] text-slate-600">
             <FiFileText className="h-5 w-5 shrink-0 text-slate-500" aria-hidden="true" />
             <span>{tableSummary}</span>
           </div>
-
           <div className="flex flex-col gap-3 min-[781px]:flex-row min-[781px]:flex-wrap min-[781px]:items-center min-[781px]:gap-5">
             <label className="inline-flex flex-wrap items-center gap-2">
               <span className="text-[15px] text-slate-700">Rows per page</span>
@@ -898,7 +765,6 @@ function RecordHistoryViewer({
                 />
               </div>
             </label>
-
             <div className="inline-flex flex-wrap items-center gap-3">
               <button
                 className={PAGINATION_BUTTON_CLASS}
@@ -909,13 +775,10 @@ function RecordHistoryViewer({
               >
                 Previous
               </button>
-
               <span className={PAGE_NUMBER_CLASS}>
                 {currentPage}
               </span>
-
               <span className="text-[15px] text-slate-600">/ {safeTotalPages}</span>
-
               <button
                 className={PAGINATION_BUTTON_CLASS}
                 type="button"
@@ -929,7 +792,6 @@ function RecordHistoryViewer({
           </div>
         </div>
       </section>
-
       {selectedLog ? (
         <div
           aria-modal="true"
@@ -967,7 +829,6 @@ function RecordHistoryViewer({
                     </p>
                   </div>
                 </div>
-
                 <div className="flex items-start gap-8">
                   <div className="hidden items-center gap-3 pt-7 min-[960px]:flex">
                     <FiUser className="h-5 w-5 text-slate-600" aria-hidden="true" />
@@ -986,7 +847,6 @@ function RecordHistoryViewer({
                   </button>
                 </div>
               </header>
-
               <section className="grid shrink-0 grid-cols-1 gap-2 p-2 pt-0 min-[720px]:grid-cols-2 min-[1120px]:grid-cols-4">
                 <div className="flex min-h-[64px] items-center gap-3 rounded-[4px] border border-violet-200 bg-violet-50/40 p-2">
                   <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] bg-violet-100 text-violet-700">
@@ -1031,7 +891,6 @@ function RecordHistoryViewer({
                   </span>
                 </div>
               </section>
-
               <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-white">
                 <div className="flex flex-col gap-2 border-b border-slate-200 p-2 min-[781px]:flex-row min-[781px]:items-center min-[781px]:justify-between">
                   <p className="m-0 text-[15px] text-slate-600">
@@ -1052,7 +911,6 @@ function RecordHistoryViewer({
                     <span>{showChangedOnly ? "Show All Fields" : "Show Changed Only"}</span>
                   </button>
                 </div>
-
                 <div className="min-h-0 flex-1 overflow-auto [scrollbar-gutter:stable_both-edges]">
                   <table className="w-full min-w-[1100px] border-separate border-spacing-0">
                     <thead>
@@ -1124,7 +982,6 @@ function RecordHistoryViewer({
                   </table>
                 </div>
               </section>
-
               <footer className="mt-2 flex shrink-0 flex-col gap-2 rounded-[4px] border border-slate-200 bg-slate-50 p-2 min-[781px]:flex-row min-[781px]:items-center min-[781px]:justify-between">
                 <p className="m-0 inline-flex items-center gap-2 text-[14px] text-blue-700">
                   <FiInfo className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -1144,7 +1001,6 @@ function RecordHistoryViewer({
       ) : null}
     </>
   );
-
   if (mode === "modal") {
     return (
       <div
@@ -1171,7 +1027,7 @@ function RecordHistoryViewer({
                     <p className="m-0 text-[12px] leading-none font-extrabold uppercase text-slate-600">
                       Record History
                     </p>
-                    <h2 className="m-0 text-[28px] leading-tight font-bold text-slate-950 max-[780px]:text-[22px]">
+                    <h2 className="m-0 text-[20px] leading-tight font-bold text-slate-950 max-[780px]:text-[22px]">
                       {displayName || "Selected record"}
                     </h2>
                   </div>
@@ -1233,7 +1089,6 @@ export function RecordHistoryModal({
   if (!isOpen) {
     return null;
   }
-
   return (
     <RecordHistoryViewer
       displayName={displayName}
@@ -1244,7 +1099,6 @@ export function RecordHistoryModal({
     />
   );
 }
-
 export default function RecordHistoryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1252,16 +1106,13 @@ export default function RecordHistoryPage() {
   const recordPk = normalizeQueryValue(searchParams.get("record_pk"));
   const displayName = normalizeQueryValue(searchParams.get("display_name"));
   const returnTo = normalizeQueryValue(searchParams.get("return_to"));
-
   const handleBack = useCallback(() => {
     if (returnTo) {
       router.push(returnTo);
       return;
     }
-
     router.push("/master/audit-logs");
   }, [returnTo, router]);
-
   return (
     <RecordHistoryViewer
       displayName={displayName}

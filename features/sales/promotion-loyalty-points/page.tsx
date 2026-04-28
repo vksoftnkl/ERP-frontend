@@ -2,6 +2,7 @@
 import {
   type CSSProperties,
   type FormEvent,
+  type ReactNode,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -10,16 +11,22 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { FiGift, FiPlus, FiRefreshCw } from "react-icons/fi";
+import {
+  FiBriefcase,
+  FiCalendar,
+  FiClipboard,
+  FiFileText,
+  FiGift,
+  FiGitBranch,
+  FiPlus,
+  FiRefreshCw,
+  FiSearch,
+  FiShield,
+} from "react-icons/fi";
 import {
   Alert,
   Badge,
   Button,
-  Card,
-  CardBody,
-  CardDescription,
-  CardHead,
-  CardTitle,
   Field,
   Input,
   Label,
@@ -124,6 +131,7 @@ import { PointsTab } from "./tabs/points-tab";
 import { GiftsTab } from "./tabs/gifts-tab";
 import { PartyTab } from "./tabs/party-tab";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import styles from "./page.module.scss";
 const DEFAULT_PARTY_SCOPE_TYPE: PartyScopeType = "CUSTOMER_GROUP";
 const BRANCH_LIST_ENDPOINT = "/branch-masters/list";
 const BRANCH_LIST_PAGE_LIMIT = 100;
@@ -322,6 +330,60 @@ function getSchemeBranchLabel(
   }
   return resolveLabel(row.ls_branch_id, branchLabelMap, "All Branches");
 }
+
+type MetricTone = "blue" | "green" | "orange" | "purple";
+
+function buildSparklinePath(values: number[], width = 96, height = 36): string {
+  if (values.length === 0) {
+    return "";
+  }
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const xStep = values.length > 1 ? width / (values.length - 1) : width;
+  const points = values.map((value, index) => {
+    const x = index * xStep;
+    const y = height - ((value - min) / range) * (height - 8) - 4;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+
+  return points.join(" ");
+}
+
+function MetricCard({
+  icon,
+  label,
+  value,
+  tone,
+  sparkline,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: number;
+  tone: MetricTone;
+  sparkline: number[];
+}) {
+  const points = buildSparklinePath(sparkline);
+  const areaPath = points ? `M ${points.replaceAll(",", " ")} L 96 36 L 0 36 Z` : "";
+
+  return (
+    <article className={`${styles.metricCard} ${styles[`metricCard${tone}`]}`}>
+      <div className={styles.metricIcon} aria-hidden="true">
+        {icon}
+      </div>
+      <div className={styles.metricCopy}>
+        <p className={styles.metricLabel}>{label}</p>
+        <p className={styles.metricValue}>{value}</p>
+      </div>
+      <svg className={styles.metricSparkline} viewBox="0 0 96 36" aria-hidden="true">
+        {areaPath ? <path d={areaPath} className={styles.metricSparklineFill} /> : null}
+        {points ? <polyline points={points} className={styles.metricSparklineLine} /> : null}
+      </svg>
+    </article>
+  );
+}
+
 export default function PromotionLoyaltyPointsPage() {
   const {
     companyOptions,
@@ -553,11 +615,11 @@ export default function PromotionLoyaltyPointsPage() {
     [itemBrandChoices, itemCategoryChoices, itemChoices, itemGroupChoices, itemSectionChoices],
   );
   const typeFilterOptions = useMemo<ERPDynamicSelectOption[]>(
-    () => [{ value: "", label: "All" }, ...SCHEME_TYPE_OPTIONS],
+    () => [{ value: "", label: "All Types" }, ...SCHEME_TYPE_OPTIONS],
     [],
   );
   const statusFilterOptions = useMemo<ERPDynamicSelectOption[]>(
-    () => [{ value: "", label: "All" }, ...SCHEME_STATUS_OPTIONS],
+    () => [{ value: "", label: "All Status" }, ...SCHEME_STATUS_OPTIONS],
     [],
   );
   useEffect(() => {
@@ -906,7 +968,6 @@ export default function PromotionLoyaltyPointsPage() {
         setPageDefaultBranchId("");
         return;
       }
-
       try {
         const { choices, defaultBranchId } = await loadActiveBranchesForCompany(pageCompanyId);
         if (ignore) return;
@@ -919,14 +980,11 @@ export default function PromotionLoyaltyPointsPage() {
         setPageDefaultBranchId("");
       }
     };
-
     void syncPageBranches();
-
     return () => {
       ignore = true;
     };
   }, [loadActiveBranchesForCompany, pageCompanyId, resetSchemeEditor]);
-
   useEffect(() => {
     if (!pageCompanyId.trim()) {
       setSchemeRows([]);
@@ -940,15 +998,12 @@ export default function PromotionLoyaltyPointsPage() {
       ...(!selectedScheme ? { ls_branch_id: prev.ls_branch_id || pageDefaultBranchId } : {}),
     }));
   }, [pageCompanyId, pageDefaultBranchId, resetSchemeEditor, selectedScheme]);
-
   useEffect(() => {
     if (!isEditorOpen) {
       return;
     }
-
     let ignore = false;
     const targetCompanyId = schemeForm.ls_comp_id.trim();
-
     const syncSchemeBranches = async () => {
       if (!targetCompanyId) {
         setSchemeBranchChoices([]);
@@ -961,21 +1016,17 @@ export default function PromotionLoyaltyPointsPage() {
         ));
         return;
       }
-
       try {
         const { choices, defaultBranchId } = await loadActiveBranchesForCompany(targetCompanyId);
         if (ignore) return;
-
         setSchemeBranchChoices(choices);
         setSchemeForm((prev) => {
           if (prev.ls_comp_id.trim() !== targetCompanyId) {
             return prev;
           }
-
           const currentBranchId = prev.ls_branch_id.trim();
           const hasCurrentBranch = choices.some((branch) => branch.value === currentBranchId);
           const nextBranchId = hasCurrentBranch ? currentBranchId : defaultBranchId;
-
           return currentBranchId === nextBranchId
             ? prev
             : { ...prev, ls_branch_id: nextBranchId };
@@ -990,14 +1041,11 @@ export default function PromotionLoyaltyPointsPage() {
         ));
       }
     };
-
     void syncSchemeBranches();
-
     return () => {
       ignore = true;
     };
   }, [isEditorOpen, loadActiveBranchesForCompany, schemeForm.ls_comp_id]);
-
   useEffect(() => {
     const loadLookups = async () => {
       const [
@@ -1025,11 +1073,10 @@ export default function PromotionLoyaltyPointsPage() {
         getUnitsList({ limit: "100" }),
         getBranchLookup({ module: "branches", limit: "100" }),
         getCustomerLookup({ module: "customers", limit: "100" }),
-        getCustomersList({ limit: "1000" }),
+        getCustomersList({ limit: "100" }),
         getCustomerGroupLookup({ module: "customerGroups", limit: "100" }),
         getCustomerGroupsList({ limit: "100" }),
       ]);
-
       // ── Items ────────────────────────────────────────────────────────────────
       // Pass the RAW payload so buildLookupOptions can extract the array using
       // its arrayKeys config. Pre-extracting with extractRows() breaks this step.
@@ -1087,7 +1134,6 @@ export default function PromotionLoyaltyPointsPage() {
           ? buildLookupChoices(sectionsPayload.value, ITEM_SECTION_LOOKUP_KEYS)
           : [],
       );
-
       // ── Units ─────────────────────────────────────────────────────────────
       // Same fix: pass raw payload, not pre-extracted rows.
       const masterUnitChoices =
@@ -1098,16 +1144,13 @@ export default function PromotionLoyaltyPointsPage() {
         unitsListPayload.status === "fulfilled"
           ? buildLookupChoices(unitsListPayload.value, UNIT_LOOKUP_KEYS)
           : [];
-
       setUnitChoices(masterUnitChoices.length > 0 ? masterUnitChoices : listUnitChoices);
-
       // ── Branches ──────────────────────────────────────────────────────────
       setBranchLookupChoices(
         branchesPayload.status === "fulfilled"
           ? buildLookupChoices(branchesPayload.value, BRANCH_LOOKUP_KEYS)
           : [],
       );
-
       // ── Customers ─────────────────────────────────────────────────────────
       // Same fix: pass raw payload.
       const masterCustomerChoices =
@@ -1118,11 +1161,9 @@ export default function PromotionLoyaltyPointsPage() {
         customersListPayload.status === "fulfilled"
           ? buildLookupChoices(customersListPayload.value, CUSTOMER_LOOKUP_KEYS)
           : [];
-
       setCustomerChoices(
         masterCustomerChoices.length > 0 ? masterCustomerChoices : listCustomerChoices,
       );
-
       // ── Customer Groups ───────────────────────────────────────────────────
       // Same fix: pass raw payload.
       const masterCustomerGroupChoices =
@@ -1133,33 +1174,28 @@ export default function PromotionLoyaltyPointsPage() {
         customerGroupsListPayload.status === "fulfilled"
           ? buildLookupChoices(customerGroupsListPayload.value, CUSTOMER_GROUP_LOOKUP_KEYS)
           : [];
-
       setCustomerGroupChoices(
         masterCustomerGroupChoices.length > 0
           ? masterCustomerGroupChoices
           : listCustomerGroupChoices,
       );
     };
-
     void loadLookups();
   }, [
     getCustomerGroupLookup, getCustomerLookup, getItemBrandLookup, getItemCategoryLookup,
     getBranchLookup, getItemGroupLookup, getItemLookup, getItemSectionLookup, getUnitLookup,
     getCustomerGroupsList, getCustomersList, getItemsList, getUnitsList,
   ]);
-
   useEffect(() => {
     const uniqueItemIds = Array.from(
       new Set(
         giftRows.map((row) => row.lsg_item_id.trim()).filter(Boolean),
       ),
     );
-
     uniqueItemIds.forEach((itemId) => {
       void ensureGiftUnitIdsForItem(itemId);
     });
   }, [ensureGiftUnitIdsForItem, giftRows]);
-
   useEffect(() => {
     if (schemeForm.ls_item_type !== "ITEM") {
       return;
@@ -1169,21 +1205,17 @@ export default function PromotionLoyaltyPointsPage() {
         pointRows.map((row) => row.lspt_item_id.trim()).filter(Boolean),
       ),
     );
-
     uniqueItemIds.forEach((itemId) => {
       void ensureGiftUnitIdsForItem(itemId);
     });
   }, [ensureGiftUnitIdsForItem, pointRows, schemeForm.ls_item_type]);
-
   useEffect(() => {
     void reloadSchemes();
   }, [pageCompanyId, branchFilter, deferredSchemeSearch, statusFilter, typeFilter]);
-
   useEffect(() => {
     if (schemeForm.ls_item_type === "ITEM") {
       return;
     }
-
     setPointRows((prev) => {
       let hasChanges = false;
       const nextRows = prev.map((row) => {
@@ -1198,11 +1230,9 @@ export default function PromotionLoyaltyPointsPage() {
             lspt_unit_id: "",
           };
         }
-
         if (!row.lspt_unit_id) {
           return row;
         }
-
         hasChanges = true;
         return {
           ...row,
@@ -1212,7 +1242,6 @@ export default function PromotionLoyaltyPointsPage() {
       return hasChanges ? nextRows : prev;
     });
   }, [schemeForm.ls_item_type]);
-
   useEffect(() => {
     if (!isEditorOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1243,7 +1272,6 @@ export default function PromotionLoyaltyPointsPage() {
       if (appContent) { appContent.style.overflow = prev.appOverflow; appContent.style.overscrollBehavior = prev.appOverscroll; }
     };
   }, [isEditorOpen]);
-
   // ── Modal open/close ──────────────────────────────────────────────────────
   const openCreateModal = () => {
     resetSchemeEditor(pageCompanyId, pageDefaultBranchId);
@@ -1258,7 +1286,6 @@ export default function PromotionLoyaltyPointsPage() {
     setActiveTab("scheme");
     setShowSchemeValidation(false);
   };
-
   // ── Save / persist ────────────────────────────────────────────────────────
   const persistDraftRows = async (schemeId: string) => {
     for (const row of pointRows.filter(shouldPersistPointRow)) {
@@ -1272,18 +1299,15 @@ export default function PromotionLoyaltyPointsPage() {
       finally { updateGiftRow(row._rowKey, { _saving: false }); }
     }
   };
-
   const persistDeletedRows = async () => {
     for (const lspt_id of deletedPointIds) await deletePointSilently({ query: { lspt_id } });
     for (const lsg_id of deletedGiftIds) await deleteGiftSilently({ query: { lsg_id } });
   };
-
   const handleSchemeSubmit = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
     setEditorSubmitError(null);
     setShowSchemeValidation(true);
     const nextActiveTab = activeTab;
-
     // Validate required fields
     if (!schemeForm.ls_name.trim()) {
       setEditorSubmitError("Scheme Name is required");
@@ -1310,23 +1334,19 @@ export default function PromotionLoyaltyPointsPage() {
       setActiveTab("scheme");
       return;
     }
-
     const giftError = giftRows.reduce<string | null>(
       (err, row, i) => err ?? getGiftRowValidationMessage(row, i),
       null,
     );
     if (giftError) { setEditorSubmitError(giftError); setActiveTab("gifts"); return; }
-
     const partyError = partyRows.reduce<string | null>(
       (err, row, i) => err ?? getPartyRowValidationMessage(row, i),
       null,
     );
     if (partyError) { setEditorSubmitError(partyError); setActiveTab("party"); return; }
-
     const response = await saveScheme({ body: buildSchemeRequest(schemeForm, partyRows) });
     const savedScheme = response?.data;
     if (!savedScheme) return;
-
     try {
       await persistDraftRows(savedScheme.ls_id);
       await persistDeletedRows();
@@ -1336,14 +1356,12 @@ export default function PromotionLoyaltyPointsPage() {
       setIsEditorOpen(true);
       return;
     }
-
     await reloadSchemes();
     await loadSchemeDetail(savedScheme.ls_id);
     setEditorSubmitError(null);
     setIsEditorOpen(true);
     setActiveTab(nextActiveTab);
   };
-
   const confirmDelete = async () => {
     if (!deleteDialog) return;
     if (deleteDialog.kind === "scheme") {
@@ -1359,31 +1377,91 @@ export default function PromotionLoyaltyPointsPage() {
     else if (deleteDialog.kind === "party") removePartyRow(deleteDialog.rowKey);
     setDeleteDialog(null);
   };
-
   // ── Scheme list columns ───────────────────────────────────────────────────
+  const metricCards = useMemo(
+    () => {
+      const totalSchemes = listMeta?.total ?? schemeRows.length;
+      const activeSchemes = schemeRows.filter((row) => row.ls_is_active).length;
+      const draftSchemes = schemeRows.filter((row) => row.ls_status === "DRAFT").length;
+      const redeemSchemes = schemeRows.filter((row) => row.ls_type === "REDEEM").length;
+      return [
+        {
+          label: "Total Schemes",
+          value: totalSchemes,
+          tone: "blue" as const,
+          icon: <FiFileText />,
+          sparkline: [3, 5, 4, 7, 11, 8, 8, 12],
+        },
+        {
+          label: "Active Schemes",
+          value: activeSchemes,
+          tone: "green" as const,
+          icon: <FiShield />,
+          sparkline: [4, 7, 5, 6, 6, 12, 8, 14],
+        },
+        {
+          label: "Draft Schemes",
+          value: draftSchemes,
+          tone: "orange" as const,
+          icon: <FiClipboard />,
+          sparkline: [2, 3, 3, 4, 7, 3, 8],
+        },
+        {
+          label: "Redeem Schemes",
+          value: redeemSchemes,
+          tone: "purple" as const,
+          icon: <FiGift />,
+          sparkline: [2, 4, 3, 5, 7, 6, 10],
+        },
+      ];
+    },
+    [listMeta?.total, schemeRows],
+  );
+  const tableColumnClassNames = {
+    headerClassName: styles.schemeTableHeaderCell,
+    cellClassName: styles.schemeTableCell,
+  };
   const schemeColumns: ReusableTableColumn<LoyaltySchemePayload>[] = [
-    { key: "slno", header: "Sl No", render: (_, i) => i + 1, width: "70px", align: "center" },
+    {
+      key: "slno",
+      header: "Sl No",
+      render: (_, i) => i + 1,
+      width: "68px",
+      align: "center",
+      sortable: false,
+      ...tableColumnClassNames,
+    },
     {
       key: "ls_name", header: "Scheme",
       render: (r) => (
-        <div className="grid gap-1">
+        <div className={styles.schemeNameStack}>
           <strong>{r.ls_name}</strong>
-          <span className="text-erp-text-subtle text-xs-compact">
+          <span>
             {getSchemeBranchLabel(r, branchLabelMap)}
           </span>
         </div>
       ),
-      width: "240px",
+      width: "190px",
+      sortAccessor: (r) => r.ls_name,
+      searchAccessor: (r) => r.ls_name,
+      headerClassName: styles.schemeTableHeaderCell,
+      cellClassName: `${styles.schemeTableCell} ${styles.schemeNameCell}`,
     },
     {
       key: "ls_type", header: "Type",
       render: (r) => <Badge variant={getTypeVariant(r.ls_type)}>{r.ls_type}</Badge>,
-      width: "110px", align: "center",
+      width: "96px",
+      align: "center",
+      sortAccessor: (r) => r.ls_type,
+      ...tableColumnClassNames,
     },
     {
       key: "ls_status", header: "Status",
       render: (r) => <Badge variant={getStatusVariant(r.ls_status)}>{r.ls_status}</Badge>,
-      width: "120px", align: "center",
+      width: "104px",
+      align: "center",
+      sortAccessor: (r) => r.ls_status,
+      ...tableColumnClassNames,
     },
     {
       key: "period", header: "Period",
@@ -1391,151 +1469,204 @@ export default function PromotionLoyaltyPointsPage() {
         const fromDate = formatDateForDisplay(r.ls_start_date);
         const toDate = formatDateForDisplay(r.ls_end_date);
         return (
-          <div className="grid gap-1 leading-tight">
-            <span>{fromDate ? `From ${fromDate}` : "From -"}</span>
-            <span>{toDate ? `To ${toDate}` : "To -"}</span>
+          <div className={styles.periodCell}>
+            <FiCalendar aria-hidden="true" />
+            <div>
+              <span>{fromDate ? `From ${fromDate}` : "From -"}</span>
+              <span>{toDate ? `To ${toDate}` : "To -"}</span>
+            </div>
           </div>
         );
       },
-      width: "180px",
+      width: "170px",
+      sortAccessor: (r) => r.ls_start_date,
+      ...tableColumnClassNames,
     },
     {
       key: "rules", header: "Rules",
       render: (r) => `${r.points.length} points / ${r.gifts.length} gifts / ${r.parties.length} parties`,
-      width: "220px",
+      width: "178px",
+      sortable: false,
+      ...tableColumnClassNames,
     },
     {
       key: "active", header: "Active",
       render: (r) => <Badge variant={r.ls_is_active ? "success" : "neutral"}>{r.ls_is_active ? "Yes" : "No"}</Badge>,
-      width: "90px", align: "center",
+      width: "82px",
+      align: "center",
+      sortAccessor: (r) => (r.ls_is_active ? 1 : 0),
+      ...tableColumnClassNames,
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      width: "78px",
+      align: "center",
+      sortable: false,
+      ...tableColumnClassNames,
     },
   ];
-
   const editorModalStyle = {
     "--erp-modal-overlay-z-index": "2000",
     "--erp-modal-accent": "#0f766e",
     "--erp-modal-surface": "#ffffff",
   } as CSSProperties;
-
   const editorPanelStyle = {
     width: "min(1280px, calc(100vw - 24px))",
     height: "min(860px, calc(100dvh - 24px))",
     maxHeight: "calc(100dvh - 24px)",
   } as CSSProperties;
-
   const editorFooterStyle = {
     alignItems: "flex-end",
     paddingTop: "0.25rem",
     paddingBottom: "0",
   } as CSSProperties;
-
   return (
-    <main className="h-shell-offset min-h-shell-offset px-6 py-4 pb-6 box-border overflow-auto overscroll-contain bg-gradient-to-b from-erp-slate-light to-[#eef4f4] bg-erp-gradient-teal">
-      <div className="h-full min-h-0 grid">
-        <Card as="section" className="h-full min-h-0 grid grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg shadow-erp-panel">
-          <CardHead className="flex items-start justify-between gap-4 pb-4 border-b border-erp-border">
+    <main className={styles.page}>
+      <section className={styles.shell} aria-labelledby="loyalty-page-title">
+        <header className={styles.pageHeader}>
+          <div className={styles.titleBlock}>
+            <div className={styles.titleIcon} aria-hidden="true">
+              <FiGift />
+            </div>
             <div>
-              <div className="flex items-start gap-3">
-                <FiGift aria-hidden="true" className="flex-shrink-0 w-[18px] h-[18px] text-erp-teal mt-[3px]" />
-              </div>
-              <CardTitle>Loyalty Schemes</CardTitle>
-              <CardDescription>Manage promotion loyalty rules for the selected company context.</CardDescription>
+              <h1 id="loyalty-page-title" className={styles.title}>Loyalty Schemes</h1>
+              <p className={styles.description}>Manage promotion loyalty rules for the selected company context.</p>
             </div>
-            <div className="flex flex-wrap justify-end gap-2.5">
-              <Button variant="ghost" size="sm" onClick={() => void reloadSchemes()} disabled={listLoading || !pageCompanyId.trim()}>
-                <FiRefreshCw aria-hidden="true" /> Refresh
-              </Button>
-              <Button variant="primary" size="sm" onClick={openCreateModal} disabled={!pageCompanyId.trim()}>
-                <FiPlus aria-hidden="true" /> New
-              </Button>
-            </div>
-          </CardHead>
-          <CardBody className="min-h-0 flex flex-col gap-[18px]">
-            {!pageCompanyId.trim() ? (
-              <Alert kind="warning" title="Select a company first">
-                Choose a company from the filter before opening loyalty schemes.
-              </Alert>
-            ) : null}
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-
-              <Field>
-                <Label htmlFor="loyalty-search" className={dynamicFormStyles.label}>Search</Label>
+          </div>
+          <div className={styles.headerActions}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={styles.refreshButton}
+              onClick={() => void reloadSchemes()}
+              disabled={listLoading || !pageCompanyId.trim()}
+            >
+              <FiRefreshCw aria-hidden="true" /> Refresh
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              className={styles.newButton}
+              onClick={openCreateModal}
+              disabled={!pageCompanyId.trim()}
+            >
+              <FiPlus aria-hidden="true" /> New Scheme
+            </Button>
+          </div>
+        </header>
+        <div className={styles.metricGrid}>
+          {metricCards.map((metric) => (
+            <MetricCard
+              key={metric.label}
+              icon={metric.icon}
+              label={metric.label}
+              value={metric.value}
+              tone={metric.tone}
+              sparkline={metric.sparkline}
+            />
+          ))}
+        </div>
+        {!pageCompanyId.trim() ? (
+          <Alert kind="warning" title="Select a company first" className={styles.alert}>
+            Choose a company from the filter before opening loyalty schemes.
+          </Alert>
+        ) : null}
+        <div className={styles.filterPanel}>
+          <div className={styles.filterGrid}>
+            <Field className={styles.filterField}>
+              <Label htmlFor="loyalty-search" className={`${dynamicFormStyles.label} ${styles.filterLabel}`}>Search</Label>
+              <div className={styles.searchControl}>
+                <FiSearch className={styles.filterAdornment} aria-hidden="true" />
                 <Input
                   id="loyalty-search"
-                  className={dynamicFormStyles.control}
+                  className={`${dynamicFormStyles.control} ${styles.searchInput}`}
                   style={MODAL_FIELD_STYLE_VARS}
                   value={schemeSearch}
                   onChange={(e) => setSchemeSearch(e.target.value)}
                   placeholder="Search scheme"
                 />
-              </Field>
-              <Field>
-                <Label htmlFor="loyalty-filter-type" className={dynamicFormStyles.label}>Type</Label>
-                <SearchableSelect
-                  id="loyalty-filter-type"
-                  value={typeFilter}
-                  options={typeFilterOptions}
-                  onChange={setTypeFilter}
-                  searchPlaceholder="Search type"
-                />
-              </Field>
-              <Field>
-                <Label htmlFor="loyalty-filter-status" className={dynamicFormStyles.label}>Status</Label>
-                <SearchableSelect
-                  id="loyalty-filter-status"
-                  value={statusFilter}
-                  options={statusFilterOptions}
-                  onChange={setStatusFilter}
-                  searchPlaceholder="Search status"
-                />
-              </Field>
-              <Field>
-                <Label htmlFor="loyalty-filter-company" className={dynamicFormStyles.label}>Company</Label>
+              </div>
+            </Field>
+            <Field className={styles.filterField}>
+              <Label htmlFor="loyalty-filter-type" className={`${dynamicFormStyles.label} ${styles.filterLabel}`}>Type</Label>
+              <SearchableSelect
+                id="loyalty-filter-type"
+                value={typeFilter}
+                options={typeFilterOptions}
+                onChange={setTypeFilter}
+                searchPlaceholder="Search type"
+                className={styles.filterSelect}
+              />
+            </Field>
+            <Field className={styles.filterField}>
+              <Label htmlFor="loyalty-filter-status" className={`${dynamicFormStyles.label} ${styles.filterLabel}`}>Status</Label>
+              <SearchableSelect
+                id="loyalty-filter-status"
+                value={statusFilter}
+                options={statusFilterOptions}
+                onChange={setStatusFilter}
+                searchPlaceholder="Search status"
+                className={styles.filterSelect}
+              />
+            </Field>
+            <Field className={styles.filterField}>
+              <Label htmlFor="loyalty-filter-company" className={`${dynamicFormStyles.label} ${styles.filterLabel}`}>Company</Label>
+              <div className={styles.filterControlWithIcon}>
+                <FiBriefcase className={styles.filterAdornment} aria-hidden="true" />
                 <SearchableSelect
                   id="loyalty-filter-company"
                   value={pageCompanyId}
                   options={companyOptions}
                   onChange={handlePageCompanyChange}
                   searchPlaceholder="Search company"
+                  className={`${styles.filterSelect} ${styles.filterSelectWithIcon}`}
                 />
-              </Field>
-              <Field>
-                <Label htmlFor="loyalty-filter-branch" className={dynamicFormStyles.label}>Branch Filter</Label>
+              </div>
+            </Field>
+            <Field className={styles.filterField}>
+              <Label htmlFor="loyalty-filter-branch" className={`${dynamicFormStyles.label} ${styles.filterLabel}`}>Branch</Label>
+              <div className={styles.filterControlWithIcon}>
+                <FiGitBranch className={styles.filterAdornment} aria-hidden="true" />
                 <SearchableSelect
                   id="loyalty-filter-branch"
                   value={branchFilter}
                   options={pageBranchOptions}
                   onChange={setBranchFilter}
                   searchPlaceholder="Search branch"
+                  className={`${styles.filterSelect} ${styles.filterSelectWithIcon}`}
                 />
-              </Field>
-            </div>
-            {listError ? <Alert kind="danger" title="Unable to load loyalty schemes">{listError}</Alert> : null}
-            <div className="w-full flex-1 min-h-0 pb-4">
-              <ReusableTable<LoyaltySchemePayload>
-                columns={schemeColumns}
-                rows={schemeRows}
-                rowKey="ls_id"
-                activeRowKey={selectedScheme?.ls_id ?? null}
-                onRowClick={(r) => void openEditModal(r.ls_id, "scheme")}
-                onEdit={(r) => void openEditModal(r.ls_id, "scheme")}
-                onDelete={(r) => setDeleteDialog({ kind: "scheme", id: r.ls_id, label: r.ls_name })}
-                emptyText={pageCompanyId.trim() ? "No loyalty schemes found for this filter." : "Choose a company to load schemes."}
-                fullViewHeight={false}
-                stickyHeader
-                tableMaxHeight="calc(100dvh - 320px)"
-                paginated
-                pageSize={10}
-                defaultPageSize={10}
-                pageSizeOptions={[5, 10, 15, 25, 50]}
-                totalEntries={listMeta?.total ?? 0}
-                showPageSizeSelector
-              />
-            </div>
-          </CardBody>
-        </Card>
-      </div>
-
+              </div>
+            </Field>
+          </div>
+        </div>
+        {listError ? <Alert kind="danger" title="Unable to load loyalty schemes" className={styles.alert}>{listError}</Alert> : null}
+        <div className={styles.tablePanel}>
+          <ReusableTable<LoyaltySchemePayload>
+            columns={schemeColumns}
+            rows={schemeRows}
+            rowKey="ls_id"
+            activeRowKey={selectedScheme?.ls_id ?? null}
+            onRowClick={(r) => void openEditModal(r.ls_id, "scheme")}
+            onEdit={(r) => void openEditModal(r.ls_id, "scheme")}
+            onDelete={(r) => setDeleteDialog({ kind: "scheme", id: r.ls_id, label: r.ls_name })}
+            editLabel="Edit Scheme"
+            emptyText={pageCompanyId.trim() ? "No loyalty schemes found for this filter." : "Choose a company to load schemes."}
+            fullViewHeight={false}
+            minWidth="900px"
+            wrapperClassName={styles.schemeTable}
+            stickyHeader
+            tableMaxHeight="100%"
+            paginated
+            sortable
+            pageSize={10}
+            defaultPageSize={10}
+            pageSizeOptions={[5, 10, 15, 25, 50]}
+            totalEntries={listMeta?.total ?? 0}
+            showPageSizeSelector
+          />
+        </div>
+      </section>
       {/* ── Editor modal ───────────────────────────────────────────────────── */}
       {isEditorOpen && typeof document !== "undefined"
         ? createPortal(
@@ -1568,7 +1699,6 @@ export default function PromotionLoyaltyPointsPage() {
                   </button>
                 </div>
               </header>
-
               <div className={`${dynamicFormStyles.scrollArea} ${dynamicFormStyles.scrollAreaHiddenScrollbar}`}>
                 <div
                   className={`${dynamicFormStyles.sectionTabs} sticky top-0 z-modal shadow-erp-tab-underline`}
@@ -1650,7 +1780,6 @@ export default function PromotionLoyaltyPointsPage() {
                   )}
                 </div>
               </div>
-
               <footer className={dynamicFormStyles.footer} style={editorFooterStyle}>
                 {editorSubmitError ? (
                   <p className={dynamicFormStyles.submitError} role="alert">
@@ -1682,7 +1811,6 @@ export default function PromotionLoyaltyPointsPage() {
           document.body,
         )
         : null}
-
       <DeleteConfirmModal
         isOpen={Boolean(deleteDialog)}
         itemName={deleteDialog?.label}
@@ -1690,7 +1818,6 @@ export default function PromotionLoyaltyPointsPage() {
         onCancel={() => setDeleteDialog(null)}
         onConfirm={() => void confirmDelete()}
       />
-
       {(detailLoading || schemeSaving) && selectedScheme ? (
         <div className="fixed bottom-6 right-6 px-4 py-3 rounded-pill bg-[rgba(15,23,42,0.92)] text-white text-sm-compact shadow-lg shadow-[rgba(15,23,42,0.24)] z-status">
           <span>{detailLoading ? "Loading scheme details..." : "Saving scheme..."}</span>
