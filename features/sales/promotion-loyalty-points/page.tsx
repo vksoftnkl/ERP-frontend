@@ -20,8 +20,10 @@ import {
   FiGitBranch,
   FiPlus,
   FiRefreshCw,
+  FiSave,
   FiSearch,
   FiShield,
+  FiStar,
 } from "react-icons/fi";
 import {
   Alert,
@@ -417,6 +419,7 @@ export default function PromotionLoyaltyPointsPage() {
   const [activeTab, setActiveTab] = useState<EditorTab>("scheme");
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>(null);
   const editorDialogRef = useRef<HTMLDivElement | null>(null);
+  const editorScrollAreaRef = useRef<HTMLDivElement | null>(null);
   const listRequestIdRef = useRef(0);
   // ── Lookup choices ────────────────────────────────────────────────────────
   const [itemChoices, setItemChoices] = useState<ERPDynamicSelectOption[]>([]);
@@ -1101,7 +1104,6 @@ export default function PromotionLoyaltyPointsPage() {
           (opt) => !deletedIds.has(opt.value),
         );
       };
-
       const masterItemChoices =
         itemsPayload.status === "fulfilled"
           ? buildFilteredItemChoices(itemsPayload.value)
@@ -1110,9 +1112,7 @@ export default function PromotionLoyaltyPointsPage() {
         itemsListPayload.status === "fulfilled"
           ? buildFilteredItemChoices(itemsListPayload.value)
           : [];
-
       setItemChoices(masterItemChoices.length > 0 ? masterItemChoices : listItemChoices);
-
       // ── Item sub-groups (raw payload — already correct) ───────────────────
       setItemGroupChoices(
         groupsPayload.status === "fulfilled"
@@ -1242,6 +1242,10 @@ export default function PromotionLoyaltyPointsPage() {
       return hasChanges ? nextRows : prev;
     });
   }, [schemeForm.ls_item_type]);
+  useEffect(() => {
+    if (!isEditorOpen) return;
+    editorScrollAreaRef.current?.scrollTo({ top: 0 });
+  }, [activeTab, isEditorOpen]);
   useEffect(() => {
     if (!isEditorOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1508,7 +1512,7 @@ export default function PromotionLoyaltyPointsPage() {
   ];
   const editorModalStyle = {
     "--erp-modal-overlay-z-index": "2000",
-    "--erp-modal-accent": "#0f766e",
+    "--erp-modal-accent": "#365b9d",
     "--erp-modal-surface": "#ffffff",
   } as CSSProperties;
   const editorPanelStyle = {
@@ -1517,9 +1521,9 @@ export default function PromotionLoyaltyPointsPage() {
     maxHeight: "calc(100dvh - 24px)",
   } as CSSProperties;
   const editorFooterStyle = {
-    alignItems: "flex-end",
-    paddingTop: "0.25rem",
-    paddingBottom: "0",
+    alignItems: "center",
+    flexShrink: 0,
+    padding: "0.5rem",
   } as CSSProperties;
   return (
     <main className={styles.page}>
@@ -1674,7 +1678,7 @@ export default function PromotionLoyaltyPointsPage() {
             <div className={dynamicFormStyles.backdrop} onClick={closeEditorModal} aria-hidden />
             <div
               ref={editorDialogRef}
-              className={dynamicFormStyles.panel}
+              className={`${dynamicFormStyles.panel} ${styles.editorPanel}`}
               role="dialog"
               aria-modal="true"
               aria-labelledby="loyalty-editor-title"
@@ -1682,26 +1686,34 @@ export default function PromotionLoyaltyPointsPage() {
               tabIndex={-1}
               style={editorPanelStyle}
             >
-              <header className={dynamicFormStyles.header}>
-                <div className={dynamicFormStyles.headerRow}>
-                  <div>
+              <header className={`${dynamicFormStyles.header} ${styles.editorHeader}`}>
+                <div className={`${dynamicFormStyles.headerRow} ${styles.editorHeaderRow}`}>
+                  <div className={styles.editorHeaderIntro}>
+                    <span className={styles.editorHeaderIcon} aria-hidden="true">
+                      <FiStar />
+                    </span>
+                    <div>
                     <h2 id="loyalty-editor-title" className={dynamicFormStyles.headerTitle}>
                       {selectedScheme ? `Edit Loyalty Scheme` : "Create Loyalty Scheme"}
                     </h2>
                     <p id="loyalty-editor-description" className={dynamicFormStyles.headerDescription}>
                       Maintain scheme header, point rules, gift rules, and party scope in one place.
                     </p>
+                    </div>
                   </div>
-                  <button type="button" className={dynamicFormStyles.closeButton} onClick={closeEditorModal} aria-label="Close loyalty scheme editor">
+                  <button type="button" className={`${dynamicFormStyles.closeButton} ${styles.editorCloseButton}`} onClick={closeEditorModal} aria-label="Close loyalty scheme editor">
                     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
                       <path d="M6 18 18 6M6 6l12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                     </svg>
                   </button>
                 </div>
               </header>
-              <div className={`${dynamicFormStyles.scrollArea} ${dynamicFormStyles.scrollAreaHiddenScrollbar}`}>
+              <div
+                className={`${dynamicFormStyles.scrollArea} ${dynamicFormStyles.scrollAreaHiddenScrollbar} ${styles.editorScrollArea}`}
+                ref={editorScrollAreaRef}
+              >
                 <div
-                  className={`${dynamicFormStyles.sectionTabs} sticky top-0 z-modal shadow-erp-tab-underline`}
+                  className={`${dynamicFormStyles.sectionTabs} ${styles.editorTabs} sticky top-0 z-modal shadow-erp-tab-underline`}
                   role="tablist"
                   aria-label="Loyalty scheme sections"
                 >
@@ -1714,14 +1726,14 @@ export default function PromotionLoyaltyPointsPage() {
                       aria-controls={`loyalty-editor-panel-${tab.key}`}
                       id={`loyalty-editor-tab-${tab.key}`}
                       tabIndex={activeTab === tab.key ? 0 : -1}
-                      className={`${dynamicFormStyles.sectionTab} ${activeTab === tab.key ? dynamicFormStyles.sectionTabActive : ""}`}
+                      className={`${dynamicFormStyles.sectionTab} ${styles.editorTab} ${activeTab === tab.key ? `${dynamicFormStyles.sectionTabActive} ${styles.editorTabActive}` : ""}`}
                       onClick={() => setActiveTab(tab.key)}
                     >
                       {tab.label}
                     </button>
                   ))}
                 </div>
-                <div className="min-h-full grid content-start gap-[18px] px-6 py-[22px] pb-6 bg-gradient-to-b from-white to-[#f8fbfb] bg-erp-gradient-modal">
+                <div className={styles.editorContent}>
                   {activeTab === "scheme" && (
                     <SchemeTab
                       schemeForm={schemeForm}
@@ -1780,7 +1792,7 @@ export default function PromotionLoyaltyPointsPage() {
                   )}
                 </div>
               </div>
-              <footer className={dynamicFormStyles.footer} style={editorFooterStyle}>
+              <footer className={`${dynamicFormStyles.footer} ${styles.editorFooter}`} style={editorFooterStyle}>
                 {editorSubmitError ? (
                   <p className={dynamicFormStyles.submitError} role="alert">
                     {editorSubmitError}
@@ -1788,7 +1800,7 @@ export default function PromotionLoyaltyPointsPage() {
                 ) : null}
                 <button
                   type="button"
-                  className={dynamicFormStyles.cancelButton}
+                  className={`${dynamicFormStyles.cancelButton} ${styles.editorCancelButton}`}
                   onClick={closeEditorModal}
                   disabled={schemeSaving}
                 >
@@ -1796,13 +1808,14 @@ export default function PromotionLoyaltyPointsPage() {
                 </button>
                 <button
                   type="button"
-                  className={`${dynamicFormStyles.submitButton} ${schemeForm.ls_id
+                  className={`${dynamicFormStyles.submitButton} ${styles.editorSubmitButton} ${schemeForm.ls_id
                       ? dynamicFormStyles.submitButtonUpdate
                       : dynamicFormStyles.submitButtonSave
                     }`}
                   onClick={() => void handleSchemeSubmit()}
                   disabled={schemeSaving || !pageCompanyId.trim()}
                 >
+                  <FiSave aria-hidden="true" />
                   {schemeSaving ? "Saving..." : schemeForm.ls_id ? "Update" : "Save"}
                 </button>
               </footer>

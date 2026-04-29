@@ -17,11 +17,14 @@ import {
   AUTH_SESSION_EVENT,
   type AuthSessionChangeDetail,
 } from "@/lib/auth/session";
-
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  businessContextChanged,
+  selectBusinessContext,
+  type PersistedBusinessContext,
+} from "@/store/slices/authSlice";
 const COMPANY_LIST_ENDPOINT = "/company-masters/list";
 const BRANCH_LIST_ENDPOINT = "/branch-masters/list";
-const BUSINESS_CONTEXT_CACHE_KEY = "erp_client_business_context";
-
 type CompanyRecord = {
   compId: string;
   compName: string;
@@ -29,22 +32,11 @@ type CompanyRecord = {
   compFinYearTo: string | null;
   compDefault?: boolean;
 };
-
 type BranchRecord = {
   brId: string;
   brName: string;
   brIsDefault?: boolean;
 };
-
-type PersistedBusinessContext = {
-  companyId: string | null;
-  companyName: string | null;
-  compFinYearFrom: string | null;
-  compFinYearTo: string | null;
-  branchId: string | null;
-  branchName: string | null;
-};
-
 type BusinessContextValue = {
   companyOptions: ERPDynamicSelectOption[];
   branchOptions: ERPDynamicSelectOption[];
@@ -64,52 +56,21 @@ type BusinessContextValue = {
   setBranchSelectionLocked: (value: boolean) => void;
   refresh: () => Promise<void>;
 };
-
 const DEFAULT_COMPANY_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Company",
 };
-
 const DEFAULT_BRANCH_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Branch",
 };
-
 const BusinessContext = createContext<BusinessContextValue | null>(null);
-
 function isLoginRoute(pathname: string): boolean {
   return pathname === "/login" || pathname.startsWith("/login/");
 }
 
-function readPersistedBusinessContext(): PersistedBusinessContext | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const persisted = window.sessionStorage.getItem(BUSINESS_CONTEXT_CACHE_KEY);
-  if (!persisted) {
-    return null;
-  }
-  try {
-    return JSON.parse(persisted) as PersistedBusinessContext;
-  } catch {
-    window.sessionStorage.removeItem(BUSINESS_CONTEXT_CACHE_KEY);
-    return null;
-  }
-}
-
-function persistBusinessContext(value: PersistedBusinessContext | null): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  if (!value) {
-    window.sessionStorage.removeItem(BUSINESS_CONTEXT_CACHE_KEY);
-    return;
-  }
-  window.sessionStorage.setItem(BUSINESS_CONTEXT_CACHE_KEY, JSON.stringify(value));
-}
-
 export function clearBusinessContextSession(): void {
-  persistBusinessContext(null);
+  // Business context is cleared through the persisted Redux auth slice.
 }
 
 function chooseDefaultCompany(companies: CompanyRecord[]): CompanyRecord | null {
@@ -135,16 +96,17 @@ function mapBranchOptions(branches: BranchRecord[]): ERPDynamicSelectOption[] {
 }
 
 export function BusinessContextProvider({ children }: { children: ReactNode }) {
+  const dispatch = useAppDispatch();
+  const persistedBusinessContext = useAppSelector(selectBusinessContext);
   const pathname = usePathname();
   const hideShell = !pathname || isLoginRoute(pathname);
-  const initialPersistedContext = useMemo(readPersistedBusinessContext, []);
   const [companies, setCompanies] = useState<CompanyRecord[]>([]);
   const [branches, setBranches] = useState<BranchRecord[]>([]);
   const [selectedCompanyId, setSelectedCompanyIdState] = useState(
-    initialPersistedContext?.companyId ?? "",
+    persistedBusinessContext?.companyId ?? "",
   );
   const [selectedBranchId, setSelectedBranchIdState] = useState(
-    initialPersistedContext?.branchId ?? "",
+    persistedBusinessContext?.branchId ?? "",
   );
   const [isCompanySelectionLocked, setCompanySelectionLocked] = useState(false);
   const [isBranchSelectionLocked, setBranchSelectionLocked] = useState(false);
@@ -276,7 +238,7 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
       if (authEvent.detail?.token !== null) {
         return;
       }
-      clearBusinessContextSession();
+      dispatch(businessContextChanged(null));
       setSelectedCompanyIdState("");
       setSelectedBranchIdState("");
       setCompanies([]);
@@ -286,7 +248,7 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener(AUTH_SESSION_EVENT, handleAuthSessionChange as EventListener);
     };
-  }, [hideShell]);
+  }, [dispatch, hideShell]);
 
   const activeCompany = useMemo(
     () => companies.find((company) => company.compId === selectedCompanyId) ?? null,
@@ -301,7 +263,7 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     if (hideShell) {
       return;
     }
-    persistBusinessContext(
+    dispatch(businessContextChanged(
       activeCompany
         ? {
             companyId: activeCompany.compId,
@@ -312,8 +274,8 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
             branchName: activeBranch?.brName ?? null,
           }
         : null,
-    );
-  }, [activeBranch, activeCompany, hideShell]);
+    ));
+  }, [activeBranch, activeCompany, dispatch, hideShell]);
 
   const value = useMemo<BusinessContextValue>(() => ({
     companyOptions: mapCompanyOptions(companies),

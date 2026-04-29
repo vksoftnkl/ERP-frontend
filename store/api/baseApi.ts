@@ -24,8 +24,7 @@ const rawBaseQuery = fetchBaseQuery({
       return headers;
     }
     const state = getState() as { auth?: { token?: string | null } };
-    const token = state.auth?.token ?? getAuthSession();
-    const authHeaderValue = getAuthHeaderValue(token);
+    const authHeaderValue = getAuthHeaderValue(state.auth?.token ?? getAuthSession());
     if (authHeaderValue) {
       headers.set("Authorization", authHeaderValue);
     }
@@ -48,7 +47,7 @@ const baseQueryWithAuthHandling: BaseQueryFn<string | FetchArgs, unknown, ApiErr
         : extractApiErrorMessage(data, "Request failed.");
     if (status === 401) {
       clearAuthSession();
-      api.dispatch(authSessionChanged({ token: null, userId: null }));
+      api.dispatch(authSessionChanged({ isAuthenticated: false }));
     }
     return {
       error: {

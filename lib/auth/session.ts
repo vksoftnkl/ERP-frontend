@@ -1,24 +1,20 @@
-const AUTH_CACHE_KEY = "erp_client_auth_token";
-const AUTH_USER_ID_CACHE_KEY = "erp_client_auth_user_id";
 const CLIENT_DEVICE_ID_CACHE_KEY = "erp_client_device_id";
+const REDUX_SESSION_STORAGE_KEY = "erp_client_redux_state";
 export const AUTH_SESSION_EVENT = "erp:auth-session-changed";
-
 export type AuthSessionChangeDetail = {
   token: string | null;
   userId: string | null;
 };
-
 type StorageValue = string | number | null | undefined;
-
 type JsonRecord = Record<string, unknown>;
-
+let memoryAuthToken: string | null = null;
+let memoryAuthUserId: string | null = null;
 function asRecord(value: unknown): JsonRecord | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
   return value as JsonRecord;
 }
-
 function normalizeStoredValue(value: StorageValue): string | null {
   if (typeof value === "string" && value.trim()) {
     return value.trim();
@@ -28,7 +24,6 @@ function normalizeStoredValue(value: StorageValue): string | null {
   }
   return null;
 }
-
 function pickFirstString(values: Array<unknown>): string | null {
   for (const value of values) {
     const normalized = normalizeStoredValue(value as StorageValue);
@@ -38,19 +33,51 @@ function pickFirstString(values: Array<unknown>): string | null {
   }
   return null;
 }
-
 function emitAuthSessionChange(token: string | null, userId: string | null): void {
   if (typeof window === "undefined") {
     return;
   }
-
   window.dispatchEvent(
     new CustomEvent<AuthSessionChangeDetail>(AUTH_SESSION_EVENT, {
       detail: { token, userId },
     }),
   );
 }
-
+function readPersistedAuthState(): JsonRecord | null {
+  if (typeof window === "undefined" || typeof window.sessionStorage === "undefined") {
+    return null;
+  }
+  try {
+    const persisted = window.sessionStorage.getItem(REDUX_SESSION_STORAGE_KEY);
+    const parsed = persisted ? JSON.parse(persisted) as unknown : null;
+    const root = asRecord(parsed);
+    return asRecord(root?.auth);
+  } catch {
+    return null;
+  }
+}
+function writePersistedAuthSession(token: string | null, userId: string | null): void {
+  if (typeof window === "undefined" || typeof window.sessionStorage === "undefined") {
+    return;
+  }
+  try {
+    const persisted = window.sessionStorage.getItem(REDUX_SESSION_STORAGE_KEY);
+    const root = asRecord(persisted ? JSON.parse(persisted) as unknown : null) ?? {};
+    const currentAuth = asRecord(root.auth) ?? {};
+    root.auth = {
+      ...currentAuth,
+      initialized: true,
+      isAuthenticated: Boolean(token),
+      token,
+      userId: token ? userId : null,
+      recentPages: token && Array.isArray(currentAuth.recentPages) ? currentAuth.recentPages : [],
+      businessContext: token ? currentAuth.businessContext ?? null : null,
+    };
+    window.sessionStorage.setItem(REDUX_SESSION_STORAGE_KEY, JSON.stringify(root));
+  } catch {
+    // Redux state remains the source of truth when persistence is unavailable.
+  }
+}
 export function extractAuthToken(payload: unknown): string | null {
   if (typeof payload === "string" && payload.trim()) {
     return payload.trim();
@@ -85,7 +112,6 @@ export function extractAuthToken(payload: unknown): string | null {
     nestedResult?.id_token,
   ]);
 }
-
 export function extractAuthUserId(payload: unknown): string | null {
   const root = asRecord(payload);
   if (!root) {
@@ -126,7 +152,6 @@ export function extractAuthUserId(payload: unknown): string | null {
     nestedResult?.id,
   ]);
 }
-
 export function setAuthSession(token?: string | null, userId?: StorageValue): boolean {
   if (typeof window === "undefined") {
     return false;
@@ -137,39 +162,27 @@ export function setAuthSession(token?: string | null, userId?: StorageValue): bo
     return false;
   }
   const normalizedUserId = normalizeStoredValue(userId);
-  window.sessionStorage.setItem(AUTH_CACHE_KEY, normalizedToken);
-  if (normalizedUserId) {
-    window.sessionStorage.setItem(AUTH_USER_ID_CACHE_KEY, normalizedUserId);
-  } else {
-    window.sessionStorage.removeItem(AUTH_USER_ID_CACHE_KEY);
-  }
+  memoryAuthToken = normalizedToken;
+  memoryAuthUserId = normalizedUserId;
+  writePersistedAuthSession(normalizedToken, normalizedUserId);
   emitAuthSessionChange(normalizedToken, normalizedUserId);
   return true;
 }
-
 export function clearAuthSession(): void {
   if (typeof window === "undefined") {
     return;
   }
-  window.sessionStorage.removeItem(AUTH_CACHE_KEY);
-  window.sessionStorage.removeItem(AUTH_USER_ID_CACHE_KEY);
+  memoryAuthToken = null;
+  memoryAuthUserId = null;
+  writePersistedAuthSession(null, null);
   emitAuthSessionChange(null, null);
 }
-
 export function getAuthSession(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  return window.sessionStorage.getItem(AUTH_CACHE_KEY);
+  return memoryAuthToken ?? normalizeStoredValue(readPersistedAuthState()?.token as StorageValue);
 }
-
 export function getAuthUserId(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  return window.sessionStorage.getItem(AUTH_USER_ID_CACHE_KEY);
+  return memoryAuthUserId ?? normalizeStoredValue(readPersistedAuthState()?.userId as StorageValue);
 }
-
 function decodeBase64UrlSegment(segment: string): string | null {
   try {
     const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
@@ -184,7 +197,6 @@ function decodeBase64UrlSegment(segment: string): string | null {
     return null;
   }
 }
-
 function decodeJwtPayload(token: string): JsonRecord | null {
   const normalizedToken = token.trim().replace(/^Bearer\s+/i, "");
   const segments = normalizedToken.split(".");
@@ -202,7 +214,6 @@ function decodeJwtPayload(token: string): JsonRecord | null {
     return null;
   }
 }
-
 export function getAuthSessionId(): string | null {
   const token = getAuthSession();
   if (!token) {
@@ -211,7 +222,6 @@ export function getAuthSessionId(): string | null {
   const payload = decodeJwtPayload(token);
   return pickFirstString([payload?.sid, payload?.sessionId, payload?.session_id]);
 }
-
 function generateUuid(): string | null {
   if (typeof window === "undefined") {
     return null;
@@ -231,12 +241,11 @@ function generateUuid(): string | null {
     hex.slice(10, 16).join(""),
   ].join("-");
 }
-
 export function getOrCreateClientDeviceId(): string | null {
   if (typeof window === "undefined") {
     return null;
   }
-  const existingId = window.localStorage.getItem(CLIENT_DEVICE_ID_CACHE_KEY)?.trim();
+  const existingId = window.sessionStorage.getItem(CLIENT_DEVICE_ID_CACHE_KEY)?.trim();
   if (existingId) {
     return existingId;
   }
@@ -247,10 +256,9 @@ export function getOrCreateClientDeviceId(): string | null {
   if (!nextId) {
     return null;
   }
-  window.localStorage.setItem(CLIENT_DEVICE_ID_CACHE_KEY, nextId);
+  window.sessionStorage.setItem(CLIENT_DEVICE_ID_CACHE_KEY, nextId);
   return nextId;
 }
-
 export function isAuthenticated(): boolean {
   return Boolean(getAuthSession()?.trim());
 }

@@ -1,19 +1,131 @@
-import { configureStore } from "@reduxjs/toolkit";
+import { combineReducers, configureStore } from "@reduxjs/toolkit";
 import { baseApi } from "@/store/api/baseApi";
-import authReducer from "@/store/slices/authSlice";
-import gridColumnsReducer from "@/store/slices/gridColumnsSlice";
+import authReducer, { type AuthState } from "@/store/slices/authSlice";
+import gridColumnsReducer, {
+  type GridColumnsState,
+} from "@/store/slices/gridColumnsSlice";
 
-export const makeStore = () =>
-  configureStore({
-    reducer: {
-      auth: authReducer,
-      [baseApi.reducerPath]: baseApi.reducer,
-      gridColumns: gridColumnsReducer,
-    },
+export const REDUX_SESSION_STORAGE_KEY = "erp_client_redux_state";
+
+const rootReducer = combineReducers({
+  auth: authReducer,
+  [baseApi.reducerPath]: baseApi.reducer,
+  gridColumns: gridColumnsReducer,
+});
+
+export type RootState = ReturnType<typeof rootReducer>;
+
+type PersistedReduxState = {
+  auth?: AuthState;
+  [baseApi.reducerPath]?: ReturnType<typeof baseApi.reducer>;
+  gridColumns?: GridColumnsState;
+};
+
+function canUseSessionStorage(): boolean {
+  return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
+}
+
+function sanitizeGridColumnsState(state: GridColumnsState | undefined): GridColumnsState | undefined {
+  if (!state?.byGridId || typeof state.byGridId !== "object") {
+    return undefined;
+  }
+
+  return {
+    byGridId: Object.fromEntries(
+      Object.entries(state.byGridId).map(([gridId, entry]) => [
+        gridId,
+        {
+          items: Array.isArray(entry?.items) ? entry.items : [],
+          loading: false,
+          error: null,
+          requested: Boolean(entry?.requested),
+        },
+      ]),
+    ) as GridColumnsState["byGridId"],
+  };
+}
+
+function sanitizeAuthState(state: AuthState | undefined): AuthState | undefined {
+  if (!state || typeof state !== "object") {
+    return undefined;
+  }
+  const token = typeof state.token === "string" && state.token.trim() ? state.token.trim() : null;
+  const userId = typeof state.userId === "string" && state.userId.trim() ? state.userId.trim() : null;
+
+  return {
+    initialized: Boolean(state.initialized),
+    isAuthenticated: Boolean(token),
+    token,
+    userId,
+    recentPages: Array.isArray(state.recentPages) ? state.recentPages : [],
+    businessContext: state.businessContext && typeof state.businessContext === "object"
+      ? state.businessContext
+      : null,
+  };
+}
+
+export function loadPersistedReduxState(): PersistedReduxState | undefined {
+  if (!canUseSessionStorage()) {
+    return undefined;
+  }
+  try {
+    const rawState = window.sessionStorage.getItem(REDUX_SESSION_STORAGE_KEY);
+    if (!rawState) {
+      return undefined;
+    }
+    const parsedState = JSON.parse(rawState) as PersistedReduxState;
+    const auth = sanitizeAuthState(parsedState.auth);
+    const gridColumns = sanitizeGridColumnsState(parsedState.gridColumns);
+    return auth || gridColumns ? { auth, gridColumns } : undefined;
+  } catch {
+    window.sessionStorage.removeItem(REDUX_SESSION_STORAGE_KEY);
+    return undefined;
+  }
+}
+
+function persistReduxState(state: RootState): void {
+  if (!canUseSessionStorage()) {
+    return;
+  }
+  const persistedAuth = state.auth.initialized
+    ? sanitizeAuthState(state.auth)
+    : loadPersistedReduxState()?.auth;
+  const persistedState: PersistedReduxState = {
+    auth: persistedAuth,
+    gridColumns: sanitizeGridColumnsState(state.gridColumns),
+  };
+  try {
+    window.sessionStorage.setItem(REDUX_SESSION_STORAGE_KEY, JSON.stringify(persistedState));
+  } catch {
+    // Session storage may be blocked or full; Redux can continue without persistence.
+  }
+}
+
+export const makeStore = () => {
+  const preloadedState =
+    typeof window !== "undefined" ? loadPersistedReduxState() : undefined;
+  const store = configureStore({
+    reducer: rootReducer,
+    preloadedState,
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware().concat(baseApi.middleware),
   });
 
+  if (typeof window !== "undefined") {
+    let pendingPersist: number | null = null;
+    store.subscribe(() => {
+      if (pendingPersist !== null) {
+        return;
+      }
+      pendingPersist = window.setTimeout(() => {
+        pendingPersist = null;
+        persistReduxState(store.getState());
+      }, 250);
+    });
+  }
+
+  return store;
+};
+
 export type AppStore = ReturnType<typeof makeStore>;
-export type RootState = ReturnType<AppStore["getState"]>;
 export type AppDispatch = AppStore["dispatch"];

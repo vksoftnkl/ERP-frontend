@@ -13,7 +13,7 @@ Introduce Redux only where the application has shared, cacheable, or cross-route
 - There is no `RTK Query` setup yet.
 - The client currently uses `useApi` heavily for request state. Repository scan found about `140` `useApi(...)` call sites.
 - `useApi` performs cache refresh with a custom browser event (`erp:api-data-invalidated`) instead of Redux-managed invalidation.
-- Authentication is managed outside the store with direct `sessionStorage` helpers in `lib/auth/session.ts`, and route protection reads that state directly in `components/auth/global-route-guard.tsx`.
+- Authentication is mirrored in the Redux store and persisted through cookie-backed helpers in `lib/auth/session.ts`.
 - Shared master pages already converge in `components/master/crud-master-page.tsx`, which is reused by about `25` master screens. This is the best migration point for broad Redux adoption.
 - Several large screens still keep substantial duplicated local request and lookup state:
   - `features/masters/account-ledger/page.tsx`
@@ -89,11 +89,11 @@ Success criteria:
 - Refactor `app/(auth)/login/page.tsx` to dispatch auth success instead of writing session state directly.
 - Refactor `components/auth/global-route-guard.tsx` to read auth state from the store.
 - Refactor `components/layout/erp-header.tsx` logout flow to dispatch store-owned logout logic.
-- Keep `sessionStorage` as a persistence mechanism, but move reads and writes behind the slice or middleware layer.
+- Keep cookie persistence behind shared helpers so route guards and API clients do not read browser storage directly.
 
 Success criteria:
 
-- No route guard reads auth state directly from `sessionStorage`.
+- No route guard reads auth state directly from browser storage.
 - Login and logout flows are driven by Redux state changes.
 
 ### Phase 3: Shared Lookup and Metadata Caching

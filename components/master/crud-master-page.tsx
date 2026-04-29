@@ -25,6 +25,7 @@ import {
   type ERPDynamicModalSubmitPayload,
   type ERPDynamicModalVariant,
 } from "@/components/library/ui/dynamic-modal-form";
+import { FiDownload, FiSearch } from "react-icons/fi";
 const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
@@ -1464,6 +1465,91 @@ function buildColumnsFromDynamicListResponseStyles(
   return buildColumnsFromGridColumns(styleGridColumns, lookupKeys, fallbackColumns);
 }
 
+function toCsvCellValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  return String(value);
+}
+
+function escapeCsvValue(value: unknown): string {
+  const normalized = toCsvCellValue(value);
+  if (/[",\n\r]/.test(normalized)) {
+    return `"${normalized.replace(/"/g, '""')}"`;
+  }
+  return normalized;
+}
+
+function reactNodeToCsvHeader(value: ReactNode, fallback: string): string {
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+  return fallback;
+}
+
+function getColumnExportValue(
+  column: ReusableTableColumn<MasterTableRow>,
+  row: MasterTableRow,
+  rowIndex: number,
+): unknown {
+  if (column.searchAccessor) {
+    return column.searchAccessor(row, rowIndex);
+  }
+  if (column.sortAccessor) {
+    return column.sortAccessor(row, rowIndex);
+  }
+  if (column.accessor) {
+    return row[column.accessor];
+  }
+  return "";
+}
+
+function toCsvFilename(title: string): string {
+  const slug = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `${slug || "master"}-${new Date().toISOString().slice(0, 10)}.csv`;
+}
+
+function downloadMasterRowsCsv(
+  title: string,
+  columns: ReusableTableColumn<MasterTableRow>[],
+  rows: MasterTableRow[],
+): void {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+
+  const exportColumns = columns.filter((column) => column.key !== "actions");
+  const csv = [
+    exportColumns.map((column) => escapeCsvValue(reactNodeToCsvHeader(column.header, column.key))),
+    ...rows.map((row, rowIndex) =>
+      exportColumns.map((column) =>
+        escapeCsvValue(getColumnExportValue(column, row, rowIndex)),
+      ),
+    ),
+  ]
+    .map((row) => row.join(","))
+    .join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = toCsvFilename(title);
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export default function CrudMasterPage({
   title,
   entityLabel,
@@ -1812,6 +1898,29 @@ export default function CrudMasterPage({
     });
   }, [createInitialValues, resetDetailsState, resetSaveState]);
 
+  useEffect(() => {
+    if (hideListPage) {
+      return;
+    }
+
+    const handleCreateShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+      if (event.key.toLowerCase() !== "c") {
+        return;
+      }
+
+      event.preventDefault();
+      openCreateModal();
+    };
+
+    window.addEventListener("keydown", handleCreateShortcut);
+    return () => {
+      window.removeEventListener("keydown", handleCreateShortcut);
+    };
+  }, [hideListPage, openCreateModal]);
+
   const openUpdateModalById = useCallback(
     async (
       recordId: string | number,
@@ -2141,7 +2250,6 @@ export default function CrudMasterPage({
     resetDetailsState();
     setEditingItemId(null);
   }, [resetDetailsState, resetSaveState, saveLoading]);
-
   const handleDeleteRow = useCallback(
     (row: MasterTableRow) => {
       if (deleteLoading || saveLoading || detailsLoading) {
@@ -2152,20 +2260,16 @@ export default function CrudMasterPage({
     },
     [deleteLoading, detailsLoading, saveLoading],
   );
-
   const handleDeleteCancel = useCallback(() => {
     if (deleteLoading) {
       return;
     }
-
     setPendingDeleteRow(null);
   }, [deleteLoading]);
-
   const handleDeleteConfirm = useCallback(() => {
     if (!pendingDeleteRow || deleteLoading || saveLoading || detailsLoading) {
       return;
     }
-
     void (async () => {
       try {
         const row = pendingDeleteRow;
@@ -2176,7 +2280,6 @@ export default function CrudMasterPage({
             [requestPayloadKeys.id]: String(deleteId),
           },
         });
-
         setSelectedRowId((current) =>
           current === row.__rowId ? null : current,
         );
@@ -2212,7 +2315,6 @@ export default function CrudMasterPage({
     searchTerm,
     afterDeleteSuccess,
   ]);
-
   const fields = useMemo<ERPDynamicModalField[]>(
     () =>
       customFields ?? [
@@ -2262,7 +2364,6 @@ export default function CrudMasterPage({
       ],
     [customFields, entityLabel, nameFieldLabel, nameFieldPlaceholder, title],
   );
-
   const viewFields = useMemo<ERPDynamicModalField[]>(
     () =>
       fields.map((field) => ({
@@ -2273,7 +2374,6 @@ export default function CrudMasterPage({
       })),
     [fields],
   );
-
   const variants = useMemo<ERPDynamicModalVariant[]>(
     () => [
       {
@@ -2319,14 +2419,12 @@ export default function CrudMasterPage({
     },
     [openUpdateModalForRow],
   );
-
   const handleRowView = useCallback(
     (row: MasterTableRow) => {
       openViewModalForRow(row);
     },
     [openViewModalForRow],
   );
-
   const handleRowDelete = useCallback(
     (row: MasterTableRow) => {
       setSelectedRowId(row.__rowId);
@@ -2334,13 +2432,11 @@ export default function CrudMasterPage({
     },
     [handleDeleteRow],
   );
-
   const handleRowLogs = useCallback(
     (row: MasterTableRow) => {
       if (!auditHistory) {
         return;
       }
-
       const recordId =
         auditHistory.getRecordId?.(row) ?? resolveAuditHistoryRecordId(row);
       const normalizedRecordId =
@@ -2348,7 +2444,6 @@ export default function CrudMasterPage({
       if (!normalizedRecordId) {
         return;
       }
-
       setAuditHistoryModal({
         screenName: auditHistory.screenName,
         recordPk: normalizedRecordId,
@@ -2358,12 +2453,38 @@ export default function CrudMasterPage({
     },
     [auditHistory],
   );
-
   const handleSearchChange = useCallback((query: string) => {
     setCurrentPage(DEFAULT_PAGE);
     setSearchTerm(query);
   }, []);
-
+  const listHeading = gridDisplayName
+    ? `${gridDisplayName} List`
+    : listTitle ?? `${title} List`;
+  const handleDownloadRows = useCallback(() => {
+    downloadMasterRowsCsv(listHeading, columns, rows);
+  }, [columns, listHeading, rows]);
+  const masterToolbarContent = (
+    <div className={styles.masterHeader}>
+      <div className={styles.masterTitleWrap}>
+        <h1 className={styles.masterTitle}>{listHeading}</h1>
+        {toolbarContent ? (
+          <div className={styles.masterToolbarSlot}>{toolbarContent}</div>
+        ) : null}
+      </div>
+      <div className={styles.masterSearchWrap}>
+        <FiSearch className={styles.masterSearchIcon} aria-hidden="true" />
+        <input
+          type="text"
+          className={styles.masterSearchInput}
+          value={searchTerm}
+          onChange={(event) => handleSearchChange(event.target.value)}
+          placeholder="Search..."
+          autoComplete="off"
+          aria-label={`Search ${entityLabelPlural}`}
+        />
+      </div>
+    </div>
+  );
   return (
     <>
       {!hideListPage ? (
@@ -2426,15 +2547,25 @@ export default function CrudMasterPage({
                   columns={columns}
                   rows={rows}
                   rowKey="__rowId"
-                  title={
-                    gridDisplayName
-                      ? `${gridDisplayName} List`
-                      : listTitle ?? `${title} List`
+                  toolbarContent={masterToolbarContent}
+                  toolbarActions={
+                    <button
+                      type="button"
+                      className={styles.masterDownloadButton}
+                      onClick={handleDownloadRows}
+                      disabled={rows.length === 0}
+                      aria-label={`Download ${listHeading}`}
+                      title={`Download ${listHeading}`}
+                    >
+                      <FiDownload aria-hidden="true" />
+                    </button>
                   }
-                  toolbarContent={toolbarContent}
+                  wrapperClassName={styles.masterTable}
+                  tableClassName={styles.masterDataTable}
                   minWidth="980px"
                   activeRowKey={selectedRowId}
                   onRowClick={(row) => setSelectedRowId(row.__rowId)}
+                  onRowDoubleClick={handleRowView}
                   onCreate={openCreateModal}
                   createLabel={createLabel ?? "Add"}
                   onView={handleRowView}
@@ -2450,7 +2581,6 @@ export default function CrudMasterPage({
                     if (!auditHistory) {
                       return true;
                     }
-
                     const recordId =
                       auditHistory.getRecordId?.(row) ?? resolveAuditHistoryRecordId(row);
                     return recordId === null || recordId === undefined || `${recordId}`.trim().length === 0;
@@ -2458,10 +2588,6 @@ export default function CrudMasterPage({
                   actionsAsIcons
                   updateLabel="Update"
                   deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
-                  searchable
-                  searchQuery={searchTerm}
-                  onSearchQueryChange={handleSearchChange}
-                  searchPlaceholder="Search..."
                   sortable
                   paginated
                   manualPagination

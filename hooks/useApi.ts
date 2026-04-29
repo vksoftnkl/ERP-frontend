@@ -2,6 +2,8 @@ import axios from "axios";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { clearAuthSession, getAuthSession } from "@/lib/auth/session";
+import { useAppDispatch } from "@/store/hooks";
+import { authSessionChanged } from "@/store/slices/authSlice";
 type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 type UseApiToastOptions = {
   success?: boolean;
@@ -236,6 +238,7 @@ export function useApi<TResp = unknown, TBody = unknown>(
   url: string,
   options: UseApiOptions<TBody> = {}
 ) {
+  const dispatch = useAppDispatch();
   const { method = "GET", headers, body: defaultBody, toast: toastOptions } = options;
   const [data, setData] = useState<TResp | null>(null);
   const [loading, setLoading] = useState(false);
@@ -276,6 +279,7 @@ export function useApi<TResp = unknown, TBody = unknown>(
       if (!loginRequest && !hasAuthorization) {
         const message = "Session expired. Please login again.";
         clearAuthSession();
+        dispatch(authSessionChanged({ isAuthenticated: false }));
         setError(message);
         if (shouldToastError) {
           showErrorToast(activeToastOptions?.errorMessage ?? message);
@@ -313,6 +317,7 @@ export function useApi<TResp = unknown, TBody = unknown>(
           const statusCode = e.response?.status;
           if (!loginRequest && statusCode === 401) {
             clearAuthSession();
+            dispatch(authSessionChanged({ isAuthenticated: false }));
             redirectToLogin();
           }
           const responseData = e.response?.data as unknown;
@@ -342,7 +347,7 @@ export function useApi<TResp = unknown, TBody = unknown>(
         setLoading(false);
       }
     },
-    [url, method]
+    [dispatch, url, method]
   );
   useEffect(() => {
     if (typeof window === "undefined") {

@@ -532,7 +532,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const resolvedOnUpdate = onUpdate ?? onEdit;
   const resolvedIsUpdateDisabled = isUpdateDisabled ?? isEditDisabled;
   const resolvedUpdateLabel = updateLabel ?? editLabel ?? "Edit";
-  const hasRowActions = Boolean(onView || resolvedOnUpdate || onDuplicate || onDelete || onLogs);
+  const hasRowActions = Boolean(resolvedOnUpdate || onDuplicate || onDelete || onLogs);
   const hasActionsColumn = columns.some((column) => isActionsColumn(column));
   const shouldRenderInlineActionMenu = false;
   const baseColumns = shouldRenderInlineActionMenu
@@ -989,8 +989,9 @@ export function ReusableTable<T extends Record<string, unknown>>({
     logsDisabled: boolean,
   ): ReactNode => {
     const isActionMenuOpen = openActionMenuKey === resolvedKey;
+    const hasDropdownActions = Boolean(onDuplicate || onLogs || onDelete);
     const actionMenu =
-      isActionMenuOpen && typeof document !== "undefined" ? (
+      isActionMenuOpen && hasDropdownActions && typeof document !== "undefined" ? (
         <div
           className={cx(
             styles.actionsDropdownPortal,
@@ -1002,18 +1003,6 @@ export function ReusableTable<T extends Record<string, unknown>>({
           role="menu"
           aria-label="Row actions"
         >
-          {resolvedOnUpdate ? (
-            <button
-              type="button"
-              role="menuitem"
-              className={styles.actionsDropdownItem}
-              onClick={(event) => handleActionClick(event, resolvedOnUpdate, row, rowIndex)}
-              disabled={updateDisabled}
-            >
-              <ActionIcon type="update" />
-              <span>{resolvedUpdateLabel}</span>
-            </button>
-          ) : null}
           {onDuplicate ? (
             <button
               type="button"
@@ -1024,18 +1013,6 @@ export function ReusableTable<T extends Record<string, unknown>>({
             >
               <ActionIcon type="duplicate" />
               <span>{duplicateLabel}</span>
-            </button>
-          ) : null}
-          {onView ? (
-            <button
-              type="button"
-              role="menuitem"
-              className={styles.actionsDropdownItem}
-              onClick={(event) => handleActionClick(event, onView, row, rowIndex)}
-              disabled={viewDisabled}
-            >
-              <ActionIcon type="view" />
-              <span>{viewLabel}</span>
             </button>
           ) : null}
           {onLogs ? (
@@ -1067,17 +1044,32 @@ export function ReusableTable<T extends Record<string, unknown>>({
 
     return (
       <div className={styles.actionsMenuRoot} data-erp-actions-root="true">
-        <button
-          type="button"
-          className={styles.actionsTrigger}
-          aria-label="Open row actions"
-          aria-haspopup="menu"
-          aria-expanded={isActionMenuOpen}
-          onClick={(event) => handleActionMenuToggle(event, resolvedKey)}
-          onMouseDown={(event) => event.stopPropagation()}
-        >
-          <FiMoreVertical className={styles.actionsTriggerIcon} aria-hidden="true" />
-        </button>
+        {resolvedOnUpdate ? (
+          <button
+            type="button"
+            className={cx(styles.actionButton, styles.iconActionButton, styles.updateButton)}
+            aria-label={resolvedUpdateLabel}
+            title={resolvedUpdateLabel}
+            onClick={(event) => handleActionClick(event, resolvedOnUpdate, row, rowIndex)}
+            onMouseDown={(event) => event.stopPropagation()}
+            disabled={updateDisabled}
+          >
+            <ActionIcon type="update" />
+          </button>
+        ) : null}
+        {hasDropdownActions ? (
+          <button
+            type="button"
+            className={styles.actionsTrigger}
+            aria-label="Open row actions"
+            aria-haspopup="menu"
+            aria-expanded={isActionMenuOpen}
+            onClick={(event) => handleActionMenuToggle(event, resolvedKey)}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <FiMoreVertical className={styles.actionsTriggerIcon} aria-hidden="true" />
+          </button>
+        ) : null}
         {actionMenu ? createPortal(actionMenu, document.body) : null}
       </div>
     );

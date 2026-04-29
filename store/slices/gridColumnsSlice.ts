@@ -133,14 +133,14 @@ export type GridColumnConfig = {
   color?: string;
 };
 
-type GridColumnsEntry = {
+export type GridColumnsEntry = {
   items: GridColumnConfig[];
   loading: boolean;
   error: string | null;
   requested: boolean;
 };
 
-type GridColumnsState = {
+export type GridColumnsState = {
   byGridId: Record<number, GridColumnsEntry>;
 };
 
@@ -459,7 +459,11 @@ export const fetchGridColumns = createAsyncThunk<
 const gridColumnsSlice = createSlice({
   name: "gridColumns",
   initialState,
-  reducers: {},
+  reducers: {
+    gridColumnsHydrated(_state, action) {
+      return action.payload as GridColumnsState;
+    },
+  },
   extraReducers: (builder) => {
     builder.addCase(fetchGridColumns.pending, (state, action) => {
       const { gridId } = action.meta.arg;
@@ -490,6 +494,8 @@ const gridColumnsSlice = createSlice({
     });
   },
 });
+
+export const { gridColumnsHydrated } = gridColumnsSlice.actions;
 
 function selectGridColumnsEntry(state: RootState, gridId: number): GridColumnsEntry {
   return state.gridColumns.byGridId[gridId] ?? EMPTY_ENTRY;

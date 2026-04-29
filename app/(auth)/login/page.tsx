@@ -3,10 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import clientPackageJson from "../../../package.json";
 import {
-  extractAuthToken,
-  extractAuthUserId,
   getOrCreateClientDeviceId,
-  setAuthSession,
 } from "@/lib/auth/session";
 import {
   canUseClientSideRouting,
@@ -14,8 +11,6 @@ import {
 } from "@/lib/navigation/safe-route";
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useLoginMutation } from "@/store/api/authApi";
-import { useAppDispatch } from "@/store/hooks";
-import { authSessionChanged } from "@/store/slices/authSlice";
 const CLIENT_APP_VERSION = `erp-client@${clientPackageJson.version}`;
 type Errors = {
   username?: string;
@@ -26,7 +21,6 @@ function normalizeNextRoute(nextRoute: string | null): string {
   return normalizedRoute.startsWith("/login") ? "/" : normalizedRoute;
 }
 export default function LoginPage() {
-  const dispatch = useAppDispatch();
   const router = useRouter();
   const [values, setValues] = useState({ username: "", password: "" });
   const [errors, setErrors] = useState<Errors>({});
@@ -54,10 +48,7 @@ export default function LoginPage() {
         device_id: getOrCreateClientDeviceId() ?? undefined,
         app_version: CLIENT_APP_VERSION,
       }).unwrap();
-      const token = extractAuthToken(response);
-      const userId = extractAuthUserId(response);
-      const hasSession = setAuthSession(token, userId);
-      if (!hasSession) {
+      if (!response.authenticated) {
         setAuthError("Token missing in login response.");
         if (canUseClientSideRouting()) {
           router.replace("/login");
@@ -66,7 +57,6 @@ export default function LoginPage() {
         }
         return;
       }
-      dispatch(authSessionChanged({ token, userId }));
       const nextRoute = normalizeNextRoute(
         new URLSearchParams(window.location.search).get("next")
       );

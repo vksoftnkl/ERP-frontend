@@ -2,6 +2,7 @@
 import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -25,6 +26,7 @@ import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import styles from "@/app/master/state-master/page.module.scss";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
 import { RecordHistoryModal } from "@/features/masters/record-history/page";
+import { FiDownload, FiSearch } from "react-icons/fi";
 
 // Import all modular logic
 import {
@@ -87,6 +89,82 @@ import {
   getFirstLedgerFocusableFieldTarget,
   focusLedgerFieldControl,
 } from "./form-navigation";
+
+function toCsvCellValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  return String(value);
+}
+
+function escapeCsvValue(value: unknown): string {
+  const normalized = toCsvCellValue(value);
+  if (/[",\n\r]/.test(normalized)) {
+    return `"${normalized.replace(/"/g, '""')}"`;
+  }
+  return normalized;
+}
+
+function reactNodeToCsvHeader(value: ReactNode, fallback: string): string {
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+  return fallback;
+}
+
+function getColumnExportValue(
+  column: ReusableTableColumn<LedgerTableRow>,
+  row: LedgerTableRow,
+  rowIndex: number,
+): unknown {
+  if (column.searchAccessor) {
+    return column.searchAccessor(row, rowIndex);
+  }
+  if (column.sortAccessor) {
+    return column.sortAccessor(row, rowIndex);
+  }
+  if (column.accessor) {
+    return row[column.accessor];
+  }
+  return "";
+}
+
+function downloadLedgerCsv(
+  title: string,
+  columns: ReusableTableColumn<LedgerTableRow>[],
+  rows: LedgerTableRow[],
+): void {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+
+  const exportColumns = columns.filter((column) => column.key !== "actions");
+  const csv = [
+    exportColumns.map((column) => escapeCsvValue(reactNodeToCsvHeader(column.header, column.key))),
+    ...rows.map((row, rowIndex) =>
+      exportColumns.map((column) =>
+        escapeCsvValue(getColumnExportValue(column, row, rowIndex)),
+      ),
+    ),
+  ]
+    .map((row) => row.join(","))
+    .join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `account-ledger-master-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
+}
 
 const LEDGER_SECTION_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   {
@@ -808,6 +886,25 @@ export default function AccountLedgerMasterPage() {
     setIsFormModalOpen(true);
   }, [ledgerFormSections, resetDetailsState, resetSaveState]);
 
+  useEffect(() => {
+    const handleCreateShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+      if (event.key.toLowerCase() !== "c") {
+        return;
+      }
+
+      event.preventDefault();
+      openCreateModal();
+    };
+
+    window.addEventListener("keydown", handleCreateShortcut);
+    return () => {
+      window.removeEventListener("keydown", handleCreateShortcut);
+    };
+  }, [openCreateModal]);
+
   const openExistingModal = useCallback(
     async (row: LedgerTableRow, mode: Exclude<ModalMode, "create">) => {
       resetSaveState();
@@ -1296,6 +1393,30 @@ export default function AccountLedgerMasterPage() {
     setPageSize(nextPageSize);
   }, []);
 
+  const listHeading = `${effectiveTitle} List`;
+  const handleDownloadRows = useCallback(() => {
+    downloadLedgerCsv(listHeading, columns, rows);
+  }, [columns, listHeading, rows]);
+  const toolbarContent = (
+    <div className={styles.masterHeader}>
+      <div className={styles.masterTitleWrap}>
+        <h1 className={styles.masterTitle}>{listHeading}</h1>
+      </div>
+      <div className={styles.masterSearchWrap}>
+        <FiSearch className={styles.masterSearchIcon} aria-hidden="true" />
+        <input
+          type="text"
+          className={styles.masterSearchInput}
+          value={searchTerm}
+          onChange={(event) => handleSearchChange(event.target.value)}
+          placeholder="Search..."
+          autoComplete="off"
+          aria-label="Search account ledgers"
+        />
+      </div>
+    </div>
+  );
+
   const pendingDeleteLabel = useMemo(() => {
     if (!pendingDeleteRow) return "";
     return (
@@ -1415,10 +1536,25 @@ export default function AccountLedgerMasterPage() {
               columns={columns}
               rows={rows}
               rowKey="__rowId"
-              title={`${effectiveTitle} List`}
+              toolbarContent={toolbarContent}
+              toolbarActions={
+                <button
+                  type="button"
+                  className={styles.masterDownloadButton}
+                  onClick={handleDownloadRows}
+                  disabled={rows.length === 0}
+                  aria-label={`Download ${listHeading}`}
+                  title={`Download ${listHeading}`}
+                >
+                  <FiDownload aria-hidden="true" />
+                </button>
+              }
+              wrapperClassName={styles.masterTable}
+              tableClassName={styles.masterDataTable}
               minWidth="980px"
               activeRowKey={selectedRowId}
               onRowClick={(row) => setSelectedRowId(row.__rowId)}
+              onRowDoubleClick={(row) => void openExistingModal(row, "view")}
               onCreate={openCreateModal}
               createLabel="Add"
               onView={(row) => void openExistingModal(row, "view")}
@@ -1432,10 +1568,6 @@ export default function AccountLedgerMasterPage() {
               actionsAsIcons
               updateLabel="Update"
               deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
-              searchable
-              searchQuery={searchTerm}
-              onSearchQueryChange={handleSearchChange}
-              searchPlaceholder="Search..."
               sortable
               paginated
               manualPagination

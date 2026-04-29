@@ -35,8 +35,12 @@ import type {
   TabStripProps,
 } from "./types";
 import { useGetPrimaryMenuQuery } from "@/store/api/shellApi";
-import { useAppDispatch } from "@/store/hooks";
-import { authSessionChanged } from "@/store/slices/authSlice";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  authSessionChanged,
+  recentPagesChanged,
+  selectRecentPages,
+} from "@/store/slices/authSlice";
 export type { ErpHeaderItem, ErpHeaderProps } from "./types";
 
 // ─── Utility functions ────────────────────────────────────────────────────────
@@ -73,6 +77,13 @@ function toFallbackRecentPageLabel(pathname: string): string {
   const lastSegment = pathname.split("/").filter(Boolean).pop() ?? "";
   if (!lastSegment) return "Home";
   return toTitleCaseLabel(lastSegment.replace(/[-_]+/g, " ").trim()) || "Recent Page";
+}
+
+function areRecentPagesEqual(left: RecentPageOption[], right: RecentPageOption[]): boolean {
+  return left.length === right.length && left.every((page, index) => {
+    const otherPage = right[index];
+    return page.path === otherPage?.path && page.label === otherPage.label;
+  });
 }
 
 function buildRouteLabelLookup(items: ErpHeaderItem[]): Map<string, string> {
@@ -783,6 +794,7 @@ export default function ErpHeader({
   billPlaceholder = "Enter Bill No",
 }: ErpHeaderProps) {
   const dispatch = useAppDispatch();
+  const recentPages = useAppSelector(selectRecentPages);
   const pathname = usePathname();
   const router = useRouter();
   const primaryMenuRef = useRef<HTMLElement | null>(null);
@@ -800,7 +812,6 @@ export default function ErpHeader({
     selectedBranch ?? getDefaultBranchValue(branchOptions)
   );
   const [localBillNumber, setLocalBillNumber] = useState(billNumber ?? "");
-  const [recentPages, setRecentPages] = useState<RecentPageOption[]>([]);
   const [selectedRecentPage, setSelectedRecentPage] = useState("");
 
   // Tracks the date shown in the header. Starts as today; updated on calendar pick.
@@ -872,10 +883,21 @@ export default function ErpHeader({
   useEffect(() => { closeFocusedMenu(); }, [closeFocusedMenu, pathname]);
 
   useEffect(() => {
-    if (!pathname) { setRecentPages(readRecentPages()); return; }
-    if (!isTrackableRecentPagePath(pathname)) { setRecentPages(readRecentPages()); return; }
-    setRecentPages(upsertRecentPage({ path: pathname, label: resolvedCurrentPageLabel }));
-  }, [pathname, resolvedCurrentPageLabel]);
+    if (!pathname || !isTrackableRecentPagePath(pathname)) {
+      const persistedRecentPages = readRecentPages();
+      if (!areRecentPagesEqual(recentPages, persistedRecentPages)) {
+        dispatch(recentPagesChanged(persistedRecentPages));
+      }
+      return;
+    }
+    const nextRecentPages = upsertRecentPage(
+      { path: pathname, label: resolvedCurrentPageLabel },
+      recentPages,
+    );
+    if (!areRecentPagesEqual(recentPages, nextRecentPages)) {
+      dispatch(recentPagesChanged(nextRecentPages));
+    }
+  }, [dispatch, pathname, recentPages, resolvedCurrentPageLabel]);
 
   useEffect(() => { setSelectedRecentPage(""); }, [pathname]);
 
@@ -930,9 +952,8 @@ export default function ErpHeader({
 
   const handleLogout = useCallback(() => {
     clearRecentPagesSession();
-    setRecentPages([]);
     if (onLogout) { onLogout(); return; }
-    dispatch(authSessionChanged({ token: null, userId: null }));
+    dispatch(authSessionChanged({ isAuthenticated: false }));
     clearAuthSession();
     clearBusinessContextSession();
     if (!canUseClientSideRouting()) { window.location.replace("/login"); return; }

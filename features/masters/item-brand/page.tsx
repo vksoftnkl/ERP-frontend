@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
@@ -16,6 +16,7 @@ import {
   type ERPDynamicModalSubmitPayload,
   type ERPDynamicModalVariant,
 } from "@/components/library/ui/dynamic-modal-form";
+import { FiDownload, FiSearch } from "react-icons/fi";
 const API_ENDPOINTS = {
   LIST: "/item-brands/list",
   GET_BY_ID: "/item-brands/get",
@@ -241,6 +242,82 @@ const DEFAULT_ITEM_BRAND_COLUMNS: ReusableTableColumn<ItemBrandTableRow>[] = [
     width: "120px",
   },
 ];
+
+function toCsvCellValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  return String(value);
+}
+
+function escapeCsvValue(value: unknown): string {
+  const normalized = toCsvCellValue(value);
+  if (/[",\n\r]/.test(normalized)) {
+    return `"${normalized.replace(/"/g, '""')}"`;
+  }
+  return normalized;
+}
+
+function reactNodeToCsvHeader(value: ReactNode, fallback: string): string {
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+  return fallback;
+}
+
+function getColumnExportValue(
+  column: ReusableTableColumn<ItemBrandTableRow>,
+  row: ItemBrandTableRow,
+  rowIndex: number,
+): unknown {
+  if (column.searchAccessor) {
+    return column.searchAccessor(row, rowIndex);
+  }
+  if (column.sortAccessor) {
+    return column.sortAccessor(row, rowIndex);
+  }
+  if (column.accessor) {
+    return row[column.accessor];
+  }
+  return "";
+}
+
+function downloadItemBrandCsv(
+  title: string,
+  columns: ReusableTableColumn<ItemBrandTableRow>[],
+  rows: ItemBrandTableRow[],
+): void {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+
+  const exportColumns = columns.filter((column) => column.key !== "actions");
+  const csv = [
+    exportColumns.map((column) => escapeCsvValue(reactNodeToCsvHeader(column.header, column.key))),
+    ...rows.map((row, rowIndex) =>
+      exportColumns.map((column) =>
+        escapeCsvValue(getColumnExportValue(column, row, rowIndex)),
+      ),
+    ),
+  ]
+    .map((row) => row.join(","))
+    .join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `item-brand-master-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
+}
 const ITEM_BRAND_COLUMN_ACCESSOR_MAP: Record<string, ItemBrandColumnAccessor> = {
   sno: "serialNo",
   srno: "serialNo",
@@ -977,6 +1054,26 @@ export default function ItemBrandMasterPage() {
       values: INITIAL_FORM_STATE,
     });
   }, [resetDetailsState, resetSaveState]);
+
+  useEffect(() => {
+    const handleCreateShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+      if (event.key.toLowerCase() !== "c") {
+        return;
+      }
+
+      event.preventDefault();
+      openCreateModal();
+    };
+
+    window.addEventListener("keydown", handleCreateShortcut);
+    return () => {
+      window.removeEventListener("keydown", handleCreateShortcut);
+    };
+  }, [openCreateModal]);
+
   const openUpdateModalForRow = useCallback(
     (row: ItemBrandTableRow) => {
       resetSaveState();
@@ -1290,6 +1387,29 @@ export default function ItemBrandMasterPage() {
     },
     [setCurrentPage, setSearchTerm],
   );
+  const listHeading = `${effectiveTitle} List`;
+  const handleDownloadRows = useCallback(() => {
+    downloadItemBrandCsv(listHeading, columns, rows);
+  }, [columns, listHeading, rows]);
+  const toolbarContent = (
+    <div className={styles.masterHeader}>
+      <div className={styles.masterTitleWrap}>
+        <h1 className={styles.masterTitle}>{listHeading}</h1>
+      </div>
+      <div className={styles.masterSearchWrap}>
+        <FiSearch className={styles.masterSearchIcon} aria-hidden="true" />
+        <input
+          type="text"
+          className={styles.masterSearchInput}
+          value={searchTerm}
+          onChange={(event) => handleSearchChange(event.target.value)}
+          placeholder="Search..."
+          autoComplete="off"
+          aria-label="Search item brands"
+        />
+      </div>
+    </div>
+  );
   return (
     <main className={styles.page}>
       <div className={styles.viewport}>
@@ -1350,10 +1470,25 @@ export default function ItemBrandMasterPage() {
               columns={columns}
               rows={rows}
               rowKey="__rowId"
-              title={`${effectiveTitle} List`}
+              toolbarContent={toolbarContent}
+              toolbarActions={
+                <button
+                  type="button"
+                  className={styles.masterDownloadButton}
+                  onClick={handleDownloadRows}
+                  disabled={rows.length === 0}
+                  aria-label={`Download ${listHeading}`}
+                  title={`Download ${listHeading}`}
+                >
+                  <FiDownload aria-hidden="true" />
+                </button>
+              }
+              wrapperClassName={styles.masterTable}
+              tableClassName={styles.masterDataTable}
               minWidth="980px"
               activeRowKey={selectedRowId}
               onRowClick={(row) => setSelectedRowId(row.__rowId)}
+              onRowDoubleClick={handleRowView}
               onCreate={openCreateModal}
               createLabel={`Add ${effectiveTitle}`}
               onView={handleRowView}
@@ -1369,10 +1504,6 @@ export default function ItemBrandMasterPage() {
               actionsAsIcons
               updateLabel="Update"
               deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
-              searchable
-              searchQuery={searchTerm}
-              onSearchQueryChange={handleSearchChange}
-              searchPlaceholder="Search..."
               sortable
               paginated
               manualPagination
