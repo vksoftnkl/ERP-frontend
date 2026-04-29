@@ -52,11 +52,7 @@ export default function GlobalRouteGuard({ children }: { children: ReactNode }) 
     }
   }, [authInitialized, isAuthenticated, pathname, publicRoute, router]);
 
-  if (!authInitialized && !publicRoute) return null;
-
-  if ((!isAuthenticated && !publicRoute) || (isAuthenticated && pathname === "/login")) {
-    return null;
-  }
-
+  // Always render children to avoid hydration mismatch
+  // Navigation logic is handled by useEffect above
   return <>{children}</>;
 }
