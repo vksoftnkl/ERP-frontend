@@ -3,11 +3,13 @@ const REDUX_SESSION_STORAGE_KEY = "erp_client_redux_state";
 export const AUTH_SESSION_EVENT = "erp:auth-session-changed";
 export type AuthSessionChangeDetail = {
   token: string | null;
+  refreshToken: string | null;
   userId: string | null;
 };
 type StorageValue = string | number | null | undefined;
 type JsonRecord = Record<string, unknown>;
 let memoryAuthToken: string | null = null;
+let memoryRefreshToken: string | null = null;
 let memoryAuthUserId: string | null = null;
 function asRecord(value: unknown): JsonRecord | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -33,13 +35,17 @@ function pickFirstString(values: Array<unknown>): string | null {
   }
   return null;
 }
-function emitAuthSessionChange(token: string | null, userId: string | null): void {
+function emitAuthSessionChange(
+  token: string | null,
+  refreshToken: string | null,
+  userId: string | null,
+): void {
   if (typeof window === "undefined") {
     return;
   }
   window.dispatchEvent(
     new CustomEvent<AuthSessionChangeDetail>(AUTH_SESSION_EVENT, {
-      detail: { token, userId },
+      detail: { token, refreshToken, userId },
     }),
   );
 }
@@ -56,7 +62,11 @@ function readPersistedAuthState(): JsonRecord | null {
     return null;
   }
 }
-function writePersistedAuthSession(token: string | null, userId: string | null): void {
+function writePersistedAuthSession(
+  token: string | null,
+  refreshToken: string | null,
+  userId: string | null,
+): void {
   if (typeof window === "undefined" || typeof window.sessionStorage === "undefined") {
     return;
   }
@@ -69,6 +79,7 @@ function writePersistedAuthSession(token: string | null, userId: string | null):
       initialized: true,
       isAuthenticated: Boolean(token),
       token,
+      refreshToken: token ? refreshToken : null,
       userId: token ? userId : null,
       recentPages: token && Array.isArray(currentAuth.recentPages) ? currentAuth.recentPages : [],
       businessContext: token ? currentAuth.businessContext ?? null : null,
@@ -112,6 +123,23 @@ export function extractAuthToken(payload: unknown): string | null {
     nestedResult?.id_token,
   ]);
 }
+
+export function extractRefreshToken(payload: unknown): string | null {
+  const root = asRecord(payload);
+  if (!root) {
+    return null;
+  }
+  const nestedData = asRecord(root.data);
+  const nestedResult = asRecord(root.result);
+  return pickFirstString([
+    root.refreshToken,
+    root.refresh_token,
+    nestedData?.refreshToken,
+    nestedData?.refresh_token,
+    nestedResult?.refreshToken,
+    nestedResult?.refresh_token,
+  ]);
+}
 export function extractAuthUserId(payload: unknown): string | null {
   const root = asRecord(payload);
   if (!root) {
@@ -152,7 +180,11 @@ export function extractAuthUserId(payload: unknown): string | null {
     nestedResult?.id,
   ]);
 }
-export function setAuthSession(token?: string | null, userId?: StorageValue): boolean {
+export function setAuthSession(
+  token?: string | null,
+  userId?: StorageValue,
+  refreshToken?: string | null,
+): boolean {
   if (typeof window === "undefined") {
     return false;
   }
@@ -161,11 +193,13 @@ export function setAuthSession(token?: string | null, userId?: StorageValue): bo
     clearAuthSession();
     return false;
   }
+  const normalizedRefreshToken = normalizeStoredValue(refreshToken);
   const normalizedUserId = normalizeStoredValue(userId);
   memoryAuthToken = normalizedToken;
+  memoryRefreshToken = normalizedRefreshToken;
   memoryAuthUserId = normalizedUserId;
-  writePersistedAuthSession(normalizedToken, normalizedUserId);
-  emitAuthSessionChange(normalizedToken, normalizedUserId);
+  writePersistedAuthSession(normalizedToken, normalizedRefreshToken, normalizedUserId);
+  emitAuthSessionChange(normalizedToken, normalizedRefreshToken, normalizedUserId);
   return true;
 }
 export function clearAuthSession(): void {
@@ -173,12 +207,19 @@ export function clearAuthSession(): void {
     return;
   }
   memoryAuthToken = null;
+  memoryRefreshToken = null;
   memoryAuthUserId = null;
-  writePersistedAuthSession(null, null);
-  emitAuthSessionChange(null, null);
+  writePersistedAuthSession(null, null, null);
+  emitAuthSessionChange(null, null, null);
 }
 export function getAuthSession(): string | null {
   return memoryAuthToken ?? normalizeStoredValue(readPersistedAuthState()?.token as StorageValue);
+}
+export function getRefreshToken(): string | null {
+  return (
+    memoryRefreshToken ??
+    normalizeStoredValue(readPersistedAuthState()?.refreshToken as StorageValue)
+  );
 }
 export function getAuthUserId(): string | null {
   return memoryAuthUserId ?? normalizeStoredValue(readPersistedAuthState()?.userId as StorageValue);

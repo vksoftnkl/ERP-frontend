@@ -1,7 +1,15 @@
 import axios from "axios";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { clearAuthSession, getAuthSession } from "@/lib/auth/session";
+import {
+  clearAuthSession,
+  extractAuthToken,
+  extractAuthUserId,
+  extractRefreshToken,
+  getAuthSession,
+  getRefreshToken,
+  setAuthSession,
+} from "@/lib/auth/session";
 import { useAppDispatch } from "@/store/hooks";
 import { authSessionChanged } from "@/store/slices/authSlice";
 type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -140,6 +148,23 @@ function normalizeMessage(value: unknown, fallback: string): string {
   const extracted = extractMessage(value);
   return extracted || fallback;
 }
+
+function isCanceledRequestError(error: unknown): boolean {
+  if (axios.isCancel(error)) {
+    return true;
+  }
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const record = error as { code?: unknown; name?: unknown; message?: unknown };
+  return (
+    record.code === "ERR_CANCELED" ||
+    record.name === "AbortError" ||
+    record.name === "CanceledError" ||
+    record.message === "canceled"
+  );
+}
+
 function showErrorToast(message: unknown): void {
   const normalizedMessage = normalizeMessage(message, "Something went wrong");
   toast.error(normalizedMessage, { toastId: `api-error:${normalizedMessage}` });
@@ -234,6 +259,41 @@ function buildHeaders(
   nextHeaders.Authorization = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
   return nextHeaders;
 }
+
+let refreshRequest: Promise<boolean> | null = null;
+
+async function refreshAuthSession(dispatch: ReturnType<typeof useAppDispatch>): Promise<boolean> {
+  if (refreshRequest) {
+    return refreshRequest;
+  }
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    return false;
+  }
+  refreshRequest = axios
+    .post<unknown>(
+      "/auth/refresh",
+      { refresh_token: refreshToken },
+      { baseURL: API_BASE || undefined },
+    )
+    .then((response) => {
+      const token = extractAuthToken(response.data);
+      if (!token) {
+        return false;
+      }
+      const nextRefreshToken = extractRefreshToken(response.data) ?? refreshToken;
+      const userId = extractAuthUserId(response.data);
+      setAuthSession(token, userId, nextRefreshToken);
+      dispatch(authSessionChanged({ token, refreshToken: nextRefreshToken, userId }));
+      return true;
+    })
+    .catch(() => false)
+    .finally(() => {
+      refreshRequest = null;
+    });
+  return refreshRequest;
+}
+
 export function useApi<TResp = unknown, TBody = unknown>(
   url: string,
   options: UseApiOptions<TBody> = {}
@@ -253,8 +313,13 @@ export function useApi<TResp = unknown, TBody = unknown>(
   toastOptionsRef.current = toastOptions;
   const run = useCallback(
     async (override?: UseApiRunOverride<TBody>) => {
-      // cancel previous request (optional)
-      abortRef.current?.abort();
+      try {
+        abortRef.current?.abort();
+      } catch (error) {
+        if (!isCanceledRequestError(error)) {
+          throw error;
+        }
+      }
       const controller = new AbortController();
       abortRef.current = controller;
       const requestOverride = override
@@ -290,7 +355,7 @@ export function useApi<TResp = unknown, TBody = unknown>(
       setLoading(true);
       setError(null);
       try {
-        const resp = await axios.request<TResp>({
+        const requestConfig = {
           url: requestUrl,
           method,
           baseURL: API_BASE || undefined,
@@ -301,7 +366,8 @@ export function useApi<TResp = unknown, TBody = unknown>(
               ? undefined
               : requestOverride?.body ?? defaultBodyRef.current ?? {},
           signal: controller.signal,
-        });
+        };
+        let resp = await axios.request<TResp>(requestConfig);
         const json = resp.data as TResp;
         setData(json);
         if (!loginRequest && isMutationMethod(method)) {
@@ -312,10 +378,31 @@ export function useApi<TResp = unknown, TBody = unknown>(
         }
         return json;
       } catch (e: any) {
-        if (e?.name === "AbortError" || e?.name === "CanceledError") return; // ignore cancels
+        if (isCanceledRequestError(e)) {
+          return;
+        }
         if (axios.isAxiosError(e)) {
           const statusCode = e.response?.status;
           if (!loginRequest && statusCode === 401) {
+            const refreshed = await refreshAuthSession(dispatch);
+            if (refreshed) {
+              const retryHeaders = buildHeaders(requestUrl, headersRef.current);
+              try {
+                const retryResponse = await axios.request<TResp>({
+                  ...e.config,
+                  headers: retryHeaders,
+                  signal: controller.signal,
+                });
+                const json = retryResponse.data as TResp;
+                setData(json);
+                return json;
+              } catch (retryError) {
+                if (isCanceledRequestError(retryError)) {
+                  return;
+                }
+                throw retryError;
+              }
+            }
             clearAuthSession();
             dispatch(authSessionChanged({ isAuthenticated: false }));
             redirectToLogin();
@@ -344,7 +431,10 @@ export function useApi<TResp = unknown, TBody = unknown>(
         }
         throw e;
       } finally {
-        setLoading(false);
+        if (abortRef.current === controller) {
+          abortRef.current = null;
+          setLoading(false);
+        }
       }
     },
     [dispatch, url, method]

@@ -2,6 +2,7 @@ import { baseApi } from "@/store/api/baseApi";
 import {
   extractAuthToken,
   extractAuthUserId,
+  extractRefreshToken,
   setAuthSession,
 } from "@/lib/auth/session";
 import { authSessionChanged } from "@/store/slices/authSlice";
@@ -27,8 +28,9 @@ export const authApi = baseApi.injectEndpoints({
           return { error: result.error };
         }
         const token = extractAuthToken(result.data);
+        const refreshToken = extractRefreshToken(result.data);
         const userId = extractAuthUserId(result.data);
-        const authenticated = setAuthSession(token, userId);
+        const authenticated = setAuthSession(token, userId, refreshToken);
         if (!authenticated) {
           return {
             error: {
@@ -36,7 +38,7 @@ export const authApi = baseApi.injectEndpoints({
             },
           };
         }
-        api.dispatch(authSessionChanged({ token, userId }));
+        api.dispatch(authSessionChanged({ token, refreshToken, userId }));
         return { data: { authenticated } };
       },
       invalidatesTags: ["Auth"],

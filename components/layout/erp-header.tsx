@@ -404,7 +404,7 @@ function RecentPagesDropdown({
         type="button"
         className={styles.recentPagesIconButton}
         onClick={handleToggle}
-        disabled={recentPages.length === 0}
+        {...(recentPages.length === 0 ? { disabled: true } : {})}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Recent pages"

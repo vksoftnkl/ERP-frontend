@@ -6,7 +6,15 @@ import type {
   FetchBaseQueryError,
 } from "@reduxjs/toolkit/query";
 import { API_BASE, extractApiErrorMessage, getAuthHeaderValue, isLoginEndpoint } from "@/lib/api/client";
-import { clearAuthSession, getAuthSession } from "@/lib/auth/session";
+import {
+  clearAuthSession,
+  extractAuthToken,
+  extractAuthUserId,
+  extractRefreshToken,
+  getAuthSession,
+  getRefreshToken,
+  setAuthSession,
+} from "@/lib/auth/session";
 import { authSessionChanged } from "@/store/slices/authSlice";
 export type ApiError = {
   status?: number;
@@ -31,15 +39,80 @@ const rawBaseQuery = fetchBaseQuery({
     return headers;
   },
 });
+
+let refreshRequest: Promise<{ token: string; refreshToken: string | null; userId: string | null } | null> | null = null;
+
+function isAuthRefreshEndpoint(args: string | FetchArgs): boolean {
+  const requestUrl = typeof args === "string" ? args : args.url;
+  return requestUrl === "/auth/refresh" || requestUrl.endsWith("/auth/refresh");
+}
+
+async function refreshAuthSession(
+  api: Parameters<BaseQueryFn<string | FetchArgs, unknown, ApiError>>[1],
+  extraOptions: Parameters<BaseQueryFn<string | FetchArgs, unknown, ApiError>>[2],
+): Promise<{ token: string; refreshToken: string | null; userId: string | null } | null> {
+  if (refreshRequest) {
+    return refreshRequest;
+  }
+
+  const state = api.getState() as { auth?: { refreshToken?: string | null } };
+  const currentRefreshToken = state.auth?.refreshToken ?? getRefreshToken();
+  if (!currentRefreshToken) {
+    return null;
+  }
+
+  refreshRequest = (async () => {
+    const result = await rawBaseQuery(
+      {
+        url: "/auth/refresh",
+        method: "POST",
+        body: { refresh_token: currentRefreshToken },
+      },
+      api,
+      extraOptions,
+    );
+
+    if ("error" in result) {
+      return null;
+    }
+
+    const token = extractAuthToken(result.data);
+    if (!token) {
+      return null;
+    }
+    const refreshedRefreshToken = extractRefreshToken(result.data) ?? currentRefreshToken;
+    const userId = extractAuthUserId(result.data);
+    setAuthSession(token, userId, refreshedRefreshToken);
+    api.dispatch(authSessionChanged({ token, refreshToken: refreshedRefreshToken, userId }));
+    return { token, refreshToken: refreshedRefreshToken, userId };
+  })().finally(() => {
+    refreshRequest = null;
+  });
+
+  return refreshRequest;
+}
+
 const baseQueryWithAuthHandling: BaseQueryFn<string | FetchArgs, unknown, ApiError> = async (
   args,
   api,
   extraOptions,
 ) => {
-  const result = await rawBaseQuery(args, api, extraOptions);
+  let result = await rawBaseQuery(args, api, extraOptions);
   if ("error" in result) {
-    const error = result.error as FetchBaseQueryError;
-    const status = typeof error.status === "number" ? error.status : undefined;
+    let error = result.error as FetchBaseQueryError;
+    let status = typeof error.status === "number" ? error.status : undefined;
+    const requestUrl = typeof args === "string" ? args : args.url;
+    if (status === 401 && !isLoginEndpoint(requestUrl) && !isAuthRefreshEndpoint(args)) {
+      const refreshedSession = await refreshAuthSession(api, extraOptions);
+      if (refreshedSession) {
+        result = await rawBaseQuery(args, api, extraOptions);
+        if (!("error" in result)) {
+          return { data: result.data };
+        }
+        error = result.error as FetchBaseQueryError;
+        status = typeof error.status === "number" ? error.status : undefined;
+      }
+    }
     const data = "data" in error ? error.data : undefined;
     const message =
       status === undefined && "error" in error && typeof error.error === "string"

@@ -50,12 +50,17 @@ function sanitizeAuthState(state: AuthState | undefined): AuthState | undefined 
     return undefined;
   }
   const token = typeof state.token === "string" && state.token.trim() ? state.token.trim() : null;
+  const refreshToken =
+    typeof state.refreshToken === "string" && state.refreshToken.trim()
+      ? state.refreshToken.trim()
+      : null;
   const userId = typeof state.userId === "string" && state.userId.trim() ? state.userId.trim() : null;
 
   return {
     initialized: Boolean(state.initialized),
     isAuthenticated: Boolean(token),
     token,
+    refreshToken: token ? refreshToken : null,
     userId,
     recentPages: Array.isArray(state.recentPages) ? state.recentPages : [],
     businessContext: state.businessContext && typeof state.businessContext === "object"
@@ -102,11 +107,8 @@ function persistReduxState(state: RootState): void {
 }
 
 export const makeStore = () => {
-  const preloadedState =
-    typeof window !== "undefined" ? loadPersistedReduxState() : undefined;
   const store = configureStore({
     reducer: rootReducer,
-    preloadedState,
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware().concat(baseApi.middleware),
   });

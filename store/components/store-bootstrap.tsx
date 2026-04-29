@@ -5,6 +5,7 @@ import {
   AUTH_SESSION_EVENT,
   getAuthSession,
   getAuthUserId,
+  getRefreshToken,
   type AuthSessionChangeDetail,
 } from "@/lib/auth/session";
 import { hydrateClientCache } from "@/lib/cache/client-cache";
@@ -30,6 +31,7 @@ export default function StoreBootstrap() {
       dispatch(
         authHydrated({
           token: persistedState?.auth?.token ?? getAuthSession(),
+          refreshToken: persistedState?.auth?.refreshToken ?? getRefreshToken(),
           userId: persistedState?.auth?.userId ?? getAuthUserId(),
           recentPages: persistedState?.auth?.recentPages,
           businessContext: persistedState?.auth?.businessContext,
@@ -42,6 +44,7 @@ export default function StoreBootstrap() {
       dispatch(
         authSessionChanged({
           token: customEvent.detail?.token ?? null,
+          refreshToken: customEvent.detail?.refreshToken ?? null,
           userId: customEvent.detail?.userId ?? null,
         }),
       );
