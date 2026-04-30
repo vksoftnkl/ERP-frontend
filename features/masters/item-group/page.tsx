@@ -303,7 +303,7 @@ const DEFAULT_SERIAL_NO_COLUMN: ReusableTableColumn<ItemGroupTableRow> = {
   header: "Sl.No",
   accessor: "serialNo",
   align: "left",
-  width: "84px",
+  width: "12px",
   sortable: false,
 };
 const DEFAULT_GROUP_LEVEL_COLUMN: ReusableTableColumn<ItemGroupTableRow> = {
@@ -2263,6 +2263,7 @@ export default function ItemGroupMasterPage() {
               wrapperClassName={styles.itemGroupTable}
               tableClassName={styles.itemGroupDataTable}
               minWidth="1240px"
+              reorderableColumns
               activeRowKey={selectedRowId}
               onRowClick={(row) => setSelectedRowId(row.__rowId)}
               onRowDoubleClick={handleRowView}

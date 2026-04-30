@@ -468,10 +468,13 @@
   z-index: 3;
   background: #ffffff;
   background-clip: padding-box;
-  box-shadow: 1px 0 0 #e8eef5;
 }
 .stickyActionCell {
   z-index: 4;
+  box-shadow: -1px 0 0 #e8eef5;
+}
+.stickySerialCell {
+  box-shadow: 1px 0 0 #e8eef5;
 }
 .stickyActionHeader,
 .stickySerialHeader {
@@ -479,6 +482,11 @@
   background: var(--table-surface-muted);
   color: var(--table-header-text, #000);
   font-weight: 700;
+}
+.stickyActionHeader {
+  box-shadow: -1px 0 0 #e8eef5;
+}
+.stickySerialHeader {
   box-shadow: 1px 0 0 #e8eef5;
 }
 .headerCellDark {

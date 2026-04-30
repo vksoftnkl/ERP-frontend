@@ -30,6 +30,8 @@ export type ReusableTableSortState = {
   direction: ReusableTableSortDirection;
 };
 export type ReusableTableRowReorderEdge = "before" | "after";
+export type ReusableTableColumnReorderEdge = "before" | "after";
+type ReusableTableColumnResizeEdge = "left" | "right";
 export type ReusableTableColumn<T> = {
   key: string;
   header: ReactNode;
@@ -76,6 +78,9 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
     targetIndex: number,
     edge: ReusableTableRowReorderEdge,
   ) => void;
+  reorderableColumns?: boolean;
+  onColumnReorder?: (columns: ReusableTableColumn<T>[]) => void;
+  resizableColumns?: boolean;
   wrapperClassName?: string;
   tableClassName?: string;
   tableLayout?: CSSProperties["tableLayout"];
@@ -459,6 +464,47 @@ function renderColumnHeaderContent(header: ReactNode): ReactNode {
   }
   return header;
 }
+function isColumnReorderable<T extends Record<string, unknown>>(
+  column: ReusableTableColumn<T>,
+): boolean {
+  return !isActionsColumn(column) && !isSerialNumberColumn(column);
+}
+function applyColumnOrder<T extends Record<string, unknown>>(
+  columns: ReusableTableColumn<T>[],
+  columnOrder: string[],
+): ReusableTableColumn<T>[] {
+  if (columnOrder.length === 0) {
+    return columns;
+  }
+
+  const orderIndexByKey = new Map(columnOrder.map((key, index) => [key, index]));
+  const reorderableColumns = columns.filter(isColumnReorderable);
+  const orderedReorderableColumns = [...reorderableColumns].sort((left, right) => {
+    const leftIndex = orderIndexByKey.get(left.key);
+    const rightIndex = orderIndexByKey.get(right.key);
+
+    if (leftIndex === undefined && rightIndex === undefined) {
+      return 0;
+    }
+    if (leftIndex === undefined) {
+      return 1;
+    }
+    if (rightIndex === undefined) {
+      return -1;
+    }
+    return leftIndex - rightIndex;
+  });
+  let nextReorderableIndex = 0;
+
+  return columns.map((column) => {
+    if (!isColumnReorderable(column)) {
+      return column;
+    }
+    const nextColumn = orderedReorderableColumns[nextReorderableIndex];
+    nextReorderableIndex += 1;
+    return nextColumn ?? column;
+  });
+}
 export function ReusableTable<T extends Record<string, unknown>>({
   columns,
   rows,
@@ -475,6 +521,9 @@ export function ReusableTable<T extends Record<string, unknown>>({
   onRowDoubleClick,
   reorderableRows = false,
   onRowReorder,
+  reorderableColumns = false,
+  onColumnReorder,
+  resizableColumns = false,
   wrapperClassName,
   tableClassName,
   tableLayout,
@@ -547,15 +596,23 @@ export function ReusableTable<T extends Record<string, unknown>>({
     key: Key;
     edge: ReusableTableRowReorderEdge;
   } | null>(null);
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  const [draggingColumnKey, setDraggingColumnKey] = useState<string | null>(null);
+  const [columnDropTarget, setColumnDropTarget] = useState<{
+    key: string;
+    edge: ReusableTableColumnReorderEdge;
+  } | null>(null);
+  const [columnWidths, setColumnWidths] = useState<Record<string, string>>({});
   const resolvedOnUpdate = onUpdate ?? onEdit;
   const resolvedIsUpdateDisabled = isUpdateDisabled ?? isEditDisabled;
   const resolvedUpdateLabel = updateLabel ?? editLabel ?? "Edit";
   const hasRowActions = Boolean(resolvedOnUpdate || onDuplicate || onDelete || onLogs);
-  const hasActionsColumn = columns.some((column) => isActionsColumn(column));
+  const actionColumns = columns.filter((column) => isActionsColumn(column));
+  const hasActionsColumn = actionColumns.length > 0;
   const shouldRenderInlineActionMenu = false;
   const baseColumns = shouldRenderInlineActionMenu
     ? columns.filter((column) => !isActionsColumn(column))
-    : columns;
+    : columns.filter((column) => !isActionsColumn(column));
   const effectiveSearchQuery = isSearchControlled ? searchQuery : internalSearchQuery;
   const effectiveSortState = isSortControlled ? sortState : internalSortState;
   const effectivePageSize = Math.max(
@@ -563,19 +620,25 @@ export function ReusableTable<T extends Record<string, unknown>>({
     isPageSizeControlled ? (pageSize ?? defaultPageSize) : internalPageSize,
   );
   const shouldIncludeActionsColumn = showActionsColumn ?? Boolean(hasActionsColumn || hasRowActions);
-  const displayColumns =
-    shouldIncludeActionsColumn && !hasActionsColumn && !shouldRenderInlineActionMenu
+  const rawDisplayColumns =
+    shouldIncludeActionsColumn && !shouldRenderInlineActionMenu
       ? [
           ...baseColumns,
-          {
-            key: "actions",
-            header: actionsHeader,
-            align: "center",
-            width: actionsColumnWidth,
-            mobileLabel: "Actions",
-          } satisfies ReusableTableColumn<T>,
+          hasActionsColumn
+            ? actionColumns[0]
+            : ({
+                key: "actions",
+                header: actionsHeader,
+                align: "center",
+                width: actionsColumnWidth,
+                mobileLabel: "Actions",
+              } satisfies ReusableTableColumn<T>),
         ]
       : baseColumns;
+  const displayColumns = useMemo(
+    () => applyColumnOrder(rawDisplayColumns, columnOrder),
+    [columnOrder, rawDisplayColumns],
+  );
   const inlineActionColumnIndex = shouldRenderInlineActionMenu
     ? getInlineActionColumnIndex(displayColumns)
     : -1;
@@ -663,6 +726,8 @@ export function ReusableTable<T extends Record<string, unknown>>({
     ? "none"
     : tableMaxHeight ?? DEFAULT_TABLE_MAX_HEIGHT;
   const enableRowReorder = reorderableRows && typeof onRowReorder === "function";
+  const enableColumnReorder = reorderableColumns && displayColumns.some(isColumnReorderable);
+  const enableColumnResize = resizableColumns && displayColumns.some(isColumnReorderable);
 
   useEffect(() => {
     if (openActionMenuKey === null) {
@@ -746,6 +811,50 @@ export function ReusableTable<T extends Record<string, unknown>>({
       setDropTarget(null);
     }
   }, [draggingRowKey, dropTarget, paginatedRows, rowKey]);
+
+  useEffect(() => {
+    const currentKeys = new Set(rawDisplayColumns.map((column) => column.key));
+    setColumnOrder((current) => {
+      const nextOrder = current.filter((key) => currentKeys.has(key));
+      const nextOrderSet = new Set(nextOrder);
+
+      for (const column of rawDisplayColumns) {
+        if (isColumnReorderable(column) && !nextOrderSet.has(column.key)) {
+          nextOrder.push(column.key);
+        }
+      }
+
+      if (
+        nextOrder.length === current.length &&
+        nextOrder.every((key, index) => key === current[index])
+      ) {
+        return current;
+      }
+
+      return nextOrder;
+    });
+
+    if (draggingColumnKey !== null && !currentKeys.has(draggingColumnKey)) {
+      setDraggingColumnKey(null);
+    }
+
+    if (columnDropTarget !== null && !currentKeys.has(columnDropTarget.key)) {
+      setColumnDropTarget(null);
+    }
+
+    setColumnWidths((current) => {
+      let changed = false;
+      const next: Record<string, string> = {};
+      for (const [key, value] of Object.entries(current)) {
+        if (currentKeys.has(key)) {
+          next[key] = value;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [columnDropTarget, draggingColumnKey, rawDisplayColumns]);
 
   useEffect(() => {
     if (!paginated) {
@@ -901,6 +1010,10 @@ export function ReusableTable<T extends Record<string, unknown>>({
     setDraggingRowKey(null);
     setDropTarget(null);
   };
+  const clearColumnReorderState = () => {
+    setDraggingColumnKey(null);
+    setColumnDropTarget(null);
+  };
   const getRowReorderEdge = (
     event: ReactDragEvent<HTMLTableRowElement>,
   ): ReusableTableRowReorderEdge => {
@@ -995,6 +1108,165 @@ export function ReusableTable<T extends Record<string, unknown>>({
     }
 
     onRowReorder(sourceRow, sourceIndex, targetRow, targetIndex, edge);
+  };
+  const getColumnReorderEdge = (
+    event: ReactDragEvent<HTMLTableCellElement>,
+  ): ReusableTableColumnReorderEdge => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return event.clientX - bounds.left <= bounds.width / 2 ? "before" : "after";
+  };
+  const handleColumnDragStart = (
+    event: ReactDragEvent<HTMLTableCellElement>,
+    column: ReusableTableColumn<T>,
+  ) => {
+    if (!enableColumnReorder || !isColumnReorderable(column)) {
+      event.preventDefault();
+      return;
+    }
+
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", column.key);
+    setDraggingColumnKey(column.key);
+    setColumnDropTarget(null);
+  };
+  const handleColumnDragOver = (
+    event: ReactDragEvent<HTMLTableCellElement>,
+    column: ReusableTableColumn<T>,
+  ) => {
+    if (!enableColumnReorder || draggingColumnKey === null || !isColumnReorderable(column)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+
+    if (column.key === draggingColumnKey) {
+      setColumnDropTarget(null);
+      return;
+    }
+
+    const nextEdge = getColumnReorderEdge(event);
+    setColumnDropTarget((current) =>
+      current?.key === column.key && current.edge === nextEdge
+        ? current
+        : { key: column.key, edge: nextEdge },
+    );
+  };
+  const handleColumnDragLeave = (
+    event: ReactDragEvent<HTMLTableCellElement>,
+    column: ReusableTableColumn<T>,
+  ) => {
+    if (!enableColumnReorder) {
+      return;
+    }
+
+    const relatedTarget = event.relatedTarget as Node | null;
+    if (relatedTarget && event.currentTarget.contains(relatedTarget)) {
+      return;
+    }
+
+    setColumnDropTarget((current) => (current?.key === column.key ? null : current));
+  };
+  const handleColumnDrop = (
+    event: ReactDragEvent<HTMLTableCellElement>,
+    targetColumn: ReusableTableColumn<T>,
+  ) => {
+    if (
+      !enableColumnReorder ||
+      draggingColumnKey === null ||
+      !isColumnReorderable(targetColumn)
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const sourceColumn = displayColumns.find((column) => column.key === draggingColumnKey);
+    const edge = getColumnReorderEdge(event);
+
+    clearColumnReorderState();
+
+    if (!sourceColumn || sourceColumn.key === targetColumn.key || !isColumnReorderable(sourceColumn)) {
+      return;
+    }
+
+    const reorderableKeys = displayColumns.filter(isColumnReorderable).map((column) => column.key);
+    const sourceIndex = reorderableKeys.indexOf(sourceColumn.key);
+    const targetIndex = reorderableKeys.indexOf(targetColumn.key);
+
+    if (sourceIndex < 0 || targetIndex < 0) {
+      return;
+    }
+
+    const nextOrder = [...reorderableKeys];
+    nextOrder.splice(sourceIndex, 1);
+    const targetIndexAfterRemoval = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    const insertionIndex = edge === "before" ? targetIndexAfterRemoval : targetIndexAfterRemoval + 1;
+
+    if (insertionIndex === sourceIndex) {
+      return;
+    }
+
+    nextOrder.splice(insertionIndex, 0, sourceColumn.key);
+    setColumnOrder(nextOrder);
+    onColumnReorder?.(applyColumnOrder(rawDisplayColumns, nextOrder));
+  };
+  const handleColumnResizeStart = (
+    event: MouseEvent<HTMLSpanElement>,
+    column: ReusableTableColumn<T>,
+    edge: ReusableTableColumnResizeEdge,
+  ) => {
+    if (!enableColumnResize || !isColumnReorderable(column)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const columnIndex = displayColumns.findIndex((displayColumn) => displayColumn.key === column.key);
+    const previousResizableColumn =
+      edge === "left"
+        ? displayColumns
+            .slice(0, columnIndex)
+            .reverse()
+            .find(isColumnReorderable)
+        : undefined;
+    const resizeColumn = previousResizableColumn ?? column;
+    const widthColumnIndex = displayColumns.findIndex(
+      (displayColumn) => displayColumn.key === resizeColumn.key,
+    );
+    const headerRow = event.currentTarget.closest("tr");
+    const headerCell = headerRow?.children.item(widthColumnIndex) as HTMLElement | null;
+    const startWidth = headerCell?.getBoundingClientRect().width ?? 120;
+    const startX = event.clientX;
+    const direction = edge === "left" && resizeColumn.key === column.key ? -1 : 1;
+
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      const nextWidth = Math.max(
+        40,
+        Math.round(startWidth + (moveEvent.clientX - startX) * direction),
+      );
+      setColumnWidths((current) => ({
+        ...current,
+        [resizeColumn.key]: `${nextWidth}px`,
+      }));
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+  const getColumnForWidth = (column: ReusableTableColumn<T>): ReusableTableColumn<T> => {
+    const resizedWidth = columnWidths[column.key];
+    return resizedWidth ? { ...column, width: resizedWidth } : column;
   };
   const renderActionMenu = (
     row: T,
@@ -1165,7 +1437,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
         >
           <colgroup>
             {displayColumns.map((column) => {
-              const widthStyle = resolveColumnWidth(column);
+              const widthStyle = resolveColumnWidth(getColumnForWidth(column));
               return <col key={column.key} style={widthStyle} />;
             })}
           </colgroup>
@@ -1173,10 +1445,17 @@ export function ReusableTable<T extends Record<string, unknown>>({
             <tr>
               {displayColumns.map((column) => {
                 const canSort = isColumnSortable(column, sortable);
+                const canReorderColumn = enableColumnReorder && isColumnReorderable(column);
+                const canResizeColumn = enableColumnResize && isColumnReorderable(column);
+                const isDraggingColumn = draggingColumnKey === column.key;
+                const isColumnDropBefore =
+                  columnDropTarget?.key === column.key && columnDropTarget.edge === "before";
+                const isColumnDropAfter =
+                  columnDropTarget?.key === column.key && columnDropTarget.edge === "after";
                 const sortDirection =
                   effectiveSortState.key === column.key ? effectiveSortState.direction : null;
                 const headerContent = renderColumnHeaderContent(column.header);
-                const widthStyle = resolveColumnWidth(column);
+                const widthStyle = resolveColumnWidth(getColumnForWidth(column));
                 return (
                   <th
                     key={column.key}
@@ -1192,9 +1471,26 @@ export function ReusableTable<T extends Record<string, unknown>>({
                       styles.headerCell,
                       getColumnAlignClass(column.align),
                       canSort && styles.sortableHeaderCell,
+                      canReorderColumn && styles.reorderableHeaderCell,
+                      isDraggingColumn && styles.columnDragging,
+                      isColumnDropBefore && styles.columnDropBefore,
+                      isColumnDropAfter && styles.columnDropAfter,
                       stickyHeader && styles.stickyHeaderCell,
                       column.headerClassName,
                     )}
+                    draggable={canReorderColumn}
+                    onDragStart={
+                      canReorderColumn ? (event) => handleColumnDragStart(event, column) : undefined
+                    }
+                    onDragOver={
+                      canReorderColumn ? (event) => handleColumnDragOver(event, column) : undefined
+                    }
+                    onDragLeave={
+                      canReorderColumn ? (event) => handleColumnDragLeave(event, column) : undefined
+                    }
+                    onDrop={canReorderColumn ? (event) => handleColumnDrop(event, column) : undefined}
+                    onDragEnd={canReorderColumn ? clearColumnReorderState : undefined}
+                    title={canReorderColumn ? "Drag to reorder column" : undefined}
                   >
                     {canSort ? (
                       <button
@@ -1213,6 +1509,36 @@ export function ReusableTable<T extends Record<string, unknown>>({
                     ) : (
                       headerContent
                     )}
+                    {canResizeColumn ? (
+                      <>
+                        <span
+                          className={cx(styles.columnResizeHandle, styles.columnResizeHandleLeft)}
+                          role="separator"
+                          aria-orientation="vertical"
+                          aria-label={`Resize left side of ${getCellLabel(
+                            column.header,
+                            column.key,
+                            column.mobileLabel,
+                          )} column`}
+                          onMouseDown={(event) => handleColumnResizeStart(event, column, "left")}
+                          onClick={(event) => event.stopPropagation()}
+                          draggable={false}
+                        />
+                        <span
+                          className={cx(styles.columnResizeHandle, styles.columnResizeHandleRight)}
+                          role="separator"
+                          aria-orientation="vertical"
+                          aria-label={`Resize right side of ${getCellLabel(
+                            column.header,
+                            column.key,
+                            column.mobileLabel,
+                          )} column`}
+                          onMouseDown={(event) => handleColumnResizeStart(event, column, "right")}
+                          onClick={(event) => event.stopPropagation()}
+                          draggable={false}
+                        />
+                      </>
+                    ) : null}
                   </th>
                 );
               })}
@@ -1303,7 +1629,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
                         typeof column.cellStyle === "function"
                           ? column.cellStyle(row, rowIndex)
                           : column.cellStyle;
-                      const widthStyle = resolveColumnWidth(column);
+                      const widthStyle = resolveColumnWidth(getColumnForWidth(column));
 
                       return (
                         <td

@@ -716,11 +716,11 @@ export default function AreaMasterPage() {
   );
   const customTableColumns = useMemo<ReusableTableColumn<CrudMasterTableRow>[]>(
     () => [
-      {
+       {
         key: "serialNo",
         header: "S.No",
         accessor: "serialNo",
-        width: "72px",
+        width: "12px",
         sortable: false,
       },
       {

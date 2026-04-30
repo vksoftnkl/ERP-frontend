@@ -586,6 +586,7 @@ export default function SuppliersMasterPage() {
         lookupKeys={LOOKUP_KEYS}
         requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
         styles={styles}
+        listResponseStyleArrayKey="styles"
         listTitle="Supplier List"
         createLabel="Add Supplier"
         codeColumnHeader="Purchase Type"

@@ -1552,6 +1552,7 @@ export default function AccountLedgerMasterPage() {
               wrapperClassName={styles.masterTable}
               tableClassName={styles.masterDataTable}
               minWidth="980px"
+              reorderableColumns
               activeRowKey={selectedRowId}
               onRowClick={(row) => setSelectedRowId(row.__rowId)}
               onRowDoubleClick={(row) => void openExistingModal(row, "view")}

@@ -185,7 +185,7 @@ export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
   },
   serialno: {
     header: "Serial No",
-    defaultWidth: "120px",
+    defaultWidth: "12px",
     align: "left",
     kind: "text",
   },

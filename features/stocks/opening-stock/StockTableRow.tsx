@@ -12,7 +12,6 @@ import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import type { ERPDynamicSearchShortcutPayload } from "@/components/library/ui/dynamic-modal-form";
 import type { ItemPriceDetailsPayload } from "@/store/api/lookupsApi";
 import {
-  DELETE_ACTION_COLUMN_WIDTH,
   PROFIT_TYPE_OPTION_LABELS,
   TRACKING_TYPE_OPTION_LABELS,
   LOOKUP_FIELD_CONFIG,
@@ -175,30 +174,6 @@ export function StockTableRow({
       )}
     >
       <td
-        data-label=""
-        className={cx(
-          styles.cell,
-          styles.compactCell,
-          styles.alignCenter,
-          styles.stickyActionCell,
-        )}
-        style={{ left: 0 }}
-      >
-        <div className={styles.actionCellContent}>
-          <button
-            type="button"
-            className={styles.rowDeleteButton}
-            aria-label={`Delete row ${rowIndex + 1}`}
-            onClick={() => onRemoveRow(row.id)}
-          >
-            <FiTrash2
-              className={styles.actionIcon}
-              aria-hidden="true"
-            />
-          </button>
-        </div>
-      </td>
-      <td
         data-label="S.No"
         className={cx(
           styles.cell,
@@ -206,7 +181,7 @@ export function StockTableRow({
           styles.alignLeft,
           styles.stickySerialCell,
         )}
-        style={{ left: DELETE_ACTION_COLUMN_WIDTH }}
+        style={{ left: 0 }}
       >
         <div className={styles.serialCellContent}>
           <span className={styles.rowNumber}>{rowIndex + 1}</span>
@@ -467,6 +442,30 @@ export function StockTableRow({
           </td>
         );
       })}
+      <td
+        data-label=""
+        className={cx(
+          styles.cell,
+          styles.compactCell,
+          styles.alignCenter,
+          styles.stickyActionCell,
+        )}
+        style={{ right: 0 }}
+      >
+        <div className={styles.actionCellContent}>
+          <button
+            type="button"
+            className={styles.rowDeleteButton}
+            aria-label={`Delete row ${rowIndex + 1}`}
+            onClick={() => onRemoveRow(row.id)}
+          >
+            <FiTrash2
+              className={styles.actionIcon}
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+      </td>
     </tr>
   );
 }

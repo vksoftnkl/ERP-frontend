@@ -202,7 +202,7 @@ const DEFAULT_ITEM_BRAND_COLUMNS: ReusableTableColumn<ItemBrandTableRow>[] = [
     header: "S.No",
     accessor: "serialNo",
     align: "left",
-    width: "56px",
+    width: "12px",
     sortable: false,
   },
   {
@@ -1486,6 +1486,7 @@ export default function ItemBrandMasterPage() {
               wrapperClassName={styles.masterTable}
               tableClassName={styles.masterDataTable}
               minWidth="980px"
+              reorderableColumns
               activeRowKey={selectedRowId}
               onRowClick={(row) => setSelectedRowId(row.__rowId)}
               onRowDoubleClick={handleRowView}

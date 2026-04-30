@@ -994,6 +994,24 @@ function extractListResponseStyleRows(
     );
 }
 
+function areListResponseStyleRowsAllHidden(
+  payload: unknown,
+  styleArrayKey: string | undefined,
+): boolean {
+  if (!styleArrayKey) {
+    return false;
+  }
+
+  const styleRows = extractListResponseStyleRows(payload, styleArrayKey);
+  return (
+    styleRows.length > 0 &&
+    styleRows.every(
+      (styleRow) =>
+        toBoolean(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_VISIBLE_KEYS)) === false,
+    )
+  );
+}
+
 type BuildMasterColumnArgs = {
   accessor: MasterColumnAccessor;
   title: string;
@@ -1274,6 +1292,7 @@ function buildColumnsFromGridColumns(
   gridColumns: GridColumnConfig[],
   lookupKeys: CrudMasterLookupKeys,
   fallbackColumns: ReusableTableColumn<MasterTableRow>[],
+  useFallbackColumns = true,
 ): ReusableTableColumn<MasterTableRow>[] {
   const visibleColumns = gridColumns
     .filter((column) => column.visible)
@@ -1302,7 +1321,7 @@ function buildColumnsFromGridColumns(
   }
 
   if (columns.length === 0) {
-    return fallbackColumns;
+    return useFallbackColumns ? fallbackColumns : [];
   }
 
   const serialIndex = columns.findIndex((column) => column.accessor === "serialNo");
@@ -1357,10 +1376,12 @@ function buildColumnsFromListResponseStyles(
       continue;
     }
 
-    const header =
-      toDisplayValue(
-        getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_HEADER_KEYS),
-      ) || styleColumn.fallbackHeader;
+    const header = toDisplayValue(
+      getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_HEADER_KEYS),
+    );
+    if (!header) {
+      continue;
+    }
 
     seenAccessors.add(styleColumn.accessor);
     columns.push(
@@ -1466,7 +1487,7 @@ function buildColumnsFromDynamicListResponseStyles(
     return [];
   }
 
-  return buildColumnsFromGridColumns(styleGridColumns, lookupKeys, fallbackColumns);
+  return buildColumnsFromGridColumns(styleGridColumns, lookupKeys, fallbackColumns, false);
 }
 
 function isMasterSerialColumn(column: ReusableTableColumn<MasterTableRow>): boolean {
@@ -1476,6 +1497,38 @@ function isMasterSerialColumn(column: ReusableTableColumn<MasterTableRow>): bool
     normalizeColumnToken(String(column.header)) === "serialno" ||
     normalizeColumnToken(String(column.header)) === "sno"
   );
+}
+
+function getMasterSerialColumn(
+  fallbackColumns: ReusableTableColumn<MasterTableRow>[],
+): ReusableTableColumn<MasterTableRow> | null {
+  return fallbackColumns.find(isMasterSerialColumn) ?? null;
+}
+
+function ensureMasterSerialColumn(
+  columns: ReusableTableColumn<MasterTableRow>[],
+  fallbackColumns: ReusableTableColumn<MasterTableRow>[],
+): ReusableTableColumn<MasterTableRow>[] {
+  const serialColumnIndex = columns.findIndex(isMasterSerialColumn);
+  if (serialColumnIndex === 0) {
+    return columns;
+  }
+
+  if (serialColumnIndex > 0) {
+    const nextColumns = [...columns];
+    const [serialColumn] = nextColumns.splice(serialColumnIndex, 1);
+    return [serialColumn, ...nextColumns];
+  }
+
+  const serialColumn = getMasterSerialColumn(fallbackColumns);
+  return serialColumn ? [serialColumn, ...columns] : columns;
+}
+
+function buildMasterSerialOnlyColumns(
+  fallbackColumns: ReusableTableColumn<MasterTableRow>[],
+): ReusableTableColumn<MasterTableRow>[] {
+  const serialColumn = getMasterSerialColumn(fallbackColumns);
+  return serialColumn ? [serialColumn] : [];
 }
 
 function applyListResponseStylesToCustomColumns(
@@ -1489,7 +1542,7 @@ function applyListResponseStylesToCustomColumns(
 
   const styleRows = extractListResponseStyleRows(payload, styleArrayKey);
   if (styleRows.length === 0) {
-    return customColumns;
+    return [];
   }
 
   let styleIndex = 0;
@@ -1503,7 +1556,7 @@ function applyListResponseStylesToCustomColumns(
     styleIndex += 1;
 
     if (!styleRow) {
-      return [column];
+      return [];
     }
 
     const isVisible = toBoolean(
@@ -1516,6 +1569,9 @@ function applyListResponseStylesToCustomColumns(
     const header = toDisplayValue(
       getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_HEADER_KEYS),
     );
+    if (!header) {
+      return [];
+    }
     const width = normalizeListStyleWidth(
       getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_WIDTH_KEYS),
     );
@@ -1539,7 +1595,7 @@ function applyListResponseStylesToCustomColumns(
     return [
       {
         ...column,
-        header: header || column.header,
+        header,
         width: width ?? column.width,
         align: align ?? column.align,
         sortable: sortable ?? column.sortable,
@@ -1865,17 +1921,25 @@ export default function CrudMasterPage({
       tableColumnLayout,
     ],
   );
+  const hasCustomTableColumns = Boolean(customTableColumns && customTableColumns.length > 0);
+  const effectiveListResponseStyleArrayKey =
+    listResponseStyleArrayKey ?? (hasCustomTableColumns ? undefined : "styles");
+  const areStyleColumnsAllHidden = useMemo(
+    () => areListResponseStyleRowsAllHidden(data, effectiveListResponseStyleArrayKey),
+    [data, effectiveListResponseStyleArrayKey],
+  );
+  const renderedRows = areStyleColumnsAllHidden ? [] : rows;
 
   const listResponseColumns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
     () => {
-      if (!listResponseStyleArrayKey) {
+      if (!effectiveListResponseStyleArrayKey) {
         return [];
       }
 
       if (listResponseStyleColumns && listResponseStyleColumns.length > 0) {
         return buildColumnsFromListResponseStyles(
           data,
-          listResponseStyleArrayKey,
+          effectiveListResponseStyleArrayKey,
           listResponseStyleColumns,
           effectiveTitle,
           codeColumnHeader,
@@ -1887,7 +1951,7 @@ export default function CrudMasterPage({
 
       return buildColumnsFromDynamicListResponseStyles(
         data,
-        listResponseStyleArrayKey,
+        effectiveListResponseStyleArrayKey,
         lookupKeys,
         fallbackColumns,
       );
@@ -1896,8 +1960,8 @@ export default function CrudMasterPage({
       codeColumnHeader,
       data,
       effectiveTitle,
+      effectiveListResponseStyleArrayKey,
       fallbackColumns,
-      listResponseStyleArrayKey,
       listResponseStyleColumns,
       lookupKeys,
       nameColumnHeader,
@@ -1907,24 +1971,38 @@ export default function CrudMasterPage({
   );
 
   const columns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
-    () =>
-      customTableColumns && customTableColumns.length > 0
-        ? applyListResponseStylesToCustomColumns(
+    () => {
+      if (customTableColumns && customTableColumns.length > 0) {
+        if (!effectiveListResponseStyleArrayKey) {
+          return customTableColumns;
+        }
+
+        const styledCustomColumns = applyListResponseStylesToCustomColumns(
             data,
-            listResponseStyleArrayKey,
+            effectiveListResponseStyleArrayKey,
             customTableColumns,
-          )
-        : listResponseColumns.length > 0
-          ? listResponseColumns
-          : normalizedGridTableNames.length > 0
-            ? buildColumnsFromGridColumns(gridColumns, lookupKeys, fallbackColumns)
-            : fallbackColumns,
+          );
+        return styledCustomColumns.length > 0
+          ? ensureMasterSerialColumn(styledCustomColumns, fallbackColumns)
+          : buildMasterSerialOnlyColumns(fallbackColumns);
+      }
+
+      if (effectiveListResponseStyleArrayKey) {
+        return listResponseColumns.length > 0
+          ? ensureMasterSerialColumn(listResponseColumns, fallbackColumns)
+          : buildMasterSerialOnlyColumns(fallbackColumns);
+      }
+
+      return normalizedGridTableNames.length > 0
+        ? buildColumnsFromGridColumns(gridColumns, lookupKeys, fallbackColumns)
+        : fallbackColumns;
+    },
     [
       customTableColumns,
       data,
+      effectiveListResponseStyleArrayKey,
       fallbackColumns,
       gridColumns,
-      listResponseStyleArrayKey,
       listResponseColumns,
       lookupKeys,
       normalizedGridTableNames.length,
@@ -1963,10 +2041,10 @@ export default function CrudMasterPage({
       return;
     }
 
-    if (!rows.some((row) => row.__rowId === selectedRowId)) {
+    if (!renderedRows.some((row) => row.__rowId === selectedRowId)) {
       setSelectedRowId(null);
     }
-  }, [rows, selectedRowId]);
+  }, [renderedRows, selectedRowId]);
 
   const pendingDeleteLabel = useMemo(() => {
     if (!pendingDeleteRow) {
@@ -2552,8 +2630,8 @@ export default function CrudMasterPage({
     ? `${gridDisplayName} List`
     : listTitle ?? `${title} List`;
   const handleDownloadRows = useCallback(() => {
-    downloadMasterRowsCsv(listHeading, columns, rows);
-  }, [columns, listHeading, rows]);
+    downloadMasterRowsCsv(listHeading, columns, renderedRows);
+  }, [columns, listHeading, renderedRows]);
   const masterToolbarContent = (
     <div className={styles.masterHeader}>
       <div className={styles.masterTitleWrap}>
@@ -2636,7 +2714,7 @@ export default function CrudMasterPage({
                 ) : null}
                 <ReusableTable
                   columns={columns}
-                  rows={rows}
+                  rows={renderedRows}
                   rowKey="__rowId"
                   toolbarContent={masterToolbarContent}
                   toolbarActions={
@@ -2644,7 +2722,7 @@ export default function CrudMasterPage({
                       type="button"
                       className={styles.masterDownloadButton}
                       onClick={handleDownloadRows}
-                      disabled={rows.length === 0}
+                      disabled={renderedRows.length === 0}
                       aria-label={`Download ${listHeading}`}
                       title={`Download ${listHeading}`}
                     >
@@ -2655,6 +2733,8 @@ export default function CrudMasterPage({
                   tableClassName={styles.masterDataTable}
                   tableLayout="fixed"
                   minWidth="980px"
+                  reorderableColumns
+                  resizableColumns
                   activeRowKey={selectedRowId}
                   onRowClick={(row) => setSelectedRowId(row.__rowId)}
                   onRowDoubleClick={handleRowView}

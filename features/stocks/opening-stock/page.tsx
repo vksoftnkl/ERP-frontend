@@ -671,6 +671,13 @@ export default function OpeningStockPage() {
     () => resolveConfiguredColumns(uiColumnConfigs),
     [uiColumnConfigs],
   );
+  const areConfiguredColumnsAllHidden = useMemo(
+    () =>
+      uiColumnConfigs.length > 0 &&
+      uiColumnConfigs.every((column) => column.uiTblClmColumnVisibility === false),
+    [uiColumnConfigs],
+  );
+  const renderedRows = areConfiguredColumnsAllHidden ? [] : rows;
   useEffect(() => {
     setColumns((current) => mergeResolvedColumns(current, resolvedColumns));
   }, [resolvedColumns]);
@@ -687,7 +694,7 @@ export default function OpeningStockPage() {
   const hasUnsavedChanges = editorSignature !== cleanEditorSignatureRef.current;
   const draftRows = useMemo(() => rows.filter((row) => !isPristineRow(row)), [rows]);
   const draftTotals = useMemo(() => getTotals(draftRows), [draftRows]);
-  const visibleTotals = useMemo(() => getTotals(rows), [rows]);
+  const visibleTotals = useMemo(() => getTotals(renderedRows), [renderedRows]);
   const selectedOpeningStockListRow = useMemo(
     () =>
       openingStockListRows.find(
@@ -2655,7 +2662,6 @@ export default function OpeningStockPage() {
             style={{ "--erp-table-min-width": tableMinWidth } as CSSProperties}
           >
             <colgroup>
-              <col style={{ width: DELETE_ACTION_COLUMN_WIDTH }} />
               <col style={{ width: SERIAL_NUMBER_COLUMN_WIDTH }} />
               {columns.map((column) => (
                 <col
@@ -2663,20 +2669,10 @@ export default function OpeningStockPage() {
                   style={{ width: column.width }}
                 />
               ))}
+              <col style={{ width: DELETE_ACTION_COLUMN_WIDTH }} />
             </colgroup>
             <thead className={styles.head}>
               <tr>
-                <th
-                  className={cx(
-                    styles.headerCell,
-                    styles.alignCenter,
-                    styles.headerCellDark,
-                    styles.stickyActionCell,
-                    styles.stickyActionHeader,
-                  )}
-                  style={{ width: DELETE_ACTION_COLUMN_WIDTH, left: 0 }}
-                  aria-hidden="true"
-                />
                 <th
                   className={cx(
                     styles.headerCell,
@@ -2687,7 +2683,7 @@ export default function OpeningStockPage() {
                   )}
                   style={{
                     width: SERIAL_NUMBER_COLUMN_WIDTH,
-                    left: DELETE_ACTION_COLUMN_WIDTH,
+                    left: 0,
                   }}
                 >
                   <span className={styles.headerText}>S.No</span>
@@ -2723,10 +2719,21 @@ export default function OpeningStockPage() {
                     />
                   </th>
                 ))}
+                <th
+                  className={cx(
+                    styles.headerCell,
+                    styles.alignCenter,
+                    styles.headerCellDark,
+                    styles.stickyActionCell,
+                    styles.stickyActionHeader,
+                  )}
+                  style={{ width: DELETE_ACTION_COLUMN_WIDTH, right: 0 }}
+                  aria-hidden="true"
+                />
               </tr>
             </thead>
             <tbody className={styles.body}>
-              {rows.map((row, index) => (
+              {renderedRows.map((row, index) => (
                 <StockTableRow
                   key={row.id}
                   row={row}

@@ -11,7 +11,6 @@ import {
   DEFAULT_GODOWN_OPTION,
   DELETE_ACTION_COLUMN_WIDTH,
   DISPLAY_DATE_PATTERN,
-  FALLBACK_COLUMN_KEYS,
   HIDDEN_INTERNAL_COLUMN_KEYS,
   ISO_DATE_PATTERN,
   ISO_DATE_TIME_PATTERN,
@@ -526,24 +525,6 @@ function createUnknownColumnSchema(header: string): ColumnSchema {
     kind: "text",
     placeholder: header,
   };
-}
-
-function createFallbackColumns(): ColumnDefinition[] {
-  return FALLBACK_COLUMN_KEYS.map((key) => {
-    const schema = COLUMN_SCHEMA[key];
-    return {
-      key,
-      header: schema.header,
-      width: schema.defaultWidth,
-      align: schema.align,
-      kind: schema.kind,
-      lookupKind: schema.lookupKind,
-      placeholder: schema.placeholder,
-      options: schema.options,
-      defaultValue: schema.defaultValue,
-      defaultWidth: schema.defaultWidth,
-    };
-  }).filter((column) => !HIDDEN_INTERNAL_COLUMN_KEYS.has(column.key));
 }
 
 function toConfiguredNumberInputValue(
@@ -1336,7 +1317,6 @@ function mapOpeningStockDetailToRow(
     oslcessperunit: toConfiguredNumberInputValue("oslcessperunit", detail.osl_cess_per_unit),
   });
 }
-
 export function mapOpeningStockDocumentToRows(
   document: OpeningStockDocumentPayload,
 ): OpeningStockRow[] {
@@ -1363,7 +1343,7 @@ export function resolveConfiguredColumns(
   configuredColumns: UiTableColumnPayload[],
 ): ColumnDefinition[] {
   if (configuredColumns.length === 0) {
-    return createFallbackColumns();
+    return [];
   }
 
   const visibleColumns = [...configuredColumns]
@@ -1413,7 +1393,7 @@ export function resolveConfiguredColumns(
     seenKeys.add(key);
   }
 
-  return resolvedColumns.length > 0 ? resolvedColumns : createFallbackColumns();
+  return resolvedColumns;
 }
 
 export function getTableMinWidth(columns: ColumnDefinition[]): string {
