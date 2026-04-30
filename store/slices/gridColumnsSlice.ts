@@ -172,6 +172,19 @@ function getFirstDefinedValue(
   return undefined;
 }
 
+function getFirstDefinedEntry(
+  row: Record<string, unknown>,
+  keys: readonly string[],
+): { key: string; value: unknown } | null {
+  for (const key of keys) {
+    const value = row[key];
+    if (value !== undefined && value !== null && value !== "") {
+      return { key, value };
+    }
+  }
+  return null;
+}
+
 function toBoolean(value: unknown): boolean | null {
   if (typeof value === "boolean") {
     return value;
@@ -235,9 +248,9 @@ function normalizeOrder(value: unknown, fallbackOrder: number): number {
   return fallbackOrder;
 }
 
-function normalizeWidth(value: unknown): string | undefined {
+function normalizeWidth(value: unknown, numericUnit: "px" | "%" = "px"): string | undefined {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return `${Math.floor(value)}px`;
+    return `${value}${numericUnit}`;
   }
   if (typeof value === "string") {
     const normalized = value.trim();
@@ -245,7 +258,7 @@ function normalizeWidth(value: unknown): string | undefined {
       return undefined;
     }
     if (/^\d+(\.\d+)?$/.test(normalized)) {
-      return `${Math.floor(Number(normalized))}px`;
+      return `${Number(normalized)}${numericUnit}`;
     }
     return normalized;
   }
@@ -326,7 +339,7 @@ function normalizeGridColumnAdjustmentRow(
     visible: isDeleted === true ? false : visibility ?? true,
     sortable: sortable ?? undefined,
     align: normalizeAlign(row.grid_column_alignment),
-    width: normalizeWidth(row.grid_column_width),
+    width: normalizeWidth(row.grid_column_width, "%"),
     color: normalizeColor(row.grid_column_color),
   };
 }
@@ -352,7 +365,16 @@ function normalizeColumnRow(
   const accessorKey = normalizeKey(rawAccessor || rawKey || rawHeader) || key;
   const header = normalizeHeader(rawHeader || rawKey || rawAccessor, key);
   const order = normalizeOrder(getFirstDefinedValue(row, COLUMN_ORDER_KEYS), fallbackOrder);
-  const width = normalizeWidth(getFirstDefinedValue(row, COLUMN_WIDTH_KEYS));
+  const widthEntry = getFirstDefinedEntry(row, COLUMN_WIDTH_KEYS);
+  const widthKey = widthEntry?.key.toLowerCase() ?? "";
+  const widthUnit =
+    widthKey === "grid_column_width" ||
+    widthKey === "gridcolumnwidth" ||
+    widthKey === "column_width" ||
+    widthKey === "columnwidth"
+      ? "%"
+      : "px";
+  const width = normalizeWidth(widthEntry?.value, widthUnit);
   const align = normalizeAlign(getFirstDefinedValue(row, COLUMN_ALIGN_KEYS));
   const color = normalizeColor(getFirstDefinedValue(row, COLUMN_COLOR_KEYS));
   const sortable = toBoolean(getFirstDefinedValue(row, COLUMN_SORTABLE_KEYS));

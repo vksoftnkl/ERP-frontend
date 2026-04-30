@@ -78,6 +78,7 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   ) => void;
   wrapperClassName?: string;
   tableClassName?: string;
+  tableLayout?: CSSProperties["tableLayout"];
   emptyText?: string;
   onView?: RowActionHandler<T>;
   onUpdate?: RowActionHandler<T>;
@@ -136,7 +137,8 @@ const ACTION_MENU_ESTIMATED_HEIGHT = 260;
 const ACTION_MENU_GAP = 8;
 const ACTION_MENU_VIEWPORT_PADDING = 8;
 const DEFAULT_TABLE_MAX_HEIGHT = "calc(100dvh - 250px)";
-const SERIAL_NUMBER_COLUMN_WIDTH = "84px";
+const SERIAL_NUMBER_COLUMN_WIDTH = "10px";
+const FIXED_ACTIONS_COLUMN_WIDTH = "30px";
 const DEFAULT_ACTION_MENU_PLACEMENT: ActionMenuPlacement = {
   vertical: "down",
   horizontal: "right",
@@ -342,7 +344,22 @@ function resolveColumnWidth<T extends Record<string, unknown>>(
       width: serialWidth,
       minWidth: serialWidth,
       maxWidth: serialWidth,
+      boxSizing: "border-box",
+      paddingInline: 0,
+      overflow: "hidden",
       whiteSpace: "nowrap",
+    };
+  }
+
+  if (isActionsColumn(column)) {
+    const actionsWidth = normalizedWidth || FIXED_ACTIONS_COLUMN_WIDTH;
+    return {
+      width: actionsWidth,
+      minWidth: actionsWidth,
+      maxWidth: actionsWidth,
+      boxSizing: "border-box",
+      paddingInline: 0,
+      overflow: "visible",
     };
   }
 
@@ -460,6 +477,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   onRowReorder,
   wrapperClassName,
   tableClassName,
+  tableLayout,
   emptyText = "No records found",
   onView,
   onUpdate,
@@ -1138,7 +1156,12 @@ export function ReusableTable<T extends Record<string, unknown>>({
       >
         <table
           className={cx(styles.table, tableClassName)}
-          style={{ "--erp-table-min-width": minWidth } as CSSProperties}
+          style={
+            {
+              "--erp-table-min-width": minWidth,
+              ...(tableLayout ? { tableLayout } : {}),
+            } as CSSProperties
+          }
         >
           <colgroup>
             {displayColumns.map((column) => {

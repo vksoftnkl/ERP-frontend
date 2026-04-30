@@ -9,6 +9,7 @@ export type GridColumnsQueryArg = {
   limit?: number;
 };
 export const metadataApi = baseApi.injectEndpoints({
+  overrideExisting: true,
   endpoints: (builder) => ({
     getGridColumns: builder.query<GridColumnConfig[], GridColumnsQueryArg>({
       query: ({ gridId, page = 1, limit = 20 }) => ({

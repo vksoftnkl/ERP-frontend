@@ -33,6 +33,8 @@ const GRID_DETAILS_ENDPOINT = "/grid-details/list";
 const GRID_DETAIL_GET_ENDPOINT = "/grid-details/get";
 const GRID_COLUMNS_PAGE = 1;
 const GRID_COLUMNS_LIMIT = 20;
+const MASTER_SERIAL_COLUMN_WIDTH = "10px";
+const MASTER_ACTIONS_COLUMN_WIDTH = "30px";
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
@@ -1023,7 +1025,7 @@ function buildMasterColumn({
       header: header ?? tableColumnHeaders?.serialNo ?? "S.No",
       accessor: "serialNo",
       align: align ?? tableColumnLayout?.serialNo?.align,
-      width: width ?? tableColumnLayout?.serialNo?.width,
+      width: MASTER_SERIAL_COLUMN_WIDTH,
       sortable: sortable ?? false,
     };
   }
@@ -1292,7 +1294,7 @@ function buildColumnsFromGridColumns(
       header: column.header,
       accessor,
       align: column.align,
-      width: column.width,
+      width: accessor === "serialNo" ? MASTER_SERIAL_COLUMN_WIDTH : column.width,
       sortable: column.sortable ?? accessor !== "serialNo",
       headerStyle: column.color ? { backgroundColor: column.color } : undefined,
       cellStyle: column.color ? { backgroundColor: column.color } : undefined,
@@ -1355,6 +1357,11 @@ function buildColumnsFromListResponseStyles(
       continue;
     }
 
+    const header =
+      toDisplayValue(
+        getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_HEADER_KEYS),
+      ) || styleColumn.fallbackHeader;
+
     seenAccessors.add(styleColumn.accessor);
     columns.push(
       buildMasterColumn({
@@ -1364,10 +1371,7 @@ function buildColumnsFromListResponseStyles(
         nameColumnHeader,
         tableColumnHeaders,
         tableColumnLayout,
-        header:
-          toDisplayValue(
-            getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_HEADER_KEYS),
-          ) || styleColumn.fallbackHeader,
+        header,
         width: normalizeListStyleWidth(
           getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_WIDTH_KEYS),
         ),
@@ -1463,6 +1467,87 @@ function buildColumnsFromDynamicListResponseStyles(
   }
 
   return buildColumnsFromGridColumns(styleGridColumns, lookupKeys, fallbackColumns);
+}
+
+function isMasterSerialColumn(column: ReusableTableColumn<MasterTableRow>): boolean {
+  return (
+    column.accessor === "serialNo" ||
+    normalizeColumnToken(column.key) === "serialno" ||
+    normalizeColumnToken(String(column.header)) === "serialno" ||
+    normalizeColumnToken(String(column.header)) === "sno"
+  );
+}
+
+function applyListResponseStylesToCustomColumns(
+  payload: unknown,
+  styleArrayKey: string | undefined,
+  customColumns: ReusableTableColumn<MasterTableRow>[],
+): ReusableTableColumn<MasterTableRow>[] {
+  if (!styleArrayKey) {
+    return customColumns;
+  }
+
+  const styleRows = extractListResponseStyleRows(payload, styleArrayKey);
+  if (styleRows.length === 0) {
+    return customColumns;
+  }
+
+  let styleIndex = 0;
+
+  return customColumns.flatMap((column) => {
+    if (isMasterSerialColumn(column)) {
+      return [column];
+    }
+
+    const styleRow = styleRows[styleIndex];
+    styleIndex += 1;
+
+    if (!styleRow) {
+      return [column];
+    }
+
+    const isVisible = toBoolean(
+      getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_VISIBLE_KEYS),
+    );
+    if (isVisible === false) {
+      return [];
+    }
+
+    const header = toDisplayValue(
+      getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_HEADER_KEYS),
+    );
+    const width = normalizeListStyleWidth(
+      getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_WIDTH_KEYS),
+    );
+    const align = normalizeListStyleAlign(
+      getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_ALIGN_KEYS),
+    );
+    const sortable = toBoolean(
+      getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_FILTER_KEYS),
+    );
+    const color =
+      toDisplayValue(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_COLOR_KEYS)) ||
+      undefined;
+    const headerStyle = color
+      ? { ...(column.headerStyle ?? {}), backgroundColor: color }
+      : column.headerStyle;
+    const cellStyle =
+      color && typeof column.cellStyle !== "function"
+        ? { ...(column.cellStyle ?? {}), backgroundColor: color }
+        : column.cellStyle;
+
+    return [
+      {
+        ...column,
+        header: header || column.header,
+        width: width ?? column.width,
+        align: align ?? column.align,
+        sortable: sortable ?? column.sortable,
+        headerStyle,
+        cellStyle,
+      },
+    ];
+  });
 }
 
 function toCsvCellValue(value: unknown): string {
@@ -1824,7 +1909,11 @@ export default function CrudMasterPage({
   const columns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
     () =>
       customTableColumns && customTableColumns.length > 0
-        ? customTableColumns
+        ? applyListResponseStylesToCustomColumns(
+            data,
+            listResponseStyleArrayKey,
+            customTableColumns,
+          )
         : listResponseColumns.length > 0
           ? listResponseColumns
           : normalizedGridTableNames.length > 0
@@ -1832,8 +1921,10 @@ export default function CrudMasterPage({
             : fallbackColumns,
     [
       customTableColumns,
+      data,
       fallbackColumns,
       gridColumns,
+      listResponseStyleArrayKey,
       listResponseColumns,
       lookupKeys,
       normalizedGridTableNames.length,
@@ -2562,6 +2653,7 @@ export default function CrudMasterPage({
                   }
                   wrapperClassName={styles.masterTable}
                   tableClassName={styles.masterDataTable}
+                  tableLayout="fixed"
                   minWidth="980px"
                   activeRowKey={selectedRowId}
                   onRowClick={(row) => setSelectedRowId(row.__rowId)}
@@ -2572,6 +2664,7 @@ export default function CrudMasterPage({
                   onUpdate={handleRowUpdate}
                   onDelete={handleRowDelete}
                   onLogs={auditHistory ? handleRowLogs : undefined}
+                  actionsColumnWidth={MASTER_ACTIONS_COLUMN_WIDTH}
                   isViewDisabled={() => saveLoading || detailsLoading}
                   isUpdateDisabled={() => saveLoading || detailsLoading}
                   isDeleteDisabled={() =>
