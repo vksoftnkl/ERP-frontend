@@ -118,6 +118,13 @@ const COLUMN_SORTABLE_KEYS = [
   "grid_column_filter",
   "gridColumnFilter",
 ] as const;
+const COLUMN_SERIAL_ID_KEYS = [
+  "grid_serialid",
+  "gridSerialId",
+  "serial_id",
+  "serialId",
+] as const;
+const COLUMN_GRID_ID_KEYS = ["grid_id", "gridId"] as const;
 
 type GridColumnAlign = "left" | "center" | "right";
 
@@ -127,6 +134,10 @@ export type GridColumnConfig = {
   header: string;
   order: number;
   visible: boolean;
+  serialId?: string;
+  gridId?: string;
+  columnNumber?: number;
+  columnName?: string;
   sortable?: boolean;
   align?: GridColumnAlign;
   width?: string;
@@ -337,6 +348,10 @@ function normalizeGridColumnAdjustmentRow(
     header: columnName,
     order: normalizeOrder(row.grid_column_number, fallbackOrder),
     visible: isDeleted === true ? false : visibility ?? true,
+    serialId: normalizeKey(row.grid_serialid ?? row.gridSerialId) || undefined,
+    gridId: normalizeKey(row.grid_id ?? row.gridId) || undefined,
+    columnNumber: normalizeOrder(row.grid_column_number, fallbackOrder),
+    columnName,
     sortable: sortable ?? undefined,
     align: normalizeAlign(row.grid_column_alignment),
     width: normalizeWidth(row.grid_column_width, "%"),
@@ -356,6 +371,7 @@ function normalizeColumnRow(
   const rawKey = getFirstDefinedValue(row, COLUMN_KEY_KEYS);
   const rawAccessor = getFirstDefinedValue(row, COLUMN_ACCESSOR_KEYS);
   const rawHeader = getFirstDefinedValue(row, COLUMN_HEADER_KEYS);
+  const rawOrder = getFirstDefinedValue(row, COLUMN_ORDER_KEYS);
 
   const key = normalizeKey(rawKey || rawAccessor || rawHeader);
   if (!key) {
@@ -364,7 +380,7 @@ function normalizeColumnRow(
 
   const accessorKey = normalizeKey(rawAccessor || rawKey || rawHeader) || key;
   const header = normalizeHeader(rawHeader || rawKey || rawAccessor, key);
-  const order = normalizeOrder(getFirstDefinedValue(row, COLUMN_ORDER_KEYS), fallbackOrder);
+  const order = normalizeOrder(rawOrder, fallbackOrder);
   const widthEntry = getFirstDefinedEntry(row, COLUMN_WIDTH_KEYS);
   const widthKey = widthEntry?.key.toLowerCase() ?? "";
   const widthUnit =
@@ -388,6 +404,10 @@ function normalizeColumnRow(
     header,
     order,
     visible,
+    serialId: normalizeKey(getFirstDefinedValue(row, COLUMN_SERIAL_ID_KEYS)) || undefined,
+    gridId: normalizeKey(getFirstDefinedValue(row, COLUMN_GRID_ID_KEYS)) || undefined,
+    columnNumber: order,
+    columnName: header,
     sortable: sortable ?? undefined,
     align,
     width,

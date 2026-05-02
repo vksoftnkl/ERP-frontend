@@ -9,7 +9,10 @@ import {
   useState,
 } from "react";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
-import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
+import ReusableTable, {
+  type ReusableTableColumn,
+  type ReusableTableColumnResizeEndPayload,
+} from "@/components/ui/table";
 import { resolveRecordHistoryDisplayName } from "@/features/masters/audit-logs/record-history-route";
 import { RecordHistoryModal } from "@/features/masters/record-history/page";
 import { useApi } from "@/hooks/useApi";
@@ -31,10 +34,11 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 const GRID_DETAILS_ENDPOINT = "/grid-details/list";
 const GRID_DETAIL_GET_ENDPOINT = "/grid-details/get";
+const GRID_COLUMNS_CREATE_ENDPOINT = "/grid-columns/create";
 const GRID_COLUMNS_PAGE = 1;
 const GRID_COLUMNS_LIMIT = 20;
-const MASTER_SERIAL_COLUMN_WIDTH = "10px";
-const MASTER_ACTIONS_COLUMN_WIDTH = "30px";
+const MASTER_SERIAL_COLUMN_WIDTH = "40px";
+const MASTER_ACTIONS_COLUMN_WIDTH = "40px";
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
@@ -76,7 +80,6 @@ const PAGE_SIZE_KEYS = [
   "perPage",
   "per_page",
 ] as const;
-
 const DEFAULT_ACTIVE_KEYS = [
   "active",
   "is_active",
@@ -153,6 +156,7 @@ type MasterTableRow = {
   masterName: string;
   masterShort: string;
   masterAlias: string;
+  masterDescription: string;
   masterActive: string;
   position: string;
 };
@@ -163,6 +167,7 @@ type MasterColumnAccessor =
   | "masterName"
   | "masterAlias"
   | "masterShort"
+  | "masterDescription"
   | "position"
   | "masterActive";
 type MasterFormState = {
@@ -174,7 +179,6 @@ type MasterFormState = {
   position: string;
 };
 type CrudMasterFormValues = MasterFormState & Record<string, string>;
-
 type PaginationInfo = {
   totalEntries: number | null;
   currentPage: number | null;
@@ -211,6 +215,7 @@ export type CrudMasterTableColumnHeaders = {
   masterName?: string;
   masterAlias?: string;
   masterShort?: string;
+  masterDescription?: string;
   position?: string;
   masterActive?: string;
 };
@@ -232,6 +237,10 @@ export type CrudMasterTableColumnLayout = {
     align?: ReusableTableColumn<Record<string, unknown>>["align"];
   };
   masterShort?: {
+    width?: string;
+    align?: ReusableTableColumn<Record<string, unknown>>["align"];
+  };
+  masterDescription?: {
     width?: string;
     align?: ReusableTableColumn<Record<string, unknown>>["align"];
   };
@@ -441,20 +450,15 @@ function extractRows(
   if (Array.isArray(payload)) {
     return payload;
   }
-
   if (!payload || typeof payload !== "object") {
     return [];
   }
-
   const objectPayload = payload as Record<string, unknown>;
-
   for (const key of arrayKeys) {
     const value = objectPayload[key];
-
     if (Array.isArray(value)) {
       return value;
     }
-
     if (value && typeof value === "object") {
       const nestedObject = value as Record<string, unknown>;
 
@@ -464,7 +468,6 @@ function extractRows(
           return nestedValue;
         }
       }
-
       const nestedArray = Object.values(nestedObject).find((entry) =>
         Array.isArray(entry),
       );
@@ -473,13 +476,11 @@ function extractRows(
       }
     }
   }
-
   const firstArray = Object.values(objectPayload).find((value) =>
     Array.isArray(value),
   );
   return Array.isArray(firstArray) ? firstArray : [];
 }
-
 function extractPaginationInfo(payload: unknown): PaginationInfo {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return {
@@ -488,28 +489,23 @@ function extractPaginationInfo(payload: unknown): PaginationInfo {
       pageSize: null,
     };
   }
-
   const root = payload as Record<string, unknown>;
   const candidates: Record<string, unknown>[] = [root];
-
   for (const key of PAGINATION_CONTAINER_KEYS) {
     const value = root[key];
     if (value && typeof value === "object" && !Array.isArray(value)) {
       candidates.push(value as Record<string, unknown>);
     }
   }
-
   if (root.data && typeof root.data === "object" && !Array.isArray(root.data)) {
     candidates.push(root.data as Record<string, unknown>);
   }
-
   return {
     totalEntries: findPaginationNumber(candidates, TOTAL_ENTRIES_KEYS, true),
     currentPage: findPaginationNumber(candidates, CURRENT_PAGE_KEYS, false),
     pageSize: findPaginationNumber(candidates, PAGE_SIZE_KEYS, false),
   };
 }
-
 function buildMasterRows(
   payload: unknown,
   serialOffset: number,
@@ -517,11 +513,10 @@ function buildMasterRows(
 ): MasterTableRow[] {
   const activeKeys = lookupKeys.active ?? DEFAULT_ACTIVE_KEYS;
   const positionKeys = lookupKeys.position ?? DEFAULT_POSITION_KEYS;
-
-  return extractRows(payload, lookupKeys.array ?? DEFAULT_ARRAY_KEYS).map(
+  const descriptionKeys = lookupKeys.description ?? DEFAULT_DESCRIPTION_KEYS;
+ return extractRows(payload, lookupKeys.array ?? DEFAULT_ARRAY_KEYS).map(
     (item, index) => {
       const serialNo = serialOffset + index + 1;
-
       if (item && typeof item === "object" && !Array.isArray(item)) {
         const row = item as Record<string, unknown>;
         const idValue = getFirstDefinedValue(row, lookupKeys.id);
@@ -529,16 +524,15 @@ function buildMasterRows(
         const nameValue = getFirstDefinedValue(row, lookupKeys.name);
         const shortValue = getFirstDefinedValue(row, lookupKeys.short);
         const aliasValue = getFirstDefinedValue(row, lookupKeys.alias);
+        const descriptionValue = getFirstDefinedValue(row, descriptionKeys);
         const activeValue = getFirstDefinedValue(row, activeKeys);
         const positionValue = getFirstDefinedValue(row, positionKeys);
-
         const preferredKey =
           idValue ?? row.id ?? row._id ?? row.code ?? serialNo;
         const rowId =
           typeof preferredKey === "string" || typeof preferredKey === "number"
             ? preferredKey
             : serialNo;
-
         return {
           __rowId: rowId,
           __recordId: rowId,
@@ -549,11 +543,11 @@ function buildMasterRows(
           masterName: toDisplayValue(nameValue),
           masterShort: toDisplayValue(shortValue),
           masterAlias: toDisplayValue(aliasValue),
+          masterDescription: toDisplayValue(descriptionValue),
           masterActive: toDisplayValue(activeValue),
           position: toDisplayValue(positionValue),
         };
       }
-
       return {
         __rowId: serialNo,
         __recordId: serialNo,
@@ -564,20 +558,19 @@ function buildMasterRows(
         masterName: toDisplayValue(item),
         masterShort: "",
         masterAlias: "",
+        masterDescription: "",
         masterActive: "",
         position: "",
       };
     },
   );
 }
-
 function mapRowToFormState(
   row: MasterTableRow,
   lookupKeys: CrudMasterLookupKeys,
 ): MasterFormState {
   const descriptionKeys = lookupKeys.description ?? DEFAULT_DESCRIPTION_KEYS;
   const positionKeys = lookupKeys.position ?? DEFAULT_POSITION_KEYS;
-
   if (!row.__source) {
     return {
       masterName: row.masterName,
@@ -588,7 +581,6 @@ function mapRowToFormState(
       position: row.position,
     };
   }
-
   const source = row.__source;
   return {
     masterName:
@@ -611,7 +603,6 @@ function mapRowToFormState(
       row.position,
   };
 }
-
 function createFallbackRowFromSource(
   recordId: string | number,
   source: Record<string, unknown> | null,
@@ -638,6 +629,11 @@ function createFallbackRowFromSource(
     masterAlias: source
       ? toDisplayValue(getFirstDefinedValue(source, lookupKeys.alias))
       : "",
+    masterDescription: source
+      ? toDisplayValue(
+          getFirstDefinedValue(source, lookupKeys.description ?? DEFAULT_DESCRIPTION_KEYS),
+        )
+      : "",
     masterActive: source
       ? toDisplayValue(
           getFirstDefinedValue(source, lookupKeys.active ?? DEFAULT_ACTIVE_KEYS),
@@ -650,15 +646,12 @@ function createFallbackRowFromSource(
       : "",
   };
 }
-
 function extractDetailSource(payload: unknown): Record<string, unknown> | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return null;
   }
-
   const objectPayload = payload as Record<string, unknown>;
   const nestedData = objectPayload.data;
-
   if (
     nestedData &&
     typeof nestedData === "object" &&
@@ -666,10 +659,8 @@ function extractDetailSource(payload: unknown): Record<string, unknown> | null {
   ) {
     return nestedData as Record<string, unknown>;
   }
-
   return objectPayload;
 }
-
 function mergeRowWithDetail(
   row: MasterTableRow,
   source: Record<string, unknown>,
@@ -678,12 +669,11 @@ function mergeRowWithDetail(
   const idValue = getFirstDefinedValue(source, lookupKeys.id);
   const activeKeys = lookupKeys.active ?? DEFAULT_ACTIVE_KEYS;
   const positionKeys = lookupKeys.position ?? DEFAULT_POSITION_KEYS;
-
+  const descriptionKeys = lookupKeys.description ?? DEFAULT_DESCRIPTION_KEYS;
   const recordId =
     typeof idValue === "string" || typeof idValue === "number"
       ? idValue
       : row.__recordId;
-
   return {
     ...row,
     __recordId: recordId,
@@ -701,6 +691,9 @@ function mergeRowWithDetail(
     masterAlias:
       toDisplayValue(getFirstDefinedValue(source, lookupKeys.alias)) ||
       row.masterAlias,
+    masterDescription:
+      toDisplayValue(getFirstDefinedValue(source, descriptionKeys)) ||
+      row.masterDescription,
     masterActive:
       toDisplayValue(getFirstDefinedValue(source, activeKeys)) ||
       row.masterActive,
@@ -709,7 +702,6 @@ function mergeRowWithDetail(
       row.position,
   };
 }
-
 function resolveRecordId(
   row: MasterTableRow,
   idKeys: readonly string[],
@@ -720,7 +712,6 @@ function resolveRecordId(
     if (typeof sourceId === "string" || typeof sourceId === "number") {
       return sourceId;
     }
-
     const displayId = toDisplayValue(sourceId);
     if (displayId) {
       return displayId;
@@ -929,7 +920,7 @@ function normalizeListStyleOrder(value: unknown, fallbackOrder: number): number 
 
 function normalizeListStyleWidth(value: unknown): string | undefined {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return `${Math.floor(value)}px`;
+    return `${value}%`;
   }
 
   if (typeof value === "string") {
@@ -938,7 +929,7 @@ function normalizeListStyleWidth(value: unknown): string | undefined {
       return undefined;
     }
     if (/^\d+(\.\d+)?$/.test(normalized)) {
-      return `${Math.floor(Number(normalized))}px`;
+      return `${Number(normalized)}%`;
     }
     return normalized;
   }
@@ -1100,6 +1091,17 @@ function buildMasterColumn({
     };
   }
 
+  if (accessor === "masterDescription") {
+    return {
+      key: "masterDescription",
+      header: header ?? tableColumnHeaders?.masterDescription ?? "Description",
+      accessor: "masterDescription",
+      align: align ?? tableColumnLayout?.masterDescription?.align,
+      width: width ?? tableColumnLayout?.masterDescription?.width,
+      sortable,
+    };
+  }
+
   if (accessor === "position") {
     return {
       key: "position",
@@ -1181,6 +1183,9 @@ function resolveMasterAccessorFromGridColumn(
   const normalizedNameKeys = new Set(lookupKeys.name.map(normalizeColumnToken));
   const normalizedShortKeys = new Set(lookupKeys.short.map(normalizeColumnToken));
   const normalizedAliasKeys = new Set(lookupKeys.alias.map(normalizeColumnToken));
+  const normalizedDescriptionKeys = new Set(
+    (lookupKeys.description ?? DEFAULT_DESCRIPTION_KEYS).map(normalizeColumnToken),
+  );
   const normalizedActiveKeys = new Set(activeKeys.map(normalizeColumnToken));
   const normalizedPositionKeys = new Set(positionKeys.map(normalizeColumnToken));
 
@@ -1232,6 +1237,15 @@ function resolveMasterAccessorFromGridColumn(
     }
 
     if (
+      normalized === "description" ||
+      normalized === "desc" ||
+      normalized.endsWith("description") ||
+      normalizedDescriptionKeys.has(normalized)
+    ) {
+      return "masterDescription";
+    }
+
+    if (
       normalized === "name" ||
       normalized.endsWith("name") ||
       normalizedNameKeys.has(normalized)
@@ -1267,6 +1281,13 @@ function resolveMasterAccessorFromGridColumn(
     }
     if (normalizedAliasKeys.has(compact) || compact.endsWith("alias")) {
       return "masterAlias";
+    }
+    if (
+      normalizedDescriptionKeys.has(compact) ||
+      compact === "desc" ||
+      compact.endsWith("description")
+    ) {
+      return "masterDescription";
     }
     if (
       normalizedNameKeys.has(compact) ||
@@ -1343,6 +1364,37 @@ function buildColumnsFromGridColumns(
   }
 
   return columns;
+}
+
+function resolveGridColumnForTableColumn(
+  tableColumn: ReusableTableColumn<MasterTableRow>,
+  gridColumns: GridColumnConfig[],
+): GridColumnConfig | null {
+  const tableTokens = [
+    tableColumn.key,
+    typeof tableColumn.accessor === "string" ? tableColumn.accessor : "",
+    typeof tableColumn.header === "string" ? tableColumn.header : "",
+  ]
+    .map(normalizeColumnToken)
+    .filter(Boolean);
+
+  if (tableTokens.length === 0) {
+    return null;
+  }
+
+  return (
+    gridColumns.find((gridColumn) => {
+      const gridTokens = [
+        gridColumn.key,
+        gridColumn.accessorKey,
+        gridColumn.header,
+        gridColumn.columnName ?? "",
+      ]
+        .map(normalizeColumnToken)
+        .filter(Boolean);
+      return tableTokens.some((token) => gridTokens.includes(token));
+    }) ?? null
+  );
 }
 
 function buildColumnsFromListResponseStyles(
@@ -1751,6 +1803,15 @@ export default function CrudMasterPage({
 
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const { getAll: getGridDetailById } = useApi<unknown>(GRID_DETAIL_GET_ENDPOINT);
+  const { run: saveGridColumnWidth } = useApi<unknown, Record<string, unknown>>(
+    GRID_COLUMNS_CREATE_ENDPOINT,
+    {
+      method: "POST",
+      toast: {
+        success: false,
+      },
+    },
+  );
   const {
     list: {
       data,
@@ -2632,6 +2693,50 @@ export default function CrudMasterPage({
   const handleDownloadRows = useCallback(() => {
     downloadMasterRowsCsv(listHeading, columns, renderedRows);
   }, [columns, listHeading, renderedRows]);
+  const handleGridColumnResizeEnd = useCallback(
+    (payload: ReusableTableColumnResizeEndPayload<MasterTableRow>) => {
+      if (gridId === null || payload.tableWidthPx <= 0) {
+        return;
+      }
+
+      const gridColumn = resolveGridColumnForTableColumn(payload.column, gridColumns);
+      if (!gridColumn?.serialId) {
+        return;
+      }
+
+      const widthPercent = Number(((payload.widthPx * 100) / payload.tableWidthPx).toFixed(4));
+      if (!Number.isFinite(widthPercent) || widthPercent <= 0) {
+        return;
+      }
+
+      const columnNumber =
+        gridColumn.columnNumber && gridColumn.columnNumber > 0
+          ? gridColumn.columnNumber
+          : Math.max(1, gridColumn.order + 1);
+      const columnName = (gridColumn.columnName ?? gridColumn.header).trim();
+      if (!columnName) {
+        return;
+      }
+
+      void (async () => {
+        try {
+          await saveGridColumnWidth({
+            body: {
+              grid_serialid: gridColumn.serialId,
+              grid_id: gridColumn.gridId ?? String(gridId),
+              grid_column_number: columnNumber,
+              grid_column_name: columnName,
+              grid_column_width: widthPercent,
+            },
+          });
+          void refetchGridColumns();
+        } catch {
+          // useApi handles the visible error toast.
+        }
+      })();
+    },
+    [gridColumns, gridId, refetchGridColumns, saveGridColumnWidth],
+  );
   const masterToolbarContent = (
     <div className={styles.masterHeader}>
       <div className={styles.masterTitleWrap}>
@@ -2735,6 +2840,7 @@ export default function CrudMasterPage({
                   minWidth="980px"
                   reorderableColumns
                   resizableColumns
+                  onColumnResizeEnd={handleGridColumnResizeEnd}
                   activeRowKey={selectedRowId}
                   onRowClick={(row) => setSelectedRowId(row.__rowId)}
                   onRowDoubleClick={handleRowView}

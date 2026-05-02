@@ -219,21 +219,22 @@
   }
   .columnResizeHandle {
     position: absolute;
-    top: 0;
-    bottom: 0;
+    top: -4px;
+    bottom: -4px;
     z-index: 130;
-    width: 7px;
+    width: 12px;
     cursor: col-resize;
     touch-action: none;
 
     &::after {
       content: "";
       position: absolute;
-      top: 22%;
-      right: 3px;
-      bottom: 22%;
-      width: 1px;
+      top: 8px;
+      right: 5px;
+      bottom: 8px;
+      width: 2px;
       background: transparent;
+      border-radius: var(--erp-radius);
       transition: background-color 0.12s ease;
     }
 
@@ -250,7 +251,7 @@
     }
   }
   .columnResizeHandleRight {
-    right: -3px;
+    right: -6px;
   }
   .headerButton {
     width: 100%;

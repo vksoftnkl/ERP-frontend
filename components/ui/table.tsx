@@ -31,7 +31,6 @@ export type ReusableTableSortState = {
 };
 export type ReusableTableRowReorderEdge = "before" | "after";
 export type ReusableTableColumnReorderEdge = "before" | "after";
-type ReusableTableColumnResizeEdge = "left" | "right";
 export type ReusableTableColumn<T> = {
   key: string;
   header: ReactNode;
@@ -47,6 +46,11 @@ export type ReusableTableColumn<T> = {
   sortable?: boolean;
   sortAccessor?: (row: T, rowIndex: number) => unknown;
   searchAccessor?: (row: T, rowIndex: number) => unknown;
+};
+export type ReusableTableColumnResizeEndPayload<T extends Record<string, unknown>> = {
+  column: ReusableTableColumn<T>;
+  widthPx: number;
+  tableWidthPx: number;
 };
 type RowKeyResolver<T> = keyof T | ((row: T, rowIndex: number) => Key);
 type RowActionHandler<T> = (row: T, rowIndex: number) => void;
@@ -81,6 +85,7 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   reorderableColumns?: boolean;
   onColumnReorder?: (columns: ReusableTableColumn<T>[]) => void;
   resizableColumns?: boolean;
+  onColumnResizeEnd?: (payload: ReusableTableColumnResizeEndPayload<T>) => void;
   wrapperClassName?: string;
   tableClassName?: string;
   tableLayout?: CSSProperties["tableLayout"];
@@ -136,27 +141,26 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
 function cx(...tokens: Array<string | undefined | false>): string {
   return tokens.filter(Boolean).join(" ");
 }
-
 const ACTION_MENU_ESTIMATED_WIDTH = 190;
 const ACTION_MENU_ESTIMATED_HEIGHT = 260;
 const ACTION_MENU_GAP = 8;
 const ACTION_MENU_VIEWPORT_PADDING = 8;
 const DEFAULT_TABLE_MAX_HEIGHT = "calc(100dvh - 250px)";
-const SERIAL_NUMBER_COLUMN_WIDTH = "10px";
-const FIXED_ACTIONS_COLUMN_WIDTH = "30px";
+const SERIAL_NUMBER_COLUMN_WIDTH = "100px";
+const FIXED_ACTIONS_COLUMN_WIDTH = "200px";
+const MIN_DATA_COLUMN_WIDTH = 100;
+const MIN_RESIZABLE_COLUMN_WIDTH = 40;
 const DEFAULT_ACTION_MENU_PLACEMENT: ActionMenuPlacement = {
   vertical: "down",
   horizontal: "right",
 };
 const DEFAULT_ACTION_MENU_POSITION: ActionMenuPosition = {};
-
 function clamp(value: number, min: number, max: number): number {
   if (max < min) {
     return min;
   }
   return Math.min(Math.max(value, min), max);
 }
-
 function resolveActionMenuGeometry(trigger: HTMLElement): {
   placement: ActionMenuPlacement;
   position: ActionMenuPosition;
@@ -164,17 +168,14 @@ function resolveActionMenuGeometry(trigger: HTMLElement): {
   const viewport = trigger.closest<HTMLElement>('[data-erp-table-viewport="true"]');
   const bounds = viewport?.getBoundingClientRect() ?? document.documentElement.getBoundingClientRect();
   const triggerRect = trigger.getBoundingClientRect();
-
   const spaceRight = bounds.right - triggerRect.right;
   const spaceLeft = triggerRect.left - bounds.left;
   const horizontal =
     spaceRight < ACTION_MENU_ESTIMATED_WIDTH && spaceLeft > spaceRight ? "left" : "right";
-
   const spaceBelow = bounds.bottom - triggerRect.top;
   const spaceAbove = triggerRect.bottom - bounds.top;
   const vertical =
     spaceBelow < ACTION_MENU_ESTIMATED_HEIGHT && spaceAbove > spaceBelow ? "up" : "down";
-
   const maxLeft = window.innerWidth - ACTION_MENU_ESTIMATED_WIDTH - ACTION_MENU_VIEWPORT_PADDING;
   const left =
     horizontal === "left"
@@ -188,7 +189,6 @@ function resolveActionMenuGeometry(trigger: HTMLElement): {
     ACTION_MENU_ESTIMATED_HEIGHT,
     window.innerHeight - ACTION_MENU_VIEWPORT_PADDING * 2,
   );
-
   return {
     placement: { vertical, horizontal },
     position: {
@@ -304,12 +304,10 @@ function isSerialNumberColumn<T extends Record<string, unknown>>(
 ): boolean {
   const normalize = (value: string): string =>
     value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-
   const normalizedKey = normalize(column.key);
   if (normalizedKey === "serialno" || normalizedKey === "sno" || normalizedKey === "srno") {
     return true;
   }
-
   if (typeof column.accessor === "string") {
     const normalizedAccessor = normalize(column.accessor);
     if (
@@ -320,7 +318,6 @@ function isSerialNumberColumn<T extends Record<string, unknown>>(
       return true;
     }
   }
-
   if (typeof column.header === "string") {
     const normalizedHeader = normalize(column.header);
     if (
@@ -331,31 +328,23 @@ function isSerialNumberColumn<T extends Record<string, unknown>>(
       return true;
     }
   }
-
   return false;
 }
 function resolveColumnWidth<T extends Record<string, unknown>>(
   column: ReusableTableColumn<T>,
 ): CSSProperties | undefined {
   const normalizedWidth = column.width?.trim();
-
   if (isSerialNumberColumn(column)) {
-    const pixelWidthMatch = normalizedWidth?.match(/^(\d+(?:\.\d+)?)px$/i);
-    const serialWidth =
-      pixelWidthMatch && Number.isFinite(Number(pixelWidthMatch[1]))
-        ? `${Math.max(Number(pixelWidthMatch[1]), Number.parseFloat(SERIAL_NUMBER_COLUMN_WIDTH))}px`
-        : normalizedWidth || SERIAL_NUMBER_COLUMN_WIDTH;
     return {
-      width: serialWidth,
-      minWidth: serialWidth,
-      maxWidth: serialWidth,
+      width: SERIAL_NUMBER_COLUMN_WIDTH,
+      minWidth: SERIAL_NUMBER_COLUMN_WIDTH,
+      maxWidth: SERIAL_NUMBER_COLUMN_WIDTH,
       boxSizing: "border-box",
       paddingInline: 0,
       overflow: "hidden",
       whiteSpace: "nowrap",
     };
   }
-
   if (isActionsColumn(column)) {
     const actionsWidth = normalizedWidth || FIXED_ACTIONS_COLUMN_WIDTH;
     return {
@@ -367,12 +356,27 @@ function resolveColumnWidth<T extends Record<string, unknown>>(
       overflow: "visible",
     };
   }
-
   if (!normalizedWidth) {
     return undefined;
   }
-
   return { width: normalizedWidth };
+}
+function resolveColumnPixelWidth<T extends Record<string, unknown>>(
+  column: ReusableTableColumn<T>,
+): number {
+  if (isSerialNumberColumn(column)) {
+    return Number.parseFloat(SERIAL_NUMBER_COLUMN_WIDTH);
+  }
+  if (isActionsColumn(column)) {
+    return Number.parseFloat(FIXED_ACTIONS_COLUMN_WIDTH);
+  }
+  const pixelWidth = column.width?.trim().match(/^(\d+(?:\.\d+)?)px$/i);
+  return pixelWidth ? Math.max(Number(pixelWidth[1]), MIN_DATA_COLUMN_WIDTH) : MIN_DATA_COLUMN_WIDTH;
+}
+function resolveMinimumTableWidth<T extends Record<string, unknown>>(
+  columns: ReusableTableColumn<T>[],
+): number {
+  return columns.reduce((total, column) => total + resolveColumnPixelWidth(column), 0);
 }
 function getInlineActionColumnIndex<T extends Record<string, unknown>>(
   columns: ReusableTableColumn<T>[],
@@ -381,11 +385,9 @@ function getInlineActionColumnIndex<T extends Record<string, unknown>>(
     (column) => !isActionsColumn(column) && isSerialNumberColumn(column),
   );
   const firstUsableColumnIndex = columns.findIndex((column) => !isActionsColumn(column));
-
   if (serialColumnIndex >= 0) {
     return serialColumnIndex;
   }
-
   return firstUsableColumnIndex;
 }
 function getCellContent<T extends Record<string, unknown>>(
@@ -476,13 +478,11 @@ function applyColumnOrder<T extends Record<string, unknown>>(
   if (columnOrder.length === 0) {
     return columns;
   }
-
   const orderIndexByKey = new Map(columnOrder.map((key, index) => [key, index]));
   const reorderableColumns = columns.filter(isColumnReorderable);
   const orderedReorderableColumns = [...reorderableColumns].sort((left, right) => {
     const leftIndex = orderIndexByKey.get(left.key);
     const rightIndex = orderIndexByKey.get(right.key);
-
     if (leftIndex === undefined && rightIndex === undefined) {
       return 0;
     }
@@ -495,7 +495,6 @@ function applyColumnOrder<T extends Record<string, unknown>>(
     return leftIndex - rightIndex;
   });
   let nextReorderableIndex = 0;
-
   return columns.map((column) => {
     if (!isColumnReorderable(column)) {
       return column;
@@ -524,6 +523,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   reorderableColumns = false,
   onColumnReorder,
   resizableColumns = false,
+  onColumnResizeEnd,
   wrapperClassName,
   tableClassName,
   tableLayout,
@@ -728,6 +728,51 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const enableRowReorder = reorderableRows && typeof onRowReorder === "function";
   const enableColumnReorder = reorderableColumns && displayColumns.some(isColumnReorderable);
   const enableColumnResize = resizableColumns && displayColumns.some(isColumnReorderable);
+  const displayColumnsWithWidths = displayColumns.map((column) => {
+    const resizedWidth = columnWidths[column.key];
+    return resizedWidth ? { ...column, width: resizedWidth } : column;
+  });
+  const fixedColumnWidth = displayColumnsWithWidths.reduce(
+    (total, column) =>
+      isSerialNumberColumn(column) || isActionsColumn(column)
+        ? total + resolveColumnPixelWidth(column)
+        : total,
+    0,
+  );
+  const dataColumns = displayColumnsWithWidths.filter(
+    (column) => !isSerialNumberColumn(column) && !isActionsColumn(column),
+  );
+  const configuredTableWidth = resolveMinimumTableWidth(displayColumnsWithWidths);
+  const fallbackMinWidthMatch = minWidth.trim().match(/^(\d+(?:\.\d+)?)px$/i);
+  const fallbackTableWidth = fallbackMinWidthMatch
+    ? Number(fallbackMinWidthMatch[1])
+    : configuredTableWidth;
+  const extraDataWidth = Math.max(0, fallbackTableWidth - configuredTableWidth);
+  const extraDataWidthPerColumn =
+    dataColumns.length > 0 ? extraDataWidth / dataColumns.length : 0;
+  const expandedDataColumnKeys =
+    extraDataWidthPerColumn > 0
+      ? new Set(dataColumns.map((column) => column.key))
+      : null;
+  const displayColumnsForRender =
+    extraDataWidthPerColumn > 0
+      ? displayColumnsWithWidths.map((column) =>
+          expandedDataColumnKeys?.has(column.key)
+            ? {
+                ...column,
+                width: `${resolveColumnPixelWidth(column) + extraDataWidthPerColumn}px`,
+              }
+            : column,
+        )
+      : displayColumnsWithWidths;
+  const minimumTableWidth = fixedColumnWidth + dataColumns.reduce(
+    (total, column) =>
+      total +
+      resolveColumnPixelWidth(column) +
+      (expandedDataColumnKeys?.has(column.key) ? extraDataWidthPerColumn : 0),
+    0,
+  );
+  const resolvedTableWidth = `${minimumTableWidth}px`;
 
   useEffect(() => {
     if (openActionMenuKey === null) {
@@ -1214,7 +1259,6 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const handleColumnResizeStart = (
     event: MouseEvent<HTMLSpanElement>,
     column: ReusableTableColumn<T>,
-    edge: ReusableTableColumnResizeEdge,
   ) => {
     if (!enableColumnResize || !isColumnReorderable(column)) {
       return;
@@ -1223,32 +1267,25 @@ export function ReusableTable<T extends Record<string, unknown>>({
     event.preventDefault();
     event.stopPropagation();
 
-    const columnIndex = displayColumns.findIndex((displayColumn) => displayColumn.key === column.key);
-    const previousResizableColumn =
-      edge === "left"
-        ? displayColumns
-            .slice(0, columnIndex)
-            .reverse()
-            .find(isColumnReorderable)
-        : undefined;
-    const resizeColumn = previousResizableColumn ?? column;
-    const widthColumnIndex = displayColumns.findIndex(
-      (displayColumn) => displayColumn.key === resizeColumn.key,
+    const primaryColumnIndex = displayColumns.findIndex(
+      (displayColumn) => displayColumn.key === column.key,
     );
     const headerRow = event.currentTarget.closest("tr");
-    const headerCell = headerRow?.children.item(widthColumnIndex) as HTMLElement | null;
-    const startWidth = headerCell?.getBoundingClientRect().width ?? 120;
+    const tableElement = event.currentTarget.closest("table");
+    const primaryHeaderCell = headerRow?.children.item(primaryColumnIndex) as HTMLElement | null;
+    const primaryStartWidth = primaryHeaderCell?.getBoundingClientRect().width ?? 120;
     const startX = event.clientX;
-    const direction = edge === "left" && resizeColumn.key === column.key ? -1 : 1;
+    let latestPrimaryWidth = Math.round(primaryStartWidth);
 
     const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-      const nextWidth = Math.max(
-        40,
-        Math.round(startWidth + (moveEvent.clientX - startX) * direction),
+      const delta = moveEvent.clientX - startX;
+      latestPrimaryWidth = Math.max(
+        MIN_RESIZABLE_COLUMN_WIDTH,
+        Math.round(primaryStartWidth + delta),
       );
       setColumnWidths((current) => ({
         ...current,
-        [resizeColumn.key]: `${nextWidth}px`,
+        [column.key]: `${latestPrimaryWidth}px`,
       }));
     };
 
@@ -1257,6 +1294,12 @@ export function ReusableTable<T extends Record<string, unknown>>({
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      const tableWidth = tableElement?.getBoundingClientRect().width ?? 0;
+      onColumnResizeEnd?.({
+        column,
+        widthPx: latestPrimaryWidth,
+        tableWidthPx: tableWidth,
+      });
     };
 
     document.body.style.cursor = "col-resize";
@@ -1430,20 +1473,21 @@ export function ReusableTable<T extends Record<string, unknown>>({
           className={cx(styles.table, tableClassName)}
           style={
             {
-              "--erp-table-min-width": minWidth,
-              ...(tableLayout ? { tableLayout } : {}),
+              "--erp-table-min-width": resolvedTableWidth,
+              width: resizableColumns ? resolvedTableWidth : undefined,
+              tableLayout: tableLayout ?? (resizableColumns ? "fixed" : undefined),
             } as CSSProperties
           }
         >
           <colgroup>
-            {displayColumns.map((column) => {
-              const widthStyle = resolveColumnWidth(getColumnForWidth(column));
+            {displayColumnsForRender.map((column) => {
+              const widthStyle = resolveColumnWidth(column);
               return <col key={column.key} style={widthStyle} />;
             })}
           </colgroup>
           <thead className={styles.head}>
             <tr>
-              {displayColumns.map((column) => {
+              {displayColumnsForRender.map((column) => {
                 const canSort = isColumnSortable(column, sortable);
                 const canReorderColumn = enableColumnReorder && isColumnReorderable(column);
                 const canResizeColumn = enableColumnResize && isColumnReorderable(column);
@@ -1455,7 +1499,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
                 const sortDirection =
                   effectiveSortState.key === column.key ? effectiveSortState.direction : null;
                 const headerContent = renderColumnHeaderContent(column.header);
-                const widthStyle = resolveColumnWidth(getColumnForWidth(column));
+                const widthStyle = resolveColumnWidth(column);
                 return (
                   <th
                     key={column.key}
@@ -1512,19 +1556,6 @@ export function ReusableTable<T extends Record<string, unknown>>({
                     {canResizeColumn ? (
                       <>
                         <span
-                          className={cx(styles.columnResizeHandle, styles.columnResizeHandleLeft)}
-                          role="separator"
-                          aria-orientation="vertical"
-                          aria-label={`Resize left side of ${getCellLabel(
-                            column.header,
-                            column.key,
-                            column.mobileLabel,
-                          )} column`}
-                          onMouseDown={(event) => handleColumnResizeStart(event, column, "left")}
-                          onClick={(event) => event.stopPropagation()}
-                          draggable={false}
-                        />
-                        <span
                           className={cx(styles.columnResizeHandle, styles.columnResizeHandleRight)}
                           role="separator"
                           aria-orientation="vertical"
@@ -1533,7 +1564,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
                             column.key,
                             column.mobileLabel,
                           )} column`}
-                          onMouseDown={(event) => handleColumnResizeStart(event, column, "right")}
+                          onMouseDown={(event) => handleColumnResizeStart(event, column)}
                           onClick={(event) => event.stopPropagation()}
                           draggable={false}
                         />
@@ -1616,7 +1647,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
                     }
                     tabIndex={onRowClick ? 0 : onRowDoubleClick ? 0 : undefined}
                   >
-                    {displayColumns.map((column, columnIndex) => {
+                    {displayColumnsForRender.map((column, columnIndex) => {
                       const shouldRenderActions = isActionsColumn(column) && !column.render;
                       const viewDisabled = !onView || isViewDisabled?.(row, rowIndex) === true;
                       const updateDisabled =
@@ -1629,7 +1660,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
                         typeof column.cellStyle === "function"
                           ? column.cellStyle(row, rowIndex)
                           : column.cellStyle;
-                      const widthStyle = resolveColumnWidth(getColumnForWidth(column));
+                      const widthStyle = resolveColumnWidth(column);
 
                       return (
                         <td
