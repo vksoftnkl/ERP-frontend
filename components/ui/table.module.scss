@@ -350,18 +350,22 @@
     text-overflow: clip;
   }
   .actionsGroup {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.45rem;
     flex-wrap: nowrap;
+    width: 100%;
+    min-width: 0;
   }
   .actionsMenuRoot {
     position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.35rem;
     flex: 0 0 auto;
+    max-width: 100%;
   }
   .actionsTrigger {
     width: auto;

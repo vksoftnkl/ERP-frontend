@@ -1,4 +1,5 @@
 import type { ReusableTableColumn } from "@/components/ui/table";
+import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import {
   LOOKUP_KEYS,
   LEDGER_COMPANY_NAME_KEYS,
@@ -12,6 +13,32 @@ import {
   normalizeColumnToken,
 } from "./transformers";
 import type { LedgerTableRow, LedgerColumnAccessor } from "./types";
+
+const STYLE_ARRAY_KEYS = ["styles", "gridColumns", "grid_columns", "columns"] as const;
+const STYLE_HEADER_KEYS = [
+  "grid_column_name",
+  "gridColumnName",
+  "column_name",
+  "columnName",
+  "header",
+  "label",
+] as const;
+const STYLE_ACCESSOR_KEYS = [
+  "grid_column_notes",
+  "gridColumnNotes",
+  "accessor",
+  "accessorKey",
+  "field",
+  "fieldName",
+  "grid_column_name",
+  "gridColumnName",
+] as const;
+const STYLE_ORDER_KEYS = ["grid_column_number", "gridColumnNumber", "order", "position"] as const;
+const STYLE_VISIBLE_KEYS = ["grid_column_visibility", "gridColumnVisibility", "visible"] as const;
+const STYLE_FILTER_KEYS = ["grid_column_filter", "gridColumnFilter", "sortable"] as const;
+const STYLE_WIDTH_KEYS = ["grid_column_width", "gridColumnWidth", "width"] as const;
+const STYLE_ALIGN_KEYS = ["grid_column_alignment", "gridColumnAlignment", "align"] as const;
+const STYLE_COLOR_KEYS = ["grid_column_color", "gridColumnColor", "color"] as const;
 
 const DEFAULT_LEDGER_SERIAL_COLUMN: ReusableTableColumn<LedgerTableRow> = {
   key: "serialNo",
@@ -48,6 +75,122 @@ export const DEFAULT_LEDGER_COLUMNS: ReusableTableColumn<LedgerTableRow>[] = [
     width: "120px",
   },
 ];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function toBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return null;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "y"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "no", "n"].includes(normalized)) {
+      return false;
+    }
+  }
+  return null;
+}
+
+function toOrder(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.floor(value));
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value.trim(), 10);
+    if (Number.isFinite(parsed)) {
+      return Math.max(0, parsed);
+    }
+  }
+  return fallback;
+}
+
+function toWidth(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return `${value}%`;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (!normalized) {
+      return undefined;
+    }
+    if (/^\d+(\.\d+)?$/.test(normalized)) {
+      return `${Number(normalized)}%`;
+    }
+    return normalized;
+  }
+  return undefined;
+}
+
+function toAlign(value: unknown): ReusableTableColumn<LedgerTableRow>["align"] | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "left" || normalized === "center" || normalized === "right") {
+    return normalized;
+  }
+  return undefined;
+}
+
+function toColor(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized || undefined;
+}
+
+function extractStyleRows(payload: unknown): Record<string, unknown>[] {
+  if (!isRecord(payload)) {
+    return [];
+  }
+  const candidates: unknown[] = [];
+  for (const key of STYLE_ARRAY_KEYS) {
+    candidates.push(payload[key]);
+  }
+  if (isRecord(payload.data)) {
+    for (const key of STYLE_ARRAY_KEYS) {
+      candidates.push(payload.data[key]);
+    }
+  }
+  const styles = candidates.find(Array.isArray);
+  return Array.isArray(styles) ? styles.filter(isRecord) : [];
+}
+
+export function areResponseStyleColumnsAllHidden(payload: unknown): boolean {
+  const styleRows = extractStyleRows(payload);
+  return (
+    styleRows.length > 0 &&
+    styleRows.every(
+      (styleRow) =>
+        toBoolean(getFirstDefinedValue(styleRow, STYLE_VISIBLE_KEYS)) === false,
+    )
+  );
+}
+
+function getRawValue(row: LedgerTableRow, accessorKey: string): unknown {
+  if (!row.__source) {
+    return "";
+  }
+  if (accessorKey in row.__source) {
+    return row.__source[accessorKey];
+  }
+  const normalizedAccessor = normalizeColumnToken(accessorKey);
+  const sourceKey = Object.keys(row.__source).find(
+    (key) => normalizeColumnToken(key) === normalizedAccessor,
+  );
+  return sourceKey ? row.__source[sourceKey] : "";
+}
 
 const LEDGER_COLUMN_ACCESSOR_MAP: Record<string, LedgerColumnAccessor> = {
   sno: "serialNo",
@@ -235,4 +378,124 @@ export function buildColumnsFromGridColumns(
   }
 
   return columns;
+}
+
+export function buildColumnsFromResponseStyles(
+  payload: unknown,
+): ReusableTableColumn<LedgerTableRow>[] {
+  const styleRows = extractStyleRows(payload)
+    .map((row, index) => ({ row, order: toOrder(getFirstDefinedValue(row, STYLE_ORDER_KEYS), index) }))
+    .sort((left, right) => left.order - right.order);
+
+  if (styleRows.length === 0) {
+    return [];
+  }
+
+  const columns: ReusableTableColumn<LedgerTableRow>[] = [];
+  const seenKeys = new Set<string>();
+
+  for (const { row } of styleRows) {
+    const isVisible = toBoolean(getFirstDefinedValue(row, STYLE_VISIBLE_KEYS));
+    if (isVisible === false) {
+      continue;
+    }
+
+    const header = toDisplayValue(getFirstDefinedValue(row, STYLE_HEADER_KEYS));
+    if (!header) {
+      continue;
+    }
+
+    const accessorKey = toDisplayValue(getFirstDefinedValue(row, STYLE_ACCESSOR_KEYS)) || header;
+    const accessor = resolveLedgerAccessor(accessorKey, header);
+    const keyBase = normalizeColumnToken(accessorKey || header) || `column${columns.length + 1}`;
+    const uniqueKey = seenKeys.has(keyBase) ? `${keyBase}-${columns.length + 1}` : keyBase;
+    seenKeys.add(uniqueKey);
+
+    const color = toColor(getFirstDefinedValue(row, STYLE_COLOR_KEYS));
+    const width = toWidth(getFirstDefinedValue(row, STYLE_WIDTH_KEYS));
+    const align = toAlign(getFirstDefinedValue(row, STYLE_ALIGN_KEYS));
+    const sortable = toBoolean(getFirstDefinedValue(row, STYLE_FILTER_KEYS));
+
+    if (accessor === "serialNo") {
+      columns.push({
+        key: uniqueKey,
+        header,
+        accessor: "serialNo",
+        width: width ?? "56px",
+        align,
+        sortable: false,
+        headerStyle: color ? { backgroundColor: color } : undefined,
+        cellStyle: color ? { backgroundColor: color } : undefined,
+      });
+      continue;
+    }
+
+    if (accessor) {
+      columns.push({
+        key: uniqueKey,
+        header,
+        accessor,
+        width,
+        align,
+        sortable: sortable ?? true,
+        headerStyle: color ? { backgroundColor: color } : undefined,
+        cellStyle: color ? { backgroundColor: color } : undefined,
+      });
+      continue;
+    }
+
+    columns.push({
+      key: uniqueKey,
+      header,
+      width,
+      align,
+      sortable: sortable ?? true,
+      render: (ledgerRow) => toDisplayValue(getRawValue(ledgerRow, accessorKey)),
+      searchAccessor: (ledgerRow) => getRawValue(ledgerRow, accessorKey),
+      sortAccessor: (ledgerRow) => getRawValue(ledgerRow, accessorKey),
+      headerStyle: color ? { backgroundColor: color } : undefined,
+      cellStyle: color ? { backgroundColor: color } : undefined,
+    });
+  }
+
+  if (columns.length === 0) {
+    return [];
+  }
+
+  if (!columns.some((column) => column.accessor === "serialNo")) {
+    columns.unshift({ ...DEFAULT_LEDGER_SERIAL_COLUMN });
+  }
+
+  return columns;
+}
+
+export function resolveGridColumnForLedgerTableColumn(
+  tableColumn: ReusableTableColumn<LedgerTableRow>,
+  gridColumns: GridColumnConfig[],
+): GridColumnConfig | null {
+  const tableTokens = [
+    tableColumn.key,
+    typeof tableColumn.accessor === "string" ? tableColumn.accessor : "",
+    typeof tableColumn.header === "string" ? tableColumn.header : "",
+  ]
+    .map(normalizeColumnToken)
+    .filter(Boolean);
+
+  if (tableTokens.length === 0) {
+    return null;
+  }
+
+  return (
+    gridColumns.find((gridColumn) => {
+      const gridTokens = [
+        gridColumn.key,
+        gridColumn.accessorKey,
+        gridColumn.header,
+        gridColumn.columnName ?? "",
+      ]
+        .map(normalizeColumnToken)
+        .filter(Boolean);
+      return tableTokens.some((token) => gridTokens.includes(token));
+    }) ?? null
+  );
 }

@@ -10,7 +10,10 @@ import {
   useState,
 } from "react";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
-import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
+import ReusableTable, {
+  type ReusableTableColumn,
+  type ReusableTableColumnResizeEndPayload,
+} from "@/components/ui/table";
 import {
   KeyboardShortcutHints,
   type KeyboardShortcutDefinition,
@@ -37,6 +40,7 @@ import {
   DEFAULT_PAGE_SIZE,
   LOOKUP_ENDPOINT,
   GRID_DETAILS_ENDPOINT,
+  GRID_COLUMNS_CREATE_ENDPOINT,
   STATE_CODE_LOOKUP_ENDPOINT,
   GRID_DETAILS_QUERY,
   GRID_COLUMNS_PAGE,
@@ -81,6 +85,9 @@ import {
   buildLedgerRows,
   resolveLedgerRecordId,
   buildColumnsFromGridColumns,
+  buildColumnsFromResponseStyles,
+  areResponseStyleColumnsAllHidden,
+  resolveGridColumnForLedgerTableColumn,
 } from "./table-builder";
 import {
   getLedgerFocusableFieldControl,
@@ -560,6 +567,13 @@ function LedgerFieldRenderer({
 export default function AccountLedgerMasterPage() {
   const { data, error, loading, getAll } = useApi<unknown>(API_ENDPOINTS.list);
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
+  const { run: saveGridColumnWidth } = useApi<unknown, Record<string, unknown>>(
+    GRID_COLUMNS_CREATE_ENDPOINT,
+    {
+      method: "POST",
+      toast: { success: false },
+    },
+  );
   const {
     run: getById,
     loading: detailsLoading,
@@ -855,20 +869,30 @@ export default function AccountLedgerMasterPage() {
     ]);
     return buildLedgerRows(data, serialOffset);
   }, [data, serialOffset]);
+  const areStyleColumnsAllHidden = useMemo(
+    () => areResponseStyleColumnsAllHidden(data),
+    [data],
+  );
+  const renderedRows = areStyleColumnsAllHidden ? [] : rows;
+  const renderedTotalEntries = areStyleColumnsAllHidden ? 0 : totalEntries;
 
   // Validate selected row
   useEffect(() => {
     if (selectedRowId === null) return;
-    if (!rows.some((row) => row.__rowId === selectedRowId)) {
+    if (!renderedRows.some((row) => row.__rowId === selectedRowId)) {
       setSelectedRowId(null);
     }
-  }, [rows, selectedRowId]);
+  }, [renderedRows, selectedRowId]);
 
   // Build columns
   const columns = useMemo<ReusableTableColumn<LedgerTableRow>[]>(
-    () => buildColumnsFromGridColumns(gridColumns),
-    [gridColumns],
+    () => {
+      const styledColumns = buildColumnsFromResponseStyles(data);
+      return styledColumns.length > 0 ? styledColumns : buildColumnsFromGridColumns(gridColumns);
+    },
+    [data, gridColumns],
   );
+  const renderedColumns = areStyleColumnsAllHidden ? [] : columns;
 
   // Modal handlers
   const openCreateModal = useCallback(() => {
@@ -1395,8 +1419,104 @@ export default function AccountLedgerMasterPage() {
 
   const listHeading = `${effectiveTitle} List`;
   const handleDownloadRows = useCallback(() => {
-    downloadLedgerCsv(listHeading, columns, rows);
-  }, [columns, listHeading, rows]);
+    downloadLedgerCsv(listHeading, renderedColumns, renderedRows);
+  }, [listHeading, renderedColumns, renderedRows]);
+
+  const handleGridColumnResizeEnd = useCallback(
+    (payload: ReusableTableColumnResizeEndPayload<LedgerTableRow>) => {
+      if (accountLedgerGridId === null || payload.tableWidthPx <= 0) {
+        return;
+      }
+
+      const gridColumn = resolveGridColumnForLedgerTableColumn(payload.column, gridColumns);
+      if (!gridColumn?.serialId) {
+        return;
+      }
+
+      const widthPercent = Number(((payload.widthPx * 100) / payload.tableWidthPx).toFixed(4));
+      if (!Number.isFinite(widthPercent) || widthPercent <= 0) {
+        return;
+      }
+
+      const columnNumber =
+        gridColumn.columnNumber && gridColumn.columnNumber > 0
+          ? gridColumn.columnNumber
+          : Math.max(1, gridColumn.order + 1);
+      const columnName = (gridColumn.columnName ?? gridColumn.header).trim();
+      if (!columnName) {
+        return;
+      }
+
+      void (async () => {
+        try {
+          await saveGridColumnWidth({
+            body: {
+              grid_serialid: gridColumn.serialId,
+              grid_id: gridColumn.gridId ?? String(accountLedgerGridId),
+              grid_column_number: columnNumber,
+              grid_column_name: columnName,
+              grid_column_width: widthPercent,
+            },
+          });
+          void refetchGridColumns();
+        } catch {
+          // useApi handles the visible error toast.
+        }
+      })();
+    },
+    [accountLedgerGridId, gridColumns, refetchGridColumns, saveGridColumnWidth],
+  );
+
+  const handleGridColumnHide = useCallback(
+    (payload: { column: ReusableTableColumn<LedgerTableRow> }) => {
+      if (accountLedgerGridId === null) {
+        return;
+      }
+
+      const gridColumn = resolveGridColumnForLedgerTableColumn(payload.column, gridColumns);
+      if (!gridColumn?.serialId) {
+        return;
+      }
+
+      const columnNumber =
+        gridColumn.columnNumber && gridColumn.columnNumber > 0
+          ? gridColumn.columnNumber
+          : Math.max(1, gridColumn.order + 1);
+      const columnName = (gridColumn.columnName ?? gridColumn.header).trim();
+      if (!columnName) {
+        return;
+      }
+
+      void (async () => {
+        try {
+          await saveGridColumnWidth({
+            body: {
+              grid_serialid: gridColumn.serialId,
+              grid_id: gridColumn.gridId ?? String(accountLedgerGridId),
+              grid_column_number: columnNumber,
+              grid_column_name: columnName,
+              grid_column_visibility: false,
+            },
+          });
+          void refetchGridColumns();
+          await loadRecords(searchTerm, currentPage, pageSize);
+        } catch {
+          // useApi handles the visible error toast.
+        }
+      })();
+    },
+    [
+      accountLedgerGridId,
+      currentPage,
+      gridColumns,
+      loadRecords,
+      pageSize,
+      refetchGridColumns,
+      saveGridColumnWidth,
+      searchTerm,
+    ],
+  );
+
   const toolbarContent = (
     <div className={styles.masterHeader}>
       <div className={styles.masterTitleWrap}>
@@ -1533,8 +1653,8 @@ export default function AccountLedgerMasterPage() {
               </div>
             ) : null}
             <ReusableTable
-              columns={columns}
-              rows={rows}
+              columns={renderedColumns}
+              rows={renderedRows}
               rowKey="__rowId"
               toolbarContent={toolbarContent}
               toolbarActions={
@@ -1542,7 +1662,7 @@ export default function AccountLedgerMasterPage() {
                   type="button"
                   className={styles.masterDownloadButton}
                   onClick={handleDownloadRows}
-                  disabled={rows.length === 0}
+                  disabled={renderedRows.length === 0}
                   aria-label={`Download ${listHeading}`}
                   title={`Download ${listHeading}`}
                 >
@@ -1551,8 +1671,13 @@ export default function AccountLedgerMasterPage() {
               }
               wrapperClassName={styles.masterTable}
               tableClassName={styles.masterDataTable}
+              tableLayout="fixed"
               minWidth="980px"
               reorderableColumns
+              resizableColumns
+              onColumnResizeEnd={handleGridColumnResizeEnd}
+              onColumnHide={handleGridColumnHide}
+              showActionsColumn={areStyleColumnsAllHidden ? false : undefined}
               activeRowKey={selectedRowId}
               onRowClick={(row) => setSelectedRowId(row.__rowId)}
               onRowDoubleClick={(row) => void openExistingModal(row, "view")}
@@ -1572,7 +1697,7 @@ export default function AccountLedgerMasterPage() {
               sortable
               paginated
               manualPagination
-              totalEntries={totalEntries}
+              totalEntries={renderedTotalEntries}
               currentPage={currentPage}
               onCurrentPageChange={setCurrentPage}
               pageSize={pageSize}

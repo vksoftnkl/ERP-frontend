@@ -12,6 +12,7 @@ export const DEFAULT_PAGE_SIZE = 20;
 
 export const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 export const GRID_DETAILS_ENDPOINT = "/grid-details/list";
+export const GRID_COLUMNS_CREATE_ENDPOINT = "/grid-columns/create";
 export const STATE_CODE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 
 export const ACCOUNT_LEDGER_TABLE_NAME = "acc_ledger_master";

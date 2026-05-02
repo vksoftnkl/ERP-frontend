@@ -38,7 +38,8 @@ const GRID_COLUMNS_CREATE_ENDPOINT = "/grid-columns/create";
 const GRID_COLUMNS_PAGE = 1;
 const GRID_COLUMNS_LIMIT = 20;
 const MASTER_SERIAL_COLUMN_WIDTH = "40px";
-const MASTER_ACTIONS_COLUMN_WIDTH = "40px";
+const MASTER_ACTIONS_COLUMN_WIDTH = "72px";
+const RESPONSE_TABLE_DEFAULT_COLUMN_WIDTH = "180px";
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
@@ -280,6 +281,8 @@ export type CrudMasterPageProps = {
   tableColumnHeaders?: CrudMasterTableColumnHeaders;
   tableColumnLayout?: CrudMasterTableColumnLayout;
   customTableColumns?: ReusableTableColumn<MasterTableRow>[];
+  useResponseTableColumns?: boolean;
+  responseTableColumnExcludeKeys?: readonly string[];
   toolbarContent?: ReactNode;
   listResponseStyleColumns?: CrudMasterListResponseStyleColumn[];
   listResponseStyleArrayKey?: string;
@@ -1658,6 +1661,123 @@ function applyListResponseStylesToCustomColumns(
   });
 }
 
+function formatResponseColumnHeader(columnKey: string): string {
+  const normalized = columnKey
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) {
+    return "Value";
+  }
+
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getResponseColumnKeys(payload: unknown, arrayKeys: readonly string[]): string[] {
+  const seenKeys = new Set<string>();
+  const keys: string[] = [];
+
+  for (const row of extractRows(payload, arrayKeys)) {
+    if (!isRecord(row)) {
+      continue;
+    }
+
+    for (const key of Object.keys(row)) {
+      if (seenKeys.has(key)) {
+        continue;
+      }
+      seenKeys.add(key);
+      keys.push(key);
+    }
+  }
+
+  return keys;
+}
+
+function buildColumnsFromResponseRows(
+  payload: unknown,
+  arrayKeys: readonly string[],
+  styleArrayKey: string | undefined,
+  fallbackColumns: ReusableTableColumn<MasterTableRow>[],
+  excludeKeys: readonly string[] = [],
+): ReusableTableColumn<MasterTableRow>[] {
+  const responseKeys = getResponseColumnKeys(payload, arrayKeys);
+  const styleRows = styleArrayKey
+    ? extractListResponseStyleRows(payload, styleArrayKey)
+    : [];
+  const excludedKeys = new Set(excludeKeys.map(normalizeColumnToken));
+  const serialColumn = getMasterSerialColumn(fallbackColumns);
+  const columns: ReusableTableColumn<MasterTableRow>[] = serialColumn ? [serialColumn] : [];
+
+  responseKeys.forEach((responseKey, index) => {
+    if (excludedKeys.has(normalizeColumnToken(responseKey))) {
+      return;
+    }
+
+    const styleRow = styleRows[index];
+    const isVisible = styleRow
+      ? toBoolean(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_VISIBLE_KEYS))
+      : null;
+
+    if (isVisible === false) {
+      return;
+    }
+
+    const header =
+      (styleRow
+        ? toDisplayValue(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_HEADER_KEYS))
+        : "") || formatResponseColumnHeader(responseKey);
+    const styledWidth = styleRow
+      ? normalizeListStyleWidth(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_WIDTH_KEYS))
+      : undefined;
+    const width = normalizeResponseTableColumnWidth(styledWidth);
+    const align = styleRow
+      ? normalizeListStyleAlign(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_ALIGN_KEYS))
+      : undefined;
+    const sortable = styleRow
+      ? toBoolean(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_FILTER_KEYS))
+      : true;
+    const color = styleRow
+      ? toDisplayValue(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_COLOR_KEYS)) || undefined
+      : undefined;
+
+    columns.push({
+      key: responseKey,
+      header,
+      width,
+      align,
+      sortable: sortable ?? true,
+      render: (row) => toDisplayValue(row.__source?.[responseKey]),
+      searchAccessor: (row) => row.__source?.[responseKey],
+      sortAccessor: (row) => row.__source?.[responseKey],
+      headerStyle: color ? { backgroundColor: color } : undefined,
+      cellStyle: color ? { backgroundColor: color } : undefined,
+    });
+  });
+
+  return columns.length > 0 ? columns : buildMasterSerialOnlyColumns(fallbackColumns);
+}
+
+function normalizeResponseTableColumnWidth(width: string | undefined): string {
+  if (!width) {
+    return RESPONSE_TABLE_DEFAULT_COLUMN_WIDTH;
+  }
+
+  const percentMatch = width.trim().match(/^(\d+(?:\.\d+)?)%$/);
+  if (!percentMatch) {
+    return width;
+  }
+
+  const percent = Number(percentMatch[1]);
+  if (!Number.isFinite(percent) || percent <= 0) {
+    return RESPONSE_TABLE_DEFAULT_COLUMN_WIDTH;
+  }
+
+  return `${Math.max(120, Math.round(percent * 8))}px`;
+}
+
 function toCsvCellValue(value: unknown): string {
   if (value === null || value === undefined) {
     return "";
@@ -1759,6 +1879,8 @@ export default function CrudMasterPage({
   tableColumnHeaders,
   tableColumnLayout,
   customTableColumns,
+  useResponseTableColumns,
+  responseTableColumnExcludeKeys,
   toolbarContent,
   listResponseStyleColumns,
   listResponseStyleArrayKey,
@@ -1990,6 +2112,7 @@ export default function CrudMasterPage({
     [data, effectiveListResponseStyleArrayKey],
   );
   const renderedRows = areStyleColumnsAllHidden ? [] : rows;
+  const renderedTotalEntries = areStyleColumnsAllHidden ? 0 : totalEntries;
 
   const listResponseColumns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
     () => {
@@ -2033,6 +2156,16 @@ export default function CrudMasterPage({
 
   const columns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
     () => {
+      if (useResponseTableColumns) {
+        return buildColumnsFromResponseRows(
+          data,
+          lookupKeys.array ?? DEFAULT_ARRAY_KEYS,
+          effectiveListResponseStyleArrayKey,
+          fallbackColumns,
+          responseTableColumnExcludeKeys,
+        );
+      }
+
       if (customTableColumns && customTableColumns.length > 0) {
         if (!effectiveListResponseStyleArrayKey) {
           return customTableColumns;
@@ -2055,7 +2188,12 @@ export default function CrudMasterPage({
       }
 
       return normalizedGridTableNames.length > 0
-        ? buildColumnsFromGridColumns(gridColumns, lookupKeys, fallbackColumns)
+        ? buildColumnsFromGridColumns(
+            gridColumns,
+            lookupKeys,
+            fallbackColumns,
+            gridColumns.length === 0,
+          )
         : fallbackColumns;
     },
     [
@@ -2066,9 +2204,12 @@ export default function CrudMasterPage({
       gridColumns,
       listResponseColumns,
       lookupKeys,
+      responseTableColumnExcludeKeys,
+      useResponseTableColumns,
       normalizedGridTableNames.length,
     ],
   );
+  const renderedColumns = areStyleColumnsAllHidden ? [] : columns;
 
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(
     null,
@@ -2691,8 +2832,8 @@ export default function CrudMasterPage({
     ? `${gridDisplayName} List`
     : listTitle ?? `${title} List`;
   const handleDownloadRows = useCallback(() => {
-    downloadMasterRowsCsv(listHeading, columns, renderedRows);
-  }, [columns, listHeading, renderedRows]);
+    downloadMasterRowsCsv(listHeading, renderedColumns, renderedRows);
+  }, [listHeading, renderedColumns, renderedRows]);
   const handleGridColumnResizeEnd = useCallback(
     (payload: ReusableTableColumnResizeEndPayload<MasterTableRow>) => {
       if (gridId === null || payload.tableWidthPx <= 0) {
@@ -2736,6 +2877,55 @@ export default function CrudMasterPage({
       })();
     },
     [gridColumns, gridId, refetchGridColumns, saveGridColumnWidth],
+  );
+  const handleGridColumnHide = useCallback(
+    (payload: { column: ReusableTableColumn<MasterTableRow> }) => {
+      if (gridId === null) {
+        return;
+      }
+
+      const gridColumn = resolveGridColumnForTableColumn(payload.column, gridColumns);
+      if (!gridColumn?.serialId) {
+        return;
+      }
+
+      const columnNumber =
+        gridColumn.columnNumber && gridColumn.columnNumber > 0
+          ? gridColumn.columnNumber
+          : Math.max(1, gridColumn.order + 1);
+      const columnName = (gridColumn.columnName ?? gridColumn.header).trim();
+      if (!columnName) {
+        return;
+      }
+
+      void (async () => {
+        try {
+          await saveGridColumnWidth({
+            body: {
+              grid_serialid: gridColumn.serialId,
+              grid_id: gridColumn.gridId ?? String(gridId),
+              grid_column_number: columnNumber,
+              grid_column_name: columnName,
+              grid_column_visibility: false,
+            },
+          });
+          void refetchGridColumns();
+          await loadRecords(searchTerm, currentPage, pageSize);
+        } catch {
+          // useApi handles the visible error toast.
+        }
+      })();
+    },
+    [
+      currentPage,
+      gridColumns,
+      gridId,
+      loadRecords,
+      pageSize,
+      refetchGridColumns,
+      saveGridColumnWidth,
+      searchTerm,
+    ],
   );
   const masterToolbarContent = (
     <div className={styles.masterHeader}>
@@ -2818,7 +3008,7 @@ export default function CrudMasterPage({
                   </div>
                 ) : null}
                 <ReusableTable
-                  columns={columns}
+                  columns={renderedColumns}
                   rows={renderedRows}
                   rowKey="__rowId"
                   toolbarContent={masterToolbarContent}
@@ -2841,6 +3031,8 @@ export default function CrudMasterPage({
                   reorderableColumns
                   resizableColumns
                   onColumnResizeEnd={handleGridColumnResizeEnd}
+                  onColumnHide={handleGridColumnHide}
+                  showActionsColumn={areStyleColumnsAllHidden ? false : undefined}
                   activeRowKey={selectedRowId}
                   onRowClick={(row) => setSelectedRowId(row.__rowId)}
                   onRowDoubleClick={handleRowView}
@@ -2870,7 +3062,7 @@ export default function CrudMasterPage({
                   sortable
                   paginated
                   manualPagination
-                  totalEntries={totalEntries}
+                  totalEntries={renderedTotalEntries}
                   currentPage={currentPage}
                   onCurrentPageChange={setCurrentPage}
                   pageSize={pageSize}
