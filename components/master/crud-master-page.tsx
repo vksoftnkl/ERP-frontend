@@ -988,24 +988,6 @@ function extractListResponseStyleRows(
     );
 }
 
-function areListResponseStyleRowsAllHidden(
-  payload: unknown,
-  styleArrayKey: string | undefined,
-): boolean {
-  if (!styleArrayKey) {
-    return false;
-  }
-
-  const styleRows = extractListResponseStyleRows(payload, styleArrayKey);
-  return (
-    styleRows.length > 0 &&
-    styleRows.every(
-      (styleRow) =>
-        toBoolean(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_VISIBLE_KEYS)) === false,
-    )
-  );
-}
-
 type BuildMasterColumnArgs = {
   accessor: MasterColumnAccessor;
   title: string;
@@ -1696,6 +1678,76 @@ function getResponseColumnKeys(payload: unknown, arrayKeys: readonly string[]): 
   return keys;
 }
 
+function compactColumnToken(value: string): string {
+  return normalizeColumnToken(value).replace(/_/g, "");
+}
+
+function getResponseKeyMatchScore(candidateToken: string, responseToken: string): number {
+  if (!candidateToken || !responseToken) {
+    return 0;
+  }
+  if (candidateToken === responseToken) {
+    return 100;
+  }
+  if (candidateToken.endsWith(responseToken) || responseToken.endsWith(candidateToken)) {
+    return 80;
+  }
+  if (candidateToken.includes(responseToken) || responseToken.includes(candidateToken)) {
+    return 60;
+  }
+  return 0;
+}
+
+function resolveResponseKeyForStyleRow(
+  styleRow: Record<string, unknown>,
+  responseKeys: readonly string[],
+  usedResponseKeys: Set<string>,
+  excludedKeys: Set<string>,
+): string | null {
+  const candidateValues = [
+    toDisplayValue(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_NOTES_KEYS)),
+    toDisplayValue(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_HEADER_KEYS)),
+  ].filter(Boolean);
+
+  const candidateTokens = candidateValues.flatMap((value) => {
+    const normalized = normalizeColumnToken(value);
+    const compact = normalized.replace(/_/g, "");
+    return normalized === compact ? [normalized] : [normalized, compact];
+  });
+
+  let bestMatch: { key: string; score: number } | null = null;
+
+  for (const responseKey of responseKeys) {
+    const normalizedResponseKey = normalizeColumnToken(responseKey);
+    if (
+      usedResponseKeys.has(responseKey) ||
+      excludedKeys.has(normalizedResponseKey)
+    ) {
+      continue;
+    }
+
+    const responseTokens = [
+      normalizedResponseKey,
+      compactColumnToken(responseKey),
+    ];
+
+    const score = candidateTokens.reduce((bestScore, candidateToken) => {
+      const tokenScore = responseTokens.reduce(
+        (innerBestScore, responseToken) =>
+          Math.max(innerBestScore, getResponseKeyMatchScore(candidateToken, responseToken)),
+        0,
+      );
+      return Math.max(bestScore, tokenScore);
+    }, 0);
+
+    if (score > (bestMatch?.score ?? 0)) {
+      bestMatch = { key: responseKey, score };
+    }
+  }
+
+  return bestMatch && bestMatch.score >= 60 ? bestMatch.key : null;
+}
+
 function buildColumnsFromResponseRows(
   payload: unknown,
   arrayKeys: readonly string[],
@@ -1709,6 +1761,66 @@ function buildColumnsFromResponseRows(
     : [];
   const excludedKeys = new Set(excludeKeys.map(normalizeColumnToken));
   const serialColumn = getMasterSerialColumn(fallbackColumns);
+
+  if (styleRows.length > 0) {
+    const usedResponseKeys = new Set<string>();
+    const styledColumns: ReusableTableColumn<MasterTableRow>[] = [];
+
+    for (const styleRow of styleRows) {
+      const isVisible = toBoolean(
+        getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_VISIBLE_KEYS),
+      );
+      if (isVisible === false) {
+        continue;
+      }
+
+      const responseKey = resolveResponseKeyForStyleRow(
+        styleRow,
+        responseKeys,
+        usedResponseKeys,
+        excludedKeys,
+      );
+      if (!responseKey) {
+        continue;
+      }
+
+      usedResponseKeys.add(responseKey);
+
+      const header =
+        toDisplayValue(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_HEADER_KEYS)) ||
+        formatResponseColumnHeader(responseKey);
+      const width = normalizeResponseTableColumnWidth(
+        normalizeListStyleWidth(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_WIDTH_KEYS)),
+      );
+      const align = normalizeListStyleAlign(
+        getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_ALIGN_KEYS),
+      );
+      const sortable = toBoolean(
+        getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_FILTER_KEYS),
+      );
+      const color =
+        toDisplayValue(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_COLOR_KEYS)) ||
+        undefined;
+
+      styledColumns.push({
+        key: responseKey,
+        header,
+        width,
+        align,
+        sortable: sortable ?? true,
+        render: (row) => toDisplayValue(row.__source?.[responseKey]),
+        searchAccessor: (row) => row.__source?.[responseKey],
+        sortAccessor: (row) => row.__source?.[responseKey],
+        headerStyle: color ? { backgroundColor: color } : undefined,
+        cellStyle: color ? { backgroundColor: color } : undefined,
+      });
+    }
+
+    return styledColumns.length > 0
+      ? styledColumns
+      : buildMasterSerialOnlyColumns(fallbackColumns);
+  }
+
   const columns: ReusableTableColumn<MasterTableRow>[] = serialColumn ? [serialColumn] : [];
 
   responseKeys.forEach((responseKey, index) => {
@@ -2107,12 +2219,8 @@ export default function CrudMasterPage({
   const hasCustomTableColumns = Boolean(customTableColumns && customTableColumns.length > 0);
   const effectiveListResponseStyleArrayKey =
     listResponseStyleArrayKey ?? (hasCustomTableColumns ? undefined : "styles");
-  const areStyleColumnsAllHidden = useMemo(
-    () => areListResponseStyleRowsAllHidden(data, effectiveListResponseStyleArrayKey),
-    [data, effectiveListResponseStyleArrayKey],
-  );
-  const renderedRows = areStyleColumnsAllHidden ? [] : rows;
-  const renderedTotalEntries = areStyleColumnsAllHidden ? 0 : totalEntries;
+  const renderedRows = rows;
+  const renderedTotalEntries = totalEntries;
 
   const listResponseColumns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
     () => {
@@ -2209,7 +2317,7 @@ export default function CrudMasterPage({
       normalizedGridTableNames.length,
     ],
   );
-  const renderedColumns = areStyleColumnsAllHidden ? [] : columns;
+  const renderedColumns = columns;
 
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(
     null,
@@ -3032,7 +3140,6 @@ export default function CrudMasterPage({
                   resizableColumns
                   onColumnResizeEnd={handleGridColumnResizeEnd}
                   onColumnHide={handleGridColumnHide}
-                  showActionsColumn={areStyleColumnsAllHidden ? false : undefined}
                   activeRowKey={selectedRowId}
                   onRowClick={(row) => setSelectedRowId(row.__rowId)}
                   onRowDoubleClick={handleRowView}

@@ -167,17 +167,6 @@ function extractStyleRows(payload: unknown): Record<string, unknown>[] {
   return Array.isArray(styles) ? styles.filter(isRecord) : [];
 }
 
-export function areResponseStyleColumnsAllHidden(payload: unknown): boolean {
-  const styleRows = extractStyleRows(payload);
-  return (
-    styleRows.length > 0 &&
-    styleRows.every(
-      (styleRow) =>
-        toBoolean(getFirstDefinedValue(styleRow, STYLE_VISIBLE_KEYS)) === false,
-    )
-  );
-}
-
 function getRawValue(row: LedgerTableRow, accessorKey: string): unknown {
   if (!row.__source) {
     return "";
@@ -459,7 +448,7 @@ export function buildColumnsFromResponseStyles(
   }
 
   if (columns.length === 0) {
-    return [];
+    return [{ ...DEFAULT_LEDGER_SERIAL_COLUMN }];
   }
 
   if (!columns.some((column) => column.accessor === "serialNo")) {

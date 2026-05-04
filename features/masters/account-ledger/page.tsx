@@ -30,7 +30,6 @@ import styles from "@/app/master/state-master/page.module.scss";
 import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
 import { RecordHistoryModal } from "@/features/masters/record-history/page";
 import { FiDownload, FiSearch } from "react-icons/fi";
-
 // Import all modular logic
 import {
   API_ENDPOINTS,
@@ -86,7 +85,6 @@ import {
   resolveLedgerRecordId,
   buildColumnsFromGridColumns,
   buildColumnsFromResponseStyles,
-  areResponseStyleColumnsAllHidden,
   resolveGridColumnForLedgerTableColumn,
 } from "./table-builder";
 import {
@@ -96,7 +94,6 @@ import {
   getFirstLedgerFocusableFieldTarget,
   focusLedgerFieldControl,
 } from "./form-navigation";
-
 function toCsvCellValue(value: unknown): string {
   if (value === null || value === undefined) {
     return "";
@@ -109,7 +106,6 @@ function toCsvCellValue(value: unknown): string {
   }
   return String(value);
 }
-
 function escapeCsvValue(value: unknown): string {
   const normalized = toCsvCellValue(value);
   if (/[",\n\r]/.test(normalized)) {
@@ -117,14 +113,12 @@ function escapeCsvValue(value: unknown): string {
   }
   return normalized;
 }
-
 function reactNodeToCsvHeader(value: ReactNode, fallback: string): string {
   if (typeof value === "string" || typeof value === "number") {
     return String(value);
   }
   return fallback;
 }
-
 function getColumnExportValue(
   column: ReusableTableColumn<LedgerTableRow>,
   row: LedgerTableRow,
@@ -141,7 +135,6 @@ function getColumnExportValue(
   }
   return "";
 }
-
 function downloadLedgerCsv(
   title: string,
   columns: ReusableTableColumn<LedgerTableRow>[],
@@ -150,7 +143,6 @@ function downloadLedgerCsv(
   if (typeof window === "undefined" || typeof document === "undefined") {
     return;
   }
-
   const exportColumns = columns.filter((column) => column.key !== "actions");
   const csv = [
     exportColumns.map((column) => escapeCsvValue(reactNodeToCsvHeader(column.header, column.key))),
@@ -172,7 +164,6 @@ function downloadLedgerCsv(
   anchor.remove();
   window.URL.revokeObjectURL(url);
 }
-
 const LEDGER_SECTION_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   {
     label: "Prev",
@@ -191,7 +182,6 @@ const LEDGER_SECTION_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
     keys: ["End"],
   },
 ];
-
 // Form rendering component
 function LedgerFieldRenderer({
   field,
@@ -244,13 +234,11 @@ function LedgerFieldRenderer({
   if (!isLedgerFieldName(field.name)) {
     return null;
   }
-
   const fieldName = field.name;
   const inputType = field.type ?? "text";
   const fieldValue = formValues[fieldName] ?? "";
   const disabled = isReadOnlyMode || detailsLoading || saveLoading;
   const isValidationInvalid = validationFieldName === fieldName;
-
   const wrapperClassName = dynamicFormStyles.field;
   const wrapperInlineStyle: CSSProperties = {
     gridTemplateColumns: "1fr",
@@ -260,7 +248,6 @@ function LedgerFieldRenderer({
   };
   const labelInlineStyle: CSSProperties = { paddingTop: 0 };
   const controlInlineStyle: CSSProperties = { gridColumn: "1" };
-
   // Checkbox type
   if (inputType === "checkbox") {
     const isChecked = fieldValue === "true";
@@ -298,7 +285,6 @@ function LedgerFieldRenderer({
       </div>
     );
   }
-
   // Searchable select
   if (inputType === "select" && field.searchable) {
     const options = field.options ?? [];
@@ -325,7 +311,6 @@ function LedgerFieldRenderer({
       isSearchOpen && highlightedOptionIndex >= 0
         ? `${field.name}-search-option-${highlightedOptionIndex}`
         : undefined;
-
     return (
       <div
         key={field.name}
@@ -462,7 +447,6 @@ function LedgerFieldRenderer({
       </div>
     );
   }
-
   // Textarea
   if (inputType === "textarea") {
     return (
@@ -493,7 +477,6 @@ function LedgerFieldRenderer({
       </div>
     );
   }
-
   // Regular select
   if (inputType === "select") {
     const options = field.options ?? [];
@@ -530,7 +513,6 @@ function LedgerFieldRenderer({
       </div>
     );
   }
-
   // Default text input
   return (
     <div
@@ -563,7 +545,6 @@ function LedgerFieldRenderer({
     </div>
   );
 }
-
 export default function AccountLedgerMasterPage() {
   const { data, error, loading, getAll } = useApi<unknown>(API_ENDPOINTS.list);
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
@@ -600,7 +581,6 @@ export default function AccountLedgerMasterPage() {
   const { getAll: getBranchLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getAccountGroupLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getStateCodeLookup } = useApi<unknown>(STATE_CODE_LOOKUP_ENDPOINT);
-
   // State for options
   const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([
     { value: "", label: "" },
@@ -615,7 +595,6 @@ export default function AccountLedgerMasterPage() {
     { value: "", label: "" },
   ]);
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
-
   // State for table and search
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
@@ -627,37 +606,30 @@ export default function AccountLedgerMasterPage() {
     recordPk: string;
     screenName: string;
   } | null>(null);
-
   // State for grid details
   const [accountLedgerGridId, setAccountLedgerGridId] = useState<number | null>(null);
   const [accountLedgerGridName, setAccountLedgerGridName] = useState<string | null>(null);
-
   // State for modal form
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>("create");
   const [formValues, setFormValues] = useState<LedgerFormValues>(
     createInitialLedgerFormValues,
-  );
+    );
   const [editingItemId, setEditingItemId] = useState<string | number | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const [validationFieldName, setValidationFieldName] = useState<LedgerFormFieldName | null>(null);
-
   // State for search fields
   const [openSearchField, setOpenSearchField] = useState<string | null>(null);
   const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
   const [searchActiveOptionIndex, setSearchActiveOptionIndex] = useState<Record<string, number>>({});
-
   // State for form sections
   const [activeSectionKey, setActiveSectionKey] = useState("general");
-
   // State for delete
   const [pendingDeleteRow, setPendingDeleteRow] = useState<LedgerTableRow | null>(null);
-
   // Refs
   const searchInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const formRef = useRef<HTMLFormElement | null>(null);
   const sectionTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-
   // Grid columns query
   const selectedGridId = accountLedgerGridId ?? -1;
   const {
@@ -671,7 +643,6 @@ export default function AccountLedgerMasterPage() {
   );
   const gridColumns = gridColumnsData ?? [];
   const gridColumnsError = getApiErrorMessage(gridColumnsQueryError);
-
   // Load grid details
   useEffect(() => {
     let mounted = true;
@@ -693,17 +664,14 @@ export default function AccountLedgerMasterPage() {
       mounted = false;
     };
   }, [getGridDetails]);
-
   const effectiveTitle = useMemo(() => {
     const normalized = accountLedgerGridName?.trim();
     return normalized || "Account Ledger";
   }, [accountLedgerGridName]);
-
   // Handle search field interactions
   useEffect(() => {
     if (openSearchField === null) return;
     const activeField = openSearchField;
-
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest('[data-ledger-search-select-root="true"]')) return;
@@ -715,7 +683,6 @@ export default function AccountLedgerMasterPage() {
         return nextState;
       });
     };
-
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -728,7 +695,6 @@ export default function AccountLedgerMasterPage() {
         });
       }
     };
-
     window.addEventListener("mousedown", handlePointerDown);
     window.addEventListener("keydown", handleEscape);
     return () => {
@@ -736,7 +702,6 @@ export default function AccountLedgerMasterPage() {
       window.removeEventListener("keydown", handleEscape);
     };
   }, [openSearchField]);
-
   // Focus search input
   useEffect(() => {
     if (!openSearchField) return;
@@ -747,7 +712,6 @@ export default function AccountLedgerMasterPage() {
       input.select();
     });
   }, [openSearchField]);
-
   // Load lookup data
   useEffect(() => {
     let mounted = true;
@@ -779,31 +743,26 @@ export default function AccountLedgerMasterPage() {
       mounted = false;
     };
   }, [getAccountGroupLookup, getBranchLookup, getCompanyLookup, getStateCodeLookup]);
-
   // Load form fields
   const ledgerFormFields = useMemo(
     () =>
       buildLedgerFormFields(companyOptions, branchOptions, accountGroupOptions, stateNameOptions),
     [accountGroupOptions, branchOptions, companyOptions, stateNameOptions],
   );
-
   const ledgerFormSections = useMemo(
     () => toLedgerFormSections(ledgerFormFields),
     [ledgerFormFields],
   );
-
   const activeLedgerSection =
     ledgerFormSections.find((section) => section.key === activeSectionKey) ??
     ledgerFormSections[0] ??
     null;
-
   // Validate active section
   useEffect(() => {
     if (ledgerFormSections.length === 0) return;
     if (ledgerFormSections.some((section) => section.key === activeSectionKey)) return;
     setActiveSectionKey(ledgerFormSections[0]?.key ?? "general");
   }, [activeSectionKey, ledgerFormSections]);
-
   // Load records
   const loadRecords = useCallback(
     async (term: string, page: number, limit: number) => {
@@ -844,7 +803,6 @@ export default function AccountLedgerMasterPage() {
     },
     [getAll],
   );
-
   // Debounced load records
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -854,7 +812,6 @@ export default function AccountLedgerMasterPage() {
       window.clearTimeout(timeoutId);
     };
   }, [currentPage, loadRecords, pageSize, searchTerm]);
-
   // Build rows
   const serialOffset = Math.max(0, (currentPage - 1) * pageSize);
   const rows = useMemo(() => {
@@ -869,13 +826,8 @@ export default function AccountLedgerMasterPage() {
     ]);
     return buildLedgerRows(data, serialOffset);
   }, [data, serialOffset]);
-  const areStyleColumnsAllHidden = useMemo(
-    () => areResponseStyleColumnsAllHidden(data),
-    [data],
-  );
-  const renderedRows = areStyleColumnsAllHidden ? [] : rows;
-  const renderedTotalEntries = areStyleColumnsAllHidden ? 0 : totalEntries;
-
+  const renderedRows = rows;
+  const renderedTotalEntries = totalEntries;
   // Validate selected row
   useEffect(() => {
     if (selectedRowId === null) return;
@@ -883,7 +835,6 @@ export default function AccountLedgerMasterPage() {
       setSelectedRowId(null);
     }
   }, [renderedRows, selectedRowId]);
-
   // Build columns
   const columns = useMemo<ReusableTableColumn<LedgerTableRow>[]>(
     () => {
@@ -892,8 +843,7 @@ export default function AccountLedgerMasterPage() {
     },
     [data, gridColumns],
   );
-  const renderedColumns = areStyleColumnsAllHidden ? [] : columns;
-
+  const renderedColumns = columns;
   // Modal handlers
   const openCreateModal = useCallback(() => {
     resetSaveState();
@@ -909,7 +859,6 @@ export default function AccountLedgerMasterPage() {
     setFormValues(createInitialLedgerFormValues());
     setIsFormModalOpen(true);
   }, [ledgerFormSections, resetDetailsState, resetSaveState]);
-
   useEffect(() => {
     const handleCreateShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
@@ -917,18 +866,15 @@ export default function AccountLedgerMasterPage() {
       }
       if (event.key.toLowerCase() !== "c") {
         return;
-      }
-
+            }
       event.preventDefault();
       openCreateModal();
     };
-
     window.addEventListener("keydown", handleCreateShortcut);
     return () => {
       window.removeEventListener("keydown", handleCreateShortcut);
     };
   }, [openCreateModal]);
-
   const openExistingModal = useCallback(
     async (row: LedgerTableRow, mode: Exclude<ModalMode, "create">) => {
       resetSaveState();
@@ -963,7 +909,6 @@ export default function AccountLedgerMasterPage() {
     },
     [getById, ledgerFormSections, resetDetailsState, resetSaveState],
   );
-
   const closeModal = useCallback(() => {
     if (saveLoading) return;
     setIsFormModalOpen(false);
@@ -975,19 +920,15 @@ export default function AccountLedgerMasterPage() {
     setSearchActiveOptionIndex({});
     setActiveSectionKey("general");
   }, [saveLoading]);
-
   useEffect(() => {
     if (!isFormModalOpen) return;
-
     const handleModalShortcuts = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
-
       if (event.key === "Escape") {
         event.preventDefault();
         closeModal();
         return;
       }
-
       if (
         modalMode === "view" ||
         saveLoading ||
@@ -999,18 +940,14 @@ export default function AccountLedgerMasterPage() {
       ) {
         return;
       }
-
       const formElement = formRef.current;
       if (!formElement) return;
-
       event.preventDefault();
       formElement.requestSubmit();
     };
-
     window.addEventListener("keydown", handleModalShortcuts);
     return () => window.removeEventListener("keydown", handleModalShortcuts);
   }, [closeModal, detailsLoading, isFormModalOpen, modalMode, saveLoading]);
-
   // Form field handlers
   const handleFieldChange = useCallback(
     (fieldName: LedgerFormFieldName, value: string) => {
@@ -1019,14 +956,12 @@ export default function AccountLedgerMasterPage() {
     },
     [],
   );
-
   const handleCheckboxKeyDown = useCallback((event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
     if (event.currentTarget.disabled) return;
     event.currentTarget.click();
   }, []);
-
   const clearSearchableFieldActiveIndex = useCallback((fieldName: LedgerFormFieldName) => {
     setSearchActiveOptionIndex((current) => {
       if (!(fieldName in current)) {
@@ -1037,7 +972,6 @@ export default function AccountLedgerMasterPage() {
       return nextState;
     });
   }, []);
-
   const handleSearchableFieldInput = useCallback(
     (fieldName: LedgerFormFieldName, query: string) => {
       setOpenSearchField(fieldName);
@@ -1049,7 +983,6 @@ export default function AccountLedgerMasterPage() {
     },
     [clearSearchableFieldActiveIndex],
   );
-
   const handleSearchableFieldPointerToggle = useCallback(
     (fieldName: LedgerFormFieldName) => {
       setOpenSearchField((current) => (current === fieldName ? null : fieldName));
@@ -1057,7 +990,6 @@ export default function AccountLedgerMasterPage() {
     },
     [clearSearchableFieldActiveIndex],
   );
-
   const handleSearchableOptionSelect = useCallback(
     (fieldName: LedgerFormFieldName, option: ERPDynamicSelectOption) => {
       if (fieldName === "ledStateName") {
@@ -1084,7 +1016,6 @@ export default function AccountLedgerMasterPage() {
     },
     [clearSearchableFieldActiveIndex, handleFieldChange, stateCodeByName],
   );
-
   const handleSearchableFieldKeyDown = useCallback(
     (
       fieldName: LedgerFormFieldName,
@@ -1095,7 +1026,6 @@ export default function AccountLedgerMasterPage() {
       const isSearchOpen = openSearchField === fieldName;
       const optionCount = filteredOptions.length;
       const currentIndex = searchActiveOptionIndex[fieldName] ?? -1;
-
       if (
         event.key === "ArrowDown" ||
         event.key === "ArrowUp" ||
@@ -1110,25 +1040,20 @@ export default function AccountLedgerMasterPage() {
           clearSearchableFieldActiveIndex(fieldName);
           return;
         }
-
         const selectedIndex = filteredOptions.findIndex(
           (option) => option.value === fieldValue,
         );
         const baseIndex = currentIndex >= 0 && currentIndex < optionCount ? currentIndex : selectedIndex;
         let nextIndex = baseIndex;
-
         if (event.key === "ArrowDown") nextIndex = baseIndex + 1;
         else if (event.key === "ArrowUp") nextIndex = baseIndex - 1;
         else if (event.key === "Home") nextIndex = 0;
         else if (event.key === "End") nextIndex = optionCount - 1;
-
         if (nextIndex < 0) nextIndex = optionCount - 1;
         else if (nextIndex >= optionCount) nextIndex = 0;
-
         setSearchActiveOptionIndex((current) => ({ ...current, [fieldName]: nextIndex }));
         return;
       }
-
       if (event.key === "Enter") {
         if (!isSearchOpen) {
           event.preventDefault();
@@ -1153,20 +1078,17 @@ export default function AccountLedgerMasterPage() {
         }
         return;
       }
-
       if (event.key === " " && !isSearchOpen) {
         event.preventDefault();
         setOpenSearchField(fieldName);
         return;
       }
-
       if (event.key === "Escape" && isSearchOpen) {
         event.preventDefault();
         setOpenSearchField(null);
         clearSearchableFieldActiveIndex(fieldName);
         return;
       }
-
       if (event.key === "Tab" && isSearchOpen) {
         clearSearchableFieldActiveIndex(fieldName);
       }
@@ -1203,7 +1125,6 @@ export default function AccountLedgerMasterPage() {
         });
         return;
       }
-
       let nextIndex = sectionIndex;
       if (event.key === "ArrowRight") {
         nextIndex = (sectionIndex + 1) % ledgerFormSections.length;
@@ -1217,11 +1138,9 @@ export default function AccountLedgerMasterPage() {
       } else {
         return;
       }
-
       event.preventDefault();
       const nextSection = ledgerFormSections[nextIndex];
       if (!nextSection) return;
-
       setActiveSectionKey(nextSection.key);
       window.requestAnimationFrame(() => {
         sectionTabRefs.current[nextSection.key]?.focus();
@@ -1229,11 +1148,9 @@ export default function AccountLedgerMasterPage() {
     },
     [activeSectionKey, ledgerFormSections],
   );
-
   const handleLedgerFieldArrowNavigation = useCallback(
     (event: ReactKeyboardEvent<HTMLFormElement>) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
-
       const direction =
         event.key === "ArrowLeft"
           ? "left"
@@ -1244,34 +1161,27 @@ export default function AccountLedgerMasterPage() {
               : event.key === "ArrowDown"
                 ? "down"
                 : null;
-
       if (!direction) return;
-
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
-
       if (
         target.closest('[data-ledger-modal-search-dropdown="true"]') ||
         target.getAttribute("role") === "searchbox"
       ) {
         return;
       }
-
       const currentContainer = target.closest<HTMLElement>(
         "[data-ledger-modal-field-name]",
       );
       if (!currentContainer) return;
-
       const formElement = formRef.current;
       if (!formElement) return;
-
       const currentFieldName = currentContainer.dataset.ledgerModalFieldName;
       const targets = getLedgerFocusableFieldTargets(formElement);
       const currentFieldTarget = currentFieldName
         ? targets.find((entry) => entry.fieldName === currentFieldName)
         : undefined;
       if (!currentFieldTarget) return;
-
       const nextTarget = findNextLedgerFieldTarget(
         targets,
         currentFieldTarget,
@@ -1287,13 +1197,11 @@ export default function AccountLedgerMasterPage() {
         }
         return;
       }
-
       event.preventDefault();
       focusLedgerFieldControl(nextTarget.control);
     },
     [activeSectionKey],
   );
-
   const handleModalSubmit = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -1301,7 +1209,6 @@ export default function AccountLedgerMasterPage() {
         closeModal();
         return;
       }
-
       const validationError = getLedgerValidationError(formValues);
       if (validationError) {
         setModalError(null);
@@ -1314,11 +1221,9 @@ export default function AccountLedgerMasterPage() {
         });
         return;
       }
-
       setValidationFieldName(null);
       const shouldUpdate = modalMode === "update";
       const payload = buildLedgerRequestPayload(formValues, shouldUpdate, editingItemId);
-
       void (async () => {
         try {
           await upsertRecord({ body: payload });
@@ -1343,7 +1248,6 @@ export default function AccountLedgerMasterPage() {
       upsertRecord,
     ],
   );
-
   const handleDeleteRow = useCallback(
     (row: LedgerTableRow) => {
       if (deleteLoading || saveLoading || detailsLoading) return;
@@ -1351,14 +1255,12 @@ export default function AccountLedgerMasterPage() {
     },
     [deleteLoading, detailsLoading, saveLoading],
   );
-
   const handleRowLogs = useCallback(
     (row: LedgerTableRow) => {
       const recordPk = `${row.__recordId}`.trim();
       if (!recordPk) {
         return;
       }
-
       setRecordHistoryModal({
         screenName: "Account Ledger Master",
         recordPk,
@@ -1367,15 +1269,12 @@ export default function AccountLedgerMasterPage() {
     },
     [],
   );
-
   const handleDeleteCancel = useCallback(() => {
     if (deleteLoading) return;
     setPendingDeleteRow(null);
   }, [deleteLoading]);
-
   const handleDeleteConfirm = useCallback(() => {
     if (!pendingDeleteRow || deleteLoading || saveLoading || detailsLoading) return;
-
     void (async () => {
       try {
         const row = pendingDeleteRow;
@@ -1406,38 +1305,31 @@ export default function AccountLedgerMasterPage() {
     saveLoading,
     searchTerm,
   ]);
-
   const handleSearchChange = useCallback((query: string) => {
     setCurrentPage(DEFAULT_PAGE);
     setSearchTerm(query);
   }, []);
-
   const handlePageSizeChange = useCallback((nextPageSize: number) => {
     setCurrentPage(DEFAULT_PAGE);
     setPageSize(nextPageSize);
   }, []);
-
   const listHeading = `${effectiveTitle} List`;
   const handleDownloadRows = useCallback(() => {
     downloadLedgerCsv(listHeading, renderedColumns, renderedRows);
   }, [listHeading, renderedColumns, renderedRows]);
-
   const handleGridColumnResizeEnd = useCallback(
     (payload: ReusableTableColumnResizeEndPayload<LedgerTableRow>) => {
       if (accountLedgerGridId === null || payload.tableWidthPx <= 0) {
         return;
       }
-
       const gridColumn = resolveGridColumnForLedgerTableColumn(payload.column, gridColumns);
       if (!gridColumn?.serialId) {
         return;
       }
-
       const widthPercent = Number(((payload.widthPx * 100) / payload.tableWidthPx).toFixed(4));
       if (!Number.isFinite(widthPercent) || widthPercent <= 0) {
         return;
       }
-
       const columnNumber =
         gridColumn.columnNumber && gridColumn.columnNumber > 0
           ? gridColumn.columnNumber
@@ -1446,7 +1338,6 @@ export default function AccountLedgerMasterPage() {
       if (!columnName) {
         return;
       }
-
       void (async () => {
         try {
           await saveGridColumnWidth({
@@ -1466,18 +1357,15 @@ export default function AccountLedgerMasterPage() {
     },
     [accountLedgerGridId, gridColumns, refetchGridColumns, saveGridColumnWidth],
   );
-
   const handleGridColumnHide = useCallback(
     (payload: { column: ReusableTableColumn<LedgerTableRow> }) => {
       if (accountLedgerGridId === null) {
         return;
       }
-
       const gridColumn = resolveGridColumnForLedgerTableColumn(payload.column, gridColumns);
       if (!gridColumn?.serialId) {
         return;
       }
-
       const columnNumber =
         gridColumn.columnNumber && gridColumn.columnNumber > 0
           ? gridColumn.columnNumber
@@ -1486,7 +1374,6 @@ export default function AccountLedgerMasterPage() {
       if (!columnName) {
         return;
       }
-
       void (async () => {
         try {
           await saveGridColumnWidth({
@@ -1516,7 +1403,6 @@ export default function AccountLedgerMasterPage() {
       searchTerm,
     ],
   );
-
   const toolbarContent = (
     <div className={styles.masterHeader}>
       <div className={styles.masterTitleWrap}>
@@ -1536,7 +1422,6 @@ export default function AccountLedgerMasterPage() {
       </div>
     </div>
   );
-
   const pendingDeleteLabel = useMemo(() => {
     if (!pendingDeleteRow) return "";
     return (
@@ -1545,7 +1430,6 @@ export default function AccountLedgerMasterPage() {
       pendingDeleteRow.ledgerId
     );
   }, [pendingDeleteRow]);
-
   const isReadOnlyMode = modalMode === "view";
   const effectiveModalError = modalError ?? saveError ?? detailsError;
   const modalTitle =
@@ -1554,7 +1438,6 @@ export default function AccountLedgerMasterPage() {
       : modalMode === "update"
         ? `Edit ${effectiveTitle}`
         : `${effectiveTitle} Details`;
-
   const modalStyle = {
     "--erp-modal-accent": "#2563eb",
     "--erp-modal-accent-soft-ring": "#2563eb33",
@@ -1576,15 +1459,12 @@ export default function AccountLedgerMasterPage() {
         ]
       : []),
   ];
-
   const modalPanelStyle = {
     width: "min(62vw,62rem)",
     height: "75vh",
     maxHeight: "75vh",
   } as CSSProperties;
-
   const modalFormId = "account-ledger-master-form";
-
   // Helper function to extract rows
   function extractRows(payload: unknown, arrayKeys: string[]): unknown[] {
     if (Array.isArray(payload)) return payload;
@@ -1596,7 +1476,6 @@ export default function AccountLedgerMasterPage() {
     }
     return [];
   }
-
   // Helper function to extract detail source
   function extractDetailSource(payload: unknown): Record<string, unknown> | null {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
@@ -1607,7 +1486,6 @@ export default function AccountLedgerMasterPage() {
     }
     return objectPayload;
   }
-
   return (
     <main className={styles.page}>
       <div className={styles.viewport}>
@@ -1677,7 +1555,6 @@ export default function AccountLedgerMasterPage() {
               resizableColumns
               onColumnResizeEnd={handleGridColumnResizeEnd}
               onColumnHide={handleGridColumnHide}
-              showActionsColumn={areStyleColumnsAllHidden ? false : undefined}
               activeRowKey={selectedRowId}
               onRowClick={(row) => setSelectedRowId(row.__rowId)}
               onRowDoubleClick={(row) => void openExistingModal(row, "view")}
