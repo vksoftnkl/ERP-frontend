@@ -149,6 +149,7 @@ export default function GspProviderMasterPage() {
       entityLabelPlural="gsp providers"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
+      useResponseTableColumns
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

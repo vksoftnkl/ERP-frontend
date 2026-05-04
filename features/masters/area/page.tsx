@@ -808,7 +808,6 @@ export default function AreaMasterPage() {
         formDescription="Create and update areas."
         customFields={areaFormFields}
         customTableColumns={customTableColumns}
-        listResponseStyleArrayKey="styles"
         createInitialValues={AREA_INITIAL_FORM_VALUES}
         mapFormValues={({ source, defaults }) => {
           const rowSource = source ?? {};

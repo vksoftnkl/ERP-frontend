@@ -470,6 +470,7 @@ export default function TaxMasterPage() {
       formTitle="Tax Form"
       formDescription="Create and update taxes."
       customFields={taxFormFields}
+      useResponseTableColumns
       createInitialValues={TAX_INITIAL_FORM_VALUES}
       modalPanelStyle={TAX_MODAL_PANEL_STYLE}
       modalFormGridColumns={3}

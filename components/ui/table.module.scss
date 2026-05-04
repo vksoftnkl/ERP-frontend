@@ -1457,3 +1457,28 @@
     }
   }
 }
+
+.tableShell {
+  .serialNumberCell {
+    position: sticky !important;
+    left: 0 !important;
+    z-index: 125 !important;
+    width: 48px !important;
+    min-width: 48px !important;
+    max-width: 48px !important;
+    background: inherit !important;
+    box-shadow: 1px 0 0 var(--table-border-soft) !important;
+    padding-left: 8px !important;
+    padding-right: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  th.serialNumberCell {
+    z-index: 140 !important;
+    background: #bacdef !important;
+  }
+
+  td.serialNumberCell {
+    background: inherit !important;
+  }
+}

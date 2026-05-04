@@ -39,6 +39,7 @@ const API_ENDPOINTS = {
   create: "/company-masters/create",
   delete: "/company-masters/delete",
 } as const;
+const GRID_TABLE_NAME = "companys";
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const STATE_LOOKUP_QUERY = {
@@ -1007,6 +1008,8 @@ export function useCompaniesModule() {
         entityLabel: "company",
         entityLabelPlural: "companies",
         apiEndpoints: API_ENDPOINTS,
+        gridTableName: GRID_TABLE_NAME,
+        useResponseTableColumns: true,
         lookupKeys: LOOKUP_KEYS,
         requestPayloadKeys: REQUEST_PAYLOAD_KEYS,
         styles,

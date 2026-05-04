@@ -358,6 +358,7 @@ export type CrudMasterPageProps = {
     controller: CrudMasterPageController | null,
   ) => void;
   hideListPage?: boolean;
+  hideRowsWhenAllGridColumnFiltersDisabled?: boolean;
   onModalOpenChange?: (open: boolean, variantKey: string | null) => void;
 };
 function getFirstDefinedValue(
@@ -988,6 +989,24 @@ function extractListResponseStyleRows(
     );
 }
 
+function shouldHideRowsFromListResponseStyleFilters(
+  payload: unknown,
+  styleArrayKey: string,
+): boolean | null {
+  const styleRows = extractListResponseStyleRows(payload, styleArrayKey);
+  if (styleRows.length === 0) {
+    return null;
+  }
+
+  const allFilterValues = styleRows.map((row) =>
+    toBoolean(getFirstDefinedValue(row, LIST_RESPONSE_STYLE_FILTER_KEYS)),
+  );
+  if (allFilterValues.some((value) => value === true)) {
+    return false;
+  }
+  return true;
+}
+
 type BuildMasterColumnArgs = {
   accessor: MasterColumnAccessor;
   title: string;
@@ -1535,6 +1554,9 @@ function isMasterSerialColumn(column: ReusableTableColumn<MasterTableRow>): bool
     normalizeColumnToken(String(column.header)) === "sno"
   );
 }
+function isMasterFilterDataColumn(column: ReusableTableColumn<MasterTableRow>): boolean {
+  return normalizeColumnToken(column.key) !== "actions" && !isMasterSerialColumn(column);
+}
 
 function getMasterSerialColumn(
   fallbackColumns: ReusableTableColumn<MasterTableRow>[],
@@ -1698,6 +1720,66 @@ function getResponseKeyMatchScore(candidateToken: string, responseToken: string)
   return 0;
 }
 
+function getColumnWords(value: string): string[] {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+function getResponseKeyWordMatchScore(candidateValue: string, responseKey: string): number {
+  const candidateWords = getColumnWords(candidateValue);
+  const responseWords = new Set(getColumnWords(responseKey));
+  if (candidateWords.length === 0 || responseWords.size === 0) {
+    return 0;
+  }
+
+  if (candidateWords.every((word) => responseWords.has(word))) {
+    return 92;
+  }
+
+  const matchedWordCount = candidateWords.filter((word) => responseWords.has(word)).length;
+  if (matchedWordCount > 0 && candidateWords.includes("name") && responseWords.has("name")) {
+    return 70;
+  }
+  if (matchedWordCount > 0 && candidateWords.includes("code") && responseWords.has("code")) {
+    return 70;
+  }
+  return matchedWordCount > 1 ? 70 : 0;
+}
+
+function isMetadataResponseKey(responseKey: string): boolean {
+  const normalized = normalizeColumnToken(responseKey);
+  const compact = compactColumnToken(responseKey);
+  return (
+    compact === "id" ||
+    compact.endsWith("id") ||
+    compact.includes("created") ||
+    compact.includes("modified") ||
+    compact.includes("updated") ||
+    compact.includes("deleted") ||
+    normalized.endsWith("_id")
+  );
+}
+
+function getFallbackResponseKeyForStyleRow(
+  responseKeys: readonly string[],
+  usedResponseKeys: Set<string>,
+  excludedKeys: Set<string>,
+): string | null {
+  return (
+    responseKeys.find((responseKey) => {
+      const normalized = normalizeColumnToken(responseKey);
+      return (
+        !usedResponseKeys.has(responseKey) &&
+        !excludedKeys.has(normalized) &&
+        !isMetadataResponseKey(responseKey)
+      );
+    }) ?? null
+  );
+}
+
 function resolveResponseKeyForStyleRow(
   styleRow: Record<string, unknown>,
   responseKeys: readonly string[],
@@ -1739,9 +1821,15 @@ function resolveResponseKeyForStyleRow(
       );
       return Math.max(bestScore, tokenScore);
     }, 0);
+    const wordScore = candidateValues.reduce(
+      (bestScore, candidateValue) =>
+        Math.max(bestScore, getResponseKeyWordMatchScore(candidateValue, responseKey)),
+      0,
+    );
+    const bestResponseScore = Math.max(score, wordScore);
 
-    if (score > (bestMatch?.score ?? 0)) {
-      bestMatch = { key: responseKey, score };
+    if (bestResponseScore > (bestMatch?.score ?? 0)) {
+      bestMatch = { key: responseKey, score: bestResponseScore };
     }
   }
 
@@ -1774,12 +1862,18 @@ function buildColumnsFromResponseRows(
         continue;
       }
 
-      const responseKey = resolveResponseKeyForStyleRow(
-        styleRow,
-        responseKeys,
-        usedResponseKeys,
-        excludedKeys,
-      );
+      const responseKey =
+        resolveResponseKeyForStyleRow(
+          styleRow,
+          responseKeys,
+          usedResponseKeys,
+          excludedKeys,
+        ) ??
+        getFallbackResponseKeyForStyleRow(
+          responseKeys,
+          usedResponseKeys,
+          excludedKeys,
+        );
       if (!responseKey) {
         continue;
       }
@@ -1816,9 +1910,11 @@ function buildColumnsFromResponseRows(
       });
     }
 
-    return styledColumns.length > 0
-      ? styledColumns
-      : buildMasterSerialOnlyColumns(fallbackColumns);
+    if (styledColumns.length === 0) {
+      return buildMasterSerialOnlyColumns(fallbackColumns);
+    }
+
+    return serialColumn ? [serialColumn, ...styledColumns] : styledColumns;
   }
 
   const columns: ReusableTableColumn<MasterTableRow>[] = serialColumn ? [serialColumn] : [];
@@ -2026,6 +2122,7 @@ export default function CrudMasterPage({
   afterDeleteSuccess,
   onCrudControllerReady,
   hideListPage = false,
+  hideRowsWhenAllGridColumnFiltersDisabled = false,
   onModalOpenChange,
 }: CrudMasterPageProps) {
   const modalControllerRef = useRef<ERPDynamicModalController | null>(null);
@@ -2219,8 +2316,6 @@ export default function CrudMasterPage({
   const hasCustomTableColumns = Boolean(customTableColumns && customTableColumns.length > 0);
   const effectiveListResponseStyleArrayKey =
     listResponseStyleArrayKey ?? (hasCustomTableColumns ? undefined : "styles");
-  const renderedRows = rows;
-  const renderedTotalEntries = totalEntries;
 
   const listResponseColumns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
     () => {
@@ -2318,6 +2413,47 @@ export default function CrudMasterPage({
     ],
   );
   const renderedColumns = columns;
+  const filterDataColumns = useMemo(
+    () => renderedColumns.filter(isMasterFilterDataColumn),
+    [renderedColumns],
+  );
+  const shouldHideRowsFromResponseStyleFilters = useMemo(
+    () =>
+      effectiveListResponseStyleArrayKey
+        ? shouldHideRowsFromListResponseStyleFilters(
+            data,
+            effectiveListResponseStyleArrayKey,
+          )
+        : null,
+    [data, effectiveListResponseStyleArrayKey],
+  );
+  const shouldHideRowsForDisabledGridFilters = useMemo(
+    () => {
+      if (!hideRowsWhenAllGridColumnFiltersDisabled) {
+        return false;
+      }
+
+      if (filterDataColumns.some((column) => column.sortable !== false)) {
+        return false;
+      }
+
+      if (shouldHideRowsFromResponseStyleFilters !== null) {
+        return shouldHideRowsFromResponseStyleFilters;
+      }
+
+      return (
+        filterDataColumns.length === 0 ||
+        filterDataColumns.every((column) => column.sortable === false)
+      );
+    },
+    [
+      filterDataColumns,
+      hideRowsWhenAllGridColumnFiltersDisabled,
+      shouldHideRowsFromResponseStyleFilters,
+    ],
+  );
+  const renderedRows = shouldHideRowsForDisabledGridFilters ? [] : rows;
+  const renderedTotalEntries = shouldHideRowsForDisabledGridFilters ? 0 : totalEntries;
 
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(
     null,
@@ -3015,6 +3151,7 @@ export default function CrudMasterPage({
               grid_column_number: columnNumber,
               grid_column_name: columnName,
               grid_column_visibility: false,
+              grid_column_filter: false,
             },
           });
           void refetchGridColumns();

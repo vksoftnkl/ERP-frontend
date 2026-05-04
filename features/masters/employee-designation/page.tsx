@@ -102,6 +102,7 @@ export default function EmployeeDesignationMasterPage() {
       entityLabelPlural="designations"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
+      useResponseTableColumns
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

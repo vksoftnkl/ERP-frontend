@@ -251,6 +251,7 @@ export default function LedgerBankAccountMasterPage() {
       entityLabelPlural="ledger bank accounts"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
+      useResponseTableColumns
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

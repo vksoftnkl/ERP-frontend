@@ -135,6 +135,26 @@ function getColumnExportValue(
   }
   return "";
 }
+function normalizeTableColumnToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9_]+/g, "");
+}
+function isLedgerFilterDataColumn(column: ReusableTableColumn<LedgerTableRow>): boolean {
+  const normalizedKey = normalizeTableColumnToken(column.key);
+  const normalizedHeader =
+    typeof column.header === "string"
+      ? normalizeTableColumnToken(column.header)
+      : "";
+  return (
+    normalizedKey !== "actions" &&
+    column.accessor !== "serialNo" &&
+    normalizedKey !== "serialno" &&
+    normalizedKey !== "sno" &&
+    normalizedKey !== "srno" &&
+    normalizedHeader !== "serialno" &&
+    normalizedHeader !== "sno" &&
+    normalizedHeader !== "srno"
+  );
+}
 function downloadLedgerCsv(
   title: string,
   columns: ReusableTableColumn<LedgerTableRow>[],
@@ -826,15 +846,6 @@ export default function AccountLedgerMasterPage() {
     ]);
     return buildLedgerRows(data, serialOffset);
   }, [data, serialOffset]);
-  const renderedRows = rows;
-  const renderedTotalEntries = totalEntries;
-  // Validate selected row
-  useEffect(() => {
-    if (selectedRowId === null) return;
-    if (!renderedRows.some((row) => row.__rowId === selectedRowId)) {
-      setSelectedRowId(null);
-    }
-  }, [renderedRows, selectedRowId]);
   // Build columns
   const columns = useMemo<ReusableTableColumn<LedgerTableRow>[]>(
     () => {
@@ -844,6 +855,25 @@ export default function AccountLedgerMasterPage() {
     [data, gridColumns],
   );
   const renderedColumns = columns;
+  const filterDataColumns = useMemo(
+    () => renderedColumns.filter(isLedgerFilterDataColumn),
+    [renderedColumns],
+  );
+  const shouldHideRowsForDisabledGridFilters = useMemo(
+    () =>
+      filterDataColumns.length === 0 ||
+      filterDataColumns.every((column) => column.sortable === false),
+    [filterDataColumns],
+  );
+  const renderedRows = shouldHideRowsForDisabledGridFilters ? [] : rows;
+  const renderedTotalEntries = shouldHideRowsForDisabledGridFilters ? 0 : totalEntries;
+  // Validate selected row
+  useEffect(() => {
+    if (selectedRowId === null) return;
+    if (!renderedRows.some((row) => row.__rowId === selectedRowId)) {
+      setSelectedRowId(null);
+    }
+  }, [renderedRows, selectedRowId]);
   // Modal handlers
   const openCreateModal = useCallback(() => {
     resetSaveState();
@@ -1383,6 +1413,7 @@ export default function AccountLedgerMasterPage() {
               grid_column_number: columnNumber,
               grid_column_name: columnName,
               grid_column_visibility: false,
+              grid_column_filter: false,
             },
           });
           void refetchGridColumns();

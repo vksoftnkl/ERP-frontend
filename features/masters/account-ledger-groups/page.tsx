@@ -238,6 +238,8 @@ export default function AccountLedgerGroupsMasterPage() {
       entityLabelPlural="account groups"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
+      useResponseTableColumns
+      hideRowsWhenAllGridColumnFiltersDisabled
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

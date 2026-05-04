@@ -788,6 +788,7 @@ export default function EmployeeMasterPage() {
       entityLabel="employee"
       entityLabelPlural="employees"
       apiEndpoints={API_ENDPOINTS}
+      useResponseTableColumns
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

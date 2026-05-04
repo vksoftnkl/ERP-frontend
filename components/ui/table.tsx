@@ -150,10 +150,11 @@ const ACTION_MENU_ESTIMATED_HEIGHT = 260;
 const ACTION_MENU_GAP = 8;
 const ACTION_MENU_VIEWPORT_PADDING = 8;
 const DEFAULT_TABLE_MAX_HEIGHT = "calc(100dvh - 250px)";
-const SERIAL_NUMBER_COLUMN_WIDTH = "100px";
+const SERIAL_NUMBER_COLUMN_WIDTH = "48px";
 const FIXED_ACTIONS_COLUMN_WIDTH = "200px";
 const MIN_DATA_COLUMN_WIDTH = 100;
 const MIN_RESIZABLE_COLUMN_WIDTH = 40;
+const PERCENT_COLUMN_WIDTH_PIXEL_FACTOR = 8;
 const DEFAULT_ACTION_MENU_PLACEMENT: ActionMenuPlacement = {
   vertical: "down",
   horizontal: "right",
@@ -363,6 +364,14 @@ function resolveColumnWidth<T extends Record<string, unknown>>(
   if (!normalizedWidth) {
     return undefined;
   }
+  const percentWidth = normalizedWidth.match(/^(\d+(?:\.\d+)?)%$/);
+  if (percentWidth) {
+    const width = `${Math.max(
+      MIN_DATA_COLUMN_WIDTH,
+      Math.round(Number(percentWidth[1]) * PERCENT_COLUMN_WIDTH_PIXEL_FACTOR),
+    )}px`;
+    return { width, minWidth: width };
+  }
   return { width: normalizedWidth };
 }
 function resolveColumnPixelWidth<T extends Record<string, unknown>>(
@@ -374,8 +383,19 @@ function resolveColumnPixelWidth<T extends Record<string, unknown>>(
   if (isActionsColumn(column)) {
     return Number.parseFloat(FIXED_ACTIONS_COLUMN_WIDTH);
   }
-  const pixelWidth = column.width?.trim().match(/^(\d+(?:\.\d+)?)px$/i);
-  return pixelWidth ? Math.max(Number(pixelWidth[1]), MIN_DATA_COLUMN_WIDTH) : MIN_DATA_COLUMN_WIDTH;
+  const normalizedWidth = column.width?.trim();
+  const pixelWidth = normalizedWidth?.match(/^(\d+(?:\.\d+)?)px$/i);
+  if (pixelWidth) {
+    return Math.max(Number(pixelWidth[1]), MIN_DATA_COLUMN_WIDTH);
+  }
+  const percentWidth = normalizedWidth?.match(/^(\d+(?:\.\d+)?)%$/);
+  if (percentWidth) {
+    return Math.max(
+      MIN_DATA_COLUMN_WIDTH,
+      Math.round(Number(percentWidth[1]) * PERCENT_COLUMN_WIDTH_PIXEL_FACTOR),
+    );
+  }
+  return MIN_DATA_COLUMN_WIDTH;
 }
 function resolveMinimumTableWidth<T extends Record<string, unknown>>(
   columns: ReusableTableColumn<T>[],
@@ -741,6 +761,9 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const enableColumnReorder = reorderableColumns && displayColumns.some(isColumnReorderable);
   const enableColumnResize = resizableColumns && displayColumns.some(isColumnReorderable);
   const displayColumnsWithWidths = displayColumns.map((column) => {
+    if (isSerialNumberColumn(column)) {
+      return { ...column, width: SERIAL_NUMBER_COLUMN_WIDTH };
+    }
     const resizedWidth = columnWidths[column.key];
     return resizedWidth ? { ...column, width: resizedWidth } : column;
   });
@@ -1594,7 +1617,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
           style={
             {
               "--erp-table-min-width": resolvedTableWidth,
-              width: resizableColumns ? `max(${resolvedTableWidth}, 100%)` : undefined,
+              width: resizableColumns ? resolvedTableWidth : undefined,
               tableLayout: tableLayout ?? (resizableColumns ? "fixed" : undefined),
             } as CSSProperties
           }
@@ -1634,6 +1657,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
                     }
                     className={cx(
                       styles.headerCell,
+                      isSerialNumberColumn(column) && styles.serialNumberCell,
                       getColumnAlignClass(column.align),
                       canSort && styles.sortableHeaderCell,
                       canReorderColumn && styles.reorderableHeaderCell,
@@ -1802,6 +1826,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
                           }
                           className={cx(
                             styles.cell,
+                            isSerialNumberColumn(column) && styles.serialNumberCell,
                             getColumnAlignClass(column.align),
                             shouldRenderActions && styles.actionsCell,
                             shouldRenderInlineActionMenu &&
