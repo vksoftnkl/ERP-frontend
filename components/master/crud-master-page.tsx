@@ -2357,16 +2357,24 @@ export default function CrudMasterPage({
     ],
   );
 
+  const lastResponseTableColumnsRef = useRef<ReusableTableColumn<MasterTableRow>[] | null>(null);
+
   const columns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
     () => {
       if (useResponseTableColumns) {
-        return buildColumnsFromResponseRows(
+        const responseColumns = buildColumnsFromResponseRows(
           data,
           lookupKeys.array ?? DEFAULT_ARRAY_KEYS,
           effectiveListResponseStyleArrayKey,
           fallbackColumns,
           responseTableColumnExcludeKeys,
         );
+
+        if (rows.length === 0 && lastResponseTableColumnsRef.current) {
+          return lastResponseTableColumnsRef.current;
+        }
+
+        return responseColumns;
       }
 
       if (customTableColumns && customTableColumns.length > 0) {
@@ -2408,10 +2416,22 @@ export default function CrudMasterPage({
       listResponseColumns,
       lookupKeys,
       responseTableColumnExcludeKeys,
+      rows.length,
       useResponseTableColumns,
       normalizedGridTableNames.length,
     ],
   );
+
+  useEffect(() => {
+    if (
+      useResponseTableColumns &&
+      rows.length > 0 &&
+      columns.some(isMasterFilterDataColumn)
+    ) {
+      lastResponseTableColumnsRef.current = columns;
+    }
+  }, [columns, rows.length, useResponseTableColumns]);
+
   const renderedColumns = columns;
   const filterDataColumns = useMemo(
     () => renderedColumns.filter(isMasterFilterDataColumn),
