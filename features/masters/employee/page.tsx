@@ -1,5 +1,4 @@
 "use client";
-
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
@@ -22,17 +21,16 @@ import {
   toUpper,
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
-
 const API_ENDPOINTS = {
   list: "/employee-masters/list",
   getById: "/employee-masters/get",
   create: "/employee-masters/create",
   delete: "/employee-masters/delete",
 } as const;
+const GRID_TABLE_NAME = "emp_master";
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const UUID_PATTERN = "^[0-9a-fA-F-]{36}$";
-
 const EMPLOYEE_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(92vw, 62rem)",
   height: "75vh",
@@ -158,7 +156,6 @@ const EMPLOYEE_TEXT_FIELD_NAMES = [
   "empPhotoUrl",
   "empRemarks",
 ] as const;
-
 const EMPLOYEE_DATE_FIELD_NAMES = [
   "empDob",
   "empJoinedOn",
@@ -166,13 +163,11 @@ const EMPLOYEE_DATE_FIELD_NAMES = [
   "empConfirmationOn",
   "empLeftOn",
 ] as const;
-
 const EMPLOYEE_BOOLEAN_FIELD_NAMES = [
   "empOvertimeAllowed",
   "empHasCommission",
   "empIsActive",
 ] as const;
-
 const EMPLOYEE_INITIAL_FORM_VALUES: Record<string, string> = {
   empName: "",
   empCode: "",
@@ -788,6 +783,7 @@ export default function EmployeeMasterPage() {
       entityLabel="employee"
       entityLabelPlural="employees"
       apiEndpoints={API_ENDPOINTS}
+      gridTableName={GRID_TABLE_NAME}
       useResponseTableColumns
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}

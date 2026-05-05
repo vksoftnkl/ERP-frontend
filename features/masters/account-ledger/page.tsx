@@ -135,25 +135,27 @@ function getColumnExportValue(
   }
   return "";
 }
-function normalizeTableColumnToken(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9_]+/g, "");
-}
-function isLedgerFilterDataColumn(column: ReusableTableColumn<LedgerTableRow>): boolean {
-  const normalizedKey = normalizeTableColumnToken(column.key);
-  const normalizedHeader =
-    typeof column.header === "string"
-      ? normalizeTableColumnToken(column.header)
-      : "";
-  return (
-    normalizedKey !== "actions" &&
-    column.accessor !== "serialNo" &&
-    normalizedKey !== "serialno" &&
-    normalizedKey !== "sno" &&
-    normalizedKey !== "srno" &&
-    normalizedHeader !== "serialno" &&
-    normalizedHeader !== "sno" &&
-    normalizedHeader !== "srno"
-  );
+function buildLedgerGridColumnBasePayload(
+  gridColumn: GridColumnConfig,
+  fallbackGridId: number,
+): Record<string, unknown> | null {
+  if (!gridColumn.serialId) {
+    return null;
+  }
+  const columnNumber =
+    gridColumn.columnNumber && gridColumn.columnNumber > 0
+      ? gridColumn.columnNumber
+      : Math.max(1, gridColumn.order + 1);
+  const columnName = (gridColumn.columnName ?? gridColumn.header).trim();
+  if (!columnName) {
+    return null;
+  }
+  return {
+    grid_serialid: gridColumn.serialId,
+    grid_id: gridColumn.gridId ?? String(fallbackGridId),
+    grid_column_number: columnNumber,
+    grid_column_name: columnName,
+  };
 }
 function downloadLedgerCsv(
   title: string,
@@ -646,8 +648,13 @@ export default function AccountLedgerMasterPage() {
   const [activeSectionKey, setActiveSectionKey] = useState("general");
   // State for delete
   const [pendingDeleteRow, setPendingDeleteRow] = useState<LedgerTableRow | null>(null);
+  const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
+  const [gridSettingsMode, setGridSettingsMode] = useState<"filter" | "visibility" | null>(null);
+  const [gridSettingsSelections, setGridSettingsSelections] = useState<Record<string, boolean>>({});
+  const [gridSettingsSaving, setGridSettingsSaving] = useState(false);
   // Refs
   const searchInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const searchSettingsRef = useRef<HTMLDivElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const sectionTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   // Grid columns query
@@ -663,6 +670,19 @@ export default function AccountLedgerMasterPage() {
   );
   const gridColumns = gridColumnsData ?? [];
   const gridColumnsError = getApiErrorMessage(gridColumnsQueryError);
+  const gridSettingsColumns = useMemo(
+    () =>
+      gridColumns
+        .filter((column) => Boolean(column.serialId))
+        .sort((left, right) => left.order - right.order),
+    [gridColumns],
+  );
+  const gridSettingsTitle =
+    gridSettingsMode === "visibility" ? "Grid Visible Columns" : "Grid Search Columns";
+  const gridSettingsCloseLabel =
+    gridSettingsMode === "visibility"
+      ? "Close grid visible columns"
+      : "Close grid search columns";
   // Load grid details
   useEffect(() => {
     let mounted = true;
@@ -855,18 +875,8 @@ export default function AccountLedgerMasterPage() {
     [data, gridColumns],
   );
   const renderedColumns = columns;
-  const filterDataColumns = useMemo(
-    () => renderedColumns.filter(isLedgerFilterDataColumn),
-    [renderedColumns],
-  );
-  const shouldHideRowsForDisabledGridFilters = useMemo(
-    () =>
-      filterDataColumns.length === 0 ||
-      filterDataColumns.every((column) => column.sortable === false),
-    [filterDataColumns],
-  );
-  const renderedRows = shouldHideRowsForDisabledGridFilters ? [] : rows;
-  const renderedTotalEntries = shouldHideRowsForDisabledGridFilters ? 0 : totalEntries;
+  const renderedRows = rows;
+  const renderedTotalEntries = totalEntries;
   // Validate selected row
   useEffect(() => {
     if (selectedRowId === null) return;
@@ -1434,13 +1444,162 @@ export default function AccountLedgerMasterPage() {
       searchTerm,
     ],
   );
+  const openGridSettingsModal = useCallback(
+    (mode: "filter" | "visibility") => {
+      const nextSelections: Record<string, boolean> = {};
+      for (const column of gridSettingsColumns) {
+        if (!column.serialId) {
+          continue;
+        }
+        nextSelections[column.serialId] =
+          mode === "visibility" ? column.visible !== false : column.sortable !== false;
+      }
+      setGridSettingsSelections(nextSelections);
+      setGridSettingsMode(mode);
+      setSearchSettingsOpen(false);
+    },
+    [gridSettingsColumns],
+  );
+  const closeGridSettingsModal = useCallback(() => {
+    if (gridSettingsSaving) {
+      return;
+    }
+    setGridSettingsMode(null);
+  }, [gridSettingsSaving]);
+  const handleGridSettingsSelectionChange = useCallback(
+    (serialId: string, checked: boolean) => {
+      setGridSettingsSelections((current) => ({
+        ...current,
+        [serialId]: checked,
+      }));
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!searchSettingsOpen || typeof document === "undefined") {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent) => {
+      if (
+        searchSettingsRef.current &&
+        !searchSettingsRef.current.contains(event.target as Node)
+      ) {
+        setSearchSettingsOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSearchSettingsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [searchSettingsOpen]);
+  const saveGridSettings = useCallback(async () => {
+    if (
+      accountLedgerGridId === null ||
+      gridSettingsMode === null ||
+      gridSettingsColumns.length === 0
+    ) {
+      return;
+    }
+    setGridSettingsSaving(true);
+    try {
+      for (const column of gridSettingsColumns) {
+        const basePayload = buildLedgerGridColumnBasePayload(column, accountLedgerGridId);
+        if (!basePayload || !column.serialId) {
+          continue;
+        }
+        await saveGridColumnWidth({
+          body: {
+            ...basePayload,
+            [gridSettingsMode === "visibility"
+              ? "grid_column_visibility"
+              : "grid_column_filter"]: gridSettingsSelections[column.serialId] === true,
+          },
+        });
+      }
+      void refetchGridColumns();
+      await loadRecords(searchTerm, currentPage, pageSize);
+      setGridSettingsMode(null);
+    } catch {
+      // useApi handles the visible error toast.
+    } finally {
+      setGridSettingsSaving(false);
+    }
+  }, [
+    accountLedgerGridId,
+    currentPage,
+    gridSettingsColumns,
+    gridSettingsMode,
+    gridSettingsSelections,
+    loadRecords,
+    pageSize,
+    refetchGridColumns,
+    saveGridColumnWidth,
+    searchTerm,
+  ]);
+  useEffect(() => {
+    if (gridSettingsMode === null || typeof document === "undefined") {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeGridSettingsModal();
+      }
+      if (event.key === "F5") {
+        event.preventDefault();
+        void saveGridSettings();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeGridSettingsModal, gridSettingsMode, saveGridSettings]);
   const toolbarContent = (
     <div className={styles.masterHeader}>
       <div className={styles.masterTitleWrap}>
         <h1 className={styles.masterTitle}>{listHeading}</h1>
       </div>
-      <div className={styles.masterSearchWrap}>
-        <FiSearch className={styles.masterSearchIcon} aria-hidden="true" />
+      <div className={styles.masterSearchWrap} ref={searchSettingsRef}>
+        <button
+          type="button"
+          className={styles.masterSearchIconButton}
+          onClick={() => setSearchSettingsOpen((open) => !open)}
+          aria-label="Search settings"
+          aria-expanded={searchSettingsOpen}
+          aria-controls="account-ledger-search-settings-tooltip"
+        >
+          <FiSearch className={styles.masterSearchIcon} aria-hidden="true" />
+        </button>
+        {searchSettingsOpen ? (
+          <div
+            id="account-ledger-search-settings-tooltip"
+            className={styles.masterSearchSettingsTooltip}
+            role="tooltip"
+          >
+            <button
+              type="button"
+              className={styles.masterSearchSettingsItem}
+              onClick={() => openGridSettingsModal("filter")}
+            >
+              grid filter setting
+            </button>
+            <button
+              type="button"
+              className={styles.masterSearchSettingsItem}
+              onClick={() => openGridSettingsModal("visibility")}
+            >
+              column visible setting
+            </button>
+          </div>
+        ) : null}
         <input
           type="text"
           className={styles.masterSearchInput}
@@ -1622,6 +1781,114 @@ export default function AccountLedgerMasterPage() {
           </section>
         </div>
       </div>
+      {gridSettingsMode !== null ? (
+        <div
+          className={dynamicFormStyles.overlay}
+          style={{
+            "--erp-modal-accent": "#0f74c9",
+            "--erp-modal-accent-soft-ring": "rgba(15, 116, 201, 0.2)",
+            "--erp-modal-overlay-z-index": 330,
+          } as CSSProperties}
+        >
+          <div
+            className={dynamicFormStyles.backdrop}
+            role="presentation"
+            onMouseDown={closeGridSettingsModal}
+          />
+          <form
+            className={`${dynamicFormStyles.panel} ${styles.gridSettingsDialog}`}
+            aria-label={gridSettingsTitle}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveGridSettings();
+            }}
+          >
+            <header className={dynamicFormStyles.header}>
+              <div className={dynamicFormStyles.headerRow}>
+                <div className={dynamicFormStyles.headerIntro}>
+                  <span className={dynamicFormStyles.headerIcon} aria-hidden="true">
+                    <FiSearch />
+                  </span>
+                  <div className={dynamicFormStyles.headerText}>
+                    <h2 className={dynamicFormStyles.headerTitle}>
+                      {gridSettingsTitle}
+                    </h2>
+                    <p className={dynamicFormStyles.headerDescription}>
+                      Select columns for this grid setting.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={dynamicFormStyles.closeButton}
+                  onClick={closeGridSettingsModal}
+                  disabled={gridSettingsSaving}
+                  aria-label={gridSettingsCloseLabel}
+                >
+                  x
+                </button>
+              </div>
+            </header>
+            <div className={styles.gridSettingsBody}>
+              {gridSettingsColumns.length > 0 ? (
+                gridSettingsColumns.map((column) => {
+                  const serialId = column.serialId ?? "";
+                  return (
+                    <label key={serialId} className={styles.gridSettingsRow}>
+                      <input
+                        type="checkbox"
+                        checked={gridSettingsSelections[serialId] === true}
+                        disabled={gridSettingsSaving}
+                        onChange={(event) =>
+                          handleGridSettingsSelectionChange(
+                            serialId,
+                            event.target.checked,
+                          )
+                        }
+                      />
+                      <span>{column.columnName ?? column.header}</span>
+                    </label>
+                  );
+                })
+              ) : (
+                <p className={styles.gridSettingsEmpty}>
+                  No saved grid columns found.
+                </p>
+              )}
+            </div>
+            <footer className={dynamicFormStyles.footer}>
+              <div className={dynamicFormStyles.footerShortcuts} />
+              <div className={dynamicFormStyles.footerActions}>
+                <button
+                  type="submit"
+                  className={dynamicFormStyles.submitButton}
+                  disabled={
+                    gridSettingsSaving ||
+                    accountLedgerGridId === null ||
+                    gridSettingsColumns.length === 0
+                  }
+                >
+                  <span className={dynamicFormStyles.footerButtonIcon} aria-hidden="true">
+                    OK
+                  </span>
+                  <span>{gridSettingsSaving ? "Saving..." : "Save (F5)"}</span>
+                </button>
+                <button
+                  type="button"
+                  className={dynamicFormStyles.cancelButton}
+                  onClick={closeGridSettingsModal}
+                  disabled={gridSettingsSaving}
+                >
+                  <span className={dynamicFormStyles.footerButtonIcon} aria-hidden="true">
+                    x
+                  </span>
+                  <span>Cancel</span>
+                </button>
+              </div>
+            </footer>
+          </form>
+        </div>
+      ) : null}
       {isFormModalOpen ? (
         <div className={dynamicFormStyles.overlay} style={modalStyle}>
           <div

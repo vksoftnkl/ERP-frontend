@@ -7,15 +7,6 @@ export default function LandingPage() {
         <section className={styles.hero} aria-label="ERP landing screen">
           <div className={styles.heroGlow} aria-hidden />
 
-          <div className={styles.logoBadge}>
-            <div className={styles.logoMark} aria-hidden>
-              <span className={styles.markTop} />
-              <span className={styles.markMid} />
-              <span className={styles.markBottom} />
-            </div>
-            <p className={styles.brandName}>VK SOFTWARES</p>
-          </div>
-
           <p className={styles.tagline}>
             EXPERIENCE + SYSTEMATIC + BEST TECHNOLOGY = NEW HEIGHT OF BUSINESS
           </p>

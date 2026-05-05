@@ -28,6 +28,7 @@ import {
   type ERPDynamicModalSubmitPayload,
   type ERPDynamicModalVariant,
 } from "@/components/library/ui/dynamic-modal-form";
+import dynamicModalStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
 import { FiDownload, FiSearch } from "react-icons/fi";
 const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
@@ -1401,6 +1402,31 @@ function resolveGridColumnForTableColumn(
   );
 }
 
+function buildGridColumnBasePayload(
+  gridColumn: GridColumnConfig,
+  fallbackGridId: number,
+): Record<string, unknown> | null {
+  if (!gridColumn.serialId) {
+    return null;
+  }
+
+  const columnNumber =
+    gridColumn.columnNumber && gridColumn.columnNumber > 0
+      ? gridColumn.columnNumber
+      : Math.max(1, gridColumn.order + 1);
+  const columnName = (gridColumn.columnName ?? gridColumn.header).trim();
+  if (!columnName) {
+    return null;
+  }
+
+  return {
+    grid_serialid: gridColumn.serialId,
+    grid_id: gridColumn.gridId ?? String(fallbackGridId),
+    grid_column_number: columnNumber,
+    grid_column_name: columnName,
+  };
+}
+
 function buildColumnsFromListResponseStyles(
   payload: unknown,
   styleArrayKey: string,
@@ -2483,47 +2509,179 @@ export default function CrudMasterPage({
   );
   const [pendingDeleteRow, setPendingDeleteRow] =
     useState<MasterTableRow | null>(null);
+  const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
+  const [gridSettingsMode, setGridSettingsMode] = useState<"filter" | "visibility" | null>(null);
+  const [gridSettingsSelections, setGridSettingsSelections] = useState<Record<string, boolean>>({});
+  const [gridSettingsSaving, setGridSettingsSaving] = useState(false);
+  const searchSettingsRef = useRef<HTMLDivElement | null>(null);
   const previousListStateResetKeyRef = useRef<string | number | null | undefined>(undefined);
 
+  const gridSettingsColumns = useMemo(
+    () =>
+      gridColumns
+        .filter((column) => Boolean(column.serialId))
+        .sort((left, right) => left.order - right.order),
+    [gridColumns],
+  );
+
+  const gridSettingsTitle =
+    gridSettingsMode === "visibility" ? "Grid Visible Columns" : "Grid Search Columns";
+  const gridSettingsCloseLabel =
+    gridSettingsMode === "visibility"
+      ? "Close grid visible columns"
+      : "Close grid search columns";
+
+  const openGridSettingsModal = useCallback((mode: "filter" | "visibility") => {
+    const nextSelections: Record<string, boolean> = {};
+    for (const column of gridSettingsColumns) {
+      if (!column.serialId) {
+        continue;
+      }
+      nextSelections[column.serialId] =
+        mode === "visibility" ? column.visible !== false : column.sortable !== false;
+    }
+    setGridSettingsSelections(nextSelections);
+    setGridSettingsMode(mode);
+    setSearchSettingsOpen(false);
+  }, [gridSettingsColumns]);
+
+  const closeGridSettingsModal = useCallback(() => {
+    if (gridSettingsSaving) {
+      return;
+    }
+    setGridSettingsMode(null);
+  }, [gridSettingsSaving]);
+
+  const handleGridSettingsSelectionChange = useCallback(
+    (serialId: string, checked: boolean) => {
+      setGridSettingsSelections((current) => ({
+        ...current,
+        [serialId]: checked,
+      }));
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!searchSettingsOpen || typeof document === "undefined") {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (
+        searchSettingsRef.current &&
+        !searchSettingsRef.current.contains(event.target as Node)
+      ) {
+        setSearchSettingsOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSearchSettingsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [searchSettingsOpen]);
+
+  const saveGridSettings = useCallback(async () => {
+    if (gridId === null || gridSettingsMode === null || gridSettingsColumns.length === 0) {
+      return;
+    }
+
+    setGridSettingsSaving(true);
+    try {
+      for (const column of gridSettingsColumns) {
+        const basePayload = buildGridColumnBasePayload(column, gridId);
+        if (!basePayload || !column.serialId) {
+          continue;
+        }
+
+        await saveGridColumnWidth({
+          body: {
+            ...basePayload,
+            [gridSettingsMode === "visibility"
+              ? "grid_column_visibility"
+              : "grid_column_filter"]: gridSettingsSelections[column.serialId] === true,
+          },
+        });
+      }
+      void refetchGridColumns();
+      await loadRecords(searchTerm, currentPage, pageSize);
+      setGridSettingsMode(null);
+    } catch {
+      // useApi handles the visible error toast.
+    } finally {
+      setGridSettingsSaving(false);
+    }
+  }, [
+    currentPage,
+    gridSettingsColumns,
+    gridSettingsMode,
+    gridSettingsSelections,
+    gridId,
+    loadRecords,
+    pageSize,
+    refetchGridColumns,
+    saveGridColumnWidth,
+    searchTerm,
+  ]);
+  useEffect(() => {
+    if (gridSettingsMode === null || typeof document === "undefined") {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeGridSettingsModal();
+      }
+      if (event.key === "F5") {
+        event.preventDefault();
+        void saveGridSettings();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeGridSettingsModal, gridSettingsMode, saveGridSettings]);
   useEffect(() => {
     if (listStateResetKey === undefined) {
       previousListStateResetKeyRef.current = undefined;
       return;
     }
-
     if (previousListStateResetKeyRef.current === undefined) {
       previousListStateResetKeyRef.current = listStateResetKey;
       return;
     }
-
     if (previousListStateResetKeyRef.current !== listStateResetKey) {
       previousListStateResetKeyRef.current = listStateResetKey;
       setCurrentPage(DEFAULT_PAGE);
     }
   }, [listStateResetKey, setCurrentPage]);
-
   useEffect(() => {
     if (selectedRowId === null) {
       return;
     }
-
     if (!renderedRows.some((row) => row.__rowId === selectedRowId)) {
       setSelectedRowId(null);
     }
   }, [renderedRows, selectedRowId]);
-
   const pendingDeleteLabel = useMemo(() => {
     if (!pendingDeleteRow) {
       return "";
     }
-
     return (
       pendingDeleteRow.masterName ||
       pendingDeleteRow.masterCode ||
       pendingDeleteRow.masterId
     );
   }, [pendingDeleteRow]);
-
   const openCreateModal = useCallback((overrideValues?: Record<string, string>) => {
     resetSaveState();
     resetDetailsState();
@@ -2532,12 +2690,10 @@ export default function CrudMasterPage({
       values: overrideValues ?? createInitialValues ?? INITIAL_FORM_STATE,
     });
   }, [createInitialValues, resetDetailsState, resetSaveState]);
-
   useEffect(() => {
     if (hideListPage) {
       return;
     }
-
     const handleCreateShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
         return;
@@ -2545,17 +2701,14 @@ export default function CrudMasterPage({
       if (event.key.toLowerCase() !== "c") {
         return;
       }
-
       event.preventDefault();
       openCreateModal();
     };
-
     window.addEventListener("keydown", handleCreateShortcut);
     return () => {
       window.removeEventListener("keydown", handleCreateShortcut);
     };
   }, [hideListPage, openCreateModal]);
-
   const openUpdateModalById = useCallback(
     async (
       recordId: string | number,
@@ -2565,7 +2718,6 @@ export default function CrudMasterPage({
       resetDetailsState();
       setSelectedRowId(null);
       setEditingItemId(recordId);
-
       try {
         const request = buildGetByIdRequest?.({
           recordId,
@@ -2576,7 +2728,6 @@ export default function CrudMasterPage({
             [requestPayloadKeys.id]: String(recordId),
           },
         };
-
         const payload = await getById(request);
         const detailSource = extractDetailSource(payload);
         const supplementalSource =
@@ -2627,7 +2778,6 @@ export default function CrudMasterPage({
       resetSaveState,
     ],
   );
-
   const openUpdateModalForRow = useCallback(
     (row: MasterTableRow) => {
       resetSaveState();
@@ -2635,7 +2785,6 @@ export default function CrudMasterPage({
       setSelectedRowId(row.__rowId);
       const updateId = resolveRecordId(row, lookupKeys.id);
       setEditingItemId(updateId);
-
       void (async () => {
         try {
           const request = buildGetByIdRequest?.({
@@ -2647,7 +2796,6 @@ export default function CrudMasterPage({
               [requestPayloadKeys.id]: String(updateId),
             },
           };
-
           const payload = await getById(request);
           const detailSource = extractDetailSource(payload);
           const supplementalSource =
@@ -2696,7 +2844,6 @@ export default function CrudMasterPage({
       resetSaveState,
     ],
   );
-
   const crudController = useMemo<CrudMasterPageController>(
     () => ({
       closeModal: () => {
@@ -2711,14 +2858,12 @@ export default function CrudMasterPage({
     }),
     [openCreateModal, openUpdateModalById],
   );
-
   useEffect(() => {
     onCrudControllerReady?.(crudController);
     return () => {
       onCrudControllerReady?.(null);
     };
   }, [crudController, onCrudControllerReady]);
-
   const openViewModalForRow = useCallback(
     (row: MasterTableRow) => {
       resetSaveState();
@@ -2726,7 +2871,6 @@ export default function CrudMasterPage({
       setSelectedRowId(row.__rowId);
       setEditingItemId(null);
       const viewId = resolveRecordId(row, lookupKeys.id);
-
       void (async () => {
         try {
           const request = buildGetByIdRequest?.({
@@ -2738,7 +2882,6 @@ export default function CrudMasterPage({
               [requestPayloadKeys.id]: String(viewId),
             },
           };
-
           const payload = await getById(request);
           const detailSource = extractDetailSource(payload);
           const supplementalSource =
@@ -2786,7 +2929,6 @@ export default function CrudMasterPage({
       resetSaveState,
     ],
   );
-
   const handleModalSubmit = useCallback(
     async ({
       variantKey,
@@ -2797,19 +2939,16 @@ export default function CrudMasterPage({
       if (variantKey === "master-view") {
         return;
       }
-
       const masterName = (values.masterName ?? "").trim();
       const searchCode = (values.searchCode ?? "").trim();
       const masterAlias = (values.masterAlias ?? "").trim();
       const masterShortName = (values.masterShortName ?? "").trim();
       const masterDescription = (values.masterDescription ?? "").trim();
       const parsedSort = Number.parseInt((values.position ?? "").trim(), 10);
-
       const sortValue = Number.isFinite(parsedSort) ? parsedSort : 0;
       const aliasValue = masterAlias || searchCode;
       const shortValue = masterShortName || searchCode || aliasValue;
       const shouldUpdate = variantKey === "master-update";
-
       const defaultPayload: Record<string, unknown> = {
         [requestPayloadKeys.name]: masterName,
         [requestPayloadKeys.alias]: aliasValue,
@@ -2821,7 +2960,6 @@ export default function CrudMasterPage({
           ? { [requestPayloadKeys.id]: editingItemId }
           : {}),
       };
-
       const formValues: CrudMasterFormValues = {
         masterName,
         searchCode,
@@ -2831,7 +2969,6 @@ export default function CrudMasterPage({
         position: values.position ?? "",
         ...values,
       };
-
       const payload = await Promise.resolve(
         buildRequestPayload?.({
           values: formValues,
@@ -2841,7 +2978,6 @@ export default function CrudMasterPage({
           sectionExpandedState,
         }) ?? defaultPayload,
       );
-
       const response = await upsertRecord({ body: payload });
       await Promise.resolve(
         afterSubmitSuccess?.({
@@ -2875,12 +3011,10 @@ export default function CrudMasterPage({
       afterSubmitSuccess,
     ],
   );
-
   const handleModalCancel = useCallback(() => {
     if (saveLoading) {
       return;
     }
-
     resetSaveState();
     resetDetailsState();
     setEditingItemId(null);
@@ -2890,7 +3024,6 @@ export default function CrudMasterPage({
       if (deleteLoading || saveLoading || detailsLoading) {
         return;
       }
-
       setPendingDeleteRow(row);
     },
     [deleteLoading, detailsLoading, saveLoading],
@@ -2909,7 +3042,6 @@ export default function CrudMasterPage({
       try {
         const row = pendingDeleteRow;
         const deleteId = resolveRecordId(row, lookupKeys.id);
-
         await deleteRecord({
           query: {
             [requestPayloadKeys.id]: String(deleteId),
@@ -3103,17 +3235,14 @@ export default function CrudMasterPage({
       if (gridId === null || payload.tableWidthPx <= 0) {
         return;
       }
-
       const gridColumn = resolveGridColumnForTableColumn(payload.column, gridColumns);
       if (!gridColumn?.serialId) {
         return;
       }
-
       const widthPercent = Number(((payload.widthPx * 100) / payload.tableWidthPx).toFixed(4));
       if (!Number.isFinite(widthPercent) || widthPercent <= 0) {
         return;
       }
-
       const columnNumber =
         gridColumn.columnNumber && gridColumn.columnNumber > 0
           ? gridColumn.columnNumber
@@ -3122,7 +3251,6 @@ export default function CrudMasterPage({
       if (!columnName) {
         return;
       }
-
       void (async () => {
         try {
           await saveGridColumnWidth({
@@ -3147,12 +3275,10 @@ export default function CrudMasterPage({
       if (gridId === null) {
         return;
       }
-
       const gridColumn = resolveGridColumnForTableColumn(payload.column, gridColumns);
       if (!gridColumn?.serialId) {
         return;
       }
-
       const columnNumber =
         gridColumn.columnNumber && gridColumn.columnNumber > 0
           ? gridColumn.columnNumber
@@ -3161,7 +3287,6 @@ export default function CrudMasterPage({
       if (!columnName) {
         return;
       }
-
       void (async () => {
         try {
           await saveGridColumnWidth({
@@ -3200,8 +3325,39 @@ export default function CrudMasterPage({
           <div className={styles.masterToolbarSlot}>{toolbarContent}</div>
         ) : null}
       </div>
-      <div className={styles.masterSearchWrap}>
-        <FiSearch className={styles.masterSearchIcon} aria-hidden="true" />
+      <div className={styles.masterSearchWrap} ref={searchSettingsRef}>
+        <button
+          type="button"
+          className={styles.masterSearchIconButton}
+          onClick={() => setSearchSettingsOpen((open) => !open)}
+          aria-label="Search settings"
+          aria-expanded={searchSettingsOpen}
+          aria-controls="master-search-settings-tooltip"
+        >
+          <FiSearch className={styles.masterSearchIcon} aria-hidden="true" />
+        </button>
+        {searchSettingsOpen ? (
+          <div
+            id="master-search-settings-tooltip"
+            className={styles.masterSearchSettingsTooltip}
+            role="tooltip"
+          >
+            <button
+              type="button"
+              className={styles.masterSearchSettingsItem}
+              onClick={() => openGridSettingsModal("filter")}
+            >
+              grid filter setting
+            </button>
+            <button
+              type="button"
+              className={styles.masterSearchSettingsItem}
+              onClick={() => openGridSettingsModal("visibility")}
+            >
+              column visible setting
+            </button>
+          </div>
+        ) : null}
         <input
           type="text"
           className={styles.masterSearchInput}
@@ -3344,6 +3500,117 @@ export default function CrudMasterPage({
             </div>
           </div>
         </main>
+      ) : null}
+      {!hideListPage && gridSettingsMode !== null ? (
+        <div
+          className={dynamicModalStyles.overlay}
+          style={{
+            "--erp-modal-accent": "#0f74c9",
+            "--erp-modal-accent-soft-ring": "rgba(15, 116, 201, 0.2)",
+            "--erp-modal-overlay-z-index": 330,
+          } as CSSProperties}
+        >
+          <div
+            className={dynamicModalStyles.backdrop}
+            role="presentation"
+            onMouseDown={closeGridSettingsModal}
+          />
+          <form
+            className={`${dynamicModalStyles.panel} ${styles.gridSettingsDialog}`}
+            aria-label={gridSettingsTitle}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveGridSettings();
+            }}
+          >
+            <header className={dynamicModalStyles.header}>
+              <div className={dynamicModalStyles.headerRow}>
+                <div className={dynamicModalStyles.headerIntro}>
+                  <span className={dynamicModalStyles.headerIcon} aria-hidden="true">
+                    <FiSearch />
+                  </span>
+                  <div className={dynamicModalStyles.headerText}>
+                    <h2 className={dynamicModalStyles.headerTitle}>
+                      {gridSettingsTitle}
+                    </h2>
+                    <p className={dynamicModalStyles.headerDescription}>
+                      Select columns for this grid setting.
+                    </p>
+                  </div>
+                </div>
+              <button
+                type="button"
+                className={dynamicModalStyles.closeButton}
+                onClick={closeGridSettingsModal}
+                disabled={gridSettingsSaving}
+                aria-label={gridSettingsCloseLabel}
+              >
+                x
+              </button>
+              </div>
+            </header>
+            <div className={styles.gridSettingsBody}>
+              {gridSettingsColumns.length > 0 ? (
+                gridSettingsColumns.map((column) => {
+                  const serialId = column.serialId ?? "";
+                  return (
+                    <label
+                      key={serialId}
+                      className={styles.gridSettingsRow}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={gridSettingsSelections[serialId] === true}
+                        disabled={gridSettingsSaving}
+                        onChange={(event) =>
+                          handleGridSettingsSelectionChange(
+                            serialId,
+                            event.target.checked,
+                          )
+                        }
+                      />
+                      <span>{column.columnName ?? column.header}</span>
+                    </label>
+                  );
+                })
+              ) : (
+                <p className={styles.gridSettingsEmpty}>
+                  No saved grid columns found.
+                </p>
+              )}
+            </div>
+            <footer className={dynamicModalStyles.footer}>
+              <div className={dynamicModalStyles.footerShortcuts} />
+              <div className={dynamicModalStyles.footerActions}>
+              <button
+                type="submit"
+                className={dynamicModalStyles.submitButton}
+                disabled={
+                  gridSettingsSaving ||
+                  gridId === null ||
+                  gridSettingsColumns.length === 0
+                }
+              >
+                <span className={dynamicModalStyles.footerButtonIcon} aria-hidden="true">
+                  OK
+                </span>
+                <span>{gridSettingsSaving ? "Saving..." : "Save (F5)"}</span>
+              </button>
+              <button
+                type="button"
+                className={dynamicModalStyles.cancelButton}
+                onClick={closeGridSettingsModal}
+                disabled={gridSettingsSaving}
+              >
+                <span className={dynamicModalStyles.footerButtonIcon} aria-hidden="true">
+                  x
+                </span>
+                <span>Cancel</span>
+              </button>
+              </div>
+            </footer>
+          </form>
+        </div>
       ) : null}
       <ERPDynamicModalForm
         title={

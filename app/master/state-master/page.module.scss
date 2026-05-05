@@ -727,13 +727,129 @@
 }
 
 .masterSearchIcon {
-  position: absolute;
-  left: 0.65rem;
   width: 0.9rem;
   height: 0.9rem;
   color: #6b7fa3;
-  pointer-events: none;
   flex-shrink: 0;
+}
+
+.masterSearchIconButton {
+  position: absolute;
+  left: 0.35rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.08rem;
+  width: 2.25rem;
+  height: 1.35rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--erp-radius);
+  background: transparent;
+  color: #6b7fa3;
+  cursor: pointer;
+
+  &::after {
+    content: "";
+    width: 0;
+    height: 0;
+    border-left: 0.22rem solid transparent;
+    border-right: 0.22rem solid transparent;
+    border-top: 0.28rem solid currentColor;
+    flex: 0 0 auto;
+  }
+
+  &:hover,
+  &:focus-visible {
+    background: #edf3fb;
+    color: var(--primary, #3b7dd8);
+    outline: 0;
+  }
+}
+
+.masterSearchSettingsTooltip {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  gap: 0.2rem;
+  min-width: 11.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #c9d6e7;
+  border-radius: var(--erp-radius);
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(21, 33, 54, 0.14);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.masterSearchSettingsItem {
+  width: 100%;
+  min-height: 1.75rem;
+  padding: 0.25rem 0.35rem;
+  border: 0;
+  border-radius: var(--erp-radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: #edf3fb;
+    color: var(--primary, #3b7dd8);
+    outline: 0;
+  }
+}
+
+.gridSettingsDialog {
+  width: min(32rem, calc(100vw - 2.4rem));
+  max-height: min(80vh, 34rem);
+}
+
+.gridSettingsBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #f8fafc;
+  padding: 0.35rem;
+}
+
+.gridSettingsRow {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.45rem;
+  border-bottom: 1px solid #c9c9ca;
+  color: #111114;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: #f4f7fb;
+  }
+
+  input {
+    width: 13px;
+    height: 13px;
+    margin: 0;
+    flex: 0 0 auto;
+  }
+}
+
+.gridSettingsEmpty {
+  margin: 0;
+  padding: 1rem;
+  color: #5e6470;
+  font-size: 13px;
+  text-align: center;
 }
 
 .masterSearchInput {
@@ -745,7 +861,7 @@
   color: var(--text-main);
   font-size: 13px;
   font-family: inherit;
-  padding: 0 0.75rem 0 2rem;
+  padding: 0 0.75rem 0 2.85rem;
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;

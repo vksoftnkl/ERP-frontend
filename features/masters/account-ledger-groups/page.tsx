@@ -239,7 +239,6 @@ export default function AccountLedgerGroupsMasterPage() {
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
       useResponseTableColumns
-      hideRowsWhenAllGridColumnFiltersDisabled
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
