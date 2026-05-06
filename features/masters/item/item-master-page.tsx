@@ -28,6 +28,7 @@ import ItemLinkedRecordsEditor, {
   parseLinkedRecordRows,
   serializeLinkedRecordRows,
   type LinkedRecordColumn,
+  type LinkedRecordColumnLayoutEntry,
   type LinkedRecordRow,
 } from "./item-linked-records-editor";
 import { normalizeItemPriceRowsForRules } from "./item-price-row-rules";
@@ -90,6 +91,7 @@ const UNIT_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const GODOWN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const HSN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const UI_TABLE_COLUMNS_ENDPOINT = "/ui-table-columns/list";
+const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-columns/create";
 const WIDGET_MASTER_LIST_ENDPOINT = "/widget-masters/list";
 const ITEM_TAX_MASTER_LIST_ENDPOINT = "/item-taxes/list";
 const ITEM_PRICE_QUERY_LIMIT = "100";
@@ -588,6 +590,20 @@ const ITEM_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(84vw, 88rem)",
   height: "80vh",
   maxHeight: "80vh",
+};
+type SaveUiTableColumnLayoutRequest = {
+  uiTblClmId?: string;
+  uiTblClmNo?: string;
+  uiTblClmName: string;
+  uiTblClmTableId: string | null;
+  uiTblClmColumnWidth: number | null;
+  uiTblClmColumnVisibility: boolean;
+  uiTblClmColumnFocus: boolean;
+  uiTblClmColumnPosition: number;
+  uiTblClmColumnNecessity: boolean;
+  uiTblClmNextColumn: number | null;
+  uiTblClmPreviousColumn: number | null;
+  uiTblClmIsActive: boolean;
 };
 
 function normalizeItemBatchConfigValue(value: unknown): string {
@@ -2402,6 +2418,8 @@ function buildCustomFieldEditor(
       columnKey: string;
       focusColumnKey?: string;
     };
+    columnLayoutStorageKey?: string;
+    onColumnLayoutChange?: (columns: LinkedRecordColumnLayoutEntry[]) => void;
     showRowIndex?: boolean;
   } = {},
 ) {
@@ -2418,10 +2436,12 @@ function buildCustomFieldEditor(
         autoCreateFirstRowOnMount={options.autoCreateFirstRowOnMount}
         autoFocusInitialRowOnMount={options.autoFocusInitialRowOnMount}
         autoAppendOnEnter={options.autoAppendOnEnter}
+        columnLayoutStorageKey={options.columnLayoutStorageKey}
         columns={columns}
         createRow={(sourceRow) => createRow(values, sourceRow)}
         disabled={disabled}
         emptyState={emptyState}
+        onColumnLayoutChange={options.onColumnLayoutChange}
         onChange={setValue}
         showRowIndex={options.showRowIndex}
         value={value}
@@ -2891,6 +2911,113 @@ function applyItemWidgetConfigToFields(
   });
   return flattenItemFormSections(reorderConfiguredItems(nextSections));
 }
+type LinkedTableColumnLayoutChangeArgs = {
+  tableId: string;
+  columns: LinkedRecordColumnLayoutEntry[];
+  configuredColumns: Record<string, unknown>[];
+  columnNameToKey: Record<string, string>;
+};
+type LinkedTableColumnLayoutChangeHandler = (
+  args: LinkedTableColumnLayoutChangeArgs,
+) => void;
+function normalizeLinkedTableColumnName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
+}
+function toNullableLayoutInteger(value: unknown): number | null {
+  const normalized = toDisplayValue(value);
+  if (!normalized) {
+    return null;
+  }
+  const parsed = Number.parseInt(normalized, 10);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+function toNullableLayoutNumber(value: unknown): number | null {
+  const normalized = toDisplayValue(value);
+  if (!normalized) {
+    return null;
+  }
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+function buildLinkedTableColumnConfigByKey(
+  configuredColumns: Record<string, unknown>[],
+  columnNameToKey: Record<string, string>,
+): Map<string, Record<string, unknown>> {
+  const configByKey = new Map<string, Record<string, unknown>>();
+  for (const configuredColumn of configuredColumns) {
+    const normalizedName = normalizeLinkedTableColumnName(
+      toDisplayValue(getFieldValue(configuredColumn, "uiTblClmName")),
+    );
+    const columnKey = columnNameToKey[normalizedName];
+    if (columnKey && !configByKey.has(columnKey)) {
+      configByKey.set(columnKey, configuredColumn);
+    }
+  }
+  return configByKey;
+}
+function buildUiTableColumnLayoutRequest(
+  tableId: string,
+  column: LinkedRecordColumnLayoutEntry,
+  configuredColumn: Record<string, unknown> | undefined,
+): SaveUiTableColumnLayoutRequest {
+  const uiTblClmId = configuredColumn
+    ? toDisplayValue(getFieldValue(configuredColumn, "uiTblClmId"))
+    : "";
+  const fallbackColumnNumber = String(column.position);
+  const width =
+    column.widthPx ??
+    (configuredColumn
+      ? toNullableLayoutNumber(getFieldValue(configuredColumn, "uiTblClmColumnWidth"))
+      : null);
+  return {
+    ...(uiTblClmId ? { uiTblClmId } : {}),
+    uiTblClmNo:
+      (configuredColumn
+        ? toDisplayValue(getFieldValue(configuredColumn, "uiTblClmNo"))
+        : "") || fallbackColumnNumber,
+    uiTblClmName:
+      (configuredColumn
+        ? toDisplayValue(getFieldValue(configuredColumn, "uiTblClmName"))
+        : "") || column.label,
+    uiTblClmTableId: tableId,
+    uiTblClmColumnWidth: width,
+    uiTblClmColumnVisibility:
+      toSelectBoolean(
+        configuredColumn
+          ? getFieldValue(configuredColumn, "uiTblClmColumnVisibility")
+          : undefined,
+        "true",
+      ) === "true",
+    uiTblClmColumnFocus:
+      toSelectBoolean(
+        configuredColumn
+          ? getFieldValue(configuredColumn, "uiTblClmColumnFocus")
+          : undefined,
+        "false",
+      ) === "true",
+    uiTblClmColumnPosition: column.position,
+    uiTblClmColumnNecessity:
+      toSelectBoolean(
+        configuredColumn
+          ? getFieldValue(configuredColumn, "uiTblClmColumnNecessity")
+          : undefined,
+        "false",
+      ) === "true",
+    uiTblClmNextColumn: configuredColumn
+      ? toNullableLayoutInteger(getFieldValue(configuredColumn, "uiTblClmNextColumn"))
+      : null,
+    uiTblClmPreviousColumn: configuredColumn
+      ? toNullableLayoutInteger(getFieldValue(configuredColumn, "uiTblClmPreviousColumn"))
+      : null,
+    uiTblClmIsActive:
+      toSelectBoolean(
+        configuredColumn
+          ? getFieldValue(configuredColumn, "uiTblClmIsActive")
+          : undefined,
+        "true",
+      ) === "true",
+  };
+}
 function buildItemFormFields(
   companyOptions: ERPDynamicSelectOption[],
   branchOptions: ERPDynamicSelectOption[],
@@ -2911,6 +3038,7 @@ function buildItemFormFields(
   itemEanTableColumnsConfig: Record<string, unknown>[],
   itemWidgetConfigRecords: ItemWidgetConfigRecord[],
   onItemGroupSearchChange?: ERPDynamicSearchQueryChangeHandler,
+  onLinkedTableColumnLayoutChange?: LinkedTableColumnLayoutChangeHandler,
 ): ERPDynamicModalField[] {
   const basePriceRowColumns: LinkedRecordColumn[] = [
     {
@@ -3451,6 +3579,7 @@ function buildItemFormFields(
               addLabel="+"
               autoCreateFirstRowOnMount
               autoFocusInitialRowOnMount={false}
+              columnLayoutStorageKey="item-master-price-list"
               columns={nextPriceRowColumns}
               createRow={() =>
                 buildEmptyItemPriceRow(
@@ -3461,6 +3590,14 @@ function buildItemFormFields(
               emptyState="No price rows added."
               exclusiveTrueColumnKeys={["ipm_is_default_unit", "ipm_is_base_unit"]}
               removeDisabledRowIndexes={[0]}
+              onColumnLayoutChange={(columns) =>
+                onLinkedTableColumnLayoutChange?.({
+                  tableId: ITEM_PRICE_TABLE_UI_ID,
+                  columns,
+                  configuredColumns: itemPriceTableColumnsConfig,
+                  columnNameToKey: ITEM_PRICE_TABLE_COLUMN_NAME_TO_KEY,
+                })
+              }
               onChange={setValue}
               value={value}
             />
@@ -3554,6 +3691,7 @@ function buildItemFormFields(
                 columnKey: "ean_code",
                 focusColumnKey: "ean_code",
               }}
+              columnLayoutStorageKey="item-master-ean-code"
               columns={nextEanRowColumns}
               createRow={(sourceRow) =>
                 buildEmptyItemEanRow(
@@ -3564,6 +3702,14 @@ function buildItemFormFields(
               }
               disabled={disabled}
               emptyState="No EAN rows added."
+              onColumnLayoutChange={(columns) =>
+                onLinkedTableColumnLayoutChange?.({
+                  tableId: ITEM_EAN_TABLE_UI_ID,
+                  columns,
+                  configuredColumns: itemEanTableColumnsConfig,
+                  columnNameToKey: ITEM_EAN_TABLE_COLUMN_NAME_TO_KEY,
+                })
+              }
               onChange={setValue}
               showRowIndex={false}
               value={value}
@@ -3599,6 +3745,14 @@ function buildItemFormFields(
           {
             autoCreateFirstRowOnMount: true,
             autoFocusInitialRowOnMount: false,
+            columnLayoutStorageKey: "item-master-reorder",
+            onColumnLayoutChange: (columns) =>
+              onLinkedTableColumnLayoutChange?.({
+                tableId: ITEM_REORDER_TABLE_UI_ID,
+                columns,
+                configuredColumns: itemReorderTableColumnsConfig,
+                columnNameToKey: ITEM_REORDER_TABLE_COLUMN_NAME_TO_KEY,
+              }),
           },
         ),
       },
@@ -4100,6 +4254,15 @@ export default function ItemMasterPageContent({
   const { getAll: getItemPriceTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
   const { getAll: getItemReorderTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
   const { getAll: getItemEanTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
+  const { run: saveUiTableColumnLayout } = useApi<
+    unknown,
+    SaveUiTableColumnLayoutRequest
+  >(UI_TABLE_COLUMNS_CREATE_ENDPOINT, {
+    method: "POST",
+    toast: {
+      success: false,
+    },
+  });
   const { getAll: getItemMasterWidgets } = useApi<unknown>(WIDGET_MASTER_LIST_ENDPOINT);
   const { getAll: getCompanyLookup } = useApi<unknown>(COMPANY_LOOKUP_ENDPOINT);
   const { getAll: getBranchLookup } = useApi<unknown>(BRANCH_LOOKUP_ENDPOINT);
@@ -4264,6 +4427,27 @@ export default function ItemMasterPageContent({
     },
     [loadItemGroupOptions],
   );
+  const handleLinkedTableColumnLayoutChange =
+    useCallback<LinkedTableColumnLayoutChangeHandler>(
+      ({ tableId, columns, configuredColumns, columnNameToKey }) => {
+        void (async () => {
+          const configByKey = buildLinkedTableColumnConfigByKey(
+            configuredColumns,
+            columnNameToKey,
+          );
+          for (const column of columns) {
+            await saveUiTableColumnLayout({
+              body: buildUiTableColumnLayoutRequest(
+                tableId,
+                column,
+                configByKey.get(column.key),
+              ),
+            });
+          }
+        })();
+      },
+      [saveUiTableColumnLayout],
+    );
   useEffect(() => {
     return () => {
       if (itemGroupSearchTimeoutRef.current !== null) {
@@ -5150,6 +5334,7 @@ export default function ItemMasterPageContent({
         itemEanTableColumnsConfig,
         itemWidgetConfigRecords,
         handleItemGroupSearchChange,
+        handleLinkedTableColumnLayoutChange,
       ),
     [
       brandOptions,
@@ -5166,6 +5351,7 @@ export default function ItemMasterPageContent({
       itemWidgetConfigRecords,
       itemPriceTableColumnsConfig,
       itemReorderTableColumnsConfig,
+      handleLinkedTableColumnLayoutChange,
       handleItemGroupSearchChange,
       sectionOptions,
       supplierOptions,

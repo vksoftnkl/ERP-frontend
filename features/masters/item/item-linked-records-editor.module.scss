@@ -1,8 +1,9 @@
 .editor {
-  --item-linked-control-height: 2.15rem;
-  --item-linked-control-padding-y: 0.45rem;
-  --item-linked-control-padding-x: 0.55rem;
-  --item-linked-control-font-size: 0.82rem;
+  --item-linked-control-height: 1.78rem;
+  --item-linked-control-padding-y: 0.28rem;
+  --item-linked-control-padding-x: 0.42rem;
+  --item-linked-control-font-size: 0.76rem;
+  --item-linked-table-divider: #dbe3ee;
 }
 .editor {
   display: grid;
@@ -16,7 +17,7 @@
   flex-wrap: wrap;
 }
 .summary {
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   font-weight: 600;
   color: #475569;
 }
@@ -26,9 +27,9 @@
   background: #f8fafc;
   color: #0f172a;
   border-radius: var(--erp-radius);
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   font-weight: 600;
-  padding: 0.45rem 0.8rem;
+  padding: 0.3rem 0.55rem;
   transition:
     background-color 0.18s ease,
     border-color 0.18s ease,
@@ -72,49 +73,118 @@
 .table th,
 .table td {
   border-bottom: 1px solid #e2e8f0;
-  padding: 0.55rem 0.6rem;
+  border-right: 1px solid var(--item-linked-table-divider);
+  padding: 0.35rem 0.45rem;
   vertical-align: middle;
   text-align: left;
   white-space: nowrap;
+}
+.table th:last-child,
+.table td:last-child {
+  border-right: none;
 }
 .table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #eff6ff;
+  background: #bacdef;
   color: var(--table-header-text, #000);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.01em;
+}
+.columnHeader {
+  padding-right: 0.9rem;
+}
+.columnHeaderDraggable {
+  cursor: grab;
+  user-select: none;
+}
+.columnHeaderDraggable:active {
+  cursor: grabbing;
+}
+.columnHeaderDragOver {
+  box-shadow: inset 2px 0 0 #2563eb;
+}
+.columnHeaderLabel {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.columnResizeHandle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  z-index: 2;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.columnResizeHandle::after {
+  content: "";
+  position: absolute;
+  top: 24%;
+  bottom: 24%;
+  left: 3px;
+  width: 1px;
+  background: rgba(15, 23, 42, 0.35);
+}
+.columnResizeHandle:hover::after {
+  background: rgba(15, 23, 42, 0.65);
 }
 .table tbody tr:last-child td {
   border-bottom: none;
 }
+.table tbody td {
+  padding: 0;
+}
+.table tbody td.indexCell,
+.table tbody td.actionsCell {
+  padding: 0.28rem 0.45rem;
+}
 .indexCell {
-  width: 3rem;
-  min-width: 3rem;
+  width: 2.4rem;
+  min-width: 2.4rem;
   text-align: center;
   color: #64748b;
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   font-weight: 700;
 }
 .actionsCell {
-  width: 6.5rem;
-  min-width: 6.5rem;
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  width: 5rem;
+  min-width: 5rem;
+  background: #ffffff;
+  box-shadow: -1px 0 0 var(--item-linked-table-divider);
+}
+.table thead th.actionsCell {
+  z-index: 4;
+  background: #bacdef;
 }
 .control {
   box-sizing: border-box;
   width: 100%;
-  min-width: 6rem;
+  min-width: 4.75rem;
   min-height: var(--item-linked-control-height);
-  border: 1px solid #cbd5e1;
+  border: none;
   background: #ffffff;
   color: #0f172a;
-  border-radius: var(--erp-radius);
+  border-radius: 0;
   padding: var(--item-linked-control-padding-y) var(--item-linked-control-padding-x);
   font-family: inherit;
   font-size: var(--item-linked-control-font-size);
   line-height: 1.2;
+  outline: none;
+  box-shadow: none;
+}
+.control:focus,
+.control:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 .control[type="number"] {
   appearance: textfield;
@@ -128,7 +198,7 @@
 .searchSelect {
   position: relative;
   width: 100%;
-  min-width: 8rem;
+  min-width: 6.5rem;
 }
 .searchSelectTrigger {
   box-sizing: border-box;
@@ -138,23 +208,24 @@
   width: 100%;
   min-width: 0;
   min-height: var(--item-linked-control-height);
-  border: 1px solid #cbd5e1;
+  border: none;
   background: #ffffff;
   color: #0f172a;
-  border-radius: var(--erp-radius);
-  padding: var(--item-linked-control-padding-y) 1.9rem var(--item-linked-control-padding-y)
+  border-radius: 0;
+  padding: var(--item-linked-control-padding-y) 1.45rem var(--item-linked-control-padding-y)
     var(--item-linked-control-padding-x);
   font-family: inherit;
   font-size: var(--item-linked-control-font-size);
   line-height: 1.2;
   text-align: left;
   cursor: pointer;
+  outline: none;
+  box-shadow: none;
 }
 .searchSelectTrigger:focus-visible,
 .searchSelectTriggerOpen {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+  box-shadow: none;
 }
 .searchSelectTriggerDisabled {
   background: #f5f7f9;
@@ -175,19 +246,19 @@
 .searchSelectChevronSlot {
   position: absolute;
   top: 50%;
-  right: 0.55rem;
+  right: 0.42rem;
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1rem;
-  height: 1rem;
+  width: 0.85rem;
+  height: 0.85rem;
   color: #475569;
   pointer-events: none;
 }
 .searchSelectChevron {
-  width: 0.95rem;
-  height: 0.95rem;
+  width: 0.82rem;
+  height: 0.82rem;
   transition: transform 0.16s ease;
 }
 .searchSelectChevronOpen {
@@ -253,6 +324,9 @@
   font-size: 0.8rem;
   color: #0f172a;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .searchSelectOption:hover {
   background: #eef4ff;

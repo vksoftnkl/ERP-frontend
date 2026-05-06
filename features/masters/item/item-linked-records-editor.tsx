@@ -1,9 +1,13 @@
 "use client";
 import {
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { cx } from "@/components/library/cx";
 import ItemLinkedRecordsSearchSelectCell from "./item-linked-records-search-select-cell";
@@ -43,6 +47,7 @@ type ItemLinkedRecordsEditorProps = {
   autoCreateFirstRowOnMount?: boolean;
   autoFocusInitialRowOnMount?: boolean;
   autoAppendOnEnter?: LinkedRecordEditorAutoAppendConfig;
+  columnLayoutStorageKey?: string;
   columns: LinkedRecordColumn[];
   createRow: (sourceRow?: LinkedRecordRow) => LinkedRecordRow;
   disabled?: boolean;
@@ -50,14 +55,31 @@ type ItemLinkedRecordsEditorProps = {
   exclusiveTrueColumnKeys?: string[];
   mutuallyExclusiveTrueColumnKeyGroups?: string[][];
   removeDisabledRowIndexes?: number[];
+  onColumnLayoutChange?: (columns: LinkedRecordColumnLayoutEntry[]) => void;
   onChange: (value: string) => void;
   showRowIndex?: boolean;
   value: string;
+};
+export type LinkedRecordColumnLayoutEntry = {
+  key: string;
+  label: string;
+  position: number;
+  widthPx?: number;
 };
 type FocusTarget = {
   columnKey: string;
   rowIndex: number;
 };
+type ColumnLayoutState = {
+  order: string[];
+  widths: Record<string, number>;
+};
+const COLUMN_LAYOUT_STORAGE_PREFIX = "erp:item-linked-records:column-layout:";
+const DEFAULT_COLUMN_LAYOUT: ColumnLayoutState = {
+  order: [],
+  widths: {},
+};
+const MIN_COLUMN_WIDTH_PX = 56;
 function resolveFocusColumnKey(
   autoAppendOnEnter: LinkedRecordEditorAutoAppendConfig | undefined,
   fallbackColumnKey?: string,
@@ -68,12 +90,103 @@ function resolveFocusColumnKey(
     fallbackColumnKey
   );
 }
+function normalizeColumnLayout(
+  layout: ColumnLayoutState,
+  columns: LinkedRecordColumn[],
+): ColumnLayoutState {
+  const columnKeys = columns.map((column) => column.key);
+  const columnKeySet = new Set(columnKeys);
+  const order = layout.order.filter((columnKey) => columnKeySet.has(columnKey));
+  for (const columnKey of columnKeys) {
+    if (!order.includes(columnKey)) {
+      order.push(columnKey);
+    }
+  }
+  const widths: Record<string, number> = {};
+  for (const [columnKey, width] of Object.entries(layout.widths)) {
+    if (!columnKeySet.has(columnKey) || !Number.isFinite(width)) {
+      continue;
+    }
+    widths[columnKey] = Math.max(MIN_COLUMN_WIDTH_PX, Math.round(width));
+  }
+  return { order, widths };
+}
+function readColumnLayout(
+  storageKey: string,
+  columns: LinkedRecordColumn[],
+): ColumnLayoutState {
+  if (typeof window === "undefined") {
+    return normalizeColumnLayout(DEFAULT_COLUMN_LAYOUT, columns);
+  }
+  try {
+    const rawValue = window.localStorage.getItem(
+      `${COLUMN_LAYOUT_STORAGE_PREFIX}${storageKey}`,
+    );
+    if (!rawValue) {
+      return normalizeColumnLayout(DEFAULT_COLUMN_LAYOUT, columns);
+    }
+    const parsed = JSON.parse(rawValue) as Partial<ColumnLayoutState>;
+    return normalizeColumnLayout(
+      {
+        order: Array.isArray(parsed.order)
+          ? parsed.order.filter((value): value is string => typeof value === "string")
+          : [],
+        widths:
+          parsed.widths && typeof parsed.widths === "object" && !Array.isArray(parsed.widths)
+            ? Object.entries(parsed.widths).reduce<Record<string, number>>(
+                (result, [key, value]) => {
+                  if (typeof value === "number" && Number.isFinite(value)) {
+                    result[key] = value;
+                  }
+                  return result;
+                },
+                {},
+              )
+            : {},
+      },
+      columns,
+    );
+  } catch {
+    return normalizeColumnLayout(DEFAULT_COLUMN_LAYOUT, columns);
+  }
+}
+function writeColumnLayout(storageKey: string, layout: ColumnLayoutState) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      `${COLUMN_LAYOUT_STORAGE_PREFIX}${storageKey}`,
+      JSON.stringify(layout),
+    );
+  } catch {
+    // Column layout persistence is optional.
+  }
+}
+function applyColumnLayout(
+  columns: LinkedRecordColumn[],
+  layout: ColumnLayoutState,
+): LinkedRecordColumn[] {
+  if (layout.order.length === 0) {
+    return columns;
+  }
+  const columnsByKey = new Map(columns.map((column) => [column.key, column]));
+  const orderedColumns = layout.order
+    .map((columnKey) => columnsByKey.get(columnKey))
+    .filter((column): column is LinkedRecordColumn => Boolean(column));
+  const orderedKeys = new Set(orderedColumns.map((column) => column.key));
+  return [
+    ...orderedColumns,
+    ...columns.filter((column) => !orderedKeys.has(column.key)),
+  ];
+}
 export default function ItemLinkedRecordsEditor({
   addLabel,
   actionsLabel = "Actions",
   autoCreateFirstRowOnMount = false,
   autoFocusInitialRowOnMount = true,
   autoAppendOnEnter,
+  columnLayoutStorageKey,
   columns,
   createRow,
   disabled = false,
@@ -81,6 +194,7 @@ export default function ItemLinkedRecordsEditor({
   exclusiveTrueColumnKeys = [],
   mutuallyExclusiveTrueColumnKeyGroups = [],
   removeDisabledRowIndexes = [],
+  onColumnLayoutChange,
   onChange,
   showRowIndex = true,
   value,
@@ -92,6 +206,88 @@ export default function ItemLinkedRecordsEditor({
   const cellRefs = useRef(new Map<string, LinkedRecordCellElement>());
   const hasSeededInitialRowRef = useRef(false);
   const pendingFocusRef = useRef<FocusTarget | null>(null);
+  const draggingColumnKeyRef = useRef<string | null>(null);
+  const [columnLayout, setColumnLayout] = useState<ColumnLayoutState>(
+    DEFAULT_COLUMN_LAYOUT,
+  );
+  const columnLayoutRef = useRef<ColumnLayoutState>(DEFAULT_COLUMN_LAYOUT);
+  const [dragOverColumnKey, setDragOverColumnKey] = useState<string | null>(null);
+  const isColumnLayoutEnabled = Boolean(columnLayoutStorageKey);
+  const columnKeysSignature = useMemo(
+    () => columns.map((column) => column.key).join("|"),
+    [columns],
+  );
+  useEffect(() => {
+    if (!columnLayoutStorageKey) {
+      columnLayoutRef.current = DEFAULT_COLUMN_LAYOUT;
+      setColumnLayout(DEFAULT_COLUMN_LAYOUT);
+      return;
+    }
+    const nextLayout = readColumnLayout(columnLayoutStorageKey, columns);
+    columnLayoutRef.current = nextLayout;
+    setColumnLayout(nextLayout);
+  }, [columnLayoutStorageKey, columnKeysSignature]);
+  const notifyColumnLayoutChange = useCallback(
+    (layout: ColumnLayoutState) => {
+      if (!onColumnLayoutChange) {
+        return;
+      }
+      const nextColumns = applyColumnLayout(
+        columns,
+        normalizeColumnLayout(layout, columns),
+      );
+      onColumnLayoutChange(
+        nextColumns.map((column, index) => ({
+          key: column.key,
+          label: column.label,
+          position: index + 1,
+          widthPx: layout.widths[column.key],
+        })),
+      );
+    },
+    [columns, onColumnLayoutChange],
+  );
+  const updateColumnLayout = useCallback(
+    (
+      updater: (current: ColumnLayoutState) => ColumnLayoutState,
+      options: { notify?: boolean } = {},
+    ) => {
+      if (!columnLayoutStorageKey) {
+        return;
+      }
+      const nextLayout = normalizeColumnLayout(
+        updater(normalizeColumnLayout(columnLayoutRef.current, columns)),
+        columns,
+      );
+      columnLayoutRef.current = nextLayout;
+      writeColumnLayout(columnLayoutStorageKey, nextLayout);
+      setColumnLayout(nextLayout);
+      if (options.notify) {
+        notifyColumnLayoutChange(nextLayout);
+      }
+    },
+    [columnLayoutStorageKey, columns, notifyColumnLayoutChange],
+  );
+  const orderedColumns = useMemo(
+    () =>
+      isColumnLayoutEnabled
+        ? applyColumnLayout(columns, columnLayout)
+        : columns,
+    [columnLayout, columns, isColumnLayoutEnabled],
+  );
+  const getResolvedColumnStyle = useCallback(
+    (column: LinkedRecordColumn) => {
+      const width = columnLayout.widths[column.key];
+      if (isColumnLayoutEnabled && width) {
+        return {
+          width: `${width}px`,
+          minWidth: `${width}px`,
+        };
+      }
+      return getColumnStyle(column);
+    },
+    [columnLayout.widths, isColumnLayoutEnabled],
+  );
   const {
     closeSearchableSelect,
     handleSearchableSelectInput,
@@ -154,7 +350,7 @@ export default function ItemLinkedRecordsEditor({
     hasSeededInitialRowRef.current = true;
     const focusColumnKey = resolveFocusColumnKey(
       autoAppendOnEnter,
-      columns[0]?.key,
+      orderedColumns[0]?.key,
     );
     if (autoFocusInitialRowOnMount && focusColumnKey) {
       queueFocus(0, focusColumnKey);
@@ -163,9 +359,9 @@ export default function ItemLinkedRecordsEditor({
   }, [
     autoAppendOnEnter,
     autoCreateFirstRowOnMount,
-    columns,
     createRow,
     disabled,
+    orderedColumns,
     parseError,
     rows.length,
     autoFocusInitialRowOnMount,
@@ -182,6 +378,120 @@ export default function ItemLinkedRecordsEditor({
       return;
     }
     updateRows(rows.filter((_, index) => index !== rowIndex));
+  };
+  const handleColumnResizePointerDown = (
+    event: ReactPointerEvent<HTMLSpanElement>,
+    column: LinkedRecordColumn,
+  ) => {
+    if (!isColumnLayoutEnabled || !columnLayoutStorageKey) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const headerCell = event.currentTarget.closest("th");
+    const startWidth =
+      headerCell instanceof HTMLElement
+        ? headerCell.getBoundingClientRect().width
+        : MIN_COLUMN_WIDTH_PX;
+    const startX = event.clientX;
+    let latestWidth = startWidth;
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const nextWidth = Math.max(
+        MIN_COLUMN_WIDTH_PX,
+        Math.round(startWidth + moveEvent.clientX - startX),
+      );
+      latestWidth = nextWidth;
+      updateColumnLayout((current) => ({
+        ...current,
+        widths: {
+          ...current.widths,
+          [column.key]: nextWidth,
+        },
+      }));
+    };
+    const handlePointerUp = () => {
+      updateColumnLayout(
+        (current) => ({
+          ...current,
+          widths: {
+            ...current.widths,
+            [column.key]: latestWidth,
+          },
+        }),
+        { notify: true },
+      );
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  };
+  const handleColumnDragStart = (
+    event: ReactDragEvent<HTMLTableCellElement>,
+    columnKey: string,
+  ) => {
+    if (!isColumnLayoutEnabled || disabled) {
+      event.preventDefault();
+      return;
+    }
+    draggingColumnKeyRef.current = columnKey;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", columnKey);
+  };
+  const handleColumnDragOver = (
+    event: ReactDragEvent<HTMLTableCellElement>,
+    columnKey: string,
+  ) => {
+    const draggingColumnKey = draggingColumnKeyRef.current;
+    if (
+      !isColumnLayoutEnabled ||
+      !draggingColumnKey ||
+      draggingColumnKey === columnKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverColumnKey(columnKey);
+  };
+  const handleColumnDrop = (
+    event: ReactDragEvent<HTMLTableCellElement>,
+    targetColumnKey: string,
+  ) => {
+    const sourceColumnKey =
+      draggingColumnKeyRef.current || event.dataTransfer.getData("text/plain");
+    if (
+      !isColumnLayoutEnabled ||
+      !sourceColumnKey ||
+      sourceColumnKey === targetColumnKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    updateColumnLayout((current) => {
+      const nextOrder = applyColumnLayout(columns, current).map((column) => column.key);
+      const sourceIndex = nextOrder.indexOf(sourceColumnKey);
+      const targetIndex = nextOrder.indexOf(targetColumnKey);
+      if (sourceIndex < 0 || targetIndex < 0) {
+        return current;
+      }
+      const [movedColumnKey] = nextOrder.splice(sourceIndex, 1);
+      if (!movedColumnKey) {
+        return current;
+      }
+      const nextTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+      nextOrder.splice(nextTargetIndex, 0, movedColumnKey);
+      return {
+        ...current,
+        order: nextOrder,
+      };
+    }, { notify: true });
+    draggingColumnKeyRef.current = null;
+    setDragOverColumnKey(null);
+  };
+  const handleColumnDragEnd = () => {
+    draggingColumnKeyRef.current = null;
+    setDragOverColumnKey(null);
   };
   const handleCellChange = (
     rowIndex: number,
@@ -497,12 +807,35 @@ export default function ItemLinkedRecordsEditor({
             <thead>
               <tr>
                 {showRowIndex ? <th className={styles.indexCell}>#</th> : null}
-                {columns.map((column) => (
+                {orderedColumns.map((column) => (
                   <th
                     key={column.key}
-                    style={getColumnStyle(column)}
+                    className={cx(
+                      styles.columnHeader,
+                      isColumnLayoutEnabled && !disabled && styles.columnHeaderDraggable,
+                      dragOverColumnKey === column.key && styles.columnHeaderDragOver,
+                    )}
+                    draggable={isColumnLayoutEnabled && !disabled}
+                    style={getResolvedColumnStyle(column)}
+                    onDragStart={(event) => handleColumnDragStart(event, column.key)}
+                    onDragOver={(event) => handleColumnDragOver(event, column.key)}
+                    onDrop={(event) => handleColumnDrop(event, column.key)}
+                    onDragEnd={handleColumnDragEnd}
                   >
-                    {column.label}
+                    <span className={styles.columnHeaderLabel}>{column.label}</span>
+                    {isColumnLayoutEnabled ? (
+                      <span
+                        aria-label={`Resize ${column.label}`}
+                        className={styles.columnResizeHandle}
+                        draggable={false}
+                        role="separator"
+                        tabIndex={-1}
+                        onDragStart={(event) => event.preventDefault()}
+                        onPointerDown={(event) =>
+                          handleColumnResizePointerDown(event, column)
+                        }
+                      />
+                    ) : null}
                   </th>
                 ))}
                 <th className={styles.actionsCell}>{actionsLabel}</th>
@@ -514,10 +847,10 @@ export default function ItemLinkedRecordsEditor({
                   {showRowIndex ? (
                     <td className={styles.indexCell}>{rowIndex + 1}</td>
                   ) : null}
-                  {columns.map((column) => (
+                  {orderedColumns.map((column) => (
                     <td
                       key={`${column.key}-${rowIndex}`}
-                      style={getColumnStyle(column)}
+                      style={getResolvedColumnStyle(column)}
                     >
                       {renderCellControl(row, rowIndex, column)}
                     </td>

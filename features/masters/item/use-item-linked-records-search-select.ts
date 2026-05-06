@@ -14,6 +14,7 @@ import {
 type UseItemLinkedRecordsSearchSelectParams = {
   cellRefs: MutableRefObject<Map<string, LinkedRecordCellElement>>;
 };
+const SEARCH_SELECT_MIN_OVERLAY_WIDTH = 176;
 function removeStateEntry<TValue>(
   current: Record<string, TValue>,
   cellKey: string,
@@ -31,7 +32,10 @@ function resolveOverlayPosition(trigger: HTMLElement): SearchSelectOverlayPositi
     0,
     window.innerWidth - SEARCH_SELECT_VIEWPORT_PADDING * 2,
   );
-  const width = Math.min(triggerRect.width, maxWidth);
+  const width = Math.min(
+    Math.max(triggerRect.width, SEARCH_SELECT_MIN_OVERLAY_WIDTH),
+    maxWidth,
+  );
   const left = Math.min(
     Math.max(SEARCH_SELECT_VIEWPORT_PADDING, triggerRect.left),
     window.innerWidth - SEARCH_SELECT_VIEWPORT_PADDING - width,

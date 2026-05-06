@@ -72,10 +72,21 @@ export default function ItemLinkedRecordsSearchSelectCell({
   searchSelectListRef,
   setActiveOptionIndex,
 }: SearchableSelectCellProps) {
-  const selectableOptions = buildColumnOptions(column, options);
+  const optionsWithCurrentValue =
+    cellValue && !options.some((option) => option.value === cellValue)
+      ? [
+          ...options,
+          {
+            value: cellValue,
+            label: cellValue,
+          },
+        ]
+      : options;
+  const selectableOptions = buildColumnOptions(column, optionsWithCurrentValue);
   const filteredOptions = filterColumnOptions(selectableOptions, searchQuery);
   const selectedOptionLabel =
-    selectableOptions.find((option) => option.value === cellValue)?.label ?? "";
+    selectableOptions.find((option) => option.value === cellValue)?.label ??
+    cellValue;
   const placeholder = getSelectPlaceholder(column);
   return (
     <div
