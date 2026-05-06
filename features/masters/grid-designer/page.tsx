@@ -29,7 +29,7 @@ const ALIGNMENT_OPTIONS: Alignment[] = ["Left", "Center", "Right"];
 const DATA_TYPE_SUGGESTIONS = ["Text", "NumericTS", "Date", "Number", "Boolean"] as const;
 const GRID_DETAILS_PAGE_SIZE = "100";
 const GRID_COLUMNS_PAGE_SIZE = "100";
-const GRID_COLUMNS_TABLE_MIN_WIDTH = "1760px";
+const GRID_COLUMNS_TABLE_MIN_WIDTH = "1870px";
 const HEX_COLOR_CODE_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 const INITIAL_FORM: GridDesignerForm = {
   gridId: "",
@@ -53,6 +53,7 @@ function createColumnDraft(
     columnNumber,
     columnName: "",
     width: "",
+    position: String(columnNumber),
     alignment: "Left",
     visible: true,
     filter: false,
@@ -101,8 +102,16 @@ function toNullableNumber(value: string): number | null {
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
 }
-function formatWidth(value: number | null): string {
+function formatNullableNumber(value: number | null): string {
   return value === null ? "" : String(value);
+}
+function compareGridColumnsByPosition(left: GridColumnPayload, right: GridColumnPayload): number {
+  const leftPosition = left.grid_column_position ?? left.grid_column_number;
+  const rightPosition = right.grid_column_position ?? right.grid_column_number;
+  if (leftPosition !== rightPosition) {
+    return leftPosition - rightPosition;
+  }
+  return left.grid_column_number - right.grid_column_number;
 }
 function resolveColorPickerValue(value: string): string {
   const normalized = value.trim();
@@ -120,7 +129,8 @@ function mapGridColumnPayloadToRow(payload: GridColumnPayload): GridColumnRow {
     gridSerialId: payload.grid_serialid,
     columnNumber: payload.grid_column_number,
     columnName: payload.grid_column_name,
-    width: formatWidth(payload.grid_column_width),
+    width: formatNullableNumber(payload.grid_column_width),
+    position: formatNullableNumber(payload.grid_column_position),
     alignment: normalizeAlignment(payload.grid_column_alignment),
     visible: payload.grid_column_visibility,
     filter: payload.grid_column_filter,
@@ -144,6 +154,7 @@ function buildGridColumnRequest(
     grid_column_number: rowIndex + 1,
     grid_column_name: column.columnName.trim() || `Column ${rowIndex + 1}`,
     grid_column_width: toNullableNumber(column.width),
+    grid_column_position: toNullableNumber(column.position),
     grid_column_alignment: column.alignment,
     grid_column_visibility: column.visible,
     grid_column_filter: column.filter,
@@ -323,6 +334,20 @@ export default function GridDesignerPage() {
             className={styles.cellInput}
             value={row.width}
             onChange={(event) => updateColumn(row.id, "width", event.target.value)}
+          />
+        ),
+      },
+      {
+        key: "position",
+        header: "Position",
+        width: "104px",
+        mobileLabel: "Position",
+        render: (row) => (
+          <input
+            className={styles.cellInput}
+            value={row.position}
+            inputMode="decimal"
+            onChange={(event) => updateColumn(row.id, "position", event.target.value)}
           />
         ),
       },
@@ -565,7 +590,7 @@ export default function GridDesignerPage() {
         }
         const loadedColumns = await fetchAllGridColumns(detail.grid_id);
         const nextColumns = loadedColumns
-          .sort((left, right) => left.grid_column_number - right.grid_column_number)
+          .sort(compareGridColumnsByPosition)
           .map(mapGridColumnPayloadToRow);
         deletedGridColumnIdsRef.current.clear();
         setForm({
@@ -654,7 +679,7 @@ export default function GridDesignerPage() {
         }
       }
       const nextColumns = savedColumns
-        .sort((left, right) => left.grid_column_number - right.grid_column_number)
+        .sort(compareGridColumnsByPosition)
         .map(mapGridColumnPayloadToRow);
       deletedGridColumnIdsRef.current.clear();
       setForm({

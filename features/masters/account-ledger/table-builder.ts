@@ -33,7 +33,14 @@ const STYLE_ACCESSOR_KEYS = [
   "grid_column_name",
   "gridColumnName",
 ] as const;
-const STYLE_ORDER_KEYS = ["grid_column_number", "gridColumnNumber", "order", "position"] as const;
+const STYLE_ORDER_KEYS = [
+  "grid_column_position",
+  "gridColumnPosition",
+  "grid_column_number",
+  "gridColumnNumber",
+  "order",
+  "position",
+] as const;
 const STYLE_VISIBLE_KEYS = ["grid_column_visibility", "gridColumnVisibility", "visible"] as const;
 const STYLE_FILTER_KEYS = ["grid_column_filter", "gridColumnFilter", "sortable"] as const;
 const STYLE_WIDTH_KEYS = ["grid_column_width", "gridColumnWidth", "width"] as const;

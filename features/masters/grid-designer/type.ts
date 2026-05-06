@@ -20,6 +20,7 @@ export type GridColumnRow = {
   columnNumber: number;
   columnName: string;
   width: string;
+  position: string;
   alignment: Alignment;
   visible: boolean;
   filter: boolean;
@@ -55,6 +56,7 @@ export type GridColumnPayload = {
   grid_column_number: number;
   grid_column_name: string;
   grid_column_width: number | null;
+  grid_column_position: number | null;
   grid_column_alignment: string | null;
   grid_column_visibility: boolean;
   grid_column_filter: boolean;
@@ -86,6 +88,7 @@ export type SaveGridColumnRequest = {
   grid_column_number: number;
   grid_column_name: string;
   grid_column_width: number | null;
+  grid_column_position: number | null;
   grid_column_alignment: string | null;
   grid_column_visibility: boolean;
   grid_column_filter: boolean;

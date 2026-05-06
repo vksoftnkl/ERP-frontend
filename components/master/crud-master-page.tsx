@@ -101,6 +101,8 @@ const LIST_RESPONSE_STYLE_HEADER_KEYS = [
   "title",
 ] as const;
 const LIST_RESPONSE_STYLE_ORDER_KEYS = [
+  "grid_column_position",
+  "gridColumnPosition",
   "grid_column_number",
   "gridColumnNumber",
   "order",
@@ -1322,7 +1324,7 @@ function buildColumnsFromGridColumns(
 ): ReusableTableColumn<MasterTableRow>[] {
   const visibleColumns = gridColumns
     .filter((column) => column.visible)
-    .sort((left, right) => left.order - right.order);
+    .sort(compareGridColumnConfigOrder);
 
   const columns: ReusableTableColumn<MasterTableRow>[] = [];
   const seenAccessors = new Set<MasterColumnAccessor>();
@@ -1369,6 +1371,25 @@ function buildColumnsFromGridColumns(
   }
 
   return columns;
+}
+
+function compareGridColumnConfigOrder(left: GridColumnConfig, right: GridColumnConfig): number {
+  const leftPosition = left.position ?? left.order;
+  const rightPosition = right.position ?? right.order;
+  if (leftPosition !== rightPosition) {
+    return leftPosition - rightPosition;
+  }
+
+  const leftColumnNumber = left.columnNumber ?? left.order;
+  const rightColumnNumber = right.columnNumber ?? right.order;
+  if (leftColumnNumber !== rightColumnNumber) {
+    return leftColumnNumber - rightColumnNumber;
+  }
+
+  return left.header.localeCompare(right.header, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
 }
 
 function resolveGridColumnForTableColumn(
@@ -1423,6 +1444,7 @@ function buildGridColumnBasePayload(
     grid_serialid: gridColumn.serialId,
     grid_id: gridColumn.gridId ?? String(fallbackGridId),
     grid_column_number: columnNumber,
+    grid_column_position: gridColumn.position ?? gridColumn.order,
     grid_column_name: columnName,
   };
 }
@@ -2520,7 +2542,7 @@ export default function CrudMasterPage({
     () =>
       gridColumns
         .filter((column) => Boolean(column.serialId))
-        .sort((left, right) => left.order - right.order),
+        .sort(compareGridColumnConfigOrder),
     [gridColumns],
   );
 
@@ -3230,6 +3252,89 @@ export default function CrudMasterPage({
   const handleDownloadRows = useCallback(() => {
     downloadMasterRowsCsv(listHeading, renderedColumns, renderedRows);
   }, [listHeading, renderedColumns, renderedRows]);
+  const handleGridColumnReorder = useCallback(
+    (nextColumns: ReusableTableColumn<MasterTableRow>[]) => {
+      if (gridId === null || gridSettingsColumns.length === 0) {
+        return;
+      }
+
+      const nextVisibleGridColumns: GridColumnConfig[] = [];
+      const seenSerialIds = new Set<string>();
+      for (const tableColumn of nextColumns) {
+        if (!isMasterFilterDataColumn(tableColumn)) {
+          continue;
+        }
+
+        const gridColumn = resolveGridColumnForTableColumn(tableColumn, gridColumns);
+        if (!gridColumn?.serialId || seenSerialIds.has(gridColumn.serialId)) {
+          continue;
+        }
+
+        seenSerialIds.add(gridColumn.serialId);
+        nextVisibleGridColumns.push(gridColumn);
+      }
+
+      if (nextVisibleGridColumns.length === 0) {
+        return;
+      }
+
+      const visibleSerialIds = new Set(nextVisibleGridColumns.map((column) => column.serialId));
+      const visibleQueue = [...nextVisibleGridColumns];
+      const nextGridColumnOrder: GridColumnConfig[] = [];
+
+      for (const gridColumn of gridSettingsColumns) {
+        if (!gridColumn.serialId) {
+          continue;
+        }
+
+        if (visibleSerialIds.has(gridColumn.serialId)) {
+          const nextVisibleColumn = visibleQueue.shift();
+          if (nextVisibleColumn) {
+            nextGridColumnOrder.push(nextVisibleColumn);
+          }
+          continue;
+        }
+
+        nextGridColumnOrder.push(gridColumn);
+      }
+
+      nextGridColumnOrder.push(...visibleQueue);
+
+      void (async () => {
+        try {
+          for (const [index, gridColumn] of nextGridColumnOrder.entries()) {
+            const basePayload = buildGridColumnBasePayload(gridColumn, gridId);
+            if (!basePayload) {
+              continue;
+            }
+
+            await saveGridColumnWidth({
+              body: {
+                ...basePayload,
+                grid_column_position: index + 1,
+              },
+            });
+          }
+
+          void refetchGridColumns();
+          await loadRecords(searchTerm, currentPage, pageSize);
+        } catch {
+          // useApi handles the visible error toast.
+        }
+      })();
+    },
+    [
+      currentPage,
+      gridColumns,
+      gridId,
+      gridSettingsColumns,
+      loadRecords,
+      pageSize,
+      refetchGridColumns,
+      saveGridColumnWidth,
+      searchTerm,
+    ],
+  );
   const handleGridColumnResizeEnd = useCallback(
     (payload: ReusableTableColumnResizeEndPayload<MasterTableRow>) => {
       if (gridId === null || payload.tableWidthPx <= 0) {
@@ -3243,22 +3348,15 @@ export default function CrudMasterPage({
       if (!Number.isFinite(widthPercent) || widthPercent <= 0) {
         return;
       }
-      const columnNumber =
-        gridColumn.columnNumber && gridColumn.columnNumber > 0
-          ? gridColumn.columnNumber
-          : Math.max(1, gridColumn.order + 1);
-      const columnName = (gridColumn.columnName ?? gridColumn.header).trim();
-      if (!columnName) {
+      const basePayload = buildGridColumnBasePayload(gridColumn, gridId);
+      if (!basePayload) {
         return;
       }
       void (async () => {
         try {
           await saveGridColumnWidth({
             body: {
-              grid_serialid: gridColumn.serialId,
-              grid_id: gridColumn.gridId ?? String(gridId),
-              grid_column_number: columnNumber,
-              grid_column_name: columnName,
+              ...basePayload,
               grid_column_width: widthPercent,
             },
           });
@@ -3279,22 +3377,15 @@ export default function CrudMasterPage({
       if (!gridColumn?.serialId) {
         return;
       }
-      const columnNumber =
-        gridColumn.columnNumber && gridColumn.columnNumber > 0
-          ? gridColumn.columnNumber
-          : Math.max(1, gridColumn.order + 1);
-      const columnName = (gridColumn.columnName ?? gridColumn.header).trim();
-      if (!columnName) {
+      const basePayload = buildGridColumnBasePayload(gridColumn, gridId);
+      if (!basePayload) {
         return;
       }
       void (async () => {
         try {
           await saveGridColumnWidth({
             body: {
-              grid_serialid: gridColumn.serialId,
-              grid_id: gridColumn.gridId ?? String(gridId),
-              grid_column_number: columnNumber,
-              grid_column_name: columnName,
+              ...basePayload,
               grid_column_visibility: false,
               grid_column_filter: false,
             },
@@ -3451,6 +3542,7 @@ export default function CrudMasterPage({
                   minWidth="980px"
                   reorderableColumns
                   resizableColumns
+                  onColumnReorder={handleGridColumnReorder}
                   onColumnResizeEnd={handleGridColumnResizeEnd}
                   onColumnHide={handleGridColumnHide}
                   activeRowKey={selectedRowId}

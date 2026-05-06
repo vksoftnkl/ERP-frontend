@@ -59,6 +59,8 @@ const COLUMN_HEADER_KEYS = [
 ] as const;
 const COLUMN_ORDER_KEYS = [
   "order",
+  "grid_column_position",
+  "gridColumnPosition",
   "grid_column_number",
   "gridColumnNumber",
   "position",
@@ -68,6 +70,7 @@ const COLUMN_ORDER_KEYS = [
   "sort_order",
   "sortOrder",
 ] as const;
+const COLUMN_NUMBER_KEYS = ["grid_column_number", "gridColumnNumber", "columnNumber"] as const;
 const COLUMN_WIDTH_KEYS = [
   "width",
   "size",
@@ -137,6 +140,7 @@ export type GridColumnConfig = {
   serialId?: string;
   gridId?: string;
   columnNumber?: number;
+  position?: number;
   columnName?: string;
   sortable?: boolean;
   align?: GridColumnAlign;
@@ -346,11 +350,15 @@ function normalizeGridColumnAdjustmentRow(
     key: accessorKey,
     accessorKey,
     header: columnName,
-    order: normalizeOrder(row.grid_column_number, fallbackOrder),
+    order: normalizeOrder(
+      row.grid_column_position ?? row.gridColumnPosition ?? row.grid_column_number,
+      fallbackOrder,
+    ),
     visible: isDeleted === true ? false : visibility ?? true,
     serialId: normalizeKey(row.grid_serialid ?? row.gridSerialId) || undefined,
     gridId: normalizeKey(row.grid_id ?? row.gridId) || undefined,
-    columnNumber: normalizeOrder(row.grid_column_number, fallbackOrder),
+    columnNumber: normalizeOrder(row.grid_column_number ?? row.gridColumnNumber, fallbackOrder),
+    position: normalizeOrder(row.grid_column_position ?? row.gridColumnPosition, fallbackOrder),
     columnName,
     sortable: sortable ?? undefined,
     align: normalizeAlign(row.grid_column_alignment),
@@ -372,6 +380,7 @@ function normalizeColumnRow(
   const rawAccessor = getFirstDefinedValue(row, COLUMN_ACCESSOR_KEYS);
   const rawHeader = getFirstDefinedValue(row, COLUMN_HEADER_KEYS);
   const rawOrder = getFirstDefinedValue(row, COLUMN_ORDER_KEYS);
+  const rawColumnNumber = getFirstDefinedValue(row, COLUMN_NUMBER_KEYS);
 
   const key = normalizeKey(rawKey || rawAccessor || rawHeader);
   if (!key) {
@@ -406,13 +415,31 @@ function normalizeColumnRow(
     visible,
     serialId: normalizeKey(getFirstDefinedValue(row, COLUMN_SERIAL_ID_KEYS)) || undefined,
     gridId: normalizeKey(getFirstDefinedValue(row, COLUMN_GRID_ID_KEYS)) || undefined,
-    columnNumber: order,
+    columnNumber: normalizeOrder(rawColumnNumber, order),
+    position: order,
     columnName: header,
     sortable: sortable ?? undefined,
     align,
     width,
     color,
   };
+}
+
+function compareGridColumnConfig(left: GridColumnConfig, right: GridColumnConfig): number {
+  if (left.order !== right.order) {
+    return left.order - right.order;
+  }
+
+  const leftColumnNumber = left.columnNumber ?? left.order;
+  const rightColumnNumber = right.columnNumber ?? right.order;
+  if (leftColumnNumber !== rightColumnNumber) {
+    return leftColumnNumber - rightColumnNumber;
+  }
+
+  return left.header.localeCompare(right.header, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
 }
 
 export function normalizeGridColumnsPayload(payload: unknown): GridColumnConfig[] {
@@ -428,12 +455,12 @@ export function normalizeGridColumnsPayload(payload: unknown): GridColumnConfig[
 
     const dedupeKey = normalized.key.trim().toLowerCase();
     const existing = dedupedByKey.get(dedupeKey);
-    if (!existing || normalized.order < existing.order) {
+    if (!existing || compareGridColumnConfig(normalized, existing) < 0) {
       dedupedByKey.set(dedupeKey, normalized);
     }
   });
 
-  return Array.from(dedupedByKey.values()).sort((left, right) => left.order - right.order);
+  return Array.from(dedupedByKey.values()).sort(compareGridColumnConfig);
 }
 
 function getErrorMessage(error: unknown): string {
