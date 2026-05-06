@@ -9,8 +9,10 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, {
+  type ReusableTableBodyContextMenuPayload,
   type ReusableTableColumn,
   type ReusableTableColumnResizeEndPayload,
 } from "@/components/ui/table";
@@ -94,6 +96,16 @@ import {
   getFirstLedgerFocusableFieldTarget,
   focusLedgerFieldControl,
 } from "./form-navigation";
+const GRID_SETTINGS_CONTEXT_MENU_WIDTH = 190;
+const GRID_SETTINGS_CONTEXT_MENU_HEIGHT = 96;
+const GRID_SETTINGS_CONTEXT_MENU_PADDING = 8;
+type ContextMenuPosition = Pick<CSSProperties, "left" | "top">;
+function clampContextMenuPosition(value: number, min: number, max: number): number {
+  if (max < min) {
+    return min;
+  }
+  return Math.min(Math.max(value, min), max);
+}
 function toCsvCellValue(value: unknown): string {
   if (value === null || value === undefined) {
     return "";
@@ -649,6 +661,8 @@ export default function AccountLedgerMasterPage() {
   // State for delete
   const [pendingDeleteRow, setPendingDeleteRow] = useState<LedgerTableRow | null>(null);
   const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
+  const [gridSettingsContextMenuPosition, setGridSettingsContextMenuPosition] =
+    useState<ContextMenuPosition | null>(null);
   const [gridSettingsMode, setGridSettingsMode] = useState<"filter" | "visibility" | null>(null);
   const [gridSettingsSelections, setGridSettingsSelections] = useState<Record<string, boolean>>({});
   const [gridSettingsSaving, setGridSettingsSaving] = useState(false);
@@ -1460,6 +1474,36 @@ export default function AccountLedgerMasterPage() {
     },
     [gridSettingsColumns],
   );
+  const openGridSettingsModalFromContextMenu = useCallback(
+    (mode: "filter" | "visibility") => {
+      setGridSettingsContextMenuPosition(null);
+      openGridSettingsModal(mode);
+    },
+    [openGridSettingsModal],
+  );
+  const handleTableBodyContextMenu = useCallback(
+    ({ event }: ReusableTableBodyContextMenuPayload<LedgerTableRow>) => {
+      if (gridSettingsColumns.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setSearchSettingsOpen(false);
+      setGridSettingsContextMenuPosition({
+        left: clampContextMenuPosition(
+          event.clientX,
+          GRID_SETTINGS_CONTEXT_MENU_PADDING,
+          window.innerWidth - GRID_SETTINGS_CONTEXT_MENU_WIDTH,
+        ),
+        top: clampContextMenuPosition(
+          event.clientY,
+          GRID_SETTINGS_CONTEXT_MENU_PADDING,
+          window.innerHeight - GRID_SETTINGS_CONTEXT_MENU_HEIGHT,
+        ),
+      });
+    },
+    [gridSettingsColumns.length],
+  );
   const closeGridSettingsModal = useCallback(() => {
     if (gridSettingsSaving) {
       return;
@@ -1499,6 +1543,41 @@ export default function AccountLedgerMasterPage() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [searchSettingsOpen]);
+  useEffect(() => {
+    if (gridSettingsContextMenuPosition === null || typeof document === "undefined") {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-master-grid-settings-context-menu="true"]')) {
+        return;
+      }
+      setGridSettingsContextMenuPosition(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setGridSettingsContextMenuPosition(null);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [gridSettingsContextMenuPosition]);
+  useEffect(() => {
+    if (gridSettingsContextMenuPosition === null || typeof window === "undefined") {
+      return;
+    }
+    const closeContextMenu = () => setGridSettingsContextMenuPosition(null);
+    window.addEventListener("resize", closeContextMenu);
+    window.addEventListener("scroll", closeContextMenu, true);
+    return () => {
+      window.removeEventListener("resize", closeContextMenu);
+      window.removeEventListener("scroll", closeContextMenu, true);
+    };
+  }, [gridSettingsContextMenuPosition]);
   const saveGridSettings = useCallback(async () => {
     if (
       accountLedgerGridId === null ||
@@ -1562,6 +1641,33 @@ export default function AccountLedgerMasterPage() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [closeGridSettingsModal, gridSettingsMode, saveGridSettings]);
+  const gridSettingsContextMenu =
+    gridSettingsContextMenuPosition && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className={`${styles.masterSearchSettingsTooltip} ${styles.masterTableContextTooltip}`}
+            data-master-grid-settings-context-menu="true"
+            style={gridSettingsContextMenuPosition}
+            role="tooltip"
+          >
+            <button
+              type="button"
+              className={styles.masterSearchSettingsItem}
+              onClick={() => openGridSettingsModalFromContextMenu("filter")}
+            >
+              grid filter setting
+            </button>
+            <button
+              type="button"
+              className={styles.masterSearchSettingsItem}
+              onClick={() => openGridSettingsModalFromContextMenu("visibility")}
+            >
+              column visible setting
+            </button>
+          </div>,
+          document.body,
+        )
+      : null;
   const toolbarContent = (
     <div className={styles.masterHeader}>
       <div className={styles.masterTitleWrap}>
@@ -1677,7 +1783,9 @@ export default function AccountLedgerMasterPage() {
     return objectPayload;
   }
   return (
-    <main className={styles.page}>
+    <>
+      {gridSettingsContextMenu}
+      <main className={styles.page}>
       <div className={styles.viewport}>
         <div className={styles.board}>
           <section className={styles.content}>
@@ -1745,6 +1853,7 @@ export default function AccountLedgerMasterPage() {
               resizableColumns
               onColumnResizeEnd={handleGridColumnResizeEnd}
               onColumnHide={handleGridColumnHide}
+              onBodyContextMenu={handleTableBodyContextMenu}
               activeRowKey={selectedRowId}
               onRowClick={(row) => setSelectedRowId(row.__rowId)}
               onRowDoubleClick={(row) => void openExistingModal(row, "view")}
@@ -2073,6 +2182,7 @@ export default function AccountLedgerMasterPage() {
         displayName={recordHistoryModal?.displayName}
         onClose={() => setRecordHistoryModal(null)}
       />
-    </main>
+      </main>
+    </>
   );
 }

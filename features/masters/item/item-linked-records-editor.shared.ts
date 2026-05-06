@@ -21,6 +21,9 @@ export type LinkedRecordColumn = {
     params: LinkedRecordColumnOptionsResolverParams,
   ) => boolean;
   searchable?: boolean;
+  hidden?: boolean;
+  focus?: boolean;
+  necessity?: boolean;
   options?: LinkedRecordOption[];
   optionsResolver?: (
     params: LinkedRecordColumnOptionsResolverParams,

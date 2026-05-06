@@ -55,6 +55,11 @@ export type ReusableTableColumnResizeEndPayload<T extends Record<string, unknown
 export type ReusableTableColumnHidePayload<T extends Record<string, unknown>> = {
   column: ReusableTableColumn<T>;
 };
+export type ReusableTableBodyContextMenuPayload<T extends Record<string, unknown>> = {
+  event: MouseEvent<HTMLTableRowElement>;
+  row: T;
+  rowIndex: number;
+};
 type RowKeyResolver<T> = keyof T | ((row: T, rowIndex: number) => Key);
 type RowActionHandler<T> = (row: T, rowIndex: number) => void;
 type RowActionDisabledResolver<T> = (row: T, rowIndex: number) => boolean;
@@ -90,6 +95,7 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   resizableColumns?: boolean;
   onColumnResizeEnd?: (payload: ReusableTableColumnResizeEndPayload<T>) => void;
   onColumnHide?: (payload: ReusableTableColumnHidePayload<T>) => void;
+  onBodyContextMenu?: (payload: ReusableTableBodyContextMenuPayload<T>) => void;
   wrapperClassName?: string;
   tableClassName?: string;
   tableLayout?: CSSProperties["tableLayout"];
@@ -552,6 +558,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   resizableColumns = false,
   onColumnResizeEnd,
   onColumnHide,
+  onBodyContextMenu,
   wrapperClassName,
   tableClassName,
   tableLayout,
@@ -1759,6 +1766,11 @@ export function ReusableTable<T extends Record<string, unknown>>({
                     onClick={onRowClick ? () => onRowClick(row, rowIndex) : undefined}
                     onDoubleClick={
                       onRowDoubleClick ? () => onRowDoubleClick(row, rowIndex) : undefined
+                    }
+                    onContextMenu={
+                      onBodyContextMenu
+                        ? (event) => onBodyContextMenu({ event, row, rowIndex })
+                        : undefined
                     }
                     onDragStart={
                       enableRowReorder

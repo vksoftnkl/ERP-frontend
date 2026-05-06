@@ -91,6 +91,83 @@
   -webkit-overflow-scrolling: touch;
   background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
 }
+.tableSettingsContextMenu {
+  position: fixed;
+  top: auto;
+  left: auto;
+  z-index: 10000;
+  display: grid;
+  gap: 0.2rem;
+  min-width: 11.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #c9d6e7;
+  border-radius: var(--erp-radius);
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(21, 33, 54, 0.14);
+  color: var(--table-text, #1b2634);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.tableSettingsContextMenuItem {
+  width: 100%;
+  min-height: 1.75rem;
+  padding: 0.25rem 0.35rem;
+  border: 0;
+  border-radius: var(--erp-radius);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.tableSettingsContextMenuItem:hover,
+.tableSettingsContextMenuItem:focus-visible {
+  background: #edf3fb;
+  color: var(--primary, #3b7dd8);
+  outline: 0;
+}
+.columnSettingsDialog {
+  width: min(32rem, calc(100vw - 2.4rem));
+  max-height: min(80vh, 34rem);
+}
+.columnSettingsBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #f8fafc;
+  padding: 0.35rem;
+}
+.columnSettingsList {
+  display: grid;
+}
+.columnSettingsRow {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 28px;
+  border-bottom: 1px solid #c9c9ca;
+  color: #111114;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 0.45rem;
+}
+.columnSettingsRow:hover {
+  background: #f4f7fb;
+}
+.columnSettingsRow input {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+}
+.columnSettingsEmpty {
+  margin: 0;
+  padding: 1rem;
+  color: #5e6470;
+  font-size: 13px;
+}
 .table {
   width: 100%;
   min-width: var(--erp-table-min-width, 980px);

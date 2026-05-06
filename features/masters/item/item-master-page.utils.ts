@@ -233,18 +233,28 @@ export function applyConfiguredLinkedTableColumnConfig<
       continue;
     }
     seenKeys.add(columnKey);
-    if (
+    const isVisible =
       toSelectBoolean(
         getFieldValue(configuredColumn, "uiTblClmColumnVisibility"),
         "true",
-      ) !== "true"
-    ) {
-      continue;
-    }
+      ) === "true";
+    const isFocused =
+      toSelectBoolean(
+        getFieldValue(configuredColumn, "uiTblClmColumnFocus"),
+        "false",
+      ) === "true";
+    const isNecessary =
+      toSelectBoolean(
+        getFieldValue(configuredColumn, "uiTblClmColumnNecessity"),
+        "false",
+      ) === "true";
     const position = toConfiguredColumnOrder(configuredColumn, baseColumn.index + 1);
     orderedColumns.push({
       column: {
         ...baseColumn.column,
+        hidden: !isVisible,
+        focus: isFocused,
+        necessity: isNecessary,
         width:
           toConfiguredColumnWidth(
             getFieldValue(configuredColumn, "uiTblClmColumnWidth"),

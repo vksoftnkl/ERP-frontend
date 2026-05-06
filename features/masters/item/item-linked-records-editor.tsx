@@ -1,7 +1,9 @@
 "use client";
 import {
+  type CSSProperties,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
@@ -9,7 +11,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { cx } from "@/components/library/cx";
+import modalStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
 import ItemLinkedRecordsSearchSelectCell from "./item-linked-records-search-select-cell";
 import {
   getCellKey,
@@ -64,22 +68,111 @@ export type LinkedRecordColumnLayoutEntry = {
   key: string;
   label: string;
   position: number;
+  visible: boolean;
+  focus: boolean;
+  necessity: boolean;
   widthPx?: number;
+};
+type AdminSettingsDraftEntry = {
+  visible: boolean;
+  focus: boolean;
+  necessity: boolean;
 };
 type FocusTarget = {
   columnKey: string;
   rowIndex: number;
 };
 type ColumnLayoutState = {
+  focus: Record<string, boolean>;
+  necessity: Record<string, boolean>;
   order: string[];
+  visibility: Record<string, boolean>;
   widths: Record<string, number>;
 };
 const COLUMN_LAYOUT_STORAGE_PREFIX = "erp:item-linked-records:column-layout:";
 const DEFAULT_COLUMN_LAYOUT: ColumnLayoutState = {
+  focus: {},
+  necessity: {},
   order: [],
+  visibility: {},
   widths: {},
 };
 const MIN_COLUMN_WIDTH_PX = 56;
+const HEADER_MENU_ESTIMATED_WIDTH = 190;
+const HEADER_MENU_ESTIMATED_HEIGHT = 64;
+const HEADER_MENU_VIEWPORT_PADDING = 8;
+const TABLE_SETTINGS_CONTEXT_MENU_HEIGHT = 64;
+type HeaderMenuPosition = Pick<CSSProperties, "left" | "top">;
+function clamp(value: number, min: number, max: number): number {
+  if (max < min) {
+    return min;
+  }
+  return Math.min(Math.max(value, min), max);
+}
+function isColumnVisibleInLayout(
+  column: LinkedRecordColumn,
+  layout: ColumnLayoutState,
+): boolean {
+  const configuredVisibility = layout.visibility[column.key];
+  return typeof configuredVisibility === "boolean"
+    ? configuredVisibility
+    : column.hidden !== true;
+}
+function isColumnFocusedInLayout(
+  column: LinkedRecordColumn,
+  layout: ColumnLayoutState,
+): boolean {
+  const configuredFocus = layout.focus[column.key];
+  return typeof configuredFocus === "boolean"
+    ? configuredFocus
+    : column.focus === true;
+}
+function isColumnNecessaryInLayout(
+  column: LinkedRecordColumn,
+  layout: ColumnLayoutState,
+): boolean {
+  const configuredNecessity = layout.necessity[column.key];
+  return typeof configuredNecessity === "boolean"
+    ? configuredNecessity
+    : column.necessity === true;
+}
+function getColumnAdminSettings(
+  column: LinkedRecordColumn,
+  layout: ColumnLayoutState,
+): AdminSettingsDraftEntry {
+  return {
+    visible: isColumnVisibleInLayout(column, layout),
+    focus: isColumnFocusedInLayout(column, layout),
+    necessity: isColumnNecessaryInLayout(column, layout),
+  };
+}
+function buildAdminSettingsDraft(
+  columns: LinkedRecordColumn[],
+  layout: ColumnLayoutState,
+): Record<string, AdminSettingsDraftEntry> {
+  return columns.reduce<Record<string, AdminSettingsDraftEntry>>(
+    (draft, column) => ({
+      ...draft,
+      [column.key]: getColumnAdminSettings(column, layout),
+    }),
+    {},
+  );
+}
+function buildDefaultAdminSettingsDraft(
+  columns: LinkedRecordColumn[],
+): Record<string, AdminSettingsDraftEntry> {
+  return columns.reduce<Record<string, AdminSettingsDraftEntry>>(
+    (draft, column) => ({
+      ...draft,
+      [column.key]: {
+        visible: true,
+        focus: false,
+        necessity: false,
+      },
+    }),
+    {},
+  );
+}
 function resolveFocusColumnKey(
   autoAppendOnEnter: LinkedRecordEditorAutoAppendConfig | undefined,
   fallbackColumnKey?: string,
@@ -109,7 +202,27 @@ function normalizeColumnLayout(
     }
     widths[columnKey] = Math.max(MIN_COLUMN_WIDTH_PX, Math.round(width));
   }
-  return { order, widths };
+  const visibility: Record<string, boolean> = {};
+  const focus: Record<string, boolean> = {};
+  const necessity: Record<string, boolean> = {};
+  for (const column of columns) {
+    const configuredVisibility = layout.visibility[column.key];
+    visibility[column.key] =
+      typeof configuredVisibility === "boolean"
+        ? configuredVisibility
+        : column.hidden !== true;
+    const configuredFocus = layout.focus[column.key];
+    focus[column.key] =
+      typeof configuredFocus === "boolean"
+        ? configuredFocus
+        : column.focus === true;
+    const configuredNecessity = layout.necessity[column.key];
+    necessity[column.key] =
+      typeof configuredNecessity === "boolean"
+        ? configuredNecessity
+        : column.necessity === true;
+  }
+  return { focus, necessity, order, visibility, widths };
 }
 function readColumnLayout(
   storageKey: string,
@@ -136,6 +249,48 @@ function readColumnLayout(
             ? Object.entries(parsed.widths).reduce<Record<string, number>>(
                 (result, [key, value]) => {
                   if (typeof value === "number" && Number.isFinite(value)) {
+                    result[key] = value;
+                  }
+                  return result;
+                },
+                {},
+              )
+            : {},
+        visibility:
+          parsed.visibility &&
+          typeof parsed.visibility === "object" &&
+          !Array.isArray(parsed.visibility)
+            ? Object.entries(parsed.visibility).reduce<Record<string, boolean>>(
+                (result, [key, value]) => {
+                  if (typeof value === "boolean") {
+                    result[key] = value;
+                  }
+                  return result;
+                },
+                {},
+              )
+            : {},
+        focus:
+          parsed.focus &&
+          typeof parsed.focus === "object" &&
+          !Array.isArray(parsed.focus)
+            ? Object.entries(parsed.focus).reduce<Record<string, boolean>>(
+                (result, [key, value]) => {
+                  if (typeof value === "boolean") {
+                    result[key] = value;
+                  }
+                  return result;
+                },
+                {},
+              )
+            : {},
+        necessity:
+          parsed.necessity &&
+          typeof parsed.necessity === "object" &&
+          !Array.isArray(parsed.necessity)
+            ? Object.entries(parsed.necessity).reduce<Record<string, boolean>>(
+                (result, [key, value]) => {
+                  if (typeof value === "boolean") {
                     result[key] = value;
                   }
                   return result;
@@ -211,10 +366,27 @@ export default function ItemLinkedRecordsEditor({
     DEFAULT_COLUMN_LAYOUT,
   );
   const columnLayoutRef = useRef<ColumnLayoutState>(DEFAULT_COLUMN_LAYOUT);
+  const [openHeaderMenuColumnKey, setOpenHeaderMenuColumnKey] = useState<
+    string | null
+  >(null);
+  const [openHeaderMenuPosition, setOpenHeaderMenuPosition] =
+    useState<HeaderMenuPosition>({});
+  const [openBodyMenuPosition, setOpenBodyMenuPosition] =
+    useState<HeaderMenuPosition | null>(null);
+  const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
+  const [adminSettingsDraft, setAdminSettingsDraft] = useState<
+    Record<string, AdminSettingsDraftEntry>
+  >({});
   const [dragOverColumnKey, setDragOverColumnKey] = useState<string | null>(null);
   const isColumnLayoutEnabled = Boolean(columnLayoutStorageKey);
   const columnKeysSignature = useMemo(
-    () => columns.map((column) => column.key).join("|"),
+    () =>
+      columns
+        .map(
+          (column) =>
+            `${column.key}:${column.hidden === true ? "hidden" : "visible"}:${column.focus === true ? "focus" : "skip"}:${column.necessity === true ? "necessary" : "optional"}`,
+        )
+        .join("|"),
     [columns],
   );
   useEffect(() => {
@@ -228,7 +400,7 @@ export default function ItemLinkedRecordsEditor({
     setColumnLayout(nextLayout);
   }, [columnLayoutStorageKey, columnKeysSignature]);
   const notifyColumnLayoutChange = useCallback(
-    (layout: ColumnLayoutState) => {
+    (layout: ColumnLayoutState, changedColumnKeys?: Set<string>) => {
       if (!onColumnLayoutChange) {
         return;
       }
@@ -237,12 +409,20 @@ export default function ItemLinkedRecordsEditor({
         normalizeColumnLayout(layout, columns),
       );
       onColumnLayoutChange(
-        nextColumns.map((column, index) => ({
-          key: column.key,
-          label: column.label,
-          position: index + 1,
-          widthPx: layout.widths[column.key],
-        })),
+        nextColumns
+          .map((column, index) => ({
+            key: column.key,
+            label: column.label,
+            position: index + 1,
+            visible: isColumnVisibleInLayout(column, layout),
+            focus: isColumnFocusedInLayout(column, layout),
+            necessity: isColumnNecessaryInLayout(column, layout),
+            widthPx: layout.widths[column.key],
+          }))
+          .filter(
+            (column) =>
+              !changedColumnKeys || changedColumnKeys.has(column.key),
+          ),
       );
     },
     [columns, onColumnLayoutChange],
@@ -250,7 +430,7 @@ export default function ItemLinkedRecordsEditor({
   const updateColumnLayout = useCallback(
     (
       updater: (current: ColumnLayoutState) => ColumnLayoutState,
-      options: { notify?: boolean } = {},
+      options: { changedColumnKeys?: string[]; notify?: boolean } = {},
     ) => {
       if (!columnLayoutStorageKey) {
         return;
@@ -263,7 +443,12 @@ export default function ItemLinkedRecordsEditor({
       writeColumnLayout(columnLayoutStorageKey, nextLayout);
       setColumnLayout(nextLayout);
       if (options.notify) {
-        notifyColumnLayoutChange(nextLayout);
+        notifyColumnLayoutChange(
+          nextLayout,
+          options.changedColumnKeys
+            ? new Set(options.changedColumnKeys)
+            : undefined,
+        );
       }
     },
     [columnLayoutStorageKey, columns, notifyColumnLayoutChange],
@@ -274,6 +459,13 @@ export default function ItemLinkedRecordsEditor({
         ? applyColumnLayout(columns, columnLayout)
         : columns,
     [columnLayout, columns, isColumnLayoutEnabled],
+  );
+  const visibleColumns = useMemo(
+    () =>
+      orderedColumns.filter((column) =>
+        isColumnVisibleInLayout(column, columnLayout),
+      ),
+    [columnLayout, orderedColumns],
   );
   const getResolvedColumnStyle = useCallback(
     (column: LinkedRecordColumn) => {
@@ -301,6 +493,247 @@ export default function ItemLinkedRecordsEditor({
     searchSelectOverlayPosition,
     setActiveOptionIndex,
   } = useItemLinkedRecordsSearchSelect({ cellRefs });
+  useEffect(() => {
+    if (openHeaderMenuColumnKey === null) {
+      return;
+    }
+
+    const isVisible = visibleColumns.some(
+      (column) => column.key === openHeaderMenuColumnKey,
+    );
+    if (!isVisible) {
+      setOpenHeaderMenuColumnKey(null);
+    }
+  }, [openHeaderMenuColumnKey, visibleColumns]);
+  useEffect(() => {
+    if (openHeaderMenuColumnKey === null) {
+      return;
+    }
+
+    const handlePointerDown = (event: globalThis.MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-item-linked-header-menu-root="true"]')) {
+        return;
+      }
+      setOpenHeaderMenuColumnKey(null);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      if (event.key === "Escape") {
+        setOpenHeaderMenuColumnKey(null);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [openHeaderMenuColumnKey]);
+  useEffect(() => {
+    if (openHeaderMenuColumnKey === null) {
+      return;
+    }
+
+    const closeHeaderMenu = () => setOpenHeaderMenuColumnKey(null);
+
+    window.addEventListener("resize", closeHeaderMenu);
+    window.addEventListener("scroll", closeHeaderMenu, true);
+
+    return () => {
+      window.removeEventListener("resize", closeHeaderMenu);
+      window.removeEventListener("scroll", closeHeaderMenu, true);
+    };
+  }, [openHeaderMenuColumnKey]);
+  useEffect(() => {
+    if (openBodyMenuPosition === null) {
+      return;
+    }
+
+    const handlePointerDown = (event: globalThis.MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-item-linked-body-menu-root="true"]')) {
+        return;
+      }
+      setOpenBodyMenuPosition(null);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      if (event.key === "Escape") {
+        setOpenBodyMenuPosition(null);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [openBodyMenuPosition]);
+  useEffect(() => {
+    if (openBodyMenuPosition === null) {
+      return;
+    }
+
+    const closeBodyMenu = () => setOpenBodyMenuPosition(null);
+
+    window.addEventListener("resize", closeBodyMenu);
+    window.addEventListener("scroll", closeBodyMenu, true);
+
+    return () => {
+      window.removeEventListener("resize", closeBodyMenu);
+      window.removeEventListener("scroll", closeBodyMenu, true);
+    };
+  }, [openBodyMenuPosition]);
+  const handleHeaderContextMenu = (
+    event: ReactMouseEvent<HTMLTableCellElement>,
+    column: LinkedRecordColumn,
+  ) => {
+    if (!isColumnLayoutEnabled || disabled) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setOpenHeaderMenuColumnKey(column.key);
+    setOpenHeaderMenuPosition({
+      left: clamp(
+        event.clientX,
+        HEADER_MENU_VIEWPORT_PADDING,
+        window.innerWidth - HEADER_MENU_ESTIMATED_WIDTH,
+      ),
+      top: clamp(
+        event.clientY,
+        HEADER_MENU_VIEWPORT_PADDING,
+        window.innerHeight - HEADER_MENU_ESTIMATED_HEIGHT,
+      ),
+    });
+  };
+  const handleHideHeaderColumn = (column: LinkedRecordColumn) => {
+    if (!isColumnLayoutEnabled || disabled) {
+      return;
+    }
+    if (openSearchCell) {
+      closeSearchableSelect(openSearchCell);
+    }
+    setOpenHeaderMenuColumnKey(null);
+    updateColumnLayout(
+      (current) => ({
+        ...current,
+        visibility: {
+          ...current.visibility,
+          [column.key]: false,
+        },
+      }),
+      { changedColumnKeys: [column.key], notify: true },
+    );
+  };
+  const handleBodyRowContextMenu = (
+    event: ReactMouseEvent<HTMLTableRowElement>,
+  ) => {
+    if (!isColumnLayoutEnabled || disabled) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setOpenHeaderMenuColumnKey(null);
+    setOpenBodyMenuPosition({
+      left: clamp(
+        event.clientX,
+        HEADER_MENU_VIEWPORT_PADDING,
+        window.innerWidth - HEADER_MENU_ESTIMATED_WIDTH,
+      ),
+      top: clamp(
+        event.clientY,
+        HEADER_MENU_VIEWPORT_PADDING,
+        window.innerHeight - TABLE_SETTINGS_CONTEXT_MENU_HEIGHT,
+      ),
+    });
+  };
+  const openAdminSettings = () => {
+    setOpenBodyMenuPosition(null);
+    setAdminSettingsDraft(buildAdminSettingsDraft(orderedColumns, columnLayout));
+    setIsAdminSettingsOpen(true);
+  };
+  const closeAdminSettings = () => {
+    setIsAdminSettingsOpen(false);
+  };
+  const handleAdminSettingsChange = (
+    columnKey: string,
+    field: keyof AdminSettingsDraftEntry,
+    checked: boolean,
+  ) => {
+    setAdminSettingsDraft((current) => ({
+      ...current,
+      [columnKey]: {
+        ...(current[columnKey] ?? {
+          visible: true,
+          focus: false,
+          necessity: false,
+        }),
+        [field]: checked,
+      },
+    }));
+  };
+  const handleDefaultAdminSettings = () => {
+    setAdminSettingsDraft(buildDefaultAdminSettingsDraft(orderedColumns));
+  };
+  const handleSaveAdminSettings = useCallback(() => {
+    const changedColumnKeys = orderedColumns.map((column) => column.key);
+    updateColumnLayout(
+      (current) => {
+        const nextVisibility = { ...current.visibility };
+        const nextFocus = { ...current.focus };
+        const nextNecessity = { ...current.necessity };
+        for (const column of orderedColumns) {
+          const draft =
+            adminSettingsDraft[column.key] ??
+            getColumnAdminSettings(column, current);
+          nextVisibility[column.key] = draft.visible;
+          nextFocus[column.key] = draft.focus;
+          nextNecessity[column.key] = draft.necessity;
+        }
+        return {
+          ...current,
+          focus: nextFocus,
+          necessity: nextNecessity,
+          visibility: nextVisibility,
+        };
+      },
+      { changedColumnKeys, notify: true },
+    );
+    setIsAdminSettingsOpen(false);
+  }, [adminSettingsDraft, orderedColumns, updateColumnLayout]);
+  useEffect(() => {
+    if (!isAdminSettingsOpen) {
+      return;
+    }
+
+    const handleAdminSettingsKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeAdminSettings();
+      }
+      if (event.key === "F5") {
+        event.preventDefault();
+        handleSaveAdminSettings();
+      }
+    };
+
+    window.addEventListener("keydown", handleAdminSettingsKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleAdminSettingsKeyDown);
+    };
+  }, [handleSaveAdminSettings, isAdminSettingsOpen]);
   const updateRows = (nextRows: LinkedRecordRow[]) => {
     onChange(serializeLinkedRecordRows(nextRows));
   };
@@ -350,7 +783,7 @@ export default function ItemLinkedRecordsEditor({
     hasSeededInitialRowRef.current = true;
     const focusColumnKey = resolveFocusColumnKey(
       autoAppendOnEnter,
-      orderedColumns[0]?.key,
+      visibleColumns[0]?.key,
     );
     if (autoFocusInitialRowOnMount && focusColumnKey) {
       queueFocus(0, focusColumnKey);
@@ -361,10 +794,10 @@ export default function ItemLinkedRecordsEditor({
     autoCreateFirstRowOnMount,
     createRow,
     disabled,
-    orderedColumns,
     parseError,
     rows.length,
     autoFocusInitialRowOnMount,
+    visibleColumns,
   ]);
   const handleAddRow = () => {
     const focusColumnKey = resolveFocusColumnKey(autoAppendOnEnter);
@@ -418,7 +851,7 @@ export default function ItemLinkedRecordsEditor({
             [column.key]: latestWidth,
           },
         }),
-        { notify: true },
+        { changedColumnKeys: [column.key], notify: true },
       );
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
@@ -783,31 +1216,286 @@ export default function ItemLinkedRecordsEditor({
       />
     );
   };
+  const openHeaderMenuColumn =
+    openHeaderMenuColumnKey === null
+      ? null
+      : visibleColumns.find((column) => column.key === openHeaderMenuColumnKey) ??
+        null;
+  const headerMenu =
+    openHeaderMenuColumn && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className={styles.headerContextMenu}
+            data-item-linked-header-menu-root="true"
+            style={openHeaderMenuPosition}
+            role="menu"
+            aria-label="Column actions"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.headerContextMenuItem}
+              onClick={() => handleHideHeaderColumn(openHeaderMenuColumn)}
+            >
+              <span>Hide column</span>
+            </button>
+          </div>,
+          document.body,
+        )
+      : null;
+  const bodyMenu =
+    openBodyMenuPosition && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className={styles.headerContextMenu}
+            data-item-linked-body-menu-root="true"
+            style={openBodyMenuPosition}
+            role="menu"
+            aria-label="Table actions"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.headerContextMenuItem}
+              onClick={openAdminSettings}
+            >
+              <span>Admin settings</span>
+            </button>
+          </div>,
+          document.body,
+        )
+      : null;
+  const adminSettingsModal =
+    isAdminSettingsOpen && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className={modalStyles.overlay}
+            style={
+              {
+                "--erp-modal-overlay-z-index": 10001,
+                "--erp-modal-accent": "var(--ds-primary, #0f74c9)",
+              } as CSSProperties
+            }
+          >
+            <div
+              className={modalStyles.backdrop}
+              onClick={closeAdminSettings}
+              aria-hidden
+            />
+            <section
+              className={cx(modalStyles.panel, styles.adminSettingsPanel)}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="item-linked-table-settings-title"
+            >
+              <header className={modalStyles.header}>
+                <div className={modalStyles.headerRow}>
+                  <div className={modalStyles.headerIntro}>
+                    <span className={modalStyles.headerIcon} aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <path
+                          d="M4 5h16M4 12h16M4 19h16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeWidth="1.8"
+                        />
+                        <path
+                          d="M8 5v14M16 5v14"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeWidth="1.4"
+                        />
+                      </svg>
+                    </span>
+                    <div className={modalStyles.headerText}>
+                      <h3
+                        id="item-linked-table-settings-title"
+                        className={modalStyles.headerTitle}
+                      >
+                        Table Settings
+                      </h3>
+                      <p className={modalStyles.headerDescription}>
+                        Configure linked table columns.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={modalStyles.closeButton}
+                    onClick={closeAdminSettings}
+                    aria-label="Close modal"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                      className={modalStyles.closeIcon}
+                    >
+                      <path
+                        d="M6 18 18 6M6 6l12 12"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeWidth="1.8"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </header>
+              <div
+                className={cx(modalStyles.scrollArea, styles.adminSettingsScrollArea)}
+                data-erp-modal-scroll-area="true"
+              >
+                <div className={styles.adminSettingsTableWrap}>
+                  <table className={styles.adminSettingsTable}>
+                    <thead>
+                      <tr>
+                        <th className={styles.adminSettingsNumberHeader} />
+                        <th>Column Name</th>
+                        <th>Visible</th>
+                        <th>Focus</th>
+                        <th>Necessity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orderedColumns.map((column, index) => {
+                        const draft =
+                          adminSettingsDraft[column.key] ??
+                          getColumnAdminSettings(column, columnLayout);
+                        return (
+                          <tr key={column.key}>
+                            <td className={styles.adminSettingsNumberCell}>
+                              {index + 1}
+                            </td>
+                            <td className={styles.adminSettingsNameCell}>
+                              {column.label}
+                            </td>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={draft.visible}
+                                onChange={(event) =>
+                                  handleAdminSettingsChange(
+                                    column.key,
+                                    "visible",
+                                    event.currentTarget.checked,
+                                  )
+                                }
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={draft.focus}
+                                onChange={(event) =>
+                                  handleAdminSettingsChange(
+                                    column.key,
+                                    "focus",
+                                    event.currentTarget.checked,
+                                  )
+                                }
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={draft.necessity}
+                                onChange={(event) =>
+                                  handleAdminSettingsChange(
+                                    column.key,
+                                    "necessity",
+                                    event.currentTarget.checked,
+                                  )
+                                }
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <footer className={modalStyles.footer}>
+                <div className={modalStyles.footerShortcuts}>
+                  <div className={modalStyles.footerShortcutList}>
+                    <span className={modalStyles.footerShortcutItem}>
+                      <span className={modalStyles.footerShortcutTitle}>
+                        {orderedColumns.length} columns
+                      </span>
+                    </span>
+                    <span className={modalStyles.footerShortcutItem}>
+                      <span className={modalStyles.footerShortcutAction}>
+                        F5 saves settings
+                      </span>
+                    </span>
+                  </div>
+                </div>
+                <div className={modalStyles.footerActions}>
+                  <button
+                    type="button"
+                    className={cx(
+                      modalStyles.cancelButton,
+                      styles.adminSettingsDefaultButton,
+                    )}
+                    onClick={handleDefaultAdminSettings}
+                  >
+                    Default
+                  </button>
+                  <button
+                    type="button"
+                    className={modalStyles.cancelButton}
+                    onClick={closeAdminSettings}
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    className={cx(
+                      modalStyles.submitButton,
+                      modalStyles.submitButtonSave,
+                    )}
+                    onClick={handleSaveAdminSettings}
+                  >
+                    Save (F5)
+                  </button>
+                </div>
+              </footer>
+            </section>
+          </div>,
+          document.body,
+        )
+      : null;
   return (
-    <div className={styles.editor}>
-      <div className={styles.toolbar}>
-        <span className={styles.summary}>
-          {rows.length} {rows.length === 1 ? "row" : "rows"}
-        </span>
-        <button
-          type="button"
-          className={styles.addButton}
-          disabled={disabled}
-          onClick={handleAddRow}
-        >
-          {addLabel}
-        </button>
-      </div>
-      {parseError ? <p className={styles.parseError}>{parseError}</p> : null}
-      {rows.length === 0 ? (
-        <div className={styles.emptyState}>{emptyState}</div>
-      ) : (
-        <div className={styles.tableWrap}>
+    <>
+      {headerMenu}
+      {bodyMenu}
+      {adminSettingsModal}
+      <div className={styles.editor}>
+        <div className={styles.toolbar}>
+          <span className={styles.summary}>
+            {rows.length} {rows.length === 1 ? "row" : "rows"}
+          </span>
+          <button
+            type="button"
+            className={styles.addButton}
+            disabled={disabled}
+            onClick={handleAddRow}
+          >
+            {addLabel}
+          </button>
+        </div>
+        {parseError ? <p className={styles.parseError}>{parseError}</p> : null}
+        {rows.length === 0 ? (
+          <div className={styles.emptyState}>{emptyState}</div>
+        ) : (
+          <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
               <tr>
                 {showRowIndex ? <th className={styles.indexCell}>#</th> : null}
-                {orderedColumns.map((column) => (
+                {visibleColumns.map((column) => (
                   <th
                     key={column.key}
                     className={cx(
@@ -821,6 +1509,7 @@ export default function ItemLinkedRecordsEditor({
                     onDragOver={(event) => handleColumnDragOver(event, column.key)}
                     onDrop={(event) => handleColumnDrop(event, column.key)}
                     onDragEnd={handleColumnDragEnd}
+                    onContextMenu={(event) => handleHeaderContextMenu(event, column)}
                   >
                     <span className={styles.columnHeaderLabel}>{column.label}</span>
                     {isColumnLayoutEnabled ? (
@@ -843,11 +1532,14 @@ export default function ItemLinkedRecordsEditor({
             </thead>
             <tbody>
               {rows.map((row, rowIndex) => (
-                <tr key={getRowKey(row, rowIndex)}>
+                <tr
+                  key={getRowKey(row, rowIndex)}
+                  onContextMenu={handleBodyRowContextMenu}
+                >
                   {showRowIndex ? (
                     <td className={styles.indexCell}>{rowIndex + 1}</td>
                   ) : null}
-                  {orderedColumns.map((column) => (
+                  {visibleColumns.map((column) => (
                     <td
                       key={`${column.key}-${rowIndex}`}
                       style={getResolvedColumnStyle(column)}
@@ -871,6 +1563,7 @@ export default function ItemLinkedRecordsEditor({
           </table>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

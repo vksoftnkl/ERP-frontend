@@ -2981,28 +2981,10 @@ function buildUiTableColumnLayoutRequest(
         : "") || column.label,
     uiTblClmTableId: tableId,
     uiTblClmColumnWidth: width,
-    uiTblClmColumnVisibility:
-      toSelectBoolean(
-        configuredColumn
-          ? getFieldValue(configuredColumn, "uiTblClmColumnVisibility")
-          : undefined,
-        "true",
-      ) === "true",
-    uiTblClmColumnFocus:
-      toSelectBoolean(
-        configuredColumn
-          ? getFieldValue(configuredColumn, "uiTblClmColumnFocus")
-          : undefined,
-        "false",
-      ) === "true",
+    uiTblClmColumnVisibility: column.visible,
+    uiTblClmColumnFocus: column.focus,
     uiTblClmColumnPosition: column.position,
-    uiTblClmColumnNecessity:
-      toSelectBoolean(
-        configuredColumn
-          ? getFieldValue(configuredColumn, "uiTblClmColumnNecessity")
-          : undefined,
-        "false",
-      ) === "true",
+    uiTblClmColumnNecessity: column.necessity,
     uiTblClmNextColumn: configuredColumn
       ? toNullableLayoutInteger(getFieldValue(configuredColumn, "uiTblClmNextColumn"))
       : null,

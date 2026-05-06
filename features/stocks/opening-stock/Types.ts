@@ -3,11 +3,18 @@ export type ColumnKind = "text" | "number" | "date" | "select" | "lookup";
 export type LookupKind = "item" | "godown";
 
 export type UiTableColumnPayload = {
+  uiTblClmId?: string;
   uiTblClmNo?: string;
+  uiTblClmTableId?: string | null;
   uiTblClmName: string | null;
   uiTblClmColumnWidth: number | null;
   uiTblClmColumnVisibility: boolean | null;
+  uiTblClmColumnFocus?: boolean | null;
   uiTblClmColumnPosition: number | null;
+  uiTblClmColumnNecessity?: boolean | null;
+  uiTblClmNextColumn?: number | null;
+  uiTblClmPreviousColumn?: number | null;
+  uiTblClmIsActive?: boolean | null;
 };
 
 export type ColumnSchema = {

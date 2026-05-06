@@ -8,8 +8,10 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, {
+  type ReusableTableBodyContextMenuPayload,
   type ReusableTableColumn,
   type ReusableTableColumnResizeEndPayload,
 } from "@/components/ui/table";
@@ -41,6 +43,9 @@ const GRID_COLUMNS_LIMIT = 20;
 const MASTER_SERIAL_COLUMN_WIDTH = "40px";
 const MASTER_ACTIONS_COLUMN_WIDTH = "72px";
 const RESPONSE_TABLE_DEFAULT_COLUMN_WIDTH = "180px";
+const GRID_SETTINGS_CONTEXT_MENU_WIDTH = 190;
+const GRID_SETTINGS_CONTEXT_MENU_HEIGHT = 96;
+const GRID_SETTINGS_CONTEXT_MENU_PADDING = 8;
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
@@ -82,6 +87,13 @@ const PAGE_SIZE_KEYS = [
   "perPage",
   "per_page",
 ] as const;
+type ContextMenuPosition = Pick<CSSProperties, "left" | "top">;
+function clampContextMenuPosition(value: number, min: number, max: number): number {
+  if (max < min) {
+    return min;
+  }
+  return Math.min(Math.max(value, min), max);
+}
 const DEFAULT_ACTIVE_KEYS = [
   "active",
   "is_active",
@@ -305,6 +317,7 @@ export type CrudMasterPageProps = {
   modalFocusFirstInvalidFieldOnValidationError?: boolean;
   modalEnableArrowKeyFieldNavigation?: boolean;
   auditHistory?: CrudMasterAuditHistoryConfig;
+  enableGridSettingsContextMenu?: boolean;
   gridDetailId?: number;
   gridTableName?: string;
   gridTableNameAliases?: readonly string[];
@@ -2156,6 +2169,7 @@ export default function CrudMasterPage({
   modalFocusFirstInvalidFieldOnValidationError,
   modalEnableArrowKeyFieldNavigation,
   auditHistory,
+  enableGridSettingsContextMenu = true,
   gridDetailId,
   gridTableName,
   gridTableNameAliases,
@@ -2532,6 +2546,8 @@ export default function CrudMasterPage({
   const [pendingDeleteRow, setPendingDeleteRow] =
     useState<MasterTableRow | null>(null);
   const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
+  const [gridSettingsContextMenuPosition, setGridSettingsContextMenuPosition] =
+    useState<ContextMenuPosition | null>(null);
   const [gridSettingsMode, setGridSettingsMode] = useState<"filter" | "visibility" | null>(null);
   const [gridSettingsSelections, setGridSettingsSelections] = useState<Record<string, boolean>>({});
   const [gridSettingsSaving, setGridSettingsSaving] = useState(false);
@@ -2566,6 +2582,36 @@ export default function CrudMasterPage({
     setGridSettingsMode(mode);
     setSearchSettingsOpen(false);
   }, [gridSettingsColumns]);
+  const openGridSettingsModalFromContextMenu = useCallback(
+    (mode: "filter" | "visibility") => {
+      setGridSettingsContextMenuPosition(null);
+      openGridSettingsModal(mode);
+    },
+    [openGridSettingsModal],
+  );
+  const handleTableBodyContextMenu = useCallback(
+    ({ event }: ReusableTableBodyContextMenuPayload<MasterTableRow>) => {
+      if (!enableGridSettingsContextMenu || gridSettingsColumns.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setSearchSettingsOpen(false);
+      setGridSettingsContextMenuPosition({
+        left: clampContextMenuPosition(
+          event.clientX,
+          GRID_SETTINGS_CONTEXT_MENU_PADDING,
+          window.innerWidth - GRID_SETTINGS_CONTEXT_MENU_WIDTH,
+        ),
+        top: clampContextMenuPosition(
+          event.clientY,
+          GRID_SETTINGS_CONTEXT_MENU_PADDING,
+          window.innerHeight - GRID_SETTINGS_CONTEXT_MENU_HEIGHT,
+        ),
+      });
+    },
+    [enableGridSettingsContextMenu, gridSettingsColumns.length],
+  );
 
   const closeGridSettingsModal = useCallback(() => {
     if (gridSettingsSaving) {
@@ -2610,6 +2656,45 @@ export default function CrudMasterPage({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [searchSettingsOpen]);
+  useEffect(() => {
+    if (gridSettingsContextMenuPosition === null || typeof document === "undefined") {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-master-grid-settings-context-menu="true"]')) {
+        return;
+      }
+      setGridSettingsContextMenuPosition(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setGridSettingsContextMenuPosition(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [gridSettingsContextMenuPosition]);
+  useEffect(() => {
+    if (gridSettingsContextMenuPosition === null || typeof window === "undefined") {
+      return;
+    }
+
+    const closeContextMenu = () => setGridSettingsContextMenuPosition(null);
+
+    window.addEventListener("resize", closeContextMenu);
+    window.addEventListener("scroll", closeContextMenu, true);
+    return () => {
+      window.removeEventListener("resize", closeContextMenu);
+      window.removeEventListener("scroll", closeContextMenu, true);
+    };
+  }, [gridSettingsContextMenuPosition]);
 
   const saveGridSettings = useCallback(async () => {
     if (gridId === null || gridSettingsMode === null || gridSettingsColumns.length === 0) {
@@ -3408,6 +3493,33 @@ export default function CrudMasterPage({
       searchTerm,
     ],
   );
+  const gridSettingsContextMenu =
+    gridSettingsContextMenuPosition && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className={`${styles.masterSearchSettingsTooltip} ${styles.masterTableContextTooltip}`}
+            data-master-grid-settings-context-menu="true"
+            style={gridSettingsContextMenuPosition}
+            role="tooltip"
+          >
+            <button
+              type="button"
+              className={styles.masterSearchSettingsItem}
+              onClick={() => openGridSettingsModalFromContextMenu("filter")}
+            >
+              grid filter setting
+            </button>
+            <button
+              type="button"
+              className={styles.masterSearchSettingsItem}
+              onClick={() => openGridSettingsModalFromContextMenu("visibility")}
+            >
+              column visible setting
+            </button>
+          </div>,
+          document.body,
+        )
+      : null;
   const masterToolbarContent = (
     <div className={styles.masterHeader}>
       <div className={styles.masterTitleWrap}>
@@ -3463,6 +3575,7 @@ export default function CrudMasterPage({
   );
   return (
     <>
+      {gridSettingsContextMenu}
       {!hideListPage ? (
         <main className={styles.page}>
           <div className={styles.viewport}>
@@ -3545,6 +3658,11 @@ export default function CrudMasterPage({
                   onColumnReorder={handleGridColumnReorder}
                   onColumnResizeEnd={handleGridColumnResizeEnd}
                   onColumnHide={handleGridColumnHide}
+                  onBodyContextMenu={
+                    enableGridSettingsContextMenu
+                      ? handleTableBodyContextMenu
+                      : undefined
+                  }
                   activeRowKey={selectedRowId}
                   onRowClick={(row) => setSelectedRowId(row.__rowId)}
                   onRowDoubleClick={handleRowView}

@@ -1,6 +1,7 @@
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import type { ColumnSchema, LookupKind } from "./Types";
 export const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
+export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-columns/create";
 export const ACCOUNT_LEDGER_LIST_ENDPOINT = "/account-ledger-masters/list";
 export const GODOWN_LIST_ENDPOINT = "/godowns/list";
 export const UNIT_LIST_ENDPOINT = "/units/list";
