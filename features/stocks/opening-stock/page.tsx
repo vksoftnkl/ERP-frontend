@@ -57,7 +57,6 @@ import styles from "./page.module.scss";
 import type {
   AccountLedgerRecord,
   ColumnDefinition,
-  GodownLookupRecord,
   LoadedOpeningStockMeta,
   LookupCellState,
   LookupKind,
@@ -599,9 +598,8 @@ export default function OpeningStockPage() {
       error: false,
     },
   });
-  const { run: listGodowns, loading: isGodownLookupLoading } = useApi<
-    ApiSuccessResponse<GodownLookupRecord[], ListMeta>
-  >(GODOWN_LIST_ENDPOINT, {
+  const { run: listGodowns, loading: isGodownLookupLoading } = useApi<unknown>(
+    GODOWN_LIST_ENDPOINT, {
     toast: {
       success: false,
       error: false,
@@ -682,13 +680,9 @@ export default function OpeningStockPage() {
         ).unwrap();
       }
       const activeBranchId = activeBranch?.brId?.trim() ?? "";
-      if (!activeBranchId) {
-        return [DEFAULT_GODOWN_OPTION];
-      }
       const payload = await listGodowns({
         query: {
           ...GODOWN_LOOKUP_QUERY,
-          gdl_branch_id: activeBranchId,
           ...(normalizedSearch ? { search: normalizedSearch } : {}),
         },
       });

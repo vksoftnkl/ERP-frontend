@@ -216,13 +216,16 @@ export function buildGodownLookupOptions(
     "list",
     "godowns",
     "godown_locations",
+    "godownLocations",
+    "locations",
+    "warehouses",
   ]);
   const optionMap = new Map<string, string>();
 
   for (const row of rows) {
-    const value = row.gdl_id?.trim() ?? "";
-    const label = row.gdl_name?.trim() ?? "";
-    const rowBranchId = row.gdl_branch_id?.trim() ?? "";
+    const value = getGodownLookupField(row, GODOWN_LOOKUP_ID_KEYS);
+    const label = getGodownLookupField(row, GODOWN_LOOKUP_LABEL_KEYS) || value;
+    const rowBranchId = getGodownLookupField(row, GODOWN_LOOKUP_BRANCH_ID_KEYS);
 
     if (!value || !label) {
       continue;
@@ -240,6 +243,56 @@ export function buildGodownLookupOptions(
   );
 
   return [DEFAULT_GODOWN_OPTION, ...options];
+}
+
+const GODOWN_LOOKUP_ID_KEYS = [
+  "gdl_id",
+  "gdlId",
+  "gdl_location_id",
+  "godown_id",
+  "godownId",
+  "id",
+  "_id",
+  "value",
+  "Location ID",
+  "location id",
+] as const;
+
+const GODOWN_LOOKUP_LABEL_KEYS = [
+  "gdl_name",
+  "gdlName",
+  "godown_name",
+  "godownName",
+  "name",
+  "label",
+  "Location Name",
+  "location name",
+] as const;
+
+const GODOWN_LOOKUP_BRANCH_ID_KEYS = [
+  "gdl_branch_id",
+  "gdlBranchId",
+  "branch_id",
+  "branchId",
+  "Branch ID",
+  "branch id",
+] as const;
+
+function getGodownLookupField(
+  row: GodownLookupRecord,
+  keys: readonly (keyof GodownLookupRecord)[],
+): string {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+
+  return "";
 }
 
 type UnitDecimalRecord = {

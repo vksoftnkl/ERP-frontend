@@ -3,7 +3,7 @@ import type { ColumnSchema, LookupKind } from "./Types";
 export const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
 export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-columns/create";
 export const ACCOUNT_LEDGER_LIST_ENDPOINT = "/account-ledger-masters/list";
-export const GODOWN_LIST_ENDPOINT = "/godowns/list";
+export const GODOWN_LIST_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 export const UNIT_LIST_ENDPOINT = "/units/list";
 export const OPENING_STOCK_SAVE_ENDPOINT = "/opening-stocks";
 export const OPENING_STOCK_LIST_ENDPOINT = "/opening-stocks/list";
@@ -61,9 +61,8 @@ export const PROFIT_TYPE_OPTION_LABELS: Record<
 export const ROUND_OFF_OPTIONS = ["0.01", "0.5", "1", "5", "10", "50", "100"] as const;
 export const CESS_TYPE_OPTIONS = ["NONE", "PERCENT", "PER_UNIT"] as const;
 export const GODOWN_LOOKUP_QUERY = {
-  page: "1",
+  module: "godownLocations",
   limit: "100",
-  gdl_is_active: "true",
 } as const;
 export const UNIT_LIST_QUERY = {
   page: "1",

@@ -50,8 +50,29 @@ export type AccountLedgerRecord = {
 
 export type GodownLookupRecord = {
   gdl_id?: string | null;
+  gdlId?: string | null;
+  gdl_location_id?: string | null;
+  godown_id?: string | null;
+  godownId?: string | null;
+  id?: string | null;
+  _id?: string | null;
+  value?: string | null;
+  "Location ID"?: string | null;
+  "location id"?: string | null;
   gdl_name?: string | null;
+  gdlName?: string | null;
+  godown_name?: string | null;
+  godownName?: string | null;
+  name?: string | null;
+  label?: string | null;
+  "Location Name"?: string | null;
+  "location name"?: string | null;
   gdl_branch_id?: string | null;
+  gdlBranchId?: string | null;
+  branch_id?: string | null;
+  branchId?: string | null;
+  "Branch ID"?: string | null;
+  "branch id"?: string | null;
 };
 
 export type LoadedOpeningStockMeta = {
