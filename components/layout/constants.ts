@@ -105,7 +105,10 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
   {
     label: "Stock",
     iconKey: "stock",
-    children: [{ label: "Opening Stock", href: "/stock/opening-stock" }],
+    children: [
+      { label: "Opening Stock", href: "/stock/opening-stock" },
+      { label: "Physical Stock", href: "/stock/physical-stock" },
+    ],
   },
   {
     label: "Accounts",
@@ -231,6 +234,7 @@ export const ERP_MENU_OBJECT: ERPMenuObject = {
   },
   Stock: {
     "Opening Stock": null,
+    "Physical Stock": null,
   },
   Inventory: {
     "Item Master": "Ctrl+I",
