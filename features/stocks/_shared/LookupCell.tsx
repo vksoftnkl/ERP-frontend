@@ -1,12 +1,20 @@
 "use client";
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
+
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { FiChevronDown, FiSearch } from "react-icons/fi";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import type { ERPDynamicSearchShortcutPayload } from "@/components/library/ui/dynamic-modal-form";
-import { LOOKUP_FIELD_CONFIG } from "./constants";
-import type { LookupKind } from "./Types";
-import { cx } from "./Utils";
-import styles from "./page.module.scss";
+import type { LookupKind } from "./types";
+
+type StockLookupCellStyles = Record<string, string>;
+
 type LookupCellProps = {
   rowId: number;
   fieldKey: string;
@@ -18,10 +26,12 @@ type LookupCellProps = {
   selectedLabel: string;
   placeholder?: string;
   header: string;
+  emptyMessage: string;
   options: ERPDynamicSelectOption[];
   searchQuery: string;
   shortcutValues?: Record<string, string>;
   hasValidationError: boolean;
+  styles: StockLookupCellStyles;
   searchInputRef: RefObject<HTMLInputElement | null>;
   rootRef: (element: HTMLDivElement | null) => void;
   onToggle: () => void;
@@ -35,6 +45,11 @@ type LookupCellProps = {
   onSearchChange: (search: string) => void;
   onSelect: (option: ERPDynamicSelectOption) => void;
 };
+
+function cx(...tokens: Array<string | false | undefined>): string {
+  return tokens.filter(Boolean).join(" ");
+}
+
 function getInitialHighlightedIndex(
   options: ERPDynamicSelectOption[],
   selectedId: string,
@@ -42,9 +57,11 @@ function getInitialHighlightedIndex(
   if (options.length === 0) {
     return -1;
   }
+
   const selectedIndex = options.findIndex((option) => option.value === selectedId);
   return selectedIndex >= 0 ? selectedIndex : 0;
 }
+
 export function LookupCell({
   rowId,
   fieldKey,
@@ -56,10 +73,12 @@ export function LookupCell({
   selectedLabel,
   placeholder,
   header,
+  emptyMessage,
   options,
   searchQuery,
   shortcutValues,
   hasValidationError,
+  styles,
   searchInputRef,
   rootRef,
   onToggle,
@@ -75,17 +94,21 @@ export function LookupCell({
   const listboxId = `${cellKey}-lookup-listbox`;
   const activeOption = highlightedIndex >= 0 ? options[highlightedIndex] : undefined;
   const activeOptionId = activeOption ? `${cellKey}-${activeOption.value}-option` : undefined;
+
   useEffect(() => {
     setHighlightedIndex(isOpen ? getInitialHighlightedIndex(options, selectedId) : -1);
   }, [isOpen, options, selectedId]);
+
   useEffect(() => {
     if (!isOpen || !activeOption) {
       return;
     }
+
     optionRefs.current[activeOption.value]?.scrollIntoView({
       block: "nearest",
     });
   }, [activeOption, isOpen]);
+
   function handleShortcutKeyDown(
     event: ReactKeyboardEvent<HTMLElement>,
     query: string,
@@ -97,6 +120,7 @@ export function LookupCell({
       value: selectedId,
       values: { ...(shortcutValues ?? {}) },
     };
+
     if (
       event.altKey &&
       !event.ctrlKey &&
@@ -109,6 +133,7 @@ export function LookupCell({
       void onSearchCreateShortcut(shortcutPayload);
       return true;
     }
+
     if (
       event.altKey &&
       !event.ctrlKey &&
@@ -121,15 +146,19 @@ export function LookupCell({
       void onSearchEditShortcut(shortcutPayload);
       return true;
     }
+
     return false;
   }
+
   function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>): void {
     if (handleShortcutKeyDown(event, searchQuery)) {
       return;
     }
+
     if (event.altKey || event.ctrlKey || event.metaKey) {
       return;
     }
+
     if (event.key === "ArrowDown") {
       if (options.length === 0) {
         return;
@@ -140,6 +169,7 @@ export function LookupCell({
       );
       return;
     }
+
     if (event.key === "ArrowUp") {
       if (options.length === 0) {
         return;
@@ -148,6 +178,7 @@ export function LookupCell({
       setHighlightedIndex((currentIndex) => Math.max(currentIndex <= 0 ? 0 : currentIndex - 1, 0));
       return;
     }
+
     if (event.key === "Enter") {
       if (!activeOption) {
         return;
@@ -156,16 +187,19 @@ export function LookupCell({
       handleOptionSelect(activeOption);
     }
   }
+
   function handleOptionSelect(option: ERPDynamicSelectOption): void {
     onSelect(option);
     window.requestAnimationFrame(() => {
       triggerButtonRef.current?.focus();
     });
   }
+
   return (
     <div
       className={styles.lookupCell}
       ref={rootRef}
+      data-stock-lookup-kind={lookupKind}
     >
       <button
         ref={triggerButtonRef}
@@ -255,7 +289,7 @@ export function LookupCell({
               ))
             ) : (
               <div className={styles.lookupEmptyState}>
-                {isLoading ? "Loading options..." : LOOKUP_FIELD_CONFIG[lookupKind].emptyMessage}
+                {isLoading ? "Loading options..." : emptyMessage}
               </div>
             )}
           </div>

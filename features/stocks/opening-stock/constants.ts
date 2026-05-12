@@ -1,9 +1,33 @@
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import {
+  DEFAULT_GODOWN_OPTION,
+  DEFAULT_ITEM_OPTION,
+  DELETE_ACTION_COLUMN_WIDTH,
+  GODOWN_LIST_ENDPOINT,
+  GODOWN_LOOKUP_QUERY,
+  LOOKUP_SEARCH_DEBOUNCE_MS,
+  MIN_RESIZABLE_COLUMN_WIDTH,
+  QUANTITY_FORMATTER,
+  SERIAL_NUMBER_COLUMN_WIDTH,
+  VALUE_FORMATTER,
+} from "@/features/stocks/_shared/constants";
 import type { ColumnSchema, LookupKind } from "./Types";
+
+export {
+  DEFAULT_GODOWN_OPTION,
+  DEFAULT_ITEM_OPTION,
+  DELETE_ACTION_COLUMN_WIDTH,
+  GODOWN_LIST_ENDPOINT,
+  GODOWN_LOOKUP_QUERY,
+  LOOKUP_SEARCH_DEBOUNCE_MS,
+  MIN_RESIZABLE_COLUMN_WIDTH,
+  QUANTITY_FORMATTER,
+  SERIAL_NUMBER_COLUMN_WIDTH,
+  VALUE_FORMATTER,
+} from "@/features/stocks/_shared/constants";
+
 export const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
 export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-columns/create";
 export const ACCOUNT_LEDGER_LIST_ENDPOINT = "/account-ledger-masters/list";
-export const GODOWN_LIST_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 export const UNIT_LIST_ENDPOINT = "/units/list";
 export const OPENING_STOCK_SAVE_ENDPOINT = "/opening-stocks";
 export const OPENING_STOCK_LIST_ENDPOINT = "/opening-stocks/list";
@@ -19,10 +43,6 @@ export const UI_TABLE_COLUMNS_TOAST_OPTIONS = {
   error: false,
 } as const;
 export const OPENING_STOCK_LEDGER_NAME = "opening stock";
-export const LOOKUP_SEARCH_DEBOUNCE_MS = 250;
-export const DELETE_ACTION_COLUMN_WIDTH = "68px";
-export const SERIAL_NUMBER_COLUMN_WIDTH = "112px";
-export const MIN_RESIZABLE_COLUMN_WIDTH = 80;
 export const TRACKING_OPTIONS = ["0", "1", "2"] as const;
 export const TRACKING_TYPE_OPTION_LABELS: Record<
   (typeof TRACKING_OPTIONS)[number],
@@ -60,10 +80,6 @@ export const PROFIT_TYPE_OPTION_LABELS: Record<
 };
 export const ROUND_OFF_OPTIONS = ["0.01", "0.5", "1", "5", "10", "50", "100"] as const;
 export const CESS_TYPE_OPTIONS = ["NONE", "PERCENT", "PER_UNIT"] as const;
-export const GODOWN_LOOKUP_QUERY = {
-  module: "godownLocations",
-  limit: "100",
-} as const;
 export const UNIT_LIST_QUERY = {
   page: "1",
   limit: "100",
@@ -76,14 +92,6 @@ export const BATCH_TRACKING_FIELD_KEYS = new Set([
   "mfgdate",
   "expirydate",
 ]);
-export const DEFAULT_ITEM_OPTION: ERPDynamicSelectOption = {
-  value: "",
-  label: "",
-};
-export const DEFAULT_GODOWN_OPTION: ERPDynamicSelectOption = {
-  value: "",
-  label: "",
-};
 export const LOOKUP_FIELD_CONFIG: Record<
   LookupKind,
   {
@@ -476,14 +484,6 @@ export const ITEM_AUTOFILL_FIELD_KEYS = [
   "oslcessperc",
   "oslcessperunit",
 ] as const;
-export const QUANTITY_FORMATTER = new Intl.NumberFormat("en-IN", {
-  minimumFractionDigits: 3,
-  maximumFractionDigits: 3,
-});
-export const VALUE_FORMATTER = new Intl.NumberFormat("en-IN", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 export const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 export const ISO_DATE_TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T/;
 export const DISPLAY_DATE_PATTERN = /^(\d{2})\/(\d{2})\/(\d{4})$/;

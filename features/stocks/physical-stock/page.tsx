@@ -43,14 +43,14 @@ import {
   QUANTITY_FORMATTER,
   SERIAL_NUMBER_COLUMN_WIDTH,
   VALUE_FORMATTER,
-} from "@/features/stocks/opening-stock/constants";
-import { LookupCell } from "@/features/stocks/opening-stock/LookupCell";
+} from "@/features/stocks/_shared/constants";
+import { LookupCell } from "@/features/stocks/_shared/LookupCell";
 import type {
   ColumnAlign,
   ColumnKind,
   LookupCellState,
   LookupKind,
-} from "@/features/stocks/opening-stock/Types";
+} from "@/features/stocks/_shared/types";
 import {
   buildGodownLookupOptions,
   buildUomOptions,
@@ -74,7 +74,7 @@ import {
   toIsoDateTime,
   toNullableTrimmedString,
 } from "@/features/stocks/opening-stock/Utils";
-import styles from "@/features/stocks/opening-stock/page.module.scss";
+import styles from "@/features/stocks/_shared/stock-page.module.scss";
 
 type PhysicalStockColumn = {
   key: string;
@@ -683,7 +683,10 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Ph
   }
 
   const visibleColumns = [...configuredColumns]
-    .filter((column) => column.uiTblClmColumnVisibility !== false)
+    .filter((column) => {
+      const key = normalizeColumnName(column.uiTblClmName ?? "");
+      return key === "barcode" || column.uiTblClmColumnVisibility !== false;
+    })
     .sort((left, right) => {
       const leftPosition = left.uiTblClmColumnPosition ?? Number.MAX_SAFE_INTEGER;
       const rightPosition = right.uiTblClmColumnPosition ?? Number.MAX_SAFE_INTEGER;
@@ -720,6 +723,20 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Ph
       width: toColumnWidth(configuredColumn.uiTblClmColumnWidth, schema.width),
     });
     seenKeys.add(key);
+  }
+
+  if (!seenKeys.has("barcode")) {
+    const barcodeSchema = PHYSICAL_STOCK_COLUMN_SCHEMA.get("barcode");
+    const barcodeConfig = configuredColumns.find(
+      (column) => normalizeColumnName(column.uiTblClmName ?? "") === "barcode",
+    );
+    if (barcodeSchema) {
+      resolvedColumns.unshift({
+        ...barcodeSchema,
+        header: barcodeConfig?.uiTblClmName?.trim() || barcodeSchema.header,
+        width: toColumnWidth(barcodeConfig?.uiTblClmColumnWidth, barcodeSchema.width),
+      });
+    }
   }
 
   return resolvedColumns;
@@ -1749,10 +1766,12 @@ export default function PhysicalStockPage() {
           selectedLabel={selectedLabel}
           placeholder={`Search ${column.header}`}
           header={column.header}
+          emptyMessage={lookupKind === "item" ? "No items found." : "No godowns found."}
           options={options}
           searchQuery={lookupSearchQuery}
           shortcutValues={row.values}
           hasValidationError={invalid}
+          styles={styles}
           searchInputRef={lookupSearchInputRef}
           rootRef={(element) => {
             lookupRootRefs.current[cellKey] = element;
@@ -1764,14 +1783,12 @@ export default function PhysicalStockPage() {
         />
       );
     }
-
     if (column.key === "uom") {
       const currentItemId = row.values.oslitemid?.trim() ?? "";
       const itemDetail = currentItemId ? itemDetailsByItemId[currentItemId] : undefined;
       const rowUomOptions = itemDetail
         ? buildUomOptions(itemDetail, unitOptionsByValue)
         : unitOptions.filter((option) => option.value);
-
       return (
         <select
           data-opening-stock-field-control="true"
@@ -1796,7 +1813,6 @@ export default function PhysicalStockPage() {
         </select>
       );
     }
-
     if (column.kind === "select") {
       return (
         <select
@@ -1821,7 +1837,6 @@ export default function PhysicalStockPage() {
         </select>
       );
     }
-
     if (column.kind === "date") {
       const datePickerKey = `${row.id}:${column.key}`;
       return (
@@ -1872,7 +1887,6 @@ export default function PhysicalStockPage() {
         </div>
       );
     }
-
     return (
       <input
         data-opening-stock-field-control="true"
@@ -1910,7 +1924,6 @@ export default function PhysicalStockPage() {
       />
     );
   };
-
   return (
     <section className={styles.page}>
       <header className={styles.header}>
@@ -1920,7 +1933,6 @@ export default function PhysicalStockPage() {
           </div>
         </div>
       </header>
-
       <div className={styles.tableShell}>
         <div className={styles.toolbar}>
           <div className={styles.tableTools}>
@@ -1997,7 +2009,6 @@ export default function PhysicalStockPage() {
             </button>
           </div>
         </div>
-
         <div
           className={styles.tableViewport}
           data-erp-table-viewport="true"

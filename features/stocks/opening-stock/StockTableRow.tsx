@@ -11,12 +11,12 @@ import { FiCalendar, FiTrash2 } from "react-icons/fi";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import type { ERPDynamicSearchShortcutPayload } from "@/components/library/ui/dynamic-modal-form";
 import type { ItemPriceDetailsPayload } from "@/store/api/lookupsApi";
+import { LookupCell } from "@/features/stocks/_shared/LookupCell";
 import {
   PROFIT_TYPE_OPTION_LABELS,
   TRACKING_TYPE_OPTION_LABELS,
   LOOKUP_FIELD_CONFIG,
 } from "./constants";
-import { LookupCell } from "./LookupCell";
 import type {
   ColumnDefinition,
   LookupCellState,
@@ -40,7 +40,7 @@ import {
   openDatePicker,
   toCanonicalDateValue,
 } from "./Utils";
-import styles from "./page.module.scss";
+import styles from "@/features/stocks/_shared/stock-page.module.scss";
 type StockTableRowProps = {
   row: OpeningStockRow;
   rowIndex: number;
@@ -279,10 +279,12 @@ export function StockTableRow({
                 selectedLabel={selectedLookupLabel}
                 placeholder={column.placeholder}
                 header={column.header}
+                emptyMessage={lookupFieldConfig.emptyMessage}
                 options={lookupOptions}
                 searchQuery={lookupSearchQuery}
                 shortcutValues={row.values}
                 hasValidationError={hasValidationError}
+                styles={styles}
                 searchInputRef={lookupSearchInputRef}
                 rootRef={(element) => {
                   lookupRootRefs.current[cellLookupKey] = element;

@@ -1,6 +1,11 @@
-export type ColumnAlign = "left" | "center" | "right";
-export type ColumnKind = "text" | "number" | "date" | "select" | "lookup";
-export type LookupKind = "item" | "godown";
+export type {
+  ColumnAlign,
+  ColumnKind,
+  LookupCellState,
+  LookupKind,
+} from "@/features/stocks/_shared/types";
+
+import type { ColumnAlign, ColumnKind, LookupKind } from "@/features/stocks/_shared/types";
 export type UiTableColumnPayload = {
   uiTblClmId?: string;
   uiTblClmNo?: string;
@@ -73,8 +78,4 @@ export type LoadedOpeningStockMeta = {
   voucherDate: string;
   companyId: string;
   branchId: string;
-};
-export type LookupCellState = {
-  key: string;
-  kind: LookupKind;
 };

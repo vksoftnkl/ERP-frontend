@@ -1,7 +1,7 @@
 "use client";
 import { type ReactNode, useEffect, useRef } from "react";
 import { FiX } from "react-icons/fi";
-import styles from "./page.module.scss";
+import styles from "@/features/stocks/_shared/stock-page.module.scss";
 const MAX_AUDIT_NOTES_LENGTH = 1000;
 type OpeningStockAuditNotesModalProps = {
   isOpen: boolean;

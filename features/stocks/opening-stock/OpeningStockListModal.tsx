@@ -8,7 +8,7 @@ import {
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
 import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import type { OpeningStockHeaderPayload } from "./opening-stock.types";
-import styles from "./page.module.scss";
+import styles from "@/features/stocks/_shared/stock-page.module.scss";
 import { QUANTITY_FORMATTER, VALUE_FORMATTER } from "./constants";
 import { cx, formatDateForDisplay } from "./Utils";
 

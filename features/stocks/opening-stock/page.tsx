@@ -53,7 +53,7 @@ import type {
   OpeningStockSaveRequest,
   OpeningStockSuccessResponse,
 } from "./opening-stock.types";
-import styles from "./page.module.scss";
+import styles from "@/features/stocks/_shared/stock-page.module.scss";
 import type {
   AccountLedgerRecord,
   ColumnDefinition,
