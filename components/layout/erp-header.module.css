@@ -170,9 +170,7 @@
   padding: 6px;
   min-width: 232px;
   max-width: min(340px, calc(100vw - 24px));
-  max-height: calc(100vh - 124px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: visible;
   list-style: none;
   background: #fff;
   border: 1px solid rgba(148, 163, 184, 0.36);
@@ -196,8 +194,8 @@
 
 .submenuLevelNested {
   top: -7px;
-  left: calc(100% - 1px);
-  --submenu-shift-x: 10px;
+  left: calc(100% + 8px);
+  --submenu-shift-x: 8px;
   --submenu-shift-y: 0;
 }
 
@@ -691,13 +689,14 @@
   }
 
   .primaryMenuList {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 2px;
+    flex-wrap: wrap;
+    overflow: visible;
+    row-gap: 4px;
+    padding-bottom: 0;
   }
 
   .primaryMenuList::-webkit-scrollbar {
-    height: 6px;
+    display: none;
   }
 
   .headerRight {
@@ -707,13 +706,14 @@
   }
 
   .quickTabsList {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 2px;
+    flex-wrap: wrap;
+    overflow: visible;
+    row-gap: 6px;
+    padding-bottom: 0;
   }
 
   .quickTabsList::-webkit-scrollbar {
-    height: 6px;
+    display: none;
   }
 }
 

@@ -8,28 +8,22 @@ import type {
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
-
 const API_ENDPOINTS = {
   list: "/tender-masters/list",
   getById: "/tender-masters/get",
   create: "/tender-masters/create",
   delete: "/tender-masters/delete",
 } as const;
-
 const GRID_TABLE_NAME = "tender_master";
-
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-
 const LOOKUP_QUERY_TENDER_TYPES = {
   module: "tenderTypes",
   limit: "20",
 } as const;
-
 const LOOKUP_QUERY_ACCOUNT_LEDGERS = {
   module: "accountLedgers",
-  limit: "",
+  limit: "20",
 } as const;
-
 const LOOKUP_KEYS = {
   id: ["tndId", "tnd_id", "id", "_id"],
   code: ["tndDisplayPosition", "tnd_display_position", "position", "sort"],
