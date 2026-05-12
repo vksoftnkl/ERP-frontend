@@ -54,6 +54,7 @@ export type MenuLinkProps = {
   className: string;
   depth: number;
   hasSubmenu: boolean;
+  isCurrentPage?: boolean;
   onNavigate: (destination: string) => void;
   onMenuClose: () => void;
 };
@@ -64,6 +65,7 @@ export type MenuTreeProps = {
   rootLinkClassName: string;
   onNavigate: (destination: string) => void;
   onMenuClose: () => void;
+  currentPath?: string;
   depth?: number;
 };
 

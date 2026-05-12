@@ -1,5 +1,4 @@
 "use client";
-
 import {
   type CSSProperties,
   type DragEvent as ReactDragEvent,
@@ -190,26 +189,22 @@ type InlineGodownMasterRequest = {
   query: string;
   rowId: number;
 };
-
 type OpeningStockListFilters = {
   search: string;
   dateFrom: string;
   dateTo: string;
 };
-
 type OpeningStockEditorState = {
   loadedVoucherId: string | null;
   voucherDate: string;
   voucherRefNo: string;
   rows: OpeningStockRow[];
 };
-
 const DEFAULT_OPENING_STOCK_LIST_FILTERS: OpeningStockListFilters = {
   search: "",
   dateFrom: "",
   dateTo: "",
 };
-
 function createOpeningStockListFiltersForToday(): OpeningStockListFilters {
   const today = toCanonicalDateValue(getTodayInputValue());
   return {
@@ -218,7 +213,6 @@ function createOpeningStockListFiltersForToday(): OpeningStockListFilters {
     dateTo: today,
   };
 }
-
 const EMPTY_OPENING_STOCK_LIST_META: OpeningStockListMeta = {
   page: 1,
   limit: 20,
@@ -228,7 +222,6 @@ const EMPTY_OPENING_STOCK_LIST_META: OpeningStockListMeta = {
 const TABLE_SETTINGS_CONTEXT_MENU_WIDTH = 190;
 const TABLE_SETTINGS_CONTEXT_MENU_HEIGHT = 96;
 const TABLE_SETTINGS_CONTEXT_MENU_PADDING = 8;
-
 type OpeningStockColumnSettingsMode = "filter" | "visibility";
 type TableSettingsContextMenuPosition = Pick<CSSProperties, "left" | "top">;
 type OpeningStockColumnSettingsRow = {
@@ -260,14 +253,12 @@ type SaveOpeningStockUiTableColumnRequest = {
   uiTblClmPreviousColumn: number | null;
   uiTblClmIsActive: boolean;
 };
-
 function clampContextMenuPosition(value: number, min: number, max: number): number {
   if (max < min) {
     return min;
   }
   return Math.min(Math.max(value, min), max);
 }
-
 function compareUiTableColumns(
   left: UiTableColumnPayload,
   right: UiTableColumnPayload,
@@ -277,16 +268,13 @@ function compareUiTableColumns(
   if (leftPosition !== rightPosition) {
     return leftPosition - rightPosition;
   }
-
   const leftNo = Number(left.uiTblClmNo ?? "");
   const rightNo = Number(right.uiTblClmNo ?? "");
   if (Number.isFinite(leftNo) && Number.isFinite(rightNo) && leftNo !== rightNo) {
     return leftNo - rightNo;
   }
-
   return 0;
 }
-
 function getUiTableColumnDraftKey(
   column: UiTableColumnPayload,
   index: number,
@@ -297,7 +285,6 @@ function getUiTableColumnDraftKey(
   }
   return `${column.uiTblClmName ?? "column"}:${index}`;
 }
-
 function buildOpeningStockColumnSettingsRows(
   configuredColumns: UiTableColumnPayload[],
   fallbackColumns: ColumnDefinition[],
@@ -318,7 +305,6 @@ function buildOpeningStockColumnSettingsRows(
       isActive: true,
     }));
   }
-
   return [...configuredColumns]
     .sort(compareUiTableColumns)
     .map((column, index) => {
@@ -340,7 +326,6 @@ function buildOpeningStockColumnSettingsRows(
       };
     });
 }
-
 function buildOpeningStockUiTableColumnRequest(
   row: OpeningStockColumnSettingsRow,
   mode: OpeningStockColumnSettingsMode,
@@ -361,7 +346,6 @@ function buildOpeningStockUiTableColumnRequest(
     uiTblClmIsActive: row.isActive,
   };
 }
-
 function findOpeningStockUiTableColumnConfig(
   configuredColumns: UiTableColumnPayload[],
   columnKey: string,
@@ -372,7 +356,6 @@ function findOpeningStockUiTableColumnConfig(
     ) ?? null
   );
 }
-
 function buildOpeningStockUiTableColumnWidthRequest(
   column: ColumnDefinition,
   configuredColumn: UiTableColumnPayload | null,
@@ -395,7 +378,6 @@ function buildOpeningStockUiTableColumnWidthRequest(
     uiTblClmIsActive: configuredColumn?.uiTblClmIsActive ?? true,
   };
 }
-
 function upsertOpeningStockUiTableColumnConfig(
   configuredColumns: UiTableColumnPayload[],
   savedColumn: UiTableColumnPayload,
@@ -407,18 +389,14 @@ function upsertOpeningStockUiTableColumnConfig(
     const sameColumnId =
       Boolean(savedColumn.uiTblClmId) && column.uiTblClmId === savedColumn.uiTblClmId;
     const sameColumnKey = normalizeColumnName(column.uiTblClmName ?? "") === savedColumnKey;
-
     if (!sameColumnId && !sameColumnKey) {
       return column;
     }
-
     didUpdate = true;
     return savedColumn;
   });
-
   return didUpdate ? nextColumns : [...nextColumns, savedColumn];
 }
-
 function buildOpeningStockEditorSignature({
   loadedVoucherId,
   voucherDate,
@@ -432,25 +410,20 @@ function buildOpeningStockEditorSignature({
     rows: rows.filter((row) => !isPristineRow(row)).map((row) => row.values),
   });
 }
-
 function buildNavigationHref(href: string | URL): string {
   if (typeof href === "string") {
     return href;
   }
-
   return href.toString();
 }
-
 function isSameNavigationTarget(targetHref: string | URL): boolean {
   if (typeof window === "undefined") {
     return false;
   }
-
   const currentUrl = new URL(window.location.href);
   const nextUrl = new URL(buildNavigationHref(targetHref), currentUrl);
   return nextUrl.href === currentUrl.href;
 }
-
 function getOpeningStockVoucherLabel(source: {
   avh_voucher_refno?: string | null;
   osh_voucher_no?: string | null;
@@ -463,7 +436,6 @@ function getOpeningStockVoucherLabel(source: {
     "selected voucher"
   );
 }
-
 function getOpeningStockListErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -473,7 +445,6 @@ function getOpeningStockListErrorMessage(error: unknown): string {
   }
   return "Failed to load opening stock list.";
 }
-
 export default function OpeningStockPage() {
   const router = useRouter();
   const [voucherDate, setVoucherDate] = useState(() => getTodayInputValue());

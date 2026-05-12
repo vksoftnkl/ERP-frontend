@@ -11,13 +11,11 @@ import type { OpeningStockHeaderPayload } from "./opening-stock.types";
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 import { QUANTITY_FORMATTER, VALUE_FORMATTER } from "./constants";
 import { cx, formatDateForDisplay } from "./Utils";
-
 type OpeningStockListFilters = {
   search: string;
   dateFrom: string;
   dateTo: string;
 };
-
 type OpeningStockListColumn = {
   key: string;
   header: string;
@@ -25,7 +23,6 @@ type OpeningStockListColumn = {
   align?: "left" | "center" | "right";
   render: (row: OpeningStockHeaderPayload) => ReactNode;
 };
-
 type OpeningStockListModalProps = {
   isOpen: boolean;
   suspendKeyboardShortcuts?: boolean;
@@ -48,7 +45,6 @@ type OpeningStockListModalProps = {
   onLoadRow: (row: OpeningStockHeaderPayload) => void;
   onLoadSelected: () => void;
 };
-
 const PAGE_SIZE_OPTIONS = [10, 20, 25, 50, 100] as const;
 const OPENING_STOCK_LIST_GRID_ID = 16;
 const GRID_COLUMNS_PAGE = 1;
@@ -71,7 +67,6 @@ const OPENING_STOCK_LIST_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
     keys: ["Esc"],
   },
 ] as const;
-
 function resolveTextValue(
   row: OpeningStockHeaderPayload,
   keys: readonly string[],
@@ -86,11 +81,9 @@ function resolveTextValue(
   }
   return fallback;
 }
-
 function normalizeColumnToken(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
-
 const DEFAULT_OPENING_STOCK_LIST_COLUMNS: OpeningStockListColumn[] = [
   {
     key: "refno",
@@ -165,39 +158,32 @@ const DEFAULT_OPENING_STOCK_LIST_COLUMNS: OpeningStockListColumn[] = [
       ]),
   },
 ];
-
 const OPENING_STOCK_COLUMN_BY_TOKEN = new Map<string, OpeningStockListColumn>();
 DEFAULT_OPENING_STOCK_LIST_COLUMNS.forEach((column) => {
   [column.key, column.header].forEach((candidate) => {
     OPENING_STOCK_COLUMN_BY_TOKEN.set(normalizeColumnToken(candidate), column);
   });
 });
-
 function resolveOpeningStockColumn(
   gridColumn: GridColumnConfig,
 ): OpeningStockListColumn | null {
   const candidates = [gridColumn.accessorKey, gridColumn.key, gridColumn.header];
-
   for (const candidate of candidates) {
     const column = OPENING_STOCK_COLUMN_BY_TOKEN.get(normalizeColumnToken(candidate));
     if (column) {
       return column;
     }
   }
-
   return null;
 }
-
 function buildOpeningStockListColumns(
   gridColumns: GridColumnConfig[],
 ): OpeningStockListColumn[] {
   if (gridColumns.length === 0) {
     return DEFAULT_OPENING_STOCK_LIST_COLUMNS;
   }
-
   const columns: OpeningStockListColumn[] = [];
   const seenKeys = new Set<string>();
-
   gridColumns
     .filter((column) => column.visible)
     .sort((left, right) => left.order - right.order)
@@ -206,11 +192,9 @@ function buildOpeningStockListColumns(
       if (!template) {
         return;
       }
-
       const keyBase = template.key;
       const key = seenKeys.has(keyBase) ? `${keyBase}-${columns.length + 1}` : keyBase;
       seenKeys.add(key);
-
       columns.push({
         ...template,
         key,
@@ -219,10 +203,8 @@ function buildOpeningStockListColumns(
         align: gridColumn.align ?? template.align,
       });
     });
-
   return columns;
 }
-
 function buildPageList(totalPages: number, currentPage: number): Array<number | "ellipsis"> {
   const pages: Array<number | "ellipsis"> = [];
   for (let page = 1; page <= totalPages; page += 1) {
@@ -230,19 +212,16 @@ function buildPageList(totalPages: number, currentPage: number): Array<number | 
       page === 1 ||
       page === totalPages ||
       (page >= currentPage - 1 && page <= currentPage + 1);
-
     if (shouldShow) {
       pages.push(page);
       continue;
     }
-
     if (pages[pages.length - 1] !== "ellipsis") {
       pages.push("ellipsis");
     }
   }
   return pages;
 }
-
 export function OpeningStockListModal({
   isOpen,
   suspendKeyboardShortcuts = false,
@@ -279,7 +258,6 @@ export function OpeningStockListModal({
     () => buildOpeningStockListColumns(gridColumnsData ?? []),
     [gridColumnsData],
   );
-
   const totalPages = Math.max(1, Math.ceil(totalEntries / Math.max(1, pageSize)));
   const currentStartEntry = totalEntries === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const currentEndEntry = totalEntries === 0 ? 0 : Math.min(currentPage * pageSize, totalEntries);
@@ -290,7 +268,6 @@ export function OpeningStockListModal({
   const footerShortcuts = suspendKeyboardShortcuts ? [] : OPENING_STOCK_LIST_SHORTCUTS;
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
-
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -301,31 +278,25 @@ export function OpeningStockListModal({
       document.body.style.overflow = previousOverflow;
     };
   }, [isOpen]);
-
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-
     const focusTimeout = window.setTimeout(() => {
       searchInputRef.current?.focus();
     }, 0);
-
     return () => {
       window.clearTimeout(focusTimeout);
     };
   }, [isOpen]);
-
   useEffect(() => {
     if (!isOpen || !selectedVoucherId) {
       return;
     }
-
     rowRefs.current[selectedVoucherId]?.scrollIntoView({
       block: "nearest",
     });
   }, [isOpen, rows, selectedVoucherId]);
-
   useEffect(() => {
     if (!isOpen || suspendKeyboardShortcuts) {
       return;
@@ -352,7 +323,6 @@ export function OpeningStockListModal({
         if (rows.length === 0) {
           return;
         }
-
         event.preventDefault();
         const currentIndex = rows.findIndex((row) => row.avh_voucher_id === selectedVoucherId);
         const fallbackIndex = event.key === "ArrowDown" ? 0 : rows.length - 1;
@@ -473,7 +443,6 @@ export function OpeningStockListModal({
               </div>
             </label>
           </div>
-
           <div className={styles.stockBrowserTableShell}>
             <div className={styles.stockBrowserTableViewport}>
               <table className={styles.stockBrowserTable}>

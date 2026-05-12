@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiHome } from "react-icons/fi";
+import { FiChevronDown, FiChevronRight, FiHome } from "react-icons/fi";
 import styles from "./erp-header.module.css";
 import { clearAuthSession } from "@/lib/auth/session";
 import { clearBusinessContextSession } from "@/components/layout/business-context";
@@ -98,6 +98,17 @@ function buildRouteLabelLookup(items: ErpHeaderItem[]): Map<string, string> {
   };
   visit(items);
   return lookup;
+}
+
+function getItemRoute(item: ErpHeaderItem): string | null {
+  return toInternalRoute(item.href);
+}
+
+function isMenuItemActive(item: ErpHeaderItem, currentPath?: string): boolean {
+  if (!currentPath) return false;
+  const route = getItemRoute(item);
+  if (route === currentPath) return true;
+  return item.children?.some((child) => isMenuItemActive(child, currentPath)) ?? false;
 }
 
 function getMenuItemElement(element: HTMLElement): HTMLLIElement | null {
@@ -526,6 +537,7 @@ function MenuLink({
   className,
   depth,
   hasSubmenu,
+  isCurrentPage = false,
   onNavigate,
   onMenuClose,
 }: MenuLinkProps) {
@@ -572,12 +584,17 @@ function MenuLink({
       onKeyDown={handleKeyDown}
       role="menuitem"
       aria-haspopup={hasSubmenu ? "menu" : undefined}
+      aria-current={isCurrentPage ? "page" : undefined}
     >
       <span className={styles.menuLinkContent}>
         {Icon ? <Icon className={styles.menuIcon} aria-hidden="true" /> : null}
         <span>{item.label}</span>
       </span>
-      {hasSubmenu && <span className={styles.submenuArrow} aria-hidden="true">&#9656;</span>}
+      {hasSubmenu && (
+        <span className={styles.submenuArrow} aria-hidden="true">
+          {depth === 0 ? <FiChevronDown /> : <FiChevronRight />}
+        </span>
+      )}
     </button>
   );
 }
@@ -590,6 +607,7 @@ function MenuTree({
   rootLinkClassName,
   onNavigate,
   onMenuClose,
+  currentPath,
   depth = 0,
 }: MenuTreeProps) {
   const isRootLevel = depth === 0;
@@ -606,6 +624,8 @@ function MenuTree({
       {items.map((item, index) => {
         const children = item.children ?? [];
         const hasSubmenu = children.length > 0;
+        const isCurrentPage = getItemRoute(item) === currentPath;
+        const isActive = isCurrentPage || children.some((child) => isMenuItemActive(child, currentPath));
         const key = `${item.label}-${depth}-${index}`;
         return (
           <li
@@ -617,9 +637,13 @@ function MenuTree({
           >
             <MenuLink
               item={item}
-              className={isRootLevel ? rootLinkClassName : styles.submenuLink}
+              className={cx(
+                isRootLevel ? rootLinkClassName : styles.submenuLink,
+                isActive && (isRootLevel ? styles.primaryMenuItemActive : styles.submenuLinkActive),
+              )}
               depth={depth}
               hasSubmenu={hasSubmenu}
+              isCurrentPage={isCurrentPage}
               onNavigate={onNavigate}
               onMenuClose={onMenuClose}
             />
@@ -630,6 +654,7 @@ function MenuTree({
                 rootLinkClassName={rootLinkClassName}
                 onNavigate={onNavigate}
                 onMenuClose={onMenuClose}
+                currentPath={currentPath}
                 depth={depth + 1}
               />
             )}
@@ -983,6 +1008,7 @@ export default function ErpHeader({
             rootLinkClassName={styles.primaryMenuItem}
             onNavigate={handleNavigate}
             onMenuClose={closeFocusedMenu}
+            currentPath={pathname ?? undefined}
           />
         </nav>
         <HeaderRight

@@ -2,16 +2,17 @@
   position: sticky;
   top: 0;
   z-index: 150;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
 }
 
 .topHeader {
-  background: #7b1111;
+  background: linear-gradient(180deg, #8b1d1d 0%, #711010 100%);
   color: #fff;
-  border-bottom: 1px solid #5f0000;
-  padding: 4px 8px;
+  border-bottom: 1px solid rgba(71, 0, 0, 0.72);
+  padding: 6px 10px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -25,7 +26,7 @@
 .primaryMenuList {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 4px;
   flex-wrap: wrap;
   margin: 0;
   padding: 0;
@@ -51,14 +52,14 @@
 .menuLinkContent {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   min-width: 0;
 }
 
 .menuIcon {
   flex-shrink: 0;
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   opacity: 0.92;
 }
 
@@ -66,29 +67,54 @@
 .quickTab {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  min-height: 30px;
+  border: 1px solid transparent;
+  border-radius: var(--erp-radius);
+  padding: 7px 9px;
   line-height: 1;
   white-space: nowrap;
   text-decoration: none;
+  letter-spacing: 0;
   transition:
-    color 0.2s ease,
-    text-decoration-color 0.2s ease;
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    color 0.18s ease;
 }
 
 .primaryMenuItem {
   color: #fff;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .quickTab {
-  color: #111;
-  font-size: 14px;
+  color: #1f2937;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.72);
+  border-color: #d8dde6;
 }
 
 .primaryMenuItem:hover,
-.quickTab:hover {
-  text-decoration: underline;
+.menuItem:focus-within > .primaryMenuItem {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.24);
+  box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.42);
+}
+
+.primaryMenuItemActive {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 -2px 0 #ffffff;
+}
+
+.quickTab:hover,
+.menuItem:focus-within > .quickTab {
+  background: #ffffff;
+  border-color: #b8c2d0;
+  color: #7b1111;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
 }
 
 .submenuItemSeparated > .submenuLink {
@@ -111,28 +137,47 @@
 }
 
 .submenuArrow {
-  font-size: 9px;
-  line-height: 1;
-  opacity: 0.9;
-  transform: translateY(1px);
-  transition: transform 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  opacity: 0.82;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
 }
 
+.submenuArrow svg {
+  width: 14px;
+  height: 14px;
+}
+
+.menuItem:hover > .menuLinkWithSubmenu .submenuArrow,
 .menuItem:focus-within > .menuLinkWithSubmenu .submenuArrow {
-  transform: translate(2px, 1px);
+  opacity: 1;
+  transform: translateX(2px);
 }
 
 .submenuList {
   --submenu-shift-x: 0;
-  --submenu-shift-y: 6px;
+  --submenu-shift-y: 8px;
 
   position: absolute;
   margin: 0;
-  padding: 4px 0;
-  min-width: 208px;
+  padding: 6px;
+  min-width: 232px;
+  max-width: min(340px, calc(100vw - 24px));
+  max-height: calc(100vh - 124px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
   background: #fff;
-  box-shadow: 0 14px 26px rgba(16, 24, 40, 0.2);
+  border: 1px solid rgba(148, 163, 184, 0.36);
+  border-radius: var(--erp-radius);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.2);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -145,17 +190,18 @@
 }
 
 .submenuLevelOne {
-  top: calc(100% + 6px);
+  top: calc(100% + 8px);
   left: 0;
 }
 
 .submenuLevelNested {
-  top: -5px;
+  top: -7px;
   left: calc(100% - 1px);
-  --submenu-shift-x: 8px;
+  --submenu-shift-x: 10px;
   --submenu-shift-y: 0;
 }
 
+.menuItem:hover > .submenuList,
 .menuItem:focus-within > .submenuList {
   opacity: 1;
   visibility: visible;
@@ -165,28 +211,35 @@
 
 .submenuLink {
   width: 100%;
-  min-height: 30px;
+  min-height: 34px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 6px 12px;
-  color: #1a2941;
+  gap: 12px;
+  border-radius: var(--erp-radius);
+  padding: 8px 10px;
+  color: #20314a;
   text-decoration: none;
   white-space: nowrap;
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0;
   transition:
     background-color 0.16s ease,
     color 0.16s ease,
-    padding-left 0.16s ease;
+    box-shadow 0.16s ease;
 }
 
 .submenuLink:hover,
 .menuItem:focus-within > .submenuLink {
-  background: #edf4ff;
+  background: #eef5ff;
   color: #0f3d8a;
-  padding-left: 14px;
+}
+
+.submenuLinkActive {
+  background: #e7f0ff;
+  color: #0f3d8a;
+  box-shadow: inset 3px 0 0 #1f6fde;
 }
 
 .primaryMenuItem:focus-visible {
@@ -518,7 +571,7 @@
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
   color: #888;
   border-bottom: 1px solid #eee;
   margin-bottom: 4px;
