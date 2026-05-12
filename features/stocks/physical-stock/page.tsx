@@ -685,7 +685,7 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Ph
   const visibleColumns = [...configuredColumns]
     .filter((column) => {
       const key = normalizeColumnName(column.uiTblClmName ?? "");
-      return key === "barcode" || column.uiTblClmColumnVisibility !== false;
+      return key === "barcode" || key === "uom" || column.uiTblClmColumnVisibility !== false;
     })
     .sort((left, right) => {
       const leftPosition = left.uiTblClmColumnPosition ?? Number.MAX_SAFE_INTEGER;
@@ -735,6 +735,28 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Ph
         ...barcodeSchema,
         header: barcodeConfig?.uiTblClmName?.trim() || barcodeSchema.header,
         width: toColumnWidth(barcodeConfig?.uiTblClmColumnWidth, barcodeSchema.width),
+      });
+    }
+  }
+
+  if (!seenKeys.has("uom")) {
+    const uomSchema = PHYSICAL_STOCK_COLUMN_SCHEMA.get("uom");
+    const uomConfig = configuredColumns.find(
+      (column) => normalizeColumnName(column.uiTblClmName ?? "") === "uom",
+    );
+    if (uomSchema) {
+      const godownIndex = resolvedColumns.findIndex((column) => column.key === "godown");
+      const itemNameIndex = resolvedColumns.findIndex((column) => column.key === "itemname");
+      const insertIndex =
+        godownIndex >= 0
+          ? godownIndex + 1
+          : itemNameIndex >= 0
+            ? itemNameIndex + 1
+            : resolvedColumns.length;
+      resolvedColumns.splice(insertIndex, 0, {
+        ...uomSchema,
+        header: uomConfig?.uiTblClmName?.trim() || uomSchema.header,
+        width: toColumnWidth(uomConfig?.uiTblClmColumnWidth, uomSchema.width),
       });
     }
   }

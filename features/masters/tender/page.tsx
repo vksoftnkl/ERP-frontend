@@ -44,7 +44,6 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "tndRemarks",
   sort: "tndDisplayPosition",
 } as const;
-
 const TENDER_TYPE_ID_KEYS = ["tndTypeId", "tnd_type_id", "typeId", "type_id"] as const;
 const TENDER_LEDGER_ID_KEYS = ["tndLedgerId", "tnd_ledger_id", "ledgerId", "ledger_id"] as const;
 const TENDER_MIN_AMOUNT_KEYS = ["tndMinAmount", "tnd_min_amount", "minAmount", "min_amount"] as const;
@@ -57,29 +56,23 @@ const TENDER_EDIT_SURCHARGE_KEYS = [
   "editSurcharge",
 ] as const;
 const TENDER_EDIT_LEDGER_KEYS = ["tndEditLedger", "tnd_edit_ledger", "editLedger"] as const;
-
 const LOOKUP_ARRAY_KEYS = ["items", "data", "results", "rows", "list"] as const;
-
 const DEFAULT_TENDER_TYPE_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Tender Type",
 };
-
 const DEFAULT_LEDGER_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Account Ledger",
 };
-
 const STATUS_OPTIONS: ERPDynamicSelectOption[] = [
   { label: "Active", value: "true" },
   { label: "Inactive", value: "false" },
 ];
-
 const YES_NO_OPTIONS: ERPDynamicSelectOption[] = [
   { label: "Yes", value: "true" },
   { label: "No", value: "false" },
 ];
-
 const TENDER_INITIAL_FORM_VALUES = {
   masterName: "",
   tndTypeId: "",
@@ -93,7 +86,6 @@ const TENDER_INITIAL_FORM_VALUES = {
   tndEditLedger: "false",
   masterDescription: "",
 } as const;
-
 function buildTenderFormFields(
   tenderTypeOptions: ERPDynamicSelectOption[],
   ledgerOptions: ERPDynamicSelectOption[],
@@ -155,21 +147,17 @@ function buildTenderFormFields(
           if (!trimmedValue) {
             return null;
           }
-
           const maxAmount = Number(trimmedValue);
           if (!Number.isFinite(maxAmount)) {
             return "Max Amount must be a valid number.";
           }
-
           const minAmount = Number((values.tndMinAmount ?? "").trim());
           if (!Number.isFinite(minAmount)) {
             return null;
           }
-
           if (maxAmount < minAmount) {
             return "Max Amount must be greater than or equal to Min Amount.";
           }
-
           return null;
         },
       },
@@ -220,7 +208,6 @@ function buildTenderFormFields(
     },
   ];
 }
-
 function getFirstDefinedValue(
   source: Record<string, unknown>,
   keys: readonly string[],
@@ -231,15 +218,12 @@ function getFirstDefinedValue(
       return value;
     }
   }
-
   return undefined;
 }
-
 function toDisplayValue(value: unknown): string {
   if (value === undefined || value === null) {
     return "";
   }
-
   if (
     typeof value === "string" ||
     typeof value === "number" ||
@@ -248,7 +232,6 @@ function toDisplayValue(value: unknown): string {
   ) {
     return String(value).trim();
   }
-
   if (typeof value === "object") {
     const nested = value as Record<string, unknown>;
     const fallback = nested.value ?? nested.id ?? nested.code ?? nested.name ?? nested.label;
@@ -261,15 +244,12 @@ function toDisplayValue(value: unknown): string {
       return String(fallback);
     }
   }
-
   return "";
 }
-
 function toSelectBoolean(value: unknown, fallback: string): "true" | "false" {
   if (typeof value === "boolean") {
     return value ? "true" : "false";
   }
-
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
     if (normalized === "true" || normalized === "1" || normalized === "yes") {
@@ -279,11 +259,9 @@ function toSelectBoolean(value: unknown, fallback: string): "true" | "false" {
       return "false";
     }
   }
-
   if (typeof value === "number") {
     return value > 0 ? "true" : "false";
   }
-
   const normalizedFallback = fallback.trim().toLowerCase();
   return normalizedFallback === "true" ||
     normalizedFallback === "1" ||
@@ -292,73 +270,57 @@ function toSelectBoolean(value: unknown, fallback: string): "true" | "false" {
     ? "true"
     : "false";
 }
-
 function toNonNegativeInteger(value: string, fallback: number): number {
   const parsed = Number.parseInt(value.trim(), 10);
   if (!Number.isFinite(parsed) || parsed < 0) {
     return fallback;
   }
-
   return Math.floor(parsed);
 }
-
 function toNonNegativeNumber(value: string, fallback: number): number {
   const parsed = Number(value.trim());
   if (!Number.isFinite(parsed) || parsed < 0) {
     return fallback;
   }
-
   return parsed;
 }
-
 function toNullableNumber(value: string): number | null {
   const normalized = value.trim();
   if (!normalized) {
     return null;
   }
-
   const parsed = Number(normalized);
   if (!Number.isFinite(parsed) || parsed < 0) {
     return null;
   }
-
   return parsed;
 }
-
 function toNullableString(value: string): string | null {
   const normalized = value.trim();
   return normalized ? normalized : null;
 }
-
 function toUpdateTenderId(editingItemId: string | number | null): string {
   if (typeof editingItemId === "number" && Number.isFinite(editingItemId)) {
     return String(editingItemId);
   }
-
   if (typeof editingItemId === "string") {
     return editingItemId.trim();
   }
-
   return "";
 }
-
 function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] {
   if (Array.isArray(payload)) {
     return payload;
   }
-
   if (!payload || typeof payload !== "object") {
     return [];
   }
-
   const objectPayload = payload as Record<string, unknown>;
-
   for (const key of arrayKeys) {
     const value = objectPayload[key];
     if (Array.isArray(value)) {
       return value;
     }
-
     if (value && typeof value === "object" && !Array.isArray(value)) {
       const nestedObject = value as Record<string, unknown>;
       for (const nestedKey of arrayKeys) {
@@ -369,93 +331,75 @@ function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] 
       }
     }
   }
-
   const firstArray = Object.values(objectPayload).find((entry) => Array.isArray(entry));
   return Array.isArray(firstArray) ? firstArray : [];
 }
-
 function buildLookupOptions(
   payload: unknown,
   defaultOption: ERPDynamicSelectOption,
 ): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();
   const rows = extractRows(payload, LOOKUP_ARRAY_KEYS);
-
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       continue;
     }
-
     const source = row as Record<string, unknown>;
     const id = toDisplayValue(getFirstDefinedValue(source, ["id", "value"]));
     if (!id) {
       continue;
     }
-
     const name = toDisplayValue(getFirstDefinedValue(source, ["name", "label"]));
     if (!name) {
       continue;
     }
-
     if (!optionMap.has(id)) {
       optionMap.set(id, name);
     }
   }
-
   const options = Array.from(optionMap.entries())
     .map(([value, label]) => ({ value, label }))
     .sort((left, right) => left.label.localeCompare(right.label));
-
   return [defaultOption, ...options];
 }
-
 export default function TenderMasterPage() {
   const { getAll: getTenderTypeLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getLedgerLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-
   const [tenderTypeOptions, setTenderTypeOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_TENDER_TYPE_OPTION,
   ]);
   const [ledgerOptions, setLedgerOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_LEDGER_OPTION,
   ]);
-
   useEffect(() => {
     let mounted = true;
-
     void (async () => {
       try {
         const [tenderTypesPayload, ledgersPayload] = await Promise.all([
           getTenderTypeLookup(LOOKUP_QUERY_TENDER_TYPES),
           getLedgerLookup(LOOKUP_QUERY_ACCOUNT_LEDGERS),
         ]);
-
         if (!mounted) {
           return;
         }
-
         setTenderTypeOptions(buildLookupOptions(tenderTypesPayload, DEFAULT_TENDER_TYPE_OPTION));
         setLedgerOptions(buildLookupOptions(ledgersPayload, DEFAULT_LEDGER_OPTION));
       } catch {
         if (!mounted) {
           return;
         }
-
         setTenderTypeOptions([DEFAULT_TENDER_TYPE_OPTION]);
         setLedgerOptions([DEFAULT_LEDGER_OPTION]);
       }
     })();
-
     return () => {
       mounted = false;
     };
   }, [getLedgerLookup, getTenderTypeLookup]);
-
   const tenderFormFields = useMemo(
     () => buildTenderFormFields(tenderTypeOptions, ledgerOptions),
     [ledgerOptions, tenderTypeOptions],
   );
-
   return (
     <CrudMasterPage
       title="Tender"
@@ -485,7 +429,6 @@ export default function TenderMasterPage() {
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
         const mergedDefaults = { ...TENDER_INITIAL_FORM_VALUES, ...defaults };
-
         return {
           ...TENDER_INITIAL_FORM_VALUES,
           masterName:
@@ -533,11 +476,9 @@ export default function TenderMasterPage() {
           tndEditSurcharge: (values.tndEditSurcharge ?? "false") === "true",
           tndEditLedger: (values.tndEditLedger ?? "false") === "true",
         };
-
         if (shouldUpdate && editingItemId !== null) {
           payload.tndId = toUpdateTenderId(editingItemId);
         }
-
         return payload;
       }}
     />
