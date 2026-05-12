@@ -38,38 +38,30 @@ import type {
   OpeningStockDocumentPayload,
   OpeningStockSaveDetail,
 } from "./opening-stock.types";
-
 export function cx(...tokens: Array<string | false | undefined>): string {
   return tokens.filter(Boolean).join(" ");
 }
-
 export function normalizeColumnName(value: string): string {
   return value.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
 }
-
 export function parseDecimal(value: string | undefined): number {
   const parsed = Number.parseFloat(value ?? "");
   return Number.isFinite(parsed) ? parsed : 0;
 }
-
 export function getOpeningStockActualConvFactor(values: Record<string, string>): number {
   const storedActualConvFactor = parseDecimal(values.oslactualconvfactor);
   if (storedActualConvFactor > 0) {
     return storedActualConvFactor;
   }
-
   return parseDecimal(values.convfactor) || 1;
 }
-
 export function formatQuantityValue(value: number): string {
   return QUANTITY_FORMATTER.format(value).replace(/,/g, "");
 }
-
 function isValidDateParts(year: string, month: string, day: string): boolean {
   const parsedYear = Number(year);
   const parsedMonth = Number(month);
   const parsedDay = Number(day);
-
   if (
     !Number.isInteger(parsedYear) ||
     !Number.isInteger(parsedMonth) ||
@@ -77,7 +69,6 @@ function isValidDateParts(year: string, month: string, day: string): boolean {
   ) {
     return false;
   }
-
   const candidate = new Date(Date.UTC(parsedYear, parsedMonth - 1, parsedDay));
   return (
     candidate.getUTCFullYear() === parsedYear &&
@@ -85,18 +76,15 @@ function isValidDateParts(year: string, month: string, day: string): boolean {
     candidate.getUTCDate() === parsedDay
   );
 }
-
 export function toCanonicalDateValue(value: string | null | undefined): string {
   const normalized = value?.trim();
   if (!normalized) {
     return "";
   }
-
   const isoMatch = normalized.match(ISO_DATE_PATTERN);
   if (isoMatch && isValidDateParts(isoMatch[1], isoMatch[2], isoMatch[3])) {
     return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
   }
-
   const isoDateTimeMatch = normalized.match(ISO_DATE_TIME_PATTERN);
   if (
     isoDateTimeMatch &&
@@ -104,35 +92,28 @@ export function toCanonicalDateValue(value: string | null | undefined): string {
   ) {
     return `${isoDateTimeMatch[1]}-${isoDateTimeMatch[2]}-${isoDateTimeMatch[3]}`;
   }
-
   const displayMatch = normalized.match(DISPLAY_DATE_PATTERN);
   if (displayMatch && isValidDateParts(displayMatch[3], displayMatch[2], displayMatch[1])) {
     return `${displayMatch[3]}-${displayMatch[2]}-${displayMatch[1]}`;
   }
-
   return "";
 }
-
 export function formatDateForDisplay(value: string | null | undefined): string {
   const normalized = toCanonicalDateValue(value);
   if (!normalized) {
     return "";
   }
-
   const [year, month, day] = normalized.split("-");
   if (!year || !month || !day) {
     return "";
   }
-
   return `${day}/${month}/${year}`;
 }
-
 export function formatDateEntry(value: string): string {
   const normalized = value.trim();
   if (normalized.includes("-")) {
     return formatDateForDisplay(normalized);
   }
-
   const digits = normalized.replace(/\D/g, "").slice(0, 8);
   if (digits.length <= 2) {
     return digits;
@@ -140,69 +121,56 @@ export function formatDateEntry(value: string): string {
   if (digits.length <= 4) {
     return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   }
-
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
-
 export function openDatePicker(input: HTMLInputElement | null) {
   if (!input) {
     return;
   }
-
   const pickerInput = input as HTMLInputElement & { showPicker?: () => void };
   if (typeof pickerInput.showPicker === "function") {
     pickerInput.showPicker();
     return;
   }
-
   input.focus();
   input.click();
 }
-
 export function getTodayInputValue(): string {
   const today = new Date();
   const localDate = new Date(today.getTime() - today.getTimezoneOffset() * 60_000);
   return formatDateForDisplay(localDate.toISOString().slice(0, 10));
 }
-
 export function toNullableTrimmedString(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
 }
-
 export function toIsoDateTime(value: string | null | undefined): string | null {
   const normalized = toCanonicalDateValue(value);
   return normalized ? `${normalized}T00:00:00.000Z` : null;
 }
-
 export function toInputDateValue(value: string | null | undefined): string {
   return formatDateForDisplay(value);
 }
-
 export function formatAccountingYear(referenceDate: string | null | undefined): string | null {
   const normalized = toCanonicalDateValue(referenceDate?.trim() || getTodayInputValue());
   const parsedMatch = normalized.match(ISO_DATE_PATTERN);
   if (!parsedMatch) {
     return null;
   }
-
   const year = Number(parsedMatch[1]);
   const month = Number(parsedMatch[2]);
   if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
     return null;
   }
-
   const startYear = month >= 4 ? year : year - 1;
   return `${startYear}-${startYear + 1}`;
 }
-
 export function toInputValue(value: string | number | null | undefined): string {
   if (value === null || value === undefined) {
     return "";
   }
   return typeof value === "string" ? value : String(value);
 }
-
 export function buildGodownLookupOptions(
   payload: ApiSuccessResponse<GodownLookupRecord[], ListMeta> | unknown,
   branchId: string | null | undefined,
@@ -221,12 +189,10 @@ export function buildGodownLookupOptions(
     "warehouses",
   ]);
   const optionMap = new Map<string, string>();
-
   for (const row of rows) {
     const value = getGodownLookupField(row, GODOWN_LOOKUP_ID_KEYS);
     const label = getGodownLookupField(row, GODOWN_LOOKUP_LABEL_KEYS) || value;
     const rowBranchId = getGodownLookupField(row, GODOWN_LOOKUP_BRANCH_ID_KEYS);
-
     if (!value || !label) {
       continue;
     }
@@ -237,14 +203,11 @@ export function buildGodownLookupOptions(
       optionMap.set(value, label);
     }
   }
-
   const options = Array.from(optionMap, ([value, label]) => ({ value, label })).sort(
     (left, right) => left.label.localeCompare(right.label),
   );
-
   return [DEFAULT_GODOWN_OPTION, ...options];
 }
-
 const GODOWN_LOOKUP_ID_KEYS = [
   "gdl_id",
   "gdlId",
@@ -257,7 +220,6 @@ const GODOWN_LOOKUP_ID_KEYS = [
   "Location ID",
   "location id",
 ] as const;
-
 const GODOWN_LOOKUP_LABEL_KEYS = [
   "gdl_name",
   "gdlName",
@@ -268,7 +230,6 @@ const GODOWN_LOOKUP_LABEL_KEYS = [
   "Location Name",
   "location name",
 ] as const;
-
 const GODOWN_LOOKUP_BRANCH_ID_KEYS = [
   "gdl_branch_id",
   "gdlBranchId",
@@ -277,7 +238,6 @@ const GODOWN_LOOKUP_BRANCH_ID_KEYS = [
   "Branch ID",
   "branch id",
 ] as const;
-
 function getGodownLookupField(
   row: GodownLookupRecord,
   keys: readonly (keyof GodownLookupRecord)[],
@@ -291,10 +251,8 @@ function getGodownLookupField(
       }
     }
   }
-
   return "";
 }
-
 type UnitDecimalRecord = {
   unit_id?: string | null;
   unitId?: string | null;
@@ -308,16 +266,13 @@ type UnitDecimalRecord = {
   decimal_count?: number | string | null;
   decimalCount?: number | string | null;
 };
-
 function toUnitDecimalCount(value: number | string | null | undefined): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
     return 0;
   }
-
   return Math.floor(parsed);
 }
-
 export function buildUnitDecimalCountById(payload: unknown): Record<string, number> {
   const rows = extractRows<UnitDecimalRecord>(payload, [
     "data",
@@ -329,7 +284,6 @@ export function buildUnitDecimalCountById(payload: unknown): Record<string, numb
     "itemUnits",
   ]);
   const unitDecimalCountById: Record<string, number> = {};
-
   for (const row of rows) {
     const unitId =
       row.unit_id?.trim() ??
@@ -340,11 +294,9 @@ export function buildUnitDecimalCountById(payload: unknown): Record<string, numb
       row.id?.trim() ??
       row.value?.trim() ??
       "";
-
     if (!unitId) {
       continue;
     }
-
     unitDecimalCountById[unitId] = toUnitDecimalCount(
       row.unit_decimal_count ??
         row.unitDecimalCount ??
@@ -352,10 +304,8 @@ export function buildUnitDecimalCountById(payload: unknown): Record<string, numb
         row.decimalCount,
     );
   }
-
   return unitDecimalCountById;
 }
-
 export function normalizeOpeningStockProfitType(value: string | null | undefined): string {
   const normalized = (value ?? "").trim().toUpperCase();
   if (normalized === "BY_AMOUNT" || normalized === "BY RS" || normalized === "VALUE") {
@@ -366,7 +316,6 @@ export function normalizeOpeningStockProfitType(value: string | null | undefined
   }
   return "BY_PERCENT";
 }
-
 export function normalizeOpeningStockRoundOff(
   value: string | number | null | undefined,
 ): string {
@@ -374,15 +323,12 @@ export function normalizeOpeningStockRoundOff(
   if (!normalized) {
     return "";
   }
-
   const numericValue = parseDecimal(normalized);
   if (numericValue <= 0) {
     return "";
   }
-
   return ROUND_OFF_OPTIONS.find((option) => parseDecimal(option) === numericValue) ?? "";
 }
-
 export function normalizeOpeningStockCessType(value: string | null | undefined): string {
   const normalized = (value ?? "").trim().toUpperCase();
   if (normalized === "PER_UNIT" || normalized === "UNIT") {
@@ -393,7 +339,6 @@ export function normalizeOpeningStockCessType(value: string | null | undefined):
   }
   return "NONE";
 }
-
 export function resolveTrackingType(item: ItemPriceDetailsPayload["item"]): string {
   const batchConfig = item.item_batch_config;
   if (batchConfig === 1) {
@@ -407,7 +352,6 @@ export function resolveTrackingType(item: ItemPriceDetailsPayload["item"]): stri
   }
   return "0";
 }
-
 export function buildTaxSelectionValues(
   taxDetail: ItemTaxDetailPayload | ItemPriceDetailsPayload["item_tax"],
 ): Record<string, string> {
@@ -420,7 +364,6 @@ export function buildTaxSelectionValues(
     oslcessperunit: toInputValue(taxDetail?.tax_cess_unit),
   };
 }
-
 export function buildPriceSelectionValues(
   detail: ItemPriceDetailsPayload,
   priceRecord: ItemPriceDetailsPayload["item_prices"][number] | null,
@@ -436,7 +379,6 @@ export function buildPriceSelectionValues(
   const requestedGodownId = priceRecord?.ipm_godown_id ?? "";
   const resolvedGodownId =
     requestedGodownId && godownOptionsByValue.has(requestedGodownId) ? requestedGodownId : "";
-
   return {
     uom: unitOptionsByValue.get(resolvedUnitId) ?? "",
     godown: godownOptionsByValue.get(resolvedGodownId) ?? "",
@@ -470,13 +412,11 @@ export function buildPriceSelectionValues(
     oslgodownid: toInputValue(resolvedGodownId),
   };
 }
-
 export function resolveDefaultItemPriceRecord(
   itemPrices: ItemPriceDetailsPayload["item_prices"],
 ): ItemPriceDetailsPayload["item_prices"][number] | null {
   return itemPrices.find((record) => record.ipm_is_default_unit) ?? itemPrices[0] ?? null;
 }
-
 export function resolveItemPriceRecordByUnitId(
   detail: ItemPriceDetailsPayload,
   unitId: string,
@@ -485,13 +425,11 @@ export function resolveItemPriceRecordByUnitId(
   if (!normalizedUnitId) {
     return resolveDefaultItemPriceRecord(detail.item_prices);
   }
-
   return (
     detail.item_prices.find((record) => record.ipm_unit_id === normalizedUnitId) ??
     resolveDefaultItemPriceRecord(detail.item_prices)
   );
 }
-
 export function buildUomOptions(
   detail: ItemPriceDetailsPayload | null | undefined,
   unitOptionsByValue: Map<string, string>,
@@ -499,34 +437,28 @@ export function buildUomOptions(
   if (!detail) {
     return [];
   }
-
   const optionMap = new Map<string, string>();
   for (const [index, priceRecord] of detail.item_prices.entries()) {
     if (!priceRecord.ipm_unit_id.trim() || optionMap.has(priceRecord.ipm_unit_id)) {
       continue;
     }
-
     optionMap.set(
       priceRecord.ipm_unit_id,
       unitOptionsByValue.get(priceRecord.ipm_unit_id) ?? `UOM ${index + 1}`,
     );
   }
-
   return Array.from(optionMap, ([value, label]) => ({ value, label }));
 }
-
 export function toColumnWidth(value: number | null | undefined, fallback: string): string {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return fallback;
   }
   return `${value}px`;
 }
-
 export function parseColumnWidth(width: string, fallback = 120): number {
   const parsed = Number.parseFloat(width);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-
 export function reorderColumns(
   current: ColumnDefinition[],
   sourceKey: string,
@@ -535,20 +467,16 @@ export function reorderColumns(
   if (!sourceKey || !targetKey || sourceKey === targetKey) {
     return current;
   }
-
   const next = [...current];
   const sourceIndex = next.findIndex((column) => column.key === sourceKey);
   const targetIndex = next.findIndex((column) => column.key === targetKey);
-
   if (sourceIndex === -1 || targetIndex === -1) {
     return current;
   }
-
   const [moved] = next.splice(sourceIndex, 1);
   next.splice(targetIndex, 0, moved);
   return next;
 }
-
 export function mergeResolvedColumns(
   previous: ColumnDefinition[],
   incoming: ColumnDefinition[],
@@ -556,7 +484,6 @@ export function mergeResolvedColumns(
   if (previous.length === 0) {
     return incoming;
   }
-
   const previousMap = new Map(previous.map((column) => [column.key, column]));
   return incoming.map((column) => {
     const previousColumn = previousMap.get(column.key);
@@ -569,7 +496,6 @@ export function mergeResolvedColumns(
     };
   });
 }
-
 function createUnknownColumnSchema(header: string): ColumnSchema {
   return {
     header,
@@ -579,7 +505,6 @@ function createUnknownColumnSchema(header: string): ColumnSchema {
     placeholder: header,
   };
 }
-
 function toConfiguredNumberInputValue(
   columnKey: keyof typeof COLUMN_SCHEMA,
   value: number | null | undefined,
@@ -587,7 +512,6 @@ function toConfiguredNumberInputValue(
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return DEFAULT_ROW_VALUES[columnKey] ?? "";
   }
-
   const defaultValue = COLUMN_SCHEMA[columnKey]?.defaultValue;
   const decimalPlaces = defaultValue?.includes(".") ? defaultValue.split(".")[1].length : 0;
   if (decimalPlaces > 0) {
@@ -595,23 +519,19 @@ function toConfiguredNumberInputValue(
   }
   return String(value);
 }
-
 function parseOptionalOpeningStockNumber(
   value: string | number | null | undefined,
 ): number | null {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
   }
-
   const normalized = toInputValue(value).trim();
   if (!normalized) {
     return null;
   }
-
   const parsedValue = Number(normalized);
   return Number.isFinite(parsedValue) ? parsedValue : null;
 }
-
 function roundDerivedOpeningStockValue(
   value: number,
   roundOffValue: string | number | null | undefined,
@@ -620,12 +540,10 @@ function roundDerivedOpeningStockValue(
   if (roundOffStep === null || roundOffStep <= 0) {
     return value;
   }
-
   return Number(
     (Math.round((value + Number.EPSILON) / roundOffStep) * roundOffStep).toFixed(4),
   );
 }
-
 export function getOpeningStockTaxExclusiveInputValue(
   columnKey: "costwot" | "priceawot" | "pricebwot" | "pricecwot" | "pricedwot",
   inclusiveValue: string | number | null | undefined,
@@ -649,14 +567,12 @@ export function getOpeningStockCostWotInputValue(
 ): string {
   return getOpeningStockTaxExclusiveInputValue("costwot", costPrice, taxPercentage);
 }
-
 export function getOpeningStockCostInputValue(
   costWot: string | number | null | undefined,
   taxPercentage: string | number | null | undefined,
 ): string {
   return getOpeningStockTaxInclusiveInputValue("costprice", costWot, taxPercentage);
 }
-
 export function getOpeningStockTaxInclusiveInputValue(
   columnKey: "costprice" | "pricea" | "priceb" | "pricec" | "priced",
   taxExclusiveValue: string | number | null | undefined,
@@ -736,9 +652,7 @@ export const OPENING_STOCK_SALE_PRICE_FIELD_PAIRS = [
     markupField: "pricedmarkup",
   },
 ] as const;
-
 type OpeningStockSalePriceFieldPair = (typeof OPENING_STOCK_SALE_PRICE_FIELD_PAIRS)[number];
-
 export function getOpeningStockSalePairDerivedValues(
   values: Record<string, string>,
   fieldPair: OpeningStockSalePriceFieldPair,
@@ -751,7 +665,6 @@ export function getOpeningStockSalePairDerivedValues(
     if (!normalizedMarkup || costPriceValue === null || normalizedProfitType === "MANUAL") {
       return {};
     }
-
     const markupValue = parseOptionalOpeningStockNumber(normalizedMarkup) ?? 0;
     const nextSaleValue = roundDerivedOpeningStockValue(
       normalizedProfitType === "BY_AMOUNT"
@@ -760,7 +673,6 @@ export function getOpeningStockSalePairDerivedValues(
       values.roundoff,
     );
     const nextSaleInputValue = toConfiguredNumberInputValue(fieldPair.saleField, nextSaleValue);
-
     return {
       [fieldPair.saleField]: nextSaleInputValue,
       [fieldPair.saleWotField]: getOpeningStockTaxExclusiveInputValue(
@@ -770,7 +682,6 @@ export function getOpeningStockSalePairDerivedValues(
       ),
     };
   }
-
   if (source === "saleWot") {
     const nextSaleValue = getOpeningStockTaxInclusiveInputValue(
       fieldPair.saleField,
@@ -801,7 +712,6 @@ export function getOpeningStockSalePairDerivedValues(
     ),
   };
 }
-
 const NONE_TRACKING_DISABLED_FIELD_KEYS = new Set([
   "priceawot",
   "priceamarkup",

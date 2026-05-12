@@ -1,7 +1,6 @@
 export type ColumnAlign = "left" | "center" | "right";
 export type ColumnKind = "text" | "number" | "date" | "select" | "lookup";
 export type LookupKind = "item" | "godown";
-
 export type UiTableColumnPayload = {
   uiTblClmId?: string;
   uiTblClmNo?: string;
@@ -16,7 +15,6 @@ export type UiTableColumnPayload = {
   uiTblClmPreviousColumn?: number | null;
   uiTblClmIsActive?: boolean | null;
 };
-
 export type ColumnSchema = {
   header: string;
   defaultWidth: string;
@@ -27,27 +25,22 @@ export type ColumnSchema = {
   options?: readonly string[];
   defaultValue?: string;
 };
-
 export type ColumnDefinition = ColumnSchema & {
   key: string;
   width: string;
 };
-
 export type OpeningStockRow = {
   id: number;
   values: Record<string, string>;
 };
-
 export type RowValidationIssue = {
   fieldKey: string;
   message: string;
 };
-
 export type AccountLedgerRecord = {
   ledId: string;
   ledName: string;
 };
-
 export type GodownLookupRecord = {
   gdl_id?: string | null;
   gdlId?: string | null;
@@ -74,7 +67,6 @@ export type GodownLookupRecord = {
   "Branch ID"?: string | null;
   "branch id"?: string | null;
 };
-
 export type LoadedOpeningStockMeta = {
   voucherId: string;
   voucherLabel: string;
@@ -82,7 +74,6 @@ export type LoadedOpeningStockMeta = {
   companyId: string;
   branchId: string;
 };
-
 export type LookupCellState = {
   key: string;
   kind: LookupKind;

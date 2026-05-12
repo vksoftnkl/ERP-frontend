@@ -2,7 +2,9 @@
 
 import {
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -18,6 +20,7 @@ import {
   type KeyboardShortcutDefinition,
 } from "@/components/library/ui/keyboard-shortcut-hints";
 import { useBusinessContext } from "@/components/layout/business-context";
+import { extractRows } from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";
 import {
   getAuthSessionId,
@@ -36,6 +39,7 @@ import {
   DELETE_ACTION_COLUMN_WIDTH,
   GODOWN_LIST_ENDPOINT,
   GODOWN_LOOKUP_QUERY,
+  MIN_RESIZABLE_COLUMN_WIDTH,
   QUANTITY_FORMATTER,
   SERIAL_NUMBER_COLUMN_WIDTH,
   VALUE_FORMATTER,
@@ -59,6 +63,7 @@ import {
   focusOpeningStockField,
   getTodayInputValue,
   moveOpeningStockFieldFocus,
+  normalizeColumnName,
   openDatePicker,
   parseDecimal,
   resolveDefaultItemPriceRecord,
@@ -199,6 +204,13 @@ type RowValidationIssue = {
 };
 
 const PHYSICAL_STOCK_SAVE_ENDPOINT = "/physical-stock";
+const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
+const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-columns/create";
+const UI_TABLE_COLUMNS_QUERY = {
+  uiTblClmTableId: "6",
+  page: "1",
+  limit: "100",
+} as const;
 const LOOKUP_SEARCH_DEBOUNCE_MS = 250;
 
 const PHYSICAL_STOCK_TABLE_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
@@ -378,6 +390,40 @@ const PHYSICAL_STOCK_COLUMNS: PhysicalStockColumn[] = [
   },
 ];
 
+type UiTableColumnPayload = {
+  uiTblClmId?: string;
+  uiTblClmNo?: string;
+  uiTblClmTableId?: string | null;
+  uiTblClmName: string | null;
+  uiTblClmColumnWidth: number | null;
+  uiTblClmColumnVisibility: boolean | null;
+  uiTblClmColumnFocus?: boolean | null;
+  uiTblClmColumnPosition: number | null;
+  uiTblClmColumnNecessity?: boolean | null;
+  uiTblClmNextColumn?: number | null;
+  uiTblClmPreviousColumn?: number | null;
+  uiTblClmIsActive?: boolean | null;
+};
+
+type SavePhysicalStockUiTableColumnRequest = {
+  uiTblClmId?: string;
+  uiTblClmNo?: string;
+  uiTblClmName: string;
+  uiTblClmTableId: string | null;
+  uiTblClmColumnWidth: number | null;
+  uiTblClmColumnVisibility: boolean;
+  uiTblClmColumnFocus: boolean;
+  uiTblClmColumnPosition: number;
+  uiTblClmColumnNecessity: boolean;
+  uiTblClmNextColumn: number | null;
+  uiTblClmPreviousColumn: number | null;
+  uiTblClmIsActive: boolean;
+};
+
+const PHYSICAL_STOCK_COLUMN_SCHEMA = new Map(
+  PHYSICAL_STOCK_COLUMNS.map((column) => [column.key, column]),
+);
+
 const HIDDEN_ROW_VALUE_DEFAULTS: Record<string, string> = {
   baseunitid: "",
 };
@@ -533,6 +579,150 @@ function getColumnMinWidth(columns: PhysicalStockColumn[]): string {
     parseDecimal(SERIAL_NUMBER_COLUMN_WIDTH) + parseDecimal(DELETE_ACTION_COLUMN_WIDTH),
   );
   return `${Math.max(width, 2800)}px`;
+}
+
+function parseColumnWidth(width: string, fallback = 120): number {
+  const parsed = Number.parseFloat(width);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toColumnWidth(value: number | null | undefined, fallback: string): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return fallback;
+  }
+  return `${value}px`;
+}
+
+function reorderColumns(
+  current: PhysicalStockColumn[],
+  sourceKey: string,
+  targetKey: string,
+): PhysicalStockColumn[] {
+  if (!sourceKey || !targetKey || sourceKey === targetKey) {
+    return current;
+  }
+
+  const next = [...current];
+  const sourceIndex = next.findIndex((column) => column.key === sourceKey);
+  const targetIndex = next.findIndex((column) => column.key === targetKey);
+  if (sourceIndex === -1 || targetIndex === -1) {
+    return current;
+  }
+
+  const [movedColumn] = next.splice(sourceIndex, 1);
+  next.splice(targetIndex, 0, movedColumn);
+  return next;
+}
+
+function findPhysicalStockUiTableColumnConfig(
+  configuredColumns: UiTableColumnPayload[],
+  columnKey: string,
+): UiTableColumnPayload | null {
+  return (
+    configuredColumns.find(
+      (column) => normalizeColumnName(column.uiTblClmName ?? "") === columnKey,
+    ) ?? null
+  );
+}
+
+function buildPhysicalStockUiTableColumnRequest(
+  column: PhysicalStockColumn,
+  configuredColumn: UiTableColumnPayload | null,
+  columnIndex: number,
+  overrides: Partial<Pick<SavePhysicalStockUiTableColumnRequest, "uiTblClmColumnPosition" | "uiTblClmColumnWidth">> = {},
+): SavePhysicalStockUiTableColumnRequest {
+  const fallbackPosition = columnIndex + 1;
+  return {
+    ...(configuredColumn?.uiTblClmId ? { uiTblClmId: configuredColumn.uiTblClmId } : {}),
+    uiTblClmNo: configuredColumn?.uiTblClmNo || String(fallbackPosition),
+    uiTblClmName: configuredColumn?.uiTblClmName?.trim() || column.header || column.key,
+    uiTblClmTableId: configuredColumn?.uiTblClmTableId ?? UI_TABLE_COLUMNS_QUERY.uiTblClmTableId,
+    uiTblClmColumnWidth:
+      overrides.uiTblClmColumnWidth ??
+      configuredColumn?.uiTblClmColumnWidth ??
+      parseColumnWidth(column.width),
+    uiTblClmColumnVisibility: configuredColumn?.uiTblClmColumnVisibility ?? true,
+    uiTblClmColumnFocus: configuredColumn?.uiTblClmColumnFocus ?? false,
+    uiTblClmColumnPosition:
+      overrides.uiTblClmColumnPosition ??
+      configuredColumn?.uiTblClmColumnPosition ??
+      fallbackPosition,
+    uiTblClmColumnNecessity: configuredColumn?.uiTblClmColumnNecessity ?? false,
+    uiTblClmNextColumn: configuredColumn?.uiTblClmNextColumn ?? null,
+    uiTblClmPreviousColumn: configuredColumn?.uiTblClmPreviousColumn ?? null,
+    uiTblClmIsActive: configuredColumn?.uiTblClmIsActive ?? true,
+  };
+}
+
+function upsertPhysicalStockUiTableColumnConfig(
+  configuredColumns: UiTableColumnPayload[],
+  savedColumn: UiTableColumnPayload,
+  fallbackColumnKey: string,
+): UiTableColumnPayload[] {
+  const savedColumnKey = normalizeColumnName(savedColumn.uiTblClmName ?? "") || fallbackColumnKey;
+  let didUpdate = false;
+  const nextColumns = configuredColumns.map((column) => {
+    const sameColumnId =
+      Boolean(savedColumn.uiTblClmId) && column.uiTblClmId === savedColumn.uiTblClmId;
+    const sameColumnKey = normalizeColumnName(column.uiTblClmName ?? "") === savedColumnKey;
+
+    if (!sameColumnId && !sameColumnKey) {
+      return column;
+    }
+
+    didUpdate = true;
+    return savedColumn;
+  });
+
+  return didUpdate ? nextColumns : [...nextColumns, savedColumn];
+}
+
+function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): PhysicalStockColumn[] {
+  if (configuredColumns.length === 0) {
+    return [];
+  }
+
+  const visibleColumns = [...configuredColumns]
+    .filter((column) => column.uiTblClmColumnVisibility !== false)
+    .sort((left, right) => {
+      const leftPosition = left.uiTblClmColumnPosition ?? Number.MAX_SAFE_INTEGER;
+      const rightPosition = right.uiTblClmColumnPosition ?? Number.MAX_SAFE_INTEGER;
+      if (leftPosition !== rightPosition) {
+        return leftPosition - rightPosition;
+      }
+
+      const leftNo = Number(left.uiTblClmNo ?? "");
+      const rightNo = Number(right.uiTblClmNo ?? "");
+      if (Number.isFinite(leftNo) && Number.isFinite(rightNo) && leftNo !== rightNo) {
+        return leftNo - rightNo;
+      }
+      return 0;
+    });
+
+  const seenKeys = new Set<string>();
+  const resolvedColumns: PhysicalStockColumn[] = [];
+
+  for (const configuredColumn of visibleColumns) {
+    const header = configuredColumn.uiTblClmName?.trim() ?? "";
+    if (!header) {
+      continue;
+    }
+
+    const key = normalizeColumnName(header);
+    const schema = PHYSICAL_STOCK_COLUMN_SCHEMA.get(key);
+    if (!schema || seenKeys.has(key)) {
+      continue;
+    }
+
+    resolvedColumns.push({
+      ...schema,
+      header,
+      width: toColumnWidth(configuredColumn.uiTblClmColumnWidth, schema.width),
+    });
+    seenKeys.add(key);
+  }
+
+  return resolvedColumns;
 }
 
 function buildDocumentNumber(voucherRefNo: string): number {
@@ -756,6 +946,8 @@ export default function PhysicalStockPage() {
     DEFAULT_GODOWN_OPTION,
   ]);
   const [unitOptions, setUnitOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [columns, setColumns] = useState<PhysicalStockColumn[]>(PHYSICAL_STOCK_COLUMNS);
+  const [uiColumnConfigs, setUiColumnConfigs] = useState<UiTableColumnPayload[]>([]);
   const [itemDetailsByItemId, setItemDetailsByItemId] = useState<
     Record<string, ItemPriceDetailsPayload>
   >({});
@@ -774,10 +966,36 @@ export default function PhysicalStockPage() {
     activeBranch,
     loading: isBusinessContextLoading,
   } = useBusinessContext();
+  const columnsRef = useRef<PhysicalStockColumn[]>(PHYSICAL_STOCK_COLUMNS);
+  const uiColumnConfigsRef = useRef<UiTableColumnPayload[]>([]);
+  const draggingColumnKeyRef = useRef<string | null>(null);
+  const resizingColumnRef = useRef<{
+    key: string;
+    startX: number;
+    startWidth: number;
+    currentWidth: number;
+  } | null>(null);
+  const columnSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [triggerItemOptions, { isFetching: isItemLookupLoading }] =
     useLazyGetItemOptionsQuery();
   const [triggerUnitOptions] = useLazyGetUnitOptionsQuery();
   const [triggerItemPriceDetails] = useLazyGetItemPriceDetailsQuery();
+  const { getAll: listUiTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_LIST_ENDPOINT, {
+    toast: {
+      success: false,
+      error: false,
+    },
+  });
+  const { run: saveUiTableColumn } = useApi<
+    { data?: UiTableColumnPayload },
+    SavePhysicalStockUiTableColumnRequest
+  >(UI_TABLE_COLUMNS_CREATE_ENDPOINT, {
+    method: "POST",
+    toast: {
+      success: false,
+      error: false,
+    },
+  });
   const { run: listGodowns, loading: isGodownLookupLoading } = useApi<unknown>(
     GODOWN_LIST_ENDPOINT,
     {
@@ -811,8 +1029,8 @@ export default function PhysicalStockPage() {
   );
   const draftRows = useMemo(() => getDraftRows(rows), [rows]);
   const tableMinWidth = useMemo(
-    () => getColumnMinWidth(PHYSICAL_STOCK_COLUMNS),
-    [],
+    () => getColumnMinWidth(columns),
+    [columns],
   );
   const totals = useMemo(
     () =>
@@ -827,6 +1045,14 @@ export default function PhysicalStockPage() {
       ),
     [draftRows],
   );
+
+  useEffect(() => {
+    columnsRef.current = columns;
+  }, [columns]);
+
+  useEffect(() => {
+    uiColumnConfigsRef.current = uiColumnConfigs;
+  }, [uiColumnConfigs]);
 
   const loadItemOptions = useCallback(
     async (search = "") => {
@@ -853,6 +1079,30 @@ export default function PhysicalStockPage() {
     },
     [activeBranch?.brId, listGodowns],
   );
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const payload = await listUiTableColumns(UI_TABLE_COLUMNS_QUERY);
+        const configuredColumns = extractRows<UiTableColumnPayload>(payload, [
+          "data",
+          "rows",
+          "items",
+          "results",
+          "columns",
+          "uiTableColumns",
+        ]);
+        uiColumnConfigsRef.current = configuredColumns;
+        setUiColumnConfigs(configuredColumns);
+        const resolvedColumns = resolveConfiguredColumns(configuredColumns);
+        setColumns(resolvedColumns.length > 0 ? resolvedColumns : PHYSICAL_STOCK_COLUMNS);
+      } catch {
+        uiColumnConfigsRef.current = [];
+        setUiColumnConfigs([]);
+        setColumns(PHYSICAL_STOCK_COLUMNS);
+      }
+    })();
+  }, [listUiTableColumns]);
 
   useEffect(() => {
     void loadItemOptions();
@@ -1109,6 +1359,198 @@ export default function PhysicalStockPage() {
     },
     [loadGodownOptions, loadItemOptions],
   );
+
+  const enqueueColumnConfigSave = useCallback((task: () => Promise<void>) => {
+    const saveTask = columnSaveQueueRef.current.catch(() => undefined).then(task);
+    columnSaveQueueRef.current = saveTask;
+    return saveTask;
+  }, []);
+
+  const persistPhysicalStockColumnWidth = useCallback(
+    async (columnKey: string, width: number) => {
+      const renderedColumns = columnsRef.current;
+      const columnIndex = renderedColumns.findIndex((column) => column.key === columnKey);
+      const column = columnIndex >= 0 ? renderedColumns[columnIndex] : null;
+
+      if (!column || !Number.isFinite(width) || width <= 0) {
+        return;
+      }
+
+      const configuredColumn = findPhysicalStockUiTableColumnConfig(
+        uiColumnConfigsRef.current,
+        columnKey,
+      );
+
+      try {
+        const response = await saveUiTableColumn({
+          body: buildPhysicalStockUiTableColumnRequest(column, configuredColumn, columnIndex, {
+            uiTblClmColumnWidth: width,
+          }),
+        });
+        const savedColumn = response?.data;
+        if (!savedColumn) {
+          return;
+        }
+
+        setUiColumnConfigs((current) => {
+          const nextColumns = upsertPhysicalStockUiTableColumnConfig(
+            current,
+            savedColumn,
+            columnKey,
+          );
+          uiColumnConfigsRef.current = nextColumns;
+          return nextColumns;
+        });
+      } catch {
+        // Keep the local resize even if persistence fails.
+      }
+    },
+    [saveUiTableColumn],
+  );
+
+  const persistPhysicalStockColumnOrder = useCallback(
+    async (orderedColumns: PhysicalStockColumn[]) => {
+      let nextColumnConfigs = uiColumnConfigsRef.current;
+
+      for (const [columnIndex, column] of orderedColumns.entries()) {
+        const configuredColumn = findPhysicalStockUiTableColumnConfig(
+          nextColumnConfigs,
+          column.key,
+        );
+
+        try {
+          const response = await saveUiTableColumn({
+            body: buildPhysicalStockUiTableColumnRequest(column, configuredColumn, columnIndex, {
+              uiTblClmColumnPosition: columnIndex + 1,
+              uiTblClmColumnWidth: parseColumnWidth(column.width),
+            }),
+          });
+          const savedColumn = response?.data;
+          if (!savedColumn) {
+            continue;
+          }
+
+          nextColumnConfigs = upsertPhysicalStockUiTableColumnConfig(
+            nextColumnConfigs,
+            savedColumn,
+            column.key,
+          );
+        } catch {
+          // Continue saving the rest of the order; the local order remains usable.
+        }
+      }
+
+      uiColumnConfigsRef.current = nextColumnConfigs;
+      setUiColumnConfigs(nextColumnConfigs);
+    },
+    [saveUiTableColumn],
+  );
+
+  const handleColumnDragStart = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>, columnKey: string) => {
+      draggingColumnKeyRef.current = columnKey;
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", columnKey);
+    },
+    [],
+  );
+
+  const handleColumnDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const handleColumnDrop = useCallback(
+    (targetKey: string) => {
+      const sourceKey = draggingColumnKeyRef.current;
+      draggingColumnKeyRef.current = null;
+
+      if (!sourceKey || sourceKey === targetKey) {
+        return;
+      }
+
+      setColumns((current) => {
+        const nextColumns = reorderColumns(current, sourceKey, targetKey);
+        if (nextColumns === current) {
+          return current;
+        }
+        columnsRef.current = nextColumns;
+        void enqueueColumnConfigSave(() => persistPhysicalStockColumnOrder(nextColumns));
+        return nextColumns;
+      });
+    },
+    [enqueueColumnConfigSave, persistPhysicalStockColumnOrder],
+  );
+
+  const handleColumnDragEnd = useCallback(() => {
+    draggingColumnKeyRef.current = null;
+  }, []);
+
+  const handleColumnResizeStart = useCallback(
+    (event: ReactMouseEvent<HTMLSpanElement>, columnKey: string, width: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const startWidth = parseColumnWidth(width);
+      resizingColumnRef.current = {
+        key: columnKey,
+        startX: event.clientX,
+        startWidth,
+        currentWidth: startWidth,
+      };
+
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      const activeResize = resizingColumnRef.current;
+      if (!activeResize) {
+        return;
+      }
+
+      const delta = event.clientX - activeResize.startX;
+      const nextWidth = Math.max(MIN_RESIZABLE_COLUMN_WIDTH, activeResize.startWidth + delta);
+      activeResize.currentWidth = nextWidth;
+
+      setColumns((current) =>
+        current.map((column) =>
+          column.key === activeResize.key ? { ...column, width: `${nextWidth}px` } : column,
+        ),
+      );
+    };
+
+    const handleMouseUp = () => {
+      const activeResize = resizingColumnRef.current;
+      if (!activeResize) {
+        return;
+      }
+
+      resizingColumnRef.current = null;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      if (Math.round(activeResize.currentWidth) !== Math.round(activeResize.startWidth)) {
+        void enqueueColumnConfigSave(() =>
+          persistPhysicalStockColumnWidth(activeResize.key, activeResize.currentWidth),
+        );
+      }
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      if (resizingColumnRef.current) {
+        resizingColumnRef.current = null;
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+      }
+    };
+  }, [enqueueColumnConfigSave, persistPhysicalStockColumnWidth]);
 
   const handleLookupSearchInputChange = useCallback(
     (lookupKind: LookupKind, search: string) => {
@@ -1567,7 +2009,7 @@ export default function PhysicalStockPage() {
           >
             <colgroup>
               <col style={{ width: SERIAL_NUMBER_COLUMN_WIDTH }} />
-              {PHYSICAL_STOCK_COLUMNS.map((column) => (
+              {columns.map((column) => (
                 <col
                   key={column.key}
                   style={{ width: column.width }}
@@ -1589,17 +2031,35 @@ export default function PhysicalStockPage() {
                 >
                   <span className={styles.headerText}>S.No</span>
                 </th>
-                {PHYSICAL_STOCK_COLUMNS.map((column) => (
+                {columns.map((column) => (
                   <th
                     key={column.key}
                     className={cx(
                       styles.headerCell,
                       styles.alignCenter,
                       styles.headerCellDark,
+                      styles.resizableHeaderCell,
                     )}
                     style={{ width: column.width }}
                   >
-                    <span className={styles.headerText}>{column.header}</span>
+                    <div
+                      draggable
+                      className={styles.draggableHeaderContent}
+                      onDragStart={(event) => handleColumnDragStart(event, column.key)}
+                      onDragOver={handleColumnDragOver}
+                      onDrop={() => handleColumnDrop(column.key)}
+                      onDragEnd={handleColumnDragEnd}
+                    >
+                      <span className={styles.headerText}>{column.header}</span>
+                    </div>
+                    <span
+                      className={styles.columnResizeHandle}
+                      onMouseDown={(event) =>
+                        handleColumnResizeStart(event, column.key, column.width)
+                      }
+                      onDragStart={(event) => event.preventDefault()}
+                      role="presentation"
+                    />
                   </th>
                 ))}
                 <th
@@ -1639,7 +2099,7 @@ export default function PhysicalStockPage() {
                       <span className={styles.rowNumber}>{rowIndex + 1}</span>
                     </div>
                   </td>
-                  {PHYSICAL_STOCK_COLUMNS.map((column) => (
+                  {columns.map((column) => (
                     <td
                       key={column.key}
                       data-label={column.header}

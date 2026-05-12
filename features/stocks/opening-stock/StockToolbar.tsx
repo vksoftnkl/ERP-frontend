@@ -97,8 +97,7 @@ export function StockToolbar({
               spellCheck={false}
             />
           </div>
-        </label>
-        
+        </label>        
         <button
           type="button"
           className={cx(styles.createButton, styles.refLoadButton)}
@@ -133,8 +132,7 @@ export function StockToolbar({
           />
           <span>{isLoadingStock ? "Loading..." : "Load Stock"}</span>
         </button>
-     
-        <button
+             <button
           type="button"
           className={cx(styles.createButton, styles.updateButton)}
           onClick={onUpdateStock}
