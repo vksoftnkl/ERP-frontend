@@ -1,5 +1,4 @@
 "use client";
-
 import {
   type CSSProperties,
   type DragEvent as ReactDragEvent,
@@ -75,7 +74,6 @@ import {
   toNullableTrimmedString,
 } from "@/features/stocks/opening-stock/Utils";
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
-
 type PhysicalStockColumn = {
   key: string;
   header: string;
@@ -87,12 +85,10 @@ type PhysicalStockColumn = {
   defaultValue?: string;
   readOnly?: boolean;
 };
-
 type PhysicalStockRow = {
   id: number;
   values: Record<string, string>;
 };
-
 type PhysicalStockSaveDetail = {
   psdRowNo: number;
   psdAccYear: string;
@@ -119,7 +115,6 @@ type PhysicalStockSaveDetail = {
   psdNotes?: string | null;
   batchDetails?: PhysicalStockSaveBatchDetail[];
 };
-
 type PhysicalStockSaveBatchDetail = {
   psbRowNo: number;
   psbAccYear: string;
@@ -149,7 +144,6 @@ type PhysicalStockSaveBatchDetail = {
   psbResolution?: "ADJUST_LOSS_GAIN";
   psbNotes?: string | null;
 };
-
 type PhysicalStockSaveRequest = {
   psAccYear: string;
   psCompanyId: string;
@@ -177,13 +171,11 @@ type PhysicalStockSaveRequest = {
   psCreatedBy: string;
   details: PhysicalStockSaveDetail[];
 };
-
 type PhysicalStockSuccessResponse<T> = {
   success: true;
   message: string;
   data: T;
 };
-
 type PhysicalStockDocumentResponse = {
   header: {
     psc_id: string;
@@ -196,14 +188,27 @@ type PhysicalStockDocumentResponse = {
     psd_row_no: number;
   }>;
 };
-
+type ItemStockBalancePayload = {
+  isb_closing_qty?: number | string | null;
+  isb_free_closing_qty?: number | string | null;
+  book_qty?: number | string | null;
+  book_base_qty?: number | string | null;
+  book_free_qty?: number | string | null;
+  book_free_base_qty?: number | string | null;
+};
+type ItemStockBalanceRowScope = {
+  itemId: string;
+  unitId: string;
+  godownId: string;
+};
 type RowValidationIssue = {
   rowId: number;
   fieldKey: string;
   message: string;
 };
-
 const PHYSICAL_STOCK_SAVE_ENDPOINT = "/physical-stock";
+const ITEM_STOCK_BALANCE_GET_ENDPOINT = "/item-stock-balance/get";
+const ITEM_STOCK_BALANCE_BUCKET = "SALEABLE";
 const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
 const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-columns/create";
 const UI_TABLE_COLUMNS_QUERY = {
@@ -212,13 +217,11 @@ const UI_TABLE_COLUMNS_QUERY = {
   limit: "100",
 } as const;
 const LOOKUP_SEARCH_DEBOUNCE_MS = 250;
-
 const PHYSICAL_STOCK_TABLE_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   { label: "Prev Cell", keys: ["Shift"] },
   { label: "Next Cell", keys: ["Enter"] },
   { label: "Close Lookup", keys: ["Escape"] },
 ];
-
 const TRACKING_OPTIONS = ["0", "1", "2", "3"] as const;
 const TRACKING_TYPE_OPTION_LABELS: Record<(typeof TRACKING_OPTIONS)[number], string> = {
   "0": "NONE",
@@ -226,7 +229,6 @@ const TRACKING_TYPE_OPTION_LABELS: Record<(typeof TRACKING_OPTIONS)[number], str
   "2": "BATCH",
   "3": "SERIAL",
 };
-
 const PHYSICAL_STOCK_COLUMNS: PhysicalStockColumn[] = [
   { key: "barcode", header: "Barcode", width: "110px", align: "left", kind: "text" },
   { key: "code", header: "Code", width: "100px", align: "left", kind: "text" },
@@ -389,7 +391,6 @@ const PHYSICAL_STOCK_COLUMNS: PhysicalStockColumn[] = [
     readOnly: true,
   },
 ];
-
 type UiTableColumnPayload = {
   uiTblClmId?: string;
   uiTblClmNo?: string;
@@ -404,7 +405,6 @@ type UiTableColumnPayload = {
   uiTblClmPreviousColumn?: number | null;
   uiTblClmIsActive?: boolean | null;
 };
-
 type SavePhysicalStockUiTableColumnRequest = {
   uiTblClmId?: string;
   uiTblClmNo?: string;
@@ -419,15 +419,12 @@ type SavePhysicalStockUiTableColumnRequest = {
   uiTblClmPreviousColumn: number | null;
   uiTblClmIsActive: boolean;
 };
-
 const PHYSICAL_STOCK_COLUMN_SCHEMA = new Map(
   PHYSICAL_STOCK_COLUMNS.map((column) => [column.key, column]),
 );
-
 const HIDDEN_ROW_VALUE_DEFAULTS: Record<string, string> = {
   baseunitid: "",
 };
-
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_FIELD_KEYS = ["batchdate", "mfgdate", "expirydate"] as const;
@@ -448,7 +445,6 @@ const DERIVED_FIELD_KEYS = new Set([
 const NON_NEGATIVE_NUMBER_FIELD_KEYS = PHYSICAL_STOCK_COLUMNS.filter(
   (column) => column.kind === "number" && column.key !== "diffqty",
 ).map((column) => column.key);
-
 function createDefaultRowValues(): Record<string, string> {
   return {
     ...PHYSICAL_STOCK_COLUMNS.reduce<Record<string, string>>((accumulator, column) => {
@@ -458,9 +454,7 @@ function createDefaultRowValues(): Record<string, string> {
     ...HIDDEN_ROW_VALUE_DEFAULTS,
   };
 }
-
 const DEFAULT_ROW_VALUES = createDefaultRowValues();
-
 function createRow(id: number, overrides: Record<string, string> = {}): PhysicalStockRow {
   return {
     id,
@@ -470,33 +464,26 @@ function createRow(id: number, overrides: Record<string, string> = {}): Physical
     },
   };
 }
-
 function createEmptyRow(nextId: number): PhysicalStockRow {
   return createRow(nextId);
 }
-
 function getNextRowId(rows: PhysicalStockRow[]): number {
   return rows.reduce((highestId, row) => Math.max(highestId, row.id), 0) + 1;
 }
-
 function isPristineRow(row: PhysicalStockRow): boolean {
   return Object.entries(DEFAULT_ROW_VALUES).every(
     ([key, defaultValue]) => (row.values[key] ?? "") === defaultValue,
   );
 }
-
 function getDraftRows(rows: PhysicalStockRow[]): PhysicalStockRow[] {
   return rows.filter((row) => !isPristineRow(row));
 }
-
 function formatAmountInput(value: number): string {
   return VALUE_FORMATTER.format(value).replace(/,/g, "");
 }
-
 function getActualConvFactor(values: Record<string, string>): number {
   return parseDecimal(values.convfactor) || 1;
 }
-
 function withDerivedPhysicalValues(values: Record<string, string>): Record<string, string> {
   const convFactor = getActualConvFactor(values);
   const bookQty = parseDecimal(values.bookqty);
@@ -504,7 +491,6 @@ function withDerivedPhysicalValues(values: Record<string, string>): Record<strin
   const physicalQty = parseDecimal(values.physicalqty);
   const physicalFreeQty = parseDecimal(values.physicalfreeqty);
   const costPrice = parseDecimal(values.costprice);
-
   return {
     ...values,
     bookbaseqty: formatQuantityValue(bookQty * convFactor),
@@ -515,7 +501,46 @@ function withDerivedPhysicalValues(values: Record<string, string>): Record<strin
     total: formatAmountInput(physicalQty * costPrice),
   };
 }
-
+function parseOptionalStockNumber(value: string | number | null | undefined): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  const normalized = value?.trim() ?? "";
+  if (!normalized) {
+    return null;
+  }
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+function buildStockBalanceQuantityValues(
+  currentValues: Record<string, string>,
+  balance: ItemStockBalancePayload,
+): Record<string, string> {
+  const bookQty = parseOptionalStockNumber(balance.book_qty ?? balance.isb_closing_qty);
+  const bookBaseQty = parseOptionalStockNumber(balance.book_base_qty);
+  const bookFreeQty = parseOptionalStockNumber(
+    balance.book_free_qty ?? balance.isb_free_closing_qty,
+  );
+  const bookFreeBaseQty = parseOptionalStockNumber(balance.book_free_base_qty);
+  const quantityValues: Record<string, string> = {};
+  if (bookQty !== null) {
+    quantityValues.bookqty = toInputValue(bookQty);
+  }
+  if (bookFreeQty !== null) {
+    quantityValues.bookfreeqty = toInputValue(bookFreeQty);
+  }
+  const nextValues = withDerivedPhysicalValues({
+    ...currentValues,
+    ...quantityValues,
+  });
+  if (bookBaseQty !== null) {
+    nextValues.bookbaseqty = formatQuantityValue(bookBaseQty);
+  }
+  if (bookFreeBaseQty !== null) {
+    nextValues.bookfreebaseqty = formatQuantityValue(bookFreeBaseQty);
+  }
+  return nextValues;
+}
 function ensureTrailingEmptyRow(rows: PhysicalStockRow[], sourceRowId: number): PhysicalStockRow[] {
   const sourceRowIndex = rows.findIndex((row) => row.id === sourceRowId);
   if (sourceRowIndex === -1 || sourceRowIndex !== rows.length - 1) {
@@ -526,14 +551,12 @@ function ensureTrailingEmptyRow(rows: PhysicalStockRow[], sourceRowId: number): 
   }
   return [...rows, createEmptyRow(getNextRowId(rows))];
 }
-
 function buildInvalidFieldState(issues: RowValidationIssue[]): Record<string, true> {
   return issues.reduce<Record<string, true>>((accumulator, issue) => {
     accumulator[`${issue.rowId}:${issue.fieldKey}`] = true;
     return accumulator;
   }, {});
 }
-
 function getAlignClass(align: ColumnAlign): string {
   if (align === "right") {
     return styles.alignRight;
@@ -543,7 +566,6 @@ function getAlignClass(align: ColumnAlign): string {
   }
   return styles.alignLeft;
 }
-
 function handleFieldNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>): boolean {
   if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey) {
     return false;
@@ -552,14 +574,12 @@ function handleFieldNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>): b
   moveOpeningStockFieldFocus(event.currentTarget, "right");
   return true;
 }
-
 function getTrackingOptionFromItem(detail: ItemPriceDetailsPayload): string {
   const trackingType = resolveTrackingType(detail.item);
   return TRACKING_OPTIONS.includes(trackingType as (typeof TRACKING_OPTIONS)[number])
     ? trackingType
     : "0";
 }
-
 function getTrackingPayloadValue(value: string): "NONE" | "MRP" | "BATCH" | "SERIAL" {
   if (value === "1") {
     return "MRP";
@@ -572,7 +592,6 @@ function getTrackingPayloadValue(value: string): "NONE" | "MRP" | "BATCH" | "SER
   }
   return "NONE";
 }
-
 function getColumnMinWidth(columns: PhysicalStockColumn[]): string {
   const width = columns.reduce(
     (total, column) => total + parseDecimal(column.width),
@@ -580,19 +599,16 @@ function getColumnMinWidth(columns: PhysicalStockColumn[]): string {
   );
   return `${Math.max(width, 2800)}px`;
 }
-
 function parseColumnWidth(width: string, fallback = 120): number {
   const parsed = Number.parseFloat(width);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-
 function toColumnWidth(value: number | null | undefined, fallback: string): string {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return fallback;
   }
   return `${value}px`;
 }
-
 function reorderColumns(
   current: PhysicalStockColumn[],
   sourceKey: string,
@@ -601,19 +617,16 @@ function reorderColumns(
   if (!sourceKey || !targetKey || sourceKey === targetKey) {
     return current;
   }
-
   const next = [...current];
   const sourceIndex = next.findIndex((column) => column.key === sourceKey);
   const targetIndex = next.findIndex((column) => column.key === targetKey);
   if (sourceIndex === -1 || targetIndex === -1) {
     return current;
   }
-
   const [movedColumn] = next.splice(sourceIndex, 1);
   next.splice(targetIndex, 0, movedColumn);
   return next;
 }
-
 function findPhysicalStockUiTableColumnConfig(
   configuredColumns: UiTableColumnPayload[],
   columnKey: string,
@@ -624,7 +637,6 @@ function findPhysicalStockUiTableColumnConfig(
     ) ?? null
   );
 }
-
 function buildPhysicalStockUiTableColumnRequest(
   column: PhysicalStockColumn,
   configuredColumn: UiTableColumnPayload | null,
@@ -653,7 +665,6 @@ function buildPhysicalStockUiTableColumnRequest(
     uiTblClmIsActive: configuredColumn?.uiTblClmIsActive ?? true,
   };
 }
-
 function upsertPhysicalStockUiTableColumnConfig(
   configuredColumns: UiTableColumnPayload[],
   savedColumn: UiTableColumnPayload,
@@ -665,23 +676,18 @@ function upsertPhysicalStockUiTableColumnConfig(
     const sameColumnId =
       Boolean(savedColumn.uiTblClmId) && column.uiTblClmId === savedColumn.uiTblClmId;
     const sameColumnKey = normalizeColumnName(column.uiTblClmName ?? "") === savedColumnKey;
-
     if (!sameColumnId && !sameColumnKey) {
       return column;
     }
-
     didUpdate = true;
     return savedColumn;
   });
-
   return didUpdate ? nextColumns : [...nextColumns, savedColumn];
 }
-
 function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): PhysicalStockColumn[] {
   if (configuredColumns.length === 0) {
     return [];
   }
-
   const visibleColumns = [...configuredColumns]
     .filter((column) => {
       const key = normalizeColumnName(column.uiTblClmName ?? "");
@@ -693,7 +699,6 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Ph
       if (leftPosition !== rightPosition) {
         return leftPosition - rightPosition;
       }
-
       const leftNo = Number(left.uiTblClmNo ?? "");
       const rightNo = Number(right.uiTblClmNo ?? "");
       if (Number.isFinite(leftNo) && Number.isFinite(rightNo) && leftNo !== rightNo) {
@@ -701,22 +706,18 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Ph
       }
       return 0;
     });
-
   const seenKeys = new Set<string>();
   const resolvedColumns: PhysicalStockColumn[] = [];
-
   for (const configuredColumn of visibleColumns) {
     const header = configuredColumn.uiTblClmName?.trim() ?? "";
     if (!header) {
       continue;
     }
-
     const key = normalizeColumnName(header);
     const schema = PHYSICAL_STOCK_COLUMN_SCHEMA.get(key);
     if (!schema || seenKeys.has(key)) {
       continue;
     }
-
     resolvedColumns.push({
       ...schema,
       header,
@@ -724,7 +725,6 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Ph
     });
     seenKeys.add(key);
   }
-
   if (!seenKeys.has("barcode")) {
     const barcodeSchema = PHYSICAL_STOCK_COLUMN_SCHEMA.get("barcode");
     const barcodeConfig = configuredColumns.find(
@@ -738,7 +738,6 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Ph
       });
     }
   }
-
   if (!seenKeys.has("uom")) {
     const uomSchema = PHYSICAL_STOCK_COLUMN_SCHEMA.get("uom");
     const uomConfig = configuredColumns.find(
@@ -760,10 +759,8 @@ function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload[]): Ph
       });
     }
   }
-
   return resolvedColumns;
 }
-
 function buildDocumentNumber(voucherRefNo: string): number {
   const numericRef = Number.parseInt(voucherRefNo.replace(/\D/g, ""), 10);
   if (Number.isInteger(numericRef) && numericRef > 0) {
@@ -771,12 +768,10 @@ function buildDocumentNumber(voucherRefNo: string): number {
   }
   return Date.now();
 }
-
 function toOptionalUuid(value: string | null): string | null {
   const normalized = value?.trim() ?? "";
   return UUID_PATTERN.test(normalized) ? normalized : null;
 }
-
 function getReasonRemarks(row: PhysicalStockRow): string | null {
   const reason = toNullableTrimmedString(row.values.reason);
   const remarks = toNullableTrimmedString(row.values.remarks);
@@ -785,10 +780,8 @@ function getReasonRemarks(row: PhysicalStockRow): string | null {
   }
   return reason ?? remarks;
 }
-
 function getRowValidationIssues(row: PhysicalStockRow, rowNumber: number): RowValidationIssue[] {
   const issues: RowValidationIssue[] = [];
-
   if (!toNullableTrimmedString(row.values.oslitemid)) {
     issues.push({
       rowId: row.id,
@@ -817,7 +810,6 @@ function getRowValidationIssues(row: PhysicalStockRow, rowNumber: number): RowVa
       message: `Row ${rowNumber} conversion factor must be greater than zero.`,
     });
   }
-
   for (const fieldKey of NON_NEGATIVE_NUMBER_FIELD_KEYS) {
     const value = row.values[fieldKey]?.trim() ?? "";
     if (!value) {
@@ -834,11 +826,9 @@ function getRowValidationIssues(row: PhysicalStockRow, rowNumber: number): RowVa
       message: `Row ${rowNumber} has an invalid ${column?.header ?? fieldKey}.`,
     });
   }
-
   const normalizedDates = Object.fromEntries(
     DATE_FIELD_KEYS.map((fieldKey) => [fieldKey, toCanonicalDateValue(row.values[fieldKey])]),
   ) as Record<(typeof DATE_FIELD_KEYS)[number], string>;
-
   for (const fieldKey of DATE_FIELD_KEYS) {
     const value = row.values[fieldKey]?.trim() ?? "";
     if (!value || normalizedDates[fieldKey]) {
@@ -851,7 +841,6 @@ function getRowValidationIssues(row: PhysicalStockRow, rowNumber: number): RowVa
       message: `Row ${rowNumber} has an invalid ${column?.header ?? fieldKey}. Use dd/mm/yyyy.`,
     });
   }
-
   if (
     normalizedDates.mfgdate &&
     normalizedDates.expirydate &&
@@ -863,14 +852,11 @@ function getRowValidationIssues(row: PhysicalStockRow, rowNumber: number): RowVa
       message: `Row ${rowNumber} expiry date must be on or after mfg date.`,
     });
   }
-
   return issues;
 }
-
 function renderValidationToastContent(issues: RowValidationIssue[]): ReactNode {
   const visibleIssues = issues.slice(0, 5);
   const remainingCount = issues.length - visibleIssues.length;
-
   return (
     <div>
       <div style={{ fontWeight: 700, marginBottom: "0.35rem" }}>
@@ -883,7 +869,6 @@ function renderValidationToastContent(issues: RowValidationIssue[]): ReactNode {
     </div>
   );
 }
-
 function buildPhysicalStockDetailPayload(
   row: PhysicalStockRow,
   rowIndex: number,
@@ -907,7 +892,6 @@ function buildPhysicalStockDetailPayload(
       toNullableTrimmedString(row.values.mfgdate) ||
       toNullableTrimmedString(row.values.expirydate),
   );
-
   const baseDetail = {
     psdRowNo: rowIndex + 1,
     psdAccYear: scope.accountingYear,
@@ -933,11 +917,9 @@ function buildPhysicalStockDetailPayload(
     psdResolution: "ADJUST_LOSS_GAIN" as const,
     psdNotes: notes,
   };
-
   if (!hasBatchDetail) {
     return baseDetail;
   }
-
   return {
     ...baseDetail,
     batchDetails: [
@@ -974,7 +956,6 @@ function buildPhysicalStockDetailPayload(
     ],
   };
 }
-
 export default function PhysicalStockPage() {
   const [voucherDate, setVoucherDate] = useState(() => getTodayInputValue());
   const [voucherRefNo, setVoucherRefNo] = useState("");
@@ -999,7 +980,6 @@ export default function PhysicalStockPage() {
   const lookupSearchInputRef = useRef<HTMLInputElement | null>(null);
   const itemSearchTimeoutRef = useRef<number | null>(null);
   const godownSearchTimeoutRef = useRef<number | null>(null);
-
   const {
     activeCompany,
     activeBranch,
@@ -1053,7 +1033,14 @@ export default function PhysicalStockPage() {
       successMessage: "Physical stock saved successfully.",
     },
   });
-
+  const { run: getItemStockBalance } = useApi<
+    PhysicalStockSuccessResponse<ItemStockBalancePayload[]>
+  >(ITEM_STOCK_BALANCE_GET_ENDPOINT, {
+    toast: {
+      success: false,
+      error: false,
+    },
+  });
   const itemOptionsByValue = useMemo(
     () => new Map(itemOptions.map((option) => [option.value, option.label])),
     [itemOptions],
@@ -1084,15 +1071,12 @@ export default function PhysicalStockPage() {
       ),
     [draftRows],
   );
-
   useEffect(() => {
     columnsRef.current = columns;
   }, [columns]);
-
   useEffect(() => {
     uiColumnConfigsRef.current = uiColumnConfigs;
   }, [uiColumnConfigs]);
-
   const loadItemOptions = useCallback(
     async (search = "") => {
       const normalizedSearch = search.trim();
@@ -1104,7 +1088,6 @@ export default function PhysicalStockPage() {
     },
     [triggerItemOptions],
   );
-
   const loadGodownOptions = useCallback(
     async (search = "") => {
       const normalizedSearch = search.trim();
@@ -1118,7 +1101,6 @@ export default function PhysicalStockPage() {
     },
     [activeBranch?.brId, listGodowns],
   );
-
   useEffect(() => {
     void (async () => {
       try {
@@ -1142,15 +1124,12 @@ export default function PhysicalStockPage() {
       }
     })();
   }, [listUiTableColumns]);
-
   useEffect(() => {
     void loadItemOptions();
   }, [loadItemOptions]);
-
   useEffect(() => {
     void loadGodownOptions();
   }, [loadGodownOptions]);
-
   useEffect(() => {
     void (async () => {
       try {
@@ -1161,12 +1140,10 @@ export default function PhysicalStockPage() {
       }
     })();
   }, [triggerUnitOptions]);
-
   useEffect(() => {
     if (!openLookupCell) {
       return;
     }
-
     const handlePointerDown = (event: MouseEvent) => {
       const activeRoot = lookupRootRefs.current[openLookupCell.key];
       if (activeRoot?.contains(event.target as Node)) {
@@ -1175,11 +1152,9 @@ export default function PhysicalStockPage() {
       setOpenLookupCell(null);
       setLookupSearchQuery("");
     };
-
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [openLookupCell]);
-
   useEffect(() => {
     return () => {
       if (itemSearchTimeoutRef.current !== null) {
@@ -1190,7 +1165,6 @@ export default function PhysicalStockPage() {
       }
     };
   }, []);
-
   const handleRowChange = useCallback((rowId: number, fieldKey: string, value: string) => {
     setRows((currentRows) => {
       const nextRows = currentRows.map((row) => {
@@ -1218,7 +1192,6 @@ export default function PhysicalStockPage() {
       return next;
     });
   }, []);
-
   const handleRemoveRow = useCallback((rowId: number) => {
     setRows((currentRows) => {
       if (currentRows.length <= 1) {
@@ -1235,7 +1208,78 @@ export default function PhysicalStockPage() {
       return next;
     });
   }, []);
-
+  const applyItemStockBalanceToRow = useCallback(
+    (rowId: number, balance: ItemStockBalancePayload, scope: ItemStockBalanceRowScope) => {
+      setRows((currentRows) =>
+        currentRows.map((row) => {
+          if (row.id !== rowId) {
+            return row;
+          }
+          if (
+            row.values.oslitemid.trim() !== scope.itemId ||
+            row.values.oslunitid.trim() !== scope.unitId ||
+            row.values.oslgodownid.trim() !== scope.godownId
+          ) {
+            return row;
+          }
+          return {
+            ...row,
+            values: buildStockBalanceQuantityValues(row.values, balance),
+          };
+        }),
+      );
+    },
+    [],
+  );
+  const loadAndApplyItemStockBalance = useCallback(
+    async (rowId: number, values: Record<string, string>) => {
+      const accountingYear = formatAccountingYear(voucherDate);
+      const companyId = activeCompany?.compId?.trim() ?? "";
+      const branchId = activeBranch?.brId?.trim() ?? "";
+      const scope: ItemStockBalanceRowScope = {
+        itemId: values.oslitemid?.trim() ?? "",
+        unitId: values.oslunitid?.trim() ?? "",
+        godownId: values.oslgodownid?.trim() ?? "",
+      };
+      if (
+        !accountingYear ||
+        !companyId ||
+        !branchId ||
+        !scope.itemId ||
+        !scope.unitId ||
+        !scope.godownId
+      ) {
+        return;
+      }
+      try {
+        const response = await getItemStockBalance({
+          query: {
+            isb_acc_year: accountingYear,
+            isb_company_id: companyId,
+            isb_branch_id: branchId,
+            isb_godown_id: scope.godownId,
+            isb_item_id: scope.itemId,
+            isb_unit_id: scope.unitId,
+            isb_stock_bucket: ITEM_STOCK_BALANCE_BUCKET,
+          },
+        });
+        const [balance] = response?.data ?? [];
+        if (!balance) {
+          return;
+        }
+        applyItemStockBalanceToRow(rowId, balance, scope);
+      } catch {
+        // The balance lookup is an autofill aid; keep the row editable if it fails.
+      }
+    },
+    [
+      activeBranch?.brId,
+      activeCompany?.compId,
+      applyItemStockBalanceToRow,
+      getItemStockBalance,
+      voucherDate,
+    ],
+  );
   const applyItemDetailToRow = useCallback(
     (
       rowId: number,
@@ -1251,7 +1295,8 @@ export default function PhysicalStockPage() {
       const displayConvFactor = priceRecord?.ipm_unit_factor ?? priceRecord?.ipm_to_base_factor ?? 1;
       const toBaseFactor = priceRecord?.ipm_to_base_factor ?? displayConvFactor;
       const godownId = priceRecord?.ipm_godown_id ?? "";
-
+      const currentRowValues = rows.find((row) => row.id === rowId)?.values;
+      const resolvedGodownId = godownId || currentRowValues?.oslgodownid?.trim() || "";
       setRows((currentRows) => {
         const nextRows = currentRows.map((row) => {
           if (row.id !== rowId) {
@@ -1287,16 +1332,28 @@ export default function PhysicalStockPage() {
         });
         return ensureTrailingEmptyRow(nextRows, rowId);
       });
+      void loadAndApplyItemStockBalance(rowId, {
+        ...DEFAULT_ROW_VALUES,
+        ...(currentRowValues ?? {}),
+        oslitemid: detail.item.item_id,
+        oslunitid: unitId,
+        oslgodownid: resolvedGodownId,
+      });
     },
-    [godownOptionsByValue, unitOptionsByValue],
+    [godownOptionsByValue, loadAndApplyItemStockBalance, rows, unitOptionsByValue],
   );
-
   const handleLookupSelection = useCallback(
     async (rowId: number, lookupKind: LookupKind, option: ERPDynamicSelectOption) => {
       setOpenLookupCell(null);
       setLookupSearchQuery("");
-
       if (lookupKind === "godown") {
+        const currentRowValues = rows.find((row) => row.id === rowId)?.values;
+        const nextRowValues = {
+          ...DEFAULT_ROW_VALUES,
+          ...(currentRowValues ?? {}),
+          godown: option.value ? option.label : "",
+          oslgodownid: option.value,
+        };
         setRows((currentRows) => {
           const nextRows = currentRows.map((row) =>
             row.id === rowId
@@ -1312,9 +1369,9 @@ export default function PhysicalStockPage() {
           );
           return ensureTrailingEmptyRow(nextRows, rowId);
         });
+        void loadAndApplyItemStockBalance(rowId, nextRowValues);
         return;
       }
-
       if (!option.value) {
         setRows((currentRows) =>
           currentRows.map((row) =>
@@ -1330,7 +1387,6 @@ export default function PhysicalStockPage() {
         );
         return;
       }
-
       setRows((currentRows) => {
         const nextRows = currentRows.map((row) =>
           row.id === rowId
@@ -1346,7 +1402,6 @@ export default function PhysicalStockPage() {
         );
         return ensureTrailingEmptyRow(nextRows, rowId);
       });
-
       try {
         const detail = await triggerItemPriceDetails({ itemId: option.value }, true).unwrap();
         setItemDetailsByItemId((current) => ({
@@ -1360,26 +1415,35 @@ export default function PhysicalStockPage() {
         });
       }
     },
-    [applyItemDetailToRow, triggerItemPriceDetails],
+    [applyItemDetailToRow, loadAndApplyItemStockBalance, rows, triggerItemPriceDetails],
   );
-
   const handleUomChange = useCallback(
     (rowId: number, unitId: string) => {
       const row = rows.find((entry) => entry.id === rowId);
       const itemId = row?.values.oslitemid?.trim() ?? "";
       const itemDetail = itemId ? itemDetailsByItemId[itemId] : undefined;
-
       if (itemDetail) {
         applyItemDetailToRow(rowId, row?.values.itemname ?? "", itemDetail, unitId);
         return;
       }
-
       handleRowChange(rowId, "oslunitid", unitId);
       handleRowChange(rowId, "uom", unitOptionsByValue.get(unitId) ?? "");
+      void loadAndApplyItemStockBalance(rowId, {
+        ...DEFAULT_ROW_VALUES,
+        ...(row?.values ?? {}),
+        oslunitid: unitId,
+        uom: unitOptionsByValue.get(unitId) ?? "",
+      });
     },
-    [applyItemDetailToRow, handleRowChange, itemDetailsByItemId, rows, unitOptionsByValue],
+    [
+      applyItemDetailToRow,
+      handleRowChange,
+      itemDetailsByItemId,
+      loadAndApplyItemStockBalance,
+      rows,
+      unitOptionsByValue,
+    ],
   );
-
   const handleLookupToggle = useCallback(
     (cellKey: string, lookupKind: LookupKind) => {
       setOpenLookupCell((current) => {
@@ -1398,28 +1462,23 @@ export default function PhysicalStockPage() {
     },
     [loadGodownOptions, loadItemOptions],
   );
-
   const enqueueColumnConfigSave = useCallback((task: () => Promise<void>) => {
     const saveTask = columnSaveQueueRef.current.catch(() => undefined).then(task);
     columnSaveQueueRef.current = saveTask;
     return saveTask;
   }, []);
-
   const persistPhysicalStockColumnWidth = useCallback(
     async (columnKey: string, width: number) => {
       const renderedColumns = columnsRef.current;
       const columnIndex = renderedColumns.findIndex((column) => column.key === columnKey);
       const column = columnIndex >= 0 ? renderedColumns[columnIndex] : null;
-
       if (!column || !Number.isFinite(width) || width <= 0) {
         return;
       }
-
       const configuredColumn = findPhysicalStockUiTableColumnConfig(
         uiColumnConfigsRef.current,
         columnKey,
       );
-
       try {
         const response = await saveUiTableColumn({
           body: buildPhysicalStockUiTableColumnRequest(column, configuredColumn, columnIndex, {
@@ -1430,7 +1489,6 @@ export default function PhysicalStockPage() {
         if (!savedColumn) {
           return;
         }
-
         setUiColumnConfigs((current) => {
           const nextColumns = upsertPhysicalStockUiTableColumnConfig(
             current,
@@ -1446,17 +1504,14 @@ export default function PhysicalStockPage() {
     },
     [saveUiTableColumn],
   );
-
   const persistPhysicalStockColumnOrder = useCallback(
     async (orderedColumns: PhysicalStockColumn[]) => {
       let nextColumnConfigs = uiColumnConfigsRef.current;
-
       for (const [columnIndex, column] of orderedColumns.entries()) {
         const configuredColumn = findPhysicalStockUiTableColumnConfig(
           nextColumnConfigs,
           column.key,
         );
-
         try {
           const response = await saveUiTableColumn({
             body: buildPhysicalStockUiTableColumnRequest(column, configuredColumn, columnIndex, {
@@ -1468,7 +1523,6 @@ export default function PhysicalStockPage() {
           if (!savedColumn) {
             continue;
           }
-
           nextColumnConfigs = upsertPhysicalStockUiTableColumnConfig(
             nextColumnConfigs,
             savedColumn,
@@ -1478,13 +1532,11 @@ export default function PhysicalStockPage() {
           // Continue saving the rest of the order; the local order remains usable.
         }
       }
-
       uiColumnConfigsRef.current = nextColumnConfigs;
       setUiColumnConfigs(nextColumnConfigs);
     },
     [saveUiTableColumn],
   );
-
   const handleColumnDragStart = useCallback(
     (event: ReactDragEvent<HTMLDivElement>, columnKey: string) => {
       draggingColumnKeyRef.current = columnKey;
@@ -1493,21 +1545,17 @@ export default function PhysicalStockPage() {
     },
     [],
   );
-
   const handleColumnDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
   }, []);
-
   const handleColumnDrop = useCallback(
     (targetKey: string) => {
       const sourceKey = draggingColumnKeyRef.current;
       draggingColumnKeyRef.current = null;
-
       if (!sourceKey || sourceKey === targetKey) {
         return;
       }
-
       setColumns((current) => {
         const nextColumns = reorderColumns(current, sourceKey, targetKey);
         if (nextColumns === current) {
@@ -1520,16 +1568,13 @@ export default function PhysicalStockPage() {
     },
     [enqueueColumnConfigSave, persistPhysicalStockColumnOrder],
   );
-
   const handleColumnDragEnd = useCallback(() => {
     draggingColumnKeyRef.current = null;
   }, []);
-
   const handleColumnResizeStart = useCallback(
     (event: ReactMouseEvent<HTMLSpanElement>, columnKey: string, width: string) => {
       event.preventDefault();
       event.stopPropagation();
-
       const startWidth = parseColumnWidth(width);
       resizingColumnRef.current = {
         key: columnKey,
@@ -1537,37 +1582,31 @@ export default function PhysicalStockPage() {
         startWidth,
         currentWidth: startWidth,
       };
-
       document.body.style.userSelect = "none";
       document.body.style.cursor = "col-resize";
     },
     [],
   );
-
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       const activeResize = resizingColumnRef.current;
       if (!activeResize) {
         return;
       }
-
       const delta = event.clientX - activeResize.startX;
       const nextWidth = Math.max(MIN_RESIZABLE_COLUMN_WIDTH, activeResize.startWidth + delta);
       activeResize.currentWidth = nextWidth;
-
       setColumns((current) =>
         current.map((column) =>
           column.key === activeResize.key ? { ...column, width: `${nextWidth}px` } : column,
         ),
       );
     };
-
     const handleMouseUp = () => {
       const activeResize = resizingColumnRef.current;
       if (!activeResize) {
         return;
       }
-
       resizingColumnRef.current = null;
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
@@ -1577,7 +1616,6 @@ export default function PhysicalStockPage() {
         );
       }
     };
-
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
     return () => {
@@ -1590,7 +1628,6 @@ export default function PhysicalStockPage() {
       }
     };
   }, [enqueueColumnConfigSave, persistPhysicalStockColumnWidth]);
-
   const handleLookupSearchInputChange = useCallback(
     (lookupKind: LookupKind, search: string) => {
       setLookupSearchQuery(search);
@@ -1608,13 +1645,11 @@ export default function PhysicalStockPage() {
     },
     [loadGodownOptions, loadItemOptions],
   );
-
   const handleClearRows = useCallback(() => {
     setRows([createEmptyRow(1)]);
     setInvalidFieldKeys({});
     setVoucherRefNo("");
   }, []);
-
   const handleSavePhysicalStock = useCallback(async () => {
     if (!activeCompany) {
       toast.error("Select a company in the header before saving physical stock.", {
@@ -1628,7 +1663,6 @@ export default function PhysicalStockPage() {
       });
       return;
     }
-
     const accountingYear = formatAccountingYear(voucherDate);
     if (!accountingYear) {
       toast.error("Select a valid voucher date before saving physical stock.", {
@@ -1636,7 +1670,6 @@ export default function PhysicalStockPage() {
       });
       return;
     }
-
     const voucherDateIso = toIsoDateTime(voucherDate);
     if (!voucherDateIso) {
       toast.error("Select a valid voucher date before saving physical stock.", {
@@ -1644,7 +1677,6 @@ export default function PhysicalStockPage() {
       });
       return;
     }
-
     const userId = getAuthUserId();
     if (!userId) {
       toast.error("User session is missing. Please login again.", {
@@ -1652,14 +1684,12 @@ export default function PhysicalStockPage() {
       });
       return;
     }
-
     if (draftRows.length === 0) {
       toast.error("Add at least one physical stock row before saving.", {
         toastId: "physical-stock-save:no-rows",
       });
       return;
     }
-
     const validationIssues = draftRows.flatMap((row, index) =>
       getRowValidationIssues(row, index + 1),
     );
@@ -1674,7 +1704,6 @@ export default function PhysicalStockPage() {
         message: "Physical stock save currently supports one godown per document.",
       });
     }
-
     if (validationIssues.length > 0) {
       setInvalidFieldKeys(buildInvalidFieldState(validationIssues));
       const [firstIssue] = validationIssues;
@@ -1690,7 +1719,6 @@ export default function PhysicalStockPage() {
       });
       return;
     }
-
     setInvalidFieldKeys({});
     const docNo = buildDocumentNumber(voucherRefNo);
     const totalBookValue = draftRows.reduce(
@@ -1738,7 +1766,6 @@ export default function PhysicalStockPage() {
         }),
       ),
     };
-
     try {
       const response = await savePhysicalStock({ body: requestPayload });
       const savedRefNo = response?.data?.header?.psc_refno?.trim();
@@ -1749,7 +1776,6 @@ export default function PhysicalStockPage() {
       // useApi already shows the API error toast.
     }
   }, [activeBranch, activeCompany, draftRows, savePhysicalStock, voucherDate, voucherRefNo]);
-
   const renderCell = (row: PhysicalStockRow, rowIndex: number, column: PhysicalStockColumn) => {
     const value = row.values[column.key] ?? "";
     const invalid = Boolean(invalidFieldKeys[`${row.id}:${column.key}`]);
@@ -1763,7 +1789,6 @@ export default function PhysicalStockPage() {
       isNumeric && styles.numericInput,
       invalid && styles.requiredField,
     );
-
     if (column.kind === "lookup" && lookupKind) {
       const selectedId =
         lookupKind === "item" ? row.values.oslitemid ?? "" : row.values.oslgodownid ?? "";
@@ -1775,7 +1800,6 @@ export default function PhysicalStockPage() {
         lookupKind === "item"
           ? filterLookupOptions(itemOptions, lookupSearchQuery)
           : filterLookupOptions(godownOptions, lookupSearchQuery);
-
       return (
         <LookupCell
           rowId={row.id}

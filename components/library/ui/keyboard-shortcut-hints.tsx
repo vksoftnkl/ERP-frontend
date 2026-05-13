@@ -1,6 +1,5 @@
 import { cx } from "@/components/library/cx";
 import styles from "./keyboard-shortcut-hints.module.scss";
-
 const KEY_LABELS = new Map<string, string>([
   [" ", "Space"],
   ["alt", "Alt"],
@@ -20,36 +19,29 @@ const KEY_LABELS = new Map<string, string>([
   ["space", "Space"],
   ["tab", "Tab"],
 ]);
-
 function formatKeyLabel(value: string): string {
   const normalizedValue = value.trim();
   if (!normalizedValue) {
     return "";
   }
-
   const mappedValue = KEY_LABELS.get(normalizedValue.toLowerCase());
   if (mappedValue) {
     return mappedValue;
   }
-
   if (normalizedValue.length === 1) {
     return normalizedValue.toUpperCase();
   }
-
   return normalizedValue;
 }
-
 export type KeyboardShortcutDefinition = {
   label?: string;
   keys: readonly string[];
 };
-
 type KeyboardKeycapProps = {
   label: string;
   className?: string;
   ariaHidden?: boolean;
 };
-
 export function KeyboardKeycap({
   label,
   className,
@@ -59,7 +51,6 @@ export function KeyboardKeycap({
   if (!displayLabel) {
     return null;
   }
-
   return (
     <kbd
       className={cx(styles.keycap, className)}
@@ -69,13 +60,11 @@ export function KeyboardKeycap({
     </kbd>
   );
 }
-
 type KeyboardShortcutKeysProps = {
   keys: readonly string[];
   className?: string;
   ariaHidden?: boolean;
 };
-
 export function KeyboardShortcutKeys({
   keys,
   className,
@@ -84,7 +73,6 @@ export function KeyboardShortcutKeys({
   if (keys.length === 0) {
     return null;
   }
-
   return (
     <span
       className={cx(styles.keycapGroup, className)}
@@ -104,14 +92,12 @@ export function KeyboardShortcutKeys({
     </span>
   );
 }
-
 type KeyboardShortcutHintsProps = {
   shortcuts: readonly KeyboardShortcutDefinition[];
   className?: string;
   dense?: boolean;
   ariaHidden?: boolean;
 };
-
 export function KeyboardShortcutHints({
   shortcuts,
   className,
@@ -121,7 +107,6 @@ export function KeyboardShortcutHints({
   if (shortcuts.length === 0) {
     return null;
   }
-
   return (
     <div
       className={cx(
@@ -133,7 +118,6 @@ export function KeyboardShortcutHints({
     >
       {shortcuts.map((shortcut, shortcutIndex) => {
         const shortcutKey = `${shortcut.label ?? "shortcut"}-${shortcutIndex}-${shortcut.keys.join("-")}`;
-
         return (
           <span key={shortcutKey} className={styles.shortcutItem}>
             {shortcut.label ? (
