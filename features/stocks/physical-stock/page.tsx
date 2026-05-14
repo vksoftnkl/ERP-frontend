@@ -11,7 +11,15 @@ import {
   useRef,
   useState,
 } from "react";
-import { FiCalendar, FiRotateCcw, FiSave, FiTrash2 } from "react-icons/fi";
+import {
+  FiCalendar,
+  FiDownload,
+  FiList,
+  FiRotateCcw,
+  FiSave,
+  FiSearch,
+  FiTrash2,
+} from "react-icons/fi";
 import { toast } from "react-toastify";
 import type { ERPDynamicSelectOption } from "@/components/library/ui";
 import {
@@ -19,6 +27,7 @@ import {
   type KeyboardShortcutDefinition,
 } from "@/components/library/ui/keyboard-shortcut-hints";
 import { useBusinessContext } from "@/components/layout/business-context";
+import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";
 import {
@@ -51,6 +60,11 @@ import type {
   LookupKind,
 } from "@/features/stocks/_shared/types";
 import {
+  PhysicalStockListModal,
+  type PhysicalStockListRow,
+} from "./PhysicalStockListModal";
+import {
+  buildLoadedLookupOptions,
   buildGodownLookupOptions,
   buildUomOptions,
   cx,
@@ -68,6 +82,7 @@ import {
   resolveDefaultItemPriceRecord,
   resolveItemPriceRecordByUnitId,
   resolveTrackingType,
+  mergeLookupOptions,
   toCanonicalDateValue,
   toInputValue,
   toIsoDateTime,
@@ -125,7 +140,9 @@ type PhysicalStockSaveBatchDetail = {
   psbUnitId: string;
   psbBaseUnitId: string;
   psbToBaseFactor: number;
+  psbBatchId?: string | null;
   psbBatchNo?: string | null;
+  psbMfgBatchNo?: string | null;
   psbBatchDate?: string | null;
   psbMfgDate?: string | null;
   psbExpiryDate?: string | null;
@@ -145,6 +162,7 @@ type PhysicalStockSaveBatchDetail = {
   psbNotes?: string | null;
 };
 type PhysicalStockSaveRequest = {
+  psId?: string;
   psAccYear: string;
   psCompanyId: string;
   psBranchId: string;
@@ -169,24 +187,87 @@ type PhysicalStockSaveRequest = {
   psSessionId: string | null;
   psRemarks: string | null;
   psCreatedBy: string;
+  psModifiedBy?: string | null;
   details: PhysicalStockSaveDetail[];
 };
 type PhysicalStockSuccessResponse<T> = {
   success: true;
   message: string;
   data: T;
+  meta?: PhysicalStockListMeta;
+};
+type PhysicalStockListMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+};
+type PhysicalStockHeaderPayload = PhysicalStockListRow & {
+  psc_acc_year?: string;
+  psc_company_id?: string;
+  psc_branch_id?: string;
+  psc_godown_id?: string;
+  psc_godown_name?: string | null;
+  psc_device_type?: string | null;
+  psc_device_id?: string | null;
+  psc_session_id?: string | null;
+  psc_remarks?: string | null;
+};
+type PhysicalStockBatchDetailPayload = {
+  psb_id: string;
+  psb_psd_id: string;
+  psb_row_no: number;
+  psb_batch_id?: string | null;
+  psb_batch_no?: string | null;
+  psb_mfg_batch_no?: string | null;
+  psb_to_base_factor?: number | null;
+  psb_batch_date?: string | null;
+  psb_mfg_date?: string | null;
+  psb_expiry_date?: string | null;
+  psb_mrp?: number | null;
+  psb_barcode?: string | null;
+  psb_serial_no?: string | null;
+  psb_book_qty?: number | null;
+  psb_book_base_qty?: number | null;
+  psb_physical_qty?: number | null;
+  psb_physical_base_qty?: number | null;
+  psb_diff_qty?: number | null;
+  psb_diff_base_qty?: number | null;
+  psb_stock_rate_wot?: number | null;
+  psb_stock_rate_with_tax?: number | null;
+  psb_notes?: string | null;
+};
+type PhysicalStockDetailPayload = {
+  psd_id: string;
+  psd_psc_id: string;
+  psd_row_no: number;
+  psd_godown_id?: string;
+  psd_godown_name?: string | null;
+  psd_item_id?: string;
+  psd_item_code?: string | null;
+  psd_item_name?: string | null;
+  psd_unit_id?: string;
+  psd_unit_name?: string | null;
+  psd_base_unit_id?: string;
+  psd_base_unit_name?: string | null;
+  psd_to_base_factor?: number | null;
+  psd_barcode?: string | null;
+  psd_mrp?: number | null;
+  psd_tracking_type?: string | null;
+  psd_book_qty?: number | null;
+  psd_book_base_qty?: number | null;
+  psd_physical_qty?: number | null;
+  psd_physical_base_qty?: number | null;
+  psd_diff_qty?: number | null;
+  psd_diff_base_qty?: number | null;
+  psd_stock_rate_wot?: number | null;
+  psd_stock_rate_with_tax?: number | null;
+  psd_notes?: string | null;
+  batch_details: PhysicalStockBatchDetailPayload[];
 };
 type PhysicalStockDocumentResponse = {
-  header: {
-    psc_id: string;
-    psc_refno: string;
-    psc_date: string;
-  };
-  details: Array<{
-    psd_id: string;
-    psd_psc_id: string;
-    psd_row_no: number;
-  }>;
+  header: PhysicalStockHeaderPayload;
+  details: PhysicalStockDetailPayload[];
 };
 type ItemStockBalancePayload = {
   isb_closing_qty?: number | string | null;
@@ -195,6 +276,20 @@ type ItemStockBalancePayload = {
   book_base_qty?: number | string | null;
   book_free_qty?: number | string | null;
   book_free_base_qty?: number | string | null;
+};
+type ItemBatchStockLookupPayload = ItemStockBalancePayload & {
+  ibs_id: string;
+  ibs_batch_id: string;
+  ibs_batch_no: string | null;
+  ibs_mfg_batch_no?: string | null;
+  ibs_batch_date?: string | null;
+  ibs_mfg_date?: string | null;
+  ibs_expiry_date?: string | null;
+  ibs_mrp?: number | string | null;
+  ibs_barcode?: string | null;
+  ibs_serial_no?: string | null;
+  ibs_avg_stock_rate?: number | string | null;
+  ibs_avg_stock_rate_wot?: number | string | null;
 };
 type ItemStockBalanceRowScope = {
   itemId: string;
@@ -207,7 +302,11 @@ type RowValidationIssue = {
   message: string;
 };
 const PHYSICAL_STOCK_SAVE_ENDPOINT = "/physical-stock";
+const PHYSICAL_STOCK_LIST_ENDPOINT = "/physical-stock/list";
+const PHYSICAL_STOCK_GET_ENDPOINT = "/physical-stock/get";
+const PHYSICAL_STOCK_DELETE_ENDPOINT = "/physical-stock/delete";
 const ITEM_STOCK_BALANCE_GET_ENDPOINT = "/item-stock-balance/get";
+const ITEM_BATCH_STOCK_OPTIONS_ENDPOINT = "/item-stock-balance/batch-options";
 const ITEM_STOCK_BALANCE_BUCKET = "SALEABLE";
 const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
 const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-columns/create";
@@ -221,6 +320,7 @@ const PHYSICAL_STOCK_TABLE_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   { label: "Prev Cell", keys: ["Shift"] },
   { label: "Next Cell", keys: ["Enter"] },
   { label: "Close Lookup", keys: ["Escape"] },
+  { label: "Open List", keys: ["F5"] },
 ];
 const TRACKING_OPTIONS = ["0", "1", "2", "3"] as const;
 const TRACKING_TYPE_OPTION_LABELS: Record<(typeof TRACKING_OPTIONS)[number], string> = {
@@ -424,9 +524,11 @@ const PHYSICAL_STOCK_COLUMN_SCHEMA = new Map(
 );
 const HIDDEN_ROW_VALUE_DEFAULTS: Record<string, string> = {
   baseunitid: "",
+  batchid: "",
+  mfgbatchno: "",
 };
 const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_FIELD_KEYS = ["batchdate", "mfgdate", "expirydate"] as const;
 const QUANTITY_FIELD_KEYS = new Set([
   "bookqty",
@@ -445,6 +547,7 @@ const DERIVED_FIELD_KEYS = new Set([
 const NON_NEGATIVE_NUMBER_FIELD_KEYS = PHYSICAL_STOCK_COLUMNS.filter(
   (column) => column.kind === "number" && column.key !== "diffqty",
 ).map((column) => column.key);
+const DEFAULT_BATCH_OPTION: ERPDynamicSelectOption = { value: "", label: "None" };
 function createDefaultRowValues(): Record<string, string> {
   return {
     ...PHYSICAL_STOCK_COLUMNS.reduce<Record<string, string>>((accumulator, column) => {
@@ -540,6 +643,36 @@ function buildStockBalanceQuantityValues(
     nextValues.bookfreebaseqty = formatQuantityValue(bookFreeBaseQty);
   }
   return nextValues;
+}
+function isBatchLookupTrackingType(value: string | null | undefined): boolean {
+  const normalized = (value ?? "").trim().toUpperCase();
+  return normalized === "1" || normalized === "2" || normalized === "MRP" || normalized === "BATCH";
+}
+function getBatchLookupOptionLabel(batch: ItemBatchStockLookupPayload): string {
+  return batch.ibs_batch_no?.trim() || batch.ibs_batch_id;
+}
+function buildBatchLookupOptions(
+  batches: ItemBatchStockLookupPayload[],
+): ERPDynamicSelectOption[] {
+  const seenValues = new Set<string>();
+  const options: ERPDynamicSelectOption[] = [DEFAULT_BATCH_OPTION];
+  for (const batch of batches) {
+    const value = batch.ibs_batch_id?.trim() ?? "";
+    if (!value || seenValues.has(value)) {
+      continue;
+    }
+    seenValues.add(value);
+    options.push({
+      value,
+      label: getBatchLookupOptionLabel(batch),
+    });
+  }
+  return options;
+}
+function hasBatchLookupScope(values: Record<string, string>): boolean {
+  return Boolean(
+    values.oslitemid?.trim() && values.oslunitid?.trim() && values.oslgodownid?.trim(),
+  );
 }
 function ensureTrailingEmptyRow(rows: PhysicalStockRow[], sourceRowId: number): PhysicalStockRow[] {
   const sourceRowIndex = rows.findIndex((row) => row.id === sourceRowId);
@@ -886,7 +1019,9 @@ function buildPhysicalStockDetailPayload(
   const notes = getReasonRemarks(row);
   const trackingType = getTrackingPayloadValue(row.values.osltrackingtype);
   const hasBatchDetail = Boolean(
+    toNullableTrimmedString(row.values.batchid) ||
     toNullableTrimmedString(row.values.batchno) ||
+      toNullableTrimmedString(row.values.mfgbatchno) ||
       toNullableTrimmedString(row.values.serialno) ||
       toNullableTrimmedString(row.values.batchdate) ||
       toNullableTrimmedString(row.values.mfgdate) ||
@@ -933,7 +1068,9 @@ function buildPhysicalStockDetailPayload(
         psbUnitId: unitId,
         psbBaseUnitId: baseUnitId,
         psbToBaseFactor: convFactor,
+        psbBatchId: toOptionalUuid(row.values.batchid),
         psbBatchNo: toNullableTrimmedString(row.values.batchno),
+        psbMfgBatchNo: toNullableTrimmedString(row.values.mfgbatchno),
         psbBatchDate: toIsoDateTime(row.values.batchdate),
         psbMfgDate: toIsoDateTime(row.values.mfgdate),
         psbExpiryDate: toIsoDateTime(row.values.expirydate),
@@ -956,10 +1093,139 @@ function buildPhysicalStockDetailPayload(
     ],
   };
 }
+type PhysicalStockLoadRequest =
+  | { type: "latest" }
+  | { type: "refno"; refNo: string }
+  | { type: "stock"; stockId: string; label: string };
+type PhysicalStockListFilters = {
+  search: string;
+  dateFrom: string;
+  dateTo: string;
+};
+type LoadedPhysicalStockMeta = {
+  stockId: string;
+  stockLabel: string;
+  stockDate: string;
+  stockDocNo: string | null;
+  companyId: string | null;
+  branchId: string | null;
+};
+const DEFAULT_PHYSICAL_STOCK_LIST_FILTERS: PhysicalStockListFilters = {
+  search: "",
+  dateFrom: "",
+  dateTo: "",
+};
+const EMPTY_PHYSICAL_STOCK_LIST_META: PhysicalStockListMeta = {
+  page: 1,
+  limit: 20,
+  total: 0,
+  total_pages: 0,
+};
+function createPhysicalStockListFiltersForToday(): PhysicalStockListFilters {
+  const today = toCanonicalDateValue(getTodayInputValue());
+  return {
+    search: "",
+    dateFrom: today,
+    dateTo: today,
+  };
+}
+function getPhysicalStockLabel(row: PhysicalStockHeaderPayload | PhysicalStockListRow): string {
+  return row.psc_refno?.trim() || row.psc_doc_no?.trim() || row.psc_id;
+}
+function getPhysicalStockListErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  return "Failed to load physical stock list.";
+}
+function getTrackingOptionFromPayload(value: string | null | undefined): string {
+  const normalized = value?.trim().toUpperCase() ?? "";
+  if (normalized === "MRP" || normalized === "1") {
+    return "1";
+  }
+  if (normalized === "BATCH" || normalized === "2") {
+    return "2";
+  }
+  if (normalized === "SERIAL" || normalized === "3") {
+    return "3";
+  }
+  return "0";
+}
+function mapPhysicalStockDocumentToRows(document: PhysicalStockDocumentResponse): PhysicalStockRow[] {
+  const rows: PhysicalStockRow[] = [];
+  for (const detail of document.details) {
+    const batches = detail.batch_details.length > 0 ? detail.batch_details : [null];
+    for (const batch of batches) {
+      const notes = batch?.psb_notes ?? detail.psd_notes ?? "";
+      const rowValues = withDerivedPhysicalValues({
+        ...DEFAULT_ROW_VALUES,
+        barcode: toInputValue(batch?.psb_barcode ?? detail.psd_barcode),
+        code: toInputValue(detail.psd_item_code),
+        itemname: toInputValue(detail.psd_item_name),
+        godown: toInputValue(detail.psd_godown_name),
+        uom: toInputValue(detail.psd_unit_name),
+        batchno: toInputValue(batch?.psb_batch_no),
+        serialno: toInputValue(batch?.psb_serial_no),
+        batchdate: formatDateForDisplay(batch?.psb_batch_date),
+        mfgdate: formatDateForDisplay(batch?.psb_mfg_date),
+        expirydate: formatDateForDisplay(batch?.psb_expiry_date),
+        bookqty: toInputValue(batch?.psb_book_qty ?? detail.psd_book_qty),
+        bookbaseqty: toInputValue(batch?.psb_book_base_qty ?? detail.psd_book_base_qty),
+        physicalqty: toInputValue(batch?.psb_physical_qty ?? detail.psd_physical_qty),
+        physicalbaseqty: toInputValue(
+          batch?.psb_physical_base_qty ?? detail.psd_physical_base_qty,
+        ),
+        diffqty: toInputValue(batch?.psb_diff_qty ?? detail.psd_diff_qty),
+        convfactor: toInputValue(batch?.psb_to_base_factor ?? detail.psd_to_base_factor ?? 1),
+        costprice: toInputValue(
+          batch?.psb_stock_rate_with_tax ?? detail.psd_stock_rate_with_tax,
+        ),
+        costwot: toInputValue(batch?.psb_stock_rate_wot ?? detail.psd_stock_rate_wot),
+        mrp: toInputValue(batch?.psb_mrp ?? detail.psd_mrp),
+        remarks: toInputValue(notes),
+        oslitemid: toInputValue(detail.psd_item_id),
+        oslunitid: toInputValue(detail.psd_unit_id),
+        oslbaseuomid: toInputValue(detail.psd_base_unit_id),
+        oslgodownid: toInputValue(detail.psd_godown_id),
+        osltrackingtype: getTrackingOptionFromPayload(detail.psd_tracking_type),
+        baseunitid: toInputValue(detail.psd_base_unit_id || detail.psd_unit_id),
+        batchid: toInputValue(batch?.psb_batch_id),
+        mfgbatchno: toInputValue(batch?.psb_mfg_batch_no),
+      });
+      rows.push(createRow(rows.length + 1, rowValues));
+    }
+  }
+  return rows.length > 0 ? [...rows, createEmptyRow(rows.length + 1)] : [createEmptyRow(1)];
+}
 export default function PhysicalStockPage() {
   const [voucherDate, setVoucherDate] = useState(() => getTodayInputValue());
   const [voucherRefNo, setVoucherRefNo] = useState("");
   const [rows, setRows] = useState<PhysicalStockRow[]>(() => [createEmptyRow(1)]);
+  const [loadedPhysicalStockId, setLoadedPhysicalStockId] = useState<string | null>(null);
+  const [loadedDocumentMeta, setLoadedDocumentMeta] = useState<LoadedPhysicalStockMeta | null>(
+    null,
+  );
+  const [isLoadingStock, setIsLoadingStock] = useState(false);
+  const [pendingLoadRequest, setPendingLoadRequest] = useState<PhysicalStockLoadRequest | null>(
+    null,
+  );
+  const [isDeleteLoadedStockConfirmOpen, setIsDeleteLoadedStockConfirmOpen] = useState(false);
+  const [isPhysicalStockListOpen, setIsPhysicalStockListOpen] = useState(false);
+  const [physicalStockListFilters, setPhysicalStockListFilters] =
+    useState<PhysicalStockListFilters>(DEFAULT_PHYSICAL_STOCK_LIST_FILTERS);
+  const [physicalStockListRows, setPhysicalStockListRows] = useState<PhysicalStockHeaderPayload[]>(
+    [],
+  );
+  const [physicalStockListMeta, setPhysicalStockListMeta] = useState<PhysicalStockListMeta>(
+    EMPTY_PHYSICAL_STOCK_LIST_META,
+  );
+  const [physicalStockListPage, setPhysicalStockListPage] = useState(1);
+  const [physicalStockListPageSize, setPhysicalStockListPageSize] = useState(20);
+  const [isPhysicalStockListLoading, setIsPhysicalStockListLoading] = useState(false);
+  const [physicalStockListError, setPhysicalStockListError] = useState<string | null>(null);
+  const [selectedPhysicalStockListId, setSelectedPhysicalStockListId] = useState<string | null>(
+    null,
+  );
   const [invalidFieldKeys, setInvalidFieldKeys] = useState<Record<string, true>>({});
   const [itemOptions, setItemOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_ITEM_OPTION]);
   const [godownOptions, setGodownOptions] = useState<ERPDynamicSelectOption[]>([
@@ -971,6 +1237,12 @@ export default function PhysicalStockPage() {
   const [itemDetailsByItemId, setItemDetailsByItemId] = useState<
     Record<string, ItemPriceDetailsPayload>
   >({});
+  const [batchOptions, setBatchOptions] = useState<ERPDynamicSelectOption[]>([
+    DEFAULT_BATCH_OPTION,
+  ]);
+  const [batchDetailsByBatchId, setBatchDetailsByBatchId] = useState<
+    Record<string, ItemBatchStockLookupPayload>
+  >({});
   const [openLookupCell, setOpenLookupCell] = useState<LookupCellState | null>(null);
   const [lookupSearchQuery, setLookupSearchQuery] = useState("");
   const tableRef = useRef<HTMLTableElement | null>(null);
@@ -980,6 +1252,8 @@ export default function PhysicalStockPage() {
   const lookupSearchInputRef = useRef<HTMLInputElement | null>(null);
   const itemSearchTimeoutRef = useRef<number | null>(null);
   const godownSearchTimeoutRef = useRef<number | null>(null);
+  const batchSearchTimeoutRef = useRef<number | null>(null);
+  const physicalStockListRequestRef = useRef(0);
   const {
     activeCompany,
     activeBranch,
@@ -1030,12 +1304,58 @@ export default function PhysicalStockPage() {
   >(PHYSICAL_STOCK_SAVE_ENDPOINT, {
     method: "POST",
     toast: {
-      successMessage: "Physical stock saved successfully.",
+      successMessage: "Physical stock updated successfully.",
     },
   });
+  const { run: listPhysicalStocks } = useApi<
+    PhysicalStockSuccessResponse<PhysicalStockHeaderPayload[]>
+  >(PHYSICAL_STOCK_LIST_ENDPOINT, {
+    toast: {
+      success: false,
+    },
+  });
+  const { run: listPhysicalStockRecords } = useApi<
+    PhysicalStockSuccessResponse<PhysicalStockHeaderPayload[]>
+  >(PHYSICAL_STOCK_LIST_ENDPOINT, {
+    toast: {
+      success: false,
+      error: false,
+    },
+  });
+  const { run: getPhysicalStockDocument } = useApi<
+    PhysicalStockSuccessResponse<PhysicalStockDocumentResponse>
+  >(PHYSICAL_STOCK_GET_ENDPOINT, {
+    toast: {
+      success: false,
+    },
+  });
+  const { run: getPhysicalStockDocumentByRefNo } = useApi<
+    PhysicalStockSuccessResponse<PhysicalStockDocumentResponse>
+  >(PHYSICAL_STOCK_LIST_ENDPOINT, {
+    toast: {
+      success: false,
+    },
+  });
+  const { run: deletePhysicalStock, loading: isDeletingPhysicalStock } = useApi<unknown>(
+    PHYSICAL_STOCK_DELETE_ENDPOINT,
+    {
+      method: "DELETE",
+      toast: {
+        successMessage: "Physical stock deleted successfully.",
+      },
+    },
+  );
   const { run: getItemStockBalance } = useApi<
     PhysicalStockSuccessResponse<ItemStockBalancePayload[]>
   >(ITEM_STOCK_BALANCE_GET_ENDPOINT, {
+    toast: {
+      success: false,
+      error: false,
+    },
+  });
+  const { run: listItemBatchStockOptions, loading: isBatchLookupLoading } = useApi<
+    PhysicalStockSuccessResponse<ItemBatchStockLookupPayload[]>
+  >(ITEM_BATCH_STOCK_OPTIONS_ENDPOINT, {
     toast: {
       success: false,
       error: false,
@@ -1054,6 +1374,12 @@ export default function PhysicalStockPage() {
     [unitOptions],
   );
   const draftRows = useMemo(() => getDraftRows(rows), [rows]);
+  const accountingYear = useMemo(() => formatAccountingYear(voucherDate), [voucherDate]);
+  const selectedPhysicalStockListRow = useMemo(
+    () =>
+      physicalStockListRows.find((row) => row.psc_id === selectedPhysicalStockListId) ?? null,
+    [physicalStockListRows, selectedPhysicalStockListId],
+  );
   const tableMinWidth = useMemo(
     () => getColumnMinWidth(columns),
     [columns],
@@ -1100,6 +1426,54 @@ export default function PhysicalStockPage() {
       setGodownOptions(buildGodownLookupOptions(payload, activeBranch?.brId));
     },
     [activeBranch?.brId, listGodowns],
+  );
+  const loadBatchOptions = useCallback(
+    async (row: PhysicalStockRow, search = "") => {
+      const accountingYear = formatAccountingYear(voucherDate);
+      const companyId = activeCompany?.compId?.trim() ?? "";
+      const branchId = activeBranch?.brId?.trim() ?? "";
+      const itemId = row.values.oslitemid?.trim() ?? "";
+      const unitId = row.values.oslunitid?.trim() ?? "";
+      const godownId = row.values.oslgodownid?.trim() ?? "";
+      if (!accountingYear || !companyId || !branchId || !itemId || !unitId || !godownId) {
+        setBatchOptions([DEFAULT_BATCH_OPTION]);
+        return;
+      }
+      try {
+        const response = await listItemBatchStockOptions({
+          query: {
+            ibs_acc_year: accountingYear,
+            ibs_company_id: companyId,
+            ibs_branch_id: branchId,
+            ibs_godown_id: godownId,
+            ibs_item_id: itemId,
+            ibs_unit_id: unitId,
+            ibs_stock_bucket: ITEM_STOCK_BALANCE_BUCKET,
+            limit: "50",
+            ...(search.trim() ? { search: search.trim() } : {}),
+          },
+        });
+        const batches = response?.data ?? [];
+        setBatchOptions(buildBatchLookupOptions(batches));
+        setBatchDetailsByBatchId((current) => {
+          const next = { ...current };
+          for (const batch of batches) {
+            if (batch.ibs_batch_id) {
+              next[batch.ibs_batch_id] = batch;
+            }
+          }
+          return next;
+        });
+      } catch {
+        setBatchOptions([DEFAULT_BATCH_OPTION]);
+      }
+    },
+    [
+      activeBranch?.brId,
+      activeCompany?.compId,
+      listItemBatchStockOptions,
+      voucherDate,
+    ],
   );
   useEffect(() => {
     void (async () => {
@@ -1163,6 +1537,9 @@ export default function PhysicalStockPage() {
       if (godownSearchTimeoutRef.current !== null) {
         window.clearTimeout(godownSearchTimeoutRef.current);
       }
+      if (batchSearchTimeoutRef.current !== null) {
+        window.clearTimeout(batchSearchTimeoutRef.current);
+      }
     };
   }, []);
   const handleRowChange = useCallback((rowId: number, fieldKey: string, value: string) => {
@@ -1171,10 +1548,39 @@ export default function PhysicalStockPage() {
         if (row.id !== rowId) {
           return row;
         }
-        const nextValues = withDerivedPhysicalValues({
+        const baseValues = {
           ...row.values,
           [fieldKey]: value,
-        });
+        };
+        const shouldClearBatchSelection =
+          fieldKey === "batchno" ||
+          fieldKey === "itemname" ||
+          fieldKey === "godown" ||
+          fieldKey === "uom" ||
+          fieldKey === "oslitemid" ||
+          fieldKey === "oslgodownid" ||
+          fieldKey === "oslunitid";
+        const batchAwareValues =
+          fieldKey === "osltrackingtype" && !isBatchLookupTrackingType(value)
+            ? {
+                ...baseValues,
+                batchid: "",
+                batchno: "",
+                mfgbatchno: "",
+                serialno: "",
+                batchdate: "",
+                mfgdate: "",
+                expirydate: "",
+              }
+            : shouldClearBatchSelection
+              ? {
+                  ...baseValues,
+                  batchid: "",
+                  ...(fieldKey === "batchno" ? {} : { batchno: "" }),
+                  mfgbatchno: "",
+                }
+              : baseValues;
+        const nextValues = withDerivedPhysicalValues(batchAwareValues);
         return {
           ...row,
           values: nextValues,
@@ -1324,6 +1730,13 @@ export default function PhysicalStockPage() {
             oslgodownid: godownId || row.values.oslgodownid,
             osltrackingtype: getTrackingOptionFromItem(detail),
             baseunitid: baseUnitId,
+            batchid: "",
+            batchno: "",
+            mfgbatchno: "",
+            serialno: "",
+            batchdate: "",
+            mfgdate: "",
+            expirydate: "",
           });
           return {
             ...row,
@@ -1346,6 +1759,63 @@ export default function PhysicalStockPage() {
     async (rowId: number, lookupKind: LookupKind, option: ERPDynamicSelectOption) => {
       setOpenLookupCell(null);
       setLookupSearchQuery("");
+      if (lookupKind === "batch") {
+        const batchDetail = option.value ? batchDetailsByBatchId[option.value] : undefined;
+        setRows((currentRows) => {
+          const nextRows = currentRows.map((row) => {
+            if (row.id !== rowId) {
+              return row;
+            }
+            if (!option.value) {
+              return {
+                ...row,
+                values: withDerivedPhysicalValues({
+                  ...row.values,
+                  batchid: "",
+                  batchno: "",
+                  mfgbatchno: "",
+                  serialno: "",
+                  batchdate: "",
+                  mfgdate: "",
+                  expirydate: "",
+                }),
+              };
+            }
+            const batchDate = formatDateForDisplay(batchDetail?.ibs_batch_date);
+            const mfgDate = formatDateForDisplay(batchDetail?.ibs_mfg_date);
+            const expiryDate = formatDateForDisplay(batchDetail?.ibs_expiry_date);
+            const nextValues = {
+              ...row.values,
+              batchid: batchDetail?.ibs_batch_id ?? option.value,
+              batchno: batchDetail ? getBatchLookupOptionLabel(batchDetail) : option.label,
+              mfgbatchno: toInputValue(batchDetail?.ibs_mfg_batch_no),
+              ...(batchDate ? { batchdate: batchDate } : {}),
+              ...(mfgDate ? { mfgdate: mfgDate } : {}),
+              ...(expiryDate ? { expirydate: expiryDate } : {}),
+              mrp: toInputValue(batchDetail?.ibs_mrp) || row.values.mrp,
+              barcode: toInputValue(batchDetail?.ibs_barcode) || row.values.barcode,
+              serialno: toInputValue(batchDetail?.ibs_serial_no),
+            };
+            return {
+              ...row,
+              values: batchDetail
+                ? buildStockBalanceQuantityValues(nextValues, batchDetail)
+                : withDerivedPhysicalValues(nextValues),
+            };
+          });
+          return ensureTrailingEmptyRow(nextRows, rowId);
+        });
+        setInvalidFieldKeys((current) => {
+          const invalidKey = `${rowId}:batchno`;
+          if (!current[invalidKey]) {
+            return current;
+          }
+          const next = { ...current };
+          delete next[invalidKey];
+          return next;
+        });
+        return;
+      }
       if (lookupKind === "godown") {
         const currentRowValues = rows.find((row) => row.id === rowId)?.values;
         const nextRowValues = {
@@ -1353,6 +1823,13 @@ export default function PhysicalStockPage() {
           ...(currentRowValues ?? {}),
           godown: option.value ? option.label : "",
           oslgodownid: option.value,
+          batchid: "",
+          batchno: "",
+          mfgbatchno: "",
+          serialno: "",
+          batchdate: "",
+          mfgdate: "",
+          expirydate: "",
         };
         setRows((currentRows) => {
           const nextRows = currentRows.map((row) =>
@@ -1363,6 +1840,13 @@ export default function PhysicalStockPage() {
                     ...row.values,
                     godown: option.value ? option.label : "",
                     oslgodownid: option.value,
+                    batchid: "",
+                    batchno: "",
+                    mfgbatchno: "",
+                    serialno: "",
+                    batchdate: "",
+                    mfgdate: "",
+                    expirydate: "",
                   },
                 }
               : row,
@@ -1415,7 +1899,13 @@ export default function PhysicalStockPage() {
         });
       }
     },
-    [applyItemDetailToRow, loadAndApplyItemStockBalance, rows, triggerItemPriceDetails],
+    [
+      applyItemDetailToRow,
+      batchDetailsByBatchId,
+      loadAndApplyItemStockBalance,
+      rows,
+      triggerItemPriceDetails,
+    ],
   );
   const handleUomChange = useCallback(
     (rowId: number, unitId: string) => {
@@ -1445,7 +1935,7 @@ export default function PhysicalStockPage() {
     ],
   );
   const handleLookupToggle = useCallback(
-    (cellKey: string, lookupKind: LookupKind) => {
+    (cellKey: string, lookupKind: LookupKind, row?: PhysicalStockRow) => {
       setOpenLookupCell((current) => {
         if (current?.key === cellKey) {
           setLookupSearchQuery("");
@@ -1454,13 +1944,15 @@ export default function PhysicalStockPage() {
         setLookupSearchQuery("");
         if (lookupKind === "item") {
           void loadItemOptions();
+        } else if (lookupKind === "batch" && row) {
+          void loadBatchOptions(row);
         } else {
           void loadGodownOptions();
         }
         return { key: cellKey, kind: lookupKind };
       });
     },
-    [loadGodownOptions, loadItemOptions],
+    [loadBatchOptions, loadGodownOptions, loadItemOptions],
   );
   const enqueueColumnConfigSave = useCallback((task: () => Promise<void>) => {
     const saveTask = columnSaveQueueRef.current.catch(() => undefined).then(task);
@@ -1629,50 +2121,571 @@ export default function PhysicalStockPage() {
     };
   }, [enqueueColumnConfigSave, persistPhysicalStockColumnWidth]);
   const handleLookupSearchInputChange = useCallback(
-    (lookupKind: LookupKind, search: string) => {
+    (lookupKind: LookupKind, search: string, row?: PhysicalStockRow) => {
       setLookupSearchQuery(search);
-      const timeoutRef = lookupKind === "item" ? itemSearchTimeoutRef : godownSearchTimeoutRef;
+      const timeoutRef =
+        lookupKind === "item"
+          ? itemSearchTimeoutRef
+          : lookupKind === "batch"
+            ? batchSearchTimeoutRef
+            : godownSearchTimeoutRef;
       if (timeoutRef.current !== null) {
         window.clearTimeout(timeoutRef.current);
       }
       timeoutRef.current = window.setTimeout(() => {
         if (lookupKind === "item") {
           void loadItemOptions(search);
+        } else if (lookupKind === "batch" && row) {
+          void loadBatchOptions(row, search);
         } else {
           void loadGodownOptions(search);
         }
       }, LOOKUP_SEARCH_DEBOUNCE_MS);
     },
-    [loadGodownOptions, loadItemOptions],
+    [loadBatchOptions, loadGodownOptions, loadItemOptions],
   );
-  const handleClearRows = useCallback(() => {
+  const clearPhysicalStockEditor = useCallback(() => {
     setRows([createEmptyRow(1)]);
     setInvalidFieldKeys({});
+    setBatchOptions([DEFAULT_BATCH_OPTION]);
+    setBatchDetailsByBatchId({});
+    setLookupSearchQuery("");
+    setOpenLookupCell(null);
     setVoucherRefNo("");
+    setLoadedPhysicalStockId(null);
+    setLoadedDocumentMeta(null);
+    setPendingLoadRequest(null);
+    setIsDeleteLoadedStockConfirmOpen(false);
   }, []);
+  const handleClearRows = useCallback(() => {
+    clearPhysicalStockEditor();
+  }, [clearPhysicalStockEditor]);
+  const resolveLoadContext = useCallback(() => {
+    if (!activeCompany) {
+      toast.error("Select a company in the header before loading stock.", {
+        toastId: "physical-stock-load:missing-company",
+      });
+      return null;
+    }
+    if (!activeBranch) {
+      toast.error("Select a branch in the header before loading stock.", {
+        toastId: "physical-stock-load:missing-branch",
+      });
+      return null;
+    }
+    if (!accountingYear) {
+      toast.error("Select a valid voucher date before loading stock.", {
+        toastId: "physical-stock-load:missing-date",
+      });
+      return null;
+    }
+    return {
+      accountingYear,
+      companyId: activeCompany.compId,
+      branchId: activeBranch.brId,
+    };
+  }, [accountingYear, activeBranch, activeCompany]);
+  const prefetchLoadedItemDetails = useCallback(
+    async (details: PhysicalStockDocumentResponse["details"]) => {
+      const itemIds = Array.from(
+        new Set(
+          details
+            .map((detail) => detail.psd_item_id?.trim() ?? "")
+            .filter((itemId) => itemId.length > 0),
+        ),
+      );
+      if (itemIds.length === 0) {
+        return;
+      }
+      const itemDetails = await Promise.allSettled(
+        itemIds.map((itemId) => triggerItemPriceDetails({ itemId }, true).unwrap()),
+      );
+      const nextItemDetailsById: Record<string, ItemPriceDetailsPayload> = {};
+      for (const itemDetail of itemDetails) {
+        if (itemDetail.status !== "fulfilled") {
+          continue;
+        }
+        nextItemDetailsById[itemDetail.value.item.item_id] = itemDetail.value;
+      }
+      if (Object.keys(nextItemDetailsById).length > 0) {
+        setItemDetailsByItemId((current) => ({
+          ...current,
+          ...nextItemDetailsById,
+        }));
+      }
+    },
+    [triggerItemPriceDetails],
+  );
+  const applyLoadedPhysicalStockDocument = useCallback(
+    (document: PhysicalStockDocumentResponse) => {
+      const documentRows = mapPhysicalStockDocumentToRows(document);
+      const nextVoucherDate = formatDateForDisplay(document.header.psc_date) || voucherDate;
+      const nextVoucherRefNo = document.header.psc_refno || "";
+      const loadedItems = buildLoadedLookupOptions(
+        document.details.map((detail) => ({
+          value: detail.psd_item_id,
+          label: detail.psd_item_name,
+        })),
+      );
+      const loadedGodowns = buildLoadedLookupOptions(
+        document.details.map((detail) => ({
+          value: detail.psd_godown_id,
+          label: detail.psd_godown_name,
+        })),
+      );
+      const loadedUnits = buildLoadedLookupOptions(
+        document.details.map((detail) => ({
+          value: detail.psd_unit_id,
+          label: detail.psd_unit_name,
+        })),
+      );
+      setRows(documentRows);
+      setVoucherDate(nextVoucherDate);
+      setVoucherRefNo(nextVoucherRefNo);
+      setInvalidFieldKeys({});
+      setLookupSearchQuery("");
+      setOpenLookupCell(null);
+      setLoadedPhysicalStockId(document.header.psc_id);
+      setLoadedDocumentMeta({
+        stockId: document.header.psc_id,
+        stockLabel: getPhysicalStockLabel(document.header),
+        stockDate: nextVoucherDate,
+        stockDocNo: document.header.psc_doc_no ?? null,
+        companyId: document.header.psc_company_id ?? null,
+        branchId: document.header.psc_branch_id ?? null,
+      });
+      setItemOptions((current) => mergeLookupOptions(current, loadedItems));
+      setGodownOptions((current) => mergeLookupOptions(current, loadedGodowns));
+      setUnitOptions((current) => mergeLookupOptions(current, loadedUnits));
+      void prefetchLoadedItemDetails(document.details);
+    },
+    [prefetchLoadedItemDetails, voucherDate],
+  );
+  const loadPhysicalStockList = useCallback(async () => {
+    if (!isPhysicalStockListOpen) {
+      return;
+    }
+    const requestId = physicalStockListRequestRef.current + 1;
+    physicalStockListRequestRef.current = requestId;
+    setIsPhysicalStockListLoading(true);
+    setPhysicalStockListError(null);
+    try {
+      const payload = await listPhysicalStockRecords({
+        query: {
+          page: String(physicalStockListPage),
+          limit: String(physicalStockListPageSize),
+          ...(physicalStockListFilters.search.trim()
+            ? { search: physicalStockListFilters.search.trim() }
+            : {}),
+          ...(physicalStockListFilters.dateFrom
+            ? { date_from: physicalStockListFilters.dateFrom }
+            : {}),
+          ...(physicalStockListFilters.dateTo
+            ? { date_to: physicalStockListFilters.dateTo }
+            : {}),
+        },
+      });
+      if (physicalStockListRequestRef.current !== requestId) {
+        return;
+      }
+      const nextRows = Array.isArray(payload?.data) ? payload.data : [];
+      const nextMeta = payload?.meta;
+      setPhysicalStockListRows(nextRows);
+      setPhysicalStockListMeta({
+        page:
+          typeof nextMeta?.page === "number" && Number.isFinite(nextMeta.page)
+            ? nextMeta.page
+            : physicalStockListPage,
+        limit:
+          typeof nextMeta?.limit === "number" && Number.isFinite(nextMeta.limit)
+            ? nextMeta.limit
+            : physicalStockListPageSize,
+        total:
+          typeof nextMeta?.total === "number" && Number.isFinite(nextMeta.total)
+            ? nextMeta.total
+            : nextRows.length,
+        total_pages:
+          typeof nextMeta?.total_pages === "number" && Number.isFinite(nextMeta.total_pages)
+            ? nextMeta.total_pages
+            : nextRows.length > 0
+              ? 1
+              : 0,
+      });
+    } catch (error) {
+      if (physicalStockListRequestRef.current !== requestId) {
+        return;
+      }
+      setPhysicalStockListRows([]);
+      setPhysicalStockListMeta({
+        ...EMPTY_PHYSICAL_STOCK_LIST_META,
+        page: physicalStockListPage,
+        limit: physicalStockListPageSize,
+      });
+      setPhysicalStockListError(getPhysicalStockListErrorMessage(error));
+    } finally {
+      if (physicalStockListRequestRef.current === requestId) {
+        setIsPhysicalStockListLoading(false);
+      }
+    }
+  }, [
+    isPhysicalStockListOpen,
+    listPhysicalStockRecords,
+    physicalStockListFilters.dateFrom,
+    physicalStockListFilters.dateTo,
+    physicalStockListFilters.search,
+    physicalStockListPage,
+    physicalStockListPageSize,
+  ]);
+  const handleOpenPhysicalStockList = useCallback(() => {
+    setPhysicalStockListPage(1);
+    setPhysicalStockListFilters(createPhysicalStockListFiltersForToday());
+    setIsPhysicalStockListOpen(true);
+    setPhysicalStockListError(null);
+  }, []);
+  const handleClosePhysicalStockList = useCallback(() => {
+    physicalStockListRequestRef.current += 1;
+    setIsPhysicalStockListOpen(false);
+    setIsPhysicalStockListLoading(false);
+    setPhysicalStockListError(null);
+    setPhysicalStockListPage(1);
+    setPhysicalStockListFilters(DEFAULT_PHYSICAL_STOCK_LIST_FILTERS);
+    setSelectedPhysicalStockListId(null);
+  }, []);
+  const handlePhysicalStockListSearchChange = useCallback((search: string) => {
+    setPhysicalStockListPage(1);
+    setPhysicalStockListFilters((current) => ({ ...current, search }));
+  }, []);
+  const handlePhysicalStockListDateFromChange = useCallback((dateFrom: string) => {
+    setPhysicalStockListPage(1);
+    setPhysicalStockListFilters((current) => ({ ...current, dateFrom }));
+  }, []);
+  const handlePhysicalStockListDateToChange = useCallback((dateTo: string) => {
+    setPhysicalStockListPage(1);
+    setPhysicalStockListFilters((current) => ({ ...current, dateTo }));
+  }, []);
+  const handlePhysicalStockListPageSizeChange = useCallback((pageSize: number) => {
+    setPhysicalStockListPage(1);
+    setPhysicalStockListPageSize(pageSize);
+  }, []);
+  const handlePhysicalStockListRowSelect = useCallback((row: PhysicalStockListRow) => {
+    setSelectedPhysicalStockListId(row.psc_id);
+  }, []);
+
+  useEffect(() => {
+    if (!isPhysicalStockListOpen) {
+      return;
+    }
+    void loadPhysicalStockList();
+  }, [isPhysicalStockListOpen, loadPhysicalStockList]);
+
+  useEffect(() => {
+    if (!isPhysicalStockListOpen) {
+      return;
+    }
+    setSelectedPhysicalStockListId((current) => {
+      if (current && physicalStockListRows.some((row) => row.psc_id === current)) {
+        return current;
+      }
+      return physicalStockListRows[0]?.psc_id ?? null;
+    });
+  }, [isPhysicalStockListOpen, physicalStockListRows]);
+
+  useEffect(() => {
+    const handleF5KeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key !== "F5" ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+      event.preventDefault();
+      if (isPhysicalStockListOpen) {
+        void loadPhysicalStockList();
+        return;
+      }
+      handleOpenPhysicalStockList();
+    };
+    window.addEventListener("keydown", handleF5KeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleF5KeyDown);
+    };
+  }, [handleOpenPhysicalStockList, isPhysicalStockListOpen, loadPhysicalStockList]);
+
+  const loadPhysicalStockById = useCallback(
+    async (stockId: string) => {
+      const normalizedStockId = stockId.trim();
+      if (!normalizedStockId) {
+        return;
+      }
+      setPendingLoadRequest(null);
+      setIsLoadingStock(true);
+      try {
+        const documentPayload = await getPhysicalStockDocument({
+          query: {
+            ps_id: normalizedStockId,
+          },
+        });
+        const document = documentPayload?.data;
+        if (!document) {
+          toast.info("No saved physical stock was found for the selected record.", {
+            toastId: "physical-stock-load:empty-document",
+          });
+          return;
+        }
+        applyLoadedPhysicalStockDocument(document);
+        setIsPhysicalStockListOpen(false);
+      } catch {
+        // Toasting is handled in useApi.
+      } finally {
+        setIsLoadingStock(false);
+      }
+    },
+    [applyLoadedPhysicalStockDocument, getPhysicalStockDocument],
+  );
+  const loadLatestPhysicalStock = useCallback(async () => {
+    const loadContext = resolveLoadContext();
+    if (!loadContext) {
+      return;
+    }
+    setPendingLoadRequest(null);
+    setIsLoadingStock(true);
+    try {
+      const listPayload = await listPhysicalStocks({
+        query: {
+          ps_company_id: loadContext.companyId,
+          ps_branch_id: loadContext.branchId,
+          ps_acc_year: loadContext.accountingYear,
+          page: "1",
+          limit: "1",
+        },
+      });
+      const latestDocumentHeader = Array.isArray(listPayload?.data) ? listPayload.data[0] : null;
+      if (!latestDocumentHeader?.psc_id) {
+        toast.info("No saved physical stock was found for the selected company and branch.", {
+          toastId: "physical-stock-load:not-found",
+        });
+        return;
+      }
+      await loadPhysicalStockById(latestDocumentHeader.psc_id);
+    } catch {
+      // Toasting is handled in useApi.
+    } finally {
+      setIsLoadingStock(false);
+    }
+  }, [listPhysicalStocks, loadPhysicalStockById, resolveLoadContext]);
+  const loadPhysicalStockByRefNo = useCallback(
+    async (refNo?: string) => {
+      const normalizedRefNo = (refNo ?? voucherRefNo).trim();
+      if (!normalizedRefNo) {
+        toast.error("Enter a reference no before loading stock.", {
+          toastId: "physical-stock-load:missing-refno",
+        });
+        return;
+      }
+      const loadContext = resolveLoadContext();
+      if (!loadContext) {
+        return;
+      }
+      setPendingLoadRequest(null);
+      setIsLoadingStock(true);
+      try {
+        const documentPayload = await getPhysicalStockDocumentByRefNo({
+          query: {
+            ps_doc_refno: normalizedRefNo,
+            ps_company_id: loadContext.companyId,
+            ps_branch_id: loadContext.branchId,
+            ps_acc_year: loadContext.accountingYear,
+          },
+        });
+        const document = documentPayload?.data;
+        if (!document) {
+          toast.info("No saved physical stock was found for the provided reference no.", {
+            toastId: "physical-stock-load:empty-refno-document",
+          });
+          return;
+        }
+        applyLoadedPhysicalStockDocument(document);
+      } catch {
+        // Toasting is handled in useApi.
+      } finally {
+        setIsLoadingStock(false);
+      }
+    },
+    [
+      applyLoadedPhysicalStockDocument,
+      getPhysicalStockDocumentByRefNo,
+      resolveLoadContext,
+      voucherRefNo,
+    ],
+  );
+  const handleLoadStock = useCallback(() => {
+    if (isLoadingStock || isSavingPhysicalStock || isDeletingPhysicalStock || isBusinessContextLoading) {
+      return;
+    }
+    if (draftRows.length > 0) {
+      setPendingLoadRequest({ type: "latest" });
+      return;
+    }
+    void loadLatestPhysicalStock();
+  }, [
+    draftRows.length,
+    isBusinessContextLoading,
+    isDeletingPhysicalStock,
+    isLoadingStock,
+    isSavingPhysicalStock,
+    loadLatestPhysicalStock,
+  ]);
+  const handleLoadByRefNo = useCallback(() => {
+    if (isLoadingStock || isSavingPhysicalStock || isDeletingPhysicalStock || isBusinessContextLoading) {
+      return;
+    }
+    const normalizedRefNo = voucherRefNo.trim();
+    if (!normalizedRefNo) {
+      toast.error("Enter a reference no before loading stock.", {
+        toastId: "physical-stock-load:missing-refno",
+      });
+      return;
+    }
+    if (draftRows.length > 0) {
+      setPendingLoadRequest({
+        type: "refno",
+        refNo: normalizedRefNo,
+      });
+      return;
+    }
+    void loadPhysicalStockByRefNo(normalizedRefNo);
+  }, [
+    draftRows.length,
+    isBusinessContextLoading,
+    isDeletingPhysicalStock,
+    isLoadingStock,
+    isSavingPhysicalStock,
+    loadPhysicalStockByRefNo,
+    voucherRefNo,
+  ]);
+  const handleLoadPhysicalStockListRow = useCallback(
+    (row: PhysicalStockListRow) => {
+      if (
+        isLoadingStock ||
+        isSavingPhysicalStock ||
+        isDeletingPhysicalStock ||
+        isBusinessContextLoading
+      ) {
+        return;
+      }
+      const stockId = row.psc_id?.trim() ?? "";
+      if (!stockId) {
+        return;
+      }
+      const stockLabel = getPhysicalStockLabel(row);
+      setSelectedPhysicalStockListId(stockId);
+      if (draftRows.length > 0) {
+        setPendingLoadRequest({
+          type: "stock",
+          stockId,
+          label: stockLabel,
+        });
+        return;
+      }
+      void loadPhysicalStockById(stockId);
+    },
+    [
+      draftRows.length,
+      isBusinessContextLoading,
+      isDeletingPhysicalStock,
+      isLoadingStock,
+      isSavingPhysicalStock,
+      loadPhysicalStockById,
+    ],
+  );
+  const handleLoadSelectedPhysicalStockListRow = useCallback(() => {
+    if (!selectedPhysicalStockListRow) {
+      return;
+    }
+    handleLoadPhysicalStockListRow(selectedPhysicalStockListRow);
+  }, [handleLoadPhysicalStockListRow, selectedPhysicalStockListRow]);
+  const handleConfirmLoad = useCallback(() => {
+    if (!pendingLoadRequest || isLoadingStock) {
+      return;
+    }
+    if (pendingLoadRequest.type === "latest") {
+      void loadLatestPhysicalStock();
+      return;
+    }
+    if (pendingLoadRequest.type === "refno") {
+      void loadPhysicalStockByRefNo(pendingLoadRequest.refNo);
+      return;
+    }
+    void loadPhysicalStockById(pendingLoadRequest.stockId);
+  }, [
+    isLoadingStock,
+    loadLatestPhysicalStock,
+    loadPhysicalStockById,
+    loadPhysicalStockByRefNo,
+    pendingLoadRequest,
+  ]);
+  const handleDeleteLoadedStock = useCallback(() => {
+    if (
+      !loadedPhysicalStockId ||
+      isLoadingStock ||
+      isSavingPhysicalStock ||
+      isDeletingPhysicalStock ||
+      isBusinessContextLoading
+    ) {
+      return;
+    }
+    setIsDeleteLoadedStockConfirmOpen(true);
+  }, [
+    isBusinessContextLoading,
+    isDeletingPhysicalStock,
+    isLoadingStock,
+    isSavingPhysicalStock,
+    loadedPhysicalStockId,
+  ]);
+  const handleConfirmDeleteLoadedStock = useCallback(async () => {
+    if (!loadedPhysicalStockId) {
+      setIsDeleteLoadedStockConfirmOpen(false);
+      toast.error("Load a physical stock document before deleting it.", {
+        toastId: "physical-stock-delete:missing-document",
+      });
+      return;
+    }
+    try {
+      await deletePhysicalStock({
+        query: {
+          ps_id: loadedPhysicalStockId,
+        },
+      });
+      clearPhysicalStockEditor();
+    } catch {
+      // Toasting is handled in useApi.
+    }
+  }, [clearPhysicalStockEditor, deletePhysicalStock, loadedPhysicalStockId]);
   const handleSavePhysicalStock = useCallback(async () => {
     if (!activeCompany) {
-      toast.error("Select a company in the header before saving physical stock.", {
+      toast.error("Select a company in the header before updating physical stock.", {
         toastId: "physical-stock-save:missing-company",
       });
       return;
     }
     if (!activeBranch) {
-      toast.error("Select a branch in the header before saving physical stock.", {
+      toast.error("Select a branch in the header before updating physical stock.", {
         toastId: "physical-stock-save:missing-branch",
       });
       return;
     }
-    const accountingYear = formatAccountingYear(voucherDate);
     if (!accountingYear) {
-      toast.error("Select a valid voucher date before saving physical stock.", {
+      toast.error("Select a valid voucher date before updating physical stock.", {
         toastId: "physical-stock-save:missing-date",
       });
       return;
     }
     const voucherDateIso = toIsoDateTime(voucherDate);
     if (!voucherDateIso) {
-      toast.error("Select a valid voucher date before saving physical stock.", {
+      toast.error("Select a valid voucher date before updating physical stock.", {
         toastId: "physical-stock-save:invalid-date",
       });
       return;
@@ -1685,7 +2698,7 @@ export default function PhysicalStockPage() {
       return;
     }
     if (draftRows.length === 0) {
-      toast.error("Add at least one physical stock row before saving.", {
+      toast.error("Add at least one physical stock row before updating stock.", {
         toastId: "physical-stock-save:no-rows",
       });
       return;
@@ -1720,7 +2733,11 @@ export default function PhysicalStockPage() {
       return;
     }
     setInvalidFieldKeys({});
-    const docNo = buildDocumentNumber(voucherRefNo);
+    const loadedDocNo = Number.parseInt(loadedDocumentMeta?.stockDocNo ?? "", 10);
+    const docNo =
+      loadedPhysicalStockId && Number.isInteger(loadedDocNo) && loadedDocNo > 0
+        ? loadedDocNo
+        : buildDocumentNumber(voucherRefNo);
     const totalBookValue = draftRows.reduce(
       (sum, row) => sum + parseDecimal(row.values.bookbaseqty) * parseDecimal(row.values.costwot),
       0,
@@ -1732,6 +2749,7 @@ export default function PhysicalStockPage() {
     );
     const normalizedRefNo = toNullableTrimmedString(voucherRefNo) ?? `PHY-STK-${docNo}`;
     const requestPayload: PhysicalStockSaveRequest = {
+      ...(loadedPhysicalStockId ? { psId: loadedPhysicalStockId } : {}),
       psAccYear: accountingYear,
       psCompanyId: activeCompany.compId,
       psBranchId: activeBranch.brId,
@@ -1758,6 +2776,7 @@ export default function PhysicalStockPage() {
         draftRows.map(getReasonRemarks).filter((value): value is string => Boolean(value)).join(" | ") ||
         null,
       psCreatedBy: userId,
+      psModifiedBy: loadedPhysicalStockId ? userId : null,
       details: draftRows.map((row, index) =>
         buildPhysicalStockDetailPayload(row, index, {
           accountingYear,
@@ -1768,14 +2787,25 @@ export default function PhysicalStockPage() {
     };
     try {
       const response = await savePhysicalStock({ body: requestPayload });
-      const savedRefNo = response?.data?.header?.psc_refno?.trim();
-      if (savedRefNo) {
-        setVoucherRefNo(savedRefNo);
+      const document = response?.data;
+      if (document) {
+        applyLoadedPhysicalStockDocument(document);
       }
     } catch {
       // useApi already shows the API error toast.
     }
-  }, [activeBranch, activeCompany, draftRows, savePhysicalStock, voucherDate, voucherRefNo]);
+  }, [
+    accountingYear,
+    activeBranch,
+    activeCompany,
+    applyLoadedPhysicalStockDocument,
+    draftRows,
+    loadedPhysicalStockId,
+    loadedDocumentMeta?.stockDocNo,
+    savePhysicalStock,
+    voucherDate,
+    voucherRefNo,
+  ]);
   const renderCell = (row: PhysicalStockRow, rowIndex: number, column: PhysicalStockColumn) => {
     const value = row.values[column.key] ?? "";
     const invalid = Boolean(invalidFieldKeys[`${row.id}:${column.key}`]);
@@ -1789,6 +2819,42 @@ export default function PhysicalStockPage() {
       isNumeric && styles.numericInput,
       invalid && styles.requiredField,
     );
+    if (column.key === "batchno" && isBatchLookupTrackingType(row.values.osltrackingtype)) {
+      const canSearchBatches = hasBatchLookupScope(row.values);
+      const visibleBatchOptions = canSearchBatches
+        ? filterLookupOptions(batchOptions, lookupSearchQuery)
+        : [];
+      return (
+        <LookupCell
+          rowId={row.id}
+          fieldKey={column.key}
+          cellKey={cellKey}
+          lookupKind="batch"
+          isOpen={isLookupOpen}
+          isLoading={isBatchLookupLoading}
+          selectedId={row.values.batchid || row.values.batchno || ""}
+          selectedLabel={row.values.batchno ?? ""}
+          placeholder={`Search ${column.header}`}
+          header={column.header}
+          emptyMessage={
+            canSearchBatches ? "No batches found." : "Select item, godown and Uom first."
+          }
+          options={visibleBatchOptions}
+          searchQuery={lookupSearchQuery}
+          shortcutValues={row.values}
+          hasValidationError={invalid}
+          styles={styles}
+          searchInputRef={lookupSearchInputRef}
+          rootRef={(element) => {
+            lookupRootRefs.current[cellKey] = element;
+          }}
+          onToggle={() => handleLookupToggle(cellKey, "batch", row)}
+          onTriggerKeyDown={handleFieldNavigationKeyDown}
+          onSearchChange={(search) => handleLookupSearchInputChange("batch", search, row)}
+          onSelect={(option) => void handleLookupSelection(row.id, "batch", option)}
+        />
+      );
+    }
     if (column.kind === "lookup" && lookupKind) {
       const selectedId =
         lookupKind === "item" ? row.values.oslitemid ?? "" : row.values.oslgodownid ?? "";
@@ -1822,9 +2888,9 @@ export default function PhysicalStockPage() {
           rootRef={(element) => {
             lookupRootRefs.current[cellKey] = element;
           }}
-          onToggle={() => handleLookupToggle(cellKey, lookupKind)}
+          onToggle={() => handleLookupToggle(cellKey, lookupKind, row)}
           onTriggerKeyDown={handleFieldNavigationKeyDown}
-          onSearchChange={(search) => handleLookupSearchInputChange(lookupKind, search)}
+          onSearchChange={(search) => handleLookupSearchInputChange(lookupKind, search, row)}
           onSelect={(option) => void handleLookupSelection(row.id, lookupKind, option)}
         />
       );
@@ -1860,6 +2926,7 @@ export default function PhysicalStockPage() {
       );
     }
     if (column.kind === "select") {
+      const isTrackingTypeSelect = column.key === "osltrackingtype";
       return (
         <select
           data-opening-stock-field-control="true"
@@ -1868,7 +2935,12 @@ export default function PhysicalStockPage() {
           value={value}
           onChange={(event) => handleRowChange(row.id, column.key, event.target.value)}
           onKeyDown={handleFieldNavigationKeyDown}
-          className={cx(styles.cellSelect, invalid && styles.requiredField)}
+          className={cx(
+            styles.cellSelect,
+            isTrackingTypeSelect && styles.cellSelectNoArrow,
+            invalid && styles.requiredField,
+          )}
+          disabled={isTrackingTypeSelect}
           aria-invalid={invalid || undefined}
         >
           {(column.options ?? []).map((option) => (
@@ -1885,6 +2957,7 @@ export default function PhysicalStockPage() {
     }
     if (column.kind === "date") {
       const datePickerKey = `${row.id}:${column.key}`;
+      const isBatchDateField = (DATE_FIELD_KEYS as readonly string[]).includes(column.key);
       return (
         <div className={cx(styles.dateInputWrap, invalid && styles.requiredDateWrap)}>
           <input
@@ -1901,6 +2974,7 @@ export default function PhysicalStockPage() {
             placeholder="dd/mm/yyyy"
             inputMode="numeric"
             maxLength={10}
+            disabled={isBatchDateField}
             aria-invalid={invalid || undefined}
           />
           <input
@@ -1915,6 +2989,7 @@ export default function PhysicalStockPage() {
             tabIndex={-1}
             aria-hidden="true"
             className={styles.hiddenDatePickerInput}
+            disabled={isBatchDateField}
           />
           <button
             type="button"
@@ -1924,6 +2999,7 @@ export default function PhysicalStockPage() {
             )}
             onClick={() => openDatePicker(rowDatePickerRefs.current[datePickerKey] ?? null)}
             aria-label={`Open ${column.header} calendar for row ${rowIndex + 1}`}
+            disabled={isBatchDateField}
           >
             <FiCalendar
               className={styles.datePickerIcon}
@@ -1975,7 +3051,11 @@ export default function PhysicalStockPage() {
       <header className={styles.header}>
         <div className={styles.headingBlock}>
           <div className={styles.headingRow}>
-            <h1 className={styles.title}>Physical Stock</h1>
+            <h1 className={styles.title}>
+              {loadedPhysicalStockId && draftRows.length > 0
+                ? "Physical Stock (Edit)"
+                : "Physical Stock"}
+            </h1>
           </div>
         </div>
       </header>
@@ -2023,6 +3103,13 @@ export default function PhysicalStockPage() {
                   type="text"
                   value={voucherRefNo}
                   onChange={(event) => setVoucherRefNo(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") {
+                      return;
+                    }
+                    event.preventDefault();
+                    handleLoadByRefNo();
+                  }}
                   className={cx(styles.toolbarDateInput, styles.toolbarRefInput)}
                   autoComplete="off"
                   spellCheck={false}
@@ -2031,21 +3118,100 @@ export default function PhysicalStockPage() {
             </label>
             <button
               type="button"
+              className={cx(styles.createButton, styles.refLoadButton)}
+              onClick={handleLoadByRefNo}
+              disabled={
+                isLoadingStock ||
+                isSavingPhysicalStock ||
+                isDeletingPhysicalStock ||
+                isBusinessContextLoading
+              }
+            >
+              <FiSearch
+                className={styles.createIcon}
+                aria-hidden="true"
+              />
+              <span>{isLoadingStock ? "Loading..." : "Load Ref No"}</span>
+            </button>
+            <button
+              type="button"
+              className={cx(styles.createButton, styles.loadButton)}
+              onClick={handleLoadStock}
+              disabled={
+                isLoadingStock ||
+                isSavingPhysicalStock ||
+                isDeletingPhysicalStock ||
+                isBusinessContextLoading
+              }
+            >
+              <FiDownload
+                className={styles.createIcon}
+                aria-hidden="true"
+              />
+              <span>{isLoadingStock ? "Loading..." : "Load Stock"}</span>
+            </button>
+            <button
+              type="button"
               className={cx(styles.createButton, styles.updateButton)}
               onClick={() => void handleSavePhysicalStock()}
-              disabled={isSavingPhysicalStock || isBusinessContextLoading}
+              disabled={
+                isSavingPhysicalStock ||
+                isLoadingStock ||
+                isDeletingPhysicalStock ||
+                isBusinessContextLoading
+              }
             >
               <FiSave
                 className={styles.createIcon}
                 aria-hidden="true"
               />
-              <span>{isSavingPhysicalStock ? "Saving..." : "Save Stock"}</span>
+              <span>{isSavingPhysicalStock ? "Updating..." : "Update Stock"}</span>
+            </button>
+            <button
+              type="button"
+              className={cx(styles.createButton, styles.deleteStockButton)}
+              onClick={handleDeleteLoadedStock}
+              disabled={
+                !loadedPhysicalStockId ||
+                isDeletingPhysicalStock ||
+                isSavingPhysicalStock ||
+                isLoadingStock ||
+                isBusinessContextLoading
+              }
+            >
+              <FiTrash2
+                className={styles.createIcon}
+                aria-hidden="true"
+              />
+              <span>{isDeletingPhysicalStock ? "Deleting..." : "Delete Stock"}</span>
+            </button>
+            <button
+              type="button"
+              className={cx(styles.createButton, styles.loadButton)}
+              onClick={handleOpenPhysicalStockList}
+              disabled={
+                isLoadingStock ||
+                isSavingPhysicalStock ||
+                isDeletingPhysicalStock ||
+                isBusinessContextLoading
+              }
+            >
+              <FiList
+                className={styles.createIcon}
+                aria-hidden="true"
+              />
+              <span>Open List</span>
             </button>
             <button
               type="button"
               className={cx(styles.createButton, styles.clearRowsButton)}
               onClick={handleClearRows}
-              disabled={isSavingPhysicalStock || draftRows.length === 0}
+              disabled={
+                isSavingPhysicalStock ||
+                isLoadingStock ||
+                isDeletingPhysicalStock ||
+                draftRows.length === 0
+              }
             >
               <FiRotateCcw
                 className={styles.createIcon}
@@ -2217,6 +3383,74 @@ export default function PhysicalStockPage() {
           </div>
         </div>
       </div>
+      <DeleteConfirmModal
+        isOpen={pendingLoadRequest !== null}
+        title="Replace current rows?"
+        message=""
+        iconVariant="replace"
+        confirmLabel={
+          pendingLoadRequest?.type === "latest"
+            ? "Load Stock"
+            : pendingLoadRequest?.type === "refno"
+              ? "Load Ref No"
+              : "Load Selected"
+        }
+        cancelLabel="Keep current rows"
+        loading={isLoadingStock}
+        loadingLabel="Loading..."
+        onConfirm={handleConfirmLoad}
+        onCancel={() => {
+          if (!isLoadingStock) {
+            setPendingLoadRequest(null);
+          }
+        }}
+      />
+      <DeleteConfirmModal
+        isOpen={isDeleteLoadedStockConfirmOpen}
+        itemName={
+          loadedDocumentMeta?.stockLabel || voucherRefNo || loadedPhysicalStockId || undefined
+        }
+        title="Delete Physical Stock?"
+        message={
+          loadedDocumentMeta?.stockLabel || voucherRefNo
+            ? `Do you really want to delete the loaded physical stock "${loadedDocumentMeta?.stockLabel || voucherRefNo}"? This action cannot be undone.`
+            : "Do you really want to delete the loaded physical stock? This action cannot be undone."
+        }
+        confirmLabel="Delete Stock"
+        cancelLabel="Cancel"
+        loading={isDeletingPhysicalStock}
+        loadingLabel="Deleting..."
+        onConfirm={handleConfirmDeleteLoadedStock}
+        onCancel={() => {
+          if (!isDeletingPhysicalStock) {
+            setIsDeleteLoadedStockConfirmOpen(false);
+          }
+        }}
+      />
+      <PhysicalStockListModal
+        isOpen={isPhysicalStockListOpen}
+        suspendKeyboardShortcuts={pendingLoadRequest !== null}
+        filters={physicalStockListFilters}
+        rows={physicalStockListRows}
+        loading={isPhysicalStockListLoading}
+        error={physicalStockListError}
+        totalEntries={physicalStockListMeta.total}
+        currentPage={physicalStockListPage}
+        pageSize={physicalStockListPageSize}
+        selectedStockId={selectedPhysicalStockListId}
+        selectedStockLabel={
+          selectedPhysicalStockListRow ? getPhysicalStockLabel(selectedPhysicalStockListRow) : null
+        }
+        onClose={handleClosePhysicalStockList}
+        onSearchChange={handlePhysicalStockListSearchChange}
+        onDateFromChange={handlePhysicalStockListDateFromChange}
+        onDateToChange={handlePhysicalStockListDateToChange}
+        onPageChange={setPhysicalStockListPage}
+        onPageSizeChange={handlePhysicalStockListPageSizeChange}
+        onSelectRow={handlePhysicalStockListRowSelect}
+        onLoadRow={handleLoadPhysicalStockListRow}
+        onLoadSelected={handleLoadSelectedPhysicalStockListRow}
+      />
     </section>
   );
 }

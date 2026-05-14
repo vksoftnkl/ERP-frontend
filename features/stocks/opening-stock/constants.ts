@@ -110,6 +110,11 @@ export const LOOKUP_FIELD_CONFIG: Record<
     idField: "oslgodownid",
     emptyMessage: "No godowns found.",
   },
+  batch: {
+    labelField: "batchno",
+    idField: "batchid",
+    emptyMessage: "No batches found.",
+  },
 };
 export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
   barcode: {
