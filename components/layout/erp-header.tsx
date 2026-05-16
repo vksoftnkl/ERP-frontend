@@ -21,7 +21,6 @@ import {
   DEFAULT_BRANCH_OPTIONS,
   DEFAULT_COMPANY_OPTIONS,
   DEFAULT_DATE_FORMAT_OPTIONS,
-  ERP_HEADER_ICON_COMPONENTS,
   DEFAULT_PRIMARY_MENU,
   DEFAULT_QUICK_TABS,
 } from "./constants";
@@ -29,10 +28,7 @@ import type {
   ErpHeaderItem,
   ErpHeaderProps,
   HeaderRightProps,
-  MenuLinkProps,
-  MenuTreeProps,
   RecentPageOption,
-  TabStripProps,
 } from "./types";
 import { useGetPrimaryMenuQuery } from "@/store/api/shellApi";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -41,6 +37,8 @@ import {
   recentPagesChanged,
   selectRecentPages,
 } from "@/store/slices/authSlice";
+import { MenuTree } from "./erp-header-menu";
+import { TabStrip } from "./erp-header-tab-strip";
 export type { ErpHeaderItem, ErpHeaderProps } from "./types";
 
 // ─── Utility functions ────────────────────────────────────────────────────────
@@ -100,72 +98,6 @@ function buildRouteLabelLookup(items: ErpHeaderItem[]): Map<string, string> {
   return lookup;
 }
 
-function getItemRoute(item: ErpHeaderItem): string | null {
-  return toInternalRoute(item.href);
-}
-
-function isMenuItemActive(item: ErpHeaderItem, currentPath?: string): boolean {
-  if (!currentPath) return false;
-  const route = getItemRoute(item);
-  if (route === currentPath) return true;
-  return item.children?.some((child) => isMenuItemActive(child, currentPath)) ?? false;
-}
-
-function getMenuItemElement(element: HTMLElement): HTMLLIElement | null {
-  return element.closest(`li.${styles.menuItem}`);
-}
-
-function getDirectMenuButton(element: Element | null): HTMLButtonElement | null {
-  if (!(element instanceof HTMLElement)) return null;
-  for (const child of Array.from(element.children)) {
-    if (child instanceof HTMLButtonElement) return child;
-  }
-  return null;
-}
-
-function getDirectSubmenu(element: Element | null): HTMLUListElement | null {
-  if (!(element instanceof HTMLElement)) return null;
-  for (const child of Array.from(element.children)) {
-    if (child instanceof HTMLUListElement) return child;
-  }
-  return null;
-}
-
-function getMenuButtonsInList(list: Element | null): HTMLButtonElement[] {
-  if (!(list instanceof HTMLElement)) return [];
-  return Array.from(list.children)
-    .map((child) => getDirectMenuButton(child))
-    .filter((button): button is HTMLButtonElement => button !== null);
-}
-
-function focusSiblingButton(button: HTMLButtonElement, offset: number): boolean {
-  const menuItem = getMenuItemElement(button);
-  const siblings = getMenuButtonsInList(menuItem?.parentElement ?? null);
-  const currentIndex = siblings.indexOf(button);
-  if (currentIndex === -1 || siblings.length === 0) return false;
-  const nextIndex = (currentIndex + offset + siblings.length) % siblings.length;
-  siblings[nextIndex]?.focus();
-  return true;
-}
-
-function focusChildMenuButton(button: HTMLButtonElement, useLastChild = false): boolean {
-  const menuItem = getMenuItemElement(button);
-  const submenu = getDirectSubmenu(menuItem);
-  const submenuButtons = getMenuButtonsInList(submenu);
-  if (submenuButtons.length === 0) return false;
-  const target = useLastChild ? submenuButtons[submenuButtons.length - 1] : submenuButtons[0];
-  target?.focus();
-  return true;
-}
-
-function focusParentMenuButton(button: HTMLButtonElement): boolean {
-  const menuItem = getMenuItemElement(button);
-  const parentList = menuItem?.parentElement;
-  const parentMenuItem = parentList?.closest(`li.${styles.menuItem}`) ?? null;
-  const parentButton = getDirectMenuButton(parentMenuItem);
-  parentButton?.focus();
-  return parentButton !== null;
-}
 
 // ─── Calendar helpers ─────────────────────────────────────────────────────────
 
@@ -530,140 +462,6 @@ function UserMenuDropdown({
   );
 }
 
-// ─── MenuLink component ───────────────────────────────────────────────────────
-
-function MenuLink({
-  item,
-  className,
-  depth,
-  hasSubmenu,
-  isCurrentPage = false,
-  onNavigate,
-  onMenuClose,
-}: MenuLinkProps) {
-  const Icon = item.iconKey ? ERP_HEADER_ICON_COMPONENTS[item.iconKey] : undefined;
-
-  const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    item.onClick?.();
-    if (item.href && item.href !== "#") {
-      event.currentTarget.blur(); onMenuClose(); onNavigate(item.href); return;
-    }
-    if (item.onClick && !hasSubmenu) { event.currentTarget.blur(); onMenuClose(); return; }
-    if (!item.onClick && !hasSubmenu) {
-      event.currentTarget.blur(); onMenuClose(); window.alert(`Navigating to ${item.label}`);
-    }
-  }, [item.href, item.onClick, item.label, hasSubmenu, onNavigate, onMenuClose]);
-
-  const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>) => {
-    const { currentTarget, key } = event;
-    const isRootLevel = depth === 0;
-
-    if (key === "Enter" || key === " ") {
-      event.preventDefault();
-      if (hasSubmenu && focusChildMenuButton(currentTarget)) return;
-      currentTarget.click(); return;
-    }
-    if (isRootLevel) {
-      if (key === "ArrowRight") { event.preventDefault(); focusSiblingButton(currentTarget, 1); return; }
-      if (key === "ArrowLeft") { event.preventDefault(); focusSiblingButton(currentTarget, -1); return; }
-      if (key === "ArrowDown") { if (hasSubmenu) { event.preventDefault(); focusChildMenuButton(currentTarget); } return; }
-      if (key === "ArrowUp") { if (hasSubmenu) { event.preventDefault(); focusChildMenuButton(currentTarget, true); } }
-      return;
-    }
-    if (key === "ArrowDown") { event.preventDefault(); focusSiblingButton(currentTarget, 1); return; }
-    if (key === "ArrowUp") { event.preventDefault(); focusSiblingButton(currentTarget, -1); return; }
-    if (key === "ArrowRight") { if (hasSubmenu) { event.preventDefault(); focusChildMenuButton(currentTarget); } return; }
-    if (key === "ArrowLeft") { event.preventDefault(); focusParentMenuButton(currentTarget); }
-  }, [depth, hasSubmenu]);
-
-  return (
-    <button
-      type="button"
-      className={cx(styles.menuLinkButton, className, hasSubmenu && styles.menuLinkWithSubmenu)}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      role="menuitem"
-      aria-haspopup={hasSubmenu ? "menu" : undefined}
-      aria-current={isCurrentPage ? "page" : undefined}
-    >
-      <span className={styles.menuLinkContent}>
-        {Icon ? <Icon className={styles.menuIcon} aria-hidden="true" /> : null}
-        <span>{item.label}</span>
-      </span>
-      {hasSubmenu && (
-        <span className={styles.submenuArrow} aria-hidden="true">
-          {depth === 0 ? <FiChevronDown /> : <FiChevronRight />}
-        </span>
-      )}
-    </button>
-  );
-}
-
-// ─── MenuTree component ───────────────────────────────────────────────────────
-
-function MenuTree({
-  items,
-  rootListClassName,
-  rootLinkClassName,
-  onNavigate,
-  onMenuClose,
-  currentPath,
-  depth = 0,
-}: MenuTreeProps) {
-  const isRootLevel = depth === 0;
-  return (
-    <ul
-      data-menu-depth={depth}
-      className={
-        isRootLevel
-          ? rootListClassName
-          : cx(styles.submenuList, depth === 1 ? styles.submenuLevelOne : styles.submenuLevelNested)
-      }
-      role={isRootLevel ? "menubar" : "menu"}
-    >
-      {items.map((item, index) => {
-        const children = item.children ?? [];
-        const hasSubmenu = children.length > 0;
-        const isCurrentPage = getItemRoute(item) === currentPath;
-        const isActive = isCurrentPage || children.some((child) => isMenuItemActive(child, currentPath));
-        const key = `${item.label}-${depth}-${index}`;
-        return (
-          <li
-            key={key}
-            className={cx(
-              styles.menuItem,
-              !isRootLevel && item.menuSeparator && styles.submenuItemSeparated,
-            )}
-          >
-            <MenuLink
-              item={item}
-              className={cx(
-                isRootLevel ? rootLinkClassName : styles.submenuLink,
-                isActive && (isRootLevel ? styles.primaryMenuItemActive : styles.submenuLinkActive),
-              )}
-              depth={depth}
-              hasSubmenu={hasSubmenu}
-              isCurrentPage={isCurrentPage}
-              onNavigate={onNavigate}
-              onMenuClose={onMenuClose}
-            />
-            {hasSubmenu && (
-              <MenuTree
-                items={children}
-                rootListClassName={rootListClassName}
-                rootLinkClassName={rootLinkClassName}
-                onNavigate={onNavigate}
-                onMenuClose={onMenuClose}
-                currentPath={currentPath}
-                depth={depth + 1}
-              />
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
 
 // ─── HeaderRight component ────────────────────────────────────────────────────
 
@@ -671,7 +469,6 @@ function HeaderRight({
   searchMenuCount,
   dateText,
   recentPages,
-  selectedRecentPage: _selectedRecentPage,
   onRecentPageChange,
   companyOptions,
   selectedCompany,
@@ -689,107 +486,66 @@ function HeaderRight({
   onLogout,
   selectedDate,
   onDateChange,
-}: HeaderRightProps & {
-  selectedDate: Date;
-  onDateChange: (date: Date) => void;
-}) {
-  const handleCompanyChange = useCallback(
-    (event: React.ChangeEvent<HTMLSelectElement>) => { onCompanyChange?.(event.target.value); },
-    [onCompanyChange],
-  );
-  const handleBranchChange = useCallback(
-    (event: React.ChangeEvent<HTMLSelectElement>) => { onBranchChange?.(event.target.value); },
-    [onBranchChange],
-  );
-
+}: HeaderRightProps) {
   return (
     <div className={styles.headerRight}>
-      {/* <span className={styles.searchText}>{searchMenuCount} Search Menu :</span> */}
+      {searchMenuCount > 0 && (
+        <span className={styles.searchText}>{searchMenuCount}</span>
+      )}
       <span className={styles.date}>{dateText}</span>
-
-      {/* Calendar date picker */}
       <CalendarPicker selectedDate={selectedDate} onDateChange={onDateChange} />
-
+      <RecentPagesDropdown
+        recentPages={recentPages}
+        onRecentPageChange={onRecentPageChange}
+        ariaLabel="Recent pages"
+      />
       <div className={styles.companyContextGroup}>
-        <RecentPagesDropdown
-          recentPages={recentPages}
-          onRecentPageChange={onRecentPageChange}
-          ariaLabel={ARIA_LABELS.RECENT_PAGES_SELECT}
-        />
-
         <select
           className={cx(styles.contextSelect, styles.companyContextSelect)}
-          aria-label={ARIA_LABELS.COMPANY_SELECT}
           value={selectedCompany}
-          onChange={handleCompanyChange}
+          onChange={(e) => onCompanyChange?.(e.target.value)}
           disabled={companyDisabled}
+          aria-label="Company"
         >
-          {companyOptions.map((option, index) => (
-            <option key={`${option.value}-company-${index}`} value={option.value}>
-              {option.label}
+          {companyOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <select
+          className={styles.contextSelect}
+          value={selectedBranch}
+          onChange={(e) => onBranchChange?.(e.target.value)}
+          disabled={branchDisabled}
+          aria-label="Branch"
+        >
+          {branchOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
             </option>
           ))}
         </select>
       </div>
-
-      <select
-        className={styles.contextSelect}
-        aria-label={ARIA_LABELS.BRANCH_SELECT}
-        value={selectedBranch}
-        onChange={handleBranchChange}
-        disabled={branchDisabled}
+      {onCartClick && (
+        <button
+          type="button"
+          className={styles.cartButton}
+          onClick={onCartClick}
+          aria-label={`Cart (${cartCount})`}
+        >
+          {cartCount > 0 ? cartCount : null}
+        </button>
+      )}
+      <button
+        type="button"
+        className={styles.goButton}
+        onClick={onGoClick}
       >
-        {branchOptions.map((option, index) => (
-          <option key={`${option.value}-${index}`} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-
-      {/* <button type="button" className={styles.cartButton} onClick={onCartClick}>{cartCount}</button> */}
-      {/* <button type="button" className={styles.goButton} onClick={onGoClick}>{goLabel}</button> */}
-
+        {goLabel}
+      </button>
       <UserMenuDropdown logoutLabel={logoutLabel} onLogout={onLogout} />
     </div>
-  );
-}
-
-// ─── TabStrip component ───────────────────────────────────────────────────────
-
-function TabStrip({
-  quickTabs,
-  billNumber,
-  onBillNumberChange,
-  billPlaceholder,
-  onNavigate,
-  onMenuClose,
-  quickTabsRef,
-}: TabStripProps) {
-  const handleBillNumberChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => { onBillNumberChange?.(event.target.value); },
-    [onBillNumberChange],
-  );
-  return (
-    <section className={styles.tabStrip}>
-      <div ref={quickTabsRef} className={styles.quickTabs}>
-        <MenuTree
-          items={quickTabs}
-          rootListClassName={styles.quickTabsList}
-          rootLinkClassName={styles.quickTab}
-          onNavigate={onNavigate}
-          onMenuClose={onMenuClose}
-        />
-      </div>
-      <input
-        className={styles.billInput}
-        type="text"
-        autoComplete="off"
-        placeholder={billPlaceholder}
-        aria-label={ARIA_LABELS.BILL_INPUT}
-        value={billNumber}
-        onChange={handleBillNumberChange}
-      />
-    </section>
   );
 }
 

@@ -7,6 +7,8 @@ import type {
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
+import { extractRows } from "@/features/masters/shared/normalizers";
+import { getFirstDefinedValue, toDisplayValue, toSelectBoolean } from "@/features/masters/shared/value-mappers";
 const API_ENDPOINTS = {
   list: "/cities/list",
   getById: "/cities/get",
@@ -113,71 +115,9 @@ function buildCityFormFields(stateOptions: ERPDynamicSelectOption[]): ERPDynamic
     },
   ];
 }
-function getFirstDefinedValue(
-  source: Record<string, unknown>,
-  keys: readonly string[],
-): unknown {
-  for (const key of keys) {
-    const value = source[key];
-    if (value !== undefined && value !== null && value !== "") {
-      return value;
-    }
-  }
-  return undefined;
-}
-function toDisplayValue(value: unknown): string {
-  if (value === undefined || value === null) {
-    return "";
-  }
-  if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "bigint" ||
-    typeof value === "boolean"
-  ) {
-    return String(value).trim();
-  }
-  if (typeof value === "object") {
-    const nested = value as Record<string, unknown>;
-    const fallback = nested.value ?? nested.id ?? nested.code ?? nested.name ?? nested.label;
-    if (
-      typeof fallback === "string" ||
-      typeof fallback === "number" ||
-      typeof fallback === "bigint" ||
-      typeof fallback === "boolean"
-    ) {
-      return String(fallback);
-    }
-  }
-  return "";
-}
 function toInteger(value: string, fallback: number): number {
   const parsed = Number.parseInt(value.trim(), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-function toSelectBoolean(value: unknown, fallback: string): "true" | "false" {
-  if (typeof value === "boolean") {
-    return value ? "true" : "false";
-  }
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === "true" || normalized === "1" || normalized === "yes") {
-      return "true";
-    }
-    if (normalized === "false" || normalized === "0" || normalized === "no") {
-      return "false";
-    }
-  }
-  if (typeof value === "number") {
-    return value > 0 ? "true" : "false";
-  }
-  const normalizedFallback = fallback.trim().toLowerCase();
-  return normalizedFallback === "true" ||
-    normalizedFallback === "1" ||
-    normalizedFallback === "yes" ||
-    normalizedFallback === "active"
-    ? "true"
-    : "false";
 }
 function toUpdateCityId(editingItemId: string | number | null): string {
   if (typeof editingItemId === "number" && Number.isFinite(editingItemId)) {
@@ -187,32 +127,6 @@ function toUpdateCityId(editingItemId: string | number | null): string {
     return editingItemId.trim();
   }
   return "";
-}
-function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-  if (!payload || typeof payload !== "object") {
-    return [];
-  }
-  const objectPayload = payload as Record<string, unknown>;
-  for (const key of arrayKeys) {
-    const value = objectPayload[key];
-    if (Array.isArray(value)) {
-      return value;
-    }
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      const nestedObject = value as Record<string, unknown>;
-      for (const nestedKey of arrayKeys) {
-        const nestedValue = nestedObject[nestedKey];
-        if (Array.isArray(nestedValue)) {
-          return nestedValue;
-        }
-      }
-    }
-  }
-  const firstArray = Object.values(objectPayload).find((entry) => Array.isArray(entry));
-  return Array.isArray(firstArray) ? firstArray : [];
 }
 function buildStateOptions(payload: unknown): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();

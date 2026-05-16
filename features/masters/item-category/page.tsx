@@ -7,6 +7,8 @@ import type {
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
+import { extractRows } from "@/features/masters/shared/normalizers";
+import { getFirstDefinedValue, toDisplayValue, toSelectBoolean } from "@/features/masters/shared/value-mappers";
 const API_ENDPOINTS = {
   list: "/item-categories/list",
   getById: "/item-categories/get",
@@ -266,61 +268,6 @@ function buildCategoryFormFields(
     },
   ];
 }
-function getFirstDefinedValue(
-  source: Record<string, unknown>,
-  keys: readonly string[],
-): unknown {
-  for (const key of keys) {
-    const value = source[key];
-    if (value !== undefined && value !== null && value !== "") {
-      return value;
-    }
-  }
-  return undefined;
-}
-function toDisplayValue(value: unknown): string {
-  if (value === undefined || value === null) {
-    return "";
-  }
-  if (typeof value === "string") {
-    return value.trim();
-  }
-  if (typeof value === "number" || typeof value === "bigint") {
-    return String(value);
-  }
-  if (typeof value === "boolean") {
-    return value ? "true" : "false";
-  }
-  if (typeof value === "object") {
-    const nested = value as Record<string, unknown>;
-    const fallback = nested.value ?? nested.id ?? nested.code ?? nested.name ?? nested.label;
-    if (
-      typeof fallback === "string" ||
-      typeof fallback === "number" ||
-      typeof fallback === "bigint" ||
-      typeof fallback === "boolean"
-    ) {
-      return String(fallback);
-    }
-  }
-  return "";
-}
-function toSelectBoolean(value: unknown, defaultValue: string): "true" | "false" {
-  if (typeof value === "boolean") {
-    return value ? "true" : "false";
-  }
-  const normalized = toDisplayValue(value).toLowerCase();
-  if (["1", "true", "yes", "active"].includes(normalized)) {
-    return "true";
-  }
-  if (["0", "false", "no", "inactive"].includes(normalized)) {
-    return "false";
-  }
-  const normalizedDefaultValue = defaultValue.trim().toLowerCase();
-  return ["1", "true", "yes", "active"].includes(normalizedDefaultValue)
-    ? "true"
-    : "false";
-}
 function toInteger(value: string, fallback: number): number {
   const parsed = Number.parseInt(value.trim(), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -346,32 +293,6 @@ function readFileAsDataUrl(file: File): Promise<string> {
 function getBase64FromDataUrl(dataUrl: string): string {
   const commaIndex = dataUrl.indexOf(",");
   return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
-}
-function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-  if (!payload || typeof payload !== "object") {
-    return [];
-  }
-  const objectPayload = payload as Record<string, unknown>;
-  for (const key of arrayKeys) {
-    const value = objectPayload[key];
-    if (Array.isArray(value)) {
-      return value;
-    }
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      const nestedObject = value as Record<string, unknown>;
-      for (const nestedKey of arrayKeys) {
-        const nestedValue = nestedObject[nestedKey];
-        if (Array.isArray(nestedValue)) {
-          return nestedValue;
-        }
-      }
-    }
-  }
-  const firstArray = Object.values(objectPayload).find((value) => Array.isArray(value));
-  return Array.isArray(firstArray) ? firstArray : [];
 }
 function buildLookupOptions(
   payload: unknown,

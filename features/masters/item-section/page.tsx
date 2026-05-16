@@ -7,6 +7,8 @@ import type {
   ERPDynamicSelectOption,
 } from "@/components/library/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
+import { extractRows } from "@/features/masters/shared/normalizers";
+import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/value-mappers";
 const API_ENDPOINTS = {
   list: "/item-sections/list",
   getById: "/item-sections/get",
@@ -214,48 +216,7 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
   ];
 }
 
-function getFirstDefinedValue(
-  source: Record<string, unknown>,
-  keys: readonly string[],
-): unknown {
-  for (const key of keys) {
-    const value = source[key];
-    if (value !== undefined && value !== null && value !== "") {
-      return value;
-    }
-  }
 
-  return undefined;
-}
-
-function toDisplayValue(value: unknown): string {
-  if (value === undefined || value === null) {
-    return "";
-  }
-
-  if (typeof value === "string") {
-    return value.trim();
-  }
-
-  if (typeof value === "number" || typeof value === "bigint" || typeof value === "boolean") {
-    return String(value);
-  }
-
-  if (typeof value === "object") {
-    const nested = value as Record<string, unknown>;
-    const fallback = nested.id ?? nested._id ?? nested.value ?? nested.code ?? nested.name;
-    if (
-      typeof fallback === "string" ||
-      typeof fallback === "number" ||
-      typeof fallback === "bigint" ||
-      typeof fallback === "boolean"
-    ) {
-      return String(fallback);
-    }
-  }
-
-  return "";
-}
 
 function toInteger(value: string, fallback: number): number {
   const parsed = Number.parseInt(value.trim(), 10);
@@ -288,35 +249,6 @@ function getBase64FromDataUrl(dataUrl: string): string {
   return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
 }
 
-function extractRows(payload: unknown, arrayKeys: readonly string[]): unknown[] {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  if (!payload || typeof payload !== "object") {
-    return [];
-  }
-
-  const root = payload as Record<string, unknown>;
-  for (const key of arrayKeys) {
-    const candidate = root[key];
-    if (Array.isArray(candidate)) {
-      return candidate;
-    }
-
-    if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
-      const nested = candidate as Record<string, unknown>;
-      for (const nestedKey of arrayKeys) {
-        const nestedCandidate = nested[nestedKey];
-        if (Array.isArray(nestedCandidate)) {
-          return nestedCandidate;
-        }
-      }
-    }
-  }
-
-  return [];
-}
 
 function buildSectionOptions(payload: unknown): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();

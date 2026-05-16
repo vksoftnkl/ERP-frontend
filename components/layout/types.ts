@@ -89,6 +89,8 @@ export type HeaderRightProps = {
   onGoClick?: () => void;
   logoutLabel: string;
   onLogout: () => void;
+  selectedDate: Date;
+  onDateChange: (date: Date) => void;
 };
 
 export type TabStripProps = {

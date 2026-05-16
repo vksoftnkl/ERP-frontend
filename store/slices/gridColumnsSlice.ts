@@ -3,6 +3,7 @@ import axios from "axios";
 import { API_BASE, getAuthHeaderValue } from "@/lib/api/client";
 import { getAuthSession } from "@/lib/auth/session";
 import type { RootState } from "@/store/store";
+import { getFirstDefinedValue } from "@/features/masters/shared/value-mappers";
 const GRID_COLUMNS_LIST_ENDPOINT = "/grid-columns/list";
 
 const ARRAY_KEYS = [
@@ -174,18 +175,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function getFirstDefinedValue(
-  row: Record<string, unknown>,
-  keys: readonly string[],
-): unknown {
-  for (const key of keys) {
-    const value = row[key];
-    if (value !== undefined && value !== null && value !== "") {
-      return value;
-    }
-  }
-  return undefined;
-}
 
 function getFirstDefinedEntry(
   row: Record<string, unknown>,
