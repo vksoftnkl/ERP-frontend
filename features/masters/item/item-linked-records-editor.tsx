@@ -12,8 +12,8 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { cx } from "@/components/library/cx";
-import modalStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
+import { cx } from "@/components/design-system/cx";
+import modalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import ItemLinkedRecordsSearchSelectCell from "./item-linked-records-search-select-cell";
 import {
   getCellKey,

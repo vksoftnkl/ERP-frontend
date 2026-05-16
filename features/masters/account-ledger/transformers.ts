@@ -1,7 +1,7 @@
 import type {
   ERPDynamicSelectOption,
   ERPDynamicModalField,
-} from "@/components/library/ui/dynamic-modal-form";
+} from "@/components/design-system/ui/dynamic-modal-form";
 import {
   REQUEST_PAYLOAD_KEYS,
   LOOKUP_KEYS,

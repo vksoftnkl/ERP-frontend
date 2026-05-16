@@ -4,7 +4,7 @@ import type {
   ERPDynamicModalSubmitPayload,
   ERPDynamicModalVariant,
   ERPDynamicSelectOption,
-} from "@/components/library/ui/dynamic-modal-form";
+} from "@/components/design-system/ui/dynamic-modal-form";
 import type { CrudMasterPageProps } from "@/components/master/crud-master-page";
 export type MasterOption = ERPDynamicSelectOption;
 export type MasterModuleBaseValues = {

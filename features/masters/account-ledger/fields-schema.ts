@@ -1,7 +1,7 @@
 import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
-} from "@/components/library/ui/dynamic-modal-form";
+} from "@/components/design-system/ui/dynamic-modal-form";
 import type { LedgerFormSection } from "./types";
 
 const BOOLEAN_OPTIONS: ERPDynamicSelectOption[] = [

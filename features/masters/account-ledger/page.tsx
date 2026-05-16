@@ -19,17 +19,17 @@ import ReusableTable, {
 import {
   KeyboardShortcutHints,
   type KeyboardShortcutDefinition,
-} from "@/components/library/ui/keyboard-shortcut-hints";
+} from "@/components/design-system/ui/keyboard-shortcut-hints";
 import { useApi } from "@/hooks/useApi";
 import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
-} from "@/components/library/ui/dynamic-modal-form";
+} from "@/components/design-system/ui/dynamic-modal-form";
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
 import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import styles from "@/app/master/state-master/page.module.scss";
-import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
+import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { RecordHistoryModal } from "@/features/masters/record-history/page";
 import { FiDownload, FiSearch } from "react-icons/fi";
 // Import all modular logic

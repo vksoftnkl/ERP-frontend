@@ -12,9 +12,9 @@ import {
   type KeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { cx } from "@/components/library/cx";
-import type { ERPDynamicSelectOption } from "@/components/library/ui/dynamic-modal-form";
-import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
+import { cx } from "@/components/design-system/cx";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
+import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 
 export type SearchableSelectProps = {
   id?: string;

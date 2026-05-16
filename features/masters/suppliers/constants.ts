@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { ERPDynamicSelectOption } from "@/components/library/ui/dynamic-modal-form";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import { COLLECTION_DAY_OPTIONS, GST_TYPE_OPTIONS } from "@/utils/constant";
 
 // API Endpoints

@@ -3,7 +3,7 @@ import type {
   ERPDynamicFieldValidation,
   ERPDynamicModalField,
   ERPDynamicSelectOption,
-} from "@/components/library/ui/dynamic-modal-form";
+} from "@/components/design-system/ui/dynamic-modal-form";
 import { DEFAULT_LOOKUP_ARRAY_KEYS } from "@/app/master/_shared/crud-utils";
 
 export const API_ENDPOINTS = {

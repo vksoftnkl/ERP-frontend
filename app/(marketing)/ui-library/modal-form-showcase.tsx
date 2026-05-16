@@ -3,7 +3,7 @@
 import {
   ERPDynamicModalForm,
   type ERPDynamicModalVariant,
-} from "@/components/library";
+} from "@/components/design-system";
 
 const modalVariants: ERPDynamicModalVariant[] = [
   {

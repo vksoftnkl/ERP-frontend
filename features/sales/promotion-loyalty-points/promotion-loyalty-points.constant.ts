@@ -1,4 +1,4 @@
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import type { LookupConfig } from "./promotion-loyalty-points.local-types";
 import { DEFAULT_LOOKUP_ARRAY_KEYS } from "@/features/masters/shared/normalizers";
 export const SCHEME_TYPE_OPTIONS = [

@@ -1,4 +1,4 @@
-import { type KeyboardShortcutDefinition } from "@/components/library/ui/keyboard-shortcut-hints";
+import { type KeyboardShortcutDefinition } from "@/components/design-system/ui/keyboard-shortcut-hints";
 
 export const SECTION_NAV_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   { label: "Prev", keys: ["ArrowLeft"] },

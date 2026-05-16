@@ -1,10 +1,10 @@
 import type { CSSProperties } from "react";
-import type { KeyboardShortcutDefinition } from "@/components/library/ui/keyboard-shortcut-hints";
+import type { KeyboardShortcutDefinition } from "@/components/design-system/ui/keyboard-shortcut-hints";
 import type {
   OpeningStockRow,
   ColumnDefinition,
   UiTableColumnPayload,
-} from "./Types";
+} from "./opening-stock.types";
 import type { OpeningStockListMeta } from "./opening-stock.types";
 import { UI_TABLE_COLUMNS_QUERY } from "./constants";
 import {
@@ -13,7 +13,7 @@ import {
   isPristineRow,
   toCanonicalDateValue,
   getTodayInputValue,
-} from "./Utils";
+} from "./opening-stock.utils";
 
 export const OPENING_STOCK_TABLE_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   {

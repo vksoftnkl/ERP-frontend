@@ -1,4 +1,4 @@
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import { buildLookupOptions } from "@/features/masters/shared/normalizers";
 import type { BadgeVariant, LookupConfig } from "./promotion-loyalty-points.local-types";
 

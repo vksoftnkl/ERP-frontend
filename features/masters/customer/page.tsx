@@ -14,7 +14,7 @@ import type {
   ERPDynamicSearchQueryChangeHandler,
   ERPDynamicSearchShortcutPayload,
   ERPDynamicSelectOption,
-} from "@/components/library/ui/dynamic-modal-form";
+} from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
   buildLookupOptions,

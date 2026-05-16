@@ -1,4 +1,4 @@
-import type { ERPDynamicSelectOption } from "@/components/library/ui/dynamic-modal-form";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 
 // Form Field Names (Union Type)
 export type SupplierFormFieldName =

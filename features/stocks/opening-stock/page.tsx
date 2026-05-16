@@ -13,13 +13,13 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { useBusinessContext } from "@/components/layout/business-context";
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import {
   KeyboardShortcutHints,
   type KeyboardShortcutDefinition,
-} from "@/components/library/ui/keyboard-shortcut-hints";
-import type { ERPDynamicSearchShortcutPayload } from "@/components/library/ui/dynamic-modal-form";
-import dynamicModalStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
+} from "@/components/design-system/ui/keyboard-shortcut-hints";
+import type { ERPDynamicSearchShortcutPayload } from "@/components/design-system/ui/dynamic-modal-form";
+import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import type { CrudMasterPageController } from "@/components/master/crud-master-page";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import GodownMasterPageContent from "@/features/masters/godown/page";
@@ -41,10 +41,10 @@ import {
   useLazyGetUnitOptionsQuery,
 } from "@/store/api/lookupsApi";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
-import { OpeningStockAuditNotesModal } from "./OpeningStockAuditNotesModal";
-import { OpeningStockListModal } from "./OpeningStockListModal";
-import { StockTableRow } from "./StockTableRow";
-import { StockToolbar } from "./StockToolbar";
+import { OpeningStockAuditNotesModal } from "./opening-stock-audit-notes-modal";
+import { OpeningStockListModal } from "./opening-stock-list-modal";
+import { StockTableRow } from "./stock-table-row";
+import { StockToolbar } from "./stock-toolbar";
 import type {
   OpeningStockDocumentPayload,
   OpeningStockHeaderPayload,
@@ -62,7 +62,7 @@ import type {
   OpeningStockRow,
   RowValidationIssue,
   UiTableColumnPayload,
-} from "./Types";
+} from "./opening-stock.types";
 import {
   ACCOUNT_LEDGER_LIST_ENDPOINT,
   DEFAULT_GODOWN_OPTION,
@@ -137,7 +137,7 @@ import {
   toIsoDateTime,
   toCanonicalDateValue,
   toNullableTrimmedString,
-} from "./Utils";
+} from "./opening-stock.utils";
 import type {
   OpeningStockLoadRequest,
   InlineItemMasterRequest,

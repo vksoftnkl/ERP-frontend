@@ -33,7 +33,7 @@ import {
   Input,
   Label,
   SearchableSelect,
-} from "@/components/library/ui";
+} from "@/components/design-system/ui";
 import { useBusinessContext } from "@/components/layout/business-context";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
@@ -44,7 +44,7 @@ import {
 } from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";
 import type { ApiSuccessResponse } from "@/utils/types";
-import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
+import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import type {
   LoyaltySchemePayload,
   PromotionLoyaltyPointsListMeta,
@@ -132,7 +132,7 @@ import { SchemeTab } from "./tabs/scheme-tab";
 import { PointsTab } from "./tabs/points-tab";
 import { GiftsTab } from "./tabs/gifts-tab";
 import { PartyTab } from "./tabs/party-tab";
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import styles from "./page.module.scss";
 const DEFAULT_PARTY_SCOPE_TYPE: PartyScopeType = "CUSTOMER_GROUP";
 const BRANCH_LIST_ENDPOINT = "/branch-masters/list";

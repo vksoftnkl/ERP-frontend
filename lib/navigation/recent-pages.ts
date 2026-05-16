@@ -1,8 +1,8 @@
 import { toInternalRoute } from "@/lib/navigation/safe-route";
 const REDUX_SESSION_STORAGE_KEY = "erp_client_redux_state";
 const MAX_RECENT_PAGES = 10;
-const EXCLUDED_EXACT_ROUTES = new Set(["/", "/login", "/ui-library", "/erp-advanced-fixed"]);
-const EXCLUDED_PREFIX_ROUTES = ["/login/", "/ui-library/", "/erp-advanced-fixed/"];
+const EXCLUDED_EXACT_ROUTES = new Set(["/", "/login", "/ui-library", "/erp-data-demo"]);
+const EXCLUDED_PREFIX_ROUTES = ["/login/", "/ui-library/", "/erp-data-demo/"];
 export type RecentPageEntry = {
   path: string;
   label: string;

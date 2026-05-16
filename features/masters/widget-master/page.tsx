@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import type { ERPDynamicModalField } from "@/components/library/ui/dynamic-modal-form";
+import type { ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
 import CrudMasterPage, { type CrudMasterTableRow } from "@/components/master/crud-master-page";
 import type { ReusableTableColumn } from "@/components/ui/table";
 import {

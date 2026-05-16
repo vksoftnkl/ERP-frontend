@@ -1,4 +1,4 @@
-import { cx } from "@/components/library/cx";
+import { cx } from "@/components/design-system/cx";
 import styles from "./keyboard-shortcut-hints.module.scss";
 const KEY_LABELS = new Map<string, string>([
   [" ", "Space"],

@@ -5,7 +5,7 @@ import {
   type ERPDynamicModalController,
   type ERPDynamicModalField,
   type ERPDynamicModalSubmitPayload,
-} from "@/components/library/ui/dynamic-modal-form";
+} from "@/components/design-system/ui/dynamic-modal-form";
 import {
   getColumnStyle,
   getSelectPlaceholder,

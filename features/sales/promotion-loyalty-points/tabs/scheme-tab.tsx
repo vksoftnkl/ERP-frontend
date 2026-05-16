@@ -9,9 +9,9 @@ import {
   Label,
   SearchableMultiSelect,
   SearchableSelect,
-} from "@/components/library/ui";
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
-import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
+} from "@/components/design-system/ui";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
+import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import {
   APPLY_ON_OPTIONS,
   AMOUNT_TYPE_OPTIONS,

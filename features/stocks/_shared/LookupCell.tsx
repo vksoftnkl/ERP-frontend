@@ -9,8 +9,8 @@ import {
   type RefObject,
 } from "react";
 import { FiChevronDown, FiSearch } from "react-icons/fi";
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
-import type { ERPDynamicSearchShortcutPayload } from "@/components/library/ui/dynamic-modal-form";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
+import type { ERPDynamicSearchShortcutPayload } from "@/components/design-system/ui/dynamic-modal-form";
 import type { LookupKind } from "./types";
 type StockLookupCellStyles = Record<string, string>;
 type LookupCellProps = {

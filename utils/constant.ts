@@ -1,4 +1,4 @@
-import { ERPDynamicSelectOption } from "@/components/library";
+import { ERPDynamicSelectOption } from "@/components/design-system";
 export  const COLLECTION_DAY_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "1", label: "Monday" },
   { value: "2", label: "Tuesday" },

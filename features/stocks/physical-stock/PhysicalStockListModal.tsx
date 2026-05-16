@@ -4,10 +4,10 @@ import { FiChevronLeft, FiChevronRight, FiSearch, FiX } from "react-icons/fi";
 import {
   KeyboardShortcutHints,
   type KeyboardShortcutDefinition,
-} from "@/components/library/ui/keyboard-shortcut-hints";
+} from "@/components/design-system/ui/keyboard-shortcut-hints";
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 import { QUANTITY_FORMATTER, VALUE_FORMATTER } from "@/features/stocks/_shared/constants";
-import { cx, formatDateForDisplay } from "@/features/stocks/opening-stock/Utils";
+import { cx, formatDateForDisplay } from "@/features/stocks/opening-stock/opening-stock.utils";
 
 export type PhysicalStockListRow = {
   psc_id: string;

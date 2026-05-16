@@ -10,7 +10,7 @@ import {
   FiTruck,
 } from "react-icons/fi";
 import type { ErpHeaderIconKey, ErpHeaderItem, ERPMenuObject } from "./types";
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 export const ERP_HEADER_ICON_COMPONENTS: Record<ErpHeaderIconKey, IconType> = {
   sales: FiShoppingBag,
   purchase: FiShoppingCart,

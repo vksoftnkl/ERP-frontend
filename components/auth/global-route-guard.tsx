@@ -7,8 +7,8 @@ import {
   selectIsAuthenticated,
 } from "@/store/slices/authSlice";
 
-const PUBLIC_EXACT_ROUTES = new Set(["/login", "/ui-library", "/erp-advanced-fixed"]);
-const PUBLIC_PREFIX_ROUTES = ["/login/", "/ui-library/", "/erp-advanced-fixed/"];
+const PUBLIC_EXACT_ROUTES = new Set(["/login", "/ui-library", "/erp-data-demo"]);
+const PUBLIC_PREFIX_ROUTES = ["/login/", "/ui-library/", "/erp-data-demo/"];
 
 function isPublicRoute(pathname: string): boolean {
   return (

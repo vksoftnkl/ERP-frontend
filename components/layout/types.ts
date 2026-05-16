@@ -1,5 +1,5 @@
 import type React from "react";
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 
 export type ErpHeaderIconKey =
   | "sales"

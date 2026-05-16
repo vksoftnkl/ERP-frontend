@@ -1,7 +1,7 @@
 "use client";
-import { ERPDynamicModalForm } from "@/components/library/ui/dynamic-modal-form";
+import { ERPDynamicModalForm } from "@/components/design-system/ui/dynamic-modal-form";
 import type { MasterOption, InlineRelatedMasterDefinition } from "./types";
-import type { ERPDynamicSearchShortcutPayload } from "@/components/library/ui/dynamic-modal-form";
+import type { ERPDynamicSearchShortcutPayload } from "@/components/design-system/ui/dynamic-modal-form";
 export function resolveOptionFromShortcut(
   payload: ERPDynamicSearchShortcutPayload,
   options: MasterOption[],

@@ -1,6 +1,6 @@
 import { type CSSProperties, type ReactNode } from "react";
 import { type ReusableTableColumn } from "@/components/ui/table";
-import { type ERPDynamicModalField } from "@/components/library/ui/dynamic-modal-form";
+import { type ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
 
 export type MasterTableRow = {
   __rowId: string | number;

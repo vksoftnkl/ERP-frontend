@@ -1,4 +1,4 @@
-import type { ERPDynamicModalField } from "@/components/library/ui/dynamic-modal-form";
+import type { ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
   defineMasterModule,

@@ -10,7 +10,7 @@ import {
   SERIAL_NUMBER_COLUMN_WIDTH,
   VALUE_FORMATTER,
 } from "@/features/stocks/_shared/constants";
-import type { ColumnSchema, LookupKind } from "./Types";
+import type { ColumnSchema, LookupKind } from "./opening-stock.types";
 
 export {
   DEFAULT_GODOWN_OPTION,

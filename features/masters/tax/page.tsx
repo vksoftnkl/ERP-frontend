@@ -4,7 +4,7 @@ import type {
   ERPDynamicFieldValueChangeHandler,
   ERPDynamicModalField,
   ERPDynamicSelectOption,
-} from "@/components/library/ui/dynamic-modal-form";
+} from "@/components/design-system/ui/dynamic-modal-form";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useMasterOptions } from "@/features/masters/shared";
 import { useApi } from "@/hooks/useApi";

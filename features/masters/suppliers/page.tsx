@@ -10,8 +10,8 @@ import type {
   ERPDynamicModalVariant,
   ERPDynamicFieldValueChangeHandler,
   ERPDynamicSearchShortcutPayload,
-} from "@/components/library/ui/dynamic-modal-form";
-import type { ERPDynamicSelectOption } from "@/components/library/ui/dynamic-modal-form";
+} from "@/components/design-system/ui/dynamic-modal-form";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
 import { toUpper, toNullableString } from "@/app/master/_shared/crud-utils";
 import {

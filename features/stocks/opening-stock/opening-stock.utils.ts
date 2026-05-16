@@ -1,4 +1,4 @@
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import type {
   ItemPriceDetailsPayload,
@@ -30,13 +30,11 @@ import type {
   ColumnDefinition,
   ColumnSchema,
   GodownLookupRecord,
+  OpeningStockDocumentPayload,
   OpeningStockRow,
+  OpeningStockSaveDetail,
   RowValidationIssue,
   UiTableColumnPayload,
-} from "./Types";
-import type {
-  OpeningStockDocumentPayload,
-  OpeningStockSaveDetail,
 } from "./opening-stock.types";
 export function cx(...tokens: Array<string | false | undefined>): string {
   return tokens.filter(Boolean).join(" ");

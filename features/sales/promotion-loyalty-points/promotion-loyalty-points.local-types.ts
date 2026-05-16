@@ -90,8 +90,8 @@ export type PartyScopeType = "CUSTOMER_GROUP" | "CUSTOMER";
 
 export type PointScopeDescriptor = {
   headerLabel: string;
-  options: import("@/components/library/ui").ERPDynamicSelectOption[];
-  defaultOption: import("@/components/library/ui").ERPDynamicSelectOption;
+  options: import("@/components/design-system/ui").ERPDynamicSelectOption[];
+  defaultOption: import("@/components/design-system/ui").ERPDynamicSelectOption;
 };
 
 export type LookupConfig = {

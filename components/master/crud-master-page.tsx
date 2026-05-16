@@ -29,8 +29,8 @@ import {
   type ERPDynamicModalField,
   type ERPDynamicModalSubmitPayload,
   type ERPDynamicModalVariant,
-} from "@/components/library/ui/dynamic-modal-form";
-import dynamicModalStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
+} from "@/components/design-system/ui/dynamic-modal-form";
+import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { FiDownload, FiSearch } from "react-icons/fi";
 export type {
   CrudMasterApiEndpoints,

@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useRef } from "react";
-import { Input, SearchableSelect } from "@/components/library/ui";
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
-import dynamicFormStyles from "@/components/library/ui/dynamic-modal-form.module.scss";
+import { Input, SearchableSelect } from "@/components/design-system/ui";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
+import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import type {
   DeleteDialogState,

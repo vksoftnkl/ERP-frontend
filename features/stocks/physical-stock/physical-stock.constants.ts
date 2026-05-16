@@ -1,5 +1,5 @@
-import type { KeyboardShortcutDefinition } from "@/components/library/ui/keyboard-shortcut-hints";
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { KeyboardShortcutDefinition } from "@/components/design-system/ui/keyboard-shortcut-hints";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import type { PhysicalStockColumn, PhysicalStockListMeta, PhysicalStockListFilters } from "./physical-stock.types";
 
 export const PHYSICAL_STOCK_SAVE_ENDPOINT = "/physical-stock";

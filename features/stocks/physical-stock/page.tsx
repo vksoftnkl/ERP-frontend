@@ -21,11 +21,11 @@ import {
   FiTrash2,
 } from "react-icons/fi";
 import { toast } from "react-toastify";
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import {
   KeyboardShortcutHints,
   type KeyboardShortcutDefinition,
-} from "@/components/library/ui/keyboard-shortcut-hints";
+} from "@/components/design-system/ui/keyboard-shortcut-hints";
 import { useBusinessContext } from "@/components/layout/business-context";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import { extractRows } from "@/features/masters/shared/normalizers";
@@ -87,7 +87,7 @@ import {
   toInputValue,
   toIsoDateTime,
   toNullableTrimmedString,
-} from "@/features/stocks/opening-stock/Utils";
+} from "@/features/stocks/opening-stock/opening-stock.utils";
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 import type {
   PhysicalStockColumn,

@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import {
   KeyboardShortcutHints,
   type KeyboardShortcutDefinition,
-} from "@/components/library/ui/keyboard-shortcut-hints";
+} from "@/components/design-system/ui/keyboard-shortcut-hints";
 import styles from "./delete-confirm-modal.module.scss";
 
 type DeleteConfirmModalProps = {

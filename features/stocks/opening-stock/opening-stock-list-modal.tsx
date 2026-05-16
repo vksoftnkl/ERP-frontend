@@ -4,13 +4,13 @@ import { FiChevronLeft, FiChevronRight, FiSearch, FiX } from "react-icons/fi";
 import {
   KeyboardShortcutHints,
   type KeyboardShortcutDefinition,
-} from "@/components/library/ui/keyboard-shortcut-hints";
+} from "@/components/design-system/ui/keyboard-shortcut-hints";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
 import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import type { OpeningStockHeaderPayload } from "./opening-stock.types";
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 import { QUANTITY_FORMATTER, VALUE_FORMATTER } from "./constants";
-import { cx, formatDateForDisplay } from "./Utils";
+import { cx, formatDateForDisplay } from "./opening-stock.utils";
 type OpeningStockListFilters = {
   search: string;
   dateFrom: string;

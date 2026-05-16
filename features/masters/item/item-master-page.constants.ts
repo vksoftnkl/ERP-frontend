@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { ERPDynamicSelectOption } from "@/components/library/ui/dynamic-modal-form";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import { DEFAULT_LOOKUP_ARRAY_KEYS } from "@/features/masters/shared/normalizers";
 import { toDisplayValue } from "@/features/masters/shared/value-mappers";
 

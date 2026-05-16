@@ -1,5 +1,5 @@
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import type {
   PhysicalStockRow,
   PhysicalStockColumn,
@@ -42,7 +42,7 @@ import {
   normalizeColumnName,
   moveOpeningStockFieldFocus,
   resolveTrackingType,
-} from "@/features/stocks/opening-stock/Utils";
+} from "@/features/stocks/opening-stock/opening-stock.utils";
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 import {
   VALUE_FORMATTER,

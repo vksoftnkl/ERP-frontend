@@ -1,4 +1,4 @@
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import {
   buildLookupOptions,
   DEFAULT_LOOKUP_ARRAY_KEYS,

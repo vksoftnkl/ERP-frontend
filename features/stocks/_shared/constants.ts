@@ -1,4 +1,4 @@
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 export const GODOWN_LIST_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 export const LOOKUP_SEARCH_DEBOUNCE_MS = 250;
 export const DELETE_ACTION_COLUMN_WIDTH = "68px";

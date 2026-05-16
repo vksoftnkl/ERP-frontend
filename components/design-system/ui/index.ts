@@ -37,17 +37,17 @@ export {
   type NavLinksProps,
   type SelectProps,
   type TextareaProps,
-} from "@/components/library/ui/primitives";
+} from "@/components/design-system/ui/primitives";
 
 export {
   SearchableMultiSelect,
   type SearchableMultiSelectProps,
-} from "@/components/library/ui/searchable-multi-select";
+} from "@/components/design-system/ui/searchable-multi-select";
 
 export {
   SearchableSelect,
   type SearchableSelectProps,
-} from "@/components/library/ui/searchable-select";
+} from "@/components/design-system/ui/searchable-select";
 
 export {
   ERPDynamicModalForm,
@@ -60,6 +60,6 @@ export {
   type ERPDynamicModalSubmitPayload,
   type ERPDynamicModalVariant,
   type ERPDynamicSelectOption,
-} from "@/components/library/ui/dynamic-modal-form";
+} from "@/components/design-system/ui/dynamic-modal-form";
 
-export { default as DynamicModalForm } from "@/components/library/ui/dynamic-modal-form";
+export { default as DynamicModalForm } from "@/components/design-system/ui/dynamic-modal-form";

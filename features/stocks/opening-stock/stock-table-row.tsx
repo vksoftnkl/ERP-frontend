@@ -8,8 +8,8 @@ import type {
   RefObject,
 } from "react";
 import { FiCalendar, FiTrash2 } from "react-icons/fi";
-import type { ERPDynamicSelectOption } from "@/components/library/ui";
-import type { ERPDynamicSearchShortcutPayload } from "@/components/library/ui/dynamic-modal-form";
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
+import type { ERPDynamicSearchShortcutPayload } from "@/components/design-system/ui/dynamic-modal-form";
 import type { ItemPriceDetailsPayload } from "@/store/api/lookupsApi";
 import { LookupCell } from "@/features/stocks/_shared/LookupCell";
 import {
@@ -22,7 +22,7 @@ import type {
   LookupCellState,
   LookupKind,
   OpeningStockRow,
-} from "./Types";
+} from "./opening-stock.types";
 import {
   buildUomOptions,
   cx,
@@ -39,7 +39,7 @@ import {
   normalizeOpeningStockQuantityInputValue,
   openDatePicker,
   toCanonicalDateValue,
-} from "./Utils";
+} from "./opening-stock.utils";
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 type StockTableRowProps = {
   row: OpeningStockRow;

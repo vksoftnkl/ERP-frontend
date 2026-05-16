@@ -13,4 +13,4 @@ export {
   type SidebarProps,
   type SplitProps,
   type StackProps,
-} from "@/components/library/layout/primitives";
+} from "@/components/design-system/layout/primitives";

@@ -3,7 +3,7 @@ import type {
   ERPDynamicModalField,
   ERPDynamicSearchShortcutPayload,
   ERPDynamicSelectOption,
-} from "@/components/library/ui/dynamic-modal-form";
+} from "@/components/design-system/ui/dynamic-modal-form";
 import {
   COLLECTION_DAY_OPTIONS,
   GST_LOOKUP_HELPER_TEXT,

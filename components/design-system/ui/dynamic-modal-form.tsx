@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { cx } from "@/components/library/cx";
+import { cx } from "@/components/design-system/cx";
 import styles from "./dynamic-modal-form.module.scss";
 import {
   FIELD_CONTAINER_SELECTOR,

@@ -1,5 +1,5 @@
 import type { CSSProperties, HTMLAttributes } from "react";
-import { cx } from "@/components/library/cx";
+import { cx } from "@/components/design-system/cx";
 
 const spacingScale = {
   xs: "0.5rem",

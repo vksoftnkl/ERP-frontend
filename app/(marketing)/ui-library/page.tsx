@@ -28,7 +28,7 @@ import {
   Split,
   Stack,
   Textarea,
-} from "@/components/library";
+} from "@/components/design-system";
 
 export default function UiLibraryPage() {
   const router = useRouter();
