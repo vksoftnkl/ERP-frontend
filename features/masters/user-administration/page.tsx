@@ -60,7 +60,7 @@ const USER_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "MANAGER", label: "Manager" },
   { value: "ADMIN", label: "Admin" },
   { value: "VIEWER", label: "Viewer" },
-  { value: "SUPER_ADMIN", label: "Super Admin" },
+  { value: "SUPER ADMIN", label: "Super Admin " },
   { value: "SYSTEM", label: "System" },
 ];
 // ── Lookup definitions ────────────────────────────────────────────────────────
@@ -195,12 +195,12 @@ function buildUserFormFields(
       name: "usrPassword",
       label: "Password",
       type: "password",
-      requiredWhen: (values) => values[USER_FORM_MODE_FIELD] !== "update",
-      validation: {
-        requiredMessage: "Password is required when creating a new user.",
-        minLength: 6,
-        minLengthMessage: "Password must be at least 6 characters.",
-      },
+      // requiredWhen: (values) => values[USER_FORM_MODE_FIELD] !== "update",
+      // validation: {
+      //   requiredMessage: "Password is required when creating a new user.",
+      //   minLength: 6,
+      //   minLengthMessage: "Password must be at least 6 characters.",
+      // },
     },
     // ── Access ────────────────────────────────────────────────────────────────
     // {

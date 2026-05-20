@@ -7,9 +7,10 @@ import {
 } from "@/lib/auth/session";
 import { authSessionChanged } from "@/store/slices/authSlice";
 export type LoginRequest = {
-  user_name: string;
-  user_password: string;
+  usrLoginName: string;
+  usrPassword: string;
   device_id?: string;
+  user_type: string;
   app_version?: string;
 };
 export type LoginResponse = {

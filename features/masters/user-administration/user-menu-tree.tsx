@@ -78,6 +78,10 @@ function collectAllIds(nodes: MenuNode[]): number[] {
   return ids;
 }
 
+function collectNodeAndDescendantIds(node: MenuNode): number[] {
+  return collectAllIds([node]);
+}
+
 export function parseMenuPermissions(raw: string): MenuPermission[] {
   try {
     const arr = JSON.parse(raw || "[]");
@@ -195,7 +199,7 @@ interface MenuRowProps {
   permissions: Map<number, MenuPermission>;
   collapsed: Set<number>;
   disabled: boolean;
-  onToggleMenu: (id: number, checked: boolean) => void;
+  onToggleMenu: (node: MenuNode, checked: boolean) => void;
   onTogglePerm: (id: number, key: PermKey, checked: boolean) => void;
   onToggleCollapsed: (id: number) => void;
 }
@@ -237,7 +241,7 @@ function MenuRow({
             type="checkbox"
             checked={isAssigned}
             disabled={disabled}
-            onChange={(e) => onToggleMenu(node.menuId, e.target.checked)}
+            onChange={(e) => onToggleMenu(node, e.target.checked)}
             style={{ flexShrink: 0 }}
           />
           <span
@@ -315,12 +319,20 @@ export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
   );
 
   const handleToggleMenu = useCallback(
-    (menuId: number, checked: boolean) => {
+    (node: MenuNode, checked: boolean) => {
       const next = new Map(permMap);
+      const ids = collectNodeAndDescendantIds(node);
+
       if (checked) {
-        next.set(menuId, emptyPerm(menuId));
+        for (const id of ids) {
+          if (!next.has(id)) {
+            next.set(id, emptyPerm(id));
+          }
+        }
       } else {
-        next.delete(menuId);
+        for (const id of ids) {
+          next.delete(id);
+        }
       }
       commit(next);
     },

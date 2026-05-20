@@ -12,6 +12,7 @@ import {
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useLoginMutation } from "@/store/api/authApi";
 const CLIENT_APP_VERSION = `erp-client@${clientPackageJson.version}`;
+const DEFAULT_LOGIN_USER_TYPE = "USER";
 type Errors = {
   username?: string;
   password?: string;
@@ -43,9 +44,10 @@ export default function LoginPage() {
     setAuthError(null);
     try {
       const response = await login({
-        user_name: values.username.trim(),
-        user_password: values.password,
+        usrLoginName: values.username.trim(),
+        usrPassword: values.password,
         device_id: getOrCreateClientDeviceId() ?? undefined,
+        user_type: DEFAULT_LOGIN_USER_TYPE,
         app_version: CLIENT_APP_VERSION,
       }).unwrap();
       if (!response.authenticated) {
