@@ -47,7 +47,6 @@ const COLLECTION_ACTION_SEGMENTS = new Set([
   "bulk-update",
   "bulk-delete",
 ]);
-
 type ApiInvalidationEventDetail = {
   scope: string;
   sourcePath: string;
@@ -148,7 +147,6 @@ function normalizeMessage(value: unknown, fallback: string): string {
   const extracted = extractMessage(value);
   return extracted || fallback;
 }
-
 function isCanceledRequestError(error: unknown): boolean {
   if (axios.isCancel(error)) {
     return true;
@@ -164,7 +162,6 @@ function isCanceledRequestError(error: unknown): boolean {
     record.message === "canceled"
   );
 }
-
 function showErrorToast(message: unknown): void {
   const normalizedMessage = normalizeMessage(message, "Something went wrong");
   toast.error(normalizedMessage, { toastId: `api-error:${normalizedMessage}` });
@@ -259,9 +256,7 @@ function buildHeaders(
   nextHeaders.Authorization = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
   return nextHeaders;
 }
-
 let refreshRequest: Promise<boolean> | null = null;
-
 async function refreshAuthSession(dispatch: ReturnType<typeof useAppDispatch>): Promise<boolean> {
   if (refreshRequest) {
     return refreshRequest;

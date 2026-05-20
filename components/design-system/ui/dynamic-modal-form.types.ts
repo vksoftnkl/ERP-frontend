@@ -116,6 +116,7 @@ export type ERPDynamicModalField = {
   fieldStyle?: CSSProperties;
   placeholder?: string;
   required?: boolean;
+  requiredWhen?: (values: Record<string, string>) => boolean;
   disabled?: boolean;
   searchable?: boolean;
   multiple?: boolean;

@@ -70,6 +70,7 @@ import {
   getFirstFocusableFieldTarget,
   getSelectOptionLabel,
   getSectionRowStartOffset,
+  isFieldRequired,
   isEmptyValue,
   parseMultiSelectValue,
   resolvePalette,
@@ -1224,6 +1225,7 @@ export function ERPDynamicModalForm({
     const selectedFile = fileData[field.name] ?? null;
     const fieldError = fieldErrors[field.name];
     const inputType = field.type ?? "text";
+    const fieldRequired = isFieldRequired(field, formData);
     if (inputType === "heading") {
       return null;
     }
@@ -1291,7 +1293,7 @@ export function ERPDynamicModalForm({
     const commonProps = {
       id: controlId,
       name: field.name,
-      required: field.required,
+      required: fieldRequired,
       disabled: field.disabled || isSubmitting,
       onChange: handleChange,
       autoComplete: "off",
@@ -1355,7 +1357,7 @@ export function ERPDynamicModalForm({
         {inputType !== "checkbox" && field.label.trim().length > 0 ? (
           <label className={styles.label} htmlFor={commonProps.id}>
             {field.label}{" "}
-            {field.required ? (
+            {fieldRequired ? (
               <span className={styles.requiredMark}>*</span>
             ) : null}
           </label>
@@ -1688,7 +1690,7 @@ export function ERPDynamicModalForm({
             />
             <span className={styles.checkboxLabel}>
               {field.label}
-              {field.required ? (
+              {fieldRequired ? (
                 <span className={styles.requiredMark}>*</span>
               ) : null}
             </span>

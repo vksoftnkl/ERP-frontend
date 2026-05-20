@@ -76,6 +76,19 @@ export function isEmptyValue(value: string): boolean {
   return value.trim().length === 0;
 }
 
+export function isFieldRequired(
+  field: ERPDynamicModalField,
+  values: Record<string, string>,
+): boolean {
+  if (field.required === false) {
+    return false;
+  }
+  if (field.requiredWhen) {
+    return Boolean(field.requiredWhen(values));
+  }
+  return Boolean(field.required);
+}
+
 export function toRegExp(pattern: string | RegExp): RegExp | null {
   if (pattern instanceof RegExp) {
     return pattern;
@@ -239,11 +252,12 @@ export function validateFieldValue(
   const value = rawValue.trim();
   const fieldType = field.type ?? "text";
   const validation = field.validation;
+  const required = isFieldRequired(field, values);
   if (fieldType === "heading") {
     return null;
   }
   if (fieldType === "custom") {
-    if (field.required && isEmptyValue(rawValue)) {
+    if (required && isEmptyValue(rawValue)) {
       return validation?.requiredMessage ?? `${field.label} is required.`;
     }
     if (validation?.custom) {
@@ -256,14 +270,14 @@ export function validateFieldValue(
   }
   if (fieldType === "checkbox") {
     const isChecked = rawValue === "true";
-    if (field.required && !isChecked) {
+    if (required && !isChecked) {
       return validation?.requiredMessage ?? `${field.label} is required.`;
     }
     return null;
   }
   if (fieldType === "file") {
     const selectedFile = files[field.name] ?? null;
-    if (field.required && !selectedFile) {
+    if (required && !selectedFile) {
       return validation?.requiredMessage ?? `${field.label} is required.`;
     }
     if (!selectedFile) {
@@ -278,7 +292,7 @@ export function validateFieldValue(
     }
     return null;
   }
-  if (field.required && isEmptyValue(rawValue)) {
+  if (required && isEmptyValue(rawValue)) {
     return validation?.requiredMessage ?? `${field.label} is required.`;
   }
   if (isEmptyValue(rawValue)) {
