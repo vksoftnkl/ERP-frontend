@@ -327,7 +327,7 @@ export function getOrCreateClientDeviceId(): string | null {
   if (typeof window === "undefined") {
     return null;
   }
-  const existingId = window.sessionStorage.getItem(CLIENT_DEVICE_ID_CACHE_KEY)?.trim();
+  const existingId = window.localStorage.getItem(CLIENT_DEVICE_ID_CACHE_KEY)?.trim();
   if (existingId) {
     return existingId;
   }
@@ -338,7 +338,7 @@ export function getOrCreateClientDeviceId(): string | null {
   if (!nextId) {
     return null;
   }
-  window.sessionStorage.setItem(CLIENT_DEVICE_ID_CACHE_KEY, nextId);
+  window.localStorage.setItem(CLIENT_DEVICE_ID_CACHE_KEY, nextId);
   return nextId;
 }
 export function isAuthenticated(): boolean {

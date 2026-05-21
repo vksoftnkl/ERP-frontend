@@ -27,9 +27,11 @@ const API_ENDPOINTS = {
 
 const GRID_TABLE_NAME = "device_master";
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const USER_LIST_ENDPOINT = "/user-administration/list";
 
 const LOOKUP_QUERY_COMPANIES = { module: "companies", limit: "100" } as const;
 const LOOKUP_QUERY_BRANCHES = { module: "branches", limit: "100" } as const;
+const USER_LIST_QUERY = { limit: "100" } as const;
 
 const DEVICE_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "", label: "Select Type" },
@@ -71,6 +73,7 @@ const REQUEST_PAYLOAD_KEYS = {
 
 const DEV_COMPANY_ID_KEYS = ["devCompanyId", "dev_company_id", "companyId", "company_id"] as const;
 const DEV_BRANCH_ID_KEYS = ["devBranchId", "dev_branch_id", "branchId", "branch_id"] as const;
+const DEV_USER_ID_KEYS = ["devUserId", "dev_user_id", "userId", "user_id"] as const;
 const DEV_DEVICE_UID_KEYS = ["devDeviceUid", "dev_device_uid", "deviceUid"] as const;
 const DEV_DEVICE_NAME_KEYS = ["devDeviceName", "dev_device_name", "deviceName"] as const;
 const DEV_DEVICE_TYPE_KEYS = ["devDeviceType", "dev_device_type", "deviceType"] as const;
@@ -83,10 +86,12 @@ const DEV_IS_ACTIVE_KEYS = ["devIsActive", "dev_is_active", "isActive", "is_acti
 
 const DEFAULT_COMPANY_OPTION: ERPDynamicSelectOption = { value: "", label: "Select Company" };
 const DEFAULT_BRANCH_OPTION: ERPDynamicSelectOption = { value: "", label: "Select Branch" };
+const DEFAULT_USER_OPTION: ERPDynamicSelectOption = { value: "", label: "Select User" };
 
 const INITIAL_FORM_VALUES = {
   devCompanyId: "",
   devBranchId: "",
+  devUserId: "",
   devDeviceUid: "",
   devDeviceName: "",
   devDeviceType: "Desktop",
@@ -101,6 +106,7 @@ const INITIAL_FORM_VALUES = {
 function buildFormFields(
   companyOptions: ERPDynamicSelectOption[],
   branchOptions: ERPDynamicSelectOption[],
+  userOptions: ERPDynamicSelectOption[],
 ): ERPDynamicModalField[] {
   return [
     // {
@@ -140,6 +146,14 @@ function buildFormFields(
       colSpan: 2,
       options: PLATFORM_OPTIONS,
       searchable: false,
+    },
+    {
+      name: "devUserId",
+      label: "User",
+      type: "select",
+      colSpan: 2,
+      searchable: true,
+      options: userOptions,
     },
     {
       name: "devCompanyId",
@@ -204,17 +218,20 @@ function getSourceValue(row: CrudMasterTableRow, keys: readonly string[]): unkno
 export default function DeviceListMasterPage() {
   const { getAll: getCompanyLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getBranchLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  const { getAll: getUserList } = useApi<unknown>(USER_LIST_ENDPOINT);
 
   const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_COMPANY_OPTION]);
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_BRANCH_OPTION]);
+  const [userOptions, setUserOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_USER_OPTION]);
 
   useEffect(() => {
     let mounted = true;
     void (async () => {
       try {
-        const [companiesPayload, branchesPayload] = await Promise.all([
+        const [companiesPayload, branchesPayload, usersPayload] = await Promise.all([
           getCompanyLookup(LOOKUP_QUERY_COMPANIES),
           getBranchLookup(LOOKUP_QUERY_BRANCHES),
+          getUserList(USER_LIST_QUERY),
         ]);
         if (!mounted) return;
         setCompanyOptions(
@@ -231,14 +248,22 @@ export default function DeviceListMasterPage() {
             labelKeys: ["name", "label"],
           }),
         );
+        setUserOptions(
+          buildLookupOptions(usersPayload, DEFAULT_USER_OPTION, {
+            arrayKeys: ["data"],
+            idKeys: ["usrId"],
+            labelKeys: ["usrDisplayName", "usrLoginName"],
+          }),
+        );
       } catch {
         if (!mounted) return;
         setCompanyOptions([DEFAULT_COMPANY_OPTION]);
         setBranchOptions([DEFAULT_BRANCH_OPTION]);
+        setUserOptions([DEFAULT_USER_OPTION]);
       }
     })();
     return () => { mounted = false; };
-  }, [getCompanyLookup, getBranchLookup]);
+  }, [getCompanyLookup, getBranchLookup, getUserList]);
 
   const companyLabelMap = useMemo(
     () => new Map(companyOptions.map((o) => [o.value, o.label])),
@@ -248,10 +273,14 @@ export default function DeviceListMasterPage() {
     () => new Map(branchOptions.map((o) => [o.value, o.label])),
     [branchOptions],
   );
+  const userLabelMap = useMemo(
+    () => new Map(userOptions.map((o) => [o.value, o.label])),
+    [userOptions],
+  );
 
   const formFields = useMemo(
-    () => buildFormFields(companyOptions, branchOptions),
-    [companyOptions, branchOptions],
+    () => buildFormFields(companyOptions, branchOptions, userOptions),
+    [companyOptions, branchOptions, userOptions],
   );
 
   const customTableColumns = useMemo<ReusableTableColumn<CrudMasterTableRow>[]>(
@@ -326,6 +355,23 @@ export default function DeviceListMasterPage() {
         },
       },
       {
+        key: "devUser",
+        header: "User",
+        width: "140px",
+        render: (row) => {
+          const id = toDisplayValue(getSourceValue(row, DEV_USER_ID_KEYS));
+          return userLabelMap.get(id) || id || "-";
+        },
+        sortAccessor: (row) => {
+          const id = toDisplayValue(getSourceValue(row, DEV_USER_ID_KEYS));
+          return userLabelMap.get(id) || id;
+        },
+        searchAccessor: (row) => {
+          const id = toDisplayValue(getSourceValue(row, DEV_USER_ID_KEYS));
+          return `${userLabelMap.get(id) || ""} ${id}`.trim();
+        },
+      },
+      {
         key: "devMacAddress",
         header: "MAC Address",
         width: "140px",
@@ -390,6 +436,7 @@ export default function DeviceListMasterPage() {
           ...INITIAL_FORM_VALUES,
           devCompanyId: toDisplayValue(getFirstDefinedValue(rowSource, DEV_COMPANY_ID_KEYS)) || INITIAL_FORM_VALUES.devCompanyId,
           devBranchId: toDisplayValue(getFirstDefinedValue(rowSource, DEV_BRANCH_ID_KEYS)) || INITIAL_FORM_VALUES.devBranchId,
+          devUserId: toDisplayValue(getFirstDefinedValue(rowSource, DEV_USER_ID_KEYS)) || INITIAL_FORM_VALUES.devUserId,
           devDeviceUid: toDisplayValue(getFirstDefinedValue(rowSource, DEV_DEVICE_UID_KEYS)) || INITIAL_FORM_VALUES.devDeviceUid,
           devDeviceName: toDisplayValue(getFirstDefinedValue(rowSource, DEV_DEVICE_NAME_KEYS)) || INITIAL_FORM_VALUES.devDeviceName,
           devDeviceType: toDisplayValue(getFirstDefinedValue(rowSource, DEV_DEVICE_TYPE_KEYS)) || INITIAL_FORM_VALUES.devDeviceType,
@@ -407,6 +454,7 @@ export default function DeviceListMasterPage() {
           devDeviceName: toNullableString(values.devDeviceName ?? ""),
           devDeviceType: (values.devDeviceType ?? "Desktop").trim(),
           devPlatform: toNullableString(values.devPlatform ?? ""),
+          devUserId: toNullableString(values.devUserId ?? ""),
           devCompanyId: toNullableString(values.devCompanyId ?? ""),
           devBranchId: toNullableString(values.devBranchId ?? ""),
           devMacAddress: toNullableString(values.devMacAddress ?? ""),
