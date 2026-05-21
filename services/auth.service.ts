@@ -4,6 +4,7 @@ export {
   getAuthSession,
   getAuthUserId,
   getRefreshToken,
+  getUserInfo,
   setAuthSession,
   clearAuthSession,
   getAuthSessionId,

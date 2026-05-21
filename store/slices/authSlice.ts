@@ -13,6 +13,18 @@ export type PersistedBusinessContext = {
   branchName: string | null;
 };
 
+export type UserInfo = {
+  userName: string | null;
+  userType: string | null;
+  tokenType: string | null;
+  deviceId: string | null;
+  deviceName: string | null;
+  devCompanyId: string | null;
+  devBranchId: string | null;
+  devUserId: string | null;
+  deviceType: string | null;
+};
+
 type AuthSessionPayload = {
   token?: string | null;
   refreshToken?: string | null;
@@ -20,6 +32,7 @@ type AuthSessionPayload = {
   isAuthenticated?: boolean;
   recentPages?: PersistedRecentPage[];
   businessContext?: PersistedBusinessContext | null;
+  userInfo?: UserInfo | null;
 };
 
 export type AuthState = {
@@ -30,6 +43,7 @@ export type AuthState = {
   userId: string | null;
   recentPages: PersistedRecentPage[];
   businessContext: PersistedBusinessContext | null;
+  userInfo: UserInfo | null;
 };
 
 const initialState: AuthState = {
@@ -40,6 +54,7 @@ const initialState: AuthState = {
   userId: null,
   recentPages: [],
   businessContext: null,
+  userInfo: null,
 };
 
 function normalizeString(value: string | null | undefined): string | null {
@@ -69,17 +84,19 @@ function applyAuthSession(state: AuthState, payload: AuthSessionPayload): void {
   if (!isAuthenticated) {
     state.recentPages = [];
     state.businessContext = null;
+    state.userInfo = null;
     return;
   }
-
   if (Array.isArray(payload.recentPages)) {
     state.recentPages = payload.recentPages;
   }
   if (Object.prototype.hasOwnProperty.call(payload, "businessContext")) {
     state.businessContext = payload.businessContext ?? null;
   }
+  if (Object.prototype.hasOwnProperty.call(payload, "userInfo")) {
+    state.userInfo = payload.userInfo ?? null;
+  }
 }
-
 const authSlice = createSlice({
   name: "auth",
   initialState,
@@ -124,5 +141,8 @@ export function selectRecentPages(state: { auth: AuthState }): PersistedRecentPa
 }
 export function selectBusinessContext(state: { auth: AuthState }): PersistedBusinessContext | null {
   return state.auth.businessContext;
+}
+export function selectUserInfo(state: { auth: AuthState }): UserInfo | null {
+  return state.auth.userInfo;
 }
 export default authSlice.reducer;

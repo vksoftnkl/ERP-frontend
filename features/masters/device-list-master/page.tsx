@@ -34,13 +34,8 @@ const LOOKUP_QUERY_BRANCHES = { module: "branches", limit: "100" } as const;
 const DEVICE_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "", label: "Select Type" },
   { value: "Desktop", label: "Desktop" },
-  { value: "Laptop", label: "Laptop" },
   { value: "Mobile", label: "Mobile" },
-  { value: "Tablet", label: "Tablet" },
-  { value: "Server", label: "Server" },
-  { value: "Kiosk", label: "Kiosk" },
-  { value: "POS", label: "POS Terminal" },
-  { value: "Other", label: "Other" },
+  { value: "Web", label: "Web" },
 ];
 
 const PLATFORM_OPTIONS: ERPDynamicSelectOption[] = [

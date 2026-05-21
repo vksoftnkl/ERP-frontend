@@ -3,6 +3,7 @@ import {
   extractAuthToken,
   extractAuthUserId,
   extractRefreshToken,
+  extractUserInfo,
   setAuthSession,
 } from "@/lib/auth/session";
 import { authSessionChanged } from "@/store/slices/authSlice";
@@ -10,8 +11,9 @@ export type LoginRequest = {
   usrLoginName: string;
   usrPassword: string;
   device_id?: string;
-  user_type: string;
   app_version?: string;
+  ip_address?: string;
+  device_type?: string;
 };
 export type LoginResponse = {
   authenticated: boolean;
@@ -31,7 +33,8 @@ export const authApi = baseApi.injectEndpoints({
         const token = extractAuthToken(result.data);
         const refreshToken = extractRefreshToken(result.data);
         const userId = extractAuthUserId(result.data);
-        const authenticated = setAuthSession(token, userId, refreshToken);
+        const userInfo = extractUserInfo(result.data);
+        const authenticated = setAuthSession(token, userId, refreshToken, userInfo);
         if (!authenticated) {
           return {
             error: {
@@ -39,7 +42,7 @@ export const authApi = baseApi.injectEndpoints({
             },
           };
         }
-        api.dispatch(authSessionChanged({ token, refreshToken, userId }));
+        api.dispatch(authSessionChanged({ token, refreshToken, userId, userInfo }));
         return { data: { authenticated } };
       },
       invalidatesTags: ["Auth"],

@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiChevronDown, FiChevronRight, FiHome } from "react-icons/fi";
+import { FiHome } from "react-icons/fi";
 import styles from "./erp-header.module.css";
 import { clearAuthSession } from "@/lib/auth/session";
 import { clearBusinessContextSession } from "@/components/layout/business-context";
@@ -582,7 +582,7 @@ export default function ErpHeader({
   const quickTabsRef = useRef<HTMLDivElement | null>(null);
 
   const shouldUseMenuMasterLabels = primaryMenu === DEFAULT_PRIMARY_MENU;
-  const { data: primaryMenuFromApi } = useGetPrimaryMenuQuery(undefined, {
+  const { data: primaryMenuFromApi, isLoading: isMenuLoading } = useGetPrimaryMenuQuery(undefined, {
     skip: !shouldUseMenuMasterLabels,
   });
 
@@ -633,8 +633,13 @@ export default function ErpHeader({
   );
 
   const resolvedPrimaryMenu = useMemo(
-    () => (shouldUseMenuMasterLabels ? primaryMenuFromApi ?? [] : primaryMenu),
-    [primaryMenu, primaryMenuFromApi, shouldUseMenuMasterLabels],
+    () =>
+      shouldUseMenuMasterLabels
+        ? isMenuLoading
+          ? primaryMenu
+          : (primaryMenuFromApi ?? [])
+        : primaryMenu,
+    [primaryMenu, primaryMenuFromApi, isMenuLoading, shouldUseMenuMasterLabels],
   );
 
   const resolvedCompany = selectedCompany ?? localCompany;

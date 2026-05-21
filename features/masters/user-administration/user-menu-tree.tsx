@@ -29,7 +29,8 @@ export interface MenuPermission {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const MENU_ENDPOINT = "/menu-masters/get";
+// Use /all so admins see every menu regardless of their own permissions
+const MENU_ENDPOINT = "/menu-masters/all";
 const MENU_QUERY = {
   includeChildren: "true",
   activeOnly: "true",

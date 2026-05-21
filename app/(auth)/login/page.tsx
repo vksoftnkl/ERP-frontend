@@ -1,18 +1,26 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import clientPackageJson from "../../../package.json";
-import {
-  getOrCreateClientDeviceId,
-} from "@/lib/auth/session";
+import { getOrCreateClientDeviceId } from "@/lib/auth/session";
 import {
   canUseClientSideRouting,
   normalizeInternalRoute,
 } from "@/lib/navigation/safe-route";
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useLoginMutation } from "@/store/api/authApi";
-const CLIENT_APP_VERSION = `erp-client@${clientPackageJson.version}`;
-const DEFAULT_LOGIN_USER_TYPE = "USER";
+
+async function getClientIp(): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch("https://api.ipify.org?format=json", { signal: controller.signal });
+    clearTimeout(timeout);
+    const data = await res.json() as { ip?: string };
+    return data.ip ?? "";
+  } catch {
+    return "";
+  }
+}
 type Errors = {
   username?: string;
   password?: string;
@@ -43,12 +51,14 @@ export default function LoginPage() {
     if (!validate()) return;
     setAuthError(null);
     try {
+      const ip = await getClientIp();
       const response = await login({
         usrLoginName: values.username.trim(),
         usrPassword: values.password,
         device_id: getOrCreateClientDeviceId() ?? undefined,
-        user_type: DEFAULT_LOGIN_USER_TYPE,
-        app_version: CLIENT_APP_VERSION,
+        app_version: "v1",
+        ip_address: ip,
+        device_type: "Web",
       }).unwrap();
       if (!response.authenticated) {
         setAuthError("Token missing in login response.");
