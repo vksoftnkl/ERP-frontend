@@ -1,0 +1,37 @@
+<svg width="680" height="280" viewBox="0 0 680 280" xmlns="http://www.w3.org/2000/svg">
+  <title>VK Softwares Logo</title>
+  <desc>VK Softwares logo</desc>
+
+  <defs>
+    <linearGradient id="iconbg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#142D45"/>
+      <stop offset="100%" stop-color="#0A1E2E"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="210" y="55" width="148" height="148" rx="22" fill="url(#iconbg)"/>
+  <rect x="214" y="59" width="140" height="140" rx="18" fill="none" stroke="white" stroke-width="0.6" opacity="0.08"/>
+
+  <!-- V -->
+  <line x1="230" y1="88" x2="262" y2="170" stroke="#3AADDF" stroke-width="9" stroke-linecap="round"/>
+  <line x1="262" y1="170" x2="294" y2="88" stroke="#3AADDF" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- K -->
+  <line x1="310" y1="88" x2="310" y2="170" stroke="white" stroke-width="9" stroke-linecap="round"/>
+  <line x1="310" y1="128" x2="346" y2="88" stroke="white" stroke-width="9" stroke-linecap="round"/>
+  <line x1="310" y1="128" x2="346" y2="170" stroke="white" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- Wordmark -->
+  <text x="380" y="120"
+        font-family="Arial Black, Arial, sans-serif"
+        font-size="48" font-weight="900" letter-spacing="-2"
+        fill="#0D2137">VK</text>
+
+  <rect x="380" y="131" width="88" height="2" rx="1" fill="#3AADDF"/>
+
+  <text x="380" y="155"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="12.5" font-weight="400" letter-spacing="4.5"
+        fill="#3AADDF">SOFTWARES</text>
+
+</svg>

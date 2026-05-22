@@ -187,6 +187,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         ]
       },
       {label:"User Administration",href:"/master/user-administration"},
+      {label:"Module Administration",href:"/master/module-administration"},
       {label:"Permissions",href:"/master/permissions"},
   
     ]

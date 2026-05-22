@@ -1,5 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ERP">
-  <rect width="64" height="64" rx="10" fill="#0f172a"/>
-  <path fill="#ffffff" d="M16 18h31v7H24v7h20v7H24v7h24v7H16z"/>
-  <path fill="#38bdf8" d="M50 18h5v35h-5z"/>
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="VK Softwares">
+  <title>VK Softwares</title>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#142D45"/>
+      <stop offset="100%" stop-color="#0A1E2E"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="10" fill="url(#bg)"/>
+  <!-- V -->
+  <line x1="9" y1="16" x2="24" y2="49" stroke="#3AADDF" stroke-width="5" stroke-linecap="round"/>
+  <line x1="24" y1="49" x2="39" y2="16" stroke="#3AADDF" stroke-width="5" stroke-linecap="round"/>
+  <!-- K -->
+  <line x1="44" y1="16" x2="44" y2="49" stroke="white" stroke-width="5" stroke-linecap="round"/>
+  <line x1="44" y1="32" x2="58" y2="16" stroke="white" stroke-width="5" stroke-linecap="round"/>
+  <line x1="44" y1="32" x2="58" y2="49" stroke="white" stroke-width="5" stroke-linecap="round"/>
 </svg>

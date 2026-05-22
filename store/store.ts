@@ -66,6 +66,7 @@ function sanitizeAuthState(state: AuthState | undefined): AuthState | undefined 
     businessContext: state.businessContext && typeof state.businessContext === "object"
       ? state.businessContext
       : null,
+    userInfo: state.userInfo && typeof state.userInfo === "object" ? state.userInfo : null,
   };
 }
 
