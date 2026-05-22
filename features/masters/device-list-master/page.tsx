@@ -17,29 +17,24 @@ import {
   toUpdateId,
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
-
 const API_ENDPOINTS = {
   list: "/device-list-masters/list",
   getById: "/device-list-masters/get",
   create: "/device-list-masters/create",
   delete: "/device-list-masters/delete",
 } as const;
-
 const GRID_TABLE_NAME = "device_master";
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const USER_LIST_ENDPOINT = "/user-administration/list";
-
 const LOOKUP_QUERY_COMPANIES = { module: "companies", limit: "100" } as const;
 const LOOKUP_QUERY_BRANCHES = { module: "branches", limit: "100" } as const;
 const USER_LIST_QUERY = { limit: "100" } as const;
-
 const DEVICE_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "", label: "Select Type" },
   { value: "Desktop", label: "Desktop" },
   { value: "Mobile", label: "Mobile" },
   { value: "Web", label: "Web" },
 ];
-
 const PLATFORM_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "", label: "Select Platform" },
   { value: "Windows", label: "Windows" },
@@ -49,7 +44,6 @@ const PLATFORM_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "iOS", label: "iOS" },
   { value: "Other", label: "Other" },
 ];
-
 const LOOKUP_KEYS = {
   id: ["devId", "dev_id", "id", "_id"],
   code: ["devDeviceName", "dev_device_name", "deviceName", "code"],
@@ -61,7 +55,6 @@ const LOOKUP_KEYS = {
   description: ["devMacAddress", "dev_mac_address", "macAddress", "description"],
   array: ["data", "items", "results", "rows", "list", "deviceMasters"],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "devId",
   name: "devDeviceUid",
@@ -70,7 +63,6 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "devMacAddress",
   sort: "position",
 } as const;
-
 const DEV_COMPANY_ID_KEYS = ["devCompanyId", "dev_company_id", "companyId", "company_id"] as const;
 const DEV_BRANCH_ID_KEYS = ["devBranchId", "dev_branch_id", "branchId", "branch_id"] as const;
 const DEV_USER_ID_KEYS = ["devUserId", "dev_user_id", "userId", "user_id"] as const;
@@ -83,11 +75,9 @@ const DEV_IS_BLOCKED_KEYS = ["devIsBlocked", "dev_is_blocked", "isBlocked"] as c
 const DEV_BLOCK_REASON_KEYS = ["devBlockReason", "dev_block_reason", "blockReason"] as const;
 const DEV_LAST_IP_KEYS = ["devLastIp", "dev_last_ip", "lastIp"] as const;
 const DEV_IS_ACTIVE_KEYS = ["devIsActive", "dev_is_active", "isActive", "is_active"] as const;
-
 const DEFAULT_COMPANY_OPTION: ERPDynamicSelectOption = { value: "", label: "Select Company" };
 const DEFAULT_BRANCH_OPTION: ERPDynamicSelectOption = { value: "", label: "Select Branch" };
 const DEFAULT_USER_OPTION: ERPDynamicSelectOption = { value: "", label: "Select User" };
-
 const INITIAL_FORM_VALUES = {
   devCompanyId: "",
   devBranchId: "",
