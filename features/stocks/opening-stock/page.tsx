@@ -27,6 +27,7 @@ import ItemMasterPageContent from "@/features/masters/item/item-master-page";
 import { resolveOptionFromShortcut } from "@/features/masters/shared";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";
+import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import {
   getAuthSessionId,
   getAuthUserId,
@@ -941,9 +942,11 @@ export default function OpeningStockPage() {
       event.preventDefault();
       requestUnsafeNavigationConfirmation(() => {
         if (nextUrl.origin === currentUrl.origin) {
+          notifyGlobalNavigationStart();
           router.push(`${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
           return;
         }
+        notifyGlobalNavigationStart();
         window.location.assign(nextUrl.href);
       });
     };

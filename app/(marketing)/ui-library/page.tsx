@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import ModalFormShowcase from "./modal-form-showcase";
 import {
   Alert,
@@ -32,6 +33,10 @@ import {
 
 export default function UiLibraryPage() {
   const router = useRouter();
+  const navigate = (href: string) => {
+    notifyGlobalNavigationStart();
+    router.push(href);
+  };
 
   return (
     <Shell>
@@ -51,14 +56,14 @@ export default function UiLibraryPage() {
               <button
                 type="button"
                 className="ui-navlink ui-navlink--active"
-                onClick={() => router.push("/ui-library")}
+                onClick={() => navigate("/ui-library")}
               >
                 Library
               </button>
-              <button type="button" className="ui-navlink" onClick={() => router.push("/")}>
+              <button type="button" className="ui-navlink" onClick={() => navigate("/")}>
                 Existing Home
               </button>
-              <button type="button" className="ui-navlink" onClick={() => router.push("/dashboard")}>
+              <button type="button" className="ui-navlink" onClick={() => navigate("/dashboard")}>
                 Dashboard
               </button>
             </NavLinks>

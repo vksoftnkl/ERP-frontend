@@ -1,5 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import styles from "./master-module-page.module.css";
 type MasterModulePageProps = {
   title: string;
@@ -42,7 +43,10 @@ export default function MasterModulePage({ title, description }: MasterModulePag
                     key={item.href}
                     type="button"
                     className={styles.shortcutCard}
-                    onClick={() => router.push(item.href)}
+                    onClick={() => {
+                      notifyGlobalNavigationStart();
+                      router.push(item.href);
+                    }}
                   >
                     {item.label}
                   </button>

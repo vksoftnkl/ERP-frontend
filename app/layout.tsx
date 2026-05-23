@@ -6,6 +6,7 @@ import Providers from "@/store/provider";
 import { BusinessContextProvider } from "@/components/layout/business-context";
 import GlobalErpHeader from "@/components/layout/global-erp-header";
 import GlobalRouteGuard from "@/components/auth/global-route-guard";
+import GlobalLoader from "@/components/feedback/global-loader";
 import GlobalToasterWrapper from "@/components/feedback/global-toaster-wrapper";
 
 export const metadata: Metadata = {
@@ -53,6 +54,7 @@ export default function RootLayout({
       <body suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: removeExtensionInjectedNodesScript }} />
         <Providers>
+          <GlobalLoader />
           <GlobalRouteGuard>
             <BusinessContextProvider>
               <div className="erp-app-shell">

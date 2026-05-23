@@ -15,6 +15,7 @@ import {
   canUseClientSideRouting,
   toInternalRoute,
 } from "@/lib/navigation/safe-route";
+import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import {
   ARIA_LABELS,
   DEFAULT_BRANCH_OPTIONS,
@@ -721,6 +722,7 @@ export default function ErpHeader({
   const handleNavigate = useCallback((destination: string) => {
     const route = toInternalRoute(destination);
     if (!route) return;
+    notifyGlobalNavigationStart();
     if (!canUseClientSideRouting()) { window.location.assign(route); return; }
     router.push(route);
   }, [router]);
@@ -741,6 +743,7 @@ export default function ErpHeader({
     dispatch(authSessionChanged({ isAuthenticated: false }));
     clearAuthSession();
     clearBusinessContextSession();
+    notifyGlobalNavigationStart();
     if (!canUseClientSideRouting()) { window.location.replace("/login"); return; }
     router.replace("/login");
   }, [dispatch, onLogout, router]);

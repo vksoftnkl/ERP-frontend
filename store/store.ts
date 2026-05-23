@@ -4,6 +4,7 @@ import authReducer, { type AuthState } from "@/store/slices/authSlice";
 import gridColumnsReducer, {
   type GridColumnsState,
 } from "@/store/slices/gridColumnsSlice";
+import globalLoaderReducer from "@/store/slices/globalLoaderSlice";
 
 export const REDUX_SESSION_STORAGE_KEY = "erp_client_redux_state";
 
@@ -11,6 +12,7 @@ const rootReducer = combineReducers({
   auth: authReducer,
   [baseApi.reducerPath]: baseApi.reducer,
   gridColumns: gridColumnsReducer,
+  globalLoader: globalLoaderReducer,
 });
 
 export type RootState = ReturnType<typeof rootReducer>;

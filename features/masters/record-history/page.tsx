@@ -16,6 +16,7 @@ import {
   FiX,
 } from "react-icons/fi";
 import { useApi } from "@/hooks/useApi";
+import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 const AUDIT_LOG_LIST_ENDPOINT = "/audit-logs/list";
 const DEFAULT_PAGE = 1;
@@ -1107,6 +1108,7 @@ export default function RecordHistoryPage() {
   const displayName = normalizeQueryValue(searchParams.get("display_name"));
   const returnTo = normalizeQueryValue(searchParams.get("return_to"));
   const handleBack = useCallback(() => {
+    notifyGlobalNavigationStart();
     if (returnTo) {
       router.push(returnTo);
       return;

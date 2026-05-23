@@ -1,6 +1,7 @@
 "use client";
 import { type ReactNode, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import { useAppSelector } from "@/store/hooks";
 import {
   selectAuthInitialized,
@@ -42,12 +43,14 @@ export default function GlobalRouteGuard({ children }: { children: ReactNode }) 
 
     if (!isAuthenticated && !publicRoute) {
       const query = window.location.search.replace(/^\?/, "");
+      notifyGlobalNavigationStart();
       router.replace(`/login?next=${encodeURIComponent(toRelativePath(pathname, query))}`);
       return;
     }
 
     if (isAuthenticated && pathname === "/login") {
       const next = new URLSearchParams(window.location.search).get("next");
+      notifyGlobalNavigationStart();
       router.replace(normalizeNextRoute(next));
     }
   }, [authInitialized, isAuthenticated, pathname, publicRoute, router]);

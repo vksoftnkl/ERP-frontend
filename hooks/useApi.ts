@@ -10,8 +10,13 @@ import {
   getRefreshToken,
   setAuthSession,
 } from "@/lib/auth/session";
+import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import { useAppDispatch } from "@/store/hooks";
 import { authSessionChanged } from "@/store/slices/authSlice";
+import {
+  globalLoaderFinished,
+  globalLoaderStarted,
+} from "@/store/slices/globalLoaderSlice";
 type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 type UseApiToastOptions = {
   success?: boolean;
@@ -236,6 +241,7 @@ function redirectToLogin(): void {
   if (window.location.pathname === "/login") {
     return;
   }
+  notifyGlobalNavigationStart();
   window.location.replace(`/login?next=${encodeURIComponent(currentRoute)}`);
 }
 function buildHeaders(
@@ -348,6 +354,7 @@ export function useApi<TResp = unknown, TBody = unknown>(
         throw new Error(message);
       }
       setLoading(true);
+      dispatch(globalLoaderStarted());
       setError(null);
       try {
         const requestConfig = {
@@ -426,6 +433,7 @@ export function useApi<TResp = unknown, TBody = unknown>(
         }
         throw e;
       } finally {
+        dispatch(globalLoaderFinished());
         if (abortRef.current === controller) {
           abortRef.current = null;
           setLoading(false);

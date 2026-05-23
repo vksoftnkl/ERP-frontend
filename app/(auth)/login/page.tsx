@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getOrCreateClientDeviceId } from "@/lib/auth/session";
+import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import {
   canUseClientSideRouting,
   normalizeInternalRoute,
@@ -62,6 +63,7 @@ export default function LoginPage() {
       }).unwrap();
       if (!response.authenticated) {
         setAuthError("Token missing in login response.");
+        notifyGlobalNavigationStart();
         if (canUseClientSideRouting()) {
           router.replace("/login");
         } else {
@@ -72,6 +74,7 @@ export default function LoginPage() {
       const nextRoute = normalizeNextRoute(
         new URLSearchParams(window.location.search).get("next")
       );
+      notifyGlobalNavigationStart();
       if (!canUseClientSideRouting()) {
         window.location.assign(nextRoute);
         return;
