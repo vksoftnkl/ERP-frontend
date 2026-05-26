@@ -10,7 +10,7 @@ import styles from "@/app/master/state-master/page.module.scss";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue, toSelectBoolean } from "@/features/masters/shared/value-mappers";
 const API_ENDPOINTS = {
-  list: "/item-categories/list",
+list: "/configured-grid-sql/run?grid_id=11",
   getById: "/item-categories/get",
   create: "/item-categories/create",
   delete: "/item-categories/delete",

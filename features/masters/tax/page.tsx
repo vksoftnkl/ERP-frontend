@@ -19,7 +19,7 @@ import {
   toUpper,
 } from "@/app/master/_shared/crud-utils";
 const API_ENDPOINTS = {
-  list: "/item-taxes/list",
+  list: "/configured-grid-sql/run?grid_id=5",
   getById: "/item-taxes/get",
   create: "/item-taxes/create",
   delete: "/item-taxes/delete",

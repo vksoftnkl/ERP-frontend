@@ -4,7 +4,7 @@ import { DEFAULT_LOOKUP_ARRAY_KEYS } from "@/features/masters/shared/normalizers
 import { toDisplayValue } from "@/features/masters/shared/value-mappers";
 
 export const API_ENDPOINTS = {
-  list: "/items/list",
+list: "/configured-grid-sql/run?grid_id=1",
   getById: "/items/get",
   create: "/items/create",
   delete: "/items/delete",

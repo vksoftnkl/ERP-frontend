@@ -12,7 +12,7 @@ import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/value-mappers";
 
 const API_ENDPOINTS = {
-  list: "/godowns/list",
+list: "/configured-grid-sql/run?grid_id=9",
   getById: "/godowns",
   create: "/godowns/create",
   delete: "/godowns/delete",
