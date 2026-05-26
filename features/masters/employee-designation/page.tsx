@@ -10,7 +10,7 @@ import {
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
 const API_ENDPOINTS = {
-  list: "/employee-designation-masters/list",
+  list: "/configured-grid-sql/run?grid_id=24",
   getById: "/employee-designation-masters/get",
   create: "/employee-designation-masters/create",
   delete: "/employee-designation-masters/delete",

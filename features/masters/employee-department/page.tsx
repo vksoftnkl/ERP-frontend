@@ -12,7 +12,7 @@ import {
 } from "@/app/master/_shared/crud-utils";
 
 const API_ENDPOINTS = {
-  list: "/employee-department-masters/list",
+    list: "/configured-grid-sql/run?grid_id=23",
   getById: "/employee-department-masters/get",
   create: "/employee-department-masters/create",
   delete: "/employee-department-masters/delete",

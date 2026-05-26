@@ -22,7 +22,7 @@ import {
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
 const API_ENDPOINTS = {
-  list: "/employee-masters/list",
+ list: "/configured-grid-sql/run?grid_id=14",
   getById: "/employee-masters/get",
   create: "/employee-masters/create",
   delete: "/employee-masters/delete",

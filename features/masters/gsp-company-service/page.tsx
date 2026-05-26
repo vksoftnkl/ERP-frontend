@@ -20,7 +20,7 @@ import {
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
 const API_ENDPOINTS = {
-  list: "/gsp-company-services/list",
+  list: "/configured-grid-sql/run?grid_id=27",
   getById: "/gsp-company-services/get",
   create: "/gsp-company-services/create",
   delete: "/gsp-company-services/delete",

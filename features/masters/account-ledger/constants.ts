@@ -1,5 +1,5 @@
 export const API_ENDPOINTS = {
-  list: "/account-ledger-masters/list",
+  list: "/configured-grid-sql/run?grid_id=26",
   getById: "/account-ledger-masters/get",
   create: "/account-ledger-masters/create",
   delete: "/account-ledger-masters/delete",

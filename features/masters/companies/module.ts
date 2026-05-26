@@ -34,7 +34,7 @@ import {
 import { GST_TYPE_OPTIONS } from "@/utils/constant";
 import { validateGstin } from "@/utils/validation";
 const API_ENDPOINTS = {
-  list: "/company-masters/list",
+   list: "/configured-grid-sql/run?grid_id=12",
   getById: "/company-masters/get",
   create: "/company-masters/create",
   delete: "/company-masters/delete",

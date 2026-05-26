@@ -21,7 +21,7 @@ import {
   toUpper,
 } from "@/app/master/_shared/crud-utils";
 const API_ENDPOINTS = {
-  list: "/branch-masters/list",
+  list: "/configured-grid-sql/run?grid_id=13",
   getById: "/branch-masters/get",
   create: "/branch-masters/create",
   delete: "/branch-masters/delete",
