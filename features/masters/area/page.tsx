@@ -18,7 +18,7 @@ import styles from "@/app/master/state-master/page.module.scss";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue, toSelectBoolean } from "@/features/masters/shared/value-mappers";
 const API_ENDPOINTS = {
-  list: "/areas/list",
+  list: "/configured-grid-sql/run?grid_id=3",
   getById: "/areas/get",
   create: "/areas/create",
   delete: "/areas/delete",
@@ -622,35 +622,19 @@ export default function AreaMasterPage() {
   );
   const customTableColumns = useMemo<ReusableTableColumn<CrudMasterTableRow>[]>(
     () => [
-       {
+      {
         key: "serialNo",
         header: "S.No",
         accessor: "serialNo",
         width: "12px",
         sortable: false,
       },
-      {
-        key: "areaName",
-        header: "Area name",
-        accessor: "masterName",
-        width: "220px",
-      },
-      {
-        key: "areaAlias",
-        header: "Area alias",
-        accessor: "masterAlias",
-        width: "140px",
-      },
-      {
-        key: "areaShort",
-        header: "Area short",
-        accessor: "masterShort",
-        width: "140px",
-      },
+      { key: "areaName", header: "", accessor: "masterName" },
+      { key: "areaAlias", header: "", accessor: "masterAlias" },
+      { key: "areaShort", header: "", accessor: "masterShort" },
       {
         key: "areaCity",
-        header: "AREA citys",
-        width: "180px",
+        header: "",
         render: (row) => {
           const cityId = toDisplayValue(getAreaSourceValue(row, AREA_CITY_ID_KEYS));
           return cityOptionLabelMap.get(cityId) || cityId || "-";
@@ -664,24 +648,17 @@ export default function AreaMasterPage() {
           return `${cityOptionLabelMap.get(cityId) || ""} ${cityId}`.trim();
         },
       },
-      {
-        key: "areaSort",
-        header: "Area sort",
-        accessor: "position",
-        width: "96px",
-      },
+      { key: "areaSort", header: "", accessor: "position" },
       {
         key: "areaDistanceKm",
-        header: "AREA distance",
-        width: "120px",
+        header: "",
         render: (row) => toDisplayValue(getAreaSourceValue(row, AREA_DISTANCE_KEYS)) || "-",
         sortAccessor: (row) => Number(getAreaSourceValue(row, AREA_DISTANCE_KEYS) ?? 0),
         searchAccessor: (row) => toDisplayValue(getAreaSourceValue(row, AREA_DISTANCE_KEYS)),
       },
       {
         key: "areaCollectionDays",
-        header: "Area collectiuon days",
-        width: "180px",
+        header: "",
         render: (row) =>
           toCollectionDaysDisplay(getAreaSourceValue(row, AREA_COLLECTION_DAYS_KEYS)) || "-",
         sortAccessor: (row) =>
@@ -700,6 +677,7 @@ export default function AreaMasterPage() {
         entityLabel="area"
         entityLabelPlural="areas"
         apiEndpoints={API_ENDPOINTS}
+        listResponseStyleArrayKey="styles"
         gridTableName={GRID_TABLE_NAME}
         lookupKeys={LOOKUP_KEYS}
         requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
