@@ -40,29 +40,23 @@ import {
 import { MenuTree } from "./erp-header-menu";
 import { TabStrip } from "./erp-header-tab-strip";
 export type { ErpHeaderItem, ErpHeaderProps } from "./types";
-
 // ─── Utility functions ────────────────────────────────────────────────────────
-
 function formatDateLabel(date: Date): string {
   return new Intl.DateTimeFormat("en-GB", DEFAULT_DATE_FORMAT_OPTIONS)
     .format(date)
     .replaceAll("/", "-");
 }
-
 function cx(...tokens: Array<string | false | undefined>): string {
   return tokens.filter(Boolean).join(" ");
 }
-
 function getDefaultBranchValue(options: Array<{ value: string }>): string {
   const firstNamedBranch = options.find((option) => option.value.trim().length > 0);
   return firstNamedBranch?.value ?? options[0]?.value ?? "";
 }
-
 function getDefaultCompanyValue(options: Array<{ value: string }>): string {
   const firstNamedCompany = options.find((option) => option.value.trim().length > 0);
   return firstNamedCompany?.value ?? options[0]?.value ?? "";
 }
-
 function toTitleCaseLabel(value: string): string {
   return value
     .split(/\s+/)
@@ -70,20 +64,17 @@ function toTitleCaseLabel(value: string): string {
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(" ");
 }
-
 function toFallbackRecentPageLabel(pathname: string): string {
   const lastSegment = pathname.split("/").filter(Boolean).pop() ?? "";
   if (!lastSegment) return "Home";
   return toTitleCaseLabel(lastSegment.replace(/[-_]+/g, " ").trim()) || "Recent Page";
 }
-
 function areRecentPagesEqual(left: RecentPageOption[], right: RecentPageOption[]): boolean {
   return left.length === right.length && left.every((page, index) => {
     const otherPage = right[index];
     return page.path === otherPage?.path && page.label === otherPage.label;
   });
 }
-
 function buildRouteLabelLookup(items: ErpHeaderItem[]): Map<string, string> {
   const lookup = new Map<string, string>();
   const visit = (menuItems: ErpHeaderItem[]) => {
@@ -97,16 +88,12 @@ function buildRouteLabelLookup(items: ErpHeaderItem[]): Map<string, string> {
   visit(items);
   return lookup;
 }
-
-
 // ─── Calendar helpers ─────────────────────────────────────────────────────────
-
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
 const DAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-
 function isSameDay(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -114,7 +101,6 @@ function isSameDay(a: Date, b: Date): boolean {
     a.getDate() === b.getDate()
   );
 }
-
 function buildCalendarDays(year: number, month: number): Array<Date | null> {
   const firstDay = new Date(year, month, 1).getDay(); // 0 = Sunday
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -124,9 +110,7 @@ function buildCalendarDays(year: number, month: number): Array<Date | null> {
   while (cells.length % 7 !== 0) cells.push(null); // pad last row
   return cells;
 }
-
 // ─── CalendarPicker component ─────────────────────────────────────────────────
-
 function CalendarPicker({
   selectedDate,
   onDateChange,
@@ -138,35 +122,29 @@ function CalendarPicker({
   const [viewYear, setViewYear] = useState(selectedDate.getFullYear());
   const [viewMonth, setViewMonth] = useState(selectedDate.getMonth());
   const shellRef = useRef<HTMLDivElement | null>(null);
-
   // Keep calendar view in sync when external date changes
   useEffect(() => {
     setViewYear(selectedDate.getFullYear());
     setViewMonth(selectedDate.getMonth());
   }, [selectedDate]);
-
   const close = useCallback(() => setOpen(false), []);
   const handleToggle = useCallback(() => setOpen((v) => !v), []);
-
   const handlePrevMonth = useCallback(() => {
     setViewMonth((m) => {
       if (m === 0) { setViewYear((y) => y - 1); return 11; }
       return m - 1;
     });
   }, []);
-
   const handleNextMonth = useCallback(() => {
     setViewMonth((m) => {
       if (m === 11) { setViewYear((y) => y + 1); return 0; }
       return m + 1;
     });
   }, []);
-
   const handleDayClick = useCallback(
     (date: Date) => { onDateChange(date); close(); },
     [onDateChange, close],
   );
-
   // Close on outside click
   useEffect(() => {
     if (!open) return;
@@ -178,21 +156,17 @@ function CalendarPicker({
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [close, open]);
-
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === "Escape") { event.stopPropagation(); close(); }
     },
     [close],
   );
-
   const calendarDays = useMemo(
     () => buildCalendarDays(viewYear, viewMonth),
     [viewYear, viewMonth],
   );
-
   const today = useMemo(() => new Date(), []);
-
   return (
     <div ref={shellRef} className={styles.calendarPickerShell} onKeyDown={handleKeyDown}>
       <button
@@ -215,7 +189,6 @@ function CalendarPicker({
           <path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm-2 6h14v12H5V8zm2 3v2h2v-2H7zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2zM7 15v2h2v-2H7zm4 0v2h2v-2h-2z" />
         </svg>
       </button>
-
       {open && (
         <div className={styles.calendarPopover} role="dialog" aria-label="Date picker">
           {/* Month / year navigation */}
@@ -240,7 +213,6 @@ function CalendarPicker({
               &#8250;
             </button>
           </div>
-
           {/* Day-of-week headers + day grid */}
           <div className={styles.calendarGrid}>
             {DAY_LABELS.map((d) => (
@@ -271,7 +243,6 @@ function CalendarPicker({
               );
             })}
           </div>
-
           {/* Today shortcut */}
           <div className={styles.calendarFooter}>
             <button
@@ -287,9 +258,7 @@ function CalendarPicker({
     </div>
   );
 }
-
 // ─── RecentPagesDropdown component ───────────────────────────────────────────
-
 function RecentPagesDropdown({
   recentPages,
   onRecentPageChange,
@@ -301,14 +270,11 @@ function RecentPagesDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const shellRef = useRef<HTMLDivElement | null>(null);
-
   const close = useCallback(() => setOpen(false), []);
-
   const handleToggle = useCallback(() => {
     if (recentPages.length === 0) return;
     setOpen((value) => !value);
   }, [recentPages.length]);
-
   const handleSelect = useCallback(
     (path: string) => {
       if (!path) return;
@@ -317,7 +283,6 @@ function RecentPagesDropdown({
     },
     [close, onRecentPageChange],
   );
-
   useEffect(() => {
     if (!open) return;
     const handlePointerDown = (event: PointerEvent) => {
@@ -328,14 +293,12 @@ function RecentPagesDropdown({
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [close, open]);
-
   const handleShellKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === "Escape") { event.stopPropagation(); close(); }
     },
     [close],
   );
-
   return (
     <div
       ref={shellRef}
@@ -389,9 +352,7 @@ function RecentPagesDropdown({
     </div>
   );
 }
-
 // ─── UserMenuDropdown component ───────────────────────────────────────────────
-
 function UserMenuDropdown({
   logoutLabel,
   onLogout,
@@ -401,12 +362,9 @@ function UserMenuDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const shellRef = useRef<HTMLDivElement | null>(null);
-
   const close = useCallback(() => setOpen(false), []);
   const handleToggle = useCallback(() => setOpen((v) => !v), []);
-
   const handleLogoutClick = useCallback(() => { close(); onLogout(); }, [close, onLogout]);
-
   useEffect(() => {
     if (!open) return;
     const handlePointerDown = (event: PointerEvent) => {
@@ -417,14 +375,12 @@ function UserMenuDropdown({
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [close, open]);
-
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === "Escape") { event.stopPropagation(); close(); }
     },
     [close],
   );
-
   return (
     <div ref={shellRef} className={styles.userMenuDropdown} onKeyDown={handleKeyDown}>
       <button
@@ -461,10 +417,7 @@ function UserMenuDropdown({
     </div>
   );
 }
-
-
 // ─── HeaderRight component ────────────────────────────────────────────────────
-
 function HeaderRight({
   searchMenuCount,
   dateText,
@@ -548,9 +501,7 @@ function HeaderRight({
     </div>
   );
 }
-
 // ─── Main ErpHeader component ─────────────────────────────────────────────────
-
 export default function ErpHeader({
   primaryMenu = DEFAULT_PRIMARY_MENU,
   quickTabs = DEFAULT_QUICK_TABS,
@@ -580,12 +531,10 @@ export default function ErpHeader({
   const router = useRouter();
   const primaryMenuRef = useRef<HTMLElement | null>(null);
   const quickTabsRef = useRef<HTMLDivElement | null>(null);
-
   const shouldUseMenuMasterLabels = primaryMenu === DEFAULT_PRIMARY_MENU;
   const { data: primaryMenuFromApi, isLoading: isMenuLoading } = useGetPrimaryMenuQuery(undefined, {
     skip: !shouldUseMenuMasterLabels,
   });
-
   const [localCompany, setLocalCompany] = useState(
     selectedCompany ?? getDefaultCompanyValue(companyOptions)
   );
@@ -594,14 +543,11 @@ export default function ErpHeader({
   );
   const [localBillNumber, setLocalBillNumber] = useState(billNumber ?? "");
   const [selectedRecentPage, setSelectedRecentPage] = useState("");
-
   // Tracks the date shown in the header. Starts as today; updated on calendar pick.
   const [pickedDate, setPickedDate] = useState<Date>(() => new Date());
-
   useEffect(() => {
     if (selectedCompany !== undefined) setLocalCompany(selectedCompany);
   }, [selectedCompany]);
-
   useEffect(() => {
     if (
       selectedCompany === undefined &&
@@ -609,11 +555,9 @@ export default function ErpHeader({
       !companyOptions.some((o) => o.value === localCompany)
     ) setLocalCompany(getDefaultCompanyValue(companyOptions));
   }, [companyOptions, localCompany, selectedCompany]);
-
   useEffect(() => {
     if (selectedBranch !== undefined) setLocalBranch(selectedBranch);
   }, [selectedBranch]);
-
   useEffect(() => {
     if (
       selectedBranch === undefined &&
@@ -621,17 +565,14 @@ export default function ErpHeader({
       !branchOptions.some((o) => o.value === localBranch)
     ) setLocalBranch(getDefaultBranchValue(branchOptions));
   }, [branchOptions, localBranch, selectedBranch]);
-
   useEffect(() => {
     if (billNumber !== undefined) setLocalBillNumber(billNumber);
   }, [billNumber]);
-
   // If caller supplies dateText prop, use it; otherwise format the picked date.
   const resolvedDateText = useMemo(
     () => dateText ?? formatDateLabel(pickedDate),
     [dateText, pickedDate],
   );
-
   const resolvedPrimaryMenu = useMemo(
     () =>
       shouldUseMenuMasterLabels
@@ -641,33 +582,26 @@ export default function ErpHeader({
         : primaryMenu,
     [primaryMenu, primaryMenuFromApi, isMenuLoading, shouldUseMenuMasterLabels],
   );
-
   const resolvedCompany = selectedCompany ?? localCompany;
   const resolvedBranch = selectedBranch ?? localBranch;
   const resolvedBillNumber = billNumber ?? localBillNumber;
-
   const routeLabelLookup = useMemo(
     () => buildRouteLabelLookup(resolvedPrimaryMenu),
     [resolvedPrimaryMenu],
   );
-
   const resolvedCurrentPageLabel = useMemo(() => {
     if (!pathname) return "";
     return routeLabelLookup.get(pathname) ?? toFallbackRecentPageLabel(pathname);
   }, [pathname, routeLabelLookup]);
-
   const recentPageOptions = useMemo(
     () => recentPages.filter((page) => page.path !== pathname),
     [pathname, recentPages],
   );
-
   const closeFocusedMenu = useCallback(() => {
     const active = document.activeElement;
     if (active instanceof HTMLElement) active.blur();
   }, []);
-
   useEffect(() => { closeFocusedMenu(); }, [closeFocusedMenu, pathname]);
-
   useEffect(() => {
     if (!pathname || !isTrackableRecentPagePath(pathname)) {
       const persistedRecentPages = readRecentPages();
@@ -684,9 +618,7 @@ export default function ErpHeader({
       dispatch(recentPagesChanged(nextRecentPages));
     }
   }, [dispatch, pathname, recentPages, resolvedCurrentPageLabel]);
-
   useEffect(() => { setSelectedRecentPage(""); }, [pathname]);
-
   useEffect(() => {
     const handlePointerDownCapture = (event: PointerEvent) => {
       const target = event.target;
@@ -703,22 +635,18 @@ export default function ErpHeader({
     document.addEventListener("pointerdown", handlePointerDownCapture, true);
     return () => document.removeEventListener("pointerdown", handlePointerDownCapture, true);
   }, []);
-
   const handleCompanyChange = useCallback((value: string) => {
     if (selectedCompany === undefined) setLocalCompany(value);
     onCompanyChange?.(value);
   }, [onCompanyChange, selectedCompany]);
-
   const handleBranchChange = useCallback((value: string) => {
     if (selectedBranch === undefined) setLocalBranch(value);
     onBranchChange?.(value);
   }, [selectedBranch, onBranchChange]);
-
   const handleBillNumberChange = useCallback((value: string) => {
     if (billNumber === undefined) setLocalBillNumber(value);
     onBillNumberChange?.(value);
   }, [billNumber, onBillNumberChange]);
-
   const handleNavigate = useCallback((destination: string) => {
     const route = toInternalRoute(destination);
     if (!route) return;
@@ -726,17 +654,14 @@ export default function ErpHeader({
     if (!canUseClientSideRouting()) { window.location.assign(route); return; }
     router.push(route);
   }, [router]);
-
   const handleRecentPageChange = useCallback((value: string) => {
     if (!value) return;
     setSelectedRecentPage("");
     handleNavigate(value);
   }, [handleNavigate]);
-
   const handleHomeClick = useCallback(() => {
     handleNavigate("/");
   }, [handleNavigate]);
-
   const handleLogout = useCallback(() => {
     clearRecentPagesSession();
     if (onLogout) { onLogout(); return; }
@@ -747,7 +672,6 @@ export default function ErpHeader({
     if (!canUseClientSideRouting()) { window.location.replace("/login"); return; }
     router.replace("/login");
   }, [dispatch, onLogout, router]);
-
   return (
     <div className={styles.headerShell}>
       <header className={styles.topHeader}>

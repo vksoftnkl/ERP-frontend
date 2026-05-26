@@ -2170,8 +2170,8 @@ export default function OpeningStockPage() {
 
     return {
       accountingYear,
-      companyId: activeCompany.compId,
-      branchId: activeBranch.brId,
+      companyId: activeCompany.id,
+      branchId: activeBranch.id,
     };
   }, [accountingYear, activeBranch, activeCompany]);
 
@@ -2537,7 +2537,7 @@ export default function OpeningStockPage() {
     try {
       const ledgerPayload = await listAccountLedgers({
         query: {
-          ledCompanyId: activeCompany.compId,
+          ledCompanyId: activeCompany.id,
           ledIsActive: "true",
           page: "1",
           limit: "100",
@@ -2578,8 +2578,8 @@ export default function OpeningStockPage() {
         avh_voucher_id: loadedVoucherId ?? undefined,
         avh_voucher_type_id: 20,
         osh_acc_year: accountingYear,
-        osh_company_id: activeCompany.compId,
-        osh_branch_id: activeBranch.brId,
+        osh_company_id: activeCompany.id,
+        osh_branch_id: activeBranch.id,
         osh_voucher_date: voucherDateIso,
         avh_party_id: matchingLedgers[0].ledId,
         avh_bill_date: voucherDateIso,

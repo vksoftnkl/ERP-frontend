@@ -23,19 +23,17 @@ import {
   selectBusinessContext,
   type PersistedBusinessContext,
 } from "@/store/slices/authSlice";
-const COMPANY_LIST_ENDPOINT = "/company-masters/list";
-const BRANCH_LIST_ENDPOINT = "/branch-masters/list";
+
+const COMPANY_LIST_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const BRANCH_BY_COMPANY_BASE = "/master-lookups/branches/by-company";
+
 type CompanyRecord = {
-  compId: string;
-  compName: string;
-  compFinYearFrom: string | null;
-  compFinYearTo: string | null;
-  compDefault?: boolean;
+  id: string;
+  name: string;
 };
 type BranchRecord = {
-  brId: string;
-  brName: string;
-  brIsDefault?: boolean;
+  id: string;
+  name: string;
 };
 type BusinessContextValue = {
   companyOptions: ERPDynamicSelectOption[];
@@ -74,24 +72,24 @@ export function clearBusinessContextSession(): void {
 }
 
 function chooseDefaultCompany(companies: CompanyRecord[]): CompanyRecord | null {
-  return companies.find((company) => company.compDefault) ?? companies[0] ?? null;
+  return companies[0] ?? null;
 }
 
 function chooseDefaultBranch(branches: BranchRecord[]): BranchRecord | null {
-  return branches.find((branch) => branch.brIsDefault) ?? branches[0] ?? null;
+  return branches[0] ?? null;
 }
 
 function mapCompanyOptions(companies: CompanyRecord[]): ERPDynamicSelectOption[] {
   return [DEFAULT_COMPANY_OPTION, ...companies.map((company) => ({
-    value: company.compId,
-    label: company.compName,
+    value: company.id,
+    label: company.name,
   }))];
 }
 
 function mapBranchOptions(branches: BranchRecord[]): ERPDynamicSelectOption[] {
   return [DEFAULT_BRANCH_OPTION, ...branches.map((branch) => ({
-    value: branch.brId,
-    label: branch.brName,
+    value: branch.id,
+    label: branch.name,
   }))];
 }
 
@@ -124,62 +122,53 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     run: loadBranches,
     loading: branchLoading,
     error: branchError,
-  } = useApi<unknown>(BRANCH_LIST_ENDPOINT, {
+  } = useApi<unknown>(BRANCH_BY_COMPANY_BASE, {
     toast: {
       success: false,
       error: false,
     },
   });
-
   const refreshCompanies = useCallback(async (): Promise<CompanyRecord[]> => {
     const payload = await loadCompanies({
       query: {
-        compIsActive: "true",
-        limit: "100",
+        module: "companies",
+        limit: "20",
       },
     });
     const nextCompanies = extractRows<CompanyRecord>(payload).filter(
       (company): company is CompanyRecord =>
-        typeof company?.compId === "string" && typeof company?.compName === "string",
+        typeof company?.id === "string" && typeof company?.name === "string",
     );
     setCompanies(nextCompanies);
     return nextCompanies;
   }, [loadCompanies]);
-
   const refreshBranches = useCallback(async (companyId: string): Promise<BranchRecord[]> => {
     if (!companyId.trim()) {
       setBranches([]);
       return [];
     }
     const payload = await loadBranches({
-      query: {
-        compId: companyId.trim(),
-        brIsActive: "true",
-        limit: "100",
-      },
+      url: `${BRANCH_BY_COMPANY_BASE}/${companyId.trim()}`,
     });
     const nextBranches = extractRows<BranchRecord>(payload).filter(
       (branch): branch is BranchRecord =>
-        typeof branch?.brId === "string" && typeof branch?.brName === "string",
+        typeof branch?.id === "string" && typeof branch?.name === "string",
     );
     setBranches(nextBranches);
     return nextBranches;
   }, [loadBranches]);
-
   const refresh = useCallback(async () => {
     if (hideShell) {
       return;
     }
     await refreshCompanies();
   }, [hideShell, refreshCompanies]);
-
   useEffect(() => {
     if (hideShell) {
       return;
     }
     void refreshCompanies();
   }, [hideShell, refreshCompanies]);
-
   useEffect(() => {
     if (hideShell) {
       return;
@@ -190,14 +179,13 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
       setSelectedBranchIdState("");
       return;
     }
-    const hasSelectedCompany = companies.some((company) => company.compId === selectedCompanyId);
+    const hasSelectedCompany = companies.some((company) => company.id === selectedCompanyId);
     if (hasSelectedCompany) {
       return;
     }
     const fallbackCompany = chooseDefaultCompany(companies);
-    setSelectedCompanyIdState(fallbackCompany?.compId ?? "");
+    setSelectedCompanyIdState(fallbackCompany?.id ?? "");
   }, [companies, hideShell, selectedCompanyId]);
-
   useEffect(() => {
     if (hideShell) {
       return;
@@ -209,7 +197,6 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     }
     void refreshBranches(selectedCompanyId);
   }, [hideShell, refreshBranches, selectedCompanyId]);
-
   useEffect(() => {
     if (hideShell) {
       return;
@@ -221,14 +208,13 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
       setSelectedBranchIdState("");
       return;
     }
-    const hasSelectedBranch = branches.some((branch) => branch.brId === selectedBranchId);
+    const hasSelectedBranch = branches.some((branch) => branch.id === selectedBranchId);
     if (hasSelectedBranch) {
       return;
     }
     const fallbackBranch = chooseDefaultBranch(branches);
-    setSelectedBranchIdState(fallbackBranch?.brId ?? "");
+    setSelectedBranchIdState(fallbackBranch?.id ?? "");
   }, [branches, hideShell, selectedBranchId, selectedCompanyId]);
-
   useEffect(() => {
     if (hideShell) {
       return;
@@ -249,16 +235,14 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
       window.removeEventListener(AUTH_SESSION_EVENT, handleAuthSessionChange as EventListener);
     };
   }, [dispatch, hideShell]);
-
   const activeCompany = useMemo(
-    () => companies.find((company) => company.compId === selectedCompanyId) ?? null,
+    () => companies.find((company) => company.id === selectedCompanyId) ?? null,
     [companies, selectedCompanyId],
   );
   const activeBranch = useMemo(
-    () => branches.find((branch) => branch.brId === selectedBranchId) ?? null,
+    () => branches.find((branch) => branch.id === selectedBranchId) ?? null,
     [branches, selectedBranchId],
   );
-
   useEffect(() => {
     if (hideShell) {
       return;
@@ -266,17 +250,16 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     dispatch(businessContextChanged(
       activeCompany
         ? {
-            companyId: activeCompany.compId,
-            companyName: activeCompany.compName,
-            compFinYearFrom: activeCompany.compFinYearFrom ?? null,
-            compFinYearTo: activeCompany.compFinYearTo ?? null,
-            branchId: activeBranch?.brId ?? null,
-            branchName: activeBranch?.brName ?? null,
+            companyId: activeCompany.id,
+            companyName: activeCompany.name,
+            compFinYearFrom: null,
+            compFinYearTo: null,
+            branchId: activeBranch?.id ?? null,
+            branchName: activeBranch?.name ?? null,
           }
         : null,
     ));
   }, [activeBranch, activeCompany, dispatch, hideShell]);
-
   const value = useMemo<BusinessContextValue>(() => ({
     companyOptions: mapCompanyOptions(companies),
     branchOptions: mapBranchOptions(branches),
@@ -321,10 +304,8 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     selectedBranchId,
     selectedCompanyId,
   ]);
-
   return <BusinessContext.Provider value={value}>{children}</BusinessContext.Provider>;
 }
-
 export function useBusinessContext(): BusinessContextValue {
   const context = useContext(BusinessContext);
   if (!context) {

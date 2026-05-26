@@ -1163,8 +1163,8 @@ export default function PhysicalStockPage() {
     }
     return {
       accountingYear,
-      companyId: activeCompany.compId,
-      branchId: activeBranch.brId,
+      companyId: activeCompany.id,
+      branchId: activeBranch.id,
     };
   }, [accountingYear, activeBranch, activeCompany]);
   const prefetchLoadedItemDetails = useCallback(
@@ -1733,8 +1733,8 @@ export default function PhysicalStockPage() {
     const requestPayload: PhysicalStockSaveRequest = {
       ...(loadedPhysicalStockId ? { psId: loadedPhysicalStockId } : {}),
       psAccYear: accountingYear,
-      psCompanyId: activeCompany.compId,
-      psBranchId: activeBranch.brId,
+      psCompanyId: activeCompany.id,
+      psBranchId: activeBranch.id,
       psGodownId: headerGodownId,
       psDocNo: docNo,
       psDocRefNo: normalizedRefNo,
@@ -1762,8 +1762,8 @@ export default function PhysicalStockPage() {
       details: draftRows.map((row, index) =>
         buildPhysicalStockDetailPayload(row, index, {
           accountingYear,
-          companyId: activeCompany.compId,
-          branchId: activeBranch.brId,
+          companyId: activeCompany.id,
+          branchId: activeBranch.id,
         }),
       ),
     };
