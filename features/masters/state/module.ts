@@ -9,7 +9,7 @@ import {
   toUpdateId,
 } from "@/features/masters/shared";
 const API_ENDPOINTS = {
-  list: "/states/list",
+  list: "/configured-grid-sql/run?grid_id=2",
   getById: "/states/get",
   create: "/states/create",
   delete: "/states/delete",

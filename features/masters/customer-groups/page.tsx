@@ -10,9 +10,9 @@ import {
   toNullableString,
   toSelectBoolean,
   toUpdateId,
-} from "@/app/master/_shared/crud-utils";
+} from "@/features/masters/shared/value-mappers";
 const API_ENDPOINTS = {
-  list: "/customer-groups/list",
+  list: "/configured-grid-sql/run?grid_id=19",
   getById: "/customer-groups/get",
   create: "/customer-groups/create",
   delete: "/customer-groups/delete",

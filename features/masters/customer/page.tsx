@@ -1,11 +1,10 @@
 "use client";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import InlineRelatedMasterModal from "@/features/masters/shared/inline-related-master";
 import { toast } from "react-toastify";
 import type {
-  ERPDynamicFieldValidation,
   ERPDynamicFieldValueChangeHandler,
   ERPDynamicModalController,
   ERPDynamicModalSubmitPayload,
@@ -20,6 +19,8 @@ import {
   buildLookupOptions,
   DEFAULT_LOOKUP_ARRAY_KEYS,
   extractRows,
+} from "@/features/masters/shared/normalizers";
+import {
   getFirstDefinedValue,
   toDateInputValue,
   toDisplayValue,
@@ -30,7 +31,7 @@ import {
   toSelectBoolean,
   toUpdateId,
   toUpper,
-} from "@/app/master/_shared/crud-utils";
+} from "@/features/masters/shared/value-mappers";
 import { COLLECTION_DAY_OPTIONS } from "@/utils/constant";
 import { validateGstin, validateOptionalGstin } from "@/utils/validation";
 import {
@@ -70,7 +71,6 @@ import {
   AREA_DETAIL_KEYS,
   GROUP_DETAIL_ARRAY_KEYS,
   GROUP_DETAIL_KEYS,
-  DEFAULT_STATE_OPTION,
   DEFAULT_AREA_OPTION,
   DEFAULT_CITY_OPTION,
   DEFAULT_GROUP_OPTION,
@@ -96,7 +96,6 @@ import {
   GST_ADDRESS_LOCALITY_KEYS,
   GST_ADDRESS_DISTRICT_KEYS,
   GST_ADDRESS_CITY_KEYS,
-  GST_ADDRESS_STATE_KEYS,
   GST_ADDRESS_PIN_KEYS,
   CUSTOMER_BOOLEAN_FIELD_NAMES,
   CUSTOMER_DATE_FIELD_NAMES,
@@ -106,7 +105,6 @@ import {
   STATE_MODAL_INITIAL_VALUES,
   GROUP_MODAL_INITIAL_VALUES,
   CUSTOMER_MODAL_PANEL_STYLE,
-  CUSTOMER_PHONE_PATTERN,
   CUSTOMER_BASIC_VALIDATIONS,
 } from "./customer-master.constants";
 function withCustomerBasicValidation(field: ERPDynamicModalField): ERPDynamicModalField {

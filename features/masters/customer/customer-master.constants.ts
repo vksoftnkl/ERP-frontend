@@ -1,13 +1,12 @@
 import { type CSSProperties } from "react";
 import type {
   ERPDynamicFieldValidation,
-  ERPDynamicModalField,
   ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
-import { DEFAULT_LOOKUP_ARRAY_KEYS } from "@/app/master/_shared/crud-utils";
+import { DEFAULT_LOOKUP_ARRAY_KEYS } from "@/features/masters/shared/normalizers";
 
 export const API_ENDPOINTS = {
-  list: "/customers/list",
+  list: "/configured-grid-sql/run?grid_id=8",
   getById: "/customers/get",
   create: "/customers/create",
   delete: "/customers/delete",
