@@ -21,7 +21,7 @@ import {
 } from "@/features/masters/user-administration/user-menu-tree";
 // ── API endpoints ─────────────────────────────────────────────────────────────
 const API_ENDPOINTS = {
-  list: "/user-administration/list",
+ list: "/configured-grid-sql/run?grid_id=29",
   getById: "/user-administration/get",
   create: "/user-administration/create",
   delete: "/user-administration/delete",
