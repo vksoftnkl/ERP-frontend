@@ -28,7 +28,7 @@ export {
 export const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
 export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-columns/create";
 export const ACCOUNT_LEDGER_LIST_ENDPOINT = "/account-ledger-masters/list";
-export const UNIT_LIST_ENDPOINT = "/units/list";
+export const UNIT_LIST_ENDPOINT ="/configured-grid-sql/run?grid_id=4";
 export const OPENING_STOCK_SAVE_ENDPOINT = "/opening-stocks";
 export const OPENING_STOCK_LIST_ENDPOINT = "/opening-stocks/list";
 export const OPENING_STOCK_GET_ENDPOINT = "/opening-stocks/get";
@@ -83,7 +83,6 @@ export const CESS_TYPE_OPTIONS = ["NONE", "PERCENT", "PER_UNIT"] as const;
 export const UNIT_LIST_QUERY = {
   page: "1",
   limit: "100",
-  unit_is_active: "true",
 } as const;
 export const BATCH_TRACKING_FIELD_KEYS = new Set([
   "batchno",

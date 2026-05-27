@@ -5,13 +5,13 @@ import {
   extractDetailSource,
 } from "@/features/masters/shared/normalizers";
 import { baseApi } from "@/store/api/baseApi";
-const ITEM_LIST_ENDPOINT = "/items/list";
+const ITEM_LIST_ENDPOINT = "/configured-grid-sql/run";
 const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const ITEM_PRICE_DETAILS_ENDPOINT = "/item-price-details/get";
-const ITEM_TAX_LIST_ENDPOINT = "/item-taxes/list";
+const ITEM_TAX_LIST_ENDPOINT = "/configured-grid-sql/run";
 const ITEM_TAX_GET_ENDPOINT = "/item-taxes/get";
 const ITEM_LOOKUP_QUERY = {
-  limit: "50",
+  grid_id: "1",
 } as const;
 const UNIT_LOOKUP_QUERY = {
   module: "units",
@@ -25,10 +25,14 @@ const BRANCH_LOOKUP_QUERY = {
   module: "branches",
   limit: "100",
 } as const;
-const ITEM_TAX_LIST_QUERY = {
-  page: "1",
+const COMPANY_LOOKUP_QUERY = {
+  module: "companies",
   limit: "100",
-  tax_is_active: "true",
+} as const;
+const USER_LIST_ENDPOINT = "/user-administration/list";
+const USER_LIST_QUERY = { limit: "100" } as const;
+const ITEM_TAX_LIST_QUERY = {
+  grid_id: "5",
 } as const;
 const DEFAULT_ITEM_OPTION: ERPDynamicSelectOption = {
   value: "",
@@ -41,6 +45,14 @@ const DEFAULT_GODOWN_OPTION: ERPDynamicSelectOption = {
 const DEFAULT_BRANCH_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Branch",
+};
+const DEFAULT_COMPANY_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Select Company",
+};
+const DEFAULT_USER_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Select User",
 };
 const DEFAULT_UNIT_OPTION: ERPDynamicSelectOption = {
   value: "",
@@ -85,6 +97,16 @@ const BRANCH_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "branches", "branch_masters"],
   idKeys: ["brId", "br_id", "branch_id", "branchId", "id", "_id", "value"],
   labelKeys: ["brName", "br_name", "branch_name", "branchName", "name", "label"],
+} as const;
+const COMPANY_LOOKUP_KEYS = {
+  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "companies", "company_masters"],
+  idKeys: ["compId", "comp_id", "company_id", "companyId", "id", "_id", "value"],
+  labelKeys: ["compName", "comp_name", "company_name", "companyName", "name", "label"],
+} as const;
+const USER_LOOKUP_KEYS = {
+  arrayKeys: ["data", ...DEFAULT_LOOKUP_ARRAY_KEYS],
+  idKeys: ["usrId", "usr_id", "userId", "user_id", "id", "_id", "value"],
+  labelKeys: ["usrDisplayName", "usrLoginName", "usr_display_name", "displayName", "name", "label"],
 } as const;
 const ITEM_TAX_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "itemTaxes"],
@@ -218,6 +240,28 @@ export const lookupsApi = baseApi.injectEndpoints({
         buildLookupOptions(payload, DEFAULT_BRANCH_OPTION, BRANCH_LOOKUP_KEYS),
       keepUnusedDataFor: 300,
     }),
+    getCompanyOptions: builder.query<ERPDynamicSelectOption[], LookupSearchArg | void>({
+      query: (arg) => ({
+        url: MASTER_LOOKUP_ENDPOINT,
+        params: arg?.search
+          ? { ...COMPANY_LOOKUP_QUERY, search: arg.search.trim() }
+          : COMPANY_LOOKUP_QUERY,
+      }),
+      transformResponse: (payload: unknown) =>
+        buildLookupOptions(payload, DEFAULT_COMPANY_OPTION, COMPANY_LOOKUP_KEYS),
+      keepUnusedDataFor: 300,
+    }),
+    getUserOptions: builder.query<ERPDynamicSelectOption[], LookupSearchArg | void>({
+      query: (arg) => ({
+        url: USER_LIST_ENDPOINT,
+        params: arg?.search
+          ? { ...USER_LIST_QUERY, search: arg.search.trim() }
+          : USER_LIST_QUERY,
+      }),
+      transformResponse: (payload: unknown) =>
+        buildLookupOptions(payload, DEFAULT_USER_OPTION, USER_LOOKUP_KEYS),
+      keepUnusedDataFor: 300,
+    }),
     getItemPriceDetails: builder.query<ItemPriceDetailsPayload, ItemPriceDetailsQueryArg>({
       query: ({ itemId }) => ({
         url: ITEM_PRICE_DETAILS_ENDPOINT,
@@ -240,6 +284,8 @@ export const lookupsApi = baseApi.injectEndpoints({
 });
 export const {
   useGetBranchOptionsQuery,
+  useGetCompanyOptionsQuery,
+  useGetUserOptionsQuery,
   useLazyGetGodownOptionsQuery,
   useLazyGetItemOptionsQuery,
   useLazyGetItemPriceDetailsQuery,

@@ -1,34 +1,31 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import CrudMasterPage, { type CrudMasterTableRow } from "@/components/master/crud-master-page";
 import type { ReusableTableColumn } from "@/components/ui/table";
-import { useApi } from "@/hooks/useApi";
 import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
-  buildLookupOptions,
   getFirstDefinedValue,
   toDisplayValue,
   toNullableString,
   toSelectBoolean,
   toUpdateId,
-  DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
+import {
+  useGetCompanyOptionsQuery,
+  useGetBranchOptionsQuery,
+  useGetUserOptionsQuery,
+} from "@/store/api/lookupsApi";
 const API_ENDPOINTS = {
-  list: "/device-list-masters/list",
+  list: "/configured-grid-sql/run?grid_id=28",
   getById: "/device-list-masters/get",
   create: "/device-list-masters/create",
   delete: "/device-list-masters/delete",
 } as const;
 const GRID_TABLE_NAME = "device_master";
-const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const USER_LIST_ENDPOINT = "/user-administration/list";
-const LOOKUP_QUERY_COMPANIES = { module: "companies", limit: "100" } as const;
-const LOOKUP_QUERY_BRANCHES = { module: "branches", limit: "100" } as const;
-const USER_LIST_QUERY = { limit: "100" } as const;
 const DEVICE_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "", label: "Select Type" },
   { value: "Desktop", label: "Desktop" },
@@ -206,54 +203,9 @@ function getSourceValue(row: CrudMasterTableRow, keys: readonly string[]): unkno
 }
 
 export default function DeviceListMasterPage() {
-  const { getAll: getCompanyLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const { getAll: getBranchLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const { getAll: getUserList } = useApi<unknown>(USER_LIST_ENDPOINT);
-
-  const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_COMPANY_OPTION]);
-  const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_BRANCH_OPTION]);
-  const [userOptions, setUserOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_USER_OPTION]);
-
-  useEffect(() => {
-    let mounted = true;
-    void (async () => {
-      try {
-        const [companiesPayload, branchesPayload, usersPayload] = await Promise.all([
-          getCompanyLookup(LOOKUP_QUERY_COMPANIES),
-          getBranchLookup(LOOKUP_QUERY_BRANCHES),
-          getUserList(USER_LIST_QUERY),
-        ]);
-        if (!mounted) return;
-        setCompanyOptions(
-          buildLookupOptions(companiesPayload, DEFAULT_COMPANY_OPTION, {
-            arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
-            idKeys: ["id", "value"],
-            labelKeys: ["name", "label"],
-          }),
-        );
-        setBranchOptions(
-          buildLookupOptions(branchesPayload, DEFAULT_BRANCH_OPTION, {
-            arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
-            idKeys: ["id", "value"],
-            labelKeys: ["name", "label"],
-          }),
-        );
-        setUserOptions(
-          buildLookupOptions(usersPayload, DEFAULT_USER_OPTION, {
-            arrayKeys: ["data"],
-            idKeys: ["usrId"],
-            labelKeys: ["usrDisplayName", "usrLoginName"],
-          }),
-        );
-      } catch {
-        if (!mounted) return;
-        setCompanyOptions([DEFAULT_COMPANY_OPTION]);
-        setBranchOptions([DEFAULT_BRANCH_OPTION]);
-        setUserOptions([DEFAULT_USER_OPTION]);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [getCompanyLookup, getBranchLookup, getUserList]);
+  const { data: companyOptions = [DEFAULT_COMPANY_OPTION] } = useGetCompanyOptionsQuery();
+  const { data: branchOptions = [DEFAULT_BRANCH_OPTION] } = useGetBranchOptionsQuery();
+  const { data: userOptions = [DEFAULT_USER_OPTION] } = useGetUserOptionsQuery();
 
   const companyLabelMap = useMemo(
     () => new Map(companyOptions.map((o) => [o.value, o.label])),

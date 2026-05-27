@@ -138,7 +138,7 @@ const DEFAULT_PARTY_SCOPE_TYPE: PartyScopeType = "CUSTOMER_GROUP";
 const BRANCH_LIST_ENDPOINT = "/branch-masters/list";
 const BRANCH_LIST_PAGE_LIMIT = 100;
 const ITEM_PRICE_LIST_ENDPOINT = "/item-prices/list";
-const ITEM_LIST_ENDPOINT = "/items/list";
+const ITEM_LIST_ENDPOINT = "/configured-grid-sql/run?grid_id=1"
 const UNIT_LIST_ENDPOINT = "/units/list";
 const CUSTOMER_LIST_ENDPOINT = "/customers/list";
 const CUSTOMER_GROUP_LIST_ENDPOINT = "/customer-groups/list";

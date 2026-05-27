@@ -41,7 +41,7 @@ export const HSN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-mas
 export const UI_TABLE_COLUMNS_ENDPOINT = "/ui-table-columns/list";
 export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-columns/create";
 export const WIDGET_MASTER_LIST_ENDPOINT = "/widget-masters/list";
-export const ITEM_TAX_MASTER_LIST_ENDPOINT = "/item-taxes/list";
+export const ITEM_TAX_MASTER_LIST_ENDPOINT = "/configured-grid-sql/run?grid_id=5";
 export const ITEM_PRICE_QUERY_LIMIT = "100";
 export const ITEM_UNIT_CONVERSION_QUERY_LIMIT = "100";
 export const ITEM_REORDER_QUERY_LIMIT = "100";
@@ -121,7 +121,6 @@ export const LOOKUP_QUERY_ITEM_TAXES = {
 export const ITEM_TAX_LIST_QUERY = {
   page: "1",
   limit: "100",
-  tax_is_active: "true",
 } as const;
 export const LOOKUP_QUERY_SUPPLIERS = {
   module: "suppliers",

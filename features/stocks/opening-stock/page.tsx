@@ -394,7 +394,7 @@ export default function OpeningStockPage() {
           true,
         ).unwrap();
       }
-      const activeBranchId = activeBranch?.brId?.trim() ?? "";
+      const activeBranchId = activeBranch?.id?.trim() ?? "";
       const payload = await listGodowns({
         query: {
           ...GODOWN_LOOKUP_QUERY,
@@ -403,7 +403,7 @@ export default function OpeningStockPage() {
       });
       return buildGodownLookupOptions(payload, activeBranchId);
     },
-    [activeBranch?.brId, listGodowns, triggerItemOptions],
+    [activeBranch?.id, listGodowns, triggerItemOptions],
   );
   const loadUnitOptions = useCallback(
     async (search = ""): Promise<ERPDynamicSelectOption[]> => {
@@ -1148,8 +1148,8 @@ export default function OpeningStockPage() {
     if (!loadedVoucherId || !loadedDocumentMeta || isBusinessContextLoading) {
       return;
     }
-    const currentCompanyId = activeCompany?.compId ?? null;
-    const currentBranchId = activeBranch?.brId ?? null;
+    const currentCompanyId = activeCompany?.id ?? null;
+    const currentBranchId = activeBranch?.id ?? null;
     if (
       currentCompanyId === loadedDocumentMeta.companyId &&
       currentBranchId === loadedDocumentMeta.branchId
@@ -1159,8 +1159,8 @@ export default function OpeningStockPage() {
     setLoadedVoucherId(null);
     setLoadedDocumentMeta(null);
   }, [
-    activeBranch?.brId,
-    activeCompany?.compId,
+    activeBranch?.id,
+    activeCompany?.id,
     isBusinessContextLoading,
     loadedDocumentMeta,
     loadedVoucherId,
