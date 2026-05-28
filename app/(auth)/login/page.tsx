@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { getOrCreateClientDeviceId } from "@/lib/auth/session";
+import { getOrCreateClientDeviceId, setAuthUserId } from "@/lib/auth/session";
 import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import {
   canUseClientSideRouting,
@@ -61,6 +61,7 @@ export default function LoginPage() {
         ip_address: ip,
         device_type: "Web",
       }).unwrap();
+      setAuthUserId(response.userId ?? null);
       if (!response.authenticated) {
         setAuthError("Token missing in login response.");
         notifyGlobalNavigationStart();

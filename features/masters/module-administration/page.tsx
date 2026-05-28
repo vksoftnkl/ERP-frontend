@@ -1,6 +1,8 @@
 "use client";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { useApi } from "@/hooks/useApi";
+import { useAppSelector } from "@/store/hooks";
+import { selectAuthInitialized, selectAuthUserId } from "@/store/slices/authSlice";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface MenuNode {
@@ -18,7 +20,7 @@ interface VisibilityItem {
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const MENU_ALL_ENDPOINT = "/menu-masters/all";
+const MENU_ALL_ENDPOINT = "/menu-masters/get";
 const MENU_VISIBILITY_ENDPOINT = "/menu-masters/visibility";
 const MENU_QUERY = {
   includeChildren: "true",
@@ -273,6 +275,8 @@ function MenuRow({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function ModuleAdministrationPage() {
+  const authInitialized = useAppSelector(selectAuthInitialized);
+  const userId = useAppSelector(selectAuthUserId);
   const { getAll } = useApi<{ data: MenuNode[] }>(MENU_ALL_ENDPOINT);
   const { run: patchVisibility, loading: saving } = useApi<unknown, { menus: VisibilityItem[] }>(
     MENU_VISIBILITY_ENDPOINT,
@@ -295,8 +299,17 @@ export default function ModuleAdministrationPage() {
   }, []);
 
   useEffect(() => {
+    if (!authInitialized) {
+      return;
+    }
+    if (!userId) {
+      setMenus([]);
+      initMaps([]);
+      setLoadingMenus(false);
+      return;
+    }
     setLoadingMenus(true);
-    getAll(MENU_QUERY as Record<string, string>)
+    getAll({ ...MENU_QUERY, userId })
       .then((res: unknown) => {
         const data = (res as { data?: MenuNode[] })?.data ?? [];
         const list = Array.isArray(data) ? data : [];
@@ -305,7 +318,7 @@ export default function ModuleAdministrationPage() {
       })
       .catch(() => setMenus([]))
       .finally(() => setLoadingMenus(false));
-  }, [getAll, initMaps]);
+  }, [authInitialized, getAll, initMaps, userId]);
 
   const dirtyItems = (() => {
     const items: VisibilityItem[] = [];

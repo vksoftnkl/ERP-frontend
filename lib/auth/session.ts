@@ -1,5 +1,6 @@
 const CLIENT_DEVICE_ID_CACHE_KEY = "erp_client_device_id";
 const REDUX_SESSION_STORAGE_KEY = "erp_client_redux_state";
+const USER_ID_SESSION_KEY = "erp_client_user_id";
 export const AUTH_SESSION_EVENT = "erp:auth-session-changed";
 export type UserInfo = {
   userName: string | null;
@@ -182,27 +183,45 @@ export function extractAuthUserId(payload: unknown): string | null {
   const nestedDataUser = asRecord(nestedData?.user);
   const nestedResultUser = asRecord(nestedResult?.user);
   return pickFirstString([
+    root.usrId,
+    root.usr_id,
+    root.usrid,
     root.userId,
     root.user_id,
     root.userid,
     root.loginId,
     root.login_id,
+    rootUser?.usrId,
+    rootUser?.usr_id,
+    rootUser?.usrid,
     rootUser?.userId,
     rootUser?.user_id,
     rootUser?.id,
+    nestedData?.usrId,
+    nestedData?.usr_id,
+    nestedData?.usrid,
     nestedData?.userId,
     nestedData?.user_id,
     nestedData?.userid,
     nestedData?.loginId,
     nestedData?.login_id,
+    nestedDataUser?.usrId,
+    nestedDataUser?.usr_id,
+    nestedDataUser?.usrid,
     nestedDataUser?.userId,
     nestedDataUser?.user_id,
     nestedDataUser?.id,
+    nestedResult?.usrId,
+    nestedResult?.usr_id,
+    nestedResult?.usrid,
     nestedResult?.userId,
     nestedResult?.user_id,
     nestedResult?.userid,
     nestedResult?.loginId,
     nestedResult?.login_id,
+    nestedResultUser?.usrId,
+    nestedResultUser?.usr_id,
+    nestedResultUser?.usrid,
     nestedResultUser?.userId,
     nestedResultUser?.user_id,
     nestedResultUser?.id,
@@ -233,6 +252,13 @@ export function setAuthSession(
   memoryAuthUserId = normalizedUserId;
   memoryUserInfo = normalizedUserInfo;
   writePersistedAuthSession(normalizedToken, normalizedRefreshToken, normalizedUserId, normalizedUserInfo);
+  try {
+    if (normalizedUserId) {
+      window.sessionStorage.setItem(USER_ID_SESSION_KEY, normalizedUserId);
+    } else {
+      window.sessionStorage.removeItem(USER_ID_SESSION_KEY);
+    }
+  } catch { /* session storage unavailable */ }
   emitAuthSessionChange(normalizedToken, normalizedRefreshToken, normalizedUserId, normalizedUserInfo);
   return true;
 }
@@ -245,6 +271,7 @@ export function clearAuthSession(): void {
   memoryAuthUserId = null;
   memoryUserInfo = null;
   writePersistedAuthSession(null, null, null, null);
+  try { window.sessionStorage.removeItem(USER_ID_SESSION_KEY); } catch { /* ignore */ }
   emitAuthSessionChange(null, null, null, null);
 }
 export function getUserInfo(): UserInfo | null {
@@ -262,8 +289,27 @@ export function getRefreshToken(): string | null {
     normalizeStoredValue(readPersistedAuthState()?.refreshToken as StorageValue)
   );
 }
+export function setAuthUserId(userId: string | null): void {
+  const normalized = normalizeStoredValue(userId);
+  memoryAuthUserId = normalized;
+  try {
+    if (normalized) {
+      window.sessionStorage.setItem(USER_ID_SESSION_KEY, normalized);
+    } else {
+      window.sessionStorage.removeItem(USER_ID_SESSION_KEY);
+    }
+  } catch { /* ignore */ }
+}
+
 export function getAuthUserId(): string | null {
-  return memoryAuthUserId ?? normalizeStoredValue(readPersistedAuthState()?.userId as StorageValue);
+  if (memoryAuthUserId) return memoryAuthUserId;
+  const fromState = normalizeStoredValue(readPersistedAuthState()?.userId as StorageValue);
+  if (fromState) return fromState;
+  try {
+    return normalizeStoredValue(window.sessionStorage.getItem(USER_ID_SESSION_KEY));
+  } catch {
+    return null;
+  }
 }
 function decodeBase64UrlSegment(segment: string): string | null {
   try {

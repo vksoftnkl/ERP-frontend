@@ -17,6 +17,7 @@ export type LoginRequest = {
 };
 export type LoginResponse = {
   authenticated: boolean;
+  userId: string | null;
 };
 export const authApi = baseApi.injectEndpoints({
   overrideExisting: true,
@@ -44,7 +45,7 @@ export const authApi = baseApi.injectEndpoints({
           };
         }
         api.dispatch(authSessionChanged({ token, refreshToken, userId, userInfo }));
-        return { data: { authenticated } };
+        return { data: { authenticated, userId } };
       },
       invalidatesTags: ["Auth"],
     }),

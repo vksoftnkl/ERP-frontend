@@ -14,10 +14,10 @@ const MENU_MASTERS_QUERY = {
 export const shellApi = baseApi.injectEndpoints({
   overrideExisting: true,
   endpoints: (builder) => ({
-    getPrimaryMenu: builder.query<ErpHeaderItem[], void>({
-      query: () => ({
+    getPrimaryMenu: builder.query<ErpHeaderItem[], string>({
+      query: (userId) => ({
         url: MENU_MASTERS_GET_ENDPOINT,
-        params: MENU_MASTERS_QUERY,
+        params: { ...MENU_MASTERS_QUERY, userId },
       }),
       transformResponse: (payload: unknown) =>
         applyMenuMasterLabels(DEFAULT_PRIMARY_MENU, extractMenuMasterItems(payload)),

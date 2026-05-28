@@ -35,6 +35,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   authSessionChanged,
   recentPagesChanged,
+  selectAuthUserId,
   selectRecentPages,
 } from "@/store/slices/authSlice";
 import { MenuTree } from "./erp-header-menu";
@@ -531,9 +532,14 @@ export default function ErpHeader({
   const router = useRouter();
   const primaryMenuRef = useRef<HTMLElement | null>(null);
   const quickTabsRef = useRef<HTMLDivElement | null>(null);
+  const userId = useAppSelector(selectAuthUserId);
   const shouldUseMenuMasterLabels = primaryMenu === DEFAULT_PRIMARY_MENU;
-  const { data: primaryMenuFromApi, isLoading: isMenuLoading } = useGetPrimaryMenuQuery(undefined, {
-    skip: !shouldUseMenuMasterLabels,
+  const {
+    data: primaryMenuFromApi,
+    isLoading: isMenuLoading,
+    isUninitialized: isMenuUninitialized,
+  } = useGetPrimaryMenuQuery(userId ?? "", {
+    skip: !shouldUseMenuMasterLabels || !userId,
   });
   const [localCompany, setLocalCompany] = useState(
     selectedCompany ?? getDefaultCompanyValue(companyOptions)
@@ -573,15 +579,11 @@ export default function ErpHeader({
     () => dateText ?? formatDateLabel(pickedDate),
     [dateText, pickedDate],
   );
-  const resolvedPrimaryMenu = useMemo(
-    () =>
-      shouldUseMenuMasterLabels
-        ? isMenuLoading
-          ? primaryMenu
-          : (primaryMenuFromApi ?? [])
-        : primaryMenu,
-    [primaryMenu, primaryMenuFromApi, isMenuLoading, shouldUseMenuMasterLabels],
-  );
+  const resolvedPrimaryMenu = useMemo(() => {
+    if (!shouldUseMenuMasterLabels) return primaryMenu;
+    if (isMenuLoading || isMenuUninitialized) return primaryMenu;
+    return primaryMenuFromApi?.length ? primaryMenuFromApi : primaryMenu;
+  }, [primaryMenu, primaryMenuFromApi, isMenuLoading, isMenuUninitialized, shouldUseMenuMasterLabels]);
   const resolvedCompany = selectedCompany ?? localCompany;
   const resolvedBranch = selectedBranch ?? localBranch;
   const resolvedBillNumber = billNumber ?? localBillNumber;
