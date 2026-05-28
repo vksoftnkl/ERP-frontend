@@ -19,6 +19,7 @@ export type GridColumnRow = {
   gridSerialId: string | null;
   columnNumber: number;
   columnName: string;
+  sqlFieldName: string;
   width: string;
   position: string;
   alignment: Alignment;
@@ -67,6 +68,7 @@ export type GridColumnPayload = {
   grid_column_data_type: string | null;
   grid_column_color: string | null;
   grid_column_notes: string | null;
+  grid_column_sql_field_name: string | null;
   grid_column_is_deleted: boolean;
 };
 
@@ -99,4 +101,5 @@ export type SaveGridColumnRequest = {
   grid_column_data_type: string | null;
   grid_column_color: string | null;
   grid_column_notes: string | null;
+  grid_column_sql_field_name: string | null;
 };

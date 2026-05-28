@@ -29,7 +29,7 @@ const ALIGNMENT_OPTIONS: Alignment[] = ["Left", "Center", "Right"];
 const DATA_TYPE_SUGGESTIONS = ["Text", "NumericTS", "Date", "Number", "Boolean"] as const;
 const GRID_DETAILS_PAGE_SIZE = "100";
 const GRID_COLUMNS_PAGE_SIZE = "100";
-const GRID_COLUMNS_TABLE_MIN_WIDTH = "1870px";
+const GRID_COLUMNS_TABLE_MIN_WIDTH = "2050px";
 const HEX_COLOR_CODE_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 const INITIAL_FORM: GridDesignerForm = {
   gridId: "",
@@ -52,6 +52,7 @@ function createColumnDraft(
     gridSerialId: null,
     columnNumber,
     columnName: "",
+    sqlFieldName: "",
     width: "",
     position: String(columnNumber),
     alignment: "Left",
@@ -129,6 +130,7 @@ function mapGridColumnPayloadToRow(payload: GridColumnPayload): GridColumnRow {
     gridSerialId: payload.grid_serialid,
     columnNumber: payload.grid_column_number,
     columnName: payload.grid_column_name,
+    sqlFieldName: payload.grid_column_sql_field_name ?? "",
     width: formatNullableNumber(payload.grid_column_width),
     position: formatNullableNumber(payload.grid_column_position),
     alignment: normalizeAlignment(payload.grid_column_alignment),
@@ -165,6 +167,7 @@ function buildGridColumnRequest(
     grid_column_data_type: toNullableString(column.dataType),
     grid_column_color: toNullableString(column.columnColor),
     grid_column_notes: toNullableString(column.notes),
+    grid_column_sql_field_name: toNullableString(column.sqlFieldName),
   };
 }
 function createBlankForm(): GridDesignerForm {
@@ -307,6 +310,19 @@ export default function GridDesignerPage() {
             className={styles.cellInput}
             value={row.columnName}
             onChange={(event) => updateColumn(row.id, "columnName", event.target.value)}
+          />
+        ),
+      },
+      {
+        key: "sqlFieldName",
+        header: "SQL Field Name",
+        width: "180px",
+        mobileLabel: "SQL Field Name",
+        render: (row) => (
+          <input
+            className={styles.cellInput}
+            value={row.sqlFieldName}
+            onChange={(event) => updateColumn(row.id, "sqlFieldName", event.target.value)}
           />
         ),
       },

@@ -29,8 +29,10 @@ const COMPANY_LOOKUP_QUERY = {
   module: "companies",
   limit: "100",
 } as const;
-const USER_LIST_ENDPOINT = "/user-administration/list";
-const USER_LIST_QUERY = { limit: "100" } as const;
+const USER_LOOKUP_QUERY = {
+  module: "userMasters",
+  limit: "20",
+} as const;
 const ITEM_TAX_LIST_QUERY = {
   grid_id: "5",
 } as const;
@@ -104,9 +106,9 @@ const COMPANY_LOOKUP_KEYS = {
   labelKeys: ["compName", "comp_name", "company_name", "companyName", "name", "label"],
 } as const;
 const USER_LOOKUP_KEYS = {
-  arrayKeys: ["data", ...DEFAULT_LOOKUP_ARRAY_KEYS],
-  idKeys: ["usrId", "usr_id", "userId", "user_id", "id", "_id", "value"],
-  labelKeys: ["usrDisplayName", "usrLoginName", "usr_display_name", "displayName", "name", "label"],
+  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS],
+  idKeys: ["id", "usrId", "usr_id", "userId", "user_id", "_id", "value"],
+  labelKeys: ["name", "usrDisplayName", "usrLoginName", "usr_display_name", "displayName", "label"],
 } as const;
 const ITEM_TAX_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "itemTaxes"],
@@ -186,6 +188,7 @@ export type ItemPriceDetailsPayload = {
   
 };
 export const lookupsApi = baseApi.injectEndpoints({
+  overrideExisting: true,
   endpoints: (builder) => ({
     getItemOptions: builder.query<ERPDynamicSelectOption[], LookupSearchArg | void>({
       query: (arg) => ({
@@ -253,10 +256,10 @@ export const lookupsApi = baseApi.injectEndpoints({
     }),
     getUserOptions: builder.query<ERPDynamicSelectOption[], LookupSearchArg | void>({
       query: (arg) => ({
-        url: USER_LIST_ENDPOINT,
+        url: MASTER_LOOKUP_ENDPOINT,
         params: arg?.search
-          ? { ...USER_LIST_QUERY, search: arg.search.trim() }
-          : USER_LIST_QUERY,
+          ? { ...USER_LOOKUP_QUERY, search: arg.search.trim() }
+          : USER_LOOKUP_QUERY,
       }),
       transformResponse: (payload: unknown) =>
         buildLookupOptions(payload, DEFAULT_USER_OPTION, USER_LOOKUP_KEYS),

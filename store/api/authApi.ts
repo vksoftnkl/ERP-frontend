@@ -19,6 +19,7 @@ export type LoginResponse = {
   authenticated: boolean;
 };
 export const authApi = baseApi.injectEndpoints({
+  overrideExisting: true,
   endpoints: (builder) => ({
     login: builder.mutation<LoginResponse, LoginRequest>({
       queryFn: async (body, api, _extraOptions, baseQuery) => {

@@ -12,6 +12,7 @@ const MENU_MASTERS_QUERY = {
   visibleOnly: "true",
 } as const;
 export const shellApi = baseApi.injectEndpoints({
+  overrideExisting: true,
   endpoints: (builder) => ({
     getPrimaryMenu: builder.query<ErpHeaderItem[], void>({
       query: () => ({
