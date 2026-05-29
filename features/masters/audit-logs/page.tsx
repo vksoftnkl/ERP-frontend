@@ -916,6 +916,7 @@ export default function AuditLogsPage() {
                     }))
                   }
                   placeholder="Select"
+                  autoComplete="off"
                 />
               </label>
               <label className="grid gap-1">
@@ -933,6 +934,7 @@ export default function AuditLogsPage() {
                       dateFrom: event.target.value,
                     }))
                   }
+                  autoComplete="off"
                 />
               </label>
               <label className="grid gap-1">
@@ -950,6 +952,7 @@ export default function AuditLogsPage() {
                       dateTo: event.target.value,
                     }))
                   }
+                  autoComplete="off"
                 />
               </label>
               <div className="grid gap-1.5 rounded-[10px] border border-slate-100 bg-slate-50 p-2.5">
@@ -1000,6 +1003,7 @@ export default function AuditLogsPage() {
                     }))
                   }
                   placeholder="Search by screen, table, entity, notes"
+                  autoComplete="off"
                 />
               </form>
               <div className="flex flex-wrap items-center gap-3.5">

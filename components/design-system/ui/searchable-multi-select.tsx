@@ -335,6 +335,7 @@ export function SearchableMultiSelect({
               placeholder={searchPlaceholder ?? "Search options"}
               className={dynamicFormStyles.searchSelectSearchInput}
               role="searchbox"
+              autoComplete="off"
               onChange={(event) => setQuery(event.currentTarget.value)}
               onKeyDown={handleSearchKeyDown}
               onBlur={() => {

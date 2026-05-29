@@ -55,6 +55,7 @@ export function StockToolbar({
               placeholder="dd/mm/yyyy"
               inputMode="numeric"
               maxLength={10}
+              autoComplete="off"
             />
             <input
               ref={voucherDatePickerRef}
@@ -64,6 +65,7 @@ export function StockToolbar({
               tabIndex={-1}
               aria-hidden="true"
               className={styles.hiddenDatePickerInput}
+              autoComplete="off"
             />
             <button
               type="button"

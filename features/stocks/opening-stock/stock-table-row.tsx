@@ -350,6 +350,7 @@ export function StockTableRow({
                   aria-invalid={hasRequiredFieldError || undefined}
                   inputMode="numeric"
                   maxLength={10}
+                  autoComplete="off"
                   onKeyDown={handleFieldNavigationKeyDown}
                 />
                 <input
@@ -366,6 +367,7 @@ export function StockTableRow({
                   className={styles.hiddenDatePickerInput}
                   disabled={isDisabledInput}
                   required={isRequiredField}
+                  autoComplete="off"
                 />
                 <button
                   type="button"

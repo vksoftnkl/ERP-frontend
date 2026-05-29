@@ -7,7 +7,6 @@ import {
   useState,
 } from "react";
 import { useApi } from "@/hooks/useApi";
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface MenuNode {
   menuId: number;
@@ -17,7 +16,6 @@ interface MenuNode {
   menuIsActive: boolean;
   children?: MenuNode[];
 }
-
 export interface MenuPermission {
   umMenuId: number;
   umCanView: boolean;
@@ -27,16 +25,14 @@ export interface MenuPermission {
   umCanPrint: boolean;
   umCanExport: boolean;
 }
-
 // ── Constants ─────────────────────────────────────────────────────────────────
 // Use /all so admins see every menu regardless of their own permissions
-const MENU_ENDPOINT = "/menu-masters/all";
+const MENU_ENDPOINT = "/menu-masters/get";
 const MENU_QUERY = {
-  includeChildren: "true",
-  activeOnly: "true",
-  visibleOnly: "true",
+  // includeChildren: "true",
+  // activeOnly: "true",
+  // visibleOnly: "true",
 } as const;
-
 const PERM_KEYS = [
   "umCanView",
   "umCanCreate",
@@ -45,9 +41,7 @@ const PERM_KEYS = [
   "umCanPrint",
   "umCanExport",
 ] as const;
-
 type PermKey = (typeof PERM_KEYS)[number];
-
 const PERM_LABELS: Record<PermKey, string> = {
   umCanView: "View",
   umCanCreate: "Create",
@@ -56,8 +50,7 @@ const PERM_LABELS: Record<PermKey, string> = {
   umCanPrint: "Print",
   umCanExport: "Export",
 };
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 function emptyPerm(menuId: number): MenuPermission {
   return {
     umMenuId: menuId,
@@ -69,7 +62,6 @@ function emptyPerm(menuId: number): MenuPermission {
     umCanExport: false,
   };
 }
-
 function collectAllIds(nodes: MenuNode[]): number[] {
   const ids: number[] = [];
   for (const node of nodes) {
@@ -78,11 +70,9 @@ function collectAllIds(nodes: MenuNode[]): number[] {
   }
   return ids;
 }
-
 function collectNodeAndDescendantIds(node: MenuNode): number[] {
   return collectAllIds([node]);
 }
-
 export function parseMenuPermissions(raw: string): MenuPermission[] {
   try {
     const arr = JSON.parse(raw || "[]");
@@ -91,7 +81,6 @@ export function parseMenuPermissions(raw: string): MenuPermission[] {
     return [];
   }
 }
-
 // ── Styles ────────────────────────────────────────────────────────────────────
 const S = {
   root: {
@@ -100,7 +89,6 @@ const S = {
     overflow: "hidden",
     fontSize: "0.8rem",
   } satisfies CSSProperties,
-
   header: {
     display: "grid",
     gridTemplateColumns: "1fr repeat(6, 4.5rem)",
@@ -113,17 +101,14 @@ const S = {
     fontSize: "0.72rem",
     color: "#374151",
   } satisfies CSSProperties,
-
   headerMenuCell: {
     display: "flex",
     alignItems: "center",
     gap: "0.5rem",
   } satisfies CSSProperties,
-
   headerPermCell: {
     textAlign: "center" as const,
   } satisfies CSSProperties,
-
   actionBtn: {
     fontSize: "0.68rem",
     padding: "0.1rem 0.4rem",
@@ -133,12 +118,10 @@ const S = {
     background: "white",
     color: "#374151",
   } satisfies CSSProperties,
-
   scrollArea: {
     maxHeight: "24rem",
     overflowY: "auto" as const,
   } satisfies CSSProperties,
-
   row: (depth: number, alt: boolean): CSSProperties => ({
     display: "grid",
     gridTemplateColumns: "1fr repeat(6, 4.5rem)",
@@ -148,7 +131,6 @@ const S = {
     background: alt ? "#f9fafb" : "white",
     borderBottom: "1px solid #f0f0f0",
   }),
-
   menuCell: (depth: number): CSSProperties => ({
     display: "flex",
     alignItems: "center",
@@ -156,7 +138,6 @@ const S = {
     paddingLeft: `${depth * 1.25}rem`,
     overflow: "hidden",
   }),
-
   expandBtn: {
     width: "1rem",
     height: "1rem",
@@ -171,11 +152,9 @@ const S = {
     color: "#6b7280",
     padding: 0,
   } satisfies CSSProperties,
-
   permCell: {
     textAlign: "center" as const,
   } satisfies CSSProperties,
-
   menuName: (isSeparator: boolean, hasChildren: boolean): CSSProperties => ({
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -183,7 +162,6 @@ const S = {
     fontWeight: hasChildren ? 600 : 400,
     color: isSeparator ? "#9ca3af" : undefined,
   }),
-
   empty: {
     padding: "1.5rem",
     textAlign: "center" as const,
@@ -191,7 +169,6 @@ const S = {
     fontSize: "0.8rem",
   } satisfies CSSProperties,
 };
-
 // ── MenuRow ───────────────────────────────────────────────────────────────────
 interface MenuRowProps {
   node: MenuNode;
@@ -204,7 +181,6 @@ interface MenuRowProps {
   onTogglePerm: (id: number, key: PermKey, checked: boolean) => void;
   onToggleCollapsed: (id: number) => void;
 }
-
 function MenuRow({
   node,
   depth,
@@ -220,7 +196,6 @@ function MenuRow({
   const isCollapsed = collapsed.has(node.menuId);
   const perm = permissions.get(node.menuId);
   const isAssigned = perm !== undefined;
-
   return (
     <>
       <div style={S.row(depth, rowIndex % 2 !== 0)}>
@@ -282,25 +257,21 @@ function MenuRow({
     </>
   );
 }
-
 // ── UserMenuTree ──────────────────────────────────────────────────────────────
 interface UserMenuTreeProps {
   value: string;
   setValue: (value: string) => void;
   disabled: boolean;
 }
-
 export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
   const { getAll } = useApi<{ data: MenuNode[] }>(MENU_ENDPOINT);
   const [menus, setMenus] = useState<MenuNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
-
   const permMap = useMemo<Map<number, MenuPermission>>(() => {
     const arr = parseMenuPermissions(value);
     return new Map(arr.map((p) => [p.umMenuId, p]));
   }, [value]);
-
   useEffect(() => {
     setLoading(true);
     getAll(MENU_QUERY as Record<string, string>)
@@ -311,19 +282,16 @@ export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
       .catch(() => setMenus([]))
       .finally(() => setLoading(false));
   }, [getAll]);
-
   const commit = useCallback(
     (map: Map<number, MenuPermission>) => {
       setValue(JSON.stringify([...map.values()]));
     },
     [setValue],
   );
-
   const handleToggleMenu = useCallback(
     (node: MenuNode, checked: boolean) => {
       const next = new Map(permMap);
       const ids = collectNodeAndDescendantIds(node);
-
       if (checked) {
         for (const id of ids) {
           if (!next.has(id)) {
@@ -339,7 +307,6 @@ export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
     },
     [permMap, commit],
   );
-
   const handleTogglePerm = useCallback(
     (menuId: number, key: PermKey, checked: boolean) => {
       const next = new Map(permMap);
@@ -349,7 +316,6 @@ export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
     },
     [permMap, commit],
   );
-
   const handleToggleCollapsed = useCallback((menuId: number) => {
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -357,7 +323,6 @@ export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
       return next;
     });
   }, []);
-
   const handleSelectAll = useCallback(() => {
     const all = collectAllIds(menus);
     const map = new Map(
@@ -376,11 +341,9 @@ export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
     );
     setValue(JSON.stringify([...map.values()]));
   }, [menus, setValue]);
-
   const handleDeselectAll = useCallback(() => {
     setValue("[]");
   }, [setValue]);
-
   if (loading) {
     return (
       <div style={S.root}>
@@ -388,7 +351,6 @@ export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
       </div>
     );
   }
-
   if (!menus.length) {
     return (
       <div style={S.root}>
@@ -396,10 +358,8 @@ export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
       </div>
     );
   }
-
   const assignedCount = permMap.size;
   const totalCount = collectAllIds(menus).length;
-
   return (
     <div style={S.root}>
       {/* Header row */}
@@ -432,7 +392,6 @@ export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
           </div>
         ))}
       </div>
-
       {/* Tree rows */}
       <div style={S.scrollArea}>
         {menus.map((menu, i) => (

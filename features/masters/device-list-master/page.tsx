@@ -86,10 +86,8 @@ const INITIAL_FORM_VALUES = {
   devMacAddress: "",
   devIsBlocked: "false",
   devBlockReason: "",
-  devLastIp: "",
   devIsActive: "true",
 } as const;
-
 function buildFormFields(
   companyOptions: ERPDynamicSelectOption[],
   branchOptions: ERPDynamicSelectOption[],
@@ -165,12 +163,6 @@ function buildFormFields(
       placeholder: "e.g. A1:B2:C3:D4:E5:F6",
     },
     {
-      name: "devLastIp",
-      label: "Last IP",
-      colSpan: 2,
-      placeholder: "e.g. 192.168.1.100",
-    },
-    {
       name: "devIsBlocked",
       label: "Blocked",
       type: "checkbox",
@@ -196,17 +188,14 @@ function buildFormFields(
     },
   ];
 }
-
 function getSourceValue(row: CrudMasterTableRow, keys: readonly string[]): unknown {
   if (!row.__source) return undefined;
   return getFirstDefinedValue(row.__source as Record<string, unknown>, keys);
 }
-
 export default function DeviceListMasterPage() {
   const { data: companyOptions = [DEFAULT_COMPANY_OPTION] } = useGetCompanyOptionsQuery();
   const { data: branchOptions = [DEFAULT_BRANCH_OPTION] } = useGetBranchOptionsQuery();
   const { data: userOptions = [DEFAULT_USER_OPTION] } = useGetUserOptionsQuery();
-
   const companyLabelMap = useMemo(
     () => new Map(companyOptions.map((o) => [o.value, o.label])),
     [companyOptions],
@@ -219,12 +208,10 @@ export default function DeviceListMasterPage() {
     () => new Map(userOptions.map((o) => [o.value, o.label])),
     [userOptions],
   );
-
   const formFields = useMemo(
     () => buildFormFields(companyOptions, branchOptions, userOptions),
     [companyOptions, branchOptions, userOptions],
   );
-
   const customTableColumns = useMemo<ReusableTableColumn<CrudMasterTableRow>[]>(
     () => [
       {
@@ -349,7 +336,6 @@ export default function DeviceListMasterPage() {
     ],
     [companyLabelMap, branchLabelMap],
   );
-
   return (
     <CrudMasterPage
       title="Device List"
@@ -386,7 +372,6 @@ export default function DeviceListMasterPage() {
           devMacAddress: toDisplayValue(getFirstDefinedValue(rowSource, DEV_MAC_ADDRESS_KEYS)) || INITIAL_FORM_VALUES.devMacAddress,
           devIsBlocked: toSelectBoolean(getFirstDefinedValue(rowSource, DEV_IS_BLOCKED_KEYS), "false"),
           devBlockReason: toDisplayValue(getFirstDefinedValue(rowSource, DEV_BLOCK_REASON_KEYS)) || INITIAL_FORM_VALUES.devBlockReason,
-          devLastIp: toDisplayValue(getFirstDefinedValue(rowSource, DEV_LAST_IP_KEYS)) || INITIAL_FORM_VALUES.devLastIp,
           devIsActive: toSelectBoolean(getFirstDefinedValue(rowSource, DEV_IS_ACTIVE_KEYS), "true"),
         };
       }}
@@ -402,7 +387,6 @@ export default function DeviceListMasterPage() {
           devMacAddress: toNullableString(values.devMacAddress ?? ""),
           devIsBlocked: (values.devIsBlocked ?? "false") === "true",
           devBlockReason: toNullableString(values.devBlockReason ?? ""),
-          devLastIp: toNullableString(values.devLastIp ?? ""),
           devIsActive: (values.devIsActive ?? "true") === "true",
         };
         if (shouldUpdate && editingItemId !== null) {
