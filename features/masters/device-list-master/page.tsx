@@ -1,5 +1,6 @@
 "use client";
 import { useMemo } from "react";
+import { useDeviceInfo } from "@/hooks/useDeviceInfo";
 import CrudMasterPage, { type CrudMasterTableRow } from "@/components/master/crud-master-page";
 import type { ReusableTableColumn } from "@/components/ui/table";
 import type {
@@ -160,6 +161,7 @@ function buildFormFields(
       name: "devMacAddress",
       label: "MAC Address",
       colSpan: 2,
+      disabled: true,
       placeholder: "e.g. A1:B2:C3:D4:E5:F6",
     },
     {
@@ -193,6 +195,7 @@ function getSourceValue(row: CrudMasterTableRow, keys: readonly string[]): unkno
   return getFirstDefinedValue(row.__source as Record<string, unknown>, keys);
 }
 export default function DeviceListMasterPage() {
+  const deviceInfo = useDeviceInfo();
   const { data: companyOptions = [DEFAULT_COMPANY_OPTION] } = useGetCompanyOptionsQuery();
   const { data: branchOptions = [DEFAULT_BRANCH_OPTION] } = useGetBranchOptionsQuery();
   const { data: userOptions = [DEFAULT_USER_OPTION] } = useGetUserOptionsQuery();
@@ -357,7 +360,15 @@ export default function DeviceListMasterPage() {
       formDescription="Register and manage devices."
       customFields={formFields}
       customTableColumns={customTableColumns}
-      createInitialValues={INITIAL_FORM_VALUES}
+      createInitialValues={useMemo(
+        () => ({
+          ...INITIAL_FORM_VALUES,
+          devMacAddress: deviceInfo.macAddress,
+          devPlatform: deviceInfo.platform,
+          devDeviceType: deviceInfo.deviceType,
+        }),
+        [deviceInfo],
+      )}
       mapFormValues={({ source }) => {
         const rowSource = source ?? {};
         return {
