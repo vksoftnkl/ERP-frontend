@@ -214,7 +214,7 @@ export default function ItemGroupMasterPage() {
       entityLabelPlural="item groups"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
-      useResponseTableColumns
+        listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

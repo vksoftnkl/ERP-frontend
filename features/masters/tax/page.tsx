@@ -458,6 +458,7 @@ export default function TaxMasterPage() {
       entityLabelPlural="taxes"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
+        listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
@@ -470,7 +471,6 @@ export default function TaxMasterPage() {
       formTitle="Tax Form"
       formDescription="Create and update taxes."
       customFields={taxFormFields}
-      useResponseTableColumns
       createInitialValues={TAX_INITIAL_FORM_VALUES}
       modalPanelStyle={TAX_MODAL_PANEL_STYLE}
       modalFormGridColumns={3}

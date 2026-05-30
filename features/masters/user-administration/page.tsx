@@ -438,7 +438,8 @@ export default function UserAdministrationPage() {
       entityLabelPlural="users"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
-      useResponseTableColumns
+        listResponseStyleArrayKey=""
+        gridDetailId={29}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

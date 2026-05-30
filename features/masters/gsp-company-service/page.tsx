@@ -254,7 +254,8 @@ export default function GspCompanyServiceMasterPage() {
       entityLabelPlural="gsp company services"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
-      useResponseTableColumns
+        listResponseStyleArrayKey=""
+        gridDetailId={27}
       responseTableColumnExcludeKeys={["csg_company_service_id", "csgCompanyServiceId"]}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}

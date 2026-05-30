@@ -451,7 +451,7 @@ export default function WidgetMasterPage() {
       entityLabel="widget"
       entityLabelPlural="widgets"
       apiEndpoints={API_ENDPOINTS}
-      useResponseTableColumns
+      listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={baseStyles}

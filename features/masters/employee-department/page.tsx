@@ -113,7 +113,8 @@ export default function EmployeeDepartmentMasterPage() {
       entityLabelPlural="employee departments"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
-      useResponseTableColumns
+        listResponseStyleArrayKey=""
+        gridDetailId={23}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

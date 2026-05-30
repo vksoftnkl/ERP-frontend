@@ -377,7 +377,8 @@ export default function ItemCategoryMasterPage() {
       entityLabelPlural="item categories"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
-      useResponseTableColumns
+        listResponseStyleArrayKey=""
+        gridDetailId={11}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

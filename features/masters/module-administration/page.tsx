@@ -3,7 +3,6 @@ import { type CSSProperties, useCallback, useEffect, useRef, useState } from "re
 import { useApi } from "@/hooks/useApi";
 import { useAppSelector } from "@/store/hooks";
 import { selectAuthInitialized, selectAuthUserId } from "@/store/slices/authSlice";
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface MenuNode {
   menuId: number;
@@ -13,19 +12,16 @@ interface MenuNode {
   menuIsActive: boolean;
   children?: MenuNode[];
 }
-
 interface VisibilityItem {
   menuId: number;
   menuVisibility: boolean;
 }
-
 // ── API ───────────────────────────────────────────────────────────────────────
 const MENU_ALL_ENDPOINT = "/menu-masters/get";
 const MENU_VISIBILITY_ENDPOINT = "/menu-masters/visibility";
 const MENU_QUERY = {
   includeChildren: "true",
 } as const;
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function collectAllNodes(nodes: MenuNode[]): MenuNode[] {
   const result: MenuNode[] = [];
@@ -35,7 +31,6 @@ function collectAllNodes(nodes: MenuNode[]): MenuNode[] {
   }
   return result;
 }
-
 // ── Styles ────────────────────────────────────────────────────────────────────
 const S = {
   page: {
@@ -47,20 +42,17 @@ const S = {
     boxSizing: "border-box",
     overflow: "hidden",
   } satisfies CSSProperties,
-
   heading: {
     fontSize: "1.05rem",
     fontWeight: 700,
     marginBottom: "0.25rem",
     color: "#111827",
   } satisfies CSSProperties,
-
   subtext: {
     fontSize: "0.78rem",
     color: "#6b7280",
     marginBottom: "1rem",
   } satisfies CSSProperties,
-
   card: {
     display: "flex",
     flexDirection: "column",
@@ -70,7 +62,6 @@ const S = {
     borderRadius: "0.5rem",
     overflow: "hidden",
   } satisfies CSSProperties,
-
   tableHeader: {
     display: "grid",
     gridTemplateColumns: "1fr 7rem",
@@ -82,14 +73,12 @@ const S = {
     color: "#374151",
     alignItems: "center",
   } satisfies CSSProperties,
-
   headerActions: {
     display: "flex",
     gap: "0.4rem",
     alignItems: "center",
     justifyContent: "flex-end",
   } satisfies CSSProperties,
-
   actionBtn: {
     fontSize: "0.68rem",
     padding: "0.15rem 0.5rem",
@@ -99,13 +88,11 @@ const S = {
     background: "white",
     color: "#374151",
   } satisfies CSSProperties,
-
   scrollArea: {
     flex: 1,
     minHeight: 0,
     overflowY: "auto" as const,
   } satisfies CSSProperties,
-
   row: (depth: number, alt: boolean, dirty: boolean): CSSProperties => ({
     display: "grid",
     gridTemplateColumns: "1fr 7rem",
@@ -115,7 +102,6 @@ const S = {
     borderBottom: "1px solid #f0f0f0",
     transition: "background 0.15s",
   }),
-
   menuCell: (depth: number): CSSProperties => ({
     display: "flex",
     alignItems: "center",
@@ -123,7 +109,6 @@ const S = {
     paddingLeft: `${depth * 1.25}rem`,
     overflow: "hidden",
   }),
-
   expandBtn: {
     width: "1rem",
     height: "1rem",
@@ -138,7 +123,6 @@ const S = {
     color: "#6b7280",
     padding: 0,
   } satisfies CSSProperties,
-
   menuName: (hasChildren: boolean, isSeparator: boolean): CSSProperties => ({
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -147,20 +131,17 @@ const S = {
     fontWeight: hasChildren ? 600 : 400,
     color: isSeparator ? "#9ca3af" : "#111827",
   }),
-
   visibilityCell: {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
   } satisfies CSSProperties,
-
   empty: {
     padding: "2rem",
     textAlign: "center" as const,
     color: "#6b7280",
     fontSize: "0.8rem",
   } satisfies CSSProperties,
-
   footer: {
     display: "flex",
     alignItems: "center",
@@ -168,7 +149,6 @@ const S = {
     marginTop: "0.75rem",
     gap: "0.5rem",
   } satisfies CSSProperties,
-
   dirtyBadge: {
     fontSize: "0.72rem",
     color: "#92400e",
@@ -177,7 +157,6 @@ const S = {
     borderRadius: "9999px",
     padding: "0.1rem 0.6rem",
   } satisfies CSSProperties,
-
   saveBtn: (disabled: boolean): CSSProperties => ({
     padding: "0.4rem 1.25rem",
     borderRadius: "0.375rem",
@@ -190,8 +169,6 @@ const S = {
     opacity: disabled ? 0.7 : 1,
   }),
 };
-
-
 // ── MenuRow ───────────────────────────────────────────────────────────────────
 interface MenuRowProps {
   node: MenuNode;
@@ -204,7 +181,6 @@ interface MenuRowProps {
   onToggle: (menuId: number, value: boolean) => void;
   onToggleCollapsed: (menuId: number) => void;
 }
-
 function MenuRow({
   node,
   depth,
@@ -220,7 +196,6 @@ function MenuRow({
   const isCollapsed = collapsed.has(node.menuId);
   const current = visibility.get(node.menuId) ?? node.menuVisibility;
   const isDirty = original.get(node.menuId) !== current;
-
   return (
     <>
       <div style={S.row(depth, rowIndex % 2 !== 0, isDirty)}>
@@ -242,7 +217,6 @@ function MenuRow({
             {node.menuName}
           </span>
         </div>
-
         <div style={S.visibilityCell}>
           <input
             type="checkbox"
@@ -252,7 +226,6 @@ function MenuRow({
           />
         </div>
       </div>
-
       {hasChildren && !isCollapsed
         ? node.children!.map((child, i) => (
             <MenuRow
@@ -272,23 +245,20 @@ function MenuRow({
     </>
   );
 }
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function ModuleAdministrationPage() {
   const authInitialized = useAppSelector(selectAuthInitialized);
   const userId = useAppSelector(selectAuthUserId);
   const { getAll } = useApi<{ data: MenuNode[] }>(MENU_ALL_ENDPOINT);
-  const { run: patchVisibility, loading: saving } = useApi<unknown, { menus: VisibilityItem[] }>(
+  const { run: patchVisibility, loading: saving } = useApi<unknown, { userId: string | null; menus: VisibilityItem[] }>(
     MENU_VISIBILITY_ENDPOINT,
     { method: "PATCH" },
   );
-
   const [menus, setMenus] = useState<MenuNode[]>([]);
   const [loadingMenus, setLoadingMenus] = useState(true);
   const [visibility, setVisibility] = useState<Map<number, boolean>>(new Map());
   const [original, setOriginal] = useState<Map<number, boolean>>(new Map());
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
-
   const initMaps = useCallback((nodes: MenuNode[]) => {
     const map = new Map<number, boolean>();
     for (const node of collectAllNodes(nodes)) {
@@ -297,7 +267,6 @@ export default function ModuleAdministrationPage() {
     setVisibility(new Map(map));
     setOriginal(new Map(map));
   }, []);
-
   useEffect(() => {
     if (!authInitialized) {
       return;
@@ -319,7 +288,6 @@ export default function ModuleAdministrationPage() {
       .catch(() => setMenus([]))
       .finally(() => setLoadingMenus(false));
   }, [authInitialized, getAll, initMaps, userId]);
-
   const dirtyItems = (() => {
     const items: VisibilityItem[] = [];
     visibility.forEach((value, menuId) => {
@@ -329,11 +297,9 @@ export default function ModuleAdministrationPage() {
     });
     return items;
   })();
-
   const handleToggle = useCallback((menuId: number, value: boolean) => {
     setVisibility((prev) => new Map(prev).set(menuId, value));
   }, []);
-
   const handleToggleCollapsed = useCallback((menuId: number) => {
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -341,7 +307,6 @@ export default function ModuleAdministrationPage() {
       return next;
     });
   }, []);
-
   const handleShowAll = useCallback(() => {
     setVisibility((prev) => {
       const next = new Map(prev);
@@ -349,7 +314,6 @@ export default function ModuleAdministrationPage() {
       return next;
     });
   }, []);
-
   const handleHideAll = useCallback(() => {
     setVisibility((prev) => {
       const next = new Map(prev);
@@ -357,19 +321,15 @@ export default function ModuleAdministrationPage() {
       return next;
     });
   }, []);
-
   const handleReset = useCallback(() => {
     setVisibility(new Map(original));
   }, [original]);
-
   const handleSave = useCallback(async () => {
     if (dirtyItems.length === 0 || saving) return;
-    await patchVisibility({ body: { menus: dirtyItems } });
+    await patchVisibility({ body: { userId, menus: dirtyItems } });
     setOriginal(new Map(visibility));
-  }, [dirtyItems, saving, patchVisibility, visibility]);
-
+  }, [dirtyItems, saving, patchVisibility, visibility, userId]);
   const hasDirty = dirtyItems.length > 0;
-
   if (loadingMenus) {
     return (
       <div style={S.page}>
@@ -380,14 +340,12 @@ export default function ModuleAdministrationPage() {
       </div>
     );
   }
-
   return (
     <div style={S.page}>
       <div style={S.heading}>Module Administration</div>
       <div style={S.subtext}>
         Control which menu items are visible across the application.
       </div>
-
       <div style={S.card}>
         {/* Header */}
         <div style={S.tableHeader}>
@@ -401,7 +359,6 @@ export default function ModuleAdministrationPage() {
             </button>
           </div>
         </div>
-
         {/* Tree */}
         <div style={S.scrollArea}>
           {menus.length === 0 ? (
@@ -424,7 +381,6 @@ export default function ModuleAdministrationPage() {
           )}
         </div>
       </div>
-
       {/* Footer */}
       <div style={S.footer}>
         <div>

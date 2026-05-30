@@ -1,5 +1,4 @@
 "use client";
-
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
@@ -9,16 +8,13 @@ import {
   toSelectBoolean,
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
-
 const API_ENDPOINTS = {
   list: "/gsp-provider-masters/list",
   getById: "/gsp-provider-masters/get",
   create: "/gsp-provider-masters/create",
   delete: "/gsp-provider-masters/delete",
 } as const;
-
 const GRID_TABLE_NAME = "gsp_provider_master";
-
 const LOOKUP_KEYS = {
   id: ["gspProviderId", "gsp_provider_id", "id", "_id"],
   code: ["gspProviderCode", "gsp_provider_code", "code"],
@@ -30,7 +26,6 @@ const LOOKUP_KEYS = {
   description: ["gspBaseUrl", "gsp_base_url", "description"],
   array: ["data", "items", "results", "rows", "list", "gspProviders", "gsp_provider_masters"],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "gspProviderId",
   name: "gspProviderName",
@@ -39,7 +34,6 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "gspBaseUrl",
   sort: "position",
 } as const;
-
 const PROVIDER_CODE_KEYS = ["gspProviderCode", "gsp_provider_code", "code"] as const;
 const PROVIDER_BASE_URL_KEYS = ["gspBaseUrl", "gsp_base_url", "baseUrl", "base_url"] as const;
 const PROVIDER_ROUTE_KEYS = ["gspRoute", "gsp_route", "route"] as const;
@@ -52,7 +46,6 @@ const PROVIDER_PASSWORD_KEYS = [
   "password",
 ] as const;
 const PROVIDER_ACTIVE_KEYS = ["gspIsActive", "gsp_is_active", "isActive", "is_active", "status"] as const;
-
 const INITIAL_FORM_VALUES = {
   gspProviderCode: "",
   masterName: "",
@@ -63,7 +56,6 @@ const INITIAL_FORM_VALUES = {
   gspUserPassword: "",
   gspIsActive: "true",
 } as const;
-
 const FORM_FIELDS: ERPDynamicModalField[] = [
   {
     name: "gspProviderCode",
@@ -139,7 +131,6 @@ const FORM_FIELDS: ERPDynamicModalField[] = [
     ],
   },
 ];
-
 export default function GspProviderMasterPage() {
   return (
     <CrudMasterPage
@@ -149,7 +140,7 @@ export default function GspProviderMasterPage() {
       entityLabelPlural="gsp providers"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
-      useResponseTableColumns
+        listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
@@ -203,11 +194,9 @@ export default function GspProviderMasterPage() {
           gspUserPassword: (values.gspUserPassword ?? "").trim(),
           gspIsActive: (values.gspIsActive ?? "true") === "true",
         };
-
         if (shouldUpdate && editingItemId !== null) {
           payload.gspProviderId = toUpdateId(editingItemId);
         }
-
         return payload;
       }}
     />

@@ -1,5 +1,4 @@
 "use client";
-
 import {
   type CSSProperties,
   useCallback,
@@ -15,7 +14,6 @@ import { createPortal } from "react-dom";
 import { cx } from "@/components/design-system/cx";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
-
 export type SearchableSelectProps = {
   id?: string;
   value: string;
@@ -30,15 +28,12 @@ export type SearchableSelectProps = {
   maxDropdownHeight?: number;
   name?: string;
 };
-
 const DEFAULT_DROPDOWN_MAX_HEIGHT = 280;
 const DROPDOWN_VIEWPORT_PADDING = 8;
 const DROPDOWN_PORTAL_Z_INDEX = 2500;
-
 function normalizeSearchValue(value: string): string {
   return value.trim().toLowerCase();
 }
-
 export function SearchableSelect({
   id,
   value,
@@ -65,23 +60,19 @@ export function SearchableSelect({
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [placement, setPlacement] = useState<"down" | "up">("down");
   const [dropdownStyle, setDropdownStyle] = useState<CSSProperties | undefined>(undefined);
-
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
     [options, value],
   );
-
   const filteredOptions = useMemo(() => {
     const normalizedQuery = normalizeSearchValue(query);
     if (!normalizedQuery) return [...options];
-
     return options.filter((option) => {
       const label = normalizeSearchValue(option.label);
       const optionValue = normalizeSearchValue(option.value);
       return label.includes(normalizedQuery) || optionValue.includes(normalizedQuery);
     });
   }, [options, query]);
-
   const activeDescendantId =
     isOpen && highlightedIndex >= 0
       ? `${controlId}-option-${highlightedIndex}`
@@ -93,11 +84,9 @@ export function SearchableSelect({
     "--erp-modal-accent": "#0f766e",
     "--erp-modal-accent-soft-ring": "rgba(15, 118, 110, 0.14)",
   } as CSSProperties;
-
   const updatePlacement = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
-
     const rect = trigger.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
@@ -115,7 +104,6 @@ export function SearchableSelect({
       DROPDOWN_VIEWPORT_PADDING,
       Math.min(rect.left, window.innerWidth - dropdownWidth - DROPDOWN_VIEWPORT_PADDING),
     );
-
     setPlacement(nextPlacement);
     setDropdownStyle({
       position: "fixed",
@@ -135,7 +123,6 @@ export function SearchableSelect({
           }),
     });
   }, [filteredOptions.length, maxDropdownHeight]);
-
   const closeDropdown = useCallback((restoreFocus = false) => {
     setIsOpen(false);
     setQuery("");
@@ -145,29 +132,23 @@ export function SearchableSelect({
       window.requestAnimationFrame(() => triggerRef.current?.focus());
     }
   }, []);
-
   const openDropdown = useCallback(() => {
     if (disabled) return;
-
     const selectedIndex = options.findIndex((option) => option.value === value);
     setIsOpen(true);
     setQuery("");
     setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
   }, [disabled, options, value]);
-
   const commitSelection = useCallback((nextValue: string) => {
     onChange(nextValue);
     closeDropdown(true);
   }, [closeDropdown, onChange]);
-
   const clearSelection = useCallback(() => {
     onChange("");
     closeDropdown(false);
   }, [closeDropdown, onChange]);
-
   const handleTriggerKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
-
     switch (event.key) {
       case "ArrowDown":
       case "ArrowUp":
@@ -186,10 +167,8 @@ export function SearchableSelect({
         break;
     }
   }, [closeDropdown, disabled, isOpen, openDropdown]);
-
   const handleSearchKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
     if (!isOpen) return;
-
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
@@ -218,33 +197,26 @@ export function SearchableSelect({
         break;
     }
   }, [closeDropdown, commitSelection, filteredOptions, highlightedIndex, isOpen]);
-
   // Run position calculation synchronously before paint to prevent flicker
   useLayoutEffect(() => {
     if (!isOpen) return;
     updatePlacement();
   }, [isOpen, updatePlacement]);
-
   useEffect(() => {
     if (!isOpen) return;
-
     const rafId = window.requestAnimationFrame(() => searchInputRef.current?.focus());
-
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
       if (target && wrapperRef.current?.contains(target)) return;
       if (target && dropdownRef.current?.contains(target)) return;
       closeDropdown();
     };
-
     const handleWindowChange = () => {
       updatePlacement();
     };
-
     window.addEventListener("mousedown", handlePointerDown);
     window.addEventListener("resize", handleWindowChange);
     window.addEventListener("scroll", handleWindowChange, true);
-
     return () => {
       window.cancelAnimationFrame(rafId);
       window.removeEventListener("mousedown", handlePointerDown);
@@ -252,17 +224,14 @@ export function SearchableSelect({
       window.removeEventListener("scroll", handleWindowChange, true);
     };
   }, [closeDropdown, isOpen, updatePlacement]);
-
   useEffect(() => {
     if (!isOpen) return;
-
     setHighlightedIndex((current) => {
       if (filteredOptions.length === 0) return -1;
       if (current >= 0 && current < filteredOptions.length) return current;
       return 0;
     });
   }, [filteredOptions, isOpen]);
-
   const dropdown = isOpen ? (
     <div
       ref={dropdownRef}
@@ -340,7 +309,6 @@ export function SearchableSelect({
       </ul>
     </div>
   ) : null;
-
   return (
     <div
       className={cx(dynamicFormStyles.searchSelect, className)}
@@ -421,5 +389,4 @@ export function SearchableSelect({
     </div>
   );
 }
-
 export default SearchableSelect;

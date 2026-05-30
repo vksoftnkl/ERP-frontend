@@ -90,7 +90,7 @@ export const stateModule = defineMasterModule({
   entityLabelPlural: "states",
   apiEndpoints: API_ENDPOINTS,
   gridTableName: GRID_TABLE_NAME,
-  useResponseTableColumns: true,
+  listResponseStyleArrayKey: "",
   lookupKeys: LOOKUP_KEYS,
   requestPayloadKeys: REQUEST_PAYLOAD_KEYS,
   styles,
