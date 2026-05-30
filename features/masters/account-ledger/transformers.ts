@@ -8,6 +8,18 @@ import {
   STATE_CODE_LOOKUP_NAME_KEYS,
   STATE_CODE_LOOKUP_CODE_KEYS,
   LOOKUP_ARRAY_KEYS,
+  GST_ADDRESS_BUILDING_KEYS,
+  GST_ADDRESS_CITY_KEYS,
+  GST_ADDRESS_DISTRICT_KEYS,
+  GST_ADDRESS_KEYS,
+  GST_ADDRESS_LOCALITY_KEYS,
+  GST_ADDRESS_PIN_KEYS,
+  GST_ADDRESS_STATE_KEYS,
+  GST_LEGAL_NAME_KEYS,
+  GST_LOOKUP_SOURCE_KEYS,
+  GST_PRIMARY_ADDRESS_KEYS,
+  GST_REGISTRATION_TYPE_KEYS,
+  GST_TRADE_NAME_KEYS,
 } from "./constants";
 import type {
   LedgerFormValues,
@@ -62,6 +74,18 @@ export function getFirstDefinedValue(
     }
   }
   return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function getObjectValue(
+  source: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> | null {
+  const candidate = getFirstDefinedValue(source, keys);
+  return isRecord(candidate) ? candidate : null;
 }
 
 export function getFieldValue(
@@ -338,6 +362,162 @@ export function buildStateCodeByName(payload: unknown): Record<string, string> {
     }
   }
   return Object.fromEntries(codeMap.entries());
+}
+
+export function buildStateNameByCode(payload: unknown): Record<string, string> {
+  const nameMap = new Map<string, string>();
+  const rows = extractRows(payload, LOOKUP_ARRAY_KEYS);
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+    const source = row as Record<string, unknown>;
+    const stateName = toDisplayValue(
+      getFirstDefinedValue(source, STATE_CODE_LOOKUP_NAME_KEYS),
+    );
+    const stateCode = toDisplayValue(
+      getFirstDefinedValue(source, STATE_CODE_LOOKUP_CODE_KEYS),
+    ).toUpperCase();
+    if (!stateName || !stateCode || nameMap.has(stateCode)) {
+      continue;
+    }
+    nameMap.set(stateCode, stateName);
+  }
+  return Object.fromEntries(nameMap.entries());
+}
+
+function joinDisplayValues(parts: unknown[]): string {
+  return parts
+    .map((part) => toDisplayValue(part))
+    .filter(Boolean)
+    .join(", ");
+}
+
+function setFieldValueIfPresent(
+  target: Partial<LedgerFormValues>,
+  fieldName: LedgerFormFieldName,
+  value: string,
+): void {
+  const normalized = value.trim();
+  if (!normalized) {
+    return;
+  }
+  target[fieldName] = normalized;
+}
+
+function toLedgerLookupGstPartyRegType(
+  value: string,
+): "REGULAR" | "COMPOSITION" | "UNREGISTERED" {
+  const normalized = normalizeGstPartyRegType(value);
+  if (normalized) {
+    return normalized;
+  }
+  const upperValue = value.trim().toUpperCase();
+  if (upperValue.includes("COMPOSITION")) {
+    return "COMPOSITION";
+  }
+  if (upperValue.includes("UNREGISTERED")) {
+    return "UNREGISTERED";
+  }
+  return "REGULAR";
+}
+
+export function extractGstLookupSource(
+  payload: unknown,
+): Record<string, unknown> | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  return getObjectValue(payload, GST_LOOKUP_SOURCE_KEYS) ?? payload;
+}
+
+export function extractGstAddress(
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const primaryAddress = getObjectValue(source, GST_PRIMARY_ADDRESS_KEYS);
+  if (!primaryAddress) {
+    return {};
+  }
+  return getObjectValue(primaryAddress, GST_ADDRESS_KEYS) ?? primaryAddress;
+}
+
+export function buildLedgerGstLookupValues(
+  gstin: string,
+  payload: Record<string, unknown>,
+  stateNameByCode: Record<string, string>,
+): Partial<LedgerFormValues> {
+  const address = extractGstAddress(payload);
+  const legalName = toDisplayValue(
+    getFirstDefinedValue(payload, GST_LEGAL_NAME_KEYS),
+  );
+  const tradeName = toDisplayValue(
+    getFirstDefinedValue(payload, GST_TRADE_NAME_KEYS),
+  );
+  const city = toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_CITY_KEYS));
+  const district =
+    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_DISTRICT_KEYS)) || city;
+  const stateCode = gstin.slice(0, 2);
+  const stateName =
+    stateNameByCode[stateCode] ||
+    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_STATE_KEYS));
+  const values: Partial<LedgerFormValues> = {
+    ledGstinNo: gstin,
+    ledPanNo: gstin.slice(2, 12),
+    ledCountry: "India",
+  };
+
+  setFieldValueIfPresent(values, "masterName", tradeName || legalName);
+  setFieldValueIfPresent(
+    values,
+    "ledGstPartyRegType",
+    toLedgerLookupGstPartyRegType(
+      toDisplayValue(getFirstDefinedValue(payload, GST_REGISTRATION_TYPE_KEYS)),
+    ),
+  );
+  setFieldValueIfPresent(
+    values,
+    "ledAddr1",
+    joinDisplayValues(
+      GST_ADDRESS_BUILDING_KEYS.map((key) => getFirstDefinedValue(address, [key])),
+    ),
+  );
+  setFieldValueIfPresent(
+    values,
+    "ledAddr2",
+    joinDisplayValues(
+      GST_ADDRESS_LOCALITY_KEYS.map((key) => getFirstDefinedValue(address, [key])),
+    ),
+  );
+  setFieldValueIfPresent(
+    values,
+    "ledAddr3",
+    joinDisplayValues([
+      getFirstDefinedValue(address, GST_ADDRESS_DISTRICT_KEYS),
+      getFirstDefinedValue(address, GST_ADDRESS_CITY_KEYS),
+    ]),
+  );
+  setFieldValueIfPresent(values, "ledCity", city);
+  setFieldValueIfPresent(values, "ledDistrict", district);
+  setFieldValueIfPresent(values, "ledStateCode", stateCode);
+  setFieldValueIfPresent(values, "ledStateName", stateName);
+  setFieldValueIfPresent(values, "ledRegionStateName", stateName);
+  setFieldValueIfPresent(
+    values,
+    "ledPin",
+    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_PIN_KEYS)),
+  );
+
+  return values;
+}
+
+export function getLookupErrorMessage(payload: unknown, fallback: string): string {
+  if (!isRecord(payload)) {
+    return fallback;
+  }
+  return (
+    toDisplayValue(getFirstDefinedValue(payload, ["message", "error", "detail"])) ||
+    fallback
+  );
 }
 
 // ============ Pagination ============

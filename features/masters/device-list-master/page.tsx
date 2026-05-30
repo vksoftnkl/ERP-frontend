@@ -15,6 +15,7 @@ import {
   toSelectBoolean,
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
+import { getAuthUserId } from "@/lib/auth/session";
 import {
   useGetCompanyOptionsQuery,
   useGetBranchOptionsQuery,
@@ -399,6 +400,7 @@ export default function DeviceListMasterPage() {
           devIsBlocked: (values.devIsBlocked ?? "false") === "true",
           devBlockReason: toNullableString(values.devBlockReason ?? ""),
           devIsActive: (values.devIsActive ?? "true") === "true",
+          devEntryBy: getAuthUserId(),
         };
         if (shouldUpdate && editingItemId !== null) {
           payload.devId = toUpdateId(editingItemId);

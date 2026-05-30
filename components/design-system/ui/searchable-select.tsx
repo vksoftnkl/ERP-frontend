@@ -160,6 +160,11 @@ export function SearchableSelect({
     closeDropdown(true);
   }, [closeDropdown, onChange]);
 
+  const clearSelection = useCallback(() => {
+    onChange("");
+    closeDropdown(false);
+  }, [closeDropdown, onChange]);
+
   const handleTriggerKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
 
@@ -349,6 +354,7 @@ export function SearchableSelect({
         type="button"
         className={cx(
           dynamicFormStyles.searchSelectTrigger,
+          selectedOption && dynamicFormStyles.searchSelectTriggerClearable,
           invalid && dynamicFormStyles.controlInvalid,
           isOpen && dynamicFormStyles.searchSelectTriggerOpen,
           disabled && dynamicFormStyles.searchSelectTriggerDisabled,
@@ -392,6 +398,23 @@ export function SearchableSelect({
           </svg>
         </span>
       </button>
+      {selectedOption && !disabled ? (
+        <button
+          type="button"
+          className={dynamicFormStyles.searchSelectClearButton}
+          aria-label="Clear selected option"
+          onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+            clearSelection();
+          }}
+        >
+          x
+        </button>
+      ) : null}
       {dropdown && typeof document !== "undefined"
         ? createPortal(dropdown, document.body)
         : dropdown}

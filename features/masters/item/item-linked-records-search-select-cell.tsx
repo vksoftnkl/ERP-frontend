@@ -97,6 +97,7 @@ export default function ItemLinkedRecordsSearchSelectCell({
         type="button"
         className={cx(
           styles.searchSelectTrigger,
+          cellValue && styles.searchSelectTriggerClearable,
           isOpen && styles.searchSelectTriggerOpen,
           disabled && styles.searchSelectTriggerDisabled,
         )}
@@ -146,6 +147,23 @@ export default function ItemLinkedRecordsSearchSelectCell({
           </svg>
         </span>
       </button>
+      {cellValue && !disabled ? (
+        <button
+          type="button"
+          className={styles.searchSelectClearButton}
+          aria-label={`Clear ${column.label}`}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+            onChoose({ value: "", label: "" });
+          }}
+        >
+          x
+        </button>
+      ) : null}
       {isOpen && typeof document !== "undefined" && overlayPosition
         ? createPortal(
             <div

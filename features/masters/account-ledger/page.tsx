@@ -50,6 +50,8 @@ import {
   LOOKUP_QUERY_BRANCHES,
   LOOKUP_QUERY_ACCOUNT_GROUPS,
   LOOKUP_QUERY_STATE_CODES,
+  GST_LOOKUP_ENDPOINT,
+  GST_LOOKUP_PATTERN,
   STATE_NAME_SEARCH_FIELD_NAMES,
   REQUEST_PAYLOAD_KEYS,
   LEDGER_ASIDE_SECTION_KEYS,
@@ -66,6 +68,10 @@ import {
   buildLookupOptions,
   buildStateNameOptions,
   buildStateCodeByName,
+  buildStateNameByCode,
+  extractGstLookupSource,
+  buildLedgerGstLookupValues,
+  getLookupErrorMessage,
   extractPaginationInfo,
   resolveAccountLedgerGridDetails,
   toSafePageNumber,
@@ -233,6 +239,7 @@ function LedgerFieldRenderer({
   handleSearchableFieldKeyDown,
   handleSearchableFieldPointerToggle,
   handleSearchableOptionSelect,
+  handleSearchableFieldClear,
   searchInputRefs,
 }: {
   field: ERPDynamicModalField;
@@ -263,6 +270,7 @@ function LedgerFieldRenderer({
     fieldName: LedgerFormFieldName,
     option: ERPDynamicSelectOption,
   ) => void;
+  handleSearchableFieldClear: (fieldName: LedgerFormFieldName) => void;
   searchInputRefs: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
 }) {
   if (!isLedgerFieldName(field.name)) {
@@ -363,7 +371,9 @@ function LedgerFieldRenderer({
             data-ledger-modal-field-control="true"
             className={`${dynamicFormStyles.searchSelectTrigger} ${
               isValidationInvalid ? dynamicFormStyles.controlInvalid : ""
-            } ${isSearchOpen ? dynamicFormStyles.searchSelectTriggerOpen : ""}`}
+            } ${fieldValue ? dynamicFormStyles.searchSelectTriggerClearable : ""} ${
+              isSearchOpen ? dynamicFormStyles.searchSelectTriggerOpen : ""
+            }`}
             disabled={disabled}
             role="combobox"
             aria-expanded={isSearchOpen}
@@ -400,6 +410,23 @@ function LedgerFieldRenderer({
               </svg>
             </span>
           </button>
+          {fieldValue && !disabled ? (
+            <button
+              type="button"
+              className={dynamicFormStyles.searchSelectClearButton}
+              aria-label={`Clear ${field.label}`}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                handleSearchableFieldClear(fieldName);
+              }}
+            >
+              x
+            </button>
+          ) : null}
           {isSearchOpen && !disabled ? (
             <div
               id={`${field.name}-search-list`}
@@ -503,6 +530,7 @@ function LedgerFieldRenderer({
           style={controlInlineStyle}
           autoComplete="off"
           value={fieldValue}
+          placeholder={field.placeholder}
           required={field.required}
           disabled={disabled}
           rows={4}
@@ -569,6 +597,7 @@ function LedgerFieldRenderer({
         type={inputType}
         autoComplete="off"
         value={fieldValue}
+        placeholder={field.placeholder}
         required={field.required}
         disabled={disabled}
         min={field.min}
@@ -629,6 +658,7 @@ export default function AccountLedgerMasterPage() {
     { value: "", label: "" },
   ]);
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
+  const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
   // State for table and search
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
@@ -651,6 +681,7 @@ export default function AccountLedgerMasterPage() {
     );
   const [editingItemId, setEditingItemId] = useState<string | number | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [gstLookupError, setGstLookupError] = useState<string | null>(null);
   const [validationFieldName, setValidationFieldName] = useState<LedgerFormFieldName | null>(null);
   // State for search fields
   const [openSearchField, setOpenSearchField] = useState<string | null>(null);
@@ -671,6 +702,8 @@ export default function AccountLedgerMasterPage() {
   const searchSettingsRef = useRef<HTMLDivElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const sectionTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const gstLookupCacheRef = useRef<Record<string, Partial<LedgerFormValues>>>({});
+  const gstLookupRequestIdRef = useRef(0);
   // Grid columns query
   const selectedGridId = accountLedgerGridId ?? -1;
   const {
@@ -784,6 +817,7 @@ export default function AccountLedgerMasterPage() {
         setAccountGroupOptions(buildLookupOptions(accountGroupsPayload, true));
         setStateNameOptions(buildStateNameOptions(stateCodesPayload));
         setStateCodeByName(buildStateCodeByName(stateCodesPayload));
+        setStateNameByCode(buildStateNameByCode(stateCodesPayload));
       } catch {
         if (!mounted) return;
         setCompanyOptions([{ value: "", label: "" }]);
@@ -791,6 +825,7 @@ export default function AccountLedgerMasterPage() {
         setAccountGroupOptions([{ value: "", label: "" }]);
         setStateNameOptions([{ value: "", label: "" }]);
         setStateCodeByName({});
+        setStateNameByCode({});
       }
     })();
     return () => {
@@ -903,10 +938,12 @@ export default function AccountLedgerMasterPage() {
     resetSaveState();
     resetDetailsState();
     setModalError(null);
+    setGstLookupError(null);
     setValidationFieldName(null);
     setOpenSearchField(null);
     setSearchQueries({});
     setSearchActiveOptionIndex({});
+    gstLookupRequestIdRef.current += 1;
     setActiveSectionKey(ledgerFormSections[0]?.key ?? "general");
     setModalMode("create");
     setEditingItemId(null);
@@ -934,10 +971,12 @@ export default function AccountLedgerMasterPage() {
       resetSaveState();
       resetDetailsState();
       setModalError(null);
+      setGstLookupError(null);
       setValidationFieldName(null);
       setOpenSearchField(null);
       setSearchQueries({});
       setSearchActiveOptionIndex({});
+      gstLookupRequestIdRef.current += 1;
       setActiveSectionKey(ledgerFormSections[0]?.key ?? "general");
       setModalMode(mode);
       setFormValues(createInitialLedgerFormValues());
@@ -967,11 +1006,13 @@ export default function AccountLedgerMasterPage() {
     if (saveLoading) return;
     setIsFormModalOpen(false);
     setModalError(null);
+    setGstLookupError(null);
     setEditingItemId(null);
     setValidationFieldName(null);
     setOpenSearchField(null);
     setSearchQueries({});
     setSearchActiveOptionIndex({});
+    gstLookupRequestIdRef.current += 1;
     setActiveSectionKey("general");
   }, [saveLoading]);
   useEffect(() => {
@@ -1003,12 +1044,103 @@ export default function AccountLedgerMasterPage() {
     return () => window.removeEventListener("keydown", handleModalShortcuts);
   }, [closeModal, detailsLoading, isFormModalOpen, modalMode, saveLoading]);
   // Form field handlers
+  const runLedgerGstinLookup = useCallback(
+    (value: string) => {
+      const normalizedGstin = value.trim().toUpperCase();
+      const requestId = gstLookupRequestIdRef.current + 1;
+      gstLookupRequestIdRef.current = requestId;
+
+      if (!GST_LOOKUP_PATTERN.test(normalizedGstin)) {
+        setGstLookupError(null);
+        return;
+      }
+
+      const applyLookupValues = (values: Partial<LedgerFormValues>) => {
+        setFormValues((current) => {
+          if ((current.ledGstinNo ?? "").trim().toUpperCase() !== normalizedGstin) {
+            return current;
+          }
+          return {
+            ...current,
+            ...values,
+          };
+        });
+        setGstLookupError(null);
+        setValidationFieldName((current) =>
+          current === "ledGstinNo" ? null : current,
+        );
+      };
+
+      const cachedValues = gstLookupCacheRef.current[normalizedGstin];
+      if (cachedValues) {
+        applyLookupValues(cachedValues);
+        return;
+      }
+
+      void (async () => {
+        try {
+          const response = await fetch(
+            `${GST_LOOKUP_ENDPOINT}?gstin=${encodeURIComponent(normalizedGstin)}`,
+            {
+              method: "GET",
+              cache: "no-store",
+              headers: {
+                Accept: "application/json",
+              },
+            },
+          );
+          const payload = (await response.json().catch(() => null)) as unknown;
+          if (gstLookupRequestIdRef.current !== requestId) {
+            return;
+          }
+          if (!response.ok) {
+            setGstLookupError(
+              getLookupErrorMessage(
+                payload,
+                "Unable to load GST details for this GSTIN.",
+              ),
+            );
+            setValidationFieldName("ledGstinNo");
+            return;
+          }
+          const lookupSource = extractGstLookupSource(payload);
+          if (!lookupSource) {
+            setGstLookupError("GST details were not available for this GSTIN.");
+            setValidationFieldName("ledGstinNo");
+            return;
+          }
+          const resolvedValues = buildLedgerGstLookupValues(
+            normalizedGstin,
+            lookupSource,
+            stateNameByCode,
+          );
+          gstLookupCacheRef.current[normalizedGstin] = resolvedValues;
+          applyLookupValues(resolvedValues);
+        } catch {
+          if (gstLookupRequestIdRef.current !== requestId) {
+            return;
+          }
+          setGstLookupError(
+            "Unable to load GST details right now. Please try again.",
+          );
+          setValidationFieldName("ledGstinNo");
+        }
+      })();
+    },
+    [stateNameByCode],
+  );
+
   const handleFieldChange = useCallback(
     (fieldName: LedgerFormFieldName, value: string) => {
-      setFormValues((current) => ({ ...current, [fieldName]: value }));
+      const nextValue =
+        fieldName === "ledGstinNo" ? value.trim().toUpperCase() : value;
+      setFormValues((current) => ({ ...current, [fieldName]: nextValue }));
       setValidationFieldName((current) => (current === fieldName ? null : current));
+      if (fieldName === "ledGstinNo") {
+        runLedgerGstinLookup(nextValue);
+      }
     },
-    [],
+    [runLedgerGstinLookup],
   );
   const handleCheckboxKeyDown = useCallback((event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
@@ -1041,6 +1173,35 @@ export default function AccountLedgerMasterPage() {
     (fieldName: LedgerFormFieldName) => {
       setOpenSearchField((current) => (current === fieldName ? null : fieldName));
       clearSearchableFieldActiveIndex(fieldName);
+    },
+    [clearSearchableFieldActiveIndex],
+  );
+  const handleSearchableFieldClear = useCallback(
+    (fieldName: LedgerFormFieldName) => {
+      setFormValues((current) => {
+        if (fieldName === "ledStateName") {
+          return {
+            ...current,
+            ledStateName: "",
+            ledStateCode: "",
+          };
+        }
+        return {
+          ...current,
+          [fieldName]: "",
+        };
+      });
+      setSearchQueries((current) => {
+        if (!(fieldName in current)) {
+          return current;
+        }
+        const nextState = { ...current };
+        delete nextState[fieldName];
+        return nextState;
+      });
+      setOpenSearchField(null);
+      clearSearchableFieldActiveIndex(fieldName);
+      setValidationFieldName((current) => (current === fieldName ? null : current));
     },
     [clearSearchableFieldActiveIndex],
   );
@@ -1727,7 +1888,7 @@ export default function AccountLedgerMasterPage() {
     );
   }, [pendingDeleteRow]);
   const isReadOnlyMode = modalMode === "view";
-  const effectiveModalError = modalError ?? saveError ?? detailsError;
+  const effectiveModalError = modalError ?? gstLookupError ?? saveError ?? detailsError;
   const modalTitle =
     modalMode === "create"
       ? `New ${effectiveTitle}`
@@ -2115,6 +2276,7 @@ export default function AccountLedgerMasterPage() {
                           handleSearchableFieldPointerToggle
                         }
                         handleSearchableOptionSelect={handleSearchableOptionSelect}
+                        handleSearchableFieldClear={handleSearchableFieldClear}
                         searchInputRefs={searchInputRefs}
                       />
                     ))}

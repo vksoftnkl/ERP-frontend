@@ -79,7 +79,16 @@ const DEFAULT_BANK_LEDGER_OPTION: ERPDynamicSelectOption = {
 };
 const EWAY_SETTINGS_SECTION_NAME = "__heading_eway_settings";
 const EINVOICE_SETTINGS_SECTION_NAME = "__heading_einvoice_settings";
-const STATE_LOOKUP_ARRAY_KEYS = ["items", "data", "results", "rows", "list"] as const;
+const STATE_LOOKUP_ARRAY_KEYS = [
+  "items",
+  "data",
+  "results",
+  "rows",
+  "list",
+  "stateCodes",
+  "state_codes",
+  "states",
+] as const;
 const STATE_LOOKUP_NAME_KEYS = ["stateName", "state_name", "name", "label"] as const;
 const STATE_LOOKUP_CODE_KEYS = ["id", "value", "stateCode", "state_code", "code"] as const;
 const GST_LOOKUP_ENDPOINT = "/api/gst/search";

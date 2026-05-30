@@ -335,6 +335,9 @@
   outline: none;
   box-shadow: none;
 }
+.searchSelectTriggerClearable {
+  padding-right: 2.45rem;
+}
 .searchSelectTrigger:focus-visible,
 .searchSelectTriggerOpen {
   outline: none;
@@ -355,6 +358,34 @@
 }
 .searchSelectTriggerPlaceholder {
   color: #64748b;
+}
+.searchSelectClearButton {
+  position: absolute;
+  top: 50%;
+  right: 1.25rem;
+  transform: translateY(-50%);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.searchSelectClearButton:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+.searchSelectClearButton:focus-visible {
+  outline: 1px solid #2563eb;
+  outline-offset: 1px;
 }
 .searchSelectChevronSlot {
   position: absolute;

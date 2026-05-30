@@ -2,6 +2,7 @@ import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
+import { GST_LOOKUP_HELPER_TEXT } from "./constants";
 import type { LedgerFormSection } from "./types";
 
 const BOOLEAN_OPTIONS: ERPDynamicSelectOption[] = [
@@ -81,6 +82,8 @@ export function buildLedgerFormFields(
     {
       name: "ledGstinNo",
       label: "GSTIN",
+      placeholder: "24ABCDE1234F1Z5",
+      helperText: GST_LOOKUP_HELPER_TEXT,
     },
     {
       name: "ledGstPartyRegType",

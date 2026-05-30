@@ -397,6 +397,7 @@
 
 .searchSelectTrigger {
   box-sizing: border-box;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -418,6 +419,10 @@
   transition:
     border-color 0.16s,
     box-shadow 0.16s;
+}
+
+.searchSelectTriggerClearable {
+  padding-right: 3.35rem;
 }
 
 .searchSelectTrigger:focus-visible,
@@ -456,6 +461,10 @@
   padding: 0.32rem 1.9rem 0.32rem 0.35rem;
 }
 
+.searchMultiSelectControl.searchSelectTriggerClearable {
+  padding-right: 3.35rem;
+}
+
 .searchSelectValueTokens {
   display: flex;
   align-items: center;
@@ -484,6 +493,45 @@
   height: 1rem;
   color: #4a6074;
   pointer-events: none;
+}
+
+.searchSelectClearButton {
+  position: absolute;
+  top: 50%;
+  right: 1.55rem;
+  transform: translateY(-50%);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.18rem;
+  height: 1.18rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #60758a;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.searchSelectClearButton:hover {
+  background: #e9eff6;
+  color: #1f3548;
+}
+
+.searchSelectClearButton:focus-visible {
+  outline: 2px solid var(--erp-modal-accent);
+  outline-offset: 1px;
+}
+
+.searchSelectClearButton:disabled {
+  color: #9aaabc;
+  cursor: not-allowed;
 }
 
 /* Backward-compatible class used by custom searchable-select UIs. */

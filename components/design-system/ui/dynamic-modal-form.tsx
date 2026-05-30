@@ -748,6 +748,38 @@ export function ERPDynamicModalForm({
     },
     [fileData, revalidateFieldNames, runFieldValueChangeHandler],
   );
+  const handleSearchableSelectClear = useCallback(
+    (field: ERPDynamicModalField) => {
+      const fieldName = field.name;
+      setFormData((current) => {
+        const nextValues = {
+          ...current,
+          [fieldName]: "",
+        };
+        revalidateFieldNames([fieldName], nextValues, fileData);
+        runFieldValueChangeHandler(field, "", nextValues, current);
+        return nextValues;
+      });
+      setSearchQueries((current) => {
+        if (!(fieldName in current)) {
+          return current;
+        }
+        const nextState = { ...current };
+        delete nextState[fieldName];
+        return nextState;
+      });
+      setSearchActiveOptionIndex((current) => {
+        if (!(fieldName in current)) {
+          return current;
+        }
+        const nextState = { ...current };
+        delete nextState[fieldName];
+        return nextState;
+      });
+      setOpenSearchField((current) => (current === fieldName ? null : current));
+    },
+    [fileData, revalidateFieldNames, runFieldValueChangeHandler],
+  );
   const handleSearchableSelectKeyDown = useCallback(
     (
       field: ERPDynamicModalField,
@@ -1249,6 +1281,9 @@ export function ERPDynamicModalForm({
     const searchInputValue = searchQuery ?? "";
     const shouldUseSearchableSelect =
       inputType === "select" && field.searchable !== false;
+    const hasSearchSelectValue = isMultiSelect
+      ? selectedValues.length > 0
+      : fieldValue.trim().length > 0;
     const isSearchOpen = openSearchField === field.name;
     const normalizedQuery = (searchQuery ?? "")
       .trim()
@@ -1385,6 +1420,7 @@ export function ERPDynamicModalForm({
               className={cx(
                 styles.searchSelectTrigger,
                 isMultiSelect && styles.searchMultiSelectControl,
+                hasSearchSelectValue && styles.searchSelectTriggerClearable,
                 fieldError && styles.controlInvalid,
                 isSearchOpen && styles.searchSelectTriggerOpen,
                 (field.disabled || isSubmitting) &&
@@ -1506,6 +1542,24 @@ export function ERPDynamicModalForm({
                 </svg>
               </span>
             </div>
+            {hasSearchSelectValue && !field.disabled && !isSubmitting ? (
+              <button
+                type="button"
+                data-search-select-clear="true"
+                className={styles.searchSelectClearButton}
+                aria-label={`Clear ${field.label}`}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleSearchableSelectClear(field);
+                }}
+              >
+                x
+              </button>
+            ) : null}
             {isSearchOpen && !field.disabled ? (
               <div
                 id={`${controlId}-search-list`}
