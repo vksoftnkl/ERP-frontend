@@ -239,6 +239,14 @@ function toCollectionDaysInput(value: unknown): string {
   }
   return "";
 }
+function toCollectionDaysDisplay(value: unknown): string {
+  const dayMap = new Map(COLLECTION_DAY_OPTIONS.map((option) => [option.value, option.label]));
+  const dayValues = Array.isArray(value) ? value : parseCollectionDays(toDisplayValue(value));
+  return dayValues
+    .map((entry) => dayMap.get(String(entry)) ?? String(entry))
+    .filter(Boolean)
+    .join(", ");
+}
 function toUpdateAreaId(editingItemId: string | number | null): string {
   if (typeof editingItemId === "number" && Number.isFinite(editingItemId)) {
     return String(editingItemId);
@@ -610,6 +618,7 @@ export default function AreaMasterPage() {
         entityLabelPlural="areas"
         apiEndpoints={API_ENDPOINTS}
         gridTableName={GRID_TABLE_NAME}
+        listResponseStyleArrayKey=""
         lookupKeys={LOOKUP_KEYS}
         requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
         styles={styles}
@@ -622,7 +631,10 @@ export default function AreaMasterPage() {
         formTitle="Area Form"
         formDescription="Create and update areas."
         customFields={areaFormFields}
-        useResponseTableColumns
+        columnRenderOverrides={{
+          arm_collection_days: (row) =>
+            toCollectionDaysDisplay(row.__source?.arm_collection_days) || "-",
+        }}
         createInitialValues={AREA_INITIAL_FORM_VALUES}
         mapFormValues={({ source, defaults }) => {
           const rowSource = source ?? {};

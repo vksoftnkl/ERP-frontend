@@ -41,6 +41,7 @@ import {
   SUPPLIER_GROUP_MODAL_INITIAL_VALUES,
   STATE_LOOKUP_ARRAY_KEYS,
   SUPPLIER_GROUP_LOOKUP_ARRAY_KEYS,
+  COLLECTION_DAY_OPTIONS,
 } from "./constants";
 import type { SupplierFormValues } from "./types";
 import {
@@ -588,7 +589,6 @@ export default function SuppliersMasterPage() {
         lookupKeys={LOOKUP_KEYS}
         requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
         styles={styles}
-        listResponseStyleArrayKey="styles"
         listTitle="Supplier List"
         createLabel="Add Supplier"
         codeColumnHeader="Purchase Type"
@@ -606,6 +606,18 @@ export default function SuppliersMasterPage() {
         formTitle="Supplier Form"
         formDescription="Create and update suppliers."
         customFields={supplierFormFields}
+        columnRenderOverrides={{
+          sup_collection_days: (row) => {
+            const value = row.__source?.sup_collection_days;
+            if (!value) return "-";
+            const days = Array.isArray(value) ? value : String(value).split(",").filter(Boolean);
+            const dayNames = days.map((d) => {
+              const found = COLLECTION_DAY_OPTIONS.find((opt) => opt.value === String(d).trim());
+              return found ? found.label : String(d);
+            });
+            return dayNames.filter(Boolean).join(", ") || "-";
+          },
+        }}
         createInitialValues={SUPPLIER_INITIAL_FORM_VALUES}
         mapFormValues={({ source, defaults }) => {
           return toSupplierFormValues(

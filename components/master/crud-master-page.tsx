@@ -1150,6 +1150,7 @@ function buildColumnsFromGridColumns(
   lookupKeys: CrudMasterLookupKeys,
   fallbackColumns: ReusableTableColumn<MasterTableRow>[],
   useFallbackColumns = true,
+  columnRenderOverrides?: Record<string, (row: MasterTableRow) => ReactNode>,
 ): ReusableTableColumn<MasterTableRow>[] {
   const visibleColumns = gridColumns
     .filter((column) => column.visible)
@@ -1157,24 +1158,47 @@ function buildColumnsFromGridColumns(
 
   const columns: ReusableTableColumn<MasterTableRow>[] = [];
   const seenAccessors = new Set<MasterColumnAccessor>();
+  const seenSourceKeys = new Set<string>();
 
   for (const column of visibleColumns) {
     const accessor = resolveMasterAccessorFromGridColumn(column, lookupKeys);
-    if (!accessor || seenAccessors.has(accessor)) {
-      continue;
+    if (accessor) {
+      if (seenAccessors.has(accessor)) {
+        continue;
+      }
+      seenAccessors.add(accessor);
+      columns.push({
+        key: normalizeColumnToken(column.key || column.accessorKey || column.header || accessor),
+        header: column.header,
+        accessor,
+        align: column.align,
+        width: accessor === "serialNo" ? MASTER_SERIAL_COLUMN_WIDTH : column.width,
+        sortable: column.sortable ?? accessor !== "serialNo",
+        headerStyle: column.color ? { backgroundColor: column.color } : undefined,
+        cellStyle: column.color ? { backgroundColor: column.color } : undefined,
+      });
+    } else {
+      const sourceKey = column.sqlFieldName || column.accessorKey;
+      if (!sourceKey || seenSourceKeys.has(sourceKey)) {
+        continue;
+      }
+      seenSourceKeys.add(sourceKey);
+      const customRender = columnRenderOverrides?.[sourceKey];
+      columns.push({
+        key: normalizeColumnToken(column.key || sourceKey || column.header),
+        header: column.header,
+        render: customRender
+          ? customRender
+          : (row) => toDisplayValue(row.__source?.[sourceKey]),
+        sortAccessor: (row) => row.__source?.[sourceKey],
+        searchAccessor: (row) => toDisplayValue(row.__source?.[sourceKey]),
+        align: column.align,
+        width: column.width,
+        sortable: column.sortable ?? true,
+        headerStyle: column.color ? { backgroundColor: column.color } : undefined,
+        cellStyle: column.color ? { backgroundColor: column.color } : undefined,
+      });
     }
-    seenAccessors.add(accessor);
-
-    columns.push({
-      key: normalizeColumnToken(column.key || column.accessorKey || column.header || accessor),
-      header: column.header,
-      accessor,
-      align: column.align,
-      width: accessor === "serialNo" ? MASTER_SERIAL_COLUMN_WIDTH : column.width,
-      sortable: column.sortable ?? accessor !== "serialNo",
-      headerStyle: column.color ? { backgroundColor: column.color } : undefined,
-      cellStyle: column.color ? { backgroundColor: column.color } : undefined,
-    });
   }
 
   if (columns.length === 0) {
@@ -1964,6 +1988,7 @@ export default function CrudMasterPage({
   tableColumnHeaders,
   tableColumnLayout,
   customTableColumns,
+  columnRenderOverrides,
   useResponseTableColumns,
   responseTableColumnExcludeKeys,
   toolbarContent,
@@ -2282,10 +2307,12 @@ export default function CrudMasterPage({
             lookupKeys,
             fallbackColumns,
             gridColumns.length === 0,
+            columnRenderOverrides,
           )
         : fallbackColumns;
     },
     [
+      columnRenderOverrides,
       customTableColumns,
       data,
       effectiveListResponseStyleArrayKey,

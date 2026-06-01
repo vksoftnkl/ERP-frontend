@@ -150,6 +150,7 @@ export type CrudMasterPageProps = {
   tableColumnHeaders?: CrudMasterTableColumnHeaders;
   tableColumnLayout?: CrudMasterTableColumnLayout;
   customTableColumns?: ReusableTableColumn<MasterTableRow>[];
+  columnRenderOverrides?: Record<string, (row: MasterTableRow) => ReactNode>;
   useResponseTableColumns?: boolean;
   responseTableColumnExcludeKeys?: readonly string[];
   toolbarContent?: ReactNode;

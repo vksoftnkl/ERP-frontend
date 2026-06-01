@@ -143,6 +143,7 @@ export type GridColumnConfig = {
   columnNumber?: number;
   position?: number;
   columnName?: string;
+  sqlFieldName?: string;
   sortable?: boolean;
   align?: GridColumnAlign;
   width?: string;
@@ -330,7 +331,10 @@ function normalizeGridColumnAdjustmentRow(
   }
 
   const notesAccessor = normalizeKey(row.grid_column_notes ?? row.gridColumnNotes);
-  const accessorKey = notesAccessor || columnName;
+  const sqlFieldName = normalizeKey(
+    row.grid_column_sql_field_name ?? row.gridColumnSqlFieldName ?? "",
+  );
+  const accessorKey = notesAccessor || sqlFieldName || columnName;
   const visibility = toBoolean(row.grid_column_visibility);
   const isDeleted = toBoolean(row.grid_column_is_deleted);
   const sortable = toBoolean(row.grid_column_filter);
@@ -349,6 +353,7 @@ function normalizeGridColumnAdjustmentRow(
     columnNumber: normalizeOrder(row.grid_column_number ?? row.gridColumnNumber, fallbackOrder),
     position: normalizeOrder(row.grid_column_position ?? row.gridColumnPosition, fallbackOrder),
     columnName,
+    sqlFieldName: sqlFieldName || undefined,
     sortable: sortable ?? undefined,
     align: normalizeAlign(row.grid_column_alignment),
     width: normalizeWidth(row.grid_column_width, "%"),
