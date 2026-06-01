@@ -4524,12 +4524,27 @@ export default function ItemMasterPageContent({
       const preferredUnitId = toDisplayValue(
         getFieldValue(itemSource, "item_base_unit_id"),
       );
-      const [itemUnitConversionRows, priceRows, reorderRows, eanRows] = await Promise.all([
+      const [
+        itemUnitConversionRowsResult,
+        priceRowsResult,
+        reorderRowsResult,
+        eanRowsResult,
+      ] = await Promise.allSettled([
         listItemUnitConversionRecords(itemId),
         listItemPriceRecords(itemId, itemSource),
         listItemReorderRecords(itemId),
         listItemEanCodeRecords(itemId),
       ]);
+      const itemUnitConversionRows =
+        itemUnitConversionRowsResult.status === "fulfilled"
+          ? itemUnitConversionRowsResult.value
+          : [];
+      const priceRows =
+        priceRowsResult.status === "fulfilled" ? priceRowsResult.value : [];
+      const reorderRows =
+        reorderRowsResult.status === "fulfilled" ? reorderRowsResult.value : [];
+      const eanRows =
+        eanRowsResult.status === "fulfilled" ? eanRowsResult.value : [];
       const managedPriceRow = selectManagedItemPriceRecord(priceRows, preferredUnitId);
       const managedReorderRow = selectManagedItemReorderRecord(
         reorderRows,

@@ -4,20 +4,17 @@
     outline-offset: 2px;
   }
 }
-
 @mixin interactive-lift {
   transition:
     transform 0.18s ease,
     box-shadow 0.2s ease,
     border-color 0.2s ease,
     background-color 0.2s ease;
-
   &:hover:not(:disabled) {
     transform: translateY(-1px);
     box-shadow: var(--ds-shadow-md);
   }
 }
-
 @mixin field-base {
   width: 100%;
   min-height: 44px;
@@ -31,11 +28,9 @@
     border-color 0.2s ease,
     box-shadow 0.2s ease,
     background-color 0.2s ease;
-
   &::placeholder {
     color: color-mix(in srgb, var(--ds-text-muted) 72%, transparent);
   }
-
   &:focus-visible {
     outline: 0;
     border-color: var(--ds-primary);

@@ -193,6 +193,9 @@ const INITIAL_FORM_STATE = {
   masterDescription: "",
   position: "",
 } as const;
+function normalizeLookupKey(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
+}
 function getFirstDefinedValue(
   row: Record<string, unknown>,
   keys: readonly string[],
@@ -200,6 +203,16 @@ function getFirstDefinedValue(
   for (const key of keys) {
     const value = row[key];
     if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+
+  const normalizedKeys = new Set(keys.map(normalizeLookupKey));
+  for (const [key, value] of Object.entries(row)) {
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+    if (normalizedKeys.has(normalizeLookupKey(key))) {
       return value;
     }
   }

@@ -15,11 +15,29 @@ import {
 export function toSnakeCase(value: string): string {
   return value.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 }
+function normalizeFieldLookupKey(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
+}
 export function getFieldValue(
   source: Record<string, unknown>,
   fieldName: string,
 ): unknown {
-  return getFirstDefinedValue(source, [fieldName, toSnakeCase(fieldName)]);
+  const fieldNames = [fieldName, toSnakeCase(fieldName)];
+  const directValue = getFirstDefinedValue(source, fieldNames);
+  if (directValue !== undefined) {
+    return directValue;
+  }
+
+  const normalizedFieldNames = new Set(fieldNames.map(normalizeFieldLookupKey));
+  for (const [key, value] of Object.entries(source)) {
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+    if (normalizedFieldNames.has(normalizeFieldLookupKey(key))) {
+      return value;
+    }
+  }
+  return undefined;
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);

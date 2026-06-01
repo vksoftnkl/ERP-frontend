@@ -46,7 +46,10 @@ type ItemPriceRowsModalEditorProps = {
   value: string;
 };
 function resolveDisplayedConversionValue(row: LinkedRecordRow): string {
-  return (row.ipm_to_base_factor ?? "").trim();
+  return (
+    (row.ipm_to_base_factor ?? "").trim() ||
+    (row.ipm_unit_factor ?? "").trim()
+  );
 }
 function resolveModalFieldName(columnKey: string): string {
   return columnKey;
@@ -56,7 +59,16 @@ function mapRowToModalValues(
   rowIndex: number,
   baseUnitId: string,
 ): LinkedRecordRow {
-  return normalizeItemPriceRowForEditor(row, rowIndex, baseUnitId);
+  const nextRow = normalizeItemPriceRowForEditor(row, rowIndex, baseUnitId);
+  const conversionFactor = resolveDisplayedConversionValue(nextRow);
+  if (!conversionFactor) {
+    return nextRow;
+  }
+  return {
+    ...nextRow,
+    ipm_to_base_factor: conversionFactor,
+    ipm_unit_factor: conversionFactor,
+  };
 }
 function buildCellDisplayValue(
   column: LinkedRecordColumn,

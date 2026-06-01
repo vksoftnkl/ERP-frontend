@@ -26,6 +26,8 @@ const STYLE_HEADER_KEYS = [
 const STYLE_ACCESSOR_KEYS = [
   "grid_column_notes",
   "gridColumnNotes",
+  "grid_column_sql_field_name",
+  "gridColumnSqlFieldName",
   "accessor",
   "accessorKey",
   "field",
@@ -315,13 +317,30 @@ export function resolveLedgerRecordId(row: LedgerTableRow): string | number {
 }
 
 export function buildColumnsFromGridColumns(
-  gridColumns: any[],
+  gridColumns: GridColumnConfig[],
 ): ReusableTableColumn<LedgerTableRow>[] {
   const columns: ReusableTableColumn<LedgerTableRow>[] = [];
   const seenColumnKeys = new Set<string>();
   const visibleColumns = gridColumns
-    .filter((column: any) => column.visible)
-    .sort((left: any, right: any) => left.order - right.order);
+    .filter((column) => column.visible)
+    .sort((left, right) => {
+      const leftPosition = left.position ?? left.order;
+      const rightPosition = right.position ?? right.order;
+      if (leftPosition !== rightPosition) {
+        return leftPosition - rightPosition;
+      }
+
+      const leftColumnNumber = left.columnNumber ?? left.order;
+      const rightColumnNumber = right.columnNumber ?? right.order;
+      if (leftColumnNumber !== rightColumnNumber) {
+        return leftColumnNumber - rightColumnNumber;
+      }
+
+      return left.header.localeCompare(right.header, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    });
 
   for (const gridColumn of visibleColumns) {
     const accessor = resolveLedgerAccessor(
@@ -329,29 +348,49 @@ export function buildColumnsFromGridColumns(
       gridColumn.key,
       gridColumn.header,
     );
-    if (!accessor) {
-      continue;
-    }
+    const sourceKey =
+      gridColumn.sqlFieldName ||
+      gridColumn.accessorKey ||
+      gridColumn.key ||
+      gridColumn.header;
     const keyBase =
       normalizeColumnToken(
-        gridColumn.key || gridColumn.accessorKey || gridColumn.header || accessor
-      ) || accessor;
+        gridColumn.key ||
+          gridColumn.accessorKey ||
+          gridColumn.sqlFieldName ||
+          gridColumn.header
+      ) || accessor || `column${columns.length + 1}`;
     const uniqueKey = seenColumnKeys.has(keyBase)
       ? `${keyBase}-${columns.length + 1}`
       : keyBase;
     seenColumnKeys.add(uniqueKey);
 
-    const tableColumn: ReusableTableColumn<LedgerTableRow> = {
+    if (accessor) {
+      columns.push({
+        key: uniqueKey,
+        header: gridColumn.header,
+        accessor,
+        align: gridColumn.align ?? "left",
+        width: gridColumn.width ?? (accessor === "serialNo" ? "56px" : undefined),
+        sortable: gridColumn.sortable ?? accessor !== "serialNo",
+        headerStyle: gridColumn.color ? { backgroundColor: gridColumn.color } : undefined,
+        cellStyle: gridColumn.color ? { backgroundColor: gridColumn.color } : undefined,
+      });
+      continue;
+    }
+
+    columns.push({
       key: uniqueKey,
       header: gridColumn.header,
-      accessor,
       align: gridColumn.align ?? "left",
-      width: gridColumn.width ?? (accessor === "serialNo" ? "56px" : undefined),
-      sortable: gridColumn.sortable ?? accessor !== "serialNo",
+      width: gridColumn.width,
+      sortable: gridColumn.sortable ?? true,
+      render: (ledgerRow) => toDisplayValue(getRawValue(ledgerRow, sourceKey)),
+      searchAccessor: (ledgerRow) => getRawValue(ledgerRow, sourceKey),
+      sortAccessor: (ledgerRow) => getRawValue(ledgerRow, sourceKey),
       headerStyle: gridColumn.color ? { backgroundColor: gridColumn.color } : undefined,
       cellStyle: gridColumn.color ? { backgroundColor: gridColumn.color } : undefined,
-    };
-    columns.push(tableColumn);
+    });
   }
 
   if (columns.length === 0) {
@@ -486,6 +525,7 @@ export function resolveGridColumnForLedgerTableColumn(
       const gridTokens = [
         gridColumn.key,
         gridColumn.accessorKey,
+        gridColumn.sqlFieldName ?? "",
         gridColumn.header,
         gridColumn.columnName ?? "",
       ]

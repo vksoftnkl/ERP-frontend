@@ -790,9 +790,7 @@ export default function EmployeeMasterPage() {
       styles={styles}
       listTitle="Employee List"
       createLabel="Add Employee"
-      codeColumnHeader="Employee Code"
-      nameColumnHeader="Employee Name"
-      listResponseStyleArrayKey="styles"
+      listResponseStyleArrayKey=""
       nameFieldLabel="Employee Name"
       nameFieldPlaceholder="Ravi Shah"
       formTitle="Employee Form"

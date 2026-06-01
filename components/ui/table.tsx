@@ -7,6 +7,7 @@ import {
   type ReactNode,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
@@ -547,6 +548,11 @@ export function ReusableTable<T extends Record<string, unknown>>({
     edge: ReusableTableColumnReorderEdge;
   } | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, string>>({});
+  const [tableWidthOverride, setTableWidthOverride] = useState<number | null>(null);
+  const activeResizeTableWidthRef = useRef<{
+    startTableWidth: number;
+    startColumnWidth: number;
+  } | null>(null);
   const [openHeaderMenuColumnKey, setOpenHeaderMenuColumnKey] = useState<string | null>(null);
   const [openHeaderMenuPosition, setOpenHeaderMenuPosition] = useState<ActionMenuPosition>(
     DEFAULT_ACTION_MENU_POSITION,
@@ -586,6 +592,10 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const displayColumns = useMemo(
     () => applyColumnOrder(rawDisplayColumns, columnOrder),
     [columnOrder, rawDisplayColumns],
+  );
+  const displayColumnSignature = useMemo(
+    () => displayColumns.map((column) => column.key).join("\u001f"),
+    [displayColumns],
   );
   const inlineActionColumnIndex = shouldRenderInlineActionMenu
     ? getInlineActionColumnIndex(displayColumns)
@@ -724,7 +734,12 @@ export function ReusableTable<T extends Record<string, unknown>>({
       (expandedDataColumnKeys?.has(column.key) ? extraDataWidthPerColumn : 0),
     0,
   );
-  const resolvedTableWidth = `${minimumTableWidth}px`;
+  const resolvedTableWidth = `${Math.max(minimumTableWidth, tableWidthOverride ?? 0)}px`;
+
+  useEffect(() => {
+    setTableWidthOverride(null);
+    activeResizeTableWidthRef.current = null;
+  }, [displayColumnSignature]);
 
   useEffect(() => {
     if (openActionMenuKey === null) {
@@ -1285,8 +1300,16 @@ export function ReusableTable<T extends Record<string, unknown>>({
     const tableElement = event.currentTarget.closest("table");
     const primaryHeaderCell = headerRow?.children.item(primaryColumnIndex) as HTMLElement | null;
     const primaryStartWidth = primaryHeaderCell?.getBoundingClientRect().width ?? 120;
+    const tableStartWidth = tableElement?.getBoundingClientRect().width ?? 0;
     const startX = event.clientX;
     let latestPrimaryWidth = Math.round(primaryStartWidth);
+    activeResizeTableWidthRef.current =
+      tableStartWidth > 0
+        ? {
+            startTableWidth: Math.round(tableStartWidth),
+            startColumnWidth: Math.round(primaryStartWidth),
+          }
+        : null;
 
     const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
       const delta = moveEvent.clientX - startX;
@@ -1298,6 +1321,17 @@ export function ReusableTable<T extends Record<string, unknown>>({
         ...current,
         [column.key]: `${latestPrimaryWidth}px`,
       }));
+      const activeTableResize = activeResizeTableWidthRef.current;
+      if (activeTableResize) {
+        setTableWidthOverride(
+          Math.max(
+            0,
+            activeTableResize.startTableWidth +
+              latestPrimaryWidth -
+              activeTableResize.startColumnWidth,
+          ),
+        );
+      }
     };
 
     const handleMouseUp = () => {
@@ -1305,6 +1339,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      activeResizeTableWidthRef.current = null;
       const tableWidth = tableElement?.getBoundingClientRect().width ?? 0;
       onColumnResizeEnd?.({
         column,

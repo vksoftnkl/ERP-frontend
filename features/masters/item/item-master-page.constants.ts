@@ -10,19 +10,19 @@ list: "/configured-grid-sql/run?grid_id=1",
   delete: "/items/delete",
 } as const;
 export const ITEM_PRICE_API_ENDPOINTS = {
-  list: "/item-prices/list",
+  list: "/item-prices/get",
   create: "/item-prices/create",
   delete: "/item-prices/delete",
 } as const;
 // Item unit conversion CRUD is handled by the item price master endpoints.
 // The request payload shape differs, but the URLs are the same.
 export const ITEM_REORDER_API_ENDPOINTS = {
-  list: "/item-reorders/list",
+  list: "/item-reorders/get",
   create: "/item-reorders/create",
   delete: "/item-reorders/delete",
 } as const;
 export const ITEM_EAN_CODE_API_ENDPOINTS = {
-  list: "/item-ean-codes/list",
+  list: "/item-ean-codes/get",
   create: "/item-ean-codes/create",
   delete: "/item-ean-codes/delete",
 } as const;

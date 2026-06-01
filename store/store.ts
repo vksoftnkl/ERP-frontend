@@ -10,9 +10,7 @@ import businessContextReducer from "@/store/slices/businessContextSlice";
 import mastersReducer from "@/store/slices/mastersSlice";
 import openingStockReducer from "@/store/slices/openingStockSlice";
 import physicalStockReducer from "@/store/slices/physicalStockSlice";
-
 export const REDUX_SESSION_STORAGE_KEY = "erp_client_redux_state";
-
 const rootReducer = combineReducers({
   auth: authReducer,
   [baseApi.reducerPath]: baseApi.reducer,
@@ -23,24 +21,19 @@ const rootReducer = combineReducers({
   openingStock: openingStockReducer,
   physicalStock: physicalStockReducer,
 });
-
 export type RootState = ReturnType<typeof rootReducer>;
-
 type PersistedReduxState = {
   auth?: AuthState;
   [baseApi.reducerPath]?: ReturnType<typeof baseApi.reducer>;
   gridColumns?: GridColumnsState;
 };
-
 function canUseSessionStorage(): boolean {
   return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
 }
-
 function sanitizeGridColumnsState(state: GridColumnsState | undefined): GridColumnsState | undefined {
   if (!state?.byGridId || typeof state.byGridId !== "object") {
     return undefined;
   }
-
   return {
     byGridId: Object.fromEntries(
       Object.entries(state.byGridId).map(([gridId, entry]) => [
@@ -55,7 +48,6 @@ function sanitizeGridColumnsState(state: GridColumnsState | undefined): GridColu
     ) as GridColumnsState["byGridId"],
   };
 }
-
 function sanitizeAuthState(state: AuthState | undefined): AuthState | undefined {
   if (!state || typeof state !== "object") {
     return undefined;
@@ -66,7 +58,6 @@ function sanitizeAuthState(state: AuthState | undefined): AuthState | undefined 
       ? state.refreshToken.trim()
       : null;
   const userId = typeof state.userId === "string" && state.userId.trim() ? state.userId.trim() : null;
-
   return {
     initialized: Boolean(state.initialized),
     isAuthenticated: Boolean(token),
@@ -80,7 +71,6 @@ function sanitizeAuthState(state: AuthState | undefined): AuthState | undefined 
     userInfo: state.userInfo && typeof state.userInfo === "object" ? state.userInfo : null,
   };
 }
-
 export function loadPersistedReduxState(): PersistedReduxState | undefined {
   if (!canUseSessionStorage()) {
     return undefined;
@@ -99,7 +89,6 @@ export function loadPersistedReduxState(): PersistedReduxState | undefined {
     return undefined;
   }
 }
-
 function persistReduxState(state: RootState): void {
   if (!canUseSessionStorage()) {
     return;
@@ -117,16 +106,13 @@ function persistReduxState(state: RootState): void {
     // Session storage may be blocked or full; Redux can continue without persistence.
   }
 }
-
 export const makeStore = () => {
   const sagaMiddleware = createSagaMiddleware();
-
   const store = configureStore({
     reducer: rootReducer,
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware().concat(baseApi.middleware).concat(sagaMiddleware),
   });
-
   if (typeof window !== "undefined") {
     let pendingPersist: number | null = null;
     store.subscribe(() => {
@@ -138,15 +124,12 @@ export const makeStore = () => {
         persistReduxState(store.getState());
       }, 250);
     });
-
     // Lazily import and run rootSaga to avoid circular dependency at module init
     void import("@/store/sagas/rootSaga").then(({ default: rootSaga }) => {
       sagaMiddleware.run(rootSaga);
     });
   }
-
   return store;
 };
-
 export type AppStore = ReturnType<typeof makeStore>;
 export type AppDispatch = AppStore["dispatch"];

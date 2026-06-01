@@ -30,7 +30,7 @@ export const GRID_DETAILS_QUERY = {
 } as const;
 
 export const GRID_COLUMNS_PAGE = 1;
-export const GRID_COLUMNS_LIMIT = 20;
+export const GRID_COLUMNS_LIMIT = 100;
 
 export const LOOKUP_QUERY_COMPANIES = {
   module: "companies",
