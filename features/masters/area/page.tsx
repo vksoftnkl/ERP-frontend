@@ -1,7 +1,6 @@
 "use client";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import CrudMasterPage, { type CrudMasterTableRow } from "@/components/master/crud-master-page";
-import type { ReusableTableColumn } from "@/components/ui/table";
+import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import InlineRelatedMasterModal from "@/features/masters/shared/inline-related-master";
 import { COLLECTION_DAY_OPTIONS } from "@/utils/constant";
@@ -239,20 +238,6 @@ function toCollectionDaysInput(value: unknown): string {
       .join(",");
   }
   return "";
-}
-function getAreaSourceValue(row: CrudMasterTableRow, keys: readonly string[]): unknown {
-  if (!row.__source) {
-    return undefined;
-  }
-  return getFirstDefinedValue(row.__source, keys);
-}
-function toCollectionDaysDisplay(value: unknown): string {
-  const dayMap = new Map(COLLECTION_DAY_OPTIONS.map((option) => [option.value, option.label]));
-  const dayValues = Array.isArray(value) ? value : parseCollectionDays(toDisplayValue(value));
-  return dayValues
-    .map((entry) => dayMap.get(String(entry)) ?? String(entry))
-    .filter(Boolean)
-    .join(", ");
 }
 function toUpdateAreaId(editingItemId: string | number | null): string {
   if (typeof editingItemId === "number" && Number.isFinite(editingItemId)) {
@@ -616,59 +601,6 @@ export default function AreaMasterPage() {
     () => buildAreaFormFields(cityOptions, handleCityCreateShortcut, handleCityEditShortcut),
     [cityOptions, handleCityCreateShortcut, handleCityEditShortcut],
   );
-  const cityOptionLabelMap = useMemo(
-    () => new Map(cityOptions.map((option) => [option.value, option.label])),
-    [cityOptions],
-  );
-  const customTableColumns = useMemo<ReusableTableColumn<CrudMasterTableRow>[]>(
-    () => [
-      {
-        key: "serialNo",
-        header: "S.No",
-        accessor: "serialNo",
-        width: "12px",
-        sortable: false,
-      },
-      { key: "areaName", header: "", accessor: "masterName" },
-      { key: "areaAlias", header: "", accessor: "masterAlias" },
-      { key: "areaShort", header: "", accessor: "masterShort" },
-      {
-        key: "areaCity",
-        header: "",
-        render: (row) => {
-          const cityId = toDisplayValue(getAreaSourceValue(row, AREA_CITY_ID_KEYS));
-          return cityOptionLabelMap.get(cityId) || cityId || "-";
-        },
-        sortAccessor: (row) => {
-          const cityId = toDisplayValue(getAreaSourceValue(row, AREA_CITY_ID_KEYS));
-          return cityOptionLabelMap.get(cityId) || cityId;
-        },
-        searchAccessor: (row) => {
-          const cityId = toDisplayValue(getAreaSourceValue(row, AREA_CITY_ID_KEYS));
-          return `${cityOptionLabelMap.get(cityId) || ""} ${cityId}`.trim();
-        },
-      },
-      { key: "areaSort", header: "", accessor: "position" },
-      {
-        key: "areaDistanceKm",
-        header: "",
-        render: (row) => toDisplayValue(getAreaSourceValue(row, AREA_DISTANCE_KEYS)) || "-",
-        sortAccessor: (row) => Number(getAreaSourceValue(row, AREA_DISTANCE_KEYS) ?? 0),
-        searchAccessor: (row) => toDisplayValue(getAreaSourceValue(row, AREA_DISTANCE_KEYS)),
-      },
-      {
-        key: "areaCollectionDays",
-        header: "",
-        render: (row) =>
-          toCollectionDaysDisplay(getAreaSourceValue(row, AREA_COLLECTION_DAYS_KEYS)) || "-",
-        sortAccessor: (row) =>
-          toCollectionDaysDisplay(getAreaSourceValue(row, AREA_COLLECTION_DAYS_KEYS)),
-        searchAccessor: (row) =>
-          toCollectionDaysDisplay(getAreaSourceValue(row, AREA_COLLECTION_DAYS_KEYS)),
-      },
-    ],
-    [cityOptionLabelMap],
-  );
   return (
     <>
       <CrudMasterPage
@@ -677,7 +609,6 @@ export default function AreaMasterPage() {
         entityLabel="area"
         entityLabelPlural="areas"
         apiEndpoints={API_ENDPOINTS}
-        listResponseStyleArrayKey="styles"
         gridTableName={GRID_TABLE_NAME}
         lookupKeys={LOOKUP_KEYS}
         requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
@@ -691,7 +622,7 @@ export default function AreaMasterPage() {
         formTitle="Area Form"
         formDescription="Create and update areas."
         customFields={areaFormFields}
-        customTableColumns={customTableColumns}
+        useResponseTableColumns
         createInitialValues={AREA_INITIAL_FORM_VALUES}
         mapFormValues={({ source, defaults }) => {
           const rowSource = source ?? {};
