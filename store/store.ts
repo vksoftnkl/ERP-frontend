@@ -1,10 +1,15 @@
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
+import createSagaMiddleware from "redux-saga";
 import { baseApi } from "@/store/api/baseApi";
 import authReducer, { type AuthState } from "@/store/slices/authSlice";
 import gridColumnsReducer, {
   type GridColumnsState,
 } from "@/store/slices/gridColumnsSlice";
 import globalLoaderReducer from "@/store/slices/globalLoaderSlice";
+import businessContextReducer from "@/store/slices/businessContextSlice";
+import mastersReducer from "@/store/slices/mastersSlice";
+import openingStockReducer from "@/store/slices/openingStockSlice";
+import physicalStockReducer from "@/store/slices/physicalStockSlice";
 
 export const REDUX_SESSION_STORAGE_KEY = "erp_client_redux_state";
 
@@ -13,6 +18,10 @@ const rootReducer = combineReducers({
   [baseApi.reducerPath]: baseApi.reducer,
   gridColumns: gridColumnsReducer,
   globalLoader: globalLoaderReducer,
+  businessContextUi: businessContextReducer,
+  masters: mastersReducer,
+  openingStock: openingStockReducer,
+  physicalStock: physicalStockReducer,
 });
 
 export type RootState = ReturnType<typeof rootReducer>;
@@ -110,10 +119,12 @@ function persistReduxState(state: RootState): void {
 }
 
 export const makeStore = () => {
+  const sagaMiddleware = createSagaMiddleware();
+
   const store = configureStore({
     reducer: rootReducer,
     middleware: (getDefaultMiddleware) =>
-      getDefaultMiddleware().concat(baseApi.middleware),
+      getDefaultMiddleware().concat(baseApi.middleware).concat(sagaMiddleware),
   });
 
   if (typeof window !== "undefined") {
@@ -126,6 +137,11 @@ export const makeStore = () => {
         pendingPersist = null;
         persistReduxState(store.getState());
       }, 250);
+    });
+
+    // Lazily import and run rootSaga to avoid circular dependency at module init
+    void import("@/store/sagas/rootSaga").then(({ default: rootSaga }) => {
+      sagaMiddleware.run(rootSaga);
     });
   }
 

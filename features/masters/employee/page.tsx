@@ -784,7 +784,6 @@ export default function EmployeeMasterPage() {
       entityLabelPlural="employees"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
-        listResponseStyleArrayKey=""
         gridDetailId={14}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}

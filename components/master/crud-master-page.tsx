@@ -18,7 +18,7 @@ import ReusableTable, {
 import { resolveRecordHistoryDisplayName } from "@/features/masters/audit-logs/record-history-route";
 import { RecordHistoryModal } from "@/features/masters/record-history/page";
 import { useApi } from "@/hooks/useApi";
-import { useMasterCrud } from "@/features/masters/shared";
+import { useMasterModule } from "@/store/hooks/useMasterModule";
 import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
@@ -2077,7 +2077,7 @@ export default function CrudMasterPage({
       loading: deleteLoading,
       error: deleteError,
     },
-  } = useMasterCrud({
+  } = useMasterModule({
     apiEndpoints,
     listArrayKeys: lookupKeys.array ?? DEFAULT_ARRAY_KEYS,
     getByIdMethod: getByIdMethod ?? "GET",

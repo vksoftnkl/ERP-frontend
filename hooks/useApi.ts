@@ -37,28 +37,10 @@ type UseApiRunOverride<TBody> = {
 };
 const DEFAULT_API_PORT = "3010";
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
-const API_INVALIDATION_EVENT = "erp:api-data-invalidated";
-const COLLECTION_ACTION_SEGMENTS = new Set([
-  "list",
-  "get",
-  "create",
-  "update",
-  "delete",
-  "save",
-  "remove",
-  "edit",
-  "upsert",
-  "bulk-create",
-  "bulk-update",
-  "bulk-delete",
-]);
-type ApiInvalidationEventDetail = {
-  scope: string;
-  sourcePath: string;
-};
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/g, "");
 }
+
 function resolveLoopbackHostname(hostname: string): string {
   const normalized = hostname.toLowerCase();
   if (normalized === "localhost" || normalized === "::1" || normalized === "[::1]") {
@@ -185,49 +167,6 @@ function getPathname(requestUrl: string): string {
   } catch {
     return trimmedUrl.toLowerCase().split("?")[0];
   }
-}
-function normalizePathnameForMatching(requestUrl: string): string {
-  const normalized = getPathname(requestUrl).trim().toLowerCase().replace(/\/+$/g, "");
-  return normalized || "/";
-}
-function splitPathSegments(pathname: string): string[] {
-  return pathname.split("/").filter(Boolean);
-}
-function isCollectionListRequest(requestUrl: string): boolean {
-  const segments = splitPathSegments(normalizePathnameForMatching(requestUrl));
-  if (segments.length === 0) {
-    return false;
-  }
-  return segments[segments.length - 1] === "list";
-}
-function resolveInvalidationScope(requestUrl: string): string {
-  const segments = splitPathSegments(normalizePathnameForMatching(requestUrl));
-  if (segments.length === 0) {
-    return "/";
-  }
-  const lastSegment = segments[segments.length - 1];
-  if (COLLECTION_ACTION_SEGMENTS.has(lastSegment)) {
-    segments.pop();
-  }
-  if (segments.length === 0) {
-    return "/";
-  }
-  return `/${segments.join("/")}`;
-}
-function scopesMatch(listenerScope: string, changedScope: string): boolean {
-  return listenerScope === changedScope;
-}
-function emitApiInvalidation(requestUrl: string): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  const detail: ApiInvalidationEventDetail = {
-    scope: resolveInvalidationScope(requestUrl),
-    sourcePath: normalizePathnameForMatching(requestUrl),
-  };
-  window.dispatchEvent(
-    new CustomEvent<ApiInvalidationEventDetail>(API_INVALIDATION_EVENT, { detail })
-  );
 }
 function isLoginEndpoint(requestUrl: string): boolean {
   const pathname = getPathname(requestUrl);
@@ -372,9 +311,6 @@ export function useApi<TResp = unknown, TBody = unknown>(
         let resp = await axios.request<TResp>(requestConfig);
         const json = resp.data as TResp;
         setData(json);
-        if (!loginRequest && isMutationMethod(method)) {
-          emitApiInvalidation(requestUrl);
-        }
         if (shouldToastSuccess) {
           showSuccessToast(successMessage);
         }
@@ -442,27 +378,6 @@ export function useApi<TResp = unknown, TBody = unknown>(
     },
     [dispatch, url, method]
   );
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    if (method !== "GET" || !isCollectionListRequest(url)) {
-      return;
-    }
-    const listenerScope = resolveInvalidationScope(url);
-    const handleInvalidation = (event: Event) => {
-      const customEvent = event as CustomEvent<ApiInvalidationEventDetail>;
-      const changedScope = customEvent.detail?.scope;
-      if (!changedScope || !scopesMatch(listenerScope, changedScope)) {
-        return;
-            }
-      void run(lastRunOverrideRef.current);
-    };
-    window.addEventListener(API_INVALIDATION_EVENT, handleInvalidation as EventListener);
-    return () => {
-      window.removeEventListener(API_INVALIDATION_EVENT, handleInvalidation as EventListener);
-    };
-  }, [method, run, url]);
   const reset = useCallback(() => {
     setData(null);
     setError(null);

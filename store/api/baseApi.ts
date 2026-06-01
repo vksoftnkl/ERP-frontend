@@ -145,11 +145,26 @@ export const baseApi = createApi({
   reducerPath: "baseApi",
   baseQuery: baseQueryWithAuthHandling,
   tagTypes: [
+    // Existing
     "Auth",
     "GridColumns",
     "ItemLookup",
     "GodownLookup",
     "MenuMasters",
+    // Business context
+    "CompanyList",
+    "BranchList",
+    // Generic master list (keyed by list URL)
+    "MasterList",
+    // Per-module lookup caches (invalidated by masters saga on save)
+    "UnitLookup",
+    "TaxLookup",
+    "BranchLookup",
+    "CompanyLookup",
+    "UserLookup",
+    // Stock modules
+    "OpeningStock",
+    "PhysicalStock",
   ],
   endpoints: () => ({}),
 });
