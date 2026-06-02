@@ -41,6 +41,13 @@ import {
   useLazyGetItemPriceDetailsQuery,
   useLazyGetUnitOptionsQuery,
 } from "@/store/api/lookupsApi";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  listModalToggled,
+  selectedDocumentIdSet,
+  selectPhysicalStockIsListModalOpen,
+  selectPhysicalStockSelectedDocId,
+} from "@/store/slices/physicalStockSlice";
 import {
   DEFAULT_GODOWN_OPTION,
   DEFAULT_ITEM_OPTION,
@@ -192,7 +199,8 @@ export default function PhysicalStockPage() {
     null,
   );
   const [isDeleteLoadedStockConfirmOpen, setIsDeleteLoadedStockConfirmOpen] = useState(false);
-  const [isPhysicalStockListOpen, setIsPhysicalStockListOpen] = useState(false);
+  const dispatch = useAppDispatch();
+  const isPhysicalStockListOpen = useAppSelector(selectPhysicalStockIsListModalOpen);
   const [physicalStockListFilters, setPhysicalStockListFilters] =
     useState<PhysicalStockListFilters>(DEFAULT_PHYSICAL_STOCK_LIST_FILTERS);
   const [physicalStockListRows, setPhysicalStockListRows] = useState<PhysicalStockHeaderPayload[]>(
@@ -205,9 +213,7 @@ export default function PhysicalStockPage() {
   const [physicalStockListPageSize, setPhysicalStockListPageSize] = useState(20);
   const [isPhysicalStockListLoading, setIsPhysicalStockListLoading] = useState(false);
   const [physicalStockListError, setPhysicalStockListError] = useState<string | null>(null);
-  const [selectedPhysicalStockListId, setSelectedPhysicalStockListId] = useState<string | null>(
-    null,
-  );
+  const selectedPhysicalStockListId = useAppSelector(selectPhysicalStockSelectedDocId);
   const [invalidFieldKeys, setInvalidFieldKeys] = useState<Record<string, true>>({});
   const [itemOptions, setItemOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_ITEM_OPTION]);
   const [godownOptions, setGodownOptions] = useState<ERPDynamicSelectOption[]>([
@@ -1321,17 +1327,17 @@ export default function PhysicalStockPage() {
   const handleOpenPhysicalStockList = useCallback(() => {
     setPhysicalStockListPage(1);
     setPhysicalStockListFilters(createPhysicalStockListFiltersForToday());
-    setIsPhysicalStockListOpen(true);
+    dispatch(listModalToggled(true));
     setPhysicalStockListError(null);
   }, []);
   const handleClosePhysicalStockList = useCallback(() => {
     physicalStockListRequestRef.current += 1;
-    setIsPhysicalStockListOpen(false);
+    dispatch(listModalToggled(false));
     setIsPhysicalStockListLoading(false);
     setPhysicalStockListError(null);
     setPhysicalStockListPage(1);
     setPhysicalStockListFilters(DEFAULT_PHYSICAL_STOCK_LIST_FILTERS);
-    setSelectedPhysicalStockListId(null);
+    dispatch(selectedDocumentIdSet(null));
   }, []);
   const handlePhysicalStockListSearchChange = useCallback((search: string) => {
     setPhysicalStockListPage(1);
@@ -1350,7 +1356,7 @@ export default function PhysicalStockPage() {
     setPhysicalStockListPageSize(pageSize);
   }, []);
   const handlePhysicalStockListRowSelect = useCallback((row: PhysicalStockListRow) => {
-    setSelectedPhysicalStockListId(row.psc_id);
+    dispatch(selectedDocumentIdSet(row.psc_id));
   }, []);
 
   useEffect(() => {
@@ -1364,13 +1370,13 @@ export default function PhysicalStockPage() {
     if (!isPhysicalStockListOpen) {
       return;
     }
-    setSelectedPhysicalStockListId((current) => {
-      if (current && physicalStockListRows.some((row) => row.psc_id === current)) {
-        return current;
-      }
-      return physicalStockListRows[0]?.psc_id ?? null;
-    });
-  }, [isPhysicalStockListOpen, physicalStockListRows]);
+    const shouldKeep =
+      selectedPhysicalStockListId &&
+      physicalStockListRows.some((row) => row.psc_id === selectedPhysicalStockListId);
+    if (!shouldKeep) {
+      dispatch(selectedDocumentIdSet(physicalStockListRows[0]?.psc_id ?? null));
+    }
+  }, [dispatch, isPhysicalStockListOpen, physicalStockListRows, selectedPhysicalStockListId]);
 
   useEffect(() => {
     const handleF5KeyDown = (event: KeyboardEvent) => {
@@ -1418,7 +1424,7 @@ export default function PhysicalStockPage() {
           return;
         }
         applyLoadedPhysicalStockDocument(document);
-        setIsPhysicalStockListOpen(false);
+        dispatch(listModalToggled(false));
       } catch {
         // Toasting is handled in useApi.
       } finally {
@@ -1563,7 +1569,7 @@ export default function PhysicalStockPage() {
         return;
       }
       const stockLabel = getPhysicalStockLabel(row);
-      setSelectedPhysicalStockListId(stockId);
+      dispatch(selectedDocumentIdSet(stockId));
       if (draftRows.length > 0) {
         setPendingLoadRequest({
           type: "stock",

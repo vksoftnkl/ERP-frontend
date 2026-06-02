@@ -70,7 +70,7 @@ const GRID_DETAILS_ENDPOINT = "/grid-details/list";
 const GRID_DETAIL_GET_ENDPOINT = "/grid-details/get";
 const GRID_COLUMNS_CREATE_ENDPOINT = "/grid-columns/create";
 const GRID_COLUMNS_PAGE = 1;
-const GRID_COLUMNS_LIMIT = 20;
+const GRID_COLUMNS_LIMIT = 100;
 const MASTER_SERIAL_COLUMN_WIDTH = "40px";
 const MASTER_ACTIONS_COLUMN_WIDTH = "72px";
 const RESPONSE_TABLE_DEFAULT_COLUMN_WIDTH = "180px";
@@ -646,6 +646,24 @@ function normalizeColumnToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9_]+/g, "");
 }
 
+function getSourceColumnValue(
+  source: Record<string, unknown> | null | undefined,
+  sourceKey: string,
+): unknown {
+  if (!source) {
+    return "";
+  }
+  if (sourceKey in source) {
+    return source[sourceKey];
+  }
+
+  const normalizedSourceKey = normalizeColumnToken(sourceKey);
+  const matchedKey = Object.keys(source).find(
+    (key) => normalizeColumnToken(key) === normalizedSourceKey,
+  );
+  return matchedKey ? source[matchedKey] : "";
+}
+
 function resolveNumericId(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.floor(value);
@@ -1202,9 +1220,9 @@ function buildColumnsFromGridColumns(
         header: column.header,
         render: customRender
           ? customRender
-          : (row) => toDisplayValue(row.__source?.[sourceKey]),
-        sortAccessor: (row) => row.__source?.[sourceKey],
-        searchAccessor: (row) => toDisplayValue(row.__source?.[sourceKey]),
+          : (row) => toDisplayValue(getSourceColumnValue(row.__source, sourceKey)),
+        sortAccessor: (row) => getSourceColumnValue(row.__source, sourceKey),
+        searchAccessor: (row) => toDisplayValue(getSourceColumnValue(row.__source, sourceKey)),
         align: column.align,
         width: column.width,
         sortable: column.sortable ?? true,
@@ -1279,6 +1297,7 @@ function resolveGridColumnForTableColumn(
       const gridTokens = [
         gridColumn.key,
         gridColumn.accessorKey,
+        gridColumn.sqlFieldName ?? "",
         gridColumn.header,
         gridColumn.columnName ?? "",
       ]

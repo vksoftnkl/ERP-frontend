@@ -41,6 +41,13 @@ import {
   useLazyGetTaxOptionsQuery,
   useLazyGetUnitOptionsQuery,
 } from "@/store/api/lookupsApi";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  listModalToggled,
+  selectedDocumentIdSet,
+  selectOpeningStockIsListModalOpen,
+  selectOpeningStockSelectedDocId,
+} from "@/store/slices/openingStockSlice";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import { OpeningStockAuditNotesModal } from "./opening-stock-audit-notes-modal";
 import { OpeningStockListModal } from "./opening-stock-list-modal";
@@ -236,7 +243,8 @@ export default function OpeningStockPage() {
   const [lookupSearchQuery, setLookupSearchQuery] = useState("");
   const [columns, setColumns] = useState<ColumnDefinition[]>([]);
   const [isUnsavedChangesConfirmOpen, setIsUnsavedChangesConfirmOpen] = useState(false);
-  const [isOpeningStockListOpen, setIsOpeningStockListOpen] = useState(false);
+  const dispatch = useAppDispatch();
+  const isOpeningStockListOpen = useAppSelector(selectOpeningStockIsListModalOpen);
   const [openingStockListFilters, setOpeningStockListFilters] = useState<OpeningStockListFilters>(
     DEFAULT_OPENING_STOCK_LIST_FILTERS,
   );
@@ -246,8 +254,7 @@ export default function OpeningStockPage() {
   );
   const [openingStockListPage, setOpeningStockListPage] = useState(1);
   const [openingStockListPageSize, setOpeningStockListPageSize] = useState(20);
-  const [selectedOpeningStockListVoucherId, setSelectedOpeningStockListVoucherId] =
-    useState<string | null>(null);
+  const selectedOpeningStockListVoucherId = useAppSelector(selectOpeningStockSelectedDocId);
   const [isOpeningStockListLoading, setIsOpeningStockListLoading] = useState(false);
   const [openingStockListError, setOpeningStockListError] = useState<string | null>(null);
   const tableRef = useRef<HTMLTableElement | null>(null);
@@ -1042,17 +1049,17 @@ export default function OpeningStockPage() {
   const handleOpenOpeningStockList = useCallback(() => {
     setOpeningStockListPage(1);
     setOpeningStockListFilters(createOpeningStockListFiltersForToday());
-    setIsOpeningStockListOpen(true);
+    dispatch(listModalToggled(true));
     setOpeningStockListError(null);
   }, []);
   const handleCloseOpeningStockList = useCallback(() => {
     openingStockListRequestRef.current += 1;
-    setIsOpeningStockListOpen(false);
+    dispatch(listModalToggled(false));
     setIsOpeningStockListLoading(false);
     setOpeningStockListError(null);
     setOpeningStockListPage(1);
     setOpeningStockListFilters(DEFAULT_OPENING_STOCK_LIST_FILTERS);
-    setSelectedOpeningStockListVoucherId(null);
+    dispatch(selectedDocumentIdSet(null));
   }, []);
   const handleOpeningStockListSearchChange = useCallback((search: string) => {
     setOpeningStockListPage(1);
@@ -1071,30 +1078,25 @@ export default function OpeningStockPage() {
     setOpeningStockListPageSize(pageSize);
   }, []);
   const handleOpeningStockListRowSelect = useCallback((row: OpeningStockHeaderPayload) => {
-    setSelectedOpeningStockListVoucherId(row.avh_voucher_id);
+    dispatch(selectedDocumentIdSet(row.avh_voucher_id));
   }, []);
-
   useEffect(() => {
     if (!isOpeningStockListOpen) {
       return;
     }
-
     void loadOpeningStockList();
   }, [isOpeningStockListOpen, loadOpeningStockList]);
-
   useEffect(() => {
     if (!isOpeningStockListOpen) {
       return;
     }
-
-    setSelectedOpeningStockListVoucherId((current) => {
-      if (current && openingStockListRows.some((row) => row.avh_voucher_id === current)) {
-        return current;
-      }
-      return openingStockListRows[0]?.avh_voucher_id ?? null;
-    });
-  }, [isOpeningStockListOpen, openingStockListRows]);
-
+    const shouldKeep =
+      selectedOpeningStockListVoucherId &&
+      openingStockListRows.some((row) => row.avh_voucher_id === selectedOpeningStockListVoucherId);
+    if (!shouldKeep) {
+      dispatch(selectedDocumentIdSet(openingStockListRows[0]?.avh_voucher_id ?? null));
+    }
+  }, [dispatch, isOpeningStockListOpen, openingStockListRows, selectedOpeningStockListVoucherId]);
   useEffect(() => {
     const handleF5KeyDown = (event: KeyboardEvent) => {
       if (
@@ -1106,13 +1108,11 @@ export default function OpeningStockPage() {
       ) {
         return;
       }
-
       event.preventDefault();
       if (isOpeningStockListOpen) {
         void loadOpeningStockList();
         return;
       }
-
       handleOpenOpeningStockList();
     };
     window.addEventListener("keydown", handleF5KeyDown);
@@ -1311,11 +1311,9 @@ export default function OpeningStockPage() {
                     values: nextValues,
                   };
                   const normalizedTrackingType = normalizeOpeningStockTrackingType(value);
-
                   if (!isOpeningStockBatchNumberEditable(nextTrackingRow, itemDetail)) {
                     nextValues.batchno = "";
                   }
-
                   if (normalizedTrackingType !== "2") {
                     nextValues.serialno = "";
                     nextValues.batchdate = "";
@@ -2259,7 +2257,7 @@ export default function OpeningStockPage() {
         }
 
         applyLoadedOpeningStockDocument(document);
-        setIsOpeningStockListOpen(false);
+        dispatch(listModalToggled(false));
       } catch {
         // Toasting is handled in useApi.
       } finally {
@@ -2436,7 +2434,7 @@ export default function OpeningStockPage() {
       }
 
       const voucherLabel = getOpeningStockVoucherLabel(row);
-      setSelectedOpeningStockListVoucherId(voucherId);
+      dispatch(selectedDocumentIdSet(voucherId));
       if (draftRows.length > 0) {
         setPendingLoadRequest({
           type: "voucher",

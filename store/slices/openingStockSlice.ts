@@ -4,7 +4,6 @@ import type {
   OpeningStockRow,
   RowValidationIssue,
 } from "@/features/stocks/opening-stock/opening-stock.types";
-
 export type OpeningStockState = {
   rows: OpeningStockRow[];
   validationIssues: RowValidationIssue[];
@@ -19,7 +18,6 @@ export type OpeningStockState = {
   saveLoading: boolean;
   saveError: string | null;
 };
-
 const initialState: OpeningStockState = {
   rows: [],
   validationIssues: [],
@@ -34,7 +32,6 @@ const initialState: OpeningStockState = {
   saveLoading: false,
   saveError: null,
 };
-
 const openingStockSlice = createSlice({
   name: "openingStock",
   initialState,
@@ -122,7 +119,6 @@ const openingStockSlice = createSlice({
     },
   },
 });
-
 export const {
   rowsSet,
   rowsReset,
@@ -139,7 +135,6 @@ export const {
   saveErrorSet,
   rowAutofilled,
 } = openingStockSlice.actions;
-
 export const selectOpeningStockRows = (state: RootState) => state.openingStock.rows;
 export const selectOpeningStockValidationIssues = (state: RootState) =>
   state.openingStock.validationIssues;
@@ -154,5 +149,6 @@ export const selectOpeningStockSaveLoading = (state: RootState) =>
   state.openingStock.saveLoading;
 export const selectOpeningStockSaveError = (state: RootState) =>
   state.openingStock.saveError;
-
+export const selectOpeningStockIsListModalOpen = (state: RootState) =>
+  state.openingStock.isListModalOpen;
 export default openingStockSlice.reducer;

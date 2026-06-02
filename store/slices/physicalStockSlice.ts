@@ -98,5 +98,7 @@ export const selectPhysicalStockSaveLoading = (state: RootState) =>
   state.physicalStock.saveLoading;
 export const selectPhysicalStockSaveError = (state: RootState) =>
   state.physicalStock.saveError;
+export const selectPhysicalStockIsListModalOpen = (state: RootState) =>
+  state.physicalStock.isListModalOpen;
 
 export default physicalStockSlice.reducer;

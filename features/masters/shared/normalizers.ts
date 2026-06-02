@@ -121,7 +121,14 @@ export function extractPaginationInfo(payload: unknown): PaginationInfo {
     }
   }
   if (root.data && typeof root.data === "object" && !Array.isArray(root.data)) {
-    candidates.push(root.data as Record<string, unknown>);
+    const dataObj = root.data as Record<string, unknown>;
+    candidates.push(dataObj);
+    for (const key of PAGINATION_CONTAINER_KEYS) {
+      const nested = dataObj[key];
+      if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+        candidates.push(nested as Record<string, unknown>);
+      }
+    }
   }
   return {
     totalEntries: findPaginationNumber(candidates, TOTAL_ENTRIES_KEYS, true),
