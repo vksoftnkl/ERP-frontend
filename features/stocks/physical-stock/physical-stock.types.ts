@@ -258,3 +258,11 @@ export type LoadedPhysicalStockMeta = {
   companyId: string | null;
   branchId: string | null;
 };
+export type StockAdjReasonPayload = {
+  sarId: string;
+  sarCode: string;
+  sarName: string;
+  sarReasonKind: string;
+  sarIsActive: boolean;
+  sarIsDeleted: boolean;
+};

@@ -116,6 +116,7 @@ import type {
   PhysicalStockLoadRequest,
   PhysicalStockListFilters,
   LoadedPhysicalStockMeta,
+  StockAdjReasonPayload,
 } from "./physical-stock.types";
 import {
   PHYSICAL_STOCK_SAVE_ENDPOINT,
@@ -125,6 +126,7 @@ import {
   ITEM_STOCK_BALANCE_GET_ENDPOINT,
   ITEM_BATCH_STOCK_OPTIONS_ENDPOINT,
   ITEM_STOCK_BALANCE_BUCKET,
+  STOCK_ADJ_REASONS_ENDPOINT,
   UI_TABLE_COLUMNS_LIST_ENDPOINT,
   UI_TABLE_COLUMNS_CREATE_ENDPOINT,
   UI_TABLE_COLUMNS_QUERY,
@@ -228,6 +230,7 @@ export default function PhysicalStockPage() {
   const [batchOptions, setBatchOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_BATCH_OPTION,
   ]);
+  const [reasonOptions, setReasonOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [batchDetailsByBatchId, setBatchDetailsByBatchId] = useState<
     Record<string, ItemBatchStockLookupPayload>
   >({});
@@ -241,6 +244,7 @@ export default function PhysicalStockPage() {
   const itemSearchTimeoutRef = useRef<number | null>(null);
   const godownSearchTimeoutRef = useRef<number | null>(null);
   const batchSearchTimeoutRef = useRef<number | null>(null);
+  const reasonSearchTimeoutRef = useRef<number | null>(null);
   const physicalStockListRequestRef = useRef(0);
   const {
     activeCompany,
@@ -349,6 +353,13 @@ export default function PhysicalStockPage() {
       error: false,
     },
   });
+  const { getAll: listStockAdjReasons, loading: isReasonLookupLoading } =
+    useApi<{ success: true; data: StockAdjReasonPayload[] }>(STOCK_ADJ_REASONS_ENDPOINT, {
+      toast: {
+        success: false,
+        error: false,
+      },
+    });
   const itemOptionsByValue = useMemo(
     () => new Map(itemOptions.map((option) => [option.value, option.label])),
     [itemOptions],
@@ -360,6 +371,10 @@ export default function PhysicalStockPage() {
   const unitOptionsByValue = useMemo(
     () => new Map(unitOptions.map((option) => [option.value, option.label])),
     [unitOptions],
+  );
+  const reasonOptionsByValue = useMemo(
+    () => new Map(reasonOptions.map((option) => [option.value, option.label])),
+    [reasonOptions],
   );
   const draftRows = useMemo(() => getDraftRows(rows), [rows]);
   const accountingYear = useMemo(() => formatAccountingYear(voucherDate), [voucherDate]);
@@ -414,6 +429,16 @@ export default function PhysicalStockPage() {
       setGodownOptions(buildGodownLookupOptions(payload, activeBranch?.brId));
     },
     [activeBranch?.brId, listGodowns],
+  );
+  const loadReasonOptions = useCallback(
+    async () => {
+      const response = await listStockAdjReasons({ activeOnly: "true" });
+      const reasons: StockAdjReasonPayload[] = response?.data ?? [];
+      setReasonOptions(
+        reasons.map((r) => ({ value: r.sarId, label: r.sarName })),
+      );
+    },
+    [listStockAdjReasons],
   );
   const loadBatchOptions = useCallback(
     async (row: PhysicalStockRow, search = "") => {
@@ -492,6 +517,9 @@ export default function PhysicalStockPage() {
   useEffect(() => {
     void loadGodownOptions();
   }, [loadGodownOptions]);
+  useEffect(() => {
+    void loadReasonOptions();
+  }, [loadReasonOptions]);
   useEffect(() => {
     void (async () => {
       try {
@@ -844,6 +872,24 @@ export default function PhysicalStockPage() {
         void loadAndApplyItemStockBalance(rowId, nextRowValues);
         return;
       }
+      if (lookupKind === "reason") {
+        setRows((currentRows) => {
+          const nextRows = currentRows.map((row) =>
+            row.id === rowId
+              ? {
+                  ...row,
+                  values: {
+                    ...row.values,
+                    reason: option.value ? option.label : "",
+                    oslreasonid: option.value,
+                  },
+                }
+              : row,
+          );
+          return ensureTrailingEmptyRow(nextRows, rowId);
+        });
+        return;
+      }
       if (!option.value) {
         setRows((currentRows) =>
           currentRows.map((row) =>
@@ -924,23 +970,22 @@ export default function PhysicalStockPage() {
   );
   const handleLookupToggle = useCallback(
     (cellKey: string, lookupKind: LookupKind, row?: PhysicalStockRow) => {
-      setOpenLookupCell((current) => {
-        if (current?.key === cellKey) {
-          setLookupSearchQuery("");
-          return null;
-        }
-        setLookupSearchQuery("");
+      const isClosing = openLookupCell?.key === cellKey;
+      setOpenLookupCell(isClosing ? null : { key: cellKey, kind: lookupKind });
+      setLookupSearchQuery("");
+      if (!isClosing) {
         if (lookupKind === "item") {
           void loadItemOptions();
         } else if (lookupKind === "batch" && row) {
           void loadBatchOptions(row);
+        } else if (lookupKind === "reason") {
+          void loadReasonOptions();
         } else {
           void loadGodownOptions();
         }
-        return { key: cellKey, kind: lookupKind };
-      });
+      }
     },
-    [loadBatchOptions, loadGodownOptions, loadItemOptions],
+    [loadBatchOptions, loadGodownOptions, loadItemOptions, loadReasonOptions, openLookupCell?.key],
   );
   const enqueueColumnConfigSave = useCallback((task: () => Promise<void>) => {
     const saveTask = columnSaveQueueRef.current.catch(() => undefined).then(task);
@@ -1116,7 +1161,9 @@ export default function PhysicalStockPage() {
           ? itemSearchTimeoutRef
           : lookupKind === "batch"
             ? batchSearchTimeoutRef
-            : godownSearchTimeoutRef;
+            : lookupKind === "reason"
+              ? reasonSearchTimeoutRef
+              : godownSearchTimeoutRef;
       if (timeoutRef.current !== null) {
         window.clearTimeout(timeoutRef.current);
       }
@@ -1125,7 +1172,7 @@ export default function PhysicalStockPage() {
           void loadItemOptions(search);
         } else if (lookupKind === "batch" && row) {
           void loadBatchOptions(row, search);
-        } else {
+        } else if (lookupKind !== "reason") {
           void loadGodownOptions(search);
         }
       }, LOOKUP_SEARCH_DEBOUNCE_MS);
@@ -1845,15 +1892,35 @@ export default function PhysicalStockPage() {
     }
     if (column.kind === "lookup" && lookupKind) {
       const selectedId =
-        lookupKind === "item" ? row.values.oslitemid ?? "" : row.values.oslgodownid ?? "";
+        lookupKind === "item"
+          ? row.values.oslitemid ?? ""
+          : lookupKind === "reason"
+            ? row.values.oslreasonid ?? ""
+            : row.values.oslgodownid ?? "";
       const selectedLabel =
         lookupKind === "item"
           ? itemOptionsByValue.get(selectedId) ?? row.values.itemname
-          : godownOptionsByValue.get(selectedId) ?? row.values.godown;
+          : lookupKind === "reason"
+            ? reasonOptionsByValue.get(selectedId) ?? row.values.reason
+            : godownOptionsByValue.get(selectedId) ?? row.values.godown;
       const options =
         lookupKind === "item"
           ? filterLookupOptions(itemOptions, lookupSearchQuery)
-          : filterLookupOptions(godownOptions, lookupSearchQuery);
+          : lookupKind === "reason"
+            ? filterLookupOptions(reasonOptions, lookupSearchQuery)
+            : filterLookupOptions(godownOptions, lookupSearchQuery);
+      const emptyMessage =
+        lookupKind === "item"
+          ? "No items found."
+          : lookupKind === "reason"
+            ? "No reasons found."
+            : "No godowns found.";
+      const isLoadingLookup =
+        lookupKind === "item"
+          ? isItemLookupLoading
+          : lookupKind === "reason"
+            ? isReasonLookupLoading
+            : isGodownLookupLoading;
       return (
         <LookupCell
           rowId={row.id}
@@ -1861,12 +1928,12 @@ export default function PhysicalStockPage() {
           cellKey={cellKey}
           lookupKind={lookupKind}
           isOpen={isLookupOpen}
-          isLoading={lookupKind === "item" ? isItemLookupLoading : isGodownLookupLoading}
+          isLoading={isLoadingLookup}
           selectedId={selectedId}
           selectedLabel={selectedLabel}
           placeholder={`Search ${column.header}`}
           header={column.header}
-          emptyMessage={lookupKind === "item" ? "No items found." : "No godowns found."}
+          emptyMessage={emptyMessage}
           options={options}
           searchQuery={lookupSearchQuery}
           shortcutValues={row.values}

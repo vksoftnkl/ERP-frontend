@@ -551,7 +551,7 @@ export function buildPhysicalStockDetailPayload(
     psdDiffBaseQty: parseDecimal(row.values.physicalbaseqty) - parseDecimal(row.values.bookbaseqty),
     psdStockRateWot: parseDecimal(row.values.costwot),
     psdStockRateWithTax: parseDecimal(row.values.costprice),
-    psdReasonId: null,
+    psdReasonId: toOptionalUuid(row.values.oslreasonid),
     psdResolution: "ADJUST_LOSS_GAIN" as const,
     psdNotes: notes,
   };
@@ -589,7 +589,7 @@ export function buildPhysicalStockDetailPayload(
           parseDecimal(row.values.physicalbaseqty) - parseDecimal(row.values.bookbaseqty),
         psbStockRateWot: parseDecimal(row.values.costwot),
         psbStockRateWithTax: parseDecimal(row.values.costprice),
-        psbReasonId: null,
+        psbReasonId: toOptionalUuid(row.values.oslreasonid),
         psbResolution: "ADJUST_LOSS_GAIN",
         psbNotes: notes,
       },

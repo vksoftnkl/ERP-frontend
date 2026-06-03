@@ -8,7 +8,6 @@ import {
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 import { QUANTITY_FORMATTER, VALUE_FORMATTER } from "@/features/stocks/_shared/constants";
 import { cx, formatDateForDisplay } from "@/features/stocks/opening-stock/opening-stock.utils";
-
 export type PhysicalStockListRow = {
   psc_id: string;
   psc_refno: string;
@@ -22,13 +21,11 @@ export type PhysicalStockListRow = {
   psc_counter_id?: string | null;
   psc_created_by?: string | null;
 };
-
 type PhysicalStockListFilters = {
   search: string;
   dateFrom: string;
   dateTo: string;
 };
-
 type PhysicalStockListColumn = {
   key: string;
   header: string;
@@ -36,7 +33,6 @@ type PhysicalStockListColumn = {
   align?: "left" | "center" | "right";
   render: (row: PhysicalStockListRow) => ReactNode;
 };
-
 type PhysicalStockListModalProps = {
   isOpen: boolean;
   suspendKeyboardShortcuts?: boolean;
@@ -59,7 +55,6 @@ type PhysicalStockListModalProps = {
   onLoadRow: (row: PhysicalStockListRow) => void;
   onLoadSelected: () => void;
 };
-
 const PAGE_SIZE_OPTIONS = [10, 20, 25, 50, 100] as const;
 const PHYSICAL_STOCK_LIST_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   { label: "Prev Row", keys: ["ArrowUp"] },
@@ -67,7 +62,6 @@ const PHYSICAL_STOCK_LIST_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   { label: "Load", keys: ["Enter"] },
   { label: "Close", keys: ["Esc"] },
 ] as const;
-
 const PHYSICAL_STOCK_LIST_COLUMNS: PhysicalStockListColumn[] = [
   {
     key: "refno",
@@ -128,7 +122,6 @@ const PHYSICAL_STOCK_LIST_COLUMNS: PhysicalStockListColumn[] = [
     render: (row) => row.psc_counter_id?.trim() || "-",
   },
 ];
-
 function buildPageList(totalPages: number, currentPage: number): Array<number | "ellipsis"> {
   const pages: Array<number | "ellipsis"> = [];
   for (let page = 1; page <= totalPages; page += 1) {
@@ -146,7 +139,6 @@ function buildPageList(totalPages: number, currentPage: number): Array<number | 
   }
   return pages;
 }
-
 export function PhysicalStockListModal({
   isOpen,
   suspendKeyboardShortcuts = false,
@@ -179,7 +171,6 @@ export function PhysicalStockListModal({
   const footerShortcuts = suspendKeyboardShortcuts ? [] : PHYSICAL_STOCK_LIST_SHORTCUTS;
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
-
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -190,7 +181,6 @@ export function PhysicalStockListModal({
       document.body.style.overflow = previousOverflow;
     };
   }, [isOpen]);
-
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -202,14 +192,12 @@ export function PhysicalStockListModal({
       window.clearTimeout(focusTimeout);
     };
   }, [isOpen]);
-
   useEffect(() => {
     if (!isOpen || !selectedStockId) {
       return;
     }
     rowRefs.current[selectedStockId]?.scrollIntoView({ block: "nearest" });
   }, [isOpen, rows, selectedStockId]);
-
   useEffect(() => {
     if (!isOpen || suspendKeyboardShortcuts) {
       return;
@@ -280,11 +268,9 @@ export function PhysicalStockListModal({
     selectedStockId,
     suspendKeyboardShortcuts,
   ]);
-
   if (!isOpen) {
     return null;
   }
-
   return (
     <div className={styles.stockBrowserModalOverlay}>
       <button

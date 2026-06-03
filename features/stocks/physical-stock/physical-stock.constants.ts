@@ -8,6 +8,7 @@ export const PHYSICAL_STOCK_GET_ENDPOINT = "/physical-stock/get";
 export const PHYSICAL_STOCK_DELETE_ENDPOINT = "/physical-stock/delete";
 export const ITEM_STOCK_BALANCE_GET_ENDPOINT = "/item-stock-balance/get";
 export const ITEM_BATCH_STOCK_OPTIONS_ENDPOINT = "/item-stock-balance/batch-options";
+export const STOCK_ADJ_REASONS_ENDPOINT = "/stock-adj-reasons/get";
 export const ITEM_STOCK_BALANCE_BUCKET = "SALEABLE";
 export const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
 export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-columns/create";
@@ -140,7 +141,7 @@ export const PHYSICAL_STOCK_COLUMNS: PhysicalStockColumn[] = [
   },
   { key: "costwot", header: "Cost wot", width: "110px", align: "right", kind: "number" },
   { key: "mrp", header: "M.R.P", width: "100px", align: "right", kind: "number" },
-  { key: "reason", header: "Reason", width: "180px", align: "left", kind: "text" },
+  { key: "reason", header: "Reason", width: "180px", align: "left", kind: "lookup", lookupKind: "reason" },
   { key: "remarks", header: "Remarks", width: "220px", align: "left", kind: "text" },
   {
     key: "oslitemid",
