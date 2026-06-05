@@ -8,6 +8,7 @@ import { baseApi } from "@/store/api/baseApi";
 const ITEM_LIST_ENDPOINT = "/configured-grid-sql/run";
 const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const ITEM_PRICE_DETAILS_ENDPOINT = "/item-price-details/get";
+const ITEM_PRICE_DETAILS_BY_BARCODE_ENDPOINT = "/item-price-details/get-by-barcode";
 const ITEM_TAX_LIST_ENDPOINT = "/configured-grid-sql/run";
 const ITEM_TAX_GET_ENDPOINT = "/item-taxes/get";
 const ITEM_LOOKUP_QUERY = {
@@ -120,6 +121,9 @@ export type LookupSearchArg = {
 };
 export type ItemPriceDetailsQueryArg = {
   itemId: string;
+};
+export type ItemPriceDetailsByBarcodeQueryArg = {
+  barcode: string;
 };
 export type ItemTaxQueryArg = {
   taxId: string;
@@ -274,6 +278,15 @@ export const lookupsApi = baseApi.injectEndpoints({
         extractDetailSource(payload) as ItemPriceDetailsPayload,
       keepUnusedDataFor: 300,
     }),
+    getItemPriceDetailsByBarcode: builder.query<ItemPriceDetailsPayload, ItemPriceDetailsByBarcodeQueryArg>({
+      query: ({ barcode }) => ({
+        url: ITEM_PRICE_DETAILS_BY_BARCODE_ENDPOINT,
+        params: { barcode: barcode.trim() },
+      }),
+      transformResponse: (payload: unknown) =>
+        extractDetailSource(payload) as ItemPriceDetailsPayload,
+      keepUnusedDataFor: 60,
+    }),
     getItemTaxById: builder.query<ItemTaxDetailPayload, ItemTaxQueryArg>({
       query: ({ taxId }) => ({
         url: ITEM_TAX_GET_ENDPOINT,
@@ -292,6 +305,7 @@ export const {
   useLazyGetGodownOptionsQuery,
   useLazyGetItemOptionsQuery,
   useLazyGetItemPriceDetailsQuery,
+  useLazyGetItemPriceDetailsByBarcodeQuery,
   useLazyGetItemTaxByIdQuery,
   useLazyGetTaxOptionsQuery,
   useLazyGetUnitOptionsQuery,

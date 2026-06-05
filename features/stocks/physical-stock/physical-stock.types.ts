@@ -1,4 +1,4 @@
-import type { ColumnAlign, ColumnKind, LookupKind } from "@/features/stocks/_shared/types";
+import type { ColumnAlign, ColumnKind, LookupKind, StockListMeta } from "@/features/stocks/_shared/types";
 import type { PhysicalStockListRow } from "./PhysicalStockListModal";
 
 export type PhysicalStockColumn = {
@@ -106,14 +106,9 @@ export type PhysicalStockSuccessResponse<T> = {
   success: true;
   message: string;
   data: T;
-  meta?: PhysicalStockListMeta;
+  meta?: StockListMeta;
 };
-export type PhysicalStockListMeta = {
-  page: number;
-  limit: number;
-  total: number;
-  total_pages: number;
-};
+export type { StockListMeta as PhysicalStockListMeta } from "@/features/stocks/_shared/types";
 export type PhysicalStockHeaderPayload = PhysicalStockListRow & {
   psc_acc_year?: string;
   psc_company_id?: string;
@@ -213,33 +208,26 @@ export type RowValidationIssue = {
   fieldKey: string;
   message: string;
 };
-export type UiTableColumnPayload = {
+export type { UiTableColumnPayload, SaveUiTableColumnRequest as SavePhysicalStockUiTableColumnRequest } from "@/features/stocks/_shared/types";
+export type PhysicalStockColumnSettingsRow = {
+  key: string;
+  label: string;
   uiTblClmId?: string;
   uiTblClmNo?: string;
-  uiTblClmTableId?: string | null;
-  uiTblClmName: string | null;
-  uiTblClmColumnWidth: number | null;
-  uiTblClmColumnVisibility: boolean | null;
-  uiTblClmColumnFocus?: boolean | null;
-  uiTblClmColumnPosition: number | null;
-  uiTblClmColumnNecessity?: boolean | null;
-  uiTblClmNextColumn?: number | null;
-  uiTblClmPreviousColumn?: number | null;
-  uiTblClmIsActive?: boolean | null;
-};
-export type SavePhysicalStockUiTableColumnRequest = {
-  uiTblClmId?: string;
-  uiTblClmNo?: string;
-  uiTblClmName: string;
   uiTblClmTableId: string | null;
-  uiTblClmColumnWidth: number | null;
-  uiTblClmColumnVisibility: boolean;
-  uiTblClmColumnFocus: boolean;
-  uiTblClmColumnPosition: number;
-  uiTblClmColumnNecessity: boolean;
-  uiTblClmNextColumn: number | null;
-  uiTblClmPreviousColumn: number | null;
-  uiTblClmIsActive: boolean;
+  width: number | null;
+  visible: boolean;
+  focus: boolean;
+  position: number;
+  necessity: boolean;
+  nextColumn: number | null;
+  previousColumn: number | null;
+  isActive: boolean;
+};
+export type PhysicalStockColumnSettingsDraftEntry = {
+  visible: boolean;
+  focus: boolean;
+  necessity: boolean;
 };
 export type PhysicalStockLoadRequest =
   | { type: "latest" }

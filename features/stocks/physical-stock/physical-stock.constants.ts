@@ -10,14 +10,13 @@ export const ITEM_STOCK_BALANCE_GET_ENDPOINT = "/item-stock-balance/get";
 export const ITEM_BATCH_STOCK_OPTIONS_ENDPOINT = "/item-stock-balance/batch-options";
 export const STOCK_ADJ_REASONS_ENDPOINT = "/stock-adj-reasons/get";
 export const ITEM_STOCK_BALANCE_BUCKET = "SALEABLE";
-export const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
-export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-columns/create";
+export { UI_TABLE_COLUMNS_LIST_ENDPOINT, UI_TABLE_COLUMNS_CREATE_ENDPOINT } from "@/features/stocks/_shared/constants";
 export const UI_TABLE_COLUMNS_QUERY = {
   uiTblClmTableId: "6",
   page: "1",
   limit: "100",
 } as const;
-export const LOOKUP_SEARCH_DEBOUNCE_MS = 250;
+export { LOOKUP_SEARCH_DEBOUNCE_MS } from "@/features/stocks/_shared/constants";
 export const PHYSICAL_STOCK_TABLE_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   { label: "Prev Cell", keys: ["Shift"] },
   { label: "Next Cell", keys: ["Enter"] },
@@ -62,6 +61,7 @@ export const PHYSICAL_STOCK_COLUMNS: PhysicalStockColumn[] = [
     width: "110px",
     align: "right",
     kind: "number",
+    readOnly: true,
   },
   {
     key: "bookfreeqty",
@@ -69,6 +69,7 @@ export const PHYSICAL_STOCK_COLUMNS: PhysicalStockColumn[] = [
     width: "120px",
     align: "right",
     kind: "number",
+    readOnly: true,
   },
   {
     key: "bookbaseqty",
@@ -131,6 +132,7 @@ export const PHYSICAL_STOCK_COLUMNS: PhysicalStockColumn[] = [
     align: "right",
     kind: "number",
     defaultValue: "1.000",
+    readOnly: true,
   },
   {
     key: "costprice",

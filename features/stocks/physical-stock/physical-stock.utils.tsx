@@ -4,16 +4,16 @@ import type {
   PhysicalStockRow,
   PhysicalStockColumn,
   PhysicalStockSaveDetail,
-  PhysicalStockSaveBatchDetail,
   PhysicalStockDocumentResponse,
   UiTableColumnPayload,
   SavePhysicalStockUiTableColumnRequest,
+  PhysicalStockColumnSettingsRow,
+  PhysicalStockColumnSettingsDraftEntry,
   RowValidationIssue,
   ItemStockBalancePayload,
   ItemBatchStockLookupPayload,
   PhysicalStockHeaderPayload,
   PhysicalStockListFilters,
-  PhysicalStockListMeta,
 } from "./physical-stock.types";
 import type { PhysicalStockListRow } from "./PhysicalStockListModal";
 import type { ItemPriceDetailsPayload } from "@/store/api/lookupsApi";
@@ -23,7 +23,6 @@ import {
   PHYSICAL_STOCK_COLUMN_SCHEMA,
   UI_TABLE_COLUMNS_QUERY,
   NON_NEGATIVE_NUMBER_FIELD_KEYS,
-  QUANTITY_FIELD_KEYS,
   DATE_FIELD_KEYS,
   HIDDEN_ROW_VALUE_DEFAULTS,
   TRACKING_OPTIONS,
@@ -46,10 +45,10 @@ import {
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 import {
   VALUE_FORMATTER,
-  MIN_RESIZABLE_COLUMN_WIDTH,
   SERIAL_NUMBER_COLUMN_WIDTH,
   DELETE_ACTION_COLUMN_WIDTH,
 } from "@/features/stocks/_shared/constants";
+import { parseColumnWidth, toColumnWidth } from "@/features/stocks/_shared/stock-utils";
 
 export function createDefaultRowValues(): Record<string, string> {
   return {
@@ -235,34 +234,7 @@ export function getColumnMinWidth(columns: PhysicalStockColumn[]): string {
   );
   return `${Math.max(width, 2800)}px`;
 }
-export function parseColumnWidth(width: string, fallback = 120): number {
-  const parsed = Number.parseFloat(width);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-export function toColumnWidth(value: number | null | undefined, fallback: string): string {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    return fallback;
-  }
-  return `${value}px`;
-}
-export function reorderColumns(
-  current: PhysicalStockColumn[],
-  sourceKey: string,
-  targetKey: string,
-): PhysicalStockColumn[] {
-  if (!sourceKey || !targetKey || sourceKey === targetKey) {
-    return current;
-  }
-  const next = [...current];
-  const sourceIndex = next.findIndex((column) => column.key === sourceKey);
-  const targetIndex = next.findIndex((column) => column.key === targetKey);
-  if (sourceIndex === -1 || targetIndex === -1) {
-    return current;
-  }
-  const [movedColumn] = next.splice(sourceIndex, 1);
-  next.splice(targetIndex, 0, movedColumn);
-  return next;
-}
+export { parseColumnWidth, toColumnWidth, reorderColumns } from "@/features/stocks/_shared/stock-utils";
 export function findPhysicalStockUiTableColumnConfig(
   configuredColumns: UiTableColumnPayload[],
   columnKey: string,
@@ -273,11 +245,106 @@ export function findPhysicalStockUiTableColumnConfig(
     ) ?? null
   );
 }
+export function comparePhysicalStockUiTableColumns(
+  left: UiTableColumnPayload,
+  right: UiTableColumnPayload,
+): number {
+  const leftPosition = left.uiTblClmColumnPosition ?? Number.MAX_SAFE_INTEGER;
+  const rightPosition = right.uiTblClmColumnPosition ?? Number.MAX_SAFE_INTEGER;
+  if (leftPosition !== rightPosition) {
+    return leftPosition - rightPosition;
+  }
+  const leftNo = Number(left.uiTblClmNo ?? "");
+  const rightNo = Number(right.uiTblClmNo ?? "");
+  if (Number.isFinite(leftNo) && Number.isFinite(rightNo) && leftNo !== rightNo) {
+    return leftNo - rightNo;
+  }
+  return 0;
+}
+export function getPhysicalStockUiTableColumnDraftKey(
+  column: UiTableColumnPayload,
+  index: number,
+): string {
+  const id = column.uiTblClmId?.trim();
+  if (id) {
+    return id;
+  }
+  return `${column.uiTblClmName ?? "column"}:${index}`;
+}
+export function buildPhysicalStockColumnSettingsRows(
+  configuredColumns: UiTableColumnPayload[],
+  fallbackColumns: PhysicalStockColumn[],
+): PhysicalStockColumnSettingsRow[] {
+  if (configuredColumns.length === 0) {
+    return fallbackColumns.map((column, index) => ({
+      key: column.key,
+      label: column.header,
+      uiTblClmNo: String(index + 1),
+      uiTblClmTableId: UI_TABLE_COLUMNS_QUERY.uiTblClmTableId,
+      width: parseColumnWidth(column.width),
+      visible: true,
+      focus: false,
+      position: index + 1,
+      necessity: false,
+      nextColumn: null,
+      previousColumn: null,
+      isActive: true,
+    }));
+  }
+  return [...configuredColumns]
+    .sort(comparePhysicalStockUiTableColumns)
+    .map((column, index) => {
+      const fallbackPosition = index + 1;
+      return {
+        key: getPhysicalStockUiTableColumnDraftKey(column, index),
+        label: column.uiTblClmName?.trim() || `Column ${fallbackPosition}`,
+        uiTblClmId: column.uiTblClmId,
+        uiTblClmNo: column.uiTblClmNo,
+        uiTblClmTableId: column.uiTblClmTableId ?? UI_TABLE_COLUMNS_QUERY.uiTblClmTableId,
+        width: column.uiTblClmColumnWidth,
+        visible: column.uiTblClmColumnVisibility ?? true,
+        focus: column.uiTblClmColumnFocus ?? false,
+        position: column.uiTblClmColumnPosition ?? fallbackPosition,
+        necessity: column.uiTblClmColumnNecessity ?? false,
+        nextColumn: column.uiTblClmNextColumn ?? null,
+        previousColumn: column.uiTblClmPreviousColumn ?? null,
+        isActive: column.uiTblClmIsActive ?? true,
+      };
+    });
+}
+export function buildPhysicalStockUiTableColumnSettingsRequest(
+  row: PhysicalStockColumnSettingsRow,
+  settings: PhysicalStockColumnSettingsDraftEntry,
+): SavePhysicalStockUiTableColumnRequest {
+  return {
+    ...(row.uiTblClmId ? { uiTblClmId: row.uiTblClmId } : {}),
+    uiTblClmNo: row.uiTblClmNo || String(row.position),
+    uiTblClmName: row.label,
+    uiTblClmTableId: row.uiTblClmTableId,
+    uiTblClmColumnWidth: row.width,
+    uiTblClmColumnVisibility: settings.visible,
+    uiTblClmColumnFocus: settings.focus,
+    uiTblClmColumnPosition: row.position,
+    uiTblClmColumnNecessity: settings.necessity,
+    uiTblClmNextColumn: row.nextColumn,
+    uiTblClmPreviousColumn: row.previousColumn,
+    uiTblClmIsActive: row.isActive,
+  };
+}
 export function buildPhysicalStockUiTableColumnRequest(
   column: PhysicalStockColumn,
   configuredColumn: UiTableColumnPayload | null,
   columnIndex: number,
-  overrides: Partial<Pick<SavePhysicalStockUiTableColumnRequest, "uiTblClmColumnPosition" | "uiTblClmColumnWidth">> = {},
+  overrides: Partial<
+    Pick<
+      SavePhysicalStockUiTableColumnRequest,
+      | "uiTblClmColumnPosition"
+      | "uiTblClmColumnWidth"
+      | "uiTblClmColumnVisibility"
+      | "uiTblClmColumnFocus"
+      | "uiTblClmColumnNecessity"
+    >
+  > = {},
 ): SavePhysicalStockUiTableColumnRequest {
   const fallbackPosition = columnIndex + 1;
   return {
@@ -289,13 +356,20 @@ export function buildPhysicalStockUiTableColumnRequest(
       overrides.uiTblClmColumnWidth ??
       configuredColumn?.uiTblClmColumnWidth ??
       parseColumnWidth(column.width),
-    uiTblClmColumnVisibility: configuredColumn?.uiTblClmColumnVisibility ?? true,
-    uiTblClmColumnFocus: configuredColumn?.uiTblClmColumnFocus ?? false,
+    uiTblClmColumnVisibility:
+      overrides.uiTblClmColumnVisibility ??
+      configuredColumn?.uiTblClmColumnVisibility ??
+      true,
+    uiTblClmColumnFocus:
+      overrides.uiTblClmColumnFocus ?? configuredColumn?.uiTblClmColumnFocus ?? false,
     uiTblClmColumnPosition:
       overrides.uiTblClmColumnPosition ??
       configuredColumn?.uiTblClmColumnPosition ??
       fallbackPosition,
-    uiTblClmColumnNecessity: configuredColumn?.uiTblClmColumnNecessity ?? false,
+    uiTblClmColumnNecessity:
+      overrides.uiTblClmColumnNecessity ??
+      configuredColumn?.uiTblClmColumnNecessity ??
+      false,
     uiTblClmNextColumn: configuredColumn?.uiTblClmNextColumn ?? null,
     uiTblClmPreviousColumn: configuredColumn?.uiTblClmPreviousColumn ?? null,
     uiTblClmIsActive: configuredColumn?.uiTblClmIsActive ?? true,
@@ -324,10 +398,15 @@ export function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload
   if (configuredColumns.length === 0) {
     return [];
   }
+  const hiddenColumnKeys = new Set(
+    configuredColumns
+      .filter((column) => column.uiTblClmColumnVisibility === false)
+      .map((column) => normalizeColumnName(column.uiTblClmName ?? ""))
+      .filter(Boolean),
+  );
   const visibleColumns = [...configuredColumns]
     .filter((column) => {
-      const key = normalizeColumnName(column.uiTblClmName ?? "");
-      return key === "barcode" || key === "uom" || column.uiTblClmColumnVisibility !== false;
+      return column.uiTblClmColumnVisibility !== false;
     })
     .sort((left, right) => {
       const leftPosition = left.uiTblClmColumnPosition ?? Number.MAX_SAFE_INTEGER;
@@ -361,7 +440,7 @@ export function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload
     });
     seenKeys.add(key);
   }
-  if (!seenKeys.has("barcode")) {
+  if (!seenKeys.has("barcode") && !hiddenColumnKeys.has("barcode")) {
     const barcodeSchema = PHYSICAL_STOCK_COLUMN_SCHEMA.get("barcode");
     const barcodeConfig = configuredColumns.find(
       (column) => normalizeColumnName(column.uiTblClmName ?? "") === "barcode",
@@ -374,7 +453,7 @@ export function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload
       });
     }
   }
-  if (!seenKeys.has("uom")) {
+  if (!seenKeys.has("uom") && !hiddenColumnKeys.has("uom")) {
     const uomSchema = PHYSICAL_STOCK_COLUMN_SCHEMA.get("uom");
     const uomConfig = configuredColumns.find(
       (column) => normalizeColumnName(column.uiTblClmName ?? "") === "uom",

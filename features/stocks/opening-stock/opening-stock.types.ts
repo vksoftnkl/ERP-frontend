@@ -7,20 +7,7 @@ export type {
   LookupKind,
 } from "@/features/stocks/_shared/types";
 
-export type UiTableColumnPayload = {
-  uiTblClmId?: string;
-  uiTblClmNo?: string;
-  uiTblClmTableId?: string | null;
-  uiTblClmName: string | null;
-  uiTblClmColumnWidth: number | null;
-  uiTblClmColumnVisibility: boolean | null;
-  uiTblClmColumnFocus?: boolean | null;
-  uiTblClmColumnPosition: number | null;
-  uiTblClmColumnNecessity?: boolean | null;
-  uiTblClmNextColumn?: number | null;
-  uiTblClmPreviousColumn?: number | null;
-  uiTblClmIsActive?: boolean | null;
-};
+export type { UiTableColumnPayload } from "@/features/stocks/_shared/types";
 export type ColumnSchema = {
   header: string;
   defaultWidth: string;
@@ -274,9 +261,4 @@ export type OpeningStockDocumentPayload = {
   header: OpeningStockHeaderPayload;
   details: OpeningStockDetailPayload[];
 };
-export type OpeningStockListMeta = {
-  page: number;
-  limit: number;
-  total: number;
-  total_pages: number;
-};
+export type { StockListMeta as OpeningStockListMeta } from "@/features/stocks/_shared/types";

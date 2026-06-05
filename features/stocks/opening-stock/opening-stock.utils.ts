@@ -36,6 +36,7 @@ import type {
   RowValidationIssue,
   UiTableColumnPayload,
 } from "./opening-stock.types";
+import { toColumnWidth } from "@/features/stocks/_shared/stock-utils";
 export function cx(...tokens: Array<string | false | undefined>): string {
   return tokens.filter(Boolean).join(" ");
 }
@@ -447,34 +448,7 @@ export function buildUomOptions(
   }
   return Array.from(optionMap, ([value, label]) => ({ value, label }));
 }
-export function toColumnWidth(value: number | null | undefined, fallback: string): string {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    return fallback;
-  }
-  return `${value}px`;
-}
-export function parseColumnWidth(width: string, fallback = 120): number {
-  const parsed = Number.parseFloat(width);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-export function reorderColumns(
-  current: ColumnDefinition[],
-  sourceKey: string,
-  targetKey: string,
-): ColumnDefinition[] {
-  if (!sourceKey || !targetKey || sourceKey === targetKey) {
-    return current;
-  }
-  const next = [...current];
-  const sourceIndex = next.findIndex((column) => column.key === sourceKey);
-  const targetIndex = next.findIndex((column) => column.key === targetKey);
-  if (sourceIndex === -1 || targetIndex === -1) {
-    return current;
-  }
-  const [moved] = next.splice(sourceIndex, 1);
-  next.splice(targetIndex, 0, moved);
-  return next;
-}
+export { parseColumnWidth, toColumnWidth, reorderColumns } from "@/features/stocks/_shared/stock-utils";
 export function mergeResolvedColumns(
   previous: ColumnDefinition[],
   incoming: ColumnDefinition[],

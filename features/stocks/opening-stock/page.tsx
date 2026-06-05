@@ -11,13 +11,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { FiBox, FiGift, FiTrendingUp } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { useBusinessContext } from "@/components/layout/business-context";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
-import {
-  KeyboardShortcutHints,
-  type KeyboardShortcutDefinition,
-} from "@/components/design-system/ui/keyboard-shortcut-hints";
 import type { ERPDynamicSearchShortcutPayload } from "@/components/design-system/ui/dynamic-modal-form";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import type { CrudMasterPageController } from "@/components/master/crud-master-page";
@@ -152,18 +149,15 @@ import type {
   InlineGodownMasterRequest,
   OpeningStockListFilters,
   OpeningStockEditorState,
-  OpeningStockColumnSettingsMode,
+  OpeningStockColumnSettingsDraftEntry,
   TableSettingsContextMenuPosition,
-  OpeningStockColumnSettingsRow,
   SaveOpeningStockUiTableColumnRequest,
 } from "./opening-stock.column-settings";
 import {
   createOpeningStockListFiltersForToday,
   clampContextMenuPosition,
-  compareUiTableColumns,
-  getUiTableColumnDraftKey,
   buildOpeningStockColumnSettingsRows,
-  buildOpeningStockUiTableColumnRequest,
+  buildOpeningStockUiTableColumnSettingsRequest,
   findOpeningStockUiTableColumnConfig,
   buildOpeningStockUiTableColumnWidthRequest,
   upsertOpeningStockUiTableColumnConfig,
@@ -177,7 +171,6 @@ import {
   TABLE_SETTINGS_CONTEXT_MENU_WIDTH,
   TABLE_SETTINGS_CONTEXT_MENU_HEIGHT,
   TABLE_SETTINGS_CONTEXT_MENU_PADDING,
-  OPENING_STOCK_TABLE_SHORTCUTS,
 } from "./opening-stock.column-settings";
 function renderValidationToastContent(
   issues: Array<{ rowId: number; fieldKey: string; message: string }>,
@@ -205,9 +198,13 @@ export default function OpeningStockPage() {
   const [uiColumnConfigs, setUiColumnConfigs] = useState<UiTableColumnPayload[]>([]);
   const [tableSettingsContextMenuPosition, setTableSettingsContextMenuPosition] =
     useState<TableSettingsContextMenuPosition | null>(null);
-  const [columnSettingsMode, setColumnSettingsMode] =
-    useState<OpeningStockColumnSettingsMode | null>(null);
-  const [columnSettingsDraft, setColumnSettingsDraft] = useState<Record<string, boolean>>({});
+  const [headerSettingsContextMenuPosition, setHeaderSettingsContextMenuPosition] =
+    useState<TableSettingsContextMenuPosition | null>(null);
+  const [headerSettingsColumnKey, setHeaderSettingsColumnKey] = useState<string | null>(null);
+  const [isColumnSettingsOpen, setIsColumnSettingsOpen] = useState(false);
+  const [columnSettingsDraft, setColumnSettingsDraft] = useState<
+    Record<string, OpeningStockColumnSettingsDraftEntry>
+  >({});
   const [isColumnSettingsSaving, setIsColumnSettingsSaving] = useState(false);
   const [itemDetailsByItemId, setItemDetailsByItemId] = useState<
     Record<string, ItemPriceDetailsPayload>
@@ -458,12 +455,12 @@ export default function OpeningStockPage() {
     void (async () => {
       const [itemsPayload, taxesPayload, unitsPayload, unitDecimalsPayload, godownsPayload] =
         await Promise.allSettled([
-        loadLookupOptions("item"),
-        loadTaxOptions(),
-        loadUnitOptions(),
-        listUnits({ query: { ...UNIT_LIST_QUERY } }),
-        loadLookupOptions("godown"),
-      ]);
+          loadLookupOptions("item"),
+          loadTaxOptions(),
+          loadUnitOptions(),
+          listUnits({ query: { ...UNIT_LIST_QUERY } }),
+          loadLookupOptions("godown"),
+        ]);
       if (cancelled) {
         return;
       }
@@ -621,33 +618,58 @@ export default function OpeningStockPage() {
     () => buildOpeningStockColumnSettingsRows(uiColumnConfigs, columns),
     [columns, uiColumnConfigs],
   );
-  const openColumnSettings = useCallback(
-    (mode: OpeningStockColumnSettingsMode) => {
-      const nextDraft: Record<string, boolean> = {};
-      for (const row of columnSettingsRows) {
-        nextDraft[row.key] = mode === "visibility" ? row.visible : row.focus;
-      }
-      setColumnSettingsDraft(nextDraft);
-      setColumnSettingsMode(mode);
-      setTableSettingsContextMenuPosition(null);
-    },
-    [columnSettingsRows],
-  );
+  const openColumnSettings = useCallback(() => {
+    const nextDraft: Record<string, OpeningStockColumnSettingsDraftEntry> = {};
+    for (const row of columnSettingsRows) {
+      nextDraft[row.key] = {
+        visible: row.visible,
+        focus: row.focus,
+        necessity: row.necessity,
+      };
+    }
+    setColumnSettingsDraft(nextDraft);
+    setIsColumnSettingsOpen(true);
+    setTableSettingsContextMenuPosition(null);
+    setHeaderSettingsContextMenuPosition(null);
+    setHeaderSettingsColumnKey(null);
+  }, [columnSettingsRows]);
   const closeColumnSettings = useCallback(() => {
     if (isColumnSettingsSaving) {
       return;
     }
-    setColumnSettingsMode(null);
+    setIsColumnSettingsOpen(false);
   }, [isColumnSettingsSaving]);
   const handleColumnSettingsSelectionChange = useCallback(
-    (rowKey: string, checked: boolean) => {
+    (
+      rowKey: string,
+      field: keyof OpeningStockColumnSettingsDraftEntry,
+      checked: boolean,
+    ) => {
       setColumnSettingsDraft((current) => ({
         ...current,
-        [rowKey]: checked,
+        [rowKey]: {
+          ...(current[rowKey] ?? {
+            visible: true,
+            focus: false,
+            necessity: false,
+          }),
+          [field]: checked,
+        },
       }));
     },
     [],
   );
+  const handleDefaultColumnSettings = useCallback(() => {
+    const nextDraft: Record<string, OpeningStockColumnSettingsDraftEntry> = {};
+    for (const row of columnSettingsRows) {
+      nextDraft[row.key] = {
+        visible: true,
+        focus: false,
+        necessity: false,
+      };
+    }
+    setColumnSettingsDraft(nextDraft);
+  }, [columnSettingsRows]);
   const handleTableBodyContextMenu = useCallback(
     (event: ReactMouseEvent<HTMLTableSectionElement>) => {
       if (columnSettingsRows.length === 0) {
@@ -656,6 +678,8 @@ export default function OpeningStockPage() {
       event.preventDefault();
       event.stopPropagation();
       setOpenLookupCell(null);
+      setHeaderSettingsContextMenuPosition(null);
+      setHeaderSettingsColumnKey(null);
       setTableSettingsContextMenuPosition({
         left: clampContextMenuPosition(
           event.clientX,
@@ -671,20 +695,52 @@ export default function OpeningStockPage() {
     },
     [columnSettingsRows.length],
   );
+  const handleColumnHeaderContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLTableCellElement>, column: ColumnDefinition) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setOpenLookupCell(null);
+      setTableSettingsContextMenuPosition(null);
+      setHeaderSettingsColumnKey(column.key);
+      setHeaderSettingsContextMenuPosition({
+        left: clampContextMenuPosition(
+          event.clientX,
+          TABLE_SETTINGS_CONTEXT_MENU_PADDING,
+          window.innerWidth - TABLE_SETTINGS_CONTEXT_MENU_WIDTH,
+        ),
+        top: clampContextMenuPosition(
+          event.clientY,
+          TABLE_SETTINGS_CONTEXT_MENU_PADDING,
+          window.innerHeight - TABLE_SETTINGS_CONTEXT_MENU_HEIGHT,
+        ),
+      });
+    },
+    [],
+  );
   useEffect(() => {
-    if (tableSettingsContextMenuPosition === null || typeof document === "undefined") {
+    if (
+      tableSettingsContextMenuPosition === null &&
+      headerSettingsContextMenuPosition === null
+    ) {
       return;
     }
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest('[data-opening-stock-settings-context-menu="true"]')) {
+      if (
+        target?.closest('[data-opening-stock-settings-context-menu="true"]') ||
+        target?.closest('[data-opening-stock-header-context-menu="true"]')
+      ) {
         return;
       }
       setTableSettingsContextMenuPosition(null);
+      setHeaderSettingsContextMenuPosition(null);
+      setHeaderSettingsColumnKey(null);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setTableSettingsContextMenuPosition(null);
+        setHeaderSettingsContextMenuPosition(null);
+        setHeaderSettingsColumnKey(null);
       }
     };
     document.addEventListener("mousedown", handlePointerDown);
@@ -693,39 +749,49 @@ export default function OpeningStockPage() {
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [tableSettingsContextMenuPosition]);
+  }, [headerSettingsContextMenuPosition, tableSettingsContextMenuPosition]);
   useEffect(() => {
-    if (tableSettingsContextMenuPosition === null || typeof window === "undefined") {
+    if (
+      tableSettingsContextMenuPosition === null &&
+      headerSettingsContextMenuPosition === null
+    ) {
       return;
     }
-    const closeContextMenu = () => setTableSettingsContextMenuPosition(null);
+    const closeContextMenu = () => {
+      setTableSettingsContextMenuPosition(null);
+      setHeaderSettingsContextMenuPosition(null);
+      setHeaderSettingsColumnKey(null);
+    };
     window.addEventListener("resize", closeContextMenu);
     window.addEventListener("scroll", closeContextMenu, true);
     return () => {
       window.removeEventListener("resize", closeContextMenu);
       window.removeEventListener("scroll", closeContextMenu, true);
     };
-  }, [tableSettingsContextMenuPosition]);
+  }, [headerSettingsContextMenuPosition, tableSettingsContextMenuPosition]);
   const saveColumnSettings = useCallback(async () => {
-    if (columnSettingsMode === null || columnSettingsRows.length === 0) {
+    if (!isColumnSettingsOpen || columnSettingsRows.length === 0) {
       return;
     }
     setIsColumnSettingsSaving(true);
     try {
       for (const row of columnSettingsRows) {
+        const draft =
+          columnSettingsDraft[row.key] ??
+          ({
+            visible: row.visible,
+            focus: row.focus,
+            necessity: row.necessity,
+          } satisfies OpeningStockColumnSettingsDraftEntry);
         await saveUiTableColumn({
-          body: buildOpeningStockUiTableColumnRequest(
-            row,
-            columnSettingsMode,
-            columnSettingsDraft[row.key] === true,
-          ),
+          body: buildOpeningStockUiTableColumnSettingsRequest(row, draft),
         });
       }
       const payload = await listUiTableColumns({ ...UI_TABLE_COLUMNS_QUERY });
       const nextColumnConfigs = Array.isArray(payload?.data) ? payload.data : [];
       uiColumnConfigsRef.current = nextColumnConfigs;
       setUiColumnConfigs(nextColumnConfigs);
-      setColumnSettingsMode(null);
+      setIsColumnSettingsOpen(false);
     } catch {
       // useApi handles error toast behavior.
     } finally {
@@ -733,13 +799,13 @@ export default function OpeningStockPage() {
     }
   }, [
     columnSettingsDraft,
-    columnSettingsMode,
     columnSettingsRows,
+    isColumnSettingsOpen,
     listUiTableColumns,
     saveUiTableColumn,
   ]);
   useEffect(() => {
-    if (columnSettingsMode === null || typeof document === "undefined") {
+    if (!isColumnSettingsOpen || typeof document === "undefined") {
       return;
     }
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -756,7 +822,51 @@ export default function OpeningStockPage() {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [closeColumnSettings, columnSettingsMode, saveColumnSettings]);
+  }, [closeColumnSettings, isColumnSettingsOpen, saveColumnSettings]);
+  const handleHideHeaderColumn = useCallback(
+    async (column: ColumnDefinition) => {
+      setHeaderSettingsContextMenuPosition(null);
+      setHeaderSettingsColumnKey(null);
+      setOpenLookupCell(null);
+
+      const renderedColumns = columnsRef.current;
+      const columnIndex = renderedColumns.findIndex((entry) => entry.key === column.key);
+      if (columnIndex < 0) {
+        return;
+      }
+      setColumns((current) => current.filter((entry) => entry.key !== column.key));
+      const configuredColumn = findOpeningStockUiTableColumnConfig(
+        uiColumnConfigsRef.current,
+        column.key,
+      );
+      const request = buildOpeningStockUiTableColumnWidthRequest(
+        column,
+        configuredColumn,
+        columnIndex,
+        parseColumnWidth(column.width),
+      );
+      request.uiTblClmColumnVisibility = false;
+      try {
+        const response = await saveUiTableColumn({ body: request });
+        const savedColumn = response?.data;
+        if (!savedColumn) {
+          return;
+        }
+        setUiColumnConfigs((current) => {
+          const nextColumns = upsertOpeningStockUiTableColumnConfig(
+            current,
+            savedColumn,
+            column.key,
+          );
+          uiColumnConfigsRef.current = nextColumns;
+          return nextColumns;
+        });
+      } catch {
+        // useApi handles error toast behavior; keep the local hide for this session.
+      }
+    },
+    [saveUiTableColumn],
+  );
   useEffect(() => {
     setColumns((current) => mergeResolvedColumns(current, resolvedColumns));
   }, [resolvedColumns]);
@@ -837,7 +947,7 @@ export default function OpeningStockPage() {
         window.clearTimeout(allowUnsafeNavigationTimeoutRef.current);
       }
     };
-    }, []);
+  }, []);
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!hasUnsavedChangesRef.current || allowUnsafeNavigationRef.current) {
@@ -1208,11 +1318,11 @@ export default function OpeningStockPage() {
       }
       const changedSalePair = sourceField
         ? OPENING_STOCK_SALE_PRICE_FIELD_PAIRS.find(
-            ({ markupField, saleField, saleWotField }) =>
-              sourceField === saleField ||
-              sourceField === saleWotField ||
-              sourceField === markupField,
-          )
+          ({ markupField, saleField, saleWotField }) =>
+            sourceField === saleField ||
+            sourceField === saleWotField ||
+            sourceField === markupField,
+        )
         : undefined;
       if (changedSalePair) {
         Object.assign(
@@ -1256,76 +1366,76 @@ export default function OpeningStockPage() {
         currentRows.map((row) =>
           row.id === rowId
             ? (() => {
-                const nextValues = {
-                  ...row.values,
-                  [field]: value,
-                };
-                const itemId = nextValues.oslitemid?.trim() ?? "";
-                const itemDetail = itemId ? itemDetailsByItemId[itemId] : undefined;
-                if (field === "osltaxid") {
-                  const normalizedTaxId = value.trim();
-                  nextValues.taxname = normalizedTaxId
-                    ? taxOptionsByValue.get(normalizedTaxId) ?? ""
-                    : "";
-                  nextValues.osltaxperc = DEFAULT_ROW_VALUES.osltaxperc ?? "";
-                  nextValues.oslcesstype = DEFAULT_ROW_VALUES.oslcesstype ?? "NONE";
-                  nextValues.oslcessperc = DEFAULT_ROW_VALUES.oslcessperc ?? "";
-                  nextValues.oslcessperunit = DEFAULT_ROW_VALUES.oslcessperunit ?? "";
-                }
-                const changedSalePair = OPENING_STOCK_SALE_PRICE_FIELD_PAIRS.find(
-                  ({ markupField, saleField, saleWotField }) =>
-                    field === saleField ||
-                    field === saleWotField ||
-                    field === markupField,
+              const nextValues = {
+                ...row.values,
+                [field]: value,
+              };
+              const itemId = nextValues.oslitemid?.trim() ?? "";
+              const itemDetail = itemId ? itemDetailsByItemId[itemId] : undefined;
+              if (field === "osltaxid") {
+                const normalizedTaxId = value.trim();
+                nextValues.taxname = normalizedTaxId
+                  ? taxOptionsByValue.get(normalizedTaxId) ?? ""
+                  : "";
+                nextValues.osltaxperc = DEFAULT_ROW_VALUES.osltaxperc ?? "";
+                nextValues.oslcesstype = DEFAULT_ROW_VALUES.oslcesstype ?? "NONE";
+                nextValues.oslcessperc = DEFAULT_ROW_VALUES.oslcessperc ?? "";
+                nextValues.oslcessperunit = DEFAULT_ROW_VALUES.oslcessperunit ?? "";
+              }
+              const changedSalePair = OPENING_STOCK_SALE_PRICE_FIELD_PAIRS.find(
+                ({ markupField, saleField, saleWotField }) =>
+                  field === saleField ||
+                  field === saleWotField ||
+                  field === markupField,
+              );
+              if (
+                changedSalePair ||
+                field === "costwot" ||
+                field === "costprice" ||
+                field === "profittype" ||
+                field === "roundoff" ||
+                field === "osltaxid" ||
+                field === "osltaxperc"
+              ) {
+                Object.assign(
+                  nextValues,
+                  getNextRowValuesWithDerivedPrices(nextValues, field),
                 );
-                if (
-                  changedSalePair ||
-                  field === "costwot" ||
-                  field === "costprice" ||
-                  field === "profittype" ||
-                  field === "roundoff" ||
-                  field === "osltaxid" ||
-                  field === "osltaxperc"
-                ) {
-                  Object.assign(
-                    nextValues,
-                    getNextRowValuesWithDerivedPrices(nextValues, field),
-                  );
-                }
-                if (field === "openingqty" || field === "freeqty" || field === "convfactor") {
-                  const convFactor =
-                    field === "convfactor"
-                      ? parseDecimal(nextValues.oslactualconvfactor) || parseDecimal(value) || 1
-                      : getOpeningStockActualConvFactor(nextValues);
-                  nextValues.baseqty = formatQuantityValue(
-                    parseDecimal(field === "openingqty" ? value : nextValues.openingqty) *
-                      convFactor,
-                  );
-                  nextValues.freebaseqty = formatQuantityValue(
-                    parseDecimal(field === "freeqty" ? value : nextValues.freeqty) * convFactor,
-                  );
-                }
-                if (field === "osltrackingtype") {
-                  const nextTrackingRow = {
-                    ...row,
-                    values: nextValues,
-                  };
-                  const normalizedTrackingType = normalizeOpeningStockTrackingType(value);
-                  if (!isOpeningStockBatchNumberEditable(nextTrackingRow, itemDetail)) {
-                    nextValues.batchno = "";
-                  }
-                  if (normalizedTrackingType !== "2") {
-                    nextValues.serialno = "";
-                    nextValues.batchdate = "";
-                    nextValues.mfgdate = "";
-                    nextValues.expirydate = "";
-                  }
-                }
-                return {
+              }
+              if (field === "openingqty" || field === "freeqty" || field === "convfactor") {
+                const convFactor =
+                  field === "convfactor"
+                    ? parseDecimal(nextValues.oslactualconvfactor) || parseDecimal(value) || 1
+                    : getOpeningStockActualConvFactor(nextValues);
+                nextValues.baseqty = formatQuantityValue(
+                  parseDecimal(field === "openingqty" ? value : nextValues.openingqty) *
+                  convFactor,
+                );
+                nextValues.freebaseqty = formatQuantityValue(
+                  parseDecimal(field === "freeqty" ? value : nextValues.freeqty) * convFactor,
+                );
+              }
+              if (field === "osltrackingtype") {
+                const nextTrackingRow = {
                   ...row,
                   values: nextValues,
                 };
-              })()
+                const normalizedTrackingType = normalizeOpeningStockTrackingType(value);
+                if (!isOpeningStockBatchNumberEditable(nextTrackingRow, itemDetail)) {
+                  nextValues.batchno = "";
+                }
+                if (normalizedTrackingType !== "2") {
+                  nextValues.serialno = "";
+                  nextValues.batchdate = "";
+                  nextValues.mfgdate = "";
+                  nextValues.expirydate = "";
+                }
+              }
+              return {
+                ...row,
+                values: nextValues,
+              };
+            })()
             : row,
         ),
       );
@@ -1346,15 +1456,15 @@ export default function OpeningStockPage() {
               currentRows.map((row) =>
                 row.id === rowId && (row.values.osltaxid ?? "").trim() === normalizedTaxId
                   ? (() => {
-                      const nextTaxValues = buildTaxSelectionValues(taxDetail);
-                      return {
-                        ...row,
-                        values: getNextRowValuesWithDerivedPrices({
-                          ...row.values,
-                          ...nextTaxValues,
-                        }),
-                      };
-                    })()
+                    const nextTaxValues = buildTaxSelectionValues(taxDetail);
+                    return {
+                      ...row,
+                      values: getNextRowValuesWithDerivedPrices({
+                        ...row.values,
+                        ...nextTaxValues,
+                      }),
+                    };
+                  })()
                   : row,
               ),
             );
@@ -1423,13 +1533,13 @@ export default function OpeningStockPage() {
           currentRows.map((row) =>
             row.id === rowId
               ? {
-                  ...row,
-                  values: {
-                    ...row.values,
-                    [fieldConfig.labelField]: option.value ? option.label : "",
-                    [fieldConfig.idField]: option.value,
-                  },
-                }
+                ...row,
+                values: {
+                  ...row.values,
+                  [fieldConfig.labelField]: option.value ? option.label : "",
+                  [fieldConfig.idField]: option.value,
+                },
+              }
               : row,
           ),
         );
@@ -1449,12 +1559,12 @@ export default function OpeningStockPage() {
           currentRows.map((row) =>
             row.id === rowId
               ? {
-                  ...row,
-                  values: {
-                    ...row.values,
-                    ...buildPendingItemSelectionValues(option),
-                  },
-                }
+                ...row,
+                values: {
+                  ...row.values,
+                  ...buildPendingItemSelectionValues(option),
+                },
+              }
               : row,
           ),
           rowId,
@@ -1508,15 +1618,15 @@ export default function OpeningStockPage() {
                 currentRows.map((row) =>
                   row.id === rowId && (row.values.oslitemid ?? "").trim() === option.value
                     ? (() => {
-                        const nextTaxValues = buildTaxSelectionValues(taxDetail);
-                        return {
-                          ...row,
-                          values: getNextRowValuesWithDerivedPrices({
-                            ...row.values,
-                            ...nextTaxValues,
-                          }),
-                        };
-                      })()
+                      const nextTaxValues = buildTaxSelectionValues(taxDetail);
+                      return {
+                        ...row,
+                        values: getNextRowValuesWithDerivedPrices({
+                          ...row.values,
+                          ...nextTaxValues,
+                        }),
+                      };
+                    })()
                     : row,
                 ),
               );
@@ -1572,15 +1682,15 @@ export default function OpeningStockPage() {
                 currentRows.map((row) =>
                   row.id === rowId && (row.values.oslitemid ?? "").trim() === option.value
                     ? (() => {
-                        const nextTaxValues = buildTaxSelectionValues(taxDetail);
-                        return {
-                          ...row,
-                          values: getNextRowValuesWithDerivedPrices({
-                            ...row.values,
-                            ...nextTaxValues,
-                          }),
-                        };
-                      })()
+                      const nextTaxValues = buildTaxSelectionValues(taxDetail);
+                      return {
+                        ...row,
+                        values: getNextRowValuesWithDerivedPrices({
+                          ...row.values,
+                          ...nextTaxValues,
+                        }),
+                      };
+                    })()
                     : row,
                 ),
               );
@@ -1594,9 +1704,9 @@ export default function OpeningStockPage() {
           }
           const message =
             error &&
-            typeof error === "object" &&
-            "message" in error &&
-            typeof error.message === "string"
+              typeof error === "object" &&
+              "message" in error &&
+              typeof error.message === "string"
               ? error.message
               : "Failed to load item price details.";
           toast.error(message, {
@@ -1648,8 +1758,8 @@ export default function OpeningStockPage() {
         controller.openCreate({
           values: request.query
             ? {
-                item_name_en: request.query,
-              }
+              item_name_en: request.query,
+            }
             : undefined,
         });
         return;
@@ -1673,8 +1783,8 @@ export default function OpeningStockPage() {
         controller.openCreate({
           values: request.query
             ? {
-                masterName: request.query,
-              }
+              masterName: request.query,
+            }
             : undefined,
         });
         return;
@@ -1875,7 +1985,7 @@ export default function OpeningStockPage() {
   const handleLookupSearchChange = useCallback(
     (lookupKind: LookupKind, search: string) => {
       const normalizedSearch = search.trim();
-       if (lookupKind === "item") {
+      if (lookupKind === "item") {
         if (itemSearchTimeoutRef.current !== null) {
           window.clearTimeout(itemSearchTimeoutRef.current);
         }
@@ -2134,9 +2244,9 @@ export default function OpeningStockPage() {
             auditNotes === undefined
               ? requestPayload
               : {
-                  ...requestPayload,
-                  audit_notes: auditNotes,
-                },
+                ...requestPayload,
+                audit_notes: auditNotes,
+              },
         });
         clearOpeningStockEditor();
       } catch {
@@ -2717,9 +2827,9 @@ export default function OpeningStockPage() {
         }
         return changed
           ? {
-              ...row,
-              values: nextValues,
-            }
+            ...row,
+            values: nextValues,
+          }
           : row;
       }),
     );
@@ -2763,459 +2873,579 @@ export default function OpeningStockPage() {
   const tableSettingsContextMenu =
     tableSettingsContextMenuPosition && typeof document !== "undefined"
       ? createPortal(
-          <div
-            className={styles.tableSettingsContextMenu}
-            data-opening-stock-settings-context-menu="true"
-            style={tableSettingsContextMenuPosition}
-            role="tooltip"
+        <div
+          className={styles.tableSettingsContextMenu}
+          data-opening-stock-settings-context-menu="true"
+          style={tableSettingsContextMenuPosition}
+          role="tooltip"
+        >
+          <button
+            type="button"
+            className={styles.tableSettingsContextMenuItem}
+            onClick={openColumnSettings}
           >
-            <button
-              type="button"
-              className={styles.tableSettingsContextMenuItem}
-              onClick={() => openColumnSettings("filter")}
-            >
-              grid filter setting
-            </button>
-            <button
-              type="button"
-              className={styles.tableSettingsContextMenuItem}
-              onClick={() => openColumnSettings("visibility")}
-            >
-              column visible setting
-            </button>
-          </div>,
-          document.body,
-        )
+            Admin settings
+          </button>
+        </div>,
+        document.body,
+      )
       : null;
-  const columnSettingsTitle =
-    columnSettingsMode === "visibility" ? "Column Visible Setting" : "Grid Filter Setting";
-  const columnSettingsModal =
-    columnSettingsMode !== null && typeof document !== "undefined"
+  const headerSettingsColumn =
+    headerSettingsColumnKey === null
+      ? null
+      : columns.find((column) => column.key === headerSettingsColumnKey) ?? null;
+  const headerSettingsContextMenu =
+    headerSettingsContextMenuPosition && headerSettingsColumn && typeof document !== "undefined"
       ? createPortal(
-          <div
-            className={dynamicModalStyles.overlay}
-            style={
-              {
-                "--erp-modal-overlay-z-index": 10001,
-                "--erp-modal-accent": "var(--ds-primary, #0f74c9)",
-              } as CSSProperties
-            }
+        <div
+          className={styles.tableSettingsContextMenu}
+          data-opening-stock-header-context-menu="true"
+          style={headerSettingsContextMenuPosition}
+          role="menu"
+          aria-label="Column actions"
+        >
+          <button
+            type="button"
+            className={styles.tableSettingsContextMenuItem}
+            onClick={() => void handleHideHeaderColumn(headerSettingsColumn)}
           >
-            <div
-              className={dynamicModalStyles.backdrop}
-              onClick={closeColumnSettings}
-              aria-hidden
-            />
-            <section
-              className={cx(dynamicModalStyles.panel, styles.columnSettingsDialog)}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="opening-stock-column-settings-title"
-            >
-              <header className={dynamicModalStyles.header}>
-                <div className={dynamicModalStyles.headerRow}>
-                  <div className={dynamicModalStyles.headerIntro}>
-                    <span className={dynamicModalStyles.headerIcon} aria-hidden="true">
-                      <svg viewBox="0 0 24 24" focusable="false">
-                        <path
-                          d="M4 5h16M4 12h16M4 19h16"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeLinecap="round"
-                          strokeWidth="1.8"
-                        />
-                        <path
-                          d="M8 5v14M16 5v14"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeLinecap="round"
-                          strokeWidth="1.4"
-                        />
-                      </svg>
-                    </span>
-                    <div className={dynamicModalStyles.headerText}>
-                      <h3
-                        id="opening-stock-column-settings-title"
-                        className={dynamicModalStyles.headerTitle}
-                      >
-                        {columnSettingsTitle}
-                      </h3>
-                      <p className={dynamicModalStyles.headerDescription}>
-                        Configure Opening Stock table columns.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className={dynamicModalStyles.closeButton}
-                    onClick={closeColumnSettings}
-                    aria-label="Close modal"
-                    disabled={isColumnSettingsSaving}
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                      className={dynamicModalStyles.closeIcon}
-                    >
+            Hide column
+          </button>
+        </div>,
+        document.body,
+      )
+      : null;
+  const columnSettingsModal =
+    isColumnSettingsOpen && typeof document !== "undefined"
+      ? createPortal(
+        <div
+          className={dynamicModalStyles.overlay}
+          style={
+            {
+              "--erp-modal-overlay-z-index": 10001,
+              "--erp-modal-accent": "var(--ds-primary, #0f74c9)",
+            } as CSSProperties
+          }
+        >
+          <div
+            className={dynamicModalStyles.backdrop}
+            onClick={closeColumnSettings}
+            aria-hidden
+          />
+          <section
+            className={cx(dynamicModalStyles.panel, styles.columnSettingsDialog)}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="opening-stock-column-settings-title"
+          >
+            <header className={dynamicModalStyles.header}>
+              <div className={dynamicModalStyles.headerRow}>
+                <div className={dynamicModalStyles.headerIntro}>
+                  <span className={dynamicModalStyles.headerIcon} aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
                       <path
-                        d="M6 18 18 6M6 6l12 12"
+                        d="M4 5h16M4 12h16M4 19h16"
                         fill="none"
                         stroke="currentColor"
                         strokeLinecap="round"
                         strokeWidth="1.8"
                       />
+                      <path
+                        d="M8 5v14M16 5v14"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeWidth="1.4"
+                      />
                     </svg>
-                  </button>
-                </div>
-              </header>
-              <div
-                className={cx(dynamicModalStyles.scrollArea, styles.columnSettingsBody)}
-                data-erp-modal-scroll-area="true"
-              >
-                {columnSettingsRows.length > 0 ? (
-                  <div className={styles.columnSettingsList}>
-                    {columnSettingsRows.map((row) => (
-                      <label key={row.key} className={styles.columnSettingsRow}>
-                        <input
-                          type="checkbox"
-                          checked={columnSettingsDraft[row.key] === true}
-                          disabled={isColumnSettingsSaving}
-                          onChange={(event) =>
-                            handleColumnSettingsSelectionChange(
-                              row.key,
-                              event.currentTarget.checked,
-                            )
-                          }
-                        />
-                        <span>{row.label}</span>
-                      </label>
-                    ))}
+                  </span>
+                  <div className={dynamicModalStyles.headerText}>
+                    <h3
+                      id="opening-stock-column-settings-title"
+                      className={dynamicModalStyles.headerTitle}
+                    >
+                      Table Settings
+                    </h3>
+                    <p className={dynamicModalStyles.headerDescription}>
+                      Configure Opening Stock table columns.
+                    </p>
                   </div>
-                ) : (
-                  <p className={styles.columnSettingsEmpty}>No columns configured.</p>
-                )}
+                </div>
+                <button
+                  type="button"
+                  className={dynamicModalStyles.closeButton}
+                  onClick={closeColumnSettings}
+                  aria-label="Close modal"
+                  disabled={isColumnSettingsSaving}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    className={dynamicModalStyles.closeIcon}
+                  >
+                    <path
+                      d="M6 18 18 6M6 6l12 12"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeWidth="1.8"
+                    />
+                  </svg>
+                </button>
               </div>
-              <footer className={dynamicModalStyles.footer}>
-                <div className={dynamicModalStyles.footerShortcuts}>
-                  <div className={dynamicModalStyles.footerShortcutList}>
-                    <span className={dynamicModalStyles.footerShortcutItem}>
-                      <span className={dynamicModalStyles.footerShortcutTitle}>
-                        {columnSettingsRows.length} columns
-                      </span>
-                    </span>
-                    <span className={dynamicModalStyles.footerShortcutItem}>
-                      <span className={dynamicModalStyles.footerShortcutAction}>
-                        F5 saves settings
-                      </span>
-                    </span>
-                  </div>
+            </header>
+            <div
+              className={cx(dynamicModalStyles.scrollArea, styles.columnSettingsBody)}
+              data-erp-modal-scroll-area="true"
+            >
+              {columnSettingsRows.length > 0 ? (
+                <div className={styles.columnSettingsTableWrap}>
+                  <table className={styles.columnSettingsTable}>
+                    <thead>
+                      <tr>
+                        <th className={styles.columnSettingsNumberHeader} />
+                        <th>Column Name</th>
+                        <th>Visible</th>
+                        <th>Focus</th>
+                        <th>Necessity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {columnSettingsRows.map((row, index) => {
+                        const draft =
+                          columnSettingsDraft[row.key] ?? {
+                            visible: row.visible,
+                            focus: row.focus,
+                            necessity: row.necessity,
+                          };
+                        return (
+                          <tr key={row.key}>
+                            <td className={styles.columnSettingsNumberCell}>
+                              {index + 1}
+                            </td>
+                            <td className={styles.columnSettingsNameCell}>
+                              {row.label}
+                            </td>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={draft.visible}
+                                disabled={isColumnSettingsSaving}
+                                onChange={(event) =>
+                                  handleColumnSettingsSelectionChange(
+                                    row.key,
+                                    "visible",
+                                    event.currentTarget.checked,
+                                  )
+                                }
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={draft.focus}
+                                disabled={isColumnSettingsSaving}
+                                onChange={(event) =>
+                                  handleColumnSettingsSelectionChange(
+                                    row.key,
+                                    "focus",
+                                    event.currentTarget.checked,
+                                  )
+                                }
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={draft.necessity}
+                                disabled={isColumnSettingsSaving}
+                                onChange={(event) =>
+                                  handleColumnSettingsSelectionChange(
+                                    row.key,
+                                    "necessity",
+                                    event.currentTarget.checked,
+                                  )
+                                }
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                <div className={dynamicModalStyles.footerActions}>
-                  <button
-                    type="button"
-                    className={dynamicModalStyles.cancelButton}
-                    onClick={closeColumnSettings}
-                    disabled={isColumnSettingsSaving}
-                  >
-                    Close
-                  </button>
-                  <button
-                    type="button"
-                    className={cx(
-                      dynamicModalStyles.submitButton,
-                      dynamicModalStyles.submitButtonSave,
-                    )}
-                    onClick={() => void saveColumnSettings()}
-                    disabled={isColumnSettingsSaving}
-                  >
-                    {isColumnSettingsSaving ? "Saving..." : "Save (F5)"}
-                  </button>
+              ) : (
+                <p className={styles.columnSettingsEmpty}>No columns configured.</p>
+              )}
+            </div>
+            <footer className={dynamicModalStyles.footer}>
+              <div className={dynamicModalStyles.footerShortcuts}>
+                <div className={dynamicModalStyles.footerShortcutList}>
+                  <span className={dynamicModalStyles.footerShortcutItem}>
+                    <span className={dynamicModalStyles.footerShortcutTitle}>
+                      {columnSettingsRows.length} columns
+                    </span>
+                  </span>
+                  <span className={dynamicModalStyles.footerShortcutItem}>
+                    <span className={dynamicModalStyles.footerShortcutAction}>
+                      F5 saves settings
+                    </span>
+                  </span>
                 </div>
-              </footer>
-            </section>
-          </div>,
-          document.body,
-        )
+              </div>
+              <div className={dynamicModalStyles.footerActions}>
+                <button
+                  type="button"
+                  className={cx(
+                    dynamicModalStyles.cancelButton,
+                    styles.columnSettingsDefaultButton,
+                  )}
+                  onClick={handleDefaultColumnSettings}
+                  disabled={isColumnSettingsSaving}
+                >
+                  Default
+                </button>
+                <button
+                  type="button"
+                  className={dynamicModalStyles.cancelButton}
+                  onClick={closeColumnSettings}
+                  disabled={isColumnSettingsSaving}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className={cx(
+                    dynamicModalStyles.submitButton,
+                    dynamicModalStyles.submitButtonSave,
+                  )}
+                  onClick={() => void saveColumnSettings()}
+                  disabled={isColumnSettingsSaving}
+                >
+                  {isColumnSettingsSaving ? "Saving..." : "Save (F5)"}
+                </button>
+              </div>
+            </footer>
+          </section>
+        </div>,
+        document.body,
+      )
       : null;
 
-  return (<>
-    {tableSettingsContextMenu}
-    {columnSettingsModal}
-    <section className={styles.page}>
-      <header className={styles.header}>
-        <div className={styles.headingBlock}>
-          <div className={styles.headingRow}>
-            <h1 className={styles.title}>
-              {loadedVoucherId && draftRows.length > 0 ? "Opening Stock (Edit)" : "Opening Stock"}
-            </h1>
+  return (
+    <>
+      {tableSettingsContextMenu}
+      {headerSettingsContextMenu}
+      {columnSettingsModal}
+      <section className={cx(styles.page, styles.openingStockPage)}>
+        <header className={cx(styles.header, styles.openingStockHeader)}>
+          <div className={styles.headingBlock}>
+            <div className={cx(styles.headingRow, styles.openingStockHeadingRow)}>
+              <span className={styles.openingStockTitleIcon} aria-hidden="true">
+                <FiBox />
+              </span>
+              <h1 className={cx(styles.title, styles.openingStockTitle)}>
+                {loadedVoucherId && draftRows.length > 0
+                  ? "Opening Stock (Edit)"
+                  : "Opening Stock"}
+              </h1>
+            </div>
           </div>
-        </div>
-      </header>
-      <div className={styles.tableShell}>
-        <StockToolbar
-          voucherDate={voucherDate}
-          voucherRefNo={voucherRefNo}
-          voucherDatePickerRef={voucherDatePickerRef}
-          isLoadingStock={isLoadingStock}
-          isSavingOpeningStock={isSavingOpeningStock}
-        isDeletingOpeningStock={isDeletingOpeningStock}
-        isBusinessContextLoading={isBusinessContextLoading}
-        canDeleteLoadedStock={Boolean(loadedVoucherId)}
-        canClearRows={draftRows.length > 0}
-        onVoucherDateChange={setVoucherDate}
-        onVoucherRefNoChange={setVoucherRefNo}
-        onBrowseStockList={handleOpenOpeningStockList}
-        onLoadByRefNo={handleLoadByRefNo}
-        onLoadStock={handleLoadStock}
-        onClearRows={handleClearRows}
-        onUpdateStock={handleUpdateStock}
-        onDeleteStock={handleDeleteLoadedStock}
-      />
-        <div
-          className={styles.tableViewport}
-          data-erp-table-viewport="true"
-        >
-          <table
-            ref={tableRef}
-            className={cx(styles.table, styles.resizableTable, styles.columnStripedTable)}
-            style={{ "--erp-table-min-width": tableMinWidth } as CSSProperties}
+        </header>
+        <div className={cx(styles.tableShell, styles.openingStockTableShell)}>
+          <StockToolbar
+            voucherDate={voucherDate}
+            voucherRefNo={voucherRefNo}
+            voucherDatePickerRef={voucherDatePickerRef}
+            isLoadingStock={isLoadingStock}
+            isSavingOpeningStock={isSavingOpeningStock}
+            isDeletingOpeningStock={isDeletingOpeningStock}
+            isBusinessContextLoading={isBusinessContextLoading}
+            canDeleteLoadedStock={Boolean(loadedVoucherId)}
+            canClearRows={draftRows.length > 0}
+            onVoucherDateChange={setVoucherDate}
+            onVoucherRefNoChange={setVoucherRefNo}
+            onBrowseStockList={handleOpenOpeningStockList}
+            onLoadByRefNo={handleLoadByRefNo}
+            onLoadStock={handleLoadStock}
+            onClearRows={handleClearRows}
+            onUpdateStock={handleUpdateStock}
+            onDeleteStock={handleDeleteLoadedStock}
+          />
+          <div
+            className={cx(styles.tableViewport, styles.openingStockTableViewport)}
+            data-erp-table-viewport="true"
           >
-            <colgroup>
-              <col style={{ width: SERIAL_NUMBER_COLUMN_WIDTH }} />
-              {columns.map((column) => (
-                <col
-                  key={column.key}
-                  style={{ width: column.width }}
-                />
-              ))}
-              <col style={{ width: DELETE_ACTION_COLUMN_WIDTH }} />
-            </colgroup>
-            <thead className={styles.head}>
-              <tr>
-                <th
-                  className={cx(
-                    styles.headerCell,
-                    styles.alignCenter,
-                    styles.headerCellDark,
-                    styles.stickySerialCell,
-                    styles.stickySerialHeader,
-                  )}
-                  style={{
-                    width: SERIAL_NUMBER_COLUMN_WIDTH,
-                    left: 0,
-                  }}
-                >
-                  <span className={styles.headerText}>S.No</span>
-                </th>
+            <table
+              ref={tableRef}
+              className={cx(
+                styles.table,
+                styles.resizableTable,
+                styles.columnStripedTable,
+                styles.openingStockTable,
+              )}
+              style={{ "--erp-table-min-width": tableMinWidth } as CSSProperties}
+            >
+              <colgroup>
+                <col style={{ width: SERIAL_NUMBER_COLUMN_WIDTH }} />
                 {columns.map((column) => (
-                  <th
+                  <col
                     key={column.key}
+                    style={{ width: column.width }}
+                  />
+                ))}
+                <col style={{ width: DELETE_ACTION_COLUMN_WIDTH }} />
+              </colgroup>
+              <thead className={styles.head}>
+                <tr>
+                  <th
                     className={cx(
                       styles.headerCell,
                       styles.alignCenter,
                       styles.headerCellDark,
-                      styles.resizableHeaderCell,
+                      styles.stickySerialCell,
+                      styles.stickySerialHeader,
                     )}
-                    style={{ width: column.width }}
+                    style={{
+                      width: SERIAL_NUMBER_COLUMN_WIDTH,
+                      left: 0,
+                    }}
                   >
-                    <div
-                      draggable
-                      className={styles.draggableHeaderContent}
-                      onDragStart={(event) => handleColumnDragStart(event, column.key)}
-                      onDragOver={handleColumnDragOver}
-                      onDrop={() => handleColumnDrop(column.key)}
-                      onDragEnd={handleColumnDragEnd}
-                    >
-                      <span className={styles.headerText}>{column.header}</span>
-                    </div>
-                    <span
-                      className={styles.columnResizeHandle}
-                      onMouseDown={(event) =>
-                        handleColumnResizeStart(event, column.key, column.width)
-                      }
-                      onDragStart={(event) => event.preventDefault()}
-                      role="presentation"
-                    />
+                    <span className={styles.headerText}>S.No</span>
                   </th>
+                  {columns.map((column) => (
+                    <th
+                      key={column.key}
+                      className={cx(
+                        styles.headerCell,
+                        styles.alignCenter,
+                        styles.headerCellDark,
+                        styles.resizableHeaderCell,
+                      )}
+                      style={{ width: column.width }}
+                      onContextMenu={(event) => handleColumnHeaderContextMenu(event, column)}
+                    >
+                      <div
+                        draggable
+                        className={styles.draggableHeaderContent}
+                        onDragStart={(event) => handleColumnDragStart(event, column.key)}
+                        onDragOver={handleColumnDragOver}
+                        onDrop={() => handleColumnDrop(column.key)}
+                        onDragEnd={handleColumnDragEnd}
+                      >
+                        <span className={styles.headerText}>{column.header}</span>
+                      </div>
+                      <span
+                        className={styles.columnResizeHandle}
+                        onMouseDown={(event) =>
+                          handleColumnResizeStart(event, column.key, column.width)
+                        }
+                        onDragStart={(event) => event.preventDefault()}
+                        role="presentation"
+                      />
+                    </th>
+                  ))}
+                  <th
+                    className={cx(
+                      styles.headerCell,
+                      styles.alignCenter,
+                      styles.headerCellDark,
+                      styles.stickyActionCell,
+                      styles.stickyActionHeader,
+                    )}
+                    style={{ width: DELETE_ACTION_COLUMN_WIDTH, right: 0 }}
+                    aria-hidden="true"
+                  />
+                </tr>
+              </thead>
+              <tbody className={styles.body} onContextMenu={handleTableBodyContextMenu}>
+                {renderedRows.map((row, index) => (
+                  <StockTableRow
+                    key={row.id}
+                    row={row}
+                    rowIndex={index}
+                    columns={columns}
+                    invalidFieldKeys={invalidFieldKeys}
+                    itemDetailsByItemId={itemDetailsByItemId}
+                    itemOptionsByValue={itemOptionsByValue}
+                    godownOptionsByValue={godownOptionsByValue}
+                    unitOptionsByValue={unitOptionsByValue}
+                    unitDecimalCountById={unitDecimalCountById}
+                    openLookupCell={openLookupCell}
+                    lookupSearchQuery={lookupSearchQuery}
+                    filteredItemOptions={filteredItemOptions}
+                    filteredGodownOptions={filteredGodownOptions}
+                    isItemLookupLoading={isItemLookupLoading}
+                    isGodownLookupLoading={isGodownLookupLoading}
+                    lookupSearchInputRef={lookupSearchInputRef}
+                    lookupRootRefs={lookupRootRefs}
+                    rowDatePickerRefs={rowDatePickerRefs}
+                    onRemoveRow={handleRemoveRow}
+                    onRowChange={handleRowChange}
+                    onUomChange={handleUomChange}
+                    onLookupSelection={handleLookupSelection}
+                    onLookupSearchChange={handleLookupSearchInputChange}
+                    onLookupToggle={handleLookupToggle}
+                    onLookupCreateShortcut={(rowId, lookupKind, payload) => {
+                      if (lookupKind === "item") {
+                        void handleItemLookupCreateShortcut(rowId, payload);
+                        return;
+                      }
+                      if (lookupKind === "godown") {
+                        void handleGodownLookupCreateShortcut(rowId, payload);
+                      }
+                    }}
+                    onLookupEditShortcut={(rowId, lookupKind, payload) => {
+                      if (lookupKind === "item") {
+                        void handleItemLookupEditShortcut(rowId, payload);
+                        return;
+                      }
+                      if (lookupKind === "godown") {
+                        void handleGodownLookupEditShortcut(rowId, payload);
+                      }
+                    }}
+                  />
                 ))}
-                <th
-                  className={cx(
-                    styles.headerCell,
-                    styles.alignCenter,
-                    styles.headerCellDark,
-                    styles.stickyActionCell,
-                    styles.stickyActionHeader,
-                  )}
-                  style={{ width: DELETE_ACTION_COLUMN_WIDTH, right: 0 }}
-                  aria-hidden="true"
-                />
-              </tr>
-            </thead>
-            <tbody className={styles.body} onContextMenu={handleTableBodyContextMenu}>
-              {renderedRows.map((row, index) => (
-                <StockTableRow
-                  key={row.id}
-                  row={row}
-                  rowIndex={index}
-                  columns={columns}
-                  invalidFieldKeys={invalidFieldKeys}
-                  itemDetailsByItemId={itemDetailsByItemId}
-                  itemOptionsByValue={itemOptionsByValue}
-                  godownOptionsByValue={godownOptionsByValue}
-                  unitOptionsByValue={unitOptionsByValue}
-                  unitDecimalCountById={unitDecimalCountById}
-                  openLookupCell={openLookupCell}
-                  lookupSearchQuery={lookupSearchQuery}
-                  filteredItemOptions={filteredItemOptions}
-                  filteredGodownOptions={filteredGodownOptions}
-                  isItemLookupLoading={isItemLookupLoading}
-                  isGodownLookupLoading={isGodownLookupLoading}
-                  lookupSearchInputRef={lookupSearchInputRef}
-                  lookupRootRefs={lookupRootRefs}
-                  rowDatePickerRefs={rowDatePickerRefs}
-                  onRemoveRow={handleRemoveRow}
-                  onRowChange={handleRowChange}
-                  onUomChange={handleUomChange}
-                  onLookupSelection={handleLookupSelection}
-                  onLookupSearchChange={handleLookupSearchInputChange}
-                  onLookupToggle={handleLookupToggle}
-                  onLookupCreateShortcut={(rowId, lookupKind, payload) => {
-                    if (lookupKind === "item") {
-                      void handleItemLookupCreateShortcut(rowId, payload);
-                      return;
-                    }
-                    if (lookupKind === "godown") {
-                      void handleGodownLookupCreateShortcut(rowId, payload);
-                    }
-                  }}
-                  onLookupEditShortcut={(rowId, lookupKind, payload) => {
-                    if (lookupKind === "item") {
-                      void handleItemLookupEditShortcut(rowId, payload);
-                      return;
-                    }
-                    if (lookupKind === "godown") {
-                      void handleGodownLookupEditShortcut(rowId, payload);
-                    }
-                  }}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className={styles.paginationBar}>
-          <div className={styles.paginationInfo}>
-            <KeyboardShortcutHints
-              shortcuts={OPENING_STOCK_TABLE_SHORTCUTS}
-              dense
-            />
+              </tbody>
+            </table>
           </div>
-          <div className={styles.footerValue}>
-            <strong className={styles.footerLabel}>qty</strong>
-            <strong>{QUANTITY_FORMATTER.format(visibleTotals.qty)} </strong>
-            <strong className={styles.footerLabel}>free qty</strong>
-            <strong>{QUANTITY_FORMATTER.format(visibleTotals.freeQty)}</strong>
-            <strong className={styles.footerLabel}>stock value</strong>
-            <strong>{VALUE_FORMATTER.format(visibleTotals.value)}</strong>
+          <div className={cx(styles.paginationBar, styles.openingStockFooterBar)}>
+            <div className={styles.paginationInfo} />
+            <div className={styles.openingStockFooterMetrics}>
+              <div className={styles.openingStockMetric}>
+                <span className={styles.openingStockMetricIcon} aria-hidden="true">
+                  <FiBox />
+                </span>
+                <div className={styles.openingStockMetricText}>
+                  <span className={styles.openingStockMetricLabel}>Qty</span>
+                  <strong className={styles.openingStockMetricValue}>
+                    {QUANTITY_FORMATTER.format(visibleTotals.qty)}
+                  </strong>
+                </div>
+              </div>
+              <div className={styles.openingStockMetric}>
+                <span className={styles.openingStockMetricIcon} aria-hidden="true">
+                  <FiGift />
+                </span>
+                <div className={styles.openingStockMetricText}>
+                  <span className={styles.openingStockMetricLabel}>Free Qty</span>
+                  <strong className={styles.openingStockMetricValue}>
+                    {QUANTITY_FORMATTER.format(visibleTotals.freeQty)}
+                  </strong>
+                </div>
+              </div>
+              <div className={styles.openingStockMetric}>
+                <span className={styles.openingStockMetricIcon} aria-hidden="true">
+                  <FiTrendingUp />
+                </span>
+                <div className={styles.openingStockMetricText}>
+                  <span className={styles.openingStockMetricLabel}>Stock Value</span>
+                  <strong className={styles.openingStockMetricValue}>
+                    {VALUE_FORMATTER.format(visibleTotals.value)}
+                  </strong>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-      {isInlineItemMasterOpen ? (
-        <ItemMasterPageContent
-          inlineModalOnly
-          onCrudControllerReady={handleInlineItemMasterControllerReady}
-          onModalOpenChange={handleInlineItemMasterModalOpenChange}
-          onItemSaved={handleInlineItemMasterSaved}
+        {isInlineItemMasterOpen ? (
+          <ItemMasterPageContent
+            inlineModalOnly
+            onCrudControllerReady={handleInlineItemMasterControllerReady}
+            onModalOpenChange={handleInlineItemMasterModalOpenChange}
+            onItemSaved={handleInlineItemMasterSaved}
+          />
+        ) : null}
+        {isInlineGodownMasterOpen ? (
+          <GodownMasterPageContent
+            inlineModalOnly
+            onCrudControllerReady={handleInlineGodownMasterControllerReady}
+            onModalOpenChange={handleInlineGodownMasterModalOpenChange}
+            onGodownSaved={handleInlineGodownMasterSaved}
+          />
+        ) : null}
+        <DeleteConfirmModal
+          isOpen={pendingLoadRequest !== null}
+          title="Replace current rows?"
+          message=""
+          iconVariant="replace"
+          confirmLabel={loadConfirmLabel}
+          cancelLabel="Keep current rows"
+          loading={isLoadingStock}
+          loadingLabel={loadConfirmLoadingLabel}
+          onConfirm={handleConfirmLoad}
+          onCancel={() => {
+            if (!isLoadingStock) {
+              setPendingLoadRequest(null);
+            }
+          }}
         />
-      ) : null}
-      {isInlineGodownMasterOpen ? (
-        <GodownMasterPageContent
-          inlineModalOnly
-          onCrudControllerReady={handleInlineGodownMasterControllerReady}
-          onModalOpenChange={handleInlineGodownMasterModalOpenChange}
-          onGodownSaved={handleInlineGodownMasterSaved}
+        <DeleteConfirmModal
+          isOpen={isDeleteLoadedStockConfirmOpen}
+          itemName={loadedDocumentMeta?.voucherLabel || voucherRefNo || loadedVoucherId || undefined}
+          title="Delete Opening Stock?"
+          message={
+            loadedDocumentMeta?.voucherLabel || voucherRefNo
+              ? `Do you really want to delete the loaded opening stock voucher "${loadedDocumentMeta?.voucherLabel || voucherRefNo}"? This action cannot be undone.`
+              : "Do you really want to delete the loaded opening stock voucher? This action cannot be undone."
+          }
+          confirmLabel="Delete Stock"
+          cancelLabel="Cancel"
+          loading={isDeletingOpeningStock}
+          loadingLabel="Deleting..."
+          onConfirm={handleConfirmDeleteLoadedStock}
+          onCancel={() => {
+            if (!isDeletingOpeningStock) {
+              setIsDeleteLoadedStockConfirmOpen(false);
+            }
+          }}
         />
-      ) : null}
-      <DeleteConfirmModal
-        isOpen={pendingLoadRequest !== null}
-        title="Replace current rows?"
-        message=""
-        iconVariant="replace"
-        confirmLabel={loadConfirmLabel}
-        cancelLabel="Keep current rows"
-        loading={isLoadingStock}
-        loadingLabel={loadConfirmLoadingLabel}
-        onConfirm={handleConfirmLoad}
-        onCancel={() => {
-          if (!isLoadingStock) {
-            setPendingLoadRequest(null);
+        <DeleteConfirmModal
+          isOpen={isUnsavedChangesConfirmOpen}
+          title="Leave Opening Stock?"
+          message="Unsaved changes will be lost if you leave this page."
+          confirmLabel="Leave Page"
+          cancelLabel="Stay Here"
+          onConfirm={handleConfirmUnsafeNavigation}
+          onCancel={handleCancelUnsafeNavigation}
+        />
+        <OpeningStockAuditNotesModal
+          isOpen={pendingOpeningStockSaveRequest !== null}
+          notes={openingStockAuditNotes}
+          error={openingStockAuditNotesError}
+          loading={isSavingOpeningStock}
+          voucherLabel={loadedDocumentMeta?.voucherLabel || voucherRefNo || loadedVoucherId}
+          onChange={handleOpeningStockAuditNotesChange}
+          onConfirm={handleConfirmOpeningStockAuditNotes}
+          onCancel={handleCancelOpeningStockAuditNotes}
+        />
+        <OpeningStockListModal
+          isOpen={isOpeningStockListOpen}
+          suspendKeyboardShortcuts={pendingLoadRequest !== null}
+          filters={openingStockListFilters}
+          rows={openingStockListRows}
+          loading={isOpeningStockListLoading}
+          error={openingStockListError}
+          totalEntries={openingStockListMeta.total}
+          currentPage={openingStockListPage}
+          pageSize={openingStockListPageSize}
+          selectedVoucherId={selectedOpeningStockListVoucherId}
+          selectedVoucherLabel={
+            selectedOpeningStockListRow
+              ? getOpeningStockVoucherLabel(selectedOpeningStockListRow)
+              : null
           }
-        }}
-      />
-      <DeleteConfirmModal
-        isOpen={isDeleteLoadedStockConfirmOpen}
-        itemName={loadedDocumentMeta?.voucherLabel || voucherRefNo || loadedVoucherId || undefined}
-        title="Delete Opening Stock?"
-        message={
-          loadedDocumentMeta?.voucherLabel || voucherRefNo
-            ? `Do you really want to delete the loaded opening stock voucher "${loadedDocumentMeta?.voucherLabel || voucherRefNo}"? This action cannot be undone.`
-            : "Do you really want to delete the loaded opening stock voucher? This action cannot be undone."
-        }
-        confirmLabel="Delete Stock"
-        cancelLabel="Cancel"
-        loading={isDeletingOpeningStock}
-        loadingLabel="Deleting..."
-        onConfirm={handleConfirmDeleteLoadedStock}
-        onCancel={() => {
-          if (!isDeletingOpeningStock) {
-            setIsDeleteLoadedStockConfirmOpen(false);
-          }
-        }}
-      />
-      <DeleteConfirmModal
-        isOpen={isUnsavedChangesConfirmOpen}
-        title="Leave Opening Stock?"
-        message="Unsaved changes will be lost if you leave this page."
-        confirmLabel="Leave Page"
-        cancelLabel="Stay Here"
-        onConfirm={handleConfirmUnsafeNavigation}
-        onCancel={handleCancelUnsafeNavigation}
-      />
-      <OpeningStockAuditNotesModal
-        isOpen={pendingOpeningStockSaveRequest !== null}
-        notes={openingStockAuditNotes}
-        error={openingStockAuditNotesError}
-        loading={isSavingOpeningStock}
-        voucherLabel={loadedDocumentMeta?.voucherLabel || voucherRefNo || loadedVoucherId}
-        onChange={handleOpeningStockAuditNotesChange}
-        onConfirm={handleConfirmOpeningStockAuditNotes}
-        onCancel={handleCancelOpeningStockAuditNotes}
-      />
-      <OpeningStockListModal
-        isOpen={isOpeningStockListOpen}
-        suspendKeyboardShortcuts={pendingLoadRequest !== null}
-        filters={openingStockListFilters}
-        rows={openingStockListRows}
-        loading={isOpeningStockListLoading}
-        error={openingStockListError}
-        totalEntries={openingStockListMeta.total}
-        currentPage={openingStockListPage}
-        pageSize={openingStockListPageSize}
-        selectedVoucherId={selectedOpeningStockListVoucherId}
-        selectedVoucherLabel={
-          selectedOpeningStockListRow
-            ? getOpeningStockVoucherLabel(selectedOpeningStockListRow)
-            : null
-        }
-        onClose={handleCloseOpeningStockList}
-        onSearchChange={handleOpeningStockListSearchChange}
-        onDateFromChange={handleOpeningStockListDateFromChange}
-        onDateToChange={handleOpeningStockListDateToChange}
-        onPageChange={setOpeningStockListPage}
-        onPageSizeChange={handleOpeningStockListPageSizeChange}
-        onSelectRow={handleOpeningStockListRowSelect}
-        onLoadRow={handleLoadOpeningStockListRow}
-        onLoadSelected={handleLoadSelectedOpeningStockListRow}
-      />
-    </section></>
+          onClose={handleCloseOpeningStockList}
+          onSearchChange={handleOpeningStockListSearchChange}
+          onDateFromChange={handleOpeningStockListDateFromChange}
+          onDateToChange={handleOpeningStockListDateToChange}
+          onPageChange={setOpeningStockListPage}
+          onPageSizeChange={handleOpeningStockListPageSizeChange}
+          onSelectRow={handleOpeningStockListRowSelect}
+          onLoadRow={handleLoadOpeningStockListRow}
+          onLoadSelected={handleLoadSelectedOpeningStockListRow}
+        />
+      </section>
+    </>
   );
 }

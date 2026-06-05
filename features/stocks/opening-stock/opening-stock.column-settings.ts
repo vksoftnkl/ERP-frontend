@@ -80,9 +80,14 @@ export const EMPTY_OPENING_STOCK_LIST_META: OpeningStockListMeta = {
   total_pages: 0,
 };
 export const TABLE_SETTINGS_CONTEXT_MENU_WIDTH = 190;
-export const TABLE_SETTINGS_CONTEXT_MENU_HEIGHT = 96;
+export const TABLE_SETTINGS_CONTEXT_MENU_HEIGHT = 64;
 export const TABLE_SETTINGS_CONTEXT_MENU_PADDING = 8;
 export type OpeningStockColumnSettingsMode = "filter" | "visibility";
+export type OpeningStockColumnSettingsDraftEntry = {
+  visible: boolean;
+  focus: boolean;
+  necessity: boolean;
+};
 export type TableSettingsContextMenuPosition = Pick<CSSProperties, "left" | "top">;
 export type OpeningStockColumnSettingsRow = {
   key: string;
@@ -201,6 +206,25 @@ export function buildOpeningStockUiTableColumnRequest(
     uiTblClmColumnFocus: mode === "filter" ? checked : row.focus,
     uiTblClmColumnPosition: row.position,
     uiTblClmColumnNecessity: row.necessity,
+    uiTblClmNextColumn: row.nextColumn,
+    uiTblClmPreviousColumn: row.previousColumn,
+    uiTblClmIsActive: row.isActive,
+  };
+}
+export function buildOpeningStockUiTableColumnSettingsRequest(
+  row: OpeningStockColumnSettingsRow,
+  settings: OpeningStockColumnSettingsDraftEntry,
+): SaveOpeningStockUiTableColumnRequest {
+  return {
+    ...(row.uiTblClmId ? { uiTblClmId: row.uiTblClmId } : {}),
+    uiTblClmNo: row.uiTblClmNo || String(row.position),
+    uiTblClmName: row.label,
+    uiTblClmTableId: row.uiTblClmTableId,
+    uiTblClmColumnWidth: row.width,
+    uiTblClmColumnVisibility: settings.visible,
+    uiTblClmColumnFocus: settings.focus,
+    uiTblClmColumnPosition: row.position,
+    uiTblClmColumnNecessity: settings.necessity,
     uiTblClmNextColumn: row.nextColumn,
     uiTblClmPreviousColumn: row.previousColumn,
     uiTblClmIsActive: row.isActive,

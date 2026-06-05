@@ -1,15 +1,3 @@
-import {
-  DEFAULT_GODOWN_OPTION,
-  DEFAULT_ITEM_OPTION,
-  DELETE_ACTION_COLUMN_WIDTH,
-  GODOWN_LIST_ENDPOINT,
-  GODOWN_LOOKUP_QUERY,
-  LOOKUP_SEARCH_DEBOUNCE_MS,
-  MIN_RESIZABLE_COLUMN_WIDTH,
-  QUANTITY_FORMATTER,
-  SERIAL_NUMBER_COLUMN_WIDTH,
-  VALUE_FORMATTER,
-} from "@/features/stocks/_shared/constants";
 import type { ColumnSchema, LookupKind } from "./opening-stock.types";
 
 export {
@@ -25,8 +13,7 @@ export {
   VALUE_FORMATTER,
 } from "@/features/stocks/_shared/constants";
 
-export const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-columns/list";
-export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-columns/create";
+export { UI_TABLE_COLUMNS_LIST_ENDPOINT, UI_TABLE_COLUMNS_CREATE_ENDPOINT } from "@/features/stocks/_shared/constants";
 export const ACCOUNT_LEDGER_LIST_ENDPOINT = "/account-ledger-masters/get";
 export const UNIT_LIST_ENDPOINT ="/configured-grid-sql/run?grid_id=4";
 export const OPENING_STOCK_SAVE_ENDPOINT = "/opening-stocks";

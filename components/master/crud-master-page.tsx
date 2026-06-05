@@ -3217,36 +3217,29 @@ export default function CrudMasterPage({
       if (gridId === null || gridSettingsColumns.length === 0) {
         return;
       }
-
       const nextVisibleGridColumns: GridColumnConfig[] = [];
       const seenSerialIds = new Set<string>();
       for (const tableColumn of nextColumns) {
         if (!isMasterFilterDataColumn(tableColumn)) {
           continue;
         }
-
         const gridColumn = resolveGridColumnForTableColumn(tableColumn, gridColumns);
         if (!gridColumn?.serialId || seenSerialIds.has(gridColumn.serialId)) {
           continue;
         }
-
         seenSerialIds.add(gridColumn.serialId);
         nextVisibleGridColumns.push(gridColumn);
       }
-
       if (nextVisibleGridColumns.length === 0) {
         return;
       }
-
       const visibleSerialIds = new Set(nextVisibleGridColumns.map((column) => column.serialId));
       const visibleQueue = [...nextVisibleGridColumns];
       const nextGridColumnOrder: GridColumnConfig[] = [];
-
       for (const gridColumn of gridSettingsColumns) {
         if (!gridColumn.serialId) {
           continue;
         }
-
         if (visibleSerialIds.has(gridColumn.serialId)) {
           const nextVisibleColumn = visibleQueue.shift();
           if (nextVisibleColumn) {
@@ -3254,12 +3247,9 @@ export default function CrudMasterPage({
           }
           continue;
         }
-
         nextGridColumnOrder.push(gridColumn);
       }
-
       nextGridColumnOrder.push(...visibleQueue);
-
       void (async () => {
         try {
           for (const [index, gridColumn] of nextGridColumnOrder.entries()) {

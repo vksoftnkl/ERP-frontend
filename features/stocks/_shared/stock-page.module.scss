@@ -8,7 +8,7 @@
   --table-border: #9ea1a5;
   --table-border-soft: #9ea1a5;
   --table-surface: #ffffff;
-  --table-surface-muted: rgb(54, 91, 157);
+  --table-surface-muted: #bacdef;
   --table-surface-stockmodal-table : rgb(54, 91, 157);
   --table-surface-accent: #fbfdff;
   --table-text:#1b2634;
@@ -96,47 +96,50 @@
   top: auto;
   left: auto;
   z-index: 10000;
-  display: grid;
-  gap: 0.2rem;
-  min-width: 11.5rem;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid #c9d6e7;
+  min-width: 11.375rem;
+  padding: 0.4rem;
+  border: 1px solid #d9e2ec;
   border-radius: var(--erp-radius);
   background: #ffffff;
-  box-shadow: 0 10px 24px rgba(21, 33, 54, 0.14);
-  color: var(--table-text, #1b2634);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.35;
+  box-shadow: 0 18px 32px rgba(15, 35, 60, 0.14);
 }
 .tableSettingsContextMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
   width: 100%;
-  min-height: 1.75rem;
-  padding: 0.25rem 0.35rem;
+  min-height: 2.25rem;
+  padding: 0.68rem 0.72rem;
   border: 0;
   border-radius: var(--erp-radius);
   background: transparent;
-  color: inherit;
+  color: #394b60;
   cursor: pointer;
-  font: inherit;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.25;
   text-align: left;
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease;
 }
 .tableSettingsContextMenuItem:hover,
 .tableSettingsContextMenuItem:focus-visible {
-  background: #edf3fb;
-  color: var(--primary, #3b7dd8);
+  background: #f3f7fb;
   outline: 0;
 }
 .columnSettingsDialog {
-  width: min(32rem, calc(100vw - 2.4rem));
-  max-height: min(80vh, 34rem);
+  width: min(54rem, calc(100vw - 2.4rem));
+  max-height: min(88vh, 42rem);
 }
 .columnSettingsBody {
   flex: 1;
   min-height: 0;
+  max-height: calc(88vh - 148px);
   overflow: auto;
-  background: #f8fafc;
-  padding: 0.35rem;
+  background: #ffffff;
+  padding: 0;
 }
 .columnSettingsList {
   display: grid;
@@ -167,6 +170,70 @@
   padding: 1rem;
   color: #5e6470;
   font-size: 13px;
+}
+.columnSettingsTableWrap {
+  min-height: 18rem;
+  overflow: auto;
+  background: #ffffff;
+  padding: 1rem;
+}
+.columnSettingsTable {
+  width: 100%;
+  border: 1px solid #dbe3ee;
+  border-radius: var(--erp-radius);
+  border-collapse: separate;
+  border-spacing: 0;
+  color: #0f172a;
+  font-size: 0.8rem;
+  overflow: hidden;
+  table-layout: fixed;
+}
+.columnSettingsTable th,
+.columnSettingsTable td {
+  border-right: 1px solid #dbe3ee;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.5rem 0.62rem;
+  text-align: left;
+  vertical-align: middle;
+}
+.columnSettingsTable th:last-child,
+.columnSettingsTable td:last-child {
+  border-right: 0;
+}
+.columnSettingsTable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #bacdef;
+  color: #0f172a;
+  font-weight: 800;
+  text-align: center;
+}
+.columnSettingsTable tbody td {
+  background: #ffffff;
+}
+.columnSettingsTable tbody tr:hover td {
+  background: #f8fafc;
+}
+.columnSettingsTable input[type="checkbox"] {
+  width: 0.82rem;
+  height: 0.82rem;
+  margin: 0;
+  accent-color: var(--ds-primary, #0f74c9);
+}
+.columnSettingsNumberHeader,
+.columnSettingsNumberCell {
+  width: 2.5rem;
+  text-align: center;
+}
+.columnSettingsNameCell {
+  width: 16rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.columnSettingsDefaultButton {
+  min-width: 5.8rem;
 }
 .table {
   width: 100%;
@@ -496,6 +563,335 @@
 }
 .deleteStockButton:hover:not(:disabled) {
   box-shadow: 0 10px 20px rgba(155, 28, 28, 0.24);
+}
+.openingStockPage {
+  min-height: calc(100dvh - 2rem);
+  gap: 1.4rem;
+  padding: 1rem;
+  background: #ffffff;
+}
+.openingStockHeader {
+  flex: 0 0 auto;
+}
+.openingStockHeadingRow {
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1rem;
+  flex-wrap: nowrap;
+}
+.openingStockTitleIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.2rem;
+  height: 3.2rem;
+  border-radius: 0.5rem;
+  background: #f0f4ff;
+  color: #0a43c4;
+  box-shadow: 0 1px 0 rgba(10, 67, 196, 0.06);
+}
+.openingStockTitleIcon svg {
+  width: 1.55rem;
+  height: 1.55rem;
+  stroke-width: 2.3;
+}
+.openingStockTitle {
+  color: #071b54;
+  font-size: 1.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.1;
+}
+.openingStockTableShell {
+  flex: 1 1 auto;
+  gap: 1.3rem;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.openingStockToolbar {
+  flex: 0 0 auto;
+  padding: 0.55rem 0.55rem 0.7rem;
+  background: transparent;
+}
+.openingStockTools {
+  display: grid;
+  grid-template-columns: auto minmax(22rem, 1fr) auto;
+  gap: 1.35rem;
+  min-height: 3.2rem;
+  align-items: center;
+}
+.openingStockField {
+  min-height: 3.2rem;
+  gap: 1rem;
+}
+.openingStockField .toolbarDateLabel {
+  color: #5f6f8c;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+.openingStockDateControl,
+.openingStockRefControl {
+  min-height: 3rem;
+  border-color: #d8e2ef;
+  border-radius: 0.45rem;
+  box-shadow:
+    0 1px 2px rgba(12, 31, 78, 0.04),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+.openingStockDateControl {
+  min-width: 10.8rem;
+}
+.openingStockRefControl {
+  min-width: 21rem;
+}
+.openingStockField .toolbarDateInput {
+  min-height: 2.95rem;
+  color: #071b54;
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 0 0.95rem;
+}
+.openingStockRefField .toolbarDateInput {
+  min-width: 12rem;
+  text-transform: none;
+  font-weight: 600;
+}
+.openingStockRefField .toolbarDateInput::placeholder {
+  color: #74819c;
+  opacity: 1;
+}
+.openingStockActionGroup {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.openingStockButton {
+  min-height: 2.85rem;
+  min-width: 8rem;
+  border-radius: 0.35rem;
+  padding: 0 1.05rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  box-shadow: 0 4px 12px rgba(13, 44, 98, 0.08);
+}
+.openingStockInlineButton {
+  min-width: 8.2rem;
+  min-height: 2.95rem;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: #003aa4;
+}
+.openingStockInlineButton:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+.openingStockButton.loadButton,
+.openingStockButton.refLoadButton {
+  color: #003aa4;
+  border-color: #d8e2ef;
+  background: #ffffff;
+}
+.openingStockButton.clearRowsButton {
+  color: #ef493f;
+  border-color: #ffc5c0;
+  background: #ffffff;
+}
+.openingStockButton.updateButton {
+  border-color: #168540;
+  background: linear-gradient(180deg, #25a84f 0%, #168540 100%);
+}
+.openingStockButton.deleteStockButton {
+  border-color: #df3d36;
+  background: linear-gradient(180deg, #ef534d 0%, #df3d36 100%);
+}
+.openingStockTableViewport {
+  flex: 0 0 auto;
+  min-height: unset;
+  border: 1px solid #dfe7f1;
+  border-radius: 0.35rem;
+  background: #ffffff;
+  box-shadow:
+    0 6px 18px rgba(12, 31, 78, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  overflow-x: auto;
+  overflow-y: visible;
+}
+.openingStockTable {
+  width: var(--erp-table-min-width, 1080px);
+  background: #ffffff;
+}
+.openingStockTable .head {
+  position: static;
+}
+.openingStockTable .headerCell {
+  height: 3.95rem;
+  border-left: 0;
+  border-bottom: 1px solid #dfe7f1;
+  background: #f8faff;
+  color: #06184d !important;
+  font-size: 0.75rem;
+  font-weight: 800 !important;
+}
+.openingStockTable .headerText {
+  white-space: nowrap;
+}
+.openingStockTable .cell {
+  height: 5.2rem;
+  border-left: 0;
+  border-bottom: 0;
+  background: #ffffff;
+  color: #071b54;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.openingStockTable .stickyActionCell,
+.openingStockTable .stickySerialCell {
+  background: #ffffff;
+  box-shadow: none;
+}
+.openingStockTable .stickyActionHeader,
+.openingStockTable .stickySerialHeader {
+  background: #f8faff;
+  box-shadow: none;
+}
+.openingStockTable .rowNumber {
+  color: #071b54;
+  font-size: 0.86rem;
+}
+.openingStockTable .cellInput,
+.openingStockTable .cellSelect,
+.openingStockTable .lookupTrigger {
+  min-height: 2.6rem;
+  color: #071b54;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+}
+.openingStockTable .lookupTrigger {
+  padding: 0 0.35rem;
+}
+.openingStockTable .lookupPlaceholder {
+  color: #344872;
+}
+.openingStockTable .lookupChevron {
+  color: #4b5e87;
+}
+.openingStockTable .cellInput[readonly],
+.openingStockTable .cellInput:disabled,
+.openingStockTable .cellSelect:disabled {
+  background: transparent;
+  color: #071b54;
+  -webkit-text-fill-color: #071b54;
+}
+.openingStockTable .numericInput {
+  text-align: center;
+}
+.openingStockBarcodeInputWrap {
+  position: relative;
+  width: 100%;
+  min-height: 2.6rem;
+}
+.openingStockBarcodeIcon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: 1.08rem;
+  height: 1.08rem;
+  color: #0040bd;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  stroke-width: 2.25;
+}
+.openingStockBarcodeInput {
+  position: relative;
+  z-index: 2;
+  color: #071b54;
+  text-align: center;
+}
+.openingStockTable .rowDeleteButton {
+  width: 2rem;
+  height: 2rem;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.35rem;
+  background: #fff0ef;
+  color: #ef493f;
+  padding: 0;
+}
+.openingStockTable .rowDeleteButton:hover {
+  background: #ffe1df;
+}
+.openingStockTable .draggableHeaderContent {
+  padding-right: 0;
+}
+.openingStockFooterBar {
+  min-height: 7.6rem;
+  margin-top: auto;
+  padding: 1.45rem 2.7rem;
+  border: 1px solid #dfe7f1;
+  border-radius: 0.35rem;
+  background: #ffffff;
+  box-shadow:
+    0 -1px 0 rgba(12, 31, 78, 0.02),
+    0 4px 18px rgba(12, 31, 78, 0.05);
+}
+.openingStockFooterMetrics {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  margin-left: auto;
+}
+.openingStockMetric {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(5rem, auto);
+  align-items: center;
+  gap: 1rem;
+  min-width: 12rem;
+  padding: 0 2.2rem;
+  border-left: 1px solid #dfe7f1;
+}
+.openingStockMetric:first-child {
+  border-left: 0;
+}
+.openingStockMetricIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  color: #0040bd;
+}
+.openingStockMetricIcon svg {
+  width: 1.7rem;
+  height: 1.7rem;
+  stroke-width: 2.35;
+}
+.openingStockMetricText {
+  display: grid;
+  gap: 0.3rem;
+}
+.openingStockMetricLabel {
+  color: #65728d;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.openingStockMetricValue {
+  color: #003aa4;
+  font-size: 1.08rem;
+  font-weight: 900;
+  line-height: 1;
 }
 .configMeta {
   margin: 0.3rem 0 0;
@@ -1486,6 +1882,32 @@
   .summaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .openingStockTools {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+  .openingStockField,
+  .openingStockRefField {
+    width: 100%;
+  }
+  .openingStockDateControl,
+  .openingStockRefControl {
+    flex: 1 1 auto;
+  }
+  .openingStockActionGroup {
+    justify-content: flex-start;
+  }
+  .openingStockFooterBar {
+    padding-inline: 1.2rem;
+  }
+  .openingStockFooterMetrics {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .openingStockMetric {
+    min-width: 10rem;
+    padding-inline: 1.2rem;
+  }
 }
 @media (max-width: 760px) {
   .page {
@@ -1510,6 +1932,61 @@
   .footerValue {
     width: 100%;
     justify-content: space-between;
+  }
+  .openingStockPage {
+    min-height: calc(100dvh - 1rem);
+    padding: 0.75rem;
+  }
+  .openingStockHeadingRow {
+    gap: 0.7rem;
+  }
+  .openingStockTitleIcon {
+    width: 2.65rem;
+    height: 2.65rem;
+  }
+  .openingStockTitle {
+    font-size: 1.35rem;
+  }
+  .openingStockField {
+    align-items: stretch;
+  }
+  .openingStockField .toolbarDateLabel {
+    min-width: 7rem;
+  }
+  .openingStockDateControl,
+  .openingStockRefControl {
+    width: 100%;
+    min-width: 0;
+  }
+  .openingStockRefControl {
+    flex-wrap: wrap;
+  }
+  .openingStockInlineButton {
+    width: 100%;
+    border-top: 1px solid #d8e2ef;
+    border-left: 0;
+  }
+  .openingStockActionGroup,
+  .openingStockButton {
+    width: 100%;
+  }
+  .openingStockFooterBar {
+    min-height: auto;
+    padding: 1rem;
+  }
+  .openingStockFooterMetrics {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .openingStockMetric {
+    width: 100%;
+    min-width: 0;
+    padding: 0.9rem 0;
+    border-left: 0;
+    border-top: 1px solid #dfe7f1;
+  }
+  .openingStockMetric:first-child {
+    border-top: 0;
   }
   .cellInput,
   .cellSelect,

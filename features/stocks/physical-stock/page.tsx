@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   FiCalendar,
   FiDownload,
@@ -26,6 +27,7 @@ import {
   KeyboardShortcutHints,
   type KeyboardShortcutDefinition,
 } from "@/components/design-system/ui/keyboard-shortcut-hints";
+import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { useBusinessContext } from "@/components/layout/business-context";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import { extractRows } from "@/features/masters/shared/normalizers";
@@ -38,6 +40,7 @@ import {
 import {
   type ItemPriceDetailsPayload,
   useLazyGetItemOptionsQuery,
+  useLazyGetItemPriceDetailsByBarcodeQuery,
   useLazyGetItemPriceDetailsQuery,
   useLazyGetUnitOptionsQuery,
 } from "@/store/api/lookupsApi";
@@ -113,6 +116,7 @@ import type {
   RowValidationIssue,
   UiTableColumnPayload,
   SavePhysicalStockUiTableColumnRequest,
+  PhysicalStockColumnSettingsDraftEntry,
   PhysicalStockLoadRequest,
   PhysicalStockListFilters,
   LoadedPhysicalStockMeta,
@@ -172,8 +176,10 @@ import {
   parseColumnWidth,
   toColumnWidth,
   reorderColumns,
+  buildPhysicalStockColumnSettingsRows,
   findPhysicalStockUiTableColumnConfig,
   buildPhysicalStockUiTableColumnRequest,
+  buildPhysicalStockUiTableColumnSettingsRequest,
   upsertPhysicalStockUiTableColumnConfig,
   resolveConfiguredColumns,
   buildDocumentNumber,
@@ -188,6 +194,16 @@ import {
   getTrackingOptionFromPayload,
   mapPhysicalStockDocumentToRows,
 } from "./physical-stock.utils";
+type TableSettingsContextMenuPosition = Pick<CSSProperties, "left" | "top">;
+const TABLE_SETTINGS_CONTEXT_MENU_WIDTH = 190;
+const TABLE_SETTINGS_CONTEXT_MENU_HEIGHT = 64;
+const TABLE_SETTINGS_CONTEXT_MENU_PADDING = 8;
+function clampContextMenuPosition(value: number, min: number, max: number): number {
+  if (max < min) {
+    return min;
+  }
+  return Math.min(Math.max(value, min), max);
+}
 export default function PhysicalStockPage() {
   const [voucherDate, setVoucherDate] = useState(() => getTodayInputValue());
   const [voucherRefNo, setVoucherRefNo] = useState("");
@@ -224,6 +240,16 @@ export default function PhysicalStockPage() {
   const [unitOptions, setUnitOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [columns, setColumns] = useState<PhysicalStockColumn[]>(PHYSICAL_STOCK_COLUMNS);
   const [uiColumnConfigs, setUiColumnConfigs] = useState<UiTableColumnPayload[]>([]);
+  const [tableSettingsContextMenuPosition, setTableSettingsContextMenuPosition] =
+    useState<TableSettingsContextMenuPosition | null>(null);
+  const [headerSettingsContextMenuPosition, setHeaderSettingsContextMenuPosition] =
+    useState<TableSettingsContextMenuPosition | null>(null);
+  const [headerSettingsColumnKey, setHeaderSettingsColumnKey] = useState<string | null>(null);
+  const [isColumnSettingsOpen, setIsColumnSettingsOpen] = useState(false);
+  const [columnSettingsDraft, setColumnSettingsDraft] = useState<
+    Record<string, PhysicalStockColumnSettingsDraftEntry>
+  >({});
+  const [isColumnSettingsSaving, setIsColumnSettingsSaving] = useState(false);
   const [itemDetailsByItemId, setItemDetailsByItemId] = useState<
     Record<string, ItemPriceDetailsPayload>
   >({});
@@ -265,6 +291,7 @@ export default function PhysicalStockPage() {
     useLazyGetItemOptionsQuery();
   const [triggerUnitOptions] = useLazyGetUnitOptionsQuery();
   const [triggerItemPriceDetails] = useLazyGetItemPriceDetailsQuery();
+  const [triggerItemPriceDetailsByBarcode] = useLazyGetItemPriceDetailsByBarcodeQuery();
   const { getAll: listUiTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_LIST_ENDPOINT, {
     toast: {
       success: false,
@@ -387,6 +414,10 @@ export default function PhysicalStockPage() {
     () => getColumnMinWidth(columns),
     [columns],
   );
+  const columnSettingsRows = useMemo(
+    () => buildPhysicalStockColumnSettingsRows(uiColumnConfigs, columns),
+    [columns, uiColumnConfigs],
+  );
   const totals = useMemo(
     () =>
       draftRows.reduce(
@@ -406,6 +437,15 @@ export default function PhysicalStockPage() {
   useEffect(() => {
     uiColumnConfigsRef.current = uiColumnConfigs;
   }, [uiColumnConfigs]);
+  const applyPhysicalStockColumnConfigs = useCallback((configuredColumns: UiTableColumnPayload[]) => {
+    uiColumnConfigsRef.current = configuredColumns;
+    setUiColumnConfigs(configuredColumns);
+    const resolvedColumns = resolveConfiguredColumns(configuredColumns);
+    const nextColumns =
+      configuredColumns.length > 0 ? resolvedColumns : PHYSICAL_STOCK_COLUMNS;
+    columnsRef.current = nextColumns;
+    setColumns(nextColumns);
+  }, []);
   const loadItemOptions = useCallback(
     async (search = "") => {
       const normalizedSearch = search.trim();
@@ -500,17 +540,12 @@ export default function PhysicalStockPage() {
           "columns",
           "uiTableColumns",
         ]);
-        uiColumnConfigsRef.current = configuredColumns;
-        setUiColumnConfigs(configuredColumns);
-        const resolvedColumns = resolveConfiguredColumns(configuredColumns);
-        setColumns(resolvedColumns.length > 0 ? resolvedColumns : PHYSICAL_STOCK_COLUMNS);
+        applyPhysicalStockColumnConfigs(configuredColumns);
       } catch {
-        uiColumnConfigsRef.current = [];
-        setUiColumnConfigs([]);
-        setColumns(PHYSICAL_STOCK_COLUMNS);
+        applyPhysicalStockColumnConfigs([]);
       }
     })();
-  }, [listUiTableColumns]);
+  }, [applyPhysicalStockColumnConfigs, listUiTableColumns]);
   useEffect(() => {
     void loadItemOptions();
   }, [loadItemOptions]);
@@ -968,6 +1003,35 @@ export default function PhysicalStockPage() {
       unitOptionsByValue,
     ],
   );
+  const handleBarcodeEnter = useCallback(
+    async (rowId: number, barcode: string) => {
+      const normalized = barcode.trim();
+      if (!normalized) {
+        return;
+      }
+      try {
+        const detail = await triggerItemPriceDetailsByBarcode({ barcode: normalized }, true).unwrap();
+        setItemDetailsByItemId((current) => ({
+          ...current,
+          [detail.item.item_id]: detail,
+        }));
+        const label = detail.item.item_name_en?.trim() || normalized;
+        setItemOptions((current) => {
+          const exists = current.some((opt) => opt.value === detail.item.item_id);
+          if (exists) {
+            return current;
+          }
+          return [...current, { value: detail.item.item_id, label }];
+        });
+        applyItemDetailToRow(rowId, label, detail);
+      } catch {
+        toast.error("No item found for the entered barcode.", {
+          toastId: "physical-stock:barcode-not-found",
+        });
+      }
+    },
+    [applyItemDetailToRow, triggerItemPriceDetailsByBarcode],
+  );
   const handleLookupToggle = useCallback(
     (cellKey: string, lookupKind: LookupKind, row?: PhysicalStockRow) => {
       const isClosing = openLookupCell?.key === cellKey;
@@ -987,6 +1051,267 @@ export default function PhysicalStockPage() {
     },
     [loadBatchOptions, loadGodownOptions, loadItemOptions, loadReasonOptions, openLookupCell?.key],
   );
+  const openColumnSettings = useCallback(() => {
+    const nextDraft: Record<string, PhysicalStockColumnSettingsDraftEntry> = {};
+    for (const row of columnSettingsRows) {
+      nextDraft[row.key] = {
+        visible: row.visible,
+        focus: row.focus,
+        necessity: row.necessity,
+      };
+    }
+    setColumnSettingsDraft(nextDraft);
+    setIsColumnSettingsOpen(true);
+    setTableSettingsContextMenuPosition(null);
+    setHeaderSettingsContextMenuPosition(null);
+    setHeaderSettingsColumnKey(null);
+  }, [columnSettingsRows]);
+  const closeColumnSettings = useCallback(() => {
+    if (isColumnSettingsSaving) {
+      return;
+    }
+    setIsColumnSettingsOpen(false);
+  }, [isColumnSettingsSaving]);
+  const handleColumnSettingsSelectionChange = useCallback(
+    (
+      rowKey: string,
+      field: keyof PhysicalStockColumnSettingsDraftEntry,
+      checked: boolean,
+    ) => {
+      setColumnSettingsDraft((current) => ({
+        ...current,
+        [rowKey]: {
+          ...(current[rowKey] ?? {
+            visible: true,
+            focus: false,
+            necessity: false,
+          }),
+          [field]: checked,
+        },
+      }));
+    },
+    [],
+  );
+  const handleDefaultColumnSettings = useCallback(() => {
+    const nextDraft: Record<string, PhysicalStockColumnSettingsDraftEntry> = {};
+    for (const row of columnSettingsRows) {
+      nextDraft[row.key] = {
+        visible: true,
+        focus: false,
+        necessity: false,
+      };
+    }
+    setColumnSettingsDraft(nextDraft);
+  }, [columnSettingsRows]);
+  const saveColumnSettings = useCallback(async () => {
+    if (!isColumnSettingsOpen || columnSettingsRows.length === 0) {
+      return;
+    }
+    setIsColumnSettingsSaving(true);
+    try {
+      for (const row of columnSettingsRows) {
+        const draft =
+          columnSettingsDraft[row.key] ??
+          ({
+            visible: row.visible,
+            focus: row.focus,
+            necessity: row.necessity,
+          } satisfies PhysicalStockColumnSettingsDraftEntry);
+        await saveUiTableColumn({
+          body: buildPhysicalStockUiTableColumnSettingsRequest(row, draft),
+        });
+      }
+      const payload = await listUiTableColumns(UI_TABLE_COLUMNS_QUERY);
+      const nextColumnConfigs = extractRows<UiTableColumnPayload>(payload, [
+        "data",
+        "rows",
+        "items",
+        "results",
+        "columns",
+        "uiTableColumns",
+      ]);
+      applyPhysicalStockColumnConfigs(nextColumnConfigs);
+      setIsColumnSettingsOpen(false);
+    } catch {
+      // useApi handles error toast behavior.
+    } finally {
+      setIsColumnSettingsSaving(false);
+    }
+  }, [
+    applyPhysicalStockColumnConfigs,
+    columnSettingsDraft,
+    columnSettingsRows,
+    isColumnSettingsOpen,
+    listUiTableColumns,
+    saveUiTableColumn,
+  ]);
+  const handleTableBodyContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLTableSectionElement>) => {
+      if (columnSettingsRows.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setOpenLookupCell(null);
+      setTableSettingsContextMenuPosition({
+        left: clampContextMenuPosition(
+          event.clientX,
+          TABLE_SETTINGS_CONTEXT_MENU_PADDING,
+          window.innerWidth - TABLE_SETTINGS_CONTEXT_MENU_WIDTH,
+        ),
+        top: clampContextMenuPosition(
+          event.clientY,
+          TABLE_SETTINGS_CONTEXT_MENU_PADDING,
+          window.innerHeight - TABLE_SETTINGS_CONTEXT_MENU_HEIGHT,
+        ),
+      });
+      setHeaderSettingsContextMenuPosition(null);
+      setHeaderSettingsColumnKey(null);
+    },
+    [columnSettingsRows.length],
+  );
+  const handleColumnHeaderContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLTableCellElement>, column: PhysicalStockColumn) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setOpenLookupCell(null);
+      setTableSettingsContextMenuPosition(null);
+      setHeaderSettingsColumnKey(column.key);
+      setHeaderSettingsContextMenuPosition({
+        left: clampContextMenuPosition(
+          event.clientX,
+          TABLE_SETTINGS_CONTEXT_MENU_PADDING,
+          window.innerWidth - TABLE_SETTINGS_CONTEXT_MENU_WIDTH,
+        ),
+        top: clampContextMenuPosition(
+          event.clientY,
+          TABLE_SETTINGS_CONTEXT_MENU_PADDING,
+          window.innerHeight - TABLE_SETTINGS_CONTEXT_MENU_HEIGHT,
+        ),
+      });
+    },
+    [],
+  );
+  const handleHideHeaderColumn = useCallback(
+    async (column: PhysicalStockColumn) => {
+      setHeaderSettingsContextMenuPosition(null);
+      setHeaderSettingsColumnKey(null);
+      setOpenLookupCell(null);
+
+      const renderedColumns = columnsRef.current;
+      const columnIndex = renderedColumns.findIndex((entry) => entry.key === column.key);
+      if (columnIndex < 0) {
+        return;
+      }
+
+      setColumns((current) => current.filter((entry) => entry.key !== column.key));
+
+      const configuredColumn = findPhysicalStockUiTableColumnConfig(
+        uiColumnConfigsRef.current,
+        column.key,
+      );
+      try {
+        const response = await saveUiTableColumn({
+          body: buildPhysicalStockUiTableColumnRequest(
+            column,
+            configuredColumn,
+            columnIndex,
+            {
+              uiTblClmColumnWidth: parseColumnWidth(column.width),
+              uiTblClmColumnVisibility: false,
+            },
+          ),
+        });
+        const savedColumn = response?.data;
+        if (!savedColumn) {
+          return;
+        }
+        setUiColumnConfigs((current) => {
+          const nextColumns = upsertPhysicalStockUiTableColumnConfig(
+            current,
+            savedColumn,
+            column.key,
+          );
+          uiColumnConfigsRef.current = nextColumns;
+          return nextColumns;
+        });
+      } catch {
+        // Keep the local hide even if persistence fails.
+      }
+    },
+    [saveUiTableColumn],
+  );
+  useEffect(() => {
+    if (
+      tableSettingsContextMenuPosition === null &&
+      headerSettingsContextMenuPosition === null
+    ) {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest('[data-physical-stock-settings-context-menu="true"]') ||
+        target?.closest('[data-physical-stock-header-context-menu="true"]')
+      ) {
+        return;
+      }
+      setTableSettingsContextMenuPosition(null);
+      setHeaderSettingsContextMenuPosition(null);
+      setHeaderSettingsColumnKey(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setTableSettingsContextMenuPosition(null);
+        setHeaderSettingsContextMenuPosition(null);
+        setHeaderSettingsColumnKey(null);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [headerSettingsContextMenuPosition, tableSettingsContextMenuPosition]);
+  useEffect(() => {
+    if (
+      tableSettingsContextMenuPosition === null &&
+      headerSettingsContextMenuPosition === null
+    ) {
+      return;
+    }
+    const closeContextMenu = () => {
+      setTableSettingsContextMenuPosition(null);
+      setHeaderSettingsContextMenuPosition(null);
+      setHeaderSettingsColumnKey(null);
+    };
+    window.addEventListener("resize", closeContextMenu);
+    window.addEventListener("scroll", closeContextMenu, true);
+    return () => {
+      window.removeEventListener("resize", closeContextMenu);
+      window.removeEventListener("scroll", closeContextMenu, true);
+    };
+  }, [headerSettingsContextMenuPosition, tableSettingsContextMenuPosition]);
+  useEffect(() => {
+    if (!isColumnSettingsOpen) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeColumnSettings();
+      }
+      if (event.key === "F5") {
+        event.preventDefault();
+        void saveColumnSettings();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeColumnSettings, isColumnSettingsOpen, saveColumnSettings]);
   const enqueueColumnConfigSave = useCallback((task: () => Promise<void>) => {
     const saveTask = columnSaveQueueRef.current.catch(() => undefined).then(task);
     columnSaveQueueRef.current = saveTask;
@@ -2064,6 +2389,7 @@ export default function PhysicalStockPage() {
         </div>
       );
     }
+    const isBarcodeField = column.key === "barcode";
     return (
       <input
         data-opening-stock-field-control="true"
@@ -2073,6 +2399,11 @@ export default function PhysicalStockPage() {
         value={value}
         onChange={(event) => handleRowChange(row.id, column.key, event.target.value)}
         onKeyDown={(event) => {
+          if (isBarcodeField && event.key === "Enter") {
+            event.preventDefault();
+            void handleBarcodeEnter(row.id, event.currentTarget.value);
+            return;
+          }
           if (handleFieldNavigationKeyDown(event)) {
             return;
           }
@@ -2101,8 +2432,273 @@ export default function PhysicalStockPage() {
       />
     );
   };
+  const tableSettingsContextMenu =
+    tableSettingsContextMenuPosition && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className={styles.tableSettingsContextMenu}
+            data-physical-stock-settings-context-menu="true"
+            style={tableSettingsContextMenuPosition}
+            role="tooltip"
+          >
+            <button
+              type="button"
+              className={styles.tableSettingsContextMenuItem}
+              onClick={openColumnSettings}
+            >
+              Admin settings
+            </button>
+          </div>,
+          document.body,
+        )
+      : null;
+  const headerSettingsColumn =
+    headerSettingsColumnKey === null
+      ? null
+      : columns.find((column) => column.key === headerSettingsColumnKey) ?? null;
+  const headerSettingsContextMenu =
+    headerSettingsContextMenuPosition && headerSettingsColumn && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className={styles.tableSettingsContextMenu}
+            data-physical-stock-header-context-menu="true"
+            style={headerSettingsContextMenuPosition}
+            role="menu"
+            aria-label="Column actions"
+          >
+            <button
+              type="button"
+              className={styles.tableSettingsContextMenuItem}
+              onClick={() => void handleHideHeaderColumn(headerSettingsColumn)}
+            >
+              Hide column
+            </button>
+          </div>,
+          document.body,
+        )
+      : null;
+  const columnSettingsModal =
+    isColumnSettingsOpen && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className={dynamicModalStyles.overlay}
+            style={
+              {
+                "--erp-modal-overlay-z-index": 10001,
+                "--erp-modal-accent": "var(--ds-primary, #0f74c9)",
+              } as CSSProperties
+            }
+          >
+            <div
+              className={dynamicModalStyles.backdrop}
+              onClick={closeColumnSettings}
+              aria-hidden
+            />
+            <section
+              className={cx(dynamicModalStyles.panel, styles.columnSettingsDialog)}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="physical-stock-column-settings-title"
+            >
+              <header className={dynamicModalStyles.header}>
+                <div className={dynamicModalStyles.headerRow}>
+                  <div className={dynamicModalStyles.headerIntro}>
+                    <span className={dynamicModalStyles.headerIcon} aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <path
+                          d="M4 5h16M4 12h16M4 19h16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeWidth="1.8"
+                        />
+                        <path
+                          d="M8 5v14M16 5v14"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeWidth="1.4"
+                        />
+                      </svg>
+                    </span>
+                    <div className={dynamicModalStyles.headerText}>
+                      <h3
+                        id="physical-stock-column-settings-title"
+                        className={dynamicModalStyles.headerTitle}
+                      >
+                        Table Settings
+                      </h3>
+                      <p className={dynamicModalStyles.headerDescription}>
+                        Configure Physical Stock table columns.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={dynamicModalStyles.closeButton}
+                    onClick={closeColumnSettings}
+                    aria-label="Close modal"
+                    disabled={isColumnSettingsSaving}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                      className={dynamicModalStyles.closeIcon}
+                    >
+                      <path
+                        d="M6 18 18 6M6 6l12 12"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeWidth="1.8"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </header>
+              <div
+                className={cx(dynamicModalStyles.scrollArea, styles.columnSettingsBody)}
+                data-erp-modal-scroll-area="true"
+              >
+                {columnSettingsRows.length > 0 ? (
+                  <div className={styles.columnSettingsTableWrap}>
+                    <table className={styles.columnSettingsTable}>
+                      <thead>
+                        <tr>
+                          <th className={styles.columnSettingsNumberHeader} />
+                          <th>Column Name</th>
+                          <th>Visible</th>
+                          <th>Focus</th>
+                          <th>Necessity</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {columnSettingsRows.map((row, index) => {
+                          const draft =
+                            columnSettingsDraft[row.key] ?? {
+                              visible: row.visible,
+                              focus: row.focus,
+                              necessity: row.necessity,
+                            };
+                          return (
+                            <tr key={row.key}>
+                              <td className={styles.columnSettingsNumberCell}>
+                                {index + 1}
+                              </td>
+                              <td className={styles.columnSettingsNameCell}>
+                                {row.label}
+                              </td>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  checked={draft.visible}
+                                  disabled={isColumnSettingsSaving}
+                                  onChange={(event) =>
+                                    handleColumnSettingsSelectionChange(
+                                      row.key,
+                                      "visible",
+                                      event.currentTarget.checked,
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  checked={draft.focus}
+                                  disabled={isColumnSettingsSaving}
+                                  onChange={(event) =>
+                                    handleColumnSettingsSelectionChange(
+                                      row.key,
+                                      "focus",
+                                      event.currentTarget.checked,
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  checked={draft.necessity}
+                                  disabled={isColumnSettingsSaving}
+                                  onChange={(event) =>
+                                    handleColumnSettingsSelectionChange(
+                                      row.key,
+                                      "necessity",
+                                      event.currentTarget.checked,
+                                    )
+                                  }
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className={styles.columnSettingsEmpty}>No columns configured.</p>
+                )}
+              </div>
+              <footer className={dynamicModalStyles.footer}>
+                <div className={dynamicModalStyles.footerShortcuts}>
+                  <div className={dynamicModalStyles.footerShortcutList}>
+                    <span className={dynamicModalStyles.footerShortcutItem}>
+                      <span className={dynamicModalStyles.footerShortcutTitle}>
+                        {columnSettingsRows.length} columns
+                      </span>
+                    </span>
+                    <span className={dynamicModalStyles.footerShortcutItem}>
+                      <span className={dynamicModalStyles.footerShortcutAction}>
+                        F5 saves settings
+                      </span>
+                    </span>
+                  </div>
+                </div>
+                <div className={dynamicModalStyles.footerActions}>
+                  <button
+                    type="button"
+                    className={cx(
+                      dynamicModalStyles.cancelButton,
+                      styles.columnSettingsDefaultButton,
+                    )}
+                    onClick={handleDefaultColumnSettings}
+                    disabled={isColumnSettingsSaving}
+                  >
+                    Default
+                  </button>
+                  <button
+                    type="button"
+                    className={dynamicModalStyles.cancelButton}
+                    onClick={closeColumnSettings}
+                    disabled={isColumnSettingsSaving}
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    className={cx(
+                      dynamicModalStyles.submitButton,
+                      dynamicModalStyles.submitButtonSave,
+                    )}
+                    onClick={() => void saveColumnSettings()}
+                    disabled={isColumnSettingsSaving}
+                  >
+                    {isColumnSettingsSaving ? "Saving..." : "Save (F5)"}
+                  </button>
+                </div>
+              </footer>
+            </section>
+          </div>,
+          document.body,
+        )
+      : null;
   return (
-    <section className={styles.page}>
+    <>
+      {tableSettingsContextMenu}
+      {headerSettingsContextMenu}
+      {columnSettingsModal}
+      <section className={styles.page}>
       <header className={styles.header}>
         <div className={styles.headingBlock}>
           <div className={styles.headingRow}>
@@ -2159,11 +2755,9 @@ export default function PhysicalStockPage() {
                   value={voucherRefNo}
                   onChange={(event) => setVoucherRefNo(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key !== "Enter") {
-                      return;
+                    if (event.key === "Enter") {
+                      event.preventDefault();
                     }
-                    event.preventDefault();
-                    handleLoadByRefNo();
                   }}
                   className={cx(styles.toolbarDateInput, styles.toolbarRefInput)}
                   autoComplete="off"
@@ -2319,6 +2913,7 @@ export default function PhysicalStockPage() {
                       styles.resizableHeaderCell,
                     )}
                     style={{ width: column.width }}
+                    onContextMenu={(event) => handleColumnHeaderContextMenu(event, column)}
                   >
                     <div
                       draggable
@@ -2353,7 +2948,7 @@ export default function PhysicalStockPage() {
                 />
               </tr>
             </thead>
-            <tbody className={styles.body}>
+            <tbody className={styles.body} onContextMenu={handleTableBodyContextMenu}>
               {rows.map((row, rowIndex) => (
                 <tr
                   key={row.id}
@@ -2420,12 +3015,7 @@ export default function PhysicalStockPage() {
           </table>
         </div>
         <div className={styles.paginationBar}>
-          <div className={styles.paginationInfo}>
-            <KeyboardShortcutHints
-              shortcuts={PHYSICAL_STOCK_TABLE_SHORTCUTS}
-              dense
-            />
-          </div>
+          <div className={styles.paginationInfo} />
           <div className={styles.footerValue}>
             <strong className={styles.footerLabel}>book qty</strong>
             <strong>{QUANTITY_FORMATTER.format(totals.bookQty)}</strong>
@@ -2506,6 +3096,7 @@ export default function PhysicalStockPage() {
         onLoadRow={handleLoadPhysicalStockListRow}
         onLoadSelected={handleLoadSelectedPhysicalStockListRow}
       />
-    </section>
+      </section>
+    </>
   );
 }
