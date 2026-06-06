@@ -7,6 +7,7 @@ export const PHYSICAL_STOCK_LIST_ENDPOINT = "/physical-stock/list";
 export const PHYSICAL_STOCK_GET_ENDPOINT = "/physical-stock/get";
 export const PHYSICAL_STOCK_DELETE_ENDPOINT = "/physical-stock/delete";
 export const ITEM_STOCK_BALANCE_GET_ENDPOINT = "/item-stock-balance/get";
+export const ITEM_STOCK_BALANCE_BULK_LIST_ENDPOINT = "/item-stock-balance/bulk-list";
 export const ITEM_BATCH_STOCK_OPTIONS_ENDPOINT = "/item-stock-balance/batch-options";
 export const STOCK_ADJ_REASONS_ENDPOINT = "/stock-adj-reasons/get";
 export const ITEM_STOCK_BALANCE_BUCKET = "SALEABLE";

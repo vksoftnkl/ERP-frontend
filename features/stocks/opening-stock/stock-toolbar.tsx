@@ -1,13 +1,7 @@
 "use client";
 import type { ReactNode, RefObject } from "react";
 import { FiCalendar, FiDownload, FiList, FiRotateCcw, FiSearch, FiTrash2 } from "react-icons/fi";
-import {
-  cx,
-  formatDateEntry,
-  formatDateForDisplay,
-  openDatePicker,
-  toCanonicalDateValue,
-} from "./opening-stock.utils";
+import { cx, formatDateEntry, formatDateForDisplay, openDatePicker, toCanonicalDateValue } from "./opening-stock.utils";
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 type StockToolbarProps = {
   voucherDate: string;
@@ -48,11 +42,11 @@ export function StockToolbar({
   onDeleteStock,
 }: StockToolbarProps): ReactNode {
   return (
-    <div className={cx(styles.toolbar, styles.openingStockToolbar)}>
-      <div className={cx(styles.tableTools, styles.openingStockTools)}>
-        <label className={cx(styles.toolbarDateField, styles.openingStockField)}>
+    <div className={styles.toolbar}>
+      <div className={styles.tableTools}>
+        <label className={styles.toolbarDateField}>
           <span className={styles.toolbarDateLabel}>Voucher Date</span>
-          <div className={cx(styles.toolbarDateControl, styles.openingStockDateControl)}>
+          <div className={styles.toolbarDateControl}>
             <input
               type="text"
               value={voucherDate}
@@ -86,15 +80,9 @@ export function StockToolbar({
             </button>
           </div>
         </label>
-        <label
-          className={cx(
-            styles.toolbarDateField,
-            styles.openingStockField,
-            styles.openingStockRefField,
-          )}
-        >
+        <label className={styles.toolbarDateField}>
           <span className={styles.toolbarDateLabel}>Ref No</span>
-          <div className={cx(styles.toolbarDateControl, styles.openingStockRefControl)}>
+          <div className={styles.toolbarDateControl}>
             <input
               type="text"
               value={voucherRefNo}
@@ -107,127 +95,111 @@ export function StockToolbar({
                 onLoadByRefNo();
               }}
               className={cx(styles.toolbarDateInput, styles.toolbarRefInput)}
-              placeholder="Enter Ref No"
               autoComplete="off"
               spellCheck={false}
             />
-            <button
-              type="button"
-              className={cx(
-                styles.createButton,
-                styles.refLoadButton,
-                styles.openingStockButton,
-                styles.openingStockInlineButton,
-              )}
-              onClick={onLoadByRefNo}
-              disabled={
-                isLoadingStock ||
-                isSavingOpeningStock ||
-                isDeletingOpeningStock ||
-                isBusinessContextLoading
-              }
-            >
-              <FiSearch
-                className={styles.createIcon}
-                aria-hidden="true"
-              />
-              <span>{isLoadingStock ? "Loading..." : "Load Ref No"}</span>
-            </button>
           </div>
-        </label>
-        <div className={styles.openingStockActionGroup}>
-          <button
-            type="button"
-            className={cx(styles.createButton, styles.loadButton, styles.openingStockButton)}
-            onClick={onLoadStock}
-            disabled={
-              isLoadingStock ||
-              isSavingOpeningStock ||
-              isDeletingOpeningStock ||
-              isBusinessContextLoading
-            }
-          >
-            <FiDownload
-              className={styles.createIcon}
-              aria-hidden="true"
-            />
-            <span>{isLoadingStock ? "Loading..." : "Load Stock"}</span>
-          </button>
-          <button
-            type="button"
-            className={cx(styles.createButton, styles.updateButton, styles.openingStockButton)}
-            onClick={onUpdateStock}
-            disabled={
-              isSavingOpeningStock ||
-              isLoadingStock ||
-              isDeletingOpeningStock ||
-              isBusinessContextLoading
-            }
-          >
-            <FiDownload
-              className={styles.createIcon}
-              aria-hidden="true"
-            />
-            <span>{isSavingOpeningStock ? "Updating..." : "Update Stock"}</span>
-          </button>
-          <button
-            type="button"
-            className={cx(
-              styles.createButton,
-              styles.deleteStockButton,
-              styles.openingStockButton,
-            )}
-            onClick={onDeleteStock}
-            disabled={
-              !canDeleteLoadedStock ||
-              isDeletingOpeningStock ||
-              isSavingOpeningStock ||
-              isLoadingStock ||
-              isBusinessContextLoading
-            }
-          >
-            <FiTrash2
-              className={styles.createIcon}
-              aria-hidden="true"
-            />
-            <span>{isDeletingOpeningStock ? "Deleting..." : "Delete Stock"}</span>
-          </button>
-          <button
-            type="button"
-            className={cx(styles.createButton, styles.loadButton, styles.openingStockButton)}
-            onClick={onBrowseStockList}
-            disabled={
-              isLoadingStock ||
-              isSavingOpeningStock ||
-              isDeletingOpeningStock ||
-              isBusinessContextLoading
-            }
-          >
-            <FiList
-              className={styles.createIcon}
-              aria-hidden="true"
-            />
-            <span>Open List</span>
-          </button>
-          <button
-            type="button"
-            className={cx(styles.createButton, styles.clearRowsButton, styles.openingStockButton)}
-            onClick={onClearRows}
-            disabled={
-              !canClearRows ||
-              isLoadingStock ||
-              isSavingOpeningStock ||
-              isDeletingOpeningStock ||
-              isBusinessContextLoading
-            }
-          >
-            <FiRotateCcw
-              className={styles.createIcon}
-              aria-hidden="true"
-            />
-            <span>Clear Rows</span>
-          </button>
-        </div>
+        </label>        
+        <button
+          type="button"
+          className={cx(styles.createButton, styles.refLoadButton)}
+          onClick={onLoadByRefNo}
+          disabled={
+            isLoadingStock ||
+            isSavingOpeningStock ||
+            isDeletingOpeningStock ||
+            isBusinessContextLoading
+          }
+        >
+          <FiSearch
+            className={styles.createIcon}
+            aria-hidden="true"
+          />
+          <span>{isLoadingStock ? "Loading..." : "Load Ref No"}</span>
+        </button>
+        <button
+          type="button"
+          className={cx(styles.createButton, styles.loadButton)}
+          onClick={onLoadStock}
+          disabled={
+            isLoadingStock ||
+            isSavingOpeningStock ||
+            isDeletingOpeningStock ||
+            isBusinessContextLoading
+          }
+        >
+          <FiDownload
+            className={styles.createIcon}
+            aria-hidden="true"
+          />
+          <span>{isLoadingStock ? "Loading..." : "Load Stock"}</span>
+        </button>
+             <button
+          type="button"
+          className={cx(styles.createButton, styles.updateButton)}
+          onClick={onUpdateStock}
+          disabled={
+            isSavingOpeningStock ||
+            isLoadingStock ||
+            isDeletingOpeningStock ||
+            isBusinessContextLoading
+          }
+        >
+          <span>{isSavingOpeningStock ? "Updating..." : "Update Stock"}</span>
+        </button>
+        <button
+          type="button"
+          className={cx(styles.createButton, styles.deleteStockButton)}
+          onClick={onDeleteStock}
+          disabled={
+            !canDeleteLoadedStock ||
+            isDeletingOpeningStock ||
+            isSavingOpeningStock ||
+            isLoadingStock ||
+            isBusinessContextLoading
+          }
+        >
+          <FiTrash2
+            className={styles.createIcon}
+            aria-hidden="true"
+          />
+          <span>{isDeletingOpeningStock ? "Deleting..." : "Delete Stock"}</span>
+        </button>
+        <button
+          type="button"
+          className={cx(styles.createButton, styles.loadButton)}
+          onClick={onBrowseStockList}
+          disabled={
+            isLoadingStock ||
+            isSavingOpeningStock ||
+            isDeletingOpeningStock ||
+            isBusinessContextLoading
+          }
+        >
+          <FiList
+            className={styles.createIcon}
+            aria-hidden="true"
+          />
+          <span>Open List</span>
+        </button>
+           <button
+          type="button"
+          className={cx(styles.createButton, styles.clearRowsButton)}
+          onClick={onClearRows}
+          disabled={
+            !canClearRows ||
+            isLoadingStock ||
+            isSavingOpeningStock ||
+            isDeletingOpeningStock ||
+            isBusinessContextLoading
+          }
+        >
+          <FiRotateCcw
+            className={styles.createIcon}
+            aria-hidden="true"
+          />
+          <span>Clear Rows</span>
+        </button>
       </div>
     </div>
   );

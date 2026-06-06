@@ -7,7 +7,7 @@ import type {
   ReactNode,
   RefObject,
 } from "react";
-import { FiCalendar, FiGrid, FiTrash2 } from "react-icons/fi";
+import { FiCalendar, FiTrash2 } from "react-icons/fi";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import type { ERPDynamicSearchShortcutPayload } from "@/components/design-system/ui/dynamic-modal-form";
 import type { ItemPriceDetailsPayload } from "@/store/api/lookupsApi";
@@ -235,41 +235,6 @@ export function StockTableRow({
           usesSelectedRowFieldBackground && styles.rowSelectionFillControl,
         );
         const cellDatePickerKey = `${row.id}:${column.key}`;
-        if (column.key === "barcode") {
-          return (
-            <td
-              key={column.key}
-              data-label={column.header}
-              data-opening-stock-field-container="true"
-              data-opening-stock-row-index={rowIndex}
-              data-opening-stock-column-index={columnIndex}
-              className={cx(styles.cell, styles.compactCell, getAlignClass(column.align))}
-            >
-              <div className={styles.openingStockBarcodeInputWrap}>
-                {!value ? (
-                  <FiGrid
-                    className={styles.openingStockBarcodeIcon}
-                    aria-hidden="true"
-                  />
-                ) : null}
-                <input
-                  data-opening-stock-field-control="true"
-                  data-opening-stock-row-id={row.id}
-                  data-opening-stock-field-key={column.key}
-                  type="text"
-                  value={value}
-                  onChange={(event) => onRowChange(row.id, column.key, event.target.value)}
-                  onFocus={handleSelectableInputFocus}
-                  onClick={handleSelectableInputClick}
-                  className={cx(sharedClassName, styles.openingStockBarcodeInput)}
-                  autoComplete="off"
-                  spellCheck={false}
-                  onKeyDown={handleFieldNavigationKeyDown}
-                />
-              </div>
-            </td>
-          );
-        }
         return (
           <td
             key={column.key}
@@ -442,9 +407,7 @@ export function StockTableRow({
                 onFocus={handleSelectableInputFocus}
                 onClick={handleSelectableInputClick}
                 className={sharedClassName}
-                placeholder={
-                  isNumeric ? "–" : getCellPlaceholder(column.placeholder)
-                }
+                placeholder={getCellPlaceholder(column.placeholder)}
                 readOnly={column.key === "taxname"}
                 disabled={isDisabledInput}
                 required={isRequiredField}

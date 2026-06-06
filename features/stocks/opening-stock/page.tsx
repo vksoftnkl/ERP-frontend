@@ -11,10 +11,13 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { FiBox, FiGift, FiTrendingUp } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { useBusinessContext } from "@/components/layout/business-context";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
+import {
+  KeyboardShortcutHints,
+  type KeyboardShortcutDefinition,
+} from "@/components/design-system/ui/keyboard-shortcut-hints";
 import type { ERPDynamicSearchShortcutPayload } from "@/components/design-system/ui/dynamic-modal-form";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import type { CrudMasterPageController } from "@/components/master/crud-master-page";
@@ -171,6 +174,7 @@ import {
   TABLE_SETTINGS_CONTEXT_MENU_WIDTH,
   TABLE_SETTINGS_CONTEXT_MENU_HEIGHT,
   TABLE_SETTINGS_CONTEXT_MENU_PADDING,
+  OPENING_STOCK_TABLE_SHORTCUTS,
 } from "./opening-stock.column-settings";
 function renderValidationToastContent(
   issues: Array<{ rowId: number; fieldKey: string; message: string }>,
@@ -1230,6 +1234,72 @@ export default function OpeningStockPage() {
       window.removeEventListener("keydown", handleF5KeyDown);
     };
   }, [handleOpenOpeningStockList, isOpeningStockListOpen, loadOpeningStockList]);
+  useEffect(() => {
+    const handleAltCKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "c" || !event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+      const activeEl = document.activeElement as HTMLElement | null;
+      const rowIdStr = activeEl?.dataset?.openingStockRowId;
+      if (!rowIdStr) {
+        return;
+      }
+      const rowId = Number(rowIdStr);
+      if (!Number.isFinite(rowId)) {
+        return;
+      }
+      event.preventDefault();
+      const nextRequest: InlineItemMasterRequest = {
+        itemId: "",
+        mode: "create",
+        query: "",
+        rowId,
+      };
+      setInlineItemMasterSession(nextRequest);
+      pendingInlineItemMasterRequestRef.current = nextRequest;
+      setIsInlineItemMasterOpen(true);
+    };
+    window.addEventListener("keydown", handleAltCKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleAltCKeyDown);
+    };
+  }, []);
+  useEffect(() => {
+    const handleAltAKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "a" || !event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+      const activeEl = document.activeElement as HTMLElement | null;
+      const rowIdStr = activeEl?.dataset?.openingStockRowId;
+      if (!rowIdStr) {
+        return;
+      }
+      const rowId = Number(rowIdStr);
+      if (!Number.isFinite(rowId)) {
+        return;
+      }
+      const row = rows.find((r) => r.id === rowId);
+      const itemId = row?.values.oslitemid?.trim() ?? "";
+      if (!itemId) {
+        toast.info("Select an existing item in the row, then press Alt+A.");
+        return;
+      }
+      event.preventDefault();
+      const nextRequest: InlineItemMasterRequest = {
+        itemId,
+        mode: "update",
+        query: row?.values.itemname?.trim() ?? "",
+        rowId,
+      };
+      setInlineItemMasterSession(nextRequest);
+      pendingInlineItemMasterRequestRef.current = nextRequest;
+      setIsInlineItemMasterOpen(true);
+    };
+    window.addEventListener("keydown", handleAltAKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleAltAKeyDown);
+    };
+  }, [rows]);
   useEffect(() => {
     if (Object.keys(invalidFieldKeys).length === 0) {
       return;
@@ -3137,22 +3207,17 @@ export default function OpeningStockPage() {
       {tableSettingsContextMenu}
       {headerSettingsContextMenu}
       {columnSettingsModal}
-      <section className={cx(styles.page, styles.openingStockPage)}>
-        <header className={cx(styles.header, styles.openingStockHeader)}>
+      <section className={styles.page}>
+        <header className={styles.header}>
           <div className={styles.headingBlock}>
-            <div className={cx(styles.headingRow, styles.openingStockHeadingRow)}>
-              <span className={styles.openingStockTitleIcon} aria-hidden="true">
-                <FiBox />
-              </span>
-              <h1 className={cx(styles.title, styles.openingStockTitle)}>
-                {loadedVoucherId && draftRows.length > 0
-                  ? "Opening Stock (Edit)"
-                  : "Opening Stock"}
+            <div className={styles.headingRow}>
+              <h1 className={styles.title}>
+                {loadedVoucherId && draftRows.length > 0 ? "Opening Stock (Edit)" : "Opening Stock"}
               </h1>
             </div>
           </div>
         </header>
-        <div className={cx(styles.tableShell, styles.openingStockTableShell)}>
+        <div className={styles.tableShell}>
           <StockToolbar
             voucherDate={voucherDate}
             voucherRefNo={voucherRefNo}
@@ -3173,17 +3238,12 @@ export default function OpeningStockPage() {
             onDeleteStock={handleDeleteLoadedStock}
           />
           <div
-            className={cx(styles.tableViewport, styles.openingStockTableViewport)}
+            className={styles.tableViewport}
             data-erp-table-viewport="true"
           >
             <table
               ref={tableRef}
-              className={cx(
-                styles.table,
-                styles.resizableTable,
-                styles.columnStripedTable,
-                styles.openingStockTable,
-              )}
+              className={cx(styles.table, styles.resizableTable, styles.columnStripedTable)}
               style={{ "--erp-table-min-width": tableMinWidth } as CSSProperties}
             >
               <colgroup>
@@ -3309,42 +3369,20 @@ export default function OpeningStockPage() {
               </tbody>
             </table>
           </div>
-          <div className={cx(styles.paginationBar, styles.openingStockFooterBar)}>
-            <div className={styles.paginationInfo} />
-            <div className={styles.openingStockFooterMetrics}>
-              <div className={styles.openingStockMetric}>
-                <span className={styles.openingStockMetricIcon} aria-hidden="true">
-                  <FiBox />
-                </span>
-                <div className={styles.openingStockMetricText}>
-                  <span className={styles.openingStockMetricLabel}>Qty</span>
-                  <strong className={styles.openingStockMetricValue}>
-                    {QUANTITY_FORMATTER.format(visibleTotals.qty)}
-                  </strong>
-                </div>
-              </div>
-              <div className={styles.openingStockMetric}>
-                <span className={styles.openingStockMetricIcon} aria-hidden="true">
-                  <FiGift />
-                </span>
-                <div className={styles.openingStockMetricText}>
-                  <span className={styles.openingStockMetricLabel}>Free Qty</span>
-                  <strong className={styles.openingStockMetricValue}>
-                    {QUANTITY_FORMATTER.format(visibleTotals.freeQty)}
-                  </strong>
-                </div>
-              </div>
-              <div className={styles.openingStockMetric}>
-                <span className={styles.openingStockMetricIcon} aria-hidden="true">
-                  <FiTrendingUp />
-                </span>
-                <div className={styles.openingStockMetricText}>
-                  <span className={styles.openingStockMetricLabel}>Stock Value</span>
-                  <strong className={styles.openingStockMetricValue}>
-                    {VALUE_FORMATTER.format(visibleTotals.value)}
-                  </strong>
-                </div>
-              </div>
+          <div className={styles.paginationBar}>
+            {/* <div className={styles.paginationInfo}>
+              <KeyboardShortcutHints
+                shortcuts={OPENING_STOCK_TABLE_SHORTCUTS}
+                dense
+              />
+            </div> */}
+            <div className={styles.footerValue}>
+              <strong className={styles.footerLabel}>qty</strong>
+              <strong>{QUANTITY_FORMATTER.format(visibleTotals.qty)} </strong>
+              <strong className={styles.footerLabel}>free qty</strong>
+              <strong>{QUANTITY_FORMATTER.format(visibleTotals.freeQty)}</strong>
+              <strong className={styles.footerLabel}>stock value</strong>
+              <strong>{VALUE_FORMATTER.format(visibleTotals.value)}</strong>
             </div>
           </div>
         </div>

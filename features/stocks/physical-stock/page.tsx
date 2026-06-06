@@ -30,6 +30,8 @@ import {
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { useBusinessContext } from "@/components/layout/business-context";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
+import type { CrudMasterPageController } from "@/components/master/crud-master-page";
+import ItemMasterPageContent from "@/features/masters/item/item-master-page";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";
 import {
@@ -73,6 +75,10 @@ import {
   PhysicalStockListModal,
   type PhysicalStockListRow,
 } from "./PhysicalStockListModal";
+import {
+  BulkLoadItemsModal,
+  type BulkLoadParams,
+} from "./BulkLoadItemsModal";
 import {
   buildLoadedLookupOptions,
   buildGodownLookupOptions,
@@ -121,6 +127,7 @@ import type {
   PhysicalStockListFilters,
   LoadedPhysicalStockMeta,
   StockAdjReasonPayload,
+  BulkItemStockPayload,
 } from "./physical-stock.types";
 import {
   PHYSICAL_STOCK_SAVE_ENDPOINT,
@@ -128,6 +135,7 @@ import {
   PHYSICAL_STOCK_GET_ENDPOINT,
   PHYSICAL_STOCK_DELETE_ENDPOINT,
   ITEM_STOCK_BALANCE_GET_ENDPOINT,
+  ITEM_STOCK_BALANCE_BULK_LIST_ENDPOINT,
   ITEM_BATCH_STOCK_OPTIONS_ENDPOINT,
   ITEM_STOCK_BALANCE_BUCKET,
   STOCK_ADJ_REASONS_ENDPOINT,
@@ -195,6 +203,12 @@ import {
   mapPhysicalStockDocumentToRows,
 } from "./physical-stock.utils";
 type TableSettingsContextMenuPosition = Pick<CSSProperties, "left" | "top">;
+type InlineItemMasterRequest = {
+  itemId: string;
+  mode: "create" | "update";
+  query: string;
+  rowId: number;
+};
 const TABLE_SETTINGS_CONTEXT_MENU_WIDTH = 190;
 const TABLE_SETTINGS_CONTEXT_MENU_HEIGHT = 64;
 const TABLE_SETTINGS_CONTEXT_MENU_PADDING = 8;
@@ -217,6 +231,8 @@ export default function PhysicalStockPage() {
     null,
   );
   const [isDeleteLoadedStockConfirmOpen, setIsDeleteLoadedStockConfirmOpen] = useState(false);
+  const [isBulkLoadModalOpen, setIsBulkLoadModalOpen] = useState(false);
+  const [isBulkLoadingStock, setIsBulkLoadingStock] = useState(false);
   const dispatch = useAppDispatch();
   const isPhysicalStockListOpen = useAppSelector(selectPhysicalStockIsListModalOpen);
   const [physicalStockListFilters, setPhysicalStockListFilters] =
@@ -262,6 +278,7 @@ export default function PhysicalStockPage() {
   >({});
   const [openLookupCell, setOpenLookupCell] = useState<LookupCellState | null>(null);
   const [lookupSearchQuery, setLookupSearchQuery] = useState("");
+  const [isInlineItemMasterOpen, setIsInlineItemMasterOpen] = useState(false);
   const tableRef = useRef<HTMLTableElement | null>(null);
   const voucherDatePickerRef = useRef<HTMLInputElement | null>(null);
   const rowDatePickerRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -287,6 +304,8 @@ export default function PhysicalStockPage() {
     currentWidth: number;
   } | null>(null);
   const columnSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const inlineItemMasterControllerRef = useRef<CrudMasterPageController | null>(null);
+  const pendingInlineItemMasterRequestRef = useRef<InlineItemMasterRequest | null>(null);
   const [triggerItemOptions, { isFetching: isItemLookupLoading }] =
     useLazyGetItemOptionsQuery();
   const [triggerUnitOptions] = useLazyGetUnitOptionsQuery();
@@ -364,6 +383,14 @@ export default function PhysicalStockPage() {
       },
     },
   );
+  const { run: getBulkItemStockList } = useApi<
+    PhysicalStockSuccessResponse<BulkItemStockPayload[]>
+  >(ITEM_STOCK_BALANCE_BULK_LIST_ENDPOINT, {
+    toast: {
+      success: false,
+      error: false,
+    },
+  });
   const { run: getItemStockBalance } = useApi<
     PhysicalStockSuccessResponse<ItemStockBalancePayload[]>
   >(ITEM_STOCK_BALANCE_GET_ENDPOINT, {
@@ -1774,6 +1801,104 @@ export default function PhysicalStockPage() {
     };
   }, [handleOpenPhysicalStockList, isPhysicalStockListOpen, loadPhysicalStockList]);
 
+  const handleCloseInlineItemMaster = useCallback(() => {
+    setIsInlineItemMasterOpen(false);
+    inlineItemMasterControllerRef.current = null;
+    pendingInlineItemMasterRequestRef.current = null;
+  }, []);
+
+  const handleInlineItemMasterControllerReady = useCallback(
+    (controller: CrudMasterPageController | null) => {
+      inlineItemMasterControllerRef.current = controller;
+      if (!controller) return;
+      const pending = pendingInlineItemMasterRequestRef.current;
+      if (!pending) {
+        return;
+      }
+      if (pending.mode === "create") {
+        controller.openCreate({ values: { item_name_en: pending.query } });
+      } else {
+        controller.openUpdateById(pending.itemId);
+      }
+    },
+    [],
+  );
+
+  const handleInlineItemMasterModalOpenChange = useCallback(
+    (isOpen: boolean) => {
+      if (!isOpen) {
+        handleCloseInlineItemMaster();
+      }
+    },
+    [handleCloseInlineItemMaster],
+  );
+
+  useEffect(() => {
+    const handleAltCKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "c" || !event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+      const activeEl = document.activeElement as HTMLElement | null;
+      const rowIdStr = activeEl?.dataset?.openingStockRowId;
+      if (!rowIdStr) {
+        return;
+      }
+      const rowId = Number(rowIdStr);
+      if (!Number.isFinite(rowId)) {
+        return;
+      }
+      event.preventDefault();
+      const nextRequest: InlineItemMasterRequest = {
+        itemId: "",
+        mode: "create",
+        query: "",
+        rowId,
+      };
+      pendingInlineItemMasterRequestRef.current = nextRequest;
+      setIsInlineItemMasterOpen(true);
+    };
+    window.addEventListener("keydown", handleAltCKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleAltCKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleAltAKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "a" || !event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+      const activeEl = document.activeElement as HTMLElement | null;
+      const rowIdStr = activeEl?.dataset?.openingStockRowId;
+      if (!rowIdStr) {
+        return;
+      }
+      const rowId = Number(rowIdStr);
+      if (!Number.isFinite(rowId)) {
+        return;
+      }
+      const row = rows.find((r) => r.id === rowId);
+      const itemId = row?.values.oslitemid?.trim() ?? "";
+      if (!itemId) {
+        toast.info("Select an existing item in the row, then press Alt+A.");
+        return;
+      }
+      event.preventDefault();
+      const nextRequest: InlineItemMasterRequest = {
+        itemId,
+        mode: "update",
+        query: row?.values.itemname?.trim() ?? "",
+        rowId,
+      };
+      pendingInlineItemMasterRequestRef.current = nextRequest;
+      setIsInlineItemMasterOpen(true);
+    };
+    window.addEventListener("keydown", handleAltAKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleAltAKeyDown);
+    };
+  }, [rows]);
+
   const loadPhysicalStockById = useCallback(
     async (stockId: string) => {
       const normalizedStockId = stockId.trim();
@@ -1882,22 +2007,104 @@ export default function PhysicalStockPage() {
     ],
   );
   const handleLoadStock = useCallback(() => {
-    if (isLoadingStock || isSavingPhysicalStock || isDeletingPhysicalStock || isBusinessContextLoading) {
+    if (isLoadingStock || isSavingPhysicalStock || isDeletingPhysicalStock || isBulkLoadingStock || isBusinessContextLoading) {
       return;
     }
-    if (draftRows.length > 0) {
-      setPendingLoadRequest({ type: "latest" });
-      return;
-    }
-    void loadLatestPhysicalStock();
+    setIsBulkLoadModalOpen(true);
   }, [
-    draftRows.length,
     isBusinessContextLoading,
     isDeletingPhysicalStock,
+    isBulkLoadingStock,
     isLoadingStock,
     isSavingPhysicalStock,
-    loadLatestPhysicalStock,
   ]);
+  const handleBulkLoadStock = useCallback(
+    async (params: BulkLoadParams) => {
+      if (!params.companyId || !params.branchId) {
+        toast.error("Select a company and branch before loading stock.", {
+          toastId: "bulk-stock-load:missing-context",
+        });
+        return;
+      }
+      setIsBulkLoadingStock(true);
+      try {
+        const query: Record<string, string> = {
+          isb_acc_year: params.accYear,
+          isb_company_id: params.companyId,
+          isb_branch_id: params.branchId,
+          isb_stock_bucket: ITEM_STOCK_BALANCE_BUCKET,
+          stock_type: params.stockType,
+          limit: "500",
+        };
+        if (params.godownId) query.isb_godown_id = params.godownId;
+        if (params.itemGroupId) query.item_group_id = params.itemGroupId;
+        if (params.itemBrandId) query.item_brand_id = params.itemBrandId;
+        if (params.itemSectionId) query.item_section_id = params.itemSectionId;
+        if (params.itemCategoryId) query.item_category_id = params.itemCategoryId;
+
+        const response = await getBulkItemStockList({ query });
+        const items = response?.data ?? [];
+        if (items.length === 0) {
+          toast.info("No stock items found for the selected filters.", {
+            toastId: "bulk-stock-load:empty",
+          });
+          return;
+        }
+        const loadedItemOptions = buildLoadedLookupOptions(
+          items.map((item) => ({ value: item.isb_item_id, label: item.item_name })),
+        );
+        const loadedGodownOptions = buildLoadedLookupOptions(
+          items.map((item) => ({ value: item.isb_godown_id, label: item.godown_name })),
+        );
+        const loadedUnitOptions = buildLoadedLookupOptions(
+          items.map((item) => ({ value: item.isb_unit_id, label: item.unit_name })),
+        );
+        const newRows: PhysicalStockRow[] = items.map((item, index) => {
+          const toBaseFactor = item.isb_to_base_factor > 0 ? item.isb_to_base_factor : 1;
+          return createRow(index + 1, {
+            itemname: item.item_name || "",
+            code: item.item_code || "",
+            barcode: item.item_default_barcode || "",
+            godown: item.godown_name || "",
+            uom: item.unit_name || "",
+            bookqty: toInputValue(item.book_qty),
+            bookfreeqty: toInputValue(item.book_free_qty),
+            bookbaseqty: toInputValue(item.book_base_qty),
+            bookfreebaseqty: toInputValue(item.book_free_base_qty),
+            convfactor: toInputValue(toBaseFactor),
+            costprice: toInputValue(item.cost_price),
+            costwot: toInputValue(item.cost_wot),
+            mrp: toInputValue(item.mrp),
+            oslitemid: item.isb_item_id,
+            oslunitid: item.isb_unit_id,
+            oslbaseuomid: item.isb_price_master_id || "",
+            oslgodownid: item.isb_godown_id,
+            baseunitid: item.isb_base_unit_id || item.isb_unit_id,
+            osltrackingtype: getTrackingOptionFromPayload(item.tracking_type),
+          });
+        });
+        const trailingRow = createEmptyRow(newRows.length + 1);
+        setRows([...newRows, trailingRow]);
+        setInvalidFieldKeys({});
+        setLookupSearchQuery("");
+        setOpenLookupCell(null);
+        setItemOptions((current) => mergeLookupOptions(current, loadedItemOptions));
+        setGodownOptions((current) => mergeLookupOptions(current, loadedGodownOptions));
+        setUnitOptions((current) => mergeLookupOptions(current, loadedUnitOptions));
+        setIsBulkLoadModalOpen(false);
+        toast.success(`Loaded ${items.length} item(s) from stock.`, {
+          toastId: "bulk-stock-load:success",
+        });
+      } catch {
+        toast.error("Failed to load bulk stock items.", {
+          toastId: "bulk-stock-load:error",
+        });
+      } finally {
+        setIsBulkLoadingStock(false);
+      }
+    },
+    [getBulkItemStockList],
+  );
   const handleLoadByRefNo = useCallback(() => {
     if (isLoadingStock || isSavingPhysicalStock || isDeletingPhysicalStock || isBusinessContextLoading) {
       return;
@@ -2788,6 +2995,7 @@ export default function PhysicalStockPage() {
               onClick={handleLoadStock}
               disabled={
                 isLoadingStock ||
+                isBulkLoadingStock ||
                 isSavingPhysicalStock ||
                 isDeletingPhysicalStock ||
                 isBusinessContextLoading
@@ -2797,7 +3005,7 @@ export default function PhysicalStockPage() {
                 className={styles.createIcon}
                 aria-hidden="true"
               />
-              <span>{isLoadingStock ? "Loading..." : "Load Stock"}</span>
+              <span>{isBulkLoadingStock ? "Loading..." : "Load Stock"}</span>
             </button>
             <button
               type="button"
@@ -3071,6 +3279,22 @@ export default function PhysicalStockPage() {
             setIsDeleteLoadedStockConfirmOpen(false);
           }
         }}
+      />
+      {isInlineItemMasterOpen ? (
+        <ItemMasterPageContent
+          inlineModalOnly
+          onCrudControllerReady={handleInlineItemMasterControllerReady}
+          onModalOpenChange={handleInlineItemMasterModalOpenChange}
+        />
+      ) : null}
+      <BulkLoadItemsModal
+        isOpen={isBulkLoadModalOpen}
+        accYear={accountingYear ?? ""}
+        defaultCompanyId={activeCompany?.compId ?? ""}
+        defaultBranchId={activeBranch?.brId ?? ""}
+        loading={isBulkLoadingStock}
+        onClose={() => setIsBulkLoadModalOpen(false)}
+        onLoadStock={(params) => void handleBulkLoadStock(params)}
       />
       <PhysicalStockListModal
         isOpen={isPhysicalStockListOpen}

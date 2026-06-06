@@ -31,7 +31,18 @@ import {
   type ERPDynamicModalVariant,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
-import { FiDownload, FiSearch } from "react-icons/fi";
+import {
+  FiClock,
+  FiDownload,
+  FiEdit2,
+  FiFilter,
+  FiPlusCircle,
+  FiPrinter,
+  FiRefreshCw,
+  FiSearch,
+  FiTrash2,
+  FiUpload,
+} from "react-icons/fi";
 export type {
   CrudMasterApiEndpoints,
   CrudMasterAuditHistoryConfig,
@@ -2409,12 +2420,22 @@ export default function CrudMasterPage({
       shouldHideRowsFromResponseStyleFilters,
     ],
   );
-  const renderedRows = shouldHideRowsForDisabledGridFilters ? [] : rows;
+  const [showOnlyInactive, setShowOnlyInactive] = useState(false);
+  const [filterCardVisible, setFilterCardVisible] = useState(true);
+  const baseRenderedRows = shouldHideRowsForDisabledGridFilters ? [] : rows;
+  const renderedRows = useMemo(() => {
+    if (!showOnlyInactive) return baseRenderedRows;
+    return baseRenderedRows.filter((row) => {
+      const active = row.masterActive.trim().toLowerCase();
+      return active === "false" || active === "0" || active === "inactive" || active === "no" || active === "n";
+    });
+  }, [baseRenderedRows, showOnlyInactive]);
   const renderedTotalEntries = shouldHideRowsForDisabledGridFilters ? 0 : totalEntries;
 
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(
     null,
   );
+  const [selectedRow, setSelectedRow] = useState<MasterTableRow | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | number | null>(
     null,
   );
@@ -2426,8 +2447,18 @@ export default function CrudMasterPage({
   const [gridSettingsMode, setGridSettingsMode] = useState<"filter" | "visibility" | null>(null);
   const [gridSettingsSelections, setGridSettingsSelections] = useState<Record<string, boolean>>({});
   const [gridSettingsSaving, setGridSettingsSaving] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchSettingsRef = useRef<HTMLDivElement | null>(null);
+  const tableContainerRef = useRef<HTMLDivElement | null>(null);
   const previousListStateResetKeyRef = useRef<string | number | null | undefined>(undefined);
+  const renderedRowsRef = useRef<MasterTableRow[]>(renderedRows);
+  const selectedRowIdRef = useRef<string | number | null>(selectedRowId);
+  const gridSettingsModeRef = useRef<"filter" | "visibility" | null>(gridSettingsMode);
+  const pendingDeleteRowRef = useRef<MasterTableRow | null>(pendingDeleteRow);
+
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
 
   const gridSettingsColumns = useMemo(
     () =>
@@ -2648,10 +2679,15 @@ export default function CrudMasterPage({
   }, [listStateResetKey, setCurrentPage]);
   useEffect(() => {
     if (selectedRowId === null) {
+      setSelectedRow(null);
       return;
     }
-    if (!renderedRows.some((row) => row.__rowId === selectedRowId)) {
+    const found = renderedRows.find((row) => row.__rowId === selectedRowId);
+    if (!found) {
       setSelectedRowId(null);
+      setSelectedRow(null);
+    } else {
+      setSelectedRow(found);
     }
   }, [renderedRows, selectedRowId]);
   const pendingDeleteLabel = useMemo(() => {
@@ -3206,12 +3242,94 @@ export default function CrudMasterPage({
     setCurrentPage(DEFAULT_PAGE);
     setSearchTerm(query);
   }, []);
+
+  // Keep refs in sync with latest state so event handlers never see stale values
+  useEffect(() => { renderedRowsRef.current = renderedRows; }, [renderedRows]);
+  useEffect(() => { selectedRowIdRef.current = selectedRowId; }, [selectedRowId]);
+  useEffect(() => { gridSettingsModeRef.current = gridSettingsMode; }, [gridSettingsMode]);
+  useEffect(() => { pendingDeleteRowRef.current = pendingDeleteRow; }, [pendingDeleteRow]);
+
+  // Scroll active row into view whenever selection changes
+  useEffect(() => {
+    if (selectedRowId === null || !tableContainerRef.current) return;
+    const activeRow = tableContainerRef.current.querySelector<HTMLElement>('[class*="activeRow"]');
+    activeRow?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [selectedRowId]);
+
+  // Arrow key navigation: Up/Down = row select, Left/Right = horizontal scroll
+  useEffect(() => {
+    if (hideListPage || typeof document === "undefined") return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const key = event.key;
+      if (key !== "ArrowUp" && key !== "ArrowDown" && key !== "ArrowLeft" && key !== "ArrowRight") return;
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+
+      const target = event.target as HTMLElement;
+      const tag = target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      if (gridSettingsModeRef.current !== null) return;
+      if (pendingDeleteRowRef.current !== null) return;
+
+      const container = tableContainerRef.current;
+      if (!container) return;
+
+      if (key === "ArrowDown" || key === "ArrowUp") {
+        event.preventDefault();
+        const rows = renderedRowsRef.current;
+        if (rows.length === 0) return;
+        const currentId = selectedRowIdRef.current;
+        const currentIndex = currentId !== null ? rows.findIndex((r) => r.__rowId === currentId) : -1;
+        const nextIndex =
+          key === "ArrowDown"
+            ? Math.min(currentIndex + 1, rows.length - 1)
+            : Math.max(currentIndex <= 0 ? 0 : currentIndex - 1, 0);
+        const nextRow = rows[nextIndex];
+        if (nextRow) {
+          setSelectedRowId(nextRow.__rowId);
+          setSelectedRow(nextRow);
+        }
+        return;
+      }
+
+      // Left/Right — scroll the table viewport
+      event.preventDefault();
+      const viewport = container.querySelector<HTMLElement>('[data-erp-table-viewport="true"]');
+      if (!viewport) return;
+      viewport.scrollBy({ left: key === "ArrowRight" ? 150 : -150, behavior: "smooth" });
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [hideListPage]);
+
   const listHeading = gridDisplayName
     ? `${gridDisplayName} List`
     : listTitle ?? `${title} List`;
   const handleDownloadRows = useCallback(() => {
     downloadMasterRowsCsv(listHeading, renderedColumns, renderedRows);
   }, [listHeading, renderedColumns, renderedRows]);
+
+  const handleRefresh = useCallback(() => {
+    void loadRecords(searchTerm, currentPage, pageSize);
+  }, [loadRecords, searchTerm, currentPage, pageSize]);
+
+  const handleToolbarEdit = useCallback(() => {
+    if (selectedRow) {
+      handleRowUpdate(selectedRow);
+    }
+  }, [selectedRow, handleRowUpdate]);
+
+  const handleToolbarDelete = useCallback(() => {
+    if (selectedRow) {
+      handleDeleteRow(selectedRow);
+    }
+  }, [selectedRow, handleDeleteRow]);
+
+  const handleToolbarLogs = useCallback(() => {
+    if (selectedRow) {
+      handleRowLogs(selectedRow);
+    }
+  }, [selectedRow, handleRowLogs]);
   const handleGridColumnReorder = useCallback(
     (nextColumns: ReusableTableColumn<MasterTableRow>[]) => {
       if (gridId === null || gridSettingsColumns.length === 0) {
@@ -3385,59 +3503,6 @@ export default function CrudMasterPage({
           document.body,
         )
       : null;
-  const masterToolbarContent = (
-    <div className={styles.masterHeader}>
-      <div className={styles.masterTitleWrap}>
-        <h1 className={styles.masterTitle}>{listHeading}</h1>
-        {toolbarContent ? (
-          <div className={styles.masterToolbarSlot}>{toolbarContent}</div>
-        ) : null}
-      </div>
-      <div className={styles.masterSearchWrap} ref={searchSettingsRef}>
-        <button
-          type="button"
-          className={styles.masterSearchIconButton}
-          onClick={() => setSearchSettingsOpen((open) => !open)}
-          aria-label="Search settings"
-          aria-expanded={searchSettingsOpen}
-          aria-controls="master-search-settings-tooltip"
-        >
-          <FiSearch className={styles.masterSearchIcon} aria-hidden="true" />
-        </button>
-        {searchSettingsOpen ? (
-          <div
-            id="master-search-settings-tooltip"
-            className={styles.masterSearchSettingsTooltip}
-            role="tooltip"
-          >
-            <button
-              type="button"
-              className={styles.masterSearchSettingsItem}
-              onClick={() => openGridSettingsModal("filter")}
-            >
-              grid filter setting
-            </button>
-            <button
-              type="button"
-              className={styles.masterSearchSettingsItem}
-              onClick={() => openGridSettingsModal("visibility")}
-            >
-              column visible setting
-            </button>
-          </div>
-        ) : null}
-        <input
-          type="text"
-          className={styles.masterSearchInput}
-          value={searchTerm}
-          onChange={(event) => handleSearchChange(event.target.value)}
-          placeholder="Search..."
-          autoComplete="off"
-          aria-label={`Search ${entityLabelPlural}`}
-        />
-      </div>
-    </div>
-  );
   return (
     <>
       {gridSettingsContextMenu}
@@ -3446,6 +3511,111 @@ export default function CrudMasterPage({
           <div className={styles.viewport}>
             <div className={styles.board}>
               <section className={styles.content}>
+                {/* Page Header */}
+                <div className={styles.pageHeader}>
+                  <div className={styles.pageHeaderText}>
+                    <h1 className={styles.pageTitle}>{listHeading}</h1>
+                    <p className={styles.pageSubtitle}>
+                      Manage all {entityLabelPlural} in your organization
+                    </p>
+                  </div>
+                 
+                </div>
+
+                {/* Icon Toolbar */}
+                <div className={styles.iconToolbar}>
+                  <button
+                    type="button"
+                    className={`${styles.iconBtn} ${filterCardVisible ? styles.iconBtnFilterActive : styles.iconBtnFilter}`}
+                    onClick={() => setFilterCardVisible((v) => !v)}
+                    title="Toggle filter panel"
+                  >
+                    <span className={styles.iconBtnBox}><FiFilter aria-hidden="true" /></span>
+                    <span>Filter</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.iconBtn} ${styles.iconBtnAdd}`}
+                    onClick={() => openCreateModal()}
+                    disabled={saveLoading || detailsLoading}
+                    title={createLabel ?? "Add"}
+                  >
+                    <span className={styles.iconBtnBox}><FiPlusCircle aria-hidden="true" /></span>
+                    <span>Add</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.iconBtn} ${styles.iconBtnEdit}`}
+                    onClick={handleToolbarEdit}
+                    disabled={!selectedRow || saveLoading || detailsLoading}
+                    title="Edit selected row"
+                  >
+                    <span className={styles.iconBtnBox}><FiEdit2 aria-hidden="true" /></span>
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.iconBtn} ${styles.iconBtnDelete}`}
+                    onClick={handleToolbarDelete}
+                    disabled={!selectedRow || deleteLoading || saveLoading || detailsLoading}
+                    title="Delete selected row"
+                  >
+                    <span className={styles.iconBtnBox}><FiTrash2 aria-hidden="true" /></span>
+                    <span>Delete</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.iconBtn} ${styles.iconBtnRefresh}`}
+                    onClick={handleRefresh}
+                    disabled={loading}
+                    title="Refresh"
+                  >
+                    <span className={styles.iconBtnBox}><FiRefreshCw aria-hidden="true" /></span>
+                    <span>Refresh</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.iconBtn} ${styles.iconBtnImport}`}
+                    title="Import"
+                    disabled
+                  >
+                    <span className={styles.iconBtnBox}><FiUpload aria-hidden="true" /></span>
+                    <span>Import</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.iconBtn} ${styles.iconBtnExcel}`}
+                    onClick={handleDownloadRows}
+                    disabled={renderedRows.length === 0}
+                    title={`Export ${listHeading} as CSV`}
+                  >
+                    <span className={styles.iconBtnBox}><FiDownload aria-hidden="true" /></span>
+                    <span>Export Excel</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.iconBtn} ${styles.iconBtnPrint}`}
+                    title="Print"
+                    disabled
+                  >
+                    <span className={styles.iconBtnBox}><FiPrinter aria-hidden="true" /></span>
+                    <span>Print</span>
+                  </button>
+                  {auditHistory ? (
+                    <button
+                      type="button"
+                      className={`${styles.iconBtn} ${styles.iconBtnHistory}`}
+                      onClick={handleToolbarLogs}
+                      disabled={!selectedRow}
+                      title="View history"
+                    >
+                      <span className={styles.iconBtnBox}><FiClock aria-hidden="true" /></span>
+                      <span>History</span>
+                    </button>
+                  ) : null}
+                </div>
+
+                {/* Error boxes */}
                 {error ? (
                   <div className={styles.errorBox}>
                     <p className={styles.errorText}>
@@ -3497,23 +3667,77 @@ export default function CrudMasterPage({
                     </button>
                   </div>
                 ) : null}
+
+                {/* Filter Card */}
+                  <div className={styles.filterCard}>
+                    {(() => {
+                      const activeCount = (searchTerm.trim() ? 1 : 0) + (showOnlyInactive ? 1 : 0);
+                      return activeCount > 0 ? (
+                        <span className={styles.filterBadge}>{activeCount}</span>
+                      ) : null;
+                    })()}
+                    <div className={styles.filterRow}>
+                      <div className={styles.filterGroup}>
+                        <label className={styles.filterLabel} htmlFor="master-search-input">
+                          Search
+                        </label>
+                        <div className={styles.filterSearchWrap} ref={searchSettingsRef}>
+                          <button
+                            type="button"
+                            className={styles.masterSearchIconButton}
+                            onClick={() => setSearchSettingsOpen((open) => !open)}
+                            aria-label="Search settings"
+                            aria-expanded={searchSettingsOpen}
+                            aria-controls="master-search-settings-tooltip"
+                          >
+                            <FiSearch className={styles.masterSearchIcon} aria-hidden="true" />
+                          </button>
+                          {searchSettingsOpen ? (
+                            <div
+                              id="master-search-settings-tooltip"
+                              className={styles.masterSearchSettingsTooltip}
+                              role="tooltip"
+                            >
+                              <button
+                                type="button"
+                                className={styles.masterSearchSettingsItem}
+                                onClick={() => openGridSettingsModal("filter")}
+                              >
+                                grid filter setting
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.masterSearchSettingsItem}
+                                onClick={() => openGridSettingsModal("visibility")}
+                              >
+                                column visible setting
+                              </button>
+                            </div>
+                          ) : null}
+                          <input
+                            ref={searchInputRef}
+                            id="master-search-input"
+                            type="text"
+                            className={styles.masterSearchInput}
+                            value={searchTerm}
+                            onChange={(event) => handleSearchChange(event.target.value)}
+                            placeholder={`Search by ${entityLabel} name...`}
+                            autoComplete="off"
+                            aria-label={`Search ${entityLabelPlural}`}
+                          />
+                        </div>
+                      </div>
+                      {toolbarContent ? (
+                        <div className={styles.filterSlot}>{toolbarContent}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                {/* Data Table */}
+                <div ref={tableContainerRef} style={{ flex: "1 1 0", minHeight: 0, display: "flex", flexDirection: "column" }}>
                 <ReusableTable
                   columns={renderedColumns}
                   rows={renderedRows}
                   rowKey="__rowId"
-                  toolbarContent={masterToolbarContent}
-                  toolbarActions={
-                    <button
-                      type="button"
-                      className={styles.masterDownloadButton}
-                      onClick={handleDownloadRows}
-                      disabled={renderedRows.length === 0}
-                      aria-label={`Download ${listHeading}`}
-                      title={`Download ${listHeading}`}
-                    >
-                      <FiDownload aria-hidden="true" />
-                    </button>
-                  }
                   wrapperClassName={styles.masterTable}
                   tableClassName={styles.masterDataTable}
                   tableLayout="fixed"
@@ -3529,31 +3753,11 @@ export default function CrudMasterPage({
                       : undefined
                   }
                   activeRowKey={selectedRowId}
-                  onRowClick={(row) => setSelectedRowId(row.__rowId)}
-                  onRowDoubleClick={handleRowView}
-                  onCreate={openCreateModal}
-                  createLabel={createLabel ?? "Add"}
-                  onView={handleRowView}
-                  onUpdate={handleRowUpdate}
-                  onDelete={handleRowDelete}
-                  onLogs={auditHistory ? handleRowLogs : undefined}
-                  actionsColumnWidth={MASTER_ACTIONS_COLUMN_WIDTH}
-                  isViewDisabled={() => saveLoading || detailsLoading}
-                  isUpdateDisabled={() => saveLoading || detailsLoading}
-                  isDeleteDisabled={() =>
-                    deleteLoading || saveLoading || detailsLoading
-                  }
-                  isLogsDisabled={(row) => {
-                    if (!auditHistory) {
-                      return true;
-                    }
-                    const recordId =
-                      auditHistory.getRecordId?.(row) ?? resolveAuditHistoryRecordId(row);
-                    return recordId === null || recordId === undefined || `${recordId}`.trim().length === 0;
+                  onRowClick={(row) => {
+                    setSelectedRowId(row.__rowId);
+                    setSelectedRow(row);
                   }}
-                  actionsAsIcons
-                  updateLabel="Update"
-                  deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
+                  onRowDoubleClick={handleRowView}
                   sortable
                   paginated
                   manualPagination
@@ -3571,6 +3775,7 @@ export default function CrudMasterPage({
                       : `No ${entityLabel} data found`
                   }
                 />
+                </div>
               </section>
             </div>
           </div>
