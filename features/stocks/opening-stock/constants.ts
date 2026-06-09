@@ -15,15 +15,17 @@ export {
 
 export { UI_TABLE_COLUMNS_LIST_ENDPOINT, UI_TABLE_COLUMNS_CREATE_ENDPOINT } from "@/features/stocks/_shared/constants";
 export const ACCOUNT_LEDGER_LIST_ENDPOINT = "/account-ledger-masters/get";
+export const ITEMS_BULK_LOAD_ENDPOINT = "/items/bulk-load";
 export const UNIT_LIST_ENDPOINT ="/configured-grid-sql/run?grid_id=4";
 export const OPENING_STOCK_SAVE_ENDPOINT = "/opening-stocks";
 export const OPENING_STOCK_LIST_ENDPOINT = "/opening-stocks/list";
 export const OPENING_STOCK_GET_ENDPOINT = "/opening-stocks/get";
 export const OPENING_STOCK_DELETE_ENDPOINT = "/opening-stocks/delete";
 export const UI_TABLE_COLUMNS_QUERY = {
-  uiTblClmTableId: "5",
+  uiTableId: "5",
   page: "1",
   limit: "100",
+  uiTblClmIsActive: "true",
 } as const;
 export const UI_TABLE_COLUMNS_TOAST_OPTIONS = {
   success: false,

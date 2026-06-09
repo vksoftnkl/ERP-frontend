@@ -1,6 +1,9 @@
+export type UiTableDeviceType = "web" | "mobile" | "desktop";
+
 export type UiTableForm = {
-  uiTblId: string;
+  uiTableId: string;
   uiTblName: string;
+  uiTblDeviceType: UiTableDeviceType;
   uiTblEditable: boolean;
   uiTblIsActive: boolean;
 };
@@ -21,23 +24,11 @@ export type UiTableColumnRow = {
 };
 
 export type UiTableOption = {
-  uiTblId: string;
+  uiTableId: string;
   uiTblName: string;
+  uiTblDeviceType: UiTableDeviceType;
   uiTblEditable: boolean;
   uiTblIsActive: boolean;
-};
-
-export type UiTablePayload = {
-  uiTblId: string;
-  uiTblName: string | null;
-  uiTblEditable: boolean;
-  uiTblIsActive: boolean;
-  uiTblIsDeleted: boolean;
-  uiTblSyncDate: string | null;
-  uiTblCreatedOn: string;
-  uiTblCreatedBy: string | null;
-  uiTblModifiedOn: string;
-  uiTblModifiedBy: string | null;
 };
 
 export type UiTableColumnPayload = {
@@ -61,18 +52,26 @@ export type UiTableColumnPayload = {
   uiTblClmModifiedBy: string | null;
 };
 
-export type SaveUiTableMasterRequest = {
-  uiTblId?: string;
-  uiTblName: string;
+export type UiTablePayload = {
+  uiTblId: string;
+  uiTableId?: string;
+  uiTblName: string | null;
+  uiTblDeviceType: string | null;
   uiTblEditable: boolean;
   uiTblIsActive: boolean;
+  uiTblIsDeleted: boolean;
+  uiTblSyncDate: string | null;
+  uiTblCreatedOn: string;
+  uiTblCreatedBy: string | null;
+  uiTblModifiedOn: string;
+  uiTblModifiedBy: string | null;
+  columns: UiTableColumnPayload[];
 };
 
 export type SaveUiTableColumnRequest = {
   uiTblClmId?: string;
   uiTblClmNo?: string;
   uiTblClmName: string;
-  uiTblClmTableId: string | null;
   uiTblClmColumnWidth: number | null;
   uiTblClmColumnVisibility: boolean;
   uiTblClmColumnFocus: boolean;
@@ -81,4 +80,13 @@ export type SaveUiTableColumnRequest = {
   uiTblClmNextColumn: number | null;
   uiTblClmPreviousColumn: number | null;
   uiTblClmIsActive: boolean;
+};
+
+export type SaveUiTableMasterRequest = {
+  uiTblId?: string;
+  uiTblName: string;
+  uiTblDeviceType: UiTableDeviceType;
+  uiTblEditable: boolean;
+  uiTblIsActive: boolean;
+  uiTblColumns?: SaveUiTableColumnRequest[];
 };

@@ -181,6 +181,8 @@ export type CrudMasterPageProps = {
     searchTerm: string;
     currentPage: number;
     pageSize: number;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
   }) => Record<string, string>;
   listStateResetKey?: string | number | null;
   buildGetByIdRequest?: (params: {

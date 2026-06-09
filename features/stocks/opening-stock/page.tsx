@@ -53,7 +53,9 @@ import { OpeningStockAuditNotesModal } from "./opening-stock-audit-notes-modal";
 import { OpeningStockListModal } from "./opening-stock-list-modal";
 import { StockTableRow } from "./stock-table-row";
 import { StockToolbar } from "./stock-toolbar";
+import { BulkLoadItemsModal, type BulkLoadParams } from "./BulkLoadItemsModal";
 import type {
+  BulkOpeningStockItemPayload,
   OpeningStockDocumentPayload,
   OpeningStockHeaderPayload,
   OpeningStockListMeta,
@@ -70,9 +72,11 @@ import type {
   OpeningStockRow,
   RowValidationIssue,
   UiTableColumnPayload,
+  UiTableMasterResponse,
 } from "./opening-stock.types";
 import {
   ACCOUNT_LEDGER_LIST_ENDPOINT,
+  ITEMS_BULK_LOAD_ENDPOINT,
   DEFAULT_GODOWN_OPTION,
   DEFAULT_ITEM_OPTION,
   DELETE_ACTION_COLUMN_WIDTH,
@@ -112,6 +116,7 @@ import {
   buildTaxSelectionValues,
   clearInvalidFieldKeys,
   createEmptyRow,
+  createRow,
   cx,
   DEFAULT_ROW_VALUES,
   ensureTrailingEmptyRow,
@@ -142,6 +147,7 @@ import {
   resolveConfiguredColumns,
   resolveItemPriceRecordByUnitId,
   toInputDateValue,
+  toInputValue,
   toIsoDateTime,
   toCanonicalDateValue,
   toNullableTrimmedString,
@@ -154,7 +160,7 @@ import type {
   OpeningStockEditorState,
   OpeningStockColumnSettingsDraftEntry,
   TableSettingsContextMenuPosition,
-  SaveOpeningStockUiTableColumnRequest,
+  SaveOpeningStockUiTableMasterRequest,
 } from "./opening-stock.column-settings";
 import {
   createOpeningStockListFiltersForToday,
@@ -225,6 +231,8 @@ export default function OpeningStockPage() {
     null,
   );
   const [isLoadingStock, setIsLoadingStock] = useState(false);
+  const [isBulkLoadModalOpen, setIsBulkLoadModalOpen] = useState(false);
+  const [isBulkLoadingItems, setIsBulkLoadingItems] = useState(false);
   const [pendingLoadRequest, setPendingLoadRequest] =
     useState<OpeningStockLoadRequest | null>(null);
   const [isDeleteLoadedStockConfirmOpen, setIsDeleteLoadedStockConfirmOpen] = useState(false);
@@ -304,18 +312,26 @@ export default function OpeningStockPage() {
     loading: isBusinessContextLoading,
   } = useBusinessContext();
   const { getAll: listUiTableColumns } = useApi<
-    ApiSuccessResponse<UiTableColumnPayload[], ListMeta>
+    ApiSuccessResponse<UiTableMasterResponse[], ListMeta>
   >(UI_TABLE_COLUMNS_LIST_ENDPOINT, {
     toast: UI_TABLE_COLUMNS_TOAST_OPTIONS,
   });
   const { run: saveUiTableColumn } = useApi<
-    ApiSuccessResponse<UiTableColumnPayload>,
-    SaveOpeningStockUiTableColumnRequest
+    ApiSuccessResponse<{ columns: UiTableColumnPayload[] }>,
+    SaveOpeningStockUiTableMasterRequest
   >(UI_TABLE_COLUMNS_CREATE_ENDPOINT, {
     method: "POST",
     toast: UI_TABLE_COLUMNS_TOAST_OPTIONS,
   });
   const { run: listAccountLedgers } = useApi<unknown>(ACCOUNT_LEDGER_LIST_ENDPOINT, {
+    toast: {
+      success: false,
+      error: false,
+    },
+  });
+  const { run: getBulkItems } = useApi<
+    OpeningStockSuccessResponse<BulkOpeningStockItemPayload[]>
+  >(ITEMS_BULK_LOAD_ENDPOINT, {
     toast: {
       success: false,
       error: false,
@@ -433,7 +449,12 @@ export default function OpeningStockPage() {
       try {
         const payload = await listUiTableColumns({ ...UI_TABLE_COLUMNS_QUERY });
         if (!cancelled) {
-          const nextColumnConfigs = Array.isArray(payload?.data) ? payload.data : [];
+          const allTables = Array.isArray(payload?.data) ? payload.data : [];
+          const matchingTable = allTables.find(
+            (table) => table.uiTblId === UI_TABLE_COLUMNS_QUERY.uiTableId,
+          );
+          const allColumns = Array.isArray(matchingTable?.columns) ? matchingTable.columns : [];
+          const nextColumnConfigs = allColumns.filter((c) => c.uiTblClmIsActive !== false);
           uiColumnConfigsRef.current = nextColumnConfigs;
           setUiColumnConfigs(nextColumnConfigs);
         }
@@ -779,20 +800,28 @@ export default function OpeningStockPage() {
     }
     setIsColumnSettingsSaving(true);
     try {
-      for (const row of columnSettingsRows) {
-        const draft =
-          columnSettingsDraft[row.key] ??
-          ({
-            visible: row.visible,
-            focus: row.focus,
-            necessity: row.necessity,
-          } satisfies OpeningStockColumnSettingsDraftEntry);
-        await saveUiTableColumn({
-          body: buildOpeningStockUiTableColumnSettingsRequest(row, draft),
-        });
-      }
+      await saveUiTableColumn({
+        body: {
+          uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId,
+          uiTblColumns: columnSettingsRows.map((row) => {
+            const draft =
+              columnSettingsDraft[row.key] ??
+              ({
+                visible: row.visible,
+                focus: row.focus,
+                necessity: row.necessity,
+              } satisfies OpeningStockColumnSettingsDraftEntry);
+            return buildOpeningStockUiTableColumnSettingsRequest(row, draft);
+          }),
+        },
+      });
       const payload = await listUiTableColumns({ ...UI_TABLE_COLUMNS_QUERY });
-      const nextColumnConfigs = Array.isArray(payload?.data) ? payload.data : [];
+      const allTables = Array.isArray(payload?.data) ? payload.data : [];
+      const matchingTable = allTables.find(
+        (table) => table.uiTblId === UI_TABLE_COLUMNS_QUERY.uiTableId,
+      );
+      const allColumns = Array.isArray(matchingTable?.columns) ? matchingTable.columns : [];
+      const nextColumnConfigs = allColumns.filter((c) => c.uiTblClmIsActive !== false);
       uiColumnConfigsRef.current = nextColumnConfigs;
       setUiColumnConfigs(nextColumnConfigs);
       setIsColumnSettingsOpen(false);
@@ -843,16 +872,22 @@ export default function OpeningStockPage() {
         uiColumnConfigsRef.current,
         column.key,
       );
-      const request = buildOpeningStockUiTableColumnWidthRequest(
+      const columnRequest = buildOpeningStockUiTableColumnWidthRequest(
         column,
         configuredColumn,
         columnIndex,
         parseColumnWidth(column.width),
       );
-      request.uiTblClmColumnVisibility = false;
+      columnRequest.uiTblClmColumnVisibility = false;
       try {
-        const response = await saveUiTableColumn({ body: request });
-        const savedColumn = response?.data;
+        const response = await saveUiTableColumn({
+          body: { uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId, uiTblColumns: [columnRequest] },
+        });
+        const savedColumn = (response?.data?.columns ?? []).find(
+          (c) =>
+            (columnRequest.uiTblClmId && c.uiTblClmId === columnRequest.uiTblClmId) ||
+            c.uiTblClmName === columnRequest.uiTblClmName,
+        );
         if (!savedColumn) {
           return;
         }
@@ -2164,15 +2199,20 @@ export default function OpeningStockPage() {
       );
 
       try {
+        const columnRequest = buildOpeningStockUiTableColumnWidthRequest(
+          column,
+          configuredColumn,
+          columnIndex,
+          width,
+        );
         const response = await saveUiTableColumn({
-          body: buildOpeningStockUiTableColumnWidthRequest(
-            column,
-            configuredColumn,
-            columnIndex,
-            width,
-          ),
+          body: { uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId, uiTblColumns: [columnRequest] },
         });
-        const savedColumn = response?.data;
+        const savedColumn = (response?.data?.columns ?? []).find(
+          (c) =>
+            (columnRequest.uiTblClmId && c.uiTblClmId === columnRequest.uiTblClmId) ||
+            c.uiTblClmName === columnRequest.uiTblClmName,
+        );
         if (!savedColumn) {
           return;
         }
@@ -2565,6 +2605,135 @@ export default function OpeningStockPage() {
     isSavingOpeningStock,
     loadLatestOpeningStock,
   ]);
+
+  const handleOpenBulkLoadModal = useCallback(() => {
+    if (isBulkLoadingItems || isSavingOpeningStock || isBusinessContextLoading) {
+      return;
+    }
+    setIsBulkLoadModalOpen(true);
+  }, [isBulkLoadingItems, isSavingOpeningStock, isBusinessContextLoading]);
+
+  const handleBulkLoadItems = useCallback(
+    async (params: BulkLoadParams) => {
+      if (!params.companyId) {
+        toast.error("Select a company before loading items.", {
+          toastId: "bulk-load-items:missing-company",
+        });
+        return;
+      }
+      setIsBulkLoadingItems(true);
+      try {
+        const query: Record<string, string> = {
+          item_company_id: params.companyId,
+          limit: "500",
+        };
+        if (params.branchId) query.item_branch_id = params.branchId;
+        if (params.godownId) query.godown_id = params.godownId;
+        if (params.itemGroupId) query.item_group_id = params.itemGroupId;
+        if (params.itemBrandId) query.item_brand_id = params.itemBrandId;
+        if (params.itemSectionId) query.item_section_id = params.itemSectionId;
+        if (params.itemCategoryId) query.item_category_id = params.itemCategoryId;
+
+        const response = await getBulkItems({ query });
+        const items = response?.data ?? [];
+        if (items.length === 0) {
+          toast.info("No items found for the selected filters.", {
+            toastId: "bulk-load-items:empty",
+          });
+          return;
+        }
+
+        const loadedItemOptions = buildLoadedLookupOptions(
+          items.map((item) => ({ value: item.item_id, label: item.item_name })),
+        );
+        const loadedGodownOptions = buildLoadedLookupOptions(
+          items
+            .filter((item) => item.godown_id)
+            .map((item) => ({ value: item.godown_id, label: item.godown_name })),
+        );
+        const loadedUnitOptions = buildLoadedLookupOptions(
+          items
+            .filter((item) => item.unit_id)
+            .map((item) => ({ value: item.unit_id, label: item.unit_name })),
+        );
+
+        const newRows = items.map((item, index) =>
+          createRow(index + 1, {
+            itemname: item.item_name,
+            code: toInputValue(item.item_code),
+            barcode: toInputValue(item.item_default_barcode),
+            oslitemid: item.item_id,
+            oslunitid: item.unit_id ?? "",
+            oslbaseuomid: item.price_master_id ?? "",
+            oslgodownid: item.godown_id ?? "",
+            baseunitid: item.base_unit_id ?? item.item_base_unit_id ?? "",
+            uom: item.unit_name ?? "",
+            godown: item.godown_name ?? "",
+            convfactor: toInputValue(item.to_base_factor || 1),
+            costprice: toInputValue(item.cost_price),
+            costwot: toInputValue(item.cost_wot),
+            mrp: toInputValue(item.mrp),
+            pricea: toInputValue(item.sales_price_a),
+            priceb: toInputValue(item.sales_price_b),
+            pricec: toInputValue(item.sales_price_c),
+            priced: toInputValue(item.sales_price_d),
+            priceawot: toInputValue(item.price_a_wot),
+            pricebwot: toInputValue(item.price_b_wot),
+            pricecwot: toInputValue(item.price_c_wot),
+            pricedwot: toInputValue(item.price_d_wot),
+            priceamarkup: toInputValue(item.price_a_markup),
+            pricebmarkup: toInputValue(item.price_b_markup),
+            pricecmarkup: toInputValue(item.price_c_markup),
+            pricedmarkup: toInputValue(item.price_d_markup),
+            profittype: item.profit_type ?? "MANUAL",
+            roundoff: toInputValue(item.round_off),
+            taxname: item.tax_name ?? "",
+            osltaxid: item.tax_id ?? "",
+            osltaxperc: toInputValue(item.tax_perc),
+            oslcesstype: item.cess_type ?? "NONE",
+            oslcessperc: toInputValue(item.cess_perc),
+            oslcessperunit: toInputValue(item.cess_per_unit),
+            osltrackingtype: normalizeOpeningStockTrackingType(item.tracking_type),
+          }),
+        );
+
+        setRows([...newRows, createEmptyRow(newRows.length + 1)]);
+        setInvalidFieldKeys({});
+        setLookupSearchQuery("");
+        setOpenLookupCell(null);
+        setItemOptions((current) => mergeLookupOptions(current, loadedItemOptions));
+        setGodownOptions((current) => mergeLookupOptions(current, loadedGodownOptions));
+        setUnitOptions((current) => mergeLookupOptions(current, loadedUnitOptions));
+        setIsBulkLoadModalOpen(false);
+        toast.success(`Loaded ${items.length} item(s).`, {
+          toastId: "bulk-load-items:success",
+        });
+
+        // Prefetch full item price details in the background for UOM-change support
+        const uniqueItemIds = Array.from(new Set(items.map((item) => item.item_id)));
+        void Promise.allSettled(
+          uniqueItemIds.map((itemId) => triggerItemPriceDetails({ itemId }, true).unwrap()),
+        ).then((results) => {
+          const nextDetails: Record<string, ItemPriceDetailsPayload> = {};
+          for (const result of results) {
+            if (result.status === "fulfilled") {
+              nextDetails[result.value.item.item_id] = result.value;
+            }
+          }
+          if (Object.keys(nextDetails).length > 0) {
+            setItemDetailsByItemId((current) => ({ ...current, ...nextDetails }));
+          }
+        });
+      } catch {
+        toast.error("Failed to load items.", {
+          toastId: "bulk-load-items:error",
+        });
+      } finally {
+        setIsBulkLoadingItems(false);
+      }
+    },
+    [getBulkItems, triggerItemPriceDetails],
+  );
 
   const handleLoadByRefNo = useCallback(() => {
     if (isLoadingStock || isSavingOpeningStock || isBusinessContextLoading) {
@@ -3225,6 +3394,7 @@ export default function OpeningStockPage() {
             isLoadingStock={isLoadingStock}
             isSavingOpeningStock={isSavingOpeningStock}
             isDeletingOpeningStock={isDeletingOpeningStock}
+            isBulkLoadingItems={isBulkLoadingItems}
             isBusinessContextLoading={isBusinessContextLoading}
             canDeleteLoadedStock={Boolean(loadedVoucherId)}
             canClearRows={draftRows.length > 0}
@@ -3233,6 +3403,7 @@ export default function OpeningStockPage() {
             onBrowseStockList={handleOpenOpeningStockList}
             onLoadByRefNo={handleLoadByRefNo}
             onLoadStock={handleLoadStock}
+            onBulkLoadItems={handleOpenBulkLoadModal}
             onClearRows={handleClearRows}
             onUpdateStock={handleUpdateStock}
             onDeleteStock={handleDeleteLoadedStock}
@@ -3456,6 +3627,14 @@ export default function OpeningStockPage() {
           onChange={handleOpeningStockAuditNotesChange}
           onConfirm={handleConfirmOpeningStockAuditNotes}
           onCancel={handleCancelOpeningStockAuditNotes}
+        />
+        <BulkLoadItemsModal
+          isOpen={isBulkLoadModalOpen}
+          defaultCompanyId={activeCompany?.compId ?? ""}
+          defaultBranchId={activeBranch?.id ?? ""}
+          loading={isBulkLoadingItems}
+          onClose={() => setIsBulkLoadModalOpen(false)}
+          onLoadItems={(params) => void handleBulkLoadItems(params)}
         />
         <OpeningStockListModal
           isOpen={isOpeningStockListOpen}

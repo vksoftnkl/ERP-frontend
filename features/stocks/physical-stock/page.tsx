@@ -121,7 +121,7 @@ import type {
   ItemStockBalanceRowScope,
   RowValidationIssue,
   UiTableColumnPayload,
-  SavePhysicalStockUiTableColumnRequest,
+  SavePhysicalStockUiTableMasterRequest,
   PhysicalStockColumnSettingsDraftEntry,
   PhysicalStockLoadRequest,
   PhysicalStockListFilters,
@@ -318,8 +318,8 @@ export default function PhysicalStockPage() {
     },
   });
   const { run: saveUiTableColumn } = useApi<
-    { data?: UiTableColumnPayload },
-    SavePhysicalStockUiTableColumnRequest
+    { data?: { columns: UiTableColumnPayload[] } },
+    SavePhysicalStockUiTableMasterRequest
   >(UI_TABLE_COLUMNS_CREATE_ENDPOINT, {
     method: "POST",
     toast: {
@@ -559,14 +559,9 @@ export default function PhysicalStockPage() {
     void (async () => {
       try {
         const payload = await listUiTableColumns(UI_TABLE_COLUMNS_QUERY);
-        const configuredColumns = extractRows<UiTableColumnPayload>(payload, [
-          "data",
-          "rows",
-          "items",
-          "results",
-          "columns",
-          "uiTableColumns",
-        ]);
+        const allTables = Array.isArray((payload as { data?: unknown[] })?.data) ? (payload as { data: { uiTblId?: string; columns?: UiTableColumnPayload[] }[] }).data : [];
+        const matchingTable = allTables.find((t) => t.uiTblId === UI_TABLE_COLUMNS_QUERY.uiTableId);
+        const configuredColumns = (Array.isArray(matchingTable?.columns) ? matchingTable.columns : []).filter((c) => c.uiTblClmIsActive !== false);
         applyPhysicalStockColumnConfigs(configuredColumns);
       } catch {
         applyPhysicalStockColumnConfigs([]);
@@ -1136,27 +1131,25 @@ export default function PhysicalStockPage() {
     }
     setIsColumnSettingsSaving(true);
     try {
-      for (const row of columnSettingsRows) {
-        const draft =
-          columnSettingsDraft[row.key] ??
-          ({
-            visible: row.visible,
-            focus: row.focus,
-            necessity: row.necessity,
-          } satisfies PhysicalStockColumnSettingsDraftEntry);
-        await saveUiTableColumn({
-          body: buildPhysicalStockUiTableColumnSettingsRequest(row, draft),
-        });
-      }
+      await saveUiTableColumn({
+        body: {
+          uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId,
+          uiTblColumns: columnSettingsRows.map((row) => {
+            const draft =
+              columnSettingsDraft[row.key] ??
+              ({
+                visible: row.visible,
+                focus: row.focus,
+                necessity: row.necessity,
+              } satisfies PhysicalStockColumnSettingsDraftEntry);
+            return buildPhysicalStockUiTableColumnSettingsRequest(row, draft);
+          }),
+        },
+      });
       const payload = await listUiTableColumns(UI_TABLE_COLUMNS_QUERY);
-      const nextColumnConfigs = extractRows<UiTableColumnPayload>(payload, [
-        "data",
-        "rows",
-        "items",
-        "results",
-        "columns",
-        "uiTableColumns",
-      ]);
+      const allTables = Array.isArray((payload as { data?: unknown[] })?.data) ? (payload as { data: { uiTblId?: string; columns?: UiTableColumnPayload[] }[] }).data : [];
+      const matchingTable = allTables.find((t) => t.uiTblId === UI_TABLE_COLUMNS_QUERY.uiTableId);
+      const nextColumnConfigs = (Array.isArray(matchingTable?.columns) ? matchingTable.columns : []).filter((c) => c.uiTblClmIsActive !== false);
       applyPhysicalStockColumnConfigs(nextColumnConfigs);
       setIsColumnSettingsOpen(false);
     } catch {
@@ -1238,18 +1231,23 @@ export default function PhysicalStockPage() {
         column.key,
       );
       try {
+        const columnRequest = buildPhysicalStockUiTableColumnRequest(
+          column,
+          configuredColumn,
+          columnIndex,
+          {
+            uiTblClmColumnWidth: parseColumnWidth(column.width),
+            uiTblClmColumnVisibility: false,
+          },
+        );
         const response = await saveUiTableColumn({
-          body: buildPhysicalStockUiTableColumnRequest(
-            column,
-            configuredColumn,
-            columnIndex,
-            {
-              uiTblClmColumnWidth: parseColumnWidth(column.width),
-              uiTblClmColumnVisibility: false,
-            },
-          ),
+          body: { uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId, uiTblColumns: [columnRequest] },
         });
-        const savedColumn = response?.data;
+        const savedColumn = (response?.data?.columns ?? []).find(
+          (c) =>
+            (columnRequest.uiTblClmId && c.uiTblClmId === columnRequest.uiTblClmId) ||
+            c.uiTblClmName === columnRequest.uiTblClmName,
+        );
         if (!savedColumn) {
           return;
         }
@@ -1357,12 +1355,20 @@ export default function PhysicalStockPage() {
         columnKey,
       );
       try {
+        const columnRequest = buildPhysicalStockUiTableColumnRequest(
+          column,
+          configuredColumn,
+          columnIndex,
+          { uiTblClmColumnWidth: width },
+        );
         const response = await saveUiTableColumn({
-          body: buildPhysicalStockUiTableColumnRequest(column, configuredColumn, columnIndex, {
-            uiTblClmColumnWidth: width,
-          }),
+          body: { uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId, uiTblColumns: [columnRequest] },
         });
-        const savedColumn = response?.data;
+        const savedColumn = (response?.data?.columns ?? []).find(
+          (c) =>
+            (columnRequest.uiTblClmId && c.uiTblClmId === columnRequest.uiTblClmId) ||
+            c.uiTblClmName === columnRequest.uiTblClmName,
+        );
         if (!savedColumn) {
           return;
         }
@@ -1390,13 +1396,23 @@ export default function PhysicalStockPage() {
           column.key,
         );
         try {
-          const response = await saveUiTableColumn({
-            body: buildPhysicalStockUiTableColumnRequest(column, configuredColumn, columnIndex, {
+          const columnRequest = buildPhysicalStockUiTableColumnRequest(
+            column,
+            configuredColumn,
+            columnIndex,
+            {
               uiTblClmColumnPosition: columnIndex + 1,
               uiTblClmColumnWidth: parseColumnWidth(column.width),
-            }),
+            },
+          );
+          const response = await saveUiTableColumn({
+            body: { uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId, uiTblColumns: [columnRequest] },
           });
-          const savedColumn = response?.data;
+          const savedColumn = (response?.data?.columns ?? []).find(
+            (c) =>
+              (columnRequest.uiTblClmId && c.uiTblClmId === columnRequest.uiTblClmId) ||
+              c.uiTblClmName === columnRequest.uiTblClmName,
+          );
           if (!savedColumn) {
             continue;
           }
@@ -2095,6 +2111,22 @@ export default function PhysicalStockPage() {
         toast.success(`Loaded ${items.length} item(s) from stock.`, {
           toastId: "bulk-stock-load:success",
         });
+
+        // Prefetch item price details in the background so UOM changes work correctly
+        const uniqueItemIds = Array.from(new Set(items.map((item) => item.isb_item_id).filter(Boolean)));
+        void Promise.allSettled(
+          uniqueItemIds.map((itemId) => triggerItemPriceDetails({ itemId }, true).unwrap()),
+        ).then((results) => {
+          const nextDetails: Record<string, ItemPriceDetailsPayload> = {};
+          for (const result of results) {
+            if (result.status === "fulfilled") {
+              nextDetails[result.value.item.item_id] = result.value;
+            }
+          }
+          if (Object.keys(nextDetails).length > 0) {
+            setItemDetailsByItemId((current) => ({ ...current, ...nextDetails }));
+          }
+        });
       } catch {
         toast.error("Failed to load bulk stock items.", {
           toastId: "bulk-stock-load:error",
@@ -2103,7 +2135,7 @@ export default function PhysicalStockPage() {
         setIsBulkLoadingStock(false);
       }
     },
-    [getBulkItemStockList],
+    [getBulkItemStockList, triggerItemPriceDetails],
   );
   const handleLoadByRefNo = useCallback(() => {
     if (isLoadingStock || isSavingPhysicalStock || isDeletingPhysicalStock || isBusinessContextLoading) {

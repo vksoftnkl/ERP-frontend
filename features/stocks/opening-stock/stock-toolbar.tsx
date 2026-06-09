@@ -1,6 +1,6 @@
 "use client";
 import type { ReactNode, RefObject } from "react";
-import { FiCalendar, FiDownload, FiList, FiRotateCcw, FiSearch, FiTrash2 } from "react-icons/fi";
+import { FiCalendar, FiDownload, FiList, FiRotateCcw, FiSearch, FiTrash2, FiPackage } from "react-icons/fi";
 import { cx, formatDateEntry, formatDateForDisplay, openDatePicker, toCanonicalDateValue } from "./opening-stock.utils";
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 type StockToolbarProps = {
@@ -10,6 +10,7 @@ type StockToolbarProps = {
   isLoadingStock: boolean;
   isSavingOpeningStock: boolean;
   isDeletingOpeningStock: boolean;
+  isBulkLoadingItems: boolean;
   isBusinessContextLoading: boolean;
   canDeleteLoadedStock: boolean;
   canClearRows: boolean;
@@ -18,6 +19,7 @@ type StockToolbarProps = {
   onBrowseStockList: () => void;
   onLoadByRefNo: () => void;
   onLoadStock: () => void;
+  onBulkLoadItems: () => void;
   onClearRows: () => void;
   onUpdateStock: () => void;
   onDeleteStock: () => void;
@@ -29,6 +31,7 @@ export function StockToolbar({
   isLoadingStock,
   isSavingOpeningStock,
   isDeletingOpeningStock,
+  isBulkLoadingItems,
   isBusinessContextLoading,
   canDeleteLoadedStock,
   canClearRows,
@@ -37,6 +40,7 @@ export function StockToolbar({
   onBrowseStockList,
   onLoadByRefNo,
   onLoadStock,
+  onBulkLoadItems,
   onClearRows,
   onUpdateStock,
   onDeleteStock,
@@ -133,6 +137,23 @@ export function StockToolbar({
             aria-hidden="true"
           />
           <span>{isLoadingStock ? "Loading..." : "Load Stock"}</span>
+        </button>
+        <button
+          type="button"
+          className={cx(styles.createButton, styles.loadButton)}
+          onClick={onBulkLoadItems}
+          disabled={
+            isBulkLoadingItems ||
+            isSavingOpeningStock ||
+            isDeletingOpeningStock ||
+            isBusinessContextLoading
+          }
+        >
+          <FiPackage
+            className={styles.createIcon}
+            aria-hidden="true"
+          />
+          <span>{isBulkLoadingItems ? "Loading..." : "Bulk Load Items"}</span>
         </button>
              <button
           type="button"

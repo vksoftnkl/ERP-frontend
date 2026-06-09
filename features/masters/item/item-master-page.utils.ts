@@ -195,6 +195,30 @@ export function extractUiTableColumnConfigRecords(
   tableId: string,
 ): Record<string, unknown>[] {
   const normalizedTableId = tableId.trim();
+
+  // New format: data[] contains table objects with nested columns array
+  const dataField = (payload as Record<string, unknown> | null)?.data;
+  if (Array.isArray(dataField) && dataField.length > 0 && isRecord(dataField[0])) {
+    const firstRow = dataField[0] as Record<string, unknown>;
+    if ("uiTblId" in firstRow || "uiTableId" in firstRow) {
+      const matchingTable = dataField.find((t) => {
+        const tId = toDisplayValue(
+          getFieldValue(t as Record<string, unknown>, "uiTblId") ??
+            getFieldValue(t as Record<string, unknown>, "uiTableId"),
+        );
+        return !normalizedTableId || tId === normalizedTableId;
+      }) as Record<string, unknown> | undefined;
+      const columns = matchingTable?.columns;
+      return Array.isArray(columns)
+        ? (columns as unknown[]).filter(isUiTableColumnConfigRecord).filter((row) => {
+            const isActive = getFieldValue(row as Record<string, unknown>, "uiTblClmIsActive");
+            return isActive !== false && isActive !== "false";
+          })
+        : [];
+    }
+  }
+
+  // Old format: flat columns array
   const extractedRows = extractArrayRecords(payload);
   const rows =
     extractedRows.length > 0

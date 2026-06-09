@@ -27,6 +27,8 @@ type UseMasterModuleArgs = {
     searchTerm: string;
     currentPage: number;
     pageSize: number;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
   }) => Record<string, string>;
   debounceMs?: number;
   defaultPage?: number;
@@ -73,6 +75,9 @@ export function useMasterModule({
   // Track whether an initial load has happened to avoid duplicate fetches
   const initialLoadRef = useRef(false);
 
+  const sortByRef = useRef<string | undefined>(undefined);
+  const sortDirRef = useRef<"asc" | "desc" | undefined>(undefined);
+
   // ── List loading ──────────────────────────────────────────────────────────
 
   const loadRecords = useCallback(
@@ -81,15 +86,22 @@ export function useMasterModule({
       const safePage = Math.max(1, page);
       const safeLimit = Math.max(1, limit);
 
+      const sortBy = sortByRef.current;
+      const sortDir = sortDirRef.current;
+
       const query =
         buildListQuery?.({
           searchTerm: normalizedTerm,
           currentPage: safePage,
           pageSize: safeLimit,
+          sortBy,
+          sortDir,
         }) ?? {
           page: String(safePage),
           limit: String(safeLimit),
           ...(normalizedTerm ? { search: normalizedTerm } : {}),
+          ...(sortBy ? { sort_by: sortBy } : {}),
+          ...(sortBy && sortDir ? { sort_dir: sortDir } : {}),
         };
 
       let payload: unknown;
@@ -172,6 +184,11 @@ export function useMasterModule({
       setPageSize: (size: number) => dispatch(pageSizeChanged({ moduleKey, size })),
       setSearchTerm: (term: string) =>
         dispatch(searchChanged({ moduleKey, term })),
+      setSort: (by: string | undefined, dir?: "asc" | "desc") => {
+        sortByRef.current = by;
+        sortDirRef.current = dir;
+        void loadRecords(searchTerm, currentPage, pageSize);
+      },
       totalEntries,
     },
 

@@ -38,8 +38,8 @@ export const ITEM_SECTION_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-account
 export const UNIT_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 export const GODOWN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 export const HSN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const UI_TABLE_COLUMNS_ENDPOINT = "/ui-table-columns/list";
-export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-columns/create";
+export const UI_TABLE_COLUMNS_ENDPOINT = "/ui-table-masters/list";
+export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-masters/create";
 export const WIDGET_MASTER_LIST_ENDPOINT = "/widget-masters/list";
 export const ITEM_TAX_MASTER_LIST_ENDPOINT = "/configured-grid-sql/run?grid_id=5";
 export const ITEM_PRICE_QUERY_LIMIT = "100";
@@ -94,19 +94,19 @@ export const GODOWN_LOOKUP_QUERY = {
 export const UI_TABLE_COLUMNS_QUERY = {
   page: "1",
   limit: UI_TABLE_COLUMNS_QUERY_LIMIT,
-  uiTblClmTableId: ITEM_PRICE_TABLE_UI_ID,
+  uiTableId: ITEM_PRICE_TABLE_UI_ID,
   uiTblClmIsActive: "true",
 } as const;
 export const UI_REORDER_TABLE_COLUMNS_QUERY = {
   page: "1",
   limit: UI_TABLE_COLUMNS_QUERY_LIMIT,
-  uiTblClmTableId: ITEM_REORDER_TABLE_UI_ID,
+  uiTableId: ITEM_REORDER_TABLE_UI_ID,
   uiTblClmIsActive: "true",
 } as const;
 export const UI_EAN_TABLE_COLUMNS_QUERY = {
   page: "1",
   limit: UI_TABLE_COLUMNS_QUERY_LIMIT,
-  uiTblClmTableId: ITEM_EAN_TABLE_UI_ID,
+  uiTableId: ITEM_EAN_TABLE_UI_ID,
   uiTblClmIsActive: "true",
 } as const;
 export const ITEM_MASTER_WIDGET_QUERY = {
@@ -538,7 +538,7 @@ export const ITEM_MODAL_PANEL_STYLE: CSSProperties = {
   height: "80vh",
   maxHeight: "80vh",
 };
-export type SaveUiTableColumnLayoutRequest = {
+export type UiTableColumnLayoutItem = {
   uiTblClmId?: string;
   uiTblClmNo?: string;
   uiTblClmName: string;
@@ -551,6 +551,10 @@ export type SaveUiTableColumnLayoutRequest = {
   uiTblClmNextColumn: number | null;
   uiTblClmPreviousColumn: number | null;
   uiTblClmIsActive: boolean;
+};
+export type SaveUiTableColumnLayoutRequest = {
+  uiTblId: string;
+  uiTblColumns: UiTableColumnLayoutItem[];
 };
 
 export function normalizeItemBatchConfigValue(value: unknown): string {

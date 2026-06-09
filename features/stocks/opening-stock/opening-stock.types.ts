@@ -7,7 +7,10 @@ export type {
   LookupKind,
 } from "@/features/stocks/_shared/types";
 
-export type { UiTableColumnPayload } from "@/features/stocks/_shared/types";
+export type {
+  UiTableColumnPayload,
+  UiTableMasterResponse,
+} from "@/features/stocks/_shared/types";
 export type ColumnSchema = {
   header: string;
   defaultWidth: string;
@@ -262,3 +265,43 @@ export type OpeningStockDocumentPayload = {
   details: OpeningStockDetailPayload[];
 };
 export type { StockListMeta as OpeningStockListMeta } from "@/features/stocks/_shared/types";
+export type BulkOpeningStockItemPayload = {
+  item_id: string;
+  item_name: string;
+  item_code: string | null;
+  item_default_barcode: string | null;
+  item_base_unit_id: string | null;
+  item_batch_config: number;
+  price_master_id: string | null;
+  unit_id: string | null;
+  unit_name: string | null;
+  base_unit_id: string | null;
+  godown_id: string | null;
+  godown_name: string | null;
+  to_base_factor: number;
+  cost_price: number;
+  cost_wot: number;
+  mrp: number;
+  min_price: number;
+  sales_price_a: number;
+  sales_price_b: number;
+  sales_price_c: number;
+  sales_price_d: number;
+  price_a_wot: number;
+  price_b_wot: number;
+  price_c_wot: number;
+  price_d_wot: number;
+  price_a_markup: number;
+  price_b_markup: number;
+  price_c_markup: number;
+  price_d_markup: number;
+  profit_type: string | null;
+  round_off: number;
+  tax_id: string | null;
+  tax_name: string | null;
+  tax_perc: number;
+  cess_type: string;
+  cess_perc: number;
+  cess_per_unit: number;
+  tracking_type: string;
+};

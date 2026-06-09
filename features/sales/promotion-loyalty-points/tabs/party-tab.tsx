@@ -11,7 +11,6 @@ import type {
 } from "../promotion-loyalty-points.local-types";
 import { isUuid, withFallbackOption } from "../promotion-loyalty-points.utils";
 import { handleGridKeyboardNav } from "./promotion-loyalty-keyboard-events";
-
 type PartyTabProps = {
   partyRows: EditablePartyRow[];
   updatePartyRow: (rowKey: string, patch: Partial<EditablePartyRow>) => void;
@@ -25,7 +24,6 @@ type PartyTabProps = {
   customerLabelMap: Map<string, string>;
   customerGroupLabelMap: Map<string, string>;
 };
-
 export function PartyTab({
   partyRows,
   updatePartyRow,
@@ -40,7 +38,6 @@ export function PartyTab({
   customerGroupLabelMap,
 }: PartyTabProps) {
   const hasAutoAddedDefaultRowRef = useRef(false);
-
   useEffect(() => {
     if (partyRows.length === 0) {
       if (!hasAutoAddedDefaultRowRef.current) {
@@ -49,16 +46,13 @@ export function PartyTab({
       }
       return;
     }
-
     hasAutoAddedDefaultRowRef.current = false;
   }, [addPartyRow, partyRows.length]);
-
   const getEffectiveScopeType = (row: EditablePartyRow): PartyScopeType | null => {
     if (schemePartyScopeType) return schemePartyScopeType;
     const t = row.lps_scope_type;
     return t === "CUSTOMER_GROUP" || t === "CUSTOMER" ? t : null;
   };
-
   const getScopeOptions = (row: EditablePartyRow): ERPDynamicSelectOption[] => {
     const effectiveType = getEffectiveScopeType(row);
     const base =
@@ -67,39 +61,30 @@ export function PartyTab({
         : effectiveType === "CUSTOMER"
           ? customerOptionsForParty
           : [{ value: "", label: "Select customer scope in Scheme tab" }];
-
     if (!isUuid(row.lps_scope_id)) return base;
-
     return withFallbackOption(
       base,
       row.lps_scope_id,
       effectiveType === "CUSTOMER_GROUP" ? customerGroupLabelMap : customerLabelMap,
     );
   };
-
   const handleScopeChange = (row: EditablePartyRow, value: string) => {
     updatePartyRow(row._rowKey, { lps_scope_id: value });
-
     const nextValue = value.trim();
     if (!nextValue || nextValue === row.lps_scope_id.trim()) {
       return;
     }
-
     const isLastRow = partyRows[partyRows.length - 1]?._rowKey === row._rowKey;
     if (isLastRow) {
       addPartyRow();
     }
   };
-
   const getRowIndex = (rowKey: string) =>
     partyRows.findIndex((entry) => entry._rowKey === rowKey);
-
   const getColIndex = (key: "scope" | "exclude" | "active") =>
     ["scope", "exclude", "active"].indexOf(key);
-
   const maxRow = Math.max(partyRows.length - 1, 0);
   const maxCol = 2;
-
   const columns: ReusableTableColumn<EditablePartyRow>[] = [
     {
       key: "actions",
@@ -121,7 +106,6 @@ export function PartyTab({
         const rowIndex = getRowIndex(row._rowKey);
         const effectiveType = getEffectiveScopeType(row);
         const options = getScopeOptions(row);
-
         return (
           <div
             className="px-3 py-2"
@@ -155,7 +139,6 @@ export function PartyTab({
       header: "Exclude",
       render: (row) => {
         const rowIndex = getRowIndex(row._rowKey);
-
         return (
           <div
             className="px-3 py-2"
@@ -193,7 +176,6 @@ export function PartyTab({
       header: "Active",
       render: (row) => {
         const rowIndex = getRowIndex(row._rowKey);
-
         return (
           <div
             className="px-3 py-2"
@@ -227,7 +209,6 @@ export function PartyTab({
       width: "100px",
     },
   ];
-
   return (
     <div
       className="grid gap-[18px]"

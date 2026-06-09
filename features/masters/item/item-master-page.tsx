@@ -179,6 +179,7 @@ import {
   WIDGET_GUI_NAME_KEYS,
   WIDGET_SECONDARY_TEXT_KEYS,
   type SaveUiTableColumnLayoutRequest,
+  type UiTableColumnLayoutItem,
   normalizeItemBatchConfigValue,
 } from "./item-master-page.constants";
 
@@ -2287,7 +2288,7 @@ function buildUiTableColumnLayoutRequest(
   tableId: string,
   column: LinkedRecordColumnLayoutEntry,
   configuredColumn: Record<string, unknown> | undefined,
-): SaveUiTableColumnLayoutRequest {
+): UiTableColumnLayoutItem {
   const uiTblClmId = configuredColumn
     ? toDisplayValue(getFieldValue(configuredColumn, "uiTblClmId"))
     : "";
@@ -3745,15 +3746,14 @@ export default function ItemMasterPageContent({
             configuredColumns,
             columnNameToKey,
           );
-          for (const column of columns) {
-            await saveUiTableColumnLayout({
-              body: buildUiTableColumnLayoutRequest(
-                tableId,
-                column,
-                configByKey.get(column.key),
+          await saveUiTableColumnLayout({
+            body: {
+              uiTblId: tableId,
+              uiTblColumns: columns.map((column) =>
+                buildUiTableColumnLayoutRequest(tableId, column, configByKey.get(column.key))
               ),
-            });
-          }
+            },
+          });
         })();
       },
       [saveUiTableColumnLayout],

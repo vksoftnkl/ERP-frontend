@@ -37,6 +37,17 @@ export type SaveUiTableColumnRequest = {
   uiTblClmIsActive: boolean;
 };
 
+export type SaveUiTableMasterRequest = {
+  uiTblId: string;
+  uiTblColumns: SaveUiTableColumnRequest[];
+};
+
+export type UiTableMasterResponse = {
+  uiTblId: string;
+  uiTblName: string;
+  columns: UiTableColumnPayload[];
+};
+
 export type StockListMeta = {
   page: number;
   limit: number;

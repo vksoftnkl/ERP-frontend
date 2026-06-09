@@ -118,6 +118,10 @@ export type SaveOpeningStockUiTableColumnRequest = {
   uiTblClmPreviousColumn: number | null;
   uiTblClmIsActive: boolean;
 };
+export type SaveOpeningStockUiTableMasterRequest = {
+  uiTblId: string;
+  uiTblColumns: SaveOpeningStockUiTableColumnRequest[];
+};
 export function clampContextMenuPosition(value: number, min: number, max: number): number {
   if (max < min) {
     return min;
@@ -159,7 +163,7 @@ export function buildOpeningStockColumnSettingsRows(
       key: column.key,
       label: column.header,
       uiTblClmNo: String(index + 1),
-      uiTblClmTableId: UI_TABLE_COLUMNS_QUERY.uiTblClmTableId,
+      uiTblClmTableId: UI_TABLE_COLUMNS_QUERY.uiTableId,
       width: parseColumnWidth(column.width),
       visible: true,
       focus: false,
@@ -179,7 +183,7 @@ export function buildOpeningStockColumnSettingsRows(
         label: column.uiTblClmName?.trim() || `Column ${fallbackPosition}`,
         uiTblClmId: column.uiTblClmId,
         uiTblClmNo: column.uiTblClmNo,
-        uiTblClmTableId: column.uiTblClmTableId ?? UI_TABLE_COLUMNS_QUERY.uiTblClmTableId,
+        uiTblClmTableId: column.uiTblClmTableId ?? UI_TABLE_COLUMNS_QUERY.uiTableId,
         width: column.uiTblClmColumnWidth,
         visible: column.uiTblClmColumnVisibility ?? true,
         focus: column.uiTblClmColumnFocus ?? false,
@@ -251,7 +255,7 @@ export function buildOpeningStockUiTableColumnWidthRequest(
     ...(configuredColumn?.uiTblClmId ? { uiTblClmId: configuredColumn.uiTblClmId } : {}),
     uiTblClmNo: configuredColumn?.uiTblClmNo || String(fallbackPosition),
     uiTblClmName: configuredColumn?.uiTblClmName?.trim() || column.header || column.key,
-    uiTblClmTableId: configuredColumn?.uiTblClmTableId ?? UI_TABLE_COLUMNS_QUERY.uiTblClmTableId,
+    uiTblClmTableId: configuredColumn?.uiTblClmTableId ?? UI_TABLE_COLUMNS_QUERY.uiTableId,
     uiTblClmColumnWidth: width,
     uiTblClmColumnVisibility: configuredColumn?.uiTblClmColumnVisibility ?? true,
     uiTblClmColumnFocus: configuredColumn?.uiTblClmColumnFocus ?? false,

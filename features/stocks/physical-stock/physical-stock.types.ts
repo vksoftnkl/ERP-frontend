@@ -208,7 +208,7 @@ export type RowValidationIssue = {
   fieldKey: string;
   message: string;
 };
-export type { UiTableColumnPayload, SaveUiTableColumnRequest as SavePhysicalStockUiTableColumnRequest } from "@/features/stocks/_shared/types";
+export type { UiTableColumnPayload, SaveUiTableColumnRequest as SavePhysicalStockUiTableColumnRequest, SaveUiTableMasterRequest as SavePhysicalStockUiTableMasterRequest } from "@/features/stocks/_shared/types";
 export type PhysicalStockColumnSettingsRow = {
   key: string;
   label: string;

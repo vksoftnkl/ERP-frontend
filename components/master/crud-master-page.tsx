@@ -14,6 +14,7 @@ import ReusableTable, {
   type ReusableTableBodyContextMenuPayload,
   type ReusableTableColumn,
   type ReusableTableColumnResizeEndPayload,
+  type ReusableTableSortState,
 } from "@/components/ui/table";
 import { resolveRecordHistoryDisplayName } from "@/features/masters/audit-logs/record-history-route";
 import { RecordHistoryModal } from "@/features/masters/record-history/page";
@@ -2101,6 +2102,7 @@ export default function CrudMasterPage({
       setCurrentPage,
       setPageSize,
       setSearchTerm,
+      setSort,
       loadRecords,
     },
     details: {
@@ -3243,6 +3245,18 @@ export default function CrudMasterPage({
     setSearchTerm(query);
   }, []);
 
+  const handleSortChange = useCallback(
+    ({ key, direction }: ReusableTableSortState) => {
+      const STANDARD_ACCESSOR_KEYS = new Set([
+        "serialno", "mastername", "mastercode", "mastershort",
+        "masteralias", "masterdescription", "masteractive", "position", "actions",
+      ]);
+      const sortBy = key && !STANDARD_ACCESSOR_KEYS.has(key) ? key : undefined;
+      setSort(sortBy, sortBy ? direction : undefined);
+    },
+    [setSort],
+  );
+
   // Keep refs in sync with latest state so event handlers never see stale values
   useEffect(() => { renderedRowsRef.current = renderedRows; }, [renderedRows]);
   useEffect(() => { selectedRowIdRef.current = selectedRowId; }, [selectedRowId]);
@@ -3759,6 +3773,7 @@ export default function CrudMasterPage({
                   }}
                   onRowDoubleClick={handleRowView}
                   sortable
+                  onSortChange={handleSortChange}
                   paginated
                   manualPagination
                   totalEntries={renderedTotalEntries}
