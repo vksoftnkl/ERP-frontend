@@ -17,18 +17,14 @@ import type {
   SaveGridDetailRequest,
   SortOrder,
 } from "./type";
-const GRID_DETAILS_LIST_ENDPOINT = "/grid-details/list";
+const GRID_DETAILS_LIST_ENDPOINT = "/grid-details/get";
 const GRID_DETAILS_GET_ENDPOINT = "/grid-details/get";
 const GRID_DETAILS_CREATE_ENDPOINT = "/grid-details/create";
 const GRID_DETAILS_DELETE_ENDPOINT = "/grid-details/delete";
-const GRID_COLUMNS_LIST_ENDPOINT = "/grid-columns/list";
-const GRID_COLUMNS_CREATE_ENDPOINT = "/grid-columns/create";
-const GRID_COLUMNS_DELETE_ENDPOINT = "/grid-columns/delete";
 const SORT_ORDER_OPTIONS: SortOrder[] = ["Ascending", "Descending"];
 const ALIGNMENT_OPTIONS: Alignment[] = ["Left", "Center", "Right"];
 const DATA_TYPE_SUGGESTIONS = ["Text", "NumericTS", "Date", "Number", "Boolean"] as const;
 const GRID_DETAILS_PAGE_SIZE = "100";
-const GRID_COLUMNS_PAGE_SIZE = "100";
 const GRID_COLUMNS_TABLE_MIN_WIDTH = "2050px";
 const HEX_COLOR_CODE_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 const INITIAL_FORM: GridDesignerForm = {
@@ -147,12 +143,10 @@ function mapGridColumnPayloadToRow(payload: GridColumnPayload): GridColumnRow {
 }
 function buildGridColumnRequest(
   column: GridColumnRow,
-  gridId: string,
   rowIndex: number,
 ): SaveGridColumnRequest {
   return {
     ...(column.gridSerialId ? { grid_serialid: column.gridSerialId } : {}),
-    grid_id: gridId,
     grid_column_number: rowIndex + 1,
     grid_column_name: column.columnName.trim() || `Column ${rowIndex + 1}`,
     grid_column_width: toNullableNumber(column.width),
@@ -191,7 +185,6 @@ export default function GridDesignerPage() {
   const [isGridSaving, setIsGridSaving] = useState(false);
   const [isGridDeleting, setIsGridDeleting] = useState(false);
   const [statusText, setStatusText] = useState("Ready.");
-  const deletedGridColumnIdsRef = useRef<Set<string>>(new Set());
   const didInitialLoadRef = useRef(false);
   const { getAll: listGridDetails } = useApi<ApiSuccessResponse<GridDetailPayload[], GridListMeta>>(
     GRID_DETAILS_LIST_ENDPOINT,
@@ -211,24 +204,6 @@ export default function GridDesignerPage() {
   const { run: deleteGridDetails } = useApi<
     ApiSuccessResponse<{ grid_id: string; deleted: true }>
   >(GRID_DETAILS_DELETE_ENDPOINT, {
-    method: "DELETE",
-    toast: { success: false, error: true },
-  });
-  const { getAll: listGridColumns } = useApi<
-    ApiSuccessResponse<GridColumnPayload[], GridListMeta>
-  >(GRID_COLUMNS_LIST_ENDPOINT, {
-    toast: { success: false, error: true },
-  });
-  const { run: saveGridColumn } = useApi<
-    ApiSuccessResponse<GridColumnPayload>,
-    SaveGridColumnRequest
-  >(GRID_COLUMNS_CREATE_ENDPOINT, {
-    method: "POST",
-    toast: { success: false, error: true },
-  });
-  const { run: deleteGridColumn } = useApi<
-    ApiSuccessResponse<{ grid_serialid: string; deleted: true }>
-  >(GRID_COLUMNS_DELETE_ENDPOINT, {
     method: "DELETE",
     toast: { success: false, error: true },
   });
@@ -563,28 +538,6 @@ export default function GridDesignerPage() {
       setIsGridListLoading(false);
     }
   }, [fetchAllGridDetails]);
-  const fetchAllGridColumns = useCallback(
-    async (gridId: string): Promise<GridColumnPayload[]> => {
-      const allColumns: GridColumnPayload[] = [];
-      let page = 1;
-      while (true) {
-        const response = await listGridColumns({
-          grid_id: gridId,
-          page: String(page),
-          limit: GRID_COLUMNS_PAGE_SIZE,
-        });
-        const pageItems = Array.isArray(response?.data) ? response.data : [];
-        const totalPages = Math.max(1, Number(response?.meta?.total_pages ?? 1));
-        allColumns.push(...pageItems);
-        if (page >= totalPages || pageItems.length === 0) {
-          break;
-        }
-        page += 1;
-      }
-      return allColumns;
-    },
-    [listGridColumns],
-  );
   const loadGridById = useCallback(
     async (gridId: string) => {
       const normalizedGridId = gridId.trim();
@@ -599,18 +552,17 @@ export default function GridDesignerPage() {
       setIsGridLoading(true);
       setStatusText(`Loading grid ${normalizedGridId}...`);
       try {
-        const detailResponse = await getGridDetailsById({ grid_id: normalizedGridId });
+        const detailResponse = await getGridDetailsById({ gridId: normalizedGridId });
         const detail = detailResponse?.data;
         if (!detail) {
           throw new Error("No grid details returned from API.");
         }
-        const loadedColumns = await fetchAllGridColumns(detail.grid_id);
+        const loadedColumns = Array.isArray(detail.columns) ? detail.columns : [];
         const nextColumns = loadedColumns
           .sort(compareGridColumnsByPosition)
           .map(mapGridColumnPayloadToRow);
-        deletedGridColumnIdsRef.current.clear();
         setForm({
-          gridId: detail.grid_id,
+          gridId: detail.grid_id ?? "",
           gridName: detail.grid_name,
           gridDescription: detail.grid_description ?? "",
           sortColumn: detail.grid_sort_column ?? "",
@@ -627,7 +579,7 @@ export default function GridDesignerPage() {
         setIsGridLoading(false);
       }
     },
-    [fetchAllGridColumns, getGridDetailsById],
+    [getGridDetailsById],
   );
   const handleLoadGrid = useCallback(async () => {
     await loadGridById(form.gridId);
@@ -635,7 +587,6 @@ export default function GridDesignerPage() {
   const handleGridSelectionChange = useCallback(
     async (nextGridId: string) => {
       if (!nextGridId) {
-        deletedGridColumnIdsRef.current.clear();
         setForm(createBlankForm());
         setColumns([]);
         setSelectedColumnId("");
@@ -651,7 +602,7 @@ export default function GridDesignerPage() {
     [loadGridById],
   );
   const handleSaveGrid = useCallback(async () => {
-    const normalizedGridId = form.gridId.trim();
+    const normalizedGridId = (form.gridId ?? "").trim();
     if (normalizedGridId && !/^\d+$/.test(normalizedGridId)) {
       toast.error("Grid id must be numeric.");
       return;
@@ -672,34 +623,19 @@ export default function GridDesignerPage() {
           grid_sort_order: toNullableString(form.sortOrder),
           grid_sql: toNullableString(form.gridSql),
           grid_status: form.gridStatus,
+          grid_device_type: "web",
+          grid_columns: columns.map((column, rowIndex) => buildGridColumnRequest(column, rowIndex)),
         },
       });
       const savedGrid = gridDetailResponse?.data;
       if (!savedGrid) {
         throw new Error("Grid details save did not return data.");
       }
-      for (const deletedColumnId of deletedGridColumnIdsRef.current) {
-        await deleteGridColumn({
-          query: {
-            grid_serialid: deletedColumnId,
-          },
-        });
-      }
-      const savedColumns: GridColumnPayload[] = [];
-      for (const [rowIndex, column] of columns.entries()) {
-        const response = await saveGridColumn({
-          body: buildGridColumnRequest(column, savedGrid.grid_id, rowIndex),
-        });
-        if (response?.data) {
-          savedColumns.push(response.data);
-        }
-      }
-      const nextColumns = savedColumns
+      const nextColumns = (Array.isArray(savedGrid.columns) ? savedGrid.columns : [])
         .sort(compareGridColumnsByPosition)
         .map(mapGridColumnPayloadToRow);
-      deletedGridColumnIdsRef.current.clear();
       setForm({
-        gridId: savedGrid.grid_id,
+        gridId: savedGrid.grid_id ?? "",
         gridName: savedGrid.grid_name,
         gridDescription: savedGrid.grid_description ?? "",
         sortColumn: savedGrid.grid_sort_column ?? "",
@@ -719,9 +655,9 @@ export default function GridDesignerPage() {
     } finally {
       setIsGridSaving(false);
     }
-  }, [columns, deleteGridColumn, form, refreshGridOptions, saveGridColumn, saveGridDetails]);
+  }, [columns, form, refreshGridOptions, saveGridDetails]);
   const handleDeleteGrid = useCallback(async () => {
-    const normalizedGridId = form.gridId.trim();
+    const normalizedGridId = (form.gridId ?? "").trim();
     if (!normalizedGridId) {
       toast.error("No grid selected.");
       return;
@@ -738,7 +674,6 @@ export default function GridDesignerPage() {
           grid_id: normalizedGridId,
         },
       });
-      deletedGridColumnIdsRef.current.clear();
       setForm(createBlankForm());
       setColumns([]);
       setSelectedColumnId("");
@@ -754,7 +689,6 @@ export default function GridDesignerPage() {
     }
   }, [deleteGridDetails, form.gridId, refreshGridOptions]);
   const handleCreateNewGrid = useCallback(() => {
-    deletedGridColumnIdsRef.current.clear();
     setForm(createBlankForm());
     setColumns([]);
     setSelectedColumnId("");
@@ -770,9 +704,6 @@ export default function GridDesignerPage() {
       return;
     }
     const deletedColumn = columns.find((column) => column.id === selectedColumnId) ?? null;
-    if (deletedColumn?.gridSerialId) {
-      deletedGridColumnIdsRef.current.add(deletedColumn.gridSerialId);
-    }
     const nextColumns = resequenceColumns(
       columns.filter((column) => column.id !== selectedColumnId),
     );
@@ -818,7 +749,7 @@ export default function GridDesignerPage() {
               type="button"
               className={styles.desktopButton}
               onClick={() => void handleLoadGrid()}
-              disabled={isBusy || !form.gridId.trim()}
+              disabled={isBusy || !(form.gridId ?? "").trim()}
             >
               Load Grid
             </button>
@@ -842,7 +773,7 @@ export default function GridDesignerPage() {
               type="button"
               className={styles.desktopButton}
               onClick={() => void handleDeleteGrid()}
-              disabled={isBusy || !form.gridId.trim()}
+              disabled={isBusy || !(form.gridId ?? "").trim()}
             >
               Delete Grid
             </button>

@@ -48,7 +48,9 @@ export type GridDetailPayload = {
   grid_sort_order: string | null;
   grid_sql: string | null;
   grid_status: boolean;
+  grid_device_type?: string | null;
   grid_is_deleted: boolean;
+  columns: GridColumnPayload[];
 };
 
 export type GridColumnPayload = {
@@ -74,19 +76,8 @@ export type GridColumnPayload = {
 
 export type GridListMeta = SharedListMeta;
 
-export type SaveGridDetailRequest = {
-  grid_id?: string;
-  grid_name: string;
-  grid_description: string | null;
-  grid_sort_column: string | null;
-  grid_sort_order: string | null;
-  grid_sql: string | null;
-  grid_status: boolean;
-};
-
 export type SaveGridColumnRequest = {
   grid_serialid?: string;
-  grid_id: string;
   grid_column_number: number;
   grid_column_name: string;
   grid_column_width: number | null;
@@ -102,4 +93,16 @@ export type SaveGridColumnRequest = {
   grid_column_color: string | null;
   grid_column_notes: string | null;
   grid_column_sql_field_name: string | null;
+};
+
+export type SaveGridDetailRequest = {
+  grid_id?: string;
+  grid_name: string;
+  grid_description: string | null;
+  grid_sort_column: string | null;
+  grid_sort_order: string | null;
+  grid_sql: string | null;
+  grid_status: boolean;
+  grid_device_type?: string;
+  grid_columns?: SaveGridColumnRequest[];
 };

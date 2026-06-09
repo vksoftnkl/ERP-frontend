@@ -1389,44 +1389,26 @@ export default function PhysicalStockPage() {
   );
   const persistPhysicalStockColumnOrder = useCallback(
     async (orderedColumns: PhysicalStockColumn[]) => {
-      let nextColumnConfigs = uiColumnConfigsRef.current;
-      for (const [columnIndex, column] of orderedColumns.entries()) {
-        const configuredColumn = findPhysicalStockUiTableColumnConfig(
-          nextColumnConfigs,
-          column.key,
-        );
-        try {
-          const columnRequest = buildPhysicalStockUiTableColumnRequest(
-            column,
-            configuredColumn,
-            columnIndex,
-            {
-              uiTblClmColumnPosition: columnIndex + 1,
-              uiTblClmColumnWidth: parseColumnWidth(column.width),
-            },
-          );
-          const response = await saveUiTableColumn({
-            body: { uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId, uiTblColumns: [columnRequest] },
-          });
-          const savedColumn = (response?.data?.columns ?? []).find(
-            (c) =>
-              (columnRequest.uiTblClmId && c.uiTblClmId === columnRequest.uiTblClmId) ||
-              c.uiTblClmName === columnRequest.uiTblClmName,
-          );
-          if (!savedColumn) {
-            continue;
-          }
-          nextColumnConfigs = upsertPhysicalStockUiTableColumnConfig(
-            nextColumnConfigs,
-            savedColumn,
-            column.key,
-          );
-        } catch {
-          // Continue saving the rest of the order; the local order remains usable.
+      const currentConfigs = uiColumnConfigsRef.current;
+      const columnRequests = orderedColumns.map((column, columnIndex) => {
+        const configuredColumn = findPhysicalStockUiTableColumnConfig(currentConfigs, column.key);
+        return buildPhysicalStockUiTableColumnRequest(column, configuredColumn, columnIndex, {
+          uiTblClmColumnPosition: columnIndex + 1,
+          uiTblClmColumnWidth: parseColumnWidth(column.width),
+        });
+      });
+      try {
+        const response = await saveUiTableColumn({
+          body: { uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId, uiTblColumns: columnRequests },
+        });
+        const savedColumns = response?.data?.columns;
+        if (savedColumns?.length) {
+          uiColumnConfigsRef.current = savedColumns;
+          setUiColumnConfigs(savedColumns);
         }
+      } catch {
+        // Keep the local order even if persistence fails.
       }
-      uiColumnConfigsRef.current = nextColumnConfigs;
-      setUiColumnConfigs(nextColumnConfigs);
     },
     [saveUiTableColumn],
   );
