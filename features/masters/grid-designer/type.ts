@@ -4,6 +4,8 @@ export type SortOrder = "Ascending" | "Descending";
 
 export type Alignment = "Left" | "Center" | "Right";
 
+export type GridDeviceType = "desktop" | "web" | "mobile";
+
 export type GridDesignerForm = {
   gridId: string;
   gridName: string;
@@ -12,6 +14,7 @@ export type GridDesignerForm = {
   sortOrder: SortOrder;
   gridSql: string;
   gridStatus: boolean;
+  gridDeviceType: GridDeviceType;
 };
 
 export type GridColumnRow = {

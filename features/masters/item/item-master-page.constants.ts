@@ -38,7 +38,7 @@ export const ITEM_SECTION_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-account
 export const UNIT_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 export const GODOWN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 export const HSN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const UI_TABLE_COLUMNS_ENDPOINT = "/ui-table-masters/list";
+export const UI_TABLE_COLUMNS_ENDPOINT = "/ui-table-masters/get";
 export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-masters/create";
 export const WIDGET_MASTER_LIST_ENDPOINT = "/widget-masters/list";
 export const ITEM_TAX_MASTER_LIST_ENDPOINT = "/configured-grid-sql/run?grid_id=5";

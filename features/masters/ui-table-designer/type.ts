@@ -90,3 +90,4 @@ export type SaveUiTableMasterRequest = {
   uiTblIsActive: boolean;
   uiTblColumns?: SaveUiTableColumnRequest[];
 };
+

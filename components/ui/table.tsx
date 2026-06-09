@@ -302,7 +302,7 @@ function resolveColumnPixelWidth<T extends Record<string, unknown>>(
   const normalizedWidth = column.width?.trim();
   const pixelWidth = normalizedWidth?.match(/^(\d+(?:\.\d+)?)px$/i);
   if (pixelWidth) {
-    return Math.max(Number(pixelWidth[1]), MIN_DATA_COLUMN_WIDTH);
+    return Math.max(Number(pixelWidth[1]), MIN_RESIZABLE_COLUMN_WIDTH);
   }
   const percentWidth = normalizedWidth?.match(/^(\d+(?:\.\d+)?)%$/);
   if (percentWidth) {
@@ -715,17 +715,22 @@ export function ReusableTable<T extends Record<string, unknown>>({
     extraDataWidthPerColumn > 0
       ? new Set(dataColumns.map((column) => column.key))
       : null;
-  const displayColumnsForRender =
-    extraDataWidthPerColumn > 0
-      ? displayColumnsWithWidths.map((column) =>
-          expandedDataColumnKeys?.has(column.key)
-            ? {
-                ...column,
-                width: `${resolveColumnPixelWidth(column) + extraDataWidthPerColumn}px`,
-              }
-            : column,
-        )
-      : displayColumnsWithWidths;
+  const displayColumnsForRender = displayColumnsWithWidths.map((column) => {
+    // Expanded data column: add the distributed extra width.
+    if (expandedDataColumnKeys?.has(column.key)) {
+      return {
+        ...column,
+        width: `${resolveColumnPixelWidth(column) + extraDataWidthPerColumn}px`,
+      };
+    }
+    // Data column with no explicit width: pin it to its pixel baseline.
+    // Without an explicit <col> width, table-layout:fixed hands all remaining
+    // table space to the last such column, making it appear "full width".
+    if (!column.width && !isSerialNumberColumn(column) && !isActionsColumn(column)) {
+      return { ...column, width: `${resolveColumnPixelWidth(column)}px` };
+    }
+    return column;
+  });
   const hasRenderableColumns = displayColumnsForRender.length > 0;
   const minimumTableWidth = fixedColumnWidth + dataColumns.reduce(
     (total, column) =>
@@ -1293,21 +1298,40 @@ export function ReusableTable<T extends Record<string, unknown>>({
     event.preventDefault();
     event.stopPropagation();
 
-    const primaryColumnIndex = displayColumns.findIndex(
-      (displayColumn) => displayColumn.key === column.key,
-    );
     const headerRow = event.currentTarget.closest("tr");
     const tableElement = event.currentTarget.closest("table");
-    const primaryHeaderCell = headerRow?.children.item(primaryColumnIndex) as HTMLElement | null;
-    const primaryStartWidth = primaryHeaderCell?.getBoundingClientRect().width ?? 120;
     const tableStartWidth = tableElement?.getBoundingClientRect().width ?? 0;
+
+    // Snapshot every resizable column's current rendered pixel width before
+    // the drag begins. Without this, the expansion-distribution logic
+    // recalculates for all columns on every frame, making columns other than
+    // the one being dragged jump around (appearing to resize the wrong column).
+    let primaryStartWidth = 120;
+    const widthSnapshot: Record<string, string> = {};
+    if (headerRow) {
+      displayColumnsForRender.forEach((col, idx) => {
+        if (!isColumnReorderable(col)) {
+          return;
+        }
+        const th = headerRow.children.item(idx) as HTMLElement | null;
+        const w = th ? Math.round(th.getBoundingClientRect().width) : 0;
+        if (w > 0) {
+          widthSnapshot[col.key] = `${w}px`;
+          if (col.key === column.key) {
+            primaryStartWidth = w;
+          }
+        }
+      });
+      setColumnWidths(widthSnapshot);
+    }
+
     const startX = event.clientX;
-    let latestPrimaryWidth = Math.round(primaryStartWidth);
+    let latestPrimaryWidth = primaryStartWidth;
     activeResizeTableWidthRef.current =
       tableStartWidth > 0
         ? {
             startTableWidth: Math.round(tableStartWidth),
-            startColumnWidth: Math.round(primaryStartWidth),
+            startColumnWidth: primaryStartWidth,
           }
         : null;
 

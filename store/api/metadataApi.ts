@@ -13,9 +13,9 @@ export const metadataApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getGridColumns: builder.query<GridColumnConfig[], GridColumnsQueryArg>({
       query: ({ gridId, page = 1, limit = 20 }) => ({
-        url: "/grid-columns/list",
+        url: "/grid-details/get",
         params: {
-          grid_id: gridId,
+          gridId: gridId,
           page,
           limit,
         },

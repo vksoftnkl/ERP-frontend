@@ -103,7 +103,7 @@ import {
   focusLedgerFieldControl,
 } from "./form-navigation";
 const GRID_SETTINGS_CONTEXT_MENU_WIDTH = 190;
-const GRID_SETTINGS_CONTEXT_MENU_HEIGHT = 96;
+const GRID_SETTINGS_CONTEXT_MENU_HEIGHT = 130;
 const GRID_SETTINGS_CONTEXT_MENU_PADDING = 8;
 type ContextMenuPosition = Pick<CSSProperties, "left" | "top">;
 function clampContextMenuPosition(value: number, min: number, max: number): number {
@@ -697,6 +697,7 @@ export default function AccountLedgerMasterPage() {
   const [gridSettingsMode, setGridSettingsMode] = useState<"filter" | "visibility" | null>(null);
   const [gridSettingsSelections, setGridSettingsSelections] = useState<Record<string, boolean>>({});
   const [gridSettingsSaving, setGridSettingsSaving] = useState(false);
+  const pendingColumnWidthsRef = useRef<Record<string, Record<string, unknown>>>({});
   // Refs
   const searchInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const searchSettingsRef = useRef<HTMLDivElement | null>(null);
@@ -1553,25 +1554,34 @@ export default function AccountLedgerMasterPage() {
       if (!columnName) {
         return;
       }
-      void (async () => {
-        try {
-          await saveGridColumnWidth({
-            body: {
-              grid_serialid: gridColumn.serialId,
-              grid_id: gridColumn.gridId ?? String(accountLedgerGridId),
-              grid_column_number: columnNumber,
-              grid_column_name: columnName,
-              grid_column_width: widthPercent,
-            },
-          });
-          void refetchGridColumns();
-        } catch {
-          // useApi handles the visible error toast.
-        }
-      })();
+      pendingColumnWidthsRef.current = {
+        ...pendingColumnWidthsRef.current,
+        [gridColumn.serialId]: {
+          grid_serialid: gridColumn.serialId,
+          grid_id: gridColumn.gridId ?? String(accountLedgerGridId),
+          grid_column_number: columnNumber,
+          grid_column_name: columnName,
+          grid_column_width: widthPercent,
+        },
+      };
     },
-    [accountLedgerGridId, gridColumns, refetchGridColumns, saveGridColumnWidth],
+    [accountLedgerGridId, gridColumns],
   );
+  const saveColumnWidths = useCallback(async () => {
+    const pending = pendingColumnWidthsRef.current;
+    if (Object.keys(pending).length === 0) {
+      return;
+    }
+    try {
+      await Promise.all(
+        Object.values(pending).map((body) => saveGridColumnWidth({ body })),
+      );
+      pendingColumnWidthsRef.current = {};
+      void refetchGridColumns();
+    } catch {
+      // useApi handles the visible error toast.
+    }
+  }, [refetchGridColumns, saveGridColumnWidth]);
   const handleGridColumnHide = useCallback(
     (payload: { column: ReusableTableColumn<LedgerTableRow> }) => {
       if (accountLedgerGridId === null) {
@@ -1824,6 +1834,13 @@ export default function AccountLedgerMasterPage() {
               onClick={() => openGridSettingsModalFromContextMenu("visibility")}
             >
               column visible setting
+            </button>
+            <button
+              type="button"
+              className={styles.masterSearchSettingsItem}
+              onClick={() => { setGridSettingsContextMenuPosition(null); void saveColumnWidths(); }}
+            >
+              save column width
             </button>
           </div>,
           document.body,

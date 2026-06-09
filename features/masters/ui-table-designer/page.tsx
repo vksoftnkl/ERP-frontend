@@ -1,5 +1,4 @@
 "use client";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import ReusableTable, {
@@ -19,11 +18,9 @@ import type {
   UiTableOption,
   UiTablePayload,
 } from "./type";
-
-const UI_TABLE_MASTERS_LIST_ENDPOINT = "/ui-table-masters/list";
+const UI_TABLE_MASTERS_LIST_ENDPOINT = "/ui-table-masters/get";
 const UI_TABLE_MASTERS_CREATE_ENDPOINT = "/ui-table-masters/create";
 const UI_TABLE_MASTERS_DELETE_ENDPOINT = "/ui-table-masters/delete";
-
 const UI_TABLES_PAGE_SIZE = "100";
 const UI_TABLE_COLUMNS_TABLE_MIN_WIDTH = "1440px";
 const UI_TABLE_DEVICE_TYPE_OPTIONS = [
@@ -32,7 +29,6 @@ const UI_TABLE_DEVICE_TYPE_OPTIONS = [
   "desktop",
 ] as const satisfies readonly UiTableDeviceType[];
 const DEFAULT_UI_TABLE_DEVICE_TYPE: UiTableDeviceType = "web";
-
 const INITIAL_FORM: UiTableForm = {
   uiTableId: "",
   uiTblName: "",
@@ -40,11 +36,9 @@ const INITIAL_FORM: UiTableForm = {
   uiTblEditable: false,
   uiTblIsActive: true,
 };
-
 function createLocalColumnId(): string {
   return `ui-column-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
-
 function createColumnDraft(
   columnNumber: number,
   overrides: Partial<UiTableColumnRow> = {},
@@ -908,53 +902,53 @@ export default function UiTableDesignerPage() {
         </section>
 
         <section className={styles.columnsSection} aria-label="UI table columns table">
-          <div className={styles.sectionLabelRow}>
-            <span className={styles.sectionLabel}>UI Table Columns :</span>
-            <span className={styles.sectionMeta}>
-              {columns.length} columns
-              {selectedColumn ? ` | Selected: ${selectedColumn.columnName || "Untitled"}` : ""}
-            </span>
-          </div>
+            <div className={styles.sectionLabelRow}>
+              <span className={styles.sectionLabel}>UI Table Columns :</span>
+              <span className={styles.sectionMeta}>
+                {columns.length} columns
+                {selectedColumn ? ` | Selected: ${selectedColumn.columnName || "Untitled"}` : ""}
+              </span>
+            </div>
 
-          <ReusableTable
-            columns={tableColumnConfigs}
-            rows={columns}
-            rowKey="id"
-            minWidth={UI_TABLE_COLUMNS_TABLE_MIN_WIDTH}
-            activeRowKey={selectedColumnId}
-            onRowClick={(row) => setSelectedColumnId(row.id)}
-            reorderableRows
-            onRowReorder={handleRowReorder}
-            wrapperClassName={styles.columnsUiTableShell}
-            tableClassName={styles.columnsUiTable}
-            rowClassName={(row) =>
-              row.id === selectedColumnId ? styles.uiTableSelectedRow : undefined
-            }
-            fullViewHeight={false}
-            tableMaxHeight="100%"
-            stickyHeader
-            showActionsColumn={false}
-            emptyText={emptyColumnsMessage}
-          />
+            <ReusableTable
+              columns={tableColumnConfigs}
+              rows={columns}
+              rowKey="id"
+              minWidth={UI_TABLE_COLUMNS_TABLE_MIN_WIDTH}
+              activeRowKey={selectedColumnId}
+              onRowClick={(row) => setSelectedColumnId(row.id)}
+              reorderableRows
+              onRowReorder={handleRowReorder}
+              wrapperClassName={styles.columnsUiTableShell}
+              tableClassName={styles.columnsUiTable}
+              rowClassName={(row) =>
+                row.id === selectedColumnId ? styles.uiTableSelectedRow : undefined
+              }
+              fullViewHeight={false}
+              tableMaxHeight="100%"
+              stickyHeader
+              showActionsColumn={false}
+              emptyText={emptyColumnsMessage}
+            />
 
-          <div className={styles.actionRow}>
-            <button
-              type="button"
-              className={styles.desktopButton}
-              onClick={handleAddColumn}
-              disabled={isBusy}
-            >
-              Add Column
-            </button>
-            <button
-              type="button"
-              className={styles.desktopButton}
-              onClick={handleDeleteColumn}
-              disabled={isBusy || !selectedColumnId}
-            >
-              Delete Column
-            </button>
-          </div>
+            <div className={styles.actionRow}>
+              <button
+                type="button"
+                className={styles.desktopButton}
+                onClick={handleAddColumn}
+                disabled={isBusy}
+              >
+                Add Column
+              </button>
+              <button
+                type="button"
+                className={styles.desktopButton}
+                onClick={handleDeleteColumn}
+                disabled={isBusy || !selectedColumnId}
+              >
+                Delete Column
+              </button>
+            </div>
         </section>
       </div>
     </main>

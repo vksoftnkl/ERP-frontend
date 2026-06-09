@@ -120,20 +120,17 @@ function withCustomerBasicValidation(field: ERPDynamicModalField): ERPDynamicMod
     },
   };
 }
-
 function validateCustomerGstin(
   value: string,
   values: Record<string, string>,
 ): string | null {
   const normalized = value.trim();
   const gstType = toGstTypeValue(values.cusGstType ?? "");
-
   if (!normalized) {
     return gstType === "REGULAR"
       ? "GST No is required when GST Type is Regular."
       : null;
   }
-
   return validateGstin(normalized);
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -157,31 +154,24 @@ function toCustomerLookupGstType(value: string): string {
   if (!normalized) {
     return "REGULAR";
   }
-
   if (normalized.includes("COMPOSITION")) {
     return "COMPOSITION";
   }
-
   return "REGULAR";
 }
-
 function extractGstLookupSource(payload: unknown): Record<string, unknown> | null {
   if (!isRecord(payload)) {
     return null;
   }
-
   return getObjectValue(payload, GST_LOOKUP_SOURCE_KEYS) ?? payload;
 }
-
 function extractGstAddress(source: Record<string, unknown>): Record<string, unknown> {
   const primaryAddress = getObjectValue(source, GST_PRIMARY_ADDRESS_KEYS);
   if (!primaryAddress) {
     return {};
   }
-
   return getObjectValue(primaryAddress, GST_ADDRESS_KEYS) ?? primaryAddress;
 }
-
 function setFieldValueIfPresent(
   target: Record<string, string>,
   fieldName: string,
@@ -191,10 +181,8 @@ function setFieldValueIfPresent(
   if (!normalized) {
     return;
   }
-
   target[fieldName] = normalized;
 }
-
 function buildCustomerLookupValues(
   gstin: string,
   payload: Record<string, unknown>,
@@ -211,7 +199,6 @@ function buildCustomerLookupValues(
     cusPanNo: gstin.slice(2, 12),
     cusCountry: "India",
   };
-
   setFieldValueIfPresent(values, "cusName", tradeName || legalName);
   setFieldValueIfPresent(
     values,
@@ -250,21 +237,17 @@ function buildCustomerLookupValues(
     "cusPin",
     toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_PIN_KEYS)),
   );
-
   return values;
 }
-
 function getLookupErrorMessage(payload: unknown, fallback: string): string {
   if (!isRecord(payload)) {
     return fallback;
   }
-
   return (
     toDisplayValue(getFirstDefinedValue(payload, ["message", "error", "detail"])) ||
     fallback
   );
 }
-
 function buildCustomerFormFields(
   stateOptions: ERPDynamicSelectOption[],
   regionStateOptions: ERPDynamicSelectOption[],
@@ -808,18 +791,15 @@ function toCollectionDaysInput(value: unknown): string {
     .map((entry) => String(entry));
   return Array.from(new Set(normalized)).join(",");
 }
-
 function toGstTypeValue(value: string): string {
   const normalized = value.trim().toUpperCase();
   return GST_TYPE_VALUES.has(normalized) ? normalized : "";
 }
-
 function removeEmptyOptions(
   options: ERPDynamicSelectOption[],
 ): ERPDynamicSelectOption[] {
   return options.filter((option) => option.value.trim().length > 0);
 }
-
 function buildStateLookupData(payload: unknown): {
   options: ERPDynamicSelectOption[];
   regionStateOptions: ERPDynamicSelectOption[];
@@ -879,17 +859,14 @@ function extractStateCodeDetailSource(payload: unknown): Record<string, unknown>
       return firstRow as Record<string, unknown>;
     }
   }
-
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return null;
   }
-
   const objectPayload = payload as Record<string, unknown>;
   const nestedData = objectPayload.data;
   if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
     return nestedData as Record<string, unknown>;
   }
-
   return objectPayload;
 }
 function mapStateCodeDetailToFormValues(source: Record<string, unknown>): Record<string, string> {
@@ -1090,7 +1067,6 @@ function buildAreaModalFields(cityOptions: ERPDynamicSelectOption[]): ERPDynamic
     },
   ];
 }
-
 function buildGroupOptions(payload: unknown): ERPDynamicSelectOption[] {
   return removeEmptyOptions(
     buildLookupOptions(payload, DEFAULT_GROUP_OPTION, {
@@ -1100,7 +1076,6 @@ function buildGroupOptions(payload: unknown): ERPDynamicSelectOption[] {
     }),
   );
 }
-
 function mergeLookupOptions(
   currentOptions: ERPDynamicSelectOption[],
   nextOptions: ERPDynamicSelectOption[],
@@ -1120,23 +1095,19 @@ function mergeLookupOptions(
   }
   return Array.from(merged.values()).sort((left, right) => left.label.localeCompare(right.label));
 }
-
 function parseGroupCollectionDays(value: string): number[] {
   const normalized = value.trim();
   if (!normalized) {
     return [];
   }
-
   const parsed = normalized
     .split(",")
     .map((token) => token.trim())
     .filter(Boolean)
     .map((token) => Number.parseInt(token, 10))
     .filter((token) => Number.isInteger(token) && token >= 0);
-
   return Array.from(new Set(parsed));
 }
-
 function toGroupCollectionDaysInput(value: unknown): string {
   if (Array.isArray(value)) {
     const normalized = value
@@ -1145,16 +1116,13 @@ function toGroupCollectionDaysInput(value: unknown): string {
       .map((entry) => String(entry));
     return Array.from(new Set(normalized)).join(",");
   }
-
   if (typeof value === "string") {
     return parseGroupCollectionDays(value)
       .map((entry) => String(entry))
       .join(",");
   }
-
   return "";
 }
-
 function extractGroupDetailSource(payload: unknown): Record<string, unknown> | null {
   const rows = extractRows(payload, GROUP_DETAIL_ARRAY_KEYS);
   if (rows.length > 0) {
@@ -1163,20 +1131,16 @@ function extractGroupDetailSource(payload: unknown): Record<string, unknown> | n
       return firstRow as Record<string, unknown>;
     }
   }
-
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return null;
   }
-
   const objectPayload = payload as Record<string, unknown>;
   const nestedData = objectPayload.data;
   if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
     return nestedData as Record<string, unknown>;
   }
-
   return objectPayload;
 }
-
 function mapGroupDetailToFormValues(source: Record<string, unknown>): Record<string, string> {
   return {
     ...GROUP_MODAL_INITIAL_VALUES,
@@ -1224,7 +1188,6 @@ function mapGroupDetailToFormValues(source: Record<string, unknown>): Record<str
     ),
   };
 }
-
 function buildGroupModalFields(): ERPDynamicModalField[] {
   return [
     {
@@ -1321,7 +1284,6 @@ function buildGroupModalFields(): ERPDynamicModalField[] {
     },
   ];
 }
-
 export default function CustomerPage() {
   const stateModalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const areaModalControllerRef = useRef<ERPDynamicModalController | null>(null);
@@ -2016,14 +1978,12 @@ export default function CustomerPage() {
           normalizedGstin && normalizedGstin !== value
             ? { cusGstNo: normalizedGstin }
             : undefined;
-
         if (!GST_LOOKUP_PATTERN.test(normalizedGstin)) {
           return {
             ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
             errors: { cusGstNo: null },
           };
         }
-
         const cachedValues = gstLookupCacheRef.current[normalizedGstin];
         if (cachedValues) {
           return {
@@ -2031,7 +1991,6 @@ export default function CustomerPage() {
             errors: { cusGstNo: null },
           };
         }
-
         try {
           const response = await fetch(
             `${GST_LOOKUP_ENDPOINT}?gstin=${encodeURIComponent(normalizedGstin)}`,
@@ -2055,7 +2014,6 @@ export default function CustomerPage() {
               },
             };
           }
-
           const lookupSource = extractGstLookupSource(payload);
           if (!lookupSource) {
             return {
@@ -2065,7 +2023,6 @@ export default function CustomerPage() {
               },
             };
           }
-
           const resolvedValues = buildCustomerLookupValues(
             normalizedGstin,
             lookupSource,

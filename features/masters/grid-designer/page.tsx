@@ -11,6 +11,7 @@ import type {
   GridColumnRow,
   GridDesignerForm,
   GridDetailPayload,
+  GridDeviceType,
   GridListMeta,
   GridOption,
   SaveGridColumnRequest,
@@ -23,6 +24,8 @@ const GRID_DETAILS_CREATE_ENDPOINT = "/grid-details/create";
 const GRID_DETAILS_DELETE_ENDPOINT = "/grid-details/delete";
 const SORT_ORDER_OPTIONS: SortOrder[] = ["Ascending", "Descending"];
 const ALIGNMENT_OPTIONS: Alignment[] = ["Left", "Center", "Right"];
+const DEVICE_TYPE_OPTIONS: GridDeviceType[] = ["desktop", "web", "mobile"];
+const DEFAULT_DEVICE_TYPE: GridDeviceType = "desktop";
 const DATA_TYPE_SUGGESTIONS = ["Text", "NumericTS", "Date", "Number", "Boolean"] as const;
 const GRID_DETAILS_PAGE_SIZE = "100";
 const GRID_COLUMNS_TABLE_MIN_WIDTH = "2050px";
@@ -35,6 +38,7 @@ const INITIAL_FORM: GridDesignerForm = {
   sortOrder: "Ascending",
   gridSql: "",
   gridStatus: true,
+  gridDeviceType: DEFAULT_DEVICE_TYPE,
 };
 function createLocalColumnId(): string {
   return `column-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -125,7 +129,7 @@ function mapGridColumnPayloadToRow(payload: GridColumnPayload): GridColumnRow {
     id: createLocalColumnId(),
     gridSerialId: payload.grid_serialid,
     columnNumber: payload.grid_column_number,
-    columnName: payload.grid_column_name,
+    columnName: payload.grid_column_name ?? "",
     sqlFieldName: payload.grid_column_sql_field_name ?? "",
     width: formatNullableNumber(payload.grid_column_width),
     position: formatNullableNumber(payload.grid_column_position),
@@ -173,13 +177,19 @@ function createBlankForm(): GridDesignerForm {
     sortOrder: "Ascending",
     gridSql: "",
     gridStatus: true,
+    gridDeviceType: DEFAULT_DEVICE_TYPE,
   };
+}
+function normalizeGridDeviceType(value: string | null | undefined): GridDeviceType {
+  if (value === "web" || value === "mobile" || value === "desktop") return value;
+  return DEFAULT_DEVICE_TYPE;
 }
 export default function GridDesignerPage() {
   const [form, setForm] = useState<GridDesignerForm>(INITIAL_FORM);
   const [columns, setColumns] = useState<GridColumnRow[]>([]);
   const [gridOptions, setGridOptions] = useState<GridOption[]>([]);
   const [selectedColumnId, setSelectedColumnId] = useState("");
+  const [gridSearchText, setGridSearchText] = useState("");
   const [isGridListLoading, setIsGridListLoading] = useState(false);
   const [isGridLoading, setIsGridLoading] = useState(false);
   const [isGridSaving, setIsGridSaving] = useState(false);
@@ -553,7 +563,8 @@ export default function GridDesignerPage() {
       setStatusText(`Loading grid ${normalizedGridId}...`);
       try {
         const detailResponse = await getGridDetailsById({ gridId: normalizedGridId });
-        const detail = detailResponse?.data;
+        const rawData = detailResponse?.data;
+        const detail = Array.isArray(rawData) ? (rawData[0] ?? null) : (rawData ?? null);
         if (!detail) {
           throw new Error("No grid details returned from API.");
         }
@@ -563,12 +574,13 @@ export default function GridDesignerPage() {
           .map(mapGridColumnPayloadToRow);
         setForm({
           gridId: detail.grid_id ?? "",
-          gridName: detail.grid_name,
+          gridName: detail.grid_name ?? "",
           gridDescription: detail.grid_description ?? "",
           sortColumn: detail.grid_sort_column ?? "",
           sortOrder: normalizeSortOrder(detail.grid_sort_order),
           gridSql: detail.grid_sql ?? "",
-          gridStatus: detail.grid_status,
+          gridStatus: detail.grid_status ?? false,
+          gridDeviceType: normalizeGridDeviceType(detail.grid_device_type),
         });
         setColumns(nextColumns);
         setSelectedColumnId(nextColumns[0]?.id ?? "");
@@ -623,7 +635,7 @@ export default function GridDesignerPage() {
           grid_sort_order: toNullableString(form.sortOrder),
           grid_sql: toNullableString(form.gridSql),
           grid_status: form.gridStatus,
-          grid_device_type: "web",
+          grid_device_type: form.gridDeviceType,
           grid_columns: columns.map((column, rowIndex) => buildGridColumnRequest(column, rowIndex)),
         },
       });
@@ -636,12 +648,13 @@ export default function GridDesignerPage() {
         .map(mapGridColumnPayloadToRow);
       setForm({
         gridId: savedGrid.grid_id ?? "",
-        gridName: savedGrid.grid_name,
+        gridName: savedGrid.grid_name ?? "",
         gridDescription: savedGrid.grid_description ?? "",
         sortColumn: savedGrid.grid_sort_column ?? "",
         sortOrder: normalizeSortOrder(savedGrid.grid_sort_order),
         gridSql: savedGrid.grid_sql ?? "",
-        gridStatus: savedGrid.grid_status,
+        gridStatus: savedGrid.grid_status ?? false,
+        gridDeviceType: normalizeGridDeviceType(savedGrid.grid_device_type),
       });
       setColumns(nextColumns);
       setSelectedColumnId(nextColumns[0]?.id ?? "");
@@ -717,6 +730,17 @@ export default function GridDesignerPage() {
     }
   }, [columns, form.sortColumn, selectedColumnId]);
   useEffect(() => {
+    if (!form.gridId) {
+      setGridSearchText("");
+      return;
+    }
+    const option = gridOptions.find((o) => o.gridId === form.gridId);
+    if (option) {
+      setGridSearchText(`${option.gridName} (${option.gridId})`);
+    }
+  }, [form.gridId, gridOptions]);
+
+  useEffect(() => {
     if (didInitialLoadRef.current) {
       return;
     }
@@ -788,22 +812,35 @@ export default function GridDesignerPage() {
             <div className={styles.fieldStack}>
               <label className={styles.inlineField}>
                 <span className={styles.fieldLabel}>Grid Id :</span>
-                <select
-                  className={styles.selectField}
-                  value={form.gridId}
-                  onChange={(event) => void handleGridSelectionChange(event.target.value)}
+                <input
+                  className={styles.textField}
+                  value={gridSearchText}
+                  list="grid-id-options"
+                  placeholder={isGridListLoading ? "Loading grids..." : "Search grids..."}
                   disabled={isBusy || isGridListLoading}
-                >
-                  <option value="">
-                    {isGridListLoading ? "Loading grids..." : "Select saved grid"}
-                  </option>
-                  {gridOptions.map((gridOption) => (
-                    <option key={gridOption.gridId} value={gridOption.gridId}>
-                      {gridOption.gridName} ({gridOption.gridId})
-                      {!gridOption.gridStatus ? " [Inactive]" : ""}
-                    </option>
+                  onChange={(event) => {
+                    const text = event.target.value;
+                    setGridSearchText(text);
+                    if (!text) {
+                      void handleGridSelectionChange("");
+                      return;
+                    }
+                    const match = gridOptions.find(
+                      (o) => `${o.gridName} (${o.gridId})${!o.gridStatus ? " [Inactive]" : ""}` === text,
+                    );
+                    if (match) {
+                      void handleGridSelectionChange(match.gridId);
+                    }
+                  }}
+                />
+                <datalist id="grid-id-options">
+                  {gridOptions.map((option) => (
+                    <option
+                      key={option.gridId}
+                      value={`${option.gridName} (${option.gridId})${!option.gridStatus ? " [Inactive]" : ""}`}
+                    />
                   ))}
-                </select>
+                </datalist>
               </label>
               <label className={styles.inlineField}>
                 <span className={styles.fieldLabel}>Grid Name :</span>
@@ -836,6 +873,20 @@ export default function GridDesignerPage() {
                   onChange={(event) => updateForm("sortOrder", event.target.value as SortOrder)}
                 >
                   {SORT_ORDER_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.inlineField}>
+                <span className={styles.fieldLabel}>Device Type :</span>
+                <select
+                  className={styles.selectField}
+                  value={form.gridDeviceType}
+                  onChange={(event) => updateForm("gridDeviceType", event.target.value as GridDeviceType)}
+                >
+                  {DEVICE_TYPE_OPTIONS.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>

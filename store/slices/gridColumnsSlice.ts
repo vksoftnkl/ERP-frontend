@@ -4,7 +4,7 @@ import { API_BASE, getAuthHeaderValue } from "@/lib/api/client";
 import { getAuthSession } from "@/lib/auth/session";
 import type { RootState } from "@/store/store";
 import { getFirstDefinedValue } from "@/features/masters/shared/value-mappers";
-const GRID_COLUMNS_LIST_ENDPOINT = "/grid-columns/list";
+const GRID_COLUMNS_LIST_ENDPOINT = "/grid-details/get";
 
 const ARRAY_KEYS = [
   "data",
@@ -16,6 +16,7 @@ const ARRAY_KEYS = [
   "gridColumns",
   "grid_columns",
 ] as const;
+const GRID_DETAIL_COLUMN_ARRAY_KEYS = ["columns", "gridColumns", "grid_columns"] as const;
 const COLUMN_KEY_KEYS = [
   "key",
   "column_key",
@@ -128,7 +129,7 @@ const COLUMN_SERIAL_ID_KEYS = [
   "serial_id",
   "serialId",
 ] as const;
-const COLUMN_GRID_ID_KEYS = ["grid_id", "gridId"] as const;
+const COLUMN_GRID_ID_KEYS = ["gridId"] as const;
 
 type GridColumnAlign = "left" | "center" | "right";
 
@@ -289,33 +290,61 @@ function normalizeColor(value: unknown): string | undefined {
   return normalized || undefined;
 }
 
+function extractNestedColumnRows(source: Record<string, unknown>): Record<string, unknown>[] {
+  for (const key of GRID_DETAIL_COLUMN_ARRAY_KEYS) {
+    const value = source[key];
+    if (Array.isArray(value)) {
+      return value.filter(isRecord);
+    }
+  }
+
+  return [];
+}
+
+function hasNestedColumnArray(source: Record<string, unknown>): boolean {
+  return GRID_DETAIL_COLUMN_ARRAY_KEYS.some((key) => Array.isArray(source[key]));
+}
+
+function extractColumnRowsFromArray(payload: unknown[]): Record<string, unknown>[] {
+  const rows = payload.filter(isRecord);
+  const nestedRows = rows.flatMap(extractNestedColumnRows);
+  if (nestedRows.length > 0 || rows.some(hasNestedColumnArray)) {
+    return nestedRows;
+  }
+
+  return rows;
+}
+
 function extractColumnRows(payload: unknown): Record<string, unknown>[] {
   if (Array.isArray(payload)) {
-    return payload.filter(isRecord);
+    return extractColumnRowsFromArray(payload);
   }
 
   if (!isRecord(payload)) {
     return [];
   }
 
+  const directNestedRows = extractNestedColumnRows(payload);
+  if (directNestedRows.length > 0) {
+    return directNestedRows;
+  }
+
   for (const key of ARRAY_KEYS) {
     const value = payload[key];
     if (Array.isArray(value)) {
-      return value.filter(isRecord);
+      return extractColumnRowsFromArray(value);
     }
     if (isRecord(value)) {
-      for (const nestedKey of ARRAY_KEYS) {
-        const nestedValue = value[nestedKey];
-        if (Array.isArray(nestedValue)) {
-          return nestedValue.filter(isRecord);
-        }
+      const nestedRows = extractColumnRows(value);
+      if (nestedRows.length > 0) {
+        return nestedRows;
       }
     }
   }
 
   const firstArray = Object.values(payload).find((value) => Array.isArray(value));
   if (Array.isArray(firstArray)) {
-    return firstArray.filter(isRecord);
+    return extractColumnRowsFromArray(firstArray);
   }
 
   return [];
@@ -501,7 +530,7 @@ export const fetchGridColumns = createAsyncThunk<
       baseURL: API_BASE || undefined,
       headers,
       params: {
-        grid_id: gridId,
+        gridId,
         page,
         limit,
       },

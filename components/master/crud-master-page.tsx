@@ -80,18 +80,23 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 const GRID_DETAILS_ENDPOINT = "/grid-details/list";
 const GRID_DETAIL_GET_ENDPOINT = "/grid-details/get";
-const GRID_COLUMNS_CREATE_ENDPOINT = "/grid-columns/create";
+const GRID_COLUMNS_CREATE_ENDPOINT = "/grid-details/create";
 const GRID_COLUMNS_PAGE = 1;
 const GRID_COLUMNS_LIMIT = 100;
 const MASTER_SERIAL_COLUMN_WIDTH = "40px";
 const MASTER_ACTIONS_COLUMN_WIDTH = "72px";
 const RESPONSE_TABLE_DEFAULT_COLUMN_WIDTH = "180px";
 const GRID_SETTINGS_CONTEXT_MENU_WIDTH = 190;
-const GRID_SETTINGS_CONTEXT_MENU_HEIGHT = 96;
+const GRID_SETTINGS_CONTEXT_MENU_HEIGHT = 130;
 const GRID_SETTINGS_CONTEXT_MENU_PADDING = 8;
 const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;
+const GRID_DETAIL_DESCRIPTION_KEYS = ["grid_description", "gridDescription", "description"] as const;
+const GRID_DETAIL_SORT_COLUMN_KEYS = ["grid_sort_column", "gridSortColumn", "sortColumn"] as const;
+const GRID_DETAIL_SORT_ORDER_KEYS = ["grid_sort_order", "gridSortOrder", "sortOrder"] as const;
+const GRID_DETAIL_STATUS_KEYS = ["grid_status", "gridStatus", "status"] as const;
+const GRID_DETAIL_DEVICE_TYPE_KEYS = ["grid_device_type", "gridDeviceType", "deviceType"] as const;
 const DEFAULT_ARRAY_KEYS = [
   "data",
   "items",
@@ -701,7 +706,52 @@ function resolveNumericId(value: unknown): number | null {
 type ResolvedGridDetails = {
   gridId: number | null;
   gridName: string | null;
+  gridDescription?: string | null;
+  gridSortColumn?: string | null;
+  gridSortOrder?: string | null;
+  gridSql?: string | null;
+  gridStatus?: boolean;
+  gridDeviceType?: string | null;
+  columns?: Record<string, unknown>[];
 };
+
+function toNullableDisplayValue(value: unknown): string | null {
+  const normalized = toDisplayValue(value);
+  return normalized || null;
+}
+
+function extractGridDetailColumns(source: Record<string, unknown>): Record<string, unknown>[] {
+  const columns = source.columns ?? source.grid_columns ?? source.gridColumns;
+  return Array.isArray(columns) ? columns.filter(isRecord) : [];
+}
+
+function resolveGridDetailsFromSource(
+  source: Record<string, unknown>,
+  fallbackGridId: number | null = null,
+): ResolvedGridDetails {
+  const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS)) ?? fallbackGridId;
+  const gridName = toNullableDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS));
+  const gridStatus = toBoolean(getFirstDefinedValue(source, GRID_DETAIL_STATUS_KEYS));
+
+  return {
+    gridId,
+    gridName,
+    gridDescription: toNullableDisplayValue(
+      getFirstDefinedValue(source, GRID_DETAIL_DESCRIPTION_KEYS),
+    ),
+    gridSortColumn: toNullableDisplayValue(
+      getFirstDefinedValue(source, GRID_DETAIL_SORT_COLUMN_KEYS),
+    ),
+    gridSortOrder: toNullableDisplayValue(
+      getFirstDefinedValue(source, GRID_DETAIL_SORT_ORDER_KEYS),
+    ),
+    gridSql: toNullableDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_SQL_KEYS)),
+    gridStatus: gridStatus ?? true,
+    gridDeviceType:
+      toNullableDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_DEVICE_TYPE_KEYS)) ?? "desktop",
+    columns: extractGridDetailColumns(source),
+  };
+}
 
 function resolveGridDetailsByTableName(
   payload: unknown,
@@ -722,13 +772,7 @@ function resolveGridDetailsByTableName(
 
     const gridSql = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_SQL_KEYS)).toLowerCase();
     if (!gridSql || tableNames.some((tableName) => gridSql.includes(tableName))) {
-      const gridName = toDisplayValue(
-        getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS),
-      );
-      return {
-        gridId,
-        gridName: gridName || null,
-      };
+      return resolveGridDetailsFromSource(source, gridId);
     }
   }
 
@@ -740,13 +784,7 @@ function resolveGridDetailsByTableName(
     const source = row as Record<string, unknown>;
     const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
     if (gridId !== null) {
-      const gridName = toDisplayValue(
-        getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS),
-      );
-      return {
-        gridId,
-        gridName: gridName || null,
-      };
+      return resolveGridDetailsFromSource(source, gridId);
     }
   }
 
@@ -756,15 +794,52 @@ function resolveGridDetailsByTableName(
   };
 }
 
-function extractGridDetailSource(payload: unknown): Record<string, unknown> | null {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+function pickGridDetailRow(
+  rows: unknown[],
+  fallbackGridId?: number,
+): Record<string, unknown> | null {
+  const records = rows.filter(isRecord);
+  if (records.length === 0) {
+    return null;
+  }
+
+  if (fallbackGridId !== undefined) {
+    const matchedRecord = records.find(
+      (row) => resolveNumericId(getFirstDefinedValue(row, GRID_DETAIL_ID_KEYS)) === fallbackGridId,
+    );
+    if (matchedRecord) {
+      return matchedRecord;
+    }
+  }
+
+  return records[0];
+}
+
+function extractGridDetailSource(
+  payload: unknown,
+  fallbackGridId?: number,
+): Record<string, unknown> | null {
+  if (Array.isArray(payload)) {
+    return pickGridDetailRow(payload, fallbackGridId);
+  }
+
+  if (!payload || typeof payload !== "object") {
     return null;
   }
 
   const source = payload as Record<string, unknown>;
   const nestedData = source.data;
+  if (Array.isArray(nestedData)) {
+    return pickGridDetailRow(nestedData, fallbackGridId);
+  }
   if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
     return nestedData as Record<string, unknown>;
+  }
+
+  const nestedRows = extractRows(payload, DEFAULT_ARRAY_KEYS);
+  const nestedSource = pickGridDetailRow(nestedRows, fallbackGridId);
+  if (nestedSource) {
+    return nestedSource;
   }
 
   return source;
@@ -774,7 +849,7 @@ function resolveGridDetailsByIdPayload(
   payload: unknown,
   fallbackGridId: number,
 ): ResolvedGridDetails {
-  const source = extractGridDetailSource(payload);
+  const source = extractGridDetailSource(payload, fallbackGridId);
   if (!source) {
     return {
       gridId: fallbackGridId,
@@ -784,12 +859,7 @@ function resolveGridDetailsByIdPayload(
 
   const gridId =
     resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS)) ?? fallbackGridId;
-  const gridName = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS));
-
-  return {
-    gridId,
-    gridName: gridName || null,
-  };
+  return resolveGridDetailsFromSource(source, gridId);
 }
 
 function normalizeListStyleOrder(value: unknown, fallbackOrder: number): number {
@@ -1320,9 +1390,46 @@ function resolveGridColumnForTableColumn(
   );
 }
 
+function toNullableNumberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(/%|px$/gi, "");
+    if (!normalized) {
+      return null;
+    }
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function findRawGridColumn(
+  gridColumn: GridColumnConfig,
+  rawColumns: Record<string, unknown>[],
+): Record<string, unknown> | undefined {
+  if (gridColumn.serialId) {
+    const serialId = gridColumn.serialId.trim();
+    const bySerialId = rawColumns.find(
+      (column) => toDisplayValue(column.grid_serialid ?? column.gridSerialId) === serialId,
+    );
+    if (bySerialId) {
+      return bySerialId;
+    }
+  }
+
+  const normalizedColumnName = normalizeColumnToken(gridColumn.columnName ?? gridColumn.header);
+  return rawColumns.find((column) => {
+    const rawName = toDisplayValue(column.grid_column_name ?? column.gridColumnName);
+    return rawName ? normalizeColumnToken(rawName) === normalizedColumnName : false;
+  });
+}
+
 function buildGridColumnBasePayload(
   gridColumn: GridColumnConfig,
-  fallbackGridId: number,
+  rawColumn?: Record<string, unknown>,
+  overrides: Record<string, unknown> = {},
 ): Record<string, unknown> | null {
   if (!gridColumn.serialId) {
     return null;
@@ -1337,12 +1444,93 @@ function buildGridColumnBasePayload(
     return null;
   }
 
+  const rawWidth = toNullableNumberValue(rawColumn?.grid_column_width ?? rawColumn?.gridColumnWidth);
+  const rawPosition = toNullableNumberValue(
+    rawColumn?.grid_column_position ?? rawColumn?.gridColumnPosition,
+  );
+  const rawVisibility = toBoolean(
+    rawColumn?.grid_column_visibility ?? rawColumn?.gridColumnVisibility,
+  );
+  const rawFilter = toBoolean(rawColumn?.grid_column_filter ?? rawColumn?.gridColumnFilter);
+  const rawGroup = toBoolean(rawColumn?.grid_column_group ?? rawColumn?.gridColumnGroup);
+  const rawTotal = toBoolean(rawColumn?.grid_column_total ?? rawColumn?.gridColumnTotal);
+  const alignment = gridColumn.align ?? toNullableDisplayValue(
+    rawColumn?.grid_column_alignment ?? rawColumn?.gridColumnAlignment,
+  );
+  const width = toNullableNumberValue(gridColumn.width) ?? rawWidth;
+  const position = gridColumn.position ?? rawPosition ?? gridColumn.order;
+
   return {
     grid_serialid: gridColumn.serialId,
-    grid_id: gridColumn.gridId ?? String(fallbackGridId),
     grid_column_number: columnNumber,
-    grid_column_position: gridColumn.position ?? gridColumn.order,
     grid_column_name: columnName,
+    grid_column_width: width,
+    grid_column_position: position,
+    grid_column_alignment: alignment,
+    grid_column_visibility: gridColumn.visible ?? rawVisibility ?? true,
+    grid_column_filter: gridColumn.sortable ?? rawFilter ?? false,
+    grid_column_condition: toNullableDisplayValue(
+      rawColumn?.grid_column_condition ?? rawColumn?.gridColumnCondition,
+    ),
+    grid_column_condition_color: toNullableDisplayValue(
+      rawColumn?.grid_column_condition_color ?? rawColumn?.gridColumnConditionColor,
+    ),
+    grid_column_group: rawGroup ?? false,
+    grid_column_total: rawTotal ?? false,
+    grid_column_data_type: toNullableDisplayValue(
+      rawColumn?.grid_column_data_type ?? rawColumn?.gridColumnDataType,
+    ),
+    grid_column_color:
+      gridColumn.color ??
+      toNullableDisplayValue(rawColumn?.grid_column_color ?? rawColumn?.gridColumnColor),
+    grid_column_notes: toNullableDisplayValue(
+      rawColumn?.grid_column_notes ?? rawColumn?.gridColumnNotes ?? gridColumn.accessorKey,
+    ),
+    grid_column_sql_field_name: toNullableDisplayValue(
+      gridColumn.sqlFieldName ??
+        rawColumn?.grid_column_sql_field_name ??
+        rawColumn?.gridColumnSqlFieldName,
+    ),
+    ...overrides,
+  };
+}
+
+function buildGridDetailsSavePayload(
+  gridDetails: ResolvedGridDetails | null,
+  fallbackGridId: number,
+  fallbackGridName: string,
+  gridColumns: GridColumnConfig[],
+  overridesBySerialId: Record<string, Record<string, unknown>> = {},
+): Record<string, unknown> | null {
+  if (!gridDetails || gridDetails.gridId === null) {
+    return null;
+  }
+
+  const rawColumns = gridDetails.columns ?? [];
+  const columns = gridColumns
+    .map((gridColumn) =>
+      buildGridColumnBasePayload(
+        gridColumn,
+        findRawGridColumn(gridColumn, rawColumns),
+        gridColumn.serialId ? overridesBySerialId[gridColumn.serialId] : undefined,
+      ),
+    )
+    .filter(isRecord);
+
+  if (columns.length === 0) {
+    return null;
+  }
+
+  return {
+    grid_id: String(gridDetails.gridId ?? fallbackGridId),
+    grid_name: gridDetails.gridName ?? (fallbackGridName.trim() || `Grid ${fallbackGridId}`),
+    grid_description: gridDetails.gridDescription ?? null,
+    grid_sort_column: gridDetails.gridSortColumn ?? null,
+    grid_sort_order: gridDetails.gridSortOrder ?? null,
+    grid_sql: gridDetails.gridSql ?? null,
+    grid_status: gridDetails.gridStatus ?? true,
+    grid_device_type: gridDetails.gridDeviceType ?? "desktop",
+    grid_columns: columns,
   };
 }
 
@@ -1550,26 +1738,21 @@ function applyListResponseStylesToCustomColumns(
   }
 
   let styleIndex = 0;
-
   return customColumns.flatMap((column) => {
     if (isMasterSerialColumn(column)) {
       return [column];
     }
-
     const styleRow = styleRows[styleIndex];
     styleIndex += 1;
-
     if (!styleRow) {
       return [];
     }
-
     const isVisible = toBoolean(
       getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_VISIBLE_KEYS),
     );
     if (isVisible === false) {
       return [];
     }
-
     const header = toDisplayValue(
       getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_HEADER_KEYS),
     );
@@ -1595,7 +1778,6 @@ function applyListResponseStylesToCustomColumns(
       color && typeof column.cellStyle !== "function"
         ? { ...(column.cellStyle ?? {}), backgroundColor: color }
         : column.cellStyle;
-
     return [
       {
         ...column,
@@ -1609,30 +1791,24 @@ function applyListResponseStylesToCustomColumns(
     ];
   });
 }
-
 function formatResponseColumnHeader(columnKey: string): string {
   const normalized = columnKey
     .replace(/[_-]+/g, " ")
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/\s+/g, " ")
     .trim();
-
   if (!normalized) {
     return "Value";
   }
-
   return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
 }
-
 function getResponseColumnKeys(payload: unknown, arrayKeys: readonly string[]): string[] {
   const seenKeys = new Set<string>();
   const keys: string[] = [];
-
   for (const row of extractRows(payload, arrayKeys)) {
     if (!isRecord(row)) {
       continue;
     }
-
     for (const key of Object.keys(row)) {
       if (seenKeys.has(key)) {
         continue;
@@ -1641,14 +1817,11 @@ function getResponseColumnKeys(payload: unknown, arrayKeys: readonly string[]): 
       keys.push(key);
     }
   }
-
   return keys;
 }
-
 function compactColumnToken(value: string): string {
   return normalizeColumnToken(value).replace(/_/g, "");
 }
-
 function getResponseKeyMatchScore(candidateToken: string, responseToken: string): number {
   if (!candidateToken || !responseToken) {
     return 0;
@@ -1664,7 +1837,6 @@ function getResponseKeyMatchScore(candidateToken: string, responseToken: string)
   }
   return 0;
 }
-
 function getColumnWords(value: string): string[] {
   return value
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -1672,18 +1844,15 @@ function getColumnWords(value: string): string[] {
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
 }
-
 function getResponseKeyWordMatchScore(candidateValue: string, responseKey: string): number {
   const candidateWords = getColumnWords(candidateValue);
   const responseWords = new Set(getColumnWords(responseKey));
   if (candidateWords.length === 0 || responseWords.size === 0) {
     return 0;
   }
-
   if (candidateWords.every((word) => responseWords.has(word))) {
     return 92;
   }
-
   const matchedWordCount = candidateWords.filter((word) => responseWords.has(word)).length;
   if (matchedWordCount > 0 && candidateWords.includes("name") && responseWords.has("name")) {
     return 70;
@@ -1693,7 +1862,6 @@ function getResponseKeyWordMatchScore(candidateValue: string, responseKey: strin
   }
   return matchedWordCount > 1 ? 70 : 0;
 }
-
 function isMetadataResponseKey(responseKey: string): boolean {
   const normalized = normalizeColumnToken(responseKey);
   const compact = compactColumnToken(responseKey);
@@ -1707,7 +1875,6 @@ function isMetadataResponseKey(responseKey: string): boolean {
     normalized.endsWith("_id")
   );
 }
-
 function getFallbackResponseKeyForStyleRow(
   responseKeys: readonly string[],
   usedResponseKeys: Set<string>,
@@ -1724,7 +1891,6 @@ function getFallbackResponseKeyForStyleRow(
     }) ?? null
   );
 }
-
 function resolveResponseKeyForStyleRow(
   styleRow: Record<string, unknown>,
   responseKeys: readonly string[],
@@ -1735,15 +1901,12 @@ function resolveResponseKeyForStyleRow(
     toDisplayValue(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_NOTES_KEYS)),
     toDisplayValue(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_HEADER_KEYS)),
   ].filter(Boolean);
-
   const candidateTokens = candidateValues.flatMap((value) => {
     const normalized = normalizeColumnToken(value);
     const compact = normalized.replace(/_/g, "");
     return normalized === compact ? [normalized] : [normalized, compact];
   });
-
   let bestMatch: { key: string; score: number } | null = null;
-
   for (const responseKey of responseKeys) {
     const normalizedResponseKey = normalizeColumnToken(responseKey);
     if (
@@ -1752,12 +1915,10 @@ function resolveResponseKeyForStyleRow(
     ) {
       continue;
     }
-
     const responseTokens = [
       normalizedResponseKey,
       compactColumnToken(responseKey),
     ];
-
     const score = candidateTokens.reduce((bestScore, candidateToken) => {
       const tokenScore = responseTokens.reduce(
         (innerBestScore, responseToken) =>
@@ -1772,15 +1933,12 @@ function resolveResponseKeyForStyleRow(
       0,
     );
     const bestResponseScore = Math.max(score, wordScore);
-
     if (bestResponseScore > (bestMatch?.score ?? 0)) {
       bestMatch = { key: responseKey, score: bestResponseScore };
     }
   }
-
   return bestMatch && bestMatch.score >= 60 ? bestMatch.key : null;
 }
-
 function buildColumnsFromResponseRows(
   payload: unknown,
   arrayKeys: readonly string[],
@@ -1794,11 +1952,9 @@ function buildColumnsFromResponseRows(
     : [];
   const excludedKeys = new Set(excludeKeys.map(normalizeColumnToken));
   const serialColumn = getMasterSerialColumn(fallbackColumns);
-
   if (styleRows.length > 0) {
     const usedResponseKeys = new Set<string>();
     const styledColumns: ReusableTableColumn<MasterTableRow>[] = [];
-
     for (const styleRow of styleRows) {
       const isVisible = toBoolean(
         getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_VISIBLE_KEYS),
@@ -1806,7 +1962,6 @@ function buildColumnsFromResponseRows(
       if (isVisible === false) {
         continue;
       }
-
       const responseKey =
         resolveResponseKeyForStyleRow(
           styleRow,
@@ -1822,9 +1977,7 @@ function buildColumnsFromResponseRows(
       if (!responseKey) {
         continue;
       }
-
       usedResponseKeys.add(responseKey);
-
       const header =
         toDisplayValue(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_HEADER_KEYS)) ||
         formatResponseColumnHeader(responseKey);
@@ -1854,30 +2007,23 @@ function buildColumnsFromResponseRows(
         cellStyle: color ? { backgroundColor: color } : undefined,
       });
     }
-
     if (styledColumns.length === 0) {
       return buildMasterSerialOnlyColumns(fallbackColumns);
     }
-
     return serialColumn ? [serialColumn, ...styledColumns] : styledColumns;
   }
-
   const columns: ReusableTableColumn<MasterTableRow>[] = serialColumn ? [serialColumn] : [];
-
   responseKeys.forEach((responseKey, index) => {
     if (excludedKeys.has(normalizeColumnToken(responseKey))) {
       return;
     }
-
     const styleRow = styleRows[index];
     const isVisible = styleRow
       ? toBoolean(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_VISIBLE_KEYS))
       : null;
-
     if (isVisible === false) {
       return;
     }
-
     const header =
       (styleRow
         ? toDisplayValue(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_HEADER_KEYS))
@@ -1895,7 +2041,6 @@ function buildColumnsFromResponseRows(
     const color = styleRow
       ? toDisplayValue(getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_COLOR_KEYS)) || undefined
       : undefined;
-
     columns.push({
       key: responseKey,
       header,
@@ -1951,14 +2096,12 @@ function escapeCsvValue(value: unknown): string {
   }
   return normalized;
 }
-
 function reactNodeToCsvHeader(value: ReactNode, fallback: string): string {
   if (typeof value === "string" || typeof value === "number") {
     return String(value);
   }
   return fallback;
 }
-
 function getColumnExportValue(
   column: ReusableTableColumn<MasterTableRow>,
   row: MasterTableRow,
@@ -1975,7 +2118,6 @@ function getColumnExportValue(
   }
   return "";
 }
-
 function toCsvFilename(title: string): string {
   const slug = title
     .trim()
@@ -1984,7 +2126,6 @@ function toCsvFilename(title: string): string {
     .replace(/^-+|-+$/g, "");
   return `${slug || "master"}-${new Date().toISOString().slice(0, 10)}.csv`;
 }
-
 function downloadMasterRowsCsv(
   title: string,
   columns: ReusableTableColumn<MasterTableRow>[],
@@ -1993,7 +2134,6 @@ function downloadMasterRowsCsv(
   if (typeof window === "undefined" || typeof document === "undefined") {
     return;
   }
-
   const exportColumns = columns.filter((column) => column.key !== "actions");
   const csv = [
     exportColumns.map((column) => escapeCsvValue(reactNodeToCsvHeader(column.header, column.key))),
@@ -2015,7 +2155,6 @@ function downloadMasterRowsCsv(
   anchor.remove();
   window.URL.revokeObjectURL(url);
 }
-
 export default function CrudMasterPage({
   title,
   entityLabel,
@@ -2078,10 +2217,9 @@ export default function CrudMasterPage({
     recordPk: string;
     screenName: string;
   } | null>(null);
-
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const { getAll: getGridDetailById } = useApi<unknown>(GRID_DETAIL_GET_ENDPOINT);
-  const { run: saveGridColumnWidth } = useApi<unknown, Record<string, unknown>>(
+  const { run: saveGridDetails } = useApi<unknown, Record<string, unknown>>(
     GRID_COLUMNS_CREATE_ENDPOINT,
     {
       method: "POST",
@@ -2133,6 +2271,7 @@ export default function CrudMasterPage({
   });
   const [gridId, setGridId] = useState<number | null>(null);
   const [gridDisplayName, setGridDisplayName] = useState<string | null>(null);
+  const [gridDetailsForSave, setGridDetailsForSave] = useState<ResolvedGridDetails | null>(null);
   const selectedGridId = gridId ?? -1;
   const {
     data: gridColumnsData,
@@ -2151,13 +2290,11 @@ export default function CrudMasterPage({
   );
   const gridColumns = gridColumnsData ?? [];
   const gridColumnsError = getApiErrorMessage(gridColumnsQueryError);
-
   const normalizedGridTableNames = useMemo(() => {
     const base = gridTableName?.trim().toLowerCase();
     if (!base) {
       return [] as string[];
     }
-
     const merged = [
       base,
       ...(gridTableNameAliases ?? []),
@@ -2167,15 +2304,12 @@ export default function CrudMasterPage({
 
     return Array.from(new Set(merged));
   }, [gridTableName, gridTableNameAliases]);
-
   const configuredGridDetailId = useMemo(() => {
     if (typeof gridDetailId === "number" && Number.isFinite(gridDetailId)) {
       return Math.floor(gridDetailId);
     }
-
     return getConfiguredModuleGridId(gridTableName);
   }, [gridDetailId, gridTableName]);
-
   useEffect(() => {
     if (
       configuredGridDetailId === undefined &&
@@ -2183,18 +2317,17 @@ export default function CrudMasterPage({
     ) {
       setGridId(null);
       setGridDisplayName(null);
+      setGridDetailsForSave(null);
       return;
     }
-
     let mounted = true;
-
     void (async () => {
       try {
         const resolvedGrid =
           configuredGridDetailId !== undefined
             ? resolveGridDetailsByIdPayload(
                 await getGridDetailById({
-                  grid_id: String(configuredGridDetailId),
+                  gridId: String(configuredGridDetailId),
                 }),
                 configuredGridDetailId,
               )
@@ -2207,21 +2340,20 @@ export default function CrudMasterPage({
                 }),
                 normalizedGridTableNames,
               );
-
         if (!mounted) {
           return;
         }
-
         setGridId(resolvedGrid.gridId);
         setGridDisplayName(resolvedGrid.gridName);
+        setGridDetailsForSave(resolvedGrid);
       } catch {
         if (mounted) {
           setGridId(configuredGridDetailId ?? null);
           setGridDisplayName(null);
+          setGridDetailsForSave(null);
         }
       }
     })();
-
     return () => {
       mounted = false;
     };
@@ -2231,19 +2363,15 @@ export default function CrudMasterPage({
     getGridDetails,
     normalizedGridTableNames,
   ]);
-
   const effectiveTitle = useMemo(() => {
     const normalized = gridDisplayName?.trim();
     return normalized || title;
   }, [gridDisplayName, title]);
-
   const serialOffset = Math.max(0, (currentPage - 1) * pageSize);
-
   const rows = useMemo(
     () => buildMasterRows(data, serialOffset, lookupKeys),
     [data, lookupKeys, serialOffset],
   );
-
   const fallbackColumns = useMemo(
     () =>
       buildMasterFallbackColumns(
@@ -2264,13 +2392,11 @@ export default function CrudMasterPage({
   const hasCustomTableColumns = Boolean(customTableColumns && customTableColumns.length > 0);
   const effectiveListResponseStyleArrayKey =
     listResponseStyleArrayKey ?? (hasCustomTableColumns ? undefined : "styles");
-
   const listResponseColumns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
     () => {
       if (!effectiveListResponseStyleArrayKey) {
         return [];
       }
-
       if (listResponseStyleColumns && listResponseStyleColumns.length > 0) {
         return buildColumnsFromListResponseStyles(
           data,
@@ -2283,7 +2409,6 @@ export default function CrudMasterPage({
           tableColumnLayout,
         );
       }
-
       return buildColumnsFromDynamicListResponseStyles(
         data,
         effectiveListResponseStyleArrayKey,
@@ -2304,9 +2429,7 @@ export default function CrudMasterPage({
       tableColumnLayout,
     ],
   );
-
   const lastResponseTableColumnsRef = useRef<ReusableTableColumn<MasterTableRow>[] | null>(null);
-
   const columns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
     () => {
       if (useResponseTableColumns) {
@@ -2317,19 +2440,15 @@ export default function CrudMasterPage({
           fallbackColumns,
           responseTableColumnExcludeKeys,
         );
-
         if (rows.length === 0 && lastResponseTableColumnsRef.current) {
           return lastResponseTableColumnsRef.current;
         }
-
         return responseColumns;
       }
-
       if (customTableColumns && customTableColumns.length > 0) {
         if (!effectiveListResponseStyleArrayKey) {
           return customTableColumns;
         }
-
         const styledCustomColumns = applyListResponseStylesToCustomColumns(
             data,
             effectiveListResponseStyleArrayKey,
@@ -2339,13 +2458,11 @@ export default function CrudMasterPage({
           ? ensureMasterSerialColumn(styledCustomColumns, fallbackColumns)
           : buildMasterSerialOnlyColumns(fallbackColumns);
       }
-
       if (effectiveListResponseStyleArrayKey) {
         return listResponseColumns.length > 0
           ? ensureMasterSerialColumn(listResponseColumns, fallbackColumns)
           : buildMasterSerialOnlyColumns(fallbackColumns);
       }
-
       return normalizedGridTableNames.length > 0
         ? buildColumnsFromGridColumns(
             gridColumns,
@@ -2371,7 +2488,6 @@ export default function CrudMasterPage({
       normalizedGridTableNames.length,
     ],
   );
-
   useEffect(() => {
     if (
       useResponseTableColumns &&
@@ -2381,7 +2497,6 @@ export default function CrudMasterPage({
       lastResponseTableColumnsRef.current = columns;
     }
   }, [columns, rows.length, useResponseTableColumns]);
-
   const renderedColumns = columns;
   const filterDataColumns = useMemo(
     () => renderedColumns.filter(isMasterFilterDataColumn),
@@ -2402,15 +2517,12 @@ export default function CrudMasterPage({
       if (!hideRowsWhenAllGridColumnFiltersDisabled) {
         return false;
       }
-
       if (filterDataColumns.some((column) => column.sortable !== false)) {
         return false;
       }
-
       if (shouldHideRowsFromResponseStyleFilters !== null) {
         return shouldHideRowsFromResponseStyleFilters;
       }
-
       return (
         filterDataColumns.length === 0 ||
         filterDataColumns.every((column) => column.sortable === false)
@@ -2433,7 +2545,6 @@ export default function CrudMasterPage({
     });
   }, [baseRenderedRows, showOnlyInactive]);
   const renderedTotalEntries = shouldHideRowsForDisabledGridFilters ? 0 : totalEntries;
-
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(
     null,
   );
@@ -2457,11 +2568,9 @@ export default function CrudMasterPage({
   const selectedRowIdRef = useRef<string | number | null>(selectedRowId);
   const gridSettingsModeRef = useRef<"filter" | "visibility" | null>(gridSettingsMode);
   const pendingDeleteRowRef = useRef<MasterTableRow | null>(pendingDeleteRow);
-
   useEffect(() => {
     searchInputRef.current?.focus();
   }, []);
-
   const gridSettingsColumns = useMemo(
     () =>
       gridColumns
@@ -2469,14 +2578,12 @@ export default function CrudMasterPage({
         .sort(compareGridColumnConfigOrder),
     [gridColumns],
   );
-
   const gridSettingsTitle =
     gridSettingsMode === "visibility" ? "Grid Visible Columns" : "Grid Search Columns";
   const gridSettingsCloseLabel =
     gridSettingsMode === "visibility"
       ? "Close grid visible columns"
       : "Close grid search columns";
-
   const openGridSettingsModal = useCallback((mode: "filter" | "visibility") => {
     const nextSelections: Record<string, boolean> = {};
     for (const column of gridSettingsColumns) {
@@ -2520,14 +2627,12 @@ export default function CrudMasterPage({
     },
     [enableGridSettingsContextMenu, gridSettingsColumns.length],
   );
-
   const closeGridSettingsModal = useCallback(() => {
     if (gridSettingsSaving) {
       return;
     }
     setGridSettingsMode(null);
   }, [gridSettingsSaving]);
-
   const handleGridSettingsSelectionChange = useCallback(
     (serialId: string, checked: boolean) => {
       setGridSettingsSelections((current) => ({
@@ -2537,12 +2642,10 @@ export default function CrudMasterPage({
     },
     [],
   );
-
   useEffect(() => {
     if (!searchSettingsOpen || typeof document === "undefined") {
       return;
     }
-
     const handlePointerDown = (event: MouseEvent) => {
       if (
         searchSettingsRef.current &&
@@ -2556,7 +2659,6 @@ export default function CrudMasterPage({
         setSearchSettingsOpen(false);
       }
     };
-
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
@@ -2568,7 +2670,6 @@ export default function CrudMasterPage({
     if (gridSettingsContextMenuPosition === null || typeof document === "undefined") {
       return;
     }
-
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest('[data-master-grid-settings-context-menu="true"]')) {
@@ -2581,7 +2682,6 @@ export default function CrudMasterPage({
         setGridSettingsContextMenuPosition(null);
       }
     };
-
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
@@ -2593,9 +2693,7 @@ export default function CrudMasterPage({
     if (gridSettingsContextMenuPosition === null || typeof window === "undefined") {
       return;
     }
-
     const closeContextMenu = () => setGridSettingsContextMenuPosition(null);
-
     window.addEventListener("resize", closeContextMenu);
     window.addEventListener("scroll", closeContextMenu, true);
     return () => {
@@ -2611,21 +2709,29 @@ export default function CrudMasterPage({
 
     setGridSettingsSaving(true);
     try {
+      const overridesBySerialId: Record<string, Record<string, unknown>> = {};
       for (const column of gridSettingsColumns) {
-        const basePayload = buildGridColumnBasePayload(column, gridId);
-        if (!basePayload || !column.serialId) {
+        if (!column.serialId) {
           continue;
         }
 
-        await saveGridColumnWidth({
-          body: {
-            ...basePayload,
-            [gridSettingsMode === "visibility"
-              ? "grid_column_visibility"
-              : "grid_column_filter"]: gridSettingsSelections[column.serialId] === true,
-          },
-        });
+        overridesBySerialId[column.serialId] = {
+          [gridSettingsMode === "visibility"
+            ? "grid_column_visibility"
+            : "grid_column_filter"]: gridSettingsSelections[column.serialId] === true,
+        };
       }
+      const savePayload = buildGridDetailsSavePayload(
+        gridDetailsForSave,
+        gridId,
+        effectiveTitle,
+        gridSettingsColumns,
+        overridesBySerialId,
+      );
+      if (!savePayload) {
+        return;
+      }
+      await saveGridDetails({ body: savePayload });
       void refetchGridColumns();
       await loadRecords(searchTerm, currentPage, pageSize);
       setGridSettingsMode(null);
@@ -2636,6 +2742,8 @@ export default function CrudMasterPage({
     }
   }, [
     currentPage,
+    effectiveTitle,
+    gridDetailsForSave,
     gridSettingsColumns,
     gridSettingsMode,
     gridSettingsSelections,
@@ -2643,7 +2751,7 @@ export default function CrudMasterPage({
     loadRecords,
     pageSize,
     refetchGridColumns,
-    saveGridColumnWidth,
+    saveGridDetails,
     searchTerm,
   ]);
   useEffect(() => {
@@ -3384,19 +3492,27 @@ export default function CrudMasterPage({
       nextGridColumnOrder.push(...visibleQueue);
       void (async () => {
         try {
+          const overridesBySerialId: Record<string, Record<string, unknown>> = {};
           for (const [index, gridColumn] of nextGridColumnOrder.entries()) {
-            const basePayload = buildGridColumnBasePayload(gridColumn, gridId);
-            if (!basePayload) {
+            if (!gridColumn.serialId) {
               continue;
             }
 
-            await saveGridColumnWidth({
-              body: {
-                ...basePayload,
-                grid_column_position: index + 1,
-              },
-            });
+            overridesBySerialId[gridColumn.serialId] = {
+              grid_column_position: index + 1,
+            };
           }
+          const savePayload = buildGridDetailsSavePayload(
+            gridDetailsForSave,
+            gridId,
+            effectiveTitle,
+            nextGridColumnOrder,
+            overridesBySerialId,
+          );
+          if (!savePayload) {
+            return;
+          }
+          await saveGridDetails({ body: savePayload });
 
           void refetchGridColumns();
           await loadRecords(searchTerm, currentPage, pageSize);
@@ -3407,16 +3523,19 @@ export default function CrudMasterPage({
     },
     [
       currentPage,
+      effectiveTitle,
       gridColumns,
+      gridDetailsForSave,
       gridId,
       gridSettingsColumns,
       loadRecords,
       pageSize,
       refetchGridColumns,
-      saveGridColumnWidth,
+      saveGridDetails,
       searchTerm,
     ],
   );
+  const pendingColumnWidthsRef = useRef<Record<string, number>>({});
   const handleGridColumnResizeEnd = useCallback(
     (payload: ReusableTableColumnResizeEndPayload<MasterTableRow>) => {
       if (gridId === null || payload.tableWidthPx <= 0) {
@@ -3430,26 +3549,47 @@ export default function CrudMasterPage({
       if (!Number.isFinite(widthPercent) || widthPercent <= 0) {
         return;
       }
-      const basePayload = buildGridColumnBasePayload(gridColumn, gridId);
-      if (!basePayload) {
-        return;
-      }
-      void (async () => {
-        try {
-          await saveGridColumnWidth({
-            body: {
-              ...basePayload,
-              grid_column_width: widthPercent,
-            },
-          });
-          void refetchGridColumns();
-        } catch {
-          // useApi handles the visible error toast.
-        }
-      })();
+      pendingColumnWidthsRef.current = {
+        ...pendingColumnWidthsRef.current,
+        [gridColumn.serialId]: widthPercent,
+      };
     },
-    [gridColumns, gridId, refetchGridColumns, saveGridColumnWidth],
+    [gridColumns, gridId],
   );
+  const saveColumnWidths = useCallback(async () => {
+    const pending = pendingColumnWidthsRef.current;
+    if (gridId === null || Object.keys(pending).length === 0) {
+      return;
+    }
+    const overridesBySerialId: Record<string, Record<string, unknown>> = {};
+    for (const [serialId, widthPercent] of Object.entries(pending)) {
+      overridesBySerialId[serialId] = { grid_column_width: widthPercent };
+    }
+    const savePayload = buildGridDetailsSavePayload(
+      gridDetailsForSave,
+      gridId,
+      effectiveTitle,
+      gridSettingsColumns,
+      overridesBySerialId,
+    );
+    if (!savePayload) {
+      return;
+    }
+    try {
+      await saveGridDetails({ body: savePayload });
+      pendingColumnWidthsRef.current = {};
+      void refetchGridColumns();
+    } catch {
+      // useApi handles the visible error toast.
+    }
+  }, [
+    effectiveTitle,
+    gridDetailsForSave,
+    gridId,
+    gridSettingsColumns,
+    refetchGridColumns,
+    saveGridDetails,
+  ]);
   const handleGridColumnHide = useCallback(
     (payload: { column: ReusableTableColumn<MasterTableRow> }) => {
       if (gridId === null) {
@@ -3459,19 +3599,24 @@ export default function CrudMasterPage({
       if (!gridColumn?.serialId) {
         return;
       }
-      const basePayload = buildGridColumnBasePayload(gridColumn, gridId);
-      if (!basePayload) {
+      const savePayload = buildGridDetailsSavePayload(
+        gridDetailsForSave,
+        gridId,
+        effectiveTitle,
+        gridSettingsColumns,
+        {
+          [gridColumn.serialId]: {
+            grid_column_visibility: false,
+            grid_column_filter: false,
+          },
+        },
+      );
+      if (!savePayload) {
         return;
       }
       void (async () => {
         try {
-          await saveGridColumnWidth({
-            body: {
-              ...basePayload,
-              grid_column_visibility: false,
-              grid_column_filter: false,
-            },
-          });
+          await saveGridDetails({ body: savePayload });
           void refetchGridColumns();
           await loadRecords(searchTerm, currentPage, pageSize);
         } catch {
@@ -3481,12 +3626,15 @@ export default function CrudMasterPage({
     },
     [
       currentPage,
+      effectiveTitle,
       gridColumns,
+      gridDetailsForSave,
       gridId,
+      gridSettingsColumns,
       loadRecords,
       pageSize,
       refetchGridColumns,
-      saveGridColumnWidth,
+      saveGridDetails,
       searchTerm,
     ],
   );
@@ -3512,6 +3660,16 @@ export default function CrudMasterPage({
               onClick={() => openGridSettingsModalFromContextMenu("visibility")}
             >
               column visible setting
+            </button>
+            <button
+              type="button"
+              className={styles.masterSearchSettingsItem}
+              onClick={() => {
+                setGridSettingsContextMenuPosition(null);
+                void saveColumnWidths();
+              }}
+            >
+              save column width
             </button>
           </div>,
           document.body,
