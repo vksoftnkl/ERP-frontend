@@ -23,7 +23,6 @@ export const OPENING_STOCK_GET_ENDPOINT = "/opening-stocks/get";
 export const OPENING_STOCK_DELETE_ENDPOINT = "/opening-stocks/delete";
 export const UI_TABLE_COLUMNS_QUERY = {
   uiTableId: "5",
-  uiTblClmIsActive: "true",
 } as const;
 export const UI_TABLE_COLUMNS_TOAST_OPTIONS = {
   success: false,
