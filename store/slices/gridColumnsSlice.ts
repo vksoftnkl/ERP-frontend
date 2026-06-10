@@ -512,9 +512,9 @@ function getErrorMessage(error: unknown): string {
 
 export const fetchGridColumns = createAsyncThunk<
   { gridId: number; columns: GridColumnConfig[] },
-  { gridId: number; page?: number; limit?: number },
+  { gridId: number },
   { rejectValue: { gridId: number; message: string } }
->("gridColumns/fetch", async ({ gridId, page = 1, limit = 20 }, { rejectWithValue }) => {
+>("gridColumns/fetch", async ({ gridId }, { rejectWithValue }) => {
   try {
     const token = getAuthSession()?.trim();
     const headers: Record<string, string> = {};
@@ -531,8 +531,6 @@ export const fetchGridColumns = createAsyncThunk<
       headers,
       params: {
         gridId,
-        page,
-        limit,
       },
     });
 

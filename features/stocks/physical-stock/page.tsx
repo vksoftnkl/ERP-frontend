@@ -2694,6 +2694,13 @@ export default function PhysicalStockPage() {
             >
               Hide column
             </button>
+            <button
+              type="button"
+              className={styles.tableSettingsContextMenuItem}
+              onClick={openColumnSettings}
+            >
+              Admin settings
+            </button>
           </div>,
           document.body,
         )

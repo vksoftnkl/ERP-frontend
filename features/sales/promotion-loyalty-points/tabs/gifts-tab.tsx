@@ -9,7 +9,6 @@ import type {
   EditableGiftRow,
 } from "../promotion-loyalty-points.local-types";
 import { handleGridKeyboardNav } from "./promotion-loyalty-keyboard-events";
-
 type GiftsTabProps = {
   giftRows: EditableGiftRow[];
   updateGiftRow: (rowKey: string, patch: Partial<EditableGiftRow>) => void;
@@ -20,7 +19,6 @@ type GiftsTabProps = {
   itemOptionsForGift: ERPDynamicSelectOption[];
   getUnitOptionsForGiftRow: (row: EditableGiftRow) => ERPDynamicSelectOption[];
 };
-
 export function GiftsTab({
   giftRows,
   updateGiftRow,
@@ -32,7 +30,6 @@ export function GiftsTab({
   getUnitOptionsForGiftRow,
 }: GiftsTabProps) {
   const hasAutoAddedDefaultRowRef = useRef(false);
-
   useEffect(() => {
     if (giftRows.length === 0) {
       if (!hasAutoAddedDefaultRowRef.current) {
@@ -41,50 +38,38 @@ export function GiftsTab({
       }
       return;
     }
-
     hasAutoAddedDefaultRowRef.current = false;
   }, [addGiftRow, giftRows.length]);
-
   const handleItemChange = (row: EditableGiftRow, value: string) => {
     onItemChange(row, value);
-
     const nextValue = value.trim();
     if (!nextValue || nextValue === row.lsg_item_id.trim()) {
       return;
     }
-
     const isLastRow = giftRows[giftRows.length - 1]?._rowKey === row._rowKey;
     if (isLastRow) {
       addGiftRow();
     }
   };
-
   const isUnitRequiredInvalid = (row: EditableGiftRow) =>
     Boolean(row.lsg_item_id.trim() && !row.lsg_unit_id.trim());
-
   const isQtyRequiredInvalid = (row: EditableGiftRow) => {
     if (!row.lsg_item_id.trim()) {
       return false;
     }
-
     const qtyValue = row.lsg_item_qty.trim();
     if (!qtyValue) {
       return true;
     }
-
     const qtyNumber = Number(qtyValue);
     return !Number.isFinite(qtyNumber) || qtyNumber <= 0;
   };
-
   const getRowIndex = (rowKey: string) =>
     giftRows.findIndex((entry) => entry._rowKey === rowKey);
-
   const getColIndex = (key: "item" | "unit" | "qty" | "redeemPoints" | "repeat" | "active") =>
     ["item", "unit", "qty", "redeemPoints", "repeat", "active"].indexOf(key);
-
   const maxRow = Math.max(giftRows.length - 1, 0);
   const maxCol = 5;
-
   const columns: ReusableTableColumn<EditableGiftRow>[] = [
     {
       key: "actions",
@@ -105,7 +90,6 @@ export function GiftsTab({
       width: "300px",
       render: (row) => {
         const rowIndex = getRowIndex(row._rowKey);
-
         return (
           <div
             data-kb-group="gifts"
@@ -142,7 +126,6 @@ export function GiftsTab({
       render: (row) => {
         const rowIndex = getRowIndex(row._rowKey);
         const unitOptions = getUnitOptionsForGiftRow(row);
-
         return (
           <div
             data-kb-group="gifts"
@@ -179,7 +162,6 @@ export function GiftsTab({
       ),
       render: (row) => {
         const rowIndex = getRowIndex(row._rowKey);
-
         return (
           <div
             data-kb-group="gifts"
@@ -215,7 +197,6 @@ export function GiftsTab({
       width: "80px",
       render: (row) => {
         const rowIndex = getRowIndex(row._rowKey);
-
         return (
           <div
             data-kb-group="gifts"
@@ -247,7 +228,6 @@ export function GiftsTab({
       header: "Repeat",
       render: (row) => {
         const rowIndex = getRowIndex(row._rowKey);
-
         return (
           <div
             data-kb-group="gifts"
@@ -283,7 +263,6 @@ export function GiftsTab({
       header: "Active",
       render: (row) => {
         const rowIndex = getRowIndex(row._rowKey);
-
         return (
           <div
             data-kb-group="gifts"
@@ -315,7 +294,6 @@ export function GiftsTab({
       },
     },
   ];
-
   return (
     <div
       className="grid gap-[18px]"
@@ -334,7 +312,6 @@ export function GiftsTab({
               removeGiftRow(row._rowKey);
               return;
             }
-
             setDeleteDialog({
               kind: "gift",
               id: row.lsg_id,

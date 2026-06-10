@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
 import type { ApiSuccessResponse } from "@/utils/types";
-import styles from "../grid-designer/page.module.scss";
+import styles from "../grid-designer/[id]/page.module.scss";
 import responsiveStyles from "./page.module.scss";
 import type {
   Alignment,

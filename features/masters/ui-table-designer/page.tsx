@@ -6,7 +6,7 @@ import ReusableTable, {
   type ReusableTableRowReorderEdge,
 } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
-import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
+import type { ApiSuccessResponse } from "@/utils/types";
 import styles from "./page.module.scss";
 import type {
   SaveUiTableColumnRequest,
@@ -21,7 +21,6 @@ import type {
 const UI_TABLE_MASTERS_LIST_ENDPOINT = "/ui-table-masters/get";
 const UI_TABLE_MASTERS_CREATE_ENDPOINT = "/ui-table-masters/create";
 const UI_TABLE_MASTERS_DELETE_ENDPOINT = "/ui-table-masters/delete";
-const UI_TABLES_PAGE_SIZE = "100";
 const UI_TABLE_COLUMNS_TABLE_MIN_WIDTH = "1440px";
 const UI_TABLE_DEVICE_TYPE_OPTIONS = [
   "web",
@@ -211,12 +210,12 @@ export default function UiTableDesignerPage() {
   const [isTableDeleting, setIsTableDeleting] = useState(false);
   const [statusText, setStatusText] = useState("Ready.");
   const didInitialLoadRef = useRef(false);
-  const { getAll: listUiTables } = useApi<ApiSuccessResponse<UiTablePayload[], ListMeta>>(
+  const { getAll: listUiTables } = useApi<ApiSuccessResponse<UiTablePayload[]>>(
     UI_TABLE_MASTERS_LIST_ENDPOINT,
     { toast: { success: false, error: true } },
   );
   const { getAll: getUiTableById } = useApi<
-    ApiSuccessResponse<UiTablePayload | UiTablePayload[], ListMeta>
+    ApiSuccessResponse<UiTablePayload | UiTablePayload[]>
   >(
     UI_TABLE_MASTERS_LIST_ENDPOINT,
     { toast: { success: false, error: true } },
@@ -488,27 +487,8 @@ export default function UiTableDesignerPage() {
   ];
 
   const fetchAllUiTables = useCallback(async (): Promise<UiTablePayload[]> => {
-    const allTables: UiTablePayload[] = [];
-    let page = 1;
-
-    while (true) {
-      const response = await listUiTables({
-        page: String(page),
-        limit: UI_TABLES_PAGE_SIZE,
-      });
-
-      const pageItems = Array.isArray(response?.data) ? response.data : [];
-      const totalPages = Math.max(1, Number(response?.meta?.total_pages ?? 1));
-      allTables.push(...pageItems);
-
-      if (page >= totalPages || pageItems.length === 0) {
-        break;
-      }
-
-      page += 1;
-    }
-
-    return allTables;
+    const response = await listUiTables();
+    return Array.isArray(response?.data) ? response.data : [];
   }, [listUiTables]);
 
   const refreshTableOptions = useCallback(async () => {

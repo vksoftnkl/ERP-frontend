@@ -1,9 +1,6 @@
 export type WidgetPlatform = "mobile" | "desktop" | "web";
-
 export type WidgetTypeFilter = WidgetPlatform | "all";
-
 export type VisibilityFilter = "all" | "visible" | "hidden";
-
 export type WidgetMasterPayload = {
   widgetNo: number;
   widgetGroupId: number;
@@ -14,7 +11,6 @@ export type WidgetMasterPayload = {
   widgetType: WidgetPlatform;
   widgetSecondaryText: string | null;
 };
-
 export type WidgetMasterFormValues = {
   widgetGroupId: string;
   widgetGuiName: string;
@@ -24,12 +20,10 @@ export type WidgetMasterFormValues = {
   widgetType: WidgetPlatform;
   widgetVisibility: string;
 };
-
 export type WidgetMasterTableRow = WidgetMasterPayload & {
   __rowId: number;
   serialNo: number;
 };
-
 export type SaveWidgetRequest = {
   widgetGroupId: number;
   widgetGuiName: string | null;

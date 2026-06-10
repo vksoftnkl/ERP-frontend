@@ -14,8 +14,6 @@ export const ITEM_STOCK_BALANCE_BUCKET = "SALEABLE";
 export { UI_TABLE_COLUMNS_LIST_ENDPOINT, UI_TABLE_COLUMNS_CREATE_ENDPOINT } from "@/features/stocks/_shared/constants";
 export const UI_TABLE_COLUMNS_QUERY = {
   uiTableId: "6",
-  page: "1",
-  limit: "100",
   uiTblClmIsActive: "true",
 } as const;
 export { LOOKUP_SEARCH_DEBOUNCE_MS } from "@/features/stocks/_shared/constants";

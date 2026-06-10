@@ -27,7 +27,7 @@ const ALIGNMENT_OPTIONS: Alignment[] = ["Left", "Center", "Right"];
 const DEVICE_TYPE_OPTIONS: GridDeviceType[] = ["desktop", "web", "mobile"];
 const DEFAULT_DEVICE_TYPE: GridDeviceType = "desktop";
 const DATA_TYPE_SUGGESTIONS = ["Text", "NumericTS", "Date", "Number", "Boolean"] as const;
-const GRID_DETAILS_PAGE_SIZE = "100";
+
 const GRID_COLUMNS_TABLE_MIN_WIDTH = "2050px";
 const HEX_COLOR_CODE_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 const INITIAL_FORM: GridDesignerForm = {
@@ -184,7 +184,7 @@ function normalizeGridDeviceType(value: string | null | undefined): GridDeviceTy
   if (value === "web" || value === "mobile" || value === "desktop") return value;
   return DEFAULT_DEVICE_TYPE;
 }
-export default function GridDesignerPage() {
+export default function GridDesignerPage({ initialGridId }: { initialGridId?: string }) {
   const [form, setForm] = useState<GridDesignerForm>(INITIAL_FORM);
   const [columns, setColumns] = useState<GridColumnRow[]>([]);
   const [gridOptions, setGridOptions] = useState<GridOption[]>([]);
@@ -501,28 +501,18 @@ export default function GridDesignerPage() {
     ],
     [updateColumn],
   );
-  const fetchAllGridDetails = useCallback(async (): Promise<GridDetailPayload[]> => {
-    const allGridDetails: GridDetailPayload[] = [];
-    let page = 1;
-    while (true) {
-      const response = await listGridDetails({
-        page: String(page),
-        limit: GRID_DETAILS_PAGE_SIZE,
-      });
-      const pageItems = Array.isArray(response?.data) ? response.data : [];
-      const totalPages = Math.max(1, Number(response?.meta?.total_pages ?? 1));
-      allGridDetails.push(...pageItems);
-      if (page >= totalPages || pageItems.length === 0) {
-        break;
-      }
-      page += 1;
-    }
-    return allGridDetails;
+  const fetchAllGridDetails = useCallback(async (gridId?: string): Promise<GridDetailPayload[]> => {
+    const params: Record<string, string> = gridId ? { gridId } : {};
+    const response = await listGridDetails(params);
+    const data = response?.data;
+    if (Array.isArray(data)) return data;
+    if (data) return [data as unknown as GridDetailPayload];
+    return [];
   }, [listGridDetails]);
-  const refreshGridOptions = useCallback(async () => {
+  const refreshGridOptions = useCallback(async (gridId?: string) => {
     setIsGridListLoading(true);
     try {
-      const gridDetails = await fetchAllGridDetails();
+      const gridDetails = await fetchAllGridDetails(gridId);
       const nextOptions = gridDetails
         .map((grid) => ({
           gridId: grid.grid_id,
@@ -747,8 +737,8 @@ export default function GridDesignerPage() {
     didInitialLoadRef.current = true;
     const loadInitialState = async () => {
       try {
-        const savedGridOptions = await refreshGridOptions();
-        const preferredGridId = savedGridOptions[0]?.gridId ?? "";
+        const savedGridOptions = await refreshGridOptions(initialGridId);
+        const preferredGridId = initialGridId ?? savedGridOptions[0]?.gridId ?? "";
         if (preferredGridId) {
           await loadGridById(preferredGridId);
           return;

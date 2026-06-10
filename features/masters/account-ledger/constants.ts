@@ -29,9 +29,6 @@ export const GRID_DETAILS_QUERY = {
   limit: "20",
 } as const;
 
-export const GRID_COLUMNS_PAGE = 1;
-export const GRID_COLUMNS_LIMIT = 100;
-
 export const LOOKUP_QUERY_COMPANIES = {
   module: "companies",
   limit: "20",

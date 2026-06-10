@@ -903,22 +903,6 @@ position: relative;
   border-radius: var(--erp-radius);
   background: transparent;
   color: #6b7fa3;
-  cursor: pointer;
-  &::after {
-    content: "";
-    width: 0;
-    height: 0;
-    border-left: 0.22rem solid transparent;
-    border-right: 0.22rem solid transparent;
-    border-top: 0.28rem solid currentColor;
-    flex: 0 0 auto;
-  }
-  &:hover,
-  &:focus-visible {
-    background: #edf3fb;
-    color: var(--primary, #3b7dd8);
-    outline: 0;
-  }
 }
 .masterSearchSettingsTooltip {
   position: absolute;

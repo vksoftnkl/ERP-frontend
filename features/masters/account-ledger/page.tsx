@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -44,8 +45,6 @@ import {
   GRID_COLUMNS_CREATE_ENDPOINT,
   STATE_CODE_LOOKUP_ENDPOINT,
   GRID_DETAILS_QUERY,
-  GRID_COLUMNS_PAGE,
-  GRID_COLUMNS_LIMIT,
   LOOKUP_QUERY_COMPANIES,
   LOOKUP_QUERY_BRANCHES,
   LOOKUP_QUERY_ACCOUNT_GROUPS,
@@ -670,6 +669,7 @@ export default function AccountLedgerMasterPage() {
     recordPk: string;
     screenName: string;
   } | null>(null);
+  const router = useRouter();
   // State for grid details
   const [accountLedgerGridId, setAccountLedgerGridId] = useState<number | null>(null);
   const [accountLedgerGridName, setAccountLedgerGridName] = useState<string | null>(null);
@@ -691,7 +691,6 @@ export default function AccountLedgerMasterPage() {
   const [activeSectionKey, setActiveSectionKey] = useState("general");
   // State for delete
   const [pendingDeleteRow, setPendingDeleteRow] = useState<LedgerTableRow | null>(null);
-  const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
   const [gridSettingsContextMenuPosition, setGridSettingsContextMenuPosition] =
     useState<ContextMenuPosition | null>(null);
   const [gridSettingsMode, setGridSettingsMode] = useState<"filter" | "visibility" | null>(null);
@@ -700,7 +699,6 @@ export default function AccountLedgerMasterPage() {
   const pendingColumnWidthsRef = useRef<Record<string, Record<string, unknown>>>({});
   // Refs
   const searchInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-  const searchSettingsRef = useRef<HTMLDivElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const sectionTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const gstLookupCacheRef = useRef<Record<string, Partial<LedgerFormValues>>>({});
@@ -713,7 +711,7 @@ export default function AccountLedgerMasterPage() {
     isFetching: gridColumnsLoading,
     refetch: refetchGridColumns,
   } = useGetGridColumnsQuery(
-    { gridId: selectedGridId, page: GRID_COLUMNS_PAGE, limit: GRID_COLUMNS_LIMIT },
+    { gridId: selectedGridId },
     { skip: accountLedgerGridId === null },
   );
   const gridColumns = gridColumnsData ?? [];
@@ -1641,7 +1639,6 @@ export default function AccountLedgerMasterPage() {
       }
       setGridSettingsSelections(nextSelections);
       setGridSettingsMode(mode);
-      setSearchSettingsOpen(false);
     },
     [gridSettingsColumns],
   );
@@ -1659,7 +1656,6 @@ export default function AccountLedgerMasterPage() {
       }
       event.preventDefault();
       event.stopPropagation();
-      setSearchSettingsOpen(false);
       setGridSettingsContextMenuPosition({
         left: clampContextMenuPosition(
           event.clientX,
@@ -1690,30 +1686,6 @@ export default function AccountLedgerMasterPage() {
     },
     [],
   );
-  useEffect(() => {
-    if (!searchSettingsOpen || typeof document === "undefined") {
-      return;
-    }
-    const handlePointerDown = (event: MouseEvent) => {
-      if (
-        searchSettingsRef.current &&
-        !searchSettingsRef.current.contains(event.target as Node)
-      ) {
-        setSearchSettingsOpen(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSearchSettingsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [searchSettingsOpen]);
   useEffect(() => {
     if (gridSettingsContextMenuPosition === null || typeof document === "undefined") {
       return;
@@ -1842,6 +1814,18 @@ export default function AccountLedgerMasterPage() {
             >
               save column width
             </button>
+            <button
+              type="button"
+              className={styles.masterSearchSettingsItem}
+              onClick={() => {
+                setGridSettingsContextMenuPosition(null);
+                if (accountLedgerGridId !== null) {
+                  router.push(`/masters/grid-designer/${accountLedgerGridId}`);
+                }
+              }}
+            >
+              Admin settings
+            </button>
           </div>,
           document.body,
         )
@@ -1851,39 +1835,10 @@ export default function AccountLedgerMasterPage() {
       <div className={styles.masterTitleWrap}>
         <h1 className={styles.masterTitle}>{listHeading}</h1>
       </div>
-      <div className={styles.masterSearchWrap} ref={searchSettingsRef}>
-        <button
-          type="button"
-          className={styles.masterSearchIconButton}
-          onClick={() => setSearchSettingsOpen((open) => !open)}
-          aria-label="Search settings"
-          aria-expanded={searchSettingsOpen}
-          aria-controls="account-ledger-search-settings-tooltip"
-        >
-          <FiSearch className={styles.masterSearchIcon} aria-hidden="true" />
-        </button>
-        {searchSettingsOpen ? (
-          <div
-            id="account-ledger-search-settings-tooltip"
-            className={styles.masterSearchSettingsTooltip}
-            role="tooltip"
-          >
-            <button
-              type="button"
-              className={styles.masterSearchSettingsItem}
-              onClick={() => openGridSettingsModal("filter")}
-            >
-              grid filter setting
-            </button>
-            <button
-              type="button"
-              className={styles.masterSearchSettingsItem}
-              onClick={() => openGridSettingsModal("visibility")}
-            >
-              column visible setting
-            </button>
-          </div>
-        ) : null}
+      <div className={styles.masterSearchWrap}>
+        <span className={styles.masterSearchIconButton} aria-hidden="true">
+          <FiSearch className={styles.masterSearchIcon} />
+        </span>
         <input
           type="text"
           className={styles.masterSearchInput}

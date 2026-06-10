@@ -74,8 +74,6 @@ export function useColumnConfig<TColumn extends { key: string; header: string; w
     try {
       const payload = await listUiTableColumns({
         uiTblClmTableId: tableId,
-        page: "1",
-        limit: "100",
       });
       const configuredColumns = extractRows<UiTableColumnPayload>(payload, [
         "data", "rows", "items", "results", "columns", "uiTableColumns",

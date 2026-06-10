@@ -160,6 +160,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         label:"GSP Company Service",href:"/master/gsp-company-service"
       },
       {
+        label:"Grid Master",href:"/master/grid-master"
+      },
+      {
         label:"Grid Designer",href:"/master/grid-designer"
       },
       {
@@ -167,6 +170,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       },
       {
         label:"Dropdown Designer",href:"/master/dropdown-designer"
+      },
+      {
+        label:"UI Table Master",href:"/master/ui-table-master"
       },
       {
         label:"UI Table Designer",href:"/master/ui-table-designer"

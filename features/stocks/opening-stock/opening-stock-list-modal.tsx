@@ -47,8 +47,6 @@ type OpeningStockListModalProps = {
 };
 const PAGE_SIZE_OPTIONS = [10, 20, 25, 50, 100] as const;
 const OPENING_STOCK_LIST_GRID_ID = 16;
-const GRID_COLUMNS_PAGE = 1;
-const GRID_COLUMNS_LIMIT = 100;
 const OPENING_STOCK_LIST_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   {
     label: "Prev Row",
@@ -245,11 +243,7 @@ export function OpeningStockListModal({
   onLoadSelected,
 }: OpeningStockListModalProps): ReactNode {
   const { data: gridColumnsData } = useGetGridColumnsQuery(
-    {
-      gridId: OPENING_STOCK_LIST_GRID_ID,
-      page: GRID_COLUMNS_PAGE,
-      limit: GRID_COLUMNS_LIMIT,
-    },
+    { gridId: OPENING_STOCK_LIST_GRID_ID },
     {
       skip: !isOpen,
     },

@@ -1,7 +1,7 @@
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 
 // UI Table Column endpoints — shared by opening-stock and physical-stock
-export const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-masters/list";
+export const UI_TABLE_COLUMNS_LIST_ENDPOINT = "/ui-table-masters/get";
 export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-masters/create";
 
 // Batch/date tracking fields — same across both stock modules

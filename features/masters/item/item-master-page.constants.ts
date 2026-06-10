@@ -46,7 +46,7 @@ export const ITEM_PRICE_QUERY_LIMIT = "100";
 export const ITEM_UNIT_CONVERSION_QUERY_LIMIT = "100";
 export const ITEM_REORDER_QUERY_LIMIT = "100";
 export const ITEM_EAN_CODE_QUERY_LIMIT = "100";
-export const UI_TABLE_COLUMNS_QUERY_LIMIT = "100";
+
 export const ITEM_WIDGET_QUERY_LIMIT = "100";
 export const ITEM_GROUP_SEARCH_DEBOUNCE_MS = 250;
 export const ITEM_REORDER_TABLE_UI_ID = "2";
@@ -92,20 +92,14 @@ export const GODOWN_LOOKUP_QUERY = {
   limit: "100",
 } as const;
 export const UI_TABLE_COLUMNS_QUERY = {
-  page: "1",
-  limit: UI_TABLE_COLUMNS_QUERY_LIMIT,
   uiTableId: ITEM_PRICE_TABLE_UI_ID,
   uiTblClmIsActive: "true",
 } as const;
 export const UI_REORDER_TABLE_COLUMNS_QUERY = {
-  page: "1",
-  limit: UI_TABLE_COLUMNS_QUERY_LIMIT,
   uiTableId: ITEM_REORDER_TABLE_UI_ID,
   uiTblClmIsActive: "true",
 } as const;
 export const UI_EAN_TABLE_COLUMNS_QUERY = {
-  page: "1",
-  limit: UI_TABLE_COLUMNS_QUERY_LIMIT,
   uiTableId: ITEM_EAN_TABLE_UI_ID,
   uiTblClmIsActive: "true",
 } as const;

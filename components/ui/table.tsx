@@ -14,6 +14,8 @@ import { createPortal } from "react-dom";
 import {
   FiChevronLeft,
   FiChevronRight,
+  FiChevronsLeft,
+  FiChevronsRight,
   FiCopy,
   FiEdit,
   FiEye,
@@ -1895,6 +1897,23 @@ export function ReusableTable<T extends Record<string, unknown>>({
             <button
               type="button"
               className={styles.paginationButton}
+              onClick={() => setPage(1)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setPage(1);
+                }
+              }}
+              disabled={effectiveCurrentPage <= 1}
+              aria-label="Go to first page"
+              title="First page"
+            >
+              <FiChevronsLeft className={styles.paginationArrowIcon} aria-hidden="true" />
+              <span className={styles.srOnly}>First</span>
+            </button>
+            <button
+              type="button"
+              className={styles.paginationButton}
               onClick={() => setPage(effectiveCurrentPage - 1)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -1951,6 +1970,23 @@ export function ReusableTable<T extends Record<string, unknown>>({
             >
               <FiChevronRight className={styles.paginationArrowIcon} aria-hidden="true" />
               <span className={styles.srOnly}>Next</span>
+            </button>
+            <button
+              type="button"
+              className={styles.paginationButton}
+              onClick={() => setPage(totalPages)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setPage(totalPages);
+                }
+              }}
+              disabled={effectiveCurrentPage >= totalPages}
+              aria-label="Go to last page"
+              title="Last page"
+            >
+              <FiChevronsRight className={styles.paginationArrowIcon} aria-hidden="true" />
+              <span className={styles.srOnly}>Last</span>
             </button>
           </div>
         </div>

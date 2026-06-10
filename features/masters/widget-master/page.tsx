@@ -1,5 +1,4 @@
 "use client";
-
 import { useCallback, useMemo, useState } from "react";
 import type { ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
 import CrudMasterPage, { type CrudMasterTableRow } from "@/components/master/crud-master-page";
@@ -15,14 +14,12 @@ import {
 import baseStyles from "@/app/master/state-master/page.module.scss";
 import styles from "./page.module.scss";
 import type { VisibilityFilter, WidgetPlatform, WidgetTypeFilter } from "./type";
-
 const API_ENDPOINTS = {
   list: "/widget-masters/list",
   getById: "/widget-masters/get",
   create: "/widget-masters/create",
   delete: "/widget-masters/delete",
 } as const;
-
 const LOOKUP_KEYS = {
   id: ["widgetNo", "widget_no", "id", "_id"],
   code: ["widgetGuiName", "widget_gui_name", "guiName", "gui_name"],
@@ -34,7 +31,6 @@ const LOOKUP_KEYS = {
   description: ["widgetSecondaryText", "widget_secondary_text", "secondaryText", "secondary_text"],
   array: ["data", "items", "results", "rows", "list", "widgets"],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "widgetNo",
   name: "widgetName",
@@ -43,7 +39,6 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "widgetSecondaryText",
   sort: "widgetPosition",
 } as const;
-
 const WIDGET_GROUP_ID_KEYS = ["widgetGroupId", "widget_group_id", "groupId", "group_id"] as const;
 const WIDGET_GUI_NAME_KEYS = ["widgetGuiName", "widget_gui_name", "guiName", "gui_name"] as const;
 const WIDGET_TYPE_KEYS = ["widgetType", "widget_type", "type"] as const;
@@ -55,24 +50,20 @@ const WIDGET_SECONDARY_TEXT_KEYS = [
   "secondary_text",
 ] as const;
 const WIDGET_NUMBER_KEYS = ["widgetNo", "widget_no", "id", "_id"] as const;
-
 const WIDGET_PLATFORM_OPTIONS: Array<{ label: string; value: WidgetPlatform }> = [
   { label: "Desktop", value: "desktop" },
   { label: "Mobile", value: "mobile" },
   { label: "Web", value: "web" },
 ];
-
 const FILTER_PLATFORM_OPTIONS: Array<{ label: string; value: WidgetTypeFilter }> = [
   { label: "All Platforms", value: "all" },
   ...WIDGET_PLATFORM_OPTIONS,
 ];
-
 const FILTER_VISIBILITY_OPTIONS: Array<{ label: string; value: VisibilityFilter }> = [
   { label: "All States", value: "all" },
   { label: "Visible Only", value: "visible" },
   { label: "Hidden Only", value: "hidden" },
 ];
-
 function toWidgetPlatform(value: unknown, fallback: WidgetPlatform = "desktop"): WidgetPlatform {
   const normalized = toDisplayValue(value).toLowerCase();
   if (normalized === "mobile" || normalized === "desktop" || normalized === "web") {
@@ -80,16 +71,13 @@ function toWidgetPlatform(value: unknown, fallback: WidgetPlatform = "desktop"):
   }
   return fallback;
 }
-
 function toBoolean(value: unknown, fallback = false): boolean {
   if (typeof value === "boolean") {
     return value;
   }
-
   if (typeof value === "number") {
     return value > 0;
   }
-
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
     if (["true", "1", "yes", "y", "on", "visible"].includes(normalized)) {
@@ -99,61 +87,47 @@ function toBoolean(value: unknown, fallback = false): boolean {
       return false;
     }
   }
-
   return fallback;
 }
-
 function getSourceValue(row: CrudMasterTableRow, keys: readonly string[]): unknown {
   if (!row.__source) {
     return undefined;
   }
-
   return getFirstDefinedValue(row.__source, keys);
 }
-
 function getWidgetNumber(row: CrudMasterTableRow): number {
   return toNonNegativeInteger(toDisplayValue(getSourceValue(row, WIDGET_NUMBER_KEYS) ?? row.masterId), 0);
 }
-
 function getWidgetGroupId(row: CrudMasterTableRow): number {
   return toNonNegativeInteger(
     toDisplayValue(getSourceValue(row, WIDGET_GROUP_ID_KEYS)),
     0,
   );
 }
-
 function getWidgetGuiName(row: CrudMasterTableRow): string {
   return toDisplayValue(getSourceValue(row, WIDGET_GUI_NAME_KEYS)) || row.masterCode;
 }
-
 function getWidgetType(row: CrudMasterTableRow): WidgetPlatform {
   return toWidgetPlatform(getSourceValue(row, WIDGET_TYPE_KEYS) ?? row.masterAlias);
 }
-
 function getWidgetVisibility(row: CrudMasterTableRow): boolean {
   return toBoolean(getSourceValue(row, WIDGET_VISIBILITY_KEYS) ?? row.masterActive, true);
 }
-
 function getWidgetSecondaryText(row: CrudMasterTableRow): string {
   return toDisplayValue(getSourceValue(row, WIDGET_SECONDARY_TEXT_KEYS));
 }
-
 function getPlatformClassName(widgetType: WidgetPlatform): string {
   if (widgetType === "mobile") {
     return styles.platformMobile;
   }
-
   if (widgetType === "web") {
     return styles.platformWeb;
   }
-
   return styles.platformDesktop;
 }
-
 function getVisibilityClassName(widgetVisibility: boolean): string {
   return widgetVisibility ? styles.visibilityVisible : styles.visibilityHidden;
 }
-
 function buildCreateDefaults(
   widgetTypeFilter: WidgetTypeFilter,
   visibilityFilter: VisibilityFilter,
@@ -171,11 +145,9 @@ function buildCreateDefaults(
         : "true",
   };
 }
-
 export default function WidgetMasterPage() {
   const [widgetTypeFilter, setWidgetTypeFilter] = useState<WidgetTypeFilter>("all");
   const [visibilityFilter, setVisibilityFilter] = useState<VisibilityFilter>("all");
-
   const widgetFormFields = useMemo<ERPDynamicModalField[]>(
     () => [
       {
@@ -237,12 +209,10 @@ export default function WidgetMasterPage() {
     ],
     [],
   );
-
   const createInitialValues = useMemo(
     () => buildCreateDefaults(widgetTypeFilter, visibilityFilter),
     [visibilityFilter, widgetTypeFilter],
   );
-
   const filterSummary = useMemo(() => {
     const platformLabel =
       FILTER_PLATFORM_OPTIONS.find((option) => option.value === widgetTypeFilter)?.label ??
@@ -250,10 +220,8 @@ export default function WidgetMasterPage() {
     const visibilityLabel =
       FILTER_VISIBILITY_OPTIONS.find((option) => option.value === visibilityFilter)?.label ??
       "All States";
-
     return `${platformLabel} • ${visibilityLabel}`;
   }, [visibilityFilter, widgetTypeFilter]);
-
   const toolbarContent = useMemo(
     () => (
       <div className={styles.filterToolbar}>
@@ -272,7 +240,6 @@ export default function WidgetMasterPage() {
               ))}
             </select>
           </label>
-
           <label className={styles.filterField}>
             <span className={styles.filterLabel}>Visibility</span>
             <select
@@ -288,7 +255,6 @@ export default function WidgetMasterPage() {
             </select>
           </label>
         </div>
-
         <div className={styles.summaryPane}>
           <span className={styles.summaryBadge}>{filterSummary}</span>
           <span className={styles.summaryMeta}>
@@ -299,7 +265,6 @@ export default function WidgetMasterPage() {
     ),
     [filterSummary, visibilityFilter, widgetTypeFilter],
   );
-
   const customTableColumns = useMemo<ReusableTableColumn<CrudMasterTableRow>[]>(
     () => [
       {
@@ -397,7 +362,6 @@ export default function WidgetMasterPage() {
     ],
     [],
   );
-
   const buildListQuery = useCallback(
     ({
       searchTerm,
@@ -418,7 +382,6 @@ export default function WidgetMasterPage() {
     }),
     [visibilityFilter, widgetTypeFilter],
   );
-
   const buildGetByIdRequest = useCallback(
     ({
       recordId,
@@ -434,7 +397,6 @@ export default function WidgetMasterPage() {
           : widgetTypeFilter !== "all"
             ? widgetTypeFilter
             : null;
-
       return {
         query: {
           widgetNo: String(recordId),
@@ -444,7 +406,6 @@ export default function WidgetMasterPage() {
     },
     [widgetTypeFilter],
   );
-
   return (
     <CrudMasterPage
       title="Widget Master"
@@ -468,7 +429,6 @@ export default function WidgetMasterPage() {
       buildGetByIdRequest={buildGetByIdRequest}
       mapFormValues={({ source }) => {
         const rowSource = source ?? {};
-
         return {
           widgetGroupId:
             toDisplayValue(getFirstDefinedValue(rowSource, WIDGET_GROUP_ID_KEYS)) || "",

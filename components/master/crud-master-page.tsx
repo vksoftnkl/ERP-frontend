@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 import {
   type CSSProperties,
   type ReactNode,
@@ -81,8 +82,9 @@ const DEFAULT_PAGE_SIZE = 20;
 const GRID_DETAILS_ENDPOINT = "/grid-details/list";
 const GRID_DETAIL_GET_ENDPOINT = "/grid-details/get";
 const GRID_COLUMNS_CREATE_ENDPOINT = "/grid-details/create";
-const GRID_COLUMNS_PAGE = 1;
-const GRID_COLUMNS_LIMIT = 100;
+const GRID_COLUMN_WIDTH_ENDPOINT = "/grid-details/column-width";
+const GRID_FILTER_SETTINGS_ENDPOINT = "/grid-details/filter-settings";
+const GRID_VISIBILITY_SETTINGS_ENDPOINT = "/grid-details/visibility-settings";
 const MASTER_SERIAL_COLUMN_WIDTH = "40px";
 const MASTER_ACTIONS_COLUMN_WIDTH = "72px";
 const RESPONSE_TABLE_DEFAULT_COLUMN_WIDTH = "180px";
@@ -2228,6 +2230,18 @@ export default function CrudMasterPage({
       },
     },
   );
+  const { run: saveColumnWidthApi } = useApi<unknown, Record<string, unknown>>(
+    GRID_COLUMN_WIDTH_ENDPOINT,
+    { method: "PUT", toast: { success: false } },
+  );
+  const { run: saveFilterSettingsApi } = useApi<unknown, Record<string, unknown>>(
+    GRID_FILTER_SETTINGS_ENDPOINT,
+    { method: "PUT", toast: { success: false } },
+  );
+  const { run: saveVisibilitySettingsApi } = useApi<unknown, Record<string, unknown>>(
+    GRID_VISIBILITY_SETTINGS_ENDPOINT,
+    { method: "PUT", toast: { success: false } },
+  );
   const {
     list: {
       data,
@@ -2269,6 +2283,7 @@ export default function CrudMasterPage({
     defaultPage: DEFAULT_PAGE,
     defaultPageSize: DEFAULT_PAGE_SIZE,
   });
+  const router = useRouter();
   const [gridId, setGridId] = useState<number | null>(null);
   const [gridDisplayName, setGridDisplayName] = useState<string | null>(null);
   const [gridDetailsForSave, setGridDetailsForSave] = useState<ResolvedGridDetails | null>(null);
@@ -2281,8 +2296,6 @@ export default function CrudMasterPage({
   } = useGetGridColumnsQuery(
     {
       gridId: selectedGridId,
-      page: GRID_COLUMNS_PAGE,
-      limit: GRID_COLUMNS_LIMIT,
     },
     {
       skip: gridId === null,
@@ -2554,14 +2567,12 @@ export default function CrudMasterPage({
   );
   const [pendingDeleteRow, setPendingDeleteRow] =
     useState<MasterTableRow | null>(null);
-  const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
   const [gridSettingsContextMenuPosition, setGridSettingsContextMenuPosition] =
     useState<ContextMenuPosition | null>(null);
   const [gridSettingsMode, setGridSettingsMode] = useState<"filter" | "visibility" | null>(null);
   const [gridSettingsSelections, setGridSettingsSelections] = useState<Record<string, boolean>>({});
   const [gridSettingsSaving, setGridSettingsSaving] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const searchSettingsRef = useRef<HTMLDivElement | null>(null);
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
   const previousListStateResetKeyRef = useRef<string | number | null | undefined>(undefined);
   const renderedRowsRef = useRef<MasterTableRow[]>(renderedRows);
@@ -2595,7 +2606,6 @@ export default function CrudMasterPage({
     }
     setGridSettingsSelections(nextSelections);
     setGridSettingsMode(mode);
-    setSearchSettingsOpen(false);
   }, [gridSettingsColumns]);
   const openGridSettingsModalFromContextMenu = useCallback(
     (mode: "filter" | "visibility") => {
@@ -2611,7 +2621,6 @@ export default function CrudMasterPage({
       }
       event.preventDefault();
       event.stopPropagation();
-      setSearchSettingsOpen(false);
       setGridSettingsContextMenuPosition({
         left: clampContextMenuPosition(
           event.clientX,
@@ -2642,30 +2651,6 @@ export default function CrudMasterPage({
     },
     [],
   );
-  useEffect(() => {
-    if (!searchSettingsOpen || typeof document === "undefined") {
-      return;
-    }
-    const handlePointerDown = (event: MouseEvent) => {
-      if (
-        searchSettingsRef.current &&
-        !searchSettingsRef.current.contains(event.target as Node)
-      ) {
-        setSearchSettingsOpen(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSearchSettingsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [searchSettingsOpen]);
   useEffect(() => {
     if (gridSettingsContextMenuPosition === null || typeof document === "undefined") {
       return;
@@ -2706,32 +2691,24 @@ export default function CrudMasterPage({
     if (gridId === null || gridSettingsMode === null || gridSettingsColumns.length === 0) {
       return;
     }
-
     setGridSettingsSaving(true);
     try {
-      const overridesBySerialId: Record<string, Record<string, unknown>> = {};
-      for (const column of gridSettingsColumns) {
-        if (!column.serialId) {
-          continue;
-        }
-
-        overridesBySerialId[column.serialId] = {
-          [gridSettingsMode === "visibility"
-            ? "grid_column_visibility"
-            : "grid_column_filter"]: gridSettingsSelections[column.serialId] === true,
-        };
-      }
-      const savePayload = buildGridDetailsSavePayload(
-        gridDetailsForSave,
-        gridId,
-        effectiveTitle,
-        gridSettingsColumns,
-        overridesBySerialId,
-      );
-      if (!savePayload) {
+      const columns = gridSettingsColumns
+        .filter((column) => Boolean(column.serialId))
+        .map((column) => ({
+          grid_serialid: column.serialId!,
+          ...(gridSettingsMode === "visibility"
+            ? { grid_column_visibility: gridSettingsSelections[column.serialId!] === true }
+            : { grid_column_filter: gridSettingsSelections[column.serialId!] === true }),
+        }));
+      if (columns.length === 0) {
         return;
       }
-      await saveGridDetails({ body: savePayload });
+      if (gridSettingsMode === "visibility") {
+        await saveVisibilitySettingsApi({ body: { columns } });
+      } else {
+        await saveFilterSettingsApi({ body: { columns } });
+      }
       void refetchGridColumns();
       await loadRecords(searchTerm, currentPage, pageSize);
       setGridSettingsMode(null);
@@ -2742,8 +2719,6 @@ export default function CrudMasterPage({
     }
   }, [
     currentPage,
-    effectiveTitle,
-    gridDetailsForSave,
     gridSettingsColumns,
     gridSettingsMode,
     gridSettingsSelections,
@@ -2751,7 +2726,8 @@ export default function CrudMasterPage({
     loadRecords,
     pageSize,
     refetchGridColumns,
-    saveGridDetails,
+    saveFilterSettingsApi,
+    saveVisibilitySettingsApi,
     searchTerm,
   ]);
   useEffect(() => {
@@ -3561,34 +3537,21 @@ export default function CrudMasterPage({
     if (gridId === null || Object.keys(pending).length === 0) {
       return;
     }
-    const overridesBySerialId: Record<string, Record<string, unknown>> = {};
-    for (const [serialId, widthPercent] of Object.entries(pending)) {
-      overridesBySerialId[serialId] = { grid_column_width: widthPercent };
-    }
-    const savePayload = buildGridDetailsSavePayload(
-      gridDetailsForSave,
-      gridId,
-      effectiveTitle,
-      gridSettingsColumns,
-      overridesBySerialId,
-    );
-    if (!savePayload) {
-      return;
-    }
+    const columns = Object.entries(pending).map(([serialId, widthPercent]) => ({
+      grid_serialid: serialId,
+      grid_column_width: widthPercent,
+    }));
     try {
-      await saveGridDetails({ body: savePayload });
+      await saveColumnWidthApi({ body: { columns } });
       pendingColumnWidthsRef.current = {};
       void refetchGridColumns();
     } catch {
       // useApi handles the visible error toast.
     }
   }, [
-    effectiveTitle,
-    gridDetailsForSave,
     gridId,
-    gridSettingsColumns,
     refetchGridColumns,
-    saveGridDetails,
+    saveColumnWidthApi,
   ]);
   const handleGridColumnHide = useCallback(
     (payload: { column: ReusableTableColumn<MasterTableRow> }) => {
@@ -3599,24 +3562,12 @@ export default function CrudMasterPage({
       if (!gridColumn?.serialId) {
         return;
       }
-      const savePayload = buildGridDetailsSavePayload(
-        gridDetailsForSave,
-        gridId,
-        effectiveTitle,
-        gridSettingsColumns,
-        {
-          [gridColumn.serialId]: {
-            grid_column_visibility: false,
-            grid_column_filter: false,
-          },
-        },
-      );
-      if (!savePayload) {
-        return;
-      }
+      const serialId = gridColumn.serialId;
       void (async () => {
         try {
-          await saveGridDetails({ body: savePayload });
+          await saveVisibilitySettingsApi({
+            body: { columns: [{ grid_serialid: serialId, grid_column_visibility: false }] },
+          });
           void refetchGridColumns();
           await loadRecords(searchTerm, currentPage, pageSize);
         } catch {
@@ -3626,15 +3577,12 @@ export default function CrudMasterPage({
     },
     [
       currentPage,
-      effectiveTitle,
       gridColumns,
-      gridDetailsForSave,
       gridId,
-      gridSettingsColumns,
       loadRecords,
       pageSize,
       refetchGridColumns,
-      saveGridDetails,
+      saveVisibilitySettingsApi,
       searchTerm,
     ],
   );
@@ -3670,6 +3618,18 @@ export default function CrudMasterPage({
               }}
             >
               save column width
+            </button>
+            <button
+              type="button"
+              className={styles.masterSearchSettingsItem}
+              onClick={() => {
+                setGridSettingsContextMenuPosition(null);
+                if (gridId !== null) {
+                  router.push(`/master/grid-designer/${gridId}`);
+                }
+              }}
+            >
+              Admin settings
             </button>
           </div>,
           document.body,
@@ -3853,39 +3813,10 @@ export default function CrudMasterPage({
                         <label className={styles.filterLabel} htmlFor="master-search-input">
                           Search
                         </label>
-                        <div className={styles.filterSearchWrap} ref={searchSettingsRef}>
-                          <button
-                            type="button"
-                            className={styles.masterSearchIconButton}
-                            onClick={() => setSearchSettingsOpen((open) => !open)}
-                            aria-label="Search settings"
-                            aria-expanded={searchSettingsOpen}
-                            aria-controls="master-search-settings-tooltip"
-                          >
-                            <FiSearch className={styles.masterSearchIcon} aria-hidden="true" />
-                          </button>
-                          {searchSettingsOpen ? (
-                            <div
-                              id="master-search-settings-tooltip"
-                              className={styles.masterSearchSettingsTooltip}
-                              role="tooltip"
-                            >
-                              <button
-                                type="button"
-                                className={styles.masterSearchSettingsItem}
-                                onClick={() => openGridSettingsModal("filter")}
-                              >
-                                grid filter setting
-                              </button>
-                              <button
-                                type="button"
-                                className={styles.masterSearchSettingsItem}
-                                onClick={() => openGridSettingsModal("visibility")}
-                              >
-                                column visible setting
-                              </button>
-                            </div>
-                          ) : null}
+                        <div className={styles.filterSearchWrap}>
+                          <span className={styles.masterSearchIconButton} aria-hidden="true">
+                            <FiSearch className={styles.masterSearchIcon} />
+                          </span>
                           <input
                             ref={searchInputRef}
                             id="master-search-input"
