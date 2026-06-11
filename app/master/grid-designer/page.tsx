@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import RouteLoader from "@/components/feedback/route-loader";
 
 const LazyRoutePage = dynamic(() => import("@/features/masters/grid-designer/[id]/page"), {
@@ -9,5 +10,6 @@ const LazyRoutePage = dynamic(() => import("@/features/masters/grid-designer/[id
 });
 
 export default function RoutePage() {
-  return <LazyRoutePage />;
+  const searchParams = useSearchParams();
+  return <LazyRoutePage startNew={searchParams.get("mode") === "new"} />;
 }

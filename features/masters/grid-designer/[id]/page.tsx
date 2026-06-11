@@ -22,6 +22,7 @@ const GRID_DETAILS_LIST_ENDPOINT = "/grid-details/get";
 const GRID_DETAILS_GET_ENDPOINT = "/grid-details/get";
 const GRID_DETAILS_CREATE_ENDPOINT = "/grid-details/create";
 const GRID_DETAILS_DELETE_ENDPOINT = "/grid-details/delete";
+const GRID_DETAILS_COLUMN_DELETE_ENDPOINT = "/grid-details/column-delete";
 const SORT_ORDER_OPTIONS: SortOrder[] = ["Ascending", "Descending"];
 const ALIGNMENT_OPTIONS: Alignment[] = ["Left", "Center", "Right"];
 const DEVICE_TYPE_OPTIONS: GridDeviceType[] = ["desktop", "web", "mobile"];
@@ -184,7 +185,13 @@ function normalizeGridDeviceType(value: string | null | undefined): GridDeviceTy
   if (value === "web" || value === "mobile" || value === "desktop") return value;
   return DEFAULT_DEVICE_TYPE;
 }
-export default function GridDesignerPage({ initialGridId }: { initialGridId?: string }) {
+export default function GridDesignerPage({
+  initialGridId,
+  startNew = false,
+}: {
+  initialGridId?: string;
+  startNew?: boolean;
+}) {
   const [form, setForm] = useState<GridDesignerForm>(INITIAL_FORM);
   const [columns, setColumns] = useState<GridColumnRow[]>([]);
   const [gridOptions, setGridOptions] = useState<GridOption[]>([]);
@@ -194,6 +201,7 @@ export default function GridDesignerPage({ initialGridId }: { initialGridId?: st
   const [isGridLoading, setIsGridLoading] = useState(false);
   const [isGridSaving, setIsGridSaving] = useState(false);
   const [isGridDeleting, setIsGridDeleting] = useState(false);
+  const [isColumnDeleting, setIsColumnDeleting] = useState(false);
   const [statusText, setStatusText] = useState("Ready.");
   const didInitialLoadRef = useRef(false);
   const { getAll: listGridDetails } = useApi<ApiSuccessResponse<GridDetailPayload[], GridListMeta>>(
@@ -217,6 +225,12 @@ export default function GridDesignerPage({ initialGridId }: { initialGridId?: st
     method: "DELETE",
     toast: { success: false, error: true },
   });
+  const { run: deleteGridColumn } = useApi<
+    ApiSuccessResponse<{ grid_serialid: string; deleted: true }>
+  >(GRID_DETAILS_COLUMN_DELETE_ENDPOINT, {
+    method: "DELETE",
+    toast: { success: false, error: true },
+  });
   const selectedColumn = useMemo(
     () => columns.find((column) => column.id === selectedColumnId) ?? null,
     [columns, selectedColumnId],
@@ -234,7 +248,7 @@ export default function GridDesignerPage({ initialGridId }: { initialGridId?: st
     }
     return options;
   }, [columns]);
-  const isBusy = isGridLoading || isGridSaving || isGridDeleting;
+  const isBusy = isGridLoading || isGridSaving || isGridDeleting || isColumnDeleting;
   const updateForm = <K extends keyof GridDesignerForm>(key: K, value: GridDesignerForm[K]) => {
     setForm((current) => ({
       ...current,
@@ -702,23 +716,47 @@ export default function GridDesignerPage({ initialGridId }: { initialGridId?: st
     setColumns((current) => [...current, nextColumn]);
     setSelectedColumnId(nextColumn.id);
   }, [columns.length]);
-  const handleDeleteColumn = useCallback(() => {
+  const handleDeleteColumn = useCallback(async () => {
     if (!selectedColumnId) {
       return;
     }
     const deletedColumn = columns.find((column) => column.id === selectedColumnId) ?? null;
+    if (!deletedColumn) {
+      return;
+    }
+    const savedSerialId = deletedColumn.gridSerialId?.trim() ?? "";
+    if (savedSerialId) {
+      setIsColumnDeleting(true);
+      setStatusText(`Deleting grid column ${savedSerialId}...`);
+      try {
+        await deleteGridColumn({
+          query: {
+            grid_serialid: savedSerialId,
+          },
+        });
+        toast.success("Grid column deleted successfully.");
+      } catch {
+        setStatusText(`Unable to delete grid column ${savedSerialId}.`);
+        return;
+      } finally {
+        setIsColumnDeleting(false);
+      }
+    }
     const nextColumns = resequenceColumns(
       columns.filter((column) => column.id !== selectedColumnId),
     );
     setColumns(nextColumns);
     setSelectedColumnId(nextColumns[0]?.id ?? "");
-    if (deletedColumn && form.sortColumn === deletedColumn.columnName) {
+    if (form.sortColumn === deletedColumn.columnName) {
       setForm((current) => ({
         ...current,
         sortColumn: nextColumns[0]?.columnName ?? "",
       }));
     }
-  }, [columns, form.sortColumn, selectedColumnId]);
+    if (savedSerialId) {
+      setStatusText(`Deleted grid column ${savedSerialId}.`);
+    }
+  }, [columns, deleteGridColumn, form.sortColumn, selectedColumnId]);
   useEffect(() => {
     if (!form.gridId) {
       setGridSearchText("");
@@ -738,12 +776,20 @@ export default function GridDesignerPage({ initialGridId }: { initialGridId?: st
     const loadInitialState = async () => {
       try {
         const savedGridOptions = await refreshGridOptions(initialGridId);
+        if (startNew) {
+          handleCreateNewGrid();
+          return;
+        }
         const preferredGridId = initialGridId ?? savedGridOptions[0]?.gridId ?? "";
         if (preferredGridId) {
           await loadGridById(preferredGridId);
           return;
         }
       } catch {
+        if (startNew) {
+          handleCreateNewGrid();
+          return;
+        }
         setStatusText("Unable to load saved grid list.");
         return;
       }
@@ -753,7 +799,7 @@ export default function GridDesignerPage({ initialGridId }: { initialGridId?: st
       setStatusText("No saved grids available. Ready for a new grid.");
     };
     void loadInitialState();
-  }, [loadGridById, refreshGridOptions]);
+  }, [handleCreateNewGrid, initialGridId, loadGridById, refreshGridOptions, startNew]);
   return (
     <main className={styles.page}>
       <div className={styles.workspace}>
@@ -949,7 +995,7 @@ export default function GridDesignerPage({ initialGridId }: { initialGridId?: st
             <button
               type="button"
               className={styles.desktopButton}
-              onClick={handleDeleteColumn}
+              onClick={() => void handleDeleteColumn()}
               disabled={isBusy || !selectedColumnId}
             >
               Delete Column

@@ -29,7 +29,6 @@ import styles from "./table.module.scss";
 export type {
   ReusableTableBodyContextMenuPayload,
   ReusableTableColumn,
-  ReusableTableColumnHidePayload,
   ReusableTableColumnReorderEdge,
   ReusableTableColumnResizeEndPayload,
   ReusableTableProps,
@@ -43,7 +42,6 @@ export type {
 import type {
   ReusableTableBodyContextMenuPayload,
   ReusableTableColumn,
-  ReusableTableColumnHidePayload,
   ReusableTableColumnReorderEdge,
   ReusableTableColumnResizeEndPayload,
   ReusableTableProps,
@@ -469,7 +467,6 @@ export function ReusableTable<T extends Record<string, unknown>>({
   onColumnReorder,
   resizableColumns = false,
   onColumnResizeEnd,
-  onColumnHide,
   onBodyContextMenu,
   wrapperClassName,
   tableClassName,
@@ -555,10 +552,6 @@ export function ReusableTable<T extends Record<string, unknown>>({
     startTableWidth: number;
     startColumnWidth: number;
   } | null>(null);
-  const [openHeaderMenuColumnKey, setOpenHeaderMenuColumnKey] = useState<string | null>(null);
-  const [openHeaderMenuPosition, setOpenHeaderMenuPosition] = useState<ActionMenuPosition>(
-    DEFAULT_ACTION_MENU_POSITION,
-  );
   const resolvedOnUpdate = onUpdate ?? onEdit;
   const resolvedIsUpdateDisabled = isUpdateDisabled ?? isEditDisabled;
   const resolvedUpdateLabel = updateLabel ?? editLabel ?? "Edit";
@@ -793,65 +786,6 @@ export function ReusableTable<T extends Record<string, unknown>>({
       window.removeEventListener("keydown", handleEscape);
     };
   }, [openActionMenuKey]);
-
-  useEffect(() => {
-    if (openHeaderMenuColumnKey === null) {
-      return;
-    }
-
-    const isVisible = displayColumns.some((column) => column.key === openHeaderMenuColumnKey);
-    if (!isVisible) {
-      setOpenHeaderMenuColumnKey(null);
-    }
-  }, [displayColumns, openHeaderMenuColumnKey]);
-
-  useEffect(() => {
-    if (openHeaderMenuColumnKey === null) {
-      return;
-    }
-
-    const handlePointerDown = (event: globalThis.MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest('[data-erp-header-menu-root="true"]')) {
-        return;
-      }
-      setOpenHeaderMenuColumnKey(null);
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) {
-        return;
-      }
-
-      if (event.key === "Escape") {
-        setOpenHeaderMenuColumnKey(null);
-      }
-    };
-
-    window.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("keydown", handleEscape);
-
-    return () => {
-      window.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("keydown", handleEscape);
-    };
-  }, [openHeaderMenuColumnKey]);
-
-  useEffect(() => {
-    if (openHeaderMenuColumnKey === null) {
-      return;
-    }
-
-    const closeHeaderMenu = () => setOpenHeaderMenuColumnKey(null);
-
-    window.addEventListener("resize", closeHeaderMenu);
-    window.addEventListener("scroll", closeHeaderMenu, true);
-
-    return () => {
-      window.removeEventListener("resize", closeHeaderMenu);
-      window.removeEventListener("scroll", closeHeaderMenu, true);
-    };
-  }, [openHeaderMenuColumnKey]);
 
   useEffect(() => {
     if (openActionMenuKey === null) {
@@ -1379,57 +1313,10 @@ export function ReusableTable<T extends Record<string, unknown>>({
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
   };
-  const handleHeaderContextMenu = (
-    event: MouseEvent<HTMLElement>,
-    column: ReusableTableColumn<T>,
-  ) => {
-    if (!onColumnHide || isSerialNumberColumn(column) || isActionsColumn(column)) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    setOpenActionMenuKey(null);
-    setOpenHeaderMenuColumnKey(column.key);
-    setOpenHeaderMenuPosition({
-      left: clamp(event.clientX, ACTION_MENU_VIEWPORT_PADDING, window.innerWidth - 190),
-      top: clamp(event.clientY, ACTION_MENU_VIEWPORT_PADDING, window.innerHeight - 64),
-    });
-  };
-  const handleHideHeaderColumn = (column: ReusableTableColumn<T>) => {
-    setOpenHeaderMenuColumnKey(null);
-    onColumnHide?.({ column });
-  };
   const getColumnForWidth = (column: ReusableTableColumn<T>): ReusableTableColumn<T> => {
     const resizedWidth = columnWidths[column.key];
     return resizedWidth ? { ...column, width: resizedWidth } : column;
   };
-  const openHeaderMenuColumn =
-    openHeaderMenuColumnKey === null
-      ? null
-      : displayColumns.find((column) => column.key === openHeaderMenuColumnKey) ?? null;
-  const headerMenu =
-    openHeaderMenuColumn && onColumnHide && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            className={styles.actionsDropdownPortal}
-            data-erp-header-menu-root="true"
-            style={openHeaderMenuPosition}
-            role="menu"
-            aria-label="Column actions"
-          >
-            <button
-              type="button"
-              role="menuitem"
-              className={styles.actionsDropdownItem}
-              onClick={() => handleHideHeaderColumn(openHeaderMenuColumn)}
-            >
-              <span>Hide column</span>
-            </button>
-          </div>,
-          document.body,
-        )
-      : null;
   const renderActionMenu = (
     row: T,
     rowIndex: number,
@@ -1536,7 +1423,6 @@ export function ReusableTable<T extends Record<string, unknown>>({
         } as CSSProperties
       }
     >
-      {headerMenu}
       {showToolbar ? (
         <div className={styles.toolbar} data-erp-table-toolbar="true">
           {title ? <h3 className={styles.toolbarTitle}>{title}</h3> : null}
@@ -1656,7 +1542,6 @@ export function ReusableTable<T extends Record<string, unknown>>({
                     }
                     onDrop={canReorderColumn ? (event) => handleColumnDrop(event, column) : undefined}
                     onDragEnd={canReorderColumn ? clearColumnReorderState : undefined}
-                    onContextMenu={(event) => handleHeaderContextMenu(event, column)}
                     title={canReorderColumn ? "Drag to reorder column" : undefined}
                   >
                     {canSort ? (

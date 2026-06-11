@@ -208,9 +208,6 @@ export default function OpeningStockPage() {
   const [uiColumnConfigs, setUiColumnConfigs] = useState<UiTableColumnPayload[]>([]);
   const [tableSettingsContextMenuPosition, setTableSettingsContextMenuPosition] =
     useState<TableSettingsContextMenuPosition | null>(null);
-  const [headerSettingsContextMenuPosition, setHeaderSettingsContextMenuPosition] =
-    useState<TableSettingsContextMenuPosition | null>(null);
-  const [headerSettingsColumnKey, setHeaderSettingsColumnKey] = useState<string | null>(null);
   const [isColumnSettingsOpen, setIsColumnSettingsOpen] = useState(false);
   const [columnSettingsDraft, setColumnSettingsDraft] = useState<
     Record<string, OpeningStockColumnSettingsDraftEntry>
@@ -655,8 +652,6 @@ export default function OpeningStockPage() {
     setColumnSettingsDraft(nextDraft);
     setIsColumnSettingsOpen(true);
     setTableSettingsContextMenuPosition(null);
-    setHeaderSettingsContextMenuPosition(null);
-    setHeaderSettingsColumnKey(null);
   }, [columnSettingsRows]);
   const closeColumnSettings = useCallback(() => {
     if (isColumnSettingsSaving) {
@@ -703,8 +698,6 @@ export default function OpeningStockPage() {
       event.preventDefault();
       event.stopPropagation();
       setOpenLookupCell(null);
-      setHeaderSettingsContextMenuPosition(null);
-      setHeaderSettingsColumnKey(null);
       setTableSettingsContextMenuPosition({
         left: clampContextMenuPosition(
           event.clientX,
@@ -720,52 +713,20 @@ export default function OpeningStockPage() {
     },
     [columnSettingsRows.length],
   );
-  const handleColumnHeaderContextMenu = useCallback(
-    (event: ReactMouseEvent<HTMLTableCellElement>, column: ColumnDefinition) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setOpenLookupCell(null);
-      setTableSettingsContextMenuPosition(null);
-      setHeaderSettingsColumnKey(column.key);
-      setHeaderSettingsContextMenuPosition({
-        left: clampContextMenuPosition(
-          event.clientX,
-          TABLE_SETTINGS_CONTEXT_MENU_PADDING,
-          window.innerWidth - TABLE_SETTINGS_CONTEXT_MENU_WIDTH,
-        ),
-        top: clampContextMenuPosition(
-          event.clientY,
-          TABLE_SETTINGS_CONTEXT_MENU_PADDING,
-          window.innerHeight - TABLE_SETTINGS_CONTEXT_MENU_HEIGHT,
-        ),
-      });
-    },
-    [],
-  );
   useEffect(() => {
-    if (
-      tableSettingsContextMenuPosition === null &&
-      headerSettingsContextMenuPosition === null
-    ) {
+    if (tableSettingsContextMenuPosition === null) {
       return;
     }
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
-      if (
-        target?.closest('[data-opening-stock-settings-context-menu="true"]') ||
-        target?.closest('[data-opening-stock-header-context-menu="true"]')
-      ) {
+      if (target?.closest('[data-opening-stock-settings-context-menu="true"]')) {
         return;
       }
       setTableSettingsContextMenuPosition(null);
-      setHeaderSettingsContextMenuPosition(null);
-      setHeaderSettingsColumnKey(null);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setTableSettingsContextMenuPosition(null);
-        setHeaderSettingsContextMenuPosition(null);
-        setHeaderSettingsColumnKey(null);
       }
     };
     document.addEventListener("mousedown", handlePointerDown);
@@ -774,18 +735,13 @@ export default function OpeningStockPage() {
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [headerSettingsContextMenuPosition, tableSettingsContextMenuPosition]);
+  }, [tableSettingsContextMenuPosition]);
   useEffect(() => {
-    if (
-      tableSettingsContextMenuPosition === null &&
-      headerSettingsContextMenuPosition === null
-    ) {
+    if (tableSettingsContextMenuPosition === null) {
       return;
     }
     const closeContextMenu = () => {
       setTableSettingsContextMenuPosition(null);
-      setHeaderSettingsContextMenuPosition(null);
-      setHeaderSettingsColumnKey(null);
     };
     window.addEventListener("resize", closeContextMenu);
     window.addEventListener("scroll", closeContextMenu, true);
@@ -793,7 +749,7 @@ export default function OpeningStockPage() {
       window.removeEventListener("resize", closeContextMenu);
       window.removeEventListener("scroll", closeContextMenu, true);
     };
-  }, [headerSettingsContextMenuPosition, tableSettingsContextMenuPosition]);
+  }, [tableSettingsContextMenuPosition]);
   const saveColumnSettings = useCallback(async () => {
     if (!isColumnSettingsOpen || columnSettingsRows.length === 0) {
       return;
@@ -856,56 +812,6 @@ export default function OpeningStockPage() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [closeColumnSettings, isColumnSettingsOpen, saveColumnSettings]);
-  const handleHideHeaderColumn = useCallback(
-    async (column: ColumnDefinition) => {
-      setHeaderSettingsContextMenuPosition(null);
-      setHeaderSettingsColumnKey(null);
-      setOpenLookupCell(null);
-
-      const renderedColumns = columnsRef.current;
-      const columnIndex = renderedColumns.findIndex((entry) => entry.key === column.key);
-      if (columnIndex < 0) {
-        return;
-      }
-      setColumns((current) => current.filter((entry) => entry.key !== column.key));
-      const configuredColumn = findOpeningStockUiTableColumnConfig(
-        uiColumnConfigsRef.current,
-        column.key,
-      );
-      const columnRequest = buildOpeningStockUiTableColumnWidthRequest(
-        column,
-        configuredColumn,
-        columnIndex,
-        parseColumnWidth(column.width),
-      );
-      columnRequest.uiTblClmColumnVisibility = false;
-      try {
-        const response = await saveUiTableColumn({
-          body: { uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId, uiTblColumns: [columnRequest] },
-        });
-        const savedColumn = (response?.data?.columns ?? []).find(
-          (c) =>
-            (columnRequest.uiTblClmId && c.uiTblClmId === columnRequest.uiTblClmId) ||
-            c.uiTblClmName === columnRequest.uiTblClmName,
-        );
-        if (!savedColumn) {
-          return;
-        }
-        setUiColumnConfigs((current) => {
-          const nextColumns = upsertOpeningStockUiTableColumnConfig(
-            current,
-            savedColumn,
-            column.key,
-          );
-          uiColumnConfigsRef.current = nextColumns;
-          return nextColumns;
-        });
-      } catch {
-        // useApi handles error toast behavior; keep the local hide for this session.
-      }
-    },
-    [saveUiTableColumn],
-  );
   useEffect(() => {
     setColumns((current) => mergeResolvedColumns(current, resolvedColumns));
   }, [resolvedColumns]);
@@ -3129,31 +3035,6 @@ export default function OpeningStockPage() {
         document.body,
       )
       : null;
-  const headerSettingsColumn =
-    headerSettingsColumnKey === null
-      ? null
-      : columns.find((column) => column.key === headerSettingsColumnKey) ?? null;
-  const headerSettingsContextMenu =
-    headerSettingsContextMenuPosition && headerSettingsColumn && typeof document !== "undefined"
-      ? createPortal(
-        <div
-          className={styles.tableSettingsContextMenu}
-          data-opening-stock-header-context-menu="true"
-          style={headerSettingsContextMenuPosition}
-          role="menu"
-          aria-label="Column actions"
-        >
-          <button
-            type="button"
-            className={styles.tableSettingsContextMenuItem}
-            onClick={() => void handleHideHeaderColumn(headerSettingsColumn)}
-          >
-            Hide column
-          </button>
-        </div>,
-        document.body,
-      )
-      : null;
   const columnSettingsModal =
     isColumnSettingsOpen && typeof document !== "undefined"
       ? createPortal(
@@ -3374,7 +3255,6 @@ export default function OpeningStockPage() {
   return (
     <>
       {tableSettingsContextMenu}
-      {headerSettingsContextMenu}
       {columnSettingsModal}
       <section className={styles.page}>
         <header className={styles.header}>
@@ -3454,7 +3334,6 @@ export default function OpeningStockPage() {
                         styles.resizableHeaderCell,
                       )}
                       style={{ width: column.width }}
-                      onContextMenu={(event) => handleColumnHeaderContextMenu(event, column)}
                     >
                       <div
                         draggable

@@ -1212,60 +1212,6 @@ export default function PhysicalStockPage() {
     },
     [],
   );
-  const handleHideHeaderColumn = useCallback(
-    async (column: PhysicalStockColumn) => {
-      setHeaderSettingsContextMenuPosition(null);
-      setHeaderSettingsColumnKey(null);
-      setOpenLookupCell(null);
-
-      const renderedColumns = columnsRef.current;
-      const columnIndex = renderedColumns.findIndex((entry) => entry.key === column.key);
-      if (columnIndex < 0) {
-        return;
-      }
-
-      setColumns((current) => current.filter((entry) => entry.key !== column.key));
-
-      const configuredColumn = findPhysicalStockUiTableColumnConfig(
-        uiColumnConfigsRef.current,
-        column.key,
-      );
-      try {
-        const columnRequest = buildPhysicalStockUiTableColumnRequest(
-          column,
-          configuredColumn,
-          columnIndex,
-          {
-            uiTblClmColumnWidth: parseColumnWidth(column.width),
-            uiTblClmColumnVisibility: false,
-          },
-        );
-        const response = await saveUiTableColumn({
-          body: { uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId, uiTblColumns: [columnRequest] },
-        });
-        const savedColumn = (response?.data?.columns ?? []).find(
-          (c) =>
-            (columnRequest.uiTblClmId && c.uiTblClmId === columnRequest.uiTblClmId) ||
-            c.uiTblClmName === columnRequest.uiTblClmName,
-        );
-        if (!savedColumn) {
-          return;
-        }
-        setUiColumnConfigs((current) => {
-          const nextColumns = upsertPhysicalStockUiTableColumnConfig(
-            current,
-            savedColumn,
-            column.key,
-          );
-          uiColumnConfigsRef.current = nextColumns;
-          return nextColumns;
-        });
-      } catch {
-        // Keep the local hide even if persistence fails.
-      }
-    },
-    [saveUiTableColumn],
-  );
   useEffect(() => {
     if (
       tableSettingsContextMenuPosition === null &&
@@ -2687,13 +2633,6 @@ export default function PhysicalStockPage() {
             role="menu"
             aria-label="Column actions"
           >
-            <button
-              type="button"
-              className={styles.tableSettingsContextMenuItem}
-              onClick={() => void handleHideHeaderColumn(headerSettingsColumn)}
-            >
-              Hide column
-            </button>
             <button
               type="button"
               className={styles.tableSettingsContextMenuItem}

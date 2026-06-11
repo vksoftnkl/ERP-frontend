@@ -38,10 +38,6 @@ export type ReusableTableColumnResizeEndPayload<T extends Record<string, unknown
   tableWidthPx: number;
 };
 
-export type ReusableTableColumnHidePayload<T extends Record<string, unknown>> = {
-  column: ReusableTableColumn<T>;
-};
-
 export type ReusableTableBodyContextMenuPayload<T extends Record<string, unknown>> = {
   event: MouseEvent<HTMLTableRowElement>;
   row: T;
@@ -78,7 +74,6 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   onColumnReorder?: (columns: ReusableTableColumn<T>[]) => void;
   resizableColumns?: boolean;
   onColumnResizeEnd?: (payload: ReusableTableColumnResizeEndPayload<T>) => void;
-  onColumnHide?: (payload: ReusableTableColumnHidePayload<T>) => void;
   onBodyContextMenu?: (payload: ReusableTableBodyContextMenuPayload<T>) => void;
   wrapperClassName?: string;
   tableClassName?: string;

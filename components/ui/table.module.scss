@@ -1458,7 +1458,6 @@
     width: 48px !important;
     min-width: 48px !important;
     max-width: 48px !important;
-    background: inherit !important;
     box-shadow: 1px 0 0 var(--table-border-soft) !important;
     padding-left: 8px !important;
     padding-right: 0 !important;
@@ -1470,7 +1469,19 @@
     background: #bacdef !important;
   }
 
+  // Body cells need a solid background (rows are transparent, so `inherit`
+  // lets other columns show through while pinned) and must stay below the
+  // sticky header (thead is z-index 100).
   td.serialNumberCell {
-    background: inherit !important;
+    z-index: 50 !important;
+    background: #ffffff !important;
+  }
+
+  .row:hover td.serialNumberCell {
+    background: var(--table-hover) !important;
+  }
+
+  .activeRow td.serialNumberCell {
+    background: var(--table-active) !important;
   }
 }

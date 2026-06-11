@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import CrudMasterPage, { type CrudMasterTableRow } from "@/components/master/crud-master-page";
 import type { ReusableTableColumn } from "@/components/ui/table";
@@ -15,8 +15,9 @@ import {
   toSelectBoolean,
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
+const GRID_DETAIL_ID = 33;
 const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=33",
+  list: `/configured-grid-sql/run?grid_id=${GRID_DETAIL_ID}`,
   getById: "/grid-details/get",
   create: "/grid-details/create",
   delete: "/grid-details/delete",
@@ -37,6 +38,7 @@ const LOOKUP_KEYS = {
   name: ["grid_name", "gridName", "name"],
   short: ["grid_device_type", "gridDeviceType"],
   alias: ["grid_sort_column", "gridSortColumn"],
+  position: ["grid_sort_order", "gridSortOrder"],
   active: ["grid_status", "gridStatus", "status"],
   description: ["grid_description", "gridDescription", "description"],
   array: ["data", "items", "results", "rows", "list"],
@@ -137,96 +139,24 @@ function normalizeSortOrder(value: string): string {
   }
   return "";
 }
-function getSourceValue(row: CrudMasterTableRow, keys: readonly string[]): unknown {
-  if (!row.__source) return undefined;
-  return getFirstDefinedValue(row.__source as Record<string, unknown>, keys);
-}
-function getColumnCount(row: CrudMasterTableRow): number | null {
-  const columns = row.__source?.columns;
-  return Array.isArray(columns) ? columns.length : null;
-}
 export default function GridMasterPage() {
   const router = useRouter();
-  const customTableColumns = useMemo<ReusableTableColumn<CrudMasterTableRow>[]>(
+  const openDesignerForRow = useCallback(
+    (row: CrudMasterTableRow) => {
+      const gridId = row.masterId.trim();
+      router.push(
+        gridId
+          ? `/master/grid-designer/${encodeURIComponent(gridId)}`
+          : "/master/grid-designer",
+      );
+    },
+    [router],
+  );
+  const openDesignerForCreate = useCallback(() => {
+    router.push("/master/grid-designer?mode=new");
+  }, [router]);
+  const designerColumns = useMemo<ReusableTableColumn<CrudMasterTableRow>[]>(
     () => [
-      {
-        key: "serialNo",
-        header: "S.No",
-        accessor: "serialNo",
-        width: "12px",
-        sortable: false,
-      },
-      {
-        key: "gridId",
-        header: "Grid ID",
-        accessor: "masterCode",
-        width: "80px",
-      },
-      {
-        key: "gridName",
-        header: "Grid Name",
-        accessor: "masterName",
-        width: "220px",
-      },
-      {
-        key: "gridDescription",
-        header: "Description",
-        accessor: "masterDescription",
-        width: "240px",
-      },
-      {
-        key: "gridDeviceType",
-        header: "Device Type",
-        width: "110px",
-        render: (row) => toDisplayValue(getSourceValue(row, GRID_DEVICE_TYPE_KEYS)) || "-",
-        sortAccessor: (row) => toDisplayValue(getSourceValue(row, GRID_DEVICE_TYPE_KEYS)),
-        searchAccessor: (row) => toDisplayValue(getSourceValue(row, GRID_DEVICE_TYPE_KEYS)),
-      },
-      {
-        key: "gridSortColumn",
-        header: "Sort Column",
-        width: "140px",
-        render: (row) => toDisplayValue(getSourceValue(row, GRID_SORT_COLUMN_KEYS)) || "-",
-        sortAccessor: (row) => toDisplayValue(getSourceValue(row, GRID_SORT_COLUMN_KEYS)),
-        searchAccessor: (row) => toDisplayValue(getSourceValue(row, GRID_SORT_COLUMN_KEYS)),
-      },
-      {
-        key: "gridSortOrder",
-        header: "Sort Order",
-        width: "110px",
-        render: (row) =>
-          normalizeSortOrder(toDisplayValue(getSourceValue(row, GRID_SORT_ORDER_KEYS))) || "-",
-        sortAccessor: (row) =>
-          normalizeSortOrder(toDisplayValue(getSourceValue(row, GRID_SORT_ORDER_KEYS))),
-      },
-      {
-        key: "gridColumnCount",
-        header: "Columns",
-        width: "90px",
-        align: "center",
-        render: (row) => {
-          const count = getColumnCount(row);
-          return count === null ? "-" : String(count);
-        },
-        sortAccessor: (row) => String(getColumnCount(row) ?? -1).padStart(6, "0"),
-      },
-      {
-        key: "gridStatus",
-        header: "Status",
-        width: "90px",
-        render: (row) => {
-          const value = getSourceValue(row, GRID_STATUS_KEYS);
-          return value === true || value === "true" ? "Active" : "Inactive";
-        },
-        sortAccessor: (row) => {
-          const value = getSourceValue(row, GRID_STATUS_KEYS);
-          return value === true || value === "true" ? "1" : "0";
-        },
-        searchAccessor: (row) => {
-          const value = getSourceValue(row, GRID_STATUS_KEYS);
-          return value === true || value === "true" ? "active" : "inactive";
-        },
-      },
       {
         key: "gridDesigner",
         header: "Designer",
@@ -240,7 +170,7 @@ export default function GridMasterPage() {
             style={{ cursor: "pointer", background: "none", border: "none", color: "var(--erp-link-color, #2563eb)", textDecoration: "underline", font: "inherit" }}
             onClick={(event) => {
               event.stopPropagation();
-              router.push(`/master/grid-designer/${row.masterId}`);
+              openDesignerForRow(row);
             }}
           >
             Open
@@ -248,7 +178,7 @@ export default function GridMasterPage() {
         ),
       },
     ],
-    [router],
+    [openDesignerForRow],
   );
   return (
     <CrudMasterPage
@@ -257,6 +187,8 @@ export default function GridMasterPage() {
       entityLabel="grid"
       entityLabelPlural="grids"
       apiEndpoints={API_ENDPOINTS}
+      gridDetailId={GRID_DETAIL_ID}
+      listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
@@ -269,11 +201,10 @@ export default function GridMasterPage() {
       formTitle="Grid Form"
       formDescription="Create and manage grid configurations. Use the designer to edit columns."
       customFields={FORM_FIELDS}
-      customTableColumns={customTableColumns}
+      appendTableColumns={designerColumns}
+      onCreateAction={openDesignerForCreate}
+      onEditAction={openDesignerForRow}
       createInitialValues={INITIAL_FORM_VALUES}
-      buildListQuery={({ searchTerm }): Record<string, string> =>
-        searchTerm ? { search: searchTerm } : {}
-      }
       augmentDetailSource={({ source }) => {
         const data = source?.data;
         if (Array.isArray(data)) {

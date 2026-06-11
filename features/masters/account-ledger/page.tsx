@@ -1580,53 +1580,6 @@ export default function AccountLedgerMasterPage() {
       // useApi handles the visible error toast.
     }
   }, [refetchGridColumns, saveGridColumnWidth]);
-  const handleGridColumnHide = useCallback(
-    (payload: { column: ReusableTableColumn<LedgerTableRow> }) => {
-      if (accountLedgerGridId === null) {
-        return;
-      }
-      const gridColumn = resolveGridColumnForLedgerTableColumn(payload.column, gridColumns);
-      if (!gridColumn?.serialId) {
-        return;
-      }
-      const columnNumber =
-        gridColumn.columnNumber && gridColumn.columnNumber > 0
-          ? gridColumn.columnNumber
-          : Math.max(1, gridColumn.order + 1);
-      const columnName = (gridColumn.columnName ?? gridColumn.header).trim();
-      if (!columnName) {
-        return;
-      }
-      void (async () => {
-        try {
-          await saveGridColumnWidth({
-            body: {
-              grid_serialid: gridColumn.serialId,
-              grid_id: gridColumn.gridId ?? String(accountLedgerGridId),
-              grid_column_number: columnNumber,
-              grid_column_name: columnName,
-              grid_column_visibility: false,
-              grid_column_filter: false,
-            },
-          });
-          void refetchGridColumns();
-          await loadRecords(searchTerm, currentPage, pageSize);
-        } catch {
-          // useApi handles the visible error toast.
-        }
-      })();
-    },
-    [
-      accountLedgerGridId,
-      currentPage,
-      gridColumns,
-      loadRecords,
-      pageSize,
-      refetchGridColumns,
-      saveGridColumnWidth,
-      searchTerm,
-    ],
-  );
   const openGridSettingsModal = useCallback(
     (mode: "filter" | "visibility") => {
       const nextSelections: Record<string, boolean> = {};
@@ -1985,7 +1938,6 @@ export default function AccountLedgerMasterPage() {
               reorderableColumns
               resizableColumns
               onColumnResizeEnd={handleGridColumnResizeEnd}
-              onColumnHide={handleGridColumnHide}
               onBodyContextMenu={handleTableBodyContextMenu}
               activeRowKey={selectedRowId}
               onRowClick={(row) => setSelectedRowId(row.__rowId)}

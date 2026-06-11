@@ -99,7 +99,6 @@ const DEFAULT_COLUMN_LAYOUT: ColumnLayoutState = {
 };
 const MIN_COLUMN_WIDTH_PX = 56;
 const HEADER_MENU_ESTIMATED_WIDTH = 190;
-const HEADER_MENU_ESTIMATED_HEIGHT = 64;
 const HEADER_MENU_VIEWPORT_PADDING = 8;
 const TABLE_SETTINGS_CONTEXT_MENU_HEIGHT = 64;
 type HeaderMenuPosition = Pick<CSSProperties, "left" | "top">;
@@ -366,11 +365,6 @@ export default function ItemLinkedRecordsEditor({
     DEFAULT_COLUMN_LAYOUT,
   );
   const columnLayoutRef = useRef<ColumnLayoutState>(DEFAULT_COLUMN_LAYOUT);
-  const [openHeaderMenuColumnKey, setOpenHeaderMenuColumnKey] = useState<
-    string | null
-  >(null);
-  const [openHeaderMenuPosition, setOpenHeaderMenuPosition] =
-    useState<HeaderMenuPosition>({});
   const [openBodyMenuPosition, setOpenBodyMenuPosition] =
     useState<HeaderMenuPosition | null>(null);
   const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
@@ -494,63 +488,6 @@ export default function ItemLinkedRecordsEditor({
     setActiveOptionIndex,
   } = useItemLinkedRecordsSearchSelect({ cellRefs });
   useEffect(() => {
-    if (openHeaderMenuColumnKey === null) {
-      return;
-    }
-
-    const isVisible = visibleColumns.some(
-      (column) => column.key === openHeaderMenuColumnKey,
-    );
-    if (!isVisible) {
-      setOpenHeaderMenuColumnKey(null);
-    }
-  }, [openHeaderMenuColumnKey, visibleColumns]);
-  useEffect(() => {
-    if (openHeaderMenuColumnKey === null) {
-      return;
-    }
-
-    const handlePointerDown = (event: globalThis.MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest('[data-item-linked-header-menu-root="true"]')) {
-        return;
-      }
-      setOpenHeaderMenuColumnKey(null);
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) {
-        return;
-      }
-
-      if (event.key === "Escape") {
-        setOpenHeaderMenuColumnKey(null);
-      }
-    };
-
-    window.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("keydown", handleEscape);
-    return () => {
-      window.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("keydown", handleEscape);
-    };
-  }, [openHeaderMenuColumnKey]);
-  useEffect(() => {
-    if (openHeaderMenuColumnKey === null) {
-      return;
-    }
-
-    const closeHeaderMenu = () => setOpenHeaderMenuColumnKey(null);
-
-    window.addEventListener("resize", closeHeaderMenu);
-    window.addEventListener("scroll", closeHeaderMenu, true);
-
-    return () => {
-      window.removeEventListener("resize", closeHeaderMenu);
-      window.removeEventListener("scroll", closeHeaderMenu, true);
-    };
-  }, [openHeaderMenuColumnKey]);
-  useEffect(() => {
     if (openBodyMenuPosition === null) {
       return;
     }
@@ -595,48 +532,6 @@ export default function ItemLinkedRecordsEditor({
       window.removeEventListener("scroll", closeBodyMenu, true);
     };
   }, [openBodyMenuPosition]);
-  const handleHeaderContextMenu = (
-    event: ReactMouseEvent<HTMLTableCellElement>,
-    column: LinkedRecordColumn,
-  ) => {
-    if (!isColumnLayoutEnabled || disabled) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    setOpenHeaderMenuColumnKey(column.key);
-    setOpenHeaderMenuPosition({
-      left: clamp(
-        event.clientX,
-        HEADER_MENU_VIEWPORT_PADDING,
-        window.innerWidth - HEADER_MENU_ESTIMATED_WIDTH,
-      ),
-      top: clamp(
-        event.clientY,
-        HEADER_MENU_VIEWPORT_PADDING,
-        window.innerHeight - HEADER_MENU_ESTIMATED_HEIGHT,
-      ),
-    });
-  };
-  const handleHideHeaderColumn = (column: LinkedRecordColumn) => {
-    if (!isColumnLayoutEnabled || disabled) {
-      return;
-    }
-    if (openSearchCell) {
-      closeSearchableSelect(openSearchCell);
-    }
-    setOpenHeaderMenuColumnKey(null);
-    updateColumnLayout(
-      (current) => ({
-        ...current,
-        visibility: {
-          ...current.visibility,
-          [column.key]: false,
-        },
-      }),
-      { changedColumnKeys: [column.key], notify: true },
-    );
-  };
   const handleBodyRowContextMenu = (
     event: ReactMouseEvent<HTMLTableRowElement>,
   ) => {
@@ -645,7 +540,6 @@ export default function ItemLinkedRecordsEditor({
     }
     event.preventDefault();
     event.stopPropagation();
-    setOpenHeaderMenuColumnKey(null);
     setOpenBodyMenuPosition({
       left: clamp(
         event.clientX,
@@ -1216,33 +1110,6 @@ export default function ItemLinkedRecordsEditor({
       />
     );
   };
-  const openHeaderMenuColumn =
-    openHeaderMenuColumnKey === null
-      ? null
-      : visibleColumns.find((column) => column.key === openHeaderMenuColumnKey) ??
-        null;
-  const headerMenu =
-    openHeaderMenuColumn && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            className={styles.headerContextMenu}
-            data-item-linked-header-menu-root="true"
-            style={openHeaderMenuPosition}
-            role="menu"
-            aria-label="Column actions"
-          >
-            <button
-              type="button"
-              role="menuitem"
-              className={styles.headerContextMenuItem}
-              onClick={() => handleHideHeaderColumn(openHeaderMenuColumn)}
-            >
-              <span>Hide column</span>
-            </button>
-          </div>,
-          document.body,
-        )
-      : null;
   const bodyMenu =
     openBodyMenuPosition && typeof document !== "undefined"
       ? createPortal(
@@ -1469,7 +1336,6 @@ export default function ItemLinkedRecordsEditor({
       : null;
   return (
     <>
-      {headerMenu}
       {bodyMenu}
       {adminSettingsModal}
       <div className={styles.editor}>
@@ -1509,7 +1375,6 @@ export default function ItemLinkedRecordsEditor({
                     onDragOver={(event) => handleColumnDragOver(event, column.key)}
                     onDrop={(event) => handleColumnDrop(event, column.key)}
                     onDragEnd={handleColumnDragEnd}
-                    onContextMenu={(event) => handleHeaderContextMenu(event, column)}
                   >
                     <span className={styles.columnHeaderLabel}>{column.label}</span>
                     {isColumnLayoutEnabled ? (

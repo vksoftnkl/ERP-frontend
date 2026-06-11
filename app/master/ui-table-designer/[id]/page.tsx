@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useSearchParams } from "next/navigation";
+import { use } from "react";
 import RouteLoader from "@/components/feedback/route-loader";
 
 const LazyRoutePage = dynamic(() => import("@/features/masters/ui-table-designer/[id]/page"), {
@@ -9,7 +9,7 @@ const LazyRoutePage = dynamic(() => import("@/features/masters/ui-table-designer
   ssr: false,
 });
 
-export default function RoutePage() {
-  const searchParams = useSearchParams();
-  return <LazyRoutePage startNew={searchParams.get("mode") === "new"} />;
+export default function RoutePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  return <LazyRoutePage initialUiTableId={id} />;
 }

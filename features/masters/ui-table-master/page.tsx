@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import CrudMasterPage, { type CrudMasterTableRow } from "@/components/master/crud-master-page";
 import type { ReusableTableColumn } from "@/components/ui/table";
@@ -15,8 +15,9 @@ import {
   toSelectBoolean,
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
+const GRID_DETAIL_ID = 35;
 const API_ENDPOINTS = {
-  list: "/ui-table-masters/get",
+  list: `/configured-grid-sql/run?grid_id=${GRID_DETAIL_ID}`,
   getById: "/ui-table-masters/get",
   create: "/ui-table-masters/create",
   delete: "/ui-table-masters/delete",
@@ -27,12 +28,14 @@ const DEVICE_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "desktop", label: "Desktop" },
 ];
 const LOOKUP_KEYS = {
-  id: ["uiTblId", "id", "_id"],
-  code: ["uiTblId"],
-  name: ["uiTblName", "name"],
-  short: ["uiTblDeviceType"],
-  alias: ["uiTblEditable"],
-  active: ["uiTblIsActive", "status"],
+  id: ["ui_tbl_id", "uiTblId", "id", "_id"],
+  code: ["ui_tbl_id", "uiTblId"],
+  name: ["ui_tbl_name", "uiTblName", "name"],
+  short: ["ui_tbl_device_type", "uiTblDeviceType"],
+  // Editable intentionally has no alias lookup so the configured grid column
+  // falls through to the columnRenderOverrides Yes/No render below.
+  alias: [],
+  active: ["ui_tbl_is_active", "uiTblIsActive", "status"],
   array: ["data", "items", "results", "rows", "list"],
 } as const;
 const REQUEST_PAYLOAD_KEYS = {
@@ -43,10 +46,10 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "uiTblName",
   sort: "uiTblId",
 } as const;
-const UI_TBL_NAME_KEYS = ["uiTblName"] as const;
-const UI_TBL_DEVICE_TYPE_KEYS = ["uiTblDeviceType"] as const;
-const UI_TBL_EDITABLE_KEYS = ["uiTblEditable"] as const;
-const UI_TBL_IS_ACTIVE_KEYS = ["uiTblIsActive"] as const;
+const UI_TBL_NAME_KEYS = ["uiTblName", "ui_tbl_name"] as const;
+const UI_TBL_DEVICE_TYPE_KEYS = ["uiTblDeviceType", "ui_tbl_device_type"] as const;
+const UI_TBL_EDITABLE_KEYS = ["uiTblEditable", "ui_tbl_editable"] as const;
+const UI_TBL_IS_ACTIVE_KEYS = ["uiTblIsActive", "ui_tbl_is_active"] as const;
 const INITIAL_FORM_VALUES = {
   uiTblName: "",
   uiTblDeviceType: "web",
@@ -93,104 +96,37 @@ const FORM_FIELDS: ERPDynamicModalField[] = [
     ],
   },
 ];
-function getSourceValue(row: CrudMasterTableRow, keys: readonly string[]): unknown {
-  if (!row.__source) return undefined;
-  return getFirstDefinedValue(row.__source as Record<string, unknown>, keys);
-}
-function getColumnCount(row: CrudMasterTableRow): number | null {
-  const columns = row.__source?.columns;
-  return Array.isArray(columns) ? columns.length : null;
-}
 export default function UiTableMasterPage() {
   const router = useRouter();
-  const customTableColumns = useMemo<ReusableTableColumn<CrudMasterTableRow>[]>(
+  const openDesignerForRow = useCallback(
+    (row: CrudMasterTableRow) => {
+      const uiTableId = row.masterId.trim();
+      router.push(
+        uiTableId
+          ? `/master/ui-table-designer/${encodeURIComponent(uiTableId)}`
+          : "/master/ui-table-designer",
+      );
+    },
+    [router],
+  );
+  const openDesignerForCreate = useCallback(() => {
+    router.push("/master/ui-table-designer?mode=new");
+  }, [router]);
+  const designerColumns = useMemo<ReusableTableColumn<CrudMasterTableRow>[]>(
     () => [
-      {
-        key: "serialNo",
-        header: "S.No",
-        accessor: "serialNo",
-        width: "12px",
-        sortable: false,
-      },
-      {
-        key: "uiTblId",
-        header: "Table ID",
-        accessor: "masterCode",
-        width: "80px",
-      },
-      {
-        key: "uiTblName",
-        header: "Table Name",
-        accessor: "masterName",
-        width: "260px",
-      },
-      {
-        key: "uiTblDeviceType",
-        header: "Device Type",
-        width: "110px",
-        render: (row) => toDisplayValue(getSourceValue(row, UI_TBL_DEVICE_TYPE_KEYS)) || "-",
-        sortAccessor: (row) => toDisplayValue(getSourceValue(row, UI_TBL_DEVICE_TYPE_KEYS)),
-        searchAccessor: (row) => toDisplayValue(getSourceValue(row, UI_TBL_DEVICE_TYPE_KEYS)),
-      },
-      {
-        key: "uiTblEditable",
-        header: "Editable",
-        width: "90px",
-        align: "center",
-        render: (row) => {
-          const value = getSourceValue(row, UI_TBL_EDITABLE_KEYS);
-          return value === true || value === "true" ? "Yes" : "No";
-        },
-        sortAccessor: (row) => {
-          const value = getSourceValue(row, UI_TBL_EDITABLE_KEYS);
-          return value === true || value === "true" ? "1" : "0";
-        },
-        searchAccessor: (row) => {
-          const value = getSourceValue(row, UI_TBL_EDITABLE_KEYS);
-          return value === true || value === "true" ? "editable yes" : "read-only no";
-        },
-      },
-      {
-        key: "uiTblColumnCount",
-        header: "Columns",
-        width: "90px",
-        align: "center",
-        render: (row) => {
-          const count = getColumnCount(row);
-          return count === null ? "-" : String(count);
-        },
-        sortAccessor: (row) => String(getColumnCount(row) ?? -1).padStart(6, "0"),
-      },
-      {
-        key: "uiTblIsActive",
-        header: "Status",
-        width: "90px",
-        render: (row) => {
-          const value = getSourceValue(row, UI_TBL_IS_ACTIVE_KEYS);
-          return value === true || value === "true" ? "Active" : "Inactive";
-        },
-        sortAccessor: (row) => {
-          const value = getSourceValue(row, UI_TBL_IS_ACTIVE_KEYS);
-          return value === true || value === "true" ? "1" : "0";
-        },
-        searchAccessor: (row) => {
-          const value = getSourceValue(row, UI_TBL_IS_ACTIVE_KEYS);
-          return value === true || value === "true" ? "active" : "inactive";
-        },
-      },
       {
         key: "uiTblDesigner",
         header: "Designer",
         width: "100px",
         align: "center",
         sortable: false,
-        render: () => (
+        render: (row) => (
           <button
             type="button"
             style={{ cursor: "pointer", background: "none", border: "none", color: "var(--erp-link-color, #2563eb)", textDecoration: "underline", font: "inherit" }}
             onClick={(event) => {
               event.stopPropagation();
-              router.push("/master/ui-table-designer");
+              openDesignerForRow(row);
             }}
           >
             Open
@@ -198,7 +134,7 @@ export default function UiTableMasterPage() {
         ),
       },
     ],
-    [router],
+    [openDesignerForRow],
   );
   return (
     <CrudMasterPage
@@ -207,6 +143,8 @@ export default function UiTableMasterPage() {
       entityLabel="UI table"
       entityLabelPlural="UI tables"
       apiEndpoints={API_ENDPOINTS}
+      gridDetailId={GRID_DETAIL_ID}
+      listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
@@ -219,11 +157,19 @@ export default function UiTableMasterPage() {
       formTitle="UI Table Form"
       formDescription="Create and manage UI tables. Use the designer to edit columns."
       customFields={FORM_FIELDS}
-      customTableColumns={customTableColumns}
+      appendTableColumns={designerColumns}
+      onCreateAction={openDesignerForCreate}
+      onEditAction={openDesignerForRow}
+      columnRenderOverrides={{
+        ui_tbl_editable: (row) => {
+          const value = getFirstDefinedValue(
+            (row.__source ?? {}) as Record<string, unknown>,
+            UI_TBL_EDITABLE_KEYS,
+          );
+          return value === true || value === "true" ? "Yes" : "No";
+        },
+      }}
       createInitialValues={INITIAL_FORM_VALUES}
-      buildListQuery={({ searchTerm }): Record<string, string> =>
-        searchTerm ? { search: searchTerm } : {}
-      }
       augmentDetailSource={({ source }) => {
         const data = source?.data;
         if (Array.isArray(data)) {

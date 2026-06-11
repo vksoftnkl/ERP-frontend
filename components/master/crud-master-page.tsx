@@ -1260,6 +1260,17 @@ function resolveMasterAccessorFromGridColumn(
   return null;
 }
 
+function formatMasterActiveDisplay(value: unknown): string {
+  const normalized = toDisplayValue(value).trim().toLowerCase();
+  if (normalized === "true" || normalized === "1") {
+    return "Active";
+  }
+  if (normalized === "false" || normalized === "0") {
+    return "Inactive";
+  }
+  return toDisplayValue(value);
+}
+
 function buildColumnsFromGridColumns(
   gridColumns: GridColumnConfig[],
   lookupKeys: CrudMasterLookupKeys,
@@ -1286,6 +1297,10 @@ function buildColumnsFromGridColumns(
         key: normalizeColumnToken(column.key || column.accessorKey || column.header || accessor),
         header: column.header,
         accessor,
+        render:
+          accessor === "masterActive"
+            ? (row) => formatMasterActiveDisplay(row.masterActive)
+            : undefined,
         align: column.align,
         width: accessor === "serialNo" ? MASTER_SERIAL_COLUMN_WIDTH : column.width,
         sortable: column.sortable ?? accessor !== "serialNo",
@@ -2173,7 +2188,10 @@ export default function CrudMasterPage({
   tableColumnHeaders,
   tableColumnLayout,
   customTableColumns,
+  appendTableColumns,
   columnRenderOverrides,
+  onCreateAction,
+  onEditAction,
   useResponseTableColumns,
   responseTableColumnExcludeKeys,
   toolbarContent,
@@ -2443,7 +2461,7 @@ export default function CrudMasterPage({
     ],
   );
   const lastResponseTableColumnsRef = useRef<ReusableTableColumn<MasterTableRow>[] | null>(null);
-  const columns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
+  const baseColumns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
     () => {
       if (useResponseTableColumns) {
         const responseColumns = buildColumnsFromResponseRows(
@@ -2500,6 +2518,13 @@ export default function CrudMasterPage({
       useResponseTableColumns,
       normalizedGridTableNames.length,
     ],
+  );
+  const columns = useMemo<ReusableTableColumn<MasterTableRow>[]>(
+    () =>
+      appendTableColumns && appendTableColumns.length > 0
+        ? [...baseColumns, ...appendTableColumns]
+        : baseColumns,
+    [appendTableColumns, baseColumns],
   );
   useEffect(() => {
     if (
@@ -2794,6 +2819,13 @@ export default function CrudMasterPage({
       values: overrideValues ?? createInitialValues ?? INITIAL_FORM_STATE,
     });
   }, [createInitialValues, resetDetailsState, resetSaveState]);
+  const handleCreateAction = useCallback(() => {
+    if (onCreateAction) {
+      onCreateAction();
+      return;
+    }
+    openCreateModal();
+  }, [onCreateAction, openCreateModal]);
   useEffect(() => {
     if (hideListPage) {
       return;
@@ -2806,13 +2838,13 @@ export default function CrudMasterPage({
         return;
       }
       event.preventDefault();
-      openCreateModal();
+      handleCreateAction();
     };
     window.addEventListener("keydown", handleCreateShortcut);
     return () => {
       window.removeEventListener("keydown", handleCreateShortcut);
     };
-  }, [hideListPage, openCreateModal]);
+  }, [handleCreateAction, hideListPage]);
   const openUpdateModalById = useCallback(
     async (
       recordId: string | number,
@@ -3286,9 +3318,13 @@ export default function CrudMasterPage({
   const handleRowUpdate = useCallback(
     (row: MasterTableRow) => {
       setSelectedRowId(row.__rowId);
+      if (onEditAction) {
+        onEditAction(row);
+        return;
+      }
       openUpdateModalForRow(row);
     },
-    [openUpdateModalForRow],
+    [onEditAction, openUpdateModalForRow],
   );
   const handleRowView = useCallback(
     (row: MasterTableRow) => {
@@ -3553,39 +3589,6 @@ export default function CrudMasterPage({
     refetchGridColumns,
     saveColumnWidthApi,
   ]);
-  const handleGridColumnHide = useCallback(
-    (payload: { column: ReusableTableColumn<MasterTableRow> }) => {
-      if (gridId === null) {
-        return;
-      }
-      const gridColumn = resolveGridColumnForTableColumn(payload.column, gridColumns);
-      if (!gridColumn?.serialId) {
-        return;
-      }
-      const serialId = gridColumn.serialId;
-      void (async () => {
-        try {
-          await saveVisibilitySettingsApi({
-            body: { columns: [{ grid_serialid: serialId, grid_column_visibility: false }] },
-          });
-          void refetchGridColumns();
-          await loadRecords(searchTerm, currentPage, pageSize);
-        } catch {
-          // useApi handles the visible error toast.
-        }
-      })();
-    },
-    [
-      currentPage,
-      gridColumns,
-      gridId,
-      loadRecords,
-      pageSize,
-      refetchGridColumns,
-      saveVisibilitySettingsApi,
-      searchTerm,
-    ],
-  );
   const gridSettingsContextMenu =
     gridSettingsContextMenuPosition && typeof document !== "undefined"
       ? createPortal(
@@ -3668,7 +3671,7 @@ export default function CrudMasterPage({
                   <button
                     type="button"
                     className={`${styles.iconBtn} ${styles.iconBtnAdd}`}
-                    onClick={() => openCreateModal()}
+                    onClick={handleCreateAction}
                     disabled={saveLoading || detailsLoading}
                     title={createLabel ?? "Add"}
                   >
@@ -3849,7 +3852,6 @@ export default function CrudMasterPage({
                   resizableColumns
                   onColumnReorder={handleGridColumnReorder}
                   onColumnResizeEnd={handleGridColumnResizeEnd}
-                  onColumnHide={handleGridColumnHide}
                   onBodyContextMenu={
                     enableGridSettingsContextMenu
                       ? handleTableBodyContextMenu

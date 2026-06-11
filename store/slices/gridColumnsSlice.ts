@@ -124,6 +124,8 @@ const COLUMN_SORTABLE_KEYS = [
   "gridColumnFilter",
 ] as const;
 const COLUMN_SERIAL_ID_KEYS = [
+  "grid_column_serial_id",
+  "gridColumnSerialId",
   "grid_serialid",
   "gridSerialId",
   "serial_id",
@@ -377,7 +379,9 @@ function normalizeGridColumnAdjustmentRow(
       fallbackOrder,
     ),
     visible: isDeleted === true ? false : visibility ?? true,
-    serialId: normalizeKey(row.grid_serialid ?? row.gridSerialId) || undefined,
+    serialId:
+      normalizeKey(row.grid_column_serial_id ?? row.gridColumnSerialId ?? row.grid_serialid ?? row.gridSerialId) ||
+      undefined,
     gridId: normalizeKey(row.grid_id ?? row.gridId) || undefined,
     columnNumber: normalizeOrder(row.grid_column_number ?? row.gridColumnNumber, fallbackOrder),
     position: normalizeOrder(row.grid_column_position ?? row.gridColumnPosition, fallbackOrder),

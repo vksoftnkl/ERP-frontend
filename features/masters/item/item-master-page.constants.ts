@@ -93,15 +93,12 @@ export const GODOWN_LOOKUP_QUERY = {
 } as const;
 export const UI_TABLE_COLUMNS_QUERY = {
   uiTableId: ITEM_PRICE_TABLE_UI_ID,
-  uiTblClmIsActive: "true",
 } as const;
 export const UI_REORDER_TABLE_COLUMNS_QUERY = {
   uiTableId: ITEM_REORDER_TABLE_UI_ID,
-  uiTblClmIsActive: "true",
 } as const;
 export const UI_EAN_TABLE_COLUMNS_QUERY = {
   uiTableId: ITEM_EAN_TABLE_UI_ID,
-  uiTblClmIsActive: "true",
 } as const;
 export const ITEM_MASTER_WIDGET_QUERY = {
   page: "1",

@@ -21,6 +21,7 @@ import type {
 const UI_TABLE_MASTERS_LIST_ENDPOINT = "/ui-table-masters/get";
 const UI_TABLE_MASTERS_CREATE_ENDPOINT = "/ui-table-masters/create";
 const UI_TABLE_MASTERS_DELETE_ENDPOINT = "/ui-table-masters/delete";
+const UI_TABLE_COLUMN_DELETE_ENDPOINT = "/ui-table-masters/column-delete";
 const UI_TABLE_COLUMNS_TABLE_MIN_WIDTH = "1440px";
 const UI_TABLE_DEVICE_TYPE_OPTIONS = [
   "web",
@@ -198,7 +199,13 @@ function buildUiTableColumnRequest(
     uiTblClmIsActive: column.isActive,
   };
 }
-export default function UiTableDesignerPage() {
+export default function UiTableDesignerPage({
+  initialUiTableId,
+  startNew = false,
+}: {
+  initialUiTableId?: string;
+  startNew?: boolean;
+}) {
   const [form, setForm] = useState<UiTableForm>(INITIAL_FORM);
   const [columns, setColumns] = useState<UiTableColumnRow[]>([]);
   const [positionDrafts, setPositionDrafts] = useState<Record<string, string>>({});
@@ -208,6 +215,7 @@ export default function UiTableDesignerPage() {
   const [isTableLoading, setIsTableLoading] = useState(false);
   const [isTableSaving, setIsTableSaving] = useState(false);
   const [isTableDeleting, setIsTableDeleting] = useState(false);
+  const [isColumnDeleting, setIsColumnDeleting] = useState(false);
   const [statusText, setStatusText] = useState("Ready.");
   const didInitialLoadRef = useRef(false);
   const { getAll: listUiTables } = useApi<ApiSuccessResponse<UiTablePayload[]>>(
@@ -234,11 +242,20 @@ export default function UiTableDesignerPage() {
       toast: { success: false, error: true },
     },
   );
+  const { run: deleteUiTableColumn } = useApi<
+    ApiSuccessResponse<{ uiTblClmId: string; deleted: true }>
+  >(
+    UI_TABLE_COLUMN_DELETE_ENDPOINT,
+    {
+      method: "DELETE",
+      toast: { success: false, error: true },
+    },
+  );
   const selectedColumn = useMemo(
     () => columns.find((column) => column.id === selectedColumnId) ?? null,
     [columns, selectedColumnId],
   );
-  const isBusy = isTableLoading || isTableSaving || isTableDeleting;
+  const isBusy = isTableLoading || isTableSaving || isTableDeleting || isColumnDeleting;
   const emptyColumnsMessage = 'No UI table columns yet. Use "Add Column" to create rows.';
   const updateForm = <K extends keyof UiTableForm>(key: K, value: UiTableForm[K]) => {
     setForm((current) => ({
@@ -732,9 +749,31 @@ export default function UiTableDesignerPage() {
     setColumns((current) => resequenceColumns([...current, nextColumn]));
     setSelectedColumnId(nextColumn.id);
   }, [clearAllPositionDrafts, columns.length]);
-  const handleDeleteColumn = useCallback(() => {
+  const handleDeleteColumn = useCallback(async () => {
     if (!selectedColumnId) {
       return;
+    }
+    const columnToDelete = columns.find((column) => column.id === selectedColumnId);
+    if (!columnToDelete) {
+      return;
+    }
+    const savedColumnId = columnToDelete.uiTblClmId?.trim() ?? "";
+    if (savedColumnId) {
+      setIsColumnDeleting(true);
+      setStatusText(`Deleting UI table column ${savedColumnId}...`);
+      try {
+        await deleteUiTableColumn({
+          query: {
+            uiTblClmId: savedColumnId,
+          },
+        });
+        toast.success("UI table column deleted successfully.");
+      } catch {
+        setStatusText(`Unable to delete UI table column ${savedColumnId}.`);
+        return;
+      } finally {
+        setIsColumnDeleting(false);
+      }
     }
     const nextColumns = resequenceColumns(
       columns.filter((column) => column.id !== selectedColumnId),
@@ -742,7 +781,10 @@ export default function UiTableDesignerPage() {
     clearAllPositionDrafts();
     setColumns(nextColumns);
     setSelectedColumnId(nextColumns[0]?.id ?? "");
-  }, [clearAllPositionDrafts, columns, selectedColumnId]);
+    if (savedColumnId) {
+      setStatusText(`Deleted UI table column ${savedColumnId}.`);
+    }
+  }, [clearAllPositionDrafts, columns, deleteUiTableColumn, selectedColumnId]);
   useEffect(() => {
     if (didInitialLoadRef.current) {
       return;
@@ -751,12 +793,20 @@ export default function UiTableDesignerPage() {
     const loadInitialState = async () => {
       try {
         const savedTables = await refreshTableOptions();
-        const preferredTableId = savedTables[0]?.uiTableId ?? "";
+        if (startNew) {
+          handleCreateNewTable();
+          return;
+        }
+        const preferredTableId = initialUiTableId ?? savedTables[0]?.uiTableId ?? "";
         if (preferredTableId) {
           await loadUiTableById(preferredTableId);
           return;
         }
       } catch {
+        if (startNew) {
+          handleCreateNewTable();
+          return;
+        }
         setStatusText("Unable to load saved UI table list.");
         return;
       }
@@ -767,7 +817,7 @@ export default function UiTableDesignerPage() {
       setStatusText("No saved UI tables available. Ready for a new UI table.");
     };
     void loadInitialState();
-  }, [loadUiTableById, refreshTableOptions]);
+  }, [handleCreateNewTable, initialUiTableId, loadUiTableById, refreshTableOptions, startNew]);
   return (
     <main className={styles.page}>
       <div className={styles.workspace}>
@@ -924,7 +974,7 @@ export default function UiTableDesignerPage() {
               <button
                 type="button"
                 className={styles.desktopButton}
-                onClick={handleDeleteColumn}
+                onClick={() => void handleDeleteColumn()}
                 disabled={isBusy || !selectedColumnId}
               >
                 Delete Column
