@@ -89,5 +89,6 @@ export type SaveUiTableMasterRequest = {
   uiTblEditable: boolean;
   uiTblIsActive: boolean;
   uiTblColumns?: SaveUiTableColumnRequest[];
+  replaceColumns?: boolean;
 };
 

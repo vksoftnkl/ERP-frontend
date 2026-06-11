@@ -648,6 +648,7 @@ export default function UiTableDesignerPage() {
           uiTblColumns: columns.map((column, rowIndex) =>
             buildUiTableColumnRequest(column, rowIndex),
           ),
+          replaceColumns: true,
         },
       });
       const savedTable = tableResponse?.data;

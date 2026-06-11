@@ -16,7 +16,7 @@ import {
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
 const API_ENDPOINTS = {
-  list: "/grid-details/get",
+  list: "/configured-grid-sql/run?grid_id=33",
   getById: "/grid-details/get",
   create: "/grid-details/create",
   delete: "/grid-details/delete",

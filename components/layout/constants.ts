@@ -160,7 +160,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         label:"GSP Company Service",href:"/master/gsp-company-service"
       },
       {
-        label:"Grid Master",href:"/master/grid-master"
+        label:"Grid Settings",href:"/master/grid-master"
       },
       {
         label:"Grid Designer",href:"/master/grid-designer"
