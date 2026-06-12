@@ -1429,7 +1429,7 @@ function findRawGridColumn(
   if (gridColumn.serialId) {
     const serialId = gridColumn.serialId.trim();
     const bySerialId = rawColumns.find(
-      (column) => toDisplayValue(column.grid_serialid ?? column.gridSerialId) === serialId,
+      (column) => toDisplayValue(column.grid_column_id ?? column.gridColumnId) === serialId,
     );
     if (bySerialId) {
       return bySerialId;
@@ -1478,7 +1478,7 @@ function buildGridColumnBasePayload(
   const position = gridColumn.position ?? rawPosition ?? gridColumn.order;
 
   return {
-    grid_serialid: gridColumn.serialId,
+    grid_column_id: gridColumn.serialId,
     grid_column_number: columnNumber,
     grid_column_name: columnName,
     grid_column_width: width,
@@ -2721,7 +2721,7 @@ export default function CrudMasterPage({
       const columns = gridSettingsColumns
         .filter((column) => Boolean(column.serialId))
         .map((column) => ({
-          grid_serialid: column.serialId!,
+          grid_column_id: column.serialId!,
           ...(gridSettingsMode === "visibility"
             ? { grid_column_visibility: gridSettingsSelections[column.serialId!] === true }
             : { grid_column_filter: gridSettingsSelections[column.serialId!] === true }),
@@ -3574,7 +3574,7 @@ export default function CrudMasterPage({
       return;
     }
     const columns = Object.entries(pending).map(([serialId, widthPercent]) => ({
-      grid_serialid: serialId,
+      grid_column_id: serialId,
       grid_column_width: widthPercent,
     }));
     try {

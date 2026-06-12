@@ -19,7 +19,7 @@ export type GridDesignerForm = {
 
 export type GridColumnRow = {
   id: string;
-  gridSerialId: string | null;
+  gridColumnId: string | null;
   columnNumber: number;
   columnName: string;
   sqlFieldName: string;
@@ -57,7 +57,7 @@ export type GridDetailPayload = {
 };
 
 export type GridColumnPayload = {
-  grid_serialid: string;
+  grid_column_id: string;
   grid_id: string;
   grid_column_number: number;
   grid_column_name: string;
@@ -80,7 +80,7 @@ export type GridColumnPayload = {
 export type GridListMeta = SharedListMeta;
 
 export type SaveGridColumnRequest = {
-  grid_serialid?: string;
+  grid_column_id?: string;
   grid_column_number: number;
   grid_column_name: string;
   grid_column_width: number | null;

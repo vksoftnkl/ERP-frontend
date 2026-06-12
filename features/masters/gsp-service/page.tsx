@@ -11,7 +11,7 @@ import {
 } from "@/app/master/_shared/crud-utils";
 
 const API_ENDPOINTS = {
-  list: "/tender-type-masters/list",
+  list: "/tender-type-masters/get",
   getById: "/tender-type-masters/get",
   create: "/tender-type-masters/create",
   delete: "/tender-type-masters/delete",

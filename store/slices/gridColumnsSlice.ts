@@ -4,7 +4,7 @@ import { API_BASE, getAuthHeaderValue } from "@/lib/api/client";
 import { getAuthSession } from "@/lib/auth/session";
 import type { RootState } from "@/store/store";
 import { getFirstDefinedValue } from "@/features/masters/shared/value-mappers";
-const GRID_COLUMNS_LIST_ENDPOINT = "/grid-details/get";
+const GRID_COLUMNS_LIST_ENDPOINT = "/configured-grid-sql/columns";
 
 const ARRAY_KEYS = [
   "data",
@@ -124,9 +124,9 @@ const COLUMN_SORTABLE_KEYS = [
   "gridColumnFilter",
 ] as const;
 const COLUMN_SERIAL_ID_KEYS = [
-  "grid_column_serial_id",
+  "grid_column_id",
   "gridColumnSerialId",
-  "grid_serialid",
+  "grid_serial_id",
   "gridSerialId",
   "serial_id",
   "serialId",
@@ -380,7 +380,7 @@ function normalizeGridColumnAdjustmentRow(
     ),
     visible: isDeleted === true ? false : visibility ?? true,
     serialId:
-      normalizeKey(row.grid_column_serial_id ?? row.gridColumnSerialId ?? row.grid_serialid ?? row.gridSerialId) ||
+      normalizeKey(row.grid_column_id ?? row.gridColumnSerialId ?? row.grid_serial_id ?? row.gridSerialId) ||
       undefined,
     gridId: normalizeKey(row.grid_id ?? row.gridId) || undefined,
     columnNumber: normalizeOrder(row.grid_column_number ?? row.gridColumnNumber, fallbackOrder),
@@ -534,7 +534,7 @@ export const fetchGridColumns = createAsyncThunk<
       baseURL: API_BASE || undefined,
       headers,
       params: {
-        gridId,
+        grid_id: gridId,
       },
     });
 

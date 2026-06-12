@@ -50,7 +50,7 @@ function createColumnDraft(
 ): GridColumnRow {
   return {
     id: createLocalColumnId(),
-    gridSerialId: null,
+    gridColumnId: null,
     columnNumber,
     columnName: "",
     sqlFieldName: "",
@@ -128,7 +128,7 @@ function resolveColorPickerValue(value: string): string {
 function mapGridColumnPayloadToRow(payload: GridColumnPayload): GridColumnRow {
   return {
     id: createLocalColumnId(),
-    gridSerialId: payload.grid_serialid,
+    gridColumnId: payload.grid_column_id,
     columnNumber: payload.grid_column_number,
     columnName: payload.grid_column_name ?? "",
     sqlFieldName: payload.grid_column_sql_field_name ?? "",
@@ -151,7 +151,7 @@ function buildGridColumnRequest(
   rowIndex: number,
 ): SaveGridColumnRequest {
   return {
-    ...(column.gridSerialId ? { grid_serialid: column.gridSerialId } : {}),
+    ...(column.gridColumnId ? { grid_column_id: column.gridColumnId } : {}),
     grid_column_number: rowIndex + 1,
     grid_column_name: column.columnName.trim() || `Column ${rowIndex + 1}`,
     grid_column_width: toNullableNumber(column.width),
@@ -226,7 +226,7 @@ export default function GridDesignerPage({
     toast: { success: false, error: true },
   });
   const { run: deleteGridColumn } = useApi<
-    ApiSuccessResponse<{ grid_serialid: string; deleted: true }>
+    ApiSuccessResponse<{ grid_column_id: string; deleted: true }>
   >(GRID_DETAILS_COLUMN_DELETE_ENDPOINT, {
     method: "DELETE",
     toast: { success: false, error: true },
@@ -293,11 +293,11 @@ export default function GridDesignerPage({
         mobileLabel: "No",
       },
       {
-        key: "gridSerialId",
-        header: "Serial Id",
+        key: "gridColumnId",
+        header: "Column Id",
         width: "112px",
-        mobileLabel: "Serial Id",
-        render: (row) => <span className={styles.serialIdTag}>{row.gridSerialId ?? "New"}</span>,
+        mobileLabel: "Column Id",
+        render: (row) => <span className={styles.serialIdTag}>{row.gridColumnId ?? "New"}</span>,
       },
       {
         key: "columnName",
@@ -724,14 +724,14 @@ export default function GridDesignerPage({
     if (!deletedColumn) {
       return;
     }
-    const savedSerialId = deletedColumn.gridSerialId?.trim() ?? "";
+    const savedSerialId = deletedColumn.gridColumnId?.trim() ?? "";
     if (savedSerialId) {
       setIsColumnDeleting(true);
       setStatusText(`Deleting grid column ${savedSerialId}...`);
       try {
         await deleteGridColumn({
           query: {
-            grid_serialid: savedSerialId,
+            grid_column_id: savedSerialId,
           },
         });
         toast.success("Grid column deleted successfully.");

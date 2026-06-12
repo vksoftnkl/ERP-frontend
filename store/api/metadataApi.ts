@@ -11,9 +11,9 @@ export const metadataApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getGridColumns: builder.query<GridColumnConfig[], GridColumnsQueryArg>({
       query: ({ gridId }) => ({
-        url: "/grid-details/get",
+        url: "/configured-grid-sql/columns",
         params: {
-          gridId: gridId,
+          grid_id: gridId,
         },
       }),
       transformResponse: (payload: unknown) => normalizeGridColumnsPayload(payload),

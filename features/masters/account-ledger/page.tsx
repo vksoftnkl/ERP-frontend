@@ -168,7 +168,7 @@ function buildLedgerGridColumnBasePayload(
     return null;
   }
   return {
-    grid_serialid: gridColumn.serialId,
+    grid_column_id: gridColumn.serialId,
     grid_id: gridColumn.gridId ?? String(fallbackGridId),
     grid_column_number: columnNumber,
     grid_column_name: columnName,
@@ -1555,7 +1555,7 @@ export default function AccountLedgerMasterPage() {
       pendingColumnWidthsRef.current = {
         ...pendingColumnWidthsRef.current,
         [gridColumn.serialId]: {
-          grid_serialid: gridColumn.serialId,
+          grid_column_id: gridColumn.serialId,
           grid_id: gridColumn.gridId ?? String(accountLedgerGridId),
           grid_column_number: columnNumber,
           grid_column_name: columnName,

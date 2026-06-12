@@ -11,7 +11,7 @@ import styles from "@/app/master/state-master/page.module.scss";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue, toSelectBoolean } from "@/features/masters/shared/value-mappers";
 const API_ENDPOINTS = {
-  list: "/tender-masters/list",
+  list: "/tender-masters/get",
   getById: "/tender-masters/get",
   create: "/tender-masters/create",
   delete: "/tender-masters/delete",
@@ -37,7 +37,6 @@ const LOOKUP_KEYS = {
   description: ["tndRemarks", "tnd_remarks", "description", "remarks"],
   array: ["data", "items", "results", "rows", "list", "tenders", "tenderMasters"],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "tndId",
   name: "tndName",
