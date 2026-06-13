@@ -24,6 +24,7 @@ export type DropdownColumnRow = {
   columnNumber: number;
   columnName: string;
   columnAlias: string;
+  sqlName: string;
   dataType: string;
   width: string;
   alignment: Alignment;
@@ -48,6 +49,7 @@ export type DropdownColumnPayload = {
   dropdown_columns_visiblity: boolean;
   dropdown_columns_allignment: string | null;
   dropdown_columns_filter: boolean;
+  dropdown_columns_sql_name: string | null;
 };
 
 export type DropdownDetailPayload = {
@@ -78,6 +80,7 @@ export type SaveDropdownColumnRequest = {
   dropdown_columns_visiblity: boolean;
   dropdown_columns_allignment: string | null;
   dropdown_columns_filter: boolean;
+  dropdown_columns_sql_name?: string | null;
 };
 
 export type SaveDropdownDetailRequest = {

@@ -20,7 +20,7 @@ import type {
 const DROPDOWN_DETAILS_GET_ENDPOINT = "/dropdown-details/get";
 const DROPDOWN_DETAILS_CREATE_ENDPOINT = "/dropdown-details/create";
 const DROPDOWN_DETAILS_DELETE_ENDPOINT = "/dropdown-details/delete";
-const DROPDOWN_COLUMNS_TABLE_MIN_WIDTH = "1120px";
+const DROPDOWN_COLUMNS_TABLE_MIN_WIDTH = "1320px";
 const SORT_ORDER_OPTIONS: Array<{ value: SortOrder; label: string }> = [
   { value: "ASC", label: "Ascending" },
   { value: "DESC", label: "Descending" },
@@ -63,6 +63,7 @@ function createColumnDraft(
     columnNumber,
     columnName: "",
     columnAlias: "",
+    sqlName: "",
     dataType: "Text",
     width: "",
     alignment: "Left",
@@ -128,6 +129,7 @@ function mapDropdownColumnPayloadToRow(payload: DropdownColumnPayload): Dropdown
     columnNumber: payload.dropdown_columns_no,
     columnName: payload.dropdown_columns_name,
     columnAlias: payload.dropdown_columns_alias ?? "",
+    sqlName: payload.dropdown_columns_sql_name ?? "",
     dataType: payload.dropdown_columns_data_type,
     width: formatNullableNumber(payload.dropdown_columns_width),
     alignment: normalizeAlignment(payload.dropdown_columns_allignment),
@@ -145,6 +147,7 @@ function buildDropdownColumnRequest(
     dropdown_columns_data_type: column.dataType.trim() || "Text",
     dropdown_columns_name: column.columnName.trim() || `Column ${rowIndex + 1}`,
     dropdown_columns_alias: toNullableString(column.columnAlias),
+    dropdown_columns_sql_name: toNullableString(column.sqlName),
     dropdown_columns_width: toNullableNumber(column.width),
     dropdown_columns_visiblity: column.visible,
     dropdown_columns_allignment: column.alignment,
@@ -304,6 +307,19 @@ export default function DropdownDesignerPage({
             className={styles.cellInput}
             value={row.columnAlias}
             onChange={(event) => updateColumn(row.id, "columnAlias", event.target.value)}
+          />
+        ),
+      },
+      {
+        key: "sqlName",
+        header: "SQL Name",
+        width: "200px",
+        mobileLabel: "SQL Name",
+        render: (row) => (
+          <input
+            className={styles.cellInput}
+            value={row.sqlName}
+            onChange={(event) => updateColumn(row.id, "sqlName", event.target.value)}
           />
         ),
       },
@@ -892,6 +908,16 @@ export default function DropdownDesignerPage({
                         value={column.columnAlias}
                         onChange={(event) =>
                           updateColumn(column.id, "columnAlias", event.target.value)
+                        }
+                      />
+                    </label>
+                    <label className={styles.cardField}>
+                      <span className={styles.cardFieldLabel}>SQL Name</span>
+                      <input
+                        className={styles.cardInput}
+                        value={column.sqlName}
+                        onChange={(event) =>
+                          updateColumn(column.id, "sqlName", event.target.value)
                         }
                       />
                     </label>
