@@ -54,6 +54,7 @@ import type {
   SaveLoyaltySchemeRequest,
   LoyaltyPointPayload,
   LoyaltyGiftPayload,
+  SchemeListRow,
 } from "./promotion-loyalty-points.types";
 import {
   CUSTOMER_TYPE_OPTIONS,
@@ -135,13 +136,13 @@ import { PartyTab } from "./tabs/party-tab";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import styles from "./page.module.scss";
 const DEFAULT_PARTY_SCOPE_TYPE: PartyScopeType = "CUSTOMER_GROUP";
-const BRANCH_LIST_ENDPOINT = "/branch-masters/list";
+const BRANCH_LIST_ENDPOINT = "/branch-masters/get";
 const BRANCH_LIST_PAGE_LIMIT = 100;
-const ITEM_PRICE_LIST_ENDPOINT = "/item-prices/list";
+const ITEM_PRICE_LIST_ENDPOINT = "/item-prices/get";
 const ITEM_LIST_ENDPOINT = "/configured-grid-sql/run?grid_id=1"
-const UNIT_LIST_ENDPOINT = "/units/list";
-const CUSTOMER_LIST_ENDPOINT = "/customers/list";
-const CUSTOMER_GROUP_LIST_ENDPOINT = "/customer-groups/list";
+const UNIT_LIST_ENDPOINT = "/units/get";
+const CUSTOMER_LIST_ENDPOINT = "/customers/get";
+const CUSTOMER_GROUP_LIST_ENDPOINT = "/customer-groups/get";
 const MODAL_FIELD_STYLE_VARS = {
   "--erp-modal-control-height": "2.15rem",
   "--erp-modal-control-padding-y": "0.5rem",
@@ -320,7 +321,7 @@ function isDefaultBranch(row: BranchRecord): boolean {
   ].some(isTruthyLookupFlag);
 }
 function getSchemeBranchLabel(
-  row: LoyaltySchemePayload,
+  row: { ls_branch_id: string | null },
   branchLabelMap: Map<string, string>,
 ): string {
   const directBranchName = readStringField(
@@ -331,6 +332,28 @@ function getSchemeBranchLabel(
     return directBranchName;
   }
   return resolveLabel(row.ls_branch_id, branchLabelMap, "All Branches");
+}
+function toSchemeListRow(row: Record<string, unknown>): SchemeListRow {
+  const toStr = (value: unknown): string => (value == null ? "" : String(value));
+  const toNullableStr = (value: unknown): string | null => (value == null ? null : String(value));
+  const toCount = (value: unknown): number => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  return {
+    ls_id: toStr(row.ls_id),
+    ls_code: toNullableStr(row.ls_code),
+    ls_name: toStr(row.ls_name),
+    ls_type: toStr(row.ls_type),
+    ls_status: toStr(row.ls_status),
+    ls_branch_id: toNullableStr(row.ls_branch_id),
+    ls_start_date: toStr(row.ls_start_date),
+    ls_end_date: toStr(row.ls_end_date),
+    ls_is_active: Boolean(row.ls_is_active),
+    points_count: toCount(row.points_count),
+    gifts_count: toCount(row.gifts_count),
+    parties_count: toCount(row.parties_count),
+  };
 }
 
 type MetricTone = "blue" | "green" | "orange" | "purple";
@@ -385,7 +408,6 @@ function MetricCard({
     </article>
   );
 }
-
 export default function PromotionLoyaltyPointsPage() {
   const {
     companyOptions,
@@ -397,7 +419,7 @@ export default function PromotionLoyaltyPointsPage() {
   const [pageBranchChoices, setPageBranchChoices] = useState<ERPDynamicSelectOption[]>([]);
   const [pageDefaultBranchId, setPageDefaultBranchId] = useState(selectedBranchId);
   const [schemeBranchChoices, setSchemeBranchChoices] = useState<ERPDynamicSelectOption[]>([]);
-  const [schemeRows, setSchemeRows] = useState<LoyaltySchemePayload[]>([]);
+  const [schemeRows, setSchemeRows] = useState<SchemeListRow[]>([]);
   const [selectedScheme, setSelectedScheme] = useState<LoyaltySchemePayload | null>(null);
   const [listMeta, setListMeta] = useState<PromotionLoyaltyPointsListMeta | null>(null);
   const [schemeSearch, setSchemeSearch] = useState("");
@@ -437,7 +459,7 @@ export default function PromotionLoyaltyPointsPage() {
   const deferredSchemeSearch = useDeferredValue(schemeSearch.trim());
   // ── API hooks ─────────────────────────────────────────────────────────────
   const { getAll: listSchemes, loading: listLoading, error: listError } = useApi<
-    ApiSuccessResponse<LoyaltySchemePayload[], PromotionLoyaltyPointsListMeta>
+    ApiSuccessResponse<{ items: Record<string, unknown>[]; meta: { page: number; limit: number; total: number } }>
   >(LOYALTY_LIST_ENDPOINT, { toast: { success: false, error: true } });
   const { run: getSchemeById, loading: detailLoading, error: detailError } = useApi<
     ApiSuccessResponse<LoyaltySchemePayload>
@@ -931,20 +953,28 @@ export default function PromotionLoyaltyPointsPage() {
       resetSchemeEditor("", "");
       return;
     }
+    const limit = 100;
     const query: Record<string, string> = {
-      ls_comp_id: pageCompanyId.trim(),
       page: "1",
-      limit: "100",
+      limit: String(limit),
+      grid_param: JSON.stringify({
+        p_comp_id: pageCompanyId.trim(),
+        p_branch_id: branchFilter.trim(),
+        p_status: statusFilter.trim(),
+        p_type: typeFilter.trim(),
+      }),
     };
-    if (branchFilter.trim()) query.ls_branch_id = branchFilter.trim();
     if (deferredSchemeSearch) query.search = deferredSchemeSearch;
-    if (statusFilter.trim()) query.ls_status = statusFilter;
-    if (typeFilter.trim()) query.ls_type = typeFilter;
     const response = await listSchemes(query);
     if (requestId !== listRequestIdRef.current) return;
-    const nextRows = response?.data ?? [];
+    const nextRows = (response?.data?.items ?? []).map(toSchemeListRow);
     setSchemeRows(nextRows);
-    setListMeta(response?.meta ?? null);
+    const meta = response?.data?.meta ?? null;
+    setListMeta(
+      meta
+        ? { ...meta, total_pages: meta.limit > 0 ? Math.ceil(meta.total / meta.limit) : 0 }
+        : null,
+    );
     if (selectedScheme && !nextRows.some((r) => r.ls_id === selectedScheme.ls_id)) {
       resetSchemeEditor(pageCompanyId, pageDefaultBranchId);
     }
@@ -1425,7 +1455,7 @@ export default function PromotionLoyaltyPointsPage() {
     headerClassName: styles.schemeTableHeaderCell,
     cellClassName: styles.schemeTableCell,
   };
-  const schemeColumns: ReusableTableColumn<LoyaltySchemePayload>[] = [
+  const schemeColumns: ReusableTableColumn<SchemeListRow>[] = [
     {
       key: "slno",
       header: "Sl No",
@@ -1488,7 +1518,7 @@ export default function PromotionLoyaltyPointsPage() {
     },
     {
       key: "rules", header: "Rules",
-      render: (r) => `${r.points.length} points / ${r.gifts.length} gifts / ${r.parties.length} parties`,
+      render: (r) => `${r.points_count} points / ${r.gifts_count} gifts / ${r.parties_count} parties`,
       width: "178px",
       sortable: false,
       ...tableColumnClassNames,
@@ -1646,7 +1676,7 @@ export default function PromotionLoyaltyPointsPage() {
         </div>
         {listError ? <Alert kind="danger" title="Unable to load loyalty schemes" className={styles.alert}>{listError}</Alert> : null}
         <div className={styles.tablePanel}>
-          <ReusableTable<LoyaltySchemePayload>
+          <ReusableTable<SchemeListRow>
             columns={schemeColumns}
             rows={schemeRows}
             rowKey="ls_id"

@@ -21,8 +21,6 @@ const CATEGORY_LOOKUP_QUERY = {
   module: "itemCategories",
   limit: "20",
 } as const;
-// const TAX_LOOKUP_ENDPOINT = "/item-taxes/list";
-// const UNIT_LOOKUP_ENDPOINT = "/units/list";
 const LOOKUP_KEYS = {
   id: [
     "category_id",

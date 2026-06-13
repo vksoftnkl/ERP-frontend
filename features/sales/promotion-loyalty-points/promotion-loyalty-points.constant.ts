@@ -76,7 +76,8 @@ export const DEFAULT_REQUIRED_ITEM_OPTION: ERPDynamicSelectOption = { value: "",
 export const DEFAULT_REQUIRED_UNIT_OPTION: ERPDynamicSelectOption = { value: "", label: "Select Unit" };
 export const DEFAULT_PARTY_CUSTOMER_GROUP_OPTION: ERPDynamicSelectOption = { value: "", label: "Select Customer Group" };
 export const DEFAULT_PARTY_CUSTOMER_OPTION: ERPDynamicSelectOption = { value: "", label: "Select Customer" };
-export const LOYALTY_LIST_ENDPOINT = "/promotion-loyalty-points/get";
+export const LOYALTY_LIST_GRID_ID = 40;
+export const LOYALTY_LIST_ENDPOINT = `/configured-grid-sql/run?grid_id=${LOYALTY_LIST_GRID_ID}`;
 export const LOYALTY_GET_ENDPOINT = "/promotion-loyalty-points/get";
 export const LOYALTY_SAVE_ENDPOINT = "/promotion-loyalty-points/create";
 export const LOYALTY_DELETE_ENDPOINT = "/promotion-loyalty-points/delete";

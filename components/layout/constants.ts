@@ -169,6 +169,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         label:"Widget Master",href:"/master/widget-master"
       },
       {
+        label:"Dropdown Settings",href:"/master/dropdown-master"
+      },
+      {
         label:"Dropdown Designer",href:"/master/dropdown-designer"
       },
       {

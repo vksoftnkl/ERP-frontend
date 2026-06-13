@@ -79,12 +79,12 @@ import type {
 const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
-const GRID_DETAILS_ENDPOINT = "/grid-details/list";
 const GRID_DETAIL_GET_ENDPOINT = "/grid-details/get";
 const GRID_COLUMNS_CREATE_ENDPOINT = "/grid-details/create";
 const GRID_COLUMN_WIDTH_ENDPOINT = "/grid-details/column-width";
 const GRID_FILTER_SETTINGS_ENDPOINT = "/grid-details/filter-settings";
 const GRID_VISIBILITY_SETTINGS_ENDPOINT = "/grid-details/visibility-settings";
+const UI_TABLE_MASTER_GET_ENDPOINT = "/ui-table-masters/get";
 const MASTER_SERIAL_COLUMN_WIDTH = "40px";
 const MASTER_ACTIONS_COLUMN_WIDTH = "72px";
 const RESPONSE_TABLE_DEFAULT_COLUMN_WIDTH = "180px";
@@ -99,6 +99,17 @@ const GRID_DETAIL_SORT_COLUMN_KEYS = ["grid_sort_column", "gridSortColumn", "sor
 const GRID_DETAIL_SORT_ORDER_KEYS = ["grid_sort_order", "gridSortOrder", "sortOrder"] as const;
 const GRID_DETAIL_STATUS_KEYS = ["grid_status", "gridStatus", "status"] as const;
 const GRID_DETAIL_DEVICE_TYPE_KEYS = ["grid_device_type", "gridDeviceType", "deviceType"] as const;
+const UI_TABLE_ID_KEYS = ["uiTblId", "uiTableId"] as const;
+const UI_TABLE_COLUMN_ARRAY_KEYS = ["columns", "uiTblColumns", "uiTableColumns"] as const;
+const UI_TABLE_COLUMN_ID_KEYS = ["uiTblClmId", "uiTableColumnId", "id"] as const;
+const UI_TABLE_COLUMN_NAME_KEYS = ["uiTblClmName", "columnName", "name", "header", "label"] as const;
+const UI_TABLE_COLUMN_NUMBER_KEYS = ["uiTblClmNo", "columnNumber", "columnNo"] as const;
+const UI_TABLE_COLUMN_POSITION_KEYS = ["uiTblClmColumnPosition", "position", "order"] as const;
+const UI_TABLE_COLUMN_WIDTH_KEYS = ["uiTblClmColumnWidth", "width", "columnWidth"] as const;
+const UI_TABLE_COLUMN_VISIBLE_KEYS = ["uiTblClmColumnVisibility", "visible", "isVisible"] as const;
+const UI_TABLE_COLUMN_FOCUS_KEYS = ["uiTblClmColumnFocus", "focus", "sortable"] as const;
+const UI_TABLE_COLUMN_ACTIVE_KEYS = ["uiTblClmIsActive", "isActive", "active"] as const;
+const UI_TABLE_COLUMN_DELETED_KEYS = ["uiTblClmIsDeleted", "isDeleted", "deleted"] as const;
 const DEFAULT_ARRAY_KEYS = [
   "data",
   "items",
@@ -677,10 +688,34 @@ function getSourceColumnValue(
   }
 
   const normalizedSourceKey = normalizeColumnToken(sourceKey);
-  const matchedKey = Object.keys(source).find(
+  const sourceKeys = Object.keys(source);
+  const matchedKey = sourceKeys.find(
     (key) => normalizeColumnToken(key) === normalizedSourceKey,
   );
-  return matchedKey ? source[matchedKey] : "";
+  if (matchedKey) {
+    return source[matchedKey];
+  }
+
+  const compactSourceKey = normalizedSourceKey.replace(/_/g, "");
+  const compactMatchedKey = sourceKeys.find(
+    (key) => normalizeColumnToken(key).replace(/_/g, "") === compactSourceKey,
+  );
+  if (compactMatchedKey) {
+    return source[compactMatchedKey];
+  }
+
+  const suffixMatchedKey =
+    compactSourceKey.length >= 3
+      ? sourceKeys.find((key) => {
+          const normalizedKey = normalizeColumnToken(key);
+          const compactKey = normalizedKey.replace(/_/g, "");
+          return (
+            normalizedKey.endsWith(`_${normalizedSourceKey}`) ||
+            compactKey.endsWith(compactSourceKey)
+          );
+        })
+      : undefined;
+  return suffixMatchedKey ? source[suffixMatchedKey] : "";
 }
 
 function resolveNumericId(value: unknown): number | null {
@@ -755,47 +790,6 @@ function resolveGridDetailsFromSource(
   };
 }
 
-function resolveGridDetailsByTableName(
-  payload: unknown,
-  tableNames: readonly string[],
-): ResolvedGridDetails {
-  const rows = extractRows(payload, DEFAULT_ARRAY_KEYS);
-
-  for (const row of rows) {
-    if (!row || typeof row !== "object" || Array.isArray(row)) {
-      continue;
-    }
-
-    const source = row as Record<string, unknown>;
-    const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
-    if (gridId === null) {
-      continue;
-    }
-
-    const gridSql = toDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_SQL_KEYS)).toLowerCase();
-    if (!gridSql || tableNames.some((tableName) => gridSql.includes(tableName))) {
-      return resolveGridDetailsFromSource(source, gridId);
-    }
-  }
-
-  for (const row of rows) {
-    if (!row || typeof row !== "object" || Array.isArray(row)) {
-      continue;
-    }
-
-    const source = row as Record<string, unknown>;
-    const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS));
-    if (gridId !== null) {
-      return resolveGridDetailsFromSource(source, gridId);
-    }
-  }
-
-  return {
-    gridId: null,
-    gridName: null,
-  };
-}
-
 function pickGridDetailRow(
   rows: unknown[],
   fallbackGridId?: number,
@@ -862,6 +856,168 @@ function resolveGridDetailsByIdPayload(
   const gridId =
     resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS)) ?? fallbackGridId;
   return resolveGridDetailsFromSource(source, gridId);
+}
+
+function normalizeUiTablePayloadId(source: Record<string, unknown>): string {
+  return toDisplayValue(getFirstDefinedValue(source, UI_TABLE_ID_KEYS)).trim();
+}
+
+function pickUiTableSource(
+  rows: unknown[],
+  uiTableId: string,
+): Record<string, unknown> | null {
+  const records = rows.filter(isRecord);
+  if (records.length === 0) {
+    return null;
+  }
+
+  const matchedRecord = records.find(
+    (row) => normalizeUiTablePayloadId(row) === uiTableId,
+  );
+  return matchedRecord ?? records[0];
+}
+
+function hasUiTableColumnArray(source: Record<string, unknown>): boolean {
+  return UI_TABLE_COLUMN_ARRAY_KEYS.some((key) => Array.isArray(source[key]));
+}
+
+function extractUiTableSource(
+  payload: unknown,
+  uiTableId: string,
+): Record<string, unknown> | null {
+  if (Array.isArray(payload)) {
+    return pickUiTableSource(payload, uiTableId);
+  }
+
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const nestedData = payload.data;
+  if (Array.isArray(nestedData)) {
+    return pickUiTableSource(nestedData, uiTableId);
+  }
+  if (isRecord(nestedData)) {
+    if (normalizeUiTablePayloadId(nestedData) || hasUiTableColumnArray(nestedData)) {
+      return nestedData;
+    }
+    const nestedRows = extractRows(nestedData, DEFAULT_ARRAY_KEYS);
+    const nestedSource = pickUiTableSource(nestedRows, uiTableId);
+    if (nestedSource) {
+      return nestedSource;
+    }
+  }
+
+  for (const key of DEFAULT_ARRAY_KEYS) {
+    const value = payload[key];
+    if (Array.isArray(value)) {
+      const source = pickUiTableSource(value, uiTableId);
+      if (source) {
+        return source;
+      }
+    }
+  }
+
+  return normalizeUiTablePayloadId(payload) || hasUiTableColumnArray(payload) ? payload : null;
+}
+
+function extractUiTableColumnRows(source: Record<string, unknown>): Record<string, unknown>[] {
+  for (const key of UI_TABLE_COLUMN_ARRAY_KEYS) {
+    const value = source[key];
+    if (Array.isArray(value)) {
+      return value.filter(isRecord);
+    }
+  }
+  return [];
+}
+
+function normalizeUiTableColumnOrder(value: unknown, fallbackOrder: number): number {
+  const normalized = toPositiveInt(value);
+  return normalized ?? fallbackOrder;
+}
+
+function normalizeUiTableColumnWidth(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return `${value}px`;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (!normalized) {
+      return undefined;
+    }
+    if (/^\d+(\.\d+)?$/.test(normalized)) {
+      return `${Number(normalized)}px`;
+    }
+    return normalized;
+  }
+
+  return undefined;
+}
+
+function normalizeUiTableColumn(
+  row: Record<string, unknown>,
+  fallbackOrder: number,
+): GridColumnConfig | null {
+  const columnName = toDisplayValue(
+    getFirstDefinedValue(row, UI_TABLE_COLUMN_NAME_KEYS),
+  );
+  if (!columnName) {
+    return null;
+  }
+
+  const isDeleted = toBoolean(getFirstDefinedValue(row, UI_TABLE_COLUMN_DELETED_KEYS));
+  const isActive = toBoolean(getFirstDefinedValue(row, UI_TABLE_COLUMN_ACTIVE_KEYS));
+  const isVisible = toBoolean(getFirstDefinedValue(row, UI_TABLE_COLUMN_VISIBLE_KEYS));
+  const sortable = toBoolean(getFirstDefinedValue(row, UI_TABLE_COLUMN_FOCUS_KEYS));
+  const position = normalizeUiTableColumnOrder(
+    getFirstDefinedValue(row, UI_TABLE_COLUMN_POSITION_KEYS),
+    fallbackOrder,
+  );
+
+  return {
+    key: columnName,
+    accessorKey: columnName,
+    header: columnName,
+    order: position,
+    visible: isDeleted === true || isActive === false ? false : isVisible ?? true,
+    serialId:
+      toDisplayValue(getFirstDefinedValue(row, UI_TABLE_COLUMN_ID_KEYS)) ||
+      undefined,
+    columnNumber: normalizeUiTableColumnOrder(
+      getFirstDefinedValue(row, UI_TABLE_COLUMN_NUMBER_KEYS),
+      position,
+    ),
+    position,
+    columnName,
+    sqlFieldName: columnName,
+    sortable: sortable ?? true,
+    width: normalizeUiTableColumnWidth(
+      getFirstDefinedValue(row, UI_TABLE_COLUMN_WIDTH_KEYS),
+    ),
+  };
+}
+
+function normalizeUiTableColumnsPayload(
+  payload: unknown,
+  uiTableId: string,
+): GridColumnConfig[] {
+  const source = extractUiTableSource(payload, uiTableId);
+  if (!source) {
+    return [];
+  }
+
+  return extractUiTableColumnRows(source)
+    .map((row, index) => normalizeUiTableColumn(row, index + 1))
+    .filter((column): column is GridColumnConfig => column !== null)
+    .sort(compareGridColumnConfigOrder);
+}
+
+function getUnknownErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  return fallback;
 }
 
 function normalizeListStyleOrder(value: unknown, fallbackOrder: number): number {
@@ -2217,6 +2373,8 @@ export default function CrudMasterPage({
   gridDetailId,
   gridTableName,
   gridTableNameAliases,
+  uiTableId,
+  useConfiguredGridColumnsOnly = false,
   getByIdMethod,
   buildListQuery,
   listStateResetKey,
@@ -2237,8 +2395,11 @@ export default function CrudMasterPage({
     recordPk: string;
     screenName: string;
   } | null>(null);
-  const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const { getAll: getGridDetailById } = useApi<unknown>(GRID_DETAIL_GET_ENDPOINT);
+  const { getAll: getUiTableById } = useApi<unknown>(
+    UI_TABLE_MASTER_GET_ENDPOINT,
+    { toast: { success: false, error: false } },
+  );
   const { run: saveGridDetails } = useApi<unknown, Record<string, unknown>>(
     GRID_COLUMNS_CREATE_ENDPOINT,
     {
@@ -2321,6 +2482,40 @@ export default function CrudMasterPage({
   );
   const gridColumns = gridColumnsData ?? [];
   const gridColumnsError = getApiErrorMessage(gridColumnsQueryError);
+  const normalizedUiTableId = useMemo(() => {
+    if (uiTableId === undefined || uiTableId === null) {
+      return "";
+    }
+    return String(uiTableId).trim();
+  }, [uiTableId]);
+  const shouldUseUiTableColumns = normalizedUiTableId.length > 0;
+  const [uiTableColumns, setUiTableColumns] = useState<GridColumnConfig[]>([]);
+  const [uiTableColumnsLoading, setUiTableColumnsLoading] = useState(false);
+  const [uiTableColumnsError, setUiTableColumnsError] = useState<string | null>(null);
+  const loadUiTableColumns = useCallback(async () => {
+    if (!normalizedUiTableId) {
+      setUiTableColumns([]);
+      setUiTableColumnsError(null);
+      return;
+    }
+
+    setUiTableColumnsLoading(true);
+    setUiTableColumnsError(null);
+    try {
+      const payload = await getUiTableById({ uiTableId: normalizedUiTableId });
+      setUiTableColumns(normalizeUiTableColumnsPayload(payload, normalizedUiTableId));
+    } catch (loadError) {
+      setUiTableColumns([]);
+      setUiTableColumnsError(
+        getUnknownErrorMessage(loadError, "Unable to load table headers."),
+      );
+    } finally {
+      setUiTableColumnsLoading(false);
+    }
+  }, [getUiTableById, normalizedUiTableId]);
+  useEffect(() => {
+    void loadUiTableColumns();
+  }, [loadUiTableColumns]);
   const normalizedGridTableNames = useMemo(() => {
     const base = gridTableName?.trim().toLowerCase();
     if (!base) {
@@ -2342,10 +2537,7 @@ export default function CrudMasterPage({
     return getConfiguredModuleGridId(gridTableName);
   }, [gridDetailId, gridTableName]);
   useEffect(() => {
-    if (
-      configuredGridDetailId === undefined &&
-      normalizedGridTableNames.length === 0
-    ) {
+    if (configuredGridDetailId === undefined) {
       setGridId(null);
       setGridDisplayName(null);
       setGridDetailsForSave(null);
@@ -2354,23 +2546,12 @@ export default function CrudMasterPage({
     let mounted = true;
     void (async () => {
       try {
-        const resolvedGrid =
-          configuredGridDetailId !== undefined
-            ? resolveGridDetailsByIdPayload(
-                await getGridDetailById({
-                  gridId: String(configuredGridDetailId),
-                }),
-                configuredGridDetailId,
-              )
-            : resolveGridDetailsByTableName(
-                await getGridDetails({
-                  grid_status: "true",
-                  search: normalizedGridTableNames[0],
-                  page: "1",
-                  limit: "20",
-                }),
-                normalizedGridTableNames,
-              );
+        const resolvedGrid = resolveGridDetailsByIdPayload(
+          await getGridDetailById({
+            gridId: String(configuredGridDetailId),
+          }),
+          configuredGridDetailId,
+        );
         if (!mounted) {
           return;
         }
@@ -2379,7 +2560,7 @@ export default function CrudMasterPage({
         setGridDetailsForSave(resolvedGrid);
       } catch {
         if (mounted) {
-          setGridId(configuredGridDetailId ?? null);
+          setGridId(configuredGridDetailId);
           setGridDisplayName(null);
           setGridDetailsForSave(null);
         }
@@ -2388,12 +2569,7 @@ export default function CrudMasterPage({
     return () => {
       mounted = false;
     };
-  }, [
-    configuredGridDetailId,
-    getGridDetailById,
-    getGridDetails,
-    normalizedGridTableNames,
-  ]);
+  }, [configuredGridDetailId, getGridDetailById]);
   const effectiveTitle = useMemo(() => {
     const normalized = gridDisplayName?.trim();
     return normalized || title;
@@ -2494,12 +2670,15 @@ export default function CrudMasterPage({
           ? ensureMasterSerialColumn(listResponseColumns, fallbackColumns)
           : buildMasterSerialOnlyColumns(fallbackColumns);
       }
-      return normalizedGridTableNames.length > 0
+      const configuredColumns = shouldUseUiTableColumns ? uiTableColumns : gridColumns;
+      const hasConfiguredColumnSource =
+        shouldUseUiTableColumns || normalizedGridTableNames.length > 0;
+      return hasConfiguredColumnSource
         ? buildColumnsFromGridColumns(
-            gridColumns,
+            configuredColumns,
             lookupKeys,
             fallbackColumns,
-            gridColumns.length === 0,
+            useConfiguredGridColumnsOnly ? false : configuredColumns.length === 0,
             columnRenderOverrides,
           )
         : fallbackColumns;
@@ -2513,8 +2692,11 @@ export default function CrudMasterPage({
       gridColumns,
       listResponseColumns,
       lookupKeys,
+      shouldUseUiTableColumns,
       responseTableColumnExcludeKeys,
       rows.length,
+      uiTableColumns,
+      useConfiguredGridColumnsOnly,
       useResponseTableColumns,
       normalizedGridTableNames.length,
     ],
@@ -3781,24 +3963,39 @@ export default function CrudMasterPage({
                     </p>
                   </div>
                 ) : null}
-                {normalizedGridTableNames.length > 0 && gridColumnsError ? (
+                {(shouldUseUiTableColumns
+                  ? uiTableColumnsError
+                  : normalizedGridTableNames.length > 0
+                    ? gridColumnsError
+                    : null) ? (
                   <div className={styles.errorBox}>
                     <p className={styles.errorText}>
-                      Unable to load table headers: {gridColumnsError}. Showing
-                      default headers.
+                      Unable to load table headers:{" "}
+                      {shouldUseUiTableColumns ? uiTableColumnsError : gridColumnsError}
+                      {useConfiguredGridColumnsOnly ? "." : " Showing default headers."}
                     </p>
                     <button
                       type="button"
                       className={styles.retryButton}
                       onClick={() => {
+                        if (shouldUseUiTableColumns) {
+                          void loadUiTableColumns();
+                          return;
+                        }
                         if (gridId === null) {
                           return;
                         }
                         void refetchGridColumns();
                       }}
-                      disabled={gridColumnsLoading || gridId === null}
+                      disabled={
+                        shouldUseUiTableColumns
+                          ? uiTableColumnsLoading
+                          : gridColumnsLoading || gridId === null
+                      }
                     >
-                      {gridColumnsLoading ? "Loading..." : "Retry Headers"}
+                      {(shouldUseUiTableColumns ? uiTableColumnsLoading : gridColumnsLoading)
+                        ? "Loading..."
+                        : "Retry Headers"}
                     </button>
                   </div>
                 ) : null}

@@ -179,6 +179,8 @@ export type CrudMasterPageProps = {
   gridDetailId?: number;
   gridTableName?: string;
   gridTableNameAliases?: readonly string[];
+  uiTableId?: string | number;
+  useConfiguredGridColumnsOnly?: boolean;
   getByIdMethod?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   buildListQuery?: (params: {
     searchTerm: string;

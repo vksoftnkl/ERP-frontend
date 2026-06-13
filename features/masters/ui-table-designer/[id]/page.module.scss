@@ -44,6 +44,32 @@
   white-space: nowrap;
 }
 
+.statusBadgeSuccess {
+  border-color: #7aa894;
+  background: #f1faf5;
+  color: #1f5a3d;
+}
+
+.statusBadgeError {
+  border-color: #d39a9a;
+  background: #fff5f5;
+  color: #8a2424;
+}
+
+.errorPanel {
+  border: 1px solid #d39a9a;
+  background: #fff8f8;
+  color: #6f1d1d;
+  padding: 8px 12px;
+}
+
+.errorList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
 .topGrid {
   display: grid;
   grid-template-columns: minmax(300px, 0.92fr) minmax(320px, 1.08fr);

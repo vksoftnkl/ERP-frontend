@@ -12,21 +12,14 @@ import type {
   DropdownColumnRow,
   DropdownDesignerForm,
   DropdownDetailPayload,
-  DropdownListMeta,
   DropdownOption,
   SaveDropdownColumnRequest,
   SaveDropdownDetailRequest,
   SortOrder,
 } from "./type";
-const DROPDOWN_DETAILS_LIST_ENDPOINT = "/dropdown-details/list";
 const DROPDOWN_DETAILS_GET_ENDPOINT = "/dropdown-details/get";
 const DROPDOWN_DETAILS_CREATE_ENDPOINT = "/dropdown-details/create";
 const DROPDOWN_DETAILS_DELETE_ENDPOINT = "/dropdown-details/delete";
-const DROPDOWN_COLUMNS_LIST_ENDPOINT = "/dropdown-columns/list";
-const DROPDOWN_COLUMNS_CREATE_ENDPOINT = "/dropdown-columns/create";
-const DROPDOWN_COLUMNS_DELETE_ENDPOINT = "/dropdown-columns/delete";
-const DROPDOWN_DETAILS_PAGE_SIZE = "100";
-const DROPDOWN_COLUMNS_PAGE_SIZE = "100";
 const DROPDOWN_COLUMNS_TABLE_MIN_WIDTH = "1120px";
 const SORT_ORDER_OPTIONS: Array<{ value: SortOrder; label: string }> = [
   { value: "ASC", label: "Ascending" },
@@ -131,7 +124,7 @@ function formatNullableNumber(value: number | null): string {
 function mapDropdownColumnPayloadToRow(payload: DropdownColumnPayload): DropdownColumnRow {
   return {
     id: createLocalColumnId(),
-    serialId: payload.drop_columns_serial_id,
+    serialId: payload.drop_columns_id,
     columnNumber: payload.drop_columns_column_no,
     columnName: payload.drop_columns_column_name,
     columnAlias: payload.drop_columns_column_alias ?? "",
@@ -144,12 +137,10 @@ function mapDropdownColumnPayloadToRow(payload: DropdownColumnPayload): Dropdown
 }
 function buildDropdownColumnRequest(
   column: DropdownColumnRow,
-  dropdownId: string,
   rowIndex: number,
 ): SaveDropdownColumnRequest {
   return {
-    ...(column.serialId ? { drop_columns_serial_id: column.serialId } : {}),
-    dropdown_id: dropdownId,
+    ...(column.serialId ? { drop_columns_id: column.serialId } : {}),
     drop_columns_column_no: rowIndex + 1,
     drop_columns_data_type: column.dataType.trim() || "Text",
     drop_columns_column_name: column.columnName.trim() || `Column ${rowIndex + 1}`,
@@ -175,7 +166,16 @@ function createBlankForm(): DropdownDesignerForm {
     dropdownWidth: "",
   };
 }
-export default function DropdownDesignerPage() {
+
+type DropdownDesignerPageProps = {
+  initialDropdownId?: string;
+  startNew?: boolean;
+};
+
+export default function DropdownDesignerPage({
+  initialDropdownId,
+  startNew = false,
+}: DropdownDesignerPageProps = {}) {
   const [form, setForm] = useState<DropdownDesignerForm>(INITIAL_FORM);
   const [columns, setColumns] = useState<DropdownColumnRow[]>([]);
   const [dropdownOptions, setDropdownOptions] = useState<DropdownOption[]>([]);
@@ -185,14 +185,12 @@ export default function DropdownDesignerPage() {
   const [isDropdownSaving, setIsDropdownSaving] = useState(false);
   const [isDropdownDeleting, setIsDropdownDeleting] = useState(false);
   const [statusText, setStatusText] = useState("Ready.");
-  const deletedDropdownColumnIdsRef = useRef<Set<string>>(new Set());
   const didInitialLoadRef = useRef(false);
-  const { getAll: listDropdownDetails } = useApi<
-    ApiSuccessResponse<DropdownDetailPayload[], DropdownListMeta>
-  >(DROPDOWN_DETAILS_LIST_ENDPOINT, {
-    toast: { success: false, error: true },
-  });
-  const { getAll: getDropdownDetailsById } = useApi<ApiSuccessResponse<DropdownDetailPayload>>(
+  const normalizedInitialDropdownId = useMemo(
+    () => initialDropdownId?.trim() ?? "",
+    [initialDropdownId],
+  );
+  const { getAll: getDropdownDetails } = useApi<ApiSuccessResponse<DropdownDetailPayload[]>>(
     DROPDOWN_DETAILS_GET_ENDPOINT,
     { toast: { success: false, error: true } },
   );
@@ -206,24 +204,6 @@ export default function DropdownDesignerPage() {
   const { run: deleteDropdownDetails } = useApi<
     ApiSuccessResponse<{ dropdown_id: string; deleted: true }>
   >(DROPDOWN_DETAILS_DELETE_ENDPOINT, {
-    method: "DELETE",
-    toast: { success: false, error: true },
-  });
-  const { getAll: listDropdownColumns } = useApi<
-    ApiSuccessResponse<DropdownColumnPayload[], DropdownListMeta>
-  >(DROPDOWN_COLUMNS_LIST_ENDPOINT, {
-    toast: { success: false, error: true },
-  });
-  const { run: saveDropdownColumn } = useApi<
-    ApiSuccessResponse<DropdownColumnPayload>,
-    SaveDropdownColumnRequest
-  >(DROPDOWN_COLUMNS_CREATE_ENDPOINT, {
-    method: "POST",
-    toast: { success: false, error: true },
-  });
-  const { run: deleteDropdownColumn } = useApi<
-    ApiSuccessResponse<{ drop_columns_serial_id: string; deleted: true }>
-  >(DROPDOWN_COLUMNS_DELETE_ENDPOINT, {
     method: "DELETE",
     toast: { success: false, error: true },
   });
@@ -409,23 +389,9 @@ export default function DropdownDesignerPage() {
     [updateColumn],
   );
   const fetchAllDropdownDetails = useCallback(async (): Promise<DropdownDetailPayload[]> => {
-    const allDropdownDetails: DropdownDetailPayload[] = [];
-    let page = 1;
-    while (true) {
-      const response = await listDropdownDetails({
-        page: String(page),
-        limit: DROPDOWN_DETAILS_PAGE_SIZE,
-      });
-      const pageItems = Array.isArray(response?.data) ? response.data : [];
-      const totalPages = Math.max(1, Number(response?.meta?.total_pages ?? 1));
-      allDropdownDetails.push(...pageItems);
-      if (page >= totalPages || pageItems.length === 0) {
-        break;
-      }
-      page += 1;
-    }
-    return allDropdownDetails;
-  }, [listDropdownDetails]);
+    const response = await getDropdownDetails({});
+    return Array.isArray(response?.data) ? response.data : [];
+  }, [getDropdownDetails]);
   const refreshDropdownOptions = useCallback(async () => {
     setIsDropdownListLoading(true);
     try {
@@ -455,28 +421,6 @@ export default function DropdownDesignerPage() {
       setIsDropdownListLoading(false);
     }
   }, [fetchAllDropdownDetails]);
-  const fetchAllDropdownColumns = useCallback(
-    async (dropdownId: string): Promise<DropdownColumnPayload[]> => {
-      const allColumns: DropdownColumnPayload[] = [];
-      let page = 1;
-      while (true) {
-        const response = await listDropdownColumns({
-          dropdown_id: dropdownId,
-          page: String(page),
-          limit: DROPDOWN_COLUMNS_PAGE_SIZE,
-        });
-        const pageItems = Array.isArray(response?.data) ? response.data : [];
-        const totalPages = Math.max(1, Number(response?.meta?.total_pages ?? 1));
-        allColumns.push(...pageItems);
-        if (page >= totalPages || pageItems.length === 0) {
-          break;
-        }
-        page += 1;
-      }
-      return allColumns;
-    },
-    [listDropdownColumns],
-  );
   const loadDropdownById = useCallback(
     async (dropdownId: string) => {
       const normalizedDropdownId = dropdownId.trim();
@@ -491,18 +435,16 @@ export default function DropdownDesignerPage() {
       setIsDropdownLoading(true);
       setStatusText(`Loading dropdown ${normalizedDropdownId}...`);
       try {
-        const detailResponse = await getDropdownDetailsById({
+        const detailResponse = await getDropdownDetails({
           dropdown_id: normalizedDropdownId,
         });
-        const detail = detailResponse?.data;
+        const detail = Array.isArray(detailResponse?.data) ? detailResponse.data[0] : undefined;
         if (!detail) {
           throw new Error("No dropdown details returned from API.");
         }
-        const loadedColumns = await fetchAllDropdownColumns(detail.dropdown_id);
-        const nextColumns = loadedColumns
+        const nextColumns = [...(detail.columns ?? [])]
           .sort((left, right) => left.drop_columns_column_no - right.drop_columns_column_no)
           .map(mapDropdownColumnPayloadToRow);
-        deletedDropdownColumnIdsRef.current.clear();
         setForm({
           dropdownId: detail.dropdown_id,
           dropdownName: detail.dropdown_name,
@@ -525,7 +467,7 @@ export default function DropdownDesignerPage() {
         setIsDropdownLoading(false);
       }
     },
-    [fetchAllDropdownColumns, getDropdownDetailsById],
+    [getDropdownDetails],
   );
   const handleLoadDropdown = useCallback(async () => {
     await loadDropdownById(form.dropdownId);
@@ -533,7 +475,6 @@ export default function DropdownDesignerPage() {
   const handleDropdownSelectionChange = useCallback(
     async (nextDropdownId: string) => {
       if (!nextDropdownId) {
-        deletedDropdownColumnIdsRef.current.clear();
         setForm(createBlankForm());
         setColumns([]);
         setSelectedColumnId("");
@@ -579,32 +520,19 @@ export default function DropdownDesignerPage() {
           dropdown_max_visible_items: toPositiveInteger(form.maxVisibleItems) ?? 10,
           dropdown_show_header: form.showHeader,
           dropdown_width: toNullablePositiveInteger(form.dropdownWidth),
+          dropdown_columns: columns.map((column, rowIndex) =>
+            buildDropdownColumnRequest(column, rowIndex),
+          ),
+          replace_columns: true,
         },
       });
       const savedDropdown = dropdownDetailResponse?.data;
       if (!savedDropdown) {
         throw new Error("Dropdown save did not return data.");
       }
-      for (const deletedColumnId of deletedDropdownColumnIdsRef.current) {
-        await deleteDropdownColumn({
-          query: {
-            drop_columns_serial_id: deletedColumnId,
-          },
-        });
-      }
-      const savedColumns: DropdownColumnPayload[] = [];
-      for (const [rowIndex, column] of columns.entries()) {
-        const response = await saveDropdownColumn({
-          body: buildDropdownColumnRequest(column, savedDropdown.dropdown_id, rowIndex),
-        });
-        if (response?.data) {
-          savedColumns.push(response.data);
-        }
-      }
-      const nextColumns = savedColumns
+      const nextColumns = [...(savedDropdown.columns ?? [])]
         .sort((left, right) => left.drop_columns_column_no - right.drop_columns_column_no)
         .map(mapDropdownColumnPayloadToRow);
-      deletedDropdownColumnIdsRef.current.clear();
       setForm({
         dropdownId: savedDropdown.dropdown_id,
         dropdownName: savedDropdown.dropdown_name,
@@ -630,7 +558,7 @@ export default function DropdownDesignerPage() {
     } finally {
       setIsDropdownSaving(false);
     }
-  }, [columns, deleteDropdownColumn, form, refreshDropdownOptions, saveDropdownColumn, saveDropdownDetails]);
+  }, [columns, form, refreshDropdownOptions, saveDropdownDetails]);
   const handleDeleteDropdown = useCallback(async () => {
     const normalizedDropdownId = form.dropdownId.trim();
     if (!normalizedDropdownId) {
@@ -649,7 +577,6 @@ export default function DropdownDesignerPage() {
           dropdown_id: normalizedDropdownId,
         },
       });
-      deletedDropdownColumnIdsRef.current.clear();
       setForm(createBlankForm());
       setColumns([]);
       setSelectedColumnId("");
@@ -665,7 +592,6 @@ export default function DropdownDesignerPage() {
     }
   }, [deleteDropdownDetails, form.dropdownId, refreshDropdownOptions]);
   const handleCreateNewDropdown = useCallback(() => {
-    deletedDropdownColumnIdsRef.current.clear();
     setForm(createBlankForm());
     setColumns([]);
     setSelectedColumnId("");
@@ -681,9 +607,6 @@ export default function DropdownDesignerPage() {
       return;
     }
     const deletedColumn = columns.find((column) => column.id === selectedColumnId) ?? null;
-    if (deletedColumn?.serialId) {
-      deletedDropdownColumnIdsRef.current.add(deletedColumn.serialId);
-    }
     const nextColumns = resequenceColumns(columns.filter((column) => column.id !== selectedColumnId));
     setColumns(nextColumns);
     setSelectedColumnId(nextColumns[0]?.id ?? "");
@@ -702,7 +625,15 @@ export default function DropdownDesignerPage() {
     const loadInitialState = async () => {
       try {
         const savedDropdownOptions = await refreshDropdownOptions();
-        const preferredDropdownId = savedDropdownOptions[0]?.dropdownId ?? "";
+        if (startNew) {
+          setForm(createBlankForm());
+          setColumns([]);
+          setSelectedColumnId("");
+          setStatusText("Ready for a new dropdown.");
+          return;
+        }
+        const preferredDropdownId =
+          normalizedInitialDropdownId || savedDropdownOptions[0]?.dropdownId || "";
         if (preferredDropdownId) {
           await loadDropdownById(preferredDropdownId);
           return;
@@ -717,7 +648,7 @@ export default function DropdownDesignerPage() {
       setStatusText("No saved dropdowns available. Ready for a new dropdown.");
     };
     void loadInitialState();
-  }, [loadDropdownById, refreshDropdownOptions]);
+  }, [loadDropdownById, normalizedInitialDropdownId, refreshDropdownOptions, startNew]);
   return (
     <main className={styles.page}>
       <div className={styles.workspace}>

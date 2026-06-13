@@ -1,9 +1,7 @@
-export type UiTableDeviceType = "web" | "mobile" | "desktop";
-
 export type UiTableForm = {
-  uiTableId: string;
+  uiTblId: string;
   uiTblName: string;
-  uiTblDeviceType: UiTableDeviceType;
+  uiTblDeviceType: string;
   uiTblEditable: boolean;
   uiTblIsActive: boolean;
 };
@@ -24,9 +22,9 @@ export type UiTableColumnRow = {
 };
 
 export type UiTableOption = {
-  uiTableId: string;
+  uiTblId: string;
   uiTblName: string;
-  uiTblDeviceType: UiTableDeviceType;
+  uiTblDeviceType: string | null;
   uiTblEditable: boolean;
   uiTblIsActive: boolean;
 };
@@ -54,7 +52,6 @@ export type UiTableColumnPayload = {
 
 export type UiTablePayload = {
   uiTblId: string;
-  uiTableId?: string;
   uiTblName: string | null;
   uiTblDeviceType: string | null;
   uiTblEditable: boolean;
@@ -72,6 +69,7 @@ export type SaveUiTableColumnRequest = {
   uiTblClmId?: string;
   uiTblClmNo?: string;
   uiTblClmName: string;
+  uiTblClmTableId?: string | null;
   uiTblClmColumnWidth: number | null;
   uiTblClmColumnVisibility: boolean;
   uiTblClmColumnFocus: boolean;
@@ -85,10 +83,20 @@ export type SaveUiTableColumnRequest = {
 export type SaveUiTableMasterRequest = {
   uiTblId?: string;
   uiTblName: string;
-  uiTblDeviceType: UiTableDeviceType;
+  uiTblDeviceType?: string | null;
   uiTblEditable: boolean;
   uiTblIsActive: boolean;
   uiTblColumns?: SaveUiTableColumnRequest[];
   replaceColumns?: boolean;
 };
 
+export type UiTableApiErrorDetail = {
+  field: string;
+  message: string;
+};
+
+export type UiTableApiErrorResponse = {
+  success: false;
+  message: string;
+  errors: UiTableApiErrorDetail[];
+};

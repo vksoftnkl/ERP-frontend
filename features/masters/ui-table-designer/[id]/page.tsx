@@ -9,11 +9,12 @@ import { useApi } from "@/hooks/useApi";
 import type { ApiSuccessResponse } from "@/utils/types";
 import styles from "./page.module.scss";
 import type {
+  UiTableApiErrorDetail,
+  UiTableApiErrorResponse,
   SaveUiTableColumnRequest,
   SaveUiTableMasterRequest,
   UiTableColumnPayload,
   UiTableColumnRow,
-  UiTableDeviceType,
   UiTableForm,
   UiTableOption,
   UiTablePayload,
@@ -23,16 +24,14 @@ const UI_TABLE_MASTERS_CREATE_ENDPOINT = "/ui-table-masters/create";
 const UI_TABLE_MASTERS_DELETE_ENDPOINT = "/ui-table-masters/delete";
 const UI_TABLE_COLUMN_DELETE_ENDPOINT = "/ui-table-masters/column-delete";
 const UI_TABLE_COLUMNS_TABLE_MIN_WIDTH = "1440px";
-const UI_TABLE_DEVICE_TYPE_OPTIONS = [
-  "web",
-  "mobile",
-  "desktop",
-] as const satisfies readonly UiTableDeviceType[];
-const DEFAULT_UI_TABLE_DEVICE_TYPE: UiTableDeviceType = "web";
+const NUMBER_STRING_PATTERN = /^\d+$/;
+const MAX_TABLE_NAME_LENGTH = 500;
+const MAX_COLUMN_NAME_LENGTH = 500;
+const MAX_DEVICE_TYPE_LENGTH = 255;
 const INITIAL_FORM: UiTableForm = {
-  uiTableId: "",
+  uiTblId: "",
   uiTblName: "",
-  uiTblDeviceType: DEFAULT_UI_TABLE_DEVICE_TYPE,
+  uiTblDeviceType: "",
   uiTblEditable: false,
   uiTblIsActive: true,
 };
@@ -61,9 +60,9 @@ function createColumnDraft(
 }
 function createBlankForm(): UiTableForm {
   return {
-    uiTableId: "",
+    uiTblId: "",
     uiTblName: "",
-    uiTblDeviceType: DEFAULT_UI_TABLE_DEVICE_TYPE,
+    uiTblDeviceType: "",
     uiTblEditable: false,
     uiTblIsActive: true,
   };
@@ -129,14 +128,6 @@ function moveColumnToPosition(
   nextColumns.splice(targetIndex, 0, sourceColumn);
   return resequenceColumns(nextColumns);
 }
-function toNullableNumber(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
-}
 function toNullableInteger(value: string): number | null {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -152,13 +143,98 @@ function parseColumnNumber(value: string, fallback: number): number {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
-function getUiTablePayloadId(payload: UiTablePayload): string {
-  return (payload.uiTblId ?? payload.uiTableId ?? "").trim();
+function toNullableTrimmedString(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
-function normalizeUiTableDeviceType(value: string | null | undefined): UiTableDeviceType {
-  return UI_TABLE_DEVICE_TYPE_OPTIONS.includes(value as UiTableDeviceType)
-    ? (value as UiTableDeviceType)
-    : DEFAULT_UI_TABLE_DEVICE_TYPE;
+function getUiTblId(payload: UiTablePayload): string {
+  return payload.uiTblId.trim();
+}
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+function extractUnknownMessage(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (typeof value === "number" || typeof value === "bigint" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => extractUnknownMessage(entry))
+      .filter(Boolean)
+      .join(", ");
+  }
+  if (isRecord(value)) {
+    for (const key of ["message", "error", "detail", "title"] as const) {
+      const message = extractUnknownMessage(value[key]);
+      if (message) {
+        return message;
+      }
+    }
+  }
+  return "";
+}
+function isUiTableApiErrorResponse(value: unknown): value is UiTableApiErrorResponse {
+  return (
+    isRecord(value) &&
+    value.success === false &&
+    typeof value.message === "string" &&
+    Array.isArray(value.errors)
+  );
+}
+function getErrorResponseData(error: unknown): unknown {
+  return isRecord(error) && isRecord(error.response) ? error.response.data : undefined;
+}
+function getUiTableErrorInfo(
+  error: unknown,
+  fallbackMessage: string,
+): { message: string; errors: UiTableApiErrorDetail[] } {
+  const responseData = getErrorResponseData(error);
+  if (isUiTableApiErrorResponse(responseData)) {
+    return {
+      message: responseData.message,
+      errors: responseData.errors,
+    };
+  }
+  return {
+    message:
+      extractUnknownMessage(responseData) || extractUnknownMessage(error) || fallbackMessage,
+    errors: [],
+  };
+}
+function parseNullableNumberInput(
+  field: string,
+  value: string,
+  errors: UiTableApiErrorDetail[],
+): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) {
+    errors.push({ field, message: `${field} must be a number` });
+    return null;
+  }
+  return parsed;
+}
+function parseNullableIntegerInput(
+  field: string,
+  value: string,
+  errors: UiTableApiErrorDetail[],
+): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed)) {
+    errors.push({ field, message: `${field} must be an integer` });
+    return null;
+  }
+  return parsed;
 }
 function mapUiTableColumnPayloadToRow(
   payload: UiTableColumnPayload,
@@ -183,20 +259,110 @@ function mapUiTableColumnPayloadToRow(
 function buildUiTableColumnRequest(
   column: UiTableColumnRow,
   rowIndex: number,
+  parentUiTblId: string,
+  errors: UiTableApiErrorDetail[],
 ): SaveUiTableColumnRequest {
   const fallbackColumnNumber = rowIndex + 1;
+  const fieldPrefix = `uiTblColumns[${rowIndex}].`;
+  const uiTblClmId = column.uiTblClmId?.trim() ?? "";
+  const uiTblClmName = column.columnName.trim();
+  const uiTblClmColumnWidth = parseNullableNumberInput(
+    `${fieldPrefix}uiTblClmColumnWidth`,
+    column.width,
+    errors,
+  );
+  const uiTblClmColumnPosition =
+    parseNullableIntegerInput(`${fieldPrefix}uiTblClmColumnPosition`, column.position, errors) ??
+    fallbackColumnNumber;
+  const uiTblClmNextColumn = parseNullableIntegerInput(
+    `${fieldPrefix}uiTblClmNextColumn`,
+    column.nextColumn,
+    errors,
+  );
+  const uiTblClmPreviousColumn = parseNullableIntegerInput(
+    `${fieldPrefix}uiTblClmPreviousColumn`,
+    column.previousColumn,
+    errors,
+  );
+
+  if (uiTblClmId && !NUMBER_STRING_PATTERN.test(uiTblClmId)) {
+    errors.push({
+      field: `${fieldPrefix}uiTblClmId`,
+      message: "uiTblClmId must be a numeric string",
+    });
+  }
+  if (!uiTblClmName) {
+    errors.push({
+      field: `${fieldPrefix}uiTblClmName`,
+      message: "uiTblClmName must not be empty",
+    });
+  } else if (uiTblClmName.length > MAX_COLUMN_NAME_LENGTH) {
+    errors.push({
+      field: `${fieldPrefix}uiTblClmName`,
+      message: `uiTblClmName must be at most ${MAX_COLUMN_NAME_LENGTH} characters`,
+    });
+  }
+
   return {
-    ...(column.uiTblClmId ? { uiTblClmId: column.uiTblClmId } : {}),
+    ...(uiTblClmId ? { uiTblClmId } : {}),
     uiTblClmNo: String(column.columnNumber || fallbackColumnNumber),
-    uiTblClmName: column.columnName.trim() || `Column ${fallbackColumnNumber}`,
-    uiTblClmColumnWidth: toNullableNumber(column.width),
+    uiTblClmName,
+    uiTblClmTableId: parentUiTblId || null,
+    uiTblClmColumnWidth,
     uiTblClmColumnVisibility: column.visible,
     uiTblClmColumnFocus: column.focus,
-    uiTblClmColumnPosition: toNullableInteger(column.position) ?? fallbackColumnNumber,
+    uiTblClmColumnPosition,
     uiTblClmColumnNecessity: column.necessity,
-    uiTblClmNextColumn: toNullableInteger(column.nextColumn),
-    uiTblClmPreviousColumn: toNullableInteger(column.previousColumn),
+    uiTblClmNextColumn,
+    uiTblClmPreviousColumn,
     uiTblClmIsActive: column.isActive,
+  };
+}
+function buildSaveUiTableRequest(
+  form: UiTableForm,
+  columns: UiTableColumnRow[],
+): { request: SaveUiTableMasterRequest | null; errors: UiTableApiErrorDetail[] } {
+  const errors: UiTableApiErrorDetail[] = [];
+  const uiTblId = form.uiTblId.trim();
+  const uiTblName = form.uiTblName.trim();
+  const uiTblDeviceType = toNullableTrimmedString(form.uiTblDeviceType);
+
+  if (uiTblId && !NUMBER_STRING_PATTERN.test(uiTblId)) {
+    errors.push({ field: "uiTblId", message: "uiTblId must be a numeric string" });
+  }
+  if (!uiTblName) {
+    errors.push({ field: "uiTblName", message: "uiTblName must not be empty" });
+  } else if (uiTblName.length > MAX_TABLE_NAME_LENGTH) {
+    errors.push({
+      field: "uiTblName",
+      message: `uiTblName must be at most ${MAX_TABLE_NAME_LENGTH} characters`,
+    });
+  }
+  if (uiTblDeviceType && uiTblDeviceType.length > MAX_DEVICE_TYPE_LENGTH) {
+    errors.push({
+      field: "uiTblDeviceType",
+      message: `uiTblDeviceType must be at most ${MAX_DEVICE_TYPE_LENGTH} characters`,
+    });
+  }
+
+  const uiTblColumns = columns.map((column, rowIndex) =>
+    buildUiTableColumnRequest(column, rowIndex, uiTblId, errors),
+  );
+  if (errors.length > 0) {
+    return { request: null, errors };
+  }
+
+  return {
+    request: {
+      ...(uiTblId ? { uiTblId } : {}),
+      uiTblName,
+      uiTblDeviceType,
+      uiTblEditable: form.uiTblEditable,
+      uiTblIsActive: form.uiTblIsActive,
+      uiTblColumns,
+      replaceColumns: true,
+    },
+    errors,
   };
 }
 export default function UiTableDesignerPage({
@@ -217,29 +383,30 @@ export default function UiTableDesignerPage({
   const [isTableDeleting, setIsTableDeleting] = useState(false);
   const [isColumnDeleting, setIsColumnDeleting] = useState(false);
   const [statusText, setStatusText] = useState("Ready.");
+  const [statusTone, setStatusTone] = useState<"info" | "success" | "error">("info");
+  const [statusErrors, setStatusErrors] = useState<UiTableApiErrorDetail[]>([]);
   const didInitialLoadRef = useRef(false);
   const { getAll: listUiTables } = useApi<ApiSuccessResponse<UiTablePayload[]>>(
     UI_TABLE_MASTERS_LIST_ENDPOINT,
-    { toast: { success: false, error: true } },
+    { toast: { success: false, error: false } },
   );
-  const { getAll: getUiTableById } = useApi<
-    ApiSuccessResponse<UiTablePayload | UiTablePayload[]>
-  >(
+  const { getAll: getUiTableById } = useApi<ApiSuccessResponse<UiTablePayload[]>>(
     UI_TABLE_MASTERS_LIST_ENDPOINT,
-    { toast: { success: false, error: true } },
+    { toast: { success: false, error: false } },
   );
   const { run: saveUiTable } = useApi<ApiSuccessResponse<UiTablePayload>, SaveUiTableMasterRequest>(
     UI_TABLE_MASTERS_CREATE_ENDPOINT,
     {
       method: "POST",
-      toast: { success: false, error: true },
+      headers: { "Content-Type": "application/json" },
+      toast: { success: false, error: false },
     },
   );
   const { run: deleteUiTable } = useApi<ApiSuccessResponse<{ uiTblId: string; deleted: true }>>(
     UI_TABLE_MASTERS_DELETE_ENDPOINT,
     {
       method: "DELETE",
-      toast: { success: false, error: true },
+      toast: { success: false, error: false },
     },
   );
   const { run: deleteUiTableColumn } = useApi<
@@ -248,7 +415,7 @@ export default function UiTableDesignerPage({
     UI_TABLE_COLUMN_DELETE_ENDPOINT,
     {
       method: "DELETE",
-      toast: { success: false, error: true },
+      toast: { success: false, error: false },
     },
   );
   const selectedColumn = useMemo(
@@ -257,6 +424,18 @@ export default function UiTableDesignerPage({
   );
   const isBusy = isTableLoading || isTableSaving || isTableDeleting || isColumnDeleting;
   const emptyColumnsMessage = 'No UI table columns yet. Use "Add Column" to create rows.';
+  const showStatus = useCallback(
+    (
+      message: string,
+      tone: "info" | "success" | "error" = "info",
+      errors: UiTableApiErrorDetail[] = [],
+    ) => {
+      setStatusText(message);
+      setStatusTone(tone);
+      setStatusErrors(errors);
+    },
+    [],
+  );
   const updateForm = <K extends keyof UiTableForm>(key: K, value: UiTableForm[K]) => {
     setForm((current) => ({
       ...current,
@@ -505,7 +684,13 @@ export default function UiTableDesignerPage({
 
   const fetchAllUiTables = useCallback(async (): Promise<UiTablePayload[]> => {
     const response = await listUiTables();
-    return Array.isArray(response?.data) ? response.data : [];
+    if (!response) {
+      throw new Error("UI table list request did not return a response.");
+    }
+    if (!Array.isArray(response?.data)) {
+      throw new Error("UI table list response did not return data as an array.");
+    }
+    return response.data;
   }, [listUiTables]);
 
   const refreshTableOptions = useCallback(async () => {
@@ -516,15 +701,15 @@ export default function UiTableDesignerPage({
       const optionsById = new Map<string, UiTableOption>();
 
       for (const table of fetchedTables) {
-        const uiTableId = getUiTablePayloadId(table);
-        if (!uiTableId) {
+        const uiTblId = getUiTblId(table);
+        if (!uiTblId) {
           continue;
         }
 
-        optionsById.set(uiTableId, {
-          uiTableId,
+        optionsById.set(uiTblId, {
+          uiTblId,
           uiTblName: table.uiTblName ?? "",
-          uiTblDeviceType: normalizeUiTableDeviceType(table.uiTblDeviceType),
+          uiTblDeviceType: table.uiTblDeviceType,
           uiTblEditable: table.uiTblEditable,
           uiTblIsActive: table.uiTblIsActive,
         });
@@ -539,7 +724,7 @@ export default function UiTableDesignerPage({
           return nameCompare;
         }
 
-        return left.uiTableId.localeCompare(right.uiTableId, undefined, {
+        return left.uiTblId.localeCompare(right.uiTblId, undefined, {
           sensitivity: "base",
           numeric: true,
         });
@@ -553,33 +738,41 @@ export default function UiTableDesignerPage({
   }, [fetchAllUiTables]);
 
   const loadUiTableById = useCallback(
-    async (uiTableId: string) => {
-      const normalizedTableId = uiTableId.trim();
+    async (uiTblId: string) => {
+      const normalizedTableId = uiTblId.trim();
       if (!normalizedTableId) {
-        toast.error("Select a saved UI table.");
+        const message = "Select a saved UI table.";
+        showStatus(message, "error", [{ field: "uiTableId", message }]);
+        toast.error(message);
         return;
       }
 
-      if (!/^\d+$/.test(normalizedTableId)) {
-        toast.error("UI table id must be numeric.");
+      if (!NUMBER_STRING_PATTERN.test(normalizedTableId)) {
+        const message = "uiTableId must be a numeric string.";
+        showStatus(message, "error", [{ field: "uiTableId", message }]);
+        toast.error(message);
         return;
       }
 
       setIsTableLoading(true);
-      setStatusText(`Loading UI table ${normalizedTableId}...`);
+      showStatus(`Loading UI table ${normalizedTableId}...`);
 
       try {
         const detailResponse = await getUiTableById({ uiTableId: normalizedTableId });
-        const detailData = detailResponse?.data;
+        if (!detailResponse) {
+          throw new Error("UI table detail request did not return a response.");
+        }
+        const detailData = detailResponse.data;
         const detail = Array.isArray(detailData)
-          ? (detailData.find((t) => getUiTablePayloadId(t) === normalizedTableId) ?? detailData[0])
-          : detailData;
-        const detailTableId = detail ? getUiTablePayloadId(detail) : "";
+          ? (detailData.find((t) => getUiTblId(t) === normalizedTableId) ?? detailData[0])
+          : undefined;
+        const detailTableId = detail ? getUiTblId(detail) : "";
         if (!detail || !detailTableId) {
-          throw new Error("No UI table details returned from API.");
+          const message = `No UI table found with uiTableId ${normalizedTableId}.`;
+          showStatus(message, "error", [{ field: "uiTableId", message }]);
+          return;
         }
 
-        // columns are included directly in the get response
         const loadedColumns = detail.columns ?? [];
         const nextColumns = loadedColumns
           .sort((left, right) => {
@@ -592,86 +785,78 @@ export default function UiTableDesignerPage({
           .map((column, index) => mapUiTableColumnPayloadToRow(column, index));
 
         setForm({
-          uiTableId: detailTableId,
+          uiTblId: detailTableId,
           uiTblName: detail.uiTblName ?? "",
-          uiTblDeviceType: normalizeUiTableDeviceType(detail.uiTblDeviceType),
+          uiTblDeviceType: detail.uiTblDeviceType ?? "",
           uiTblEditable: detail.uiTblEditable,
           uiTblIsActive: detail.uiTblIsActive,
         });
         setColumns(resequenceColumns(nextColumns));
         setPositionDrafts({});
         setSelectedColumnId(nextColumns[0]?.id ?? "");
-        setStatusText(`Loaded UI table ${detailTableId}.`);
-      } catch {
-        setStatusText(`Unable to load UI table ${normalizedTableId}.`);
+        showStatus(detailResponse.message, "success");
+      } catch (error) {
+        const errorInfo = getUiTableErrorInfo(
+          error,
+          `Unable to load UI table ${normalizedTableId}.`,
+        );
+        showStatus(errorInfo.message, "error", errorInfo.errors);
+        toast.error(errorInfo.message);
       } finally {
         setIsTableLoading(false);
       }
     },
-    [getUiTableById],
+    [getUiTableById, showStatus],
   );
 
   const handleLoadTable = useCallback(async () => {
-    await loadUiTableById(form.uiTableId);
-  }, [form.uiTableId, loadUiTableById]);
+    await loadUiTableById(form.uiTblId);
+  }, [form.uiTblId, loadUiTableById]);
 
   const handleTableSelectionChange = useCallback(
-    async (nextuiTableId: string) => {
-      if (!nextuiTableId) {
+    async (nextUiTblId: string) => {
+      if (!nextUiTblId) {
         setForm(createBlankForm());
         setColumns([]);
         setPositionDrafts({});
         setSelectedColumnId("");
-        setStatusText("Ready for a new UI table.");
+        showStatus("Ready for a new UI table.");
         return;
       }
 
       setForm((current) => ({
         ...current,
-        uiTableId: nextuiTableId,
+        uiTblId: nextUiTblId,
       }));
 
-      await loadUiTableById(nextuiTableId);
+      await loadUiTableById(nextUiTblId);
     },
-    [loadUiTableById],
+    [loadUiTableById, showStatus],
   );
 
   const handleSaveTable = useCallback(async () => {
-    const normalizedTableId = form.uiTableId.trim();
-    if (normalizedTableId && !/^\d+$/.test(normalizedTableId)) {
-      toast.error("UI table id must be numeric.");
-      return;
-    }
-
-    if (!form.uiTblName.trim()) {
-      toast.error("UI Table Name is required.");
+    const { request, errors } = buildSaveUiTableRequest(form, columns);
+    if (!request) {
+      const message = "Validation failed";
+      showStatus(message, "error", errors);
+      toast.error(message);
       return;
     }
 
     setIsTableSaving(true);
-    setStatusText("Saving UI table...");
+    showStatus("Saving UI table...");
 
     try {
-      // Save table + all columns in a single request.
-      // The backend authoritatively syncs columns: existing columns not in the
-      // array are soft-deleted, provided columns are created or updated.
       const tableResponse = await saveUiTable({
-        body: {
-          ...(normalizedTableId ? { uiTblId: normalizedTableId } : {}),
-          uiTblName: form.uiTblName.trim(),
-          uiTblDeviceType: form.uiTblDeviceType,
-          uiTblEditable: form.uiTblEditable,
-          uiTblIsActive: form.uiTblIsActive,
-          uiTblColumns: columns.map((column, rowIndex) =>
-            buildUiTableColumnRequest(column, rowIndex),
-          ),
-          replaceColumns: true,
-        },
+        body: request,
       });
-      const savedTable = tableResponse?.data;
-      const savedTableId = savedTable ? getUiTablePayloadId(savedTable) : "";
-      if (!savedTable || !savedTableId) {
+      if (!tableResponse?.data) {
         throw new Error("UI table save did not return data.");
+      }
+      const savedTable = tableResponse.data;
+      const savedTableId = getUiTblId(savedTable);
+      if (!savedTableId) {
+        throw new Error("UI table save did not return uiTblId.");
       }
       const nextColumns = (savedTable.columns ?? [])
         .sort((left, right) => {
@@ -683,9 +868,9 @@ export default function UiTableDesignerPage({
         .map((column, index) => mapUiTableColumnPayloadToRow(column, index));
       const resequencedColumns = resequenceColumns(nextColumns);
       setForm({
-        uiTableId: savedTableId,
+        uiTblId: savedTableId,
         uiTblName: savedTable.uiTblName ?? "",
-        uiTblDeviceType: normalizeUiTableDeviceType(savedTable.uiTblDeviceType),
+        uiTblDeviceType: savedTable.uiTblDeviceType ?? "",
         uiTblEditable: savedTable.uiTblEditable,
         uiTblIsActive: savedTable.uiTblIsActive,
       });
@@ -695,32 +880,41 @@ export default function UiTableDesignerPage({
       try {
         await refreshTableOptions();
       } catch {}
-      setStatusText(`Saved UI table ${savedTableId}.`);
-      toast.success("UI table saved successfully.");
-    } catch {
-      setStatusText("UI table save failed.");
+      showStatus(tableResponse.message, "success");
+      toast.success(tableResponse.message);
+    } catch (error) {
+      const errorInfo = getUiTableErrorInfo(error, "UI table save failed.");
+      showStatus(errorInfo.message, "error", errorInfo.errors);
+      toast.error(errorInfo.message);
     } finally {
       setIsTableSaving(false);
     }
-  }, [columns, form, refreshTableOptions, saveUiTable]);
+  }, [columns, form, refreshTableOptions, saveUiTable, showStatus]);
   const handleDeleteTable = useCallback(async () => {
-    const normalizedTableId = form.uiTableId.trim();
+    const normalizedTableId = form.uiTblId.trim();
     if (!normalizedTableId) {
-      toast.error("No UI table selected.");
+      const message = "No UI table selected.";
+      showStatus(message, "error", [{ field: "uiTblId", message }]);
+      toast.error(message);
       return;
     }
-    if (!/^\d+$/.test(normalizedTableId)) {
-      toast.error("UI table id must be numeric.");
+    if (!NUMBER_STRING_PATTERN.test(normalizedTableId)) {
+      const message = "uiTblId must be a numeric string.";
+      showStatus(message, "error", [{ field: "uiTblId", message }]);
+      toast.error(message);
       return;
     }
     setIsTableDeleting(true);
-    setStatusText(`Deleting UI table ${normalizedTableId}...`);
+    showStatus(`Deleting UI table ${normalizedTableId}...`);
     try {
-      await deleteUiTable({
+      const deleteResponse = await deleteUiTable({
         query: {
           uiTblId: normalizedTableId,
         },
       });
+      if (!deleteResponse) {
+        throw new Error("UI table delete request did not return a response.");
+      }
       setForm(createBlankForm());
       setColumns([]);
       setPositionDrafts({});
@@ -728,21 +922,26 @@ export default function UiTableDesignerPage({
       try {
         await refreshTableOptions();
       } catch {}
-      setStatusText(`Deleted UI table ${normalizedTableId}.`);
-      toast.success("UI table deleted successfully.");
-    } catch {
-      setStatusText(`Unable to delete UI table ${normalizedTableId}.`);
+      showStatus(deleteResponse.message, "success");
+      toast.success(deleteResponse.message);
+    } catch (error) {
+      const errorInfo = getUiTableErrorInfo(
+        error,
+        `Unable to delete UI table ${normalizedTableId}.`,
+      );
+      showStatus(errorInfo.message, "error", errorInfo.errors);
+      toast.error(errorInfo.message);
     } finally {
       setIsTableDeleting(false);
     }
-  }, [deleteUiTable, form.uiTableId, refreshTableOptions]);
+  }, [deleteUiTable, form.uiTblId, refreshTableOptions, showStatus]);
   const handleCreateNewTable = useCallback(() => {
     setForm(createBlankForm());
     setColumns([]);
     setPositionDrafts({});
     setSelectedColumnId("");
-    setStatusText("Ready for a new UI table.");
-  }, []);
+    showStatus("Ready for a new UI table.");
+  }, [showStatus]);
   const handleAddColumn = useCallback(() => {
     const nextColumn = createColumnDraft(columns.length + 1);
     clearAllPositionDrafts();
@@ -759,17 +958,32 @@ export default function UiTableDesignerPage({
     }
     const savedColumnId = columnToDelete.uiTblClmId?.trim() ?? "";
     if (savedColumnId) {
+      if (!NUMBER_STRING_PATTERN.test(savedColumnId)) {
+        const message = "uiTblClmId must be a numeric string.";
+        showStatus(message, "error", [{ field: "uiTblClmId", message }]);
+        toast.error(message);
+        return;
+      }
       setIsColumnDeleting(true);
-      setStatusText(`Deleting UI table column ${savedColumnId}...`);
+      showStatus(`Deleting UI table column ${savedColumnId}...`);
       try {
-        await deleteUiTableColumn({
+        const deleteResponse = await deleteUiTableColumn({
           query: {
             uiTblClmId: savedColumnId,
           },
         });
-        toast.success("UI table column deleted successfully.");
-      } catch {
-        setStatusText(`Unable to delete UI table column ${savedColumnId}.`);
+        if (!deleteResponse) {
+          throw new Error("UI table column delete request did not return a response.");
+        }
+        showStatus(deleteResponse.message, "success");
+        toast.success(deleteResponse.message);
+      } catch (error) {
+        const errorInfo = getUiTableErrorInfo(
+          error,
+          `Unable to delete UI table column ${savedColumnId}.`,
+        );
+        showStatus(errorInfo.message, "error", errorInfo.errors);
+        toast.error(errorInfo.message);
         return;
       } finally {
         setIsColumnDeleting(false);
@@ -782,9 +996,9 @@ export default function UiTableDesignerPage({
     setColumns(nextColumns);
     setSelectedColumnId(nextColumns[0]?.id ?? "");
     if (savedColumnId) {
-      setStatusText(`Deleted UI table column ${savedColumnId}.`);
+      showStatus(`Deleted UI table column ${savedColumnId}.`, "success");
     }
-  }, [clearAllPositionDrafts, columns, deleteUiTableColumn, selectedColumnId]);
+  }, [clearAllPositionDrafts, columns, deleteUiTableColumn, selectedColumnId, showStatus]);
   useEffect(() => {
     if (didInitialLoadRef.current) {
       return;
@@ -797,27 +1011,35 @@ export default function UiTableDesignerPage({
           handleCreateNewTable();
           return;
         }
-        const preferredTableId = initialUiTableId ?? savedTables[0]?.uiTableId ?? "";
+        const preferredTableId = initialUiTableId ?? savedTables[0]?.uiTblId ?? "";
         if (preferredTableId) {
           await loadUiTableById(preferredTableId);
           return;
         }
-      } catch {
+      } catch (error) {
         if (startNew) {
           handleCreateNewTable();
           return;
         }
-        setStatusText("Unable to load saved UI table list.");
+        const errorInfo = getUiTableErrorInfo(error, "Unable to load saved UI table list.");
+        showStatus(errorInfo.message, "error", errorInfo.errors);
         return;
       }
       setForm(createBlankForm());
       setColumns([]);
       setPositionDrafts({});
       setSelectedColumnId("");
-      setStatusText("No saved UI tables available. Ready for a new UI table.");
+      showStatus("No saved UI tables available. Ready for a new UI table.");
     };
     void loadInitialState();
-  }, [handleCreateNewTable, initialUiTableId, loadUiTableById, refreshTableOptions, startNew]);
+  }, [
+    handleCreateNewTable,
+    initialUiTableId,
+    loadUiTableById,
+    refreshTableOptions,
+    showStatus,
+    startNew,
+  ]);
   return (
     <main className={styles.page}>
       <div className={styles.workspace}>
@@ -827,7 +1049,7 @@ export default function UiTableDesignerPage({
               type="button"
               className={styles.desktopButton}
               onClick={() => void handleLoadTable()}
-              disabled={isBusy || !form.uiTableId.trim()}
+              disabled={isBusy || !form.uiTblId.trim()}
             >
               Load Table
             </button>
@@ -851,15 +1073,35 @@ export default function UiTableDesignerPage({
               type="button"
               className={styles.desktopButton}
               onClick={() => void handleDeleteTable()}
-              disabled={isBusy || !form.uiTableId.trim()}
+              disabled={isBusy || !form.uiTblId.trim()}
             >
               Delete Table
             </button>
           </div>
-          <div className={styles.statusBadge} aria-live="polite">
+          <div
+            className={`${styles.statusBadge} ${
+              statusTone === "error"
+                ? styles.statusBadgeError
+                : statusTone === "success"
+                  ? styles.statusBadgeSuccess
+                  : ""
+            }`}
+            aria-live="polite"
+          >
             {statusText}
           </div>
         </section>
+        {statusErrors.length > 0 ? (
+          <section className={styles.errorPanel} aria-live="polite">
+            <ul className={styles.errorList}>
+              {statusErrors.map((error, index) => (
+                <li key={`${error.field}-${index}`}>
+                  <strong>{error.field}</strong>: {error.message}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         <section className={styles.topGrid}>
           <section className={styles.detailsPanel} aria-label="UI table details form">
@@ -869,7 +1111,7 @@ export default function UiTableDesignerPage({
                 <span className={styles.fieldLabel}>Table Id :</span>
                 <select
                   className={styles.selectField}
-                  value={form.uiTableId}
+                  value={form.uiTblId}
                   onChange={(event) => void handleTableSelectionChange(event.target.value)}
                   disabled={isBusy || isTableListLoading}
                 >
@@ -877,8 +1119,8 @@ export default function UiTableDesignerPage({
                     {isTableListLoading ? "Loading tables..." : "Select saved UI table"}
                   </option>
                   {tableOptions.map((tableOption) => (
-                    <option key={tableOption.uiTableId} value={tableOption.uiTableId}>
-                      {tableOption.uiTblName || `UI Table ${tableOption.uiTableId}`} ({tableOption.uiTableId})
+                    <option key={tableOption.uiTblId} value={tableOption.uiTblId}>
+                      {tableOption.uiTblName || `UI Table ${tableOption.uiTblId}`} ({tableOption.uiTblId})
                       {!tableOption.uiTblIsActive ? " [Inactive]" : ""}
                     </option>
                   ))}
@@ -896,19 +1138,12 @@ export default function UiTableDesignerPage({
 
               <label className={styles.inlineField}>
                 <span className={styles.fieldLabel}>Device Type :</span>
-                <select
-                  className={styles.selectField}
+                <input
+                  className={styles.textField}
                   value={form.uiTblDeviceType}
-                  onChange={(event) =>
-                    updateForm("uiTblDeviceType", event.target.value as UiTableDeviceType)
-                  }
-                >
-                  {UI_TABLE_DEVICE_TYPE_OPTIONS.map((deviceType) => (
-                    <option key={deviceType} value={deviceType}>
-                      {deviceType}
-                    </option>
-                  ))}
-                </select>
+                  maxLength={MAX_DEVICE_TYPE_LENGTH}
+                  onChange={(event) => updateForm("uiTblDeviceType", event.target.value)}
+                />
               </label>
 
               <label className={styles.checkboxField}>

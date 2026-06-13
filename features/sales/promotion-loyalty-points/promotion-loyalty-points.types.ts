@@ -4,7 +4,22 @@ export type PromotionLoyaltyPointsListMeta = {
   total: number;
   total_pages: number;
 };
-
+// Flat row shape returned by the configured-grid-sql/run loyalty scheme grid.
+// Child counts come back as strings from the raw SQL and are coerced to numbers.
+export type SchemeListRow = {
+  ls_id: string;
+  ls_code: string | null;
+  ls_name: string;
+  ls_type: string;
+  ls_status: string;
+  ls_branch_id: string | null;
+  ls_start_date: string;
+  ls_end_date: string;
+  ls_is_active: boolean;
+  points_count: number;
+  gifts_count: number;
+  parties_count: number;
+};
 export type LoyaltyPointPayload = {
   lspt_id: string;
   lspt_ls_id: string;
@@ -24,7 +39,6 @@ export type LoyaltyPointPayload = {
   lspt_updated_on: string | null;
   lspt_updated_by: string | null;
 };
-
 export type LoyaltyGiftPayload = {
   lsg_id: string;
   lsg_ls_id: string;
@@ -43,7 +57,6 @@ export type LoyaltyGiftPayload = {
   lsg_updated_on: string | null;
   lsg_updated_by: string | null;
 };
-
 export type LoyaltyPartyPayload = {
   lps_id: string;
   lps_ls_id: string;
@@ -60,7 +73,6 @@ export type LoyaltyPartyPayload = {
   lps_updated_on: string | null;
   lps_updated_by: string | null;
 };
-
 export type LoyaltySchemePayload = {
   ls_id: string;
   ls_code: string | null;
@@ -110,7 +122,6 @@ export type LoyaltySchemePayload = {
   points: LoyaltyPointPayload[];
   gifts: LoyaltyGiftPayload[];
 };
-
 export type SaveLoyaltySchemeRequest = {
   ls_id?: string;
   ls_code?: string | null;
@@ -147,7 +158,6 @@ export type SaveLoyaltySchemeRequest = {
   ls_is_active?: boolean;
   parties?: SaveLoyaltyPartyRequest[];
 };
-
 export type SaveLoyaltyPointRequest = {
   lspt_id?: string;
   lspt_ls_id?: string;
@@ -161,7 +171,6 @@ export type SaveLoyaltyPointRequest = {
   lspt_notes?: string | null;
   lspt_is_active?: boolean;
 };
-
 export type SaveLoyaltyGiftRequest = {
   lsg_id?: string;
   lsg_ls_id?: string;
@@ -174,7 +183,6 @@ export type SaveLoyaltyGiftRequest = {
   lsg_notes?: string | null;
   lsg_is_active?: boolean;
 };
-
 export type SaveLoyaltyPartyRequest = {
   lps_id?: string;
   lps_ls_id?: string;
