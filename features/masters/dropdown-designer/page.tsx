@@ -124,15 +124,15 @@ function formatNullableNumber(value: number | null): string {
 function mapDropdownColumnPayloadToRow(payload: DropdownColumnPayload): DropdownColumnRow {
   return {
     id: createLocalColumnId(),
-    serialId: payload.drop_columns_id,
-    columnNumber: payload.drop_columns_column_no,
-    columnName: payload.drop_columns_column_name,
-    columnAlias: payload.drop_columns_column_alias ?? "",
-    dataType: payload.drop_columns_data_type,
-    width: formatNullableNumber(payload.drop_columns_column_width),
-    alignment: normalizeAlignment(payload.drop_columns_column_allignment),
-    visible: payload.drop_columns_column_visiblity,
-    filter: payload.drop_columns_column_filter,
+    serialId: payload.dropdown_columns_id,
+    columnNumber: payload.dropdown_columns_no,
+    columnName: payload.dropdown_columns_name,
+    columnAlias: payload.dropdown_columns_alias ?? "",
+    dataType: payload.dropdown_columns_data_type,
+    width: formatNullableNumber(payload.dropdown_columns_width),
+    alignment: normalizeAlignment(payload.dropdown_columns_allignment),
+    visible: payload.dropdown_columns_visiblity,
+    filter: payload.dropdown_columns_filter,
   };
 }
 function buildDropdownColumnRequest(
@@ -140,15 +140,15 @@ function buildDropdownColumnRequest(
   rowIndex: number,
 ): SaveDropdownColumnRequest {
   return {
-    ...(column.serialId ? { drop_columns_id: column.serialId } : {}),
-    drop_columns_column_no: rowIndex + 1,
-    drop_columns_data_type: column.dataType.trim() || "Text",
-    drop_columns_column_name: column.columnName.trim() || `Column ${rowIndex + 1}`,
-    drop_columns_column_alias: toNullableString(column.columnAlias),
-    drop_columns_column_width: toNullableNumber(column.width),
-    drop_columns_column_visiblity: column.visible,
-    drop_columns_column_allignment: column.alignment,
-    drop_columns_column_filter: column.filter,
+    ...(column.serialId ? { dropdown_columns_id: column.serialId } : {}),
+    dropdown_columns_no: rowIndex + 1,
+    dropdown_columns_data_type: column.dataType.trim() || "Text",
+    dropdown_columns_name: column.columnName.trim() || `Column ${rowIndex + 1}`,
+    dropdown_columns_alias: toNullableString(column.columnAlias),
+    dropdown_columns_width: toNullableNumber(column.width),
+    dropdown_columns_visiblity: column.visible,
+    dropdown_columns_allignment: column.alignment,
+    dropdown_columns_filter: column.filter,
   };
 }
 function createBlankForm(): DropdownDesignerForm {
@@ -443,7 +443,7 @@ export default function DropdownDesignerPage({
           throw new Error("No dropdown details returned from API.");
         }
         const nextColumns = [...(detail.columns ?? [])]
-          .sort((left, right) => left.drop_columns_column_no - right.drop_columns_column_no)
+          .sort((left, right) => left.dropdown_columns_no - right.dropdown_columns_no)
           .map(mapDropdownColumnPayloadToRow);
         setForm({
           dropdownId: detail.dropdown_id,
@@ -531,7 +531,7 @@ export default function DropdownDesignerPage({
         throw new Error("Dropdown save did not return data.");
       }
       const nextColumns = [...(savedDropdown.columns ?? [])]
-        .sort((left, right) => left.drop_columns_column_no - right.drop_columns_column_no)
+        .sort((left, right) => left.dropdown_columns_no - right.dropdown_columns_no)
         .map(mapDropdownColumnPayloadToRow);
       setForm({
         dropdownId: savedDropdown.dropdown_id,
