@@ -27,9 +27,7 @@ import type {
   PaginationInfo,
   ResolvedGridDetails,
 } from "./types";
-
 // ============ Value Conversion & Formatting ============
-
 export function toDisplayValue(value: unknown): string {
   if (value === undefined || value === null) {
     return "";
@@ -58,11 +56,9 @@ export function toDisplayValue(value: unknown): string {
   }
   return "";
 }
-
 export function toSnakeCase(value: string): string {
   return value.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 }
-
 export function getFirstDefinedValue(
   source: Record<string, unknown>,
   keys: readonly string[],
@@ -75,11 +71,9 @@ export function getFirstDefinedValue(
   }
   return undefined;
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
-
 function getObjectValue(
   source: Record<string, unknown>,
   keys: readonly string[],
@@ -87,14 +81,12 @@ function getObjectValue(
   const candidate = getFirstDefinedValue(source, keys);
   return isRecord(candidate) ? candidate : null;
 }
-
 export function getFieldValue(
   source: Record<string, unknown>,
   fieldName: string,
 ): unknown {
   return getFirstDefinedValue(source, [fieldName, toSnakeCase(fieldName)]);
 }
-
 export function toSelectBoolean(
   value: unknown,
   defaultValue: string,
@@ -114,27 +106,22 @@ export function toSelectBoolean(
     ? "true"
     : "false";
 }
-
 export function toNumber(value: string, fallback: number): number {
   const parsed = Number.parseFloat(value.trim());
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-
 export function toNullableString(value: string): string | null {
   const normalized = value.trim();
   return normalized ? normalized : null;
 }
-
 export function toUpperNullable(value: string): string | null {
   const normalized = value.trim();
   return normalized ? normalized.toUpperCase() : null;
 }
-
 export function toNullableDate(value: string): string | null {
   const normalized = value.trim();
   return normalized ? normalized : null;
 }
-
 export function toDateInputValue(value: unknown): string {
   const normalized = toDisplayValue(value);
   if (!normalized) {
@@ -143,7 +130,6 @@ export function toDateInputValue(value: unknown): string {
   const matched = normalized.match(/^\d{4}-\d{2}-\d{2}/);
   return matched ? matched[0] : normalized;
 }
-
 export function normalizeGstPartyRegType(
   value: string,
 ): "REGULAR" | "COMPOSITION" | "UNREGISTERED" | null {
@@ -157,11 +143,9 @@ export function normalizeGstPartyRegType(
   }
   return null;
 }
-
 export function normalizeObType(value: string): "DR" | "CR" {
   return value.trim().toUpperCase() === "CR" ? "CR" : "DR";
 }
-
 export function toNonNegativeInt(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     const normalized = Math.floor(value);
@@ -175,7 +159,6 @@ export function toNonNegativeInt(value: unknown): number | null {
   }
   return null;
 }
-
 export function toPositiveInt(value: unknown): number | null {
   const normalized = toNonNegativeInt(value);
   if (normalized === null || normalized < 1) {
@@ -183,52 +166,40 @@ export function toPositiveInt(value: unknown): number | null {
   }
   return normalized;
 }
-
 export function toSafePageNumber(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 1;
 }
-
 export function toSafePageSize(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 20;
 }
-
 export function normalizeColumnToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9_]+/g, "");
 }
-
 export function normalizeGridColumnColor(value: string | undefined): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
-
   const normalized = value.trim();
   return normalized || undefined;
 }
-
 export function resolveNumericId(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.floor(value);
   }
-
   if (typeof value === "string") {
     const normalized = value.trim();
     if (!normalized) {
       return null;
     }
-
     const parsed = Number.parseInt(normalized, 10);
     return Number.isFinite(parsed) ? parsed : null;
   }
-
   if (typeof value === "bigint") {
     return Number(value);
   }
-
   return null;
 }
-
 // ============ Array Extraction ============
-
 export function extractRows(
   payload: unknown,
   arrayKeys: readonly string[],
@@ -260,7 +231,6 @@ export function extractRows(
   );
   return Array.isArray(firstArray) ? firstArray : [];
 }
-
 export function extractDetailSource(payload: unknown): Record<string, unknown> | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return null;
@@ -276,16 +246,13 @@ export function extractDetailSource(payload: unknown): Record<string, unknown> |
   }
   return objectPayload;
 }
-
 // ============ Option Building ============
-
 export function buildLookupOptions(
   payload: unknown,
   includeEmptyOption = true,
 ): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();
   const rows = extractRows(payload, LOOKUP_ARRAY_KEYS);
-
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       continue;
@@ -311,7 +278,6 @@ export function buildLookupOptions(
   }
   return [{ value: "", label: "" }, ...options];
 }
-
 export function buildStateNameOptions(payload: unknown): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();
   const rows = extractRows(payload, LOOKUP_ARRAY_KEYS);
@@ -339,7 +305,6 @@ export function buildStateNameOptions(payload: unknown): ERPDynamicSelectOption[
     .sort((left, right) => left.label.localeCompare(right.label));
   return [{ value: "", label: "" }, ...options];
 }
-
 export function buildStateCodeByName(payload: unknown): Record<string, string> {
   const codeMap = new Map<string, string>();
   const rows = extractRows(payload, LOOKUP_ARRAY_KEYS);
@@ -363,7 +328,6 @@ export function buildStateCodeByName(payload: unknown): Record<string, string> {
   }
   return Object.fromEntries(codeMap.entries());
 }
-
 export function buildStateNameByCode(payload: unknown): Record<string, string> {
   const nameMap = new Map<string, string>();
   const rows = extractRows(payload, LOOKUP_ARRAY_KEYS);
@@ -385,14 +349,12 @@ export function buildStateNameByCode(payload: unknown): Record<string, string> {
   }
   return Object.fromEntries(nameMap.entries());
 }
-
 function joinDisplayValues(parts: unknown[]): string {
   return parts
     .map((part) => toDisplayValue(part))
     .filter(Boolean)
     .join(", ");
 }
-
 function setFieldValueIfPresent(
   target: Partial<LedgerFormValues>,
   fieldName: LedgerFormFieldName,
@@ -404,7 +366,6 @@ function setFieldValueIfPresent(
   }
   target[fieldName] = normalized;
 }
-
 function toLedgerLookupGstPartyRegType(
   value: string,
 ): "REGULAR" | "COMPOSITION" | "UNREGISTERED" {
@@ -421,7 +382,6 @@ function toLedgerLookupGstPartyRegType(
   }
   return "REGULAR";
 }
-
 export function extractGstLookupSource(
   payload: unknown,
 ): Record<string, unknown> | null {
@@ -430,7 +390,6 @@ export function extractGstLookupSource(
   }
   return getObjectValue(payload, GST_LOOKUP_SOURCE_KEYS) ?? payload;
 }
-
 export function extractGstAddress(
   source: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -440,7 +399,6 @@ export function extractGstAddress(
   }
   return getObjectValue(primaryAddress, GST_ADDRESS_KEYS) ?? primaryAddress;
 }
-
 export function buildLedgerGstLookupValues(
   gstin: string,
   payload: Record<string, unknown>,
@@ -465,7 +423,6 @@ export function buildLedgerGstLookupValues(
     ledPanNo: gstin.slice(2, 12),
     ledCountry: "India",
   };
-
   setFieldValueIfPresent(values, "masterName", tradeName || legalName);
   setFieldValueIfPresent(
     values,
@@ -506,10 +463,8 @@ export function buildLedgerGstLookupValues(
     "ledPin",
     toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_PIN_KEYS)),
   );
-
   return values;
 }
-
 export function getLookupErrorMessage(payload: unknown, fallback: string): string {
   if (!isRecord(payload)) {
     return fallback;
@@ -519,9 +474,7 @@ export function getLookupErrorMessage(payload: unknown, fallback: string): strin
     fallback
   );
 }
-
 // ============ Pagination ============
-
 function findPaginationNumber(
   candidates: Record<string, unknown>[],
   keys: readonly string[],
@@ -540,7 +493,6 @@ function findPaginationNumber(
   }
   return null;
 }
-
 export function extractPaginationInfo(payload: unknown): PaginationInfo {
   const {
     PAGINATION_CONTAINER_KEYS,
@@ -573,12 +525,9 @@ export function extractPaginationInfo(payload: unknown): PaginationInfo {
     pageSize: findPaginationNumber(candidates, PAGE_SIZE_KEYS, false),
   };
 }
-
 // ============ Grid Details ============
-
 export function resolveAccountLedgerGridDetails(payload: unknown): ResolvedGridDetails {
   const { GRID_DETAIL_ID_KEYS, GRID_DETAIL_SQL_KEYS, GRID_DETAIL_NAME_KEYS, ACCOUNT_LEDGER_TABLE_NAME_ALIASES } = require("./constants");
-
   const rows = extractRows(payload, LOOKUP_ARRAY_KEYS);
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {

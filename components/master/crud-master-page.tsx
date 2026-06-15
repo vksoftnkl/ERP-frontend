@@ -595,18 +595,14 @@ function resolveRecordId(
       return displayId;
     }
   }
-
   return row.__recordId;
 }
-
 function resolveAuditHistoryRecordId(row: MasterTableRow): string | number | null {
   if (typeof row.__recordId === "string" || typeof row.__recordId === "number") {
     return row.__recordId;
   }
-
   return null;
 }
-
 function resolveAuditHistoryDisplayName(row: MasterTableRow): string | null {
   if (row.__source) {
     return resolveRecordHistoryDisplayName(
@@ -621,7 +617,6 @@ function resolveAuditHistoryDisplayName(row: MasterTableRow): string | null {
       row.__source.code,
     );
   }
-
   return resolveRecordHistoryDisplayName(
     row.masterName,
     row.masterCode,
@@ -630,24 +625,19 @@ function resolveAuditHistoryDisplayName(row: MasterTableRow): string | null {
     row.masterId,
   );
 }
-
 function toSafePageNumber(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : DEFAULT_PAGE;
 }
-
 function toSafePageSize(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : DEFAULT_PAGE_SIZE;
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
-
 function toBoolean(value: unknown): boolean | null {
   if (typeof value === "boolean") {
     return value;
   }
-
   if (typeof value === "number") {
     if (value === 1) {
       return true;
@@ -657,7 +647,6 @@ function toBoolean(value: unknown): boolean | null {
     }
     return null;
   }
-
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
     if (["true", "1", "yes", "y"].includes(normalized)) {
@@ -667,14 +656,11 @@ function toBoolean(value: unknown): boolean | null {
       return false;
     }
   }
-
   return null;
 }
-
 function normalizeColumnToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9_]+/g, "");
 }
-
 function getSourceColumnValue(
   source: Record<string, unknown> | null | undefined,
   sourceKey: string,
@@ -685,7 +671,6 @@ function getSourceColumnValue(
   if (sourceKey in source) {
     return source[sourceKey];
   }
-
   const normalizedSourceKey = normalizeColumnToken(sourceKey);
   const sourceKeys = Object.keys(source);
   const matchedKey = sourceKeys.find(
@@ -694,7 +679,6 @@ function getSourceColumnValue(
   if (matchedKey) {
     return source[matchedKey];
   }
-
   const compactSourceKey = normalizedSourceKey.replace(/_/g, "");
   const compactMatchedKey = sourceKeys.find(
     (key) => normalizeColumnToken(key).replace(/_/g, "") === compactSourceKey,
@@ -702,7 +686,6 @@ function getSourceColumnValue(
   if (compactMatchedKey) {
     return source[compactMatchedKey];
   }
-
   const suffixMatchedKey =
     compactSourceKey.length >= 3
       ? sourceKeys.find((key) => {
@@ -716,29 +699,23 @@ function getSourceColumnValue(
       : undefined;
   return suffixMatchedKey ? source[suffixMatchedKey] : "";
 }
-
 function resolveNumericId(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.floor(value);
   }
-
   if (typeof value === "string") {
     const normalized = value.trim();
     if (!normalized) {
       return null;
     }
-
     const parsed = Number.parseInt(normalized, 10);
     return Number.isFinite(parsed) ? parsed : null;
   }
-
   if (typeof value === "bigint") {
     return Number(value);
   }
-
   return null;
 }
-
 type ResolvedGridDetails = {
   gridId: number | null;
   gridName: string | null;
@@ -750,17 +727,14 @@ type ResolvedGridDetails = {
   gridDeviceType?: string | null;
   columns?: Record<string, unknown>[];
 };
-
 function toNullableDisplayValue(value: unknown): string | null {
   const normalized = toDisplayValue(value);
   return normalized || null;
 }
-
 function extractGridDetailColumns(source: Record<string, unknown>): Record<string, unknown>[] {
   const columns = source.columns ?? source.grid_columns ?? source.gridColumns;
   return Array.isArray(columns) ? columns.filter(isRecord) : [];
 }
-
 function resolveGridDetailsFromSource(
   source: Record<string, unknown>,
   fallbackGridId: number | null = null,
@@ -768,7 +742,6 @@ function resolveGridDetailsFromSource(
   const gridId = resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS)) ?? fallbackGridId;
   const gridName = toNullableDisplayValue(getFirstDefinedValue(source, GRID_DETAIL_NAME_KEYS));
   const gridStatus = toBoolean(getFirstDefinedValue(source, GRID_DETAIL_STATUS_KEYS));
-
   return {
     gridId,
     gridName,
@@ -788,7 +761,6 @@ function resolveGridDetailsFromSource(
     columns: extractGridDetailColumns(source),
   };
 }
-
 function pickGridDetailRow(
   rows: unknown[],
   fallbackGridId?: number,
@@ -797,7 +769,6 @@ function pickGridDetailRow(
   if (records.length === 0) {
     return null;
   }
-
   if (fallbackGridId !== undefined) {
     const matchedRecord = records.find(
       (row) => resolveNumericId(getFirstDefinedValue(row, GRID_DETAIL_ID_KEYS)) === fallbackGridId,
@@ -806,10 +777,8 @@ function pickGridDetailRow(
       return matchedRecord;
     }
   }
-
   return records[0];
 }
-
 function extractGridDetailSource(
   payload: unknown,
   fallbackGridId?: number,
@@ -817,11 +786,9 @@ function extractGridDetailSource(
   if (Array.isArray(payload)) {
     return pickGridDetailRow(payload, fallbackGridId);
   }
-
   if (!payload || typeof payload !== "object") {
     return null;
   }
-
   const source = payload as Record<string, unknown>;
   const nestedData = source.data;
   if (Array.isArray(nestedData)) {
@@ -830,16 +797,13 @@ function extractGridDetailSource(
   if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
     return nestedData as Record<string, unknown>;
   }
-
   const nestedRows = extractRows(payload, DEFAULT_ARRAY_KEYS);
   const nestedSource = pickGridDetailRow(nestedRows, fallbackGridId);
   if (nestedSource) {
     return nestedSource;
   }
-
   return source;
 }
-
 function resolveGridDetailsByIdPayload(
   payload: unknown,
   fallbackGridId: number,
@@ -851,16 +815,13 @@ function resolveGridDetailsByIdPayload(
       gridName: null,
     };
   }
-
   const gridId =
     resolveNumericId(getFirstDefinedValue(source, GRID_DETAIL_ID_KEYS)) ?? fallbackGridId;
   return resolveGridDetailsFromSource(source, gridId);
 }
-
 function normalizeUiTablePayloadId(source: Record<string, unknown>): string {
   return toDisplayValue(getFirstDefinedValue(source, UI_TABLE_ID_KEYS)).trim();
 }
-
 function pickUiTableSource(
   rows: unknown[],
   uiTableId: string,
@@ -869,17 +830,14 @@ function pickUiTableSource(
   if (records.length === 0) {
     return null;
   }
-
   const matchedRecord = records.find(
     (row) => normalizeUiTablePayloadId(row) === uiTableId,
   );
   return matchedRecord ?? records[0];
 }
-
 function hasUiTableColumnArray(source: Record<string, unknown>): boolean {
   return UI_TABLE_COLUMN_ARRAY_KEYS.some((key) => Array.isArray(source[key]));
 }
-
 function extractUiTableSource(
   payload: unknown,
   uiTableId: string,
@@ -887,11 +845,9 @@ function extractUiTableSource(
   if (Array.isArray(payload)) {
     return pickUiTableSource(payload, uiTableId);
   }
-
   if (!isRecord(payload)) {
     return null;
   }
-
   const nestedData = payload.data;
   if (Array.isArray(nestedData)) {
     return pickUiTableSource(nestedData, uiTableId);
@@ -906,7 +862,6 @@ function extractUiTableSource(
       return nestedSource;
     }
   }
-
   for (const key of DEFAULT_ARRAY_KEYS) {
     const value = payload[key];
     if (Array.isArray(value)) {
@@ -916,10 +871,8 @@ function extractUiTableSource(
       }
     }
   }
-
   return normalizeUiTablePayloadId(payload) || hasUiTableColumnArray(payload) ? payload : null;
 }
-
 function extractUiTableColumnRows(source: Record<string, unknown>): Record<string, unknown>[] {
   for (const key of UI_TABLE_COLUMN_ARRAY_KEYS) {
     const value = source[key];
@@ -929,17 +882,14 @@ function extractUiTableColumnRows(source: Record<string, unknown>): Record<strin
   }
   return [];
 }
-
 function normalizeUiTableColumnOrder(value: unknown, fallbackOrder: number): number {
   const normalized = toPositiveInt(value);
   return normalized ?? fallbackOrder;
 }
-
 function normalizeUiTableColumnWidth(value: unknown): string | undefined {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
     return `${value}px`;
   }
-
   if (typeof value === "string") {
     const normalized = value.trim();
     if (!normalized) {
@@ -950,10 +900,8 @@ function normalizeUiTableColumnWidth(value: unknown): string | undefined {
     }
     return normalized;
   }
-
   return undefined;
 }
-
 function normalizeUiTableColumn(
   row: Record<string, unknown>,
   fallbackOrder: number,
@@ -964,7 +912,6 @@ function normalizeUiTableColumn(
   if (!columnName) {
     return null;
   }
-
   const isDeleted = toBoolean(getFirstDefinedValue(row, UI_TABLE_COLUMN_DELETED_KEYS));
   const isActive = toBoolean(getFirstDefinedValue(row, UI_TABLE_COLUMN_ACTIVE_KEYS));
   const isVisible = toBoolean(getFirstDefinedValue(row, UI_TABLE_COLUMN_VISIBLE_KEYS));
@@ -973,7 +920,6 @@ function normalizeUiTableColumn(
     getFirstDefinedValue(row, UI_TABLE_COLUMN_POSITION_KEYS),
     fallbackOrder,
   );
-
   return {
     key: columnName,
     accessorKey: columnName,

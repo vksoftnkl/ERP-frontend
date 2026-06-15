@@ -13,7 +13,6 @@ import type {
   FocusableFieldTarget,
   ModalAccentPalette,
 } from "./dynamic-modal-form.types";
-
 export function getSectionRowStartOffset(fields: ERPDynamicModalField[]): number | null {
   const rowStarts = fields
     .map((field) => field.gridRowStart)
@@ -28,7 +27,6 @@ export function getSectionRowStartOffset(fields: ERPDynamicModalField[]): number
   }
   return Math.min(...rowStarts);
 }
-
 export function buildFormSections(fields: ERPDynamicModalField[]): ERPDynamicFormSection[] {
   if (fields.length === 0) {
     return [];
@@ -50,7 +48,6 @@ export function buildFormSections(fields: ERPDynamicModalField[]): ERPDynamicFor
   }
   return sections;
 }
-
 export function resolvePalette(accent: ERPDynamicModalVariant["accent"]): ModalAccentPalette {
   if (!accent) {
     return DEFAULT_ACCENT;
@@ -60,7 +57,6 @@ export function resolvePalette(accent: ERPDynamicModalVariant["accent"]): ModalA
   }
   return { ...DEFAULT_ACCENT, ...accent };
 }
-
 export function buildInitialValues(
   variant: ERPDynamicModalVariant,
   initialValuesByVariant: ERPDynamicModalFormProps["initialValuesByVariant"],
@@ -71,11 +67,9 @@ export function buildInitialValues(
     return state;
   }, {});
 }
-
 export function isEmptyValue(value: string): boolean {
   return value.trim().length === 0;
 }
-
 export function isFieldRequired(
   field: ERPDynamicModalField,
   values: Record<string, string>,
@@ -88,7 +82,6 @@ export function isFieldRequired(
   }
   return Boolean(field.required);
 }
-
 export function toRegExp(pattern: string | RegExp): RegExp | null {
   if (pattern instanceof RegExp) {
     return pattern;
@@ -99,7 +92,6 @@ export function toRegExp(pattern: string | RegExp): RegExp | null {
     return null;
   }
 }
-
 export function getSelectOptionLabel(field: ERPDynamicModalField, value: string | undefined): string {
   if (!value) {
     return "";
@@ -107,7 +99,6 @@ export function getSelectOptionLabel(field: ERPDynamicModalField, value: string 
   const matchedOption = field.options?.find((option) => option.value === value);
   return matchedOption?.label ?? value;
 }
-
 export function parseMultiSelectValue(value: string | undefined): string[] {
   if (!value) {
     return [];
@@ -117,11 +108,9 @@ export function parseMultiSelectValue(value: string | undefined): string[] {
     .map((entry) => entry.trim())
     .filter(Boolean);
 }
-
 export function formatMultiSelectValue(values: string[]): string {
   return values.join(",");
 }
-
 export function getFocusableFieldControl(container: HTMLElement): HTMLElement | null {
   const primaryControl = container.querySelector<HTMLElement>(PRIMARY_FIELD_CONTROL_SELECTOR);
   if (primaryControl) {
@@ -139,7 +128,6 @@ export function getFocusableFieldControl(container: HTMLElement): HTMLElement | 
     ].join(", "),
   );
 }
-
 export function getFocusableFieldTargets(root: HTMLElement): FocusableFieldTarget[] {
   const fieldContainers = Array.from(
     root.querySelectorAll<HTMLElement>(FIELD_CONTAINER_SELECTOR),
@@ -169,7 +157,6 @@ export function getFocusableFieldTargets(root: HTMLElement): FocusableFieldTarge
     })
     .filter((target): target is FocusableFieldTarget => target !== null);
 }
-
 export function findNextFieldTarget(
   targets: FocusableFieldTarget[],
   currentTarget: FocusableFieldTarget,
@@ -213,7 +200,6 @@ export function findNextFieldTarget(
   }
   return bestTarget;
 }
-
 export function getFirstFocusableFieldTarget(root: HTMLElement): FocusableFieldTarget | null {
   const targets = getFocusableFieldTargets(root);
   if (targets.length === 0) {
@@ -229,7 +215,6 @@ export function getFirstFocusableFieldTarget(root: HTMLElement): FocusableFieldT
     })[0] ?? null
   );
 }
-
 export function focusFieldControl(control: HTMLElement) {
   control.focus();
   if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) {
@@ -242,7 +227,6 @@ export function focusFieldControl(control: HTMLElement) {
   }
   control.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
-
 export function validateFieldValue(
   field: ERPDynamicModalField,
   values: Record<string, string>,
@@ -362,7 +346,6 @@ export function validateFieldValue(
   }
   return null;
 }
-
 export function resolveVisibleFields(
   variant: ERPDynamicModalVariant,
   values: Record<string, string>,
@@ -397,7 +380,6 @@ export function resolveVisibleFields(
   }
   return resolved;
 }
-
 export function buildSectionExpandedState(
   fields: ERPDynamicModalField[],
   values?: Record<string, string>,

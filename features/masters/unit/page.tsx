@@ -243,6 +243,7 @@ function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDyna
     {
       name: "unitConversion",
       label: "Conversion",
+      requiredWhen: (values) => (values.unitIsPackUnit ?? "false") === "true",
       colSpan: 1,
       visibleWhen: (values) => (values.unitIsPackUnit ?? "false") === "true",
     },
@@ -378,6 +379,7 @@ export default function UnitMasterPage() {
       formDescription="Create and update units."
       createModalTitle="Unit Entry"
       editModalTitle="Edit Unit Entry"
+      modalPanelStyle={{ width: "min(52rem, calc(100vw - 2rem))", maxHeight: "min(82vh, 42rem)" }}
       customFields={unitFormFields}
       createInitialValues={UNIT_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {
