@@ -11,12 +11,13 @@ import styles from "@/app/master/state-master/page.module.scss";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue, toSelectBoolean } from "@/features/masters/shared/value-mappers";
 const API_ENDPOINTS = {
-  list: "/tender-masters/get",
+  list: "/configured-grid-sql/run?grid_id=44",
   getById: "/tender-masters/get",
   create: "/tender-masters/create",
   delete: "/tender-masters/delete",
 } as const;
 const GRID_TABLE_NAME = "tender_master";
+const GRID_DETAIL_ID = 44;
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const LOOKUP_QUERY_TENDER_TYPES = {
   module: "tenderTypes",
@@ -321,18 +322,14 @@ export default function TenderMasterPage() {
       entityLabelPlural="tenders"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
-        listResponseStyleArrayKey=""
+      gridDetailId={GRID_DETAIL_ID}
+      useConfiguredGridColumnsOnly
+      listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
       listTitle="Tender List"
       createLabel="Add"
-      tableColumnHeaders={{
-        masterCode: "Position",
-        masterName: "Tender Name",
-        masterShort: "Min Amount",
-        masterActive: "Status",
-      }}
       nameFieldLabel="Tender Name"
       nameFieldPlaceholder="Cash"
       formTitle="Tender Form"

@@ -3,7 +3,6 @@ export type PersistedRecentPage = {
   path: string;
   label: string;
 };
-
 export type PersistedBusinessContext = {
   companyId: string | null;
   companyName: string | null;
@@ -12,7 +11,6 @@ export type PersistedBusinessContext = {
   branchId: string | null;
   branchName: string | null;
 };
-
 export type UserInfo = {
   userName: string | null;
   userType: string | null;
@@ -24,7 +22,6 @@ export type UserInfo = {
   devUserId: string | null;
   deviceType: string | null;
 };
-
 type AuthSessionPayload = {
   token?: string | null;
   refreshToken?: string | null;
@@ -34,7 +31,6 @@ type AuthSessionPayload = {
   businessContext?: PersistedBusinessContext | null;
   userInfo?: UserInfo | null;
 };
-
 export type AuthState = {
   initialized: boolean;
   isAuthenticated: boolean;
@@ -45,7 +41,6 @@ export type AuthState = {
   businessContext: PersistedBusinessContext | null;
   userInfo: UserInfo | null;
 };
-
 const initialState: AuthState = {
   initialized: false,
   isAuthenticated: false,
@@ -56,12 +51,10 @@ const initialState: AuthState = {
   businessContext: null,
   userInfo: null,
 };
-
 function normalizeString(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
 }
-
 function applyAuthSession(state: AuthState, payload: AuthSessionPayload): void {
   const nextToken = Object.prototype.hasOwnProperty.call(payload, "token")
     ? normalizeString(payload.token)
@@ -74,13 +67,11 @@ function applyAuthSession(state: AuthState, payload: AuthSessionPayload): void {
     : state.refreshToken;
   const isAuthenticated =
     payload.isAuthenticated ?? Boolean(nextToken);
-
   state.initialized = true;
   state.isAuthenticated = isAuthenticated;
   state.token = isAuthenticated ? nextToken : null;
   state.refreshToken = isAuthenticated ? nextRefreshToken : null;
   state.userId = isAuthenticated ? nextUserId : null;
-
   if (!isAuthenticated) {
     state.recentPages = [];
     state.businessContext = null;

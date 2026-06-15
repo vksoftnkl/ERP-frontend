@@ -37,7 +37,6 @@ import {
   FiClock,
   FiDownload,
   FiEdit2,
-  FiFilter,
   FiPlusCircle,
   FiPrinter,
   FiRefreshCw,
@@ -2755,7 +2754,6 @@ export default function CrudMasterPage({
     ],
   );
   const [showOnlyInactive, setShowOnlyInactive] = useState(false);
-  const [filterCardVisible, setFilterCardVisible] = useState(true);
   const baseRenderedRows = shouldHideRowsForDisabledGridFilters ? [] : rows;
   const renderedRows = useMemo(() => {
     if (!showOnlyInactive) return baseRenderedRows;
@@ -3841,15 +3839,6 @@ export default function CrudMasterPage({
 
                 {/* Icon Toolbar */}
                 <div className={styles.iconToolbar}>
-                  <button
-                    type="button"
-                    className={`${styles.iconBtn} ${filterCardVisible ? styles.iconBtnFilterActive : styles.iconBtnFilter}`}
-                    onClick={() => setFilterCardVisible((v) => !v)}
-                    title="Toggle filter panel"
-                  >
-                    <span className={styles.iconBtnBox}><FiFilter aria-hidden="true" /></span>
-                    <span>Filter</span>
-                  </button>
                   <button
                     type="button"
                     className={`${styles.iconBtn} ${styles.iconBtnAdd}`}

@@ -5,7 +5,6 @@ import { getAuthSession } from "@/lib/auth/session";
 import type { RootState } from "@/store/store";
 import { getFirstDefinedValue } from "@/features/masters/shared/value-mappers";
 const GRID_COLUMNS_LIST_ENDPOINT = "/configured-grid-sql/columns";
-
 const ARRAY_KEYS = [
   "data",
   "items",
@@ -132,9 +131,7 @@ const COLUMN_SERIAL_ID_KEYS = [
   "serialId",
 ] as const;
 const COLUMN_GRID_ID_KEYS = ["gridId"] as const;
-
 type GridColumnAlign = "left" | "center" | "right";
-
 export type GridColumnConfig = {
   key: string;
   accessorKey: string;
@@ -152,34 +149,27 @@ export type GridColumnConfig = {
   width?: string;
   color?: string;
 };
-
 export type GridColumnsEntry = {
   items: GridColumnConfig[];
   loading: boolean;
   error: string | null;
   requested: boolean;
 };
-
 export type GridColumnsState = {
   byGridId: Record<number, GridColumnsEntry>;
 };
-
 const EMPTY_ENTRY: GridColumnsEntry = {
   items: [],
   loading: false,
   error: null,
   requested: false,
 };
-
 const initialState: GridColumnsState = {
   byGridId: {},
 };
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
-
-
 function getFirstDefinedEntry(
   row: Record<string, unknown>,
   keys: readonly string[],
@@ -192,7 +182,6 @@ function getFirstDefinedEntry(
   }
   return null;
 }
-
 function toBoolean(value: unknown): boolean | null {
   if (typeof value === "boolean") {
     return value;
@@ -213,7 +202,6 @@ function toBoolean(value: unknown): boolean | null {
   }
   return null;
 }
-
 function normalizeKey(value: unknown): string {
   if (typeof value === "string") {
     return value.trim();
@@ -223,7 +211,6 @@ function normalizeKey(value: unknown): string {
   }
   return "";
 }
-
 function formatHeaderFromKey(key: string): string {
   const normalized = key
     .replace(/[_-]+/g, " ")
@@ -234,15 +221,12 @@ function formatHeaderFromKey(key: string): string {
   if (!normalized) {
     return "Value";
   }
-
   return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
 }
-
 function normalizeHeader(value: unknown, fallbackKey: string): string {
   const normalized = normalizeKey(value);
   return normalized || formatHeaderFromKey(fallbackKey);
 }
-
 function normalizeOrder(value: unknown, fallbackOrder: number): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.max(0, Math.floor(value));
@@ -255,7 +239,6 @@ function normalizeOrder(value: unknown, fallbackOrder: number): number {
   }
   return fallbackOrder;
 }
-
 function normalizeWidth(value: unknown, numericUnit: "px" | "%" = "px"): string | undefined {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
     return `${value}${numericUnit}`;
@@ -272,7 +255,6 @@ function normalizeWidth(value: unknown, numericUnit: "px" | "%" = "px"): string 
   }
   return undefined;
 }
-
 function normalizeAlign(value: unknown): GridColumnAlign | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -283,7 +265,6 @@ function normalizeAlign(value: unknown): GridColumnAlign | undefined {
   }
   return undefined;
 }
-
 function normalizeColor(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -291,7 +272,6 @@ function normalizeColor(value: unknown): string | undefined {
   const normalized = value.trim();
   return normalized || undefined;
 }
-
 function extractNestedColumnRows(source: Record<string, unknown>): Record<string, unknown>[] {
   for (const key of GRID_DETAIL_COLUMN_ARRAY_KEYS) {
     const value = source[key];
@@ -299,38 +279,30 @@ function extractNestedColumnRows(source: Record<string, unknown>): Record<string
       return value.filter(isRecord);
     }
   }
-
   return [];
 }
-
 function hasNestedColumnArray(source: Record<string, unknown>): boolean {
   return GRID_DETAIL_COLUMN_ARRAY_KEYS.some((key) => Array.isArray(source[key]));
 }
-
 function extractColumnRowsFromArray(payload: unknown[]): Record<string, unknown>[] {
   const rows = payload.filter(isRecord);
   const nestedRows = rows.flatMap(extractNestedColumnRows);
   if (nestedRows.length > 0 || rows.some(hasNestedColumnArray)) {
     return nestedRows;
   }
-
   return rows;
 }
-
 function extractColumnRows(payload: unknown): Record<string, unknown>[] {
   if (Array.isArray(payload)) {
     return extractColumnRowsFromArray(payload);
   }
-
   if (!isRecord(payload)) {
     return [];
   }
-
   const directNestedRows = extractNestedColumnRows(payload);
   if (directNestedRows.length > 0) {
     return directNestedRows;
   }
-
   for (const key of ARRAY_KEYS) {
     const value = payload[key];
     if (Array.isArray(value)) {
@@ -343,15 +315,12 @@ function extractColumnRows(payload: unknown): Record<string, unknown>[] {
       }
     }
   }
-
   const firstArray = Object.values(payload).find((value) => Array.isArray(value));
   if (Array.isArray(firstArray)) {
     return extractColumnRowsFromArray(firstArray);
   }
-
   return [];
 }
-
 function normalizeGridColumnAdjustmentRow(
   row: Record<string, unknown>,
   fallbackOrder: number,
@@ -360,7 +329,6 @@ function normalizeGridColumnAdjustmentRow(
   if (!columnName) {
     return null;
   }
-
   const notesAccessor = normalizeKey(row.grid_column_notes ?? row.gridColumnNotes);
   const sqlFieldName = normalizeKey(
     row.grid_column_sql_field_name ?? row.gridColumnSqlFieldName ?? "",
@@ -369,7 +337,6 @@ function normalizeGridColumnAdjustmentRow(
   const visibility = toBoolean(row.grid_column_visibility);
   const isDeleted = toBoolean(row.grid_column_is_deleted);
   const sortable = toBoolean(row.grid_column_filter);
-
   return {
     key: accessorKey,
     accessorKey,
@@ -393,7 +360,6 @@ function normalizeGridColumnAdjustmentRow(
     color: normalizeColor(row.grid_column_color),
   };
 }
-
 function normalizeColumnRow(
   row: Record<string, unknown>,
   fallbackOrder: number,
@@ -402,18 +368,15 @@ function normalizeColumnRow(
   if (directAdjustment) {
     return directAdjustment;
   }
-
   const rawKey = getFirstDefinedValue(row, COLUMN_KEY_KEYS);
   const rawAccessor = getFirstDefinedValue(row, COLUMN_ACCESSOR_KEYS);
   const rawHeader = getFirstDefinedValue(row, COLUMN_HEADER_KEYS);
   const rawOrder = getFirstDefinedValue(row, COLUMN_ORDER_KEYS);
   const rawColumnNumber = getFirstDefinedValue(row, COLUMN_NUMBER_KEYS);
-
   const key = normalizeKey(rawKey || rawAccessor || rawHeader);
   if (!key) {
     return null;
   }
-
   const accessorKey = normalizeKey(rawAccessor || rawKey || rawHeader) || key;
   const header = normalizeHeader(rawHeader || rawKey || rawAccessor, key);
   const order = normalizeOrder(rawOrder, fallbackOrder);
@@ -433,7 +396,6 @@ function normalizeColumnRow(
   const hidden = toBoolean(getFirstDefinedValue(row, COLUMN_HIDDEN_KEYS));
   const visibleValue = toBoolean(getFirstDefinedValue(row, COLUMN_VISIBLE_KEYS));
   const visible = hidden !== null ? !hidden : visibleValue ?? true;
-
   return {
     key,
     accessorKey,
@@ -451,45 +413,37 @@ function normalizeColumnRow(
     color,
   };
 }
-
 function compareGridColumnConfig(left: GridColumnConfig, right: GridColumnConfig): number {
   if (left.order !== right.order) {
     return left.order - right.order;
   }
-
   const leftColumnNumber = left.columnNumber ?? left.order;
   const rightColumnNumber = right.columnNumber ?? right.order;
   if (leftColumnNumber !== rightColumnNumber) {
     return leftColumnNumber - rightColumnNumber;
   }
-
   return left.header.localeCompare(right.header, undefined, {
     numeric: true,
     sensitivity: "base",
   });
 }
-
 export function normalizeGridColumnsPayload(payload: unknown): GridColumnConfig[] {
   const rows = extractColumnRows(payload);
   const candidateRows = rows.length > 0 ? rows : isRecord(payload) ? [payload] : [];
   const dedupedByKey = new Map<string, GridColumnConfig>();
-
   candidateRows.forEach((row, index) => {
     const normalized = normalizeColumnRow(row, index);
     if (!normalized) {
       return;
     }
-
     const dedupeKey = normalized.key.trim().toLowerCase();
     const existing = dedupedByKey.get(dedupeKey);
     if (!existing || compareGridColumnConfig(normalized, existing) < 0) {
       dedupedByKey.set(dedupeKey, normalized);
     }
   });
-
   return Array.from(dedupedByKey.values()).sort(compareGridColumnConfig);
 }
-
 function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const responseData = error.response?.data as { message?: string } | string | undefined;
@@ -506,14 +460,11 @@ function getErrorMessage(error: unknown): string {
     }
     return error.message || "Unable to load grid columns.";
   }
-
   if (error instanceof Error && error.message.trim()) {
     return error.message;
   }
-
   return "Unable to load grid columns.";
 }
-
 export const fetchGridColumns = createAsyncThunk<
   { gridId: number; columns: GridColumnConfig[] },
   { gridId: number },
@@ -522,12 +473,10 @@ export const fetchGridColumns = createAsyncThunk<
   try {
     const token = getAuthSession()?.trim();
     const headers: Record<string, string> = {};
-
     const authHeaderValue = getAuthHeaderValue(token);
     if (authHeaderValue) {
       headers.Authorization = authHeaderValue;
     }
-
     const response = await axios.request<unknown>({
       url: GRID_COLUMNS_LIST_ENDPOINT,
       method: "GET",
@@ -537,7 +486,6 @@ export const fetchGridColumns = createAsyncThunk<
         grid_id: gridId,
       },
     });
-
     return {
       gridId,
       columns: normalizeGridColumnsPayload(response.data),
@@ -549,7 +497,6 @@ export const fetchGridColumns = createAsyncThunk<
     });
   }
 });
-
 const gridColumnsSlice = createSlice({
   name: "gridColumns",
   initialState,
@@ -567,7 +514,6 @@ const gridColumnsSlice = createSlice({
       entry.requested = true;
       state.byGridId[gridId] = entry;
     });
-
     builder.addCase(fetchGridColumns.fulfilled, (state, action) => {
       const { gridId, columns } = action.payload;
       const entry = state.byGridId[gridId] ?? { ...EMPTY_ENTRY };
@@ -577,7 +523,6 @@ const gridColumnsSlice = createSlice({
       entry.requested = true;
       state.byGridId[gridId] = entry;
     });
-
     builder.addCase(fetchGridColumns.rejected, (state, action) => {
       const gridId = action.payload?.gridId ?? action.meta.arg.gridId;
       const entry = state.byGridId[gridId] ?? { ...EMPTY_ENTRY };
@@ -588,27 +533,20 @@ const gridColumnsSlice = createSlice({
     });
   },
 });
-
 export const { gridColumnsHydrated } = gridColumnsSlice.actions;
-
 function selectGridColumnsEntry(state: RootState, gridId: number): GridColumnsEntry {
   return state.gridColumns.byGridId[gridId] ?? EMPTY_ENTRY;
 }
-
 export function selectGridColumns(state: RootState, gridId: number): GridColumnConfig[] {
   return selectGridColumnsEntry(state, gridId).items;
 }
-
 export function selectGridColumnsLoading(state: RootState, gridId: number): boolean {
   return selectGridColumnsEntry(state, gridId).loading;
 }
-
 export function selectGridColumnsRequested(state: RootState, gridId: number): boolean {
   return selectGridColumnsEntry(state, gridId).requested;
 }
-
 export function selectGridColumnsError(state: RootState, gridId: number): string | null {
   return selectGridColumnsEntry(state, gridId).error;
 }
-
 export default gridColumnsSlice.reducer;
