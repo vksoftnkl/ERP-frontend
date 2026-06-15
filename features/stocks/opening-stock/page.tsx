@@ -14,10 +14,6 @@ import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { useBusinessContext } from "@/components/layout/business-context";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
-import {
-  KeyboardShortcutHints,
-  type KeyboardShortcutDefinition,
-} from "@/components/design-system/ui/keyboard-shortcut-hints";
 import type { ERPDynamicSearchShortcutPayload } from "@/components/design-system/ui/dynamic-modal-form";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import type { CrudMasterPageController } from "@/components/master/crud-master-page";
@@ -180,7 +176,6 @@ import {
   TABLE_SETTINGS_CONTEXT_MENU_WIDTH,
   TABLE_SETTINGS_CONTEXT_MENU_HEIGHT,
   TABLE_SETTINGS_CONTEXT_MENU_PADDING,
-  OPENING_STOCK_TABLE_SHORTCUTS,
 } from "./opening-stock.column-settings";
 function renderValidationToastContent(
   issues: Array<{ rowId: number; fieldKey: string; message: string }>,
@@ -3199,20 +3194,6 @@ export default function OpeningStockPage() {
               )}
             </div>
             <footer className={dynamicModalStyles.footer}>
-              <div className={dynamicModalStyles.footerShortcuts}>
-                <div className={dynamicModalStyles.footerShortcutList}>
-                  <span className={dynamicModalStyles.footerShortcutItem}>
-                    <span className={dynamicModalStyles.footerShortcutTitle}>
-                      {columnSettingsRows.length} columns
-                    </span>
-                  </span>
-                  <span className={dynamicModalStyles.footerShortcutItem}>
-                    <span className={dynamicModalStyles.footerShortcutAction}>
-                      F5 saves settings
-                    </span>
-                  </span>
-                </div>
-              </div>
               <div className={dynamicModalStyles.footerActions}>
                 <button
                   type="button"
@@ -3242,7 +3223,7 @@ export default function OpeningStockPage() {
                   onClick={() => void saveColumnSettings()}
                   disabled={isColumnSettingsSaving}
                 >
-                  {isColumnSettingsSaving ? "Saving..." : "Save (F5)"}
+                  {isColumnSettingsSaving ? "Saving..." : "Save"}
                 </button>
               </div>
             </footer>
@@ -3420,12 +3401,6 @@ export default function OpeningStockPage() {
             </table>
           </div>
           <div className={styles.paginationBar}>
-            {/* <div className={styles.paginationInfo}>
-              <KeyboardShortcutHints
-                shortcuts={OPENING_STOCK_TABLE_SHORTCUTS}
-                dense
-              />
-            </div> */}
             <div className={styles.footerValue}>
               <strong className={styles.footerLabel}>qty</strong>
               <strong>{QUANTITY_FORMATTER.format(visibleTotals.qty)} </strong>

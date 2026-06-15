@@ -17,10 +17,6 @@ import ReusableTable, {
   type ReusableTableColumn,
   type ReusableTableColumnResizeEndPayload,
 } from "@/components/ui/table";
-import {
-  KeyboardShortcutHints,
-  type KeyboardShortcutDefinition,
-} from "@/components/design-system/ui/keyboard-shortcut-hints";
 import { useApi } from "@/hooks/useApi";
 import type {
   ERPDynamicModalField,
@@ -203,24 +199,6 @@ function downloadLedgerCsv(
   anchor.remove();
   window.URL.revokeObjectURL(url);
 }
-const LEDGER_SECTION_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
-  {
-    label: "Prev",
-    keys: ["ArrowLeft"],
-  },
-  {
-    label: "Next",
-    keys: ["ArrowRight"],
-  },
-  {
-    label: "First",
-    keys: ["Home"],
-  },
-  {
-    label: "Last",
-    keys: ["End"],
-  },
-];
 // Form rendering component
 function LedgerFieldRenderer({
   field,
@@ -1826,21 +1804,6 @@ export default function AccountLedgerMasterPage() {
     "--erp-modal-border": "#cfdae6",
     "--erp-modal-surface": "#ffffff",
   } as CSSProperties;
-  const ledgerModalFooterShortcuts: KeyboardShortcutDefinition[] = [
-    ...(ledgerFormSections.length > 1 ? LEDGER_SECTION_SHORTCUTS : []),
-    {
-      label: isReadOnlyMode ? "Close" : "Cancel",
-      keys: ["Escape"],
-    },
-    ...(!isReadOnlyMode && !saveLoading && !detailsLoading
-      ? [
-          {
-            label: modalMode === "update" ? "Update" : "Save",
-            keys: ["Ctrl/Cmd", "Enter"],
-          },
-        ]
-      : []),
-  ];
   const modalPanelStyle = {
     width: "min(62vw,62rem)",
     height: "75vh",
@@ -2051,7 +2014,6 @@ export default function AccountLedgerMasterPage() {
               )}
             </div>
             <footer className={dynamicFormStyles.footer}>
-              <div className={dynamicFormStyles.footerShortcuts} />
               <div className={dynamicFormStyles.footerActions}>
                 <button
                   type="submit"
@@ -2065,7 +2027,7 @@ export default function AccountLedgerMasterPage() {
                   <span className={dynamicFormStyles.footerButtonIcon} aria-hidden="true">
                     OK
                   </span>
-                  <span>{gridSettingsSaving ? "Saving..." : "Save (F5)"}</span>
+                  <span>{gridSettingsSaving ? "Saving..." : "Save"}</span>
                 </button>
                 <button
                   type="button"
@@ -2214,12 +2176,6 @@ export default function AccountLedgerMasterPage() {
               </form>
             </div>
             <footer className={dynamicFormStyles.footer}>
-              <div className={dynamicFormStyles.footerShortcuts}>
-                <KeyboardShortcutHints
-                  shortcuts={ledgerModalFooterShortcuts}
-                  dense
-                />
-              </div>
               <div className={dynamicFormStyles.footerActions}>
                 <button
                   type="button"

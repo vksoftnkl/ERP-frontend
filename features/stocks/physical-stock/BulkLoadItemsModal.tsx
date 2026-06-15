@@ -371,7 +371,6 @@ export function BulkLoadItemsModal({
         </div>
 
         <footer className={dynamicModalStyles.footer}>
-          <div className={dynamicModalStyles.footerShortcuts} />
           <div className={dynamicModalStyles.footerActions}>
             <button
               type="button"
@@ -387,7 +386,7 @@ export function BulkLoadItemsModal({
               onClick={handleSubmit}
               disabled={loading || isMasterLoading || !companyId || !branchId}
             >
-              {loading ? "Loading..." : isMasterLoading ? "Fetching..." : "Load Stock (F5)"}
+              {loading ? "Loading..." : isMasterLoading ? "Fetching..." : "Load Stock"}
             </button>
           </div>
         </footer>

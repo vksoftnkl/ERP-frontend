@@ -1,10 +1,4 @@
 "use client";
-import { Fragment } from "react";
-import {
-  KeyboardShortcutKeys,
-  type KeyboardShortcutDefinition,
-} from "@/components/design-system/ui/keyboard-shortcut-hints";
-import styles from "./dynamic-modal-form.module.scss";
 
 export function IconPlaceholder() {
   return (
@@ -24,59 +18,6 @@ export function IconPlaceholder() {
         strokeLinecap="round"
       />
     </svg>
-  );
-}
-
-export function ModalFooterShortcuts({
-  shortcuts,
-}: {
-  shortcuts: readonly KeyboardShortcutDefinition[];
-}) {
-  if (shortcuts.length === 0) {
-    return null;
-  }
-  return (
-    <div className={styles.footerShortcutList} aria-label="Keyboard shortcuts">
-      <span className={styles.footerShortcutIcon} aria-hidden="true">
-        <svg viewBox="0 0 24 24">
-          <path
-            d="M4.5 7.25h15A1.75 1.75 0 0 1 21.25 9v6A1.75 1.75 0 0 1 19.5 16.75h-15A1.75 1.75 0 0 1 2.75 15V9A1.75 1.75 0 0 1 4.5 7.25Z"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M6.2 10h.01M9.1 10h.01M12 10h.01M14.9 10h.01M17.8 10h.01M7.6 13.75h8.8"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-        </svg>
-      </span>
-      {shortcuts.map((shortcut, shortcutIndex) => {
-        const shortcutKey = `${shortcut.label ?? "shortcut"}-${shortcutIndex}-${shortcut.keys.join("-")}`;
-        return (
-          <Fragment key={shortcutKey}>
-            {shortcutIndex > 0 ? (
-              <span className={styles.footerShortcutSeparator} aria-hidden="true">
-                |
-              </span>
-            ) : null}
-            <span className={styles.footerShortcutItem}>
-              <KeyboardShortcutKeys
-                keys={shortcut.keys}
-                className={styles.footerShortcutKeys}
-              />
-              {shortcut.label ? (
-                <span className={styles.footerShortcutAction}>{shortcut.label}</span>
-              ) : null}
-            </span>
-          </Fragment>
-        );
-      })}
-    </div>
   );
 }
 

@@ -491,32 +491,34 @@
   top: 0 !important;
   z-index: 8 !important;
   flex: 0 0 auto;
-  gap: 0.25rem !important;
-  padding: 0 1rem !important;
-  border-bottom: 1px solid #dbe5f2 !important;
+  gap: 1.5rem !important;
+  padding: 0 1.25rem !important;
+  border-bottom: 1px solid #e2e8f0 !important;
   background: #ffffff !important;
 }
 
 .editorTab {
-  min-height: 2.7rem;
-  border-radius: 7px 7px 0 0 !important;
+  min-height: 2.6rem;
+  margin-bottom: -1px;
+  border-radius: 0 !important;
   border: 0 !important;
   border-bottom: 2px solid transparent !important;
-  color: #334967 !important;
-  padding: 0.52rem 0.92rem !important;
-  font-size: 0.84rem !important;
-  font-weight: 760 !important;
+  color: #64748b !important;
+  padding: 0.6rem 0.15rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
 }
 
 .editorTab:hover {
-  background: color-mix(in srgb, var(--loyalty-primary) 7%, #ffffff 93%) !important;
-  color: var(--loyalty-primary) !important;
+  background: transparent !important;
+  color: #1e293b !important;
 }
 
 .editorTabActive {
-  background: #ffffff !important;
-  border-bottom-color: var(--loyalty-primary) !important;
-  color: var(--loyalty-primary) !important;
+  background: transparent !important;
+  border-bottom-color: #1e293b !important;
+  color: #1e293b !important;
+  font-weight: 700 !important;
 }
 
 .editorContent {

@@ -17,7 +17,6 @@ import {
   FIELD_CONTAINER_SELECTOR,
   SEARCH_SELECT_LIST_MAX_HEIGHT,
   SEARCH_SELECT_LIST_OFFSET,
-  SECTION_NAV_SHORTCUTS,
 } from "./dynamic-modal-form.constants";
 import type {
   AccentPreset,
@@ -37,7 +36,6 @@ import type {
   ERPDynamicSectionNavigationMode,
   ERPDynamicSelectOption,
 } from "./dynamic-modal-form.types";
-import type { KeyboardShortcutDefinition } from "./keyboard-shortcut-hints";
 export type {
   AccentPreset,
   ERPDynamicCustomFieldRenderProps,
@@ -80,7 +78,6 @@ import {
 import {
   IconPlaceholder,
   ModalFooterCancelIcon,
-  ModalFooterShortcuts,
   ModalFooterSubmitIcon,
 } from "./dynamic-modal-form.parts";
 
@@ -1192,26 +1189,6 @@ export function ERPDynamicModalForm({
     "--erp-modal-border": "#cfdae6",
     "--erp-modal-surface": "#ffffff",
   } as CSSProperties;
-  const modalFooterShortcuts: KeyboardShortcutDefinition[] =
-    activeVariant
-      ? [
-          ...(sectionNavigationMode === "tabs" && tabSections.length > 1
-            ? SECTION_NAV_SHORTCUTS
-            : []),
-          {
-            label: "Cancel",
-            keys: ["Escape"],
-          },
-          ...(!isSubmitting
-            ? [
-                {
-                  label: activeVariant.submitLabel,
-                  keys: ["Ctrl/Cmd", "Enter"],
-                },
-              ]
-            : []),
-        ]
-      : [];
   const formId = activeVariant
     ? `erp-modal-form-${activeVariant.key}`
     : "erp-modal-form";
@@ -2059,9 +2036,6 @@ export function ERPDynamicModalForm({
                   {submitError}
                 </p>
               ) : null}
-              <div className={styles.footerShortcuts}>
-                <ModalFooterShortcuts shortcuts={modalFooterShortcuts} />
-              </div>
               <div className={styles.footerActions}>
                 <button
                   type="button"

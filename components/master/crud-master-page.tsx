@@ -996,7 +996,6 @@ function normalizeUiTableColumn(
     ),
   };
 }
-
 function normalizeUiTableColumnsPayload(
   payload: unknown,
   uiTableId: string,
@@ -1005,30 +1004,25 @@ function normalizeUiTableColumnsPayload(
   if (!source) {
     return [];
   }
-
   return extractUiTableColumnRows(source)
     .map((row, index) => normalizeUiTableColumn(row, index + 1))
     .filter((column): column is GridColumnConfig => column !== null)
     .sort(compareGridColumnConfigOrder);
 }
-
 function getUnknownErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
   }
   return fallback;
 }
-
 function normalizeListStyleOrder(value: unknown, fallbackOrder: number): number {
   const normalized = toNonNegativeInt(value);
   return normalized ?? fallbackOrder;
 }
-
 function normalizeListStyleWidth(value: unknown): string | undefined {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
     return `${value}%`;
   }
-
   if (typeof value === "string") {
     const normalized = value.trim();
     if (!normalized) {
@@ -1039,25 +1033,20 @@ function normalizeListStyleWidth(value: unknown): string | undefined {
     }
     return normalized;
   }
-
   return undefined;
 }
-
 function normalizeListStyleAlign(
   value: unknown,
 ): ReusableTableColumn<Record<string, unknown>>["align"] | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
-
   const normalized = value.trim().toLowerCase();
   if (normalized === "left" || normalized === "center" || normalized === "right") {
     return normalized;
   }
-
   return undefined;
 }
-
 function extractListResponseStyleRows(
   payload: unknown,
   styleArrayKey: string,
@@ -1065,17 +1054,14 @@ function extractListResponseStyleRows(
   if (!isRecord(payload)) {
     return [];
   }
-
   const candidates: unknown[] = [payload[styleArrayKey]];
   if (isRecord(payload.data)) {
     candidates.push(payload.data[styleArrayKey]);
   }
-
   const styleRows = candidates.find((candidate) => Array.isArray(candidate));
   if (!Array.isArray(styleRows)) {
     return [];
   }
-
   return styleRows
     .filter(isRecord)
     .sort(
@@ -1090,7 +1076,6 @@ function extractListResponseStyleRows(
         ),
     );
 }
-
 function shouldHideRowsFromListResponseStyleFilters(
   payload: unknown,
   styleArrayKey: string,
@@ -1099,7 +1084,6 @@ function shouldHideRowsFromListResponseStyleFilters(
   if (styleRows.length === 0) {
     return null;
   }
-
   const allFilterValues = styleRows.map((row) =>
     toBoolean(getFirstDefinedValue(row, LIST_RESPONSE_STYLE_FILTER_KEYS)),
   );
@@ -1108,7 +1092,6 @@ function shouldHideRowsFromListResponseStyleFilters(
   }
   return true;
 }
-
 type BuildMasterColumnArgs = {
   accessor: MasterColumnAccessor;
   title: string;
@@ -1121,7 +1104,6 @@ type BuildMasterColumnArgs = {
   align?: ReusableTableColumn<Record<string, unknown>>["align"];
   sortable?: boolean;
 };
-
 function buildMasterColumn({
   accessor,
   title,
@@ -1144,7 +1126,6 @@ function buildMasterColumn({
       sortable: sortable ?? false,
     };
   }
-
   if (accessor === "masterCode") {
     return {
       key: "masterCode",
@@ -1159,7 +1140,6 @@ function buildMasterColumn({
       sortable,
     };
   }
-
   if (accessor === "masterName") {
     return {
       key: "masterName",
@@ -1174,7 +1154,6 @@ function buildMasterColumn({
       sortable,
     };
   }
-
   if (accessor === "masterAlias") {
     return {
       key: "masterAlias",
@@ -1185,7 +1164,6 @@ function buildMasterColumn({
       sortable,
     };
   }
-
   if (accessor === "masterShort") {
     return {
       key: "masterShort",
@@ -1196,7 +1174,6 @@ function buildMasterColumn({
       sortable,
     };
   }
-
   if (accessor === "masterDescription") {
     return {
       key: "masterDescription",
@@ -1207,7 +1184,6 @@ function buildMasterColumn({
       sortable,
     };
   }
-
   if (accessor === "position") {
     return {
       key: "position",
@@ -1216,7 +1192,6 @@ function buildMasterColumn({
       sortable,
     };
   }
-
   return {
     key: "masterActive",
     header: header ?? tableColumnHeaders?.masterActive ?? "Status",
@@ -1226,7 +1201,6 @@ function buildMasterColumn({
     sortable,
   };
 }
-
 function buildMasterFallbackColumns(
   title: string,
   codeColumnHeader: string | undefined,
@@ -1277,7 +1251,6 @@ function buildMasterFallbackColumns(
     }),
   ];
 }
-
 function resolveMasterAccessorFromGridColumn(
   column: GridColumnConfig,
   lookupKeys: CrudMasterLookupKeys,
@@ -1294,17 +1267,14 @@ function resolveMasterAccessorFromGridColumn(
   );
   const normalizedActiveKeys = new Set(activeKeys.map(normalizeColumnToken));
   const normalizedPositionKeys = new Set(positionKeys.map(normalizeColumnToken));
-
   for (const candidate of candidates) {
     if (!candidate) {
       continue;
     }
-
     const normalized = normalizeColumnToken(candidate);
     if (!normalized) {
       continue;
     }
-
     if (
       normalized === "sno" ||
       normalized === "srno" ||
@@ -1313,7 +1283,6 @@ function resolveMasterAccessorFromGridColumn(
     ) {
       return "serialNo";
     }
-
     if (
       normalized === "status" ||
       normalized === "active" ||
@@ -1323,7 +1292,6 @@ function resolveMasterAccessorFromGridColumn(
     ) {
       return "masterActive";
     }
-
     if (
       normalized === "position" ||
       normalized === "sort" ||
@@ -1332,7 +1300,6 @@ function resolveMasterAccessorFromGridColumn(
     ) {
       return "position";
     }
-
     if (
       normalized === "short" ||
       normalized === "shortname" ||
@@ -1341,7 +1308,6 @@ function resolveMasterAccessorFromGridColumn(
     ) {
       return "masterShort";
     }
-
     if (
       normalized === "description" ||
       normalized === "desc" ||
@@ -1350,7 +1316,6 @@ function resolveMasterAccessorFromGridColumn(
     ) {
       return "masterDescription";
     }
-
     if (
       normalized === "name" ||
       normalized.endsWith("name") ||
@@ -1358,7 +1323,6 @@ function resolveMasterAccessorFromGridColumn(
     ) {
       return "masterName";
     }
-
     if (
       normalized === "code" ||
       normalized.endsWith("code") ||
@@ -1366,7 +1330,6 @@ function resolveMasterAccessorFromGridColumn(
     ) {
       return "masterCode";
     }
-
     if (
       normalized === "alias" ||
       normalized.endsWith("alias") ||
@@ -1374,7 +1337,6 @@ function resolveMasterAccessorFromGridColumn(
     ) {
       return "masterAlias";
     }
-
     const compact = normalized.replace(/_/g, "");
     if (!compact) {
       continue;
@@ -1411,10 +1373,8 @@ function resolveMasterAccessorFromGridColumn(
       return "position";
     }
   }
-
   return null;
 }
-
 function formatMasterActiveDisplay(value: unknown): string {
   const normalized = toDisplayValue(value).trim().toLowerCase();
   if (normalized === "true" || normalized === "1") {
@@ -1425,7 +1385,6 @@ function formatMasterActiveDisplay(value: unknown): string {
   }
   return toDisplayValue(value);
 }
-
 function buildColumnsFromGridColumns(
   gridColumns: GridColumnConfig[],
   lookupKeys: CrudMasterLookupKeys,
@@ -1436,11 +1395,9 @@ function buildColumnsFromGridColumns(
   const visibleColumns = gridColumns
     .filter((column) => column.visible)
     .sort(compareGridColumnConfigOrder);
-
   const columns: ReusableTableColumn<MasterTableRow>[] = [];
   const seenAccessors = new Set<MasterColumnAccessor>();
   const seenSourceKeys = new Set<string>();
-
   for (const column of visibleColumns) {
     const accessor = resolveMasterAccessorFromGridColumn(column, lookupKeys);
     if (accessor) {
@@ -1485,11 +1442,9 @@ function buildColumnsFromGridColumns(
       });
     }
   }
-
   if (columns.length === 0) {
     return useFallbackColumns ? fallbackColumns : [];
   }
-
   const serialIndex = columns.findIndex((column) => column.accessor === "serialNo");
   if (serialIndex < 0) {
     const serialFallback = fallbackColumns.find((column) => column.accessor === "serialNo");
@@ -1498,7 +1453,6 @@ function buildColumnsFromGridColumns(
     }
     return columns;
   }
-
   if (serialIndex > 0) {
     const [serialColumn] = columns.splice(serialIndex, 1);
     columns.unshift({
@@ -1507,7 +1461,6 @@ function buildColumnsFromGridColumns(
       sortable: false,
     });
   }
-
   return columns;
 }
 
@@ -2337,6 +2290,7 @@ export default function CrudMasterPage({
   requestPayloadExtra,
   styles,
   listTitle,
+  listTitleOverride,
   createLabel,
   codeColumnHeader,
   nameColumnHeader,
@@ -2356,6 +2310,8 @@ export default function CrudMasterPage({
   nameFieldPlaceholder,
   formTitle,
   formDescription,
+  createModalTitle,
+  editModalTitle,
   customFields,
   createInitialValues,
   modalPanelStyle,
@@ -3475,7 +3431,7 @@ export default function CrudMasterPage({
         cardTitle: `Create ${effectiveTitle}`,
         cardDescription: `Create a new ${entityLabel}.`,
         cardButtonLabel: "Create",
-        modalTitle: `New ${effectiveTitle}`,
+        modalTitle: createModalTitle ?? `New ${effectiveTitle}`,
         modalDescription: `Configure ${entityLabel} details.`,
         submitLabel: saveLoading ? "Saving..." : "Save",
         accent: "blue",
@@ -3486,14 +3442,14 @@ export default function CrudMasterPage({
         cardTitle: `Update ${effectiveTitle}`,
         cardDescription: `Update an existing ${entityLabel}.`,
         cardButtonLabel: "Update",
-        modalTitle: `Edit ${effectiveTitle}`,
+        modalTitle: editModalTitle ?? `Edit ${effectiveTitle}`,
         modalDescription: `Update selected ${entityLabel} details.`,
         submitLabel: saveLoading ? "Updating..." : "Update",
         accent: "emerald",
         fields,
       },
     ],
-    [effectiveTitle, entityLabel, fields, saveLoading, viewFields],
+    [createModalTitle, editModalTitle, effectiveTitle, entityLabel, fields, saveLoading, viewFields],
   );
   const handleRowUpdate = useCallback(
     (row: MasterTableRow) => {
@@ -3616,9 +3572,9 @@ export default function CrudMasterPage({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [hideListPage]);
 
-  const listHeading = gridDisplayName
-    ? `${gridDisplayName} List`
-    : listTitle ?? `${title} List`;
+  const listHeading =
+    listTitleOverride ??
+    (gridDisplayName ? `${gridDisplayName} List` : listTitle ?? `${title} List`);
   const handleDownloadRows = useCallback(() => {
     downloadMasterRowsCsv(listHeading, renderedColumns, renderedRows);
   }, [listHeading, renderedColumns, renderedRows]);
@@ -4152,7 +4108,6 @@ export default function CrudMasterPage({
               )}
             </div>
             <footer className={dynamicModalStyles.footer}>
-              <div className={dynamicModalStyles.footerShortcuts} />
               <div className={dynamicModalStyles.footerActions}>
               <button
                 type="submit"
@@ -4166,7 +4121,7 @@ export default function CrudMasterPage({
                 <span className={dynamicModalStyles.footerButtonIcon} aria-hidden="true">
                   OK
                 </span>
-                <span>{gridSettingsSaving ? "Saving..." : "Save (F5)"}</span>
+                <span>{gridSettingsSaving ? "Saving..." : "Save"}</span>
               </button>
               <button
                 type="button"

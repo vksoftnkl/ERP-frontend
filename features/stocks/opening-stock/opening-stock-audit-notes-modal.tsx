@@ -123,7 +123,7 @@ export function OpeningStockAuditNotesModal({
           </label>
           <div className={styles.auditNotesMetaRow}>
             <p className={error ? styles.auditNotesErrorText : styles.auditNotesHelperText}>
-              {error ?? "This note is required for updates. Press Ctrl+Enter to save."}
+              {error ?? "This note is required for updates."}
             </p>
             <span className={styles.auditNotesCharCount}>
               {notes.length}/{MAX_AUDIT_NOTES_LENGTH}

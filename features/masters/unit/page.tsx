@@ -114,7 +114,7 @@ const UNIT_INITIAL_FORM_VALUES = {
   unitCode: "",
   unitAlias: "",
   unitDescription: "",
-  unitDecimalCount: "0",
+  unitDecimalCount: "1",
   unitWeight: "",
   unitLoading: "",
   unitUnloading: "",
@@ -188,15 +188,15 @@ function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDyna
     },
     {
       name: "unitCode",
-      label: "Unit Code",
+      label: "Gst Unit Code",
       type: "select",
+      required: true,
       searchable: true,
       options: UNIT_CODE_OPTIONS,
       placeholder: "Search unit code or unit name",
       colSpan: 1,
     },
     { name: "unitAlias", label: "Unit Alias", colSpan: 1 },
-
     {
       name: "unitWeight",
       label: "Weight",
@@ -209,7 +209,8 @@ function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDyna
       name: "unitDecimalCount",
       label: "Decimal Count",
       type: "number",
-      min: 0,
+      min: 1,
+      max:3,
       step: 1,
       colSpan: 1,
     },
@@ -229,7 +230,6 @@ function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDyna
       ],
       colSpan: 1,
     },
-
     {
       name: "unitBaseUnitId",
       label: "Base Unit",
@@ -254,7 +254,6 @@ function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDyna
       step: "0.01",
       colSpan: 1,
     },
-
     {
       name: "unitUnloading",
       label: "Unloading charge",
@@ -364,11 +363,12 @@ export default function UnitMasterPage() {
       entityLabelPlural="units"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
-        listResponseStyleArrayKey=""
+      listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
       listTitle="Unit List"
+      listTitleOverride="Unit List"
       createLabel="Add Unit"
       codeColumnHeader="Unit Code"
       nameColumnHeader="Unit Name"
@@ -376,6 +376,8 @@ export default function UnitMasterPage() {
       nameFieldPlaceholder="Kilogram"
       formTitle="Unit Form"
       formDescription="Create and update units."
+      createModalTitle="Unit Entry"
+      editModalTitle="Edit Unit Entry"
       customFields={unitFormFields}
       createInitialValues={UNIT_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {

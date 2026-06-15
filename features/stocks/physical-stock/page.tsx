@@ -23,10 +23,6 @@ import {
 } from "react-icons/fi";
 import { toast } from "react-toastify";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
-import {
-  KeyboardShortcutHints,
-  type KeyboardShortcutDefinition,
-} from "@/components/design-system/ui/keyboard-shortcut-hints";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { useBusinessContext } from "@/components/layout/business-context";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
@@ -143,7 +139,6 @@ import {
   UI_TABLE_COLUMNS_CREATE_ENDPOINT,
   UI_TABLE_COLUMNS_QUERY,
   LOOKUP_SEARCH_DEBOUNCE_MS,
-  PHYSICAL_STOCK_TABLE_SHORTCUTS,
   TRACKING_OPTIONS,
   TRACKING_TYPE_OPTION_LABELS,
   PHYSICAL_STOCK_COLUMNS,
@@ -2808,20 +2803,6 @@ export default function PhysicalStockPage() {
                 )}
               </div>
               <footer className={dynamicModalStyles.footer}>
-                <div className={dynamicModalStyles.footerShortcuts}>
-                  <div className={dynamicModalStyles.footerShortcutList}>
-                    <span className={dynamicModalStyles.footerShortcutItem}>
-                      <span className={dynamicModalStyles.footerShortcutTitle}>
-                        {columnSettingsRows.length} columns
-                      </span>
-                    </span>
-                    <span className={dynamicModalStyles.footerShortcutItem}>
-                      <span className={dynamicModalStyles.footerShortcutAction}>
-                        F5 saves settings
-                      </span>
-                    </span>
-                  </div>
-                </div>
                 <div className={dynamicModalStyles.footerActions}>
                   <button
                     type="button"
@@ -2851,7 +2832,7 @@ export default function PhysicalStockPage() {
                     onClick={() => void saveColumnSettings()}
                     disabled={isColumnSettingsSaving}
                   >
-                    {isColumnSettingsSaving ? "Saving..." : "Save (F5)"}
+                    {isColumnSettingsSaving ? "Saving..." : "Save"}
                   </button>
                 </div>
               </footer>

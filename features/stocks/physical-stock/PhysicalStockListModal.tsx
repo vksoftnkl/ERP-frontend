@@ -1,10 +1,6 @@
 "use client";
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { FiChevronLeft, FiChevronRight, FiSearch, FiX } from "react-icons/fi";
-import {
-  KeyboardShortcutHints,
-  type KeyboardShortcutDefinition,
-} from "@/components/design-system/ui/keyboard-shortcut-hints";
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 import { QUANTITY_FORMATTER, VALUE_FORMATTER } from "@/features/stocks/_shared/constants";
 import { cx, formatDateForDisplay } from "@/features/stocks/opening-stock/opening-stock.utils";
@@ -56,12 +52,6 @@ type PhysicalStockListModalProps = {
   onLoadSelected: () => void;
 };
 const PAGE_SIZE_OPTIONS = [10, 20, 25, 50, 100] as const;
-const PHYSICAL_STOCK_LIST_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
-  { label: "Prev Row", keys: ["ArrowUp"] },
-  { label: "Next Row", keys: ["ArrowDown"] },
-  { label: "Load", keys: ["Enter"] },
-  { label: "Close", keys: ["Esc"] },
-] as const;
 const PHYSICAL_STOCK_LIST_COLUMNS: PhysicalStockListColumn[] = [
   {
     key: "refno",
@@ -168,7 +158,6 @@ export function PhysicalStockListModal({
     () => buildPageList(totalPages, Math.min(currentPage, totalPages)),
     [currentPage, totalPages],
   );
-  const footerShortcuts = suspendKeyboardShortcuts ? [] : PHYSICAL_STOCK_LIST_SHORTCUTS;
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   useEffect(() => {
@@ -514,12 +503,6 @@ export function PhysicalStockListModal({
           </div>
         </div>
         <footer className={styles.stockBrowserModalFooter}>
-          <div className={styles.stockBrowserFooterShortcuts}>
-            <KeyboardShortcutHints
-              shortcuts={footerShortcuts}
-              dense
-            />
-          </div>
           <div className={styles.stockBrowserModalActions}>
             <span className={styles.stockBrowserSelectionText}>
               {selectedStockLabel ? `Selected: ${selectedStockLabel}` : "No stock selected"}

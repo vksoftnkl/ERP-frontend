@@ -1285,20 +1285,6 @@ export default function ItemLinkedRecordsEditor({
                 </div>
               </div>
               <footer className={modalStyles.footer}>
-                <div className={modalStyles.footerShortcuts}>
-                  <div className={modalStyles.footerShortcutList}>
-                    <span className={modalStyles.footerShortcutItem}>
-                      <span className={modalStyles.footerShortcutTitle}>
-                        {orderedColumns.length} columns
-                      </span>
-                    </span>
-                    <span className={modalStyles.footerShortcutItem}>
-                      <span className={modalStyles.footerShortcutAction}>
-                        F5 saves settings
-                      </span>
-                    </span>
-                  </div>
-                </div>
                 <div className={modalStyles.footerActions}>
                   <button
                     type="button"
@@ -1325,7 +1311,7 @@ export default function ItemLinkedRecordsEditor({
                     )}
                     onClick={handleSaveAdminSettings}
                   >
-                    Save (F5)
+                    Save
                   </button>
                 </div>
               </footer>

@@ -1,10 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import {
-  KeyboardShortcutHints,
-  type KeyboardShortcutDefinition,
-} from "@/components/design-system/ui/keyboard-shortcut-hints";
 import styles from "./delete-confirm-modal.module.scss";
 
 type DeleteConfirmModalProps = {
@@ -113,19 +109,6 @@ export default function DeleteConfirmModal({
 
   const effectiveMessage = message ?? buildDefaultMessage(itemName);
   const hasMessage = effectiveMessage.trim().length > 0;
-  const footerShortcuts: KeyboardShortcutDefinition[] = loading
-    ? []
-    : [
-        {
-          label: cancelLabel,
-          keys: ["Escape"],
-        },
-        {
-          label: confirmLabel,
-          keys: ["Enter"],
-        },
-      ];
-
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={title}>
       <button
@@ -179,14 +162,6 @@ export default function DeleteConfirmModal({
         ) : null}
 
         <div className={styles.footerRow}>
-          {footerShortcuts.length > 0 ? (
-            <div className={styles.footerShortcuts}>
-              <KeyboardShortcutHints
-                shortcuts={footerShortcuts}
-                dense
-              />
-            </div>
-          ) : null}
           <div className={styles.actions}>
             <button
               type="button"

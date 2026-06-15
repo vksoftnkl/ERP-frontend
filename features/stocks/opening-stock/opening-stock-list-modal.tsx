@@ -1,10 +1,6 @@
 "use client";
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { FiChevronLeft, FiChevronRight, FiSearch, FiX } from "react-icons/fi";
-import {
-  KeyboardShortcutHints,
-  type KeyboardShortcutDefinition,
-} from "@/components/design-system/ui/keyboard-shortcut-hints";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
 import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import type { OpeningStockHeaderPayload } from "./opening-stock.types";
@@ -47,24 +43,6 @@ type OpeningStockListModalProps = {
 };
 const PAGE_SIZE_OPTIONS = [10, 20, 25, 50, 100] as const;
 const OPENING_STOCK_LIST_GRID_ID = 16;
-const OPENING_STOCK_LIST_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
-  {
-    label: "Prev Row",
-    keys: ["ArrowUp"],
-  },
-  {
-    label: "Next Row",
-    keys: ["ArrowDown"],
-  },
-  {
-    label: "Load",
-    keys: ["Enter"],
-  },
-  {
-    label: "Close",
-    keys: ["Esc"],
-  },
-] as const;
 function resolveTextValue(
   row: OpeningStockHeaderPayload,
   keys: readonly string[],
@@ -259,7 +237,6 @@ export function OpeningStockListModal({
     () => buildPageList(totalPages, Math.min(currentPage, totalPages)),
     [currentPage, totalPages],
   );
-  const footerShortcuts = suspendKeyboardShortcuts ? [] : OPENING_STOCK_LIST_SHORTCUTS;
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   useEffect(() => {
@@ -605,12 +582,6 @@ export function OpeningStockListModal({
           </div>
         </div>
         <footer className={styles.stockBrowserModalFooter}>        
-          <div className={styles.stockBrowserFooterShortcuts}>
-            <KeyboardShortcutHints
-              shortcuts={footerShortcuts}
-              dense
-            />
-          </div>
           <div className={styles.stockBrowserModalActions}>
             <button
               type="button"

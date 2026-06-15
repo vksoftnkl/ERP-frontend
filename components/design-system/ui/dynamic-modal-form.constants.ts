@@ -1,12 +1,3 @@
-import { type KeyboardShortcutDefinition } from "@/components/design-system/ui/keyboard-shortcut-hints";
-
-export const SECTION_NAV_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
-  { label: "Prev", keys: ["ArrowLeft"] },
-  { label: "Next", keys: ["ArrowRight"] },
-  { label: "First", keys: ["Home"] },
-  { label: "Last", keys: ["End"] },
-];
-
 export const ACCENT_PRESETS = {
   blue: {
     accent: "#2563eb",

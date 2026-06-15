@@ -144,6 +144,7 @@ export type CrudMasterPageProps = {
   requestPayloadExtra?: Record<string, unknown>;
   styles: Record<string, string>;
   listTitle?: string;
+  listTitleOverride?: string;
   createLabel?: string;
   codeColumnHeader?: string;
   nameColumnHeader?: string;
@@ -163,6 +164,8 @@ export type CrudMasterPageProps = {
   nameFieldPlaceholder?: string;
   formTitle?: string;
   formDescription?: string;
+  createModalTitle?: string;
+  editModalTitle?: string;
   customFields?: ERPDynamicModalField[];
   createInitialValues?: Record<string, string>;
   modalPanelStyle?: CSSProperties;
