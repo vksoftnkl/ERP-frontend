@@ -506,6 +506,7 @@ export default function GodownMasterPageContent({
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
       listTitle="Godown Location List"
+      listTitleOverride="Location List"
       createLabel="Add Location"
       codeColumnHeader="Location Code"
       nameColumnHeader="Location Name"
@@ -515,6 +516,9 @@ export default function GodownMasterPageContent({
       formDescription="Create and update godown locations."
       customFields={godownFormFields}
       createInitialValues={GODOWN_INITIAL_FORM_VALUES}
+      viewModalTitle="Location Details"
+      createModalTitle="Location Entry"
+      editModalTitle="Edit Location Entry"
       onCrudControllerReady={onCrudControllerReady}
       onModalOpenChange={onModalOpenChange}
       hideListPage={inlineModalOnly}

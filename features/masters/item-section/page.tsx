@@ -322,6 +322,7 @@ export default function ItemSectionMasterPage() {
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
       listTitle="Item Section List"
+      listTitleOverride="Section List"
       createLabel="Add "
       codeColumnHeader="Section Code"
       nameColumnHeader="Section Name"
@@ -329,6 +330,10 @@ export default function ItemSectionMasterPage() {
       nameFieldPlaceholder="Frozen Foods"
       formTitle="Item Section Form"
       formDescription="Create and update item sections."
+      viewModalTitle="Section Details"
+      createModalTitle="Section Entry"
+      editModalTitle="Edit Section Entry"
+      modalPanelStyle={{ width: "min(52rem, calc(100vw - 2rem))", maxHeight: "min(82vh, 42rem)" }}
       customFields={sectionFormFields}
       createInitialValues={SECTION_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {

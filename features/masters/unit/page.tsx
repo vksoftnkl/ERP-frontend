@@ -124,57 +124,34 @@ const UNIT_INITIAL_FORM_VALUES = {
   unitConversion: "",
   unitIsActive: "true",
 } as const;
-const UNIT_UQC_LIST = [
-  { uqc: "BAG", unit: "Bags" },
-  { uqc: "BAL", unit: "Bale" },
-  { uqc: "BDL", unit: "Bundles" },
-  { uqc: "BKL", unit: "Buckles" },
-  { uqc: "BOU", unit: "Billions of Units" },
-  { uqc: "BOX", unit: "Box" },
-  { uqc: "BTL", unit: "Bottles" },
-  { uqc: "BUN", unit: "Bunches" },
-  { uqc: "CAN", unit: "Cans" },
-  { uqc: "CBM", unit: "Cubic Meter" },
-  { uqc: "CCM", unit: "Cubic Centimeter" },
-  { uqc: "CMS", unit: "Centimeter" },
-  { uqc: "CTN", unit: "Cartons" },
-  { uqc: "DOZ", unit: "Dozen" },
-  { uqc: "DRM", unit: "Drums" },
-  { uqc: "GGR", unit: "Great Gross" },
-  { uqc: "GMS", unit: "Grams" },
-  { uqc: "GRS", unit: "Gross" },
-  { uqc: "GYD", unit: "Gross Yards" },
-  { uqc: "KGS", unit: "Kilograms" },
-  { uqc: "KLR", unit: "Kiloliter" },
-  { uqc: "KME", unit: "Kilometre" },
-  { uqc: "MLT", unit: "Millilitre" },
-  { uqc: "MTR", unit: "Meters" },
-  { uqc: "MTS", unit: "Metric Tons" },
-  { uqc: "NOS", unit: "Numbers" },
-  { uqc: "PAC", unit: "Packs" },
-  { uqc: "PCS", unit: "Pieces" },
-  { uqc: "PRS", unit: "Pairs" },
-  { uqc: "QTL", unit: "Quintal" },
-  { uqc: "ROL", unit: "Rolls" },
-  { uqc: "SET", unit: "Sets" },
-  { uqc: "SQF", unit: "Square Feet" },
-  { uqc: "SQM", unit: "Square Meters" },
-  { uqc: "SQY", unit: "Square Yards" },
-  { uqc: "TBS", unit: "Tablets" },
-  { uqc: "TGM", unit: "Ten Gross" },
-  { uqc: "THD", unit: "Thousands" },
-  { uqc: "TON", unit: "Tonnes" },
-  { uqc: "TUB", unit: "Tubes" },
-  { uqc: "UGS", unit: "US Gallons" },
-  { uqc: "UNT", unit: "Units" },
-  { uqc: "YDS", unit: "Yards" },
-  { uqc: "OTH", unit: "Others" },
-] as const;
-const UNIT_CODE_OPTIONS: ERPDynamicSelectOption[] = UNIT_UQC_LIST.map(({ uqc, unit }) => ({
-  value: uqc,
-  label: `${uqc} - ${unit}`,
-}));
-function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
+const GST_UNIT_LOOKUP_ENDPOINT = "/item-gst-units/get";
+const GST_UNIT_LOOKUP_KEYS = {
+  code: ["item_gst_unit_code", "itemGstUnitCode", "uqc", "code"],
+  name: ["item_gst_unit_name", "itemGstUnitName", "unit", "name"],
+} as const;
+function buildUnitCodeOptions(payload: unknown): ERPDynamicSelectOption[] {
+  const optionMap = new Map<string, string>();
+  const rows = extractRows(payload);
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+    const source = row as Record<string, unknown>;
+    const code = toDisplayValue(getFirstDefinedValue(source, GST_UNIT_LOOKUP_KEYS.code));
+    if (!code) {
+      continue;
+    }
+    const name = toDisplayValue(getFirstDefinedValue(source, GST_UNIT_LOOKUP_KEYS.name));
+    if (!optionMap.has(code)) {
+      optionMap.set(code, name ? `${code} - ${name}` : code);
+    }
+  }
+  return Array.from(optionMap.entries()).map(([value, label]) => ({ value, label }));
+}
+function buildUnitFormFields(
+  baseUnitOptions: ERPDynamicSelectOption[],
+  unitCodeOptions: ERPDynamicSelectOption[],
+): ERPDynamicModalField[] {
   return [
     {
       name: "unitName",
@@ -192,7 +169,7 @@ function buildUnitFormFields(baseUnitOptions: ERPDynamicSelectOption[]): ERPDyna
       type: "select",
       required: true,
       searchable: true,
-      options: UNIT_CODE_OPTIONS,
+      options: unitCodeOptions,
       placeholder: "Search unit code or unit name",
       colSpan: 1,
     },
@@ -331,9 +308,11 @@ function buildBaseUnitOptions(payload: unknown): ERPDynamicSelectOption[] {
 }
 export default function UnitMasterPage() {
   const { getAll: getBaseUnitList } = useApi<unknown>(BASE_UNIT_LOOKUP_ENDPOINT);
+  const { getAll: getGstUnitList } = useApi<unknown>(GST_UNIT_LOOKUP_ENDPOINT);
   const [baseUnitOptions, setBaseUnitOptions] = useState<ERPDynamicSelectOption[]>([
     { value: "", label: "None" },
   ]);
+  const [unitCodeOptions, setUnitCodeOptions] = useState<ERPDynamicSelectOption[]>([]);
   useEffect(() => {
     let mounted = true;
     void (async () => {
@@ -352,9 +331,27 @@ export default function UnitMasterPage() {
       mounted = false;
     };
   }, [getBaseUnitList]);
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        const payload = await getGstUnitList();
+        if (mounted) {
+          setUnitCodeOptions(buildUnitCodeOptions(payload));
+        }
+      } catch {
+        if (mounted) {
+          setUnitCodeOptions([]);
+        }
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [getGstUnitList]);
   const unitFormFields = useMemo(
-    () => buildUnitFormFields(baseUnitOptions),
-    [baseUnitOptions],
+    () => buildUnitFormFields(baseUnitOptions, unitCodeOptions),
+    [baseUnitOptions, unitCodeOptions],
   );
   return (
     <CrudMasterPage

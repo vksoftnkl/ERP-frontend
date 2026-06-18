@@ -191,7 +191,7 @@ export default function ItemBrandMasterPage() {
   );
   return (
     <CrudMasterPage
-      title="Item Brand"
+      title="Brand"
       auditHistory={{ screenName: "Item Brand Master" }}
       entityLabel="item brand"
       entityLabelPlural="item brands"
@@ -201,7 +201,8 @@ export default function ItemBrandMasterPage() {
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
-      listTitle="Item Brand List"
+      listTitle="Brand List"
+      listTitleOverride="Brand List"
       createLabel="Add Item Brand"
       codeColumnHeader="Brand Code"
       nameColumnHeader="Brand Name"
@@ -211,6 +212,9 @@ export default function ItemBrandMasterPage() {
       formDescription="Create and update item brands."
       customFields={formFields}
       createInitialValues={INITIAL_FORM_VALUES}
+      createModalTitle="Brand Entry"
+      editModalTitle="Edit Brand Entry"
+      viewModalTitle="Brand Details"
       modalPanelStyle={{ width: "min(52rem, calc(100vw - 2rem))", maxHeight: "min(82vh, 42rem)" }}
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};

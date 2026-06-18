@@ -166,6 +166,7 @@ export type CrudMasterPageProps = {
   formDescription?: string;
   createModalTitle?: string;
   editModalTitle?: string;
+  viewModalTitle?: string;
   customFields?: ERPDynamicModalField[];
   createInitialValues?: Record<string, string>;
   modalPanelStyle?: CSSProperties;

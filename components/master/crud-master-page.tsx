@@ -2258,6 +2258,7 @@ export default function CrudMasterPage({
   formDescription,
   createModalTitle,
   editModalTitle,
+  viewModalTitle,
   customFields,
   createInitialValues,
   modalPanelStyle,
@@ -3366,7 +3367,7 @@ export default function CrudMasterPage({
         cardTitle: `View ${effectiveTitle}`,
         cardDescription: `View selected ${entityLabel} details.`,
         cardButtonLabel: "View",
-        modalTitle: `${effectiveTitle} Details`,
+        modalTitle: viewModalTitle ?? `${effectiveTitle} Details`,
         modalDescription: `Read-only view of selected ${entityLabel} data.`,
         submitLabel: "Close",
         accent: "indigo",
@@ -3395,7 +3396,7 @@ export default function CrudMasterPage({
         fields,
       },
     ],
-    [createModalTitle, editModalTitle, effectiveTitle, entityLabel, fields, saveLoading, viewFields],
+    [createModalTitle, editModalTitle, viewModalTitle, effectiveTitle, entityLabel, fields, saveLoading, viewFields],
   );
   const handleRowUpdate = useCallback(
     (row: MasterTableRow) => {
@@ -3692,7 +3693,7 @@ export default function CrudMasterPage({
               className={styles.masterSearchSettingsItem}
               onClick={() => openGridSettingsModalFromContextMenu("visibility")}
             >
-              column visible setting
+              column visibility setting
             </button>
             <button
               type="button"

@@ -1,36 +1,81 @@
 export type WidgetPlatform = "mobile" | "desktop" | "web";
 export type WidgetTypeFilter = WidgetPlatform | "all";
-export type VisibilityFilter = "all" | "visible" | "hidden";
+
+/** One field row under a section (server: fixed.form_field). */
+export type WidgetFieldPayload = {
+  fieldId: number;
+  fieldSectionId: number;
+  fieldName: string;
+  fieldGuiName: string | null;
+  fieldSecondaryText: string | null;
+  fieldPosition: number;
+  fieldVisibility: boolean;
+  // Server-managed audit/sync metadata (read-only; ISO timestamps).
+  fieldSyncDate: string;
+  fieldCreatedOn: string;
+  fieldCreatedBy: string | null;
+  fieldUpdatedOn: string;
+  fieldUpdatedBy: string | null;
+};
+
+/** A section heading row with its nested fields (server: fixed.form_section). */
 export type WidgetMasterPayload = {
-  widgetNo: number;
-  widgetGroupId: number;
-  widgetName: string;
-  widgetPosition: number;
-  widgetVisibility: boolean;
-  widgetGuiName: string | null;
-  widgetType: WidgetPlatform;
-  widgetSecondaryText: string | null;
+  sectionId: number;
+  sectionMenuId: number;
+  sectionName: string;
+  sectionGuiName: string;
+  sectionPosition: number;
+  sectionVisibility: boolean;
+  sectionPlatform: WidgetPlatform;
+  // Server-managed audit/sync metadata (read-only; ISO timestamps).
+  sectionSyncDate: string;
+  sectionCreatedOn: string;
+  sectionCreatedBy: string | null;
+  sectionUpdatedOn: string;
+  sectionUpdatedBy: string | null;
+  fields: WidgetFieldPayload[];
 };
-export type WidgetMasterFormValues = {
-  widgetGroupId: string;
-  widgetGuiName: string;
-  widgetName: string;
-  widgetPosition: string;
-  widgetSecondaryText: string;
-  widgetType: WidgetPlatform;
-  widgetVisibility: string;
-};
+
 export type WidgetMasterTableRow = WidgetMasterPayload & {
   __rowId: number;
   serialNo: number;
 };
+
+/** Draft shape used by the in-form fields editor (all-string for form values). */
+export type WidgetFieldDraft = {
+  fieldId?: number;
+  fieldName: string;
+  fieldGuiName: string;
+  fieldSecondaryText: string;
+  fieldPosition: string;
+  fieldVisibility: boolean;
+};
+
+/** A single field as sent to POST /widget-masters/create. */
+export type SaveWidgetFieldRequest = {
+  fieldId?: number;
+  fieldName: string;
+  fieldGuiName: string | null;
+  fieldSecondaryText: string | null;
+  fieldPosition: number;
+  fieldVisibility: boolean;
+};
+
+/** Body for POST /widget-masters/create (omit sectionId to create). */
 export type SaveWidgetRequest = {
-  widgetGroupId: number;
-  widgetGuiName: string | null;
-  widgetName: string;
-  widgetPosition: number;
-  widgetSecondaryText: string | null;
-  widgetType: WidgetPlatform;
-  widgetVisibility: boolean;
-  widgetNo?: number;
+  sectionId?: number;
+  sectionMenuId: number;
+  sectionName: string;
+  sectionGuiName: string;
+  sectionPosition: number;
+  sectionVisibility: boolean;
+  sectionPlatform: WidgetPlatform;
+  fields: SaveWidgetFieldRequest[];
+};
+
+/** Query params for GET /widget-masters/get. */
+export type ListWidgetQuery = {
+  sectionMenuId?: string;
+  sectionPlatform?: WidgetPlatform;
+  search?: string;
 };

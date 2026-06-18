@@ -463,6 +463,7 @@ export default function TaxMasterPage() {
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
       listTitle="Tax List"
+      listTitleOverride="Tax List"
       createLabel="Add Tax"
       codeColumnHeader="Tax Code"
       nameColumnHeader="Tax Name"
@@ -470,6 +471,9 @@ export default function TaxMasterPage() {
       nameFieldPlaceholder="GST 18%"
       formTitle="Tax Form"
       formDescription="Create and update taxes."
+      viewModalTitle="Tax Details"
+      createModalTitle="Tax Entry"
+      editModalTitle="Edit Tax Entry"
       customFields={taxFormFields}
       createInitialValues={TAX_INITIAL_FORM_VALUES}
       modalPanelStyle={TAX_MODAL_PANEL_STYLE}

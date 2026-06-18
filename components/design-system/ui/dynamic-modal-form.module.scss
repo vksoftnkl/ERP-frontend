@@ -457,6 +457,36 @@
   color: #687992;
 }
 
+.searchSelectInput {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.25;
+  color: #142033;
+  text-overflow: ellipsis;
+}
+
+.searchSelectInput::placeholder {
+  color: #687992;
+  opacity: 1;
+}
+
+.searchSelectInput:disabled {
+  color: #698196;
+  cursor: not-allowed;
+}
+
+.searchSelectInputMulti {
+  flex: 1 1 4rem;
+  min-width: 4rem;
+}
+
 .searchMultiSelectControl {
   padding: 0.32rem 1.9rem 0.32rem 0.35rem;
 }
@@ -491,8 +521,15 @@
   justify-content: center;
   width: 1rem;
   height: 1rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #4a6074;
-  pointer-events: none;
+  cursor: pointer;
+}
+
+.searchSelectChevronSlot:disabled {
+  cursor: not-allowed;
 }
 
 .searchSelectClearButton {

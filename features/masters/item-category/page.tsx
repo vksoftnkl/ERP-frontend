@@ -381,6 +381,7 @@ export default function ItemCategoryMasterPage() {
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
       listTitle="Item Category List"
+      listTitleOverride="Category List"
       createLabel="Add Item Category"
       codeColumnHeader="Category Code"
       nameColumnHeader="Category Name"
@@ -388,6 +389,9 @@ export default function ItemCategoryMasterPage() {
       nameFieldPlaceholder="Dairy"
       formTitle="Item Category Form"
       formDescription="Create and update item categories."
+      viewModalTitle="Category Details"
+      createModalTitle="Category Entry"
+      editModalTitle="Edit Category Entry"
       customFields={categoryFormFields}
       createInitialValues={CATEGORY_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {

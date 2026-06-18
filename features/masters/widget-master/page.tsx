@@ -1,8 +1,10 @@
 "use client";
 import { useCallback, useMemo, useState } from "react";
-import type { ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
-import CrudMasterPage, { type CrudMasterTableRow } from "@/components/master/crud-master-page";
-import type { ReusableTableColumn } from "@/components/ui/table";
+import type {
+  ERPDynamicModalField,
+  ERPDynamicSelectOption,
+} from "@/components/design-system/ui/dynamic-modal-form";
+import CrudMasterPage from "@/components/master/crud-master-page";
 import {
   getFirstDefinedValue,
   toDisplayValue,
@@ -10,46 +12,61 @@ import {
   toNullableString,
   toSelectBoolean,
   toUpdateId,
+  useMasterOptions,
 } from "@/features/masters/shared";
+import { useApi } from "@/hooks/useApi";
 import baseStyles from "@/app/master/state-master/page.module.scss";
 import styles from "./page.module.scss";
-import type { VisibilityFilter, WidgetPlatform, WidgetTypeFilter } from "./type";
+import FieldsEditor, { parseFieldDrafts, serializeFieldDrafts } from "./fields-editor";
+import type { WidgetFieldDraft, WidgetPlatform, WidgetTypeFilter } from "./type";
+
 const API_ENDPOINTS = {
-  list: "/widget-masters/list",
+  // List rows + table columns/visibility/grid-settings come from the configured
+  // grid (grid_id 46 → SELECT … FROM fixed.form_section). The edit flow still
+  // re-fetches GET /widget-masters/get (which nests each section's fields) and
+  // matches the section client-side; create/delete keep their own endpoints.
+  list: "/configured-grid-sql/run?grid_id=46",
   getById: "/widget-masters/get",
   create: "/widget-masters/create",
   delete: "/widget-masters/delete",
 } as const;
+// Drives the configured-grid columns query (GET /configured-grid-sql/columns?grid_id=46)
+// and grid-settings menu. The numeric id is authoritative via `gridDetailId`.
+const GRID_DETAIL_ID = 46;
+const GRID_TABLE_NAME = "form_section";
 const LOOKUP_KEYS = {
-  id: ["widgetNo", "widget_no", "id", "_id"],
-  code: ["widgetGuiName", "widget_gui_name", "guiName", "gui_name"],
-  name: ["widgetName", "widget_name", "name"],
-  short: ["widgetSecondaryText", "widget_secondary_text", "secondaryText", "secondary_text"],
-  alias: ["widgetType", "widget_type", "type"],
-  active: ["widgetVisibility", "widget_visibility", "visible", "isVisible"],
-  position: ["widgetPosition", "widget_position", "position", "sort"],
-  description: ["widgetSecondaryText", "widget_secondary_text", "secondaryText", "secondary_text"],
-  array: ["data", "items", "results", "rows", "list", "widgets"],
+  id: ["sectionId", "section_id", "id", "_id"],
+  code: ["sectionName", "section_name", "name"],
+  name: ["sectionName", "section_name", "name"],
+  short: ["sectionPlatform", "section_platform", "platform"],
+  alias: ["sectionPlatform", "section_platform", "platform"],
+  active: ["sectionVisibility", "section_visibility", "visible", "isVisible"],
+  position: ["sectionPosition", "section_position", "position", "sort"],
+  description: ["sectionName", "section_name"],
+  array: ["data", "items", "results", "rows", "list", "sections"],
 } as const;
 const REQUEST_PAYLOAD_KEYS = {
-  id: "widgetNo",
-  name: "widgetName",
-  alias: "widgetGuiName",
-  short: "widgetSecondaryText",
-  description: "widgetSecondaryText",
-  sort: "widgetPosition",
+  id: "sectionId",
+  name: "sectionName",
+  alias: "sectionPlatform",
+  short: "sectionPlatform",
+  description: "sectionName",
+  sort: "sectionPosition",
 } as const;
-const WIDGET_GROUP_ID_KEYS = ["widgetGroupId", "widget_group_id", "groupId", "group_id"] as const;
-const WIDGET_GUI_NAME_KEYS = ["widgetGuiName", "widget_gui_name", "guiName", "gui_name"] as const;
-const WIDGET_TYPE_KEYS = ["widgetType", "widget_type", "type"] as const;
-const WIDGET_VISIBILITY_KEYS = ["widgetVisibility", "widget_visibility", "visible", "isVisible"] as const;
-const WIDGET_SECONDARY_TEXT_KEYS = [
-  "widgetSecondaryText",
-  "widget_secondary_text",
-  "secondaryText",
-  "secondary_text",
+const SECTION_ID_KEYS = ["sectionId", "section_id", "id", "_id"] as const;
+const SECTION_MENU_ID_KEYS = ["sectionMenuId", "section_menu_id", "menuId", "menu_id"] as const;
+const SECTION_NAME_KEYS = ["sectionName", "section_name", "name"] as const;
+const SECTION_GUI_NAME_KEYS = ["sectionGuiName", "section_gui_name", "guiName"] as const;
+const SECTION_PLATFORM_KEYS = ["sectionPlatform", "section_platform", "platform", "type"] as const;
+const SECTION_VISIBILITY_KEYS = [
+  "sectionVisibility",
+  "section_visibility",
+  "visible",
+  "isVisible",
 ] as const;
-const WIDGET_NUMBER_KEYS = ["widgetNo", "widget_no", "id", "_id"] as const;
+const SECTION_POSITION_KEYS = ["sectionPosition", "section_position", "position", "sort"] as const;
+const SECTION_FIELDS_KEYS = ["fields", "field", "sectionFields"] as const;
+const RESPONSE_ARRAY_KEYS = ["data", "items", "results", "rows", "list", "sections"] as const;
 const WIDGET_PLATFORM_OPTIONS: Array<{ label: string; value: WidgetPlatform }> = [
   { label: "Desktop", value: "desktop" },
   { label: "Mobile", value: "mobile" },
@@ -59,11 +76,46 @@ const FILTER_PLATFORM_OPTIONS: Array<{ label: string; value: WidgetTypeFilter }>
   { label: "All Platforms", value: "all" },
   ...WIDGET_PLATFORM_OPTIONS,
 ];
-const FILTER_VISIBILITY_OPTIONS: Array<{ label: string; value: VisibilityFilter }> = [
-  { label: "All States", value: "all" },
-  { label: "Visible Only", value: "visible" },
-  { label: "Hidden Only", value: "hidden" },
-];
+// `sectionMenuId` is a FK to a menu/screen. The menu list is fetched and shown
+// as a searchable dropdown: the label is the menu name, the stored value is the
+// menu id. The endpoint returns a nested tree, so the rows are flattened first.
+const MENU_ENDPOINT = "/menu-masters/get";
+const MENU_ID_KEYS = ["menuId", "menu_id", "id"] as const;
+const MENU_NAME_KEYS = ["menuName", "menu_name", "name"] as const;
+const MENU_CHILDREN_KEYS = ["children", "items", "subMenus"] as const;
+const DEFAULT_MENU_OPTION: ERPDynamicSelectOption = { value: "", label: "Select menu" };
+const MENU_LOOKUP_QUERY = { activeOnly: "true" } as const;
+const MENU_LOOKUP_DEFINITION = {
+  query: MENU_LOOKUP_QUERY,
+  defaultOption: DEFAULT_MENU_OPTION,
+  idKeys: MENU_ID_KEYS,
+  labelKeys: MENU_NAME_KEYS,
+} as const;
+/** Walk the nested menu payload into a flat list so every menu (parent + leaf) is selectable. */
+function flattenMenuRecords(payload: unknown): Record<string, unknown>[] {
+  const root =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>).data ?? payload
+      : payload;
+  const flat: Record<string, unknown>[] = [];
+  const walk = (nodes: unknown): void => {
+    if (!Array.isArray(nodes)) {
+      return;
+    }
+    for (const node of nodes) {
+      if (!node || typeof node !== "object" || Array.isArray(node)) {
+        continue;
+      }
+      const record = node as Record<string, unknown>;
+      flat.push(record);
+      for (const key of MENU_CHILDREN_KEYS) {
+        walk(record[key]);
+      }
+    }
+  };
+  walk(root);
+  return flat;
+}
 function toWidgetPlatform(value: unknown, fallback: WidgetPlatform = "desktop"): WidgetPlatform {
   const normalized = toDisplayValue(value).toLowerCase();
   if (normalized === "mobile" || normalized === "desktop" || normalized === "web") {
@@ -89,139 +141,174 @@ function toBoolean(value: unknown, fallback = false): boolean {
   }
   return fallback;
 }
-function getSourceValue(row: CrudMasterTableRow, keys: readonly string[]): unknown {
-  if (!row.__source) {
-    return undefined;
+function getSectionFields(source: Record<string, unknown> | null | undefined): Record<string, unknown>[] {
+  if (!source) {
+    return [];
   }
-  return getFirstDefinedValue(row.__source, keys);
+  const value = getFirstDefinedValue(source, SECTION_FIELDS_KEYS);
+  return Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
 }
-function getWidgetNumber(row: CrudMasterTableRow): number {
-  return toNonNegativeInteger(toDisplayValue(getSourceValue(row, WIDGET_NUMBER_KEYS) ?? row.masterId), 0);
-}
-function getWidgetGroupId(row: CrudMasterTableRow): number {
-  return toNonNegativeInteger(
-    toDisplayValue(getSourceValue(row, WIDGET_GROUP_ID_KEYS)),
-    0,
-  );
-}
-function getWidgetGuiName(row: CrudMasterTableRow): string {
-  return toDisplayValue(getSourceValue(row, WIDGET_GUI_NAME_KEYS)) || row.masterCode;
-}
-function getWidgetType(row: CrudMasterTableRow): WidgetPlatform {
-  return toWidgetPlatform(getSourceValue(row, WIDGET_TYPE_KEYS) ?? row.masterAlias);
-}
-function getWidgetVisibility(row: CrudMasterTableRow): boolean {
-  return toBoolean(getSourceValue(row, WIDGET_VISIBILITY_KEYS) ?? row.masterActive, true);
-}
-function getWidgetSecondaryText(row: CrudMasterTableRow): string {
-  return toDisplayValue(getSourceValue(row, WIDGET_SECONDARY_TEXT_KEYS));
-}
-function getPlatformClassName(widgetType: WidgetPlatform): string {
-  if (widgetType === "mobile") {
-    return styles.platformMobile;
+function extractSectionsArray(source: Record<string, unknown> | null): Record<string, unknown>[] {
+  if (!source) {
+    return [];
   }
-  if (widgetType === "web") {
-    return styles.platformWeb;
-  }
-  return styles.platformDesktop;
+  const value = getFirstDefinedValue(source, RESPONSE_ARRAY_KEYS);
+  return Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
 }
-function getVisibilityClassName(widgetVisibility: boolean): string {
-  return widgetVisibility ? styles.visibilityVisible : styles.visibilityHidden;
+function fieldPayloadToDraft(field: Record<string, unknown>): WidgetFieldDraft {
+  const rawId = getFirstDefinedValue(field, ["fieldId", "field_id", "id"]);
+  const fieldId =
+    typeof rawId === "number"
+      ? rawId
+      : typeof rawId === "string" && rawId.trim() !== "" && Number.isFinite(Number(rawId))
+        ? Number(rawId)
+        : undefined;
+  return {
+    ...(fieldId !== undefined ? { fieldId } : {}),
+    fieldName: toDisplayValue(getFirstDefinedValue(field, ["fieldName", "field_name", "name"])),
+    fieldGuiName: toDisplayValue(getFirstDefinedValue(field, ["fieldGuiName", "field_gui_name", "guiName"])),
+    fieldSecondaryText: toDisplayValue(
+      getFirstDefinedValue(field, ["fieldSecondaryText", "field_secondary_text", "secondaryText"]),
+    ),
+    fieldPosition: toDisplayValue(getFirstDefinedValue(field, ["fieldPosition", "field_position", "position"])) || "0",
+    fieldVisibility: toBoolean(
+      getFirstDefinedValue(field, ["fieldVisibility", "field_visibility", "visible"]),
+      true,
+    ),
+  };
 }
 function buildCreateDefaults(
-  widgetTypeFilter: WidgetTypeFilter,
-  visibilityFilter: VisibilityFilter,
+  platformFilter: WidgetTypeFilter,
+  menuIdFilter: string,
 ): Record<string, string> {
   return {
-    widgetGroupId: "",
-    widgetGuiName: "",
-    widgetName: "",
-    widgetPosition: "0",
-    widgetSecondaryText: "",
-    widgetType: widgetTypeFilter === "all" ? "desktop" : widgetTypeFilter,
-    widgetVisibility:
-      visibilityFilter === "hidden"
-        ? "false"
-        : "true",
+    sectionName: "",
+    sectionGuiName: "",
+    sectionMenuId: menuIdFilter || "",
+    sectionPosition: "0",
+    sectionPlatform: platformFilter === "all" ? "desktop" : platformFilter,
+    sectionVisibility: "true",
+    fields: serializeFieldDrafts([]),
   };
 }
 export default function WidgetMasterPage() {
-  const [widgetTypeFilter, setWidgetTypeFilter] = useState<WidgetTypeFilter>("all");
-  const [visibilityFilter, setVisibilityFilter] = useState<VisibilityFilter>("all");
+  const [platformFilter, setPlatformFilter] = useState<WidgetTypeFilter>("all");
+  const [menuIdFilter, setMenuIdFilter] = useState<string>("");
+  const { getAll: getMenus } = useApi<unknown>(MENU_ENDPOINT);
+  // Flatten the nested menu tree before useMasterOptions maps it to {label, value}.
+  const loadMenuOptions = useCallback(
+    async (query?: Record<string, string>) => ({
+      data: flattenMenuRecords(await getMenus(query)),
+    }),
+    [getMenus],
+  );
+  const { options: menuOptions, loading: menusLoading } = useMasterOptions({
+    definition: MENU_LOOKUP_DEFINITION,
+    load: loadMenuOptions,
+  });
   const widgetFormFields = useMemo<ERPDynamicModalField[]>(
     () => [
       {
-        name: "widgetName",
-        label: "Widget Name",
+        name: "sectionName",
+        label: "Section Name",
         colSpan: 2,
+        required: true,
         validation: {
           minLength: 2,
-          minLengthMessage: "Widget Name must be at least 2 characters.",
+          minLengthMessage: "Section Name must be at least 2 characters.",
         },
       },
       {
-        name: "widgetGuiName",
-        label: "Widget GUI Name",
+        name: "sectionGuiName",
+        label: "GUI Name",
         colSpan: 2,
-        helperText: "Optional internal GUI identifier.",
-      },
-      {
-        name: "widgetGroupId",
-        label: "Widget Group Id",
-        type: "number",
-        min: 0,
-        step: 1,
+        required: true,
+        helperText: "Display name shown in the Widget column.",
         validation: {
-          minMessage: "Widget Group Id must be 0 or greater.",
+          minLength: 2,
+          minLengthMessage: "GUI Name must be at least 2 characters.",
         },
       },
       {
-        name: "widgetPosition",
-        label: "Widget Position",
-        type: "number",
-        min: 0,
-        step: 1,
+        name: "sectionMenuId",
+        label: "Menu",
+        type: "select",
+        searchable: true,
+        required: true,
+        // Shows the menu name; the selected option's value (the menu id) is what
+        // is stored in form state and sent to the API.
+        options: menuOptions,
+        disabled: menusLoading,
+        placeholder: menusLoading ? "Loading menus…" : "Search menu",
+        helperText: "Screen this section belongs to.",
         validation: {
-          minMessage: "Widget Position must be 0 or greater.",
+          requiredMessage: "Select a menu.",
         },
       },
       {
-        name: "widgetType",
-        label: "Widget Platform",
+        name: "sectionPlatform",
+        label: "Platform",
         type: "select",
         required: true,
         options: WIDGET_PLATFORM_OPTIONS,
       },
-     
       {
-        name: "widgetSecondaryText",
-        label: "Secondary Text",
-        colSpan: 2,
-        rows: 3,
-        helperText: "Optional supporting line shown under the main widget label.",
+        name: "sectionPosition",
+        label: "Position",
+        type: "number",
+        min: 0,
+        step: 1,
+        validation: {
+          minMessage: "Position must be 0 or greater.",
+        },
       },
-       {
-        name: "widgetVisibility",
+      {
+        name: "sectionVisibility",
         label: "Visible in UI",
         type: "checkbox",
-        helperText: "Unchecked widgets stay saved but hidden from the interface.",
+        helperText: "Unchecked sections stay saved but hidden from the interface.",
+      },
+      {
+        name: "fields",
+        label: "Fields",
+        type: "custom",
+        colSpan: 2,
+        helperText: "Fields under this section. Sent as fields[] on save.",
+        validation: {
+          // Rows whose Field Name is blank are dropped from the payload on save
+          // (the server requires fieldName). Block the save and explain why so
+          // the user does not silently end up sending fields: [].
+          custom: (rawValue) => {
+            const namelessRow = parseFieldDrafts(rawValue).some(
+              (draft) =>
+                draft.fieldName.trim().length === 0 &&
+                [draft.fieldGuiName, draft.fieldSecondaryText].some(
+                  (column) => (column ?? "").trim().length > 0,
+                ),
+            );
+            return namelessRow
+              ? "Each field needs a Field Name (the internal key, e.g. item_name). Fill it in or remove the row."
+              : null;
+          },
+        },
+        render: ({ value, setValue, disabled }) => (
+          <FieldsEditor value={value} onChange={setValue} disabled={disabled} />
+        ),
       },
     ],
-    [],
+    [menuOptions, menusLoading],
   );
   const createInitialValues = useMemo(
-    () => buildCreateDefaults(widgetTypeFilter, visibilityFilter),
-    [visibilityFilter, widgetTypeFilter],
+    () => buildCreateDefaults(platformFilter, menuIdFilter),
+    [menuIdFilter, platformFilter],
   );
   const filterSummary = useMemo(() => {
     const platformLabel =
-      FILTER_PLATFORM_OPTIONS.find((option) => option.value === widgetTypeFilter)?.label ??
+      FILTER_PLATFORM_OPTIONS.find((option) => option.value === platformFilter)?.label ??
       "All Platforms";
-    const visibilityLabel =
-      FILTER_VISIBILITY_OPTIONS.find((option) => option.value === visibilityFilter)?.label ??
-      "All States";
-    return `${platformLabel} • ${visibilityLabel}`;
-  }, [visibilityFilter, widgetTypeFilter]);
+    const menuLabel = menuIdFilter ? `Menu #${menuIdFilter}` : "All Menus";
+    return `${platformLabel} • ${menuLabel}`;
+  }, [menuIdFilter, platformFilter]);
   const toolbarContent = useMemo(
     () => (
       <div className={styles.filterToolbar}>
@@ -230,8 +317,8 @@ export default function WidgetMasterPage() {
             <span className={styles.filterLabel}>Platform</span>
             <select
               className={styles.filterSelect}
-              value={widgetTypeFilter}
-              onChange={(event) => setWidgetTypeFilter(event.target.value as WidgetTypeFilter)}
+              value={platformFilter}
+              onChange={(event) => setPlatformFilter(event.target.value as WidgetTypeFilter)}
             >
               {FILTER_PLATFORM_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -241,225 +328,124 @@ export default function WidgetMasterPage() {
             </select>
           </label>
           <label className={styles.filterField}>
-            <span className={styles.filterLabel}>Visibility</span>
-            <select
+            <span className={styles.filterLabel}>Menu Id</span>
+            <input
               className={styles.filterSelect}
-              value={visibilityFilter}
-              onChange={(event) => setVisibilityFilter(event.target.value as VisibilityFilter)}
-            >
-              {FILTER_VISIBILITY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              type="number"
+              min={1}
+              step={1}
+              placeholder="All"
+              value={menuIdFilter}
+              onChange={(event) => setMenuIdFilter(event.target.value.trim())}
+            />
           </label>
         </div>
         <div className={styles.summaryPane}>
           <span className={styles.summaryBadge}>{filterSummary}</span>
           <span className={styles.summaryMeta}>
-            Detail fetches reuse the widget type filter when available.
+            Search matches section names and any field name.
           </span>
         </div>
       </div>
     ),
-    [filterSummary, visibilityFilter, widgetTypeFilter],
-  );
-  const customTableColumns = useMemo<ReusableTableColumn<CrudMasterTableRow>[]>(
-    () => [
-      {
-        key: "serialNo",
-        header: "S.No",
-        accessor: "serialNo",
-        width: "12px",
-        sortable: false,
-      },
-      {
-        key: "widgetNo",
-        header: "Widget No",
-        width: "96px",
-        render: (row) => getWidgetNumber(row),
-        sortAccessor: (row) => getWidgetNumber(row),
-      },
-      {
-        key: "widgetName",
-        header: "Widget Name",
-        accessor: "masterName",
-        width: "240px",
-      },
-      {
-        key: "widgetType",
-        header: "Platform",
-        width: "118px",
-        render: (row) => {
-          const widgetType = getWidgetType(row);
-
-          return (
-            <span className={`${styles.platformChip} ${getPlatformClassName(widgetType)}`}>
-              {widgetType}
-            </span>
-          );
-        },
-        sortAccessor: (row) => getWidgetType(row),
-        searchAccessor: (row) => getWidgetType(row),
-      },
-      {
-        key: "widgetGroupId",
-        header: "Group Id",
-        width: "100px",
-        render: (row) => getWidgetGroupId(row),
-        sortAccessor: (row) => getWidgetGroupId(row),
-      },
-      {
-        key: "widgetGuiName",
-        header: "GUI Name",
-        width: "220px",
-        render: (row) => getWidgetGuiName(row) || "-",
-        sortAccessor: (row) => getWidgetGuiName(row),
-        searchAccessor: (row) => getWidgetGuiName(row),
-      },
-      {
-        key: "widgetPosition",
-        header: "Position",
-        accessor: "position",
-        width: "96px",
-        sortAccessor: (row) => toNonNegativeInteger(row.position, 0),
-      },
-      {
-        key: "widgetVisibility",
-        header: "Visibility",
-        width: "120px",
-        render: (row) => {
-          const widgetVisibility = getWidgetVisibility(row);
-
-          return (
-            <span
-              className={`${styles.visibilityChip} ${getVisibilityClassName(widgetVisibility)}`}
-            >
-              {widgetVisibility ? "Visible" : "Hidden"}
-            </span>
-          );
-        },
-        sortAccessor: (row) => (getWidgetVisibility(row) ? 1 : 0),
-        searchAccessor: (row) => (getWidgetVisibility(row) ? "Visible" : "Hidden"),
-      },
-      {
-        key: "widgetSecondaryText",
-        header: "Secondary Text",
-        width: "240px",
-        render: (row) => {
-          const secondaryText = getWidgetSecondaryText(row);
-
-          return (
-            <span className={styles.secondaryText} title={secondaryText}>
-              {secondaryText || "-"}
-            </span>
-          );
-        },
-        sortAccessor: (row) => getWidgetSecondaryText(row),
-        searchAccessor: (row) => getWidgetSecondaryText(row),
-      },
-    ],
-    [],
-  );
-  const buildListQuery = useCallback(
-    ({
-      searchTerm,
-      currentPage,
-      pageSize,
-    }: {
-      searchTerm: string;
-      currentPage: number;
-      pageSize: number;
-    }) => ({
-      page: String(currentPage),
-      limit: String(pageSize),
-      ...(searchTerm ? { search: searchTerm } : {}),
-      ...(widgetTypeFilter !== "all" ? { widgetType: widgetTypeFilter } : {}),
-      ...(visibilityFilter !== "all"
-        ? { widgetVisibility: visibilityFilter === "visible" ? "true" : "false" }
-        : {}),
-    }),
-    [visibilityFilter, widgetTypeFilter],
+    [filterSummary, menuIdFilter, platformFilter],
   );
   const buildGetByIdRequest = useCallback(
-    ({
-      recordId,
-      rowSource,
-    }: {
-      recordId: string | number;
-      action: "view" | "update";
-      rowSource: Record<string, unknown> | null;
-    }) => {
-      const widgetType =
-        rowSource !== null
-          ? toWidgetPlatform(getFirstDefinedValue(rowSource, WIDGET_TYPE_KEYS), "desktop")
-          : widgetTypeFilter !== "all"
-            ? widgetTypeFilter
-            : null;
+    ({ rowSource }: { recordId: string | number; action: "view" | "update"; rowSource: Record<string, unknown> | null }) => {
+      const sectionMenuId = rowSource
+        ? toDisplayValue(getFirstDefinedValue(rowSource, SECTION_MENU_ID_KEYS))
+        : menuIdFilter;
+      const platform = rowSource
+        ? toWidgetPlatform(
+            getFirstDefinedValue(rowSource, SECTION_PLATFORM_KEYS),
+            platformFilter === "all" ? "desktop" : platformFilter,
+          )
+        : platformFilter !== "all"
+          ? platformFilter
+          : null;
       return {
         query: {
-          widgetNo: String(recordId),
-          ...(widgetType ? { widgetType } : {}),
+          ...(sectionMenuId ? { sectionMenuId } : {}),
+          ...(platform ? { sectionPlatform: platform } : {}),
         },
       };
     },
-    [widgetTypeFilter],
+    [menuIdFilter, platformFilter],
   );
   return (
     <CrudMasterPage
       title="Widget Master"
-      entityLabel="widget"
-      entityLabelPlural="widgets"
+      entityLabel="section"
+      entityLabelPlural="sections"
       apiEndpoints={API_ENDPOINTS}
       listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={baseStyles}
-      listTitle="Widget List"
-      createLabel="Add Widget"
-      formTitle="Widget Form"
-      formDescription="Create and update widgets."
+      listTitle="Widget Sections"
+      createLabel="Add Section"
+      formTitle="Widget Section Form"
+      formDescription="Create and update widget sections and their fields."
       customFields={widgetFormFields}
       createInitialValues={createInitialValues}
-      customTableColumns={customTableColumns}
+      gridTableName={GRID_TABLE_NAME}
+      gridDetailId={GRID_DETAIL_ID}
       toolbarContent={toolbarContent}
-      buildListQuery={buildListQuery}
-      listStateResetKey={`${widgetTypeFilter}:${visibilityFilter}`}
+      listStateResetKey={`${platformFilter}:${menuIdFilter}`}
       buildGetByIdRequest={buildGetByIdRequest}
+      augmentDetailSource={({ recordId, source, rowSource }) => {
+        // `source` is the GET /get envelope ({ data: Section[] }); match by id.
+        const sections = extractSectionsArray(source);
+        const match = sections.find(
+          (section) =>
+            String(getFirstDefinedValue(section, SECTION_ID_KEYS)) === String(recordId),
+        );
+        return match ?? rowSource ?? null;
+      }}
       mapFormValues={({ source }) => {
         const rowSource = source ?? {};
+        const drafts = getSectionFields(rowSource).map(fieldPayloadToDraft);
         return {
-          widgetGroupId:
-            toDisplayValue(getFirstDefinedValue(rowSource, WIDGET_GROUP_ID_KEYS)) || "",
-          widgetGuiName:
-            toDisplayValue(getFirstDefinedValue(rowSource, WIDGET_GUI_NAME_KEYS)) || "",
-          widgetName:
-            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.name)) || "",
-          widgetPosition:
-            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) || "0",
-          widgetSecondaryText:
-            toDisplayValue(getFirstDefinedValue(rowSource, WIDGET_SECONDARY_TEXT_KEYS)) || "",
-          widgetType: toWidgetPlatform(
-            getFirstDefinedValue(rowSource, WIDGET_TYPE_KEYS),
-            widgetTypeFilter === "all" ? "desktop" : widgetTypeFilter,
+          sectionName: toDisplayValue(getFirstDefinedValue(rowSource, SECTION_NAME_KEYS)) || "",
+          sectionGuiName:
+            toDisplayValue(getFirstDefinedValue(rowSource, SECTION_GUI_NAME_KEYS)) || "",
+          sectionMenuId:
+            toDisplayValue(getFirstDefinedValue(rowSource, SECTION_MENU_ID_KEYS)) || "",
+          sectionPosition:
+            toDisplayValue(getFirstDefinedValue(rowSource, SECTION_POSITION_KEYS)) || "0",
+          sectionPlatform: toWidgetPlatform(
+            getFirstDefinedValue(rowSource, SECTION_PLATFORM_KEYS),
+            platformFilter === "all" ? "desktop" : platformFilter,
           ),
-          widgetVisibility: toSelectBoolean(
-            getFirstDefinedValue(rowSource, WIDGET_VISIBILITY_KEYS),
+          sectionVisibility: toSelectBoolean(
+            getFirstDefinedValue(rowSource, SECTION_VISIBILITY_KEYS),
             "true",
           ),
+          fields: serializeFieldDrafts(drafts),
         };
       }}
-      buildRequestPayload={({ values, shouldUpdate, editingItemId }) => ({
-        widgetGroupId: toNonNegativeInteger(values.widgetGroupId ?? "", 0),
-        widgetGuiName: toNullableString(values.widgetGuiName ?? ""),
-        widgetName: (values.widgetName ?? "").trim(),
-        widgetPosition: toNonNegativeInteger(values.widgetPosition ?? "0", 0),
-        widgetSecondaryText: toNullableString(values.widgetSecondaryText ?? ""),
-        widgetType: toWidgetPlatform(values.widgetType, "desktop"),
-        widgetVisibility: (values.widgetVisibility ?? "true") === "true",
-        ...(shouldUpdate ? { widgetNo: toUpdateId(editingItemId) } : {}),
-      })}
+      buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
+        const fields = parseFieldDrafts(values.fields)
+          .map((draft) => ({
+            ...(draft.fieldId !== undefined ? { fieldId: draft.fieldId } : {}),
+            fieldName: draft.fieldName.trim(),
+            fieldGuiName: toNullableString(draft.fieldGuiName ?? ""),
+            fieldSecondaryText: toNullableString(draft.fieldSecondaryText ?? ""),
+            fieldPosition: toNonNegativeInteger(draft.fieldPosition ?? "0", 0),
+            fieldVisibility: (draft.fieldVisibility ?? true) !== false,
+          }))
+          .filter((field) => field.fieldName.length > 0);
+        return {
+          sectionMenuId: toNonNegativeInteger(values.sectionMenuId ?? "", 0),
+          sectionName: (values.sectionName ?? "").trim(),
+          sectionGuiName: (values.sectionGuiName ?? "").trim(),
+          sectionPosition: toNonNegativeInteger(values.sectionPosition ?? "0", 0),
+          sectionVisibility: (values.sectionVisibility ?? "true") === "true",
+          sectionPlatform: toWidgetPlatform(values.sectionPlatform, "desktop"),
+          fields,
+          ...(shouldUpdate ? { sectionId: toUpdateId(editingItemId) } : {}),
+        };
+      }}
     />
   );
 }
