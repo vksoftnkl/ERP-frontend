@@ -140,6 +140,30 @@ export default function SuppliersMasterPage() {
   const [editingSupplierGroupId, setEditingSupplierGroupId] = useState<
     string | null
   >(null);
+  // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
+  // can see soft-deleted suppliers. Lives beside the list search input.
+  const [wantDelete, setWantDelete] = useState(false);
+  // Adds the `grid_param` payload to the default page/limit/search list query.
+  // The server JSON-parses it and binds each key into the matching named token in
+  // grid 17's stored SQL; keys with no matching token are ignored. `wantdelete` is
+  // driven by the "Show deleted records" checkbox beside the list search input.
+  const buildListQuery = useCallback(
+    ({
+      searchTerm,
+      currentPage,
+      pageSize,
+    }: {
+      searchTerm: string;
+      currentPage: number;
+      pageSize: number;
+    }): Record<string, string> => ({
+      page: String(currentPage),
+      limit: String(pageSize),
+      ...(searchTerm ? { search: searchTerm } : {}),
+      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+    }),
+    [wantDelete],
+  );
 
   // Cache for GST Lookups
   const gstLookupCacheRef = useRef<Record<string, Record<string, string>>>({});
@@ -583,6 +607,19 @@ export default function SuppliersMasterPage() {
         entityLabel="supplier"
         entityLabelPlural="suppliers"
         apiEndpoints={API_ENDPOINTS}
+        buildListQuery={buildListQuery}
+        toolbarContent={
+          <div className={styles.filterCheckGroup}>
+            <label className={styles.filterCheckLabel}>
+              <input
+                type="checkbox"
+                checked={wantDelete}
+                onChange={(event) => setWantDelete(event.target.checked)}
+              />
+              Show deleted records
+            </label>
+          </div>
+        }
         gridTableName={GRID_TABLE_NAME}
         listResponseStyleArrayKey=""
         gridDetailId={17}

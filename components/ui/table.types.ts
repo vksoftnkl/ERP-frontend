@@ -75,6 +75,8 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   resizableColumns?: boolean;
   onColumnResizeEnd?: (payload: ReusableTableColumnResizeEndPayload<T>) => void;
   onBodyContextMenu?: (payload: ReusableTableBodyContextMenuPayload<T>) => void;
+  // Fires on right-click anywhere in the table shell (header, empty area, etc.).
+  onWrapperContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
   wrapperClassName?: string;
   tableClassName?: string;
   tableLayout?: CSSProperties["tableLayout"];

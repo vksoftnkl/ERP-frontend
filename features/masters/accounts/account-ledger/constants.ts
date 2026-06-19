@@ -1,5 +1,8 @@
+// Canonical grid id for the Account Ledger master (drives the configured grid SQL/columns).
+export const ACCOUNT_LEDGER_GRID_ID = 26;
+
 export const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=26",
+  list: `/configured-grid-sql/run?grid_id=${ACCOUNT_LEDGER_GRID_ID}`,
   getById: "/account-ledger-masters/get",
   create: "/account-ledger-masters/create",
   delete: "/account-ledger-masters/delete",
@@ -13,6 +16,10 @@ export const DEFAULT_PAGE_SIZE = 20;
 export const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 export const GRID_DETAILS_ENDPOINT = "/grid-details/get";
 export const GRID_COLUMNS_CREATE_ENDPOINT = "/grid-columns/create";
+// Bulk PUT endpoints for grid column settings (payload: { columns: [...] }).
+export const GRID_COLUMN_WIDTH_ENDPOINT = "/grid-details/column-width";
+export const GRID_FILTER_SETTINGS_ENDPOINT = "/grid-details/filter-settings";
+export const GRID_VISIBILITY_SETTINGS_ENDPOINT = "/grid-details/visibility-settings";
 export const STATE_CODE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 
 export const ACCOUNT_LEDGER_TABLE_NAME = "acc_ledger_master";
@@ -23,10 +30,8 @@ export const ACCOUNT_LEDGER_TABLE_NAME_ALIASES = [
 ] as const;
 
 export const GRID_DETAILS_QUERY = {
-  grid_status: "true",
+  grid_id: String(ACCOUNT_LEDGER_GRID_ID),
   search: ACCOUNT_LEDGER_TABLE_NAME,
-  page: "1",
-  limit: "20",
 } as const;
 
 export const LOOKUP_QUERY_COMPANIES = {

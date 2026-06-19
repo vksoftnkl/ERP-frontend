@@ -57,34 +57,6 @@ const DEFAULT_LEDGER_SERIAL_COLUMN: ReusableTableColumn<LedgerTableRow> = {
   sortable: false,
 };
 
-export const DEFAULT_LEDGER_COLUMNS: ReusableTableColumn<LedgerTableRow>[] = [
-  DEFAULT_LEDGER_SERIAL_COLUMN,
-  {
-    key: "ledgerCode",
-    header: "Ledger Code",
-    accessor: "ledgerCode",
-    width: "220px",
-  },
-  {
-    key: "ledgerName",
-    header: "Ledger Name",
-    accessor: "ledgerName",
-    width: "320px",
-  },
-  {
-    key: "ledgerShort",
-    header: "Short Name",
-    accessor: "ledgerShort",
-    width: "180px",
-  },
-  {
-    key: "ledgerStatus",
-    header: "Status",
-    accessor: "ledgerStatus",
-    width: "120px",
-  },
-];
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -394,7 +366,8 @@ export function buildColumnsFromGridColumns(
   }
 
   if (columns.length === 0) {
-    return DEFAULT_LEDGER_COLUMNS;
+    // No configured grid columns -> render no headers (no hardcoded defaults).
+    return [];
   }
 
   const serialColumnIndex = columns.findIndex((column) => column.accessor === "serialNo");

@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -46,9 +47,13 @@ import {
   SEARCHABLE_SELECT_OPTIONS_MAX_HEIGHT,
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
+  ACCOUNT_LEDGER_GRID_ID,
   LOOKUP_ENDPOINT,
   GRID_DETAILS_ENDPOINT,
   GRID_COLUMNS_CREATE_ENDPOINT,
+  GRID_COLUMN_WIDTH_ENDPOINT,
+  GRID_FILTER_SETTINGS_ENDPOINT,
+  GRID_VISIBILITY_SETTINGS_ENDPOINT,
   STATE_CODE_LOOKUP_ENDPOINT,
   GRID_DETAILS_QUERY,
   LOOKUP_QUERY_COMPANIES,
@@ -97,7 +102,6 @@ import {
   buildLedgerRows,
   resolveLedgerRecordId,
   buildColumnsFromGridColumns,
-  buildColumnsFromResponseStyles,
   resolveGridColumnForLedgerTableColumn,
 } from "./table-builder";
 import {
@@ -158,6 +162,12 @@ function getColumnExportValue(
   }
   return "";
 }
+type GridColumnWidthUpdate = { grid_column_id: string; grid_column_width: number };
+type GridColumnFilterUpdate = { grid_column_id: string; grid_column_filter: boolean };
+type GridColumnVisibilityUpdate = {
+  grid_column_id: string;
+  grid_column_visibility: boolean;
+};
 function buildLedgerGridColumnBasePayload(
   gridColumn: GridColumnConfig,
   fallbackGridId: number,
@@ -605,6 +615,19 @@ export default function AccountLedgerMasterPage() {
       toast: { success: false },
     },
   );
+  // Bulk PUT settings savers (each takes { columns: [...] }).
+  const { run: saveColumnWidthsApi } = useApi<
+    unknown,
+    { columns: GridColumnWidthUpdate[] }
+  >(GRID_COLUMN_WIDTH_ENDPOINT, { method: "PUT", toast: { success: false } });
+  const { run: saveFilterSettingsApi } = useApi<
+    unknown,
+    { columns: GridColumnFilterUpdate[] }
+  >(GRID_FILTER_SETTINGS_ENDPOINT, { method: "PUT", toast: { success: false } });
+  const { run: saveVisibilitySettingsApi } = useApi<
+    unknown,
+    { columns: GridColumnVisibilityUpdate[] }
+  >(GRID_VISIBILITY_SETTINGS_ENDPOINT, { method: "PUT", toast: { success: false } });
   const {
     run: getById,
     loading: detailsLoading,
@@ -662,7 +685,8 @@ export default function AccountLedgerMasterPage() {
   } | null>(null);
   const router = useRouter();
   // State for grid details
-  const [accountLedgerGridId, setAccountLedgerGridId] = useState<number | null>(null);
+  const [accountLedgerGridId, setAccountLedgerGridId] =
+    useState<number | null>(ACCOUNT_LEDGER_GRID_ID);
   const [accountLedgerGridName, setAccountLedgerGridName] = useState<string | null>(null);
   // State for modal form
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -687,24 +711,22 @@ export default function AccountLedgerMasterPage() {
   const [gridSettingsMode, setGridSettingsMode] = useState<"filter" | "visibility" | null>(null);
   const [gridSettingsSelections, setGridSettingsSelections] = useState<Record<string, boolean>>({});
   const [gridSettingsSaving, setGridSettingsSaving] = useState(false);
-  const pendingColumnWidthsRef = useRef<Record<string, Record<string, unknown>>>({});
+  const pendingColumnWidthsRef = useRef<Record<string, GridColumnWidthUpdate>>({});
   // Refs
   const searchInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const formRef = useRef<HTMLFormElement | null>(null);
   const sectionTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const gstLookupCacheRef = useRef<Record<string, Partial<LedgerFormValues>>>({});
   const gstLookupRequestIdRef = useRef(0);
-  // Grid columns query
-  const selectedGridId = accountLedgerGridId ?? -1;
+  // Grid columns query. Seed from the known grid id so headers load immediately,
+  // independent of the grid-details resolution; refines to the resolved id when ready.
+  const selectedGridId = accountLedgerGridId ?? ACCOUNT_LEDGER_GRID_ID;
   const {
     data: gridColumnsData,
     error: gridColumnsQueryError,
     isFetching: gridColumnsLoading,
     refetch: refetchGridColumns,
-  } = useGetGridColumnsQuery(
-    { gridId: selectedGridId },
-    { skip: accountLedgerGridId === null },
-  );
+  } = useGetGridColumnsQuery({ gridId: selectedGridId });
   const gridColumns = gridColumnsData ?? [];
   const gridColumnsError = getApiErrorMessage(gridColumnsQueryError);
   const gridSettingsColumns = useMemo(
@@ -728,11 +750,11 @@ export default function AccountLedgerMasterPage() {
         const payload = await getGridDetails(GRID_DETAILS_QUERY);
         if (!mounted) return;
         const resolvedGrid = resolveAccountLedgerGridDetails(payload);
-        setAccountLedgerGridId(resolvedGrid.gridId);
+        setAccountLedgerGridId(resolvedGrid.gridId ?? ACCOUNT_LEDGER_GRID_ID);
         setAccountLedgerGridName(resolvedGrid.gridName);
       } catch {
         if (mounted) {
-          setAccountLedgerGridId(null);
+          // Keep the known grid id so the table/columns still load; only the name is unknown.
           setAccountLedgerGridName(null);
         }
       }
@@ -909,12 +931,10 @@ export default function AccountLedgerMasterPage() {
     return buildLedgerRows(data, serialOffset);
   }, [data, serialOffset]);
   // Build columns
+  // Headers come solely from /configured-grid-sql/columns (grid_id); no hardcoded defaults.
   const columns = useMemo<ReusableTableColumn<LedgerTableRow>[]>(
-    () => {
-      const styledColumns = buildColumnsFromResponseStyles(data);
-      return styledColumns.length > 0 ? styledColumns : buildColumnsFromGridColumns(gridColumns);
-    },
-    [data, gridColumns],
+    () => buildColumnsFromGridColumns(gridColumns),
+    [gridColumns],
   );
   const renderedColumns = columns;
   const renderedRows = rows;
@@ -1555,7 +1575,7 @@ export default function AccountLedgerMasterPage() {
     !selectedRow || `${selectedRow.__recordId}`.trim().length === 0;
   const handleGridColumnResizeEnd = useCallback(
     (payload: ReusableTableColumnResizeEndPayload<LedgerTableRow>) => {
-      if (accountLedgerGridId === null || payload.tableWidthPx <= 0) {
+      if (payload.tableWidthPx <= 0) {
         return;
       }
       const gridColumn = resolveGridColumnForLedgerTableColumn(payload.column, gridColumns);
@@ -1566,42 +1586,29 @@ export default function AccountLedgerMasterPage() {
       if (!Number.isFinite(widthPercent) || widthPercent <= 0) {
         return;
       }
-      const columnNumber =
-        gridColumn.columnNumber && gridColumn.columnNumber > 0
-          ? gridColumn.columnNumber
-          : Math.max(1, gridColumn.order + 1);
-      const columnName = (gridColumn.columnName ?? gridColumn.header).trim();
-      if (!columnName) {
-        return;
-      }
       pendingColumnWidthsRef.current = {
         ...pendingColumnWidthsRef.current,
         [gridColumn.serialId]: {
           grid_column_id: gridColumn.serialId,
-          grid_id: gridColumn.gridId ?? String(accountLedgerGridId),
-          grid_column_number: columnNumber,
-          grid_column_name: columnName,
           grid_column_width: widthPercent,
         },
       };
     },
-    [accountLedgerGridId, gridColumns],
+    [gridColumns],
   );
   const saveColumnWidths = useCallback(async () => {
-    const pending = pendingColumnWidthsRef.current;
-    if (Object.keys(pending).length === 0) {
+    const columns = Object.values(pendingColumnWidthsRef.current);
+    if (columns.length === 0) {
       return;
     }
     try {
-      await Promise.all(
-        Object.values(pending).map((body) => saveGridColumnWidth({ body })),
-      );
+      await saveColumnWidthsApi({ body: { columns } });
       pendingColumnWidthsRef.current = {};
       void refetchGridColumns();
     } catch {
       // useApi handles the visible error toast.
     }
-  }, [refetchGridColumns, saveGridColumnWidth]);
+  }, [refetchGridColumns, saveColumnWidthsApi]);
   const handleGridColumnReorder = useCallback(
     (nextColumns: ReusableTableColumn<LedgerTableRow>[]) => {
       if (accountLedgerGridId === null || gridSettingsColumns.length === 0) {
@@ -1699,8 +1706,8 @@ export default function AccountLedgerMasterPage() {
     },
     [openGridSettingsModal],
   );
-  const handleTableBodyContextMenu = useCallback(
-    ({ event }: ReusableTableBodyContextMenuPayload<LedgerTableRow>) => {
+  const openGridSettingsContextMenu = useCallback(
+    (event: Pick<ReactMouseEvent, "clientX" | "clientY" | "preventDefault" | "stopPropagation">) => {
       if (gridSettingsColumns.length === 0) {
         return;
       }
@@ -1720,6 +1727,21 @@ export default function AccountLedgerMasterPage() {
       });
     },
     [gridSettingsColumns.length],
+  );
+  // Right-click on a data row.
+  const handleTableBodyContextMenu = useCallback(
+    ({ event }: ReusableTableBodyContextMenuPayload<LedgerTableRow>) => {
+      openGridSettingsContextMenu(event);
+    },
+    [openGridSettingsContextMenu],
+  );
+  // Right-click anywhere else in the table region (column header, empty area).
+  // Body rows call stopPropagation above, so this never double-fires for them.
+  const handleTableWrapperContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      openGridSettingsContextMenu(event);
+    },
+    [openGridSettingsContextMenu],
   );
   const closeGridSettingsModal = useCallback(() => {
     if (gridSettingsSaving) {
@@ -1772,28 +1794,29 @@ export default function AccountLedgerMasterPage() {
     };
   }, [gridSettingsContextMenuPosition]);
   const saveGridSettings = useCallback(async () => {
-    if (
-      accountLedgerGridId === null ||
-      gridSettingsMode === null ||
-      gridSettingsColumns.length === 0
-    ) {
+    if (gridSettingsMode === null || gridSettingsColumns.length === 0) {
+      return;
+    }
+    const serialIds = gridSettingsColumns
+      .map((column) => column.serialId)
+      .filter((serialId): serialId is string => Boolean(serialId));
+    if (serialIds.length === 0) {
       return;
     }
     setGridSettingsSaving(true);
     try {
-      for (const column of gridSettingsColumns) {
-        const basePayload = buildLedgerGridColumnBasePayload(column, accountLedgerGridId);
-        if (!basePayload || !column.serialId) {
-          continue;
-        }
-        await saveGridColumnWidth({
-          body: {
-            ...basePayload,
-            [gridSettingsMode === "visibility"
-              ? "grid_column_visibility"
-              : "grid_column_filter"]: gridSettingsSelections[column.serialId] === true,
-          },
-        });
+      if (gridSettingsMode === "visibility") {
+        const columns: GridColumnVisibilityUpdate[] = serialIds.map((serialId) => ({
+          grid_column_id: serialId,
+          grid_column_visibility: gridSettingsSelections[serialId] === true,
+        }));
+        await saveVisibilitySettingsApi({ body: { columns } });
+      } else {
+        const columns: GridColumnFilterUpdate[] = serialIds.map((serialId) => ({
+          grid_column_id: serialId,
+          grid_column_filter: gridSettingsSelections[serialId] === true,
+        }));
+        await saveFilterSettingsApi({ body: { columns } });
       }
       void refetchGridColumns();
       await loadRecords(searchTerm, currentPage, pageSize);
@@ -1804,7 +1827,6 @@ export default function AccountLedgerMasterPage() {
       setGridSettingsSaving(false);
     }
   }, [
-    accountLedgerGridId,
     currentPage,
     gridSettingsColumns,
     gridSettingsMode,
@@ -1812,7 +1834,8 @@ export default function AccountLedgerMasterPage() {
     loadRecords,
     pageSize,
     refetchGridColumns,
-    saveGridColumnWidth,
+    saveFilterSettingsApi,
+    saveVisibilitySettingsApi,
     searchTerm,
   ]);
   useEffect(() => {
@@ -1855,7 +1878,7 @@ export default function AccountLedgerMasterPage() {
               className={styles.masterSearchSettingsItem}
               onClick={() => openGridSettingsModalFromContextMenu("visibility")}
             >
-              column visible setting
+              column visibility setting
             </button>
             <button
               type="button"
@@ -1870,7 +1893,7 @@ export default function AccountLedgerMasterPage() {
               onClick={() => {
                 setGridSettingsContextMenuPosition(null);
                 if (accountLedgerGridId !== null) {
-                  router.push(`/masters/grid-designer/${accountLedgerGridId}`);
+                  router.push(`/master/grid-designer/${accountLedgerGridId}`);
                 }
               }}
             >
@@ -2050,7 +2073,7 @@ export default function AccountLedgerMasterPage() {
             {gridColumnsError ? (
               <div className={styles.errorBox}>
                 <p className={styles.errorText}>
-                  Unable to load table headers: {gridColumnsError}. Showing default headers.
+                  Unable to load table headers: {gridColumnsError}. Retry to load the configured columns.
                 </p>
                 <button
                   type="button"
@@ -2104,6 +2127,7 @@ export default function AccountLedgerMasterPage() {
             <ReusableTable
               columns={renderedColumns}
               rows={renderedRows}
+              onWrapperContextMenu={handleTableWrapperContextMenu}
               rowKey="__rowId"
               wrapperClassName={styles.masterTable}
               tableClassName={styles.masterDataTable}

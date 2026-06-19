@@ -468,6 +468,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   resizableColumns = false,
   onColumnResizeEnd,
   onBodyContextMenu,
+  onWrapperContextMenu,
   wrapperClassName,
   tableClassName,
   tableLayout,
@@ -1416,6 +1417,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   return (
     <div
       className={cx(styles.tableShell, wrapperClassName)}
+      onContextMenu={onWrapperContextMenu}
       style={
         {
           "--erp-table-shell-height": fullViewHeight ? "100vh" : "100%",
