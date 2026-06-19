@@ -4683,6 +4683,30 @@ export default function ItemMasterPageContent({
       unitOptions,
     ],
   );
+  // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
+  // can see soft-deleted items. Lives beside the list search input.
+  const [wantDelete, setWantDelete] = useState(false);
+  // Adds the `grid_param` payload to the default page/limit/search list query.
+  // The server JSON-parses it and binds each key into the matching named token in
+  // grid 1's stored SQL; keys with no matching token are ignored. `wantdelete` is
+  // driven by the "Show deleted records" checkbox beside the list search input.
+  const buildListQuery = useCallback(
+    ({
+      searchTerm,
+      currentPage,
+      pageSize,
+    }: {
+      searchTerm: string;
+      currentPage: number;
+      pageSize: number;
+    }): Record<string, string> => ({
+      page: String(currentPage),
+      limit: String(pageSize),
+      ...(searchTerm ? { search: searchTerm } : {}),
+      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+    }),
+    [wantDelete],
+  );
   return (
     <CrudMasterPage
       title="Item"
@@ -4690,6 +4714,19 @@ export default function ItemMasterPageContent({
       entityLabelPlural="items"
       auditHistory={{ screenName: "Item Master" }}
       apiEndpoints={API_ENDPOINTS}
+      buildListQuery={buildListQuery}
+      toolbarContent={
+        <div className={styles.filterCheckGroup}>
+          <label className={styles.filterCheckLabel}>
+            <input
+              type="checkbox"
+              checked={wantDelete}
+              onChange={(event) => setWantDelete(event.target.checked)}
+            />
+            Show deleted records
+          </label>
+        </div>
+      }
       gridTableName={GRID_TABLE_NAME}
       listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
