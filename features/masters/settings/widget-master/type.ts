@@ -1,4 +1,4 @@
-export type WidgetPlatform = "mobile" | "desktop" | "web";
+export type WidgetPlatform = "Mobile" | "Desktop" | "Web";
 export type WidgetTypeFilter = WidgetPlatform | "all";
 
 /** One field row under a section (server: fixed.form_field). */

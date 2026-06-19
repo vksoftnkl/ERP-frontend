@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import type {
@@ -160,6 +160,9 @@ export default function ItemBrandMasterPage() {
   const [parentOptions, setParentOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_PARENT_OPTION,
   ]);
+  // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
+  // can see soft-deleted item brands. Lives beside the list search input.
+  const [wantDelete, setWantDelete] = useState(false);
   useEffect(() => {
     let mounted = true;
     void (async () => {
@@ -189,6 +192,27 @@ export default function ItemBrandMasterPage() {
     () => buildItemBrandFormFields(parentOptions),
     [parentOptions],
   );
+  // Adds the `grid_param` payload to the default page/limit/search list query.
+  // The server JSON-parses it and binds each key into the matching named token in
+  // grid 7's stored SQL; keys with no matching token are ignored. `wantdelete` is
+  // driven by the "Show deleted records" checkbox beside the list search input.
+  const buildListQuery = useCallback(
+    ({
+      searchTerm,
+      currentPage,
+      pageSize,
+    }: {
+      searchTerm: string;
+      currentPage: number;
+      pageSize: number;
+    }): Record<string, string> => ({
+      page: String(currentPage),
+      limit: String(pageSize),
+      ...(searchTerm ? { search: searchTerm } : {}),
+      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+    }),
+    [wantDelete],
+  );
   return (
     <CrudMasterPage
       title="Brand"
@@ -196,6 +220,19 @@ export default function ItemBrandMasterPage() {
       entityLabel="item brand"
       entityLabelPlural="item brands"
       apiEndpoints={API_ENDPOINTS}
+      buildListQuery={buildListQuery}
+      toolbarContent={
+        <div className={styles.filterCheckGroup}>
+          <label className={styles.filterCheckLabel}>
+            <input
+              type="checkbox"
+              checked={wantDelete}
+              onChange={(event) => setWantDelete(event.target.checked)}
+            />
+            Show deleted records
+          </label>
+        </div>
+      }
       gridTableName={GRID_TABLE_NAME}
         listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}

@@ -40,7 +40,7 @@ export const GODOWN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-
 export const HSN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 export const UI_TABLE_COLUMNS_ENDPOINT = "/ui-table-masters/get";
 export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-masters/create";
-export const WIDGET_MASTER_LIST_ENDPOINT = "/widget-masters/list";
+export const WIDGET_MASTER_LIST_ENDPOINT = "/widget-masters/get";
 export const ITEM_TAX_MASTER_LIST_ENDPOINT = "/configured-grid-sql/run?grid_id=5";
 export const ITEM_PRICE_QUERY_LIMIT = "100";
 export const ITEM_UNIT_CONVERSION_QUERY_LIMIT = "100";

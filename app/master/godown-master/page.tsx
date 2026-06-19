@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import RouteLoader from "@/components/feedback/route-loader";
 
-const LazyRoutePage = dynamic(() => import("@/features/masters/godown/page"), {
+const LazyRoutePage = dynamic(() => import("@/features/masters/inventory/godown/page"), {
   loading: () => <RouteLoader />,
   ssr: false,
 });

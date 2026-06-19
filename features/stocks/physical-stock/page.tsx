@@ -27,7 +27,7 @@ import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form
 import { useBusinessContext } from "@/components/layout/business-context";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import type { CrudMasterPageController } from "@/components/master/crud-master-page";
-import ItemMasterPageContent from "@/features/masters/item/item-master-page";
+import ItemMasterPageContent from "@/features/masters/inventory/item/item-master-page";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";
 import {

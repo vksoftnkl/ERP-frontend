@@ -17,7 +17,7 @@ import ReusableTable, {
   type ReusableTableColumnResizeEndPayload,
   type ReusableTableSortState,
 } from "@/components/ui/table";
-import { resolveRecordHistoryDisplayName } from "@/features/masters/audit-logs/record-history-route";
+import { resolveRecordHistoryDisplayName } from "@/features/masters/reports/audit-logs/record-history-route";
 import { RecordHistoryModal } from "@/features/masters/record-history/page";
 import { useApi } from "@/hooks/useApi";
 import { useMasterModule } from "@/store/hooks/useMasterModule";

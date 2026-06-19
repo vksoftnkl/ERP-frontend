@@ -4,6 +4,7 @@ import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
+import { SearchableSelect } from "@/components/design-system/ui/searchable-select";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import {
   getFirstDefinedValue,
@@ -68,9 +69,9 @@ const SECTION_POSITION_KEYS = ["sectionPosition", "section_position", "position"
 const SECTION_FIELDS_KEYS = ["fields", "field", "sectionFields"] as const;
 const RESPONSE_ARRAY_KEYS = ["data", "items", "results", "rows", "list", "sections"] as const;
 const WIDGET_PLATFORM_OPTIONS: Array<{ label: string; value: WidgetPlatform }> = [
-  { label: "Desktop", value: "desktop" },
-  { label: "Mobile", value: "mobile" },
-  { label: "Web", value: "web" },
+  { label: "Desktop", value: "Desktop" },
+  { label: "Mobile", value: "Mobile" },
+  { label: "Web", value: "Web" },
 ];
 const FILTER_PLATFORM_OPTIONS: Array<{ label: string; value: WidgetTypeFilter }> = [
   { label: "All Platforms", value: "all" },
@@ -116,9 +117,9 @@ function flattenMenuRecords(payload: unknown): Record<string, unknown>[] {
   walk(root);
   return flat;
 }
-function toWidgetPlatform(value: unknown, fallback: WidgetPlatform = "desktop"): WidgetPlatform {
+function toWidgetPlatform(value: unknown, fallback: WidgetPlatform = "Desktop"): WidgetPlatform {
   const normalized = toDisplayValue(value).toLowerCase();
-  if (normalized === "mobile" || normalized === "desktop" || normalized === "web") {
+  if (normalized === "Mobile" || normalized === "Desktop" || normalized === "Web") {
     return normalized;
   }
   return fallback;
@@ -206,6 +207,12 @@ export default function WidgetMasterPage() {
     definition: MENU_LOOKUP_DEFINITION,
     load: loadMenuOptions,
   });
+  // The toolbar filter reuses the form's menu list, minus the empty "Select menu"
+  // placeholder so an unset filter renders as "All Menus" rather than a blank pick.
+  const menuFilterOptions = useMemo(
+    () => menuOptions.filter((option) => option.value !== ""),
+    [menuOptions],
+  );
   const widgetFormFields = useMemo<ERPDynamicModalField[]>(
     () => [
       {
@@ -302,13 +309,42 @@ export default function WidgetMasterPage() {
     () => buildCreateDefaults(platformFilter, menuIdFilter),
     [menuIdFilter, platformFilter],
   );
+  // grid 46's stored SQL filters strictly on its `menuid` and `platform` tokens
+  // (`… where section_menu_id=menuid and section_platform=platform`), so both must
+  // be bound on every list request via the `grid_param` query field — an unbound
+  // token is what makes the run 500. The filters supply the values; an empty menu
+  // falls back to "0" so section_menu_id (integer) stays valid and simply matches
+  // nothing, and "All Platforms" sends "" for the same reason.
+  const buildListQuery = useCallback(
+    ({
+      searchTerm,
+      currentPage,
+      pageSize,
+    }: {
+      searchTerm: string;
+      currentPage: number;
+      pageSize: number;
+    }): Record<string, string> => ({
+      page: String(currentPage),
+      limit: String(pageSize),
+      ...(searchTerm ? { search: searchTerm } : {}),
+      grid_param: JSON.stringify({
+        menuid: menuIdFilter.trim() || "0",
+        platform: platformFilter === "all" ? "" : platformFilter,
+      }),
+    }),
+    [menuIdFilter, platformFilter],
+  );
   const filterSummary = useMemo(() => {
     const platformLabel =
       FILTER_PLATFORM_OPTIONS.find((option) => option.value === platformFilter)?.label ??
       "All Platforms";
-    const menuLabel = menuIdFilter ? `Menu #${menuIdFilter}` : "All Menus";
+    const menuLabel = menuIdFilter
+      ? menuFilterOptions.find((option) => option.value === menuIdFilter)?.label ??
+        `Menu #${menuIdFilter}`
+      : "All Menus";
     return `${platformLabel} • ${menuLabel}`;
-  }, [menuIdFilter, platformFilter]);
+  }, [menuFilterOptions, menuIdFilter, platformFilter]);
   const toolbarContent = useMemo(
     () => (
       <div className={styles.filterToolbar}>
@@ -327,18 +363,18 @@ export default function WidgetMasterPage() {
               ))}
             </select>
           </label>
-          <label className={styles.filterField}>
-            <span className={styles.filterLabel}>Menu Id</span>
-            <input
-              className={styles.filterSelect}
-              type="number"
-              min={1}
-              step={1}
-              placeholder="All"
+          <div className={styles.filterField}>
+            <span className={styles.filterLabel}>Menu</span>
+            <SearchableSelect
               value={menuIdFilter}
-              onChange={(event) => setMenuIdFilter(event.target.value.trim())}
+              options={menuFilterOptions}
+              onChange={setMenuIdFilter}
+              disabled={menusLoading}
+              placeholder={menusLoading ? "Loading menus…" : "All Menus"}
+              searchPlaceholder="Search menu"
+              emptyText="No menus found."
             />
-          </label>
+          </div>
         </div>
         <div className={styles.summaryPane}>
           <span className={styles.summaryBadge}>{filterSummary}</span>
@@ -348,7 +384,7 @@ export default function WidgetMasterPage() {
         </div>
       </div>
     ),
-    [filterSummary, menuIdFilter, platformFilter],
+    [filterSummary, menuFilterOptions, menuIdFilter, menusLoading, platformFilter],
   );
   const buildGetByIdRequest = useCallback(
     ({ rowSource }: { recordId: string | number; action: "view" | "update"; rowSource: Record<string, unknown> | null }) => {
@@ -358,7 +394,7 @@ export default function WidgetMasterPage() {
       const platform = rowSource
         ? toWidgetPlatform(
             getFirstDefinedValue(rowSource, SECTION_PLATFORM_KEYS),
-            platformFilter === "all" ? "desktop" : platformFilter,
+            platformFilter === "all" ? "Desktop" : platformFilter,
           )
         : platformFilter !== "all"
           ? platformFilter
@@ -378,6 +414,7 @@ export default function WidgetMasterPage() {
       entityLabel="section"
       entityLabelPlural="sections"
       apiEndpoints={API_ENDPOINTS}
+      buildListQuery={buildListQuery}
       listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
@@ -415,7 +452,7 @@ export default function WidgetMasterPage() {
             toDisplayValue(getFirstDefinedValue(rowSource, SECTION_POSITION_KEYS)) || "0",
           sectionPlatform: toWidgetPlatform(
             getFirstDefinedValue(rowSource, SECTION_PLATFORM_KEYS),
-            platformFilter === "all" ? "desktop" : platformFilter,
+            platformFilter === "all" ? "Desktop" : platformFilter,
           ),
           sectionVisibility: toSelectBoolean(
             getFirstDefinedValue(rowSource, SECTION_VISIBILITY_KEYS),
@@ -441,7 +478,7 @@ export default function WidgetMasterPage() {
           sectionGuiName: (values.sectionGuiName ?? "").trim(),
           sectionPosition: toNonNegativeInteger(values.sectionPosition ?? "0", 0),
           sectionVisibility: (values.sectionVisibility ?? "true") === "true",
-          sectionPlatform: toWidgetPlatform(values.sectionPlatform, "desktop"),
+          sectionPlatform: toWidgetPlatform(values.sectionPlatform, "Desktop"),
           fields,
           ...(shouldUpdate ? { sectionId: toUpdateId(editingItemId) } : {}),
         };

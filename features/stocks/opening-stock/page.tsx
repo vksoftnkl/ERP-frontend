@@ -18,8 +18,8 @@ import type { ERPDynamicSearchShortcutPayload } from "@/components/design-system
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import type { CrudMasterPageController } from "@/components/master/crud-master-page";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
-import GodownMasterPageContent from "@/features/masters/godown/page";
-import ItemMasterPageContent from "@/features/masters/item/item-master-page";
+import GodownMasterPageContent from "@/features/masters/inventory/godown/page";
+import ItemMasterPageContent from "@/features/masters/inventory/item/item-master-page";
 import { resolveOptionFromShortcut } from "@/features/masters/shared";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";

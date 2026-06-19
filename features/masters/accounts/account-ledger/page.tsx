@@ -28,7 +28,17 @@ import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import styles from "@/app/master/state-master/page.module.scss";
 import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { RecordHistoryModal } from "@/features/masters/record-history/page";
-import { FiDownload, FiSearch } from "react-icons/fi";
+import {
+  FiClock,
+  FiDownload,
+  FiEdit2,
+  FiPlusCircle,
+  FiPrinter,
+  FiRefreshCw,
+  FiSearch,
+  FiTrash2,
+  FiUpload,
+} from "react-icons/fi";
 // Import all modular logic
 import {
   API_ENDPOINTS,
@@ -638,6 +648,9 @@ export default function AccountLedgerMasterPage() {
   const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
   // State for table and search
   const [searchTerm, setSearchTerm] = useState("");
+  // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
+  // can see soft-deleted account ledgers. Lives beside the list search input.
+  const [wantDelete, setWantDelete] = useState(false);
   const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [totalEntries, setTotalEntries] = useState(0);
@@ -836,6 +849,9 @@ export default function AccountLedgerMasterPage() {
       const query: Record<string, string> = {
         page: String(Math.max(1, page)),
         limit: String(Math.max(1, limit)),
+        // The server JSON-parses this and binds each key into the matching named
+        // token in grid 26's stored SQL; keys with no matching token are ignored.
+        grid_param: JSON.stringify({ wantdelete: wantDelete }),
       };
       if (normalizedTerm) {
         query.search = normalizedTerm;
@@ -867,7 +883,7 @@ export default function AccountLedgerMasterPage() {
         );
       }
     },
-    [getAll],
+    [getAll, wantDelete],
   );
   // Debounced load records
   useEffect(() => {
@@ -1501,6 +1517,10 @@ export default function AccountLedgerMasterPage() {
     setCurrentPage(DEFAULT_PAGE);
     setSearchTerm(query);
   }, []);
+  const handleWantDeleteChange = useCallback((checked: boolean) => {
+    setCurrentPage(DEFAULT_PAGE);
+    setWantDelete(checked);
+  }, []);
   const handlePageSizeChange = useCallback((nextPageSize: number) => {
     setCurrentPage(DEFAULT_PAGE);
     setPageSize(nextPageSize);
@@ -1509,6 +1529,30 @@ export default function AccountLedgerMasterPage() {
   const handleDownloadRows = useCallback(() => {
     downloadLedgerCsv(listHeading, renderedColumns, renderedRows);
   }, [listHeading, renderedColumns, renderedRows]);
+  const selectedRow = useMemo(
+    () => renderedRows.find((row) => row.__rowId === selectedRowId) ?? null,
+    [renderedRows, selectedRowId],
+  );
+  const handleRefresh = useCallback(() => {
+    void loadRecords(searchTerm, currentPage, pageSize);
+  }, [loadRecords, searchTerm, currentPage, pageSize]);
+  const handleToolbarEdit = useCallback(() => {
+    if (selectedRow) {
+      void openExistingModal(selectedRow, "update");
+    }
+  }, [openExistingModal, selectedRow]);
+  const handleToolbarDelete = useCallback(() => {
+    if (selectedRow) {
+      handleDeleteRow(selectedRow);
+    }
+  }, [handleDeleteRow, selectedRow]);
+  const handleToolbarLogs = useCallback(() => {
+    if (selectedRow) {
+      handleRowLogs(selectedRow);
+    }
+  }, [handleRowLogs, selectedRow]);
+  const isToolbarLogsDisabled =
+    !selectedRow || `${selectedRow.__recordId}`.trim().length === 0;
   const handleGridColumnResizeEnd = useCallback(
     (payload: ReusableTableColumnResizeEndPayload<LedgerTableRow>) => {
       if (accountLedgerGridId === null || payload.tableWidthPx <= 0) {
@@ -1558,6 +1602,81 @@ export default function AccountLedgerMasterPage() {
       // useApi handles the visible error toast.
     }
   }, [refetchGridColumns, saveGridColumnWidth]);
+  const handleGridColumnReorder = useCallback(
+    (nextColumns: ReusableTableColumn<LedgerTableRow>[]) => {
+      if (accountLedgerGridId === null || gridSettingsColumns.length === 0) {
+        return;
+      }
+      // Map the dragged table columns back to their grid columns, in new order.
+      const nextVisibleGridColumns: GridColumnConfig[] = [];
+      const seenSerialIds = new Set<string>();
+      for (const tableColumn of nextColumns) {
+        const gridColumn = resolveGridColumnForLedgerTableColumn(tableColumn, gridColumns);
+        if (!gridColumn?.serialId || seenSerialIds.has(gridColumn.serialId)) {
+          continue;
+        }
+        seenSerialIds.add(gridColumn.serialId);
+        nextVisibleGridColumns.push(gridColumn);
+      }
+      if (nextVisibleGridColumns.length === 0) {
+        return;
+      }
+      // Slot the reordered (visible) columns back into the full grid order,
+      // leaving any hidden columns in their existing positions.
+      const visibleSerialIds = new Set(nextVisibleGridColumns.map((column) => column.serialId));
+      const visibleQueue = [...nextVisibleGridColumns];
+      const nextGridColumnOrder: GridColumnConfig[] = [];
+      for (const gridColumn of gridSettingsColumns) {
+        if (!gridColumn.serialId) {
+          continue;
+        }
+        if (visibleSerialIds.has(gridColumn.serialId)) {
+          const nextVisibleColumn = visibleQueue.shift();
+          if (nextVisibleColumn) {
+            nextGridColumnOrder.push(nextVisibleColumn);
+          }
+          continue;
+        }
+        nextGridColumnOrder.push(gridColumn);
+      }
+      nextGridColumnOrder.push(...visibleQueue);
+      void (async () => {
+        try {
+          const saves: Array<Promise<unknown>> = [];
+          nextGridColumnOrder.forEach((gridColumn, index) => {
+            const basePayload = buildLedgerGridColumnBasePayload(gridColumn, accountLedgerGridId);
+            if (!basePayload) {
+              return;
+            }
+            saves.push(
+              saveGridColumnWidth({
+                body: { ...basePayload, grid_column_position: index + 1 },
+              }),
+            );
+          });
+          if (saves.length === 0) {
+            return;
+          }
+          await Promise.all(saves);
+          void refetchGridColumns();
+          await loadRecords(searchTerm, currentPage, pageSize);
+        } catch {
+          // useApi handles the visible error toast.
+        }
+      })();
+    },
+    [
+      accountLedgerGridId,
+      currentPage,
+      gridColumns,
+      gridSettingsColumns,
+      loadRecords,
+      pageSize,
+      refetchGridColumns,
+      saveGridColumnWidth,
+      searchTerm,
+    ],
+  );
   const openGridSettingsModal = useCallback(
     (mode: "filter" | "visibility") => {
       const nextSelections: Record<string, boolean> = {};
@@ -1761,27 +1880,6 @@ export default function AccountLedgerMasterPage() {
           document.body,
         )
       : null;
-  const toolbarContent = (
-    <div className={styles.masterHeader}>
-      <div className={styles.masterTitleWrap}>
-        <h1 className={styles.masterTitle}>{listHeading}</h1>
-      </div>
-      <div className={styles.masterSearchWrap}>
-        <span className={styles.masterSearchIconButton} aria-hidden="true">
-          <FiSearch className={styles.masterSearchIcon} />
-        </span>
-        <input
-          type="text"
-          className={styles.masterSearchInput}
-          value={searchTerm}
-          onChange={(event) => handleSearchChange(event.target.value)}
-          placeholder="Search..."
-          autoComplete="off"
-          aria-label="Search account ledgers"
-        />
-      </div>
-    </div>
-  );
   const pendingDeleteLabel = useMemo(() => {
     if (!pendingDeleteRow) return "";
     return (
@@ -1838,6 +1936,96 @@ export default function AccountLedgerMasterPage() {
       <div className={styles.viewport}>
         <div className={styles.board}>
           <section className={styles.content}>
+            {/* Page Header */}
+            <div className={styles.pageHeader}>
+              <div className={styles.pageHeaderText}>
+                <h1 className={styles.pageTitle}>{listHeading}</h1>
+                <p className={styles.pageSubtitle}>
+                  Manage all account ledgers in your organization
+                </p>
+              </div>
+            </div>
+            {/* Icon Toolbar */}
+            <div className={styles.iconToolbar}>
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${styles.iconBtnAdd}`}
+                onClick={openCreateModal}
+                disabled={saveLoading || detailsLoading}
+                title="Add"
+              >
+                <span className={styles.iconBtnBox}><FiPlusCircle aria-hidden="true" /></span>
+                <span>Add</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${styles.iconBtnEdit}`}
+                onClick={handleToolbarEdit}
+                disabled={!selectedRow || saveLoading || detailsLoading}
+                title="Edit selected row"
+              >
+                <span className={styles.iconBtnBox}><FiEdit2 aria-hidden="true" /></span>
+                <span>Edit</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${styles.iconBtnDelete}`}
+                onClick={handleToolbarDelete}
+                disabled={!selectedRow || deleteLoading || saveLoading || detailsLoading}
+                title="Delete selected row"
+              >
+                <span className={styles.iconBtnBox}><FiTrash2 aria-hidden="true" /></span>
+                <span>Delete</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${styles.iconBtnRefresh}`}
+                onClick={handleRefresh}
+                disabled={loading}
+                title="Refresh"
+              >
+                <span className={styles.iconBtnBox}><FiRefreshCw aria-hidden="true" /></span>
+                <span>Refresh</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${styles.iconBtnImport}`}
+                title="Import"
+                disabled
+              >
+                <span className={styles.iconBtnBox}><FiUpload aria-hidden="true" /></span>
+                <span>Import</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${styles.iconBtnExcel}`}
+                onClick={handleDownloadRows}
+                disabled={renderedRows.length === 0}
+                title={`Export ${listHeading} as CSV`}
+              >
+                <span className={styles.iconBtnBox}><FiDownload aria-hidden="true" /></span>
+                <span>Export Excel</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${styles.iconBtnPrint}`}
+                title="Print"
+                disabled
+              >
+                <span className={styles.iconBtnBox}><FiPrinter aria-hidden="true" /></span>
+                <span>Print</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${styles.iconBtnHistory}`}
+                onClick={handleToolbarLogs}
+                disabled={isToolbarLogsDisabled}
+                title="View history"
+              >
+                <span className={styles.iconBtnBox}><FiClock aria-hidden="true" /></span>
+                <span>History</span>
+              </button>
+            </div>
             {error ? (
               <div className={styles.errorBox}>
                 <p className={styles.errorText}>
@@ -1877,47 +2065,58 @@ export default function AccountLedgerMasterPage() {
                 </button>
               </div>
             ) : null}
+            {/* Filter Card */}
+            <div className={styles.filterCard}>
+              {searchTerm.trim() ? <span className={styles.filterBadge}>1</span> : null}
+              <div className={styles.filterRow}>
+                <div className={styles.filterGroup}>
+                  <label className={styles.filterLabel} htmlFor="account-ledger-search-input">
+                    Search
+                  </label>
+                  <div className={styles.filterSearchWrap}>
+                    <span className={styles.masterSearchIconButton} aria-hidden="true">
+                      <FiSearch className={styles.masterSearchIcon} />
+                    </span>
+                    <input
+                      id="account-ledger-search-input"
+                      type="text"
+                      className={styles.masterSearchInput}
+                      value={searchTerm}
+                      onChange={(event) => handleSearchChange(event.target.value)}
+                      placeholder="Search by account ledger name..."
+                      autoComplete="off"
+                      aria-label="Search account ledgers"
+                    />
+                  </div>
+                </div>
+                <div className={styles.filterCheckGroup}>
+                  <label className={styles.filterCheckLabel}>
+                    <input
+                      type="checkbox"
+                      checked={wantDelete}
+                      onChange={(event) => handleWantDeleteChange(event.target.checked)}
+                    />
+                    Show deleted records
+                  </label>
+                </div>
+              </div>
+            </div>
             <ReusableTable
               columns={renderedColumns}
               rows={renderedRows}
               rowKey="__rowId"
-              toolbarContent={toolbarContent}
-              toolbarActions={
-                <button
-                  type="button"
-                  className={styles.masterDownloadButton}
-                  onClick={handleDownloadRows}
-                  disabled={renderedRows.length === 0}
-                  aria-label={`Download ${listHeading}`}
-                  title={`Download ${listHeading}`}
-                >
-                  <FiDownload aria-hidden="true" />
-                </button>
-              }
               wrapperClassName={styles.masterTable}
               tableClassName={styles.masterDataTable}
               tableLayout="fixed"
               minWidth="980px"
               reorderableColumns
               resizableColumns
+              onColumnReorder={handleGridColumnReorder}
               onColumnResizeEnd={handleGridColumnResizeEnd}
               onBodyContextMenu={handleTableBodyContextMenu}
               activeRowKey={selectedRowId}
               onRowClick={(row) => setSelectedRowId(row.__rowId)}
               onRowDoubleClick={(row) => void openExistingModal(row, "view")}
-              onCreate={openCreateModal}
-              createLabel="Add"
-              onView={(row) => void openExistingModal(row, "view")}
-              onUpdate={(row) => void openExistingModal(row, "update")}
-              onDelete={handleDeleteRow}
-              onLogs={handleRowLogs}
-              isViewDisabled={() => saveLoading || detailsLoading}
-              isUpdateDisabled={() => saveLoading || detailsLoading}
-              isDeleteDisabled={() => deleteLoading || saveLoading || detailsLoading}
-              isLogsDisabled={(row) => `${row.__recordId}`.trim().length === 0}
-              actionsAsIcons
-              updateLabel="Update"
-              deleteLabel={deleteLoading ? "Deleting..." : "Delete"}
               sortable
               paginated
               manualPagination

@@ -1,0 +1,168 @@
+$cols: minmax(0, 1fr) 220px;
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #c2cad1;
+  background: #ffffff;
+}
+
+.tableScroll {
+  max-height: min(52vh, 420px);
+  overflow: auto;
+}
+
+.headRow,
+.row {
+  display: grid;
+  grid-template-columns: $cols;
+}
+
+.headRow {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.headCell {
+  padding: 7px 12px;
+  font-weight: 700;
+  color: #4a3f17;
+  background: #f3e9a6;
+  border-bottom: 1px solid #cdbf6e;
+  border-right: 1px solid #cdbf6e;
+
+  &:last-child {
+    border-right: none;
+  }
+}
+
+.row {
+  border-bottom: 1px solid #eef1f4;
+
+  &:hover {
+    background: #f4f7f9;
+  }
+}
+
+.sectionRow {
+  background: #fbfcfd;
+
+  &:hover {
+    background: #f1f5f8;
+  }
+}
+
+.widgetCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-right: 1px solid #eef1f4;
+  min-width: 0;
+}
+
+.indent {
+  padding-left: 34px;
+}
+
+.secondaryCell {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  min-width: 0;
+}
+
+.toggle {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #9aa3aa;
+  background: #ffffff;
+  color: #30424f;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: #eef3f7;
+  }
+}
+
+.checkLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  min-width: 0;
+}
+
+.checkbox {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  accent-color: #3f87c6;
+  cursor: inherit;
+}
+
+.sectionLabel {
+  font-weight: 700;
+  color: #30424f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fieldLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fieldHint {
+  font-size: 10px;
+  font-style: italic;
+  color: #97a1a9;
+  white-space: nowrap;
+}
+
+.secondaryInput {
+  width: 100%;
+  min-height: 26px;
+  border: 1px solid #c3cbd1;
+  background: #ffffff;
+  color: #1d2b36;
+  font: inherit;
+  padding: 0 8px;
+
+  &:focus {
+    outline: 1px solid #3f87c6;
+    outline-offset: 0;
+  }
+
+  &:disabled {
+    background: #f3f5f7;
+  }
+}
+
+.state,
+.stateError {
+  padding: 14px 12px;
+  color: #5b6770;
+}
+
+.stateError {
+  color: #b42318;
+}
+
+.caption {
+  padding: 6px 12px;
+  font-weight: 700;
+  color: #5b6770;
+  border-top: 1px solid #c2cad1;
+  background: #f1f5f8;
+}

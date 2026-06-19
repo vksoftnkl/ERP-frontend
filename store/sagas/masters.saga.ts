@@ -26,12 +26,16 @@ function extractModuleKey(action: {
   return action.meta?.arg?.originalArgs?.moduleKey ?? "";
 }
 
-function extractErrorMessage(payload: unknown): string {
+function extractMessage(payload: unknown, fallback: string): string {
   if (payload && typeof payload === "object" && "message" in payload) {
     const msg = (payload as { message?: unknown }).message;
     if (typeof msg === "string" && msg.trim()) return msg.trim();
   }
-  return "Request failed.";
+  return fallback;
+}
+
+function extractErrorMessage(payload: unknown): string {
+  return extractMessage(payload, "Request failed.");
 }
 
 // ─── Workers ─────────────────────────────────────────────────────────────────
@@ -53,13 +57,18 @@ function* handleSaveSuccessWorker(action: {
 }
 
 function* handleDeleteSuccessWorker(action: {
+  payload?: unknown;
   meta: { arg: { originalArgs: { moduleKey?: string } } };
 }): Generator {
   const moduleKey = extractModuleKey(action);
   if (moduleKey) {
     yield put(editModalClosed({ moduleKey }));
   }
-  toast.success("Deleted successfully.");
+  // The delete endpoint toggles soft-delete: deleting an active record returns a
+  // "… deleted successfully" message, while hitting it on an already-deleted record
+  // restores it and returns "… restored successfully". Surface the server message so
+  // the toast reflects which action actually happened.
+  toast.success(extractMessage(action.payload, "Deleted successfully."));
 }
 
 function* handleSaveFailureWorker(action: { payload?: unknown }): Generator {

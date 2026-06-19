@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { use } from "react";
 import RouteLoader from "@/components/feedback/route-loader";
 
-const LazyRoutePage = dynamic(() => import("@/features/masters/dropdown-designer/page"), {
+const LazyRoutePage = dynamic(() => import("@/features/masters/settings/dropdown-designer/page"), {
   loading: () => <RouteLoader />,
   ssr: false,
 });
