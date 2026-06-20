@@ -1,0 +1,375 @@
+$cols: minmax(0, 1fr) 220px;
+
+.tree {
+  // Rendered as a custom field inside the modal's 2-column `.field` grid; span
+  // both tracks (label + control) so it fills the row instead of being dropped
+  // into the narrow ~9.75rem label column.
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ds-border, #ccd8e4);
+  border-radius: var(--ds-radius-md, 6px);
+  background: var(--ds-surface, #ffffff);
+  overflow: hidden;
+}
+
+.tableScroll {
+  max-height: min(52vh, 420px);
+  overflow: auto;
+}
+
+.headRow,
+.row {
+  display: grid;
+  grid-template-columns: $cols;
+}
+
+.headRow {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.headCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ds-text-muted, #4e6374);
+  background: var(--ds-surface-muted, #e7eef5);
+  border-bottom: 1px solid var(--ds-border, #ccd8e4);
+
+  & + & {
+    border-left: 1px solid var(--ds-border, #ccd8e4);
+  }
+}
+
+.expandAll {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ds-text-muted, #4e6374);
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(15, 116, 201, 0.12);
+    color: var(--ds-primary, #0f74c9);
+  }
+}
+
+.row {
+  border-bottom: 1px solid #eef1f4;
+  transition: background 0.12s ease;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: #f4f8fb;
+  }
+}
+
+.sectionRow {
+  background: #f6f9fb;
+  box-shadow: inset 3px 0 0 var(--ds-primary, #0f74c9);
+
+  &:hover {
+    background: #eef4f9;
+  }
+}
+
+// Hidden (toggled-off) rows read as muted so the on/off state is scannable.
+.rowOff {
+  .sectionLabel,
+  .fieldLabel {
+    color: var(--ds-text-muted, #8a98a5);
+  }
+
+  &.sectionRow {
+    box-shadow: inset 3px 0 0 #c8d2db;
+  }
+}
+
+.widgetCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  min-width: 0;
+}
+
+.secondaryCell {
+  display: flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-left: 1px solid #eef1f4;
+  min-width: 0;
+}
+
+// Field rows sit under their section with a subtle tree guide (vertical line +
+// horizontal tick) aligned to the section chevron above.
+.indent {
+  position: relative;
+  padding-left: 38px;
+
+  &::before {
+    content: "";
+    position: absolute;
+    left: 21px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: #dce5ee;
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    left: 21px;
+    top: 50%;
+    width: 11px;
+    height: 1px;
+    background: #dce5ee;
+  }
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ds-text-muted, #4e6374);
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(15, 116, 201, 0.12);
+    color: var(--ds-primary, #0f74c9);
+  }
+}
+
+.chevron {
+  transition: transform 0.15s ease;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.switchLabel {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  user-select: none;
+  min-width: 0;
+}
+
+// CSS toggle switch wrapping a native checkbox (kept for accessibility).
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 18px;
+
+  input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+}
+
+.slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #c4ced8;
+  transition: background 0.15s ease;
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(16, 45, 69, 0.3);
+    transition: transform 0.15s ease;
+  }
+}
+
+.switch input:checked + .slider {
+  background: var(--ds-primary, #0f74c9);
+
+  &::before {
+    transform: translateX(12px);
+  }
+}
+
+.switch input:focus-visible + .slider {
+  box-shadow: 0 0 0 2px rgba(15, 116, 201, 0.4);
+}
+
+.switch input:disabled + .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sectionLabel {
+  font-weight: 700;
+  color: var(--ds-text, #1d2b36);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fieldLabel {
+  color: var(--ds-text, #1d2b36);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.countBadge {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ds-text-muted, #4e6374);
+  background: #eaf1f7;
+  border: 1px solid #d6e2ed;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.fieldHint {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ds-warning, #b97506);
+  background: #fdf3e0;
+  border: 1px solid #f1dcb4;
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.secondaryInput {
+  width: 100%;
+  min-height: 28px;
+  border: 1px solid var(--ds-border, #c3cbd1);
+  border-radius: var(--ds-radius-sm, 4px);
+  background: #ffffff;
+  color: var(--ds-text, #1d2b36);
+  font: inherit;
+  padding: 0 8px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+
+  &::placeholder {
+    color: #aeb9c3;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--ds-primary, #3f87c6);
+    box-shadow: 0 0 0 2px rgba(15, 116, 201, 0.18);
+  }
+
+  &:disabled {
+    background: #f3f5f7;
+    color: #8a98a5;
+  }
+}
+
+.state,
+.stateError {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 12px;
+  color: var(--ds-text-muted, #5b6770);
+}
+
+.stateError {
+  color: var(--ds-danger, #b42318);
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #cdd8e1;
+  border-top-color: var(--ds-primary, #0f74c9);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--ds-border, #c2cad1);
+  background: var(--ds-surface-muted, #f1f5f8);
+}
+
+.footerCount {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--ds-text-muted, #5b6770);
+  font-variant-numeric: tabular-nums;
+
+  strong {
+    color: var(--ds-text, #30424f);
+    font-weight: 700;
+  }
+}
+
+.footerBar {
+  flex: 1 1 auto;
+  height: 6px;
+  border-radius: 999px;
+  background: #d7e1ea;
+  overflow: hidden;
+}
+
+.footerBarFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--ds-primary, #0f74c9);
+  transition: width 0.25s ease;
+}

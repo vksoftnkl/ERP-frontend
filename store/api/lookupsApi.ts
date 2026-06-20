@@ -5,14 +5,24 @@ import {
   extractDetailSource,
 } from "@/features/masters/shared/normalizers";
 import { baseApi } from "@/store/api/baseApi";
-const ITEM_LIST_ENDPOINT = "/configured-grid-sql/run";
+const ITEM_LIST_ENDPOINT = "/dropdown-details/run";
 const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const ITEM_PRICE_DETAILS_ENDPOINT = "/item-price-details/get";
 const ITEM_PRICE_DETAILS_BY_BARCODE_ENDPOINT = "/item-price-details/get-by-barcode";
 const ITEM_TAX_LIST_ENDPOINT = "/configured-grid-sql/run";
 const ITEM_TAX_GET_ENDPOINT = "/item-taxes/get";
+// `dropdown_details.dropdown_id` for the configured items dropdown. The seeded
+// items dropdown is id 6 (`SELECT item_id, ..., item_name_en ... FROM inventory.item_master`).
+const ITEM_DROPDOWN_ID = "6";
+// Dynamic filter values substituted into the dropdown SQL. The items SQL has no
+// placeholders today, so these pass through harmlessly but are kept in one place
+// for when the branch/company scope is needed.
+const ITEM_DROPDOWN_PARAM = JSON.stringify({ branch_id: 1, company_id: 2 });
 const ITEM_LOOKUP_QUERY = {
-  grid_id: "1",
+  dropdown_id: ITEM_DROPDOWN_ID,
+  page: "1",
+  limit: "20",
+  dropdown_param: ITEM_DROPDOWN_PARAM,
 } as const;
 const UNIT_LOOKUP_QUERY = {
   module: "units",

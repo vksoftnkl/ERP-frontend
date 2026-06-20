@@ -1,7 +1,17 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
-import WidgetVisibilityTree, { type WidgetTreeSectionView } from "./widget-visibility-tree";
+import WidgetVisibilityTree, {
+  type WidgetTreeSectionView,
+} from "@/features/masters/shared/widget-visibility-tree";
+import {
+  applyWidgetFieldConfig,
+  buildControllableFieldNames,
+  buildWidgetFieldConfig,
+  type ResolvedFieldConfig,
+  type WidgetMasterSectionConfig,
+  type WidgetMastersResponse,
+} from "@/features/masters/shared/widget-config";
 import { useApi } from "@/hooks/useApi";
 import {
   ERPDynamicModalForm,
@@ -61,9 +71,7 @@ const WIDGET_CONFIG_TREE_ENDPOINT = "/widget-masters/config";
 const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 // Backend fieldNames (lowercased) that map to a real form field, so their popup
 // checkbox can actually show/hide something. Others render read-only ("not on form").
-const WIDGET_CONTROLLABLE_FIELD_NAMES = new Set(
-  Object.values(WIDGET_FIELD_NAME_BY_FORM_FIELD).map((name) => name.toLowerCase()),
-);
+const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
 const PARENT_GROUP_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const PARENT_GROUP_LOOKUP_QUERY = {
   module: "itemGroups",
@@ -125,105 +133,6 @@ const INITIAL_FORM_VALUES = {
   groupDefaultUomId: "",
   groupPhotoUrl: "",
 } as const;
-/** GET /widget-masters/get → one configured field row (server: fixed.form_field). */
-interface WidgetMasterFieldConfig {
-  fieldId: number;
-  fieldSectionId: number;
-  fieldName: string;
-  fieldGuiName: string | null;
-  fieldSecondaryText: string | null;
-  fieldPosition: number;
-  fieldVisibility: boolean;
-}
-/** GET /widget-masters/get → one section with its nested fields (server: fixed.form_section). */
-interface WidgetMasterSectionConfig {
-  sectionId: number;
-  sectionMenuId: number;
-  sectionName: string;
-  sectionGuiName: string;
-  sectionPosition: number;
-  sectionVisibility: boolean;
-  sectionPlatform: string;
-  fields: WidgetMasterFieldConfig[];
-}
-/** Envelope returned by GET /widget-masters/get. */
-interface WidgetMastersResponse {
-  success: boolean;
-  data: WidgetMasterSectionConfig[];
-}
-/** The three properties pulled from the config and applied to a hardcoded field. */
-type ResolvedFieldConfig = {
-  /** fieldGuiName, trimmed; empty string means "keep the hardcoded label". */
-  label: string;
-  /** Global render order derived from sectionPosition then fieldPosition (ascending). */
-  order: number;
-  /** fieldVisibility; when false the field is dropped from rendering. */
-  visible: boolean;
-};
-// Flatten the configured sections into a lookup keyed by the lowercased backend
-// fieldName. Sections are ordered by sectionPosition and fields by fieldPosition
-// so the assigned `order` is a stable ascending render order across the form.
-function buildWidgetFieldConfig(
-  response: WidgetMastersResponse | null | undefined,
-): Map<string, ResolvedFieldConfig> {
-  const config = new Map<string, ResolvedFieldConfig>();
-  const sections = Array.isArray(response?.data) ? response.data : [];
-  const orderedSections = [...sections].sort(
-    (a, b) => (a.sectionPosition ?? 0) - (b.sectionPosition ?? 0),
-  );
-  let order = 0;
-  for (const section of orderedSections) {
-    const fields = Array.isArray(section?.fields) ? section.fields : [];
-    const orderedFields = [...fields].sort(
-      (a, b) => (a.fieldPosition ?? 0) - (b.fieldPosition ?? 0),
-    );
-    for (const field of orderedFields) {
-      const key = (field?.fieldName ?? "").trim().toLowerCase();
-      if (!key) {
-        continue;
-      }
-      config.set(key, {
-        label: (field.fieldGuiName ?? "").trim(),
-        order,
-        visible: field.fieldVisibility !== false,
-      });
-      order += 1;
-    }
-  }
-  return config;
-}
-// Re-label, re-order, and show/hide the hardcoded fields from the config. A field
-// with no configured entry keeps its label and is rendered after configured ones;
-// a configured field with visibility=false is dropped. Nothing else is touched.
-function applyWidgetFieldConfig(
-  fields: ERPDynamicModalField[],
-  config: Map<string, ResolvedFieldConfig>,
-): ERPDynamicModalField[] {
-  if (config.size === 0) {
-    return fields;
-  }
-  const configured: Array<{ field: ERPDynamicModalField; order: number; index: number }> = [];
-  const unconfigured: ERPDynamicModalField[] = [];
-  fields.forEach((field, index) => {
-    const backendName = WIDGET_FIELD_NAME_BY_FORM_FIELD[field.name];
-    const resolved = backendName ? config.get(backendName.toLowerCase()) : undefined;
-    if (!resolved) {
-      unconfigured.push(field);
-      return;
-    }
-    if (!resolved.visible) {
-      return;
-    }
-    configured.push({
-      field: resolved.label ? { ...field, label: resolved.label } : field,
-      order: resolved.order,
-      index,
-    });
-  });
-  configured.sort((a, b) => a.order - b.order || a.index - b.index);
-  return [...configured.map((entry) => entry.field), ...unconfigured];
-}
-
 function buildItemGroupFormFields(parentOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
   return [
     {
@@ -374,7 +283,12 @@ export default function ItemGroupMasterPage() {
   }, [getParentGroupLookup]);
 
   const formFields = useMemo(
-    () => applyWidgetFieldConfig(buildItemGroupFormFields(parentOptions), widgetFieldConfig),
+    () =>
+      applyWidgetFieldConfig(
+        buildItemGroupFormFields(parentOptions),
+        widgetFieldConfig,
+        WIDGET_FIELD_NAME_BY_FORM_FIELD,
+      ),
     [parentOptions, widgetFieldConfig],
   );
 

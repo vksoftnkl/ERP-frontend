@@ -58,7 +58,7 @@ const SECTION_ID_KEYS = ["sectionId", "section_id", "id", "_id"] as const;
 const SECTION_MENU_ID_KEYS = ["sectionMenuId", "section_menu_id", "menuId", "menu_id"] as const;
 const SECTION_NAME_KEYS = ["sectionName", "section_name", "name"] as const;
 const SECTION_GUI_NAME_KEYS = ["sectionGuiName", "section_gui_name", "guiName"] as const;
-const SECTION_PLATFORM_KEYS = ["sectionPlatform", "section_platform", "platform", "type"] as const;
+const  SECTION_PLATFORM_KEYS = ["sectionPlatform", "section_platform", "platform", "type"] as const;
 const SECTION_VISIBILITY_KEYS = [
   "sectionVisibility",
   "section_visibility",
@@ -118,9 +118,15 @@ function flattenMenuRecords(payload: unknown): Record<string, unknown>[] {
   return flat;
 }
 function toWidgetPlatform(value: unknown, fallback: WidgetPlatform = "Desktop"): WidgetPlatform {
-  const normalized = toDisplayValue(value).toLowerCase();
-  if (normalized === "Mobile" || normalized === "Desktop" || normalized === "Web") {
-    return normalized;
+  const normalized = toDisplayValue(value).trim().toLowerCase();
+  if (normalized === "mobile") {
+    return "Mobile";
+  }
+  if (normalized === "desktop") {
+    return "Desktop";
+  }
+  if (normalized === "web") {
+    return "Web";
   }
   return fallback;
 }
@@ -187,7 +193,7 @@ function buildCreateDefaults(
     sectionGuiName: "",
     sectionMenuId: menuIdFilter || "",
     sectionPosition: "0",
-    sectionPlatform: platformFilter === "all" ? "desktop" : platformFilter,
+    sectionPlatform: platformFilter === "all" ? "Desktop" : platformFilter,
     sectionVisibility: "true",
     fields: serializeFieldDrafts([]),
   };
@@ -478,7 +484,7 @@ export default function WidgetMasterPage() {
           sectionGuiName: (values.sectionGuiName ?? "").trim(),
           sectionPosition: toNonNegativeInteger(values.sectionPosition ?? "0", 0),
           sectionVisibility: (values.sectionVisibility ?? "true") === "true",
-          sectionPlatform: toWidgetPlatform(values.sectionPlatform, "Desktop"),
+          sectionPlatform: toWidgetPlatform(values.sectionPlatform),
           fields,
           ...(shouldUpdate ? { sectionId: toUpdateId(editingItemId) } : {}),
         };
