@@ -16,12 +16,14 @@ import {
   PROFIT_TYPE_OPTION_LABELS,
   TRACKING_TYPE_OPTION_LABELS,
   LOOKUP_FIELD_CONFIG,
+  LOOKUP_TABLE_COLUMNS,
 } from "./constants";
 import type {
   ColumnDefinition,
   LookupCellState,
   LookupKind,
   OpeningStockRow,
+  StockLookupOption,
 } from "./opening-stock.types";
 import {
   buildUomOptions,
@@ -53,8 +55,8 @@ type StockTableRowProps = {
   unitDecimalCountById: Record<string, number>;
   openLookupCell: LookupCellState | null;
   lookupSearchQuery: string;
-  filteredItemOptions: ERPDynamicSelectOption[];
-  filteredGodownOptions: ERPDynamicSelectOption[];
+  filteredItemOptions: StockLookupOption[];
+  filteredGodownOptions: StockLookupOption[];
   isItemLookupLoading: boolean;
   isGodownLookupLoading: boolean;
   lookupSearchInputRef: RefObject<HTMLInputElement | null>;
@@ -281,6 +283,7 @@ export function StockTableRow({
                 header={column.header}
                 emptyMessage={lookupFieldConfig.emptyMessage}
                 options={lookupOptions}
+                columns={LOOKUP_TABLE_COLUMNS[lookupKind]}
                 searchQuery={lookupSearchQuery}
                 shortcutValues={row.values}
                 hasValidationError={hasValidationError}

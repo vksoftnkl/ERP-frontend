@@ -921,6 +921,52 @@
   color: #6d7f92;
   font-size: 0.92rem;
 }
+// ─── Tabular lookup dropdown (item / godown) ──────────────────────────────────
+// Echoes the legacy ERP lookup popup: a S.No + code + name grid with a sticky
+// header row. Only applied when the cell is given a `columns` config.
+.lookupMenuTable {
+  // The two-column grid needs more room than the cell width, so let the menu
+  // grow to the right of its trigger instead of clamping to the cell.
+  right: auto;
+  min-width: 24rem;
+  max-width: min(34rem, 92vw);
+}
+.lookupTableHead {
+  display: grid;
+  align-items: center;
+  column-gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--erp-radius);
+  background: #f4ecc4;
+  border: 1px solid #e4d89a;
+  color: #4a4326;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: none;
+}
+.lookupHeadCell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lookupOptionRow {
+  display: grid;
+  align-items: center;
+  column-gap: 0.5rem;
+  padding: 0.42rem 0.6rem;
+}
+.lookupBodyCell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lookupSerialCell {
+  text-align: center;
+  color: #6d7f92;
+  font-variant-numeric: tabular-nums;
+}
 .numericInput {
   min-width: 0;
   text-align: right;

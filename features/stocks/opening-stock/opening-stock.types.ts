@@ -5,6 +5,8 @@ export type {
   ColumnKind,
   LookupCellState,
   LookupKind,
+  LookupTableColumn,
+  StockLookupOption,
 } from "@/features/stocks/_shared/types";
 
 export type {
@@ -56,6 +58,12 @@ export type GodownLookupRecord = {
   label?: string | null;
   "Location Name"?: string | null;
   "location name"?: string | null;
+  gdl_code?: string | null;
+  gdlCode?: string | null;
+  gdl_short?: string | null;
+  gdlShort?: string | null;
+  search_code?: string | null;
+  searchCode?: string | null;
   gdl_branch_id?: string | null;
   gdlBranchId?: string | null;
   branch_id?: string | null;

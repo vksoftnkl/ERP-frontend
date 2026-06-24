@@ -262,8 +262,21 @@ export function buildLookupOptions(
     if (!id) {
       continue;
     }
+    // The name-id lookup returns an empty generic `name` for some modules (notably
+    // accountGroups), with the real label in a module-specific field (acc_group_name,
+    // comp_name, br_name). getFirstDefinedValue skips "" so a populated `name` still
+    // wins; otherwise fall through to the module key instead of showing the uuid id.
     const name = toDisplayValue(
-      getFirstDefinedValue(source, ["name", "label"]),
+      getFirstDefinedValue(source, [
+        "name",
+        "label",
+        "accGroupName",
+        "acc_group_name",
+        "compName",
+        "comp_name",
+        "brName",
+        "br_name",
+      ]),
     );
     const label = name || id;
     if (!optionMap.has(id)) {

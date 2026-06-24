@@ -8,6 +8,10 @@ import {
   normalizeObType,
 } from "./transformers";
 import { REQUEST_PAYLOAD_KEYS, LOOKUP_KEYS } from "./constants";
+import {
+  buildLedgerBankAccountPayload,
+  type LedgerBankAccountFormRow,
+} from "./bank-accounts";
 import type {
   LedgerFormFieldName,
   LedgerFormValues,
@@ -24,6 +28,8 @@ const LEDGER_INITIAL_FORM_VALUES = {
   ledTallyGroupName: "",
   ledTallyGuid: "",
   ledCategory: "GENERAL",
+  ledLedgerType: "",
+  ledMailingName: "",
   ledIsBillByBill: "false",
   ledIsCostCenterReq: "false",
   ledIsInterestApplicable: "false",
@@ -57,18 +63,30 @@ const LEDGER_INITIAL_FORM_VALUES = {
   ledAadharNo: "",
   ledEcommerceGstin: "",
   ledIsSez: "false",
-  ledChequeName: "",
-  ledBankName: "",
-  ledBankBranch: "",
-  ledBankAcNo: "",
-  ledBankIfsc: "",
-  ledUpiId: "",
+  ledTypeOfSupply: "",
+  ledHsnSac: "",
+  ledGstRate: "",
+  ledTaxability: "",
+  ledGstPartyType: "",
+  ledTanNo: "",
+  ledCin: "",
+  ledUdyamNo: "",
+  ledMsmeType: "",
+  ledGstDutyHead: "",
+  ledTaxRate: "",
+  ledRoundingMethod: "",
+  ledRoundingLimit: "",
+  ledIsTdsApplicable: "false",
+  ledTdsDeducteeType: "",
+  ledTdsNatureOfPayment: "",
+  ledIsTcsApplicable: "false",
   ledObAmount: "0",
   ledObType: "DR",
   ledObAsOn: "",
   ledTotalDr: "0",
   ledTotalCr: "0",
   ledTotalBalance: "0",
+  ledSortOrder: "",
   ledIsActive: "true",
   ledAllowEdit: "false",
   ledIsEntry: "false",
@@ -115,6 +133,8 @@ export function toLedgerFormValues(source: Record<string, unknown> | null): Ledg
     ledTallyGuid: toDisplayValue(getFieldValue(rowSource, "ledTallyGuid")),
     ledCategory:
       toDisplayValue(getFieldValue(rowSource, "ledCategory")) || defaults.ledCategory,
+    ledLedgerType: toDisplayValue(getFieldValue(rowSource, "ledLedgerType")),
+    ledMailingName: toDisplayValue(getFieldValue(rowSource, "ledMailingName")),
     ledIsBillByBill: toSelectBoolean(getFieldValue(rowSource, "ledIsBillByBill"), "false"),
     ledIsCostCenterReq: toSelectBoolean(
       getFieldValue(rowSource, "ledIsCostCenterReq"),
@@ -155,12 +175,23 @@ export function toLedgerFormValues(source: Record<string, unknown> | null): Ledg
     ledAadharNo: toDisplayValue(getFieldValue(rowSource, "ledAadharNo")),
     ledEcommerceGstin: toDisplayValue(getFieldValue(rowSource, "ledEcommerceGstin")),
     ledIsSez: toSelectBoolean(getFieldValue(rowSource, "ledIsSez"), "false"),
-    ledChequeName: toDisplayValue(getFieldValue(rowSource, "ledChequeName")),
-    ledBankName: toDisplayValue(getFieldValue(rowSource, "ledBankName")),
-    ledBankBranch: toDisplayValue(getFieldValue(rowSource, "ledBankBranch")),
-    ledBankAcNo: toDisplayValue(getFieldValue(rowSource, "ledBankAcNo")),
-    ledBankIfsc: toDisplayValue(getFieldValue(rowSource, "ledBankIfsc")),
-    ledUpiId: toDisplayValue(getFieldValue(rowSource, "ledUpiId")),
+    ledTypeOfSupply: toDisplayValue(getFieldValue(rowSource, "ledTypeOfSupply")),
+    ledHsnSac: toDisplayValue(getFieldValue(rowSource, "ledHsnSac")),
+    ledGstRate: toDisplayValue(getFieldValue(rowSource, "ledGstRate")),
+    ledTaxability: toDisplayValue(getFieldValue(rowSource, "ledTaxability")),
+    ledGstPartyType: toDisplayValue(getFieldValue(rowSource, "ledGstPartyType")),
+    ledTanNo: toDisplayValue(getFieldValue(rowSource, "ledTanNo")),
+    ledCin: toDisplayValue(getFieldValue(rowSource, "ledCin")),
+    ledUdyamNo: toDisplayValue(getFieldValue(rowSource, "ledUdyamNo")),
+    ledMsmeType: toDisplayValue(getFieldValue(rowSource, "ledMsmeType")),
+    ledGstDutyHead: toDisplayValue(getFieldValue(rowSource, "ledGstDutyHead")),
+    ledTaxRate: toDisplayValue(getFieldValue(rowSource, "ledTaxRate")),
+    ledRoundingMethod: toDisplayValue(getFieldValue(rowSource, "ledRoundingMethod")),
+    ledRoundingLimit: toDisplayValue(getFieldValue(rowSource, "ledRoundingLimit")),
+    ledIsTdsApplicable: toSelectBoolean(getFieldValue(rowSource, "ledIsTdsApplicable"), "false"),
+    ledTdsDeducteeType: toDisplayValue(getFieldValue(rowSource, "ledTdsDeducteeType")),
+    ledTdsNatureOfPayment: toDisplayValue(getFieldValue(rowSource, "ledTdsNatureOfPayment")),
+    ledIsTcsApplicable: toSelectBoolean(getFieldValue(rowSource, "ledIsTcsApplicable"), "false"),
     ledObAmount:
       toDisplayValue(getFieldValue(rowSource, "ledObAmount")) || defaults.ledObAmount,
     ledObType: normalizeObType(toDisplayValue(getFieldValue(rowSource, "ledObType"))),
@@ -169,6 +200,7 @@ export function toLedgerFormValues(source: Record<string, unknown> | null): Ledg
     ledTotalCr: toDisplayValue(getFieldValue(rowSource, "ledTotalCr")) || defaults.ledTotalCr,
     ledTotalBalance:
       toDisplayValue(getFieldValue(rowSource, "ledTotalBalance")) || defaults.ledTotalBalance,
+    ledSortOrder: toDisplayValue(getFieldValue(rowSource, "ledSortOrder")),
     ledIsActive: toSelectBoolean(getFieldValue(rowSource, "ledIsActive"), "true"),
     ledAllowEdit: toSelectBoolean(getFieldValue(rowSource, "ledAllowEdit"), "false"),
     ledIsEntry: toSelectBoolean(getFieldValue(rowSource, "ledIsEntry"), "false"),
@@ -182,8 +214,26 @@ export function buildLedgerRequestPayload(
   values: LedgerFormValues,
   shouldUpdate: boolean,
   editingItemId: string | number | null,
+  bankAccountRows: LedgerBankAccountFormRow[] = [],
 ): Record<string, unknown> {
   const { toNumber, toNullableString, toUpperNullable, toNullableDate } = require("./transformers");
+
+  const toNullableNumber = (raw: string | undefined): number | null => {
+    const normalized = (raw ?? "").trim();
+    if (!normalized) {
+      return null;
+    }
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const toNullableInt = (raw: string | undefined): number | null => {
+    const normalized = (raw ?? "").trim();
+    if (!normalized) {
+      return null;
+    }
+    const parsed = Number.parseInt(normalized, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
 
   const payload: Record<string, unknown> = {
     ledCompanyId: (values.ledCompanyId ?? "").trim(),
@@ -196,6 +246,8 @@ export function buildLedgerRequestPayload(
     ledTallyGroupName: toNullableString(values.ledTallyGroupName ?? ""),
     ledTallyGuid: toNullableString(values.ledTallyGuid ?? ""),
     ledCategory: (values.ledCategory ?? "").trim() || "GENERAL",
+    ledLedgerType: toNullableString(values.ledLedgerType ?? ""),
+    ledMailingName: toNullableString(values.ledMailingName ?? ""),
     ledIsBillByBill: (values.ledIsBillByBill ?? "false") === "true",
     ledIsCostCenterReq: (values.ledIsCostCenterReq ?? "false") === "true",
     ledIsInterestApplicable: (values.ledIsInterestApplicable ?? "false") === "true",
@@ -229,18 +281,30 @@ export function buildLedgerRequestPayload(
     ledAadharNo: toNullableString(values.ledAadharNo ?? ""),
     ledEcommerceGstin: toUpperNullable(values.ledEcommerceGstin ?? ""),
     ledIsSez: (values.ledIsSez ?? "false") === "true",
-    ledChequeName: toNullableString(values.ledChequeName ?? ""),
-    ledBankName: toNullableString(values.ledBankName ?? ""),
-    ledBankBranch: toNullableString(values.ledBankBranch ?? ""),
-    ledBankAcNo: toNullableString(values.ledBankAcNo ?? ""),
-    ledBankIfsc: toUpperNullable(values.ledBankIfsc ?? ""),
-    ledUpiId: toNullableString(values.ledUpiId ?? ""),
+    ledTypeOfSupply: toNullableString(values.ledTypeOfSupply ?? ""),
+    ledHsnSac: toNullableString(values.ledHsnSac ?? ""),
+    ledGstRate: toNullableNumber(values.ledGstRate),
+    ledTaxability: toNullableString(values.ledTaxability ?? ""),
+    ledGstPartyType: toNullableString(values.ledGstPartyType ?? ""),
+    ledTanNo: toUpperNullable(values.ledTanNo ?? ""),
+    ledCin: toUpperNullable(values.ledCin ?? ""),
+    ledUdyamNo: toUpperNullable(values.ledUdyamNo ?? ""),
+    ledMsmeType: toNullableString(values.ledMsmeType ?? ""),
+    ledGstDutyHead: toNullableString(values.ledGstDutyHead ?? ""),
+    ledTaxRate: toNullableNumber(values.ledTaxRate),
+    ledRoundingMethod: toNullableString(values.ledRoundingMethod ?? ""),
+    ledRoundingLimit: toNullableNumber(values.ledRoundingLimit),
+    ledIsTdsApplicable: (values.ledIsTdsApplicable ?? "false") === "true",
+    ledTdsDeducteeType: toNullableString(values.ledTdsDeducteeType ?? ""),
+    ledTdsNatureOfPayment: toNullableString(values.ledTdsNatureOfPayment ?? ""),
+    ledIsTcsApplicable: (values.ledIsTcsApplicable ?? "false") === "true",
     ledObAmount: Math.max(0, toNumber(values.ledObAmount ?? "0", 0)),
     ledObType: normalizeObType(values.ledObType ?? "DR"),
     ledObAsOn: toNullableDate(values.ledObAsOn ?? ""),
     ledTotalDr: toNumber(values.ledTotalDr ?? "0", 0),
     ledTotalCr: toNumber(values.ledTotalCr ?? "0", 0),
     ledTotalBalance: toNumber(values.ledTotalBalance ?? "0", 0),
+    ledSortOrder: toNullableInt(values.ledSortOrder),
     ledIsActive: (values.ledIsActive ?? "true") === "true",
     ledAllowEdit: (values.ledAllowEdit ?? "false") === "true",
     ledIsEntry: (values.ledIsEntry ?? "false") === "true",
@@ -249,6 +313,12 @@ export function buildLedgerRequestPayload(
   };
   if (shouldUpdate && editingItemId !== null) {
     payload.ledId = String(editingItemId);
+  }
+  // Nested bank accounts. Only attach when at least one non-blank row exists so an
+  // empty array is never sent (server treats an absent array as "leave untouched").
+  const bankAccounts = buildLedgerBankAccountPayload(bankAccountRows);
+  if (bankAccounts.length > 0) {
+    payload.ledgerBankAccount = bankAccounts;
   }
   return payload;
 }

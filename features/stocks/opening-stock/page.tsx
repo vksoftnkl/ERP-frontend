@@ -67,6 +67,7 @@ import type {
   LookupKind,
   OpeningStockRow,
   RowValidationIssue,
+  StockLookupOption,
   UiTableColumnPayload,
   UiTableMasterResponse,
 } from "./opening-stock.types";
@@ -76,8 +77,8 @@ import {
   DEFAULT_GODOWN_OPTION,
   DEFAULT_ITEM_OPTION,
   DELETE_ACTION_COLUMN_WIDTH,
-  GODOWN_LIST_ENDPOINT,
-  GODOWN_LOOKUP_QUERY,
+  GODOWN_GRID_LIST_ENDPOINT,
+  GODOWN_GRID_LIST_QUERY,
   LOOKUP_FIELD_CONFIG,
   LOOKUP_SEARCH_DEBOUNCE_MS,
   MIN_RESIZABLE_COLUMN_WIDTH,
@@ -212,10 +213,10 @@ export default function OpeningStockPage() {
     Record<string, ItemPriceDetailsPayload>
   >({});
   const [unitDecimalCountById, setUnitDecimalCountById] = useState<Record<string, number>>({});
-  const [itemOptions, setItemOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_ITEM_OPTION]);
+  const [itemOptions, setItemOptions] = useState<StockLookupOption[]>([DEFAULT_ITEM_OPTION]);
   const [taxOptions, setTaxOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [unitOptions, setUnitOptions] = useState<ERPDynamicSelectOption[]>([]);
-  const [godownOptions, setGodownOptions] = useState<ERPDynamicSelectOption[]>([
+  const [godownOptions, setGodownOptions] = useState<StockLookupOption[]>([
     DEFAULT_GODOWN_OPTION,
   ]);
   const [loadedVoucherId, setLoadedVoucherId] = useState<string | null>(null);
@@ -330,7 +331,7 @@ export default function OpeningStockPage() {
     },
   });
   const { run: listGodowns, loading: isGodownLookupLoading } = useApi<unknown>(
-    GODOWN_LIST_ENDPOINT, {
+    GODOWN_GRID_LIST_ENDPOINT, {
     toast: {
       success: false,
       error: false,
@@ -402,7 +403,7 @@ export default function OpeningStockPage() {
     uiColumnConfigsRef.current = uiColumnConfigs;
   }, [uiColumnConfigs]);
   const loadLookupOptions = useCallback(
-    async (lookupKind: LookupKind, search = ""): Promise<ERPDynamicSelectOption[]> => {
+    async (lookupKind: LookupKind, search = ""): Promise<StockLookupOption[]> => {
       const normalizedSearch = search.trim();
       if (lookupKind === "item") {
         return triggerItemOptions(
@@ -413,7 +414,7 @@ export default function OpeningStockPage() {
       const activeBranchId = activeBranch?.id?.trim() ?? "";
       const payload = await listGodowns({
         query: {
-          ...GODOWN_LOOKUP_QUERY,
+          ...GODOWN_GRID_LIST_QUERY,
           ...(normalizedSearch ? { search: normalizedSearch } : {}),
         },
       });
@@ -1898,7 +1899,7 @@ export default function OpeningStockPage() {
         params.values.item_name_en?.trim() ||
         params.values.masterName?.trim() ||
         activeRequest.query;
-      let refreshedOptions: ERPDynamicSelectOption[] = [];
+      let refreshedOptions: StockLookupOption[] = [];
       try {
         refreshedOptions = await loadLookupOptions("item", itemName);
       } catch {
@@ -1949,7 +1950,7 @@ export default function OpeningStockPage() {
         return;
       }
       const godownName = params.values.masterName?.trim() || activeRequest.query;
-      let refreshedOptions: ERPDynamicSelectOption[] = [];
+      let refreshedOptions: StockLookupOption[] = [];
       try {
         refreshedOptions = await loadLookupOptions("godown", godownName);
       } catch {
@@ -2304,6 +2305,7 @@ export default function OpeningStockPage() {
         document.details.map((detail) => ({
           value: detail.osl_item_id,
           label: detail.osl_item_name,
+          code: detail.osl_item_code,
         })),
       );
       const loadedGodowns = buildLoadedLookupOptions(
@@ -2545,7 +2547,11 @@ export default function OpeningStockPage() {
         }
 
         const loadedItemOptions = buildLoadedLookupOptions(
-          items.map((item) => ({ value: item.item_id, label: item.item_name })),
+          items.map((item) => ({
+            value: item.item_id,
+            label: item.item_name,
+            code: item.item_code,
+          })),
         );
         const loadedGodownOptions = buildLoadedLookupOptions(
           items

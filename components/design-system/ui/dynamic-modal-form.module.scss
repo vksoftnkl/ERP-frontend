@@ -230,6 +230,27 @@
   height: 1px;
   background: #d5dee9;
 }
+.subheadingField {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.55rem 0 0.05rem;
+}
+.subheadingField::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #dbe3ec;
+}
+.subheading {
+  margin: 0;
+  color: var(--erp-modal-accent);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+}
 .sectionTabs {
   position: sticky;
   top: 0;

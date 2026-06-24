@@ -14,11 +14,13 @@ import {
   toDateInputValue,
   toDisplayValue,
   toNullableDate,
+  toNullableInteger,
   toNullableNumber,
   toNullableString,
   toSelectBoolean,
   toUpdateId,
   toUpper,
+  toUpperNullable,
 } from "@/app/master/_shared/crud-utils";
 const API_ENDPOINTS = {
   list: "/configured-grid-sql/run?grid_id=13",
@@ -157,6 +159,7 @@ const BRANCH_STANDARD_FIELD_NAMES = [
   "brRegionDistrict",
   "brRegionState",
   "brRegionCountry",
+  "brRegionName",
   "brContactPerson",
   "brTel",
   "brPhone",
@@ -172,6 +175,9 @@ const BRANCH_STANDARD_FIELD_NAMES = [
   "brBankId",
   "brFssaiNo",
   "brFssaiLicenseType",
+  "brGstinNo",
+  "brGstRegType",
+  "brPanNo",
   "brAllowNegativeStock",
   "brSmsApplicable",
 ] as const;
@@ -209,6 +215,7 @@ const BRANCH_INITIAL_FORM_VALUES = {
   brRegionDistrict: "",
   brRegionState: "",
   brRegionCountry: "India",
+  brRegionName: "",
   brContactPerson: "",
   brTel: "",
   brPhone: "",
@@ -227,6 +234,9 @@ const BRANCH_INITIAL_FORM_VALUES = {
   brFssaiNo: "",
   brFssaiLicenseType: "",
   brFssaiValidUpto: "",
+  brGstinNo: "",
+  brGstRegType: "",
+  brPanNo: "",
 } as const;
 function removeEmptyOptions(
   options: ERPDynamicSelectOption[],
@@ -484,6 +494,10 @@ function buildBranchFormFields(
       label: "Region Address 3",
     },
     {
+      name: "brRegionName",
+      label: "Region Name",
+    },
+    {
       name: "__heading_billing",
       label: "Billing & Invoice Setup",   
       type: "heading",
@@ -555,6 +569,30 @@ function buildBranchFormFields(
       label: "Compliance & Licenses",
       type: "heading",
       defaultExpanded: false,
+    },
+    {
+      name: "brGstinNo",
+      label: "GSTIN No",
+      validation: {
+        maxLength: 15,
+        maxLengthMessage: "GSTIN No must be at most 15 characters.",
+      },
+    },
+    {
+      name: "brGstRegType",
+      label: "GST Registration Type",
+      validation: {
+        maxLength: 30,
+        maxLengthMessage: "GST Registration Type must be at most 30 characters.",
+      },
+    },
+    {
+      name: "brPanNo",
+      label: "PAN No",
+      validation: {
+        maxLength: 10,
+        maxLengthMessage: "PAN No must be at most 10 characters.",
+      },
     },
     {
       name: "brFssaiNo",
@@ -781,6 +819,7 @@ export default function BranchesMasterPage() {
       nameFieldLabel="Branch Name"
       nameFieldPlaceholder="Main Branch"
       formTitle="Branch Form"
+      listTitleOverride="Branch List"
       formDescription="Create and update branches with address, billing, inventory, and compliance details."
       customFields={branchFormFields}
       createInitialValues={BRANCH_INITIAL_FORM_VALUES}
@@ -789,6 +828,8 @@ export default function BranchesMasterPage() {
       modalFormDenseGrid={false}
       modalStackLabels={true}
       modalSectionNavigationMode="tabs"
+      createModalTitle="Unit Branch Entry"
+      editModalTitle="Edit Unit Branch Entry"
       modalHideFieldHelperText
       modalHideFieldErrorText
       modalFocusFirstInvalidFieldOnValidationError
@@ -818,7 +859,7 @@ export default function BranchesMasterPage() {
           brDistrict: toNullableString(values.brDistrict ?? ""),
           brState: toNullableString(values.brState ?? ""),
           brStateCode: toUpper(derivedStateCode),
-          brPin: toNullableString(values.brPin ?? ""),
+          brPin: toNullableInteger(values.brPin ?? ""),
           brCountry: (values.brCountry ?? "").trim() || "India",
           brLandmark: toNullableString(values.brLandmark ?? ""),
           brRegionAddr1: toNullableString(values.brRegionAddr1 ?? ""),
@@ -828,6 +869,7 @@ export default function BranchesMasterPage() {
           brRegionDistrict: toNullableString(values.brRegionDistrict ?? ""),
           brRegionState: toNullableString(values.brRegionState ?? ""),
           brRegionCountry: (values.brRegionCountry ?? "").trim() || "India",
+          brRegionName: toNullableString(values.brRegionName ?? ""),
           brContactPerson: toNullableString(values.brContactPerson ?? ""),
           brTel: toNullableString(values.brTel ?? ""),
           brPhone: toNullableString(values.brPhone ?? ""),
@@ -849,6 +891,9 @@ export default function BranchesMasterPage() {
           brFssaiNo: toNullableString(values.brFssaiNo ?? ""),
           brFssaiLicenseType: toNullableString(values.brFssaiLicenseType ?? ""),
           brFssaiValidUpto: toNullableDate(values.brFssaiValidUpto ?? ""),
+          brGstinNo: toUpperNullable(values.brGstinNo ?? ""),
+          brGstRegType: toNullableString(values.brGstRegType ?? ""),
+          brPanNo: toUpperNullable(values.brPanNo ?? ""),
         };
         if (shouldUpdate && editingItemId !== null) {
           payload.brId = toUpdateId(editingItemId);

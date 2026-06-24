@@ -1,4 +1,5 @@
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
+import type { StockLookupOption } from "@/features/stocks/_shared/types";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import type {
   ItemPriceDetailsPayload,
@@ -173,7 +174,7 @@ export function toInputValue(value: string | number | null | undefined): string 
 export function buildGodownLookupOptions(
   payload: ApiSuccessResponse<GodownLookupRecord[], ListMeta> | unknown,
   branchId: string | null | undefined,
-): ERPDynamicSelectOption[] {
+): StockLookupOption[] {
   const normalizedBranchId = branchId?.trim() ?? "";
   const rows = extractRows<GodownLookupRecord>(payload, [
     "data",
@@ -187,10 +188,11 @@ export function buildGodownLookupOptions(
     "locations",
     "warehouses",
   ]);
-  const optionMap = new Map<string, string>();
+  const optionMap = new Map<string, StockLookupOption>();
   for (const row of rows) {
     const value = getGodownLookupField(row, GODOWN_LOOKUP_ID_KEYS);
     const label = getGodownLookupField(row, GODOWN_LOOKUP_LABEL_KEYS) || value;
+    const code = getGodownLookupField(row, GODOWN_LOOKUP_CODE_KEYS);
     const rowBranchId = getGodownLookupField(row, GODOWN_LOOKUP_BRANCH_ID_KEYS);
     if (!value || !label) {
       continue;
@@ -199,11 +201,11 @@ export function buildGodownLookupOptions(
       continue;
     }
     if (!optionMap.has(value)) {
-      optionMap.set(value, label);
+      optionMap.set(value, code ? { value, label, code } : { value, label });
     }
   }
-  const options = Array.from(optionMap, ([value, label]) => ({ value, label })).sort(
-    (left, right) => left.label.localeCompare(right.label),
+  const options = Array.from(optionMap.values()).sort((left, right) =>
+    left.label.localeCompare(right.label),
   );
   return [DEFAULT_GODOWN_OPTION, ...options];
 }
@@ -236,6 +238,16 @@ const GODOWN_LOOKUP_BRANCH_ID_KEYS = [
   "branchId",
   "Branch ID",
   "branch id",
+] as const;
+// "Search Code" column source. `gdl_code` is the configured search code; fall
+// back to `gdl_short` (alias) when no explicit code is set on the godown.
+const GODOWN_LOOKUP_CODE_KEYS = [
+  "gdl_code",
+  "gdlCode",
+  "search_code",
+  "searchCode",
+  "gdl_short",
+  "gdlShort",
 ] as const;
 function getGodownLookupField(
   row: GodownLookupRecord,
@@ -734,18 +746,23 @@ export function createEmptyRow(nextId: number): OpeningStockRow {
   return createRow(nextId);
 }
 export function buildLoadedLookupOptions(
-  entries: Array<{ value: string | null | undefined; label: string | null | undefined }>,
-): ERPDynamicSelectOption[] {
-  const options = new Map<string, string>();
+  entries: Array<{
+    value: string | null | undefined;
+    label: string | null | undefined;
+    code?: string | null | undefined;
+  }>,
+): StockLookupOption[] {
+  const options = new Map<string, StockLookupOption>();
   for (const entry of entries) {
     const value = entry.value?.trim() ?? "";
     const label = entry.label?.trim() ?? "";
+    const code = entry.code?.trim() ?? "";
     if (!value || !label || options.has(value)) {
       continue;
     }
-    options.set(value, label);
+    options.set(value, code ? { value, label, code } : { value, label });
   }
-  return Array.from(options, ([value, label]) => ({ value, label }));
+  return Array.from(options.values());
 }
 export function getNextRowId(rows: OpeningStockRow[]): number {
   return rows.reduce((highestId, row) => Math.max(highestId, row.id), 0) + 1;
@@ -1339,35 +1356,35 @@ export function getTableMinWidth(columns: ColumnDefinition[]): string {
   return `${Math.max(width, 1080)}px`;
 }
 
-export function mergeLookupOptions(
-  currentOptions: ERPDynamicSelectOption[],
-  nextOptions: ERPDynamicSelectOption[],
-): ERPDynamicSelectOption[] {
+export function mergeLookupOptions<TOption extends ERPDynamicSelectOption>(
+  currentOptions: TOption[],
+  nextOptions: TOption[],
+): TOption[] {
   const emptyOption =
     currentOptions.find((option) => option.value === "") ??
     nextOptions.find((option) => option.value === "");
-  const merged = new Map<string, string>();
+  const merged = new Map<string, TOption>();
 
   for (const option of [...currentOptions, ...nextOptions]) {
     if (!option.value) {
       continue;
     }
     if (!merged.has(option.value)) {
-      merged.set(option.value, option.label);
+      merged.set(option.value, option);
     }
   }
 
-  const normalizedOptions = Array.from(merged, ([value, label]) => ({ value, label })).sort(
-    (left, right) => left.label.localeCompare(right.label),
+  const normalizedOptions = Array.from(merged.values()).sort((left, right) =>
+    left.label.localeCompare(right.label),
   );
 
   return emptyOption ? [emptyOption, ...normalizedOptions] : normalizedOptions;
 }
 
-export function filterLookupOptions(
-  options: ERPDynamicSelectOption[],
+export function filterLookupOptions<TOption extends ERPDynamicSelectOption>(
+  options: TOption[],
   searchQuery: string,
-): ERPDynamicSelectOption[] {
+): TOption[] {
   const normalizedQuery = searchQuery.trim().toLowerCase();
   return options.filter((option) => {
     if (!option.value.trim()) {
@@ -1376,9 +1393,11 @@ export function filterLookupOptions(
     if (!normalizedQuery) {
       return true;
     }
+    const code = (option as StockLookupOption).code;
     return (
       option.label.toLowerCase().includes(normalizedQuery) ||
-      option.value.toLowerCase().includes(normalizedQuery)
+      option.value.toLowerCase().includes(normalizedQuery) ||
+      (code?.toLowerCase().includes(normalizedQuery) ?? false)
     );
   });
 }

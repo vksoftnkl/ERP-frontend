@@ -832,6 +832,8 @@ export default function EmployeeMasterPage() {
       nameFieldPlaceholder="Ravi Shah"
       formTitle="Employee Form"
       formDescription="Create and update employees."
+       createModalTitle="EmployeeEntry"
+      editModalTitle="Edit Employee Entry"
       customFields={employeeFormFields}
       createInitialValues={EMPLOYEE_INITIAL_FORM_VALUES}
       modalPanelStyle={EMPLOYEE_MODAL_PANEL_STYLE}

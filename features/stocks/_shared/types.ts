@@ -1,9 +1,26 @@
+import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
+
 export type ColumnAlign = "left" | "center" | "right";
 export type ColumnKind = "text" | "number" | "date" | "select" | "lookup";
 export type LookupKind = "item" | "godown" | "batch" | "reason";
 export type LookupCellState = {
   key: string;
   kind: LookupKind;
+};
+
+// A lookup option enriched with a secondary "code" (item code / godown search
+// code) so the lookup dropdown can render the legacy tabular layout. `code` is
+// optional, so a `StockLookupOption` is interchangeable with a plain option
+// wherever only `label`/`value` are consumed.
+export type StockLookupOption = ERPDynamicSelectOption & { code?: string };
+
+// Describes one data column in a tabular lookup dropdown. The serial (S.No)
+// column is always rendered by the cell itself and is not listed here.
+export type LookupTableColumn = {
+  key: "code" | "label";
+  header: string;
+  // CSS grid track size for this column (e.g. "120px" or "minmax(0, 1fr)").
+  width: string;
 };
 
 // Shared between opening-stock and physical-stock

@@ -6,6 +6,10 @@ export const API_ENDPOINTS = {
   getById: "/account-ledger-masters/get",
   create: "/account-ledger-masters/create",
   delete: "/account-ledger-masters/delete",
+  // Per-row soft delete for a ledger bank account (query: lbaId). Used when a saved
+  // bank account is removed in the ledger modal — the nested upsert is non-destructive,
+  // so removals must be deleted explicitly.
+  bankAccountDelete: "/ledger-bank-accounts/delete",
 } as const;
 
 export const DEBOUNCE_MS = 300;

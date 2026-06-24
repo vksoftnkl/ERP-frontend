@@ -237,7 +237,7 @@ export function validateFieldValue(
   const fieldType = field.type ?? "text";
   const validation = field.validation;
   const required = isFieldRequired(field, values);
-  if (fieldType === "heading") {
+  if (fieldType === "heading" || fieldType === "subheading") {
     return null;
   }
   if (fieldType === "custom") {

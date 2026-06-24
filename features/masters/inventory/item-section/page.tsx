@@ -159,8 +159,7 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
         minLength: 2,
         minLengthMessage: "Item Section Name must be at least 2 characters.",
       },
-    },
-   
+    },   
     // {
     //   name: "masterAlias",
     //   label: "Section Alias",
@@ -215,19 +214,14 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
     },
   ];
 }
-
-
-
 function toInteger(value: string, fallback: number): number {
   const parsed = Number.parseInt(value.trim(), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-
 function toReferenceValue(value: string): string {
   const normalized = value.trim();
   return normalized;
 }
-
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -236,58 +230,46 @@ function readFileAsDataUrl(file: File): Promise<string> {
         reject(new Error("Unable to read selected image."));
         return;
       }
-
       resolve(reader.result);
     };
     reader.onerror = () => reject(new Error("Unable to read selected image."));
     reader.readAsDataURL(file);
   });
 }
-
 function getBase64FromDataUrl(dataUrl: string): string {
   const commaIndex = dataUrl.indexOf(",");
   return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
 }
-
-
 function buildSectionOptions(payload: unknown): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();
   const rows = extractRows(payload, LOOKUP_KEYS.array);
-
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       continue;
     }
-
     const source = row as Record<string, unknown>;
     const id = toDisplayValue(getFirstDefinedValue(source, LOOKUP_KEYS.id));
     if (!id) {
       continue;
     }
-
     const name = toDisplayValue(getFirstDefinedValue(source, LOOKUP_KEYS.name));
     const label = name || id;
-
     if (!optionMap.has(id)) {
       optionMap.set(id, label);
     }
   }
-
   return Array.from(optionMap.entries())
     .map(([value, label]) => ({ value, label }))
     .sort((left, right) => left.label.localeCompare(right.label));
 }
-
 export default function ItemSectionMasterPage() {
   const { getAll: getSectionOptions } = useApi<unknown>(SECTION_LOOKUP_ENDPOINT);
   const [sectionOptions, setSectionOptions] = useState<ERPDynamicSelectOption[]>([]);
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted item sections. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
-
   useEffect(() => {
     let mounted = true;
-
     void (async () => {
       try {
         const payload = await getSectionOptions(SECTION_LOOKUP_QUERY);
@@ -300,17 +282,14 @@ export default function ItemSectionMasterPage() {
         }
       }
     })();
-
     return () => {
       mounted = false;
     };
   }, [getSectionOptions]);
-
   const sectionFormFields = useMemo(
     () => buildSectionFormFields(sectionOptions),
     [sectionOptions],
   );
-
   // Adds the `grid_param` payload to the default page/limit/search list query.
   // The server JSON-parses it and binds each key into the matching named token in
   // grid 10's stored SQL; keys with no matching token are ignored. `wantdelete` is
@@ -332,7 +311,6 @@ export default function ItemSectionMasterPage() {
     }),
     [wantDelete],
   );
-
   return (
     <CrudMasterPage
       title="Item Section"
@@ -413,7 +391,6 @@ export default function ItemSectionMasterPage() {
           uploadedImage && uploadedImage.size > 0
             ? getBase64FromDataUrl(await readFileAsDataUrl(uploadedImage))
             : "";
-
         return {
           sec_name: sectionName,
           sec_alias: sectionAlias,

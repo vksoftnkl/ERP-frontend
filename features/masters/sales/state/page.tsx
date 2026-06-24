@@ -434,6 +434,7 @@ export default function StateMasterPage() {
       nameFieldPlaceholder="Gujarat"
       formTitle="State Form"
       formDescription="Create and update states."
+        modalPanelStyle={{ width: "min(40rem, calc(100vw - 2.4rem))" }}
       customFields={formFields}
       createInitialValues={STATE_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {

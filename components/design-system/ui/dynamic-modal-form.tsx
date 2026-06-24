@@ -1239,6 +1239,16 @@ export function ERPDynamicModalForm({
     if (inputType === "heading") {
       return null;
     }
+    if (inputType === "subheading") {
+      return (
+        <div
+          key={field.name}
+          className={cx(styles.field, styles.fieldWide, styles.subheadingField)}
+        >
+          <span className={styles.subheading}>{field.label}</span>
+        </div>
+      );
+    }
     const isMultiSelect = inputType === "select" && field.multiple;
     const selectedValues = isMultiSelect
       ? parseMultiSelectValue(fieldValue)

@@ -3,7 +3,10 @@ import {
   buildLookupOptions,
   DEFAULT_LOOKUP_ARRAY_KEYS,
   extractDetailSource,
+  extractRows,
 } from "@/features/masters/shared/normalizers";
+import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/value-mappers";
+import type { StockLookupOption } from "@/features/stocks/_shared/types";
 import { baseApi } from "@/store/api/baseApi";
 const ITEM_LIST_ENDPOINT = "/dropdown-details/run";
 const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
@@ -80,6 +83,32 @@ const ITEM_LOOKUP_KEYS = {
   idKeys: ["item_id", "itemId", "id", "_id", "value"],
   labelKeys: ["item_name_en", "itemNameEn", "name", "label"],
 } as const;
+// The configured items dropdown (dropdown_id 6) selects `item_code`, so each
+// option also carries it as `code` for the tabular lookup dropdown.
+const ITEM_CODE_KEYS = ["item_code", "itemCode", "code"] as const;
+function buildItemLookupOptions(payload: unknown): StockLookupOption[] {
+  const rows = extractRows(payload, ITEM_LOOKUP_KEYS.arrayKeys);
+  const optionMap = new Map<string, StockLookupOption>();
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+    const source = row as Record<string, unknown>;
+    const id = toDisplayValue(getFirstDefinedValue(source, ITEM_LOOKUP_KEYS.idKeys));
+    if (!id) {
+      continue;
+    }
+    const label = toDisplayValue(getFirstDefinedValue(source, ITEM_LOOKUP_KEYS.labelKeys)) || id;
+    const code = toDisplayValue(getFirstDefinedValue(source, ITEM_CODE_KEYS));
+    if (!optionMap.has(id)) {
+      optionMap.set(id, code ? { value: id, label, code } : { value: id, label });
+    }
+  }
+  const sortedOptions = Array.from(optionMap.values()).sort((left, right) =>
+    left.label.localeCompare(right.label),
+  );
+  return [DEFAULT_ITEM_OPTION, ...sortedOptions];
+}
 const UNIT_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "units", "itemUnits"],
   idKeys: ["unit_id", "unitId", "item_unit_id", "itemUnitId", "uom_id", "id", "_id", "value"],
@@ -204,13 +233,12 @@ export type ItemPriceDetailsPayload = {
 export const lookupsApi = baseApi.injectEndpoints({
   overrideExisting: true,
   endpoints: (builder) => ({
-    getItemOptions: builder.query<ERPDynamicSelectOption[], LookupSearchArg | void>({
+    getItemOptions: builder.query<StockLookupOption[], LookupSearchArg | void>({
       query: (arg) => ({
         url: ITEM_LIST_ENDPOINT,
         params: arg?.search ? { ...ITEM_LOOKUP_QUERY, search: arg.search.trim() } : ITEM_LOOKUP_QUERY,
       }),
-      transformResponse: (payload: unknown) =>
-        buildLookupOptions(payload, DEFAULT_ITEM_OPTION, ITEM_LOOKUP_KEYS),
+      transformResponse: (payload: unknown) => buildItemLookupOptions(payload),
       providesTags: (_result, _error, arg) => [{ type: "ItemLookup", id: arg?.search?.trim() || "default" }],
       keepUnusedDataFor: 300,
     }),

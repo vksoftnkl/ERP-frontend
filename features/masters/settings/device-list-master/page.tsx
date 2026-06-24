@@ -395,6 +395,8 @@ export default function DeviceListMasterPage() {
       nameFieldLabel="Device UID"
       nameFieldPlaceholder="e.g. A1:B2:C3:D4:E5:F6"
       formTitle="Device Form"
+       createModalTitle="Device Entry"
+      editModalTitle="Edit Device Entry"
       formDescription="Register and manage devices."
       customFields={formFields}
       customTableColumns={customTableColumns}

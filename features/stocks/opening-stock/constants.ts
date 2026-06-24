@@ -1,3 +1,4 @@
+import type { LookupTableColumn } from "@/features/stocks/_shared/types";
 import type { ColumnSchema, LookupKind } from "./opening-stock.types";
 
 export {
@@ -16,6 +17,17 @@ export {
 export { UI_TABLE_COLUMNS_LIST_ENDPOINT, UI_TABLE_COLUMNS_CREATE_ENDPOINT } from "@/features/stocks/_shared/constants";
 export const ACCOUNT_LEDGER_LIST_ENDPOINT = "/account-ledger-masters/get";
 export const ITEMS_BULK_LOAD_ENDPOINT = "/items/bulk-load";
+// Godown lookup is sourced from configured grid 9 (the godown master list grid)
+// rather than the name-id master-lookup, because grid 9 also returns the godown
+// search code (`gdl_code`/`gdl_short`) needed for the tabular lookup dropdown.
+export const GODOWN_GRID_LIST_ENDPOINT = "/configured-grid-sql/run?grid_id=9";
+export const GODOWN_GRID_LIST_QUERY = {
+  page: "1",
+  limit: "100",
+  // grid 9's stored SQL filters on a `wantdelete` token; bind it to false so only
+  // live godowns are returned.
+  grid_param: JSON.stringify({ wantdelete: false }),
+} as const;
 export const UNIT_LIST_ENDPOINT ="/configured-grid-sql/run?grid_id=4";
 export const OPENING_STOCK_SAVE_ENDPOINT = "/opening-stocks";
 export const OPENING_STOCK_LIST_ENDPOINT = "/opening-stocks/list";
@@ -105,6 +117,19 @@ export const LOOKUP_FIELD_CONFIG: Record<
     idField: "sarId",
     emptyMessage: "No reasons found.",
   },
+};
+// Column layout for the tabular lookup dropdown, per lookup kind. The leading
+// S.No column is rendered by the cell itself; these describe the data columns.
+// Only the lookups that opening stock renders (item, godown) are configured.
+export const LOOKUP_TABLE_COLUMNS: Partial<Record<LookupKind, readonly LookupTableColumn[]>> = {
+  item: [
+    { key: "code", header: "Code", width: "minmax(96px, 0.5fr)" },
+    { key: "label", header: "Item Name", width: "minmax(0, 1fr)" },
+  ],
+  godown: [
+    { key: "code", header: "Search Code", width: "minmax(96px, 0.55fr)" },
+    { key: "label", header: "Godown Name", width: "minmax(0, 1fr)" },
+  ],
 };
 export const COLUMN_SCHEMA: Record<string, ColumnSchema> = {
   barcode: {

@@ -75,6 +75,14 @@ export function buildLedgerFormFields(
       options: accountGroupOptions,
     },
     {
+      name: "ledLedgerType",
+      label: "Ledger Type",
+    },
+    {
+      name: "ledMailingName",
+      label: "Mailing Name",
+    },
+    {
       name: "__heading_statutory",
       label: "GST & Statutory",
       type: "heading",
@@ -118,6 +126,45 @@ export function buildLedgerFormFields(
         maxLength: 12,
         maxLengthMessage: "Aadhar must be 12 digits.",
       },
+    },
+    {
+      name: "ledGstPartyType",
+      label: "GST Party Type",
+    },
+    {
+      name: "ledTypeOfSupply",
+      label: "Type of Supply",
+    },
+    {
+      name: "ledTaxability",
+      label: "Taxability",
+    },
+    {
+      name: "ledHsnSac",
+      label: "HSN / SAC",
+    },
+    {
+      name: "ledGstRate",
+      label: "GST Rate (%)",
+      type: "number",
+      step: "0.01",
+      min: 0,
+    },
+    {
+      name: "ledTanNo",
+      label: "TAN",
+    },
+    {
+      name: "ledCin",
+      label: "CIN",
+    },
+    {
+      name: "ledUdyamNo",
+      label: "Udyam No",
+    },
+    {
+      name: "ledMsmeType",
+      label: "MSME Type",
     },
     {
       name: "__heading_contact",
@@ -226,33 +273,54 @@ export function buildLedgerFormFields(
       label: "Region district",
     },
     {
-      name: "__heading_bank",
-      label: "Bank & Payment",
+      name: "__heading_tax_duty",
+      label: "Tax / Duty",
       type: "heading",
     },
     {
-      name: "ledChequeName",
-      label: "Account Holder Name",
+      name: "ledGstDutyHead",
+      label: "GST Duty Head",
     },
     {
-      name: "ledBankBranch",
-      label: "Bank Branch",
+      name: "ledTaxRate",
+      label: "Tax Rate (%)",
+      type: "number",
+      step: "0.01",
+      min: 0,
     },
     {
-      name: "ledBankIfsc",
-      label: "Bank IFSC",
+      name: "ledRoundingMethod",
+      label: "Rounding Method",
     },
     {
-      name: "ledBankName",
-      label: "Bank Name",
+      name: "ledRoundingLimit",
+      label: "Rounding Limit",
+      type: "number",
+      step: "0.01",
+      min: 0,
     },
     {
-      name: "ledBankAcNo",
-      label: "Bank A/C No",
+      name: "__heading_tds",
+      label: "TDS / TCS",
+      type: "heading",
     },
     {
-      name: "ledUpiId",
-      label: "UPI ID",
+      name: "ledIsTdsApplicable",
+      label: "TDS Applicable",
+      type: "checkbox",
+    },
+    {
+      name: "ledTdsDeducteeType",
+      label: "TDS Deductee Type",
+    },
+    {
+      name: "ledTdsNatureOfPayment",
+      label: "TDS Nature of Payment",
+    },
+    {
+      name: "ledIsTcsApplicable",
+      label: "TCS Applicable",
+      type: "checkbox",
     },
     {
       name: "__heading_opening",
@@ -278,6 +346,13 @@ export function buildLedgerFormFields(
       name: "__heading_control",
       label: "Status & Controls",
       type: "heading",
+    },
+    {
+      name: "ledSortOrder",
+      label: "Sort Order",
+      type: "number",
+      colSpan: 1,
+      min: 0,
     },
     {
       name: "ledIsActive",

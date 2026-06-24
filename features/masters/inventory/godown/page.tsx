@@ -557,6 +557,7 @@ export default function GodownMasterPageContent({
       viewModalTitle="Location Details"
       createModalTitle="Location Entry"
       editModalTitle="Edit Location Entry"
+        modalPanelStyle={{ width: "min(40rem, calc(100vw - 2.4rem))" }}
       onCrudControllerReady={onCrudControllerReady}
       onModalOpenChange={onModalOpenChange}
       hideListPage={inlineModalOnly}

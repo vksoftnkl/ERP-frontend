@@ -36,8 +36,6 @@ list: "/configured-grid-sql/run?grid_id=6",
   create: "/item-groups/create",
   delete: "/item-groups/delete",
 } as const;
-
-
 const GRID_TABLE_NAME = "item_group_master";
 // The form fields below are re-labelled, re-ordered, and shown/hidden from the
 // backend widget-masters config (fixed.form_section / form_field) for this
@@ -187,17 +185,14 @@ function buildItemGroupFormFields(parentOptions: ERPDynamicSelectOption[]): ERPD
     },
   ];
 }
-
 function toInteger(value: string, fallback: number): number {
   const parsed = Number.parseInt(value.trim(), 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-
 function toNullableReference(value: string): string | null {
   const normalized = value.trim();
   return normalized ? normalized : null;
 }
-
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -212,7 +207,6 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
-
 function getBase64FromDataUrl(dataUrl: string): string {
   const commaIndex = dataUrl.indexOf(",");
   return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
@@ -255,7 +249,6 @@ export default function ItemGroupMasterPage() {
       mounted = false;
     };
   }, [getWidgetConfig]);
-
   useEffect(() => {
     let mounted = true;
     void (async () => {
@@ -281,7 +274,6 @@ export default function ItemGroupMasterPage() {
       mounted = false;
     };
   }, [getParentGroupLookup]);
-
   const formFields = useMemo(
     () =>
       applyWidgetFieldConfig(
@@ -291,7 +283,6 @@ export default function ItemGroupMasterPage() {
       ),
     [parentOptions, widgetFieldConfig],
   );
-
   // Adds the `grid_param` payload to the default page/limit/search list query.
   const buildListQuery = useCallback(
     ({
@@ -310,7 +301,6 @@ export default function ItemGroupMasterPage() {
     }),
     [wantDelete],
   );
-
   // Right-click config tree popup over the create/update modal.
   const { getAll: getWidgetConfigTree } = useApi<WidgetMastersResponse>(
     WIDGET_CONFIG_TREE_ENDPOINT,
@@ -330,7 +320,6 @@ export default function ItemGroupMasterPage() {
   const [visibilityModalOpen, setVisibilityModalOpen] = useState(false);
   const treeLoadedRef = useRef(false);
   const visibilityControllerRef = useRef<ERPDynamicModalController | null>(null);
-
   // Fetched lazily the first time the popup is opened, then cached.
   const loadConfigTree = useCallback(async () => {
     if (treeLoadedRef.current) {
@@ -349,7 +338,6 @@ export default function ItemGroupMasterPage() {
       setTreeLoading(false);
     }
   }, [getWidgetConfigTree]);
-
   // Hijack right-clicks that land inside the open create/update modal only; clicks
   // elsewhere keep the browser's native context menu. Opens the Visible Settings
   // modal (an ERPDynamicModalForm) on top via its controller.
@@ -366,7 +354,6 @@ export default function ItemGroupMasterPage() {
     window.addEventListener("contextmenu", handleContextMenu);
     return () => window.removeEventListener("contextmenu", handleContextMenu);
   }, [loadConfigTree]);
-
   const handleToggleField = useCallback((backendName: string, checked: boolean) => {
     const key = backendName.toLowerCase();
     setWidgetFieldConfig((prev) => {
@@ -381,7 +368,6 @@ export default function ItemGroupMasterPage() {
       return next;
     });
   }, []);
-
   const handleToggleSection = useCallback((sectionId: number, checked: boolean) => {
     setSectionVisibility((prev) => {
       const next = new Map(prev);
@@ -389,7 +375,6 @@ export default function ItemGroupMasterPage() {
       return next;
     });
   }, []);
-
   const handleChangeSecondaryText = useCallback((fieldId: number, value: string) => {
     setSecondaryTextById((prev) => {
       const next = new Map(prev);
@@ -397,7 +382,6 @@ export default function ItemGroupMasterPage() {
       return next;
     });
   }, []);
-
   // Build the tree view from the /config payload, deriving each checkbox from the
   // live form visibility map so the popup and the rendered form stay in sync.
   const treeSections = useMemo<WidgetTreeSectionView[]>(
@@ -421,7 +405,6 @@ export default function ItemGroupMasterPage() {
       })),
     [configSections, sectionVisibility, secondaryTextById, widgetFieldConfig],
   );
-
   // PATCH the current section/field visibility for every configured field back to
   // the server in the documented { data: [{ sectionId, sectionGuiName,
   // sectionVisibility, fields: [{ fieldId, fieldSecondaryText, fieldVisibility }] }] }
@@ -446,7 +429,6 @@ export default function ItemGroupMasterPage() {
     };
     await saveVisibility({ body: payload });
   }, [configSections, sectionVisibility, secondaryTextById, widgetFieldConfig, saveVisibility]);
-
   // While the Visible Settings modal is open, intercept Escape/F5 in the capture
   // phase so they act on it alone — without this, the underlying create/update
   // modal's window-level Escape would also fire and close both. F5 mirrors the
@@ -475,7 +457,6 @@ export default function ItemGroupMasterPage() {
     window.addEventListener("keydown", handleKeyDownCapture, true);
     return () => window.removeEventListener("keydown", handleKeyDownCapture, true);
   }, [visibilityModalOpen, savingVisibility, handleVisibilitySubmit]);
-
   // The Visible Settings modal hosts the whole tree as a single custom field so it
   // reuses the standard ERP modal chrome (header, backdrop, Save/Cancel footer).
   const visibilityVariant = useMemo<ERPDynamicModalVariant>(
@@ -516,7 +497,6 @@ export default function ItemGroupMasterPage() {
       handleChangeSecondaryText,
     ],
   );
-
   return (
     <>
     <CrudMasterPage
@@ -597,7 +577,6 @@ export default function ItemGroupMasterPage() {
           uploadedImage && uploadedImage.size > 0
             ? getBase64FromDataUrl(await readFileAsDataUrl(uploadedImage))
             : undefined;
-
         return {
           itg_name: groupName,
           itg_alias: groupAlias || null,

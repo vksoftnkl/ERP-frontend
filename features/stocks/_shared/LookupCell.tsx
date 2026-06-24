@@ -11,7 +11,7 @@ import {
 import { FiChevronDown, FiSearch } from "react-icons/fi";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import type { ERPDynamicSearchShortcutPayload } from "@/components/design-system/ui/dynamic-modal-form";
-import type { LookupKind } from "./types";
+import type { LookupKind, LookupTableColumn, StockLookupOption } from "./types";
 type StockLookupCellStyles = Record<string, string>;
 type LookupCellProps = {
   rowId: number;
@@ -25,7 +25,10 @@ type LookupCellProps = {
   placeholder?: string;
   header: string;
   emptyMessage: string;
-  options: ERPDynamicSelectOption[];
+  options: StockLookupOption[];
+  // When provided, the dropdown renders as a grid with these data columns (plus a
+  // leading S.No column). Omit for the default single-column list layout.
+  columns?: readonly LookupTableColumn[];
   searchQuery: string;
   shortcutValues?: Record<string, string>;
   hasValidationError: boolean;
@@ -69,6 +72,7 @@ export function LookupCell({
   header,
   emptyMessage,
   options,
+  columns,
   searchQuery,
   shortcutValues,
   hasValidationError,
@@ -88,6 +92,12 @@ export function LookupCell({
   const listboxId = `${cellKey}-lookup-listbox`;
   const activeOption = highlightedIndex >= 0 ? options[highlightedIndex] : undefined;
   const activeOptionId = activeOption ? `${cellKey}-${activeOption.value}-option` : undefined;
+  const isTabular = Boolean(columns && columns.length > 0);
+  // Leading S.No track + one track per configured column. Shared by the header
+  // and every option row so columns stay aligned.
+  const gridTemplateColumns = isTabular
+    ? `2.75rem ${columns!.map((column) => column.width).join(" ")}`
+    : undefined;
   useEffect(() => {
     setHighlightedIndex(isOpen ? getInitialHighlightedIndex(options, selectedId) : -1);
   }, [isOpen, options, selectedId]);
@@ -219,7 +229,7 @@ export function LookupCell({
       </button>
       {isOpen ? (
         <div
-          className={styles.lookupMenu}
+          className={cx(styles.lookupMenu, isTabular && styles.lookupMenuTable)}
           data-opening-stock-lookup-menu="true"
         >
           <div className={styles.lookupSearchWrap}>
@@ -241,6 +251,23 @@ export function LookupCell({
               aria-expanded={isOpen}
             />
           </div>
+          {isTabular ? (
+            <div
+              className={styles.lookupTableHead}
+              style={{ gridTemplateColumns }}
+              aria-hidden="true"
+            >
+              <span className={cx(styles.lookupHeadCell, styles.lookupSerialCell)}>S.No</span>
+              {columns!.map((column) => (
+                <span
+                  key={column.key}
+                  className={styles.lookupHeadCell}
+                >
+                  {column.header}
+                </span>
+              ))}
+            </div>
+          ) : null}
           <div
             className={styles.lookupOptions}
             id={listboxId}
@@ -254,8 +281,10 @@ export function LookupCell({
                   type="button"
                   className={cx(
                     styles.lookupOption,
+                    isTabular && styles.lookupOptionRow,
                     index === highlightedIndex && styles.lookupOptionActive,
                   )}
+                  style={isTabular ? { gridTemplateColumns } : undefined}
                   role="option"
                   aria-selected={option.value === selectedId}
                   ref={(element) => {
@@ -264,7 +293,24 @@ export function LookupCell({
                   onMouseEnter={() => setHighlightedIndex(index)}
                   onClick={() => handleOptionSelect(option)}
                 >
-                  {option.label}
+                  {isTabular ? (
+                    <>
+                      <span className={cx(styles.lookupBodyCell, styles.lookupSerialCell)}>
+                        {index + 1}
+                      </span>
+                      {columns!.map((column) => (
+                        <span
+                          key={column.key}
+                          className={styles.lookupBodyCell}
+                          title={column.key === "code" ? option.code : option.label}
+                        >
+                          {column.key === "code" ? option.code ?? "" : option.label}
+                        </span>
+                      ))}
+                    </>
+                  ) : (
+                    option.label
+                  )}
                 </button>
               ))
             ) : (

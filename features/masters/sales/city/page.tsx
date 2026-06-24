@@ -530,6 +530,7 @@ export default function CityMasterPage() {
       nameFieldPlaceholder="Ahmedabad"
       formTitle="City Form"
       formDescription="Create and update cities."
+        modalPanelStyle={{ width: "min(40rem, calc(100vw - 2.4rem))" }}
       customFields={formFields}
       createInitialValues={CITY_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {

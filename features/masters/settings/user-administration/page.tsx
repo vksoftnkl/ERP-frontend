@@ -488,6 +488,8 @@ export default function UserAdministrationPage() {
       nameFieldPlaceholder="John Doe"
       formTitle="User Form"
       formDescription="Create and manage system users along with their login channels and permissions."
+      createModalTitle="User Entry"
+      editModalTitle="Edit User Entry"
       customFields={formFields}
       createInitialValues={USER_INITIAL_FORM_VALUES}
       modalPanelStyle={USER_MODAL_PANEL_STYLE}

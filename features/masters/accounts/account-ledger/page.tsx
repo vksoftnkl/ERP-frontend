@@ -48,22 +48,19 @@ import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
   ACCOUNT_LEDGER_GRID_ID,
-  LOOKUP_ENDPOINT,
   GRID_DETAILS_ENDPOINT,
   GRID_COLUMNS_CREATE_ENDPOINT,
   GRID_COLUMN_WIDTH_ENDPOINT,
   GRID_FILTER_SETTINGS_ENDPOINT,
   GRID_VISIBILITY_SETTINGS_ENDPOINT,
-  STATE_CODE_LOOKUP_ENDPOINT,
   GRID_DETAILS_QUERY,
-  LOOKUP_QUERY_COMPANIES,
-  LOOKUP_QUERY_BRANCHES,
-  LOOKUP_QUERY_ACCOUNT_GROUPS,
-  LOOKUP_QUERY_STATE_CODES,
   GST_LOOKUP_ENDPOINT,
   GST_LOOKUP_PATTERN,
   STATE_NAME_SEARCH_FIELD_NAMES,
   REQUEST_PAYLOAD_KEYS,
+  LEDGER_COMPANY_NAME_KEYS,
+  LEDGER_BRANCH_NAME_KEYS,
+  LEDGER_GROUP_NAME_KEYS,
   LEDGER_ASIDE_SECTION_KEYS,
 } from "./constants";
 import type {
@@ -75,7 +72,6 @@ import type {
 import {
   toDisplayValue,
   getFirstDefinedValue,
-  buildLookupOptions,
   buildStateNameOptions,
   buildStateCodeByName,
   buildStateNameByCode,
@@ -98,6 +94,21 @@ import {
   buildLedgerFormFields,
   toLedgerFormSections,
 } from "./fields-schema";
+import BankAccountsEditor from "./bank-accounts-editor";
+import {
+  createEmptyBankAccountRow,
+  extractLedgerBankAccountRows,
+  getBankAccountValidationError,
+  type LedgerBankAccountFieldName,
+  type LedgerBankAccountFormRow,
+} from "./bank-accounts";
+import {
+  DROPDOWN_RUN_ENDPOINT,
+  LEDGER_DROPDOWN_FIELD_CONFIG,
+  LEDGER_DROPDOWN_FIELD_NAMES,
+  buildDropdownRunQuery,
+  buildDropdownOptions,
+} from "./dropdowns";
 import {
   buildLedgerRows,
   resolveLedgerRecordId,
@@ -114,6 +125,8 @@ import {
 const GRID_SETTINGS_CONTEXT_MENU_WIDTH = 190;
 const GRID_SETTINGS_CONTEXT_MENU_HEIGHT = 130;
 const GRID_SETTINGS_CONTEXT_MENU_PADDING = 8;
+// Synthetic form tab (no scalar fields) that hosts the nested bank-accounts editor.
+const BANK_ACCOUNTS_SECTION_KEY = "__bank_accounts";
 type ContextMenuPosition = Pick<CSSProperties, "left" | "top">;
 function clampContextMenuPosition(value: number, min: number, max: number): number {
   if (max < min) {
@@ -238,6 +251,8 @@ function LedgerFieldRenderer({
   handleSearchableOptionSelect,
   handleSearchableFieldClear,
   searchInputRefs,
+  serverSearchFieldNames,
+  loadingFieldNames,
 }: {
   field: ERPDynamicModalField;
   formValues: LedgerFormValues;
@@ -248,6 +263,8 @@ function LedgerFieldRenderer({
   openSearchField: string | null;
   searchQueries: Record<string, string>;
   searchActiveOptionIndex: Record<string, number>;
+  serverSearchFieldNames: Set<string>;
+  loadingFieldNames: Set<string>;
   handleFieldChange: (fieldName: LedgerFormFieldName, value: string) => void;
   handleCheckboxKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
   handleSearchableFieldInput: (
@@ -332,13 +349,19 @@ function LedgerFieldRenderer({
     const selectedLabel = fieldValue ? selectedOption?.label ?? "" : "";
     const typedQuery = searchQueries[fieldName] ?? "";
     const normalizedQuery = typedQuery.trim().toLowerCase();
-    const filteredOptions = options.filter((option) => {
-      if (!normalizedQuery) return true;
-      return (
-        option.label.toLowerCase().includes(normalizedQuery) ||
-        option.value.toLowerCase().includes(normalizedQuery)
-      );
-    });
+    // Server-backed dropdowns already filter via the `search` param, so render their
+    // options as-is (client filtering would hide rows matched on non-label columns).
+    const isServerSearch = serverSearchFieldNames.has(fieldName);
+    const isLoadingOptions = loadingFieldNames.has(fieldName);
+    const filteredOptions = isServerSearch
+      ? options
+      : options.filter((option) => {
+          if (!normalizedQuery) return true;
+          return (
+            option.label.toLowerCase().includes(normalizedQuery) ||
+            option.value.toLowerCase().includes(normalizedQuery)
+          );
+        });
     const highlightedOptionIndexRaw = searchActiveOptionIndex[fieldName];
     const highlightedOptionIndex =
       highlightedOptionIndexRaw !== undefined &&
@@ -471,7 +494,9 @@ function LedgerFieldRenderer({
                   </svg>
                 </span>
               </div>
-              {filteredOptions.length ? (
+              {isLoadingOptions ? (
+                <div className={dynamicFormStyles.searchSelectEmpty}>Loading...</div>
+              ) : filteredOptions.length ? (
                 <ul
                   className={dynamicFormStyles.searchSelectOptions}
                   style={{ maxHeight: `${SEARCHABLE_SELECT_OPTIONS_MAX_HEIGHT}px` }}
@@ -650,10 +675,26 @@ export default function AccountLedgerMasterPage() {
     loading: deleteLoading,
     error: deleteError,
   } = useApi<unknown>(API_ENDPOINTS.delete, { method: "DELETE" });
-  const { getAll: getCompanyLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const { getAll: getBranchLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const { getAll: getAccountGroupLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const { getAll: getStateCodeLookup } = useApi<unknown>(STATE_CODE_LOOKUP_ENDPOINT);
+  // Per-row bank-account soft delete, used when saved bank accounts are removed in the modal.
+  const { run: deleteBankAccountRecord } = useApi<unknown>(
+    API_ENDPOINTS.bankAccountDelete,
+    { method: "DELETE", toast: { success: false } },
+  );
+  // Lazy server dropdowns (fixed.dropdown_details via /dropdown-details/run). One hook
+  // per kind so each fetch has an independent abort/loading lifecycle. Errors are not
+  // toasted — a failed dropdown fetch should not interrupt the form.
+  const { run: runCompanyDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
+  const { run: runBranchDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
+  const { run: runAccountGroupDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
+  const { run: runStateDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
   // State for options
   const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([
     { value: "", label: "" },
@@ -669,6 +710,8 @@ export default function AccountLedgerMasterPage() {
   ]);
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
   const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
+  // Per-kind in-flight flag for the lazy dropdowns, keyed by LedgerDropdownKind.
+  const [dropdownLoading, setDropdownLoading] = useState<Record<string, boolean>>({});
   // State for table and search
   const [searchTerm, setSearchTerm] = useState("");
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
@@ -698,6 +741,14 @@ export default function AccountLedgerMasterPage() {
   const [modalError, setModalError] = useState<string | null>(null);
   const [gstLookupError, setGstLookupError] = useState<string | null>(null);
   const [validationFieldName, setValidationFieldName] = useState<LedgerFormFieldName | null>(null);
+  // Nested bank accounts edited alongside the ledger. `removedBankAccountIds` tracks
+  // saved rows the user deleted so they can be soft-deleted on submit.
+  const [bankAccounts, setBankAccounts] = useState<LedgerBankAccountFormRow[]>([]);
+  const [removedBankAccountIds, setRemovedBankAccountIds] = useState<string[]>([]);
+  const [bankAccountError, setBankAccountError] = useState<{
+    rowKey: string;
+    field: LedgerBankAccountFieldName;
+  } | null>(null);
   // State for search fields
   const [openSearchField, setOpenSearchField] = useState<string | null>(null);
   const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
@@ -811,39 +862,125 @@ export default function AccountLedgerMasterPage() {
       input.select();
     });
   }, [openSearchField]);
-  // Load lookup data
-  useEffect(() => {
-    let mounted = true;
-    void (async () => {
+  // Lazily fetch a dropdown's options from /dropdown-details/run for the given field and
+  // (server-side) search term. Called when the field is opened and on debounced typing —
+  // nothing is loaded up front. A superseded request returns undefined (aborted) and is
+  // skipped so it never wipes the options the latest request set.
+  const fetchLedgerDropdown = useCallback(
+    async (fieldName: string, search: string) => {
+      const config = LEDGER_DROPDOWN_FIELD_CONFIG[fieldName];
+      if (!config) return;
+      const query = buildDropdownRunQuery(config.dropdownId, search);
+      setDropdownLoading((current) => ({ ...current, [config.kind]: true }));
       try {
-        const [companiesPayload, branchesPayload, accountGroupsPayload, stateCodesPayload] =
-          await Promise.all([
-            getCompanyLookup(LOOKUP_QUERY_COMPANIES),
-            getBranchLookup(LOOKUP_QUERY_BRANCHES),
-            getAccountGroupLookup(LOOKUP_QUERY_ACCOUNT_GROUPS),
-            getStateCodeLookup(LOOKUP_QUERY_STATE_CODES),
-          ]);
-        if (!mounted) return;
-        setCompanyOptions(buildLookupOptions(companiesPayload, true));
-        setBranchOptions(buildLookupOptions(branchesPayload, true));
-        setAccountGroupOptions(buildLookupOptions(accountGroupsPayload, true));
-        setStateNameOptions(buildStateNameOptions(stateCodesPayload));
-        setStateCodeByName(buildStateCodeByName(stateCodesPayload));
-        setStateNameByCode(buildStateNameByCode(stateCodesPayload));
+        switch (config.kind) {
+          case "company": {
+            const payload = await runCompanyDropdown({ query });
+            if (payload === undefined) return;
+            setCompanyOptions(buildDropdownOptions(payload, config.idKeys, config.labelKeys));
+            break;
+          }
+          case "branch": {
+            const payload = await runBranchDropdown({ query });
+            if (payload === undefined) return;
+            setBranchOptions(buildDropdownOptions(payload, config.idKeys, config.labelKeys));
+            break;
+          }
+          case "accountGroup": {
+            const payload = await runAccountGroupDropdown({ query });
+            if (payload === undefined) return;
+            setAccountGroupOptions(
+              buildDropdownOptions(payload, config.idKeys, config.labelKeys),
+            );
+            break;
+          }
+          case "state": {
+            const payload = await runStateDropdown({ query });
+            if (payload === undefined) return;
+            setStateNameOptions(buildStateNameOptions(payload));
+            // Merge so a previously seeded selected state's code mapping survives.
+            setStateCodeByName((prev) => ({ ...prev, ...buildStateCodeByName(payload) }));
+            setStateNameByCode((prev) => ({ ...prev, ...buildStateNameByCode(payload) }));
+            break;
+          }
+        }
       } catch {
-        if (!mounted) return;
-        setCompanyOptions([{ value: "", label: "" }]);
-        setBranchOptions([{ value: "", label: "" }]);
-        setAccountGroupOptions([{ value: "", label: "" }]);
-        setStateNameOptions([{ value: "", label: "" }]);
-        setStateCodeByName({});
-        setStateNameByCode({});
+        // Keep whatever options are currently shown (e.g. the seeded selected value).
+      } finally {
+        setDropdownLoading((current) => ({ ...current, [config.kind]: false }));
       }
-    })();
+    },
+    [runAccountGroupDropdown, runBranchDropdown, runCompanyDropdown, runStateDropdown],
+  );
+  // Fetch on open (immediate) and on typed search (debounced). Only the currently open
+  // lazy dropdown is fetched, so "open = one API call" with no up-front loading.
+  useEffect(() => {
+    const fieldName = openSearchField;
+    if (!fieldName || !LEDGER_DROPDOWN_FIELD_NAMES.has(fieldName)) {
+      return;
+    }
+    const query = searchQueries[fieldName] ?? "";
+    const delay = query.trim() ? DEBOUNCE_MS : 0;
+    const handle = window.setTimeout(() => {
+      void fetchLedgerDropdown(fieldName, query);
+    }, delay);
     return () => {
-      mounted = false;
+      window.clearTimeout(handle);
     };
-  }, [getAccountGroupLookup, getBranchLookup, getCompanyLookup, getStateCodeLookup]);
+  }, [openSearchField, searchQueries, fetchLedgerDropdown]);
+  // Reset the lazy dropdowns to just the blank option (e.g. when opening the create modal
+  // or before a record loads) so no stale list from a previous record/search lingers.
+  const resetLedgerDropdownOptions = useCallback(() => {
+    setCompanyOptions([{ value: "", label: "" }]);
+    setBranchOptions([{ value: "", label: "" }]);
+    setAccountGroupOptions([{ value: "", label: "" }]);
+    setStateNameOptions([{ value: "", label: "" }]);
+    setStateCodeByName({});
+    setStateNameByCode({});
+    setDropdownLoading({});
+  }, []);
+  // Seed each lazy dropdown with just its currently-selected option so the trigger shows
+  // the saved name on edit/view before the user opens (and lazily loads) the full list.
+  const seedLedgerDropdownOptions = useCallback(
+    (detailSource: Record<string, unknown>, values: LedgerFormValues) => {
+      const blank: ERPDynamicSelectOption = { value: "", label: "" };
+      const seedOne = (id: string, name: string): ERPDynamicSelectOption[] =>
+        id ? [blank, { value: id, label: name || id }] : [blank];
+      const companyName = toDisplayValue(
+        getFirstDefinedValue(detailSource, LEDGER_COMPANY_NAME_KEYS),
+      );
+      const branchName = toDisplayValue(
+        getFirstDefinedValue(detailSource, LEDGER_BRANCH_NAME_KEYS),
+      );
+      const groupName = toDisplayValue(
+        getFirstDefinedValue(detailSource, LEDGER_GROUP_NAME_KEYS),
+      );
+      setCompanyOptions(seedOne(values.ledCompanyId, companyName));
+      setBranchOptions(seedOne(values.ledBranchId, branchName));
+      setAccountGroupOptions(seedOne(values.ledGroupId, groupName));
+      // State name + region state name both store the state name as their value and share
+      // stateNameOptions, so seed both selected names.
+      const stateSeed: ERPDynamicSelectOption[] = [blank];
+      if (values.ledStateName) {
+        stateSeed.push({ value: values.ledStateName, label: values.ledStateName });
+      }
+      if (values.ledRegionStateName && values.ledRegionStateName !== values.ledStateName) {
+        stateSeed.push({ value: values.ledRegionStateName, label: values.ledRegionStateName });
+      }
+      setStateNameOptions(stateSeed);
+      setStateCodeByName(
+        values.ledStateName && values.ledStateCode
+          ? { [values.ledStateName]: values.ledStateCode }
+          : {},
+      );
+      setStateNameByCode(
+        values.ledStateName && values.ledStateCode
+          ? { [values.ledStateCode]: values.ledStateName }
+          : {},
+      );
+    },
+    [],
+  );
   // Load form fields
   const ledgerFormFields = useMemo(
     () =>
@@ -851,13 +988,27 @@ export default function AccountLedgerMasterPage() {
     [accountGroupOptions, branchOptions, companyOptions, stateNameOptions],
   );
   const ledgerFormSections = useMemo(
-    () => toLedgerFormSections(ledgerFormFields),
+    () => [
+      ...toLedgerFormSections(ledgerFormFields),
+      { key: BANK_ACCOUNTS_SECTION_KEY, title: "Bank Accounts", fields: [] },
+    ],
     [ledgerFormFields],
   );
   const activeLedgerSection =
     ledgerFormSections.find((section) => section.key === activeSectionKey) ??
     ledgerFormSections[0] ??
     null;
+  // Field names whose lazy dropdown is currently fetching (derived from the per-kind flag),
+  // so the searchable select can show a Loading state.
+  const loadingDropdownFieldNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const fieldName of LEDGER_DROPDOWN_FIELD_NAMES) {
+      if (dropdownLoading[LEDGER_DROPDOWN_FIELD_CONFIG[fieldName].kind]) {
+        names.add(fieldName);
+      }
+    }
+    return names;
+  }, [dropdownLoading]);
   // Validate active section
   useEffect(() => {
     if (ledgerFormSections.length === 0) return;
@@ -961,8 +1112,12 @@ export default function AccountLedgerMasterPage() {
     setModalMode("create");
     setEditingItemId(null);
     setFormValues(createInitialLedgerFormValues());
+    setBankAccounts([]);
+    setRemovedBankAccountIds([]);
+    setBankAccountError(null);
+    resetLedgerDropdownOptions();
     setIsFormModalOpen(true);
-  }, [ledgerFormSections, resetDetailsState, resetSaveState]);
+  }, [ledgerFormSections, resetDetailsState, resetLedgerDropdownOptions, resetSaveState]);
   useEffect(() => {
     const handleCreateShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
@@ -993,6 +1148,10 @@ export default function AccountLedgerMasterPage() {
       setActiveSectionKey(ledgerFormSections[0]?.key ?? "general");
       setModalMode(mode);
       setFormValues(createInitialLedgerFormValues());
+      setBankAccounts([]);
+      setRemovedBankAccountIds([]);
+      setBankAccountError(null);
+      resetLedgerDropdownOptions();
       setIsFormModalOpen(true);
       setSelectedRowId(row.__rowId);
       const recordId = resolveLedgerRecordId(row);
@@ -1002,7 +1161,10 @@ export default function AccountLedgerMasterPage() {
           query: { [REQUEST_PAYLOAD_KEYS.id]: String(recordId) },
         });
         const detailSource = extractDetailSource(payload) ?? row.__source;
-        setFormValues(toLedgerFormValues(detailSource));
+        const nextValues = toLedgerFormValues(detailSource);
+        setFormValues(nextValues);
+        seedLedgerDropdownOptions(detailSource ?? {}, nextValues);
+        setBankAccounts(extractLedgerBankAccountRows(detailSource));
         if (mode === "update" && detailSource) {
           const detailId = getFirstDefinedValue(detailSource, ["ledId", "led_id", "id", "_id"]);
           if (typeof detailId === "string" || typeof detailId === "number") {
@@ -1013,7 +1175,14 @@ export default function AccountLedgerMasterPage() {
         setModalError("Unable to load selected account ledger details.");
       }
     },
-    [getById, ledgerFormSections, resetDetailsState, resetSaveState],
+    [
+      getById,
+      ledgerFormSections,
+      resetDetailsState,
+      resetLedgerDropdownOptions,
+      resetSaveState,
+      seedLedgerDropdownOptions,
+    ],
   );
   const closeModal = useCallback(() => {
     if (saveLoading) return;
@@ -1027,6 +1196,9 @@ export default function AccountLedgerMasterPage() {
     setSearchActiveOptionIndex({});
     gstLookupRequestIdRef.current += 1;
     setActiveSectionKey("general");
+    setBankAccounts([]);
+    setRemovedBankAccountIds([]);
+    setBankAccountError(null);
   }, [saveLoading]);
   useEffect(() => {
     if (!isFormModalOpen) return;
@@ -1160,6 +1332,37 @@ export default function AccountLedgerMasterPage() {
     event.preventDefault();
     if (event.currentTarget.disabled) return;
     event.currentTarget.click();
+  }, []);
+  // ----- Bank account handlers -----
+  const handleBankAccountAdd = useCallback(() => {
+    setBankAccounts((rows) => [...rows, createEmptyBankAccountRow()]);
+  }, []);
+  const handleBankAccountChange = useCallback(
+    (rowKey: string, patch: Partial<LedgerBankAccountFormRow>) => {
+      setBankAccounts((rows) =>
+        rows.map((row) => (row.rowKey === rowKey ? { ...row, ...patch } : row)),
+      );
+      setBankAccountError((current) => (current?.rowKey === rowKey ? null : current));
+    },
+    [],
+  );
+  const handleBankAccountRemove = useCallback((rowKey: string) => {
+    setBankAccounts((rows) => {
+      const target = rows.find((row) => row.rowKey === rowKey);
+      if (target?.lbaId) {
+        const removedId = target.lbaId;
+        setRemovedBankAccountIds((ids) =>
+          ids.includes(removedId) ? ids : [...ids, removedId],
+        );
+      }
+      return rows.filter((row) => row.rowKey !== rowKey);
+    });
+    setBankAccountError((current) => (current?.rowKey === rowKey ? null : current));
+  }, []);
+  const handleBankAccountSetDefault = useCallback((rowKey: string) => {
+    setBankAccounts((rows) =>
+      rows.map((row) => ({ ...row, lbaIsDefault: row.rowKey === rowKey })),
+    );
   }, []);
   const clearSearchableFieldActiveIndex = useCallback((fieldName: LedgerFormFieldName) => {
     setSearchActiveOptionIndex((current) => {
@@ -1449,15 +1652,52 @@ export default function AccountLedgerMasterPage() {
         });
         return;
       }
+      const bankAccountValidationError = getBankAccountValidationError(bankAccounts);
+      if (bankAccountValidationError) {
+        setModalError(bankAccountValidationError.message);
+        setBankAccountError({
+          rowKey: bankAccountValidationError.rowKey,
+          field: bankAccountValidationError.field,
+        });
+        setActiveSectionKey(BANK_ACCOUNTS_SECTION_KEY);
+        window.requestAnimationFrame(() => {
+          const invalidField = document.getElementById(
+            `${bankAccountValidationError.rowKey}-${bankAccountValidationError.field}`,
+          );
+          if (!(invalidField instanceof HTMLElement)) return;
+          invalidField.focus();
+          invalidField.scrollIntoView({ block: "nearest", inline: "nearest" });
+        });
+        return;
+      }
       setValidationFieldName(null);
+      setBankAccountError(null);
       const shouldUpdate = modalMode === "update";
-      const payload = buildLedgerRequestPayload(formValues, shouldUpdate, editingItemId);
+      const payload = buildLedgerRequestPayload(
+        formValues,
+        shouldUpdate,
+        editingItemId,
+        bankAccounts,
+      );
+      const idsToDelete = shouldUpdate ? removedBankAccountIds : [];
       void (async () => {
         try {
           await upsertRecord({ body: payload });
+          // The nested upsert is non-destructive, so saved rows removed in the modal
+          // must be soft-deleted explicitly. Failures here are non-fatal to the save.
+          if (idsToDelete.length > 0) {
+            await Promise.all(
+              idsToDelete.map((lbaId) =>
+                deleteBankAccountRecord({ query: { lbaId } }).catch(() => null),
+              ),
+            );
+          }
           setIsFormModalOpen(false);
           setModalError(null);
           setEditingItemId(null);
+          setBankAccounts([]);
+          setRemovedBankAccountIds([]);
+          setBankAccountError(null);
           await loadRecords(searchTerm, currentPage, pageSize);
         } catch {
           setModalError("Unable to save account ledger.");
@@ -1465,13 +1705,16 @@ export default function AccountLedgerMasterPage() {
       })();
     },
     [
+      bankAccounts,
       closeModal,
       currentPage,
+      deleteBankAccountRecord,
       editingItemId,
       formValues,
       loadRecords,
       modalMode,
       pageSize,
+      removedBankAccountIds,
       searchTerm,
       upsertRecord,
     ],
@@ -2365,30 +2608,45 @@ export default function AccountLedgerMasterPage() {
                         : undefined
                     }
                   >
-                    {activeLedgerSection.fields.map((field) => (
-                      <LedgerFieldRenderer
-                        key={field.name}
-                        field={field as any}
-                        formValues={formValues}
-                        isReadOnlyMode={isReadOnlyMode}
-                        detailsLoading={detailsLoading}
-                        saveLoading={saveLoading}
-                        validationFieldName={validationFieldName}
-                        openSearchField={openSearchField}
-                        searchQueries={searchQueries}
-                        searchActiveOptionIndex={searchActiveOptionIndex}
-                        handleFieldChange={handleFieldChange}
-                        handleCheckboxKeyDown={handleCheckboxKeyDown}
-                        handleSearchableFieldInput={handleSearchableFieldInput}
-                        handleSearchableFieldKeyDown={handleSearchableFieldKeyDown}
-                        handleSearchableFieldPointerToggle={
-                          handleSearchableFieldPointerToggle
-                        }
-                        handleSearchableOptionSelect={handleSearchableOptionSelect}
-                        handleSearchableFieldClear={handleSearchableFieldClear}
-                        searchInputRefs={searchInputRefs}
+                    {activeLedgerSection.key === BANK_ACCOUNTS_SECTION_KEY ? (
+                      <BankAccountsEditor
+                        rows={bankAccounts}
+                        disabled={isReadOnlyMode || detailsLoading || saveLoading}
+                        invalidRowKey={bankAccountError?.rowKey ?? null}
+                        invalidField={bankAccountError?.field ?? null}
+                        onAddRow={handleBankAccountAdd}
+                        onChangeRow={handleBankAccountChange}
+                        onRemoveRow={handleBankAccountRemove}
+                        onSetDefault={handleBankAccountSetDefault}
                       />
-                    ))}
+                    ) : (
+                      activeLedgerSection.fields.map((field) => (
+                        <LedgerFieldRenderer
+                          key={field.name}
+                          field={field as any}
+                          formValues={formValues}
+                          isReadOnlyMode={isReadOnlyMode}
+                          detailsLoading={detailsLoading}
+                          saveLoading={saveLoading}
+                          validationFieldName={validationFieldName}
+                          openSearchField={openSearchField}
+                          searchQueries={searchQueries}
+                          searchActiveOptionIndex={searchActiveOptionIndex}
+                          handleFieldChange={handleFieldChange}
+                          handleCheckboxKeyDown={handleCheckboxKeyDown}
+                          handleSearchableFieldInput={handleSearchableFieldInput}
+                          handleSearchableFieldKeyDown={handleSearchableFieldKeyDown}
+                          handleSearchableFieldPointerToggle={
+                            handleSearchableFieldPointerToggle
+                          }
+                          handleSearchableOptionSelect={handleSearchableOptionSelect}
+                          handleSearchableFieldClear={handleSearchableFieldClear}
+                          searchInputRefs={searchInputRefs}
+                          serverSearchFieldNames={LEDGER_DROPDOWN_FIELD_NAMES}
+                          loadingFieldNames={loadingDropdownFieldNames}
+                        />
+                      ))
+                    )}
                   </div>
                 ) : null}
                 {effectiveModalError ? (

@@ -152,6 +152,8 @@ export default function EmployeeDesignationMasterPage() {
       nameFieldLabel="Designation Name"
       nameFieldPlaceholder="Sales Executive"
       formTitle="Employee Designation Form"
+       createModalTitle="Employee Designation Entry"
+      editModalTitle="Edit Employee Designation Entry"
       formDescription="Create and update employee designations."
       customFields={DESIGNATION_FORM_FIELDS}
       createInitialValues={INITIAL_FORM_VALUES}

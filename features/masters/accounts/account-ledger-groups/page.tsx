@@ -50,6 +50,7 @@ const ACCOUNT_GROUP_INITIAL_FORM_VALUES = {
   masterName: "",
   masterAlias: "",
   masterShortName: "",
+  masterDescription: "",
   accGroupParentId: "",
   position: "0",
 } as const;
@@ -124,7 +125,9 @@ function buildLookupOptions(payload: unknown, includeEmptyOption = false): ERPDy
     if (!id) {
       continue;
     }
-    const name = toDisplayValue(getFirstDefinedValue(source, ["name", "label"]));
+    const name = toDisplayValue(
+      getFirstDefinedValue(source, ["name", "label", "accGroupName", "acc_group_name"]),
+    );
     const label = name || id;
     if (!optionMap.has(id)) {
       optionMap.set(id, label);
@@ -224,7 +227,11 @@ export default function AccountLedgerGroupsMasterPage() {
       nameFieldLabel="Group Name"
       nameFieldPlaceholder="Sundry Debtors"
       formTitle="Account Group Form"
+      viewModalTitle="Group Entry"
+      createModalTitle="Group Entry"
+      editModalTitle="Edit Group Entry"
       formDescription="Create and update account groups."
+      modalPanelStyle={{ width: "min(40rem, calc(100vw - 2.4rem))" }}
       customFields={accountGroupFormFields}
       createInitialValues={ACCOUNT_GROUP_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {
@@ -239,6 +246,9 @@ export default function AccountLedgerGroupsMasterPage() {
           masterShortName:
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.short)) ||
             defaults.masterShortName,
+          masterDescription:
+            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.description)) ||
+            defaults.masterDescription,
           accGroupParentId: toDisplayValue(
             getFirstDefinedValue(rowSource, GROUP_PARENT_ID_KEYS),
           ),
@@ -248,14 +258,13 @@ export default function AccountLedgerGroupsMasterPage() {
       }}
       buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
         const groupName = (values.masterName ?? "").trim();
-        const groupAlias = (values.masterAlias ?? "").trim();
         const groupShort = (values.masterShortName ?? "").trim();
+        const groupDescription = (values.masterDescription ?? "").trim();
         const groupSort = Math.max(0, toInteger(values.position ?? "0", 0));
         return {
           accGroupName: groupName,
-          accGroupAlias: groupAlias || null,
           accGroupShort: groupShort || null,
-          accGroupTypeCode: "AG",
+          accGroupDescription: groupDescription || null,
           accGroupParentId: toNullableReference(values.accGroupParentId ?? ""),
           accGroupSort: groupSort,
           ...(shouldUpdate && editingItemId !== null

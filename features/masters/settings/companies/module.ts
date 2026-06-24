@@ -77,8 +77,6 @@ const DEFAULT_BANK_LEDGER_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Bank Ledger",
 };
-const EWAY_SETTINGS_SECTION_NAME = "__heading_eway_settings";
-const EINVOICE_SETTINGS_SECTION_NAME = "__heading_einvoice_settings";
 const STATE_LOOKUP_ARRAY_KEYS = [
   "items",
   "data",
@@ -152,6 +150,8 @@ const COMPANY_STANDARD_FIELD_NAMES = [
   "compGstinNo",
   "compGstRegType",
   "compPanNo",
+  "compTanNo",
+  "compCinNo",
   "compFssaiNo",
   "compDrugLicenseNo",
   "compAddr1",
@@ -170,6 +170,7 @@ const COMPANY_STANDARD_FIELD_NAMES = [
   "compRegionDistrict",
   "compRegionState",
   "compRegionCountry",
+  "compRegionName",
   "compTel",
   "compPhone",
   "compMail",
@@ -187,6 +188,7 @@ const COMPANY_STANDARD_FIELD_NAMES = [
   "compCurrencySymbol",
   "compLocaleCode",
   "compRemarks",
+  "compAuthorizeSignature",
   "compNegStkApl",
   "compDefault",
   "compIsActive",
@@ -195,6 +197,7 @@ const COMPANY_DATE_FIELD_NAMES = [
   "compFinYearFrom",
   "compFinYearTo",
   "compBooksBeginFrom",
+  "compBooksLockDate",
   "compEwayDate",
   "compEinvoiceDate",
 ] as const;
@@ -218,6 +221,8 @@ const COMPANY_INITIAL_FORM_VALUES = {
   compGstinNo: "",
   compGstRegType: "",
   compPanNo: "",
+  compTanNo: "",
+  compCinNo: "",
   compFssaiNo: "",
   compDrugLicenseNo: "",
   compAddr1: "",
@@ -236,6 +241,7 @@ const COMPANY_INITIAL_FORM_VALUES = {
   compRegionDistrict: "",
   compRegionState: "",
   compRegionCountry: "India",
+  compRegionName: "",
   compTel: "",
   compPhone: "",
   compMail: "",
@@ -245,6 +251,7 @@ const COMPANY_INITIAL_FORM_VALUES = {
   compFinYearFrom: "",
   compFinYearTo: "",
   compBooksBeginFrom: "",
+  compBooksLockDate: "",
   compGstApplicable: "true",
   compTcsApplicable: "false",
   compSmsApplicable: "false",
@@ -268,6 +275,7 @@ const COMPANY_INITIAL_FORM_VALUES = {
   compCurrencySymbol: "",
   compLocaleCode: "en-IN",
   compRemarks: "",
+  compAuthorizeSignature: "",
 } as const;
 function removeEmptyOptions(
   options: ERPDynamicSelectOption[],
@@ -474,12 +482,12 @@ function buildCompanyFormFields({
   return [
     {
       name: "__heading_identity",
-      label: "Identity & Registration",
+      label: "Identity",
       type: "heading",
     },
     {
       name: "compGstinNo",
-      label: "GSTIN",
+      label: "GSTIN No",
       placeholder: "24ABCDE1234F1Z5",
       helperText: GST_LOOKUP_HELPER_TEXT,
       onValueChange: onCompanyGstinValueChange,
@@ -499,18 +507,6 @@ function buildCompanyFormFields({
       },
     },
     {
-      name: "compLegalName",
-      label: "Legal Name",
-    },
-    {
-      name: "compFssaiNo",
-      label: "FSSAI No",
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "FSSAI No must be at most 20 characters.",
-      },
-    },
-    {
       name: "compName",
       label: "Company Name",
       required: true,
@@ -520,24 +516,125 @@ function buildCompanyFormFields({
       },
     },
     {
-      name: "compPrefixCode",
-      label: "Prefix Code",
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "Prefix Code must be at most 20 characters.",
-      },
-    },
-    {
-      name: "compDrugLicenseNo",
-      label: "Drug License No",
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "Drug License No must be at most 20 characters.",
-      },
-    },
-    {
       name: "compShort",
-      label: "Short Name",
+      label: "Short Code",
+    },
+    {
+      name: "compLegalName",
+      label: "Legal Name",
+    },
+    {
+      name: "compPriceFixing",
+      label: "Price Fixing",
+      type: "select",
+      options: PRICE_FIXING_OPTIONS,
+      validation: {
+        maxLength: 50,
+        maxLengthMessage: "Price Fixing must be at most 50 characters.",
+      },
+    },
+    {
+      name: "__subheading_address",
+      label: "Address",
+      type: "subheading",
+    },
+    {
+      name: "compAddr1",
+      label: "Address Line 1",
+    },
+    {
+      name: "compAddr2",
+      label: "Address Line 2",
+    },
+    {
+      name: "compAddr3",
+      label: "Address Line 3",
+    },
+    {
+      name: "compCity",
+      label: "City",
+      required: true,
+      validation: {
+        maxLength: 100,
+        maxLengthMessage: "City must be at most 100 characters.",
+      },
+    },
+    {
+      name: "compDistrict",
+      label: "District",
+      required: true,
+      validation: {
+        maxLength: 100,
+        maxLengthMessage: "District must be at most 100 characters.",
+      },
+    },
+    {
+      name: "compState",
+      label: "State",
+      type: "select",
+      searchable: true,
+      required: true,
+      options: stateOptions,
+      validation: {
+        requiredMessage: "State is required.",
+      },
+    },
+    {
+      name: "compPin",
+      label: "Pin Code",
+      type: "number",
+      required: true,
+      min: 0,
+      step: 1,
+      inputMode: "numeric",
+      validation: {
+        minMessage: "Pin Code must be 0 or greater.",
+      },
+    },
+    {
+      name: "compCountry",
+      label: "Country",
+      disabled: true,
+    },
+    {
+      name: "__subheading_contact",
+      label: "Contact",
+      type: "subheading",
+    },
+    {
+      name: "compPhone",
+      label: "Mobile / Phone",
+      type: "tel",
+    },
+    {
+      name: "compTel",
+      label: "Telephone",
+      type: "tel",
+    },
+    {
+      name: "compMail",
+      label: "Mail ID",
+      type: "email",
+    },
+    {
+      name: "compWebsiteName",
+      label: "Website",
+      type: "url",
+    },
+    {
+      name: "compSupportEmail",
+      label: "Support Email",
+      type: "email",
+    },
+    {
+      name: "compSupportPhone",
+      label: "Support Phone",
+      type: "tel",
+    },
+    {
+      name: "__heading_tax",
+      label: "Tax and Compliance",
+      type: "heading",
     },
     {
       name: "compPanNo",
@@ -553,250 +650,28 @@ function buildCompanyFormFields({
       },
     },
     {
-      name: "__heading_mailing_address",
-      label: "Mailing Address",
-      type: "heading",
+      name: "compTanNo",
+      label: "TAN No",
     },
     {
-      name: "compAddr1",
-      label: "Address Line 1",
+      name: "compCinNo",
+      label: "CIN No",
     },
     {
-      name: "compCity",
-      label: "City",
-      required: true,
+      name: "compFssaiNo",
+      label: "FSSAI No",
       validation: {
-        maxLength: 100,
-        maxLengthMessage: "City must be at most 100 characters.",
+        maxLength: 20,
+        maxLengthMessage: "FSSAI No must be at most 20 characters.",
       },
     },
     {
-      name: "compState",
-      label: "State",
-      type: "select",
-      searchable: true,
-      required: true,
-      options: stateOptions,
+      name: "compDrugLicenseNo",
+      label: "Drug License No",
       validation: {
-        requiredMessage: "State is required.",
+        maxLength: 20,
+        maxLengthMessage: "Drug License No must be at most 20 characters.",
       },
-    },
-    {
-      name: "compAddr2",
-      label: "Address Line 2",
-    },
-    {
-      name: "compDistrict",
-      label: "District",
-      required: true,
-      validation: {
-        maxLength: 100,
-        maxLengthMessage: "District must be at most 100 characters.",
-      },
-    },
-    {
-      name: "compPin",
-      label: "Pincode",
-      type: "number",
-      required: true,
-      min: 0,
-      step: 1,
-      inputMode: "numeric",
-      validation: {
-        minMessage: "Pincode must be 0 or greater.",
-      },
-    },
-    {
-      name: "compAddr3",
-      label: "Address Line 3",
-    },
-    
-    {
-      name: "__heading_contact",
-      label: "Contact",
-      type: "heading",
-    },
-    {
-      name: "compTel",
-      label: "Telephone",
-      type: "tel",
-    },
-    {
-      name: "compPhone",
-      label: "Phone",
-      type: "tel",
-    },
-    {
-      name: "compMail",
-      label: "Email",
-      type: "email",
-    },
-    {
-      name: "compSupportEmail",
-      label: "Support Email",
-      type: "email",
-    },
-    {
-      name: "compSupportPhone",
-      label: "Support Phone",
-      type: "tel",
-    },
-    {
-      name: "compWebsiteName",
-      label: "Website",
-      type: "url",
-    },
-    {
-      name: "__heading_fiscal",
-      label: "Fiscal Year & Books",
-      type: "heading",
-    },
-    {
-      name: "compFinYearFrom",
-      label: "Financial Year From",
-      type: "date",
-    },
-    {
-      name: "compFinYearTo",
-      label: "Financial Year To",
-      type: "date",
-    },
-    {
-      name: "compBooksBeginFrom",
-      label: "Books Begin From",
-      type: "date",
-    },   
-    {
-      name: EWAY_SETTINGS_SECTION_NAME,
-      label: "E-Way Settings",
-      type: "heading",
-      defaultExpanded: false,
-      defaultExpandedWhen: (values) =>
-        (values.compEwayApplicable ?? "false") === "true",
-    },
-    {
-      name: "compEwayDate",
-      label: "E-Way Effective Date",
-      type: "date",
-    },
-    {
-      name: "compEwayInterLimit",
-      label: "E-Way Inter Limit",
-      type: "number",
-      min: 0,
-      step: "0.01",
-      validation: {
-        minMessage: "E-Way Inter Limit must be 0 or greater.",
-      },
-    },
-    {
-      name: "compEwayIntraApl",
-      label: "Intra-State E-Way Applicable",
-      type: "checkbox",
-    },
-    {
-      name: "compEwayIntraLimit",
-      label: "E-Way Intra Limit",
-      type: "number",
-      min: 0,
-      step: "0.01",
-      validation: {
-        minMessage: "E-Way Intra Limit must be 0 or greater.",
-      },
-    },
-    {
-      name: EINVOICE_SETTINGS_SECTION_NAME,
-      label: "E-Invoice Settings",
-      type: "heading",
-      defaultExpanded: false,
-      defaultExpandedWhen: (values) =>
-        (values.compEinvoiceApplicable ?? "false") === "true",
-    },
-    {
-      name: "compEinvoiceDate",
-      label: "E-Invoice Effective Date",
-      type: "date",
-    },
-    {
-      name: "compEinvoiceInclEway",
-      label: "Include E-Way With E-Invoice",
-      type: "checkbox",
-    },
-    {
-      name: "__heading_system",
-      label: "System Settings",
-      type: "heading",
-      defaultExpanded: false,
-    },
-    {
-      name: "compStylesheetId",
-      label: "Stylesheet Id",
-      type:"color",
-      required: true,
-      validation: {
-        requiredMessage: "Stylesheet Id is required.",
-      },
-    },
-    {
-      name: "compBankId",
-      label: "Bank Id",
-      type: "select",
-      options: bankOptions,
-    },
-    {
-      name: "compPriceFixing",
-      label: "Price Fixing",
-      type: "select",
-      options: PRICE_FIXING_OPTIONS,
-      validation: {
-        maxLength: 50,
-        maxLengthMessage: "Price Fixing must be at most 50 characters.",
-      },
-    },
-    {
-      name: "compBillGreeting",
-      label: "Bill Greeting",
-      rows: 3,
-      colSpan: 2,
-    },   
-    {
-      name: "__heading_region_address",
-      label: "Region Address",
-      type: "heading",
-      defaultExpanded: false,
-    },
-    {
-      name: "compRegionAddr1",
-      label: "Region Address Line 1",
-    },
-    {
-      name: "compRegionAddr3",
-      label: "Region Address Line 3",
-    },
-    {
-      name: "compRegionDistrict",
-      label: "Region District",
-      validation: {
-        maxLength: 100,
-        maxLengthMessage: "Region District must be at most 100 characters.",
-      },
-    },
-    {
-      name: "compRegionAddr2",
-      label: "Region Address Line 2",
-    },
-    {
-      name: "compRegionCity",
-      label: "Region City",
-      validation: {
-        maxLength: 100,
-        maxLengthMessage: "Region City must be at most 100 characters.",
-      },
-    },
-    {
-      name: "__heading_applicability",
-      label: "Applicability Flags",
-      type: "heading",
     },
     {
       name: "compGstApplicable",
@@ -806,11 +681,17 @@ function buildCompanyFormFields({
     },
     {
       name: "compTcsApplicable",
-      label: "TCS Applicable",
+      label: "TCS/TDS Applicable",
       type: "checkbox",
       fieldStyle: APPLICABILITY_CHECKBOX_FIELD_STYLE,
     },
-     {
+    {
+      name: "compSmsApplicable",
+      label: "Send SMS",
+      type: "checkbox",
+      fieldStyle: APPLICABILITY_CHECKBOX_FIELD_STYLE,
+    },
+    {
       name: "compNegStkApl",
       label: "Allow Negative Stock",
       type: "checkbox",
@@ -829,10 +710,187 @@ function buildCompanyFormFields({
       fieldStyle: APPLICABILITY_CHECKBOX_FIELD_STYLE,
     },
     {
-      name: "compSmsApplicable",
-      label: "SMS Applicable",
+      name: "__subheading_einvoicing",
+      label: "e-Invoicing",
+      type: "subheading",
+    },
+    {
+      name: "compEinvoiceApplicable",
+      label: "e-Invoicing Applicable",
       type: "checkbox",
       fieldStyle: APPLICABILITY_CHECKBOX_FIELD_STYLE,
+    },
+    {
+      name: "compEinvoiceDate",
+      label: "e-Invoice From",
+      type: "date",
+    },
+    {
+      name: "compEinvoiceInclEway",
+      label: "Send e-Way details with e-Invoice",
+      type: "checkbox",
+      fieldStyle: APPLICABILITY_CHECKBOX_FIELD_STYLE,
+    },
+    {
+      name: "__subheading_eway",
+      label: "e-Way Bill",
+      type: "subheading",
+    },
+    {
+      name: "compEwayApplicable",
+      label: "e-Way Bill Applicable",
+      type: "checkbox",
+      fieldStyle: APPLICABILITY_CHECKBOX_FIELD_STYLE,
+    },
+    {
+      name: "compEwayDate",
+      label: "e-Way From",
+      type: "date",
+    },
+    {
+      name: "compEwayInterLimit",
+      label: "Other State Limit",
+      type: "number",
+      min: 0,
+      step: "0.01",
+      validation: {
+        minMessage: "Other State Limit must be 0 or greater.",
+      },
+    },
+    {
+      name: "compEwayIntraApl",
+      label: "Applicable for Own State",
+      type: "checkbox",
+      fieldStyle: APPLICABILITY_CHECKBOX_FIELD_STYLE,
+    },
+    {
+      name: "compEwayIntraLimit",
+      label: "Own State Limit",
+      type: "number",
+      min: 0,
+      step: "0.01",
+      validation: {
+        minMessage: "Own State Limit must be 0 or greater.",
+      },
+    },
+    {
+      name: "__heading_preferences",
+      label: "Preferences",
+      type: "heading",
+    },
+    {
+      name: "compStylesheetId",
+      label: "Stylesheet",
+      type: "color",
+      required: true,
+      validation: {
+        requiredMessage: "Stylesheet is required.",
+      },
+    },
+    {
+      name: "compBankId",
+      label: "Bank",
+      type: "select",
+      options: bankOptions,
+    },
+    {
+      name: "compPrefixCode",
+      label: "Prefix Code",
+      validation: {
+        maxLength: 20,
+        maxLengthMessage: "Prefix Code must be at most 20 characters.",
+      },
+    },
+    {
+      name: "compCurrencyCode",
+      label: "Currency Code",
+    },
+    {
+      name: "compCurrencySymbol",
+      label: "Currency Symbol",
+    },
+    {
+      name: "compBillGreeting",
+      label: "Bill Greeting",
+      type: "textarea",
+      rows: 3,
+      colSpan: 2,
+    },
+    {
+      name: "compRemarks",
+      label: "Remarks",
+      type: "textarea",
+      rows: 3,
+      colSpan: 2,
+    },
+    {
+      name: "compAuthorizeSignature",
+      label: "Authorized Signature",
+      type: "textarea",
+      rows: 2,
+      colSpan: 2,
+    },
+    {
+      name: "__subheading_financial",
+      label: "Financial Year & Books",
+      type: "subheading",
+    },
+    {
+      name: "compFinYearFrom",
+      label: "Financial Year From",
+      type: "date",
+    },
+    {
+      name: "compFinYearTo",
+      label: "Financial Year To",
+      type: "date",
+    },
+    {
+      name: "compBooksBeginFrom",
+      label: "Books Begin From",
+      type: "date",
+    },
+    {
+      name: "compBooksLockDate",
+      label: "Books Lock Date",
+      type: "date",
+    },
+    {
+      name: "__heading_regional",
+      label: "Regional Details",
+      type: "heading",
+    },
+    {
+      name: "compRegionName",
+      label: "Regional Name",
+    },
+    {
+      name: "compRegionAddr1",
+      label: "Regional Addr 1",
+    },
+    {
+      name: "compRegionAddr2",
+      label: "Regional Addr 2",
+    },
+    {
+      name: "compRegionAddr3",
+      label: "Regional Addr 3",
+    },
+    {
+      name: "compRegionCity",
+      label: "Regional City",
+      validation: {
+        maxLength: 100,
+        maxLengthMessage: "Regional City must be at most 100 characters.",
+      },
+    },
+    {
+      name: "compRegionDistrict",
+      label: "Regional District",
+      validation: {
+        maxLength: 100,
+        maxLengthMessage: "Regional District must be at most 100 characters.",
+      },
     },
   ];
 }
@@ -1024,6 +1082,7 @@ export function useCompaniesModule() {
         requestPayloadKeys: REQUEST_PAYLOAD_KEYS,
         styles,
         listTitle: "Company List",
+        listTitleOverride: "Company List",
         createLabel: "Add Company",
         codeColumnHeader: "Company Code",
         nameColumnHeader: "Company Name",
@@ -1035,9 +1094,11 @@ export function useCompaniesModule() {
         customFields: companyFormFields,
         createInitialValues: COMPANY_INITIAL_FORM_VALUES,
         modalPanelStyle: COMPANY_MODAL_PANEL_STYLE,
-        modalFormGridColumns: 3,
+         createModalTitle:"Company Entry",
+      editModalTitle:"Edit Company Entry",
+        modalFormGridColumns: 2,
         modalFormDenseGrid: false,
-        modalStackLabels: true,
+        modalStackLabels: false,
         modalSectionNavigationMode: "tabs",
         modalHideFieldHelperText: true,
         modalHideFieldErrorText: true,
@@ -1045,18 +1106,11 @@ export function useCompaniesModule() {
         modalEnableArrowKeyFieldNavigation: true,
         mapFormValues: ({ source, defaults }) =>
           mapCompanyFormValues(source, defaults, stateNameByCode),
-        buildRequestPayload: ({
-          values,
-          shouldUpdate,
-          editingItemId,
-          sectionExpandedState,
-        }) => {
+        buildRequestPayload: ({ values, shouldUpdate, editingItemId }) => {
           const isEwayApplicable =
-            sectionExpandedState[EWAY_SETTINGS_SECTION_NAME] ??
-            ((values.compEwayApplicable ?? "false") === "true");
+            (values.compEwayApplicable ?? "false") === "true";
           const isEinvoiceApplicable =
-            sectionExpandedState[EINVOICE_SETTINGS_SECTION_NAME] ??
-            ((values.compEinvoiceApplicable ?? "false") === "true");
+            (values.compEinvoiceApplicable ?? "false") === "true";
           const isEwayIntraApplicable =
             isEwayApplicable && (values.compEwayIntraApl ?? "false") === "true";
           const normalizedState = (values.compState ?? "").trim();
@@ -1071,6 +1125,8 @@ export function useCompaniesModule() {
             compGstinNo: toUpperNullable(values.compGstinNo ?? ""),
             compGstRegType: toNullableString(values.compGstRegType ?? ""),
             compPanNo: toUpperNullable(values.compPanNo ?? ""),
+            compTanNo: toUpperNullable(values.compTanNo ?? ""),
+            compCinNo: toUpperNullable(values.compCinNo ?? ""),
             compFssaiNo: toNullableString(values.compFssaiNo ?? ""),
             compDrugLicenseNo: toNullableString(values.compDrugLicenseNo ?? ""),
             compAddr1: toNullableString(values.compAddr1 ?? ""),
@@ -1089,6 +1145,7 @@ export function useCompaniesModule() {
             compRegionDistrict: toNullableString(values.compRegionDistrict ?? ""),
             compRegionState:toNullableString(values.compState ?? ""),
             compRegionCountry:"India",
+            compRegionName: toNullableString(values.compRegionName ?? ""),
             compTel: toNullableString(values.compTel ?? ""),
             compPhone: toNullableString(values.compPhone ?? ""),
             compMail: toNullableString(values.compMail ?? ""),
@@ -1098,6 +1155,7 @@ export function useCompaniesModule() {
             compFinYearFrom: toNullableDate(values.compFinYearFrom ?? ""),
             compFinYearTo: toNullableDate(values.compFinYearTo ?? ""),
             compBooksBeginFrom: toNullableDate(values.compBooksBeginFrom ?? ""),
+            compBooksLockDate: toNullableDate(values.compBooksLockDate ?? ""),
             compGstApplicable: (values.compGstApplicable ?? "false") === "true",
             compTcsApplicable: (values.compTcsApplicable ?? "false") === "true",
             compSmsApplicable: (values.compSmsApplicable ?? "false") === "true",
@@ -1127,10 +1185,13 @@ export function useCompaniesModule() {
             compNegStkApl: (values.compNegStkApl ?? "false") === "true",
             compDefault: (values.compDefault ?? "false") === "true",
             compIsActive: (values.compIsActive ?? "false") === "true",
-            compCurrencyCode:  "INR",
+            compCurrencyCode: (values.compCurrencyCode ?? "").trim() || "INR",
             compCurrencySymbol: toNullableString(values.compCurrencySymbol ?? ""),
             compLocaleCode:"en-IN",
             compRemarks: toNullableString(values.compRemarks ?? ""),
+            compAuthorizeSignature: toNullableString(
+              values.compAuthorizeSignature ?? "",
+            ),
           };
           if (shouldUpdate && editingItemId !== null) {
             payload.compId = toUpdateId(editingItemId);

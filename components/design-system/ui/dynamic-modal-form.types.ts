@@ -25,6 +25,7 @@ export type FocusableFieldTarget = {
 
 export type ERPDynamicFieldType =
   | "heading"
+  | "subheading"
   | "custom"
   | "text"
   | "email"
