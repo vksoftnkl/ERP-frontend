@@ -1,15 +1,17 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
+  ERPDynamicSearchQueryChangeHandler,
+  ERPDynamicFieldValueChangeHandler,
+  ERPDynamicFieldValueChangePayload,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
-  DEFAULT_LOOKUP_ARRAY_KEYS,
-  buildLookupOptions,
+  extractRows,
   getFirstDefinedValue,
   toDisplayValue,
   toNullableString,
@@ -22,11 +24,15 @@ const API_ENDPOINTS = {
   delete: "/item-brands/delete",
 } as const;
 const GRID_TABLE_NAME = "item_brand_master";
-const PARENT_BRAND_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const PARENT_BRAND_LOOKUP_QUERY = {
-  module: "itemBrands",
-  limit: "100",
-} as const;
+// Parent Brand is a lazy, server-side searchable configured dropdown
+// (fixed.dropdown_details id 18 -> item_brand_master active rows). Loaded on open + on
+// debounced server-side search via /dropdown-details/run; nothing is fetched up front
+// and dropdown_param is never sent.
+const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
+const PARENT_BRAND_DROPDOWN_ID = "18";
+const PARENT_BRAND_DROPDOWN_ID_KEYS = ["brand_id", "brandId"] as const;
+const PARENT_BRAND_DROPDOWN_LABEL_KEYS = ["brand_name", "brandName"] as const;
+const PARENT_BRAND_SEARCH_DEBOUNCE_MS = 250;
 const LOOKUP_KEYS = {
   id: ["brand_id", "brandId", "id", "_id", "itb_id", "item_brand_id", "itemBrandId"],
   code: ["brand_alias", "brandAlias", "brand_short", "brandShort", "code", "itb_alias", "itb_short"],
@@ -47,6 +53,7 @@ const REQUEST_PAYLOAD_KEYS = {
   sort: "brand_sort",
 } as const;
 const BRAND_PARENT_ID_KEYS = ["brand_parent_id", "brandParentId", "parent_id", "parentId", "parent_brand_id", "parentBrandId"] as const;
+const BRAND_PARENT_NAME_KEYS = ["brand_parent_name", "brandParentName", "parent_name", "parentName", "parent_brand_name"] as const;
 const BRAND_LEVEL_KEYS = ["brand_level", "brandLevel", "level"] as const;
 const BRAND_PHOTO_URL_KEYS = ["brand_photo_url", "brandPhotoUrl", "photo_url", "photoUrl"] as const;
 const FILE_CONSTRAINTS = {
@@ -64,6 +71,56 @@ const DEFAULT_PARENT_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "None",
 };
+// Map dropdown-run rows ({ data: { items: [...] } }) for dropdown 18 to <id,name>
+// options. The "None" head is prepended so the parent can be cleared (top-level brand).
+function buildParentOptions(payload: unknown): ERPDynamicSelectOption[] {
+  const optionMap = new Map<string, string>();
+  for (const row of extractRows(payload)) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+    const source = row as Record<string, unknown>;
+    const id = toDisplayValue(getFirstDefinedValue(source, PARENT_BRAND_DROPDOWN_ID_KEYS));
+    if (!id) {
+      continue;
+    }
+    const label = toDisplayValue(getFirstDefinedValue(source, PARENT_BRAND_DROPDOWN_LABEL_KEYS));
+    if (!optionMap.has(id)) {
+      optionMap.set(id, label || id);
+    }
+  }
+  const options = Array.from(optionMap.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((left, right) => left.label.localeCompare(right.label));
+  return [DEFAULT_PARENT_OPTION, ...options];
+}
+// Build the run query. An empty search is omitted so the server returns the first page;
+// dropdown_param is never sent.
+function buildParentRunQuery(search: string): Record<string, string> {
+  const query: Record<string, string> = {
+    dropdown_id: PARENT_BRAND_DROPDOWN_ID,
+    page: "1",
+    limit: "20",
+  };
+  const trimmed = search.trim();
+  if (trimmed) {
+    query.search = trimmed;
+  }
+  return query;
+}
+// Keep the currently-selected option visible after a fetch replaces the option list.
+function withPinnedOption(
+  options: ERPDynamicSelectOption[],
+  pinned: ERPDynamicSelectOption | null,
+): ERPDynamicSelectOption[] {
+  if (!pinned || !pinned.value) {
+    return options;
+  }
+  if (options.some((option) => option.value === pinned.value)) {
+    return options;
+  }
+  return [...options, pinned];
+}
 const INITIAL_FORM_VALUES = {
   masterName: "",
   searchCode: "",
@@ -75,7 +132,15 @@ const INITIAL_FORM_VALUES = {
   brandLevel: "0",
   brandPhotoUrl: "",
 } as const;
-function buildItemBrandFormFields(parentOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
+type LazyParentHandlers = {
+  onSearchOpenChange: (open: boolean) => void;
+  onSearchQueryChange: ERPDynamicSearchQueryChangeHandler;
+  onValueChange: ERPDynamicFieldValueChangeHandler;
+};
+function buildItemBrandFormFields(
+  parentOptions: ERPDynamicSelectOption[],
+  lazyParent: LazyParentHandlers,
+): ERPDynamicModalField[] {
   return [
     {
       name: "masterName",
@@ -109,7 +174,11 @@ function buildItemBrandFormFields(parentOptions: ERPDynamicSelectOption[]): ERPD
       type: "select",
       colSpan: 2,
       searchable: true,
+      serverSearch: true,
       options: parentOptions,
+      onSearchOpenChange: lazyParent.onSearchOpenChange,
+      onSearchQueryChange: lazyParent.onSearchQueryChange,
+      onValueChange: lazyParent.onValueChange,
     },
     {
       name: "masterDescription",
@@ -156,41 +225,100 @@ function getBase64FromDataUrl(dataUrl: string): string {
   return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
 }
 export default function ItemBrandMasterPage() {
-  const { getAll: getParentBrandLookup } = useApi<unknown>(PARENT_BRAND_LOOKUP_ENDPOINT);
+  // Lazy server-side Parent Brand dropdown (configured dropdown 18 via
+  // /dropdown-details/run). Errors aren't toasted — a failed dropdown fetch shouldn't
+  // interrupt the form.
+  const { run: runParentDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
   const [parentOptions, setParentOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_PARENT_OPTION,
   ]);
+  // Mirror of the latest options + the pinned selection so the value handler can resolve
+  // a picked label and the selection stays visible after a fetch replaces the list.
+  const parentOptionsRef = useRef<ERPDynamicSelectOption[]>([DEFAULT_PARENT_OPTION]);
+  const pinnedParentOptionRef = useRef<ERPDynamicSelectOption | null>(null);
+  const parentSearchTimeoutRef = useRef<number | null>(null);
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted item brands. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
-  useEffect(() => {
-    let mounted = true;
-    void (async () => {
+  const applyParentOptions = useCallback((options: ERPDynamicSelectOption[]) => {
+    parentOptionsRef.current = options;
+    setParentOptions(options);
+  }, []);
+  // Fetch the dropdown's first page (open) or search results (typing). A superseded/
+  // aborted request returns undefined and is skipped so it never wipes the latest list.
+  const fetchParentOptions = useCallback(
+    async (search: string) => {
       try {
-        const payload = await getParentBrandLookup(PARENT_BRAND_LOOKUP_QUERY);
-        if (!mounted) {
+        const payload = await runParentDropdown({ query: buildParentRunQuery(search) });
+        if (payload === undefined) {
           return;
         }
-        setParentOptions(
-          buildLookupOptions(payload, DEFAULT_PARENT_OPTION, {
-            arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
-            idKeys: ["id", "value", "brand_id"],
-            labelKeys: ["name", "label", "brand_name"],
-          }),
+        applyParentOptions(
+          withPinnedOption(buildParentOptions(payload), pinnedParentOptionRef.current),
         );
       } catch {
-        if (mounted) {
-          setParentOptions([DEFAULT_PARENT_OPTION]);
-        }
+        // Keep whatever options are currently shown (e.g. the seeded selection).
       }
-    })();
+    },
+    [applyParentOptions, runParentDropdown],
+  );
+  // Field handlers: fetch on open (immediate), on debounced typing, and pin the choice.
+  const lazyParentHandlers = useMemo<LazyParentHandlers>(
+    () => ({
+      onSearchOpenChange: (open: boolean) => {
+        if (parentSearchTimeoutRef.current != null) {
+          window.clearTimeout(parentSearchTimeoutRef.current);
+          parentSearchTimeoutRef.current = null;
+        }
+        if (open) {
+          void fetchParentOptions("");
+        }
+      },
+      onSearchQueryChange: (query: string) => {
+        if (parentSearchTimeoutRef.current != null) {
+          window.clearTimeout(parentSearchTimeoutRef.current);
+        }
+        const delay = query.trim() ? PARENT_BRAND_SEARCH_DEBOUNCE_MS : 0;
+        parentSearchTimeoutRef.current = window.setTimeout(() => {
+          parentSearchTimeoutRef.current = null;
+          void fetchParentOptions(query);
+        }, delay);
+      },
+      onValueChange: (payload: ERPDynamicFieldValueChangePayload) => {
+        const option = parentOptionsRef.current.find((item) => item.value === payload.value);
+        pinnedParentOptionRef.current = option && payload.value ? option : null;
+      },
+    }),
+    [fetchParentOptions],
+  );
+  // Seed the trigger with the saved parent on edit/view before the field is opened
+  // (and lazily loaded). On create, reset to just the "None" head.
+  const seedSelectedParent = useCallback(
+    (parentId: string, parentName: string) => {
+      const value = parentId.trim();
+      if (!value) {
+        pinnedParentOptionRef.current = null;
+        applyParentOptions([DEFAULT_PARENT_OPTION]);
+        return;
+      }
+      const option: ERPDynamicSelectOption = { value, label: parentName.trim() || value };
+      pinnedParentOptionRef.current = option;
+      applyParentOptions([DEFAULT_PARENT_OPTION, option]);
+    },
+    [applyParentOptions],
+  );
+  useEffect(() => {
     return () => {
-      mounted = false;
+      if (parentSearchTimeoutRef.current != null) {
+        window.clearTimeout(parentSearchTimeoutRef.current);
+      }
     };
-  }, [getParentBrandLookup]);
+  }, []);
   const formFields = useMemo(
-    () => buildItemBrandFormFields(parentOptions),
-    [parentOptions],
+    () => buildItemBrandFormFields(parentOptions, lazyParentHandlers),
+    [parentOptions, lazyParentHandlers],
   );
   // Adds the `grid_param` payload to the default page/limit/search list query.
   // The server JSON-parses it and binds each key into the matching named token in
@@ -253,8 +381,22 @@ export default function ItemBrandMasterPage() {
       editModalTitle="Edit Brand Entry"
       viewModalTitle="Brand Details"
       modalPanelStyle={{ width: "min(52rem, calc(100vw - 2rem))", maxHeight: "min(82vh, 42rem)" }}
+      onModalOpenChange={(open, variantKey) => {
+        // Clear the lazy parent dropdown when the create modal opens so no stale
+        // selection from a previously edited brand lingers (it reloads on open).
+        if (open && variantKey === "master-create") {
+          seedSelectedParent("", "");
+        }
+      }}
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
+        const parentBrandId = toDisplayValue(getFirstDefinedValue(rowSource, BRAND_PARENT_ID_KEYS));
+        // Seed the lazy Parent Brand dropdown with the saved selection so the trigger
+        // shows the parent name on edit/view before the field is opened (and loaded).
+        seedSelectedParent(
+          parentBrandId,
+          toDisplayValue(getFirstDefinedValue(rowSource, BRAND_PARENT_NAME_KEYS)),
+        );
         return {
           ...INITIAL_FORM_VALUES,
           masterName:
@@ -269,7 +411,7 @@ export default function ItemBrandMasterPage() {
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.description)) || defaults.masterDescription,
           position:
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) || defaults.position,
-          parentBrandId: toDisplayValue(getFirstDefinedValue(rowSource, BRAND_PARENT_ID_KEYS)),
+          parentBrandId,
           brandLevel: toDisplayValue(getFirstDefinedValue(rowSource, BRAND_LEVEL_KEYS)) || "0",
           brandPhotoUrl: toDisplayValue(getFirstDefinedValue(rowSource, BRAND_PHOTO_URL_KEYS)),
         };
