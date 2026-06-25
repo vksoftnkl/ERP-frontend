@@ -12,7 +12,6 @@ import {
   getFirstDefinedValue,
   toDisplayValue,
   toNonNegativeInteger,
-  toNullableNumber,
   toNullableString,
   toSelectBoolean,
   toUpdateId,
@@ -31,12 +30,31 @@ const LOOKUP_QUERY_ACCOUNT_LEDGERS = {
   module: "accountLedgers",
   limit: "20",
 } as const;
+const LOOKUP_QUERY_COMPANIES = {
+  module: "companies",
+  limit: "20",
+} as const;
+const LOOKUP_QUERY_BRANCHES = {
+  module: "branches",
+  limit: "20",
+} as const;
+const DEFAULT_COUNTRY_CODE = "IN";
+const DEFAULT_ADDR_TYPE = "SHIP_TO";
+// Mirrors acc_ship_addrs_gstin_chk enforced in the backend validation layer.
+const GSTIN_PATTERN = "^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$";
+// Mirrors acc_ship_addrs_state_code_chk (2-digit GST numeric state code).
+const STATE_CODE_PATTERN = "^[0-9]{2}$";
+const ADDR_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
+  { label: "Ship To", value: "SHIP_TO" },
+  { label: "Bill To", value: "BILL_TO" },
+  { label: "Both", value: "BOTH" },
+];
 const LOOKUP_KEYS = {
   id: ["saaId", "saa_id", "id", "_id"],
-  code: ["saaAddrType", "saa_addr_type", "code"],
-  name: ["saaTrdnm", "saa_trdnm", "name", "tradeName", "trade_name"],
+  code: ["saaAddrType", "saa_addr_type", "addrType", "addr_type", "code"],
+  name: ["saaTradeName", "saa_trade_name", "tradeName", "trade_name", "name"],
   short: ["saaContactName", "saa_contact_name", "contactName", "contact_name", "short"],
-  alias: ["saaPhone", "saa_phone", "alias"],
+  alias: ["saaPhone", "saa_phone", "phone", "alias"],
   active: ["saaIsActive", "saa_is_active", "isActive", "is_active", "status"],
   position: ["saaSort", "saa_sort", "position", "sort"],
   description: ["saaRemarks", "saa_remarks", "description", "remarks"],
@@ -52,74 +70,92 @@ const LOOKUP_KEYS = {
 } as const;
 const REQUEST_PAYLOAD_KEYS = {
   id: "saaId",
-  name: "saaTrdnm",
+  name: "saaTradeName",
   alias: "saaPhone",
   short: "saaContactName",
   description: "saaRemarks",
   sort: "saaSort",
 } as const;
+const SAA_COMPANY_ID_KEYS = ["saaCompanyId", "saa_company_id", "companyId", "company_id"] as const;
+const SAA_BRANCH_ID_KEYS = ["saaBranchId", "saa_branch_id", "branchId", "branch_id"] as const;
 const SAA_LEDGER_ID_KEYS = ["saaLedgerId", "saa_ledger_id", "ledgerId", "ledger_id"] as const;
 const SAA_ADDR_TYPE_KEYS = ["saaAddrType", "saa_addr_type", "addrType", "addr_type"] as const;
 const SAA_CONTACT_NAME_KEYS = ["saaContactName", "saa_contact_name", "contactName", "contact_name"] as const;
 const SAA_ADDR1_KEYS = ["saaAddr1", "saa_addr1", "addr1"] as const;
 const SAA_ADDR2_KEYS = ["saaAddr2", "saa_addr2", "addr2"] as const;
 const SAA_ADDR3_KEYS = ["saaAddr3", "saa_addr3", "addr3"] as const;
-const SAA_LOC_KEYS = ["saaLoc", "saa_loc", "location"] as const;
+const SAA_LOCATION_KEYS = ["saaLocation", "saa_location", "location"] as const;
 const SAA_PIN_KEYS = ["saaPin", "saa_pin", "pin"] as const;
 const SAA_STATE_CODE_KEYS = ["saaStateCode", "saa_state_code", "stateCode", "state_code"] as const;
 const SAA_STATE_NAME_KEYS = ["saaStateName", "saa_state_name", "stateName", "state_name"] as const;
+const SAA_COUNTRY_CODE_KEYS = ["saaCountryCode", "saa_country_code", "countryCode", "country_code"] as const;
 const SAA_DISTANCE_KEYS = ["saaDistanceKm", "saa_distance_km", "distanceKm", "distance_km"] as const;
 const SAA_PHONE_KEYS = ["saaPhone", "saa_phone", "phone"] as const;
 const SAA_EMAIL_KEYS = ["saaEmail", "saa_email", "email"] as const;
 const SAA_GSTIN_KEYS = ["saaGstin", "saa_gstin", "gstin"] as const;
-const SAA_PAN_KEYS = ["saaPan", "saa_pan", "pan"] as const;
 const SAA_IS_DEFAULT_KEYS = ["saaIsDefault", "saa_is_default", "isDefault", "is_default"] as const;
 const SAA_IS_ACTIVE_KEYS = ["saaIsActive", "saa_is_active", "isActive", "is_active", "status"] as const;
 const DEFAULT_LEDGER_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Account Ledger",
 };
+const DEFAULT_COMPANY_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "None",
+};
+const DEFAULT_BRANCH_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "None",
+};
 const INITIAL_FORM_VALUES = {
   masterName: "",
   saaLedgerId: "",
-  saaAddrType: "BILLING",
+  saaAddrType: DEFAULT_ADDR_TYPE,
+  saaCompanyId: "",
+  saaBranchId: "",
   saaContactName: "",
   saaAddr1: "",
   saaAddr2: "",
   saaAddr3: "",
-  saaLoc: "",
+  saaLocation: "",
   saaPin: "",
   saaStateCode: "",
   saaStateName: "",
+  saaCountryCode: DEFAULT_COUNTRY_CODE,
   saaDistanceKm: "",
   saaPhone: "",
   saaEmail: "",
   saaGstin: "",
-  saaPan: "",
   position: "0",
   saaIsDefault: "false",
   saaIsActive: "true",
   masterDescription: "",
 } as const;
-function toOptionalNonNegativeInteger(value: string): number | undefined {
+function toNullableNonNegativeInteger(value: string): number | null {
   const normalized = value.trim();
   if (!normalized) {
-    return undefined;
+    return null;
   }
   const parsed = Number.parseInt(normalized, 10);
   if (!Number.isFinite(parsed) || parsed < 0) {
-    return undefined;
+    return null;
   }
   return Math.floor(parsed);
 }
 function buildLedgerShippingAddressFields(
   ledgerOptions: ERPDynamicSelectOption[],
+  companyOptions: ERPDynamicSelectOption[],
+  branchOptions: ERPDynamicSelectOption[],
 ): ERPDynamicModalField[] {
   return [
     {
       name: "masterName",
       label: "Trade Name",
       placeholder: "ABC Traders",
+      validation: {
+        maxLength: 200,
+        maxLengthMessage: "Trade Name must be at most 200 characters.",
+      },
     },
     {
       name: "saaLedgerId",
@@ -135,49 +171,100 @@ function buildLedgerShippingAddressFields(
     {
       name: "saaAddrType",
       label: "Address Type",
-      placeholder: "BILLING",
-      validation: {
-        maxLength: 20,
-        maxLengthMessage: "Address Type must be at most 20 characters.",
-      },
+      type: "select",
+      options: ADDR_TYPE_OPTIONS,
+    },
+    {
+      name: "saaCompanyId",
+      label: "Company",
+      type: "select",
+      searchable: true,
+      options: companyOptions,
+    },
+    {
+      name: "saaBranchId",
+      label: "Branch",
+      type: "select",
+      searchable: true,
+      options: branchOptions,
     },
     {
       name: "saaContactName",
       label: "Contact Name",
+      validation: {
+        maxLength: 150,
+        maxLengthMessage: "Contact Name must be at most 150 characters.",
+      },
     },
     {
       name: "saaAddr1",
       label: "Address Line 1",
+      validation: {
+        maxLength: 250,
+        maxLengthMessage: "Address Line 1 must be at most 250 characters.",
+      },
     },
     {
       name: "saaAddr2",
       label: "Address Line 2",
+      validation: {
+        maxLength: 250,
+        maxLengthMessage: "Address Line 2 must be at most 250 characters.",
+      },
     },
     {
       name: "saaAddr3",
       label: "Address Line 3",
+      validation: {
+        maxLength: 250,
+        maxLengthMessage: "Address Line 3 must be at most 250 characters.",
+      },
     },
     {
-      name: "saaLoc",
+      name: "saaLocation",
       label: "Location",
+      validation: {
+        maxLength: 200,
+        maxLengthMessage: "Location must be at most 200 characters.",
+      },
     },
     {
       name: "saaPin",
       label: "PIN",
+      helperText: "6-digit PIN code (required when Country is IN).",
+      validation: {
+        maxLength: 10,
+        maxLengthMessage: "PIN must be at most 10 characters.",
+      },
     },
     {
       name: "saaStateCode",
       label: "State Code",
+      placeholder: "33",
+      helperText: "2-digit GST state code.",
       validation: {
-        minLength: 2,
-        maxLength: 2,
-        minLengthMessage: "State Code must be exactly 2 characters.",
-        maxLengthMessage: "State Code must be exactly 2 characters.",
+        pattern: STATE_CODE_PATTERN,
+        patternMessage: "State Code must be a 2-digit GST state code.",
       },
     },
     {
       name: "saaStateName",
       label: "State Name",
+      validation: {
+        maxLength: 100,
+        maxLengthMessage: "State Name must be at most 100 characters.",
+      },
+    },
+    {
+      name: "saaCountryCode",
+      label: "Country Code",
+      placeholder: DEFAULT_COUNTRY_CODE,
+      validation: {
+        minLength: 2,
+        maxLength: 2,
+        minLengthMessage: "Country Code must be exactly 2 characters.",
+        maxLengthMessage: "Country Code must be exactly 2 characters.",
+      },
     },
     {
       name: "saaDistanceKm",
@@ -193,6 +280,10 @@ function buildLedgerShippingAddressFields(
       name: "saaPhone",
       label: "Phone",
       type: "tel",
+      validation: {
+        maxLength: 20,
+        maxLengthMessage: "Phone must be at most 20 characters.",
+      },
     },
     {
       name: "saaEmail",
@@ -202,19 +293,16 @@ function buildLedgerShippingAddressFields(
     {
       name: "saaGstin",
       label: "GSTIN",
+      required: true,
+      placeholder: "33ABCDE1234F1Z5",
       validation: {
+        requiredMessage: "GSTIN is required.",
+        minLength: 15,
         maxLength: 15,
-        maxLengthMessage: "GSTIN must be at most 15 characters.",
-      },
-    },
-    {
-      name: "saaPan",
-      label: "PAN",
-      validation: {
-        minLength: 10,
-        maxLength: 10,
-        minLengthMessage: "PAN must be exactly 10 characters.",
-        maxLengthMessage: "PAN must be exactly 10 characters.",
+        minLengthMessage: "GSTIN must be exactly 15 characters.",
+        maxLengthMessage: "GSTIN must be exactly 15 characters.",
+        pattern: GSTIN_PATTERN,
+        patternMessage: "GSTIN must be a valid 15-character GSTIN.",
       },
     },
     {
@@ -250,40 +338,76 @@ function buildLedgerShippingAddressFields(
       label: "Remarks",
       type: "textarea",
       colSpan: 2,
+      validation: {
+        maxLength: 250,
+        maxLengthMessage: "Remarks must be at most 250 characters.",
+      },
     },
   ];
 }
 export default function LedgerShippingAddressMasterPage() {
   const { getAll: getLedgerLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  const { getAll: getCompanyLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  const { getAll: getBranchLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const [ledgerOptions, setLedgerOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_LEDGER_OPTION,
+  ]);
+  const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([
+    DEFAULT_COMPANY_OPTION,
+  ]);
+  const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([
+    DEFAULT_BRANCH_OPTION,
   ]);
   useEffect(() => {
     let mounted = true;
     void (async () => {
       try {
-        const payload = await getLedgerLookup(LOOKUP_QUERY_ACCOUNT_LEDGERS);
+        const [ledgersPayload, companiesPayload, branchesPayload] = await Promise.all([
+          getLedgerLookup(LOOKUP_QUERY_ACCOUNT_LEDGERS),
+          getCompanyLookup(LOOKUP_QUERY_COMPANIES),
+          getBranchLookup(LOOKUP_QUERY_BRANCHES),
+        ]);
         if (!mounted) {
           return;
         }
         setLedgerOptions(
-          buildLookupOptions(payload, DEFAULT_LEDGER_OPTION, {
+          buildLookupOptions(ledgersPayload, DEFAULT_LEDGER_OPTION, {
+            arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
+            idKeys: ["id", "value"],
+            labelKeys: ["name", "label"],
+          }),
+        );
+        setCompanyOptions(
+          buildLookupOptions(companiesPayload, DEFAULT_COMPANY_OPTION, {
+            arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
+            idKeys: ["id", "value"],
+            labelKeys: ["name", "label"],
+          }),
+        );
+        setBranchOptions(
+          buildLookupOptions(branchesPayload, DEFAULT_BRANCH_OPTION, {
             arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
             idKeys: ["id", "value"],
             labelKeys: ["name", "label"],
           }),
         );
       } catch {
-        if (mounted) {
-          setLedgerOptions([DEFAULT_LEDGER_OPTION]);
+        if (!mounted) {
+          return;
         }
+        setLedgerOptions([DEFAULT_LEDGER_OPTION]);
+        setCompanyOptions([DEFAULT_COMPANY_OPTION]);
+        setBranchOptions([DEFAULT_BRANCH_OPTION]);
       }
     })();
     return () => {
       mounted = false;
     };
-  }, [getLedgerLookup]);
-  const formFields = useMemo(() => buildLedgerShippingAddressFields(ledgerOptions), [ledgerOptions]);
+  }, [getLedgerLookup, getCompanyLookup, getBranchLookup]);
+  const formFields = useMemo(
+    () => buildLedgerShippingAddressFields(ledgerOptions, companyOptions, branchOptions),
+    [ledgerOptions, companyOptions, branchOptions],
+  );
   return (
     <CrudMasterPage
       title="Ledger Shipping Address"
@@ -292,7 +416,7 @@ export default function LedgerShippingAddressMasterPage() {
       entityLabelPlural="ledger shipping addresses"
       apiEndpoints={API_ENDPOINTS}
       gridTableName={GRID_TABLE_NAME}
-        listResponseStyleArrayKey=""
+      listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
@@ -312,13 +436,20 @@ export default function LedgerShippingAddressMasterPage() {
         return {
           ...INITIAL_FORM_VALUES,
           masterName:
-            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.name)) || mergedDefaults.masterName,
+            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.name)) ||
+            mergedDefaults.masterName,
           saaLedgerId:
             toDisplayValue(getFirstDefinedValue(rowSource, SAA_LEDGER_ID_KEYS)) ||
             mergedDefaults.saaLedgerId,
           saaAddrType:
             toDisplayValue(getFirstDefinedValue(rowSource, SAA_ADDR_TYPE_KEYS)) ||
             mergedDefaults.saaAddrType,
+          saaCompanyId:
+            toDisplayValue(getFirstDefinedValue(rowSource, SAA_COMPANY_ID_KEYS)) ||
+            mergedDefaults.saaCompanyId,
+          saaBranchId:
+            toDisplayValue(getFirstDefinedValue(rowSource, SAA_BRANCH_ID_KEYS)) ||
+            mergedDefaults.saaBranchId,
           saaContactName:
             toDisplayValue(getFirstDefinedValue(rowSource, SAA_CONTACT_NAME_KEYS)) ||
             mergedDefaults.saaContactName,
@@ -328,8 +459,9 @@ export default function LedgerShippingAddressMasterPage() {
             toDisplayValue(getFirstDefinedValue(rowSource, SAA_ADDR2_KEYS)) || mergedDefaults.saaAddr2,
           saaAddr3:
             toDisplayValue(getFirstDefinedValue(rowSource, SAA_ADDR3_KEYS)) || mergedDefaults.saaAddr3,
-          saaLoc:
-            toDisplayValue(getFirstDefinedValue(rowSource, SAA_LOC_KEYS)) || mergedDefaults.saaLoc,
+          saaLocation:
+            toDisplayValue(getFirstDefinedValue(rowSource, SAA_LOCATION_KEYS)) ||
+            mergedDefaults.saaLocation,
           saaPin:
             toDisplayValue(getFirstDefinedValue(rowSource, SAA_PIN_KEYS)) || mergedDefaults.saaPin,
           saaStateCode:
@@ -338,6 +470,9 @@ export default function LedgerShippingAddressMasterPage() {
           saaStateName:
             toDisplayValue(getFirstDefinedValue(rowSource, SAA_STATE_NAME_KEYS)) ||
             mergedDefaults.saaStateName,
+          saaCountryCode:
+            toDisplayValue(getFirstDefinedValue(rowSource, SAA_COUNTRY_CODE_KEYS)) ||
+            mergedDefaults.saaCountryCode,
           saaDistanceKm:
             toDisplayValue(getFirstDefinedValue(rowSource, SAA_DISTANCE_KEYS)) ||
             mergedDefaults.saaDistanceKm,
@@ -347,10 +482,9 @@ export default function LedgerShippingAddressMasterPage() {
             toDisplayValue(getFirstDefinedValue(rowSource, SAA_EMAIL_KEYS)) || mergedDefaults.saaEmail,
           saaGstin:
             toDisplayValue(getFirstDefinedValue(rowSource, SAA_GSTIN_KEYS)) || mergedDefaults.saaGstin,
-          saaPan:
-            toDisplayValue(getFirstDefinedValue(rowSource, SAA_PAN_KEYS)) || mergedDefaults.saaPan,
           position:
-            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) || mergedDefaults.position,
+            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) ||
+            mergedDefaults.position,
           saaIsDefault: toSelectBoolean(getFirstDefinedValue(rowSource, SAA_IS_DEFAULT_KEYS), "false"),
           saaIsActive: toSelectBoolean(getFirstDefinedValue(rowSource, SAA_IS_ACTIVE_KEYS), "true"),
           masterDescription:
@@ -361,23 +495,25 @@ export default function LedgerShippingAddressMasterPage() {
       buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
         const payload: Record<string, unknown> = {
           saaLedgerId: (values.saaLedgerId ?? "").trim(),
-          saaAddrType: toUpper(values.saaAddrType ?? "BILLING"),
+          saaAddrType: toUpper(values.saaAddrType ?? DEFAULT_ADDR_TYPE) || DEFAULT_ADDR_TYPE,
+          saaCompanyId: toNullableString(values.saaCompanyId ?? ""),
+          saaBranchId: toNullableString(values.saaBranchId ?? ""),
           saaIsDefault: (values.saaIsDefault ?? "false") === "true",
           saaSort: toNonNegativeInteger(values.position ?? "0", 0),
-          saaTrdnm: toNullableString(values.masterName ?? ""),
+          saaTradeName: toNullableString(values.masterName ?? ""),
           saaContactName: toNullableString(values.saaContactName ?? ""),
           saaAddr1: toNullableString(values.saaAddr1 ?? ""),
           saaAddr2: toNullableString(values.saaAddr2 ?? ""),
           saaAddr3: toNullableString(values.saaAddr3 ?? ""),
-          saaLoc: toNullableString(values.saaLoc ?? ""),
+          saaLocation: toNullableString(values.saaLocation ?? ""),
           saaPin: toNullableString(values.saaPin ?? ""),
-          saaStateCode: toNullableString(toUpper(values.saaStateCode ?? "")),
+          saaStateCode: toNullableString(values.saaStateCode ?? ""),
           saaStateName: toNullableString(values.saaStateName ?? ""),
-          saaDistanceKm: toOptionalNonNegativeInteger(values.saaDistanceKm ?? ""),
+          saaCountryCode: toUpper(values.saaCountryCode ?? "") || DEFAULT_COUNTRY_CODE,
+          saaDistanceKm: toNullableNonNegativeInteger(values.saaDistanceKm ?? ""),
           saaPhone: toNullableString(values.saaPhone ?? ""),
           saaEmail: toNullableString(values.saaEmail ?? ""),
-          saaGstin: toNullableString(toUpper(values.saaGstin ?? "")),
-          saaPan: toNullableString(toUpper(values.saaPan ?? "")),
+          saaGstin: toUpper(values.saaGstin ?? "").trim(),
           saaIsActive: (values.saaIsActive ?? "true") === "true",
           saaRemarks: toNullableString(values.masterDescription ?? ""),
         };

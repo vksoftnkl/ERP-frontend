@@ -48,7 +48,9 @@ const LEDGER_INITIAL_FORM_VALUES = {
   ledStateName: "",
   ledStateCode: "",
   ledPin: "",
-  ledCountry: "",
+  // Create-mode default (mirrors LedgerEntry create defaults). Overwritten by the
+  // saved value on edit via toLedgerFormValues.
+  ledCountry: "India",
   ledRegionName: "",
   ledRegionAddr1: "",
   ledRegionAddr2: "",

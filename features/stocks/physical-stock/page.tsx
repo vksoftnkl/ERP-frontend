@@ -61,6 +61,7 @@ import {
   VALUE_FORMATTER,
 } from "@/features/stocks/_shared/constants";
 import { LookupCell } from "@/features/stocks/_shared/LookupCell";
+import { SelectCell } from "@/features/stocks/_shared/SelectCell";
 import type {
   ColumnAlign,
   ColumnKind,
@@ -2444,57 +2445,44 @@ export default function PhysicalStockPage() {
         ? buildUomOptions(itemDetail, unitOptionsByValue)
         : unitOptions.filter((option) => option.value);
       return (
-        <select
-          data-opening-stock-field-control="true"
-          data-opening-stock-row-id={row.id}
-          data-opening-stock-field-key={column.key}
+        <SelectCell
+          rowId={row.id}
+          fieldKey={column.key}
           value={row.values.oslunitid ?? ""}
-          onChange={(event) => handleUomChange(row.id, event.target.value)}
-          onKeyDown={handleFieldNavigationKeyDown}
-          className={cx(styles.cellSelect, invalid && styles.requiredField)}
+          options={rowUomOptions}
+          styles={styles}
+          placeholderOption={{
+            value: "",
+            label: itemDetail ? "Select Uom" : "Select item first",
+          }}
           disabled={rowUomOptions.length === 0}
-          aria-invalid={invalid || undefined}
-        >
-          <option value="">{itemDetail ? "Select Uom" : "Select item first"}</option>
-          {rowUomOptions.map((option) => (
-            <option
-              key={`${row.id}-uom-${option.value}`}
-              value={option.value}
-            >
-              {option.label}
-            </option>
-          ))}
-        </select>
+          hasError={invalid}
+          optionKeyPrefix={`${row.id}-uom`}
+          onChange={(unitId) => handleUomChange(row.id, unitId)}
+          onKeyDown={handleFieldNavigationKeyDown}
+        />
       );
     }
     if (column.kind === "select") {
       const isTrackingTypeSelect = column.key === "osltrackingtype";
       return (
-        <select
-          data-opening-stock-field-control="true"
-          data-opening-stock-row-id={row.id}
-          data-opening-stock-field-key={column.key}
+        <SelectCell
+          rowId={row.id}
+          fieldKey={column.key}
           value={value}
-          onChange={(event) => handleRowChange(row.id, column.key, event.target.value)}
-          onKeyDown={handleFieldNavigationKeyDown}
-          className={cx(
-            styles.cellSelect,
-            isTrackingTypeSelect && styles.cellSelectNoArrow,
-            invalid && styles.requiredField,
-          )}
+          options={(column.options ?? []).map((option) => ({
+            value: option,
+            label:
+              TRACKING_TYPE_OPTION_LABELS[option as keyof typeof TRACKING_TYPE_OPTION_LABELS] ??
+              option,
+          }))}
+          styles={styles}
           disabled={isTrackingTypeSelect}
-          aria-invalid={invalid || undefined}
-        >
-          {(column.options ?? []).map((option) => (
-            <option
-              key={option}
-              value={option}
-            >
-              {TRACKING_TYPE_OPTION_LABELS[option as keyof typeof TRACKING_TYPE_OPTION_LABELS] ??
-                option}
-            </option>
-          ))}
-        </select>
+          hasError={invalid}
+          hideNativeArrow={isTrackingTypeSelect}
+          onChange={(nextValue) => handleRowChange(row.id, column.key, nextValue)}
+          onKeyDown={handleFieldNavigationKeyDown}
+        />
       );
     }
     if (column.kind === "date") {

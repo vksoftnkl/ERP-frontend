@@ -12,6 +12,7 @@ import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import type { ERPDynamicSearchShortcutPayload } from "@/components/design-system/ui/dynamic-modal-form";
 import type { ItemPriceDetailsPayload } from "@/store/api/lookupsApi";
 import { LookupCell } from "@/features/stocks/_shared/LookupCell";
+import { SelectCell } from "@/features/stocks/_shared/SelectCell";
 import {
   PROFIT_TYPE_OPTION_LABELS,
   TRACKING_TYPE_OPTION_LABELS,
@@ -247,28 +248,21 @@ export function StockTableRow({
             className={cx(styles.cell, styles.compactCell, getAlignClass(column.align))}
           >
             {isHiddenField ? null : column.key === "uom" ? (
-              <select
-                data-opening-stock-field-control="true"
-                data-opening-stock-row-id={row.id}
-                data-opening-stock-field-key={column.key}
+              <SelectCell
+                rowId={row.id}
+                fieldKey={column.key}
                 value={row.values.oslunitid ?? ""}
-                onChange={(event) => onUomChange(row.id, event.target.value)}
-                className={cx(styles.cellSelect, hasValidationError && styles.requiredField)}
+                options={uomSelectOptions}
+                styles={styles}
+                placeholderOption={{
+                  value: "",
+                  label: currentItemDetail ? "Select Uom" : "Select item first",
+                }}
                 disabled={!currentItemDetail || uomSelectOptions.length === 0}
-                aria-invalid={hasValidationError || undefined}
-              >
-                <option value="">
-                  {currentItemDetail ? "Select Uom" : "Select item first"}
-                </option>
-                {uomSelectOptions.map((option) => (
-                  <option
-                    key={`${row.id}-uom-${option.value}`}
-                    value={option.value}
-                  >
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                hasError={hasValidationError}
+                optionKeyPrefix={`${row.id}-uom`}
+                onChange={(unitId) => onUomChange(row.id, unitId)}
+              />
             ) : column.kind === "lookup" && lookupKind && lookupFieldConfig ? (
               <LookupCell
                 rowId={row.id}
@@ -304,31 +298,26 @@ export function StockTableRow({
                 onSelect={(option) => onLookupSelection(row.id, lookupKind, option)}
               />
             ) : column.kind === "select" ? (
-              <select
-                data-opening-stock-field-control="true"
-                data-opening-stock-row-id={row.id}
-                data-opening-stock-field-key={column.key}
+              <SelectCell
+                rowId={row.id}
+                fieldKey={column.key}
                 value={value}
-                onChange={(event) => onRowChange(row.id, column.key, event.target.value)}
-                onKeyDown={handleFieldNavigationKeyDown}
-                className={cx(
-                  styles.cellSelect,
-                  hidesNativeSelectArrow && styles.cellSelectNoArrow,
-                  hasRequiredFieldError && styles.requiredField,
-                )}
+                options={(column.options ?? []).map((option) => ({
+                  value: option,
+                  label: getSelectOptionLabel(column.key, option),
+                }))}
+                styles={styles}
+                placeholderOption={
+                  column.key === "roundoff"
+                    ? { value: "", label: "Select Round Off" }
+                    : null
+                }
                 disabled={isDisabledInput}
-                aria-invalid={hasRequiredFieldError || undefined}
-              >
-                {column.key === "roundoff" ? <option value="">Select Round Off</option> : null}
-                {(column.options ?? []).map((option) => (
-                  <option
-                    key={option}
-                    value={option}
-                  >
-                    {getSelectOptionLabel(column.key, option)}
-                  </option>
-                ))}
-              </select>
+                hasError={hasRequiredFieldError}
+                hideNativeArrow={hidesNativeSelectArrow}
+                onChange={(nextValue) => onRowChange(row.id, column.key, nextValue)}
+                onKeyDown={handleFieldNavigationKeyDown}
+              />
             ) : column.kind === "date" ? (
               <div
                 className={cx(

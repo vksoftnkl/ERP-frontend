@@ -158,6 +158,10 @@ export type CrudMasterPageProps = {
   useResponseTableColumns?: boolean;
   responseTableColumnExcludeKeys?: readonly string[];
   toolbarContent?: ReactNode;
+  // Extra action buttons rendered at the end of the icon toolbar (alongside
+  // Add/Edit/Delete/...). Lets a page add navigation/actions without forking
+  // the shared toolbar.
+  toolbarActions?: ReactNode;
   listResponseStyleColumns?: CrudMasterListResponseStyleColumn[];
   listResponseStyleArrayKey?: string;
   nameFieldLabel?: string;

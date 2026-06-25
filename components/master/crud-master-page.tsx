@@ -2250,6 +2250,7 @@ export default function CrudMasterPage({
   useResponseTableColumns,
   responseTableColumnExcludeKeys,
   toolbarContent,
+  toolbarActions,
   listResponseStyleColumns,
   listResponseStyleArrayKey,
   nameFieldLabel,
@@ -3822,6 +3823,7 @@ export default function CrudMasterPage({
                       <span>History</span>
                     </button>
                   ) : null}
+                  {toolbarActions}
                 </div>
 
                 {/* Error boxes */}

@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { FiTruck } from "react-icons/fi";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import InlineRelatedMasterModal from "@/features/masters/shared/inline-related-master";
@@ -1285,6 +1287,7 @@ function buildGroupModalFields(): ERPDynamicModalField[] {
   ];
 }
 export default function CustomerPage() {
+  const router = useRouter();
   const stateModalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const areaModalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const groupModalControllerRef = useRef<ERPDynamicModalController | null>(null);
@@ -2105,6 +2108,9 @@ export default function CustomerPage() {
     }),
     [wantDelete],
   );
+  const handleNavigateToShippingAddress = useCallback(() => {
+    router.push("/master/ledger-shipping-address-master");
+  }, [router]);
   return (
     <>
       <CrudMasterPage
@@ -2125,6 +2131,17 @@ export default function CustomerPage() {
               Show deleted records
             </label>
           </div>
+        }
+        toolbarActions={
+          <button
+            type="button"
+            className={`${styles.iconBtn} ${styles.iconBtnShipping}`}
+            onClick={handleNavigateToShippingAddress}
+            title="Ledger Shipping Address"
+          >
+            <span className={styles.iconBtnBox}><FiTruck aria-hidden="true" /></span>
+            <span>Shipping Address</span>
+          </button>
         }
         gridTableName={GRID_TABLE_NAME}
         gridDetailId={8}

@@ -116,25 +116,37 @@ export type PaginationInfo = {
   pageSize: number | null;
 };
 
+// One declarative field/heading in the ledger modal. `type` may be a normal
+// control type, or a structural marker: "heading" (opens a tab), "subheading"
+// (inline sub-section), or "bank-editor" (the inline bank-accounts grid).
+export type LedgerFormField = {
+  name: LedgerFormFieldName | string;
+  label: string;
+  type?: string;
+  required?: boolean;
+  searchable?: boolean;
+  options?: ERPDynamicSelectOption[];
+  placeholder?: string;
+  helperText?: string;
+  validation?: Record<string, unknown>;
+  colSpan?: number;
+  min?: number | string;
+  max?: number | string;
+  step?: string;
+  // The sub-section (sub-heading key, or tab key) this field belongs to. Stamped
+  // by toLedgerFormSections and used to gate the field by the ledger profile.
+  sectionKey?: string;
+};
+
+// Flat field as authored in buildLedgerFormFields (before tab splitting). Same
+// shape as LedgerFormField; `sectionKey` is added later by toLedgerFormSections.
+export type LedgerFormBuildField = Omit<LedgerFormField, "sectionKey">;
+
 export type LedgerFormSection = {
   key: string;
   title: string;
   helperText?: string;
-  fields: Array<{
-    name: LedgerFormFieldName | string;
-    label: string;
-    type?: string;
-    required?: boolean;
-    searchable?: boolean;
-    options?: ERPDynamicSelectOption[];
-    placeholder?: string;
-    helperText?: string;
-    validation?: Record<string, unknown>;
-    colSpan?: number;
-    min?: number | string;
-    max?: number | string;
-    step?: string;
-  }>;
+  fields: LedgerFormField[];
 };
 
 export type LedgerFieldNavigationDirection = "left" | "right" | "up" | "down";

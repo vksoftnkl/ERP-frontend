@@ -18,40 +18,93 @@ type BankAccountsEditorProps = {
   onSetDefault: (rowKey: string) => void;
 };
 
-const cardStyle: CSSProperties = {
-  border: "1px solid var(--erp-modal-border, #cfdae6)",
-  borderRadius: "0.5rem",
-  padding: "0.75rem 0.9rem 0.9rem",
-  marginBottom: "0.75rem",
-  background: "var(--erp-modal-surface, #ffffff)",
+// Editable grid (mirrors the desktop NexBankGrid / table_id 13): one row per
+// beneficiary bank account, one column per field, an A/c Type combo, and a single
+// "Default" radio with Add/Delete actions.
+type BankColumn = {
+  field: LedgerBankAccountFieldName;
+  label: string;
+  required?: boolean;
+  minWidth: number;
+  placeholder?: string;
+  maxLength?: number;
 };
 
-const cardHeaderStyle: CSSProperties = {
+const TEXT_COLUMNS: BankColumn[] = [
+  { field: "lbaAccountHolder", label: "Account Holder", required: true, minWidth: 160, maxLength: 200 },
+  { field: "lbaBankName", label: "Bank Name", required: true, minWidth: 150, maxLength: 200 },
+  { field: "lbaAccountNo", label: "Account No", required: true, minWidth: 140, maxLength: 50 },
+  { field: "lbaBranchName", label: "Branch", minWidth: 130, maxLength: 200 },
+  { field: "lbaIfscCode", label: "IFSC", minWidth: 120, placeholder: "HDFC0001234", maxLength: 11 },
+  { field: "lbaMicrCode", label: "MICR", minWidth: 110, maxLength: 15 },
+];
+
+const TRAILING_TEXT_COLUMNS: BankColumn[] = [
+  { field: "lbaUpiId", label: "UPI Id", minWidth: 130, maxLength: 100 },
+  { field: "lbaChequeName", label: "Cheque Name", minWidth: 140, maxLength: 200 },
+  { field: "lbaRemarks", label: "Remarks", minWidth: 150, maxLength: 250 },
+];
+
+const wrapperStyle: CSSProperties = {
+  gridColumn: "1 / -1",
+  display: "flex",
+  flexDirection: "column",
+  rowGap: "0.6rem",
+};
+
+const toolbarStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
   gap: "0.75rem",
-  marginBottom: "0.65rem",
 };
 
-const gridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-  columnGap: "1.25rem",
-  rowGap: "0.6rem",
+const tableScrollStyle: CSSProperties = {
+  overflowX: "auto",
+  border: "1px solid var(--erp-modal-border, #cfdae6)",
+  borderRadius: "0.5rem",
 };
 
-const fieldStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  rowGap: "0.3rem",
+const tableStyle: CSSProperties = {
+  borderCollapse: "collapse",
+  width: "100%",
+  fontSize: "0.8rem",
+};
+
+const thStyle: CSSProperties = {
+  textAlign: "left",
+  padding: "0.5rem 0.55rem",
+  background: "#f1f5f9",
+  color: "#334155",
+  fontWeight: 700,
+  fontSize: "0.72rem",
+  whiteSpace: "nowrap",
+  borderBottom: "1px solid #d8e1ea",
+};
+
+const thCenterStyle: CSSProperties = { ...thStyle, textAlign: "center" };
+
+const tdStyle: CSSProperties = {
+  padding: "0.25rem 0.35rem",
+  borderBottom: "1px solid #eef2f7",
+  verticalAlign: "middle",
+};
+
+const tdCenterStyle: CSSProperties = { ...tdStyle, textAlign: "center" };
+
+const cellInputBaseStyle: CSSProperties = {
+  width: "100%",
+  padding: "0.32rem 0.45rem",
+  border: "1px solid #d8e1ea",
+  borderRadius: "0.35rem",
+  fontSize: "0.8rem",
+  background: "#fff",
 };
 
 const addButtonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   gap: "0.4rem",
-  alignSelf: "flex-start",
   padding: "0.35rem 0.75rem",
   border: "1px dashed var(--erp-modal-accent, #2563eb)",
   borderRadius: "0.5rem",
@@ -64,20 +117,12 @@ const addButtonStyle: CSSProperties = {
 const removeButtonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  gap: "0.35rem",
-  padding: "0.25rem 0.55rem",
+  justifyContent: "center",
+  padding: "0.3rem",
   border: "1px solid #e2b4b4",
   borderRadius: "0.4rem",
   background: "transparent",
   color: "#c0392b",
-  cursor: "pointer",
-};
-
-const defaultToggleStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "0.35rem",
-  fontWeight: 600,
   cursor: "pointer",
 };
 
@@ -91,130 +136,153 @@ export default function BankAccountsEditor({
   onRemoveRow,
   onSetDefault,
 }: BankAccountsEditorProps) {
-  const renderText = (
-    row: LedgerBankAccountFormRow,
-    field: LedgerBankAccountFieldName,
-    label: string,
-    options?: { required?: boolean; placeholder?: string; type?: string; maxLength?: number; span?: number },
-  ) => {
-    const isInvalid = invalidRowKey === row.rowKey && invalidField === field;
+  const renderCell = (row: LedgerBankAccountFormRow, column: BankColumn) => {
+    const isInvalid = invalidRowKey === row.rowKey && invalidField === column.field;
     return (
-      <div style={{ ...fieldStyle, gridColumn: options?.span ? `span ${options.span}` : undefined }}>
-        <label className={dynamicFormStyles.label} htmlFor={`${row.rowKey}-${field}`} style={{ paddingTop: 0 }}>
-          {label}
-          {options?.required ? <span className={dynamicFormStyles.requiredMark}>*</span> : null}
-        </label>
+      <td key={column.field} style={{ ...tdStyle, minWidth: column.minWidth }}>
         <input
-          id={`${row.rowKey}-${field}`}
-          className={`${dynamicFormStyles.control} ${isInvalid ? dynamicFormStyles.controlInvalid : ""}`}
-          type={options?.type ?? "text"}
+          id={`${row.rowKey}-${column.field}`}
+          style={{
+            ...cellInputBaseStyle,
+            borderColor: isInvalid ? "#dc2626" : "#d8e1ea",
+          }}
+          type="text"
           autoComplete="off"
-          value={row[field]}
-          placeholder={options?.placeholder}
-          maxLength={options?.maxLength}
+          aria-label={column.label}
+          value={row[column.field]}
+          placeholder={column.placeholder}
+          maxLength={column.maxLength}
           disabled={disabled}
           onChange={(event) =>
-            onChangeRow(row.rowKey, { [field]: event.target.value } as Partial<LedgerBankAccountFormRow>)
+            onChangeRow(row.rowKey, {
+              [column.field]: event.target.value,
+            } as Partial<LedgerBankAccountFormRow>)
           }
         />
-      </div>
+      </td>
     );
   };
 
+  // Column count for the empty-state row's colSpan: index + text cols + type +
+  // trailing text cols + active + default + delete.
+  const columnCount = 1 + TEXT_COLUMNS.length + 1 + TRAILING_TEXT_COLUMNS.length + 3;
+
   return (
-    <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column" }}>
-      {rows.length === 0 ? (
-        <p
-          style={{
-            margin: "0 0 0.75rem",
-            color: "#64748b",
-            fontSize: "0.85rem",
-          }}
-        >
-          No bank accounts added yet.
-        </p>
-      ) : (
-        rows.map((row, index) => (
-          <div key={row.rowKey} style={cardStyle}>
-            <div style={cardHeaderStyle}>
-              <strong style={{ fontSize: "0.85rem" }}>
-                Bank Account #{index + 1}
-              </strong>
-              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                <label style={defaultToggleStyle}>
-                  <input
-                    type="radio"
-                    name="ledger-bank-account-default"
-                    checked={row.lbaIsDefault}
-                    disabled={disabled}
-                    onChange={() => onSetDefault(row.rowKey)}
-                  />
-                  Default
-                </label>
-                <label style={{ ...defaultToggleStyle, fontWeight: 500 }}>
-                  <input
-                    type="checkbox"
-                    checked={row.lbaIsActive}
-                    disabled={disabled}
-                    onChange={(event) =>
-                      onChangeRow(row.rowKey, { lbaIsActive: event.target.checked })
-                    }
-                  />
-                  Active
-                </label>
-                {!disabled ? (
-                  <button
-                    type="button"
-                    style={removeButtonStyle}
-                    onClick={() => onRemoveRow(row.rowKey)}
-                    title="Remove bank account"
-                  >
-                    <FiTrash2 aria-hidden="true" />
-                    Remove
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            <div style={gridStyle}>
-              {renderText(row, "lbaAccountHolder", "Account Holder", { required: true, maxLength: 200 })}
-              {renderText(row, "lbaBankName", "Bank Name", { required: true, maxLength: 200 })}
-              {renderText(row, "lbaAccountNo", "Account No", { required: true, maxLength: 50 })}
-              {renderText(row, "lbaIfscCode", "IFSC Code", { placeholder: "HDFC0001234", maxLength: 11 })}
-              {renderText(row, "lbaMicrCode", "MICR Code", { maxLength: 15 })}
-              <div style={fieldStyle}>
-                <label className={dynamicFormStyles.label} htmlFor={`${row.rowKey}-lbaAccountType`} style={{ paddingTop: 0 }}>
-                  Account Type
-                </label>
-                <select
-                  id={`${row.rowKey}-lbaAccountType`}
-                  className={dynamicFormStyles.control}
-                  value={row.lbaAccountType}
-                  disabled={disabled}
-                  onChange={(event) =>
-                    onChangeRow(row.rowKey, { lbaAccountType: event.target.value })
-                  }
+    <div style={wrapperStyle}>
+      <div style={toolbarStyle}>
+        <span style={{ fontSize: "0.78rem", color: "#64748b" }}>
+          {rows.length} bank account{rows.length === 1 ? "" : "s"}
+        </span>
+        {!disabled ? (
+          <button type="button" style={addButtonStyle} onClick={onAddRow}>
+            <FiPlusCircle aria-hidden="true" />
+            Add
+          </button>
+        ) : null}
+      </div>
+      <div style={tableScrollStyle}>
+        <table style={tableStyle}>
+          <thead>
+            <tr>
+              <th style={thCenterStyle}>#</th>
+              {TEXT_COLUMNS.map((column) => (
+                <th key={column.field} style={thStyle}>
+                  {column.label}
+                  {column.required ? (
+                    <span className={dynamicFormStyles.requiredMark}> *</span>
+                  ) : null}
+                </th>
+              ))}
+              <th style={thStyle}>A/c Type</th>
+              {TRAILING_TEXT_COLUMNS.map((column) => (
+                <th key={column.field} style={thStyle}>
+                  {column.label}
+                </th>
+              ))}
+              <th style={thCenterStyle}>Active</th>
+              <th style={thCenterStyle}>Default</th>
+              <th style={thCenterStyle} aria-label="Actions" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={columnCount}
+                  style={{
+                    ...tdStyle,
+                    textAlign: "center",
+                    color: "#64748b",
+                    padding: "0.9rem",
+                  }}
                 >
-                  {BANK_ACCOUNT_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label || "Select Account Type"}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {renderText(row, "lbaBranchName", "Branch Name", { maxLength: 200 })}
-              {renderText(row, "lbaUpiId", "UPI Id", { maxLength: 100 })}
-              {renderText(row, "lbaChequeName", "Cheque Name", { maxLength: 200 })}
-              {renderText(row, "lbaRemarks", "Remarks", { maxLength: 250, span: 3 })}
-            </div>
-          </div>
-        ))
-      )}
-      {!disabled ? (
-        <button type="button" style={addButtonStyle} onClick={onAddRow}>
-          <FiPlusCircle aria-hidden="true" />
-          Add Bank Account
-        </button>
-      ) : null}
+                  No bank accounts added yet.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, index) => (
+                <tr key={row.rowKey}>
+                  <td style={tdCenterStyle}>{index + 1}</td>
+                  {TEXT_COLUMNS.map((column) => renderCell(row, column))}
+                  <td style={{ ...tdStyle, minWidth: 140 }}>
+                    <select
+                      id={`${row.rowKey}-lbaAccountType`}
+                      style={cellInputBaseStyle}
+                      aria-label="Account Type"
+                      value={row.lbaAccountType}
+                      disabled={disabled}
+                      onChange={(event) =>
+                        onChangeRow(row.rowKey, { lbaAccountType: event.target.value })
+                      }
+                    >
+                      {BANK_ACCOUNT_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label || "Select"}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  {TRAILING_TEXT_COLUMNS.map((column) => renderCell(row, column))}
+                  <td style={tdCenterStyle}>
+                    <input
+                      type="checkbox"
+                      aria-label="Active"
+                      checked={row.lbaIsActive}
+                      disabled={disabled}
+                      onChange={(event) =>
+                        onChangeRow(row.rowKey, { lbaIsActive: event.target.checked })
+                      }
+                    />
+                  </td>
+                  <td style={tdCenterStyle}>
+                    <input
+                      type="radio"
+                      name="ledger-bank-account-default"
+                      aria-label="Default"
+                      checked={row.lbaIsDefault}
+                      disabled={disabled}
+                      onChange={() => onSetDefault(row.rowKey)}
+                    />
+                  </td>
+                  <td style={tdCenterStyle}>
+                    {!disabled ? (
+                      <button
+                        type="button"
+                        style={removeButtonStyle}
+                        onClick={() => onRemoveRow(row.rowKey)}
+                        title="Remove bank account"
+                        aria-label="Remove bank account"
+                      >
+                        <FiTrash2 aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

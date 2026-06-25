@@ -18,6 +18,10 @@ export const DEFAULT_PAGE = 1;
 export const DEFAULT_PAGE_SIZE = 20;
 
 export const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+// Single account-group fetch (query: accGroupId). Read to resolve the group's
+// `accLedgerProfile`, which drives the ledger modal's section visibility and the
+// derived (read-only) Ledger Type.
+export const ACCOUNT_GROUP_GET_ENDPOINT = "/account-groups/get";
 export const GRID_DETAILS_ENDPOINT = "/grid-details/get";
 export const GRID_COLUMNS_CREATE_ENDPOINT = "/grid-columns/create";
 // Bulk PUT endpoints for grid column settings (payload: { columns: [...] }).
@@ -208,5 +212,3 @@ export const GST_ADDRESS_PIN_KEYS = ["pncd", "pin", "pincode"] as const;
 export const LEDGER_FIELD_CONTAINER_SELECTOR = "[data-ledger-modal-field-name]";
 export const LEDGER_PRIMARY_FIELD_CONTROL_SELECTOR =
   '[data-ledger-modal-field-control="true"]';
-
-export const LEDGER_ASIDE_SECTION_KEYS = new Set<string>(["__heading_control"]);

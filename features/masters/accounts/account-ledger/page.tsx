@@ -48,6 +48,7 @@ import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
   ACCOUNT_LEDGER_GRID_ID,
+  ACCOUNT_GROUP_GET_ENDPOINT,
   GRID_DETAILS_ENDPOINT,
   GRID_COLUMNS_CREATE_ENDPOINT,
   GRID_COLUMN_WIDTH_ENDPOINT,
@@ -61,7 +62,6 @@ import {
   LEDGER_COMPANY_NAME_KEYS,
   LEDGER_BRANCH_NAME_KEYS,
   LEDGER_GROUP_NAME_KEYS,
-  LEDGER_ASIDE_SECTION_KEYS,
 } from "./constants";
 import type {
   ModalMode,
@@ -93,8 +93,18 @@ import {
 import {
   buildLedgerFormFields,
   toLedgerFormSections,
+  BANK_EDITOR_FIELD_NAME,
 } from "./fields-schema";
 import BankAccountsEditor from "./bank-accounts-editor";
+import {
+  type LedgerProfile,
+  normalizeLedgerProfile,
+  ledgerTypeForProfile,
+  isLedgerTabVisibleForProfile,
+  getVisibleLedgerSectionFields,
+  LEDGER_DERIVED_LOCKED_FIELDS,
+  LEDGER_GROUP_PROFILE_KEYS,
+} from "./profile";
 import {
   createEmptyBankAccountRow,
   extractLedgerBankAccountRows,
@@ -125,8 +135,9 @@ import {
 const GRID_SETTINGS_CONTEXT_MENU_WIDTH = 190;
 const GRID_SETTINGS_CONTEXT_MENU_HEIGHT = 130;
 const GRID_SETTINGS_CONTEXT_MENU_PADDING = 8;
-// Synthetic form tab (no scalar fields) that hosts the nested bank-accounts editor.
-const BANK_ACCOUNTS_SECTION_KEY = "__bank_accounts";
+// The bank-accounts grid lives inline under the Identity tab; this is the tab to
+// raise when a bank-account row fails validation.
+const BANK_ACCOUNTS_TAB_KEY = "identity";
 type ContextMenuPosition = Pick<CSSProperties, "left" | "top">;
 function clampContextMenuPosition(value: number, min: number, max: number): number {
   if (max < min) {
@@ -253,6 +264,7 @@ function LedgerFieldRenderer({
   searchInputRefs,
   serverSearchFieldNames,
   loadingFieldNames,
+  lockedFieldNames,
 }: {
   field: ERPDynamicModalField;
   formValues: LedgerFormValues;
@@ -265,6 +277,8 @@ function LedgerFieldRenderer({
   searchActiveOptionIndex: Record<string, number>;
   serverSearchFieldNames: Set<string>;
   loadingFieldNames: Set<string>;
+  // Fields derived from the group profile (e.g. Ledger Type) -> rendered read-only.
+  lockedFieldNames: Set<string>;
   handleFieldChange: (fieldName: LedgerFormFieldName, value: string) => void;
   handleCheckboxKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
   handleSearchableFieldInput: (
@@ -293,7 +307,8 @@ function LedgerFieldRenderer({
   const fieldName = field.name;
   const inputType = field.type ?? "text";
   const fieldValue = formValues[fieldName] ?? "";
-  const disabled = isReadOnlyMode || detailsLoading || saveLoading;
+  const disabled =
+    isReadOnlyMode || detailsLoading || saveLoading || lockedFieldNames.has(fieldName);
   const isValidationInvalid = validationFieldName === fieldName;
   const wrapperClassName = dynamicFormStyles.field;
   const wrapperInlineStyle: CSSProperties = {
@@ -662,6 +677,13 @@ export default function AccountLedgerMasterPage() {
     method: "GET",
     toast: { success: false },
   });
+  // Single account-group fetch used to resolve a group's ledger profile in create
+  // mode (edit mode reads ledGroupLedgerProfile straight off the ledger GET). A
+  // failed fetch must not interrupt the form, so neither toast is shown.
+  const { run: getAccountGroup } = useApi<unknown, Record<string, unknown>>(
+    ACCOUNT_GROUP_GET_ENDPOINT,
+    { method: "GET", toast: { success: false, error: false } },
+  );
   const {
     run: upsertRecord,
     loading: saveLoading,
@@ -754,7 +776,15 @@ export default function AccountLedgerMasterPage() {
   const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
   const [searchActiveOptionIndex, setSearchActiveOptionIndex] = useState<Record<string, number>>({});
   // State for form sections
-  const [activeSectionKey, setActiveSectionKey] = useState("general");
+  const [activeSectionKey, setActiveSectionKey] = useState("identity");
+  // Ledger profile resolved from the selected account group (mirrors
+  // LedgerEntry::Profile). Drives which sections/tabs are visible and the derived,
+  // read-only Ledger Type. "General" is the minimal form shown before a group is
+  // chosen. `profileCacheRef` avoids re-fetching a group's profile (== m_profileCache);
+  // `groupProfileRequestIdRef` guards against out-of-order async group fetches.
+  const [ledgerProfile, setLedgerProfile] = useState<LedgerProfile>("General");
+  const profileCacheRef = useRef<Record<string, LedgerProfile>>({});
+  const groupProfileRequestIdRef = useRef(0);
   // State for delete
   const [pendingDeleteRow, setPendingDeleteRow] = useState<LedgerTableRow | null>(null);
   const [gridSettingsContextMenuPosition, setGridSettingsContextMenuPosition] =
@@ -981,23 +1011,94 @@ export default function AccountLedgerMasterPage() {
     },
     [],
   );
+  // Apply a resolved group profile: drive section visibility and derive the
+  // read-only Ledger Type (mirrors LedgerEntry::applyProfileVisibility +
+  // ledgerTypeString). The Ledger Type is only overwritten when it actually
+  // changes so a programmatic set never churns the form state.
+  const applyLedgerProfile = useCallback((profile: LedgerProfile) => {
+    setLedgerProfile(profile);
+    setFormValues((current) => {
+      const nextLedgerType = ledgerTypeForProfile(profile);
+      return current.ledLedgerType === nextLedgerType
+        ? current
+        : { ...current, ledLedgerType: nextLedgerType };
+    });
+  }, []);
+  // Resolve a group's ledger profile (mirrors LedgerEntry::applyGroupProfile):
+  // empty group -> minimal General form; cached -> apply immediately; otherwise
+  // GET the group row and read accLedgerProfile. The request id guards against a
+  // stale fetch landing after the user picked a different group.
+  const resolveGroupProfile = useCallback(
+    (groupId: string) => {
+      const trimmed = groupId.trim();
+      if (!trimmed) {
+        groupProfileRequestIdRef.current += 1;
+        setLedgerProfile("General");
+        return;
+      }
+      const cached = profileCacheRef.current[trimmed];
+      if (cached) {
+        applyLedgerProfile(cached);
+        return;
+      }
+      const requestId = groupProfileRequestIdRef.current + 1;
+      groupProfileRequestIdRef.current = requestId;
+      void (async () => {
+        try {
+          const payload = await getAccountGroup({ query: { accGroupId: trimmed } });
+          if (groupProfileRequestIdRef.current !== requestId) return;
+          const source = extractDetailSource(payload);
+          const rawProfile = source
+            ? toDisplayValue(getFirstDefinedValue(source, LEDGER_GROUP_PROFILE_KEYS))
+            : "";
+          const profile = normalizeLedgerProfile(rawProfile);
+          profileCacheRef.current[trimmed] = profile;
+          applyLedgerProfile(profile);
+        } catch {
+          if (groupProfileRequestIdRef.current !== requestId) return;
+          // Fall back to the minimal General form if the group can't be read.
+          applyLedgerProfile("General");
+        }
+      })();
+    },
+    [applyLedgerProfile, getAccountGroup],
+  );
   // Load form fields
   const ledgerFormFields = useMemo(
     () =>
       buildLedgerFormFields(companyOptions, branchOptions, accountGroupOptions, stateNameOptions),
     [accountGroupOptions, branchOptions, companyOptions, stateNameOptions],
   );
+  // Tabs of the ledger modal (Identity / GST & Tax / Address & Contact /
+  // Regional Details). The bank-accounts grid is now an inline sub-section under
+  // Identity, not a separate tab.
   const ledgerFormSections = useMemo(
-    () => [
-      ...toLedgerFormSections(ledgerFormFields),
-      { key: BANK_ACCOUNTS_SECTION_KEY, title: "Bank Accounts", fields: [] },
-    ],
+    () => toLedgerFormSections(ledgerFormFields),
     [ledgerFormFields],
   );
+  // Tabs shown for the current ledger profile. The Identity tab is always
+  // visible; the rest (and each sub-section within a tab) are gated by the
+  // profile, and an otherwise-empty tab is dropped (mirrors the C++ policy).
+  const visibleLedgerFormSections = useMemo(
+    () =>
+      ledgerFormSections.filter((section) =>
+        isLedgerTabVisibleForProfile(section, ledgerProfile),
+      ),
+    [ledgerFormSections, ledgerProfile],
+  );
   const activeLedgerSection =
-    ledgerFormSections.find((section) => section.key === activeSectionKey) ??
-    ledgerFormSections[0] ??
+    visibleLedgerFormSections.find((section) => section.key === activeSectionKey) ??
+    visibleLedgerFormSections[0] ??
     null;
+  // The visible, ordered items (sub-headings + fields + inline bank grid) of the
+  // active tab under the current profile.
+  const activeLedgerSectionFields = useMemo(
+    () =>
+      activeLedgerSection
+        ? getVisibleLedgerSectionFields(activeLedgerSection, ledgerProfile)
+        : [],
+    [activeLedgerSection, ledgerProfile],
+  );
   // Field names whose lazy dropdown is currently fetching (derived from the per-kind flag),
   // so the searchable select can show a Loading state.
   const loadingDropdownFieldNames = useMemo(() => {
@@ -1009,12 +1110,13 @@ export default function AccountLedgerMasterPage() {
     }
     return names;
   }, [dropdownLoading]);
-  // Validate active section
+  // Keep the active tab valid. When the profile change hides the active section
+  // (or it otherwise drops out of the list), snap to the first visible section.
   useEffect(() => {
-    if (ledgerFormSections.length === 0) return;
-    if (ledgerFormSections.some((section) => section.key === activeSectionKey)) return;
-    setActiveSectionKey(ledgerFormSections[0]?.key ?? "general");
-  }, [activeSectionKey, ledgerFormSections]);
+    if (visibleLedgerFormSections.length === 0) return;
+    if (visibleLedgerFormSections.some((section) => section.key === activeSectionKey)) return;
+    setActiveSectionKey(visibleLedgerFormSections[0]?.key ?? "general");
+  }, [activeSectionKey, visibleLedgerFormSections]);
   // Load records
   const loadRecords = useCallback(
     async (term: string, page: number, limit: number) => {
@@ -1110,6 +1212,9 @@ export default function AccountLedgerMasterPage() {
     gstLookupRequestIdRef.current += 1;
     setActiveSectionKey(ledgerFormSections[0]?.key ?? "general");
     setModalMode("create");
+    // No group chosen yet -> minimal (General) form until the user picks one.
+    groupProfileRequestIdRef.current += 1;
+    setLedgerProfile("General");
     setEditingItemId(null);
     setFormValues(createInitialLedgerFormValues());
     setBankAccounts([]);
@@ -1147,6 +1252,10 @@ export default function AccountLedgerMasterPage() {
       gstLookupRequestIdRef.current += 1;
       setActiveSectionKey(ledgerFormSections[0]?.key ?? "general");
       setModalMode(mode);
+      // Reset to the minimal form; the real profile is resolved once the ledger
+      // detail (with ledGroupLedgerProfile) loads below.
+      groupProfileRequestIdRef.current += 1;
+      setLedgerProfile("General");
       setFormValues(createInitialLedgerFormValues());
       setBankAccounts([]);
       setRemovedBankAccountIds([]);
@@ -1164,6 +1273,21 @@ export default function AccountLedgerMasterPage() {
         const nextValues = toLedgerFormValues(detailSource);
         setFormValues(nextValues);
         seedLedgerDropdownOptions(detailSource ?? {}, nextValues);
+        // Resolve the ledger profile -> section visibility + derived ledger type.
+        // The ledger GET embeds ledGroupLedgerProfile, so prefer it; fall back to a
+        // group fetch only if it's absent.
+        const profileRaw = detailSource
+          ? toDisplayValue(getFirstDefinedValue(detailSource, LEDGER_GROUP_PROFILE_KEYS))
+          : "";
+        if (profileRaw) {
+          const profile = normalizeLedgerProfile(profileRaw);
+          if (nextValues.ledGroupId) {
+            profileCacheRef.current[nextValues.ledGroupId] = profile;
+          }
+          applyLedgerProfile(profile);
+        } else if (nextValues.ledGroupId) {
+          resolveGroupProfile(nextValues.ledGroupId);
+        }
         setBankAccounts(extractLedgerBankAccountRows(detailSource));
         if (mode === "update" && detailSource) {
           const detailId = getFirstDefinedValue(detailSource, ["ledId", "led_id", "id", "_id"]);
@@ -1176,11 +1300,13 @@ export default function AccountLedgerMasterPage() {
       }
     },
     [
+      applyLedgerProfile,
       getById,
       ledgerFormSections,
       resetDetailsState,
       resetLedgerDropdownOptions,
       resetSaveState,
+      resolveGroupProfile,
       seedLedgerDropdownOptions,
     ],
   );
@@ -1195,7 +1321,9 @@ export default function AccountLedgerMasterPage() {
     setSearchQueries({});
     setSearchActiveOptionIndex({});
     gstLookupRequestIdRef.current += 1;
-    setActiveSectionKey("general");
+    groupProfileRequestIdRef.current += 1;
+    setLedgerProfile("General");
+    setActiveSectionKey("identity");
     setBankAccounts([]);
     setRemovedBankAccountIds([]);
     setBankAccountError(null);
@@ -1324,8 +1452,12 @@ export default function AccountLedgerMasterPage() {
       if (fieldName === "ledGstinNo") {
         runLedgerGstinLookup(nextValue);
       }
+      // Group drives the ledger profile -> section visibility + derived ledger type.
+      if (fieldName === "ledGroupId") {
+        resolveGroupProfile(nextValue);
+      }
     },
-    [runLedgerGstinLookup],
+    [resolveGroupProfile, runLedgerGstinLookup],
   );
   const handleCheckboxKeyDown = useCallback((event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
@@ -1407,6 +1539,11 @@ export default function AccountLedgerMasterPage() {
           [fieldName]: "",
         };
       });
+      // Clearing the group resets the form to the minimal General profile.
+      if (fieldName === "ledGroupId") {
+        groupProfileRequestIdRef.current += 1;
+        setLedgerProfile("General");
+      }
       setSearchQueries((current) => {
         if (!(fieldName in current)) {
           return current;
@@ -1538,7 +1675,7 @@ export default function AccountLedgerMasterPage() {
       sectionIndex: number,
       sectionKey: string,
     ) => {
-      if (ledgerFormSections.length === 0) return;
+      if (visibleLedgerFormSections.length === 0) return;
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -1558,26 +1695,27 @@ export default function AccountLedgerMasterPage() {
       }
       let nextIndex = sectionIndex;
       if (event.key === "ArrowRight") {
-        nextIndex = (sectionIndex + 1) % ledgerFormSections.length;
+        nextIndex = (sectionIndex + 1) % visibleLedgerFormSections.length;
       } else if (event.key === "ArrowLeft") {
         nextIndex =
-          (sectionIndex - 1 + ledgerFormSections.length) % ledgerFormSections.length;
+          (sectionIndex - 1 + visibleLedgerFormSections.length) %
+          visibleLedgerFormSections.length;
       } else if (event.key === "Home") {
         nextIndex = 0;
       } else if (event.key === "End") {
-        nextIndex = ledgerFormSections.length - 1;
+        nextIndex = visibleLedgerFormSections.length - 1;
       } else {
         return;
       }
       event.preventDefault();
-      const nextSection = ledgerFormSections[nextIndex];
+      const nextSection = visibleLedgerFormSections[nextIndex];
       if (!nextSection) return;
       setActiveSectionKey(nextSection.key);
       window.requestAnimationFrame(() => {
         sectionTabRefs.current[nextSection.key]?.focus();
       });
     },
-    [activeSectionKey, ledgerFormSections],
+    [activeSectionKey, visibleLedgerFormSections],
   );
   const handleLedgerFieldArrowNavigation = useCallback(
     (event: ReactKeyboardEvent<HTMLFormElement>) => {
@@ -1659,7 +1797,7 @@ export default function AccountLedgerMasterPage() {
           rowKey: bankAccountValidationError.rowKey,
           field: bankAccountValidationError.field,
         });
-        setActiveSectionKey(BANK_ACCOUNTS_SECTION_KEY);
+        setActiveSectionKey(BANK_ACCOUNTS_TAB_KEY);
         window.requestAnimationFrame(() => {
           const invalidField = document.getElementById(
             `${bankAccountValidationError.rowKey}-${bankAccountValidationError.field}`,
@@ -2547,13 +2685,13 @@ export default function AccountLedgerMasterPage() {
               </div>
             </header>
             <div className={dynamicFormStyles.scrollArea}>
-              {ledgerFormSections.length > 0 ? (
+              {visibleLedgerFormSections.length > 0 ? (
                 <div
                   className={dynamicFormStyles.sectionTabs}
                   role="tablist"
                   aria-label="Ledger form sections"
                 >
-                  {ledgerFormSections.map((section, sectionIndex) => (
+                  {visibleLedgerFormSections.map((section, sectionIndex) => (
                     <button
                       key={section.key}
                       ref={(element) => {
@@ -2600,27 +2738,39 @@ export default function AccountLedgerMasterPage() {
                     role="tabpanel"
                     aria-labelledby={`${modalFormId}-${activeLedgerSection.key}-tab`}
                     className={dynamicFormStyles.sectionFields}
-                    style={
-                      LEDGER_ASIDE_SECTION_KEYS.has(activeLedgerSection.key)
-                        ? ({
-                            "--erp-modal-section-columns": "1",
-                          } as CSSProperties)
-                        : undefined
-                    }
                   >
-                    {activeLedgerSection.key === BANK_ACCOUNTS_SECTION_KEY ? (
-                      <BankAccountsEditor
-                        rows={bankAccounts}
-                        disabled={isReadOnlyMode || detailsLoading || saveLoading}
-                        invalidRowKey={bankAccountError?.rowKey ?? null}
-                        invalidField={bankAccountError?.field ?? null}
-                        onAddRow={handleBankAccountAdd}
-                        onChangeRow={handleBankAccountChange}
-                        onRemoveRow={handleBankAccountRemove}
-                        onSetDefault={handleBankAccountSetDefault}
-                      />
-                    ) : (
-                      activeLedgerSection.fields.map((field) => (
+                    {activeLedgerSectionFields.map((field) => {
+                      // Inline sub-heading row (C++ inline heading).
+                      if (field.type === "subheading") {
+                        return (
+                          <div
+                            key={field.name}
+                            className={dynamicFormStyles.subheadingField}
+                          >
+                            <span className={dynamicFormStyles.subheading}>
+                              {field.label}
+                            </span>
+                          </div>
+                        );
+                      }
+                      // Inline bank-accounts grid (C++ NexBankGrid under Identity).
+                      if (field.name === BANK_EDITOR_FIELD_NAME) {
+                        return (
+                          <div key={field.name} className={dynamicFormStyles.fieldWide}>
+                            <BankAccountsEditor
+                              rows={bankAccounts}
+                              disabled={isReadOnlyMode || detailsLoading || saveLoading}
+                              invalidRowKey={bankAccountError?.rowKey ?? null}
+                              invalidField={bankAccountError?.field ?? null}
+                              onAddRow={handleBankAccountAdd}
+                              onChangeRow={handleBankAccountChange}
+                              onRemoveRow={handleBankAccountRemove}
+                              onSetDefault={handleBankAccountSetDefault}
+                            />
+                          </div>
+                        );
+                      }
+                      return (
                         <LedgerFieldRenderer
                           key={field.name}
                           field={field as any}
@@ -2644,9 +2794,10 @@ export default function AccountLedgerMasterPage() {
                           searchInputRefs={searchInputRefs}
                           serverSearchFieldNames={LEDGER_DROPDOWN_FIELD_NAMES}
                           loadingFieldNames={loadingDropdownFieldNames}
+                          lockedFieldNames={LEDGER_DERIVED_LOCKED_FIELDS}
                         />
-                      ))
-                    )}
+                      );
+                    })}
                   </div>
                 ) : null}
                 {effectiveModalError ? (
