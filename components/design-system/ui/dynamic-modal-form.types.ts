@@ -120,6 +120,10 @@ export type ERPDynamicModalField = {
   requiredWhen?: (values: Record<string, string>) => boolean;
   disabled?: boolean;
   searchable?: boolean;
+  // When true the field's options are treated as already filtered by the owner
+  // (e.g. a server-side/lazy dropdown), so the built-in client-side substring
+  // filtering is skipped and the provided options are shown as-is.
+  serverSearch?: boolean;
   multiple?: boolean;
   options?: ERPDynamicSelectOption[];
   colSpan?: 1 | 2;
@@ -140,6 +144,9 @@ export type ERPDynamicModalField = {
   gridColumnStart?: number;
   gridRowStart?: number;
   onSearchQueryChange?: ERPDynamicSearchQueryChangeHandler;
+  // Fired when this field's search dropdown opens (true) or closes (false). Lets
+  // the owner lazily load options on open instead of fetching up front.
+  onSearchOpenChange?: (open: boolean) => void;
   onSearchCreateShortcut?: ERPDynamicSearchShortcutHandler;
   onSearchEditShortcut?: ERPDynamicSearchShortcutHandler;
   onValueChange?: ERPDynamicFieldValueChangeHandler;

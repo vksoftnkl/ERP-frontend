@@ -9,29 +9,28 @@ import type {
   ERPDynamicModalSubmitPayload,
   ERPDynamicModalVariant,
   ERPDynamicFieldValueChangeHandler,
+  ERPDynamicFieldValueChangePayload,
+  ERPDynamicSearchQueryChangeHandler,
   ERPDynamicSearchShortcutPayload,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
-import { toUpper, toNullableString } from "@/app/master/_shared/crud-utils";
+import {
+  toUpper,
+  toNullableString,
+  toDisplayValue,
+  getFirstDefinedValue,
+} from "@/app/master/_shared/crud-utils";
 import {
   API_ENDPOINTS,
   GRID_TABLE_NAME,
   CUSTOMER_MODAL_PANEL_STYLE,
   STATE_MODAL_PANEL_STYLE,
   SUPPLIER_GROUP_MODAL_PANEL_STYLE,
-  SUPPLIER_GROUP_LOOKUP_ENDPOINT,
   SUPPLIER_GROUP_GET_ENDPOINT,
   SUPPLIER_GROUP_CREATE_ENDPOINT,
-  COMPANY_LOOKUP_ENDPOINT,
-  BRANCH_LOOKUP_ENDPOINT,
-  STATE_LOOKUP_ENDPOINT,
   STATE_GET_ENDPOINT,
   STATE_CREATE_ENDPOINT,
-  SUPPLIER_GROUP_LOOKUP_QUERY,
-  COMPANY_LOOKUP_QUERY,
-  BRANCH_LOOKUP_QUERY,
-  STATE_LOOKUP_QUERY,
   GST_LOOKUP_ENDPOINT,
   GST_LOOKUP_PATTERN,
   LOOKUP_KEYS,
@@ -45,12 +44,6 @@ import {
 } from "./constants";
 import type { SupplierFormValues } from "./types";
 import {
-  buildSupplierGroupOptions,
-  buildStateNameOptions,
-  buildCompanyOptions,
-  buildBranchOptions,
-  buildStateCodeByName,
-  buildStateNameByCode,
   extractGstLookupSource,
   buildSupplierLookupValues,
   getLookupErrorMessage,
@@ -68,7 +61,18 @@ import {
   buildSupplierFormFields,
   buildStateModalFields,
   buildSupplierGroupModalFields,
+  type SupplierLazyDropdownHandlers,
 } from "./fields-schema";
+import {
+  DROPDOWN_RUN_ENDPOINT,
+  DROPDOWN_SEARCH_DEBOUNCE_MS,
+  SUPPLIER_DROPDOWN_CONFIG,
+  type SupplierDropdownKind,
+  buildDropdownRunQuery,
+  buildDropdownOptions,
+  buildSupplierStateData,
+  withPinnedOption,
+} from "./dropdowns";
 
 export default function SuppliersMasterPage() {
   const stateModalControllerRef = useRef<ERPDynamicModalController | null>(null);
@@ -76,9 +80,21 @@ export default function SuppliersMasterPage() {
     useRef<ERPDynamicModalController | null>(null);
 
   // API Hooks
-  const { getAll: getSupplierGroupLookup } = useApi<unknown>(
-    SUPPLIER_GROUP_LOOKUP_ENDPOINT,
-  );
+  // Lazy configured-dropdown runners (fixed.dropdown_details via /dropdown-details/run).
+  // One hook per kind so each fetch has an independent abort/loading lifecycle; errors
+  // are not toasted. Nothing loads up front — options load on open + on debounced search.
+  const { run: runCompanyDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
+  const { run: runBranchDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
+  const { run: runGroupDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
+  const { run: runStateDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
   const {
     getAll: getSupplierGroupById,
     loading: supplierGroupDetailsLoading,
@@ -97,9 +113,6 @@ export default function SuppliersMasterPage() {
   } = useApi<unknown, Record<string, unknown>>(SUPPLIER_GROUP_CREATE_ENDPOINT, {
     method: "POST",
   });
-  const { getAll: getCompanyLookup } = useApi<unknown>(COMPANY_LOOKUP_ENDPOINT);
-  const { getAll: getBranchLookup } = useApi<unknown>(BRANCH_LOOKUP_ENDPOINT);
-  const { getAll: getStateLookup } = useApi<unknown>(STATE_LOOKUP_ENDPOINT);
   const {
     getAll: getStateByCode,
     loading: stateDetailsLoading,
@@ -168,60 +181,215 @@ export default function SuppliersMasterPage() {
   // Cache for GST Lookups
   const gstLookupCacheRef = useRef<Record<string, Record<string, string>>>({});
 
-  // Refresh Functions
-  const refreshSupplierGroupOptions = useCallback(async () => {
-    const payload = await getSupplierGroupLookup(SUPPLIER_GROUP_LOOKUP_QUERY);
-    setSupplierGroupOptions(buildSupplierGroupOptions(payload));
-  }, [getSupplierGroupLookup]);
+  // Lazy-dropdown plumbing: mirror of the latest options per field (so the value handler
+  // can resolve a picked label), the pinned selection per field (kept visible after a
+  // fetch), and a debounce handle per field for server-side search typing.
+  const dropdownOptionsRef = useRef<Record<string, ERPDynamicSelectOption[]>>({});
+  const pinnedDropdownOptionRef = useRef<Record<string, ERPDynamicSelectOption | null>>({});
+  const dropdownSearchTimeoutsRef = useRef<Record<string, number | null>>({});
 
-  const refreshStateOptions = useCallback(async () => {
-    const payload = await getStateLookup(STATE_LOOKUP_QUERY);
-    setStateOptions(buildStateNameOptions(payload));
-    setStateCodeByName(buildStateCodeByName(payload));
-    setStateNameByCode(buildStateNameByCode(payload));
-  }, [getStateLookup]);
+  // Push freshly built options into both the matching state setter and the mirror ref.
+  const applyDropdownOptions = useCallback(
+    (fieldName: string, options: ERPDynamicSelectOption[]) => {
+      dropdownOptionsRef.current[fieldName] = options;
+      switch (fieldName) {
+        case "supCompanyId":
+          setCompanyOptions(options);
+          break;
+        case "supBranchId":
+          setBranchOptions(options);
+          break;
+        case "supGroupId":
+          setSupplierGroupOptions(options);
+          break;
+        case "supStateName":
+          setStateOptions(options);
+          break;
+      }
+    },
+    [],
+  );
 
-  // Load Initial Lookup Data
-  useEffect(() => {
-    let mounted = true;
-    void (async () => {
+  // Lazily fetch a dropdown's first page (open) or search results (typing) from
+  // /dropdown-details/run. A superseded/aborted request returns undefined and is skipped
+  // so it never wipes the options the latest request set.
+  const fetchDropdown = useCallback(
+    async (kind: SupplierDropdownKind, search: string) => {
+      const config = SUPPLIER_DROPDOWN_CONFIG[kind];
+      const query = buildDropdownRunQuery(config.dropdownId, search);
       try {
-        const [supplierGroupPayload, companyPayload, branchPayload, statePayload] =
-          await Promise.all([
-            getSupplierGroupLookup(SUPPLIER_GROUP_LOOKUP_QUERY),
-            getCompanyLookup(COMPANY_LOOKUP_QUERY),
-            getBranchLookup(BRANCH_LOOKUP_QUERY),
-            getStateLookup(STATE_LOOKUP_QUERY),
-          ]);
-        if (!mounted) {
+        switch (kind) {
+          case "company": {
+            const payload = await runCompanyDropdown({ query });
+            if (payload === undefined) return;
+            applyDropdownOptions(
+              "supCompanyId",
+              withPinnedOption(
+                buildDropdownOptions(payload, config.idKeys, config.labelKeys),
+                pinnedDropdownOptionRef.current.supCompanyId,
+              ),
+            );
+            break;
+          }
+          case "branch": {
+            const payload = await runBranchDropdown({ query });
+            if (payload === undefined) return;
+            applyDropdownOptions(
+              "supBranchId",
+              withPinnedOption(
+                buildDropdownOptions(payload, config.idKeys, config.labelKeys),
+                pinnedDropdownOptionRef.current.supBranchId,
+              ),
+            );
+            break;
+          }
+          case "group": {
+            const payload = await runGroupDropdown({ query });
+            if (payload === undefined) return;
+            applyDropdownOptions(
+              "supGroupId",
+              withPinnedOption(
+                buildDropdownOptions(payload, config.idKeys, config.labelKeys),
+                pinnedDropdownOptionRef.current.supGroupId,
+              ),
+            );
+            break;
+          }
+          case "state": {
+            const payload = await runStateDropdown({ query });
+            if (payload === undefined) return;
+            const data = buildSupplierStateData(payload);
+            applyDropdownOptions(
+              "supStateName",
+              withPinnedOption(data.options, pinnedDropdownOptionRef.current.supStateName),
+            );
+            // Merge so a previously seeded selected state's code mapping survives.
+            setStateCodeByName((prev) => ({ ...prev, ...data.stateCodeByName }));
+            setStateNameByCode((prev) => ({ ...prev, ...data.stateNameByCode }));
+            break;
+          }
+        }
+      } catch {
+        // Keep whatever options are currently shown (e.g. the seeded selection).
+      }
+    },
+    [
+      applyDropdownOptions,
+      runBranchDropdown,
+      runCompanyDropdown,
+      runGroupDropdown,
+      runStateDropdown,
+    ],
+  );
+
+  // Per-field handlers: fetch on open (immediate), on debounced typing, and pin the
+  // chosen option. The State field also mirrors its name into supRegionStateName.
+  const lazyDropdownHandlers = useMemo<SupplierLazyDropdownHandlers>(() => {
+    const build = (fieldName: string, kind: SupplierDropdownKind) => ({
+      onSearchOpenChange: (open: boolean) => {
+        const pending = dropdownSearchTimeoutsRef.current[fieldName];
+        if (pending != null) {
+          window.clearTimeout(pending);
+          dropdownSearchTimeoutsRef.current[fieldName] = null;
+        }
+        if (open) {
+          void fetchDropdown(kind, "");
+        }
+      },
+      onSearchQueryChange: ((query: string) => {
+        const pending = dropdownSearchTimeoutsRef.current[fieldName];
+        if (pending != null) {
+          window.clearTimeout(pending);
+        }
+        const delay = query.trim() ? DROPDOWN_SEARCH_DEBOUNCE_MS : 0;
+        dropdownSearchTimeoutsRef.current[fieldName] = window.setTimeout(() => {
+          dropdownSearchTimeoutsRef.current[fieldName] = null;
+          void fetchDropdown(kind, query);
+        }, delay);
+      }) as ERPDynamicSearchQueryChangeHandler,
+      onValueChange: ((payload: ERPDynamicFieldValueChangePayload) => {
+        const option = dropdownOptionsRef.current[fieldName]?.find(
+          (item) => item.value === payload.value,
+        );
+        pinnedDropdownOptionRef.current[fieldName] =
+          option && payload.value ? option : null;
+        if (fieldName === "supStateName") {
+          return { values: { supRegionStateName: payload.value.trim() } };
+        }
+      }) as ERPDynamicFieldValueChangeHandler,
+    });
+    return {
+      supCompanyId: build("supCompanyId", "company"),
+      supBranchId: build("supBranchId", "branch"),
+      supGroupId: build("supGroupId", "group"),
+      supStateName: build("supStateName", "state"),
+    };
+  }, [fetchDropdown]);
+
+  // Seed each lazy dropdown with its currently-selected option (from the loaded record)
+  // so the trigger shows the saved name on edit/view before the field is opened.
+  const seedDropdownSelections = useCallback(
+    (source: Record<string, unknown>, values: SupplierFormValues) => {
+      const blank: ERPDynamicSelectOption = { value: "", label: "" };
+      const nameFrom = (keys: readonly string[]) =>
+        toDisplayValue(getFirstDefinedValue(source, keys));
+      const seedOne = (fieldName: string, rawValue: string, label: string) => {
+        const value = (rawValue ?? "").trim();
+        if (!value) {
+          pinnedDropdownOptionRef.current[fieldName] = null;
+          applyDropdownOptions(fieldName, [blank]);
           return;
         }
-        setSupplierGroupOptions(buildSupplierGroupOptions(supplierGroupPayload));
-        setCompanyOptions(buildCompanyOptions(companyPayload));
-        setBranchOptions(buildBranchOptions(branchPayload));
-        setStateOptions(buildStateNameOptions(statePayload));
-        setStateCodeByName(buildStateCodeByName(statePayload));
-        setStateNameByCode(buildStateNameByCode(statePayload));
-      } catch {
-        if (mounted) {
-          setSupplierGroupOptions([]);
-          setCompanyOptions([]);
-          setBranchOptions([]);
-          setStateOptions([]);
-          setStateCodeByName({});
-          setStateNameByCode({});
+        const option: ERPDynamicSelectOption = { value, label: label || value };
+        pinnedDropdownOptionRef.current[fieldName] = option;
+        applyDropdownOptions(fieldName, [blank, option]);
+      };
+      seedOne("supCompanyId", values.supCompanyId, nameFrom(["supCompanyName", "sup_company_name"]));
+      seedOne("supBranchId", values.supBranchId, nameFrom(["supBranchName", "sup_branch_name"]));
+      seedOne("supGroupId", values.supGroupId, nameFrom(["supGroupName", "sup_group_name"]));
+      // The State field's value IS the state name, so seed value === label.
+      const stateName = (values.supStateName ?? "").trim();
+      seedOne("supStateName", stateName, stateName);
+      // Seed the code map from the record so name->code resolves on submit without
+      // having to open the dropdown.
+      const stateCode = (values.supStateCode ?? "").trim().toUpperCase();
+      if (stateName && stateCode) {
+        setStateCodeByName((prev) => ({ ...prev, [stateName]: stateCode }));
+        setStateNameByCode((prev) => ({ ...prev, [stateCode]: stateName }));
+      }
+    },
+    [applyDropdownOptions],
+  );
+
+  // Reset every lazy dropdown to just its empty head (used when the create modal opens).
+  const resetDropdownSelections = useCallback(() => {
+    const blank: ERPDynamicSelectOption = { value: "", label: "" };
+    pinnedDropdownOptionRef.current = {};
+    applyDropdownOptions("supCompanyId", [blank]);
+    applyDropdownOptions("supBranchId", [blank]);
+    applyDropdownOptions("supGroupId", [blank]);
+    applyDropdownOptions("supStateName", [blank]);
+  }, [applyDropdownOptions]);
+
+  // Clear any pending dropdown search debounces on unmount.
+  useEffect(() => {
+    return () => {
+      for (const handle of Object.values(dropdownSearchTimeoutsRef.current)) {
+        if (handle != null) {
+          window.clearTimeout(handle);
         }
       }
-    })();
-    return () => {
-      mounted = false;
     };
-  }, [
-    getBranchLookup,
-    getCompanyLookup,
-    getStateLookup,
-    getSupplierGroupLookup,
-  ]);
+  }, []);
+
+  // Refresh Functions (re-run the lazy fetch after an inline create/update).
+  const refreshSupplierGroupOptions = useCallback(async () => {
+    await fetchDropdown("group", "");
+  }, [fetchDropdown]);
+
+  const refreshStateOptions = useCallback(async () => {
+    await fetchDropdown("state", "");
+  }, [fetchDropdown]);
 
   // Modal Variants
   const stateCreateModalFields = useMemo(() => buildStateModalFields(false), []);
@@ -563,13 +731,6 @@ export default function SuppliersMasterPage() {
       [stateNameByCode],
     );
 
-  const handleSupplierStateValueChange =
-    useCallback<ERPDynamicFieldValueChangeHandler>(({ value }) => ({
-      values: {
-        supRegionStateName: value.trim(),
-      },
-    }), []);
-
   // Build Form Fields
   const supplierFormFields = useMemo(
     () =>
@@ -578,18 +739,18 @@ export default function SuppliersMasterPage() {
         companyOptions,
         branchOptions,
         stateOptions,
+        lazyDropdownHandlers,
         handleSupplierGroupCreateShortcut,
         handleSupplierGroupEditShortcut,
         handleStateCreateShortcut,
         handleStateEditShortcut,
-        handleSupplierStateValueChange,
         handleSupplierGstinValueChange,
       ),
     [
       branchOptions,
       companyOptions,
+      lazyDropdownHandlers,
       handleSupplierGstinValueChange,
-      handleSupplierStateValueChange,
       handleStateCreateShortcut,
       handleStateEditShortcut,
       handleSupplierGroupCreateShortcut,
@@ -656,14 +817,26 @@ export default function SuppliersMasterPage() {
           },
         }}
         createInitialValues={SUPPLIER_INITIAL_FORM_VALUES}
+        onModalOpenChange={(open, variantKey) => {
+          // Clear the lazy dropdowns when the create modal opens so no stale selection
+          // from a previously edited supplier lingers (they reload on open).
+          if (open && variantKey === "master-create") {
+            resetDropdownSelections();
+          }
+        }}
         mapFormValues={({ source, defaults }) => {
-          return toSupplierFormValues(
-            (source ?? {}) as Record<string, unknown>,
+          const rowSource = (source ?? {}) as Record<string, unknown>;
+          const values = toSupplierFormValues(
+            rowSource,
             (defaults ?? {}) as Record<string, unknown>,
             stateCodeByName,
             SUPPLIER_INITIAL_FORM_VALUES,
             LOOKUP_KEYS,
           );
+          // Seed the lazy dropdowns with the saved selection so each trigger shows the
+          // resolved name on edit/view before the field is opened (and lazily loaded).
+          seedDropdownSelections(rowSource, values);
+          return values;
         }}
         buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
           return buildSupplierRequestPayload(

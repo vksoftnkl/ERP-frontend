@@ -19,11 +19,13 @@ import {
   type ERPDynamicModalField,
   type ERPDynamicModalVariant,
   type ERPDynamicSelectOption,
+  type ERPDynamicSearchQueryChangeHandler,
+  type ERPDynamicFieldValueChangeHandler,
+  type ERPDynamicFieldValueChangePayload,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
-  DEFAULT_LOOKUP_ARRAY_KEYS,
-  buildLookupOptions,
+  extractRows,
   getFirstDefinedValue,
   toDisplayValue,
   toNullableString,
@@ -70,11 +72,15 @@ const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 // Backend fieldNames (lowercased) that map to a real form field, so their popup
 // checkbox can actually show/hide something. Others render read-only ("not on form").
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
-const PARENT_GROUP_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const PARENT_GROUP_LOOKUP_QUERY = {
-  module: "itemGroups",
-  limit: "100",
-} as const;
+// Parent Group is a lazy, server-side searchable configured dropdown
+// (fixed.dropdown_details id 17 -> item_group_master active rows). Loaded on open + on
+// debounced server-side search via /dropdown-details/run; nothing is fetched up front
+// and dropdown_param is never sent.
+const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
+const PARENT_GROUP_DROPDOWN_ID = "17";
+const PARENT_GROUP_DROPDOWN_ID_KEYS = ["itg_id", "itgId"] as const;
+const PARENT_GROUP_DROPDOWN_LABEL_KEYS = ["itg_name", "itgName"] as const;
+const PARENT_GROUP_SEARCH_DEBOUNCE_MS = 250;
 const LOOKUP_KEYS = {
   id: ["itg_id", "group_id", "groupId", "id", "_id", "item_group_id", "itemGroupId"],
   code: ["itg_alias", "itg_short", "group_code", "groupCode", "code", "groupalias", "groupshort"],
@@ -95,6 +101,7 @@ const REQUEST_PAYLOAD_KEYS = {
   sort: "itg_sort",
 } as const;
 const GROUP_PARENT_ID_KEYS = ["itg_parent_id", "parent_id", "parentId", "parent_group_id", "parentGroupId"] as const;
+const GROUP_PARENT_NAME_KEYS = ["itg_parent_name", "parent_name", "parentName", "parent_group_name"] as const;
 const GROUP_LEVEL_KEYS = ["itg_level", "level", "group_level", "groupLevel"] as const;
 const GROUP_TAX_CLAIM_KEYS = ["itg_tax_claim", "tax_claim", "taxClaim"] as const;
 const GROUP_DEFAULT_TAX_ID_KEYS = ["itg_default_tax_id", "default_tax_id", "defaultTaxId"] as const;
@@ -116,6 +123,56 @@ const DEFAULT_PARENT_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "None",
 };
+// Map dropdown-run rows ({ data: { items: [...] } }) for dropdown 17 to <id,name>
+// options. The "None" head is prepended so the parent can be cleared (top-level group).
+function buildParentOptions(payload: unknown): ERPDynamicSelectOption[] {
+  const optionMap = new Map<string, string>();
+  for (const row of extractRows(payload)) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+    const source = row as Record<string, unknown>;
+    const id = toDisplayValue(getFirstDefinedValue(source, PARENT_GROUP_DROPDOWN_ID_KEYS));
+    if (!id) {
+      continue;
+    }
+    const label = toDisplayValue(getFirstDefinedValue(source, PARENT_GROUP_DROPDOWN_LABEL_KEYS));
+    if (!optionMap.has(id)) {
+      optionMap.set(id, label || id);
+    }
+  }
+  const options = Array.from(optionMap.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((left, right) => left.label.localeCompare(right.label));
+  return [DEFAULT_PARENT_OPTION, ...options];
+}
+// Build the run query. An empty search is omitted so the server returns the first page;
+// dropdown_param is never sent.
+function buildParentRunQuery(search: string): Record<string, string> {
+  const query: Record<string, string> = {
+    dropdown_id: PARENT_GROUP_DROPDOWN_ID,
+    page: "1",
+    limit: "20",
+  };
+  const trimmed = search.trim();
+  if (trimmed) {
+    query.search = trimmed;
+  }
+  return query;
+}
+// Keep the currently-selected option visible after a fetch replaces the option list.
+function withPinnedOption(
+  options: ERPDynamicSelectOption[],
+  pinned: ERPDynamicSelectOption | null,
+): ERPDynamicSelectOption[] {
+  if (!pinned || !pinned.value) {
+    return options;
+  }
+  if (options.some((option) => option.value === pinned.value)) {
+    return options;
+  }
+  return [...options, pinned];
+}
 const INITIAL_FORM_VALUES = {
   masterName: "",
   searchCode: "",
@@ -131,7 +188,15 @@ const INITIAL_FORM_VALUES = {
   groupDefaultUomId: "",
   groupPhotoUrl: "",
 } as const;
-function buildItemGroupFormFields(parentOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
+type LazyParentHandlers = {
+  onSearchOpenChange: (open: boolean) => void;
+  onSearchQueryChange: ERPDynamicSearchQueryChangeHandler;
+  onValueChange: ERPDynamicFieldValueChangeHandler;
+};
+function buildItemGroupFormFields(
+  parentOptions: ERPDynamicSelectOption[],
+  lazyParent: LazyParentHandlers,
+): ERPDynamicModalField[] {
   return [
     {
       name: "masterName",
@@ -165,7 +230,11 @@ function buildItemGroupFormFields(parentOptions: ERPDynamicSelectOption[]): ERPD
       type: "select",
       colSpan: 2,
       searchable: true,
+      serverSearch: true,
       options: parentOptions,
+      onSearchOpenChange: lazyParent.onSearchOpenChange,
+      onSearchQueryChange: lazyParent.onSearchQueryChange,
+      onValueChange: lazyParent.onValueChange,
     },
     {
       name: "masterDescription",
@@ -212,7 +281,12 @@ function getBase64FromDataUrl(dataUrl: string): string {
   return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
 }
 export default function ItemGroupMasterPage() {
-  const { getAll: getParentGroupLookup } = useApi<unknown>(PARENT_GROUP_LOOKUP_ENDPOINT);
+  // Lazy server-side Parent Group dropdown (configured dropdown 17 via
+  // /dropdown-details/run). Errors aren't toasted — a failed dropdown fetch shouldn't
+  // interrupt the form.
+  const { run: runParentDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
   // Silent progressive enhancement: a failed config fetch leaves the form on its
   // hardcoded labels/order (empty map), so don't nag the user with an error toast.
   const { getAll: getWidgetConfig } = useApi<WidgetMastersResponse>(WIDGET_CONFIG_ENDPOINT, {
@@ -249,39 +323,93 @@ export default function ItemGroupMasterPage() {
       mounted = false;
     };
   }, [getWidgetConfig]);
-  useEffect(() => {
-    let mounted = true;
-    void (async () => {
+  // Mirror of the latest options + the pinned selection so the value handler can resolve
+  // a picked label and the selection stays visible after a fetch replaces the list.
+  const parentOptionsRef = useRef<ERPDynamicSelectOption[]>([DEFAULT_PARENT_OPTION]);
+  const pinnedParentOptionRef = useRef<ERPDynamicSelectOption | null>(null);
+  const parentSearchTimeoutRef = useRef<number | null>(null);
+  const applyParentOptions = useCallback((options: ERPDynamicSelectOption[]) => {
+    parentOptionsRef.current = options;
+    setParentOptions(options);
+  }, []);
+  // Fetch the dropdown's first page (open) or search results (typing). A superseded/
+  // aborted request returns undefined and is skipped so it never wipes the latest list.
+  const fetchParentOptions = useCallback(
+    async (search: string) => {
       try {
-        const payload = await getParentGroupLookup(PARENT_GROUP_LOOKUP_QUERY);
-        if (!mounted) {
+        const payload = await runParentDropdown({ query: buildParentRunQuery(search) });
+        if (payload === undefined) {
           return;
         }
-        setParentOptions(
-          buildLookupOptions(payload, DEFAULT_PARENT_OPTION, {
-            arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
-            idKeys: ["id", "value", "itg_id"],
-            labelKeys: ["name", "label", "itg_name"],
-          }),
+        applyParentOptions(
+          withPinnedOption(buildParentOptions(payload), pinnedParentOptionRef.current),
         );
       } catch {
-        if (mounted) {
-          setParentOptions([DEFAULT_PARENT_OPTION]);
-        }
+        // Keep whatever options are currently shown (e.g. the seeded selection).
       }
-    })();
+    },
+    [applyParentOptions, runParentDropdown],
+  );
+  // Field handlers: fetch on open (immediate), on debounced typing, and pin the choice.
+  const lazyParentHandlers = useMemo<LazyParentHandlers>(
+    () => ({
+      onSearchOpenChange: (open: boolean) => {
+        if (parentSearchTimeoutRef.current != null) {
+          window.clearTimeout(parentSearchTimeoutRef.current);
+          parentSearchTimeoutRef.current = null;
+        }
+        if (open) {
+          void fetchParentOptions("");
+        }
+      },
+      onSearchQueryChange: (query: string) => {
+        if (parentSearchTimeoutRef.current != null) {
+          window.clearTimeout(parentSearchTimeoutRef.current);
+        }
+        const delay = query.trim() ? PARENT_GROUP_SEARCH_DEBOUNCE_MS : 0;
+        parentSearchTimeoutRef.current = window.setTimeout(() => {
+          parentSearchTimeoutRef.current = null;
+          void fetchParentOptions(query);
+        }, delay);
+      },
+      onValueChange: (payload: ERPDynamicFieldValueChangePayload) => {
+        const option = parentOptionsRef.current.find((item) => item.value === payload.value);
+        pinnedParentOptionRef.current = option && payload.value ? option : null;
+      },
+    }),
+    [fetchParentOptions],
+  );
+  // Seed the trigger with the saved parent on edit/view before the field is opened
+  // (and lazily loaded). On create, reset to just the "None" head.
+  const seedSelectedParent = useCallback(
+    (parentId: string, parentName: string) => {
+      const value = parentId.trim();
+      if (!value) {
+        pinnedParentOptionRef.current = null;
+        applyParentOptions([DEFAULT_PARENT_OPTION]);
+        return;
+      }
+      const option: ERPDynamicSelectOption = { value, label: parentName.trim() || value };
+      pinnedParentOptionRef.current = option;
+      applyParentOptions([DEFAULT_PARENT_OPTION, option]);
+    },
+    [applyParentOptions],
+  );
+  useEffect(() => {
     return () => {
-      mounted = false;
+      if (parentSearchTimeoutRef.current != null) {
+        window.clearTimeout(parentSearchTimeoutRef.current);
+      }
     };
-  }, [getParentGroupLookup]);
+  }, []);
   const formFields = useMemo(
     () =>
       applyWidgetFieldConfig(
-        buildItemGroupFormFields(parentOptions),
+        buildItemGroupFormFields(parentOptions, lazyParentHandlers),
         widgetFieldConfig,
         WIDGET_FIELD_NAME_BY_FORM_FIELD,
       ),
-    [parentOptions, widgetFieldConfig],
+    [parentOptions, lazyParentHandlers, widgetFieldConfig],
   );
   // Adds the `grid_param` payload to the default page/limit/search list query.
   const buildListQuery = useCallback(
@@ -519,7 +647,7 @@ export default function ItemGroupMasterPage() {
         </div>
       }
       gridTableName={GRID_TABLE_NAME}
-        listResponseStyleArrayKey=""
+      listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
@@ -532,14 +660,28 @@ export default function ItemGroupMasterPage() {
       nameFieldPlaceholder="Enter item group name"
       formTitle="Item Group Form"
       formDescription="Create and update item groups."
-        viewModalTitle="Group Details"
+      viewModalTitle="Group Details"
       createModalTitle="Group Entry"
       editModalTitle="Edit Group Entry"
       customFields={formFields}
       createInitialValues={INITIAL_FORM_VALUES}
       modalPanelStyle={{ width: "min(52rem, calc(100vw - 2rem))", maxHeight: "min(82vh, 42rem)" }}
+      onModalOpenChange={(open, variantKey) => {
+        // Clear the lazy parent dropdown when the create modal opens so no stale
+        // selection from a previously edited group lingers (it reloads on open).
+        if (open && variantKey === "master-create") {
+          seedSelectedParent("", "");
+        }
+      }}
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
+        const parentGroupId = toDisplayValue(getFirstDefinedValue(rowSource, GROUP_PARENT_ID_KEYS));
+        // Seed the lazy Parent Group dropdown with the saved selection so the trigger
+        // shows the parent name on edit/view before the field is opened (and loaded).
+        seedSelectedParent(
+          parentGroupId,
+          toDisplayValue(getFirstDefinedValue(rowSource, GROUP_PARENT_NAME_KEYS)),
+        );
         return {
           ...INITIAL_FORM_VALUES,
           masterName:
@@ -554,7 +696,7 @@ export default function ItemGroupMasterPage() {
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.description)) || defaults.masterDescription,
           position:
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) || defaults.position,
-          parentGroupId: toDisplayValue(getFirstDefinedValue(rowSource, GROUP_PARENT_ID_KEYS)),
+          parentGroupId,
           groupLevel: toDisplayValue(getFirstDefinedValue(rowSource, GROUP_LEVEL_KEYS)) || "0",
           groupTaxClaim: toSelectBoolean(
             getFirstDefinedValue(rowSource, GROUP_TAX_CLAIM_KEYS),

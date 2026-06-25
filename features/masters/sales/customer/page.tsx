@@ -8,6 +8,7 @@ import InlineRelatedMasterModal from "@/features/masters/shared/inline-related-m
 import { toast } from "react-toastify";
 import type {
   ERPDynamicFieldValueChangeHandler,
+  ERPDynamicFieldValueChangePayload,
   ERPDynamicModalController,
   ERPDynamicModalSubmitPayload,
   ERPDynamicModalVariant,
@@ -39,33 +40,21 @@ import { validateGstin, validateOptionalGstin } from "@/utils/validation";
 import {
   API_ENDPOINTS,
   GRID_TABLE_NAME,
-  STATE_LOOKUP_ENDPOINT,
   STATE_GET_ENDPOINT,
   STATE_UPSERT_ENDPOINT,
-  AREA_LOOKUP_ENDPOINT,
   AREA_GET_ENDPOINT,
   AREA_UPSERT_ENDPOINT,
-  CUSTOMER_GROUP_LOOKUP_ENDPOINT,
   CUSTOMER_GROUP_GET_ENDPOINT,
   CUSTOMER_GROUP_UPSERT_ENDPOINT,
-  COMPANY_LOOKUP_ENDPOINT,
-  BRANCH_LOOKUP_ENDPOINT,
   PRICE_LEVEL_LOOKUP_ENDPOINT,
   CITY_LOOKUP_ENDPOINT,
-  CUSTOMER_GROUP_LOOKUP_QUERY,
-  CUSTOMER_GROUP_SEARCH_DEBOUNCE_MS,
-  AREA_LOOKUP_REQUEST_QUERY,
-  STATE_LOOKUP_REQUEST_QUERY,
   CITY_LOOKUP_REQUEST_QUERY,
-  BRANCH_LOOKUP_REQUEST_QUERY,
-  COMPANY_LOOKUP_REQUEST_QUERY,
   PRICE_LEVEL_LOOKUP_REQUEST_QUERY,
   GST_LOOKUP_ENDPOINT,
   GST_LOOKUP_PATTERN,
   GST_LOOKUP_HELPER_TEXT,
   LOOKUP_KEYS,
   REQUEST_PAYLOAD_KEYS,
-  STATE_LOOKUP_KEYS,
   CITY_LOOKUP_KEYS,
   STATE_DETAIL_ARRAY_KEYS,
   STATE_DETAIL_KEYS,
@@ -73,11 +62,7 @@ import {
   AREA_DETAIL_KEYS,
   GROUP_DETAIL_ARRAY_KEYS,
   GROUP_DETAIL_KEYS,
-  DEFAULT_AREA_OPTION,
   DEFAULT_CITY_OPTION,
-  DEFAULT_GROUP_OPTION,
-  DEFAULT_BRANCH_OPTION,
-  DEFAULT_COMPANY_OPTION,
   ALL_COMPANY_OPTION_VALUE,
   ALL_BRANCH_OPTION_VALUE,
   ALL_COMPANY_OPTION,
@@ -109,6 +94,16 @@ import {
   CUSTOMER_MODAL_PANEL_STYLE,
   CUSTOMER_BASIC_VALIDATIONS,
 } from "./customer-master.constants";
+import {
+  DROPDOWN_RUN_ENDPOINT,
+  DROPDOWN_SEARCH_DEBOUNCE_MS,
+  CUSTOMER_DROPDOWN_CONFIG,
+  type CustomerDropdownKind,
+  buildDropdownRunQuery,
+  buildDropdownOptions,
+  buildStateDropdownData,
+  withPinnedOption,
+} from "./customer-dropdowns";
 function withCustomerBasicValidation(field: ERPDynamicModalField): ERPDynamicModalField {
   const basicValidation = CUSTOMER_BASIC_VALIDATIONS[field.name];
   if (!basicValidation) {
@@ -250,6 +245,20 @@ function getLookupErrorMessage(payload: unknown, fallback: string): string {
     fallback
   );
 }
+type LazyDropdownFieldHandlers = {
+  onSearchOpenChange: (open: boolean) => void;
+  onSearchQueryChange: ERPDynamicSearchQueryChangeHandler;
+  onValueChange: ERPDynamicFieldValueChangeHandler;
+};
+type CustomerLazyDropdownHandlers = Record<
+  | "cusCompanyId"
+  | "cusBranchId"
+  | "cusAreaId"
+  | "cusGroupId"
+  | "cusStateCode"
+  | "cusRegionStateName",
+  LazyDropdownFieldHandlers
+>;
 function buildCustomerFormFields(
   stateOptions: ERPDynamicSelectOption[],
   regionStateOptions: ERPDynamicSelectOption[],
@@ -258,11 +267,11 @@ function buildCustomerFormFields(
   companyOptions: ERPDynamicSelectOption[],
   branchOptions: ERPDynamicSelectOption[],
   priceLevelOptions: ERPDynamicSelectOption[],
+  lazy: CustomerLazyDropdownHandlers,
   onStateCreateShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
   onStateEditShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
   onAreaCreateShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
   onAreaEditShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
-  onGroupSearchQueryChange: ERPDynamicSearchQueryChangeHandler,
   onGroupCreateShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
   onGroupEditShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
   onCustomerGstinValueChange: ERPDynamicFieldValueChangeHandler,
@@ -272,21 +281,29 @@ function buildCustomerFormFields(
       name: "scopeHeadingPrimary",
       label: "Primary details",
       type: "heading",
-    },   
+    },
     {
       name: "cusCompanyId",
       label: "Company",
       type: "select",
       searchable: true,
+      serverSearch: true,
       options: companyOptions,
+      onSearchOpenChange: lazy.cusCompanyId.onSearchOpenChange,
+      onSearchQueryChange: lazy.cusCompanyId.onSearchQueryChange,
+      onValueChange: lazy.cusCompanyId.onValueChange,
     },
     {
       name: "cusAreaId",
       label: "Area",
       type: "select",
       searchable: true,
+      serverSearch: true,
       required: true,
       options: areaOptions,
+      onSearchOpenChange: lazy.cusAreaId.onSearchOpenChange,
+      onSearchQueryChange: lazy.cusAreaId.onSearchQueryChange,
+      onValueChange: lazy.cusAreaId.onValueChange,
       onSearchCreateShortcut: onAreaCreateShortcut,
       onSearchEditShortcut: onAreaEditShortcut,
       validation: {
@@ -305,15 +322,22 @@ function buildCustomerFormFields(
       label: "Branch",
       type: "select",
       searchable: true,
+      serverSearch: true,
       options: branchOptions,
+      onSearchOpenChange: lazy.cusBranchId.onSearchOpenChange,
+      onSearchQueryChange: lazy.cusBranchId.onSearchQueryChange,
+      onValueChange: lazy.cusBranchId.onValueChange,
     },{
       name: "cusGroupId",
       label: "Customer Group",
       type: "select",
       searchable: true,
+      serverSearch: true,
       required: true,
       options: groupOptions,
-      onSearchQueryChange: onGroupSearchQueryChange,
+      onSearchOpenChange: lazy.cusGroupId.onSearchOpenChange,
+      onSearchQueryChange: lazy.cusGroupId.onSearchQueryChange,
+      onValueChange: lazy.cusGroupId.onValueChange,
       onSearchCreateShortcut: onGroupCreateShortcut,
       onSearchEditShortcut: onGroupEditShortcut,
       validation: {
@@ -382,9 +406,13 @@ function buildCustomerFormFields(
       label: "State",
       type: "select",
       searchable: true,
+      serverSearch: true,
       required: true,
       options: stateOptions,
       gridColumnStart: 2,
+      onSearchOpenChange: lazy.cusStateCode.onSearchOpenChange,
+      onSearchQueryChange: lazy.cusStateCode.onSearchQueryChange,
+      onValueChange: lazy.cusStateCode.onValueChange,
       onSearchCreateShortcut: onStateCreateShortcut,
       onSearchEditShortcut: onStateEditShortcut,
       validation: {
@@ -627,7 +655,11 @@ function buildCustomerFormFields(
       label: "Region State Name",
       type: "select",
       searchable: true,
+      serverSearch: true,
       options: regionStateOptions,
+      onSearchOpenChange: lazy.cusRegionStateName.onSearchOpenChange,
+      onSearchQueryChange: lazy.cusRegionStateName.onSearchQueryChange,
+      onValueChange: lazy.cusRegionStateName.onValueChange,
     },
     {
       name: "cusRegionCountry",
@@ -802,57 +834,6 @@ function removeEmptyOptions(
 ): ERPDynamicSelectOption[] {
   return options.filter((option) => option.value.trim().length > 0);
 }
-function buildStateLookupData(payload: unknown): {
-  options: ERPDynamicSelectOption[];
-  regionStateOptions: ERPDynamicSelectOption[];
-  stateNameByCode: Record<string, string>;
-  stateCodeByName: Record<string, string>;
-} {
-  const codeToName = new Map<string, string>();
-  const rows = extractRows(payload, STATE_LOOKUP_KEYS.array);
-  for (const row of rows) {
-    if (!row || typeof row !== "object" || Array.isArray(row)) {
-      continue;
-    }
-    const source = row as Record<string, unknown>;
-    const stateCode = toDisplayValue(getFirstDefinedValue(source, STATE_LOOKUP_KEYS.code))
-      .trim()
-      .toUpperCase();
-    const stateName = toDisplayValue(getFirstDefinedValue(source, STATE_LOOKUP_KEYS.name));
-    if (!stateCode || !stateName) {
-      continue;
-    }
-    if (!codeToName.has(stateCode)) {
-      codeToName.set(stateCode, stateName);
-    }
-  }
-  const options = Array.from(codeToName.entries())
-    .map(([value, name]) => ({
-      value,
-      label: `${name} (${value})`,
-    }))
-    .sort((left, right) => left.label.localeCompare(right.label));
-  const regionStateOptions = Array.from(new Set(codeToName.values()))
-    .map((name) => ({
-      value: name,
-      label: name,
-    }))
-    .sort((left, right) => left.label.localeCompare(right.label));
-  const stateNameByCode: Record<string, string> = {};
-  const stateCodeByName: Record<string, string> = {};
-  for (const [code, name] of codeToName.entries()) {
-    stateNameByCode[code] = name;
-    if (!(name in stateCodeByName)) {
-      stateCodeByName[name] = code;
-    }
-  }
-  return {
-    options,
-    regionStateOptions,
-    stateNameByCode,
-    stateCodeByName,
-  };
-}
 function extractStateCodeDetailSource(payload: unknown): Record<string, unknown> | null {
   const rows = extractRows(payload, STATE_DETAIL_ARRAY_KEYS);
   if (rows.length > 0) {
@@ -937,15 +918,6 @@ function buildStateCodeModalFields(disableStateCode: boolean): ERPDynamicModalFi
       type: "checkbox",
     },
   ];
-}
-function buildAreaOptions(payload: unknown): ERPDynamicSelectOption[] {
-  return removeEmptyOptions(
-    buildLookupOptions(payload, DEFAULT_AREA_OPTION, {
-      arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "areas"],
-      idKeys: ["armId", "arm_id", "area_id", "areaId", "id", "_id", "value"],
-      labelKeys: ["armName", "arm_name", "area_name", "areaName", "name", "label"],
-    }),
-  );
 }
 function buildCityOptions(payload: unknown): ERPDynamicSelectOption[] {
   return removeEmptyOptions(
@@ -1068,34 +1040,6 @@ function buildAreaModalFields(cityOptions: ERPDynamicSelectOption[]): ERPDynamic
       type: "checkbox",
     },
   ];
-}
-function buildGroupOptions(payload: unknown): ERPDynamicSelectOption[] {
-  return removeEmptyOptions(
-    buildLookupOptions(payload, DEFAULT_GROUP_OPTION, {
-      arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "customerGroups", "customer_groups"],
-      idKeys: ["cgrId", "cgr_id", "group_id", "groupId", "id", "_id", "value"],
-      labelKeys: ["cgrName", "cgr_name", "group_name", "groupName", "name", "label"],
-    }),
-  );
-}
-function mergeLookupOptions(
-  currentOptions: ERPDynamicSelectOption[],
-  nextOptions: ERPDynamicSelectOption[],
-): ERPDynamicSelectOption[] {
-  const merged = new Map<string, ERPDynamicSelectOption>();
-  for (const option of currentOptions) {
-    if (!option.value.trim()) {
-      continue;
-    }
-    merged.set(option.value, option);
-  }
-  for (const option of nextOptions) {
-    if (!option.value.trim()) {
-      continue;
-    }
-    merged.set(option.value, option);
-  }
-  return Array.from(merged.values()).sort((left, right) => left.label.localeCompare(right.label));
 }
 function parseGroupCollectionDays(value: string): number[] {
   const normalized = value.trim();
@@ -1291,7 +1235,25 @@ export default function CustomerPage() {
   const stateModalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const areaModalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const groupModalControllerRef = useRef<ERPDynamicModalController | null>(null);
-  const { getAll: getStateLookup } = useApi<unknown>(STATE_LOOKUP_ENDPOINT);
+  // Lazy configured-dropdown runners (fixed.dropdown_details via /dropdown-details/run).
+  // One hook per kind so each fetch has an independent abort/loading lifecycle. Errors
+  // are not toasted — a failed dropdown fetch should not interrupt the form. Nothing is
+  // fetched up front; options load when a field opens and on debounced server-side search.
+  const { run: runCompanyDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
+  const { run: runBranchDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
+  const { run: runAreaDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
+  const { run: runGroupDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
+  const { run: runStateDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
   const {
     getAll: getStateByCode,
     loading: stateDetailsLoading,
@@ -1310,7 +1272,6 @@ export default function CustomerPage() {
   } = useApi<unknown, Record<string, unknown>>(STATE_UPSERT_ENDPOINT, {
     method: "POST",
   });
-  const { getAll: getAreaLookup } = useApi<unknown>(AREA_LOOKUP_ENDPOINT);
   const {
     getAll: getAreaById,
     loading: areaDetailsLoading,
@@ -1330,7 +1291,6 @@ export default function CustomerPage() {
     method: "POST",
   });
   const { getAll: getCityLookup } = useApi<unknown>(CITY_LOOKUP_ENDPOINT);
-  const { getAll: getCustomerGroupLookup } = useApi<unknown>(CUSTOMER_GROUP_LOOKUP_ENDPOINT);
   const {
     getAll: getCustomerGroupById,
     loading: groupDetailsLoading,
@@ -1349,8 +1309,6 @@ export default function CustomerPage() {
   } = useApi<unknown, Record<string, unknown>>(CUSTOMER_GROUP_UPSERT_ENDPOINT, {
     method: "POST",
   });
-  const { getAll: getCompanyLookup } = useApi<unknown>(COMPANY_LOOKUP_ENDPOINT);
-  const { getAll: getBranchLookup } = useApi<unknown>(BRANCH_LOOKUP_ENDPOINT);
   const { getAll: getPriceLevelLookup } = useApi<unknown>(PRICE_LEVEL_LOOKUP_ENDPOINT);
   const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [regionStateOptions, setRegionStateOptions] = useState<ERPDynamicSelectOption[]>([]);
@@ -1366,49 +1324,28 @@ export default function CustomerPage() {
   const [editingAreaId, setEditingAreaId] = useState<string | null>(null);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const gstLookupCacheRef = useRef<Record<string, Record<string, string>>>({});
-  const customerGroupSearchTimeoutRef = useRef<number | null>(null);
-  const customerGroupSearchRequestRef = useRef(0);
+  // Debounce handles per lazy field name (server-side search typing).
+  const dropdownSearchTimeoutsRef = useRef<Record<string, number | null>>({});
+  // Latest options shown for each lazy field, mirrored so the selection handler can
+  // resolve a picked value's label without a stale closure.
+  const dropdownOptionsRef = useRef<Record<string, ERPDynamicSelectOption[]>>({});
+  // Currently-selected option pinned per field so it stays visible (keeping its label)
+  // after a fetch replaces the option list with a fresh server page.
+  const pinnedDropdownOptionRef = useRef<Record<string, ERPDynamicSelectOption | null>>({});
+  // Only city + price level remain eagerly loaded; the company/branch/area/group/state
+  // dropdowns are lazy (loaded on open + debounced search via /dropdown-details/run).
   useEffect(() => {
     let mounted = true;
     void (async () => {
       try {
-        const [statePayload, areaPayload, cityPayload, groupPayload, companyPayload, branchPayload, priceLevelPayload] =
-          await Promise.all([
-            getStateLookup(STATE_LOOKUP_REQUEST_QUERY),
-            getAreaLookup(AREA_LOOKUP_REQUEST_QUERY),
-            getCityLookup(CITY_LOOKUP_REQUEST_QUERY),
-            getCustomerGroupLookup(CUSTOMER_GROUP_LOOKUP_QUERY),
-            getCompanyLookup(COMPANY_LOOKUP_REQUEST_QUERY),
-            getBranchLookup(BRANCH_LOOKUP_REQUEST_QUERY),
-            getPriceLevelLookup(PRICE_LEVEL_LOOKUP_REQUEST_QUERY),
-          ]);
+        const [cityPayload, priceLevelPayload] = await Promise.all([
+          getCityLookup(CITY_LOOKUP_REQUEST_QUERY),
+          getPriceLevelLookup(PRICE_LEVEL_LOOKUP_REQUEST_QUERY),
+        ]);
         if (!mounted) {
           return;
         }
-        const stateLookupData = buildStateLookupData(statePayload);
-        setStateOptions(stateLookupData.options);
-        setRegionStateOptions(stateLookupData.regionStateOptions);
-        setStateNameByCode(stateLookupData.stateNameByCode);
-        setStateCodeByName(stateLookupData.stateCodeByName);
-        setAreaOptions(buildAreaOptions(areaPayload));
         setCityOptions(buildCityOptions(cityPayload));
-        setGroupOptions(buildGroupOptions(groupPayload));
-        const companyLookupOptions = removeEmptyOptions(
-          buildLookupOptions(companyPayload, DEFAULT_COMPANY_OPTION, {
-            arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "companies", "companys"],
-            idKeys: ["compId", "comp_id", "company_id", "companyId", "id", "_id", "value"],
-            labelKeys: ["compName", "comp_name", "company_name", "companyName", "name", "label"],
-          }),
-        );
-        setCompanyOptions([ALL_COMPANY_OPTION, ...companyLookupOptions]);
-        const branchLookupOptions = removeEmptyOptions(
-          buildLookupOptions(branchPayload, DEFAULT_BRANCH_OPTION, {
-            arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "branches", "branch_masters"],
-            idKeys: ["brId", "br_id", "branch_id", "branchId", "id", "_id", "value"],
-            labelKeys: ["brName", "br_name", "branch_name", "branchName", "name", "label"],
-          }),
-        );
-        setBranchOptions([ALL_BRANCH_OPTION, ...branchLookupOptions]);
         setPriceLevelOptions(
           removeEmptyOptions(
             buildLookupOptions(priceLevelPayload, DEFAULT_PRICE_LEVEL_OPTION, {
@@ -1422,76 +1359,267 @@ export default function CustomerPage() {
         if (!mounted) {
           return;
         }
-        setStateOptions([]);
-        setRegionStateOptions([]);
-        setStateNameByCode({});
-        setStateCodeByName({});
-        setAreaOptions([]);
         setCityOptions([]);
-        setGroupOptions([]);
-        setCompanyOptions([]);
-        setBranchOptions([]);
         setPriceLevelOptions([]);
       }
     })();
     return () => {
       mounted = false;
     };
-  }, [
-    getAreaLookup,
-    getBranchLookup,
-    getCityLookup,
-    getCompanyLookup,
-    getCustomerGroupLookup,
-    getPriceLevelLookup,
-    getStateLookup,
-  ]);
-  const loadCustomerGroupOptions = useCallback(
-    async (search = "") => {
-      const normalizedSearch = search.trim();
-      const payload = await getCustomerGroupLookup(
-        normalizedSearch
-          ? {
-              ...CUSTOMER_GROUP_LOOKUP_QUERY,
-              search: normalizedSearch,
-            }
-          : CUSTOMER_GROUP_LOOKUP_QUERY,
-      );
-      return buildGroupOptions(payload);
+  }, [getCityLookup, getPriceLevelLookup]);
+  // Push freshly built options into both the matching state setter and the mirror ref.
+  const applyDropdownOptions = useCallback(
+    (fieldName: string, options: ERPDynamicSelectOption[]) => {
+      dropdownOptionsRef.current[fieldName] = options;
+      switch (fieldName) {
+        case "cusCompanyId":
+          setCompanyOptions(options);
+          break;
+        case "cusBranchId":
+          setBranchOptions(options);
+          break;
+        case "cusAreaId":
+          setAreaOptions(options);
+          break;
+        case "cusGroupId":
+          setGroupOptions(options);
+          break;
+        case "cusStateCode":
+          setStateOptions(options);
+          break;
+        case "cusRegionStateName":
+          setRegionStateOptions(options);
+          break;
+      }
     },
-    [getCustomerGroupLookup],
+    [],
   );
-  const handleCustomerGroupSearchChange = useCallback<ERPDynamicSearchQueryChangeHandler>(
-    (query) => {
-      const normalizedQuery = query.trim();
-      if (customerGroupSearchTimeoutRef.current !== null) {
-        window.clearTimeout(customerGroupSearchTimeoutRef.current);
-      }
-      if (!normalizedQuery) {
-        return;
-      }
-      const requestId = customerGroupSearchRequestRef.current + 1;
-      customerGroupSearchRequestRef.current = requestId;
-      customerGroupSearchTimeoutRef.current = window.setTimeout(() => {
-        void (async () => {
-          try {
-            const searchedOptions = await loadCustomerGroupOptions(normalizedQuery);
-            if (customerGroupSearchRequestRef.current !== requestId) {
-              return;
-            }
-            setGroupOptions((current) => mergeLookupOptions(current, searchedOptions));
-          } catch {
-            // Keep current options if live lookup search fails.
+  // Lazily fetch a configured dropdown's first page (open) or search results (typing)
+  // from /dropdown-details/run. A superseded/aborted request returns undefined and is
+  // skipped so it never wipes the options the latest request set.
+  const fetchDropdown = useCallback(
+    async (kind: CustomerDropdownKind, search: string) => {
+      const config = CUSTOMER_DROPDOWN_CONFIG[kind];
+      const query = buildDropdownRunQuery(config.dropdownId, search);
+      try {
+        switch (kind) {
+          case "company": {
+            const payload = await runCompanyDropdown({ query });
+            if (payload === undefined) return;
+            const options = [
+              ALL_COMPANY_OPTION,
+              ...buildDropdownOptions(payload, config.idKeys, config.labelKeys, false),
+            ];
+            applyDropdownOptions(
+              "cusCompanyId",
+              withPinnedOption(options, pinnedDropdownOptionRef.current.cusCompanyId),
+            );
+            break;
           }
-        })();
-      }, CUSTOMER_GROUP_SEARCH_DEBOUNCE_MS);
+          case "branch": {
+            const payload = await runBranchDropdown({ query });
+            if (payload === undefined) return;
+            const options = [
+              ALL_BRANCH_OPTION,
+              ...buildDropdownOptions(payload, config.idKeys, config.labelKeys, false),
+            ];
+            applyDropdownOptions(
+              "cusBranchId",
+              withPinnedOption(options, pinnedDropdownOptionRef.current.cusBranchId),
+            );
+            break;
+          }
+          case "area": {
+            const payload = await runAreaDropdown({ query });
+            if (payload === undefined) return;
+            applyDropdownOptions(
+              "cusAreaId",
+              withPinnedOption(
+                buildDropdownOptions(payload, config.idKeys, config.labelKeys),
+                pinnedDropdownOptionRef.current.cusAreaId,
+              ),
+            );
+            break;
+          }
+          case "group": {
+            const payload = await runGroupDropdown({ query });
+            if (payload === undefined) return;
+            applyDropdownOptions(
+              "cusGroupId",
+              withPinnedOption(
+                buildDropdownOptions(payload, config.idKeys, config.labelKeys),
+                pinnedDropdownOptionRef.current.cusGroupId,
+              ),
+            );
+            break;
+          }
+          case "state": {
+            const payload = await runStateDropdown({ query });
+            if (payload === undefined) return;
+            const data = buildStateDropdownData(payload);
+            applyDropdownOptions(
+              "cusStateCode",
+              withPinnedOption(data.options, pinnedDropdownOptionRef.current.cusStateCode),
+            );
+            applyDropdownOptions(
+              "cusRegionStateName",
+              withPinnedOption(
+                data.regionStateOptions,
+                pinnedDropdownOptionRef.current.cusRegionStateName,
+              ),
+            );
+            // Merge so a previously seeded selected state's code mapping survives.
+            setStateNameByCode((prev) => ({ ...prev, ...data.stateNameByCode }));
+            setStateCodeByName((prev) => ({ ...prev, ...data.stateCodeByName }));
+            break;
+          }
+        }
+      } catch {
+        // Keep whatever options are currently shown (e.g. the seeded selection).
+      }
     },
-    [loadCustomerGroupOptions],
+    [
+      applyDropdownOptions,
+      runAreaDropdown,
+      runBranchDropdown,
+      runCompanyDropdown,
+      runGroupDropdown,
+      runStateDropdown,
+    ],
   );
+  // Per-field handlers wiring the form's searchable selects to the lazy fetch:
+  // fetch on open (immediate), on debounced typing, and pin the chosen option.
+  const lazyDropdownHandlers = useMemo(() => {
+    const build = (fieldName: string, kind: CustomerDropdownKind) => ({
+      onSearchOpenChange: (open: boolean) => {
+        const pending = dropdownSearchTimeoutsRef.current[fieldName];
+        if (pending != null) {
+          window.clearTimeout(pending);
+          dropdownSearchTimeoutsRef.current[fieldName] = null;
+        }
+        if (open) {
+          void fetchDropdown(kind, "");
+        }
+      },
+      onSearchQueryChange: ((query: string) => {
+        const pending = dropdownSearchTimeoutsRef.current[fieldName];
+        if (pending != null) {
+          window.clearTimeout(pending);
+        }
+        const delay = query.trim() ? DROPDOWN_SEARCH_DEBOUNCE_MS : 0;
+        dropdownSearchTimeoutsRef.current[fieldName] = window.setTimeout(() => {
+          dropdownSearchTimeoutsRef.current[fieldName] = null;
+          void fetchDropdown(kind, query);
+        }, delay);
+      }) as ERPDynamicSearchQueryChangeHandler,
+      onValueChange: ((payload: ERPDynamicFieldValueChangePayload) => {
+        const option = dropdownOptionsRef.current[fieldName]?.find(
+          (item) => item.value === payload.value,
+        );
+        pinnedDropdownOptionRef.current[fieldName] =
+          option && payload.value ? option : null;
+      }) as ERPDynamicFieldValueChangeHandler,
+    });
+    return {
+      cusCompanyId: build("cusCompanyId", "company"),
+      cusBranchId: build("cusBranchId", "branch"),
+      cusAreaId: build("cusAreaId", "area"),
+      cusGroupId: build("cusGroupId", "group"),
+      cusStateCode: build("cusStateCode", "state"),
+      cusRegionStateName: build("cusRegionStateName", "state"),
+    };
+  }, [fetchDropdown]);
+  // Seed each lazy dropdown with just its currently-selected option (from the loaded
+  // record) so the trigger shows the saved name on edit/view before the user opens it.
+  const seedDropdownSelections = useCallback(
+    (source: Record<string, unknown>, values: Record<string, string>) => {
+      const blank: ERPDynamicSelectOption = { value: "", label: "" };
+      const nameFrom = (keys: readonly string[]) =>
+        toDisplayValue(getFirstDefinedValue(source, keys));
+      const seedOne = (
+        fieldName: string,
+        rawValue: string,
+        label: string,
+        head: ERPDynamicSelectOption,
+      ) => {
+        const value = (rawValue ?? "").trim();
+        if (!value) {
+          pinnedDropdownOptionRef.current[fieldName] = null;
+          applyDropdownOptions(fieldName, [head]);
+          return;
+        }
+        const option: ERPDynamicSelectOption = { value, label: label || value };
+        pinnedDropdownOptionRef.current[fieldName] = option;
+        applyDropdownOptions(fieldName, [head, option]);
+      };
+      seedOne(
+        "cusCompanyId",
+        values.cusCompanyId,
+        nameFrom(["cusCompanyName", "cus_company_name"]),
+        ALL_COMPANY_OPTION,
+      );
+      seedOne(
+        "cusBranchId",
+        values.cusBranchId,
+        nameFrom(["cusBranchName", "cus_branch_name"]),
+        ALL_BRANCH_OPTION,
+      );
+      seedOne(
+        "cusAreaId",
+        values.cusAreaId,
+        nameFrom(["cusAreaName", "cus_area_name"]),
+        blank,
+      );
+      seedOne(
+        "cusGroupId",
+        values.cusGroupId,
+        nameFrom(["cusGroupName", "cus_group_name"]),
+        blank,
+      );
+      // Main State field: value = code, label = "State Name (CODE)".
+      const stateCode = (values.cusStateCode ?? "").trim().toUpperCase();
+      const stateName =
+        nameFrom(["cusStateName", "cus_state_name"]) || stateNameByCode[stateCode] || "";
+      if (stateCode) {
+        const stateOption: ERPDynamicSelectOption = {
+          value: stateCode,
+          label: stateName ? `${stateName} (${stateCode})` : stateCode,
+        };
+        pinnedDropdownOptionRef.current.cusStateCode = stateOption;
+        applyDropdownOptions("cusStateCode", [blank, stateOption]);
+        if (stateName) {
+          setStateNameByCode((prev) => ({ ...prev, [stateCode]: stateName }));
+          setStateCodeByName((prev) => ({ ...prev, [stateName]: stateCode }));
+        }
+      } else {
+        pinnedDropdownOptionRef.current.cusStateCode = null;
+        applyDropdownOptions("cusStateCode", [blank]);
+      }
+      // Region State field: value = state name.
+      const regionStateName = (values.cusRegionStateName ?? "").trim();
+      seedOne("cusRegionStateName", regionStateName, regionStateName, blank);
+    },
+    [applyDropdownOptions, stateNameByCode],
+  );
+  // Reset every lazy dropdown to just its empty/All head so no stale list from a
+  // previous record lingers (used when the create modal opens).
+  const resetDropdownSelections = useCallback(() => {
+    const blank: ERPDynamicSelectOption = { value: "", label: "" };
+    pinnedDropdownOptionRef.current = {};
+    applyDropdownOptions("cusCompanyId", [ALL_COMPANY_OPTION]);
+    applyDropdownOptions("cusBranchId", [ALL_BRANCH_OPTION]);
+    applyDropdownOptions("cusAreaId", [blank]);
+    applyDropdownOptions("cusGroupId", [blank]);
+    applyDropdownOptions("cusStateCode", [blank]);
+    applyDropdownOptions("cusRegionStateName", [blank]);
+  }, [applyDropdownOptions]);
+  // Clear any pending dropdown search debounces on unmount.
   useEffect(() => {
     return () => {
-      if (customerGroupSearchTimeoutRef.current !== null) {
-        window.clearTimeout(customerGroupSearchTimeoutRef.current);
+      for (const handle of Object.values(dropdownSearchTimeoutsRef.current)) {
+        if (handle != null) {
+          window.clearTimeout(handle);
+        }
       }
     };
   }, []);
@@ -1525,13 +1653,8 @@ export default function CustomerPage() {
     [stateCreateModalFields, stateSaveLoading, stateUpdateModalFields],
   );
   const refreshStateOptions = useCallback(async () => {
-    const statePayload = await getStateLookup(STATE_LOOKUP_REQUEST_QUERY);
-    const stateLookupData = buildStateLookupData(statePayload);
-    setStateOptions(stateLookupData.options);
-    setRegionStateOptions(stateLookupData.regionStateOptions);
-    setStateNameByCode(stateLookupData.stateNameByCode);
-    setStateCodeByName(stateLookupData.stateCodeByName);
-  }, [getStateLookup]);
+    await fetchDropdown("state", "");
+  }, [fetchDropdown]);
   const resolveStateOptionFromShortcut = useCallback(
     (payload: ERPDynamicSearchShortcutPayload): ERPDynamicSelectOption | null => {
       const selectedValue = payload.value.trim().toUpperCase();
@@ -1683,9 +1806,8 @@ export default function CustomerPage() {
     [areaModalFields, areaSaveLoading],
   );
   const refreshAreaOptions = useCallback(async () => {
-    const payload = await getAreaLookup(AREA_LOOKUP_REQUEST_QUERY);
-    setAreaOptions(buildAreaOptions(payload));
-  }, [getAreaLookup]);
+    await fetchDropdown("area", "");
+  }, [fetchDropdown]);
   const resolveAreaOptionFromShortcut = useCallback(
     (payload: ERPDynamicSearchShortcutPayload): ERPDynamicSelectOption | null => {
       const selectedValue = payload.value.trim();
@@ -1844,9 +1966,8 @@ export default function CustomerPage() {
     [groupModalFields, groupSaveLoading],
   );
   const refreshGroupOptions = useCallback(async () => {
-    const payload = await getCustomerGroupLookup(CUSTOMER_GROUP_LOOKUP_QUERY);
-    setGroupOptions(buildGroupOptions(payload));
-  }, [getCustomerGroupLookup]);
+    await fetchDropdown("group", "");
+  }, [fetchDropdown]);
   const resolveGroupOptionFromShortcut = useCallback(
     (payload: ERPDynamicSearchShortcutPayload): ERPDynamicSelectOption | null => {
       const selectedValue = payload.value.trim();
@@ -2057,11 +2178,11 @@ export default function CustomerPage() {
         companyOptions,
         branchOptions,
         priceLevelOptions,
+        lazyDropdownHandlers,
         handleStateCreateShortcut,
         handleStateEditShortcut,
         handleAreaCreateShortcut,
         handleAreaEditShortcut,
-        handleCustomerGroupSearchChange,
         handleGroupCreateShortcut,
         handleGroupEditShortcut,
         handleCustomerGstinValueChange,
@@ -2071,9 +2192,9 @@ export default function CustomerPage() {
       branchOptions,
       companyOptions,
       groupOptions,
+      lazyDropdownHandlers,
       handleAreaCreateShortcut,
       handleAreaEditShortcut,
-      handleCustomerGroupSearchChange,
       handleCustomerGstinValueChange,
       handleGroupCreateShortcut,
       handleGroupEditShortcut,
@@ -2166,6 +2287,37 @@ export default function CustomerPage() {
         modalHideFieldErrorText
         modalFocusFirstInvalidFieldOnValidationError
         modalEnableArrowKeyFieldNavigation
+        onModalOpenChange={(open, variantKey) => {
+          // Clear the lazy dropdowns when the create modal opens so no stale list
+          // from a previously edited record lingers (they reload on open).
+          if (open && variantKey === "master-create") {
+            resetDropdownSelections();
+          }
+        }}
+        augmentDetailSource={async ({ source }) => {
+          // getById doesn't return the customer group's name, so resolve it here to
+          // seed the Customer Group trigger with a readable label (not the raw id).
+          const detail = source ?? {};
+          const groupId = toDisplayValue(
+            getFirstDefinedValue(detail, ["cusGroupId", "cus_group_id"]),
+          );
+          const existingName = toDisplayValue(
+            getFirstDefinedValue(detail, ["cusGroupName", "cus_group_name"]),
+          );
+          if (!groupId || existingName) {
+            return null;
+          }
+          try {
+            const detailPayload = await getCustomerGroupById({ cgrId: groupId });
+            const detailSource = extractGroupDetailSource(detailPayload);
+            const groupName = detailSource
+              ? toDisplayValue(getFirstDefinedValue(detailSource, GROUP_DETAIL_KEYS.name))
+              : "";
+            return groupName ? { cusGroupName: groupName } : null;
+          } catch {
+            return null;
+          }
+        }}
         mapFormValues={({ source, defaults }) => {
           const rowSource = source ?? {};
           const mappedValues: Record<string, string> = {
@@ -2229,6 +2381,9 @@ export default function CustomerPage() {
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.description)) ||
             defaults.masterDescription ||
             CUSTOMER_INITIAL_FORM_VALUES.cusNotes;
+          // Seed the lazy dropdowns with the saved selection so each trigger shows the
+          // resolved name on edit/view before the field is opened (and lazily loaded).
+          seedDropdownSelections(rowSource, mappedValues);
           return mappedValues;
         }}
         buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {

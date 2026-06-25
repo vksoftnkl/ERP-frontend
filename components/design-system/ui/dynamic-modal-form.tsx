@@ -126,6 +126,9 @@ export function ERPDynamicModalForm({
   >({});
   const searchSelectRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const searchInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // Tracks which searchable field is currently open so onSearchOpenChange can be
+  // fired exactly once on each open/close transition (used for lazy dropdowns).
+  const prevOpenSearchFieldRef = useRef<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const [searchDropdownPlacement, setSearchDropdownPlacement] = useState<
     "down" | "up"
@@ -993,6 +996,28 @@ export function ERPDynamicModalForm({
       input.select();
     });
   }, [openSearchField]);
+  // Notify owners when a searchable field opens/closes so they can lazily load
+  // (or refresh) that field's options. Fires false for the field that just
+  // closed and true for the one that just opened.
+  useEffect(() => {
+    const previousField = prevOpenSearchFieldRef.current;
+    if (previousField === openSearchField) {
+      return;
+    }
+    if (previousField) {
+      const closedField = activeVariant?.fields.find(
+        (item) => item.name === previousField,
+      );
+      closedField?.onSearchOpenChange?.(false);
+    }
+    if (openSearchField) {
+      const openedField = activeVariant?.fields.find(
+        (item) => item.name === openSearchField,
+      );
+      openedField?.onSearchOpenChange?.(true);
+    }
+    prevOpenSearchFieldRef.current = openSearchField;
+  }, [openSearchField, activeVariant]);
   useEffect(() => {
     if (!openSearchField) {
       return;
@@ -1286,9 +1311,12 @@ export function ERPDynamicModalForm({
     const normalizedQuery = (searchQuery ?? "")
       .trim()
       .toLowerCase();
-    const filteredOptions =
-      shouldUseSearchableSelect
-        ? (field.options ?? []).filter((option) => {
+    const filteredOptions = !shouldUseSearchableSelect
+      ? []
+      : field.serverSearch
+        ? // Options are already filtered by the owner (server-side/lazy dropdown).
+          (field.options ?? [])
+        : (field.options ?? []).filter((option) => {
             if (!normalizedQuery) {
               return true;
             }
@@ -1299,8 +1327,7 @@ export function ERPDynamicModalForm({
               .toLowerCase()
               .includes(normalizedQuery);
             return valueMatch || labelMatch;
-          })
-        : [];
+          });
     const highlightedOptionIndexRaw =
       searchActiveOptionIndex[field.name];
     const highlightedOptionIndex =

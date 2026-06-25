@@ -8,6 +8,9 @@ import {
   type ERPDynamicModalField,
   type ERPDynamicModalVariant,
   type ERPDynamicSelectOption,
+  type ERPDynamicSearchQueryChangeHandler,
+  type ERPDynamicFieldValueChangeHandler,
+  type ERPDynamicFieldValueChangePayload,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import WidgetVisibilityTree, {
   type WidgetTreeSectionView,
@@ -30,11 +33,15 @@ const API_ENDPOINTS = {
   delete: "/cities/delete",
 } as const;
 const GRID_TABLE_NAME = "city_master";
-const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const LOOKUP_REQUEST_QUERY = {
-  module: "states",
-  limit: "20",
-} as const;
+// State select is a lazy, server-side searchable configured dropdown
+// (fixed.dropdown_details id 2 -> SELECT stm_id, stm_name FROM sales.state_master).
+// Loaded on open + on debounced server-side search via /dropdown-details/run; nothing
+// is fetched up front and dropdown_param is never sent.
+const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
+const STATE_DROPDOWN_ID = "2";
+const STATE_DROPDOWN_ID_KEYS = ["stm_id", "stmId"] as const;
+const STATE_DROPDOWN_LABEL_KEYS = ["stm_name", "stmName"] as const;
+const STATE_SEARCH_DEBOUNCE_MS = 250;
 // The form fields below are re-labelled, re-ordered, and shown/hidden from the
 // backend widget-masters config (fixed.form_section / form_field) for this
 // screen's menu id. Only those three properties come from the API — validation,
@@ -86,12 +93,8 @@ const REQUEST_PAYLOAD_KEYS = {
   sort: "ctmOrder",
 } as const;
 const CITY_STATE_ID_KEYS = ["ctmStateId", "ctm_state_id", "state_id", "stateId"] as const;
+const CITY_STATE_NAME_KEYS = ["ctmStateName", "ctm_state_name", "state_name", "stateName"] as const;
 const CITY_IS_ACTIVE_KEYS = ["ctmIsActive", "ctm_is_active", "isActive", "is_active", "status"] as const;
-const STATE_LOOKUP_KEYS = {
-  id: ["stmId", "stm_id", "state_id", "stateId", "id", "_id"],
-  name: ["stmName", "stm_name", "state_name", "stateName", "name"],
-  array: ["data", "items", "results", "rows", "list", "states"],
-} as const;
 const DEFAULT_STATE_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select State",
@@ -104,7 +107,15 @@ const CITY_INITIAL_FORM_VALUES = {
   position: "0",
   cityIsActive: "true",
 } as const;
-function buildCityFormFields(stateOptions: ERPDynamicSelectOption[]): ERPDynamicModalField[] {
+type LazyStateHandlers = {
+  onSearchOpenChange: (open: boolean) => void;
+  onSearchQueryChange: ERPDynamicSearchQueryChangeHandler;
+  onValueChange: ERPDynamicFieldValueChangeHandler;
+};
+function buildCityFormFields(
+  stateOptions: ERPDynamicSelectOption[],
+  lazyState: LazyStateHandlers,
+): ERPDynamicModalField[] {
   return [
     {
       name: "masterName",
@@ -132,9 +143,13 @@ function buildCityFormFields(stateOptions: ERPDynamicSelectOption[]): ERPDynamic
       type: "select",
       colSpan: 2,
       searchable: true,
+      serverSearch: true,
       required: true,
       options: stateOptions,
       placeholder: "Search state",
+      onSearchOpenChange: lazyState.onSearchOpenChange,
+      onSearchQueryChange: lazyState.onSearchQueryChange,
+      onValueChange: lazyState.onValueChange,
       validation: {
         requiredMessage: "State is required.",
       },
@@ -173,24 +188,22 @@ function toUpdateCityId(editingItemId: string | number | null): string {
   }
   return "";
 }
+// Map dropdown-run rows ({ data: { items: [...] } }) for dropdown 2 to <id,name>
+// options. The "Select State" head is prepended so the field can be cleared.
 function buildStateOptions(payload: unknown): ERPDynamicSelectOption[] {
   const optionMap = new Map<string, string>();
-  const rows = extractRows(payload, STATE_LOOKUP_KEYS.array);
-  for (const row of rows) {
+  for (const row of extractRows(payload)) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       continue;
     }
     const source = row as Record<string, unknown>;
-    const stateId = toDisplayValue(getFirstDefinedValue(source, STATE_LOOKUP_KEYS.id));
+    const stateId = toDisplayValue(getFirstDefinedValue(source, STATE_DROPDOWN_ID_KEYS));
     if (!stateId) {
       continue;
     }
-    const stateName = toDisplayValue(getFirstDefinedValue(source, STATE_LOOKUP_KEYS.name));
-    if (!stateName) {
-      continue;
-    }
+    const stateName = toDisplayValue(getFirstDefinedValue(source, STATE_DROPDOWN_LABEL_KEYS));
     if (!optionMap.has(stateId)) {
-      optionMap.set(stateId, stateName);
+      optionMap.set(stateId, stateName || stateId);
     }
   }
   const sortedOptions = Array.from(optionMap.entries())
@@ -198,28 +211,119 @@ function buildStateOptions(payload: unknown): ERPDynamicSelectOption[] {
     .sort((left, right) => left.label.localeCompare(right.label));
   return [DEFAULT_STATE_OPTION, ...sortedOptions];
 }
+// Build the run query. An empty search is omitted so the server returns the first page;
+// dropdown_param is never sent.
+function buildStateRunQuery(search: string): Record<string, string> {
+  const query: Record<string, string> = {
+    dropdown_id: STATE_DROPDOWN_ID,
+    page: "1",
+    limit: "20",
+  };
+  const trimmed = search.trim();
+  if (trimmed) {
+    query.search = trimmed;
+  }
+  return query;
+}
+// Keep the currently-selected option visible after a fetch replaces the option list.
+function withPinnedOption(
+  options: ERPDynamicSelectOption[],
+  pinned: ERPDynamicSelectOption | null,
+): ERPDynamicSelectOption[] {
+  if (!pinned || !pinned.value) {
+    return options;
+  }
+  if (options.some((option) => option.value === pinned.value)) {
+    return options;
+  }
+  return [...options, pinned];
+}
 export default function CityMasterPage() {
-  const { getAll: getStateLookup } = useApi<unknown>(STATE_LOOKUP_ENDPOINT);
+  // Lazy server-side state dropdown (configured dropdown 2 via /dropdown-details/run).
+  // Errors aren't toasted — a failed dropdown fetch shouldn't interrupt the form.
+  const { run: runStateDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
   const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_STATE_OPTION]);
-  useEffect(() => {
-    let mounted = true;
-    void (async () => {
+  // Mirror of the latest options + the pinned selection so the value handler can resolve
+  // a picked label and the selection stays visible after a fetch replaces the list.
+  const stateOptionsRef = useRef<ERPDynamicSelectOption[]>([DEFAULT_STATE_OPTION]);
+  const pinnedStateOptionRef = useRef<ERPDynamicSelectOption | null>(null);
+  const stateSearchTimeoutRef = useRef<number | null>(null);
+  const applyStateOptions = useCallback((options: ERPDynamicSelectOption[]) => {
+    stateOptionsRef.current = options;
+    setStateOptions(options);
+  }, []);
+  // Fetch the dropdown's first page (open) or search results (typing). A superseded/
+  // aborted request returns undefined and is skipped so it never wipes the latest list.
+  const fetchStateOptions = useCallback(
+    async (search: string) => {
       try {
-        const payload = await getStateLookup(LOOKUP_REQUEST_QUERY);
-        if (!mounted) {
+        const payload = await runStateDropdown({ query: buildStateRunQuery(search) });
+        if (payload === undefined) {
           return;
         }
-        setStateOptions(buildStateOptions(payload));
+        applyStateOptions(
+          withPinnedOption(buildStateOptions(payload), pinnedStateOptionRef.current),
+        );
       } catch {
-        if (mounted) {
-          setStateOptions([DEFAULT_STATE_OPTION]);
-        }
+        // Keep whatever options are currently shown (e.g. the seeded selection).
       }
-    })();
+    },
+    [applyStateOptions, runStateDropdown],
+  );
+  // Field handlers: fetch on open (immediate), on debounced typing, and pin the choice.
+  const lazyStateHandlers = useMemo<LazyStateHandlers>(
+    () => ({
+      onSearchOpenChange: (open: boolean) => {
+        if (stateSearchTimeoutRef.current != null) {
+          window.clearTimeout(stateSearchTimeoutRef.current);
+          stateSearchTimeoutRef.current = null;
+        }
+        if (open) {
+          void fetchStateOptions("");
+        }
+      },
+      onSearchQueryChange: (query: string) => {
+        if (stateSearchTimeoutRef.current != null) {
+          window.clearTimeout(stateSearchTimeoutRef.current);
+        }
+        const delay = query.trim() ? STATE_SEARCH_DEBOUNCE_MS : 0;
+        stateSearchTimeoutRef.current = window.setTimeout(() => {
+          stateSearchTimeoutRef.current = null;
+          void fetchStateOptions(query);
+        }, delay);
+      },
+      onValueChange: (payload: ERPDynamicFieldValueChangePayload) => {
+        const option = stateOptionsRef.current.find((item) => item.value === payload.value);
+        pinnedStateOptionRef.current = option && payload.value ? option : null;
+      },
+    }),
+    [fetchStateOptions],
+  );
+  // Seed the trigger with the saved state on edit/view before the field is opened
+  // (and lazily loaded). On create, reset to just the "Select State" head.
+  const seedSelectedState = useCallback(
+    (stateId: string, stateName: string) => {
+      const value = stateId.trim();
+      if (!value) {
+        pinnedStateOptionRef.current = null;
+        applyStateOptions([DEFAULT_STATE_OPTION]);
+        return;
+      }
+      const option: ERPDynamicSelectOption = { value, label: stateName.trim() || value };
+      pinnedStateOptionRef.current = option;
+      applyStateOptions([DEFAULT_STATE_OPTION, option]);
+    },
+    [applyStateOptions],
+  );
+  useEffect(() => {
     return () => {
-      mounted = false;
+      if (stateSearchTimeoutRef.current != null) {
+        window.clearTimeout(stateSearchTimeoutRef.current);
+      }
     };
-  }, [getStateLookup]);
+  }, []);
 
   // Silent progressive enhancement: a failed config fetch leaves the form on its
   // hardcoded labels/order (empty map), so don't nag the user with an error toast.
@@ -252,16 +356,16 @@ export default function CityMasterPage() {
     };
   }, [getWidgetConfig]);
 
-  // Re-label/re-order/show-hide the dynamically-built fields (the State select
-  // options come from the lookup) from the resolved widget config.
+  // Re-label/re-order/show-hide the dynamically-built fields (the State select is a
+  // lazy server-side dropdown) from the resolved widget config.
   const formFields = useMemo(
     () =>
       applyWidgetFieldConfig(
-        buildCityFormFields(stateOptions),
+        buildCityFormFields(stateOptions, lazyStateHandlers),
         widgetFieldConfig,
         WIDGET_FIELD_NAME_BY_FORM_FIELD,
       ),
-    [stateOptions, widgetFieldConfig],
+    [stateOptions, lazyStateHandlers, widgetFieldConfig],
   );
 
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
@@ -533,8 +637,22 @@ export default function CityMasterPage() {
         modalPanelStyle={{ width: "min(40rem, calc(100vw - 2.4rem))" }}
       customFields={formFields}
       createInitialValues={CITY_INITIAL_FORM_VALUES}
+      onModalOpenChange={(open, variantKey) => {
+        // Clear the lazy state dropdown when the create modal opens so no stale
+        // selection from a previously edited city lingers (it reloads on open).
+        if (open && variantKey === "master-create") {
+          seedSelectedState("", "");
+        }
+      }}
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
+        const cityStateId = toDisplayValue(getFirstDefinedValue(rowSource, CITY_STATE_ID_KEYS));
+        // Seed the lazy state dropdown with the saved selection so the trigger shows
+        // the state name on edit/view before the field is opened (and lazily loaded).
+        seedSelectedState(
+          cityStateId,
+          toDisplayValue(getFirstDefinedValue(rowSource, CITY_STATE_NAME_KEYS)),
+        );
         return {
           ...CITY_INITIAL_FORM_VALUES,
           masterName:
@@ -545,7 +663,7 @@ export default function CityMasterPage() {
           masterShortName:
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.short)) ||
             defaults.masterShortName,
-          cityStateId: toDisplayValue(getFirstDefinedValue(rowSource, CITY_STATE_ID_KEYS)),
+          cityStateId,
           position:
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) || defaults.position,
           cityIsActive: toSelectBoolean(

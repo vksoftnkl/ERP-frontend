@@ -1,9 +1,21 @@
 import type {
   ERPDynamicFieldValueChangeHandler,
   ERPDynamicModalField,
+  ERPDynamicSearchQueryChangeHandler,
   ERPDynamicSearchShortcutPayload,
   ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
+
+// Per-field handlers wiring a searchable select to its lazy server-side dropdown.
+type SupplierLazyFieldHandlers = {
+  onSearchOpenChange: (open: boolean) => void;
+  onSearchQueryChange: ERPDynamicSearchQueryChangeHandler;
+  onValueChange: ERPDynamicFieldValueChangeHandler;
+};
+export type SupplierLazyDropdownHandlers = Record<
+  "supCompanyId" | "supBranchId" | "supGroupId" | "supStateName",
+  SupplierLazyFieldHandlers
+>;
 import {
   COLLECTION_DAY_OPTIONS,
   GST_LOOKUP_HELPER_TEXT,
@@ -20,6 +32,7 @@ export function buildSupplierFormFields(
   companyOptions: ERPDynamicSelectOption[],
   branchOptions: ERPDynamicSelectOption[],
   stateOptions: ERPDynamicSelectOption[],
+  lazy: SupplierLazyDropdownHandlers,
   onSupplierGroupCreateShortcut: (
     payload: ERPDynamicSearchShortcutPayload,
   ) => void | Promise<void>,
@@ -32,7 +45,6 @@ export function buildSupplierFormFields(
   onStateEditShortcut: (
     payload: ERPDynamicSearchShortcutPayload,
   ) => void | Promise<void>,
-  onSupplierStateValueChange: ERPDynamicFieldValueChangeHandler,
   onSupplierGstinValueChange: ERPDynamicFieldValueChangeHandler,
 ): ERPDynamicModalField[] {
   return [
@@ -88,8 +100,12 @@ export function buildSupplierFormFields(
       gridColumnStart: 2,
       gridRowStart: 3,
       searchable: true,
+      serverSearch: true,
       required: true,
       options: supplierGroupOptions,
+      onSearchOpenChange: lazy.supGroupId.onSearchOpenChange,
+      onSearchQueryChange: lazy.supGroupId.onSearchQueryChange,
+      onValueChange: lazy.supGroupId.onValueChange,
       onSearchCreateShortcut: onSupplierGroupCreateShortcut,
       onSearchEditShortcut: onSupplierGroupEditShortcut,
       validation: {
@@ -103,7 +119,11 @@ export function buildSupplierFormFields(
       gridColumnStart: 3,
       gridRowStart: 2,
       searchable: true,
+      serverSearch: true,
       options: companyOptions,
+      onSearchOpenChange: lazy.supCompanyId.onSearchOpenChange,
+      onSearchQueryChange: lazy.supCompanyId.onSearchQueryChange,
+      onValueChange: lazy.supCompanyId.onValueChange,
     },
     {
       name: "supShort",
@@ -135,7 +155,11 @@ export function buildSupplierFormFields(
       gridColumnStart: 3,
       gridRowStart: 3,
       searchable: true,
+      serverSearch: true,
       options: branchOptions,
+      onSearchOpenChange: lazy.supBranchId.onSearchOpenChange,
+      onSearchQueryChange: lazy.supBranchId.onSearchQueryChange,
+      onValueChange: lazy.supBranchId.onValueChange,
     },
     {
       name: "supPanNo",
@@ -211,11 +235,15 @@ export function buildSupplierFormFields(
       gridColumnStart: 2,
       gridRowStart: 8,
       searchable: true,
+      serverSearch: true,
       required: true,
       options: stateOptions,
+      onSearchOpenChange: lazy.supStateName.onSearchOpenChange,
+      onSearchQueryChange: lazy.supStateName.onSearchQueryChange,
+      // Pins the selection and mirrors the name into supRegionStateName.
+      onValueChange: lazy.supStateName.onValueChange,
       onSearchCreateShortcut: onStateCreateShortcut,
       onSearchEditShortcut: onStateEditShortcut,
-      onValueChange: onSupplierStateValueChange,
       validation: {
         requiredMessage: "State is required.",
       },
