@@ -2,6 +2,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
+import {
+  useLazyConfiguredDropdown,
+  type LazyDropdownHandlers,
+} from "@/features/masters/shared/use-lazy-configured-dropdown";
 import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
@@ -27,9 +31,14 @@ const API_ENDPOINTS = {
 } as const;
 const GRID_TABLE_NAME = "gsp_company_service";
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const LOOKUP_QUERY_COMPANIES = {
-  module: "companies",
-  limit: "20",
+// Company is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
+// 8=company comp_id/comp_name). Loaded on open + on debounced server-side search via
+// /dropdown-details/run; nothing up front and dropdown_param is never sent.
+const COMPANY_DROPDOWN_CONFIG = {
+  dropdownId: "8",
+  idKeys: ["comp_id", "compId"] as const,
+  labelKeys: ["comp_name", "compName"] as const,
+  defaultOption: { value: "", label: "Select Company" } as ERPDynamicSelectOption,
 } as const;
 const LOOKUP_QUERY_PROVIDERS = {
   module: "gspProviders",
@@ -75,6 +84,7 @@ const REQUEST_PAYLOAD_KEYS = {
   sort: "position",
 } as const;
 const CSG_COMPANY_ID_KEYS = ["csgCompanyId", "csg_company_id", "companyId", "company_id"] as const;
+const CSG_COMPANY_NAME_KEYS = ["companyName", "company_name", "compName", "comp_name"] as const;
 const CSG_PROVIDER_ID_KEYS = ["csgGspProviderId", "csg_gsp_provider_id", "providerId", "provider_id"] as const;
 const CSG_SERVICE_TYPE_KEYS = ["csgServiceType", "csg_service_type", "serviceType", "service_type"] as const;
 const CSG_EUSER_NAME_KEYS = ["csgEuserName", "csg_euser_name", "euserName"] as const;
@@ -86,10 +96,6 @@ const CSG_AUTH_TOKEN_VALID_TILL_KEYS = [
   "authTokenValidTill",
 ] as const;
 const CSG_IS_ACTIVE_KEYS = ["csgIsActive", "csg_is_active", "isActive", "is_active", "status"] as const;
-const DEFAULT_COMPANY_OPTION: ERPDynamicSelectOption = {
-  value: "",
-  label: "Select Company",
-};
 const DEFAULT_PROVIDER_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select GSP Provider",
@@ -117,6 +123,7 @@ const INITIAL_FORM_VALUES = {
 function buildGspCompanyServiceFormFields(
   companyOptions: ERPDynamicSelectOption[],
   providerOptions: ERPDynamicSelectOption[],
+  companyHandlers: LazyDropdownHandlers,
 ): ERPDynamicModalField[] {
   return [
     {
@@ -125,8 +132,12 @@ function buildGspCompanyServiceFormFields(
       type: "select",
       colSpan:2,
       searchable: true,
+      serverSearch: true,
       required: true,
       options: companyOptions,
+      onSearchOpenChange: companyHandlers.onSearchOpenChange,
+      onSearchQueryChange: companyHandlers.onSearchQueryChange,
+      onValueChange: companyHandlers.onValueChange,
       validation: {
         requiredMessage: "Company is required.",
       },
@@ -197,11 +208,10 @@ function normalizeServiceType(value: unknown): string {
 }
 
 export default function GspCompanyServiceMasterPage() {
-  const { getAll: getCompanyLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  // Company: lazy server-side configured dropdown 8. Provider stays eager (no configured
+  // dropdown for GSP providers).
+  const company = useLazyConfiguredDropdown(COMPANY_DROPDOWN_CONFIG);
   const { getAll: getProviderLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([
-    DEFAULT_COMPANY_OPTION,
-  ]);
   const [providerOptions, setProviderOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_PROVIDER_OPTION,
   ]);
@@ -209,20 +219,10 @@ export default function GspCompanyServiceMasterPage() {
     let mounted = true;
     void (async () => {
       try {
-        const [companiesPayload, providersPayload] = await Promise.all([
-          getCompanyLookup(LOOKUP_QUERY_COMPANIES),
-          getProviderLookup(LOOKUP_QUERY_PROVIDERS),
-        ]);
+        const providersPayload = await getProviderLookup(LOOKUP_QUERY_PROVIDERS);
         if (!mounted) {
           return;
         }
-        setCompanyOptions(
-          buildLookupOptions(companiesPayload, DEFAULT_COMPANY_OPTION, {
-            arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
-            idKeys: ["id", "value"],
-            labelKeys: ["name", "label"],
-          }),
-        );
         setProviderOptions(
           buildLookupOptions(providersPayload, DEFAULT_PROVIDER_OPTION, {
             arrayKeys: DEFAULT_LOOKUP_ARRAY_KEYS,
@@ -234,17 +234,16 @@ export default function GspCompanyServiceMasterPage() {
         if (!mounted) {
           return;
         }
-        setCompanyOptions([DEFAULT_COMPANY_OPTION]);
         setProviderOptions([DEFAULT_PROVIDER_OPTION]);
       }
     })();
     return () => {
       mounted = false;
     };
-  }, [getCompanyLookup, getProviderLookup]);
+  }, [getProviderLookup]);
   const formFields = useMemo(
-    () => buildGspCompanyServiceFormFields(companyOptions, providerOptions),
-    [companyOptions, providerOptions],
+    () => buildGspCompanyServiceFormFields(company.options, providerOptions, company.handlers),
+    [company.options, providerOptions, company.handlers],
   );
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted GSP company services. Lives beside the list search input.
@@ -308,14 +307,28 @@ export default function GspCompanyServiceMasterPage() {
       formDescription="Create and update GSP company service mappings."
       customFields={formFields}
       createInitialValues={INITIAL_FORM_VALUES}
+      onModalOpenChange={(open, variantKey) => {
+        // Clear the lazy Company dropdown when the create modal opens so no stale
+        // selection from a previously edited row lingers (it reloads on open).
+        if (open && variantKey === "master-create") {
+          company.seedSelected("", "");
+        }
+      }}
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
         const mergedDefaults = { ...INITIAL_FORM_VALUES, ...defaults };
+        const csgCompanyId =
+          toDisplayValue(getFirstDefinedValue(rowSource, CSG_COMPANY_ID_KEYS)) ||
+          mergedDefaults.csgCompanyId;
+        // Seed the lazy Company dropdown so the trigger shows the company name on
+        // edit/view before the field is opened (getById returns companyName).
+        company.seedSelected(
+          csgCompanyId,
+          toDisplayValue(getFirstDefinedValue(rowSource, CSG_COMPANY_NAME_KEYS)),
+        );
         return {
           ...INITIAL_FORM_VALUES,
-          csgCompanyId:
-            toDisplayValue(getFirstDefinedValue(rowSource, CSG_COMPANY_ID_KEYS)) ||
-            mergedDefaults.csgCompanyId,
+          csgCompanyId,
           csgGspProviderId:
             toDisplayValue(getFirstDefinedValue(rowSource, CSG_PROVIDER_ID_KEYS)) ||
             mergedDefaults.csgGspProviderId,

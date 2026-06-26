@@ -1,8 +1,10 @@
 "use client";
 import { type CSSProperties, useCallback, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
-import { useMasterOptions } from "@/features/masters/shared";
-import { useApi } from "@/hooks/useApi";
+import {
+  useLazyConfiguredDropdown,
+  type LazyDropdownHandlers,
+} from "@/features/masters/shared/use-lazy-configured-dropdown";
 import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
@@ -27,10 +29,27 @@ const API_ENDPOINTS = {
   delete: "/user-administration/delete",
 } as const;
 const GRID_TABLE_NAME = "user_master";
-const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-// ── Lookup queries ────────────────────────────────────────────────────────────
-const LOOKUP_QUERY_COMPANIES = { module: "companies", limit: "100" } as const;
-const LOOKUP_QUERY_BRANCHES = { module: "branches", limit: "100" } as const;
+// Company/Branch are lazy, server-side searchable configured dropdowns
+// (fixed.dropdown_details 8=company comp_id/comp_name, 5=branch br_id/br_name). Loaded on
+// open + on debounced server-side search via /dropdown-details/run; nothing up front.
+const COMPANY_DROPDOWN_CONFIG = {
+  dropdownId: "8",
+  idKeys: ["comp_id", "compId"] as const,
+  labelKeys: ["comp_name", "compName"] as const,
+  defaultOption: { value: "", label: "Select Company" } as ERPDynamicSelectOption,
+} as const;
+const BRANCH_DROPDOWN_CONFIG = {
+  dropdownId: "5",
+  idKeys: ["br_id", "brId"] as const,
+  labelKeys: ["br_name", "brName"] as const,
+  defaultOption: { value: "", label: "Select Branch" } as ERPDynamicSelectOption,
+} as const;
+// Source keys used to seed the saved selection on edit/view (the getById response
+// includes both the id and the resolved name for each).
+const COMPANY_SOURCE_ID_KEYS = ["usrCompanyId", "usr_company_id"] as const;
+const COMPANY_SOURCE_NAME_KEYS = ["usrCompanyName", "usr_company_name"] as const;
+const BRANCH_SOURCE_ID_KEYS = ["usrBranchId", "usr_branch_id"] as const;
+const BRANCH_SOURCE_NAME_KEYS = ["usrBranchName", "usr_branch_name"] as const;
 // ── Grid / list key mapping ───────────────────────────────────────────────────
 const LOOKUP_KEYS = {
   id: ["usrId", "usr_id", "id", "_id"],
@@ -63,19 +82,6 @@ const USER_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "SUPER ADMIN", label: "Super Admin " },
   { value: "SYSTEM", label: "System" },
 ];
-// ── Lookup definitions ────────────────────────────────────────────────────────
-const COMPANY_LOOKUP_DEFINITION = {
-  query: LOOKUP_QUERY_COMPANIES,
-  defaultOption: { value: "", label: "Select Company" } as ERPDynamicSelectOption,
-  idKeys: ["id", "value"],
-  labelKeys: ["name", "label"],
-} as const;
-const BRANCH_LOOKUP_DEFINITION = {
-  query: LOOKUP_QUERY_BRANCHES,
-  defaultOption: { value: "", label: "Select Branch" } as ERPDynamicSelectOption,
-  idKeys: ["id", "value"],
-  labelKeys: ["name", "label"],
-} as const;
 // ── Field name lists ──────────────────────────────────────────────────────────
 const USER_TEXT_FIELD_NAMES = [
   "usrLoginName",
@@ -139,6 +145,8 @@ const USER_INITIAL_FORM_VALUES: Record<string, string> = {
 function buildUserFormFields(
   companyOptions: ERPDynamicSelectOption[],
   branchOptions: ERPDynamicSelectOption[],
+  companyHandlers: LazyDropdownHandlers,
+  branchHandlers: LazyDropdownHandlers,
 ): ERPDynamicModalField[] {
   return [
     // ── Identity ──────────────────────────────────────────────────────────────
@@ -213,7 +221,11 @@ function buildUserFormFields(
       label: "Company",
       type: "select",
       searchable: true,
+      serverSearch: true,
       options: companyOptions,
+      onSearchOpenChange: companyHandlers.onSearchOpenChange,
+      onSearchQueryChange: companyHandlers.onSearchQueryChange,
+      onValueChange: companyHandlers.onValueChange,
     },
     {
       name: "usrType",
@@ -228,7 +240,11 @@ function buildUserFormFields(
       label: "Branch",
       type: "select",
       searchable: true,
+      serverSearch: true,
       options: branchOptions,
+      onSearchOpenChange: branchHandlers.onSearchOpenChange,
+      onSearchQueryChange: branchHandlers.onSearchQueryChange,
+      onValueChange: branchHandlers.onValueChange,
     },
     // {
     //   name: "usrDisplayName",
@@ -408,27 +424,11 @@ function mapUserFormValues(
 }
 // ── Page component ────────────────────────────────────────────────────────────
 export default function UserAdministrationPage() {
-  const { getAll: getCompanyLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const { getAll: getBranchLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const { options: companyOptions } = useMasterOptions({
-    definition: COMPANY_LOOKUP_DEFINITION,
-    load: getCompanyLookup,
-  });
-  const { options: branchOptions } = useMasterOptions({
-    definition: BRANCH_LOOKUP_DEFINITION,
-    load: getBranchLookup,
-  });
-  const filteredCompanyOptions = useMemo(
-    () => companyOptions.filter((o) => o.value.trim().length > 0),
-    [companyOptions],
-  );
-  const filteredBranchOptions = useMemo(
-    () => branchOptions.filter((o) => o.value.trim().length > 0),
-    [branchOptions],
-  );
+  const company = useLazyConfiguredDropdown(COMPANY_DROPDOWN_CONFIG);
+  const branch = useLazyConfiguredDropdown(BRANCH_DROPDOWN_CONFIG);
   const formFields = useMemo(
-    () => buildUserFormFields(filteredCompanyOptions, filteredBranchOptions),
-    [filteredCompanyOptions, filteredBranchOptions],
+    () => buildUserFormFields(company.options, branch.options, company.handlers, branch.handlers),
+    [company.options, branch.options, company.handlers, branch.handlers],
   );
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted users. Lives beside the list search input.
@@ -501,9 +501,29 @@ export default function UserAdministrationPage() {
       modalHideFieldErrorText
       modalFocusFirstInvalidFieldOnValidationError
       modalEnableArrowKeyFieldNavigation
-      mapFormValues={({ source, defaults }) =>
-        mapUserFormValues(source, defaults)
-      }
+      onModalOpenChange={(open, variantKey) => {
+        // Clear the lazy Company/Branch dropdowns when the create modal opens so no
+        // stale selection from a previously edited user lingers (they reload on open).
+        if (open && variantKey === "master-create") {
+          company.seedSelected("", "");
+          branch.seedSelected("", "");
+        }
+      }}
+      mapFormValues={({ source, defaults }) => {
+        const rowSource = source ?? {};
+        // Seed the lazy Company/Branch dropdowns with the saved selection so the trigger
+        // shows the name on edit/view before the field is opened (and lazily loaded).
+        // The getById response carries both the id and the resolved name for each.
+        company.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, COMPANY_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, COMPANY_SOURCE_NAME_KEYS)),
+        );
+        branch.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, BRANCH_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, BRANCH_SOURCE_NAME_KEYS)),
+        );
+        return mapUserFormValues(source, defaults);
+      }}
       buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
         const loginName = (values.usrLoginName ?? "").trim();
         const fullName = (values.usrFullName ?? "").trim();

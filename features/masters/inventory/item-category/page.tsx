@@ -1,10 +1,13 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
+  ERPDynamicSearchQueryChangeHandler,
+  ERPDynamicFieldValueChangeHandler,
+  ERPDynamicFieldValueChangePayload,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
 import { extractRows } from "@/features/masters/shared/normalizers";
@@ -16,11 +19,13 @@ list: "/configured-grid-sql/run?grid_id=11",
   delete: "/item-categories/delete",
 } as const;
 const GRID_TABLE_NAME = "category_master";
-const CATEGORY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const CATEGORY_LOOKUP_QUERY = {
-  module: "itemCategories",
-  limit: "20",
-} as const;
+// Parent Category is a lazy, server-side searchable configured dropdown
+// (fixed.dropdown_details id 20 -> item_category_master active rows). Loaded on open + on
+// debounced server-side search via /dropdown-details/run; nothing is fetched up front
+// and dropdown_param is never sent.
+const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
+const PARENT_CATEGORY_DROPDOWN_ID = "20";
+const PARENT_CATEGORY_SEARCH_DEBOUNCE_MS = 250;
 const LOOKUP_KEYS = {
   id: [
     "category_id",
@@ -115,6 +120,7 @@ const CATEGORY_CODE_FORM_KEYS = [
   "categoryShort",
 ] as const;
 const CATEGORY_PARENT_ID_KEYS = ["category_parent_id", "categoryParentId", "parent_id", "parentId"] as const;
+const CATEGORY_PARENT_NAME_KEYS = ["category_parent_name", "categoryParentName", "parent_name", "parentName"] as const;
 const CATEGORY_LEVEL_KEYS = ["category_level", "categoryLevel", "level"] as const;
 const CATEGORY_TAX_CLAIM_KEYS = [
   "category_tax_claim",
@@ -194,10 +200,16 @@ type OptionLookupKeys = {
   name: readonly string[];
   array: readonly string[];
 };
+type LazyParentHandlers = {
+  onSearchOpenChange: (open: boolean) => void;
+  onSearchQueryChange: ERPDynamicSearchQueryChangeHandler;
+  onValueChange: ERPDynamicFieldValueChangeHandler;
+};
 function buildCategoryFormFields(
   categoryOptions: ERPDynamicSelectOption[],
   taxOptions: ERPDynamicSelectOption[],
   unitOptions: ERPDynamicSelectOption[],
+  lazyParent: LazyParentHandlers,
 ): ERPDynamicModalField[] {
   return [
     {
@@ -237,7 +249,11 @@ function buildCategoryFormFields(
       type: "select",
       colSpan:2,
       searchable: true,
+      serverSearch: true,
       options: categoryOptions,
+      onSearchOpenChange: lazyParent.onSearchOpenChange,
+      onSearchQueryChange: lazyParent.onSearchQueryChange,
+      onValueChange: lazyParent.onValueChange,
     },
     // {
     //   name: "categoryLevel",
@@ -322,53 +338,141 @@ function buildLookupOptions(
   }
   return [DEFAULT_SELECT_OPTION, ...options];
 }
+// Dropdown 20 rows expose category_id/category_name (camelCase aliases also accepted).
+const PARENT_CATEGORY_LOOKUP_KEYS: OptionLookupKeys = {
+  id: ["category_id", "categoryId"],
+  name: ["category_name", "categoryName"],
+  array: ["items", "data", "results", "rows", "list"],
+};
+// Build the run query. An empty search is omitted so the server returns the first page;
+// dropdown_param is never sent.
+function buildParentRunQuery(search: string): Record<string, string> {
+  const query: Record<string, string> = {
+    dropdown_id: PARENT_CATEGORY_DROPDOWN_ID,
+    page: "1",
+    limit: "20",
+  };
+  const trimmed = search.trim();
+  if (trimmed) {
+    query.search = trimmed;
+  }
+  return query;
+}
+// Keep the currently-selected option visible after a fetch replaces the option list.
+function withPinnedOption(
+  options: ERPDynamicSelectOption[],
+  pinned: ERPDynamicSelectOption | null,
+): ERPDynamicSelectOption[] {
+  if (!pinned || !pinned.value) {
+    return options;
+  }
+  if (options.some((option) => option.value === pinned.value)) {
+    return options;
+  }
+  return [...options, pinned];
+}
 export default function ItemCategoryMasterPage() {
-  const { getAll: getCategoryOptions } = useApi<unknown>(CATEGORY_LOOKUP_ENDPOINT);
-  // const { getAll: getTaxOptions } = useApi<unknown>(TAX_LOOKUP_ENDPOINT);
-  // const { getAll: getUnitOptions } = useApi<unknown>(UNIT_LOOKUP_ENDPOINT);
+  // Lazy server-side Parent Category dropdown (configured dropdown 20 via
+  // /dropdown-details/run). Errors aren't toasted — a failed dropdown fetch shouldn't
+  // interrupt the form.
+  const { run: runParentDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
   const [categoryOptions, setCategoryOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_SELECT_OPTION,
   ]);
-  const [taxOptions, setTaxOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_SELECT_OPTION]);
-  const [unitOptions, setUnitOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_SELECT_OPTION]);
+  // Tax/Unit selects are not currently rendered (fields are commented out), so their
+  // options stay at the placeholder.
+  const [taxOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_SELECT_OPTION]);
+  const [unitOptions] = useState<ERPDynamicSelectOption[]>([DEFAULT_SELECT_OPTION]);
+  // Mirror of the latest options + the pinned selection so the value handler can resolve
+  // a picked label and the selection stays visible after a fetch replaces the list.
+  const parentOptionsRef = useRef<ERPDynamicSelectOption[]>([DEFAULT_SELECT_OPTION]);
+  const pinnedParentOptionRef = useRef<ERPDynamicSelectOption | null>(null);
+  const parentSearchTimeoutRef = useRef<number | null>(null);
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted categories. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
-  useEffect(() => {
-    let mounted = true;
-    void (async () => {
+  const applyParentOptions = useCallback((options: ERPDynamicSelectOption[]) => {
+    parentOptionsRef.current = options;
+    setCategoryOptions(options);
+  }, []);
+  // Fetch the dropdown's first page (open) or search results (typing). A superseded/
+  // aborted request returns undefined and is skipped so it never wipes the latest list.
+  const fetchParentOptions = useCallback(
+    async (search: string) => {
       try {
-        const [categoryPayload, 
-          //taxPayload, unitPayload
-        ] = await Promise.all([
-          getCategoryOptions(CATEGORY_LOOKUP_QUERY),
-          // getTaxOptions(LOOKUP_REQUEST_QUERY),
-          // getUnitOptions(LOOKUP_REQUEST_QUERY),
-        ]);
-        if (!mounted) {
+        const payload = await runParentDropdown({ query: buildParentRunQuery(search) });
+        if (payload === undefined) {
           return;
         }
-        setCategoryOptions(buildLookupOptions(categoryPayload, LOOKUP_KEYS, true));
-        // setTaxOptions(buildLookupOptions(taxPayload, TAX_LOOKUP_KEYS, true));
-        // setUnitOptions(buildLookupOptions(unitPayload, UNIT_LOOKUP_KEYS, true));
+        applyParentOptions(
+          withPinnedOption(
+            buildLookupOptions(payload, PARENT_CATEGORY_LOOKUP_KEYS, true),
+            pinnedParentOptionRef.current,
+          ),
+        );
       } catch {
-        if (!mounted) {
-          return;
-        }
-        setCategoryOptions([DEFAULT_SELECT_OPTION]);
-        setTaxOptions([DEFAULT_SELECT_OPTION]);
-        setUnitOptions([DEFAULT_SELECT_OPTION]);
+        // Keep whatever options are currently shown (e.g. the seeded selection).
       }
-    })();
+    },
+    [applyParentOptions, runParentDropdown],
+  );
+  // Field handlers: fetch on open (immediate), on debounced typing, and pin the choice.
+  const lazyParentHandlers = useMemo<LazyParentHandlers>(
+    () => ({
+      onSearchOpenChange: (open: boolean) => {
+        if (parentSearchTimeoutRef.current != null) {
+          window.clearTimeout(parentSearchTimeoutRef.current);
+          parentSearchTimeoutRef.current = null;
+        }
+        if (open) {
+          void fetchParentOptions("");
+        }
+      },
+      onSearchQueryChange: (query: string) => {
+        if (parentSearchTimeoutRef.current != null) {
+          window.clearTimeout(parentSearchTimeoutRef.current);
+        }
+        const delay = query.trim() ? PARENT_CATEGORY_SEARCH_DEBOUNCE_MS : 0;
+        parentSearchTimeoutRef.current = window.setTimeout(() => {
+          parentSearchTimeoutRef.current = null;
+          void fetchParentOptions(query);
+        }, delay);
+      },
+      onValueChange: (payload: ERPDynamicFieldValueChangePayload) => {
+        const option = parentOptionsRef.current.find((item) => item.value === payload.value);
+        pinnedParentOptionRef.current = option && payload.value ? option : null;
+      },
+    }),
+    [fetchParentOptions],
+  );
+  // Seed the trigger with the saved parent on edit/view before the field is opened
+  // (and lazily loaded). On create, reset to just the "None" head.
+  const seedSelectedParent = useCallback(
+    (parentId: string, parentName: string) => {
+      const value = parentId.trim();
+      if (!value) {
+        pinnedParentOptionRef.current = null;
+        applyParentOptions([DEFAULT_SELECT_OPTION]);
+        return;
+      }
+      const option: ERPDynamicSelectOption = { value, label: parentName.trim() || value };
+      pinnedParentOptionRef.current = option;
+      applyParentOptions([DEFAULT_SELECT_OPTION, option]);
+    },
+    [applyParentOptions],
+  );
+  useEffect(() => {
     return () => {
-      mounted = false;
+      if (parentSearchTimeoutRef.current != null) {
+        window.clearTimeout(parentSearchTimeoutRef.current);
+      }
     };
-  }, [getCategoryOptions, 
-    // getTaxOptions, getUnitOptions
-  ]);
+  }, []);
   const categoryFormFields = useMemo(
-    () => buildCategoryFormFields(categoryOptions, taxOptions, unitOptions),
-    [categoryOptions, taxOptions, unitOptions],
+    () => buildCategoryFormFields(categoryOptions, taxOptions, unitOptions, lazyParentHandlers),
+    [categoryOptions, taxOptions, unitOptions, lazyParentHandlers],
   );
   // Adds the `grid_param` payload to the default page/limit/search list query.
   // The server JSON-parses it and binds each key into the matching named token in
@@ -431,8 +535,24 @@ export default function ItemCategoryMasterPage() {
       editModalTitle="Edit Category Entry"
       customFields={categoryFormFields}
       createInitialValues={CATEGORY_INITIAL_FORM_VALUES}
+      onModalOpenChange={(open, variantKey) => {
+        // Clear the lazy parent dropdown when the create modal opens so no stale
+        // selection from a previously edited category lingers (it reloads on open).
+        if (open && variantKey === "master-create") {
+          seedSelectedParent("", "");
+        }
+      }}
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
+        const categoryParentId = toDisplayValue(
+          getFirstDefinedValue(rowSource, CATEGORY_PARENT_ID_KEYS),
+        );
+        // Seed the lazy Parent Category dropdown with the saved selection so the trigger
+        // shows the parent name on edit/view before the field is opened (and loaded).
+        seedSelectedParent(
+          categoryParentId,
+          toDisplayValue(getFirstDefinedValue(rowSource, CATEGORY_PARENT_NAME_KEYS)),
+        );
         return {
           ...CATEGORY_INITIAL_FORM_VALUES,
           masterName:
@@ -449,9 +569,7 @@ export default function ItemCategoryMasterPage() {
           position:
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) ||
             defaults.position,
-          categoryParentId: toDisplayValue(
-            getFirstDefinedValue(rowSource, CATEGORY_PARENT_ID_KEYS),
-          ),
+          categoryParentId,
           categoryLevel:
             toDisplayValue(getFirstDefinedValue(rowSource, CATEGORY_LEVEL_KEYS)) || "0",
           categoryTaxClaim: toSelectBoolean(
