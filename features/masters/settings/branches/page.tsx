@@ -2,6 +2,10 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useMasterOptions } from "@/features/masters/shared";
+import {
+  useLazyConfiguredDropdown,
+  type LazyDropdownHandlers,
+} from "@/features/masters/shared/use-lazy-configured-dropdown";
 import { useApi } from "@/hooks/useApi";
 import type {
   ERPDynamicModalField,
@@ -32,10 +36,6 @@ const GRID_TABLE_NAME = "branch_master";
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const GODOWN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const LOOKUP_QUERY_COMPANIES = {
-  module: "companies",
-  limit: "100",
-} as const;
 const LOOKUP_QUERY_ACCOUNT_LEDGERS = {
   module: "accountLedgers",
   limit: "100",
@@ -79,12 +79,38 @@ const DEFAULT_GODOWN_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Godown",
 };
-const COMPANY_LOOKUP_DEFINITION = {
-  query: LOOKUP_QUERY_COMPANIES,
+// Company is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
+// 8=company comp_id/comp_name). Loaded on open + on debounced server-side search via
+// /dropdown-details/run; nothing up front and dropdown_param is never sent.
+const COMPANY_DROPDOWN_CONFIG = {
+  dropdownId: "8",
+  idKeys: ["comp_id", "compId"] as const,
+  labelKeys: ["comp_name", "compName"] as const,
   defaultOption: DEFAULT_COMPANY_OPTION,
-  idKeys: ["id", "value"],
-  labelKeys: ["name", "label"],
 } as const;
+// Source keys to seed the saved company on edit/view (getById returns compId + compName).
+const COMPANY_SOURCE_ID_KEYS = ["compId", "comp_id", "brCompId", "br_comp_id"] as const;
+const COMPANY_SOURCE_NAME_KEYS = ["compName", "comp_name", "companyName", "company_name"] as const;
+// State selects (main + region) are lazy server-side configured dropdowns (dropdown 9 ->
+// state_code/state_name); the field value is the state NAME. The full code<->name maps
+// below still load eagerly because submit derives brStateCode from the picked name.
+const STATE_DROPDOWN_CONFIG = {
+  dropdownId: "9",
+  idKeys: ["state_name", "stateName"] as const,
+  labelKeys: ["state_name", "stateName"] as const,
+  defaultOption: { value: "", label: "Select State" } as ERPDynamicSelectOption,
+} as const;
+// Godown is a lazy configured dropdown (dropdown 26 -> gdl_id/gdl_name). The eager godown
+// list is kept only to resolve the saved godown's name on edit (getById returns no name).
+const GODOWN_DROPDOWN_CONFIG = {
+  dropdownId: "26",
+  idKeys: ["gdl_id", "gdlId"] as const,
+  labelKeys: ["gdl_name", "gdlName"] as const,
+  defaultOption: DEFAULT_GODOWN_OPTION,
+} as const;
+const BRANCH_STATE_KEYS = ["brState", "br_state"] as const;
+const BRANCH_REGION_STATE_KEYS = ["brRegionState", "br_region_state"] as const;
+const BRANCH_GODOWN_ID_KEYS = ["brDefaultGodownId", "br_default_godown_id", "defaultGodownId"] as const;
 const ACCOUNT_LEDGER_LOOKUP_DEFINITION = {
   query: LOOKUP_QUERY_ACCOUNT_LEDGERS,
   defaultOption: DEFAULT_LEDGER_OPTION,
@@ -243,30 +269,6 @@ function removeEmptyOptions(
 ): ERPDynamicSelectOption[] {
   return options.filter((option) => option.value.trim().length > 0);
 }
-function buildStateNameOptions(payload: unknown): ERPDynamicSelectOption[] {
-  const rows = extractRows(payload, STATE_LOOKUP_ARRAY_KEYS);
-  const seenNames = new Set<string>();
-  const options: ERPDynamicSelectOption[] = [];
-  for (const row of rows) {
-    if (!row || typeof row !== "object" || Array.isArray(row)) {
-      continue;
-    }
-    const source = row as Record<string, unknown>;
-    const stateName = toDisplayValue(
-      getFirstDefinedValue(source, STATE_LOOKUP_NAME_KEYS),
-    );
-    if (!stateName || seenNames.has(stateName)) {
-      continue;
-    }
-    seenNames.add(stateName);
-    options.push({
-      value: stateName,
-      label: stateName,
-    });
-  }
-  options.sort((left, right) => left.label.localeCompare(right.label));
-  return removeEmptyOptions(options);
-}
 function buildStateCodeByName(payload: unknown): Record<string, string> {
   const codeByName = new Map<string, string>();
   const rows = extractRows(payload, STATE_LOOKUP_ARRAY_KEYS);
@@ -309,12 +311,27 @@ function buildStateNameByCode(payload: unknown): Record<string, string> {
   }
   return Object.fromEntries(nameByCode.entries());
 }
-function buildBranchFormFields(
-  companyOptions: ERPDynamicSelectOption[],
-  stateOptions: ERPDynamicSelectOption[],
-  ledgerOptions: ERPDynamicSelectOption[],
-  godownOptions: ERPDynamicSelectOption[],
-): ERPDynamicModalField[] {
+function buildBranchFormFields({
+  companyOptions,
+  stateOptions,
+  regionStateOptions,
+  ledgerOptions,
+  godownOptions,
+  companyHandlers,
+  stateHandlers,
+  regionStateHandlers,
+  godownHandlers,
+}: {
+  companyOptions: ERPDynamicSelectOption[];
+  stateOptions: ERPDynamicSelectOption[];
+  regionStateOptions: ERPDynamicSelectOption[];
+  ledgerOptions: ERPDynamicSelectOption[];
+  godownOptions: ERPDynamicSelectOption[];
+  companyHandlers: LazyDropdownHandlers;
+  stateHandlers: LazyDropdownHandlers;
+  regionStateHandlers: LazyDropdownHandlers;
+  godownHandlers: LazyDropdownHandlers;
+}): ERPDynamicModalField[] {
   return [
     {
       name: "__heading_identity",
@@ -337,8 +354,12 @@ function buildBranchFormFields(
       label: "Company",
       type: "select",
       searchable: true,
+      serverSearch: true,
       required: true,
       options: companyOptions,
+      onSearchOpenChange: companyHandlers.onSearchOpenChange,
+      onSearchQueryChange: companyHandlers.onSearchQueryChange,
+      onValueChange: companyHandlers.onValueChange,
       validation: {
         requiredMessage: "Company is required.",
       },
@@ -437,8 +458,12 @@ function buildBranchFormFields(
       label: "State",
       type: "select",
       searchable: true,
+      serverSearch: true,
       required: true,
       options: stateOptions,
+      onSearchOpenChange: stateHandlers.onSearchOpenChange,
+      onSearchQueryChange: stateHandlers.onSearchQueryChange,
+      onValueChange: stateHandlers.onValueChange,
       validation: {
         requiredMessage: "State is required.",
       },
@@ -487,7 +512,11 @@ function buildBranchFormFields(
       label: "State",
       type: "select",
       searchable: true,
-      options: stateOptions,
+      serverSearch: true,
+      options: regionStateOptions,
+      onSearchOpenChange: regionStateHandlers.onSearchOpenChange,
+      onSearchQueryChange: regionStateHandlers.onSearchQueryChange,
+      onValueChange: regionStateHandlers.onValueChange,
     },
     {
       name: "brRegionAddr3",
@@ -553,8 +582,12 @@ function buildBranchFormFields(
       label: "Default Godown Id",
       type: "select",
       searchable: true,
+      serverSearch: true,
       options: godownOptions,
       placeholder: "Search godown",
+      onSearchOpenChange: godownHandlers.onSearchOpenChange,
+      onSearchQueryChange: godownHandlers.onSearchQueryChange,
+      onValueChange: godownHandlers.onValueChange,
     },
     {
       name: "brBankId",
@@ -692,14 +725,16 @@ function mapBranchFormValues(
   return values;
 }
 export default function BranchesMasterPage() {
-  const { getAll: getCompanyLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  // Company/State/Region State/Godown: lazy server-side configured dropdowns. Ledger
+  // stays eager. The eager godown list is kept only to resolve the saved godown's name on
+  // edit (getById returns no godown name). The state code<->name maps also stay eager.
+  const company = useLazyConfiguredDropdown(COMPANY_DROPDOWN_CONFIG);
+  const state = useLazyConfiguredDropdown(STATE_DROPDOWN_CONFIG);
+  const regionState = useLazyConfiguredDropdown(STATE_DROPDOWN_CONFIG);
+  const godown = useLazyConfiguredDropdown(GODOWN_DROPDOWN_CONFIG);
   const { getAll: getAccountLedgerLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getGodownLookup } = useApi<unknown>(GODOWN_LOOKUP_ENDPOINT);
   const { getAll: getStateLookup } = useApi<unknown>(STATE_LOOKUP_ENDPOINT);
-  const { options: companyOptions } = useMasterOptions({
-    definition: COMPANY_LOOKUP_DEFINITION,
-    load: getCompanyLookup,
-  });
   const { options: ledgerOptions } = useMasterOptions({
     definition: ACCOUNT_LEDGER_LOOKUP_DEFINITION,
     load: getAccountLedgerLookup,
@@ -708,19 +743,15 @@ export default function BranchesMasterPage() {
     definition: GODOWN_LOOKUP_DEFINITION,
     load: getGodownLookup,
   });
-  const filteredCompanyOptions = useMemo(
-    () => removeEmptyOptions(companyOptions),
-    [companyOptions],
-  );
   const filteredLedgerOptions = useMemo(
     () => removeEmptyOptions(ledgerOptions),
     [ledgerOptions],
   );
-  const filteredGodownOptions = useMemo(
-    () => removeEmptyOptions(godownOptions),
+  // id -> name map for resolving the saved godown's label when seeding the edit form.
+  const godownLabelMap = useMemo(
+    () => new Map(removeEmptyOptions(godownOptions).map((o) => [o.value, o.label])),
     [godownOptions],
   );
-  const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
   const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -731,14 +762,12 @@ export default function BranchesMasterPage() {
         if (!mounted) {
           return;
         }
-        setStateOptions(buildStateNameOptions(payload));
         setStateCodeByName(buildStateCodeByName(payload));
         setStateNameByCode(buildStateNameByCode(payload));
       } catch {
         if (!mounted) {
           return;
         }
-        setStateOptions([]);
         setStateCodeByName({});
         setStateNameByCode({});
       }
@@ -749,17 +778,27 @@ export default function BranchesMasterPage() {
   }, [getStateLookup]);
   const branchFormFields = useMemo(
     () =>
-      buildBranchFormFields(
-        filteredCompanyOptions,
-        stateOptions,
-        filteredLedgerOptions,
-        filteredGodownOptions,
-      ),
+      buildBranchFormFields({
+        companyOptions: company.options,
+        stateOptions: state.options,
+        regionStateOptions: regionState.options,
+        ledgerOptions: filteredLedgerOptions,
+        godownOptions: godown.options,
+        companyHandlers: company.handlers,
+        stateHandlers: state.handlers,
+        regionStateHandlers: regionState.handlers,
+        godownHandlers: godown.handlers,
+      }),
     [
-      filteredCompanyOptions,
-      stateOptions,
+      company.options,
+      company.handlers,
+      state.options,
+      state.handlers,
+      regionState.options,
+      regionState.handlers,
       filteredLedgerOptions,
-      filteredGodownOptions,
+      godown.options,
+      godown.handlers,
     ],
   );
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
@@ -834,9 +873,41 @@ export default function BranchesMasterPage() {
       modalHideFieldErrorText
       modalFocusFirstInvalidFieldOnValidationError
       modalEnableArrowKeyFieldNavigation
-      mapFormValues={({ source, defaults }) =>
-        mapBranchFormValues(source, defaults, stateNameByCode)
-      }
+      onModalOpenChange={(open, variantKey) => {
+        // Clear the lazy dropdowns when the create modal opens so no stale selection
+        // from a previously edited branch lingers (they reload on open).
+        if (open && variantKey === "master-create") {
+          company.seedSelected("", "");
+          state.seedSelected("", "");
+          regionState.seedSelected("", "");
+          godown.seedSelected("", "");
+        }
+      }}
+      mapFormValues={({ source, defaults }) => {
+        const rowSource = source ?? {};
+        // Seed the lazy dropdowns so the triggers show the saved labels on edit/view
+        // before each field is opened (and lazily loaded).
+        company.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, COMPANY_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, COMPANY_SOURCE_NAME_KEYS)),
+        );
+        // State field value IS the name. Fall back to deriving it from the saved code.
+        const stateName =
+          toDisplayValue(getFirstDefinedValue(rowSource, BRANCH_STATE_KEYS)) ||
+          stateNameByCode[
+            toDisplayValue(getBranchFieldValue(rowSource, "brStateCode")).toUpperCase()
+          ] ||
+          "";
+        state.seedSelected(stateName, stateName);
+        const regionStateName = toDisplayValue(
+          getFirstDefinedValue(rowSource, BRANCH_REGION_STATE_KEYS),
+        );
+        regionState.seedSelected(regionStateName, regionStateName);
+        // getById returns no godown name, so resolve the label from the eager godown list.
+        const godownId = toDisplayValue(getFirstDefinedValue(rowSource, BRANCH_GODOWN_ID_KEYS));
+        godown.seedSelected(godownId, godownLabelMap.get(godownId) ?? "");
+        return mapBranchFormValues(source, defaults, stateNameByCode);
+      }}
       buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
         const normalizedState = (values.brState ?? "").trim();
         const derivedStateCode =

@@ -15,6 +15,10 @@ import {
   toSelectBoolean,
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
+import {
+  useLazyConfiguredDropdown,
+  type LazyDropdownHandlers,
+} from "@/features/masters/shared/use-lazy-configured-dropdown";
 import { getAuthUserId } from "@/lib/auth/session";
 import {
   useGetCompanyOptionsQuery,
@@ -77,6 +81,24 @@ const DEV_IS_ACTIVE_KEYS = ["devIsActive", "dev_is_active", "isActive", "is_acti
 const DEFAULT_COMPANY_OPTION: ERPDynamicSelectOption = { value: "", label: "Select Company" };
 const DEFAULT_BRANCH_OPTION: ERPDynamicSelectOption = { value: "", label: "Select Branch" };
 const DEFAULT_USER_OPTION: ERPDynamicSelectOption = { value: "", label: "Select User" };
+// Form Company/Branch selects are lazy, server-side searchable configured dropdowns
+// (fixed.dropdown_details 8=company comp_id/comp_name, 5=branch br_id/br_name). The eager
+// RTK lists are still loaded to resolve names in the list table (grid 28 returns only ids).
+const COMPANY_DROPDOWN_CONFIG = {
+  dropdownId: "8",
+  idKeys: ["comp_id", "compId"] as const,
+  labelKeys: ["comp_name", "compName"] as const,
+  defaultOption: DEFAULT_COMPANY_OPTION,
+} as const;
+const BRANCH_DROPDOWN_CONFIG = {
+  dropdownId: "5",
+  idKeys: ["br_id", "brId"] as const,
+  labelKeys: ["br_name", "brName"] as const,
+  defaultOption: DEFAULT_BRANCH_OPTION,
+} as const;
+// Source keys to seed the saved selection on edit/view (getById returns id + name).
+const DEV_COMPANY_NAME_KEYS = ["devCompanyName", "dev_company_name", "compName", "comp_name"] as const;
+const DEV_BRANCH_NAME_KEYS = ["devBranchName", "dev_branch_name", "brName", "br_name"] as const;
 const INITIAL_FORM_VALUES = {
   devCompanyId: "",
   devBranchId: "",
@@ -94,6 +116,8 @@ function buildFormFields(
   companyOptions: ERPDynamicSelectOption[],
   branchOptions: ERPDynamicSelectOption[],
   userOptions: ERPDynamicSelectOption[],
+  companyHandlers: LazyDropdownHandlers,
+  branchHandlers: LazyDropdownHandlers,
 ): ERPDynamicModalField[] {
   return [
     // {
@@ -148,7 +172,11 @@ function buildFormFields(
       type: "select",
       colSpan: 2,
       searchable: true,
+      serverSearch: true,
       options: companyOptions,
+      onSearchOpenChange: companyHandlers.onSearchOpenChange,
+      onSearchQueryChange: companyHandlers.onSearchQueryChange,
+      onValueChange: companyHandlers.onValueChange,
     },
     {
       name: "devBranchId",
@@ -156,7 +184,11 @@ function buildFormFields(
       type: "select",
       colSpan: 2,
       searchable: true,
+      serverSearch: true,
       options: branchOptions,
+      onSearchOpenChange: branchHandlers.onSearchOpenChange,
+      onSearchQueryChange: branchHandlers.onSearchQueryChange,
+      onValueChange: branchHandlers.onValueChange,
     },
     {
       name: "devMacAddress",
@@ -197,9 +229,13 @@ function getSourceValue(row: CrudMasterTableRow, keys: readonly string[]): unkno
 }
 export default function DeviceListMasterPage() {
   const deviceInfo = useDeviceInfo();
+  // Eager lists feed the list-table name resolution (grid 28 returns only ids) and the
+  // User form select. Company/Branch FORM selects use lazy server-side dropdowns below.
   const { data: companyOptions = [DEFAULT_COMPANY_OPTION] } = useGetCompanyOptionsQuery();
   const { data: branchOptions = [DEFAULT_BRANCH_OPTION] } = useGetBranchOptionsQuery();
   const { data: userOptions = [DEFAULT_USER_OPTION] } = useGetUserOptionsQuery();
+  const company = useLazyConfiguredDropdown(COMPANY_DROPDOWN_CONFIG);
+  const branch = useLazyConfiguredDropdown(BRANCH_DROPDOWN_CONFIG);
   const companyLabelMap = useMemo(
     () => new Map(companyOptions.map((o) => [o.value, o.label])),
     [companyOptions],
@@ -213,8 +249,15 @@ export default function DeviceListMasterPage() {
     [userOptions],
   );
   const formFields = useMemo(
-    () => buildFormFields(companyOptions, branchOptions, userOptions),
-    [companyOptions, branchOptions, userOptions],
+    () =>
+      buildFormFields(
+        company.options,
+        branch.options,
+        userOptions,
+        company.handlers,
+        branch.handlers,
+      ),
+    [company.options, company.handlers, branch.options, branch.handlers, userOptions],
   );
   const customTableColumns = useMemo<ReusableTableColumn<CrudMasterTableRow>[]>(
     () => [
@@ -409,12 +452,40 @@ export default function DeviceListMasterPage() {
         }),
         [deviceInfo],
       )}
+      onModalOpenChange={(open, variantKey) => {
+        // Clear the lazy Company/Branch dropdowns when the create modal opens so no
+        // stale selection from a previously edited device lingers (they reload on open).
+        if (open && variantKey === "master-create") {
+          company.seedSelected("", "");
+          branch.seedSelected("", "");
+        }
+      }}
       mapFormValues={({ source }) => {
         const rowSource = source ?? {};
+        const devCompanyId =
+          toDisplayValue(getFirstDefinedValue(rowSource, DEV_COMPANY_ID_KEYS)) ||
+          INITIAL_FORM_VALUES.devCompanyId;
+        const devBranchId =
+          toDisplayValue(getFirstDefinedValue(rowSource, DEV_BRANCH_ID_KEYS)) ||
+          INITIAL_FORM_VALUES.devBranchId;
+        // Seed the lazy Company/Branch dropdowns so the trigger shows the name on
+        // edit/view. Prefer getById's resolved name, fall back to the eager label maps.
+        company.seedSelected(
+          devCompanyId,
+          toDisplayValue(getFirstDefinedValue(rowSource, DEV_COMPANY_NAME_KEYS)) ||
+            companyLabelMap.get(devCompanyId) ||
+            "",
+        );
+        branch.seedSelected(
+          devBranchId,
+          toDisplayValue(getFirstDefinedValue(rowSource, DEV_BRANCH_NAME_KEYS)) ||
+            branchLabelMap.get(devBranchId) ||
+            "",
+        );
         return {
           ...INITIAL_FORM_VALUES,
-          devCompanyId: toDisplayValue(getFirstDefinedValue(rowSource, DEV_COMPANY_ID_KEYS)) || INITIAL_FORM_VALUES.devCompanyId,
-          devBranchId: toDisplayValue(getFirstDefinedValue(rowSource, DEV_BRANCH_ID_KEYS)) || INITIAL_FORM_VALUES.devBranchId,
+          devCompanyId,
+          devBranchId,
           devUserId: toDisplayValue(getFirstDefinedValue(rowSource, DEV_USER_ID_KEYS)) || INITIAL_FORM_VALUES.devUserId,
           devDeviceUid: toDisplayValue(getFirstDefinedValue(rowSource, DEV_DEVICE_UID_KEYS)) || INITIAL_FORM_VALUES.devDeviceUid,
           devDeviceName: toDisplayValue(getFirstDefinedValue(rowSource, DEV_DEVICE_NAME_KEYS)) || INITIAL_FORM_VALUES.devDeviceName,

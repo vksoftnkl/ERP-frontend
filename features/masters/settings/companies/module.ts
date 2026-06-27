@@ -13,6 +13,10 @@ import type {
   ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import { useApi } from "@/hooks/useApi";
+import {
+  useLazyConfiguredDropdown,
+  type LazyDropdownHandlers,
+} from "@/features/masters/shared/use-lazy-configured-dropdown";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
   buildLookupOptions,
@@ -73,6 +77,16 @@ const DEFAULT_STATE_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select State",
 };
+// The State select is a lazy, server-side searchable configured dropdown
+// (fixed.dropdown_details 9 -> state_code/state_name). The field value is the state NAME
+// (compState), so options map state_name -> state_name. The full code<->name maps below
+// still load eagerly because GSTIN auto-fill and submit code-derivation need every state.
+const STATE_DROPDOWN_CONFIG = {
+  dropdownId: "9",
+  idKeys: ["state_name", "stateName"] as const,
+  labelKeys: ["state_name", "stateName"] as const,
+  defaultOption: DEFAULT_STATE_OPTION,
+} as const;
 const DEFAULT_BANK_LEDGER_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Bank Ledger",
@@ -277,11 +291,6 @@ const COMPANY_INITIAL_FORM_VALUES = {
   compRemarks: "",
   compAuthorizeSignature: "",
 } as const;
-function removeEmptyOptions(
-  options: ERPDynamicSelectOption[],
-): ERPDynamicSelectOption[] {
-  return options.filter((option) => option.value.trim().length > 0);
-}
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -404,30 +413,6 @@ function getLookupErrorMessage(payload: unknown, fallback: string): string {
     fallback
   );
 }
-function buildStateNameOptions(payload: unknown): ERPDynamicSelectOption[] {
-  const rows = extractRows(payload, STATE_LOOKUP_ARRAY_KEYS);
-  const seenNames = new Set<string>();
-  const options: ERPDynamicSelectOption[] = [];
-  for (const row of rows) {
-    if (!row || typeof row !== "object" || Array.isArray(row)) {
-      continue;
-    }
-    const source = row as Record<string, unknown>;
-    const stateName = toDisplayValue(
-      getFirstDefinedValue(source, STATE_LOOKUP_NAME_KEYS),
-    );
-    if (!stateName || seenNames.has(stateName)) {
-      continue;
-    }
-    seenNames.add(stateName);
-    options.push({
-      value: stateName,
-      label: stateName,
-    });
-  }
-  options.sort((left, right) => left.label.localeCompare(right.label));
-  return [DEFAULT_STATE_OPTION, ...removeEmptyOptions(options)];
-}
 function buildStateCodeByName(payload: unknown): Record<string, string> {
   const codeByName = new Map<string, string>();
   const rows = extractRows(payload, STATE_LOOKUP_ARRAY_KEYS);
@@ -473,10 +458,12 @@ function buildStateNameByCode(payload: unknown): Record<string, string> {
 function buildCompanyFormFields({
   bankOptions,
   stateOptions,
+  stateHandlers,
   onCompanyGstinValueChange,
 }: {
   bankOptions: ERPDynamicSelectOption[];
   stateOptions: ERPDynamicSelectOption[];
+  stateHandlers: LazyDropdownHandlers;
   onCompanyGstinValueChange: ERPDynamicFieldValueChangeHandler;
 }): ERPDynamicModalField[] {
   return [
@@ -573,8 +560,12 @@ function buildCompanyFormFields({
       label: "State",
       type: "select",
       searchable: true,
+      serverSearch: true,
       required: true,
       options: stateOptions,
+      onSearchOpenChange: stateHandlers.onSearchOpenChange,
+      onSearchQueryChange: stateHandlers.onSearchQueryChange,
+      onValueChange: stateHandlers.onValueChange,
       validation: {
         requiredMessage: "State is required.",
       },
@@ -941,12 +932,13 @@ function mapCompanyFormValues(
 export function useCompaniesModule() {
   const { getAll: getBankLedgerLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getStateLookup } = useApi<unknown>(STATE_LOOKUP_ENDPOINT);
+  // The State select itself is a lazy server-side dropdown (configured dropdown 9).
+  const state = useLazyConfiguredDropdown(STATE_DROPDOWN_CONFIG);
   const [bankOptions, setBankOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_BANK_LEDGER_OPTION,
   ]);
-  const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([
-    DEFAULT_STATE_OPTION,
-  ]);
+  // Full code<->name maps are still loaded eagerly: GSTIN auto-fill derives the state
+  // name from the GSTIN's leading code, and submit derives the code from the picked name.
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
   const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
   const gstLookupCacheRef = useRef<Record<string, Record<string, string>>>({});
@@ -962,11 +954,9 @@ export function useCompaniesModule() {
       }
       if (stateLookupResult.status === "fulfilled") {
         const payload = stateLookupResult.value;
-        setStateOptions(buildStateNameOptions(payload));
         setStateCodeByName(buildStateCodeByName(payload));
         setStateNameByCode(buildStateNameByCode(payload));
       } else {
-        setStateOptions([DEFAULT_STATE_OPTION]);
         setStateCodeByName({});
         setStateNameByCode({});
       }
@@ -999,6 +989,10 @@ export function useCompaniesModule() {
         }
         const cachedValues = gstLookupCacheRef.current[normalizedGstin];
         if (cachedValues) {
+          // Pin the auto-filled state so the lazy dropdown can display it.
+          if (cachedValues.compState) {
+            state.seedSelected(cachedValues.compState, cachedValues.compState);
+          }
           return {
             values: cachedValues,
             errors: { compGstinNo: null },
@@ -1042,6 +1036,10 @@ export function useCompaniesModule() {
             stateNameByCode,
           );
           gstLookupCacheRef.current[normalizedGstin] = resolvedValues;
+          // Pin the auto-filled state so the lazy dropdown can display it.
+          if (resolvedValues.compState) {
+            state.seedSelected(resolvedValues.compState, resolvedValues.compState);
+          }
           return {
             values: resolvedValues,
             errors: { compGstinNo: null },
@@ -1056,16 +1054,17 @@ export function useCompaniesModule() {
           };
         }
       },
-      [stateNameByCode],
+      [stateNameByCode, state.seedSelected],
     );
   const companyFormFields = useMemo(
     () =>
       buildCompanyFormFields({
         bankOptions,
-        stateOptions,
+        stateOptions: state.options,
+        stateHandlers: state.handlers,
         onCompanyGstinValueChange: handleCompanyGstinValueChange,
       }),
-    [bankOptions, handleCompanyGstinValueChange, stateOptions],
+    [bankOptions, handleCompanyGstinValueChange, state.options, state.handlers],
   );
   return useMemo(
     () =>
@@ -1104,8 +1103,27 @@ export function useCompaniesModule() {
         modalHideFieldErrorText: true,
         modalFocusFirstInvalidFieldOnValidationError: true,
         modalEnableArrowKeyFieldNavigation: true,
-        mapFormValues: ({ source, defaults }) =>
-          mapCompanyFormValues(source, defaults, stateNameByCode),
+        onModalOpenChange: (open, variantKey) => {
+          // Clear the lazy State dropdown when the create modal opens so no stale
+          // selection from a previously edited company lingers (it reloads on open).
+          if (open && variantKey === "master-create") {
+            state.seedSelected("", "");
+          }
+        },
+        mapFormValues: ({ source, defaults }) => {
+          const rowSource = source ?? {};
+          // Seed the lazy State dropdown so the trigger shows the state name on
+          // edit/view. The field value is the name; fall back to deriving it from the
+          // saved code via the eager code->name map.
+          const stateName =
+            toDisplayValue(getCompanyFieldValue(rowSource, "compState")) ||
+            stateNameByCode[
+              toDisplayValue(getCompanyFieldValue(rowSource, "compStateCode")).toUpperCase()
+            ] ||
+            "";
+          state.seedSelected(stateName, stateName);
+          return mapCompanyFormValues(source, defaults, stateNameByCode);
+        },
         buildRequestPayload: ({ values, shouldUpdate, editingItemId }) => {
           const isEwayApplicable =
             (values.compEwayApplicable ?? "false") === "true";
@@ -1199,6 +1217,6 @@ export function useCompaniesModule() {
           return payload;
         },
       }),
-    [companyFormFields, stateCodeByName, stateNameByCode],
+    [companyFormFields, stateCodeByName, stateNameByCode, state.seedSelected],
   );
 }

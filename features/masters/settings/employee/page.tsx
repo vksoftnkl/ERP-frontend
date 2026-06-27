@@ -2,6 +2,10 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
+import {
+  useLazyConfiguredDropdown,
+  type LazyDropdownHandlers,
+} from "@/features/masters/shared/use-lazy-configured-dropdown";
 import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
@@ -40,14 +44,26 @@ const FILE_CONSTRAINTS = {
   MAX_UPLOAD_IMAGE_BYTES: 5 * 1024 * 1024,
   ALLOWED_MIME_TYPES: ["image/jpeg", "image/png", "image/webp", "image/gif"],
 } as const;
-const LOOKUP_QUERY_COMPANIES = {
-  module: "companies",
-  limit: "20",
+// Company/Branch are lazy, server-side searchable configured dropdowns
+// (fixed.dropdown_details 8=company comp_id/comp_name, 5=branch br_id/br_name). Loaded on
+// open + on debounced server-side search via /dropdown-details/run; nothing up front.
+const COMPANY_DROPDOWN_CONFIG = {
+  dropdownId: "8",
+  idKeys: ["comp_id", "compId"] as const,
+  labelKeys: ["comp_name", "compName"] as const,
+  defaultOption: { value: "", label: "Select Company" } as ERPDynamicSelectOption,
 } as const;
-const LOOKUP_QUERY_BRANCHES = {
-  module: "branches",
-  limit: "20",
+const BRANCH_DROPDOWN_CONFIG = {
+  dropdownId: "5",
+  idKeys: ["br_id", "brId"] as const,
+  labelKeys: ["br_name", "brName"] as const,
+  defaultOption: { value: "", label: "Select Branch" } as ERPDynamicSelectOption,
 } as const;
+// Source keys to seed the saved selection on edit/view (getById returns id + name).
+const COMPANY_SOURCE_ID_KEYS = ["empCompanyId", "emp_company_id"] as const;
+const COMPANY_SOURCE_NAME_KEYS = ["empCompanyName", "emp_company_name", "compName", "comp_name"] as const;
+const BRANCH_SOURCE_ID_KEYS = ["empBranchId", "emp_branch_id"] as const;
+const BRANCH_SOURCE_NAME_KEYS = ["empBranchName", "emp_branch_name", "brName", "br_name"] as const;
 const LOOKUP_QUERY_DEPARTMENTS = {
   module: "employeeDepartments",
   limit: "20",
@@ -301,6 +317,8 @@ function buildEmployeeFormFields(
   employmentStatusOptions: ERPDynamicSelectOption[],
   salaryTypeOptions: ERPDynamicSelectOption[],
   loanLedgerOptions: ERPDynamicSelectOption[],
+  companyHandlers: LazyDropdownHandlers,
+  branchHandlers: LazyDropdownHandlers,
 ): ERPDynamicModalField[] {
   return [
     {
@@ -322,8 +340,12 @@ function buildEmployeeFormFields(
       label: "Company",
       type: "select",
       searchable: true,
+      serverSearch: true,
       required: true,
       options: companyOptions,
+      onSearchOpenChange: companyHandlers.onSearchOpenChange,
+      onSearchQueryChange: companyHandlers.onSearchQueryChange,
+      onValueChange: companyHandlers.onValueChange,
       validation: {
         requiredMessage: "Company is required.",
       },
@@ -342,7 +364,11 @@ function buildEmployeeFormFields(
       label: "Branch",
       type: "select",
       searchable: true,
+      serverSearch: true,
       options: branchOptions,
+      onSearchOpenChange: branchHandlers.onSearchOpenChange,
+      onSearchQueryChange: branchHandlers.onSearchQueryChange,
+      onValueChange: branchHandlers.onValueChange,
     },
     {
       name: "empMaritalStatus",
@@ -679,32 +705,27 @@ function mapEmployeeFormValues(
   return values;
 }
 export default function EmployeeMasterPage() {
-  const { getAll: getCompanyLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const { getAll: getBranchLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  // Company/Branch: lazy server-side configured dropdowns 8/5. The rest stay eager.
+  const company = useLazyConfiguredDropdown(COMPANY_DROPDOWN_CONFIG);
+  const branch = useLazyConfiguredDropdown(BRANCH_DROPDOWN_CONFIG);
   const { getAll: getDepartmentLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getDesignationLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getStateLookup } = useApi<unknown>(STATE_LOOKUP_ENDPOINT);
   const { getAll: getLoanLedgerLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([]);
-  const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [departmentOptions, setDepartmentOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [designationOptions, setDesignationOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [loanLedgerOptions, setLoanLedgerOptions] = useState<ERPDynamicSelectOption[]>([]);
-  
+
   useEffect(() => {
     let mounted = true;
     void (async () => {
       const [
-        companiesPayload,
-        branchesPayload,
         departmentsPayload,
         designationsPayload,
         statesPayload,
         loanLedgersPayload,
       ] = await Promise.allSettled([
-        getCompanyLookup(LOOKUP_QUERY_COMPANIES),
-        getBranchLookup(LOOKUP_QUERY_BRANCHES),
         getDepartmentLookup(LOOKUP_QUERY_DEPARTMENTS),
         getDesignationLookup(LOOKUP_QUERY_DESIGNATIONS),
         getStateLookup(LOOKUP_QUERY_STATES),
@@ -713,16 +734,6 @@ export default function EmployeeMasterPage() {
       if (!mounted) {
         return;
       }
-      setCompanyOptions(
-        companiesPayload.status === "fulfilled"
-          ? toLookupOptions(companiesPayload.value)
-          : [],
-      );
-      setBranchOptions(
-        branchesPayload.status === "fulfilled"
-          ? toLookupOptions(branchesPayload.value)
-          : [],
-      );
       setDepartmentOptions(
         departmentsPayload.status === "fulfilled"
           ? toLookupOptions(departmentsPayload.value)
@@ -748,8 +759,6 @@ export default function EmployeeMasterPage() {
       mounted = false;
     };
   }, [
-    getBranchLookup,
-    getCompanyLookup,
     getDepartmentLookup,
     getDesignationLookup,
     getStateLookup,
@@ -758,18 +767,22 @@ export default function EmployeeMasterPage() {
   const employeeFormFields = useMemo(
     () =>
       buildEmployeeFormFields(
-        companyOptions,
-        branchOptions,
+        company.options,
+        branch.options,
         departmentOptions,
         designationOptions,
         stateOptions,
         EMPLOYMENT_STATUS_OPTIONS,
         SALARY_TYPE_OPTIONS,
         loanLedgerOptions,
+        company.handlers,
+        branch.handlers,
       ),
     [
-      branchOptions,
-      companyOptions,
+      company.options,
+      company.handlers,
+      branch.options,
+      branch.handlers,
       departmentOptions,
       designationOptions,
       loanLedgerOptions,
@@ -845,9 +858,28 @@ export default function EmployeeMasterPage() {
       modalHideFieldErrorText
       modalFocusFirstInvalidFieldOnValidationError
       modalEnableArrowKeyFieldNavigation
-      mapFormValues={({ source, defaults }) =>
-        mapEmployeeFormValues(source, defaults)
-      }
+      onModalOpenChange={(open, variantKey) => {
+        // Clear the lazy Company/Branch dropdowns when the create modal opens so no
+        // stale selection from a previously edited employee lingers (they reload on open).
+        if (open && variantKey === "master-create") {
+          company.seedSelected("", "");
+          branch.seedSelected("", "");
+        }
+      }}
+      mapFormValues={({ source, defaults }) => {
+        const rowSource = source ?? {};
+        // Seed the lazy Company/Branch dropdowns so the trigger shows the name on
+        // edit/view before the field is opened (getById returns empCompanyName/empBranchName).
+        company.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, COMPANY_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, COMPANY_SOURCE_NAME_KEYS)),
+        );
+        branch.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, BRANCH_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, BRANCH_SOURCE_NAME_KEYS)),
+        );
+        return mapEmployeeFormValues(source, defaults);
+      }}
       buildRequestPayload={async ({ values, shouldUpdate, editingItemId, files }) => {
         const payload: Record<string, unknown> = {
           empCompanyId: (values.empCompanyId ?? "").trim(),

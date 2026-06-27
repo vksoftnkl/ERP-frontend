@@ -196,17 +196,14 @@ function buildGspCompanyServiceFormFields(
     },
   ];
 }
-
 function normalizeServiceType(value: unknown): string {
   const normalizedValue = toDisplayValue(value).trim().toUpperCase();
 
   if (normalizedValue === "EINV" || normalizedValue === "EWAY" || normalizedValue === "BOTH") {
     return normalizedValue;
   }
-
   return "";
 }
-
 export default function GspCompanyServiceMasterPage() {
   // Company: lazy server-side configured dropdown 8. Provider stays eager (no configured
   // dropdown for GSP providers).
