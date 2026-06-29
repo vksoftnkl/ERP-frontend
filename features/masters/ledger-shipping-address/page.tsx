@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import type {
@@ -18,8 +18,9 @@ import {
   toUpper,
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
+const GRID_DETAIL_ID = 60;
 const API_ENDPOINTS = {
-  list: "/ledger-shipping-addresses/list",
+  list: `/configured-grid-sql/run?grid_id=${GRID_DETAIL_ID}`,
   getById: "/ledger-shipping-addresses/get",
   create: "/ledger-shipping-addresses/create",
   delete: "/ledger-shipping-addresses/delete",
@@ -408,6 +409,30 @@ export default function LedgerShippingAddressMasterPage() {
     () => buildLedgerShippingAddressFields(ledgerOptions, companyOptions, branchOptions),
     [ledgerOptions, companyOptions, branchOptions],
   );
+  // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
+  // can see soft-deleted shipping addresses. Lives beside the list search input.
+  const [wantDelete, setWantDelete] = useState(false);
+  // Adds the `grid_param` payload to the default page/limit/search list query.
+  // The server JSON-parses it and binds each key into the matching named token in
+  // grid 60's stored SQL; keys with no matching token are ignored. `wantdelete` is
+  // driven by the "Show deleted records" checkbox beside the list search input.
+  const buildListQuery = useCallback(
+    ({
+      searchTerm,
+      currentPage,
+      pageSize,
+    }: {
+      searchTerm: string;
+      currentPage: number;
+      pageSize: number;
+    }): Record<string, string> => ({
+      page: String(currentPage),
+      limit: String(pageSize),
+      ...(searchTerm ? { search: searchTerm } : {}),
+      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+    }),
+    [wantDelete],
+  );
   return (
     <CrudMasterPage
       title="Ledger Shipping Address"
@@ -415,7 +440,21 @@ export default function LedgerShippingAddressMasterPage() {
       entityLabel="ledger shipping address"
       entityLabelPlural="ledger shipping addresses"
       apiEndpoints={API_ENDPOINTS}
+      buildListQuery={buildListQuery}
+      toolbarContent={
+        <div className={styles.filterCheckGroup}>
+          <label className={styles.filterCheckLabel}>
+            <input
+              type="checkbox"
+              checked={wantDelete}
+              onChange={(event) => setWantDelete(event.target.checked)}
+            />
+            Show deleted records
+          </label>
+        </div>
+      }
       gridTableName={GRID_TABLE_NAME}
+      gridDetailId={GRID_DETAIL_ID}
       listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
