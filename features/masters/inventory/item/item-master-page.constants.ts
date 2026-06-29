@@ -53,7 +53,12 @@ export const ITEM_REORDER_TABLE_UI_ID = "2";
 export const ITEM_PRICE_TABLE_UI_ID = "3";
 export const ITEM_EAN_TABLE_UI_ID = "4";
 export const ITEM_MASTER_WIDGET_GROUP_ID = "5";
-export const ITEM_MASTER_WIDGET_TYPE = "web";
+// Item Master screen's menu id (fixed.menu_master). Selects this screen's
+// configured widget sections/fields from GET /widget-masters/get.
+export const ITEM_MASTER_WIDGET_SECTION_MENU_ID = "29";
+// Platform filter for widget sections. Must match the server's WidgetPlatform
+// enum (Mobile | Desktop | Web) exactly — it is validated case-sensitively.
+export const ITEM_MASTER_WIDGET_TYPE = "Web";
 export const UUID_PATTERN = "^[0-9a-fA-F-]{36}$";
 export const ITEM_PRICE_ROWS_FIELD_NAME = "item_price_rows_json";
 export const ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME = "item_unit_conversion_rows_json";
@@ -100,11 +105,12 @@ export const UI_REORDER_TABLE_COLUMNS_QUERY = {
 export const UI_EAN_TABLE_COLUMNS_QUERY = {
   uiTableId: ITEM_EAN_TABLE_UI_ID,
 } as const;
+// GET /widget-masters/get is filtered by section menu id + platform (see the
+// server's ListWidgetQueryDto). The legacy page/limit/widgetGroupId/widgetType
+// params are rejected by the endpoint's whitelist validation.
 export const ITEM_MASTER_WIDGET_QUERY = {
-  page: "1",
-  limit: ITEM_WIDGET_QUERY_LIMIT,
-  widgetGroupId: ITEM_MASTER_WIDGET_GROUP_ID,
-  widgetType: ITEM_MASTER_WIDGET_TYPE,
+  sectionMenuId: ITEM_MASTER_WIDGET_SECTION_MENU_ID,
+  sectionPlatform: ITEM_MASTER_WIDGET_TYPE,
 } as const;
 export const LOOKUP_QUERY_ITEM_TAXES = {
   module: "itemTaxes",
@@ -112,6 +118,10 @@ export const LOOKUP_QUERY_ITEM_TAXES = {
 export const ITEM_TAX_LIST_QUERY = {
   page: "1",
   limit: "100",
+  // grid 5's stored SQL filters on a `wantdelete` placeholder token; bind it to
+  // false so only non-deleted taxes are returned. Without it the unbound token
+  // reaches Postgres as a column reference and the query 500s.
+  grid_param: JSON.stringify({ wantdelete: false }),
 } as const;
 export const LOOKUP_QUERY_SUPPLIERS = {
   module: "suppliers",

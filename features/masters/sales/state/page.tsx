@@ -166,12 +166,10 @@ export default function StateMasterPage() {
       mounted = false;
     };
   }, [getWidgetConfig]);
-
   const formFields = useMemo(
     () => applyWidgetFieldConfig(STATE_FORM_FIELDS, widgetFieldConfig, WIDGET_FIELD_NAME_BY_FORM_FIELD),
     [widgetFieldConfig],
   );
-
   // Adds the `grid_param` payload to the default page/limit/search list query.
   // The server JSON-parses it and binds each key into the matching named token in
   // grid 2's stored SQL; keys with no matching token are ignored. `wantdelete` is
@@ -193,7 +191,6 @@ export default function StateMasterPage() {
     }),
     [wantDelete],
   );
-
   // Right-click config tree popup over the create/update modal.
   const { getAll: getWidgetConfigTree } = useApi<WidgetMastersResponse>(
     WIDGET_CONFIG_TREE_ENDPOINT,
@@ -213,7 +210,6 @@ export default function StateMasterPage() {
   const [visibilityModalOpen, setVisibilityModalOpen] = useState(false);
   const treeLoadedRef = useRef(false);
   const visibilityControllerRef = useRef<ERPDynamicModalController | null>(null);
-
   // Fetched lazily the first time the popup is opened, then cached.
   const loadConfigTree = useCallback(async () => {
     if (treeLoadedRef.current) {
@@ -232,7 +228,6 @@ export default function StateMasterPage() {
       setTreeLoading(false);
     }
   }, [getWidgetConfigTree]);
-
   // Hijack right-clicks that land inside the open create/update modal only; clicks
   // elsewhere keep the browser's native context menu. Opens the Visible Settings
   // modal (an ERPDynamicModalForm) on top via its controller.
@@ -249,7 +244,6 @@ export default function StateMasterPage() {
     window.addEventListener("contextmenu", handleContextMenu);
     return () => window.removeEventListener("contextmenu", handleContextMenu);
   }, [loadConfigTree]);
-
   const handleToggleField = useCallback((backendName: string, checked: boolean) => {
     const key = backendName.toLowerCase();
     setWidgetFieldConfig((prev) => {
@@ -264,7 +258,6 @@ export default function StateMasterPage() {
       return next;
     });
   }, []);
-
   const handleToggleSection = useCallback((sectionId: number, checked: boolean) => {
     setSectionVisibility((prev) => {
       const next = new Map(prev);
@@ -272,7 +265,6 @@ export default function StateMasterPage() {
       return next;
     });
   }, []);
-
   const handleChangeSecondaryText = useCallback((fieldId: number, value: string) => {
     setSecondaryTextById((prev) => {
       const next = new Map(prev);
@@ -280,7 +272,6 @@ export default function StateMasterPage() {
       return next;
     });
   }, []);
-
   // Build the tree view from the /config payload, deriving each checkbox from the
   // live form visibility map so the popup and the rendered form stay in sync.
   const treeSections = useMemo<WidgetTreeSectionView[]>(
@@ -304,24 +295,26 @@ export default function StateMasterPage() {
       })),
     [configSections, sectionVisibility, secondaryTextById, widgetFieldConfig],
   );
-
   // PATCH the current section/field visibility for every configured field back to
   // the server in the documented { data: [{ sectionId, sectionGuiName,
   // sectionVisibility, fields: [{ fieldId, fieldSecondaryText, fieldVisibility }] }] }
   // shape. Throws on failure so the hosting modal stays open (useApi toasts the error);
-  // on success it resolves and the modal closes itself.
+  // on success it resolves and the modal closes itself. sectionGuiName and
+  // fieldSecondaryText are coerced to non-null strings — the server DTO requires a
+  // string (sectionGuiName is also @IsNotEmpty) and rejects the null an unset config
+  // value carries.
   const handleVisibilitySubmit = useCallback(async () => {
     const payload = {
       data: configSections.map((section) => ({
         sectionId: section.sectionId,
-        sectionGuiName: section.sectionGuiName,
+        sectionGuiName: section.sectionGuiName?.trim() || section.sectionName || "Section",
         sectionVisibility: sectionVisibility.get(section.sectionId) ?? section.sectionVisibility !== false,
         fields: (Array.isArray(section.fields) ? section.fields : []).map((field) => {
           const key = (field.fieldName ?? "").trim().toLowerCase();
           const configEntry = widgetFieldConfig.get(key);
           return {
             fieldId: field.fieldId,
-            fieldSecondaryText: secondaryTextById.get(field.fieldId) ?? field.fieldSecondaryText,
+            fieldSecondaryText: secondaryTextById.get(field.fieldId) ?? field.fieldSecondaryText ?? "",
             fieldVisibility: configEntry ? configEntry.visible : field.fieldVisibility !== false,
           };
         }),
@@ -329,7 +322,6 @@ export default function StateMasterPage() {
     };
     await saveVisibility({ body: payload });
   }, [configSections, sectionVisibility, secondaryTextById, widgetFieldConfig, saveVisibility]);
-
   // While the Visible Settings modal is open, intercept Escape/F5 in the capture
   // phase so they act on it alone — without this, the underlying create/update
   // modal's window-level Escape would also fire and close both. F5 mirrors the
@@ -358,7 +350,6 @@ export default function StateMasterPage() {
     window.addEventListener("keydown", handleKeyDownCapture, true);
     return () => window.removeEventListener("keydown", handleKeyDownCapture, true);
   }, [visibilityModalOpen, savingVisibility, handleVisibilitySubmit]);
-
   // The Visible Settings modal hosts the whole tree as a single custom field so it
   // reuses the standard ERP modal chrome (header, backdrop, Save/Cancel footer).
   const visibilityVariant = useMemo<ERPDynamicModalVariant>(
@@ -399,7 +390,6 @@ export default function StateMasterPage() {
       handleChangeSecondaryText,
     ],
   );
-
   return (
     <>
     <CrudMasterPage

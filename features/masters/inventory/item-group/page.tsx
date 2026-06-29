@@ -45,7 +45,11 @@ const GRID_TABLE_NAME = "item_group_master";
 // state shape, and submit logic stay defined locally.
 const WIDGET_CONFIG_ENDPOINT = "/widget-masters/get";
 const WIDGET_SECTION_MENU_ID = 35;
-const WIDGET_SECTION_PLATFORM = "web";
+// Platform filter for widget sections. The server validates it against its
+// WidgetPlatform enum (Mobile | Desktop | Web) case-sensitively AND matches the
+// stored section_platform exactly — menu 35's section is scoped to "Web", so a
+// lowercase "web" silently matches nothing and leaves the form unconfigured.
+const WIDGET_SECTION_PLATFORM = "Web";
 // Sent with the list request as the `grid_param` query field (JSON-stringified).
 // The server JSON-parses it and binds each key into the matching named token in
 // grid 6's stored SQL; keys with no matching token are ignored. `wantdelete` is
@@ -537,19 +541,22 @@ export default function ItemGroupMasterPage() {
   // the server in the documented { data: [{ sectionId, sectionGuiName,
   // sectionVisibility, fields: [{ fieldId, fieldSecondaryText, fieldVisibility }] }] }
   // shape. Throws on failure so the hosting modal stays open (useApi toasts the error);
-  // on success it resolves and the modal closes itself.
+  // on success it resolves and the modal closes itself. sectionGuiName and
+  // fieldSecondaryText are coerced to non-null strings — the server DTO requires a
+  // string (sectionGuiName is also @IsNotEmpty) and rejects the null an unset config
+  // value carries.
   const handleVisibilitySubmit = useCallback(async () => {
     const payload = {
       data: configSections.map((section) => ({
         sectionId: section.sectionId,
-        sectionGuiName: section.sectionGuiName,
+        sectionGuiName: section.sectionGuiName?.trim() || section.sectionName || "Section",
         sectionVisibility: sectionVisibility.get(section.sectionId) ?? section.sectionVisibility !== false,
         fields: (Array.isArray(section.fields) ? section.fields : []).map((field) => {
           const key = (field.fieldName ?? "").trim().toLowerCase();
           const configEntry = widgetFieldConfig.get(key);
           return {
             fieldId: field.fieldId,
-            fieldSecondaryText: secondaryTextById.get(field.fieldId) ?? field.fieldSecondaryText,
+            fieldSecondaryText: secondaryTextById.get(field.fieldId) ?? field.fieldSecondaryText ?? "",
             fieldVisibility: configEntry ? configEntry.visible : field.fieldVisibility !== false,
           };
         }),

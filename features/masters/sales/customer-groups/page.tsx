@@ -442,19 +442,22 @@ export default function CustomerGroupsPage() {
   // the server in the documented { data: [{ sectionId, sectionGuiName,
   // sectionVisibility, fields: [{ fieldId, fieldSecondaryText, fieldVisibility }] }] }
   // shape. Throws on failure so the hosting modal stays open (useApi toasts the error);
-  // on success it resolves and the modal closes itself.
+  // on success it resolves and the modal closes itself. sectionGuiName and
+  // fieldSecondaryText are coerced to non-null strings — the server DTO requires a
+  // string (sectionGuiName is also @IsNotEmpty) and rejects the null an unset config
+  // value carries.
   const handleVisibilitySubmit = useCallback(async () => {
     const payload = {
       data: configSections.map((section) => ({
         sectionId: section.sectionId,
-        sectionGuiName: section.sectionGuiName,
+        sectionGuiName: section.sectionGuiName?.trim() || section.sectionName || "Section",
         sectionVisibility: sectionVisibility.get(section.sectionId) ?? section.sectionVisibility !== false,
         fields: (Array.isArray(section.fields) ? section.fields : []).map((field) => {
           const key = (field.fieldName ?? "").trim().toLowerCase();
           const configEntry = widgetFieldConfig.get(key);
           return {
             fieldId: field.fieldId,
-            fieldSecondaryText: secondaryTextById.get(field.fieldId) ?? field.fieldSecondaryText,
+            fieldSecondaryText: secondaryTextById.get(field.fieldId) ?? field.fieldSecondaryText ?? "",
             fieldVisibility: configEntry ? configEntry.visible : field.fieldVisibility !== false,
           };
         }),
