@@ -73,9 +73,17 @@ export function buildWidgetFieldConfig(
   }
   return config;
 }
-// Re-label, re-order, and show/hide the hardcoded fields from the config. A field
-// with no configured entry keeps its label and is rendered after configured ones;
-// a configured field with visibility=false is dropped. Nothing else is touched.
+// Field types that carry no form value and exist only to structure the layout.
+// When such a field has no configured entry it is pinned in place (see below)
+// rather than pushed to the end, so a section heading stays with the group it
+// introduces.
+const PINNED_PRESENTATIONAL_TYPES = new Set(["heading", "subheading", "custom"]);
+// Re-label, re-order, and show/hide the hardcoded fields from the config. A
+// configured field with visibility=false is dropped; the rest render in the
+// config's order. A non-bridged INPUT field keeps its label and renders after all
+// configured fields. A non-bridged PRESENTATIONAL field (heading/subheading/custom)
+// is instead pinned just before the configured field it originally preceded, so
+// section headings stay with their group instead of sliding to the end.
 // `fieldNameByFormField` bridges each form field `name` (camelCase aliases used by
 // form state and the submit payload) to the backend `fieldName` it is configured
 // under (column-style keys, matched case-insensitively).
@@ -88,25 +96,41 @@ export function applyWidgetFieldConfig(
     return fields;
   }
   const configured: Array<{ field: ERPDynamicModalField; order: number; index: number }> = [];
-  const unconfigured: ERPDynamicModalField[] = [];
+  const pinned: Array<{ field: ERPDynamicModalField; index: number }> = [];
+  const trailing: ERPDynamicModalField[] = [];
   fields.forEach((field, index) => {
     const backendName = fieldNameByFormField[field.name];
     const resolved = backendName ? config.get(backendName.toLowerCase()) : undefined;
-    if (!resolved) {
-      unconfigured.push(field);
+    if (resolved) {
+      if (resolved.visible) {
+        configured.push({
+          field: resolved.label ? { ...field, label: resolved.label } : field,
+          order: resolved.order,
+          index,
+        });
+      }
       return;
     }
-    if (!resolved.visible) {
-      return;
+    if (field.type && PINNED_PRESENTATIONAL_TYPES.has(field.type)) {
+      pinned.push({ field, index });
+    } else {
+      trailing.push(field);
     }
-    configured.push({
-      field: resolved.label ? { ...field, label: resolved.label } : field,
-      order: resolved.order,
-      index,
-    });
   });
-  configured.sort((a, b) => a.order - b.order || a.index - b.index);
-  return [...configured.map((entry) => entry.field), ...unconfigured];
+  // Anchor each pinned presentational field to the configured field that follows
+  // it in the original order, so it sorts immediately before that field's new
+  // position (config `order` values are unique, and the index tiebreak keeps the
+  // pinned field ahead of its anchor and preserves the order of consecutive pinned
+  // fields). A pinned field with no following configured field falls to the end of
+  // the configured block (before any trailing input fields).
+  const anchored = pinned.map(({ field, index }) => {
+    const next = configured.find((entry) => entry.index > index);
+    return { field, order: next ? next.order : Number.MAX_SAFE_INTEGER, index };
+  });
+  const ordered = [...configured, ...anchored].sort(
+    (a, b) => a.order - b.order || a.index - b.index,
+  );
+  return [...ordered.map((entry) => entry.field), ...trailing];
 }
 /** Lowercased backend fieldNames that map to a real form field on this screen. */
 export function buildControllableFieldNames(
