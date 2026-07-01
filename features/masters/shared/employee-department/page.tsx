@@ -28,16 +28,13 @@ import {
   toSelectBoolean,
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
-
 const API_ENDPOINTS = {
     list: "/configured-grid-sql/run?grid_id=23",
   getById: "/employee-department-masters/get",
   create: "/employee-department-masters/create",
   delete: "/employee-department-masters/delete",
 } as const;
-
 const GRID_TABLE_NAME = "employee_departments";
-
 // The form fields below are re-labelled, re-ordered, and shown/hidden from the
 // backend widget-masters config (fixed.form_section / form_field) for this
 // screen's menu id. Only those three properties come from the API — validation,
@@ -67,7 +64,6 @@ const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 // Backend fieldNames (lowercased) that map to a real form field, so their popup
 // checkbox can actually show/hide something. Others render read-only ("not on form").
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
-
 const LOOKUP_KEYS = {
   id: ["edptId", "edpt_id", "id", "_id"],
   code: ["edptCode", "edpt_code", "code"],
@@ -87,7 +83,6 @@ const LOOKUP_KEYS = {
     "employee_department_masters",
   ],
 } as const;
-
 const REQUEST_PAYLOAD_KEYS = {
   id: "edptId",
   name: "edptName",
@@ -96,7 +91,6 @@ const REQUEST_PAYLOAD_KEYS = {
   description: "edptRemarks",
   sort: "position",
 } as const;
-
 const DEPARTMENT_CODE_KEYS = ["edptCode", "edpt_code", "code"] as const;
 const DEPARTMENT_ALIAS_KEYS = ["edptAlias", "edpt_alias", "alias"] as const;
 const DEPARTMENT_IS_ACTIVE_KEYS = [
@@ -106,7 +100,6 @@ const DEPARTMENT_IS_ACTIVE_KEYS = [
   "is_active",
   "status",
 ] as const;
-
 const INITIAL_FORM_VALUES = {
   masterName: "",
   edptCode: "",
@@ -114,7 +107,6 @@ const INITIAL_FORM_VALUES = {
   edptIsActive: "true",
   masterDescription: "",
 } as const;
-
 const DEPARTMENT_FORM_FIELDS: ERPDynamicModalField[] = [
   {
     name: "masterName",
@@ -151,7 +143,6 @@ const DEPARTMENT_FORM_FIELDS: ERPDynamicModalField[] = [
     ],
   },
 ];
-
 export default function EmployeeDepartmentMasterPage() {
   // Silent progressive enhancement: a failed config fetch leaves the form on its
   // hardcoded labels/order (empty map), so don't nag the user with an error toast.
@@ -423,7 +414,6 @@ export default function EmployeeDepartmentMasterPage() {
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
         const mergedDefaults = { ...INITIAL_FORM_VALUES, ...defaults };
-
         return {
           ...INITIAL_FORM_VALUES,
           masterName:
