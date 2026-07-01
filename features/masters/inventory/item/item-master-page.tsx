@@ -2839,6 +2839,59 @@ function buildItemFormFields(
         options: customerGroupOptions,
       },
       {
+        name: "itemInlineUnitConversionHeading",
+        label: "",
+        type: "custom",
+        fieldStyle: {
+          gridColumn: "1 / -1",
+        },
+        render: () => (
+          <div style={ITEM_INLINE_SECTION_HEADING_STYLE}>Unit Conversion Table</div>
+        ),
+      },
+      {
+        name: ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME,
+        label: "",
+        type: "custom",
+        fieldStyle: {
+          gridColumn: "1 / -1",
+        },
+        helperText:
+          "Maintain the valid units for this item here. Price rows can only use units from this section.",
+        validation: {
+          custom: validateItemUnitConversionRows,
+        },
+        onValueChange: ({ value, values, previousValues }) =>
+          buildItemUnitConversionRowsValueChangeResult(
+            values,
+            previousValues,
+            value,
+            itemTaxRecordsById,
+          ),
+        render: ({ disabled, setValue, value, values }) => (
+          <ItemLinkedRecordsEditor
+            addLabel="+"
+            autoCreateFirstRowOnMount
+            autoFocusInitialRowOnMount={false}
+            columnLayoutStorageKey="item-master-unit-conversion"
+            columns={unitConversionRowColumns}
+            createRow={() => {
+              const rows = buildManagedItemUnitConversionRows(values);
+              return buildEmptyItemUnitConversionRow(
+                (values.item_base_unit_id ?? "").trim(),
+                rows.length + 1,
+              );
+            }}
+            disabled={disabled}
+            emptyState="No unit conversions added."
+            exclusiveTrueColumnKeys={["iuc_is_default_unit", "iuc_is_base_unit"]}
+            removeDisabledRowIndexes={[0]}
+            onChange={setValue}
+            value={value}
+          />
+        ),
+      },
+      {
         name: "itemInlinePriceListHeading",
         label: "",
         type: "custom",
@@ -2855,7 +2908,7 @@ function buildItemFormFields(
           gridColumn: "1 / -1",
         },
         helperText:
-          "Add and edit price rows here. Unit conversion values are maintained from this section while the Unit Conversion block stays hidden.",
+          "Add and edit price rows here. Price rows can only use units from the Unit Conversion Table above.",
         onValueChange: ({ value, values, previousValues }) =>
           buildItemPriceRowsValueChangeResult(
             values,
@@ -2913,52 +2966,6 @@ function buildItemFormFields(
             />
           );
         },
-      },
-      {
-        name: "itemHeadingUnitConversionTable",
-        label: "Unit Conversion",
-        type: "heading",
-        defaultExpanded: true,
-        sectionGridColumns: 4,
-        visibleWhen: () => false,
-      },
-      {
-        name: ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME,
-        label: "",
-        type: "custom",
-        visibleWhen: () => false,
-        fieldStyle: {
-          gridColumn: "1 / -1",
-        },
-        helperText:
-          "Maintain the valid units for this item here. Price rows can only use units from this section.",
-        validation: {
-          custom: validateItemUnitConversionRows,
-        },
-        onValueChange: ({ value, values, previousValues }) =>
-          buildItemUnitConversionRowsValueChangeResult(
-            values,
-            previousValues,
-            value,
-            itemTaxRecordsById,
-          ),
-        render: buildCustomFieldEditor(
-          unitConversionRowColumns,
-          (values) => {
-            const rows = buildManagedItemUnitConversionRows(values);
-            const nextUnitSlno = rows.length + 1;
-            return buildEmptyItemUnitConversionRow(
-              (values.item_base_unit_id ?? "").trim(),
-              nextUnitSlno,
-            );
-          },
-          "+",
-          "No unit conversions added.",
-          {
-            autoCreateFirstRowOnMount: true,
-            autoFocusInitialRowOnMount: false,
-          },
-        ),
       },
       {
         name: "itemHeadingEanTable",
