@@ -191,8 +191,14 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       },
       {
         label:"Designation Master",href:"/master/employee-designation-master"
-      }, 
-          {label:"Device list master",href:"/master/device-list-master"}   
+      },
+          {label:"Device list master",href:"/master/device-list-master"}
+        ]
+      },
+      {
+        label:"Templates",
+        children:[
+          {label:"Customer Template",href:"/master/customer-template"}
         ]
       },
       {label:"User Administration",href:"/master/user-administration"},
