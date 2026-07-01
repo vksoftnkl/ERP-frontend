@@ -813,6 +813,7 @@ export default function GodownMasterPageContent({
     <>
     <CrudMasterPage
       title="Godown Location"
+      iconName="godown_master_entry"
       auditHistory={{ screenName: "Godown Location Master" }}
       entityLabel="godown location"
       entityLabelPlural="godown locations"

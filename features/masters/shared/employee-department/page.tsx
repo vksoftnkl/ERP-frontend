@@ -399,6 +399,7 @@ export default function EmployeeDepartmentMasterPage() {
     <>
     <CrudMasterPage
       title="Employee Department"
+      iconName="employee_department_master"
       auditHistory={{ screenName: "Employee Department Master" }}
       entityLabel="employee department"
       entityLabelPlural="employee departments"

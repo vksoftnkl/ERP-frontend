@@ -540,6 +540,7 @@ export default function CustomerGroupsPage() {
     <>
     <CrudMasterPage
       title="Customer Group"
+      iconName="customer_classification"
       auditHistory={{ screenName: "Customer Group Master" }}
       entityLabel="customer group"
       entityLabelPlural="customer groups"

@@ -671,6 +671,7 @@ export default function UnitMasterPage() {
     <>
     <CrudMasterPage
       title="Unit"
+      iconName="item_unit_master_entry"
       auditHistory={{ screenName: "Units Master" }}
       entityLabel="unit"
       entityLabelPlural="units"

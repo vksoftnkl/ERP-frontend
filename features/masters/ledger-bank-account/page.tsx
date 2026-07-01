@@ -246,6 +246,7 @@ export default function LedgerBankAccountMasterPage() {
   return (
     <CrudMasterPage
       title="Ledger Bank Account"
+      iconName="bank_list"
       auditHistory={{ screenName: "Ledger Bank Account" }}
       entityLabel="ledger bank account"
       entityLabelPlural="ledger bank accounts"

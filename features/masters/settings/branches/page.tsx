@@ -828,6 +828,7 @@ export default function BranchesMasterPage() {
   return (
     <CrudMasterPage
       title="Branch"
+      iconName="branch_master"
       auditHistory={{ screenName: "Branch Master" }}
       entityLabel="branch"
       entityLabelPlural="branches"

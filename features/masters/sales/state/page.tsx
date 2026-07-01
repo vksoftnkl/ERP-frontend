@@ -394,6 +394,7 @@ export default function StateMasterPage() {
     <>
     <CrudMasterPage
       title="State"
+      iconName="state_master"
       auditHistory={{ screenName: "State Master" }}
       entityLabel="state"
       entityLabelPlural="states"

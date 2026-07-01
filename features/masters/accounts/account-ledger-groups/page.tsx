@@ -478,6 +478,7 @@ export default function AccountLedgerGroupsMasterPage() {
     <>
     <CrudMasterPage
       title="Account Group"
+      iconName="account_group_master"
       auditHistory={{ screenName: "Account Group Master" }}
       entityLabel="account group"
       entityLabelPlural="account groups"

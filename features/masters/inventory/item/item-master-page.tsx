@@ -4710,6 +4710,7 @@ export default function ItemMasterPageContent({
   return (
     <CrudMasterPage
       title="Item"
+      iconName="item_master"
       entityLabel="item"
       entityLabelPlural="items"
       auditHistory={{ screenName: "Item Master" }}

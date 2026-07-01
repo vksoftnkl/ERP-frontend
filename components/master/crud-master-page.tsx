@@ -33,6 +33,7 @@ import {
   type ERPDynamicModalVariant,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
+import { MasterIcon } from "@/components/design-system/icons/master-icons";
 import {
   FiClock,
   FiDownload,
@@ -2228,6 +2229,8 @@ function downloadMasterRowsCsv(
 }
 export default function CrudMasterPage({
   title,
+  iconName,
+  icon,
   entityLabel,
   entityLabelPlural,
   apiEndpoints,
@@ -3361,6 +3364,10 @@ export default function CrudMasterPage({
       })),
     [fields],
   );
+  const modalIcon = useMemo<ReactNode>(
+    () => icon ?? (iconName ? <MasterIcon name={iconName} /> : undefined),
+    [icon, iconName],
+  );
   const variants = useMemo<ERPDynamicModalVariant[]>(
     () => [
       {
@@ -3372,6 +3379,7 @@ export default function CrudMasterPage({
         modalDescription: `Read-only view of selected ${entityLabel} data.`,
         submitLabel: "Close",
         accent: "indigo",
+        icon: modalIcon,
         fields: viewFields,
       },
       {
@@ -3383,6 +3391,7 @@ export default function CrudMasterPage({
         modalDescription: `Configure ${entityLabel} details.`,
         submitLabel: saveLoading ? "Saving..." : "Save",
         accent: "blue",
+        icon: modalIcon,
         fields,
       },
       {
@@ -3394,10 +3403,11 @@ export default function CrudMasterPage({
         modalDescription: `Update selected ${entityLabel} details.`,
         submitLabel: saveLoading ? "Updating..." : "Update",
         accent: "emerald",
+        icon: modalIcon,
         fields,
       },
     ],
-    [createModalTitle, editModalTitle, viewModalTitle, effectiveTitle, entityLabel, fields, saveLoading, viewFields],
+    [createModalTitle, editModalTitle, viewModalTitle, effectiveTitle, entityLabel, fields, modalIcon, saveLoading, viewFields],
   );
   const handleRowUpdate = useCallback(
     (row: MasterTableRow) => {

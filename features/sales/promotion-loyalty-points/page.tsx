@@ -23,7 +23,6 @@ import {
   FiSave,
   FiSearch,
   FiShield,
-  FiStar,
 } from "react-icons/fi";
 import {
   Alert,
@@ -45,6 +44,7 @@ import {
 import { useApi } from "@/hooks/useApi";
 import type { ApiSuccessResponse } from "@/utils/types";
 import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
+import { MasterIcon } from "@/components/design-system/icons/master-icons";
 import type {
   LoyaltySchemePayload,
   PromotionLoyaltyPointsListMeta,
@@ -1720,7 +1720,7 @@ export default function PromotionLoyaltyPointsPage() {
                 <div className={`${dynamicFormStyles.headerRow} ${styles.editorHeaderRow}`}>
                   <div className={styles.editorHeaderIntro}>
                     <span className={styles.editorHeaderIcon} aria-hidden="true">
-                      <FiStar />
+                      <MasterIcon name="loyalty_scheme_master" />
                     </span>
                     <div>
                     <h2 id="loyalty-editor-title" className={dynamicFormStyles.headerTitle}>

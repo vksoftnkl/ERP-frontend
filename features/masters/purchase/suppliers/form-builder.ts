@@ -96,7 +96,6 @@ export function buildSupplierRequestPayload(
     supBilledDate: toNullableDate(values.supBilledDate ?? ""),
     supSortOrder: toNullableInteger(values.supSortOrder ?? ""),
     supIsActive: (values.supIsActive ?? "true") === "true",
-    supStateId: toNullableString(values.supStateId ?? ""),
     supCreatedBy: toNullableString(values.supCreatedBy ?? ""),
     supModifiedBy: toNullableString(values.supModifiedBy ?? ""),
   };

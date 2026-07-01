@@ -636,6 +636,7 @@ export default function ItemGroupMasterPage() {
     <>
     <CrudMasterPage
       title="Item Group"
+      iconName="item_group_master_entry"
       auditHistory={{ screenName: "Item Group Master" }}
       entityLabel="item group"
       entityLabelPlural="item groups"

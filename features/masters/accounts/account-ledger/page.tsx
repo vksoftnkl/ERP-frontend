@@ -28,6 +28,7 @@ import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
 import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import styles from "@/app/master/state-master/page.module.scss";
 import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
+import { MasterIcon } from "@/components/design-system/icons/master-icons";
 import { RecordHistoryModal } from "@/features/masters/record-history/page";
 import {
   FiClock,
@@ -2300,6 +2301,12 @@ export default function AccountLedgerMasterPage() {
       : modalMode === "update"
         ? `Edit ${effectiveTitle}`
         : `${effectiveTitle} Details`;
+  const modalDescription =
+    modalMode === "create"
+      ? `Configure ${effectiveTitle.toLowerCase()} details.`
+      : modalMode === "update"
+        ? `Update selected ${effectiveTitle.toLowerCase()} details.`
+        : `Read-only view of selected ${effectiveTitle.toLowerCase()} data.`;
   const modalStyle = {
     "--erp-modal-accent": "#2563eb",
     "--erp-modal-accent-soft-ring": "#2563eb33",
@@ -2664,7 +2671,17 @@ export default function AccountLedgerMasterPage() {
           >
             <header className={dynamicFormStyles.header}>
               <div className={dynamicFormStyles.headerRow}>
-                <h2 className={dynamicFormStyles.headerTitle}>{modalTitle}</h2>
+                <div className={dynamicFormStyles.headerIntro}>
+                  <span className={dynamicFormStyles.headerIcon} aria-hidden="true">
+                    <MasterIcon name="account_ledger_master" />
+                  </span>
+                  <div className={dynamicFormStyles.headerText}>
+                    <h2 className={dynamicFormStyles.headerTitle}>{modalTitle}</h2>
+                    <p className={dynamicFormStyles.headerDescription}>
+                      {modalDescription}
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
                   className={dynamicFormStyles.closeButton}

@@ -2236,6 +2236,7 @@ export default function CustomerPage() {
     <>
       <CrudMasterPage
         title="Customer"
+        iconName="customer_master"
         auditHistory={{ screenName: "Customer Master" }}
         entityLabel="customer"
         entityLabelPlural="customers"

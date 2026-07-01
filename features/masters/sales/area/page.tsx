@@ -931,6 +931,7 @@ export default function AreaMasterPage() {
     <>
       <CrudMasterPage
         title="Area"
+        iconName="area_master"
         auditHistory={{ screenName: "Area Master" }}
         entityLabel="area"
         entityLabelPlural="areas"

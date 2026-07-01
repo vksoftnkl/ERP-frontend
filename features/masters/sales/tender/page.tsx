@@ -640,6 +640,7 @@ export default function TenderMasterPage() {
     <>
     <CrudMasterPage
       title="Tender"
+      iconName="account_tender_master"
       auditHistory={{ screenName: "Tender Master" }}
       entityLabel="tender"
       entityLabelPlural="tenders"

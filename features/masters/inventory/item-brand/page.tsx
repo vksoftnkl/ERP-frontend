@@ -629,6 +629,7 @@ export default function ItemBrandMasterPage() {
     <>
     <CrudMasterPage
       title="Brand"
+      iconName="item_brand_master_entry"
       auditHistory={{ screenName: "Item Brand Master" }}
       entityLabel="item brand"
       entityLabelPlural="item brands"

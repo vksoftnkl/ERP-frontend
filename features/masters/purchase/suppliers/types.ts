@@ -1,5 +1,4 @@
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
-
 // Form Field Names (Union Type)
 export type SupplierFormFieldName =
   | "supCompanyId"
@@ -43,10 +42,8 @@ export type SupplierFormFieldName =
   | "supBilledDate"
   | "supSortOrder"
   | "supIsActive"
-  | "supStateId"
   | "supCreatedBy"
   | "supModifiedBy";
-
 // Heading Field Names
 export type SupplierHeadingFieldName =
   | "scopeHeading"
@@ -54,7 +51,6 @@ export type SupplierHeadingFieldName =
   | "creditHeading"
   | "regionHeading"
   | "statusHeading";
-
 // Modal Field Names - State
 export type StateModalFieldName =
   | "stateCode"
@@ -62,14 +58,12 @@ export type StateModalFieldName =
   | "stateUt"
   | "tinCode"
   | "isActive";
-
 // Modal Field Names - Supplier Group
 export type SupplierGroupModalFieldName =
   | "spgName"
   | "spgShort"
   | "spgDesc"
   | "spgIsActive";
-
 // Supplier Form Values
 export interface SupplierFormValues extends Record<string, string> {
   supCompanyId: string;
@@ -113,11 +107,9 @@ export interface SupplierFormValues extends Record<string, string> {
   supBilledDate: string;
   supSortOrder: string;
   supIsActive: string;
-  supStateId: string;
   supCreatedBy: string;
   supModifiedBy: string;
 }
-
 // Supplier Table Row
 export interface SupplierTableRow {
   supId?: string;
@@ -131,7 +123,6 @@ export interface SupplierTableRow {
   supSortOrder?: number | string;
   [key: string]: unknown;
 }
-
 // State Modal Form Values
 export interface StateModalFormValues {
   stateCode: string;
@@ -140,7 +131,6 @@ export interface StateModalFormValues {
   tinCode: string;
   isActive: string;
 }
-
 // Supplier Group Modal Form Values
 export interface SupplierGroupModalFormValues {
   spgName: string;
@@ -148,7 +138,6 @@ export interface SupplierGroupModalFormValues {
   spgDesc: string;
   spgIsActive: string;
 }
-
 // Pagination Info
 export interface PaginationInfo {
   currentPage: number;
@@ -156,10 +145,8 @@ export interface PaginationInfo {
   pageSize: number;
   totalRecords: number;
 }
-
 // Modal Mode Type
 export type ModalMode = "create" | "update";
-
 // Lookup Options Map
 export interface LookupOptionsMap {
   supplierGroups: ERPDynamicSelectOption[];
@@ -167,13 +154,11 @@ export interface LookupOptionsMap {
   branches: ERPDynamicSelectOption[];
   states: ERPDynamicSelectOption[];
 }
-
 // State Code Maps
 export interface StateCodeMaps {
   codeByName: Record<string, string>;
   nameByCode: Record<string, string>;
 }
-
 // GST Lookup Result
 export interface GstLookupResult extends Record<string, string> {
   supName: string;

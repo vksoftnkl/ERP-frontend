@@ -426,6 +426,7 @@ export default function SupplierGroupsPage() {
     <>
     <CrudMasterPage
       title="Supplier Group"
+      iconName="supplier_group_master"
       auditHistory={{ screenName: "Supplier Group Master" }}
       entityLabel="supplier group"
       entityLabelPlural="supplier groups"

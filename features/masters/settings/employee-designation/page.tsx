@@ -410,6 +410,7 @@ export default function EmployeeDesignationMasterPage() {
     <>
     <CrudMasterPage
       title="Designation"
+      iconName="employee_designation_master"
       auditHistory={{ screenName: "Employee Designation Master" }}
       entityLabel=" designation"
       entityLabelPlural="designations"

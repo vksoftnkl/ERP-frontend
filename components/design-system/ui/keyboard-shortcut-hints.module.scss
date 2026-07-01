@@ -4,18 +4,15 @@
   align-items: center;
   gap: 0.5rem 0.85rem;
 }
-
 .shortcutListDense {
   gap: 0.4rem 0.7rem;
 }
-
 .shortcutItem {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   min-width: 0;
 }
-
 .shortcutLabel {
   color: #6a7f93;
   font-size: 0.68rem;
@@ -25,26 +22,22 @@
   text-transform: uppercase;
   white-space: nowrap;
 }
-
 .keycapGroup {
   display: inline-flex;
   align-items: center;
   gap: 0.22rem;
 }
-
 .keycapWithJoiner {
   display: inline-flex;
   align-items: center;
   gap: 0.22rem;
 }
-
 .keycapJoiner {
   color: #70869a;
   font-size: 0.72rem;
   font-weight: 700;
   line-height: 1;
 }
-
 .keycap {
   display: inline-flex;
   align-items: center;

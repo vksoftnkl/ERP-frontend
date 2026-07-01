@@ -1,6 +1,7 @@
 import { type CSSProperties, type ReactNode } from "react";
 import { type ReusableTableColumn } from "@/components/ui/table";
 import { type ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
+import { type MasterIconName } from "@/components/design-system/icons/master-icons";
 
 export type MasterTableRow = {
   __rowId: string | number;
@@ -138,6 +139,11 @@ export type CrudMasterPageProps = {
   title: string;
   entityLabel: string;
   entityLabelPlural: string;
+  // Per-master modal icon shown in the create/update/view dialog header. Pass a
+  // registered name (resolved against assets/icons) or a custom ReactNode. When
+  // both are omitted the modal falls back to the generic placeholder icon.
+  iconName?: MasterIconName;
+  icon?: ReactNode;
   apiEndpoints: CrudMasterApiEndpoints;
   lookupKeys: CrudMasterLookupKeys;
   requestPayloadKeys: CrudMasterRequestPayloadKeys;

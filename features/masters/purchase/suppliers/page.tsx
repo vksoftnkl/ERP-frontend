@@ -73,12 +73,22 @@ import {
   buildSupplierStateData,
   withPinnedOption,
 } from "./dropdowns";
-
+import type { ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
+// The supplier shares its primary key with a linked account ledger, which owns the
+// bank-account rows. Reuse the ledger feature's editor + helpers so suppliers edit the
+// same nested `ledgerBankAccount` array the server accepts on create/update.
+import BankAccountsEditor from "@/features/masters/accounts/account-ledger/bank-accounts-editor";
+import {
+  createEmptyBankAccountRow,
+  extractLedgerBankAccountRows,
+  getBankAccountValidationError,
+  buildLedgerBankAccountPayload,
+  type LedgerBankAccountFormRow,
+} from "@/features/masters/accounts/account-ledger/bank-accounts";
 export default function SuppliersMasterPage() {
   const stateModalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const supplierGroupModalControllerRef =
     useRef<ERPDynamicModalController | null>(null);
-
   // API Hooks
   // Lazy configured-dropdown runners (fixed.dropdown_details via /dropdown-details/run).
   // One hook per kind so each fetch has an independent abort/loading lifecycle; errors
@@ -131,7 +141,6 @@ export default function SuppliersMasterPage() {
   } = useApi<unknown, Record<string, unknown>>(STATE_CREATE_ENDPOINT, {
     method: "POST",
   });
-
   // State Management
   const [supplierGroupOptions, setSupplierGroupOptions] = useState<
     ERPDynamicSelectOption[]
@@ -156,6 +165,29 @@ export default function SuppliersMasterPage() {
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted suppliers. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
+  // Nested bank accounts edited alongside the supplier (persisted on its linked
+  // account ledger). Seeded from the loaded record on edit/view, reset on create.
+  const [bankAccounts, setBankAccounts] = useState<LedgerBankAccountFormRow[]>([]);
+  const handleAddBankAccount = useCallback(() => {
+    setBankAccounts((rows) => [...rows, createEmptyBankAccountRow()]);
+  }, []);
+  const handleChangeBankAccount = useCallback(
+    (rowKey: string, patch: Partial<LedgerBankAccountFormRow>) => {
+      setBankAccounts((rows) =>
+        rows.map((row) => (row.rowKey === rowKey ? { ...row, ...patch } : row)),
+      );
+    },
+    [],
+  );
+  const handleRemoveBankAccount = useCallback((rowKey: string) => {
+    setBankAccounts((rows) => rows.filter((row) => row.rowKey !== rowKey));
+  }, []);
+  // Single default per ledger: marking one row default clears the others.
+  const handleSetDefaultBankAccount = useCallback((rowKey: string) => {
+    setBankAccounts((rows) =>
+      rows.map((row) => ({ ...row, lbaIsDefault: row.rowKey === rowKey })),
+    );
+  }, []);
   // Adds the `grid_param` payload to the default page/limit/search list query.
   // The server JSON-parses it and binds each key into the matching named token in
   // grid 17's stored SQL; keys with no matching token are ignored. `wantdelete` is
@@ -177,17 +209,14 @@ export default function SuppliersMasterPage() {
     }),
     [wantDelete],
   );
-
   // Cache for GST Lookups
   const gstLookupCacheRef = useRef<Record<string, Record<string, string>>>({});
-
   // Lazy-dropdown plumbing: mirror of the latest options per field (so the value handler
   // can resolve a picked label), the pinned selection per field (kept visible after a
   // fetch), and a debounce handle per field for server-side search typing.
   const dropdownOptionsRef = useRef<Record<string, ERPDynamicSelectOption[]>>({});
   const pinnedDropdownOptionRef = useRef<Record<string, ERPDynamicSelectOption | null>>({});
   const dropdownSearchTimeoutsRef = useRef<Record<string, number | null>>({});
-
   // Push freshly built options into both the matching state setter and the mirror ref.
   const applyDropdownOptions = useCallback(
     (fieldName: string, options: ERPDynamicSelectOption[]) => {
@@ -209,7 +238,6 @@ export default function SuppliersMasterPage() {
     },
     [],
   );
-
   // Lazily fetch a dropdown's first page (open) or search results (typing) from
   // /dropdown-details/run. A superseded/aborted request returns undefined and is skipped
   // so it never wipes the options the latest request set.
@@ -281,7 +309,6 @@ export default function SuppliersMasterPage() {
       runStateDropdown,
     ],
   );
-
   // Per-field handlers: fetch on open (immediate), on debounced typing, and pin the
   // chosen option. The State field also mirrors its name into supRegionStateName.
   const lazyDropdownHandlers = useMemo<SupplierLazyDropdownHandlers>(() => {
@@ -325,7 +352,6 @@ export default function SuppliersMasterPage() {
       supStateName: build("supStateName", "state"),
     };
   }, [fetchDropdown]);
-
   // Seed each lazy dropdown with its currently-selected option (from the loaded record)
   // so the trigger shows the saved name on edit/view before the field is opened.
   const seedDropdownSelections = useCallback(
@@ -360,7 +386,6 @@ export default function SuppliersMasterPage() {
     },
     [applyDropdownOptions],
   );
-
   // Reset every lazy dropdown to just its empty head (used when the create modal opens).
   const resetDropdownSelections = useCallback(() => {
     const blank: ERPDynamicSelectOption = { value: "", label: "" };
@@ -370,7 +395,6 @@ export default function SuppliersMasterPage() {
     applyDropdownOptions("supGroupId", [blank]);
     applyDropdownOptions("supStateName", [blank]);
   }, [applyDropdownOptions]);
-
   // Clear any pending dropdown search debounces on unmount.
   useEffect(() => {
     return () => {
@@ -381,16 +405,13 @@ export default function SuppliersMasterPage() {
       }
     };
   }, []);
-
   // Refresh Functions (re-run the lazy fetch after an inline create/update).
   const refreshSupplierGroupOptions = useCallback(async () => {
     await fetchDropdown("group", "");
   }, [fetchDropdown]);
-
   const refreshStateOptions = useCallback(async () => {
     await fetchDropdown("state", "");
   }, [fetchDropdown]);
-
   // Modal Variants
   const stateCreateModalFields = useMemo(() => buildStateModalFields(false), []);
   const stateUpdateModalFields = useMemo(() => buildStateModalFields(true), []);
@@ -421,7 +442,6 @@ export default function SuppliersMasterPage() {
     ],
     [stateCreateModalFields, stateSaveLoading, stateUpdateModalFields],
   );
-
   const supplierGroupModalFields = useMemo(
     () => buildSupplierGroupModalFields(),
     [],
@@ -453,7 +473,6 @@ export default function SuppliersMasterPage() {
     ],
     [supplierGroupModalFields, supplierGroupSaveLoading],
   );
-
   // State Modal Handlers
   const handleStateCreateShortcut = useCallback(
     (payload: ERPDynamicSearchShortcutPayload) => {
@@ -472,7 +491,6 @@ export default function SuppliersMasterPage() {
     },
     [resetStateDetailsState, resetStateSaveState],
   );
-
   const handleStateEditShortcut = useCallback(
     async (payload: ERPDynamicSearchShortcutPayload) => {
       const matchedOption = resolveOptionFromShortcut(payload, stateOptions);
@@ -519,7 +537,6 @@ export default function SuppliersMasterPage() {
       stateOptions,
     ],
   );
-
   const handleStateModalSubmit = useCallback(
     async ({ variantKey, values }: ERPDynamicModalSubmitPayload) => {
       const isUpdate = variantKey === "state-update";
@@ -538,7 +555,6 @@ export default function SuppliersMasterPage() {
     },
     [editingStateCode, refreshStateOptions, upsertStateCode],
   );
-
   const handleStateModalCancel = useCallback(() => {
     if (stateSaveLoading || stateDetailsLoading) {
       return;
@@ -552,7 +568,6 @@ export default function SuppliersMasterPage() {
     stateDetailsLoading,
     stateSaveLoading,
   ]);
-
   // Supplier Group Modal Handlers
   const handleSupplierGroupCreateShortcut = useCallback(
     (payload: ERPDynamicSearchShortcutPayload) => {
@@ -568,7 +583,6 @@ export default function SuppliersMasterPage() {
     },
     [resetSupplierGroupDetailsState, resetSupplierGroupSaveState],
   );
-
   const handleSupplierGroupEditShortcut = useCallback(
     async (payload: ERPDynamicSearchShortcutPayload) => {
       const selectedGroupId = payload.value.trim();
@@ -614,7 +628,6 @@ export default function SuppliersMasterPage() {
       supplierGroupOptions,
     ],
   );
-
   const handleSupplierGroupModalSubmit = useCallback(
     async ({ variantKey, values }: ERPDynamicModalSubmitPayload) => {
       const isUpdate = variantKey === "supplier-group-update";
@@ -636,7 +649,6 @@ export default function SuppliersMasterPage() {
     },
     [editingSupplierGroupId, refreshSupplierGroupOptions, upsertSupplierGroup],
   );
-
   const handleSupplierGroupModalCancel = useCallback(() => {
     if (supplierGroupSaveLoading || supplierGroupDetailsLoading) {
       return;
@@ -650,7 +662,6 @@ export default function SuppliersMasterPage() {
     supplierGroupDetailsLoading,
     supplierGroupSaveLoading,
   ]);
-
   // Form Field Value Change Handlers
   const handleSupplierGstinValueChange =
     useCallback<ERPDynamicFieldValueChangeHandler>(
@@ -730,11 +741,50 @@ export default function SuppliersMasterPage() {
       },
       [stateNameByCode],
     );
-
+  // First invalid bank-account row/field (or null), recomputed as rows change. Drives
+  // both the inline cell highlight and the custom field's submit-blocking validation.
+  const bankAccountValidationError = useMemo(
+    () => getBankAccountValidationError(bankAccounts),
+    [bankAccounts],
+  );
+  // The bank-accounts grid, rendered as a full-width `custom` field under its own tab.
+  // `validation.custom` blocks submit while a row is invalid (mirrors the server rules).
+  const bankAccountsField = useMemo<ERPDynamicModalField>(
+    () => ({
+      name: "ledgerBankAccountEditor",
+      label: "",
+      type: "custom",
+      fieldStyle: { gridColumn: "1 / -1" },
+      validation: {
+        custom: () =>
+          bankAccountValidationError ? bankAccountValidationError.message : null,
+      },
+      render: ({ disabled }) => (
+        <BankAccountsEditor
+          rows={bankAccounts}
+          disabled={disabled}
+          invalidRowKey={bankAccountValidationError?.rowKey ?? null}
+          invalidField={bankAccountValidationError?.field ?? null}
+          onAddRow={handleAddBankAccount}
+          onChangeRow={handleChangeBankAccount}
+          onRemoveRow={handleRemoveBankAccount}
+          onSetDefault={handleSetDefaultBankAccount}
+        />
+      ),
+    }),
+    [
+      bankAccounts,
+      bankAccountValidationError,
+      handleAddBankAccount,
+      handleChangeBankAccount,
+      handleRemoveBankAccount,
+      handleSetDefaultBankAccount,
+    ],
+  );
   // Build Form Fields
-  const supplierFormFields = useMemo(
-    () =>
-      buildSupplierFormFields(
+  const supplierFormFields = useMemo<ERPDynamicModalField[]>(
+    () => [
+      ...buildSupplierFormFields(
         supplierGroupOptions,
         companyOptions,
         branchOptions,
@@ -746,7 +796,16 @@ export default function SuppliersMasterPage() {
         handleStateEditShortcut,
         handleSupplierGstinValueChange,
       ),
+      {
+        name: "bankAccountsHeading",
+        label: "Bank Accounts",
+        type: "heading",
+        gridColumnStart: 1,
+      },
+      bankAccountsField,
+    ],
     [
+      bankAccountsField,
       branchOptions,
       companyOptions,
       lazyDropdownHandlers,
@@ -759,11 +818,11 @@ export default function SuppliersMasterPage() {
       supplierGroupOptions,
     ],
   );
-
   return (
     <>
       <CrudMasterPage
         title="Supplier"
+        iconName="supplier_master"
         auditHistory={{ screenName: "Supplier Master" }}
         entityLabel="supplier"
         entityLabelPlural="suppliers"
@@ -822,6 +881,12 @@ export default function SuppliersMasterPage() {
           // from a previously edited supplier lingers (they reload on open).
           if (open && variantKey === "master-create") {
             resetDropdownSelections();
+            setBankAccounts([]);
+          }
+          // Drop the edited bank rows on close so the next create starts empty (edit/view
+          // re-seed them via mapFormValues before the modal opens).
+          if (!open) {
+            setBankAccounts([]);
           }
         }}
         mapFormValues={({ source, defaults }) => {
@@ -836,15 +901,21 @@ export default function SuppliersMasterPage() {
           // Seed the lazy dropdowns with the saved selection so each trigger shows the
           // resolved name on edit/view before the field is opened (and lazily loaded).
           seedDropdownSelections(rowSource, values);
+          // Seed the bank-accounts grid from the loaded record's nested ledgerBankAccount.
+          setBankAccounts(extractLedgerBankAccountRows(rowSource));
           return values;
         }}
         buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
-          return buildSupplierRequestPayload(
+          const payload = buildSupplierRequestPayload(
             values as unknown as SupplierFormValues,
             stateCodeByName,
             shouldUpdate,
             typeof editingItemId === "string" ? editingItemId : null,
           );
+          // Attach the nested bank accounts; the server persists them on the supplier's
+          // linked ledger (insert new rows, update rows carrying an lbaId).
+          payload.ledgerBankAccount = buildLedgerBankAccountPayload(bankAccounts);
+          return payload;
         }}
       />
       <InlineRelatedMasterModal

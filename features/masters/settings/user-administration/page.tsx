@@ -457,6 +457,7 @@ export default function UserAdministrationPage() {
   return (
     <CrudMasterPage
       title="User Administration"
+      iconName="user_admin"
       auditHistory={{ screenName: "User Administration" }}
       entityLabel="user"
       entityLabelPlural="users"

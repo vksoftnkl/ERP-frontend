@@ -561,6 +561,5 @@ export function toSupplierFormValues(
         ]),
       "true",
     ),
-    supStateId: toDisplayValue(rowSource.supStateId),
   };
 }

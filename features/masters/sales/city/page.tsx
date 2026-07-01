@@ -606,6 +606,7 @@ export default function CityMasterPage() {
     <>
     <CrudMasterPage
       title="City"
+      iconName="city_master"
       auditHistory={{ screenName: "City Master" }}
       entityLabel="city"
       entityLabelPlural="cities"

@@ -256,7 +256,6 @@ export const SUPPLIER_INITIAL_FORM_VALUES = {
   supBilledDate: "",
   supSortOrder: "0",
   supIsActive: "true",
-  supStateId: "",
   supCreatedBy: "",
   supModifiedBy: "",
 } as const;

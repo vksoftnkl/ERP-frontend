@@ -783,6 +783,7 @@ export default function ItemCategoryMasterPage() {
     <>
     <CrudMasterPage
       title="Item Category"
+      iconName="item_category_master_entry"
       auditHistory={{ screenName: "Category Master" }}
       entityLabel="item category"
       entityLabelPlural="item categories"
