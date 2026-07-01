@@ -2306,7 +2306,9 @@ function buildUiTableColumnLayoutRequest(
     uiTblClmName:
       (configuredColumn
         ? toDisplayValue(getFieldValue(configuredColumn, "uiTblClmName"))
-        : "") || column.label,
+        : "") ||
+      column.label ||
+      column.key,
     uiTblClmTableId: tableId,
     uiTblClmColumnWidth: width,
     uiTblClmColumnVisibility: column.visible,
@@ -3752,14 +3754,23 @@ export default function ItemMasterPageContent({
             configuredColumns,
             columnNameToKey,
           );
-          await saveUiTableColumnLayout({
-            body: {
-              uiTblId: tableId,
-              uiTblColumns: columns.map((column) =>
-                buildUiTableColumnLayoutRequest(tableId, column, configByKey.get(column.key))
-              ),
-            },
-          });
+          try {
+            await saveUiTableColumnLayout({
+              body: {
+                uiTblId: tableId,
+                uiTblColumns: columns.map((column) =>
+                  buildUiTableColumnLayoutRequest(tableId, column, configByKey.get(column.key))
+                ),
+              },
+            });
+          } catch (error) {
+            // Persisting the column layout is a background nicety — the reorder/
+            // resize is already applied locally. Swallow failures here so a
+            // rejected save (validation, or the auth-refresh 401->retry race)
+            // can't bubble up as an unhandled promise rejection and crash the
+            // page. useApi already surfaces an error toast for the failure.
+            console.warn("Failed to persist UI table column layout", error);
+          }
         })();
       },
       [saveUiTableColumnLayout],
@@ -4024,73 +4035,11 @@ export default function ItemMasterPageContent({
         itemTaxRecordsById,
       );
       const baseUnitId = resolveLinkedBaseUnitId(normalizedValues);
-      const itemPriceRows = buildManagedItemPriceRows(normalizedValues);
-      const hiddenUnitConversionRowsByUnitId = new Map(
-        buildManagedItemUnitConversionRows(normalizedValues)
-          .map((row) => [(row.iuc_unit_id ?? "").trim(), row] as const)
-          .filter(([unitId]) => Boolean(unitId)),
-      );
 
-      if (itemPriceRows.length > 0) {
-        const seenUnitIds = new Set<string>();
-        return itemPriceRows.flatMap((priceRow, index) => {
-          const unitId = (priceRow.ipm_unit_id ?? "").trim() || baseUnitId;
-          if (!unitId || seenUnitIds.has(unitId)) {
-            return [];
-          }
-          seenUnitIds.add(unitId);
-          const matchingUnitConversionRow = hiddenUnitConversionRowsByUnitId.get(unitId);
-          const nextToBaseFactor = toOptionalNonNegativeNumber(
-            resolveItemPriceToBaseFactorValue(priceRow) ||
-              resolveItemUnitConversionToBaseFactorValue(
-                matchingUnitConversionRow ?? {},
-              ) ||
-              (unitId === baseUnitId ? "1" : ""),
-          );
-          const nextUnitFactor = toOptionalNonNegativeNumber(
-            resolveItemPriceUnitFactorValue(priceRow) ||
-              resolveItemUnitConversionUnitFactorValue(
-                matchingUnitConversionRow ?? {},
-              ) ||
-              (unitId === baseUnitId ? "1" : ""),
-          );
-          const payload: Record<string, unknown> = {
-            iuc_company_id: (normalizedValues.item_company_id ?? "").trim(),
-            iuc_item_id: itemId,
-            iuc_unit_id: unitId,
-            iuc_base_unit_id: baseUnitId,
-            iuc_unit_slno:
-              toOptionalNonNegativeInteger(
-                priceRow.ipm_unit_slno ??
-                  matchingUnitConversionRow?.iuc_unit_slno ??
-                  String(index + 1),
-              ) ?? index + 1,
-            iuc_to_base_factor: nextToBaseFactor,
-            iuc_unit_factor: nextUnitFactor,
-            iuc_is_default_unit: (priceRow.ipm_is_default_unit ?? "false") === "true",
-            iuc_is_base_unit: (priceRow.ipm_is_base_unit ?? "false") === "true",
-            iuc_is_big_unit: (priceRow.ipm_is_big_unit ?? "false") === "true",
-            iuc_uom_weight: toOptionalNonNegativeNumber(
-              (matchingUnitConversionRow?.iuc_uom_weight ?? "").trim() || "0",
-            ),
-            iuc_uom_remarks: toNullableString(
-              matchingUnitConversionRow?.iuc_uom_remarks ?? "",
-            ),
-            iuc_is_active:
-              (matchingUnitConversionRow?.iuc_is_active ?? "true") === "true",
-          };
-
-          const itemUnitConversionId = toTrimmedOrUndefined(
-            matchingUnitConversionRow?.iuc_id,
-          );
-          if (itemUnitConversionId) {
-            payload.iuc_id = itemUnitConversionId;
-          }
-
-          return [payload];
-        });
-      }
-
+      // The Unit Conversion Table is the source of truth for its own payload.
+      // Price rows are kept in sync with these rows via the value-change
+      // handlers, so we always serialize the unit conversion rows directly
+      // instead of deriving them from the price list.
       return buildManagedItemUnitConversionRows(normalizedValues).map((row) => {
         const unitId = (row.iuc_unit_id ?? "").trim() || baseUnitId;
         const payload: Record<string, unknown> = {

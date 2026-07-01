@@ -23,17 +23,14 @@ const suggestionCache = new Map<
     payload: SuggestionPayload;
   }
 >();
-
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
 function mergeSuggestions(
   primarySuggestions: string[],
   fallbackSuggestions: string[],
 ): string[] {
   const mergedSuggestions: string[] = [];
   const seenSuggestions = new Set<string>();
-
   for (const suggestion of [...primarySuggestions, ...fallbackSuggestions]) {
     const normalizedSuggestion = suggestion.trim();
     if (!normalizedSuggestion || seenSuggestions.has(normalizedSuggestion)) {
@@ -45,36 +42,29 @@ function mergeSuggestions(
       break;
     }
   }
-
   return mergedSuggestions;
 }
-
 function readCachedPayload(word: string): SuggestionPayload | null {
   const cachedEntry = suggestionCache.get(word);
   if (!cachedEntry) {
     return null;
   }
-
   if (cachedEntry.expiresAt <= Date.now()) {
     suggestionCache.delete(word);
     return null;
   }
-
   return cachedEntry.payload;
 }
-
 function cachePayload(word: string, payload: SuggestionPayload) {
   suggestionCache.set(word, {
     expiresAt: Date.now() + CACHE_TTL_MS,
     payload,
   });
 }
-
 export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams.get("q")?.trim() ?? "";
   const normalizedWord = query.toLowerCase();
   const configured = isGoogleTranslateConfigured();
-
   if (!WORD_PATTERN.test(query)) {
     return NextResponse.json<SuggestionPayload>({
       configured,
@@ -82,18 +72,15 @@ export async function GET(request: NextRequest) {
       suggestions: [],
     });
   }
-
   const cachedPayload = readCachedPayload(normalizedWord);
   if (cachedPayload) {
     return NextResponse.json(cachedPayload);
   }
-
   const localSuggestions = suggestTamilWords(query, {
     limit: MAX_SUGGESTION_COUNT,
   });
   let googleSuggestions: string[] = [];
   let provider: TamilSuggestionProvider = "local";
-
   if (configured) {
     try {
       googleSuggestions = await suggestTamilWordsWithGoogle(query);
@@ -104,14 +91,11 @@ export async function GET(request: NextRequest) {
       console.error("Google Tamil suggestion failed:", error);
     }
   }
-
   const payload: SuggestionPayload = {
     configured,
     provider,
     suggestions: mergeSuggestions(googleSuggestions, localSuggestions),
   };
-
   cachePayload(normalizedWord, payload);
-
   return NextResponse.json(payload);
 }
