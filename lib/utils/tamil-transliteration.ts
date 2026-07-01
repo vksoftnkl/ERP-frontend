@@ -1,35 +1,28 @@
 type RomanTokenType = "vowel" | "consonant";
-
 type RomanToken = {
   key: string;
   type: RomanTokenType;
 };
-
 type TamilVowelOption = {
   dependent: string;
   independent: string;
   weight: number;
 };
-
 type TamilConsonantOption = {
   letter: string;
   weight: number;
 };
-
 type CandidateState = {
   score: number;
   text: string;
 };
-
 type SuggestTamilWordsOptions = {
   limit?: number;
 };
-
 const PULLI = "்";
 const DEFAULT_LIMIT = 4;
 const MAX_BEAM_WIDTH = 14;
 const MAX_TOKEN_LENGTH = 32;
-
 const VOWEL_OPTIONS: Record<string, TamilVowelOption[]> = {
   a: [{ independent: "அ", dependent: "", weight: 0 }],
   aa: [{ independent: "ஆ", dependent: "ா", weight: 0 }],
@@ -58,7 +51,6 @@ const VOWEL_OPTIONS: Record<string, TamilVowelOption[]> = {
   ae: [{ independent: "ஏ", dependent: "ே", weight: 0 }],
   au: [{ independent: "ஔ", dependent: "ௌ", weight: 0 }],
 };
-
 const CONSONANT_OPTIONS: Record<string, TamilConsonantOption[]> = {
   k: [{ letter: "க", weight: 0 }],
   g: [{ letter: "க", weight: 0.1 }],
@@ -137,7 +129,6 @@ const CONSONANT_OPTIONS: Record<string, TamilConsonantOption[]> = {
   kh: [{ letter: "க", weight: 0.2 }],
   gh: [{ letter: "க", weight: 0.25 }],
 };
-
 const MULTI_CHAR_TOKENS = [
   "ng",
   "nj",
@@ -162,7 +153,6 @@ const MULTI_CHAR_TOKENS = [
   "ae",
   "oe",
 ];
-
 const COMMON_ROMANIZED_OVERRIDES: Record<string, string[]> = {
   akka: ["அக்கா"],
   amma: ["அம்மா"],
@@ -174,19 +164,15 @@ const COMMON_ROMANIZED_OVERRIDES: Record<string, string[]> = {
   thamizh: ["தமிழ்"],
   vanakkam: ["வணக்கம்"],
 };
-
 function trimAndNormalizeWord(value: string): string {
   return value.trim().toLowerCase();
 }
-
 function isRomanWord(value: string): boolean {
   return /^[a-z]{1,32}$/.test(value);
 }
-
 function tokenizeRomanWord(value: string): RomanToken[] {
   const tokens: RomanToken[] = [];
   let currentIndex = 0;
-
   while (currentIndex < value.length) {
     const remaining = value.slice(currentIndex);
     const matchedMultiCharToken = MULTI_CHAR_TOKENS.find((token) =>
@@ -196,7 +182,6 @@ function tokenizeRomanWord(value: string): RomanToken[] {
     if (!tokenKey) {
       return [];
     }
-
     if (VOWEL_OPTIONS[tokenKey]) {
       tokens.push({
         key: tokenKey,
@@ -205,7 +190,6 @@ function tokenizeRomanWord(value: string): RomanToken[] {
       currentIndex += tokenKey.length;
       continue;
     }
-
     if (CONSONANT_OPTIONS[tokenKey]) {
       tokens.push({
         key: tokenKey,
@@ -214,13 +198,10 @@ function tokenizeRomanWord(value: string): RomanToken[] {
       currentIndex += tokenKey.length;
       continue;
     }
-
     return [];
   }
-
   return tokens;
 }
-
 function rankConsonantOptions(
   token: RomanToken,
   tokenIndex: number,
@@ -230,7 +211,6 @@ function rankConsonantOptions(
   const options = CONSONANT_OPTIONS[token.key] ?? [];
   const previousToken = tokenIndex > 0 ? tokens[tokenIndex - 1] : null;
   const nextToken = tokenIndex < tokens.length - 1 ? tokens[tokenIndex + 1] : null;
-
   return [...options]
     .map((option, optionIndex) => {
       let weight = option.weight + optionIndex * 0.08;

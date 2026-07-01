@@ -1,23 +1,17 @@
 "use client";
-
 const LEGACY_CLIENT_CACHE_NAME = "erp_client_app_cache_v1";
 const LOCAL_STORAGE_PREFIX = "erp_client_cache:";
 const SESSION_STORAGE_PREFIX = "erp_client_session:";
-
 const memoryCache = new Map<string, string>();
-
 function canUseCookies(): boolean {
   return typeof document !== "undefined";
 }
-
 function canUseSessionStorage(): boolean {
   return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
 }
-
 function encodeCookiePart(value: string): string {
   return encodeURIComponent(value);
 }
-
 function decodeCookiePart(value: string): string | null {
   try {
     return decodeURIComponent(value);
@@ -25,7 +19,6 @@ function decodeCookiePart(value: string): string | null {
     return null;
   }
 }
-
 function getExpiredCookieAttributes(): string {
   const attributes = [`Path=/`, `SameSite=Lax`, `Max-Age=0`];
   if (typeof window !== "undefined" && window.location.protocol === "https:") {
@@ -33,7 +26,6 @@ function getExpiredCookieAttributes(): string {
   }
   return attributes.join("; ");
 }
-
 function readSessionStorageValue(key: string): string | null {
   if (!canUseSessionStorage()) {
     return null;
@@ -45,7 +37,6 @@ function readSessionStorageValue(key: string): string | null {
     return null;
   }
 }
-
 function expireCookieValue(key: string): void {
   if (!canUseCookies()) {
     return;
@@ -55,7 +46,6 @@ function expireCookieValue(key: string): void {
     getExpiredCookieAttributes(),
   ].join("; ");
 }
-
 function setSessionStorageValue(key: string, value: string): void {
   if (!canUseSessionStorage()) {
     return;
@@ -66,7 +56,6 @@ function setSessionStorageValue(key: string, value: string): void {
     // Memory remains available when sessionStorage is blocked or full.
   }
 }
-
 function removeSessionStorageValue(key: string): void {
   if (!canUseSessionStorage()) {
     return;
@@ -77,7 +66,6 @@ function removeSessionStorageValue(key: string): void {
     // Nothing else to do when sessionStorage removal is blocked.
   }
 }
-
 function removeLegacyLocalStorageValue(key: string): void {
   if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
     return;
@@ -88,7 +76,6 @@ function removeLegacyLocalStorageValue(key: string): void {
     // Nothing else to do when localStorage cleanup is blocked.
   }
 }
-
 function clearLegacyClientCache(): void {
   if (typeof window !== "undefined" && typeof window.localStorage !== "undefined") {
     try {
@@ -112,7 +99,6 @@ function clearLegacyClientCache(): void {
     });
   }
 }
-
 export function hydrateClientCache(): Promise<void> {
   if (typeof window !== "undefined" && typeof window.caches !== "undefined") {
     void window.caches.delete(LEGACY_CLIENT_CACHE_NAME);
@@ -120,7 +106,6 @@ export function hydrateClientCache(): Promise<void> {
   clearLegacyClientCache();
   return Promise.resolve();
 }
-
 export function getClientCacheItem(key: string): string | null {
   const storageValue = readSessionStorageValue(key);
   if (storageValue !== null) {
@@ -129,14 +114,12 @@ export function getClientCacheItem(key: string): string | null {
   }
   return memoryCache.get(key) ?? null;
 }
-
 export async function setClientCacheItem(key: string, value: string): Promise<void> {
   memoryCache.set(key, value);
   setSessionStorageValue(key, value);
   removeLegacyLocalStorageValue(key);
   expireCookieValue(key);
 }
-
 export async function removeClientCacheItem(key: string): Promise<void> {
   memoryCache.delete(key);
   removeSessionStorageValue(key);

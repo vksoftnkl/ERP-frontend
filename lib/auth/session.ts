@@ -155,7 +155,6 @@ export function extractAuthToken(payload: unknown): string | null {
     nestedResult?.id_token,
   ]);
 }
-
 export function extractRefreshToken(payload: unknown): string | null {
   const root = asRecord(payload);
   if (!root) {
@@ -300,7 +299,6 @@ export function setAuthUserId(userId: string | null): void {
     }
   } catch { /* ignore */ }
 }
-
 export function getAuthUserId(): string | null {
   if (memoryAuthUserId) return memoryAuthUserId;
   const fromState = normalizeStoredValue(readPersistedAuthState()?.userId as StorageValue);

@@ -1,5 +1,4 @@
 import { createSign } from "node:crypto";
-
 type GoogleTranslateCredentials = {
   clientEmail: string;
   location: string;
@@ -9,43 +8,34 @@ type GoogleTranslateCredentials = {
   sourceLanguageCode: string;
   targetLanguageCode: string;
 };
-
 type GoogleAccessTokenCache = {
   accessToken: string;
   expiresAt: number;
 };
-
 const GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_TRANSLATE_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 const GOOGLE_TRANSLATE_API_BASE = "https://translation.googleapis.com/v3";
 const DEFAULT_TIMEOUT_MS = 4000;
-
 let accessTokenCache: GoogleAccessTokenCache | null = null;
-
 function getEnvValue(name: string): string {
   return process.env[name]?.trim() ?? "";
 }
-
 function normalizePrivateKey(value: string): string {
   return value.replace(/\\n/g, "\n");
 }
-
 function toPositiveInteger(value: string, fallback: number): number {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
-
 function getCredentials(): GoogleTranslateCredentials | null {
   const projectId = getEnvValue("GOOGLE_TRANSLATE_PROJECT_ID");
   const clientEmail = getEnvValue("GOOGLE_TRANSLATE_CLIENT_EMAIL");
   const privateKey = normalizePrivateKey(
     process.env.GOOGLE_TRANSLATE_PRIVATE_KEY ?? "",
   );
-
   if (!projectId || !clientEmail || !privateKey) {
     return null;
   }
-
   return {
     clientEmail,
     location: getEnvValue("GOOGLE_TRANSLATE_LOCATION") || "global",
@@ -61,11 +51,9 @@ function getCredentials(): GoogleTranslateCredentials | null {
       getEnvValue("GOOGLE_TRANSLATE_TARGET_LANGUAGE") || "ta",
   };
 }
-
 export function isGoogleTranslateConfigured(): boolean {
   return getCredentials() !== null;
 }
-
 function base64UrlEncode(value: string | Buffer): string {
   return Buffer.from(value)
     .toString("base64")
@@ -73,7 +61,6 @@ function base64UrlEncode(value: string | Buffer): string {
     .replace(/\//g, "_")
     .replace(/=+$/g, "");
 }
-
 function buildServiceAccountJwt(
   credentials: GoogleTranslateCredentials,
 ): string {
@@ -94,14 +81,11 @@ function buildServiceAccountJwt(
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const unsignedToken = `${encodedHeader}.${encodedPayload}`;
   const signer = createSign("RSA-SHA256");
-
   signer.update(unsignedToken);
   signer.end();
-
   const signature = signer.sign(credentials.privateKey);
   return `${unsignedToken}.${base64UrlEncode(signature)}`;
 }
-
 async function fetchWithTimeout(
   url: string,
   init: RequestInit,
@@ -109,7 +93,6 @@ async function fetchWithTimeout(
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
-
   try {
     return await fetch(url, {
       ...init,
@@ -120,7 +103,6 @@ async function fetchWithTimeout(
     globalThis.clearTimeout(timeoutId);
   }
 }
-
 async function parseJsonBody(response: Response): Promise<unknown> {
   const responseText = await response.text();
   if (!responseText.trim()) {
@@ -132,38 +114,30 @@ async function parseJsonBody(response: Response): Promise<unknown> {
     return responseText;
   }
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
-
 function extractErrorMessage(payload: unknown, fallback: string): string {
   if (typeof payload === "string" && payload.trim()) {
     return payload.trim();
   }
-
   if (!isRecord(payload)) {
     return fallback;
   }
-
   if (typeof payload.error === "string" && payload.error.trim()) {
     return payload.error.trim();
   }
-
   if (isRecord(payload.error)) {
     const nestedMessage = payload.error.message;
     if (typeof nestedMessage === "string" && nestedMessage.trim()) {
       return nestedMessage.trim();
     }
   }
-
   if (typeof payload.message === "string" && payload.message.trim()) {
     return payload.message.trim();
   }
-
   return fallback;
 }
-
 async function getAccessToken(
   credentials: GoogleTranslateCredentials,
 ): Promise<string> {
