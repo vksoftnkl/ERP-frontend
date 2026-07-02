@@ -198,7 +198,8 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       {
         label:"Templates",
         children:[
-          {label:"Customer Template",href:"/master/customer-template"}
+          {label:"Customer Template",href:"/master/customer-template"},
+          {label:"Item Template",href:"/master/item-template"}
         ]
       },
       {label:"User Administration",href:"/master/user-administration"},
