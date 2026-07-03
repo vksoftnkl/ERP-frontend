@@ -660,7 +660,7 @@ export default function ItemBrandMasterPage() {
       nameFieldLabel="Item Brand Name"
       nameFieldPlaceholder="Enter item brand name"
       formTitle="Item Brand Form"
-      formDescription="Create and update item brands."
+      formDescription="Manage item brands and thier display order."
       customFields={formFields}
       createInitialValues={INITIAL_FORM_VALUES}
       createModalTitle="Brand Entry"

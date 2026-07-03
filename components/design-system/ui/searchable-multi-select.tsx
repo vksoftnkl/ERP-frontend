@@ -11,6 +11,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { cx } from "@/components/design-system/cx";
+import { focusNextInteractiveControl } from "@/components/design-system/ui/focus-next-control";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 export type SearchableMultiSelectProps = {
@@ -144,9 +145,18 @@ export function SearchableMultiSelect({
     (event: KeyboardEvent<HTMLButtonElement>) => {
       if (disabled) return;
       switch (event.key) {
+        case "Enter":
+          event.preventDefault();
+          if (isOpen) break;
+          if (selectedValueSet.size > 0) {
+            // Selection already confirmed: move on instead of re-opening the list.
+            focusNextInteractiveControl(event.currentTarget, wrapperRef.current);
+          } else {
+            openDropdown();
+          }
+          break;
         case "ArrowDown":
         case "ArrowUp":
-        case "Enter":
         case " ":
           event.preventDefault();
           if (!isOpen) {
@@ -161,7 +171,7 @@ export function SearchableMultiSelect({
           break;
       }
     },
-    [closeDropdown, disabled, isOpen, openDropdown],
+    [closeDropdown, disabled, isOpen, openDropdown, selectedValueSet],
   );
   const handleSearchKeyDown = useCallback(
     (event: KeyboardEvent<HTMLInputElement>) => {

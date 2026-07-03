@@ -857,6 +857,41 @@ export default function ItemLinkedRecordsEditor({
   ) => {
     handleCellChange(rowIndex, columnKey, option.value);
     closeSearchableSelect(cellKey);
+    window.requestAnimationFrame(() => {
+      cellRefs.current.get(cellKey)?.focus();
+    });
+  };
+  const focusNextCellControl = (rowIndex: number, columnKey: string) => {
+    const columnKeys = visibleColumns.map((column) => column.key);
+    const currentColumnIndex = columnKeys.indexOf(columnKey);
+    if (currentColumnIndex < 0) {
+      return;
+    }
+    for (
+      let targetRowIndex = rowIndex;
+      targetRowIndex < rows.length;
+      targetRowIndex += 1
+    ) {
+      const startColumnIndex =
+        targetRowIndex === rowIndex ? currentColumnIndex + 1 : 0;
+      for (
+        let targetColumnIndex = startColumnIndex;
+        targetColumnIndex < columnKeys.length;
+        targetColumnIndex += 1
+      ) {
+        const element = cellRefs.current.get(
+          getCellKey(targetRowIndex, columnKeys[targetColumnIndex]),
+        );
+        if (!element || element.disabled) {
+          continue;
+        }
+        element.focus();
+        if (element instanceof HTMLInputElement) {
+          element.select();
+        }
+        return;
+      }
+    }
   };
   const handleAutoAppendRow = (
     rowIndex: number,
@@ -954,6 +989,10 @@ export default function ItemLinkedRecordsEditor({
     if (event.key === "Enter") {
       event.preventDefault();
       if (!isSearchOpen) {
+        if (cellValue) {
+          focusNextCellControl(rowIndex, column.key);
+          return;
+        }
         openSearchableSelect(cellKey, filteredOptions, cellValue);
         return;
       }

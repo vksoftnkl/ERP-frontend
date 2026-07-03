@@ -2297,9 +2297,9 @@ export default function AccountLedgerMasterPage() {
   const effectiveModalError = modalError ?? gstLookupError ?? saveError ?? detailsError;
   const modalTitle =
     modalMode === "create"
-      ? `New ${effectiveTitle}`
+      ? "Ledger Entry"
       : modalMode === "update"
-        ? `Edit ${effectiveTitle}`
+        ? "Edit Ledger Entry"
         : `${effectiveTitle} Details`;
   const modalDescription =
     modalMode === "create"

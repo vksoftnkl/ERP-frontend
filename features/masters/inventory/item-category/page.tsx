@@ -815,7 +815,7 @@ export default function ItemCategoryMasterPage() {
       nameFieldLabel="Item Category Name"
       nameFieldPlaceholder="Dairy"
       formTitle="Item Category Form"
-      formDescription="Create and update item categories."
+      formDescription="Manage item categories and their hierarchy"
       viewModalTitle="Category Details"
       createModalTitle="Category Entry"
       editModalTitle="Edit Category Entry"

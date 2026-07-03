@@ -12,6 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "@/components/design-system/cx";
+import { focusNextInteractiveControl } from "@/components/design-system/ui/focus-next-control";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 export type SearchableSelectProps = {
@@ -150,9 +151,18 @@ export function SearchableSelect({
   const handleTriggerKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
     switch (event.key) {
+      case "Enter":
+        event.preventDefault();
+        if (isOpen) break;
+        if (selectedOption) {
+          // Value already confirmed: move on instead of re-opening the list.
+          focusNextInteractiveControl(event.currentTarget, wrapperRef.current);
+        } else {
+          openDropdown();
+        }
+        break;
       case "ArrowDown":
       case "ArrowUp":
-      case "Enter":
       case " ":
         event.preventDefault();
         if (!isOpen) {
@@ -166,7 +176,7 @@ export function SearchableSelect({
         }
         break;
     }
-  }, [closeDropdown, disabled, isOpen, openDropdown]);
+  }, [closeDropdown, disabled, isOpen, openDropdown, selectedOption]);
   const handleSearchKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
     if (!isOpen) return;
     switch (event.key) {

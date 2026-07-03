@@ -667,7 +667,7 @@ export default function ItemGroupMasterPage() {
       nameFieldLabel="Item Group Name"
       nameFieldPlaceholder="Enter item group name"
       formTitle="Item Group Form"
-      formDescription="Create and update item groups."
+      formDescription="Manage all item groups in your organization"
       viewModalTitle="Group Details"
       createModalTitle="Group Entry"
       editModalTitle="Edit Group Entry"

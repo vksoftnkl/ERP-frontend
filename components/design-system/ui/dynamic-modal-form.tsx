@@ -359,6 +359,16 @@ export function ERPDynamicModalForm({
       })),
     [visibleSections],
   );
+  const sectionErrorCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const { key, section } of tabSections) {
+      counts[key] = section.fields.reduce(
+        (count, field) => (fieldErrors[field.name] ? count + 1 : count),
+        0,
+      );
+    }
+    return counts;
+  }, [fieldErrors, tabSections]);
   const activeSectionKey =
     activeVariant
       ? activeSectionByVariant[activeVariant.key] ?? tabSections[0]?.key
@@ -780,6 +790,25 @@ export function ERPDynamicModalForm({
     },
     [fileData, revalidateFieldNames, runFieldValueChangeHandler],
   );
+  const focusNextFieldControl = useCallback((originControl: HTMLElement) => {
+    const formElement = formRef.current;
+    if (!formElement) {
+      return;
+    }
+    const container = originControl.closest<HTMLElement>(FIELD_CONTAINER_SELECTOR);
+    const fieldName = container?.dataset.erpModalFieldName;
+    if (!fieldName) {
+      return;
+    }
+    const targets = getFocusableFieldTargets(formElement);
+    const currentIndex = targets.findIndex(
+      (target) => target.fieldName === fieldName,
+    );
+    const nextTarget = currentIndex >= 0 ? targets[currentIndex + 1] : undefined;
+    if (nextTarget) {
+      focusFieldControl(nextTarget.control);
+    }
+  }, []);
   const handleSearchableSelectKeyDown = useCallback(
     (
       field: ERPDynamicModalField,
@@ -883,6 +912,13 @@ export function ERPDynamicModalForm({
       if (event.key === "Enter") {
         if (!isSearchOpen) {
           event.preventDefault();
+          const hasConfirmedValue = isMultipleSelect
+            ? parseMultiSelectValue(fieldValue).length > 0
+            : fieldValue.trim() !== "";
+          if (hasConfirmedValue) {
+            focusNextFieldControl(event.currentTarget);
+            return;
+          }
           setOpenSearchField(fieldName);
           return;
         }
@@ -924,6 +960,7 @@ export function ERPDynamicModalForm({
       }
     },
     [
+      focusNextFieldControl,
       formData,
       handleSearchableSelectChoose,
       openSearchField,
@@ -1937,6 +1974,14 @@ export function ERPDynamicModalForm({
                       }
                     >
                       {section.label}
+                      {sectionErrorCounts[section.key] ? (
+                        <span
+                          className={styles.sectionTabBadge}
+                          aria-label={`${sectionErrorCounts[section.key]} field errors`}
+                        >
+                          {sectionErrorCounts[section.key]}
+                        </span>
+                      ) : null}
                     </button>
                   ))}
                 </div>
