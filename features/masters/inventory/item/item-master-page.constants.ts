@@ -14,8 +14,11 @@ export const ITEM_PRICE_API_ENDPOINTS = {
   create: "/item-prices/create",
   delete: "/item-prices/delete",
 } as const;
-// Item unit conversion CRUD is handled by the item price master endpoints.
-// The request payload shape differs, but the URLs are the same.
+export const ITEM_UNIT_CONVERSION_API_ENDPOINTS = {
+  list: "/item-unit-conversions/get",
+  create: "/item-unit-conversions/create",
+  delete: "/item-unit-conversions/delete",
+} as const;
 export const ITEM_REORDER_API_ENDPOINTS = {
   list: "/item-reorders/get",
   create: "/item-reorders/create",
@@ -42,11 +45,6 @@ export const UI_TABLE_COLUMNS_ENDPOINT = "/ui-table-masters/get";
 export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-masters/create";
 export const WIDGET_MASTER_LIST_ENDPOINT = "/widget-masters/get";
 export const ITEM_TAX_MASTER_LIST_ENDPOINT = "/configured-grid-sql/run?grid_id=5";
-export const ITEM_PRICE_QUERY_LIMIT = "100";
-export const ITEM_UNIT_CONVERSION_QUERY_LIMIT = "100";
-export const ITEM_REORDER_QUERY_LIMIT = "100";
-export const ITEM_EAN_CODE_QUERY_LIMIT = "100";
-
 export const ITEM_WIDGET_QUERY_LIMIT = "100";
 export const ITEM_GROUP_SEARCH_DEBOUNCE_MS = 250;
 export const ITEM_REORDER_TABLE_UI_ID = "2";
@@ -557,7 +555,6 @@ export type SaveUiTableColumnLayoutRequest = {
   uiTblId: string;
   uiTblColumns: UiTableColumnLayoutItem[];
 };
-
 export function normalizeItemBatchConfigValue(value: unknown): string {
   const normalized = toDisplayValue(value).trim().toUpperCase();
   if (!normalized) {

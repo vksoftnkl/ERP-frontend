@@ -5,19 +5,14 @@ import { useBusinessContext } from "@/components/layout/business-context";
 import { useApi } from "@/hooks/useApi";
 import { SearchableSelect, type ERPDynamicSelectOption } from "@/components/design-system/ui";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
-
 const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-
 const NONE_OPTION: ERPDynamicSelectOption = { value: "", label: "--None--" };
-
 const STOCK_TYPE_OPTIONS: readonly ERPDynamicSelectOption[] = [
   { value: "ALL", label: "Show All Stock" },
   { value: "NEGATIVE", label: "Only Negative Stocks" },
   { value: "ZERO", label: "Only Zero Stocks" },
 ];
-
 type RawRecord = Record<string, unknown>;
-
 function extractRows(payload: unknown, arrayKeys: readonly string[]): RawRecord[] {
   if (Array.isArray(payload)) return payload as RawRecord[];
   if (payload && typeof payload === "object") {
@@ -35,7 +30,6 @@ function extractRows(payload: unknown, arrayKeys: readonly string[]): RawRecord[
   }
   return [];
 }
-
 function pickString(record: RawRecord, keys: readonly string[]): string {
   for (const k of keys) {
     const v = record[k];
@@ -43,9 +37,7 @@ function pickString(record: RawRecord, keys: readonly string[]): string {
   }
   return "";
 }
-
 const DEFAULT_ARRAY_KEYS = ["data", "rows", "items", "results", "list"] as const;
-
 function buildOptions(
   payload: unknown,
   arrayKeys: readonly string[],
@@ -65,34 +57,26 @@ function buildOptions(
   options.sort((a, b) => a.label.localeCompare(b.label));
   return [NONE_OPTION, ...options];
 }
-
 const BRANCH_ARRAY_KEYS = [...DEFAULT_ARRAY_KEYS, "branches", "branch_masters"] as const;
 const BRANCH_ID_KEYS = ["brId", "br_id", "branch_id", "branchId", "id", "_id", "value"] as const;
 const BRANCH_LABEL_KEYS = ["brName", "br_name", "branch_name", "branchName", "name", "label"] as const;
-
 const GROUP_ARRAY_KEYS = [...DEFAULT_ARRAY_KEYS, "groups", "itemGroups"] as const;
 const GROUP_ID_KEYS = ["itg_id", "itgId", "group_id", "groupId", "itemGroupId", "id", "_id", "value"] as const;
 const GROUP_LABEL_KEYS = ["itg_name", "itgName", "group_name", "groupName", "itemGroupName", "name", "label"] as const;
-
 const BRAND_ARRAY_KEYS = [...DEFAULT_ARRAY_KEYS, "brands", "itemBrands"] as const;
 const BRAND_ID_KEYS = ["ibm_id", "ibmId", "brand_id", "brandId", "itemBrandId", "id", "_id", "value"] as const;
 const BRAND_LABEL_KEYS = ["ibm_name", "ibmName", "brand_name", "brandName", "itemBrandName", "name", "label"] as const;
-
 const SECTION_ARRAY_KEYS = [...DEFAULT_ARRAY_KEYS, "sections", "itemSections"] as const;
 const SECTION_ID_KEYS = ["sec_id", "secId", "section_id", "sectionId", "itemSectionId", "id", "_id", "value"] as const;
 const SECTION_LABEL_KEYS = ["sec_name", "secName", "section_name", "sectionName", "itemSectionName", "name", "label"] as const;
-
 const CATEGORY_ARRAY_KEYS = [...DEFAULT_ARRAY_KEYS, "categories", "itemCategories"] as const;
 const CATEGORY_ID_KEYS = ["category_id", "categoryId", "itemCategoryId", "id", "_id", "value"] as const;
 const CATEGORY_LABEL_KEYS = ["category_name", "categoryName", "itemCategoryName", "name", "label"] as const;
-
 const GODOWN_ARRAY_KEYS = [...DEFAULT_ARRAY_KEYS, "godowns", "godown_locations", "godownLocations"] as const;
 const GODOWN_ID_KEYS = ["gdl_id", "gdlId", "godown_id", "godownId", "id", "_id", "value"] as const;
 const GODOWN_LABEL_KEYS = ["gdl_name", "gdlName", "godown_name", "godownName", "name", "label"] as const;
 const GODOWN_BRANCH_KEYS = ["gdl_branch_id", "gdlBranchId", "branch_id", "branchId"] as const;
-
 type GodownRaw = { id: string; label: string; branchId: string };
-
 function extractGodownRaw(payload: unknown): GodownRaw[] {
   const rows = extractRows(payload, GODOWN_ARRAY_KEYS);
   const seen = new Set<string>();
@@ -107,9 +91,7 @@ function extractGodownRaw(payload: unknown): GodownRaw[] {
   }
   return result;
 }
-
 const LOOKUP_TOAST = { toast: { success: false, error: false } } as const;
-
 export type BulkLoadParams = {
   accYear: string;
   companyId: string;
@@ -121,7 +103,6 @@ export type BulkLoadParams = {
   itemCategoryId: string;
   stockType: "ALL" | "NEGATIVE" | "ZERO";
 };
-
 type BulkLoadItemsModalProps = {
   isOpen: boolean;
   accYear: string;
@@ -131,7 +112,6 @@ type BulkLoadItemsModalProps = {
   onClose: () => void;
   onLoadStock: (params: BulkLoadParams) => void;
 };
-
 export function BulkLoadItemsModal({
   isOpen,
   accYear,
@@ -142,7 +122,6 @@ export function BulkLoadItemsModal({
   onLoadStock,
 }: BulkLoadItemsModalProps): ReactNode {
   const { companyOptions } = useBusinessContext();
-
   const [companyId, setCompanyId] = useState(defaultCompanyId);
   const [branchId, setBranchId] = useState(defaultBranchId);
   const [itemGroupId, setItemGroupId] = useState("");
@@ -151,7 +130,6 @@ export function BulkLoadItemsModal({
   const [itemCategoryId, setItemCategoryId] = useState("");
   const [godownId, setGodownId] = useState("");
   const [stockType, setStockType] = useState<"ALL" | "NEGATIVE" | "ZERO">("ALL");
-
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([NONE_OPTION]);
   const [itemGroupOptions, setItemGroupOptions] = useState<ERPDynamicSelectOption[]>([NONE_OPTION]);
   const [itemBrandOptions, setItemBrandOptions] = useState<ERPDynamicSelectOption[]>([NONE_OPTION]);
@@ -159,7 +137,6 @@ export function BulkLoadItemsModal({
   const [itemCategoryOptions, setItemCategoryOptions] = useState<ERPDynamicSelectOption[]>([NONE_OPTION]);
   const [godownRaw, setGodownRaw] = useState<GodownRaw[]>([]);
   const [isMasterLoading, setIsMasterLoading] = useState(false);
-
   // Each lookup needs its own useApi instance — sharing one causes each call to
   // abort the previous one (see abortRef.current?.abort() in useApi run).
   const { getAll: getBranchLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, LOOKUP_TOAST);
@@ -168,7 +145,6 @@ export function BulkLoadItemsModal({
   const { getAll: getSectionLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, LOOKUP_TOAST);
   const { getAll: getCategoryLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, LOOKUP_TOAST);
   const { getAll: getGodownLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, LOOKUP_TOAST);
-
   useEffect(() => {
     if (!isOpen) return;
     setCompanyId(defaultCompanyId);
@@ -180,7 +156,6 @@ export function BulkLoadItemsModal({
     setGodownId("");
     setStockType("ALL");
   }, [isOpen, defaultCompanyId, defaultBranchId]);
-
   useEffect(() => {
     if (!isOpen) return;
     setIsMasterLoading(true);
@@ -207,11 +182,9 @@ export function BulkLoadItemsModal({
       }
     })();
   }, [isOpen, getBranchLookup, getGroupLookup, getBrandLookup, getSectionLookup, getCategoryLookup, getGodownLookup]);
-
   useEffect(() => {
     setGodownId("");
   }, [branchId]);
-
   const godownOptions = useMemo<ERPDynamicSelectOption[]>(() => {
     const filtered = branchId
       ? godownRaw.filter((g) => !g.branchId || g.branchId === branchId)
@@ -221,7 +194,6 @@ export function BulkLoadItemsModal({
       .map((g) => ({ value: g.id, label: g.label }));
     return [NONE_OPTION, ...options];
   }, [godownRaw, branchId]);
-
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -234,15 +206,11 @@ export function BulkLoadItemsModal({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   });
-
   function handleSubmit() {
     onLoadStock({ accYear, companyId, branchId, godownId, itemGroupId, itemBrandId, itemSectionId, itemCategoryId, stockType });
   }
-
   if (!isOpen) return null;
-
   const isDisabled = loading || isMasterLoading;
-
   return (
     <div className={dynamicModalStyles.overlay}>
       <button
@@ -275,7 +243,6 @@ export function BulkLoadItemsModal({
             </button>
           </div>
         </header>
-
         <div className={dynamicModalStyles.scrollArea}>
           <div
             className={dynamicModalStyles.formGrid}
@@ -291,7 +258,6 @@ export function BulkLoadItemsModal({
                 disabled={isDisabled}
               />
             </div>
-
             <div className={dynamicModalStyles.field}>
               <p className={dynamicModalStyles.label}>Branch</p>
               <SearchableSelect
@@ -302,7 +268,6 @@ export function BulkLoadItemsModal({
                 disabled={isDisabled || !companyId}
               />
             </div>
-
             <div className={dynamicModalStyles.field}>
               <p className={dynamicModalStyles.label}>Item Group</p>
               <SearchableSelect
@@ -313,7 +278,6 @@ export function BulkLoadItemsModal({
                 disabled={isDisabled}
               />
             </div>
-
             <div className={dynamicModalStyles.field}>
               <p className={dynamicModalStyles.label}>Item Brand</p>
               <SearchableSelect
@@ -324,7 +288,6 @@ export function BulkLoadItemsModal({
                 disabled={isDisabled}
               />
             </div>
-
             <div className={dynamicModalStyles.field}>
               <p className={dynamicModalStyles.label}>Item Section</p>
               <SearchableSelect
@@ -335,7 +298,6 @@ export function BulkLoadItemsModal({
                 disabled={isDisabled}
               />
             </div>
-
             <div className={dynamicModalStyles.field}>
               <p className={dynamicModalStyles.label}>Item Category</p>
               <SearchableSelect
@@ -346,7 +308,6 @@ export function BulkLoadItemsModal({
                 disabled={isDisabled}
               />
             </div>
-
             <div className={dynamicModalStyles.field}>
               <p className={dynamicModalStyles.label}>Godown</p>
               <SearchableSelect
@@ -357,7 +318,6 @@ export function BulkLoadItemsModal({
                 disabled={isDisabled}
               />
             </div>
-
             <div className={dynamicModalStyles.field}>
               <p className={dynamicModalStyles.label}>Stock Type</p>
               <SearchableSelect
@@ -369,7 +329,6 @@ export function BulkLoadItemsModal({
             </div>
           </div>
         </div>
-
         <footer className={dynamicModalStyles.footer}>
           <div className={dynamicModalStyles.footerActions}>
             <button

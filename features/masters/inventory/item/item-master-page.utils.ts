@@ -27,7 +27,6 @@ export function getFieldValue(
   if (directValue !== undefined) {
     return directValue;
   }
-
   const normalizedFieldNames = new Set(fieldNames.map(normalizeFieldLookupKey));
   for (const [key, value] of Object.entries(source)) {
     if (value === undefined || value === null || value === "") {
@@ -195,7 +194,6 @@ export function extractUiTableColumnConfigRecords(
   tableId: string,
 ): Record<string, unknown>[] {
   const normalizedTableId = tableId.trim();
-
   // New format: data[] contains table objects with nested columns array
   const dataField = (payload as Record<string, unknown> | null)?.data;
   if (Array.isArray(dataField) && dataField.length > 0 && isRecord(dataField[0])) {
@@ -217,7 +215,6 @@ export function extractUiTableColumnConfigRecords(
         : [];
     }
   }
-
   // Old format: flat columns array
   const extractedRows = extractArrayRecords(payload);
   const rows =

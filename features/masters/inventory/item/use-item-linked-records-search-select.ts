@@ -99,37 +99,30 @@ export function useItemLinkedRecordsSearchSelect({
   const [searchActiveOptionIndex, setSearchActiveOptionIndex] = useState<
     Record<string, number>
   >({});
-
   const registerSearchInputRef =
     (cellKey: string) => (element: HTMLInputElement | null) => {
       if (element) {
         searchInputRefs.current.set(cellKey, element);
         return;
       }
-
       searchInputRefs.current.delete(cellKey);
     };
-
   const registerSearchSelectRef =
     (cellKey: string) => (element: HTMLDivElement | null) => {
       if (element) {
         searchSelectRefs.current.set(cellKey, element);
         return;
       }
-
       searchSelectRefs.current.delete(cellKey);
     };
-
   const clearSearchableSelectState = (cellKey: string) => {
     setSearchQueries((current) => removeStateEntry(current, cellKey));
     setSearchActiveOptionIndex((current) => removeStateEntry(current, cellKey));
   };
-
   const closeSearchableSelect = (cellKey: string) => {
     setOpenSearchCell((current) => (current === cellKey ? null : current));
     clearSearchableSelectState(cellKey);
   };
-
   const openSearchableSelect = (
     cellKey: string,
     options: LinkedRecordOption[],
@@ -146,7 +139,6 @@ export function useItemLinkedRecordsSearchSelect({
       ),
     }));
   };
-
   const handleSearchableSelectInput = (cellKey: string, query: string) => {
     setOpenSearchCell(cellKey);
     setSearchQueries((current) => ({
@@ -158,64 +150,51 @@ export function useItemLinkedRecordsSearchSelect({
       [cellKey]: 0,
     }));
   };
-
   const setActiveOptionIndex = (cellKey: string, optionIndex: number) => {
     setSearchActiveOptionIndex((current) => ({
       ...current,
       [cellKey]: optionIndex,
     }));
   };
-
   useEffect(() => {
     if (!openSearchCell) {
       return;
     }
-
     const searchInput = searchInputRefs.current.get(openSearchCell);
     if (!searchInput) {
       return;
     }
-
     searchInput.focus();
     searchInput.select();
   }, [openSearchCell]);
-
   useEffect(() => {
     if (!openSearchCell) {
       setSearchSelectOverlayPosition(null);
       return;
     }
-
     const updateOverlayPosition = () => {
       const trigger = cellRefs.current.get(openSearchCell);
-
       if (!(trigger instanceof HTMLElement)) {
         setSearchSelectOverlayPosition(null);
         return;
       }
-
       setSearchSelectOverlayPosition(resolveOverlayPosition(trigger));
     };
-
     updateOverlayPosition();
     window.addEventListener("resize", updateOverlayPosition);
     window.addEventListener("scroll", updateOverlayPosition, true);
-
     return () => {
       window.removeEventListener("resize", updateOverlayPosition);
       window.removeEventListener("scroll", updateOverlayPosition, true);
     };
   }, [cellRefs, openSearchCell]);
-
   useEffect(() => {
     if (!openSearchCell) {
       return;
     }
-
     const handlePointerDown = (event: MouseEvent) => {
       const container = searchSelectRefs.current.get(openSearchCell);
       const overlay = searchSelectListRef.current;
-
       if (
         event.target instanceof Node &&
         ((container && container.contains(event.target)) ||
@@ -223,16 +202,13 @@ export function useItemLinkedRecordsSearchSelect({
       ) {
         return;
       }
-
       closeSearchableSelect(openSearchCell);
     };
-
     document.addEventListener("mousedown", handlePointerDown);
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
     };
   }, [openSearchCell]);
-
   return {
     closeSearchableSelect,
     handleSearchableSelectInput,

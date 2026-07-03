@@ -491,7 +491,6 @@ export default function ItemLinkedRecordsEditor({
     if (openBodyMenuPosition === null) {
       return;
     }
-
     const handlePointerDown = (event: globalThis.MouseEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest('[data-item-linked-body-menu-root="true"]')) {
@@ -499,17 +498,14 @@ export default function ItemLinkedRecordsEditor({
       }
       setOpenBodyMenuPosition(null);
     };
-
     const handleEscape = (event: KeyboardEvent) => {
       if (event.defaultPrevented) {
         return;
       }
-
       if (event.key === "Escape") {
         setOpenBodyMenuPosition(null);
       }
     };
-
     window.addEventListener("mousedown", handlePointerDown);
     window.addEventListener("keydown", handleEscape);
     return () => {
@@ -521,12 +517,9 @@ export default function ItemLinkedRecordsEditor({
     if (openBodyMenuPosition === null) {
       return;
     }
-
     const closeBodyMenu = () => setOpenBodyMenuPosition(null);
-
     window.addEventListener("resize", closeBodyMenu);
     window.addEventListener("scroll", closeBodyMenu, true);
-
     return () => {
       window.removeEventListener("resize", closeBodyMenu);
       window.removeEventListener("scroll", closeBodyMenu, true);
@@ -611,7 +604,6 @@ export default function ItemLinkedRecordsEditor({
     if (!isAdminSettingsOpen) {
       return;
     }
-
     const handleAdminSettingsKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -622,7 +614,6 @@ export default function ItemLinkedRecordsEditor({
         handleSaveAdminSettings();
       }
     };
-
     window.addEventListener("keydown", handleAdminSettingsKeyDown);
     return () => {
       window.removeEventListener("keydown", handleAdminSettingsKeyDown);
@@ -923,7 +914,6 @@ export default function ItemLinkedRecordsEditor({
     }
     const isSearchOpen = openSearchCell === cellKey;
     const highlightedIndex = searchActiveOptionIndex[cellKey] ?? -1;
-
     if (event.key === "Escape" && isSearchOpen) {
       event.preventDefault();
       closeSearchableSelect(cellKey);

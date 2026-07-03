@@ -58,6 +58,7 @@ import type {
 import {
   API_ENDPOINTS,
   ITEM_PRICE_API_ENDPOINTS,
+  ITEM_UNIT_CONVERSION_API_ENDPOINTS,
   ITEM_REORDER_API_ENDPOINTS,
   ITEM_EAN_CODE_API_ENDPOINTS,
   GRID_TABLE_NAME,
@@ -76,10 +77,6 @@ import {
   UI_TABLE_COLUMNS_CREATE_ENDPOINT,
   WIDGET_MASTER_LIST_ENDPOINT,
   ITEM_TAX_MASTER_LIST_ENDPOINT,
-  ITEM_PRICE_QUERY_LIMIT,
-  ITEM_UNIT_CONVERSION_QUERY_LIMIT,
-  ITEM_REORDER_QUERY_LIMIT,
-  ITEM_EAN_CODE_QUERY_LIMIT,
   ITEM_WIDGET_QUERY_LIMIT,
   ITEM_GROUP_SEARCH_DEBOUNCE_MS,
   ITEM_REORDER_TABLE_UI_ID,
@@ -181,7 +178,6 @@ import {
   type UiTableColumnLayoutItem,
   normalizeItemBatchConfigValue,
 } from "./item-master-page.constants";
-
 type ItemWidgetConfigRecord = {
   widgetNo: string;
   widgetGroupId: string;
@@ -191,7 +187,6 @@ type ItemWidgetConfigRecord = {
   widgetGuiName: string;
   widgetSecondaryText: string;
 };
-
 type ItemMasterPageContentProps = {
   inlineModalOnly?: boolean;
   onCrudControllerReady?: (controller: CrudMasterPageController | null) => void;
@@ -202,7 +197,6 @@ type ItemMasterPageContentProps = {
     values: Record<string, string>;
   }) => void | Promise<void>;
 };
-
 type ItemFormSection = {
   heading: ERPDynamicModalField | null;
   fields: ERPDynamicModalField[];
@@ -733,43 +727,30 @@ function syncSerializedItemUnitConversionRowsFromPriceRows(
   if (!baseUnitId) {
     return serializedItemUnitConversionRows;
   }
-  if (priceRows.length === 0) {
-    return syncSerializedItemUnitConversionRows(
-      serializedItemUnitConversionRows,
-      values,
-    );
-  }
+  // The Unit Conversion Table is the source of truth for its own rows, so keep
+  // every existing row and only append a conversion row for a price unit that
+  // isn't tracked here yet. Rebuilding the table from the price list would drop
+  // the units the user maintains only in the conversion table.
   const existingRows = parseLinkedRecordRows(serializedItemUnitConversionRows);
-  const existingRowsByUnitId = new Map(
-    existingRows
-      .map((row) => [(row.iuc_unit_id ?? "").trim(), row] as const)
-      .filter(([unitId]) => Boolean(unitId)),
+  const trackedUnitIds = new Set(
+    existingRows.map((row) => (row.iuc_unit_id ?? "").trim()).filter(Boolean),
   );
-  const priceRowUnitIds = new Set<string>();
-  const nextRows: LinkedRecordRow[] = [];
-  for (const [index, row] of priceRows.entries()) {
+  const nextRows: LinkedRecordRow[] = [...existingRows];
+  for (const row of priceRows) {
     const unitId = (row.ipm_unit_id ?? "").trim();
-    if (!unitId || priceRowUnitIds.has(unitId)) {
+    if (!unitId || trackedUnitIds.has(unitId)) {
       continue;
     }
-    priceRowUnitIds.add(unitId);
-    const existingRow = existingRowsByUnitId.get(unitId);
+    trackedUnitIds.add(unitId);
     nextRows.push({
-      ...buildEmptyItemUnitConversionRow(baseUnitId, index + 1),
-      ...existingRow,
+      ...buildEmptyItemUnitConversionRow(baseUnitId, nextRows.length + 1),
       iuc_unit_id: unitId,
       iuc_unit_slno:
-        (row.ipm_unit_slno ?? "").trim() ||
-        (existingRow?.iuc_unit_slno ?? "").trim() ||
-        String(index + 1),
+        (row.ipm_unit_slno ?? "").trim() || String(nextRows.length + 1),
       iuc_to_base_factor:
         resolveItemPriceToBaseFactorValue(row) ||
-        resolveItemUnitConversionToBaseFactorValue(existingRow ?? {}) ||
         (unitId === baseUnitId ? "1" : ""),
-      iuc_unit_factor:
-        resolveItemPriceUnitFactorValue(row) ||
-        resolveItemUnitConversionUnitFactorValue(existingRow ?? {}) ||
-        "1",
+      iuc_unit_factor: resolveItemPriceUnitFactorValue(row) || "1",
       iuc_is_default_unit:
         (row.ipm_is_default_unit ?? "false") === "true" ? "true" : "false",
       iuc_is_base_unit:
@@ -801,12 +782,15 @@ function syncItemPriceRowsWithUnitConversions(
       return row;
     }
     const nextRow = { ...row };
+    // The price list's Conv column mirrors the Unit Factor maintained in the
+    // Unit Conversion Table, so drive both mirrored price-row factor fields
+    // from the conversion row's unit factor. Preferring the to-base factor
+    // here would resurrect its stale "1" default whenever only the Unit
+    // Factor column was edited.
     const nextFactor =
-      resolveItemUnitConversionToBaseFactorValue(matchingUnitConversion) ||
-      (unitId === baseUnitId ? "1" : "");
-    const nextUnitFactor =
       resolveItemUnitConversionUnitFactorValue(matchingUnitConversion) ||
       (unitId === baseUnitId ? "1" : "");
+    const nextUnitFactor = nextFactor;
     const nextUnitSlno = (matchingUnitConversion.iuc_unit_slno ?? "").trim();
     const nextIsDefaultUnit =
       (matchingUnitConversion.iuc_is_default_unit ?? "false") === "true"
@@ -1222,20 +1206,6 @@ function collectChangedFieldValues(
 function normalizeComparisonString(value: unknown): string {
   return toDisplayValue(value).trim();
 }
-function normalizeComparisonBoolean(
-  value: unknown,
-  fallback: "true" | "false" = "false",
-): string {
-  return toSelectBoolean(value, fallback);
-}
-function normalizeComparisonInteger(value: unknown): string {
-  const normalized = toDisplayValue(value).trim();
-  if (!normalized) {
-    return "";
-  }
-  const parsed = Number.parseInt(normalized, 10);
-  return Number.isFinite(parsed) ? String(parsed) : normalized;
-}
 type ItemPriceScope = {
   branchId: string;
   companyId: string;
@@ -1266,30 +1236,6 @@ function toSingleOrArrayPayload<T>(items: T[]): T | T[] {
   return items.length === 1 ? items[0] : items;
 }
 
-function shouldRecreateItemUnitConversionPayloadRow(
-  existingRow: Record<string, unknown> | undefined,
-  desiredRow: Record<string, unknown>,
-): boolean {
-  if (!existingRow) {
-    return true;
-  }
-  return (
-    normalizeComparisonString(getFieldValue(existingRow, "iuc_company_id")) !==
-      normalizeComparisonString(desiredRow.iuc_company_id) ||
-    normalizeComparisonString(getFieldValue(existingRow, "iuc_unit_id")) !==
-      normalizeComparisonString(desiredRow.iuc_unit_id) ||
-    normalizeComparisonString(getFieldValue(existingRow, "iuc_base_unit_id")) !==
-      normalizeComparisonString(desiredRow.iuc_base_unit_id) ||
-    normalizeComparisonInteger(getFieldValue(existingRow, "iuc_unit_slno")) !==
-      normalizeComparisonInteger(desiredRow.iuc_unit_slno) ||
-    normalizeComparisonBoolean(getFieldValue(existingRow, "iuc_is_default_unit")) !==
-      normalizeComparisonBoolean(desiredRow.iuc_is_default_unit) ||
-    normalizeComparisonBoolean(getFieldValue(existingRow, "iuc_is_base_unit")) !==
-      normalizeComparisonBoolean(desiredRow.iuc_is_base_unit) ||
-    normalizeComparisonBoolean(getFieldValue(existingRow, "iuc_is_active"), "true") !==
-      normalizeComparisonBoolean(desiredRow.iuc_is_active, "true")
-  );
-}
 function selectManagedItemPriceLinkedRow(
   rows: LinkedRecordRow[],
   values: Record<string, string>,
@@ -1362,52 +1308,29 @@ function buildItemPriceRowsValueChangeResult(
   serializedRows: string,
   itemTaxRecordsById: ReadonlyMap<string, Record<string, unknown>>,
 ): ERPDynamicFieldValueChangeResult | void {
+  // Editing the price list must not mutate the Unit Conversion Table — the two
+  // tables are maintained independently. Recalculate the price rows against the
+  // current (unchanged) conversion rows only; the conversion table stays as-is.
   const comparisonValues = {
     ...values,
-    [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]:
-      previousValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ??
-      values[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ??
-      "",
     [ITEM_PRICE_ROWS_FIELD_NAME]:
       previousValues[ITEM_PRICE_ROWS_FIELD_NAME] ??
       values[ITEM_PRICE_ROWS_FIELD_NAME] ??
       "",
   };
-  const nextUnitConversionRows = syncSerializedItemUnitConversionRowsFromPriceRows(
-    values[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ?? "",
-    serializedRows,
-    values,
-  );
   const normalizedRows = syncSerializedItemPriceRows(
     serializedRows,
-    {
-      ...comparisonValues,
-      [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]: nextUnitConversionRows,
-    },
+    comparisonValues,
     itemTaxRecordsById,
   );
-  const finalUnitConversionRows = syncSerializedItemUnitConversionRowsFromPriceRows(
-    nextUnitConversionRows,
-    normalizedRows,
-    {
-      ...values,
-      [ITEM_PRICE_ROWS_FIELD_NAME]: normalizedRows,
-    },
-  );
-  const nextValues = syncPrimaryItemPriceValuesFromRows(
-    {
-      ...values,
-      [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]: finalUnitConversionRows,
-    },
-    normalizedRows,
-  );
+  const nextValues = syncPrimaryItemPriceValuesFromRows(values, normalizedRows);
   if (hasMeaningfulItemPriceRows(nextValues)) {
     nextValues.item_price_list = "true";
   }
   const changedValues = collectChangedFieldValues(
     comparisonValues,
     nextValues,
-    [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME, "item_price_list", ...ITEM_PRICE_SYNC_FIELD_NAMES],
+    ["item_price_list", ...ITEM_PRICE_SYNC_FIELD_NAMES],
   );
   if (Object.keys(changedValues).length === 0) {
     return;
@@ -1423,6 +1346,15 @@ function buildItemUnitConversionRowsValueChangeResult(
   itemTaxRecordsById: ReadonlyMap<string, Record<string, unknown>>,
 ): ERPDynamicFieldValueChangeResult | void {
   const normalizedRows = syncSerializedItemUnitConversionRows(serializedRows, values);
+  // The Unit Conversion Table is the source of truth for the item's base unit,
+  // so derive item_base_unit_id from its base row here. Without this the base
+  // unit is only ever populated when editing/viewing a saved record (from the
+  // mapped source), leaving create-mode price/conversion syncs with no base
+  // unit to key off. Ignore price rows so the table's base row always wins.
+  const nextBaseUnitId = resolveLinkedBaseUnitId(values, {
+    priceRows: [],
+    unitConversionRows: parseLinkedRecordRows(normalizedRows),
+  });
   const comparisonValues = {
     ...values,
     [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]:
@@ -1432,6 +1364,7 @@ function buildItemUnitConversionRowsValueChangeResult(
   };
   const nextValues: Record<string, string> = {
     ...values,
+    item_base_unit_id: nextBaseUnitId,
     [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]: normalizedRows,
   };
   const nextPriceRows = syncSerializedItemPriceRows(
@@ -1450,7 +1383,7 @@ function buildItemUnitConversionRowsValueChangeResult(
   const changedValues = collectChangedFieldValues(
     comparisonValues,
     syncedPriceValues,
-    [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME, ...ITEM_PRICE_SYNC_FIELD_NAMES],
+    ["item_base_unit_id", ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME, ...ITEM_PRICE_SYNC_FIELD_NAMES],
   );
   if (Object.keys(changedValues).length === 0) {
     return;
@@ -2472,7 +2405,9 @@ function buildItemFormFields(
       min: 0.0001,
       step: "0.0001",
       width: "7rem",
-      readOnlyResolver: ({ row }) => (row.iuc_is_base_unit ?? "false") === "true",
+      // Only the first row (the base unit's row) has a locked unit factor.
+      // Editability must NOT depend on the Base checkbox for any other row.
+      readOnlyResolver: ({ rowIndex }) => rowIndex === 0,
     },
     {
       key: "iuc_is_default_unit",
@@ -2646,146 +2581,6 @@ function buildItemFormFields(
         placeholder: "Select Batch Config",
       },
       {
-        name: "item_base_unit_id",
-        label: "Base Unit",
-        type: "select",
-        searchable: true,
-        options: unitOptions,
-        onValueChange: ({ value, values, previousValues }) => {
-          const currentReorderUnitId = (values.ir_unit_id ?? "").trim();
-          const currentEanUnitId = (values.ean_unit_id ?? "").trim();
-          const previousBaseUnitId = (previousValues.item_base_unit_id ?? "").trim();
-          if (!value.trim()) {
-            return;
-          }
-          const nextValues = { ...values };
-          let hasChanges = false;
-          if (!currentReorderUnitId || currentReorderUnitId === previousBaseUnitId) {
-            nextValues.ir_unit_id = value;
-            hasChanges = true;
-          }
-          if (!currentEanUnitId || currentEanUnitId === previousBaseUnitId) {
-            nextValues.ean_unit_id = value;
-            hasChanges = true;
-          }
-          const nextReorderRows = syncSerializedRowUnitIds(
-            values[ITEM_REORDER_ROWS_FIELD_NAME] ?? "",
-            "ir_unit_id",
-            value,
-            previousBaseUnitId,
-          );
-          if (nextReorderRows !== null) {
-            nextValues[ITEM_REORDER_ROWS_FIELD_NAME] = nextReorderRows;
-            hasChanges = true;
-          }
-          const nextEanRows = syncSerializedRowUnitIds(
-            values[ITEM_EAN_ROWS_FIELD_NAME] ?? "",
-            "ean_unit_id",
-            value,
-            previousBaseUnitId,
-          );
-          if (nextEanRows !== null) {
-            nextValues[ITEM_EAN_ROWS_FIELD_NAME] = nextEanRows;
-            hasChanges = true;
-          }
-          const nextItemUnitConversionRows =
-            syncSerializedItemUnitConversionRowsForBaseUnitChange(
-              values[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ?? "",
-              value,
-              previousBaseUnitId,
-            );
-          if (
-            nextItemUnitConversionRows !==
-            (values[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ?? "")
-          ) {
-            nextValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] = nextItemUnitConversionRows;
-            hasChanges = true;
-          }
-          const nextSyncedPriceRows = syncSerializedItemPriceRows(
-            nextValues[ITEM_PRICE_ROWS_FIELD_NAME] ?? "",
-            {
-              ...nextValues,
-              [ITEM_PRICE_ROWS_FIELD_NAME]:
-                previousValues[ITEM_PRICE_ROWS_FIELD_NAME] ??
-                values[ITEM_PRICE_ROWS_FIELD_NAME] ??
-                "",
-            },
-            itemTaxRecordsById,
-          );
-          if (nextSyncedPriceRows !== (nextValues[ITEM_PRICE_ROWS_FIELD_NAME] ?? "")) {
-            nextValues[ITEM_PRICE_ROWS_FIELD_NAME] = nextSyncedPriceRows;
-            hasChanges = true;
-          }
-          if (hasChanges) {
-            return {
-              values: nextValues,
-            };
-          }
-        },
-      },
-      {
-        name: "item_packing_item_ids",
-        label: "Packing Items",
-        type: "select",
-        searchable: true,
-        multiple: true,
-        options: itemOptions,
-        helperText: "Select one or more packing items (optional).",
-      },
-      {
-        name: "itemInlineReferenceLinksHeading",
-        label: "",
-        type: "custom",
-        fieldStyle: {
-          gridColumn: "1 / -1",
-        },
-        render: () => <div style={ITEM_INLINE_SECTION_HEADING_STYLE}>Reference Links</div>,
-      },
-      {
-        name: "item_company_id",
-        label: "Company",
-        type: "select",
-        searchable: true,
-        options: companyOptions,
-      },
-      {
-        name: "item_branch_id",
-        label: "Branch",
-        type: "select",
-        searchable: true,
-        options: branchOptions,
-      },
-      buildUuidTextField("item_company_category_id", "Company Category Id"),
-      {
-        name: "item_group_id",
-        label: "Item Group",
-        type: "select",
-        searchable: true,
-        options: groupOptions,
-        onSearchQueryChange: onItemGroupSearchChange,
-      },
-      {
-        name: "item_category_id",
-        label: "Item Category",
-        type: "select",
-        searchable: true,
-        options: categoryOptions,
-      },
-      {
-        name: "item_section_id",
-        label: "Item Section",
-        type: "select",
-        searchable: true,
-        options: sectionOptions,
-      },
-      {
-        name: "item_brand_id",
-        label: "Item Brand",
-        type: "select",
-        searchable: true,
-        options: brandOptions,
-      },
-      {
         name: "item_hsn_code",
         label: "HSN Code",
         type: "select",
@@ -2825,6 +2620,58 @@ function buildItemFormFields(
             values: changedValues,
           };
         },
+      },
+      {
+        name: "itemInlineReferenceLinksHeading",
+        label: "",
+        type: "custom",
+        fieldStyle: {
+          gridColumn: "1 / -1",
+        },
+        render: () => <div style={ITEM_INLINE_SECTION_HEADING_STYLE}>Reference Links</div>,
+      },
+      {
+        name: "item_company_id",
+        label: "Company",
+        type: "select",
+        searchable: true,
+        options: companyOptions,
+      },
+      {
+        name: "item_branch_id",
+        label: "Branch",
+        type: "select",
+        searchable: true,
+        options: branchOptions,
+      },
+      {
+        name: "item_group_id",
+        label: "Item Group",
+        type: "select",
+        searchable: true,
+        options: groupOptions,
+        onSearchQueryChange: onItemGroupSearchChange,
+      },
+      {
+        name: "item_category_id",
+        label: "Item Category",
+        type: "select",
+        searchable: true,
+        options: categoryOptions,
+      },
+      {
+        name: "item_section_id",
+        label: "Item Section",
+        type: "select",
+        searchable: true,
+        options: sectionOptions,
+      },
+      {
+        name: "item_brand_id",
+        label: "Item Brand",
+        type: "select",
+        searchable: true,
+        options: brandOptions,
       },
       {
         name: "item_supplier_id",
@@ -3354,12 +3201,30 @@ function buildItemFormFields(
     ITEM_MASTER_WIDGET_GROUP_ID,
   );
 }
+// POST /items/create, GET /items/get and DELETE /items/delete now return the
+// item nested under `data.item` (alongside sibling unit_conversions/prices/
+// ean_codes/reorders arrays) instead of the item fields directly on `data`.
+// Unwrap that nesting once so downstream field lookups (which only read
+// top-level keys) keep working; a plain flat source (e.g. a grid row) passes
+// through unchanged.
+function unwrapItemSource(
+  source: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!source) {
+    return {};
+  }
+  const nestedItem = (source as { item?: unknown }).item;
+  if (nestedItem && typeof nestedItem === "object" && !Array.isArray(nestedItem)) {
+    return nestedItem as Record<string, unknown>;
+  }
+  return source;
+}
 function mapItemFormValues(
   source: Record<string, unknown> | null,
   defaults: ItemFormDefaults,
   itemTaxRecordsById: ReadonlyMap<string, Record<string, unknown>>,
 ): Record<string, string> {
-  const rowSource = source ?? {};
+  const rowSource = unwrapItemSource(source);
   const mappedValues: Record<string, string> = {
     ...ITEM_INITIAL_FORM_VALUES,
   };
@@ -3593,32 +3458,17 @@ export default function ItemMasterPageContent({
   const { getAll: getUnitLookup } = useApi<unknown>(UNIT_LOOKUP_ENDPOINT);
   const { getAll: getGodownLookup } = useApi<unknown>(GODOWN_LOOKUP_ENDPOINT);
   const { getAll: getHsnLookup } = useApi<unknown>(HSN_LOOKUP_ENDPOINT);
-  const { getAll: listItemUnitConversions } = useApi<unknown>(
-    ITEM_PRICE_API_ENDPOINTS.list,
-  );
-  const { run: upsertItemUnitConversion } = useApi<unknown, unknown>(
-    ITEM_PRICE_API_ENDPOINTS.create,
-    {
-      method: "POST",
-      toast: {
-        success: false,
-      },
-    },
-  );
+  // GET /items/get?item_id=X returns the item's unit conversions, prices, EAN
+  // codes and reorders as sibling arrays on the same response (see
+  // FIX_ITEM_UNIT_CONVERSIONS_404.md) — the standalone per-table list
+  // endpoints (e.g. /item-unit-conversions/get) are not reliably implemented,
+  // so every read of these linked tables goes through this composite fetch
+  // instead.
+  const { getAll: getItemDetailById } = useApi<unknown>(API_ENDPOINTS.getById);
   const { run: removeItemUnitConversion } = useApi<unknown, unknown>(
-    ITEM_PRICE_API_ENDPOINTS.delete,
+    ITEM_UNIT_CONVERSION_API_ENDPOINTS.delete,
     {
       method: "DELETE",
-      toast: {
-        success: false,
-      },
-    },
-  );
-  const { getAll: listItemPrices } = useApi<unknown>(ITEM_PRICE_API_ENDPOINTS.list);
-  const { run: upsertItemPrice } = useApi<unknown, unknown>(
-    ITEM_PRICE_API_ENDPOINTS.create,
-    {
-      method: "POST",
       toast: {
         success: false,
       },
@@ -3630,32 +3480,12 @@ export default function ItemMasterPageContent({
       success: false,
     },
   });
-  const { getAll: listItemReorders } = useApi<unknown>(ITEM_REORDER_API_ENDPOINTS.list);
-  const { run: upsertItemReorder } = useApi<unknown, unknown>(
-    ITEM_REORDER_API_ENDPOINTS.create,
-    {
-      method: "POST",
-      toast: {
-        success: false,
-      },
-    },
-  );
   const { run: removeItemReorder } = useApi<unknown, unknown>(ITEM_REORDER_API_ENDPOINTS.delete, {
     method: "DELETE",
     toast: {
       success: false,
     },
   });
-  const { getAll: listItemEanCodes } = useApi<unknown>(ITEM_EAN_CODE_API_ENDPOINTS.list);
-  const { run: upsertItemEanCode } = useApi<unknown, unknown>(
-    ITEM_EAN_CODE_API_ENDPOINTS.create,
-    {
-      method: "POST",
-      toast: {
-        success: false,
-      },
-    },
-  );
   const { run: removeItemEanCode } = useApi<unknown, unknown>(ITEM_EAN_CODE_API_ENDPOINTS.delete, {
     method: "DELETE",
     toast: {
@@ -3974,52 +3804,44 @@ export default function ItemMasterPageContent({
     getUnitLookup,
     listItemTaxes,
   ]);
-  const listItemUnitConversionRecords = useCallback(
+  const fetchItemDetailRecord = useCallback(
     async (itemId: string) => {
-      const payload = await listItemUnitConversions({
-        iuc_item_id: itemId,
-        limit: ITEM_UNIT_CONVERSION_QUERY_LIMIT,
-      });
-      return extractArrayRecords(payload, DEFAULT_LOOKUP_ARRAY_KEYS);
+      const payload = await getItemDetailById({ item_id: itemId });
+      return extractResponseRecord(payload) ?? {};
     },
-    [listItemUnitConversions],
+    [getItemDetailById],
   );
-  const listItemPriceRecords = useCallback(
-    async (
-      itemId: string,
-      scopeSource?: Record<string, unknown> | null,
-    ) => {
-      const scope = scopeSource ? resolveItemPriceScope(scopeSource) : null;
-      const payload = await listItemPrices({
-        ipm_item_id: itemId,
-        limit: ITEM_PRICE_QUERY_LIMIT,
-        ...(scope?.companyId ? { ipm_company_id: scope.companyId } : {}),
-        ...(scope?.branchId ? { ipm_branch_id: scope.branchId } : {}),
-      });
-      const rows = extractArrayRecords(payload, DEFAULT_LOOKUP_ARRAY_KEYS);
-      return scope ? filterItemPriceRowsByScope(rows, scope) : rows;
-    },
-    [listItemPrices],
-  );
-  const listItemReorderRecords = useCallback(
+  // Single composite GET /items/get?item_id=X fetch shared by every caller
+  // that needs the item's *current* linked-table state (delete cascade,
+  // post-update reconciliation). Each caller used to issue its own fetch —
+  // when four of them ran concurrently via Promise.all, they all shared the
+  // same useApi hook instance, whose single in-flight AbortController meant
+  // each new call silently canceled the previous one, leaving three of the
+  // four with an empty result and no rows to reconcile/delete. Fetching once
+  // up front and handing every caller the same snapshot avoids the race.
+  const fetchItemLinkedRecordsSnapshot = useCallback(
     async (itemId: string) => {
-      const payload = await listItemReorders({
-        ir_item_id: itemId,
-        limit: ITEM_REORDER_QUERY_LIMIT,
-      });
-      return extractArrayRecords(payload, DEFAULT_LOOKUP_ARRAY_KEYS);
+      const detail = await fetchItemDetailRecord(itemId);
+      return {
+        unitConversions: extractArrayRecords(
+          getFieldValue(detail, "unit_conversions"),
+          DEFAULT_LOOKUP_ARRAY_KEYS,
+        ),
+        prices: extractArrayRecords(
+          getFieldValue(detail, "prices"),
+          DEFAULT_LOOKUP_ARRAY_KEYS,
+        ),
+        reorders: extractArrayRecords(
+          getFieldValue(detail, "reorders"),
+          DEFAULT_LOOKUP_ARRAY_KEYS,
+        ),
+        eanCodes: extractArrayRecords(
+          getFieldValue(detail, "ean_codes"),
+          DEFAULT_LOOKUP_ARRAY_KEYS,
+        ),
+      };
     },
-    [listItemReorders],
-  );
-  const listItemEanCodeRecords = useCallback(
-    async (itemId: string) => {
-      const payload = await listItemEanCodes({
-        ean_item_id: itemId,
-        limit: ITEM_EAN_CODE_QUERY_LIMIT,
-      });
-      return extractArrayRecords(payload, DEFAULT_LOOKUP_ARRAY_KEYS);
-    },
-    [listItemEanCodes],
+    [fetchItemDetailRecord],
   );
   const extractLinkedRowIds = useCallback(
     (rows: Record<string, unknown>[], fieldName: string) =>
@@ -4241,8 +4063,7 @@ export default function ItemMasterPageContent({
     [],
   );
   const deleteLinkedItemPrices = useCallback(
-    async (itemId: string) => {
-      const rows = await listItemPriceRecords(itemId);
+    async (rows: Record<string, unknown>[]) => {
       const itemPriceIds = extractLinkedRowIds(rows, "ipm_id");
       if (itemPriceIds.length === 0) {
         return;
@@ -4255,11 +4076,10 @@ export default function ItemMasterPageContent({
         ),
       });
     },
-    [extractLinkedRowIds, listItemPriceRecords, removeItemPrice],
+    [extractLinkedRowIds, removeItemPrice],
   );
   const deleteLinkedItemUnitConversions = useCallback(
-    async (itemId: string) => {
-      const rows = await listItemUnitConversionRecords(itemId);
+    async (rows: Record<string, unknown>[]) => {
       const itemUnitConversionIds = extractLinkedRowIds(rows, "iuc_id");
       if (itemUnitConversionIds.length === 0) {
         return;
@@ -4270,11 +4090,10 @@ export default function ItemMasterPageContent({
         })),
       });
     },
-    [extractLinkedRowIds, listItemUnitConversionRecords, removeItemUnitConversion],
+    [extractLinkedRowIds, removeItemUnitConversion],
   );
   const deleteLinkedItemReorders = useCallback(
-    async (itemId: string) => {
-      const rows = await listItemReorderRecords(itemId);
+    async (rows: Record<string, unknown>[]) => {
       const itemReorderIds = extractLinkedRowIds(rows, "ir_id");
       if (itemReorderIds.length === 0) {
         return;
@@ -4285,11 +4104,10 @@ export default function ItemMasterPageContent({
         })),
       });
     },
-    [extractLinkedRowIds, listItemReorderRecords, removeItemReorder],
+    [extractLinkedRowIds, removeItemReorder],
   );
   const deleteLinkedItemEanCodes = useCallback(
-    async (itemId: string) => {
-      const rows = await listItemEanCodeRecords(itemId);
+    async (rows: Record<string, unknown>[]) => {
       const itemEanCodeIds = extractLinkedRowIds(rows, "ean_id");
       if (itemEanCodeIds.length === 0) {
         return;
@@ -4300,84 +4118,42 @@ export default function ItemMasterPageContent({
         })),
       });
     },
-    [extractLinkedRowIds, listItemEanCodeRecords, removeItemEanCode],
+    [extractLinkedRowIds, removeItemEanCode],
   );
-  const syncLinkedItemUnitConversion = useCallback(
-    async (itemId: string, values: Record<string, string>) => {
-      const existingRows = await listItemUnitConversionRecords(itemId);
+  // The item plus its unit conversions, prices, EAN codes and reorders are
+  // created/updated together in the single /items/create composite call (see
+  // buildRequestPayload). That endpoint never deletes rows omitted from the
+  // payload, so these reconcilers run after an update to delete the linked rows
+  // the user removed from each table. Upserts are no longer issued here. Each
+  // takes the *existing* rows (a snapshot fetched once by the caller) rather
+  // than fetching them itself, so running all four concurrently can't race on
+  // a shared useApi hook's single in-flight request (see
+  // fetchItemLinkedRecordsSnapshot).
+  const reconcileRemovedItemUnitConversions = useCallback(
+    async (existingRows: Record<string, unknown>[], itemId: string, values: Record<string, string>) => {
       const desiredRows = buildItemUnitConversionPayloadRows(itemId, values);
-      const existingRowsById = new Map(
-        existingRows
-          .map((row) => [toDisplayValue(getFieldValue(row, "iuc_id")), row] as const)
-          .filter(([iucId]) => Boolean(iucId)),
+      const desiredIds = new Set(
+        desiredRows
+          .map((row) => (typeof row.iuc_id === "string" ? row.iuc_id : ""))
+          .filter(Boolean),
       );
-      const desiredIds = new Set<string>();
-      const deleteIds = new Set<string>();
-      const updateRows: Record<string, unknown>[] = [];
-      const createRows: Record<string, unknown>[] = [];
-
-      for (const desiredRow of desiredRows) {
-        const desiredId =
-          typeof desiredRow.iuc_id === "string" ? desiredRow.iuc_id.trim() : "";
-        if (!desiredId) {
-          createRows.push(desiredRow);
-          continue;
-        }
-        desiredIds.add(desiredId);
-        const existingRow = existingRowsById.get(desiredId);
-        if (shouldRecreateItemUnitConversionPayloadRow(existingRow, desiredRow)) {
-          if (existingRow) {
-            deleteIds.add(desiredId);
-          }
-          const { iuc_id: _ignoredId, ...createRow } = desiredRow;
-          createRows.push(createRow);
-          continue;
-        }
-        updateRows.push(desiredRow);
-      }
-
-      for (const existingId of extractLinkedRowIds(existingRows, "iuc_id")) {
-        if (!desiredIds.has(existingId)) {
-          deleteIds.add(existingId);
-        }
-      }
-
-      if (deleteIds.size > 0) {
-        await removeItemUnitConversion({
-          body: Array.from(deleteIds).map((iucId) => ({
-            iuc_id: iucId,
-          })),
-        });
-      }
-      if (updateRows.length === 0 && createRows.length === 0) {
+      const deleteIds = extractLinkedRowIds(existingRows, "iuc_id").filter(
+        (existingId) => !desiredIds.has(existingId),
+      );
+      if (deleteIds.length === 0) {
         return;
       }
-      if (updateRows.length > 0) {
-        await upsertItemUnitConversion({
-          body: updateRows,
-        });
-      }
-      if (createRows.length > 0) {
-        await upsertItemUnitConversion({
-          body: createRows,
-        });
-      }
+      await removeItemUnitConversion({
+        body: deleteIds.map((iucId) => ({
+          iuc_id: iucId,
+        })),
+      });
     },
-    [
-      buildItemUnitConversionPayloadRows,
-      extractLinkedRowIds,
-      listItemUnitConversionRecords,
-      removeItemUnitConversion,
-      upsertItemUnitConversion,
-    ],
+    [buildItemUnitConversionPayloadRows, extractLinkedRowIds, removeItemUnitConversion],
   );
-  const syncLinkedItemPrice = useCallback(
-    async (itemId: string, values: Record<string, string>) => {
-      const existingRows = await listItemPriceRecords(itemId, values);
+  const reconcileRemovedItemPrices = useCallback(
+    async (existingRows: Record<string, unknown>[], itemId: string, values: Record<string, string>) => {
       const desiredRows = buildItemPricePayloadRows(itemId, values);
-      const shouldSyncItemPriceRows =
-        (values.item_price_list ?? "false") === "true" ||
-        hasMeaningfulItemPriceRows(values);
       const desiredIds = new Set(
         desiredRows
           .map((row) => (typeof row.ipm_id === "string" ? row.ipm_id : ""))
@@ -4386,27 +4162,21 @@ export default function ItemMasterPageContent({
       const deleteIds = extractLinkedRowIds(existingRows, "ipm_id").filter(
         (existingId) => !desiredIds.has(existingId),
       );
-      if (deleteIds.length > 0) {
-        await removeItemPrice({
-          body: toSingleOrArrayPayload(
-            deleteIds.map((ipmId) => ({
-              ipm_id: ipmId,
-            })),
-          ),
-        });
-      }
-      if (!shouldSyncItemPriceRows || desiredRows.length === 0) {
+      if (deleteIds.length === 0) {
         return;
       }
-      await upsertItemPrice({
-        body: toSingleOrArrayPayload(desiredRows),
+      await removeItemPrice({
+        body: toSingleOrArrayPayload(
+          deleteIds.map((ipmId) => ({
+            ipm_id: ipmId,
+          })),
+        ),
       });
     },
-    [buildItemPricePayloadRows, extractLinkedRowIds, listItemPriceRecords, removeItemPrice, upsertItemPrice],
+    [buildItemPricePayloadRows, extractLinkedRowIds, removeItemPrice],
   );
-  const syncLinkedItemReorder = useCallback(
-    async (itemId: string, values: Record<string, string>) => {
-      const existingRows = await listItemReorderRecords(itemId);
+  const reconcileRemovedItemReorders = useCallback(
+    async (existingRows: Record<string, unknown>[], itemId: string, values: Record<string, string>) => {
       const desiredRows = buildItemReorderPayloadRows(itemId, values);
       const desiredIds = new Set(
         desiredRows
@@ -4416,25 +4186,19 @@ export default function ItemMasterPageContent({
       const deleteIds = extractLinkedRowIds(existingRows, "ir_id").filter(
         (existingId) => !desiredIds.has(existingId),
       );
-      if (deleteIds.length > 0) {
-        await removeItemReorder({
-          body: deleteIds.map((irId) => ({
-            ir_id: irId,
-          })),
-        });
-      }
-      if (desiredRows.length === 0) {
+      if (deleteIds.length === 0) {
         return;
       }
-      await upsertItemReorder({
-        body: desiredRows,
+      await removeItemReorder({
+        body: deleteIds.map((irId) => ({
+          ir_id: irId,
+        })),
       });
     },
-    [buildItemReorderPayloadRows, extractLinkedRowIds, listItemReorderRecords, removeItemReorder, upsertItemReorder],
+    [buildItemReorderPayloadRows, extractLinkedRowIds, removeItemReorder],
   );
-  const syncLinkedItemEanCode = useCallback(
-    async (itemId: string, values: Record<string, string>) => {
-      const existingRows = await listItemEanCodeRecords(itemId);
+  const reconcileRemovedItemEanCodes = useCallback(
+    async (existingRows: Record<string, unknown>[], itemId: string, values: Record<string, string>) => {
       const desiredRows = buildItemEanPayloadRows(itemId, values);
       const desiredIds = new Set(
         desiredRows
@@ -4444,24 +4208,19 @@ export default function ItemMasterPageContent({
       const deleteIds = extractLinkedRowIds(existingRows, "ean_id").filter(
         (existingId) => !desiredIds.has(existingId),
       );
-      if (deleteIds.length > 0) {
-        await removeItemEanCode({
-          body: deleteIds.map((eanId) => ({
-            ean_id: eanId,
-          })),
-        });
-      }
-      if (desiredRows.length === 0) {
+      if (deleteIds.length === 0) {
         return;
       }
-      await upsertItemEanCode({
-        body: desiredRows,
+      await removeItemEanCode({
+        body: deleteIds.map((eanId) => ({
+          ean_id: eanId,
+        })),
       });
     },
-    [buildItemEanPayloadRows, extractLinkedRowIds, listItemEanCodeRecords, removeItemEanCode, upsertItemEanCode],
+    [buildItemEanPayloadRows, extractLinkedRowIds, removeItemEanCode],
   );
   const augmentItemDetailSource = useCallback(
-    async ({
+    ({
       recordId,
       source,
       rowSource,
@@ -4470,7 +4229,8 @@ export default function ItemMasterPageContent({
       source: Record<string, unknown> | null;
       rowSource: Record<string, unknown> | null;
     }) => {
-      const itemSource = source ?? rowSource ?? {};
+      const compositeSource = source ?? rowSource;
+      const itemSource = unwrapItemSource(compositeSource);
       const itemId =
         toDisplayValue(getFieldValue(itemSource, "item_id")) || String(recordId);
       if (!itemId) {
@@ -4479,27 +4239,31 @@ export default function ItemMasterPageContent({
       const preferredUnitId = toDisplayValue(
         getFieldValue(itemSource, "item_base_unit_id"),
       );
-      const [
-        itemUnitConversionRowsResult,
-        priceRowsResult,
-        reorderRowsResult,
-        eanRowsResult,
-      ] = await Promise.allSettled([
-        listItemUnitConversionRecords(itemId),
-        listItemPriceRecords(itemId, itemSource),
-        listItemReorderRecords(itemId),
-        listItemEanCodeRecords(itemId),
-      ]);
-      const itemUnitConversionRows =
-        itemUnitConversionRowsResult.status === "fulfilled"
-          ? itemUnitConversionRowsResult.value
-          : [];
-      const priceRows =
-        priceRowsResult.status === "fulfilled" ? priceRowsResult.value : [];
-      const reorderRows =
-        reorderRowsResult.status === "fulfilled" ? reorderRowsResult.value : [];
-      const eanRows =
-        eanRowsResult.status === "fulfilled" ? eanRowsResult.value : [];
+      // GET /items/get?item_id=X (the detail fetch that produced `source`)
+      // already returns unit_conversions/prices/ean_codes/reorders as sibling
+      // arrays on the same payload, so read them directly here instead of
+      // issuing four more requests to the per-table list endpoints — those
+      // aren't reliably implemented server-side (see
+      // FIX_ITEM_UNIT_CONVERSIONS_404.md).
+      const itemUnitConversionRows = extractArrayRecords(
+        getFieldValue(compositeSource ?? {}, "unit_conversions"),
+        DEFAULT_LOOKUP_ARRAY_KEYS,
+      );
+      const priceRows = filterItemPriceRowsByScope(
+        extractArrayRecords(
+          getFieldValue(compositeSource ?? {}, "prices"),
+          DEFAULT_LOOKUP_ARRAY_KEYS,
+        ),
+        resolveItemPriceScope(itemSource),
+      );
+      const reorderRows = extractArrayRecords(
+        getFieldValue(compositeSource ?? {}, "reorders"),
+        DEFAULT_LOOKUP_ARRAY_KEYS,
+      );
+      const eanRows = extractArrayRecords(
+        getFieldValue(compositeSource ?? {}, "ean_codes"),
+        DEFAULT_LOOKUP_ARRAY_KEYS,
+      );
       const managedPriceRow = selectManagedItemPriceRecord(priceRows, preferredUnitId);
       const managedReorderRow = selectManagedItemReorderRecord(
         reorderRows,
@@ -4571,9 +4335,18 @@ export default function ItemMasterPageContent({
         !serializedReorderRows &&
         !serializedEanRows
       ) {
-        return null;
+        // Even with no child rows, still backfill the flat item_* fields
+        // unwrapped from the composite GET response so the detail merge above
+        // this callback doesn't stay stuck on the nested `data.item` shape.
+        return Object.keys(itemSource).length > 0 ? { ...itemSource, item: { ...itemSource } } : null;
       }
-      return {
+      const augmentedItemSource: Record<string, unknown> = {
+        // Backfills the flat item_* fields (unwrapped above from the composite
+        // GET response's `data.item`) so callers reading the merged detail
+        // source at the top level (mergeRowWithDetail, mapItemFormValues) see
+        // them, since this augmented object is spread on top of the raw
+        // (now-nested) detail source.
+        ...itemSource,
         ...(managedPriceRow ?? {}),
         ...(managedReorderRow ?? {}),
         ...(managedEanRow ?? {}),
@@ -4583,14 +4356,20 @@ export default function ItemMasterPageContent({
         [ITEM_EAN_ROWS_FIELD_NAME]: serializedEanRows,
         item_price_list: priceRows.length > 0 ? "true" : getFieldValue(itemSource, "item_price_list"),
       };
+      return {
+        ...augmentedItemSource,
+        // CrudMasterPage merges this return value on top of the raw detail
+        // source (`{...detailSource, ...supplementalSource}`), which still
+        // carries the composite GET response's nested `item` key untouched.
+        // mapItemFormValues later calls unwrapItemSource() on that merged
+        // object, which prefers a nested `item` object when present — so
+        // without overriding it here, it would re-read the *stale* nested
+        // item (missing these linked-row fields) instead of this augmented
+        // one, silently dropping the unit conversion/price/reorder/EAN rows.
+        item: augmentedItemSource,
+      };
     },
-    [
-      itemTaxRecordsById,
-      listItemUnitConversionRecords,
-      listItemEanCodeRecords,
-      listItemPriceRecords,
-      listItemReorderRecords,
-    ],
+    [itemTaxRecordsById],
   );
   const itemFormFields = useMemo(
     () =>
@@ -4717,28 +4496,72 @@ export default function ItemMasterPageContent({
       mapFormValues={({ source, defaults }) =>
         mapItemFormValues(source, defaults, itemTaxRecordsById)
       }
-      buildRequestPayload={(params) => buildItemRequestPayload(params)}
+      buildRequestPayload={async (params) => {
+        const itemPayload = await buildItemRequestPayload(params);
+        // Persist the item together with its linked tables (unit conversions,
+        // prices, EAN codes, reorders) in the one /items/create composite call.
+        // The server injects the parent item_id into every child row, so the id
+        // passed to the builders here is only a placeholder ("" on create).
+        const normalizedValues = normalizeItemLinkedSubmissionValues(
+          params.values,
+          itemTaxRecordsById,
+        );
+        const childItemId =
+          params.shouldUpdate && params.editingItemId !== null
+            ? String(params.editingItemId)
+            : "";
+        const includeItemPrices =
+          (normalizedValues.item_price_list ?? "false") === "true" ||
+          hasMeaningfulItemPriceRows(normalizedValues);
+        return {
+          ...itemPayload,
+          unit_conversions: buildItemUnitConversionPayloadRows(
+            childItemId,
+            normalizedValues,
+          ),
+          prices: includeItemPrices
+            ? buildItemPricePayloadRows(childItemId, normalizedValues)
+            : [],
+          ean_codes: buildItemEanPayloadRows(childItemId, normalizedValues),
+          reorders: buildItemReorderPayloadRows(childItemId, normalizedValues),
+        };
+      }}
       onCrudControllerReady={onCrudControllerReady}
       onModalOpenChange={onModalOpenChange}
       afterSubmitSuccess={async ({ response, payload, values, editingItemId, shouldUpdate }) => {
         const responseSource = extractResponseRecord(response);
         const savedItemId =
-          toDisplayValue(getFieldValue(responseSource ?? {}, "item_id")) ||
+          toDisplayValue(getFieldValue(unwrapItemSource(responseSource), "item_id")) ||
           toDisplayValue(payload.item_id) ||
           (editingItemId !== null ? String(editingItemId) : "");
         if (!savedItemId) {
           return;
         }
-        const normalizedValues = normalizeItemLinkedSubmissionValues(
-          values,
-          itemTaxRecordsById,
-        );
-        await syncLinkedItemUnitConversion(savedItemId, normalizedValues);
-        await Promise.all([
-          syncLinkedItemPrice(savedItemId, normalizedValues),
-          syncLinkedItemReorder(savedItemId, normalizedValues),
-          syncLinkedItemEanCode(savedItemId, normalizedValues),
-        ]);
+        // The item and all of its linked rows were created/updated in the
+        // single /items/create composite call (see buildRequestPayload). That
+        // endpoint never deletes rows omitted from the payload, so on update we
+        // reconcile the linked rows the user removed from each table.
+        if (shouldUpdate) {
+          const normalizedValues = normalizeItemLinkedSubmissionValues(
+            values,
+            itemTaxRecordsById,
+          );
+          const snapshot = await fetchItemLinkedRecordsSnapshot(savedItemId);
+          const existingPriceRows = filterItemPriceRowsByScope(
+            snapshot.prices,
+            resolveItemPriceScope(normalizedValues),
+          );
+          await Promise.all([
+            reconcileRemovedItemUnitConversions(
+              snapshot.unitConversions,
+              savedItemId,
+              normalizedValues,
+            ),
+            reconcileRemovedItemPrices(existingPriceRows, savedItemId, normalizedValues),
+            reconcileRemovedItemReorders(snapshot.reorders, savedItemId, normalizedValues),
+            reconcileRemovedItemEanCodes(snapshot.eanCodes, savedItemId, normalizedValues),
+          ]);
+        }
         await onItemSaved?.({
           itemId: savedItemId,
           shouldUpdate,
@@ -4747,16 +4570,17 @@ export default function ItemMasterPageContent({
       }}
       afterDeleteSuccess={async ({ deleteId, rowSource }) => {
         const deletedItemId =
-          toDisplayValue(getFieldValue(rowSource ?? {}, "item_id")) ||
+          toDisplayValue(getFieldValue(unwrapItemSource(rowSource), "item_id")) ||
           String(deleteId);
         if (!deletedItemId) {
           return;
         }
+        const snapshot = await fetchItemLinkedRecordsSnapshot(deletedItemId);
         await Promise.all([
-          deleteLinkedItemUnitConversions(deletedItemId),
-          deleteLinkedItemPrices(deletedItemId),
-          deleteLinkedItemReorders(deletedItemId),
-          deleteLinkedItemEanCodes(deletedItemId),
+          deleteLinkedItemUnitConversions(snapshot.unitConversions),
+          deleteLinkedItemPrices(snapshot.prices),
+          deleteLinkedItemReorders(snapshot.reorders),
+          deleteLinkedItemEanCodes(snapshot.eanCodes),
         ]);
       }}
     />
