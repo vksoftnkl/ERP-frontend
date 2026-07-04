@@ -27,7 +27,6 @@ export type RecentPageOption = {
 
 export type ErpHeaderProps = {
   primaryMenu?: ErpHeaderItem[];
-  quickTabs?: ErpHeaderItem[];
   searchMenuCount?: number;
   dateText?: string;
   companyOptions?: ERPDynamicSelectOption[];
@@ -44,9 +43,6 @@ export type ErpHeaderProps = {
   onGoClick?: () => void;
   logoutLabel?: string;
   onLogout?: () => void;
-  billNumber?: string;
-  onBillNumberChange?: (value: string) => void;
-  billPlaceholder?: string;
 };
 
 export type MenuLinkProps = {

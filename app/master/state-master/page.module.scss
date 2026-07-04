@@ -791,25 +791,27 @@ position: relative;
 .filterRow {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   gap: 1rem;
 }
 .filterGroup {
   display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
   min-width: 200px;
 }
 .filterLabel {
   font-size: 12px;
   font-weight: 600;
   color: #374151;
+  white-space: nowrap;
 }
 .filterSearchWrap {
   position: relative;
   display: flex;
   align-items: center;
-  width: min(260px, 100%);
+  width: min(480px, 100%);
 }
 .filterSlot {
   display: contents;
@@ -817,7 +819,7 @@ position: relative;
 .filterCheckGroup {
   display: flex;
   align-items: center;
-  padding-bottom: 0.15rem;
+  margin-left: auto;
 }
 .filterCheckLabel {
   display: inline-flex;
@@ -987,7 +989,7 @@ position: relative;
   text-align: center;
 }
 .masterSearchInput {
-  width: 70%;
+  width: 100%;
   height: 34px;
   border: 1px solid #d5dfec;
   border-radius: var(--erp-radius);

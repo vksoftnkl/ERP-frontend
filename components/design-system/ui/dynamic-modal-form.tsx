@@ -144,6 +144,8 @@ export function ERPDynamicModalForm({
     Record<string, string>
   >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Data-URL previews for image files picked in this session, keyed by field name.
+  const [filePreviews, setFilePreviews] = useState<Record<string, string>>({});
   const fieldValueChangeRequestIdsRef = useRef<Record<string, number>>({});
   const sectionTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const activeVariant = useMemo(
@@ -164,6 +166,7 @@ export function ERPDynamicModalForm({
     setIsSubmitting(false);
     setFieldErrors({});
     setFileData({});
+    setFilePreviews({});
     setSearchQueries({});
     setOpenSearchField(null);
     setSearchActiveOptionIndex({});
@@ -185,6 +188,7 @@ export function ERPDynamicModalForm({
       setActiveVariantKey(variantKey);
       setFormData(nextFormData);
       setFileData({});
+      setFilePreviews({});
       setFieldErrors({});
       setSearchQueries({});
       setOpenSearchField(null);
@@ -653,6 +657,29 @@ export function ERPDynamicModalForm({
         ...current,
         [name]: nextFile,
       }));
+      if (nextFile && nextFile.type.startsWith("image/")) {
+        const previewFieldName = name;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result;
+          if (typeof result === "string") {
+            setFilePreviews((current) => ({
+              ...current,
+              [previewFieldName]: result,
+            }));
+          }
+        };
+        reader.readAsDataURL(nextFile);
+      } else {
+        setFilePreviews((current) => {
+          if (!(name in current)) {
+            return current;
+          }
+          const nextState = { ...current };
+          delete nextState[name];
+          return nextState;
+        });
+      }
     }
     setFormData((current) => {
       const nextValues = {
@@ -1149,6 +1176,7 @@ export function ERPDynamicModalForm({
       if (resetOnSubmit) {
         setFormData(buildInitialValues(activeVariant, initialValuesByVariant));
         setFileData({});
+        setFilePreviews({});
         setFieldErrors({});
       }
       if (closeOnSubmit) {
@@ -1381,7 +1409,20 @@ export function ERPDynamicModalForm({
     const helpId = !hideFieldHelperText && field.helperText
       ? `${controlId}-help`
       : undefined;
-    const fileId = selectedFile ? `${controlId}-file` : undefined;
+    const storedFileName =
+      inputType === "file" && !selectedFile ? fieldValue.trim() : "";
+    const storedFilePreview =
+      inputType === "file" && field.previewImageValueKey
+        ? (formData[field.previewImageValueKey] ?? "").trim()
+        : "";
+    const filePreviewSource =
+      inputType === "file"
+        ? selectedFile
+          ? (filePreviews[field.name] ?? "")
+          : storedFilePreview
+        : "";
+    const fileId =
+      selectedFile || storedFileName ? `${controlId}-file` : undefined;
     const errorId =
       fieldError && !hideFieldErrorText ? `${controlId}-error` : undefined;
     const describedBy =
@@ -1793,9 +1834,20 @@ export function ERPDynamicModalForm({
               )}
               style={field.controlStyle}
             />
+            {filePreviewSource ? (
+              <img
+                src={filePreviewSource}
+                alt={`${field.label} preview`}
+                className={styles.filePreviewImage}
+              />
+            ) : null}
             {selectedFile ? (
               <p id={fileId} className={styles.fileMeta}>
                 {`${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)`}
+              </p>
+            ) : storedFileName ? (
+              <p id={fileId} className={styles.fileMeta}>
+                {storedFileName}
               </p>
             ) : null}
           </div>

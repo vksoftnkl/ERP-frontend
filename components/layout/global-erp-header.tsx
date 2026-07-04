@@ -59,7 +59,6 @@ export default function GlobalErpHeader() {
       searchMenuCount={0}
       cartCount={6}
       goLabel="K Go"
-      billPlaceholder="Enter Bill No"
     />
   );
 }

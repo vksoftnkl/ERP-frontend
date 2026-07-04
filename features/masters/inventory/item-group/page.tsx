@@ -32,6 +32,10 @@ import {
   toSelectBoolean,
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
+import {
+  resolveStoredPhotoName,
+  resolveStoredPhotoPreview,
+} from "@/features/masters/shared/stored-photo";
 const API_ENDPOINTS = {
 list: "/configured-grid-sql/run?grid_id=6",
   getById: "/item-groups/get",
@@ -112,6 +116,7 @@ const GROUP_DEFAULT_TAX_ID_KEYS = ["itg_default_tax_id", "default_tax_id", "defa
 const GROUP_DEFAULT_HSN_KEYS = ["itg_default_hsn", "default_hsn", "defaultHsn", "hsn_code", "hsnCode"] as const;
 const GROUP_DEFAULT_UOM_ID_KEYS = ["itg_default_uom_id", "default_uom_id", "defaultUomId"] as const;
 const GROUP_PHOTO_URL_KEYS = ["itg_photo_url", "photo_url", "photoUrl"] as const;
+const GROUP_PHOTO_KEYS = ["itg_photo", "itgPhoto", "group_photo", "groupPhoto"] as const;
 const FILE_CONSTRAINTS = {
   MAX_UPLOAD_IMAGE_BYTES: 5 * 1024 * 1024,
   ALLOWED_MIME_TYPES: [
@@ -191,6 +196,8 @@ const INITIAL_FORM_VALUES = {
   groupDefaultHsn: "",
   groupDefaultUomId: "",
   groupPhotoUrl: "",
+  itgPhoto: "",
+  groupPhotoPreview: "",
 } as const;
 type LazyParentHandlers = {
   onSearchOpenChange: (open: boolean) => void;
@@ -253,6 +260,7 @@ function buildItemGroupFormFields(
       accept: "image/*",
       maxFileSizeBytes: FILE_CONSTRAINTS.MAX_UPLOAD_IMAGE_BYTES,
       allowedMimeTypes: [...FILE_CONSTRAINTS.ALLOWED_MIME_TYPES],
+      previewImageValueKey: "groupPhotoPreview",
       helperText: "Optional. Sent as base64 in itg_photo.",
       colSpan: 2,
     },
@@ -673,7 +681,7 @@ export default function ItemGroupMasterPage() {
       editModalTitle="Edit Group Entry"
       customFields={formFields}
       createInitialValues={INITIAL_FORM_VALUES}
-      modalPanelStyle={{ width: "min(52rem, calc(100vw - 2rem))", maxHeight: "min(82vh, 42rem)" }}
+      modalPanelStyle={{ width: "min(40rem, calc(100vw - 2rem))", maxHeight: "min(78vh, 36rem)" }}
       onModalOpenChange={(open, variantKey) => {
         // Clear the lazy parent dropdown when the create modal opens so no stale
         // selection from a previously edited group lingers (it reloads on open).
@@ -714,6 +722,15 @@ export default function ItemGroupMasterPage() {
           groupDefaultHsn: toDisplayValue(getFirstDefinedValue(rowSource, GROUP_DEFAULT_HSN_KEYS)),
           groupDefaultUomId: toDisplayValue(getFirstDefinedValue(rowSource, GROUP_DEFAULT_UOM_ID_KEYS)),
           groupPhotoUrl: toDisplayValue(getFirstDefinedValue(rowSource, GROUP_PHOTO_URL_KEYS)),
+          // Stored file name + preview image for the file field on edit/view.
+          itgPhoto: resolveStoredPhotoName(
+            toDisplayValue(getFirstDefinedValue(rowSource, GROUP_PHOTO_URL_KEYS)),
+            toDisplayValue(getFirstDefinedValue(rowSource, GROUP_PHOTO_KEYS)).length > 0,
+          ),
+          groupPhotoPreview: resolveStoredPhotoPreview(
+            toDisplayValue(getFirstDefinedValue(rowSource, GROUP_PHOTO_KEYS)),
+            toDisplayValue(getFirstDefinedValue(rowSource, GROUP_PHOTO_URL_KEYS)),
+          ),
         };
       }}
       buildRequestPayload={async ({ values, shouldUpdate, editingItemId, files }) => {
@@ -739,7 +756,11 @@ export default function ItemGroupMasterPage() {
           itg_default_tax_id: toNullableReference(values.groupDefaultTaxId ?? ""),
           itg_default_hsn: (values.groupDefaultHsn ?? "").trim(),
           itg_default_uom_id: toNullableReference(values.groupDefaultUomId ?? ""),
-          itg_photo_url: (values.groupPhotoUrl ?? "").trim(),
+          // Persist the uploaded file's name in itg_photo_url so edit/view can
+          // show it later (an explicit URL is kept when no new file is chosen).
+          itg_photo_url: groupPhoto
+            ? uploadedImage!.name
+            : (values.groupPhotoUrl ?? "").trim(),
           ...(groupPhoto ? { itg_photo: groupPhoto } : {}),
           ...(shouldUpdate && editingItemId !== null ? { itg_id: toUpdateId(editingItemId) } : {}),
         };

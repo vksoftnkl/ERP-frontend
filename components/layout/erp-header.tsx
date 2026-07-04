@@ -22,7 +22,6 @@ import {
   DEFAULT_COMPANY_OPTIONS,
   DEFAULT_DATE_FORMAT_OPTIONS,
   DEFAULT_PRIMARY_MENU,
-  DEFAULT_QUICK_TABS,
 } from "./constants";
 import type {
   ErpHeaderItem,
@@ -39,7 +38,6 @@ import {
   selectRecentPages,
 } from "@/store/slices/authSlice";
 import { MenuTree } from "./erp-header-menu";
-import { TabStrip } from "./erp-header-tab-strip";
 export type { ErpHeaderItem, ErpHeaderProps } from "./types";
 // ─── Utility functions ────────────────────────────────────────────────────────
 function formatDateLabel(date: Date): string {
@@ -505,7 +503,6 @@ function HeaderRight({
 // ─── Main ErpHeader component ─────────────────────────────────────────────────
 export default function ErpHeader({
   primaryMenu = DEFAULT_PRIMARY_MENU,
-  quickTabs = DEFAULT_QUICK_TABS,
   searchMenuCount = 0,
   dateText,
   companyOptions = DEFAULT_COMPANY_OPTIONS,
@@ -522,16 +519,12 @@ export default function ErpHeader({
   onGoClick,
   logoutLabel = "Logout",
   onLogout,
-  billNumber,
-  onBillNumberChange,
-  billPlaceholder = "Enter Bill No",
 }: ErpHeaderProps) {
   const dispatch = useAppDispatch();
   const recentPages = useAppSelector(selectRecentPages);
   const pathname = usePathname();
   const router = useRouter();
   const primaryMenuRef = useRef<HTMLElement | null>(null);
-  const quickTabsRef = useRef<HTMLDivElement | null>(null);
   const userId = useAppSelector(selectAuthUserId);
   const shouldUseMenuMasterLabels = primaryMenu === DEFAULT_PRIMARY_MENU;
   const {
@@ -547,7 +540,6 @@ export default function ErpHeader({
   const [localBranch, setLocalBranch] = useState(
     selectedBranch ?? getDefaultBranchValue(branchOptions)
   );
-  const [localBillNumber, setLocalBillNumber] = useState(billNumber ?? "");
   const [selectedRecentPage, setSelectedRecentPage] = useState("");
   // Tracks the date shown in the header. Starts as today; updated on calendar pick.
   const [pickedDate, setPickedDate] = useState<Date>(() => new Date());
@@ -571,9 +563,6 @@ export default function ErpHeader({
       !branchOptions.some((o) => o.value === localBranch)
     ) setLocalBranch(getDefaultBranchValue(branchOptions));
   }, [branchOptions, localBranch, selectedBranch]);
-  useEffect(() => {
-    if (billNumber !== undefined) setLocalBillNumber(billNumber);
-  }, [billNumber]);
   // If caller supplies dateText prop, use it; otherwise format the picked date.
   const resolvedDateText = useMemo(
     () => dateText ?? formatDateLabel(pickedDate),
@@ -586,7 +575,6 @@ export default function ErpHeader({
   }, [primaryMenu, primaryMenuFromApi, isMenuLoading, isMenuUninitialized, shouldUseMenuMasterLabels]);
   const resolvedCompany = selectedCompany ?? localCompany;
   const resolvedBranch = selectedBranch ?? localBranch;
-  const resolvedBillNumber = billNumber ?? localBillNumber;
   const routeLabelLookup = useMemo(
     () => buildRouteLabelLookup(resolvedPrimaryMenu),
     [resolvedPrimaryMenu],
@@ -628,11 +616,9 @@ export default function ErpHeader({
       const active = document.activeElement;
       if (!(active instanceof HTMLElement)) return;
       const isInsidePrimaryMenu = !!primaryMenuRef.current?.contains(target);
-      const isInsideQuickTabs = !!quickTabsRef.current?.contains(target);
-      if (isInsidePrimaryMenu || isInsideQuickTabs) return;
+      if (isInsidePrimaryMenu) return;
       const activeInPrimaryMenu = !!primaryMenuRef.current?.contains(active);
-      const activeInQuickTabs = !!quickTabsRef.current?.contains(active);
-      if (activeInPrimaryMenu || activeInQuickTabs) active.blur();
+      if (activeInPrimaryMenu) active.blur();
     };
     document.addEventListener("pointerdown", handlePointerDownCapture, true);
     return () => document.removeEventListener("pointerdown", handlePointerDownCapture, true);
@@ -645,10 +631,6 @@ export default function ErpHeader({
     if (selectedBranch === undefined) setLocalBranch(value);
     onBranchChange?.(value);
   }, [selectedBranch, onBranchChange]);
-  const handleBillNumberChange = useCallback((value: string) => {
-    if (billNumber === undefined) setLocalBillNumber(value);
-    onBillNumberChange?.(value);
-  }, [billNumber, onBillNumberChange]);
   const handleNavigate = useCallback((destination: string) => {
     const route = toInternalRoute(destination);
     if (!route) return;
@@ -746,15 +728,6 @@ export default function ErpHeader({
           onDateChange={setPickedDate}
         />
       </header>
-      <TabStrip
-        quickTabs={quickTabs}
-        billNumber={resolvedBillNumber}
-        onBillNumberChange={handleBillNumberChange}
-        billPlaceholder={billPlaceholder}
-        onNavigate={handleNavigate}
-        onMenuClose={closeFocusedMenu}
-        quickTabsRef={quickTabsRef}
-      />
     </div>
   );
 }

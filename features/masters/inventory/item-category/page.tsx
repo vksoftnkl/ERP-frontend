@@ -26,6 +26,10 @@ import {
 import styles from "@/app/master/state-master/page.module.scss";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue, toSelectBoolean } from "@/features/masters/shared/value-mappers";
+import {
+  resolveStoredPhotoName,
+  resolveStoredPhotoPreview,
+} from "@/features/masters/shared/stored-photo";
 const API_ENDPOINTS = {
 list: "/configured-grid-sql/run?grid_id=11",
   getById: "/item-categories/get",
@@ -200,6 +204,7 @@ const CATEGORY_PHOTO_URL_KEYS = [
   "photo_url",
   "photoUrl",
 ] as const;
+const CATEGORY_PHOTO_KEYS = ["category_photo", "categoryPhoto"] as const;
 
 const TAX_LOOKUP_KEYS = {
   id: ["tax_id", "taxId", "id", "_id", "item_tax_id", "itemTaxId"],
@@ -235,6 +240,8 @@ const CATEGORY_INITIAL_FORM_VALUES = {
   categoryDefaultHsn: "",
   categoryDefaultUomId: "",
   categoryPhotoUrl: "",
+  categoryPhoto: "",
+  categoryPhotoPreview: "",
   masterDescription: "",
 } as const;
 const DEFAULT_SELECT_OPTION: ERPDynamicSelectOption = {
@@ -323,6 +330,7 @@ function buildCategoryFormFields(
       accept: "image/*",
       maxFileSizeBytes: FILE_CONSTRAINTS.MAX_UPLOAD_IMAGE_BYTES,
       allowedMimeTypes: [...FILE_CONSTRAINTS.ALLOWED_MIME_TYPES],
+      previewImageValueKey: "categoryPhotoPreview",
       helperText: "Optional. Sent as base64 in category_photo.",
       colSpan: 2,
     },
@@ -874,6 +882,15 @@ export default function ItemCategoryMasterPage() {
           categoryPhotoUrl: toDisplayValue(
             getFirstDefinedValue(rowSource, CATEGORY_PHOTO_URL_KEYS),
           ),
+          // Stored file name + preview image for the file field on edit/view.
+          categoryPhoto: resolveStoredPhotoName(
+            toDisplayValue(getFirstDefinedValue(rowSource, CATEGORY_PHOTO_URL_KEYS)),
+            toDisplayValue(getFirstDefinedValue(rowSource, CATEGORY_PHOTO_KEYS)).length > 0,
+          ),
+          categoryPhotoPreview: resolveStoredPhotoPreview(
+            toDisplayValue(getFirstDefinedValue(rowSource, CATEGORY_PHOTO_KEYS)),
+            toDisplayValue(getFirstDefinedValue(rowSource, CATEGORY_PHOTO_URL_KEYS)),
+          ),
           masterDescription:
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.description)) ||
             defaults.masterDescription,
@@ -905,7 +922,11 @@ export default function ItemCategoryMasterPage() {
           category_default_tax_id: toNullableReference(values.categoryDefaultTaxId ?? ""),
           category_default_hsn: (values.categoryDefaultHsn ?? "").trim(),
           category_default_uom_id: toNullableReference(values.categoryDefaultUomId ?? ""),
-          category_photo_url: (values.categoryPhotoUrl ?? "").trim(),
+          // Persist the uploaded file's name in category_photo_url so edit/view
+          // can show it later (an explicit URL is kept when no new file is chosen).
+          category_photo_url: categoryPhoto
+            ? uploadedImage!.name
+            : (values.categoryPhotoUrl ?? "").trim(),
           ...(categoryPhoto ? { category_photo: categoryPhoto } : {}),
           ...(shouldUpdate && editingItemId !== null
             ? { category_id: String(editingItemId) }

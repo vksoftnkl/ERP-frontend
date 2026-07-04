@@ -139,6 +139,9 @@ export type ERPDynamicModalField = {
   accept?: string;
   maxFileSizeBytes?: number;
   allowedMimeTypes?: string[];
+  // File fields only: name of a form-values key holding an image source (URL or
+  // data URL) for the already-stored file, rendered as a preview on edit/view.
+  previewImageValueKey?: string;
   validation?: ERPDynamicFieldValidation;
   visibleWhen?: (values: Record<string, string>) => boolean;
   gridColumnStart?: number;

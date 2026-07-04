@@ -31,6 +31,10 @@ import {
   toNullableString,
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
+import {
+  resolveStoredPhotoName,
+  resolveStoredPhotoPreview,
+} from "@/features/masters/shared/stored-photo";
 const API_ENDPOINTS = {
   list: "/configured-grid-sql/run?grid_id=7",
   getById: "/item-brands/get",
@@ -102,6 +106,7 @@ const BRAND_PARENT_ID_KEYS = ["brand_parent_id", "brandParentId", "parent_id", "
 const BRAND_PARENT_NAME_KEYS = ["brand_parent_name", "brandParentName", "parent_name", "parentName", "parent_brand_name"] as const;
 const BRAND_LEVEL_KEYS = ["brand_level", "brandLevel", "level"] as const;
 const BRAND_PHOTO_URL_KEYS = ["brand_photo_url", "brandPhotoUrl", "photo_url", "photoUrl"] as const;
+const BRAND_PHOTO_KEYS = ["brand_photo", "brandPhoto"] as const;
 const FILE_CONSTRAINTS = {
   MAX_UPLOAD_IMAGE_BYTES: 5 * 1024 * 1024,
   ALLOWED_MIME_TYPES: [
@@ -177,6 +182,8 @@ const INITIAL_FORM_VALUES = {
   parentBrandId: "",
   brandLevel: "0",
   brandPhotoUrl: "",
+  brandPhoto: "",
+  brandPhotoPreview: "",
 } as const;
 type LazyParentHandlers = {
   onSearchOpenChange: (open: boolean) => void;
@@ -239,6 +246,7 @@ function buildItemBrandFormFields(
       accept: "image/*",
       maxFileSizeBytes: FILE_CONSTRAINTS.MAX_UPLOAD_IMAGE_BYTES,
       allowedMimeTypes: [...FILE_CONSTRAINTS.ALLOWED_MIME_TYPES],
+      previewImageValueKey: "brandPhotoPreview",
       helperText: "Optional. Sent as base64 in brand_photo.",
       colSpan: 2,
     },
@@ -676,6 +684,8 @@ export default function ItemBrandMasterPage() {
       }}
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
+        const brandPhotoUrl = toDisplayValue(getFirstDefinedValue(rowSource, BRAND_PHOTO_URL_KEYS));
+        const brandPhotoBase64 = toDisplayValue(getFirstDefinedValue(rowSource, BRAND_PHOTO_KEYS));
         const parentBrandId = toDisplayValue(getFirstDefinedValue(rowSource, BRAND_PARENT_ID_KEYS));
         // Seed the lazy Parent Brand dropdown with the saved selection so the trigger
         // shows the parent name on edit/view before the field is opened (and loaded).
@@ -699,7 +709,10 @@ export default function ItemBrandMasterPage() {
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) || defaults.position,
           parentBrandId,
           brandLevel: toDisplayValue(getFirstDefinedValue(rowSource, BRAND_LEVEL_KEYS)) || "0",
-          brandPhotoUrl: toDisplayValue(getFirstDefinedValue(rowSource, BRAND_PHOTO_URL_KEYS)),
+          brandPhotoUrl,
+          // Stored file name + preview image for the file field on edit/view.
+          brandPhoto: resolveStoredPhotoName(brandPhotoUrl, brandPhotoBase64.length > 0),
+          brandPhotoPreview: resolveStoredPhotoPreview(brandPhotoBase64, brandPhotoUrl),
         };
       }}
       buildRequestPayload={async ({ values, shouldUpdate, editingItemId, files }) => {
@@ -721,7 +734,11 @@ export default function ItemBrandMasterPage() {
           brand_parent_id: toNullableReference(values.parentBrandId ?? ""),
           brand_sort: toInteger(values.position ?? "0", 0),
           brand_level: Math.max(0, toInteger(values.brandLevel ?? "0", 0)),
-          brand_photo_url: (values.brandPhotoUrl ?? "").trim(),
+          // Persist the uploaded file's name in brand_photo_url so edit/view can
+          // show it later (an explicit URL is kept when no new file is chosen).
+          brand_photo_url: brandPhoto
+            ? uploadedImage!.name
+            : (values.brandPhotoUrl ?? "").trim(),
           ...(brandPhoto ? { brand_photo: brandPhoto } : {}),
           ...(shouldUpdate && editingItemId !== null ? { brand_id: toUpdateId(editingItemId) } : {}),
         };
