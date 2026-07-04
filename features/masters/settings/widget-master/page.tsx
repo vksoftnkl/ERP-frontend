@@ -429,6 +429,8 @@ export default function WidgetMasterPage() {
       createLabel="Add Section"
       formTitle="Widget Section Form"
       formDescription="Create and update widget sections and their fields."
+      createModalTitle="Widget Section Entry"
+      editModalTitle="Edit Widget Section Entry"
       customFields={widgetFormFields}
       createInitialValues={createInitialValues}
       gridTableName={GRID_TABLE_NAME}

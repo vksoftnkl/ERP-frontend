@@ -2277,6 +2277,9 @@ export default function CustomerPage() {
         nameColumnHeader="Customer Name"
         formTitle="Customer Form"
         formDescription="Create and update customers."
+        createModalTitle="Customer Entry"
+        editModalTitle="Edit Customer Entry"
+        listSubtitleOverride="Manage customers"
         customFields={customerFormFields}
         createInitialValues={CUSTOMER_INITIAL_FORM_VALUES}
         modalPanelStyle={CUSTOMER_MODAL_PANEL_STYLE}

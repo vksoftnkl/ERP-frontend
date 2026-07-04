@@ -959,7 +959,10 @@ export default function AreaMasterPage() {
         codeColumnHeader="Area Code"
         nameColumnHeader="Area Name"
         nameFieldLabel="Area Name"
+        createModalTitle="Area Entry"
+        editModalTitle="Edit Area Entry"
         nameFieldPlaceholder="Navrangpura"
+        listSubtitleOverride="Manage areas"
         formTitle="Area Form"
         formDescription="Create and update areas."
         customFields={areaFormFields}

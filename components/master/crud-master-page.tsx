@@ -2240,6 +2240,7 @@ export default function CrudMasterPage({
   styles,
   listTitle,
   listTitleOverride,
+  listSubtitleOverride,
   createLabel,
   codeColumnHeader,
   nameColumnHeader,
@@ -3745,7 +3746,8 @@ export default function CrudMasterPage({
                   <div className={styles.pageHeaderText}>
                     <h1 className={styles.pageTitle}>{listHeading}</h1>
                     <p className={styles.pageSubtitle}>
-                      Manage all {entityLabelPlural} in your organization
+                      {listSubtitleOverride ??
+                        `Manage all ${entityLabelPlural} in your organization`}
                     </p>
                   </div>
                  

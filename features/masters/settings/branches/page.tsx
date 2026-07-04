@@ -860,6 +860,7 @@ export default function BranchesMasterPage() {
       nameFieldPlaceholder="Main Branch"
       formTitle="Branch Form"
       listTitleOverride="Branch List"
+      listSubtitleOverride="Manage branches and their configuration"
       formDescription="Create and update branches with address, billing, inventory, and compliance details."
       customFields={branchFormFields}
       createInitialValues={BRANCH_INITIAL_FORM_VALUES}
@@ -868,8 +869,8 @@ export default function BranchesMasterPage() {
       modalFormDenseGrid={false}
       modalStackLabels={true}
       modalSectionNavigationMode="tabs"
-      createModalTitle="Unit Branch Entry"
-      editModalTitle="Edit Unit Branch Entry"
+      createModalTitle=" Branch Entry"
+      editModalTitle="Edit Branch Entry"
       modalHideFieldHelperText
       modalHideFieldErrorText
       modalFocusFirstInvalidFieldOnValidationError

@@ -585,6 +585,8 @@ export default function GspCompanyServiceMasterPage() {
       nameFieldPlaceholder="Select Service Type"
       formTitle="GSP Company Service Form"
       formDescription="Create and update GSP company service mappings."
+      createModalTitle="GSP Company Service Entry"
+      editModalTitle="Edit GSP Company Service Entry"
       customFields={formFields}
       createInitialValues={INITIAL_FORM_VALUES}
       onModalOpenChange={(open, variantKey) => {

@@ -88,6 +88,8 @@ export default function GspServiceMasterPage() {
       nameFieldPlaceholder="EINV"
       formTitle="GSP Service Form"
       formDescription="Create and update GSP services."
+      createModalTitle="GSP Service Entry"
+      editModalTitle="Edit Group Entry"
       customFields={FORM_FIELDS}
       createInitialValues={INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {

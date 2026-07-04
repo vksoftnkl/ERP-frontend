@@ -115,6 +115,14 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   defaultSortState?: ReusableTableSortState;
   onSortChange?: (sortState: ReusableTableSortState) => void;
   paginated?: boolean;
+  /**
+   * Fit the page size to the viewport so rows fill the available height with
+   * no vertical scrolling. The computed size overrides `pageSize` /
+   * `defaultPageSize` and is reported through `onPageSizeChange` so
+   * server-driven callers can send it as the request `limit`. Enabled by
+   * default for paginated tables; pass `false` to keep fixed page sizes.
+   */
+  autoPageSize?: boolean;
   manualPagination?: boolean;
   totalEntries?: number;
   currentPage?: number;

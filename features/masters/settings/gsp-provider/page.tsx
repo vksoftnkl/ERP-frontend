@@ -149,6 +149,8 @@ export default function GspProviderMasterPage() {
       codeColumnHeader="Provider Code"
       nameColumnHeader="Provider Name"
       nameFieldLabel="Provider Name"
+      createModalTitle="GSP Provider Entry"
+      editModalTitle="Edit Group Entry"
       nameFieldPlaceholder="ClearTax"
       formTitle="GSP Provider Form"
       formDescription="Create and update GSP providers."

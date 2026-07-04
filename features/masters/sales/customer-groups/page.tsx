@@ -569,7 +569,10 @@ export default function CustomerGroupsPage() {
       codeColumnHeader="Alias"
       nameColumnHeader="Group Name"
       nameFieldLabel="Group Name"
+      listSubtitleOverride="Manage customer groups"
       nameFieldPlaceholder="Retail"
+      createModalTitle="Customer Group Entry"
+      editModalTitle="Edit Customer Group Entry"
       formTitle="Customer Group Form"
       formDescription="Create and update customer groups."
         modalPanelStyle={{ width: "min(40rem, calc(100vw - 2.4rem))" }}

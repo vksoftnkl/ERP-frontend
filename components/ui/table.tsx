@@ -6,11 +6,13 @@ import {
   type MouseEvent,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useAutoFitPageSize } from "@/hooks/useAutoFitPageSize";
 import {
   FiChevronLeft,
   FiChevronRight,
@@ -507,6 +509,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   defaultSortState = { key: null, direction: "asc" },
   onSortChange,
   paginated = false,
+  autoPageSize = true,
   manualPagination = false,
   totalEntries,
   currentPage,
@@ -565,9 +568,25 @@ export function ReusableTable<T extends Record<string, unknown>>({
     : columns.filter((column) => !isActionsColumn(column));
   const effectiveSearchQuery = isSearchControlled ? searchQuery : internalSearchQuery;
   const effectiveSortState = isSortControlled ? sortState : internalSortState;
+  const autoFitEnabled = paginated && autoPageSize;
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const headRef = useRef<HTMLTableSectionElement | null>(null);
+  const bodyRef = useRef<HTMLTableSectionElement | null>(null);
+  const { autoPageSize: autoFitPageSize, remeasure: remeasureAutoPageSize } =
+    useAutoFitPageSize({
+      enabled: autoFitEnabled,
+      viewportRef,
+      headerRef: headRef,
+      bodyRef,
+      isDataRow: (row) => !row.cells[0]?.classList.contains(styles.emptyCell),
+    });
   const effectivePageSize = Math.max(
     1,
-    isPageSizeControlled ? (pageSize ?? defaultPageSize) : internalPageSize,
+    autoFitEnabled && autoFitPageSize !== null
+      ? autoFitPageSize
+      : isPageSizeControlled
+        ? (pageSize ?? defaultPageSize)
+        : internalPageSize,
   );
   const shouldIncludeActionsColumn = showActionsColumn ?? Boolean(hasActionsColumn || hasRowActions);
   const rawDisplayColumns =
@@ -674,11 +693,43 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const showToolbar = Boolean(title || toolbarContent || searchable || onCreate || toolbarActions);
   const renderedRowCount = Math.max(1, paginatedRows.length);
   const compactViewportRowThreshold = paginated ? effectivePageSize : 8;
+  // Auto-fit needs the viewport to keep claiming the full leftover height even
+  // when few rows are rendered, otherwise the measurement collapses to the
+  // current row count and locks the page size small.
   const shouldUseCompactViewport =
-    fullViewHeight && renderedRowCount < compactViewportRowThreshold;
+    fullViewHeight && !autoFitEnabled && renderedRowCount < compactViewportRowThreshold;
   const resolvedTableMaxHeight = fullViewHeight
     ? "none"
-    : tableMaxHeight ?? DEFAULT_TABLE_MAX_HEIGHT;
+    : tableMaxHeight ?? (autoFitEnabled ? "none" : DEFAULT_TABLE_MAX_HEIGHT);
+  // Report the fitted page size so server-driven callers refetch with it as
+  // the request limit. Layout effect: it must land before the caller's
+  // initial-fetch effect fires, so the first request already uses the fitted
+  // limit instead of the hardcoded default.
+  const onPageSizeChangeRef = useRef(onPageSizeChange);
+  onPageSizeChangeRef.current = onPageSizeChange;
+  const notifiedAutoPageSizeRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (!autoFitEnabled || autoFitPageSize === null) {
+      return;
+    }
+    if (notifiedAutoPageSizeRef.current === autoFitPageSize) {
+      return;
+    }
+    notifiedAutoPageSizeRef.current = autoFitPageSize;
+    if (!isPageSizeControlled) {
+      setInternalPageSize(autoFitPageSize);
+    }
+    onPageSizeChangeRef.current?.(autoFitPageSize);
+  }, [autoFitEnabled, autoFitPageSize, isPageSizeControlled]);
+  // Re-measure when the rendered rows change (first data arrival replaces the
+  // estimated row height with a sampled one) and when the column layout
+  // changes (width/order changes can rewrap text and change row height).
+  useLayoutEffect(() => {
+    remeasureAutoPageSize();
+  }, [paginatedRows, remeasureAutoPageSize]);
+  useLayoutEffect(() => {
+    remeasureAutoPageSize({ invalidateRowHeight: true });
+  }, [columnWidths, displayColumnSignature, remeasureAutoPageSize, tableWidthOverride]);
   const enableRowReorder = reorderableRows && typeof onRowReorder === "function";
   const enableColumnReorder = reorderableColumns && displayColumns.some(isColumnReorderable);
   const enableColumnResize = resizableColumns && displayColumns.some(isColumnReorderable);
@@ -1468,6 +1519,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
         </div>
       ) : null}
       <div
+        ref={viewportRef}
         className={styles.tableViewport}
         data-erp-table-viewport="true"
         style={
@@ -1494,7 +1546,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
             })}
           </colgroup>
           {hasRenderableColumns ? (
-            <thead className={styles.head}>
+            <thead ref={headRef} className={styles.head}>
               <tr>
                 {displayColumnsForRender.map((column) => {
                 const canSort = isColumnSortable(column, sortable);
@@ -1586,7 +1638,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
               </tr>
             </thead>
           ) : null}
-          <tbody className={styles.body}>
+          <tbody ref={bodyRef} className={styles.body}>
             {paginatedRows.length === 0 ? (
               <tr className={cx(styles.row, styles.rowOdd)}>
                 <td
@@ -1763,7 +1815,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
             <span>
               {paginationLabel} {pageStart} to {pageEnd} of {resolvedTotalEntries} entries
             </span>
-            {showPageSizeSelector ? (
+            {showPageSizeSelector && !autoFitEnabled ? (
               <label className={styles.pageSizeControl}>
                 <span>Show:</span>
                 <select

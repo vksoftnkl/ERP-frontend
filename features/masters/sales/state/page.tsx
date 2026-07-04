@@ -423,6 +423,8 @@ export default function StateMasterPage() {
       nameColumnHeader="State Name"
       nameFieldLabel="State Name"
       nameFieldPlaceholder="Gujarat"
+      createModalTitle="State Entry"
+      editModalTitle="Edit State Entry"
       formTitle="State Form"
       formDescription="Create and update states."
         modalPanelStyle={{ width: "min(40rem, calc(100vw - 2.4rem))" }}

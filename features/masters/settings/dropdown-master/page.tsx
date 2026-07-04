@@ -288,6 +288,8 @@ export default function DropdownMasterPage() {
       nameFieldLabel="Dropdown Name"
       nameFieldPlaceholder="e.g. Item Lookup"
       formTitle="Dropdown Form"
+      createModalTitle="Dropdown Entry"
+      editModalTitle="Edit Dropdown Entry"
       formDescription="Create and manage dropdown definitions. Use the designer to edit dropdown columns."
       customFields={FORM_FIELDS}
       createInitialValues={INITIAL_FORM_VALUES}

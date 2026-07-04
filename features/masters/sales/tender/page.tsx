@@ -671,6 +671,8 @@ export default function TenderMasterPage() {
       nameFieldPlaceholder="Cash"
       formTitle="Tender Form"
       formDescription="Create and update tenders."
+      createModalTitle="Tender Entry"
+      editModalTitle="Edit Tender Entry"
       customFields={tenderFormFields}
       createInitialValues={TENDER_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {

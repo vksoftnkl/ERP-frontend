@@ -151,6 +151,7 @@ export type CrudMasterPageProps = {
   styles: Record<string, string>;
   listTitle?: string;
   listTitleOverride?: string;
+  listSubtitleOverride?: string;
   createLabel?: string;
   codeColumnHeader?: string;
   nameColumnHeader?: string;

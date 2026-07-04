@@ -1083,6 +1083,7 @@ export function useCompaniesModule() {
         styles,
         listTitle: "Company List",
         listTitleOverride: "Company List",
+        listSubtitleOverride: "Manage companies and their configuration",
         createLabel: "Add Company",
         codeColumnHeader: "Company Code",
         nameColumnHeader: "Company Name",
