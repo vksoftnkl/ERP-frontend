@@ -931,6 +931,18 @@
   min-width: 24rem;
   max-width: min(34rem, 92vw);
 }
+// Docked variant: pins the open menu to the bottom-right of the viewport
+// (legacy ERP item-picker placement) instead of dropping below its cell.
+// Bottom offset keeps it clear of the totals bar.
+.lookupMenuDockedBottomRight {
+  position: fixed;
+  top: auto;
+  left: auto;
+  right: 1rem;
+  bottom: 4rem;
+  z-index: 240;
+  min-width: 24rem;
+}
 .lookupTableHead {
   display: grid;
   align-items: center;

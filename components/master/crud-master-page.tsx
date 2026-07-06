@@ -1347,10 +1347,15 @@ function buildColumnsFromGridColumns(
   const seenSourceKeys = new Set<string>();
   for (const column of visibleColumns) {
     const accessor = resolveMasterAccessorFromGridColumn(column, lookupKeys);
-    if (accessor) {
-      if (seenAccessors.has(accessor)) {
-        continue;
-      }
+    const accessorTaken = accessor !== null && seenAccessors.has(accessor);
+    // A column whose heuristic accessor is already claimed (e.g. itg_parent_name
+    // resolves to masterName after itg_name) still renders — from its own SQL
+    // field via the source branch below — rather than being silently dropped.
+    // Duplicates with no SQL field of their own keep the old skip.
+    if (accessorTaken && !column.sqlFieldName) {
+      continue;
+    }
+    if (accessor && !accessorTaken) {
       seenAccessors.add(accessor);
       columns.push({
         key: normalizeColumnToken(column.key || column.accessorKey || column.header || accessor),

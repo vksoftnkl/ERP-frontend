@@ -278,6 +278,7 @@ export function StockTableRow({
                 emptyMessage={lookupFieldConfig.emptyMessage}
                 options={lookupOptions}
                 columns={LOOKUP_TABLE_COLUMNS[lookupKind]}
+                dockMenuToPageBottomRight
                 searchQuery={lookupSearchQuery}
                 shortcutValues={row.values}
                 hasValidationError={hasValidationError}

@@ -1,5 +1,4 @@
 "use client";
-
 import {
   useEffect,
   useRef,
@@ -29,6 +28,9 @@ type LookupCellProps = {
   // When provided, the dropdown renders as a grid with these data columns (plus a
   // leading S.No column). Omit for the default single-column list layout.
   columns?: readonly LookupTableColumn[];
+  // Pins the open menu to the bottom-right of the viewport instead of
+  // dropping it below the trigger cell.
+  dockMenuToPageBottomRight?: boolean;
   searchQuery: string;
   shortcutValues?: Record<string, string>;
   hasValidationError: boolean;
@@ -73,6 +75,7 @@ export function LookupCell({
   emptyMessage,
   options,
   columns,
+  dockMenuToPageBottomRight,
   searchQuery,
   shortcutValues,
   hasValidationError,
@@ -229,7 +232,11 @@ export function LookupCell({
       </button>
       {isOpen ? (
         <div
-          className={cx(styles.lookupMenu, isTabular && styles.lookupMenuTable)}
+          className={cx(
+            styles.lookupMenu,
+            isTabular && styles.lookupMenuTable,
+            dockMenuToPageBottomRight && styles.lookupMenuDockedBottomRight,
+          )}
           data-opening-stock-lookup-menu="true"
         >
           <div className={styles.lookupSearchWrap}>

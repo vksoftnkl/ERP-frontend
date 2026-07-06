@@ -57,10 +57,6 @@ import type {
 } from "./type";
 import {
   API_ENDPOINTS,
-  ITEM_PRICE_API_ENDPOINTS,
-  ITEM_UNIT_CONVERSION_API_ENDPOINTS,
-  ITEM_REORDER_API_ENDPOINTS,
-  ITEM_EAN_CODE_API_ENDPOINTS,
   GRID_TABLE_NAME,
   LOOKUP_ENDPOINT,
   TAX_LOOKUP_ENDPOINT,
@@ -1230,10 +1226,6 @@ function filterItemPriceRowsByScope(
         scope.companyId &&
       normalizeComparisonString(getFieldValue(row, "ipm_branch_id")) === scope.branchId,
   );
-}
-
-function toSingleOrArrayPayload<T>(items: T[]): T | T[] {
-  return items.length === 1 ? items[0] : items;
 }
 
 function selectManagedItemPriceLinkedRow(
@@ -3458,40 +3450,6 @@ export default function ItemMasterPageContent({
   const { getAll: getUnitLookup } = useApi<unknown>(UNIT_LOOKUP_ENDPOINT);
   const { getAll: getGodownLookup } = useApi<unknown>(GODOWN_LOOKUP_ENDPOINT);
   const { getAll: getHsnLookup } = useApi<unknown>(HSN_LOOKUP_ENDPOINT);
-  // GET /items/get?item_id=X returns the item's unit conversions, prices, EAN
-  // codes and reorders as sibling arrays on the same response (see
-  // FIX_ITEM_UNIT_CONVERSIONS_404.md) — the standalone per-table list
-  // endpoints (e.g. /item-unit-conversions/get) are not reliably implemented,
-  // so every read of these linked tables goes through this composite fetch
-  // instead.
-  const { getAll: getItemDetailById } = useApi<unknown>(API_ENDPOINTS.getById);
-  const { run: removeItemUnitConversion } = useApi<unknown, unknown>(
-    ITEM_UNIT_CONVERSION_API_ENDPOINTS.delete,
-    {
-      method: "DELETE",
-      toast: {
-        success: false,
-      },
-    },
-  );
-  const { run: removeItemPrice } = useApi<unknown, unknown>(ITEM_PRICE_API_ENDPOINTS.delete, {
-    method: "DELETE",
-    toast: {
-      success: false,
-    },
-  });
-  const { run: removeItemReorder } = useApi<unknown, unknown>(ITEM_REORDER_API_ENDPOINTS.delete, {
-    method: "DELETE",
-    toast: {
-      success: false,
-    },
-  });
-  const { run: removeItemEanCode } = useApi<unknown, unknown>(ITEM_EAN_CODE_API_ENDPOINTS.delete, {
-    method: "DELETE",
-    toast: {
-      success: false,
-    },
-  });
   const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [groupOptions, setGroupOptions] = useState<ERPDynamicSelectOption[]>([]);
@@ -3804,52 +3762,6 @@ export default function ItemMasterPageContent({
     getUnitLookup,
     listItemTaxes,
   ]);
-  const fetchItemDetailRecord = useCallback(
-    async (itemId: string) => {
-      const payload = await getItemDetailById({ item_id: itemId });
-      return extractResponseRecord(payload) ?? {};
-    },
-    [getItemDetailById],
-  );
-  // Single composite GET /items/get?item_id=X fetch shared by every caller
-  // that needs the item's *current* linked-table state (delete cascade,
-  // post-update reconciliation). Each caller used to issue its own fetch —
-  // when four of them ran concurrently via Promise.all, they all shared the
-  // same useApi hook instance, whose single in-flight AbortController meant
-  // each new call silently canceled the previous one, leaving three of the
-  // four with an empty result and no rows to reconcile/delete. Fetching once
-  // up front and handing every caller the same snapshot avoids the race.
-  const fetchItemLinkedRecordsSnapshot = useCallback(
-    async (itemId: string) => {
-      const detail = await fetchItemDetailRecord(itemId);
-      return {
-        unitConversions: extractArrayRecords(
-          getFieldValue(detail, "unit_conversions"),
-          DEFAULT_LOOKUP_ARRAY_KEYS,
-        ),
-        prices: extractArrayRecords(
-          getFieldValue(detail, "prices"),
-          DEFAULT_LOOKUP_ARRAY_KEYS,
-        ),
-        reorders: extractArrayRecords(
-          getFieldValue(detail, "reorders"),
-          DEFAULT_LOOKUP_ARRAY_KEYS,
-        ),
-        eanCodes: extractArrayRecords(
-          getFieldValue(detail, "ean_codes"),
-          DEFAULT_LOOKUP_ARRAY_KEYS,
-        ),
-      };
-    },
-    [fetchItemDetailRecord],
-  );
-  const extractLinkedRowIds = useCallback(
-    (rows: Record<string, unknown>[], fieldName: string) =>
-      rows
-        .map((row) => toDisplayValue(getFieldValue(row, fieldName)))
-        .filter((value): value is string => Boolean(value)),
-    [],
-  );
   const buildItemUnitConversionPayloadRows = useCallback(
     (itemId: string, values: Record<string, string>) => {
       const normalizedValues = normalizeItemLinkedSubmissionValues(
@@ -3857,7 +3769,6 @@ export default function ItemMasterPageContent({
         itemTaxRecordsById,
       );
       const baseUnitId = resolveLinkedBaseUnitId(normalizedValues);
-
       // The Unit Conversion Table is the source of truth for its own payload.
       // Price rows are kept in sync with these rows via the value-change
       // handlers, so we always serialize the unit conversion rows directly
@@ -3865,7 +3776,6 @@ export default function ItemMasterPageContent({
       return buildManagedItemUnitConversionRows(normalizedValues).map((row) => {
         const unitId = (row.iuc_unit_id ?? "").trim() || baseUnitId;
         const payload: Record<string, unknown> = {
-          iuc_company_id: (normalizedValues.item_company_id ?? "").trim(),
           iuc_item_id: itemId,
           iuc_unit_id: unitId,
           iuc_base_unit_id: baseUnitId,
@@ -3888,12 +3798,10 @@ export default function ItemMasterPageContent({
           iuc_uom_remarks: toNullableString(row.iuc_uom_remarks ?? ""),
           iuc_is_active: (row.iuc_is_active ?? "true") === "true",
         };
-
         const itemUnitConversionId = toTrimmedOrUndefined(row.iuc_id);
         if (itemUnitConversionId) {
           payload.iuc_id = itemUnitConversionId;
         }
-
         return payload;
       });
     },
@@ -4061,163 +3969,6 @@ export default function ItemMasterPageContent({
       });
     },
     [],
-  );
-  const deleteLinkedItemPrices = useCallback(
-    async (rows: Record<string, unknown>[]) => {
-      const itemPriceIds = extractLinkedRowIds(rows, "ipm_id");
-      if (itemPriceIds.length === 0) {
-        return;
-      }
-      await removeItemPrice({
-        body: toSingleOrArrayPayload(
-          itemPriceIds.map((ipmId) => ({
-            ipm_id: ipmId,
-          })),
-        ),
-      });
-    },
-    [extractLinkedRowIds, removeItemPrice],
-  );
-  const deleteLinkedItemUnitConversions = useCallback(
-    async (rows: Record<string, unknown>[]) => {
-      const itemUnitConversionIds = extractLinkedRowIds(rows, "iuc_id");
-      if (itemUnitConversionIds.length === 0) {
-        return;
-      }
-      await removeItemUnitConversion({
-        body: itemUnitConversionIds.map((iucId) => ({
-          iuc_id: iucId,
-        })),
-      });
-    },
-    [extractLinkedRowIds, removeItemUnitConversion],
-  );
-  const deleteLinkedItemReorders = useCallback(
-    async (rows: Record<string, unknown>[]) => {
-      const itemReorderIds = extractLinkedRowIds(rows, "ir_id");
-      if (itemReorderIds.length === 0) {
-        return;
-      }
-      await removeItemReorder({
-        body: itemReorderIds.map((irId) => ({
-          ir_id: irId,
-        })),
-      });
-    },
-    [extractLinkedRowIds, removeItemReorder],
-  );
-  const deleteLinkedItemEanCodes = useCallback(
-    async (rows: Record<string, unknown>[]) => {
-      const itemEanCodeIds = extractLinkedRowIds(rows, "ean_id");
-      if (itemEanCodeIds.length === 0) {
-        return;
-      }
-      await removeItemEanCode({
-        body: itemEanCodeIds.map((eanId) => ({
-          ean_id: eanId,
-        })),
-      });
-    },
-    [extractLinkedRowIds, removeItemEanCode],
-  );
-  // The item plus its unit conversions, prices, EAN codes and reorders are
-  // created/updated together in the single /items/create composite call (see
-  // buildRequestPayload). That endpoint never deletes rows omitted from the
-  // payload, so these reconcilers run after an update to delete the linked rows
-  // the user removed from each table. Upserts are no longer issued here. Each
-  // takes the *existing* rows (a snapshot fetched once by the caller) rather
-  // than fetching them itself, so running all four concurrently can't race on
-  // a shared useApi hook's single in-flight request (see
-  // fetchItemLinkedRecordsSnapshot).
-  const reconcileRemovedItemUnitConversions = useCallback(
-    async (existingRows: Record<string, unknown>[], itemId: string, values: Record<string, string>) => {
-      const desiredRows = buildItemUnitConversionPayloadRows(itemId, values);
-      const desiredIds = new Set(
-        desiredRows
-          .map((row) => (typeof row.iuc_id === "string" ? row.iuc_id : ""))
-          .filter(Boolean),
-      );
-      const deleteIds = extractLinkedRowIds(existingRows, "iuc_id").filter(
-        (existingId) => !desiredIds.has(existingId),
-      );
-      if (deleteIds.length === 0) {
-        return;
-      }
-      await removeItemUnitConversion({
-        body: deleteIds.map((iucId) => ({
-          iuc_id: iucId,
-        })),
-      });
-    },
-    [buildItemUnitConversionPayloadRows, extractLinkedRowIds, removeItemUnitConversion],
-  );
-  const reconcileRemovedItemPrices = useCallback(
-    async (existingRows: Record<string, unknown>[], itemId: string, values: Record<string, string>) => {
-      const desiredRows = buildItemPricePayloadRows(itemId, values);
-      const desiredIds = new Set(
-        desiredRows
-          .map((row) => (typeof row.ipm_id === "string" ? row.ipm_id : ""))
-          .filter(Boolean),
-      );
-      const deleteIds = extractLinkedRowIds(existingRows, "ipm_id").filter(
-        (existingId) => !desiredIds.has(existingId),
-      );
-      if (deleteIds.length === 0) {
-        return;
-      }
-      await removeItemPrice({
-        body: toSingleOrArrayPayload(
-          deleteIds.map((ipmId) => ({
-            ipm_id: ipmId,
-          })),
-        ),
-      });
-    },
-    [buildItemPricePayloadRows, extractLinkedRowIds, removeItemPrice],
-  );
-  const reconcileRemovedItemReorders = useCallback(
-    async (existingRows: Record<string, unknown>[], itemId: string, values: Record<string, string>) => {
-      const desiredRows = buildItemReorderPayloadRows(itemId, values);
-      const desiredIds = new Set(
-        desiredRows
-          .map((row) => (typeof row.ir_id === "string" ? row.ir_id : ""))
-          .filter(Boolean),
-      );
-      const deleteIds = extractLinkedRowIds(existingRows, "ir_id").filter(
-        (existingId) => !desiredIds.has(existingId),
-      );
-      if (deleteIds.length === 0) {
-        return;
-      }
-      await removeItemReorder({
-        body: deleteIds.map((irId) => ({
-          ir_id: irId,
-        })),
-      });
-    },
-    [buildItemReorderPayloadRows, extractLinkedRowIds, removeItemReorder],
-  );
-  const reconcileRemovedItemEanCodes = useCallback(
-    async (existingRows: Record<string, unknown>[], itemId: string, values: Record<string, string>) => {
-      const desiredRows = buildItemEanPayloadRows(itemId, values);
-      const desiredIds = new Set(
-        desiredRows
-          .map((row) => (typeof row.ean_id === "string" ? row.ean_id : ""))
-          .filter(Boolean),
-      );
-      const deleteIds = extractLinkedRowIds(existingRows, "ean_id").filter(
-        (existingId) => !desiredIds.has(existingId),
-      );
-      if (deleteIds.length === 0) {
-        return;
-      }
-      await removeItemEanCode({
-        body: deleteIds.map((eanId) => ({
-          ean_id: eanId,
-        })),
-      });
-    },
-    [buildItemEanPayloadRows, extractLinkedRowIds, removeItemEanCode],
   );
   const augmentItemDetailSource = useCallback(
     ({
@@ -4469,6 +4220,7 @@ export default function ItemMasterPageContent({
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
       listTitle="Item List"
+      listTitleOverride="Item List"
       createLabel="Add Item"
       codeColumnHeader="Item Code"
       nameColumnHeader="Item Name"
@@ -4537,51 +4289,18 @@ export default function ItemMasterPageContent({
         if (!savedItemId) {
           return;
         }
-        // The item and all of its linked rows were created/updated in the
-        // single /items/create composite call (see buildRequestPayload). That
-        // endpoint never deletes rows omitted from the payload, so on update we
-        // reconcile the linked rows the user removed from each table.
-        if (shouldUpdate) {
-          const normalizedValues = normalizeItemLinkedSubmissionValues(
-            values,
-            itemTaxRecordsById,
-          );
-          const snapshot = await fetchItemLinkedRecordsSnapshot(savedItemId);
-          const existingPriceRows = filterItemPriceRowsByScope(
-            snapshot.prices,
-            resolveItemPriceScope(normalizedValues),
-          );
-          await Promise.all([
-            reconcileRemovedItemUnitConversions(
-              snapshot.unitConversions,
-              savedItemId,
-              normalizedValues,
-            ),
-            reconcileRemovedItemPrices(existingPriceRows, savedItemId, normalizedValues),
-            reconcileRemovedItemReorders(snapshot.reorders, savedItemId, normalizedValues),
-            reconcileRemovedItemEanCodes(snapshot.eanCodes, savedItemId, normalizedValues),
-          ]);
-        }
+        // The item and all of its linked rows (unit conversions, prices,
+        // reorders, EAN codes) are created/updated in the single /items/create
+        // composite call (see buildRequestPayload). Rows the user removed are
+        // NOT deleted from this client — the per-table /delete endpoints
+        // (/item-unit-conversions/delete, /item-prices/delete,
+        // /item-reorders/delete, /item-ean-codes/delete) must never be called
+        // from here; the server owns that cleanup.
         await onItemSaved?.({
           itemId: savedItemId,
           shouldUpdate,
           values,
         });
-      }}
-      afterDeleteSuccess={async ({ deleteId, rowSource }) => {
-        const deletedItemId =
-          toDisplayValue(getFieldValue(unwrapItemSource(rowSource), "item_id")) ||
-          String(deleteId);
-        if (!deletedItemId) {
-          return;
-        }
-        const snapshot = await fetchItemLinkedRecordsSnapshot(deletedItemId);
-        await Promise.all([
-          deleteLinkedItemUnitConversions(snapshot.unitConversions),
-          deleteLinkedItemPrices(snapshot.prices),
-          deleteLinkedItemReorders(snapshot.reorders),
-          deleteLinkedItemEanCodes(snapshot.eanCodes),
-        ]);
       }}
     />
   );

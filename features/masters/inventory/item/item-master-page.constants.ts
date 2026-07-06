@@ -9,26 +9,6 @@ list: "/configured-grid-sql/run?grid_id=1",
   create: "/items/create",
   delete: "/items/delete",
 } as const;
-export const ITEM_PRICE_API_ENDPOINTS = {
-  list: "/item-prices/get",
-  create: "/item-prices/create",
-  delete: "/item-prices/delete",
-} as const;
-export const ITEM_UNIT_CONVERSION_API_ENDPOINTS = {
-  list: "/item-unit-conversions/get",
-  create: "/item-unit-conversions/create",
-  delete: "/item-unit-conversions/delete",
-} as const;
-export const ITEM_REORDER_API_ENDPOINTS = {
-  list: "/item-reorders/get",
-  create: "/item-reorders/create",
-  delete: "/item-reorders/delete",
-} as const;
-export const ITEM_EAN_CODE_API_ENDPOINTS = {
-  list: "/item-ean-codes/get",
-  create: "/item-ean-codes/create",
-  delete: "/item-ean-codes/delete",
-} as const;
 export const GRID_TABLE_NAME = "item_master";
 export const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
 export const TAX_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
