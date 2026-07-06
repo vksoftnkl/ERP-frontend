@@ -20,7 +20,6 @@ import baseStyles from "@/app/master/state-master/page.module.scss";
 import styles from "./page.module.scss";
 import FieldsEditor, { parseFieldDrafts, serializeFieldDrafts } from "./fields-editor";
 import type { WidgetFieldDraft, WidgetPlatform, WidgetTypeFilter } from "./type";
-
 const API_ENDPOINTS = {
   // List rows + table columns/visibility/grid-settings come from the configured
   // grid (grid_id 46 → SELECT … FROM fixed.form_section). The edit flow still
