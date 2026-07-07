@@ -11,7 +11,6 @@ import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useLoginMutation } from "@/store/api/authApi";
 import "./login-global.css";
 import styles from "./login.module.css";
-
 async function getClientIp(): Promise<string> {
   try {
     const controller = new AbortController();

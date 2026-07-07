@@ -88,9 +88,9 @@ const COMPANY_DROPDOWN_CONFIG = {
   labelKeys: ["comp_name", "compName"] as const,
   defaultOption: DEFAULT_COMPANY_OPTION,
 } as const;
-// Source keys to seed the saved company on edit/view (getById returns compId + compName).
+// Source keys to seed the saved company on edit/view (getById returns brCompId + brCompName).
 const COMPANY_SOURCE_ID_KEYS = ["compId", "comp_id", "brCompId", "br_comp_id"] as const;
-const COMPANY_SOURCE_NAME_KEYS = ["compName", "comp_name", "companyName", "company_name"] as const;
+const COMPANY_SOURCE_NAME_KEYS = ["brCompName", "br_comp_name", "compName", "comp_name", "companyName", "company_name"] as const;
 // State selects (main + region) are lazy server-side configured dropdowns (dropdown 9 ->
 // state_code/state_name); the field value is the state NAME. The full code<->name maps
 // below still load eagerly because submit derives brStateCode from the picked name.
@@ -161,7 +161,7 @@ const STATUS_CHECKBOX_FIELD_STYLE: CSSProperties = {
   paddingBlock: "0.45rem",
 };
 const BRANCH_STANDARD_FIELD_NAMES = [
-  "compId",
+  "brCompId",
   "brCode",
   "brName",
   "brMailingName",
@@ -215,7 +215,7 @@ const BRANCH_BOOLEAN_FIELD_NAMES = [
   "brSmsApplicable",
 ] as const;
 const BRANCH_INITIAL_FORM_VALUES = {
-  compId: "",
+  brCompId: "",
   brCode: "",
   brName: "",
   brMailingName: "",
@@ -350,7 +350,7 @@ function buildBranchFormFields({
       },
     },
     {
-      name: "compId",
+      name: "brCompId",
       label: "Company",
       type: "select",
       searchable: true,
@@ -889,8 +889,11 @@ export default function BranchesMasterPage() {
         const rowSource = source ?? {};
         // Seed the lazy dropdowns so the triggers show the saved labels on edit/view
         // before each field is opened (and lazily loaded).
+        const companyId = toDisplayValue(
+          getFirstDefinedValue(rowSource, COMPANY_SOURCE_ID_KEYS),
+        );
         company.seedSelected(
-          toDisplayValue(getFirstDefinedValue(rowSource, COMPANY_SOURCE_ID_KEYS)),
+          companyId,
           toDisplayValue(getFirstDefinedValue(rowSource, COMPANY_SOURCE_NAME_KEYS)),
         );
         // State field value IS the name. Fall back to deriving it from the saved code.
@@ -908,7 +911,11 @@ export default function BranchesMasterPage() {
         // getById returns no godown name, so resolve the label from the eager godown list.
         const godownId = toDisplayValue(getFirstDefinedValue(rowSource, BRANCH_GODOWN_ID_KEYS));
         godown.seedSelected(godownId, godownLabelMap.get(godownId) ?? "");
-        return mapBranchFormValues(source, defaults, stateNameByCode);
+        const mappedValues = mapBranchFormValues(source, defaults, stateNameByCode);
+        // Keep the company field value aligned with the seeded dropdown regardless of
+        // which key getById returns it under (compId/comp_id/brCompId/br_comp_id).
+        mappedValues.brCompId = companyId || mappedValues.brCompId;
+        return mappedValues;
       }}
       buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
         const normalizedState = (values.brState ?? "").trim();
@@ -916,7 +923,7 @@ export default function BranchesMasterPage() {
           stateCodeByName[normalizedState] ??
           (values.brStateCode ?? "").trim().toUpperCase();
         const payload: Record<string, unknown> = {
-          compId: (values.compId ?? "").trim(),
+          brCompId: (values.brCompId ?? "").trim(),
           brCode: toNullableString(values.brCode ?? ""),
           brName: (values.brName ?? "").trim(),
           brMailingName: toNullableString(values.brMailingName ?? ""),
