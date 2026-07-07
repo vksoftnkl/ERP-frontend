@@ -1,0 +1,84 @@
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(12px);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.02) translateY(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+:root {
+  --brand-top: #8b1d1d;
+  --brand-bot: #711010;
+  --brand: #7e1616;
+  --card: #ffffff;
+  --line: #e6e8ec;
+  --line-strong: #d5d9df;
+  --text: #17181c;
+  --muted: #5f6673;
+  --muted-2: #9198a3;
+  --brass: #d79a2c;
+  --brass-soft: #ebc06a;
+  --cream: #fbedea;
+  --danger: #c0433b;
+  --focus: rgba(126, 22, 22, 0.14);
+  --radius: 8px;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  background: #f2f4f7;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
