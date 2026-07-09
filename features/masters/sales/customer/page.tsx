@@ -131,7 +131,7 @@ const WIDGET_SECTION_PLATFORM = "Web";
 // no mapping — or no matching response entry — keep their hardcoded label and
 // render after all configured fields.
 const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
-  cusCompanyId: "comp",
+  cusCompanyId: "comp_name",
   cusAreaId: "comp_area",
   cusDefaultSalesman: "comp_salesman",
   cusBranchId: "comp_branch",
@@ -157,7 +157,7 @@ const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
   cusAddr3: "cus_address3",
   cusPriceLevelId: "cus_price_level",
   cusCreditDays: "cus_credit_days",
-  cusCreditAmtLimit: "cus_credit_amt_limit",
+  cusCreditAmtLimit: "cus_credit_amount_limit",
   cusDebitBalance: "cus_debit_balance",
   cusCreditBillLimit: "cus_credit_bill_limit",
   cusDebitGraceDays: "cus_debit_grace_days",
@@ -166,7 +166,7 @@ const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
   cusEcommerceGstin: "cus_ecommerce_gstin",
   cusGstNo: "cus_gst_no",
   cusAadharNo: "cus_aadhar_no",
-  cusDistanceKm: "cus_distance_km",
+  cusDistanceKm: "cus_distance",
   cusRegionName: "cus_region_name",
   cusRegionAddr1: "cus_region_addr1",
   cusRegionAddr2: "cus_region_addr2",
@@ -175,21 +175,22 @@ const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
   cusRegionDistrict: "cus_region_district",
   cusRegionStateName: "cus_region_state",
   cusRegionCountry: "cus_region_country",
-  cusDiscPerc: "cus_disc_perc",
-  cusBirthDate: "cus_birth_date",
-  cusMarriageDate: "cus_marriage_date",
+  cusDiscPerc: "cus_discount",
+  // "cus_birt_date" matches the (misspelled) seeded field_name in fixed.form_field.
+  cusBirthDate: "cus_birt_date",
+  cusMarriageDate: "cus_anniversary_date",
   cusEnableSms: "cus_enable_sms",
   cusOverdueSms: "cus_overdue_sms",
   cusOverdueBilling: "cus_overdue_billing",
   cusAllowPromotion: "cus_allow_promotion",
   cusAllowLoyalty: "cus_allow_loyalty",
   cusAllowDiscount: "cus_allow_discount",
-  cusTcsApplicable: "cus_tcs_applicable",
-  cusItcollExempted: "cus_itcoll_exempted",
+  cusTcsApplicable: "cus_tcs_allowable",
+  cusItcollExempted: "cus_it_collection_exempted",
   cusFreightCharge: "cus_freight_charge",
   cusLoadingCharge: "cus_loading_charge",
   cusUnloadingCharge: "cus_unloading_charge",
-  cusIsActive: "cus_is_active",
+  cusIsActive: "cus_active",
   cusNotes: "cus_notes",
 };
 // Right-clicking inside the open create/update modal opens a tree popup of this
@@ -2430,7 +2431,7 @@ export default function CustomerPage() {
         key,
         existing
           ? { ...existing, visible: checked }
-          : { label: "", order: Number.MAX_SAFE_INTEGER, visible: checked },
+          : { label: "", secondaryText: "", order: Number.MAX_SAFE_INTEGER, visible: checked },
       );
       return next;
     });
@@ -2444,13 +2445,35 @@ export default function CustomerPage() {
     });
   }, []);
 
-  const handleChangeSecondaryText = useCallback((fieldId: number, value: string) => {
-    setSecondaryTextById((prev) => {
-      const next = new Map(prev);
-      next.set(fieldId, value);
-      return next;
-    });
-  }, []);
+  const handleChangeSecondaryText = useCallback(
+    (fieldId: number, value: string) => {
+      setSecondaryTextById((prev) => {
+        const next = new Map(prev);
+        next.set(fieldId, value);
+        return next;
+      });
+      // Mirror the edit into the live form config (keyed by backend fieldName)
+      // so the matching input's label updates immediately, like the visibility
+      // toggles do. A non-empty secondary text wins over fieldGuiName as label.
+      const fieldName = configSections
+        .flatMap((section) => (Array.isArray(section.fields) ? section.fields : []))
+        .find((field) => field.fieldId === fieldId)?.fieldName;
+      const key = (fieldName ?? "").trim().toLowerCase();
+      if (!key) {
+        return;
+      }
+      setWidgetFieldConfig((prev) => {
+        const existing = prev.get(key);
+        if (!existing) {
+          return prev;
+        }
+        const next = new Map(prev);
+        next.set(key, { ...existing, secondaryText: value.trim() });
+        return next;
+      });
+    },
+    [configSections],
+  );
 
   // Build the tree view from the /config payload, deriving each checkbox from the
   // live form visibility map so the popup and the rendered form stay in sync.

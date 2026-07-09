@@ -278,6 +278,7 @@ export const ERP_MENU_OBJECT: ERPMenuObject = {
   },
 };
 export const MENU_MASTERS_GET_ENDPOINT = "/menu-masters/get";
+export const MENU_MASTERS_USERMENU_ENDPOINT = "/menu-masters/usermenu";
 export type MenuMasterItem = {
   menuId?: number;
   menuName: string;

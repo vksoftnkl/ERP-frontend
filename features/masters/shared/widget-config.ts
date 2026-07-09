@@ -32,10 +32,16 @@ export interface WidgetMastersResponse {
   success: boolean;
   data: WidgetMasterSectionConfig[];
 }
-/** The three properties pulled from the config and applied to a hardcoded field. */
+/** The properties pulled from the config and applied to a hardcoded field. */
 export type ResolvedFieldConfig = {
   /** fieldGuiName, trimmed; empty string means "keep the hardcoded label". */
   label: string;
+  /**
+   * fieldSecondaryText, trimmed; when non-empty it wins over `label` as the
+   * rendered field label (it is the user's custom re-label, editable from the
+   * Visible Settings popup).
+   */
+  secondaryText?: string;
   /** Global render order derived from sectionPosition then fieldPosition (ascending). */
   order: number;
   /** fieldVisibility; when false the field is dropped from rendering. */
@@ -65,6 +71,7 @@ export function buildWidgetFieldConfig(
       }
       config.set(key, {
         label: (field.fieldGuiName ?? "").trim(),
+        secondaryText: (field.fieldSecondaryText ?? "").trim(),
         order,
         visible: field.fieldVisibility !== false,
       });
@@ -103,8 +110,9 @@ export function applyWidgetFieldConfig(
     const resolved = backendName ? config.get(backendName.toLowerCase()) : undefined;
     if (resolved) {
       if (resolved.visible) {
+        const configuredLabel = (resolved.secondaryText ?? "").trim() || resolved.label;
         configured.push({
-          field: resolved.label ? { ...field, label: resolved.label } : field,
+          field: configuredLabel ? { ...field, label: configuredLabel } : field,
           order: resolved.order,
           index,
         });

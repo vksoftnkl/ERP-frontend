@@ -1,23 +1,19 @@
 import type { ErpHeaderItem } from "@/components/layout/types";
 import {
   DEFAULT_PRIMARY_MENU,
-  MENU_MASTERS_GET_ENDPOINT,
+  MENU_MASTERS_USERMENU_ENDPOINT,
   applyMenuMasterLabels,
   extractMenuMasterItems,
 } from "@/components/layout/constants";
 import { baseApi } from "@/store/api/baseApi";
-const MENU_MASTERS_QUERY = {
-  includeChildren: "true",
-  activeOnly: "true",
-  visibleOnly: "true",
-} as const;
 export const shellApi = baseApi.injectEndpoints({
   overrideExisting: true,
   endpoints: (builder) => ({
     getPrimaryMenu: builder.query<ErpHeaderItem[], string>({
-      query: (userId) => ({
-        url: MENU_MASTERS_GET_ENDPOINT,
-        params: { ...MENU_MASTERS_QUERY, userId },
+      // userId is only the RTK Query cache key here; the server resolves the
+      // current user's menu assignments from the Bearer token.
+      query: () => ({
+        url: MENU_MASTERS_USERMENU_ENDPOINT,
       }),
       transformResponse: (payload: unknown) =>
         applyMenuMasterLabels(DEFAULT_PRIMARY_MENU, extractMenuMasterItems(payload)),

@@ -26,12 +26,9 @@ export interface MenuPermission {
   umCanExport: boolean;
 }
 // ── Constants ─────────────────────────────────────────────────────────────────
-// Use /all so admins see every menu regardless of their own permissions
 const MENU_ENDPOINT = "/menu-masters/get";
 const MENU_QUERY = {
-  // includeChildren: "true",
-  // activeOnly: "true",
-  // visibleOnly: "true",
+  visibleOnly: "true",
 } as const;
 const PERM_KEYS = [
   "umCanView",

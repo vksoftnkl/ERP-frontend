@@ -19,9 +19,6 @@ interface VisibilityItem {
 // ── API ───────────────────────────────────────────────────────────────────────
 const MENU_ALL_ENDPOINT = "/menu-masters/get";
 const MENU_VISIBILITY_ENDPOINT = "/menu-masters/visibility";
-const MENU_QUERY = {
-  includeChildren: "true",
-} as const;
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function collectAllNodes(nodes: MenuNode[]): MenuNode[] {
   const result: MenuNode[] = [];
@@ -250,7 +247,7 @@ export default function ModuleAdministrationPage() {
   const authInitialized = useAppSelector(selectAuthInitialized);
   const userId = useAppSelector(selectAuthUserId);
   const { getAll } = useApi<{ data: MenuNode[] }>(MENU_ALL_ENDPOINT);
-  const { run: patchVisibility, loading: saving } = useApi<unknown, { userId: string | null; menus: VisibilityItem[] }>(
+  const { run: patchVisibility, loading: saving } = useApi<unknown, { menus: VisibilityItem[] }>(
     MENU_VISIBILITY_ENDPOINT,
     { method: "PATCH" },
   );
@@ -278,7 +275,7 @@ export default function ModuleAdministrationPage() {
       return;
     }
     setLoadingMenus(true);
-    getAll({ ...MENU_QUERY, userId })
+    getAll()
       .then((res: unknown) => {
         const data = (res as { data?: MenuNode[] })?.data ?? [];
         const list = Array.isArray(data) ? data : [];
@@ -326,7 +323,7 @@ export default function ModuleAdministrationPage() {
   }, [original]);
   const handleSave = useCallback(async () => {
     if (dirtyItems.length === 0 || saving) return;
-    await patchVisibility({ body: { userId, menus: dirtyItems } });
+    await patchVisibility({ body: { menus: dirtyItems } });
     setOriginal(new Map(visibility));
   }, [dirtyItems, saving, patchVisibility, visibility, userId]);
   const hasDirty = dirtyItems.length > 0;
