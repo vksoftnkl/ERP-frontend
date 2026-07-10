@@ -40,6 +40,11 @@ export {
 } from "@/components/design-system/ui/primitives";
 
 export {
+  ERPColorPicker,
+  type ERPColorPickerProps,
+} from "@/components/design-system/ui/color-picker";
+
+export {
   SearchableMultiSelect,
   type SearchableMultiSelectProps,
 } from "@/components/design-system/ui/searchable-multi-select";

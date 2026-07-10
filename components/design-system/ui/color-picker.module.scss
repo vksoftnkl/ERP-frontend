@@ -1,0 +1,212 @@
+.root {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.trigger {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: var(--erp-modal-control-height);
+  padding: var(--erp-modal-control-padding-y) var(--erp-modal-control-padding-x);
+  border: 1px solid #c9d5e3;
+  border-radius: 5px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.25;
+  color: #142033;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.16s,
+    box-shadow 0.16s,
+    background-color 0.16s;
+}
+
+.trigger:focus-visible,
+.triggerOpen {
+  outline: 0;
+  border-color: var(--erp-modal-accent);
+  box-shadow:
+    0 0 0 1px var(--erp-modal-accent),
+    0 0 0 4px var(--erp-modal-accent-soft-ring);
+}
+
+.triggerInvalid {
+  border-color: #d14343;
+  box-shadow: 0 0 0 3px rgba(209, 67, 67, 0.16);
+}
+
+.triggerDisabled {
+  background: #f5f7f9;
+  color: #698196;
+  cursor: not-allowed;
+}
+
+.swatch {
+  flex: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.triggerValue {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.panel {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 34;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(15rem, 100%);
+  min-width: 13rem;
+  padding: 0.65rem;
+  border: 1px solid #c9d5e3;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 18px 32px rgba(15, 23, 42, 0.16);
+}
+
+.area {
+  position: relative;
+  height: 8.5rem;
+  border-radius: 5px;
+  cursor: crosshair;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.areaSaturation,
+.areaValue {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.areaSaturation {
+  background: linear-gradient(to right, #fff, rgba(255, 255, 255, 0));
+}
+
+.areaValue {
+  background: linear-gradient(to top, #000, rgba(0, 0, 0, 0));
+}
+
+.areaThumb {
+  position: absolute;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin: -0.4rem 0 0 -0.4rem;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.4);
+  pointer-events: none;
+}
+
+.hueSlider {
+  width: 100%;
+  height: 0.7rem;
+  margin: 0;
+  padding: 0;
+  border-radius: 999px;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  background: linear-gradient(
+    to right,
+    #f00 0%,
+    #ff0 17%,
+    #0f0 33%,
+    #0ff 50%,
+    #00f 67%,
+    #f0f 83%,
+    #f00 100%
+  );
+}
+
+.hueSlider:focus-visible {
+  outline: 0;
+  box-shadow:
+    0 0 0 1px var(--erp-modal-accent),
+    0 0 0 4px var(--erp-modal-accent-soft-ring);
+}
+
+.hueSlider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.35);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.35);
+}
+
+.hueSlider::-moz-range-thumb {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.35);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.35);
+}
+
+.presets {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.3rem;
+}
+
+.preset {
+  height: 1.1rem;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  cursor: pointer;
+}
+
+.preset:focus-visible {
+  outline: 0;
+  box-shadow:
+    0 0 0 1px #fff,
+    0 0 0 3px var(--erp-modal-accent);
+}
+
+.presetActive {
+  box-shadow:
+    0 0 0 1px #fff,
+    0 0 0 3px var(--erp-modal-accent);
+}
+
+.hexInput {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #c9d5e3;
+  border-radius: 5px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #142033;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+.hexInput:focus-visible {
+  outline: 0;
+  border-color: var(--erp-modal-accent);
+  box-shadow:
+    0 0 0 1px var(--erp-modal-accent),
+    0 0 0 4px var(--erp-modal-accent-soft-ring);
+}

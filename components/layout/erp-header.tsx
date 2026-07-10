@@ -667,7 +667,7 @@ export default function ErpHeader({
           title="Home"
         >
           <svg
-            viewBox="0 0 680 280"
+            viewBox="8 18 240 240"
             xmlns="http://www.w3.org/2000/svg"
             aria-hidden="true"
             className={styles.headerLogo}
@@ -686,8 +686,6 @@ export default function ErpHeader({
                 <use href="#petal" transform="rotate(0)   scale(1.00)" fill="#F7941D" />
               </g>
             </svg>
-            <text x="288" y="150" fontFamily="Georgia, 'Times New Roman', serif" fontSize="62" fontWeight="700" fill="#1B6B32">GREEN TREE</text>
-            <text x="290" y="188" fontFamily="Georgia, serif" fontStyle="italic" fontSize="25" fill="#7A2E2E">Wood You Can Trust</text>
           </svg>
         </button>
         <nav

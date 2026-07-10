@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 import { cx } from "@/components/design-system/cx";
+import { ERPColorPicker } from "@/components/design-system/ui/color-picker";
 import styles from "./dynamic-modal-form.module.scss";
 import {
   FIELD_CONTAINER_SELECTOR,
@@ -1851,15 +1852,22 @@ export function ERPDynamicModalForm({
               </p>
             ) : null}
           </div>
+        ) : inputType === "color" ? (
+          <ERPColorPicker
+            id={commonProps.id}
+            value={fieldValue || "#000000"}
+            onChange={setCustomValue}
+            disabled={commonProps.disabled}
+            invalid={Boolean(fieldError)}
+            label={field.label}
+            aria-describedby={describedBy}
+            style={field.controlStyle}
+          />
         ) : (
           <input
             {...commonProps}
             data-erp-modal-field-control="true"
-            value={
-              inputType === "color"
-                ? fieldValue || "#000000"
-                : fieldValue
-            }
+            value={fieldValue}
             type={inputType}
             autoComplete="off"
             inputMode={field.inputMode}
