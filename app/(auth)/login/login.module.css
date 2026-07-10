@@ -219,12 +219,21 @@
   animation: rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
+.formLogo {
+  display: block;
+  width: 150px;
+  height: 150px;
+  margin: 0 auto 20px;
+  overflow: visible;
+}
+
 .forminner h2 {
   font-size: 23px;
   font-weight: 600;
   letter-spacing: -0.01em;
   margin: 0 0 6px;
   color: var(--text);
+  text-align: center;
 }
 
 .forminner .sub {
@@ -232,6 +241,7 @@
   font-size: 14px;
   margin: 0 0 28px;
   line-height: 1.4;
+  text-align: center;
 }
 
 .forminner form {

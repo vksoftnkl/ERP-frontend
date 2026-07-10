@@ -116,6 +116,171 @@ export function withPinnedOption(
   return [...options, pinned];
 }
 
+// A single Company/Area/Customer-Group default resolved from the customer_template
+// config. `id` becomes the select's value (a real id when the config supplies one,
+// otherwise the plain string itself) and `label` the text shown on the trigger.
+export type CustomerTemplateDefault = {
+  id: string;
+  label: string;
+};
+
+// State-select seed: value = code, label = "Name (CODE)". null when the config omits
+// cusStateCode.
+export type CustomerTemplateStateDefault = {
+  code: string;
+  name: string;
+};
+
+// Everything the customer_template config supplies for the create form:
+// - company/area/group: the three lazily-loaded dropdowns (seeded with a pinned
+//   option so their label shows); any the config omits stay null.
+// - state: the lazy State select seed (kept apart because its label/value differ).
+// - fieldValues: every other primitive `cus*` field, keyed by form-field name and
+//   coerced to the string shape the modal stores, overlaid onto the blank create
+//   values so the whole template (GST type, price level, charges, flags, …) pre-fills.
+export type CustomerTemplateDefaults = {
+  company: CustomerTemplateDefault | null;
+  area: CustomerTemplateDefault | null;
+  group: CustomerTemplateDefault | null;
+  state: CustomerTemplateStateDefault | null;
+  fieldValues: Record<string, string>;
+};
+
+export const EMPTY_CUSTOMER_TEMPLATE_DEFAULTS: CustomerTemplateDefaults = {
+  company: null,
+  area: null,
+  group: null,
+  state: null,
+  fieldValues: {},
+};
+
+// Config keys that drive the three seeded dropdowns or the State select — excluded
+// from the generic field overlay so raw ids/labels/codes don't leak in twice.
+const TEMPLATE_HANDLED_KEYS = new Set<string>([
+  "company",
+  "companyId",
+  "cusCompanyId",
+  "area",
+  "areaId",
+  "cusAreaId",
+  "customerGroup",
+  "customer_group",
+  "group",
+  "groupId",
+  "cusGroupId",
+  "cusStateName",
+  "stateName",
+  "state_name",
+]);
+
+function extractTemplateState(
+  source: Record<string, unknown>,
+): CustomerTemplateStateDefault | null {
+  const code = toDisplayValue(
+    getFirstDefinedValue(source, ["cusStateCode", "stateCode", "state_code"]),
+  )
+    .trim()
+    .toUpperCase();
+  if (!code) {
+    return null;
+  }
+  const name = toDisplayValue(
+    getFirstDefinedValue(source, ["cusStateName", "stateName", "state_name"]),
+  );
+  return { code, name };
+}
+
+// Copy every primitive config entry (string/number/boolean, coerced to string) keyed
+// by its form-field name, skipping the dropdown/state keys handled separately and any
+// nested objects/arrays. Empty strings are kept so a template can blank a field.
+function collectTemplateFieldValues(
+  source: Record<string, unknown>,
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(source)) {
+    if (TEMPLATE_HANDLED_KEYS.has(key)) {
+      continue;
+    }
+    if (raw === undefined || raw === null || typeof raw === "object") {
+      continue;
+    }
+    values[key] = toDisplayValue(raw);
+  }
+  return values;
+}
+
+// Normalize one config entry. It can be an object ({ id/value, name/label } — e.g.
+// company) or a bare string (e.g. area "arafd", customerGroup "vary"); a string is
+// used as both the option value and its label.
+function normalizeTemplateDefault(raw: unknown): CustomerTemplateDefault | null {
+  if (raw === undefined || raw === null) {
+    return null;
+  }
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    const source = raw as Record<string, unknown>;
+    const id = toDisplayValue(getFirstDefinedValue(source, ["id", "value", "code", "_id"]));
+    const label = toDisplayValue(getFirstDefinedValue(source, ["name", "label", "title"]));
+    const resolvedId = id || label;
+    if (!resolvedId) {
+      return null;
+    }
+    return { id: resolvedId, label: label || resolvedId };
+  }
+  const value = toDisplayValue(raw);
+  return value ? { id: value, label: value } : null;
+}
+
+// Read the customer_template config payload (GET /configs/get?configId=1) into the
+// three dropdown defaults. `data.configValue` is a JSON *string* holding the company/
+// area/customerGroup selections; a missing/blank/malformed value yields empty defaults
+// so the create form simply renders without seeded selections.
+export function parseCustomerTemplateConfig(payload: unknown): CustomerTemplateDefaults {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return EMPTY_CUSTOMER_TEMPLATE_DEFAULTS;
+  }
+  const root = payload as Record<string, unknown>;
+  const data =
+    root.data && typeof root.data === "object" && !Array.isArray(root.data)
+      ? (root.data as Record<string, unknown>)
+      : root;
+  const rawConfigValue = data.configValue ?? data.config_value;
+  let configValue: unknown = rawConfigValue;
+  if (typeof rawConfigValue === "string") {
+    const trimmed = rawConfigValue.trim();
+    if (!trimmed) {
+      return EMPTY_CUSTOMER_TEMPLATE_DEFAULTS;
+    }
+    try {
+      configValue = JSON.parse(trimmed);
+    } catch {
+      return EMPTY_CUSTOMER_TEMPLATE_DEFAULTS;
+    }
+  }
+  if (!configValue || typeof configValue !== "object" || Array.isArray(configValue)) {
+    return EMPTY_CUSTOMER_TEMPLATE_DEFAULTS;
+  }
+  const source = configValue as Record<string, unknown>;
+  return {
+    company: normalizeTemplateDefault(
+      getFirstDefinedValue(source, ["company", "cusCompanyId", "companyId"]),
+    ),
+    area: normalizeTemplateDefault(
+      getFirstDefinedValue(source, ["area", "cusAreaId", "areaId"]),
+    ),
+    group: normalizeTemplateDefault(
+      getFirstDefinedValue(source, [
+        "customerGroup",
+        "customer_group",
+        "group",
+        "cusGroupId",
+        "groupId",
+      ]),
+    ),
+    state: extractTemplateState(source),
+    fieldValues: collectTemplateFieldValues(source),
+  };
+}
+
 export type CustomerStateDropdownData = {
   // Main State field: value = state_code, label = "State Name (CODE)".
   options: ERPDynamicSelectOption[];

@@ -672,22 +672,22 @@ export default function ErpHeader({
             aria-hidden="true"
             className={styles.headerLogo}
           >
-            <defs>
-              <linearGradient id="iconbg" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#142D45" />
-                <stop offset="100%" stopColor="#0A1E2E" />
-              </linearGradient>
-            </defs>
-            <rect x="210" y="55" width="148" height="148" rx="22" fill="url(#iconbg)" />
-            <rect x="214" y="59" width="140" height="140" rx="18" fill="none" stroke="white" strokeWidth="0.6" opacity="0.08" />
-            <line x1="230" y1="88" x2="262" y2="170" stroke="#3AADDF" strokeWidth="9" strokeLinecap="round" />
-            <line x1="262" y1="170" x2="294" y2="88" stroke="#3AADDF" strokeWidth="9" strokeLinecap="round" />
-            <line x1="310" y1="88" x2="310" y2="170" stroke="white" strokeWidth="9" strokeLinecap="round" />
-            <line x1="310" y1="128" x2="346" y2="88" stroke="white" strokeWidth="9" strokeLinecap="round" />
-            <line x1="310" y1="128" x2="346" y2="170" stroke="white" strokeWidth="9" strokeLinecap="round" />
-            <text x="380" y="120" fontFamily="Arial Black, Arial, sans-serif" fontSize="48" fontWeight="900" letterSpacing="-2" fill="#0D2137">VK</text>
-            <rect x="380" y="131" width="88" height="2" rx="1" fill="#3AADDF" />
-            <text x="380" y="155" fontFamily="Arial, Helvetica, sans-serif" fontSize="12.5" fontWeight="400" letterSpacing="4.5" fill="#3AADDF">SOFTWARES</text>
+            <svg x="8" y="18" width="240" height="240" viewBox="0 0 512 512">
+              <defs>
+                <path id="petal" d="M 0 0 C -40 -55 -30 -135 0 -175 C 30 -135 40 -55 0 0 Z" />
+              </defs>
+              <g transform="translate(256 410)">
+                <use href="#petal" transform="rotate(-66) scale(0.80)" fill="#1E9E4B" />
+                <use href="#petal" transform="rotate(66)  scale(0.80)" fill="#7B2E8E" />
+                <use href="#petal" transform="rotate(-44) scale(0.90)" fill="#8DC63F" />
+                <use href="#petal" transform="rotate(44)  scale(0.90)" fill="#EC008C" />
+                <use href="#petal" transform="rotate(-22) scale(0.97)" fill="#FFD200" />
+                <use href="#petal" transform="rotate(22)  scale(0.97)" fill="#EF4123" />
+                <use href="#petal" transform="rotate(0)   scale(1.00)" fill="#F7941D" />
+              </g>
+            </svg>
+            <text x="288" y="150" fontFamily="Georgia, 'Times New Roman', serif" fontSize="62" fontWeight="700" fill="#1B6B32">GREEN TREE</text>
+            <text x="290" y="188" fontFamily="Georgia, serif" fontStyle="italic" fontSize="25" fill="#7A2E2E">Wood You Can Trust</text>
           </svg>
         </button>
         <nav

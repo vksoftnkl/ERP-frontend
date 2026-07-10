@@ -37,7 +37,6 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<Errors>({});
   const [authError, setAuthError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [login, { isLoading, error }] = useLoginMutation();
   const loginError = getApiErrorMessage(error);
   const validate = () => {
@@ -158,6 +157,28 @@ export default function LoginPage() {
         {/* Login panel (right) */}
         <section className={styles.panel} aria-label="Sign in">
           <div className={styles.forminner}>
+            <svg
+              className={styles.formLogo}
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 512 512"
+              aria-hidden="true"
+            >
+              <defs>
+                <path
+                  id="loginPetal"
+                  d="M 0 0 C -40 -55 -30 -135 0 -175 C 30 -135 40 -55 0 0 Z"
+                />
+              </defs>
+              <g transform="translate(256 410)">
+                <use href="#loginPetal" transform="rotate(-66) scale(0.80)" fill="#1E9E4B" />
+                <use href="#loginPetal" transform="rotate(66)  scale(0.80)" fill="#7B2E8E" />
+                <use href="#loginPetal" transform="rotate(-44) scale(0.90)" fill="#8DC63F" />
+                <use href="#loginPetal" transform="rotate(44)  scale(0.90)" fill="#EC008C" />
+                <use href="#loginPetal" transform="rotate(-22) scale(0.97)" fill="#FFD200" />
+                <use href="#loginPetal" transform="rotate(22)  scale(0.97)" fill="#EF4123" />
+                <use href="#loginPetal" transform="rotate(0)   scale(1.00)" fill="#F7941D" />
+              </g>
+            </svg>
             <h2>Sign in</h2>
             <p className={styles.sub}>to access VK Nex ERP</p>
             <form onSubmit={onSubmit} noValidate>
@@ -211,29 +232,11 @@ export default function LoginPage() {
                 Sign in
                 <span className={styles.spinner} aria-hidden="true"></span>
               </button>
-              <div className={styles.aux}>
-                <label className={styles.remember}>
-                  <input
-                    type="checkbox"
-                    id="remember"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                  />
-                  Keep me signed in
-                </label>
-                <a className={styles.link} href="#">Forgot password?</a>
-              </div>
               {(loginError || authError) && (
                 <div className={`${styles.notice} ${styles.show}`}>
                   {loginError || authError}
                 </div>
               )}
-              <p className={styles.formfoot}>Accounts are provisioned by your administrator.</p>
-              <p className={styles.panelfoot}>
-                <a href="#">Privacy</a> <span className={styles.sep}>·</span>
-                <a href="#">Terms</a> <span className={styles.sep}>·</span>
-                Help
-              </p>
             </form>
           </div>
         </section>

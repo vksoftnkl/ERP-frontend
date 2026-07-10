@@ -105,16 +105,22 @@ import {
   GROUP_MODAL_INITIAL_VALUES,
   CUSTOMER_MODAL_PANEL_STYLE,
   CUSTOMER_BASIC_VALIDATIONS,
+  CUSTOMER_TEMPLATE_CONFIG_ENDPOINT,
+  CUSTOMER_TEMPLATE_CONFIG_ID,
 } from "./customer-master.constants";
 import {
   DROPDOWN_RUN_ENDPOINT,
   DROPDOWN_SEARCH_DEBOUNCE_MS,
   CUSTOMER_DROPDOWN_CONFIG,
   type CustomerDropdownKind,
+  type CustomerTemplateDefault,
+  type CustomerTemplateDefaults,
   buildDropdownRunQuery,
   buildDropdownOptions,
   buildStateDropdownData,
   withPinnedOption,
+  parseCustomerTemplateConfig,
+  EMPTY_CUSTOMER_TEMPLATE_DEFAULTS,
 } from "./customer-dropdowns";
 // The customer form fields below are re-labelled, re-ordered, and shown/hidden
 // from the backend widget-masters config (fixed.form_section / form_field) for
@@ -414,7 +420,7 @@ function buildCustomerFormFields(
         pattern: "^[0-9a-fA-F-]{36}$",
         patternMessage: "Default Salesman Id must be a valid UUID.",
       },
-    },            
+    },
     {
       name: "cusBranchId",
       label: "Branch",
@@ -458,7 +464,6 @@ function buildCustomerFormFields(
     {
       name: "cusName",
       label: "Customer Name",
-      gridColumnStart: 1,
       required: true,
       validation: {
         minLength: 2,
@@ -468,36 +473,30 @@ function buildCustomerFormFields(
     {
       name: "cusCity",
       label: "City",
-      gridColumnStart: 2,
     },
     {
       name: "cusPhone1",
       label: "Phone 1",
       type: "tel",
-      gridColumnStart: 3,
     },
     {
       name: "cusCode",
       label: "Customer Code",
-      gridColumnStart: 1,
     },
 
     {
       name: "cusDistrict",
       label: "District",
-      gridColumnStart: 2,
     },
     
     {
       name: "cusPhone2",
       label: "Phone 2",
       type: "tel",
-      gridColumnStart: 3,
     },
     {
       name: "cusShort",
       label: "Short Name",
-      gridColumnStart: 1,
     },
     {
       name: "cusStateCode",
@@ -507,7 +506,6 @@ function buildCustomerFormFields(
       serverSearch: true,
       required: true,
       options: stateOptions,
-      gridColumnStart: 2,
       onSearchOpenChange: lazy.cusStateCode.onSearchOpenChange,
       onSearchQueryChange: lazy.cusStateCode.onSearchQueryChange,
       onValueChange: lazy.cusStateCode.onValueChange,
@@ -521,7 +519,6 @@ function buildCustomerFormFields(
       name: "cusTel",
       label: "Tel",
       type: "tel",
-      gridColumnStart: 3,
     },
     {
       name: "cusPriceLevelId",
@@ -530,7 +527,6 @@ function buildCustomerFormFields(
       searchable: true,
       required: true,
       options: priceLevelOptions,
-      gridColumnStart: 1,
       validation: {
         requiredMessage: "Price Level is required.",
       },
@@ -538,45 +534,37 @@ function buildCustomerFormFields(
     {
       name: "cusPin",
       label: "PIN",
-      gridColumnStart: 2,
     },
     {
       name: "cusWhatsappNo",
       label: "WhatsApp No",
       type: "tel",
-      gridColumnStart: 3,
     },
     {
       name: "cusAddr1",
       label: "Address Line 1",
-      gridColumnStart: 1,
     },
     {
       name: "cusLandmark",
       label: "Landmark",
-      gridColumnStart: 2,
     },
     {
       name: "cusEmail",
       label: "Email",
       type: "email",
-      gridColumnStart: 3,
     },
     {
       name: "cusAddr2",
       label: "Address Line 2",
-      gridColumnStart: 1,
     },
     {
       name: "cusTransportName",
       label: "Transport Name",
-      gridColumnStart: 2,
     },
     {
       name: "cusSortOrder",
       label: "Sort Order",
       type: "number",
-      gridColumnStart: 3,
       colSpan: 1,
       min: 0,
       step: 1,
@@ -587,7 +575,6 @@ function buildCustomerFormFields(
     {
       name: "cusAddr3",
       label: "Address Line 3",
-      gridColumnStart: 1,
     },
     // {
     //   name: "cusCountry",
@@ -606,7 +593,6 @@ function buildCustomerFormFields(
       name: "cusCreditDays",
       label: "Credit Days",
       type: "number",
-      gridColumnStart: 1,
       min: 0,
       step: 1,
       validation: {
@@ -617,7 +603,6 @@ function buildCustomerFormFields(
       name: "cusCreditAmtLimit",
       label: "Credit Amount Limit",
       type: "number",
-      gridColumnStart: 2,
       min: 0,
       step: "0.01",
       validation: {
@@ -628,7 +613,6 @@ function buildCustomerFormFields(
       name: "cusDebitBalance",
       label: "Debit Balance",
       type: "number",
-      gridColumnStart: 3,
       min: 0,
       step: "0.01",
       validation: {
@@ -639,7 +623,6 @@ function buildCustomerFormFields(
       name: "cusCreditBillLimit",
       label: "Credit Bill Limit",
       type: "number",
-      gridColumnStart: 1,
       min: 0,
       step: 1,
       validation: {
@@ -650,7 +633,6 @@ function buildCustomerFormFields(
       name: "cusDebitGraceDays",
       label: "Debit Grace Days",
       type: "number",
-      gridColumnStart: 2,
       min: 0,
       step: 1,
       validation: {
@@ -668,12 +650,10 @@ function buildCustomerFormFields(
       type: "select",
       searchable: true,
       options: GST_TYPE_OPTIONS,
-      gridColumnStart: 1,
     },
     {
       name: "cusPanNo",
       label: "PAN No",
-      gridColumnStart: 2,
       validation: {
         pattern: "^[A-Z]{5}[0-9]{4}[A-Z]{1}$",
         patternMessage: "PAN must be 10 characters (e.g., ABCDE1234F).",
@@ -682,7 +662,6 @@ function buildCustomerFormFields(
     {
       name: "cusEcommerceGstin",
       label: "Ecommerce GSTIN",
-      gridColumnStart: 3,
       validation: {
         custom: (value) => validateOptionalGstin(value),
       },
@@ -690,7 +669,6 @@ function buildCustomerFormFields(
     {
       name: "cusGstNo",
       label: "GST No",
-      gridColumnStart: 1,
       placeholder: "24ABCDE1234F1Z5",
       helperText: GST_LOOKUP_HELPER_TEXT,
       onValueChange: onCustomerGstinValueChange,
@@ -701,7 +679,6 @@ function buildCustomerFormFields(
     {
       name: "cusAadharNo",
       label: "Aadhar No",
-      gridColumnStart: 2,
       validation: {
         pattern: "^[0-9]{12}$",
         patternMessage: "Aadhar must be 12 digits.",
@@ -711,7 +688,6 @@ function buildCustomerFormFields(
       name: "cusDistanceKm",
       label: "Distance (Km)",
       type: "number",
-      gridColumnStart: 3,
       min: 0,
       step: 1,
       validation: {
@@ -772,7 +748,6 @@ function buildCustomerFormFields(
       name: "cusDiscPerc",
       label: "Discount %",
       type: "number",
-      gridColumnStart: 1,
       min: 0,
       step: "0.001",
       validation: {
@@ -783,85 +758,71 @@ function buildCustomerFormFields(
       name: "cusBirthDate",
       label: "Birth Date",
       type: "date",
-      gridColumnStart: 2,
     },
     {
       name: "cusMarriageDate",
       label: "Anniversary Date",
       type: "date",
-      gridColumnStart: 3,
     },
     {
       name: "cusEnableSms",
       label: "Enable SMS",
       type: "checkbox",
-      gridColumnStart: 1,
     },
     {
       name: "cusOverdueSms",
       label: "Overdue SMS",
       type: "checkbox",
-      gridColumnStart: 2,
     },
     {
       name: "cusOverdueBilling",
       label: "Overdue Billing",
       type: "checkbox",
-      gridColumnStart: 3,
     },
     {
       name: "cusAllowPromotion",
       label: "Allow Promotion",
       type: "checkbox",
-      gridColumnStart: 1,
     },
     {
       name: "cusAllowLoyalty",
       label: "Allow Loyalty",
       type: "checkbox",
-      gridColumnStart: 2,
     },
     {
       name: "cusAllowDiscount",
       label: "Allow Discount",
       type: "checkbox",
-      gridColumnStart: 3,
     },
     {
       name: "cusTcsApplicable",
       label: "TCS Allowable",
       type: "checkbox",
-      gridColumnStart: 1,
     },
     {
       name: "cusItcollExempted",
       label: "IT Collection Exempted",
       type: "checkbox",
-      gridColumnStart: 2,
     },
     {
       name: "cusFreightCharge",
       label: "Freight Charge",
       type: "checkbox",
-      gridColumnStart: 3,
     },
     {
       name: "cusLoadingCharge",
       label: "Loading Charge",
       type: "checkbox",
-      gridColumnStart: 1,
     },
     {
       name: "cusUnloadingCharge",
       label: "Unloading Charge",
       type: "checkbox",
-      gridColumnStart: 2,
     },
     {
       name: "cusIsActive",
       label: "Active",
       type: "checkbox",
-      gridColumnStart: 3,
     },
     {
       name: "cusNotes",
@@ -1408,6 +1369,12 @@ export default function CustomerPage() {
     method: "POST",
   });
   const { getAll: getPriceLevelLookup } = useApi<unknown>(PRICE_LEVEL_LOOKUP_ENDPOINT);
+  // Customer_template config: seeds the create form's Company/Area/Customer Group
+  // defaults. A failed fetch just leaves those dropdowns blank, so don't toast errors.
+  const { getAll: getCustomerTemplateConfig } = useApi<unknown>(
+    CUSTOMER_TEMPLATE_CONFIG_ENDPOINT,
+    { toast: { error: false } },
+  );
   const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [regionStateOptions, setRegionStateOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [areaOptions, setAreaOptions] = useState<ERPDynamicSelectOption[]>([]);
@@ -1416,6 +1383,9 @@ export default function CustomerPage() {
   const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [priceLevelOptions, setPriceLevelOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [templateDefaults, setTemplateDefaults] = useState<CustomerTemplateDefaults>(
+    EMPTY_CUSTOMER_TEMPLATE_DEFAULTS,
+  );
   const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
   const [editingStateCode, setEditingStateCode] = useState<string | null>(null);
@@ -1465,6 +1435,30 @@ export default function CustomerPage() {
       mounted = false;
     };
   }, [getCityLookup, getPriceLevelLookup]);
+  // Fetch the customer_template config once so the create form can default its
+  // Company/Area/Customer Group dropdowns. A failed/malformed fetch keeps the empty
+  // defaults, so the form still opens normally with blank dropdowns.
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        const payload = await getCustomerTemplateConfig({
+          configId: CUSTOMER_TEMPLATE_CONFIG_ID,
+        });
+        if (!mounted) {
+          return;
+        }
+        setTemplateDefaults(parseCustomerTemplateConfig(payload));
+      } catch {
+        if (mounted) {
+          setTemplateDefaults(EMPTY_CUSTOMER_TEMPLATE_DEFAULTS);
+        }
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [getCustomerTemplateConfig]);
   // Silent progressive enhancement: a failed config fetch leaves the form on its
   // hardcoded labels/order (empty map), so don't nag the user with an error toast.
   const { getAll: getWidgetConfig } = useApi<WidgetMastersResponse>(WIDGET_CONFIG_ENDPOINT, {
@@ -1741,6 +1735,44 @@ export default function CustomerPage() {
     applyDropdownOptions("cusStateCode", [blank]);
     applyDropdownOptions("cusRegionStateName", [blank]);
   }, [applyDropdownOptions]);
+  // Seed the create form's lazy dropdowns from the customer_template config: the
+  // Company/Area/Customer Group selections and the State select. Each is pinned (so its
+  // label survives a later lazy fetch) and shown as the only extra option beside the
+  // field's blank/All head, mirroring how a saved record's selection is seeded on edit.
+  // The State seed also feeds stateNameByCode/stateCodeByName so the submit payload can
+  // resolve cusStateName without the user opening the field. Fields the config omits
+  // keep whatever resetDropdownSelections left them at.
+  const seedTemplateDropdownDefaults = useCallback(() => {
+    const blank: ERPDynamicSelectOption = { value: "", label: "" };
+    const seedOne = (
+      fieldName: "cusCompanyId" | "cusAreaId" | "cusGroupId",
+      head: ERPDynamicSelectOption,
+      def: CustomerTemplateDefault | null,
+    ) => {
+      if (!def || !def.id) {
+        return;
+      }
+      const option: ERPDynamicSelectOption = { value: def.id, label: def.label || def.id };
+      pinnedDropdownOptionRef.current[fieldName] = option;
+      applyDropdownOptions(fieldName, [head, option]);
+    };
+    seedOne("cusCompanyId", ALL_COMPANY_OPTION, templateDefaults.company);
+    seedOne("cusAreaId", blank, templateDefaults.area);
+    seedOne("cusGroupId", blank, templateDefaults.group);
+    const state = templateDefaults.state;
+    if (state?.code) {
+      const stateOption: ERPDynamicSelectOption = {
+        value: state.code,
+        label: state.name ? `${state.name} (${state.code})` : state.code,
+      };
+      pinnedDropdownOptionRef.current.cusStateCode = stateOption;
+      applyDropdownOptions("cusStateCode", [blank, stateOption]);
+      if (state.name) {
+        setStateNameByCode((prev) => ({ ...prev, [state.code]: state.name }));
+        setStateCodeByName((prev) => ({ ...prev, [state.name]: state.code }));
+      }
+    }
+  }, [applyDropdownOptions, templateDefaults]);
   // Clear any pending dropdown search debounces on unmount.
   useEffect(() => {
     return () => {
@@ -2338,6 +2370,23 @@ export default function CustomerPage() {
       widgetFieldConfig,
     ],
   );
+  // Create-modal initial values: the blank base, then the whole customer_template
+  // config overlaid — every primitive cus* field (fieldValues) plus the three dropdown
+  // ids. cusStateCode arrives via fieldValues; the dropdown/state option labels are
+  // seeded separately (seedTemplateDropdownDefaults) when the create modal opens.
+  const customerCreateInitialValues = useMemo<Record<string, string>>(() => {
+    const values = { ...CUSTOMER_INITIAL_FORM_VALUES, ...templateDefaults.fieldValues };
+    if (templateDefaults.company?.id) {
+      values.cusCompanyId = templateDefaults.company.id;
+    }
+    if (templateDefaults.area?.id) {
+      values.cusAreaId = templateDefaults.area.id;
+    }
+    if (templateDefaults.group?.id) {
+      values.cusGroupId = templateDefaults.group.id;
+    }
+    return values;
+  }, [templateDefaults]);
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted customers. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
@@ -2645,11 +2694,10 @@ export default function CustomerPage() {
         editModalTitle="Edit Customer Entry"
         listSubtitleOverride="Manage customers"
         customFields={customerFormFields}
-        createInitialValues={CUSTOMER_INITIAL_FORM_VALUES}
+        createInitialValues={customerCreateInitialValues}
         modalPanelStyle={CUSTOMER_MODAL_PANEL_STYLE}
-        modalFormGridColumns={3}
+        modalFormGridColumns={2}
         modalFormDenseGrid={false}
-        modalStackLabels
         modalSectionNavigationMode="tabs"
         modalHideFieldHelperText
         modalHideFieldErrorText
@@ -2657,9 +2705,11 @@ export default function CustomerPage() {
         modalEnableArrowKeyFieldNavigation
         onModalOpenChange={(open, variantKey) => {
           // Clear the lazy dropdowns when the create modal opens so no stale list
-          // from a previously edited record lingers (they reload on open).
+          // from a previously edited record lingers (they reload on open), then seed
+          // the Company/Area/Customer Group defaults from the customer_template config.
           if (open && variantKey === "master-create") {
             resetDropdownSelections();
+            seedTemplateDropdownDefaults();
           }
         }}
         augmentDetailSource={async ({ source }) => {
