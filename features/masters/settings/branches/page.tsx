@@ -33,20 +33,17 @@ const API_ENDPOINTS = {
   delete: "/branch-masters/delete",
 } as const;
 const GRID_TABLE_NAME = "branch_master";
-const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const GODOWN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+const GODOWN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const LOOKUP_QUERY_ACCOUNT_LEDGERS = {
   module: "accountLedgers",
-  limit: "100",
 } as const;
 const GODOWN_LOOKUP_QUERY = {
   module: "godownLocations",
-  limit: "100",
 } as const;
 const STATE_LOOKUP_QUERY = {
   module: "stateCodes",
-  limit: "100",
 } as const;
 const LOOKUP_KEYS = {
   id: ["brId", "br_id", "id", "_id"],

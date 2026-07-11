@@ -29,7 +29,7 @@ const API_ENDPOINTS = {
   create: "/account-groups/create",
   delete: "/account-groups/delete",
 } as const;
-const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const GRID_TABLE_NAME = "account_groups";
 // The form fields below are re-labelled, re-ordered, and shown/hidden from the
 // backend widget-masters config (fixed.form_section / form_field) for this
@@ -61,7 +61,6 @@ const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
 const LOOKUP_QUERY_ACCOUNT_GROUPS = {
   module: "accountGroups",
-  limit: "20",
 } as const;
 const LOOKUP_KEYS = {
   id: ["accGroupId", "acc_group_id", "id", "_id"],

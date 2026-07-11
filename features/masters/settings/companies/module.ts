@@ -44,15 +44,13 @@ const API_ENDPOINTS = {
   delete: "/company-masters/delete",
 } as const;
 const GRID_TABLE_NAME = "companys";
-const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const STATE_LOOKUP_QUERY = {
   module: "stateCodes",
-  limit: "100",
 } as const;
 const BANK_LEDGER_LOOKUP_QUERY = {
   module: "accountLedgers",
-  limit: "100",
 } as const;
 const LOOKUP_KEYS = {
   id: ["compId", "comp_id", "id", "_id"],

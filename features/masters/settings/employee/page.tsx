@@ -32,8 +32,8 @@ const API_ENDPOINTS = {
   delete: "/employee-masters/delete",
 } as const;
 const GRID_TABLE_NAME = "emp_master";
-const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const UUID_PATTERN = "^[0-9a-fA-F-]{36}$";
 const EMPLOYEE_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(92vw, 62rem)",
@@ -66,19 +66,15 @@ const BRANCH_SOURCE_ID_KEYS = ["empBranchId", "emp_branch_id"] as const;
 const BRANCH_SOURCE_NAME_KEYS = ["empBranchName", "emp_branch_name", "brName", "br_name"] as const;
 const LOOKUP_QUERY_DEPARTMENTS = {
   module: "employeeDepartments",
-  limit: "20",
 } as const;
 const LOOKUP_QUERY_DESIGNATIONS = {
   module: "employeeDesignations",
-  limit: "20",
 } as const;
 const LOOKUP_QUERY_LOAN_LEDGERS = {
   module: "accountLedgers",
-  limit: "20",
 } as const;
 const LOOKUP_QUERY_STATES = {
   module: "states",
-  limit: "100",
 } as const;
 const LOOKUP_KEYS = {
   id: ["empId", "emp_id", "id", "_id"],

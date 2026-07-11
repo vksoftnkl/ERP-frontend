@@ -9,7 +9,7 @@ import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/
 import type { StockLookupOption } from "@/features/stocks/_shared/types";
 import { baseApi } from "@/store/api/baseApi";
 const ITEM_LIST_ENDPOINT = "/dropdown-details/run";
-const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const ITEM_PRICE_DETAILS_ENDPOINT = "/item-price-details/get";
 const ITEM_PRICE_DETAILS_BY_BARCODE_ENDPOINT = "/item-price-details/get-by-barcode";
 const ITEM_TAX_LIST_ENDPOINT = "/configured-grid-sql/run";
@@ -24,28 +24,22 @@ const ITEM_DROPDOWN_PARAM = JSON.stringify({ branch_id: 1, company_id: 2 });
 const ITEM_LOOKUP_QUERY = {
   dropdown_id: ITEM_DROPDOWN_ID,
   page: "1",
-  limit: "20",
   dropdown_param: ITEM_DROPDOWN_PARAM,
 } as const;
 const UNIT_LOOKUP_QUERY = {
   module: "units",
-  limit: "100",
 } as const;
 const GODOWN_LOOKUP_QUERY = {
   module: "godownLocations",
-  limit: "100",
 } as const;
 const BRANCH_LOOKUP_QUERY = {
   module: "branches",
-  limit: "100",
 } as const;
 const COMPANY_LOOKUP_QUERY = {
   module: "companies",
-  limit: "100",
 } as const;
 const USER_LOOKUP_QUERY = {
   module: "userMasters",
-  limit: "20",
 } as const;
 const ITEM_TAX_LIST_QUERY = {
   grid_id: "5",

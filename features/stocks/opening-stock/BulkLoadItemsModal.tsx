@@ -5,7 +5,7 @@ import { useBusinessContext } from "@/components/layout/business-context";
 import { useApi } from "@/hooks/useApi";
 import { SearchableSelect, type ERPDynamicSelectOption } from "@/components/design-system/ui";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
-const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const NONE_OPTION: ERPDynamicSelectOption = { value: "", label: "--None--" };
 const LOOKUP_TOAST = { toast: { success: false, error: false } } as const;
 type RawRecord = Record<string, unknown>;
@@ -148,12 +148,12 @@ export function BulkLoadItemsModal({
     void (async () => {
       try {
         const [branches, groups, brands, sections, categories, godowns] = await Promise.all([
-          getBranchLookup({ module: "branches", limit: "100" }),
-          getGroupLookup({ module: "itemGroups", limit: "100" }),
-          getBrandLookup({ module: "itemBrands", limit: "100" }),
-          getSectionLookup({ module: "itemSections", limit: "100" }),
-          getCategoryLookup({ module: "itemCategories", limit: "100" }),
-          getGodownLookup({ module: "godownLocations", limit: "100" }),
+          getBranchLookup({ module: "branches" }),
+          getGroupLookup({ module: "itemGroups" }),
+          getBrandLookup({ module: "itemBrands" }),
+          getSectionLookup({ module: "itemSections" }),
+          getCategoryLookup({ module: "itemCategories" }),
+          getGodownLookup({ module: "godownLocations" }),
         ]);
         setBranchOptions(buildOptions(branches, BRANCH_ARRAY_KEYS, BRANCH_ID_KEYS, BRANCH_LABEL_KEYS));
         setItemGroupOptions(buildOptions(groups, GROUP_ARRAY_KEYS, GROUP_ID_KEYS, GROUP_LABEL_KEYS));

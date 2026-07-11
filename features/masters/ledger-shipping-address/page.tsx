@@ -26,18 +26,15 @@ const API_ENDPOINTS = {
   delete: "/ledger-shipping-addresses/delete",
 } as const;
 const GRID_TABLE_NAME = "acc_ship_addrs";
-const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const LOOKUP_QUERY_ACCOUNT_LEDGERS = {
   module: "accountLedgers",
-  limit: "20",
 } as const;
 const LOOKUP_QUERY_COMPANIES = {
   module: "companies",
-  limit: "20",
 } as const;
 const LOOKUP_QUERY_BRANCHES = {
   module: "branches",
-  limit: "20",
 } as const;
 const DEFAULT_COUNTRY_CODE = "IN";
 const DEFAULT_ADDR_TYPE = "SHIP_TO";

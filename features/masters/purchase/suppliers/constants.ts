@@ -26,33 +26,29 @@ export const SUPPLIER_GROUP_MODAL_PANEL_STYLE: CSSProperties = {
 };
 // Related Master Endpoints
 export const SUPPLIER_GROUP_LOOKUP_ENDPOINT =
-  "/master-lookups/name-id/all-accounts-and-masters";
+  "/master-lookups/name-id/all-masters";
 export const SUPPLIER_GROUP_GET_ENDPOINT = "/supplier-groups/get";
 export const SUPPLIER_GROUP_CREATE_ENDPOINT = "/supplier-groups/create";
 export const COMPANY_LOOKUP_ENDPOINT =
-  "/master-lookups/name-id/all-accounts-and-masters";
+  "/master-lookups/name-id/all-masters";
 export const BRANCH_LOOKUP_ENDPOINT =
-  "/master-lookups/name-id/all-accounts-and-masters";
+  "/master-lookups/name-id/all-masters";
 export const STATE_LOOKUP_ENDPOINT =
-  "/master-lookups/name-id/all-accounts-and-masters";
+  "/master-lookups/name-id/all-masters";
 export const STATE_GET_ENDPOINT = "/state-code-masters/get";
 export const STATE_CREATE_ENDPOINT = "/state-code-masters/create";
 // Lookup Queries
 export const SUPPLIER_GROUP_LOOKUP_QUERY = {
   module: "supplierGroups",
-  limit: "20",
 } as const;
 export const COMPANY_LOOKUP_QUERY = {
   module: "companies",
-  limit: "100",
 } as const;
 export const BRANCH_LOOKUP_QUERY = {
   module: "branches",
-  limit: "100",
 } as const;
 export const STATE_LOOKUP_QUERY = {
   module: "stateCodes",
-  limit: "100",
 } as const;
 // GST Lookup Configuration
 export const GST_LOOKUP_ENDPOINT = "/api/gst/search";

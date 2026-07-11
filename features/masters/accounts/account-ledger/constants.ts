@@ -17,7 +17,7 @@ export const SEARCHABLE_SELECT_OPTIONS_MAX_HEIGHT = 220;
 export const DEFAULT_PAGE = 1;
 export const DEFAULT_PAGE_SIZE = 20;
 
-export const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+export const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 // Single account-group fetch (query: accGroupId). Read to resolve the group's
 // `accLedgerProfile`, which drives the ledger modal's section visibility and the
 // derived (read-only) Ledger Type.
@@ -28,7 +28,7 @@ export const GRID_COLUMNS_CREATE_ENDPOINT = "/grid-columns/create";
 export const GRID_COLUMN_WIDTH_ENDPOINT = "/grid-details/column-width";
 export const GRID_FILTER_SETTINGS_ENDPOINT = "/grid-details/filter-settings";
 export const GRID_VISIBILITY_SETTINGS_ENDPOINT = "/grid-details/visibility-settings";
-export const STATE_CODE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+export const STATE_CODE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 
 export const ACCOUNT_LEDGER_TABLE_NAME = "acc_ledger_master";
 export const ACCOUNT_LEDGER_TABLE_NAME_ALIASES = [
@@ -44,22 +44,18 @@ export const GRID_DETAILS_QUERY = {
 
 export const LOOKUP_QUERY_COMPANIES = {
   module: "companies",
-  limit: "20",
 } as const;
 
 export const LOOKUP_QUERY_BRANCHES = {
   module: "branches",
-  limit: "20",
 } as const;
 
 export const LOOKUP_QUERY_ACCOUNT_GROUPS = {
   module: "accountGroups",
-  limit: "20",
 } as const;
 
 export const LOOKUP_QUERY_STATE_CODES = {
   module: "stateCodes",
-  limit: "100",
 } as const;
 
 export const STATE_NAME_SEARCH_FIELD_NAMES = new Set<string>([

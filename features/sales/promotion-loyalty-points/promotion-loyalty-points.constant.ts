@@ -85,7 +85,7 @@ export const LOYALTY_POINT_SAVE_ENDPOINT = "/promotion-loyalty-points/points/cre
 export const LOYALTY_POINT_DELETE_ENDPOINT = "/promotion-loyalty-points/points/delete";
 export const LOYALTY_GIFT_SAVE_ENDPOINT = "/promotion-loyalty-points/gifts/create";
 export const LOYALTY_GIFT_DELETE_ENDPOINT = "/promotion-loyalty-points/gifts/delete";
-export const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+export const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 export const ITEM_LOOKUP_KEYS: LookupConfig = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "items", "item_masters"],
   idKeys: ["item_id", "itemId", "id", "_id", "value"],

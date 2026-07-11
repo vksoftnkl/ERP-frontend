@@ -68,17 +68,15 @@ const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 // Backend fieldNames (lowercased) that map to a real form field, so their popup
 // checkbox can actually show/hide something. Others render read-only ("not on form").
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
-const CITY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const CITY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const CITY_GET_ENDPOINT = "/cities/get";
 const CITY_UPSERT_ENDPOINT = "/cities/create";
-const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const CITY_LOOKUP_REQUEST_QUERY = {
   module: "cities",
-  limit: "20",
 } as const;
 const STATE_LOOKUP_REQUEST_QUERY = {
   module: "states",
-  limit: "100",
 } as const;
 const LOOKUP_KEYS = {
   id: ["armId", "arm_id", "area_id", "areaId", "id", "_id"],

@@ -34,8 +34,8 @@ const CUSTOMER_TEMPLATE_CONFIG_ID = 1;
 const CUSTOMER_TEMPLATE_CONFIG_NAME = "customer_template";
 // Price Level is the one non-configured dropdown; it loads eagerly from the shared
 // master-lookup endpoint (same source the customer master uses).
-const PRICE_LEVEL_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const PRICE_LEVEL_LOOKUP_QUERY = { module: "priceLevels", limit: "100" } as const;
+const PRICE_LEVEL_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+const PRICE_LEVEL_LOOKUP_QUERY = { module: "priceLevels" } as const;
 type ConfigGetResponse = {
   data?: { configValue?: string | null } | null;
 };

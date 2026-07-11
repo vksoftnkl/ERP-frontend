@@ -24,11 +24,10 @@ const API_ENDPOINTS = {
   create: "/item-taxes/create",
   delete: "/item-taxes/delete",
 } as const;
-const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const GRID_TABLE_NAME = "item_tax_master";
 const LOOKUP_QUERY_ACCOUNT_LEDGERS = {
   module: "accountLedgers",
-  limit: "100",
 } as const;
 const LOOKUP_KEYS = {
   id: ["tax_id", "taxId", "id", "_id"],

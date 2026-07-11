@@ -10,17 +10,17 @@ list: "/configured-grid-sql/run?grid_id=1",
   delete: "/items/delete",
 } as const;
 export const GRID_TABLE_NAME = "item_master";
-export const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const TAX_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const COMPANY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const BRANCH_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const ITEM_GROUP_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const ITEM_CATEGORY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const ITEM_BRAND_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const ITEM_SECTION_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const UNIT_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const GODOWN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const HSN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+export const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+export const TAX_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+export const COMPANY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+export const BRANCH_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+export const ITEM_GROUP_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+export const ITEM_CATEGORY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+export const ITEM_BRAND_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+export const ITEM_SECTION_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+export const UNIT_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+export const GODOWN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+export const HSN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 export const UI_TABLE_COLUMNS_ENDPOINT = "/ui-table-masters/get";
 export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-masters/create";
 export const WIDGET_MASTER_LIST_ENDPOINT = "/widget-masters/get";
@@ -44,11 +44,9 @@ export const ITEM_REORDER_ROWS_FIELD_NAME = "item_reorder_rows_json";
 export const ITEM_EAN_ROWS_FIELD_NAME = "item_ean_rows_json";
 export const COMPANY_LOOKUP_QUERY = {
   module: "companies",
-  limit: "100",
 } as const;
 export const BRANCH_LOOKUP_QUERY = {
   module: "branches",
-  limit: "100",
 } as const;
 export const ITEM_GROUP_LOOKUP_QUERY = {
   module: "itemGroups",
@@ -56,23 +54,18 @@ export const ITEM_GROUP_LOOKUP_QUERY = {
 } as const;
 export const ITEM_CATEGORY_LOOKUP_QUERY = {
   module: "itemCategories",
-  limit: "100",
 } as const;
 export const ITEM_BRAND_LOOKUP_QUERY = {
   module: "itemBrands",
-  limit: "100",
 } as const;
 export const ITEM_SECTION_LOOKUP_QUERY = {
   module: "itemSections",
-  limit: "100",
 } as const;
 export const UNIT_LOOKUP_QUERY = {
   module: "units",
-  limit: "100",
 } as const;
 export const GODOWN_LOOKUP_QUERY = {
   module: "godownLocations",
-  limit: "100",
 } as const;
 export const UI_TABLE_COLUMNS_QUERY = {
   uiTableId: ITEM_PRICE_TABLE_UI_ID,
@@ -95,7 +88,6 @@ export const LOOKUP_QUERY_ITEM_TAXES = {
 } as const;
 export const ITEM_TAX_LIST_QUERY = {
   page: "1",
-  limit: "100",
   // grid 5's stored SQL filters on a `wantdelete` placeholder token; bind it to
   // false so only non-deleted taxes are returned. Without it the unbound token
   // reaches Postgres as a column reference and the query 500s.
@@ -103,19 +95,15 @@ export const ITEM_TAX_LIST_QUERY = {
 } as const;
 export const LOOKUP_QUERY_SUPPLIERS = {
   module: "suppliers",
-  limit: "50",
 } as const;
 export const LOOKUP_QUERY_CUSTOMER_GROUPS = {
   module: "customerGroups",
-  limit: "50",
 } as const;
 export const LOOKUP_QUERY_ITEMS = {
   module: "items",
-  limit: "50",
 } as const;
 export const HSN_LOOKUP_QUERY = {
   module: "hsnCodes",
-  limit: "100",
 } as const;
 export const COMPANY_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "companies", "companys"],

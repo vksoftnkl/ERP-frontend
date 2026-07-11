@@ -70,17 +70,15 @@ const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 // checkbox can actually show/hide something. Others render read-only ("not on form").
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
 
-const BRANCH_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-const PARENT_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const BRANCH_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+const PARENT_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 
 const BRANCH_LOOKUP_QUERY = {
   module: "branches",
-  limit: "20",
 } as const;
 
 const PARENT_LOOKUP_QUERY = {
   module: "godownLocations",
-  limit: "20",
 } as const;
 
 const LOOKUP_KEYS = {

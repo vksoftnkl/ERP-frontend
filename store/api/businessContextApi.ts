@@ -12,7 +12,7 @@ export type BranchRecord = {
   brId: string;
   name: string;
 };
-const COMPANY_LIST_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const COMPANY_LIST_ENDPOINT = "/master-lookups/name-id/all-masters";
 const BRANCH_BY_COMPANY_ENDPOINT = "/master-lookups/branches/by-company";
 const COMPANY_ID_KEYS = ["compId", "comp_id", "company_id", "companyId", "id", "_id"] as const;
 const COMPANY_NAME_KEYS = [
@@ -58,7 +58,7 @@ export const businessContextApi = baseApi.injectEndpoints({
     getCompanyList: builder.query<CompanyRecord[], void>({
       query: () => ({
         url: COMPANY_LIST_ENDPOINT,
-        params: { module: "companies", limit: "20" },
+        params: { module: "companies" },
       }),
       transformResponse: (payload: unknown) =>
         extractRows<Record<string, unknown>>(payload)

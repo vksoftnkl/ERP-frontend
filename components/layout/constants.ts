@@ -203,6 +203,12 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
           {label:"Item Template",href:"/master/item-template"}
         ]
       },
+      {
+        label:"Configuration",
+        children:[
+          {label:"Price Level Configuration",href:"/master/price-level-configuration"}
+        ]
+      },
       {label:"User Administration",href:"/master/user-administration"},
       {label:"Module Administration",href:"/master/module-administration"},
       {label:"Permissions",href:"/master/permissions"},

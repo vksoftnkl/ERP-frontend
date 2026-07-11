@@ -74,7 +74,7 @@ const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 // Backend fieldNames (lowercased) that map to a real form field, so their popup
 // checkbox can actually show/hide something. Others render read-only ("not on form").
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
-const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 // Company is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
 // 8=company comp_id/comp_name). Loaded on open + on debounced server-side search via
 // /dropdown-details/run; nothing up front and dropdown_param is never sent.
@@ -86,7 +86,6 @@ const COMPANY_DROPDOWN_CONFIG = {
 } as const;
 const LOOKUP_QUERY_PROVIDERS = {
   module: "gspProviders",
-  limit: "20",
 } as const;
 const LOOKUP_KEYS = {
   id: ["csgCompanyServiceId", "csg_company_service_id", "id", "_id"],

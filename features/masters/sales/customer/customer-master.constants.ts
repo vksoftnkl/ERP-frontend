@@ -16,46 +16,40 @@ export const GRID_TABLE_NAME = "customers";
 // defaults saved in the customer_template config (GET /configs/get?configId=1).
 export const CUSTOMER_TEMPLATE_CONFIG_ENDPOINT = "/configs/get";
 export const CUSTOMER_TEMPLATE_CONFIG_ID = "1";
-export const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+export const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 export const STATE_GET_ENDPOINT = "/state-code-masters/get";
 export const STATE_UPSERT_ENDPOINT = "/state-code-masters/create";
-export const AREA_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+export const AREA_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 export const AREA_GET_ENDPOINT = "/areas/get";
 export const AREA_UPSERT_ENDPOINT = "/areas/create";
-export const CUSTOMER_GROUP_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+export const CUSTOMER_GROUP_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 export const CUSTOMER_GROUP_GET_ENDPOINT = "/customer-groups/get";
 export const CUSTOMER_GROUP_UPSERT_ENDPOINT = "/customer-groups/create";
-export const COMPANY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const BRANCH_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const PRICE_LEVEL_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
-export const CITY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+export const COMPANY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+export const BRANCH_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+export const PRICE_LEVEL_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+export const CITY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 export const CUSTOMER_GROUP_LOOKUP_QUERY = {
   module: "customerGroups",
 } as const;
 export const CUSTOMER_GROUP_SEARCH_DEBOUNCE_MS = 250;
 export const AREA_LOOKUP_REQUEST_QUERY = {
   module: "areas",
-  limit: "20",
 } as const;
 export const STATE_LOOKUP_REQUEST_QUERY = {
   module: "stateCodes",
-  limit: "100",
 } as const;
 export const CITY_LOOKUP_REQUEST_QUERY = {
   module: "cities",
-  limit: "20",
 } as const;
 export const BRANCH_LOOKUP_REQUEST_QUERY = {
   module: "branches",
-  limit: "100",
 } as const;
 export const COMPANY_LOOKUP_REQUEST_QUERY = {
   module: "companies",
-  limit: "100",
 } as const;
 export const PRICE_LEVEL_LOOKUP_REQUEST_QUERY = {
   module: "priceLevels",
-  limit: "100",
 } as const;
 export const GST_LOOKUP_ENDPOINT = "/api/gst/search";
 export const GST_LOOKUP_PATTERN = /^[0-9A-Z]{15}$/;

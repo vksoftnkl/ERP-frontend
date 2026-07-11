@@ -24,14 +24,12 @@ const API_ENDPOINTS = {
   delete: "/ledger-bank-accounts/delete",
 } as const;
 const GRID_TABLE_NAME = "acc_ledger_bank_accounts";
-const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-accounts-and-masters";
+const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const LOOKUP_QUERY_COMPANIES = {
   module: "companies",
-  limit: "20",
 } as const;
 const LOOKUP_QUERY_ACCOUNT_LEDGERS = {
   module: "accountLedgers",
-  limit: "20",
 } as const;
 const LOOKUP_KEYS = {
   id: ["lbaId", "lba_id", "id", "_id"],
