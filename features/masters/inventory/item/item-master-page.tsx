@@ -1,14 +1,18 @@
 "use client";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import CrudMasterPage, {
   type CrudMasterPageController,
 } from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
+import {
+  useLazyConfiguredDropdown,
+  type LazyDropdownHandlers,
+} from "@/features/masters/shared/use-lazy-configured-dropdown";
 import type {
   ERPDynamicCustomFieldRenderProps,
+  ERPDynamicFieldValueChangePayload,
   ERPDynamicFieldValueChangeResult,
   ERPDynamicModalField,
-  ERPDynamicSearchQueryChangeHandler,
   ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
@@ -42,7 +46,6 @@ import {
   fileToBase64,
   getFieldValue,
   hasLinkedRows,
-  mergeLookupOptionSets,
   toHsnOptions,
   toLookupOptions,
   toOptionalNonNegativeInteger,
@@ -60,12 +63,8 @@ import {
   GRID_TABLE_NAME,
   LOOKUP_ENDPOINT,
   TAX_LOOKUP_ENDPOINT,
-  COMPANY_LOOKUP_ENDPOINT,
   BRANCH_LOOKUP_ENDPOINT,
-  ITEM_GROUP_LOOKUP_ENDPOINT,
-  ITEM_CATEGORY_LOOKUP_ENDPOINT,
-  ITEM_BRAND_LOOKUP_ENDPOINT,
-  ITEM_SECTION_LOOKUP_ENDPOINT,
+  BRANCH_BY_COMPANY_ENDPOINT,
   UNIT_LOOKUP_ENDPOINT,
   GODOWN_LOOKUP_ENDPOINT,
   HSN_LOOKUP_ENDPOINT,
@@ -74,7 +73,6 @@ import {
   WIDGET_MASTER_LIST_ENDPOINT,
   ITEM_TAX_MASTER_LIST_ENDPOINT,
   ITEM_WIDGET_QUERY_LIMIT,
-  ITEM_GROUP_SEARCH_DEBOUNCE_MS,
   ITEM_REORDER_TABLE_UI_ID,
   ITEM_PRICE_TABLE_UI_ID,
   ITEM_EAN_TABLE_UI_ID,
@@ -85,12 +83,7 @@ import {
   ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME,
   ITEM_REORDER_ROWS_FIELD_NAME,
   ITEM_EAN_ROWS_FIELD_NAME,
-  COMPANY_LOOKUP_QUERY,
   BRANCH_LOOKUP_QUERY,
-  ITEM_GROUP_LOOKUP_QUERY,
-  ITEM_CATEGORY_LOOKUP_QUERY,
-  ITEM_BRAND_LOOKUP_QUERY,
-  ITEM_SECTION_LOOKUP_QUERY,
   UNIT_LOOKUP_QUERY,
   GODOWN_LOOKUP_QUERY,
   UI_TABLE_COLUMNS_QUERY,
@@ -99,16 +92,9 @@ import {
   ITEM_MASTER_WIDGET_QUERY,
   LOOKUP_QUERY_ITEM_TAXES,
   ITEM_TAX_LIST_QUERY,
-  LOOKUP_QUERY_SUPPLIERS,
-  LOOKUP_QUERY_CUSTOMER_GROUPS,
   LOOKUP_QUERY_ITEMS,
   HSN_LOOKUP_QUERY,
-  COMPANY_LOOKUP_KEYS,
   BRANCH_LOOKUP_KEYS,
-  GROUP_LOOKUP_KEYS,
-  CATEGORY_LOOKUP_KEYS,
-  BRAND_LOOKUP_KEYS,
-  SECTION_LOOKUP_KEYS,
   UNIT_LOOKUP_KEYS,
   GODOWN_LOOKUP_KEYS,
   LOOKUP_KEYS,
@@ -174,6 +160,82 @@ import {
   type UiTableColumnLayoutItem,
   normalizeItemBatchConfigValue,
 } from "./item-master-page.constants";
+// Company is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
+// 8=company comp_id/comp_name). Loaded on open + on debounced server-side search via
+// /dropdown-details/run; nothing fetched up front.
+const COMPANY_DROPDOWN_CONFIG = {
+  dropdownId: "8",
+  idKeys: ["comp_id", "compId"] as const,
+  labelKeys: ["comp_name", "compName"] as const,
+  defaultOption: DEFAULT_COMPANY_OPTION,
+} as const;
+// Source keys to seed the saved company on edit/view (/items/get returns both
+// item_company_id and the resolved item_company_name).
+const COMPANY_SOURCE_ID_KEYS = ["item_company_id", "itemCompanyId"] as const;
+const COMPANY_SOURCE_NAME_KEYS = ["item_company_name", "itemCompanyName"] as const;
+// Item Group is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
+// 17=item groups itg_id/itg_name from inventory.item_group_master where active). Loaded on
+// open + on debounced server-side search via /dropdown-details/run; nothing fetched up front.
+const GROUP_DROPDOWN_CONFIG = {
+  dropdownId: "17",
+  idKeys: ["itg_id", "itgId"] as const,
+  labelKeys: ["itg_name", "itgName"] as const,
+  defaultOption: DEFAULT_GROUP_OPTION,
+} as const;
+// Source keys to seed the saved item group on edit/view (/items/get returns both
+// item_group_id and the resolved item_group_name).
+const GROUP_SOURCE_ID_KEYS = ["item_group_id", "itemGroupId"] as const;
+const GROUP_SOURCE_NAME_KEYS = ["item_group_name", "itemGroupName"] as const;
+// Item Category is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
+// 20=item categories category_id/category_name from inventory.item_category_master where active).
+const CATEGORY_DROPDOWN_CONFIG = {
+  dropdownId: "20",
+  idKeys: ["category_id", "categoryId"] as const,
+  labelKeys: ["category_name", "categoryName"] as const,
+  defaultOption: DEFAULT_CATEGORY_OPTION,
+} as const;
+const CATEGORY_SOURCE_ID_KEYS = ["item_category_id", "itemCategoryId"] as const;
+const CATEGORY_SOURCE_NAME_KEYS = ["item_category_name", "itemCategoryName"] as const;
+// Item Section is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
+// 19=item sections sec_id/sec_name from inventory.item_section_master where active).
+const SECTION_DROPDOWN_CONFIG = {
+  dropdownId: "19",
+  idKeys: ["sec_id", "secId"] as const,
+  labelKeys: ["sec_name", "secName"] as const,
+  defaultOption: DEFAULT_SECTION_OPTION,
+} as const;
+const SECTION_SOURCE_ID_KEYS = ["item_section_id", "itemSectionId"] as const;
+const SECTION_SOURCE_NAME_KEYS = ["item_section_name", "itemSectionName"] as const;
+// Item Brand is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
+// 18=item brands brand_id/brand_name from inventory.item_brand_master where active).
+const BRAND_DROPDOWN_CONFIG = {
+  dropdownId: "18",
+  idKeys: ["brand_id", "brandId"] as const,
+  labelKeys: ["brand_name", "brandName"] as const,
+  defaultOption: DEFAULT_BRAND_OPTION,
+} as const;
+const BRAND_SOURCE_ID_KEYS = ["item_brand_id", "itemBrandId"] as const;
+const BRAND_SOURCE_NAME_KEYS = ["item_brand_name", "itemBrandName"] as const;
+// Item Customer Group is a lazy, server-side searchable configured dropdown
+// (fixed.dropdown_details 3=customerGroups cgr_id/cgr_name from sales.cust_groups where active).
+const CUSTOMER_GROUP_DROPDOWN_CONFIG = {
+  dropdownId: "3",
+  idKeys: ["cgr_id", "cgrId"] as const,
+  labelKeys: ["cgr_name", "cgrName"] as const,
+  defaultOption: DEFAULT_CUSTOMER_GROUP_OPTION,
+} as const;
+const CUSTOMER_GROUP_SOURCE_ID_KEYS = ["item_cust_group", "itemCustGroup"] as const;
+const CUSTOMER_GROUP_SOURCE_NAME_KEYS = ["item_cust_group_name", "itemCustGroupName"] as const;
+// Default Supplier is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
+// 35=SUPPLIERS sup_id/sup_name from purchase.suppliers where active).
+const SUPPLIER_DROPDOWN_CONFIG = {
+  dropdownId: "35",
+  idKeys: ["sup_id", "supId"] as const,
+  labelKeys: ["sup_name", "supName"] as const,
+  defaultOption: DEFAULT_SUPPLIER_OPTION,
+} as const;
+const SUPPLIER_SOURCE_ID_KEYS = ["item_supplier_id", "itemSupplierId"] as const;
+const SUPPLIER_SOURCE_NAME_KEYS = ["item_supplier_name", "itemSupplierName"] as const;
 type ItemWidgetConfigRecord = {
   widgetNo: string;
   widgetGroupId: string;
@@ -2257,24 +2319,30 @@ function buildUiTableColumnLayoutRequest(
 }
 function buildItemFormFields(
   companyOptions: ERPDynamicSelectOption[],
+  companyHandlers: LazyDropdownHandlers,
   branchOptions: ERPDynamicSelectOption[],
   groupOptions: ERPDynamicSelectOption[],
+  groupHandlers: LazyDropdownHandlers,
   categoryOptions: ERPDynamicSelectOption[],
+  categoryHandlers: LazyDropdownHandlers,
   brandOptions: ERPDynamicSelectOption[],
+  brandHandlers: LazyDropdownHandlers,
   sectionOptions: ERPDynamicSelectOption[],
+  sectionHandlers: LazyDropdownHandlers,
   unitOptions: ERPDynamicSelectOption[],
   godownOptions: ERPDynamicSelectOption[],
   taxOptions: ERPDynamicSelectOption[],
   itemTaxRecordsById: ReadonlyMap<string, Record<string, unknown>>,
   hsnOptions: ERPDynamicSelectOption[],
   supplierOptions: ERPDynamicSelectOption[],
+  supplierHandlers: LazyDropdownHandlers,
   customerGroupOptions: ERPDynamicSelectOption[],
+  customerGroupHandlers: LazyDropdownHandlers,
   itemOptions: ERPDynamicSelectOption[],
   itemPriceTableColumnsConfig: Record<string, unknown>[],
   itemReorderTableColumnsConfig: Record<string, unknown>[],
   itemEanTableColumnsConfig: Record<string, unknown>[],
   itemWidgetConfigRecords: ItemWidgetConfigRecord[],
-  onItemGroupSearchChange?: ERPDynamicSearchQueryChangeHandler,
   onLinkedTableColumnLayoutChange?: LinkedTableColumnLayoutChangeHandler,
 ): ERPDynamicModalField[] {
   const basePriceRowColumns: LinkedRecordColumn[] = [
@@ -2627,7 +2695,11 @@ function buildItemFormFields(
         label: "Company",
         type: "select",
         searchable: true,
+        serverSearch: true,
         options: companyOptions,
+        onSearchOpenChange: companyHandlers.onSearchOpenChange,
+        onSearchQueryChange: companyHandlers.onSearchQueryChange,
+        onValueChange: companyHandlers.onValueChange,
       },
       {
         name: "item_branch_id",
@@ -2641,43 +2713,66 @@ function buildItemFormFields(
         label: "Item Group",
         type: "select",
         searchable: true,
+        serverSearch: true,
         options: groupOptions,
-        onSearchQueryChange: onItemGroupSearchChange,
+        onSearchOpenChange: groupHandlers.onSearchOpenChange,
+        onSearchQueryChange: groupHandlers.onSearchQueryChange,
+        onValueChange: groupHandlers.onValueChange,
       },
       {
         name: "item_category_id",
         label: "Item Category",
         type: "select",
         searchable: true,
+        serverSearch: true,
         options: categoryOptions,
+        onSearchOpenChange: categoryHandlers.onSearchOpenChange,
+        onSearchQueryChange: categoryHandlers.onSearchQueryChange,
+        onValueChange: categoryHandlers.onValueChange,
       },
       {
         name: "item_section_id",
         label: "Item Section",
         type: "select",
         searchable: true,
+        serverSearch: true,
         options: sectionOptions,
+        onSearchOpenChange: sectionHandlers.onSearchOpenChange,
+        onSearchQueryChange: sectionHandlers.onSearchQueryChange,
+        onValueChange: sectionHandlers.onValueChange,
       },
       {
         name: "item_brand_id",
         label: "Item Brand",
         type: "select",
         searchable: true,
+        serverSearch: true,
         options: brandOptions,
+        onSearchOpenChange: brandHandlers.onSearchOpenChange,
+        onSearchQueryChange: brandHandlers.onSearchQueryChange,
+        onValueChange: brandHandlers.onValueChange,
       },
       {
         name: "item_supplier_id",
         label: "Default Supplier",
         type: "select",
         searchable: true,
+        serverSearch: true,
         options: supplierOptions,
+        onSearchOpenChange: supplierHandlers.onSearchOpenChange,
+        onSearchQueryChange: supplierHandlers.onSearchQueryChange,
+        onValueChange: supplierHandlers.onValueChange,
       },
       {
         name: "item_cust_group",
         label: "Item Customer Group",
         type: "select",
         searchable: true,
+        serverSearch: true,
         options: customerGroupOptions,
+        onSearchOpenChange: customerGroupHandlers.onSearchOpenChange,
+        onSearchQueryChange: customerGroupHandlers.onSearchQueryChange,
+        onValueChange: customerGroupHandlers.onValueChange,
       },
       {
         name: "itemInlineUnitConversionHeading",
@@ -3422,8 +3517,6 @@ export default function ItemMasterPageContent({
   onModalOpenChange,
   onItemSaved,
 }: ItemMasterPageContentProps = {}) {
-  const { getAll: getSupplierLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const { getAll: getCustomerGroupLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getItemLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getTaxLookup } = useApi<unknown>(TAX_LOOKUP_ENDPOINT);
   const { getAll: listItemTaxes } = useApi<unknown>(ITEM_TAX_MASTER_LIST_ENDPOINT);
@@ -3440,30 +3533,27 @@ export default function ItemMasterPageContent({
     },
   });
   const { getAll: getItemMasterWidgets } = useApi<unknown>(WIDGET_MASTER_LIST_ENDPOINT);
-  const { getAll: getCompanyLookup } = useApi<unknown>(COMPANY_LOOKUP_ENDPOINT);
   const { getAll: getBranchLookup } = useApi<unknown>(BRANCH_LOOKUP_ENDPOINT);
-  const { getAll: getGroupLookup } = useApi<unknown>(ITEM_GROUP_LOOKUP_ENDPOINT);
-  const { getAll: searchGroupLookup } = useApi<unknown>(ITEM_GROUP_LOOKUP_ENDPOINT);
-  const { getAll: getCategoryLookup } = useApi<unknown>(ITEM_CATEGORY_LOOKUP_ENDPOINT);
-  const { getAll: getBrandLookup } = useApi<unknown>(ITEM_BRAND_LOOKUP_ENDPOINT);
-  const { getAll: getSectionLookup } = useApi<unknown>(ITEM_SECTION_LOOKUP_ENDPOINT);
+  // Errors aren't toasted — a failed company-scoped branch refresh shouldn't
+  // interrupt the form; the Branch field just keeps its prior option list.
+  const { run: getBranchesByCompany } = useApi<unknown>(BRANCH_BY_COMPANY_ENDPOINT, {
+    toast: { error: false },
+  });
   const { getAll: getUnitLookup } = useApi<unknown>(UNIT_LOOKUP_ENDPOINT);
   const { getAll: getGodownLookup } = useApi<unknown>(GODOWN_LOOKUP_ENDPOINT);
   const { getAll: getHsnLookup } = useApi<unknown>(HSN_LOOKUP_ENDPOINT);
-  const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const company = useLazyConfiguredDropdown(COMPANY_DROPDOWN_CONFIG);
+  const group = useLazyConfiguredDropdown(GROUP_DROPDOWN_CONFIG);
+  const category = useLazyConfiguredDropdown(CATEGORY_DROPDOWN_CONFIG);
+  const brand = useLazyConfiguredDropdown(BRAND_DROPDOWN_CONFIG);
+  const section = useLazyConfiguredDropdown(SECTION_DROPDOWN_CONFIG);
+  const customerGroup = useLazyConfiguredDropdown(CUSTOMER_GROUP_DROPDOWN_CONFIG);
+  const supplier = useLazyConfiguredDropdown(SUPPLIER_DROPDOWN_CONFIG);
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([]);
-  const [groupOptions, setGroupOptions] = useState<ERPDynamicSelectOption[]>([]);
-  const [categoryOptions, setCategoryOptions] = useState<ERPDynamicSelectOption[]>([]);
-  const [brandOptions, setBrandOptions] = useState<ERPDynamicSelectOption[]>([]);
-  const [sectionOptions, setSectionOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [unitOptions, setUnitOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [godownOptions, setGodownOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [taxOptions, setTaxOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [hsnOptions, setHsnOptions] = useState<ERPDynamicSelectOption[]>([]);
-  const [supplierOptions, setSupplierOptions] = useState<ERPDynamicSelectOption[]>([]);
-  const [customerGroupOptions, setCustomerGroupOptions] = useState<
-    ERPDynamicSelectOption[]
-  >([]);
   const [itemOptions, setItemOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [itemTaxRecords, setItemTaxRecords] = useState<Record<string, unknown>[]>([]);
   const [itemPriceTableColumnsConfig, setItemPriceTableColumnsConfig] = useState<
@@ -3478,8 +3568,6 @@ export default function ItemMasterPageContent({
   const [itemWidgetConfigRecords, setItemWidgetConfigRecords] = useState<
     ItemWidgetConfigRecord[]
   >([]);
-  const itemGroupSearchTimeoutRef = useRef<number | null>(null);
-  const itemGroupSearchRequestRef = useRef(0);
   const itemTaxRecordsById = useMemo(
     () =>
       new Map(
@@ -3492,47 +3580,49 @@ export default function ItemMasterPageContent({
       ),
     [itemTaxRecords],
   );
-  const loadItemGroupOptions = useCallback(
-    async (search = "") => {
-      const normalizedSearch = search.trim();
-      const payload = await searchGroupLookup(
-        normalizedSearch
-          ? {
-            ...ITEM_GROUP_LOOKUP_QUERY,
-            search: normalizedSearch,
-          }
-          : ITEM_GROUP_LOOKUP_QUERY,
-      );
-      return toLookupOptions(payload, DEFAULT_GROUP_OPTION, GROUP_LOOKUP_KEYS);
-    },
-    [searchGroupLookup],
-  );
-  const handleItemGroupSearchChange = useCallback<ERPDynamicSearchQueryChangeHandler>(
-    (query) => {
-      const normalizedQuery = query.trim();
-      if (itemGroupSearchTimeoutRef.current !== null) {
-        window.clearTimeout(itemGroupSearchTimeoutRef.current);
-      }
-      if (!normalizedQuery) {
+  // When Company changes, re-scope the Branch options to that company's active
+  // branches and auto-select: keep the current branch if it still belongs to the
+  // new company, otherwise select the first branch in the new list (mirrors the
+  // company/branch switcher's businessContext.saga.ts auto-select behavior).
+  const handleCompanyValueChange = useCallback(
+    async (
+      payload: ERPDynamicFieldValueChangePayload,
+    ): Promise<ERPDynamicFieldValueChangeResult | void> => {
+      company.handlers.onValueChange(payload);
+      const companyId = payload.value.trim();
+      if (!companyId) {
         return;
       }
-      const requestId = itemGroupSearchRequestRef.current + 1;
-      itemGroupSearchRequestRef.current = requestId;
-      itemGroupSearchTimeoutRef.current = window.setTimeout(() => {
-        void (async () => {
-          try {
-            const searchedOptions = await loadItemGroupOptions(normalizedQuery);
-            if (itemGroupSearchRequestRef.current !== requestId) {
-              return;
-            }
-            setGroupOptions((current) => mergeLookupOptionSets(current, searchedOptions));
-          } catch {
-            // Keep the existing option set when incremental search fails.
-          }
-        })();
-      }, ITEM_GROUP_SEARCH_DEBOUNCE_MS);
+      try {
+        const response = await getBranchesByCompany({
+          url: `${BRANCH_BY_COMPANY_ENDPOINT}/${companyId}`,
+        });
+        const nextBranchOptions = toLookupOptions(
+          response,
+          DEFAULT_BRANCH_OPTION,
+          BRANCH_LOOKUP_KEYS,
+        );
+        setBranchOptions(nextBranchOptions);
+        const currentBranchId = (payload.previousValues.item_branch_id ?? "").trim();
+        const branchStillValid = nextBranchOptions.some(
+          (option) => option.value === currentBranchId,
+        );
+        const nextBranchId = branchStillValid
+          ? currentBranchId
+          : (nextBranchOptions[0]?.value ?? "");
+        if (nextBranchId === currentBranchId) {
+          return;
+        }
+        return { values: { item_branch_id: nextBranchId } };
+      } catch {
+        // Keep whatever branch options/selection are currently shown.
+      }
     },
-    [loadItemGroupOptions],
+    [company.handlers, getBranchesByCompany],
+  );
+  const companyFieldHandlers = useMemo(
+    () => ({ ...company.handlers, onValueChange: handleCompanyValueChange }),
+    [company.handlers, handleCompanyValueChange],
   );
   const handleLinkedTableColumnLayoutChange =
     useCallback<LinkedTableColumnLayoutChangeHandler>(
@@ -3564,48 +3654,27 @@ export default function ItemMasterPageContent({
       [saveUiTableColumnLayout],
     );
   useEffect(() => {
-    return () => {
-      if (itemGroupSearchTimeoutRef.current !== null) {
-        window.clearTimeout(itemGroupSearchTimeoutRef.current);
-      }
-    };
-  }, []);
-  useEffect(() => {
     let mounted = true;
     void (async () => {
       const [
-        companiesPayload,
         branchesPayload,
-        groupsPayload,
-        categoriesPayload,
-        brandsPayload,
-        sectionsPayload,
         unitsPayload,
         godownsPayload,
         taxesPayload,
         itemTaxesPayload,
         hsnPayload,
-        suppliersPayload,
-        customerGroupsPayload,
         itemsPayload,
         uiTableColumnsPayload,
         uiReorderTableColumnsPayload,
         uiEanTableColumnsPayload,
         itemMasterWidgetsPayload,
       ] = await Promise.allSettled([
-        getCompanyLookup(COMPANY_LOOKUP_QUERY),
         getBranchLookup(BRANCH_LOOKUP_QUERY),
-        getGroupLookup(ITEM_GROUP_LOOKUP_QUERY),
-        getCategoryLookup(ITEM_CATEGORY_LOOKUP_QUERY),
-        getBrandLookup(ITEM_BRAND_LOOKUP_QUERY),
-        getSectionLookup(ITEM_SECTION_LOOKUP_QUERY),
         getUnitLookup(UNIT_LOOKUP_QUERY),
         getGodownLookup(GODOWN_LOOKUP_QUERY),
         getTaxLookup(LOOKUP_QUERY_ITEM_TAXES),
         listItemTaxes(ITEM_TAX_LIST_QUERY),
         getHsnLookup(HSN_LOOKUP_QUERY),
-        getSupplierLookup(LOOKUP_QUERY_SUPPLIERS),
-        getCustomerGroupLookup(LOOKUP_QUERY_CUSTOMER_GROUPS),
         getItemLookup(LOOKUP_QUERY_ITEMS),
         getItemPriceTableColumns(UI_TABLE_COLUMNS_QUERY),
         getItemReorderTableColumns(UI_REORDER_TABLE_COLUMNS_QUERY),
@@ -3615,57 +3684,12 @@ export default function ItemMasterPageContent({
       if (!mounted) {
         return;
       }
-      setCompanyOptions(
-        companiesPayload.status === "fulfilled"
-          ? toLookupOptions(
-            companiesPayload.value,
-            DEFAULT_COMPANY_OPTION,
-            COMPANY_LOOKUP_KEYS,
-          )
-          : [],
-      );
       setBranchOptions(
         branchesPayload.status === "fulfilled"
           ? toLookupOptions(
             branchesPayload.value,
             DEFAULT_BRANCH_OPTION,
             BRANCH_LOOKUP_KEYS,
-          )
-          : [],
-      );
-      setGroupOptions((current) => {
-        if (groupsPayload.status !== "fulfilled") {
-          return current;
-        }
-        const initialGroupOptions = toLookupOptions(
-          groupsPayload.value,
-          DEFAULT_GROUP_OPTION,
-          GROUP_LOOKUP_KEYS,
-        );
-        return current.length > 0
-          ? mergeLookupOptionSets(initialGroupOptions, current)
-          : initialGroupOptions;
-      });
-      setCategoryOptions(
-        categoriesPayload.status === "fulfilled"
-          ? toLookupOptions(
-            categoriesPayload.value,
-            DEFAULT_CATEGORY_OPTION,
-            CATEGORY_LOOKUP_KEYS,
-          )
-          : [],
-      );
-      setBrandOptions(
-        brandsPayload.status === "fulfilled"
-          ? toLookupOptions(brandsPayload.value, DEFAULT_BRAND_OPTION, BRAND_LOOKUP_KEYS)
-          : [],
-      );
-      setSectionOptions(
-        sectionsPayload.status === "fulfilled"
-          ? toLookupOptions(
-            sectionsPayload.value,
-            DEFAULT_SECTION_OPTION,
-            SECTION_LOOKUP_KEYS,
           )
           : [],
       );
@@ -3692,16 +3716,6 @@ export default function ItemMasterPageContent({
       setHsnOptions(
         hsnPayload.status === "fulfilled"
           ? toHsnOptions(hsnPayload.value, DEFAULT_HSN_OPTION)
-          : [],
-      );
-      setSupplierOptions(
-        suppliersPayload.status === "fulfilled"
-          ? toLookupOptions(suppliersPayload.value, DEFAULT_SUPPLIER_OPTION)
-          : [],
-      );
-      setCustomerGroupOptions(
-        customerGroupsPayload.status === "fulfilled"
-          ? toLookupOptions(customerGroupsPayload.value, DEFAULT_CUSTOMER_GROUP_OPTION)
           : [],
       );
       setItemOptions(
@@ -3743,21 +3757,14 @@ export default function ItemMasterPageContent({
       mounted = false;
     };
   }, [
-    getBrandLookup,
     getBranchLookup,
-    getCategoryLookup,
-    getCompanyLookup,
-    getCustomerGroupLookup,
     getGodownLookup,
-    getGroupLookup,
     getHsnLookup,
     getItemEanTableColumns,
     getItemMasterWidgets,
     getItemLookup,
     getItemPriceTableColumns,
     getItemReorderTableColumns,
-    getSectionLookup,
-    getSupplierLookup,
     getTaxLookup,
     getUnitLookup,
     listItemTaxes,
@@ -4125,35 +4132,46 @@ export default function ItemMasterPageContent({
   const itemFormFields = useMemo(
     () =>
       buildItemFormFields(
-        companyOptions,
+        company.options,
+        companyFieldHandlers,
         branchOptions,
-        groupOptions,
-        categoryOptions,
-        brandOptions,
-        sectionOptions,
+        group.options,
+        group.handlers,
+        category.options,
+        category.handlers,
+        brand.options,
+        brand.handlers,
+        section.options,
+        section.handlers,
         unitOptions,
         godownOptions,
         taxOptions,
         itemTaxRecordsById,
         hsnOptions,
-        supplierOptions,
-        customerGroupOptions,
+        supplier.options,
+        supplier.handlers,
+        customerGroup.options,
+        customerGroup.handlers,
         itemOptions,
         itemPriceTableColumnsConfig,
         itemReorderTableColumnsConfig,
         itemEanTableColumnsConfig,
         itemWidgetConfigRecords,
-        handleItemGroupSearchChange,
         handleLinkedTableColumnLayoutChange,
       ),
     [
-      brandOptions,
+      brand.options,
+      brand.handlers,
       branchOptions,
-      categoryOptions,
-      companyOptions,
-      customerGroupOptions,
+      category.options,
+      category.handlers,
+      company.options,
+      companyFieldHandlers,
+      customerGroup.options,
+      customerGroup.handlers,
       godownOptions,
-      groupOptions,
+      group.options,
+      group.handlers,
       hsnOptions,
       itemOptions,
       itemEanTableColumnsConfig,
@@ -4162,9 +4180,10 @@ export default function ItemMasterPageContent({
       itemPriceTableColumnsConfig,
       itemReorderTableColumnsConfig,
       handleLinkedTableColumnLayoutChange,
-      handleItemGroupSearchChange,
-      sectionOptions,
-      supplierOptions,
+      section.options,
+      section.handlers,
+      supplier.options,
+      supplier.handlers,
       taxOptions,
       unitOptions,
     ],
@@ -4245,9 +4264,41 @@ export default function ItemMasterPageContent({
           rowSource,
         })
       }
-      mapFormValues={({ source, defaults }) =>
-        mapItemFormValues(source, defaults, itemTaxRecordsById)
-      }
+      mapFormValues={({ source, defaults }) => {
+        // Seed the lazy Company/Item Group/Category/Brand/Section/Customer Group/
+        // Supplier dropdowns so the triggers show the saved labels on edit/view
+        // before each field is opened (and lazily loaded).
+        const rowSource = unwrapItemSource(source);
+        company.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, COMPANY_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, COMPANY_SOURCE_NAME_KEYS)),
+        );
+        group.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, GROUP_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, GROUP_SOURCE_NAME_KEYS)),
+        );
+        category.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, CATEGORY_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, CATEGORY_SOURCE_NAME_KEYS)),
+        );
+        brand.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, BRAND_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, BRAND_SOURCE_NAME_KEYS)),
+        );
+        section.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, SECTION_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, SECTION_SOURCE_NAME_KEYS)),
+        );
+        customerGroup.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, CUSTOMER_GROUP_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, CUSTOMER_GROUP_SOURCE_NAME_KEYS)),
+        );
+        supplier.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, SUPPLIER_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, SUPPLIER_SOURCE_NAME_KEYS)),
+        );
+        return mapItemFormValues(source, defaults, itemTaxRecordsById);
+      }}
       buildRequestPayload={async (params) => {
         const itemPayload = await buildItemRequestPayload(params);
         // Persist the item together with its linked tables (unit conversions,
@@ -4279,7 +4330,21 @@ export default function ItemMasterPageContent({
         };
       }}
       onCrudControllerReady={onCrudControllerReady}
-      onModalOpenChange={onModalOpenChange}
+      onModalOpenChange={(open, variantKey) => {
+        // Clear the lazy Company/Item Group/Category/Brand/Section/Customer Group/
+        // Supplier dropdowns when the create modal opens so no stale selection from
+        // a previously edited item lingers (they reload on open).
+        if (open && variantKey === "master-create") {
+          company.seedSelected("", "");
+          group.seedSelected("", "");
+          category.seedSelected("", "");
+          brand.seedSelected("", "");
+          section.seedSelected("", "");
+          customerGroup.seedSelected("", "");
+          supplier.seedSelected("", "");
+        }
+        onModalOpenChange?.(open, variantKey);
+      }}
       afterSubmitSuccess={async ({ response, payload, values, editingItemId, shouldUpdate }) => {
         const responseSource = extractResponseRecord(response);
         const savedItemId =

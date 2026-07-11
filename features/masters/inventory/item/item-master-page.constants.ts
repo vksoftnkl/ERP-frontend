@@ -12,12 +12,10 @@ list: "/configured-grid-sql/run?grid_id=1",
 export const GRID_TABLE_NAME = "item_master";
 export const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 export const TAX_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
-export const COMPANY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 export const BRANCH_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
-export const ITEM_GROUP_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
-export const ITEM_CATEGORY_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
-export const ITEM_BRAND_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
-export const ITEM_SECTION_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
+// Company-scoped branch list (id/name), used to auto-select/filter Branch when
+// the Company field changes. Path param, not query-string based.
+export const BRANCH_BY_COMPANY_ENDPOINT = "/master-lookups/branches/by-company";
 export const UNIT_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 export const GODOWN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 export const HSN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
@@ -26,7 +24,6 @@ export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-masters/create";
 export const WIDGET_MASTER_LIST_ENDPOINT = "/widget-masters/get";
 export const ITEM_TAX_MASTER_LIST_ENDPOINT = "/configured-grid-sql/run?grid_id=5";
 export const ITEM_WIDGET_QUERY_LIMIT = "100";
-export const ITEM_GROUP_SEARCH_DEBOUNCE_MS = 250;
 export const ITEM_REORDER_TABLE_UI_ID = "2";
 export const ITEM_PRICE_TABLE_UI_ID = "3";
 export const ITEM_EAN_TABLE_UI_ID = "4";
@@ -42,24 +39,8 @@ export const ITEM_PRICE_ROWS_FIELD_NAME = "item_price_rows_json";
 export const ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME = "item_unit_conversion_rows_json";
 export const ITEM_REORDER_ROWS_FIELD_NAME = "item_reorder_rows_json";
 export const ITEM_EAN_ROWS_FIELD_NAME = "item_ean_rows_json";
-export const COMPANY_LOOKUP_QUERY = {
-  module: "companies",
-} as const;
 export const BRANCH_LOOKUP_QUERY = {
   module: "branches",
-} as const;
-export const ITEM_GROUP_LOOKUP_QUERY = {
-  module: "itemGroups",
-  search: " speakers",
-} as const;
-export const ITEM_CATEGORY_LOOKUP_QUERY = {
-  module: "itemCategories",
-} as const;
-export const ITEM_BRAND_LOOKUP_QUERY = {
-  module: "itemBrands",
-} as const;
-export const ITEM_SECTION_LOOKUP_QUERY = {
-  module: "itemSections",
 } as const;
 export const UNIT_LOOKUP_QUERY = {
   module: "units",
@@ -93,47 +74,16 @@ export const ITEM_TAX_LIST_QUERY = {
   // reaches Postgres as a column reference and the query 500s.
   grid_param: JSON.stringify({ wantdelete: false }),
 } as const;
-export const LOOKUP_QUERY_SUPPLIERS = {
-  module: "suppliers",
-} as const;
-export const LOOKUP_QUERY_CUSTOMER_GROUPS = {
-  module: "customerGroups",
-} as const;
 export const LOOKUP_QUERY_ITEMS = {
   module: "items",
 } as const;
 export const HSN_LOOKUP_QUERY = {
   module: "hsnCodes",
 } as const;
-export const COMPANY_LOOKUP_KEYS = {
-  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "companies", "companys"],
-  idKeys: ["compId", "comp_id", "company_id", "companyId", "id", "_id", "value"],
-  labelKeys: ["compName", "comp_name", "company_name", "companyName", "name", "label"],
-} as const;
 export const BRANCH_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "branches", "branch_masters"],
   idKeys: ["brId", "br_id", "branch_id", "branchId", "id", "_id", "value"],
   labelKeys: ["brName", "br_name", "branch_name", "branchName", "name", "label"],
-} as const;
-export const GROUP_LOOKUP_KEYS = {
-  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "groups", "itemGroups"],
-  idKeys: ["group_id", "groupId", "itg_id", "item_group_id", "itemGroupId", "id", "_id", "value"],
-  labelKeys: ["group_name", "groupName", "itg_name", "item_group_name", "itemGroupName", "name", "label"],
-} as const;
-export const CATEGORY_LOOKUP_KEYS = {
-  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "categories", "itemCategories", "item_categories"],
-  idKeys: ["category_id", "categoryId", "item_category_id", "itemCategoryId", "id", "_id", "value"],
-  labelKeys: ["category_name", "categoryName", "item_category_name", "itemCategoryName", "name", "label"],
-} as const;
-export const BRAND_LOOKUP_KEYS = {
-  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "brands", "itemBrands"],
-  idKeys: ["brand_id", "brandId", "item_brand_id", "itemBrandId", "id", "_id", "value"],
-  labelKeys: ["brand_name", "brandName", "item_brand_name", "itemBrandName", "name", "label"],
-} as const;
-export const SECTION_LOOKUP_KEYS = {
-  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "sections", "itemSections", "item_sections"],
-  idKeys: ["sec_id", "secId", "section_id", "sectionId", "item_section_id", "itemSectionId", "id", "_id", "value"],
-  labelKeys: ["sec_name", "secName", "section_name", "sectionName", "item_section_name", "itemSectionName", "name", "label"],
 } as const;
 export const UNIT_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "units", "itemUnits"],

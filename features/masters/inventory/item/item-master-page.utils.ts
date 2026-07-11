@@ -133,25 +133,6 @@ export function toHsnOptions(
     labelKeys: ["name", "label", "hsnCode", "hsn_code"],
   }).filter((option) => option.value !== defaultOption.value);
 }
-export function mergeLookupOptionSets(
-  currentOptions: ERPDynamicSelectOption[],
-  nextOptions: ERPDynamicSelectOption[],
-): ERPDynamicSelectOption[] {
-  const merged = new Map<string, ERPDynamicSelectOption>();
-  for (const option of currentOptions) {
-    if (!option.value) {
-      continue;
-    }
-    merged.set(option.value, option);
-  }
-  for (const option of nextOptions) {
-    if (!option.value) {
-      continue;
-    }
-    merged.set(option.value, option);
-  }
-  return Array.from(merged.values());
-}
 function normalizeUiTableColumnName(value: string): string {
   return value.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
 }
