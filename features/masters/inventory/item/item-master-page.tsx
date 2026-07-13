@@ -964,11 +964,12 @@ function syncSerializedItemPriceRows(
     ? conversionSyncedRows
     : serializeLinkedRecordRows(normalizedRows);
 }
-function buildEmptyItemReorderRow(baseUnitId: string): LinkedRecordRow {
-  return {
-    ...ITEM_REORDER_INITIAL_FORM_VALUES,
-    ir_unit_id: baseUnitId.trim(),
-  };
+// ir_branch_id/ir_unit_id/ir_godown_id default to blank ("global rule", no
+// scoping) rather than the item's branch/base unit: ir_unit_id is a FK to
+// item_unit_conversion(iuc_id), not the raw unit master, so it can only be
+// resolved to a real option once a matching unit-conversion row exists.
+function buildEmptyItemReorderRow(): LinkedRecordRow {
+  return { ...ITEM_REORDER_INITIAL_FORM_VALUES };
 }
 function buildEmptyItemEanRow(
   baseUnitId: string,
@@ -1069,6 +1070,33 @@ function buildItemPriceUnitOptions(
       option.value === currentUnitId ||
       !usedUnitIds.has(option.value),
   );
+}
+// ir_unit_id is a FK to item_unit_conversion(iuc_id), not the raw unit
+// master, so reorder row options come from the item's own Unit Conversion
+// Table rows (value = iuc_id) rather than the flat unitOptions list.
+function buildItemReorderUnitOptions(
+  values: Record<string, string>,
+  unitOptions: ERPDynamicSelectOption[],
+): ERPDynamicSelectOption[] {
+  const unitLabelById = new Map(unitOptions.map((option) => [option.value, option.label]));
+  const seenUnitConversionIds = new Set<string>();
+  const options: ERPDynamicSelectOption[] = [];
+  for (const row of buildManagedItemUnitConversionRows(values)) {
+    if ((row.iuc_is_active ?? "true") !== "true") {
+      continue;
+    }
+    const unitConversionId = (row.iuc_id ?? "").trim();
+    if (!unitConversionId || seenUnitConversionIds.has(unitConversionId)) {
+      continue;
+    }
+    seenUnitConversionIds.add(unitConversionId);
+    const unitId = (row.iuc_unit_id ?? "").trim();
+    options.push({
+      value: unitConversionId,
+      label: unitLabelById.get(unitId) ?? unitId,
+    });
+  }
+  return options;
 }
 function resolvePreferredItemEanUnitId(values: Record<string, string>): string {
   const primaryPriceUnitId = (values.ipm_unit_id ?? "").trim();
@@ -1454,8 +1482,7 @@ function syncPrimaryItemReorderValuesFromRows(
     ...values,
     [ITEM_REORDER_ROWS_FIELD_NAME]: serializedRows,
   };
-  const baseUnitId = (nextValues.item_base_unit_id ?? "").trim();
-  const defaultRow = buildEmptyItemReorderRow(baseUnitId);
+  const defaultRow = buildEmptyItemReorderRow();
   const rows = parseLinkedRecordRows(serializedRows);
   const managedRow =
     rows.find((row) => hasLinkedRowContent(row, ITEM_REORDER_CONTENT_FIELD_NAMES)) ??
@@ -2508,6 +2535,32 @@ function buildItemFormFields(
     },
   ]);
   const baseReorderRowColumns: LinkedRecordColumn[] = [
+    {
+      key: "ir_branch_id",
+      label: "Branch",
+      type: "select",
+      searchable: true,
+      options: branchOptions,
+      placeholder: "Item Branch",
+      width: "10rem",
+    },
+    {
+      key: "ir_unit_id",
+      label: "Unit",
+      type: "select",
+      searchable: true,
+      placeholder: "Global",
+      width: "10rem",
+    },
+    {
+      key: "ir_godown_id",
+      label: "Godown",
+      type: "select",
+      searchable: true,
+      options: godownOptions,
+      placeholder: "Global Default",
+      width: "11rem",
+    },
     { key: "ir_min_level", label: "Min Level", type: "number", min: 0, step: "0.0001", width: "7rem" },
     { key: "ir_max_level", label: "Max Level", type: "number", min: 0, step: "0.0001", width: "7rem" },
     { key: "ir_reorder_level", label: "Reorder Level", type: "number", min: 0, step: "0.0001", width: "8rem" },
@@ -2990,24 +3043,39 @@ function buildItemFormFields(
         },
         onValueChange: ({ value, values, previousValues }) =>
           buildItemReorderRowsValueChangeResult(values, previousValues, value),
-        render: buildCustomFieldEditor(
-          reorderRowColumns,
-          (values) => buildEmptyItemReorderRow((values.item_base_unit_id ?? "").trim()),
-          "+",
-          "No reorder rows added.",
-          {
-            autoCreateFirstRowOnMount: true,
-            autoFocusInitialRowOnMount: false,
-            columnLayoutStorageKey: "item-master-reorder",
-            onColumnLayoutChange: (columns) =>
-              onLinkedTableColumnLayoutChange?.({
-                tableId: ITEM_REORDER_TABLE_UI_ID,
-                columns,
-                configuredColumns: itemReorderTableColumnsConfig,
-                columnNameToKey: ITEM_REORDER_TABLE_COLUMN_NAME_TO_KEY,
-              }),
-          },
-        ),
+        render: ({ disabled, setValue, value, values }) => {
+          const reorderUnitOptions = buildItemReorderUnitOptions(values, unitOptions);
+          const nextReorderRowColumns = reorderRowColumns.map((column) =>
+            column.key === "ir_unit_id"
+              ? {
+                ...column,
+                options: reorderUnitOptions,
+              }
+              : column,
+          );
+          return (
+            <ItemLinkedRecordsEditor
+              addLabel="+"
+              autoCreateFirstRowOnMount
+              autoFocusInitialRowOnMount={false}
+              columnLayoutStorageKey="item-master-reorder"
+              columns={nextReorderRowColumns}
+              createRow={() => buildEmptyItemReorderRow()}
+              disabled={disabled}
+              emptyState="No reorder rows added."
+              onColumnLayoutChange={(columns) =>
+                onLinkedTableColumnLayoutChange?.({
+                  tableId: ITEM_REORDER_TABLE_UI_ID,
+                  columns,
+                  configuredColumns: itemReorderTableColumnsConfig,
+                  columnNameToKey: ITEM_REORDER_TABLE_COLUMN_NAME_TO_KEY,
+                })
+              }
+              onChange={setValue}
+              value={value}
+            />
+          );
+        },
       },
       {
         name: "itemHeadingInventory",
@@ -3920,12 +3988,13 @@ export default function ItemMasterPageContent({
   );
   const buildItemReorderPayloadRows = useCallback(
     (itemId: string, values: Record<string, string>) => {
-      const baseUnitId = (values.item_base_unit_id ?? "").trim();
+      const itemBranchId = (values.item_branch_id ?? "").trim();
       return buildManagedItemReorderRows(values).map((row) => {
         const payload: Record<string, unknown> = {
           ir_item_id: itemId,
-          ir_branch_id: toNullableString(values.item_branch_id ?? ""),
-          ir_unit_id: (row.ir_unit_id ?? "").trim() || baseUnitId,
+          ir_branch_id: toNullableString((row.ir_branch_id ?? "").trim() || itemBranchId),
+          ir_unit_id: toNullableString(row.ir_unit_id ?? ""),
+          ir_godown_id: toNullableString(row.ir_godown_id ?? ""),
           ir_min_level: toOptionalNonNegativeNumber(row.ir_min_level ?? ""),
           ir_max_level: toOptionalNonNegativeNumber(row.ir_max_level ?? ""),
           ir_reorder_level: toOptionalNonNegativeNumber(
@@ -4070,7 +4139,7 @@ export default function ItemMasterPageContent({
             row,
             ITEM_REORDER_ROW_TEXT_FIELD_NAMES,
             ITEM_REORDER_ROW_BOOLEAN_FIELD_NAMES,
-            buildEmptyItemReorderRow(preferredUnitId),
+            buildEmptyItemReorderRow(),
           ),
         ),
       );

@@ -273,6 +273,10 @@ export const ITEM_PRICE_TABLE_COLUMN_NAME_TO_KEY = {
   points: "ipm_loyalty_points",
 } as const;
 export const ITEM_REORDER_TABLE_COLUMN_NAME_TO_KEY = {
+  branch: "ir_branch_id",
+  unit: "ir_unit_id",
+  unitcode: "ir_unit_id",
+  godown: "ir_godown_id",
   minlevel: "ir_min_level",
   maxlevel: "ir_max_level",
   reorderlevel: "ir_reorder_level",
@@ -334,7 +338,9 @@ export const ITEM_PRICE_INITIAL_FORM_VALUES: Record<string, string> = {
 };
 export const ITEM_REORDER_INITIAL_FORM_VALUES: Record<string, string> = {
   ir_id: "",
+  ir_branch_id: "",
   ir_unit_id: "",
+  ir_godown_id: "",
   ir_min_level: "",
   ir_max_level: "",
   ir_reorder_level: "",
@@ -390,7 +396,9 @@ export const ITEM_INITIAL_FORM_VALUES: Record<string, string> = {
   item_company_category_id: "",
   item_packing_item_ids: "",
   ir_id: "",
+  ir_branch_id: "",
   ir_unit_id: "",
+  ir_godown_id: "",
   ir_min_level: "",
   ir_max_level: "",
   ir_reorder_level: "",
@@ -524,7 +532,9 @@ export const ITEM_TEXT_FIELD_NAMES = [
   "item_cust_group",
   "item_company_category_id",
   "ir_id",
+  "ir_branch_id",
   "ir_unit_id",
+  "ir_godown_id",
   "ir_min_level",
   "ir_max_level",
   "ir_reorder_level",
@@ -642,7 +652,9 @@ export const ITEM_UNIT_CONVERSION_ROW_BOOLEAN_FIELD_NAMES = [
 ] as const;
 export const ITEM_REORDER_ROW_TEXT_FIELD_NAMES = [
   "ir_id",
+  "ir_branch_id",
   "ir_unit_id",
+  "ir_godown_id",
   "ir_min_level",
   "ir_max_level",
   "ir_reorder_level",
@@ -696,6 +708,9 @@ export const ITEM_PRICE_SUBMISSION_FIELD_NAMES = [
 ] as const;
 export const ITEM_UNIT_CONVERSION_CONTENT_FIELD_NAMES = ["iuc_unit_id"] as const;
 export const ITEM_REORDER_CONTENT_FIELD_NAMES = [
+  "ir_branch_id",
+  "ir_unit_id",
+  "ir_godown_id",
   "ir_min_level",
   "ir_max_level",
   "ir_reorder_level",
