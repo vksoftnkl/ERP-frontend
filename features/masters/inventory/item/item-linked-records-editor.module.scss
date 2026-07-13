@@ -331,7 +331,6 @@
   font-size: var(--item-linked-control-font-size);
   line-height: 1.2;
   text-align: left;
-  cursor: pointer;
   outline: none;
   box-shadow: none;
   transition:
@@ -354,16 +353,27 @@
   color: #698196;
   cursor: not-allowed;
 }
-.searchSelectTriggerLabel {
-  display: block;
+.searchSelectTriggerInput {
   flex: 1;
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 0;
+  font-family: inherit;
+  font-size: var(--item-linked-control-font-size);
+  line-height: 1.2;
+  color: #0f172a;
   text-overflow: ellipsis;
 }
-.searchSelectTriggerPlaceholder {
+.searchSelectTriggerInput::placeholder {
   color: #64748b;
+  opacity: 1;
+}
+.searchSelectTriggerInput:disabled {
+  color: #698196;
+  cursor: not-allowed;
 }
 .searchSelectClearButton {
   position: absolute;
@@ -403,8 +413,14 @@
   justify-content: center;
   width: 0.85rem;
   height: 0.85rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #475569;
-  pointer-events: none;
+  cursor: pointer;
+}
+.searchSelectChevronSlot:disabled {
+  cursor: not-allowed;
 }
 .searchSelectChevron {
   width: 0.82rem;
@@ -423,43 +439,6 @@
   background: #ffffff;
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
   overflow: hidden;
-}
-.searchSelectSearchWrap {
-  position: relative;
-  padding: 0.45rem;
-  border-bottom: 1px solid #e2e8f0;
-}
-.searchSelectSearchInput {
-  box-sizing: border-box;
-  width: 100%;
-  min-height: var(--item-linked-control-height);
-  border: 1px solid #cbd5e1;
-  border-radius: var(--erp-radius);
-  padding: var(--item-linked-control-padding-y) 1.9rem var(--item-linked-control-padding-y)
-    var(--item-linked-control-padding-x);
-  font-family: inherit;
-  font-size: var(--item-linked-control-font-size);
-  line-height: 1.2;
-}
-.searchSelectSearchInput:focus-visible {
-  outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
-}
-.searchSelectSearchIcon {
-  position: absolute;
-  top: 50%;
-  right: 1rem;
-  transform: translateY(-50%);
-  width: 0.9rem;
-  height: 0.9rem;
-  color: #64748b;
-  pointer-events: none;
-}
-.searchSelectSearchIcon svg {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 .searchSelectOptions {
   max-height: var(--search-select-options-max-height, 15rem);

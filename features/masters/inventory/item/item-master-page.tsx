@@ -977,11 +977,9 @@ function buildEmptyItemEanRow(
   sourceRow?: LinkedRecordRow,
 ): LinkedRecordRow {
   const sourceUnitId = (sourceRow?.ean_unit_id ?? "").trim();
-  const sourceGodownId = (sourceRow?.ean_godown_id ?? "").trim();
   return {
     ...ITEM_EAN_INITIAL_FORM_VALUES,
     ean_unit_id: sourceUnitId || preferredUnitId.trim() || baseUnitId.trim(),
-    ean_godown_id: sourceGodownId,
   };
 }
 function collectLinkedRowUnitIds(
@@ -1949,26 +1947,8 @@ function selectManagedItemEanCodeRecord(
   const normalizedPreferredUnitId = preferredUnitId.trim();
   const isDefaultRow = (row: Record<string, unknown>) =>
     toSelectBoolean(getFieldValue(row, "ean_is_default"), "false") === "true";
-  const globalRows = rows.filter(
-    (row) => !toDisplayValue(getFieldValue(row, "ean_godown_id")),
-  );
-  const defaultGlobalRows = globalRows.filter(isDefaultRow);
   const defaultRows = rows.filter(isDefaultRow);
   if (normalizedPreferredUnitId) {
-    const matchingDefaultGlobalRow = defaultGlobalRows.find(
-      (row) =>
-        toDisplayValue(getFieldValue(row, "ean_unit_id")) === normalizedPreferredUnitId,
-    );
-    if (matchingDefaultGlobalRow) {
-      return matchingDefaultGlobalRow;
-    }
-    const matchingGlobalRow = globalRows.find(
-      (row) =>
-        toDisplayValue(getFieldValue(row, "ean_unit_id")) === normalizedPreferredUnitId,
-    );
-    if (matchingGlobalRow) {
-      return matchingGlobalRow;
-    }
     const matchingDefaultRow = defaultRows.find(
       (row) =>
         toDisplayValue(getFieldValue(row, "ean_unit_id")) === normalizedPreferredUnitId,
@@ -1984,7 +1964,7 @@ function selectManagedItemEanCodeRecord(
       return matchingRow;
     }
   }
-  return defaultGlobalRows[0] ?? defaultRows[0] ?? globalRows[0] ?? rows[0] ?? null;
+  return defaultRows[0] ?? rows[0] ?? null;
 }
 function buildUuidTextField(name: string, label: string): ERPDynamicModalField {
   return {
@@ -2593,15 +2573,6 @@ function buildItemFormFields(
       type: "select",
       searchable: true,
       width: "10rem",
-    },
-    {
-      key: "ean_godown_id",
-      label: "Godown",
-      type: "select",
-      searchable: true,
-      options: godownOptions,
-      placeholder: "Global Default",
-      width: "11rem",
     },
     {
       key: "ean_is_default",
@@ -4032,7 +4003,6 @@ export default function ItemMasterPageContent({
           ean_item_id: itemId,
           ean_unit_id: (row.ean_unit_id ?? "").trim() || baseUnitId,
           ean_code: (row.ean_code ?? "").trim(),
-          ean_godown_id: toNullableString(row.ean_godown_id ?? ""),
           ean_is_default: (row.ean_is_default ?? "false") === "true",
           ean_is_active: (row.ean_is_active ?? "true") === "true",
           ean_remarks: toNullableString(row.ean_remarks ?? ""),

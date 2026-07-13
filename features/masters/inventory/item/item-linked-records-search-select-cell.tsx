@@ -88,46 +88,66 @@ export default function ItemLinkedRecordsSearchSelectCell({
     selectableOptions.find((option) => option.value === cellValue)?.label ??
     cellValue;
   const placeholder = getSelectPlaceholder(column);
+  // The trigger doubles as the search field (no nested search box in the
+  // dropdown): closed, it shows the selected label; open, it shows what's
+  // being typed, falling back to the selected label as a placeholder so the
+  // prior selection stays visible until the user types over it.
+  const triggerValue = isOpen ? searchQuery : selectedOptionLabel;
+  const triggerPlaceholder = selectedOptionLabel || placeholder;
   return (
     <div
       className={styles.searchSelect}
       ref={registerSearchSelectRef(cellKey)}
     >
-      <button
-        type="button"
+      <div
         className={cx(
           styles.searchSelectTrigger,
           cellValue && styles.searchSelectTriggerClearable,
           isOpen && styles.searchSelectTriggerOpen,
           disabled && styles.searchSelectTriggerDisabled,
         )}
-        disabled={disabled}
-        ref={registerCellRef(rowIndex, column.key)}
-        onClick={() => {
-          if (disabled) {
-            return;
-          }
-
-          if (isOpen) {
-            closeSearchableSelect();
-            return;
-          }
-
-          openSearchableSelect(filteredOptions);
-        }}
-        onKeyDown={(event) => onKeyDown(event, filteredOptions)}
       >
-        <span
-          className={cx(
-            styles.searchSelectTriggerLabel,
-            !cellValue && styles.searchSelectTriggerPlaceholder,
-          )}
-        >
-          {selectedOptionLabel || placeholder}
-        </span>
-        <span
-          className={styles.searchSelectChevronSlot}
+        <input
+          type="text"
+          autoComplete="off"
+          className={styles.searchSelectTriggerInput}
+          disabled={disabled}
+          ref={(element) => {
+            registerCellRef(rowIndex, column.key)(element);
+            registerSearchInputRef(cellKey)(element);
+          }}
+          value={triggerValue}
+          placeholder={triggerPlaceholder}
+          onFocus={(event) => {
+            event.currentTarget.select();
+          }}
+          onMouseDown={() => {
+            if (disabled || isOpen) {
+              return;
+            }
+            openSearchableSelect(filteredOptions);
+          }}
+          onChange={(event) => onInputChange(event.currentTarget.value)}
+          onKeyDown={(event) => onKeyDown(event, filteredOptions)}
+        />
+        <button
+          type="button"
+          tabIndex={-1}
           aria-hidden="true"
+          className={styles.searchSelectChevronSlot}
+          disabled={disabled}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (disabled) {
+              return;
+            }
+            if (isOpen) {
+              closeSearchableSelect();
+            } else {
+              openSearchableSelect(filteredOptions);
+            }
+          }}
         >
           <svg
             viewBox="0 0 20 20"
@@ -145,8 +165,8 @@ export default function ItemLinkedRecordsSearchSelectCell({
               strokeLinejoin="round"
             />
           </svg>
-        </span>
-      </button>
+        </button>
+      </div>
       {cellValue && !disabled ? (
         <button
           type="button"
@@ -171,35 +191,6 @@ export default function ItemLinkedRecordsSearchSelectCell({
               ref={searchSelectListRef}
               style={overlayPosition}
             >
-              <div className={styles.searchSelectSearchWrap}>
-                <input
-                  type="text"
-                  autoComplete="off"
-                  className={styles.searchSelectSearchInput}
-                  placeholder={column.placeholder ?? `Search ${column.label}`}
-                  ref={registerSearchInputRef(cellKey)}
-                  value={searchQuery}
-                  onChange={(event) =>
-                    onInputChange(event.currentTarget.value)
-                  }
-                  onKeyDown={(event) => onKeyDown(event, filteredOptions)}
-                />
-                <span
-                  className={styles.searchSelectSearchIcon}
-                  aria-hidden="true"
-                >
-                  <svg viewBox="0 0 20 20">
-                    <path
-                      d="M8.6 3.5a5.1 5.1 0 1 1 0 10.2 5.1 5.1 0 0 1 0-10.2Zm0 1.6a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm4.7 8.7 3.2 3.2"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </span>
-              </div>
               <ul className={styles.searchSelectOptions}>
                 {filteredOptions.length > 0 ? (
                   filteredOptions.map((option, optionIndex) => (

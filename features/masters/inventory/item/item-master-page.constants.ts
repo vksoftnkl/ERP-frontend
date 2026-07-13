@@ -289,7 +289,6 @@ export const ITEM_EAN_TABLE_COLUMN_NAME_TO_KEY = {
   barcode: "ean_code",
   unit: "ean_unit_id",
   unitcode: "ean_unit_id",
-  godown: "ean_godown_id",
   default: "ean_is_default",
   isdefault: "ean_is_default",
   active: "ean_is_active",
@@ -357,7 +356,6 @@ export const ITEM_EAN_INITIAL_FORM_VALUES: Record<string, string> = {
   ean_id: "",
   ean_unit_id: "",
   ean_code: "",
-  ean_godown_id: "",
   ean_remarks: "",
   ean_is_default: "false",
   ean_is_active: "true",
@@ -412,7 +410,6 @@ export const ITEM_INITIAL_FORM_VALUES: Record<string, string> = {
   ean_id: "",
   ean_unit_id: "",
   ean_code: "",
-  ean_godown_id: "",
   ean_remarks: "",
   item_hsn_code: "",
   item_batch_config: "",
@@ -548,7 +545,6 @@ export const ITEM_TEXT_FIELD_NAMES = [
   "ean_id",
   "ean_unit_id",
   "ean_code",
-  "ean_godown_id",
   "ean_remarks",
   "item_hsn_code",
   "item_storage_location",
@@ -671,7 +667,6 @@ export const ITEM_EAN_ROW_TEXT_FIELD_NAMES = [
   "ean_id",
   "ean_unit_id",
   "ean_code",
-  "ean_godown_id",
   "ean_remarks",
 ] as const;
 export const ITEM_EAN_ROW_BOOLEAN_FIELD_NAMES = ["ean_is_default", "ean_is_active"] as const;
@@ -717,7 +712,7 @@ export const ITEM_REORDER_CONTENT_FIELD_NAMES = [
   "ir_reorder_qty",
   "ir_reorder_type",
 ] as const;
-export const ITEM_EAN_CONTENT_FIELD_NAMES = ["ean_code", "ean_godown_id", "ean_remarks"] as const;
+export const ITEM_EAN_CONTENT_FIELD_NAMES = ["ean_code", "ean_remarks"] as const;
 export const WIDGET_NUMBER_KEYS = ["widgetNo", "widget_no", "id", "_id"] as const;
 export const WIDGET_GROUP_ID_KEYS = ["widgetGroupId", "widget_group_id", "groupId", "group_id"] as const;
 export const WIDGET_NAME_KEYS = ["widgetName", "widget_name", "name"] as const;
