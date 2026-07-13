@@ -321,10 +321,10 @@
   width: 100%;
   min-width: 0;
   min-height: var(--item-linked-control-height);
-  border: 1px solid #cbd5e1;
+  border: none;
   background: #ffffff;
   color: #0f172a;
-  border-radius: var(--erp-radius);
+  border-radius: 0;
   padding: var(--item-linked-control-padding-y) 1.45rem var(--item-linked-control-padding-y)
     var(--item-linked-control-padding-x);
   font-family: inherit;
@@ -333,9 +333,6 @@
   text-align: left;
   outline: none;
   box-shadow: none;
-  transition:
-    border-color 0.16s ease,
-    box-shadow 0.16s ease;
 }
 .searchSelectTriggerClearable {
   padding-right: 2.45rem;
@@ -343,10 +340,7 @@
 .searchSelectTrigger:focus-visible,
 .searchSelectTriggerOpen {
   outline: none;
-  border-color: var(--erp-modal-accent, #2563eb);
-  box-shadow:
-    0 0 0 1px var(--erp-modal-accent, #2563eb),
-    0 0 0 3px var(--erp-modal-accent-soft-ring, rgba(37, 99, 235, 0.16));
+  box-shadow: none;
 }
 .searchSelectTriggerDisabled {
   background: #f5f7f9;
