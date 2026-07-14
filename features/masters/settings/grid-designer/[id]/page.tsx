@@ -306,7 +306,7 @@ export default function GridDesignerPage({
         mobileLabel: "Column Name",
         render: (row) => (
           <input
-            className={styles.cellInput}
+            className={`${styles.cellInput} erp-ms-cellctl`}
             value={row.columnName}
             onChange={(event) => updateColumn(row.id, "columnName", event.target.value)}
           />
@@ -319,7 +319,7 @@ export default function GridDesignerPage({
         mobileLabel: "SQL Field Name",
         render: (row) => (
           <input
-            className={styles.cellInput}
+            className={`${styles.cellInput} erp-ms-cellctl`}
             value={row.sqlFieldName}
             onChange={(event) => updateColumn(row.id, "sqlFieldName", event.target.value)}
           />
@@ -332,7 +332,7 @@ export default function GridDesignerPage({
         mobileLabel: "Data Type",
         render: (row) => (
           <input
-            className={styles.cellInput}
+            className={`${styles.cellInput} erp-ms-cellctl`}
             value={row.dataType}
             list="grid-column-data-type-options"
             onChange={(event) => updateColumn(row.id, "dataType", event.target.value)}
@@ -346,7 +346,7 @@ export default function GridDesignerPage({
         mobileLabel: "Width",
         render: (row) => (
           <input
-            className={styles.cellInput}
+            className={`${styles.cellInput} erp-ms-cellctl`}
             value={row.width}
             onChange={(event) => updateColumn(row.id, "width", event.target.value)}
           />
@@ -359,7 +359,7 @@ export default function GridDesignerPage({
         mobileLabel: "Position",
         render: (row) => (
           <input
-            className={styles.cellInput}
+            className={`${styles.cellInput} erp-ms-cellctl`}
             value={row.position}
             inputMode="decimal"
             onChange={(event) => updateColumn(row.id, "position", event.target.value)}
@@ -373,7 +373,7 @@ export default function GridDesignerPage({
         mobileLabel: "Alignment",
         render: (row) => (
           <select
-            className={styles.cellSelect}
+            className={`${styles.cellSelect} erp-ms-cellctl`}
             value={row.alignment}
             onChange={(event) => updateColumn(row.id, "alignment", event.target.value as Alignment)}
           >
@@ -456,7 +456,7 @@ export default function GridDesignerPage({
         mobileLabel: "Condition",
         render: (row) => (
           <input
-            className={styles.cellInput}
+            className={`${styles.cellInput} erp-ms-cellctl`}
             value={row.condition}
             onChange={(event) => updateColumn(row.id, "condition", event.target.value)}
           />
@@ -469,7 +469,7 @@ export default function GridDesignerPage({
         mobileLabel: "Condition Color",
         render: (row) => (
           <input
-            className={styles.cellInput}
+            className={`${styles.cellInput} erp-ms-cellctl`}
             value={row.conditionColor}
             onChange={(event) => updateColumn(row.id, "conditionColor", event.target.value)}
           />
@@ -481,10 +481,10 @@ export default function GridDesignerPage({
         width: "196px",
         mobileLabel: "Column Color",
         render: (row) => (
-          <div className={styles.colorCodeField}>
+          <div className={`${styles.colorCodeField} erp-ms-colorcell`}>
             <input
               type="color"
-              className={styles.colorPicker}
+              className={`${styles.colorPicker} erp-ms-swatch`}
               value={resolveColorPickerValue(row.columnColor)}
               aria-label={`Select column color for ${row.columnName || `column ${row.columnNumber}`}`}
               onChange={(event) => updateColumn(row.id, "columnColor", event.target.value)}
@@ -506,7 +506,7 @@ export default function GridDesignerPage({
         mobileLabel: "Notes",
         render: (row) => (
           <input
-            className={styles.cellInput}
+            className={`${styles.cellInput} erp-ms-cellctl`}
             value={row.notes}
             onChange={(event) => updateColumn(row.id, "notes", event.target.value)}
           />
@@ -801,55 +801,55 @@ export default function GridDesignerPage({
     void loadInitialState();
   }, [handleCreateNewGrid, initialGridId, loadGridById, refreshGridOptions, startNew]);
   return (
-    <main className={styles.page}>
-      <div className={styles.workspace}>
-        <section className={styles.toolbar} aria-label="Grid actions">
+    <main className={`${styles.page} erp-master-shell erp-ms-designer`}>
+      <div className={`${styles.workspace} erp-ms-designer-main`}>
+        <section className={`${styles.toolbar} erp-ms-toolbar`} aria-label="Grid actions">
           <div className={styles.toolbarGroup}>
             <button
               type="button"
-              className={styles.desktopButton}
-              onClick={() => void handleLoadGrid()}
-              disabled={isBusy || !(form.gridId ?? "").trim()}
-            >
-              Load Grid
-            </button>
-            <button
-              type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-tbtn erp-ms-tbtn--primary`}
               onClick={() => void handleSaveGrid()}
               disabled={isBusy}
             >
-              Save Grid
+              Save
             </button>
             <button
               type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-tbtn`}
               onClick={handleCreateNewGrid}
               disabled={isBusy}
             >
-              New Grid
+              New
             </button>
             <button
               type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-tbtn`}
+              onClick={() => void handleLoadGrid()}
+              disabled={isBusy || !(form.gridId ?? "").trim()}
+            >
+              Load
+            </button>
+            <button
+              type="button"
+              className={`${styles.desktopButton} erp-ms-tbtn`}
               onClick={() => void handleDeleteGrid()}
               disabled={isBusy || !(form.gridId ?? "").trim()}
             >
-              Delete Grid
+              Delete
             </button>
           </div>
-          <div className={styles.statusBadge} aria-live="polite">
+          <div className={`${styles.statusBadge} erp-ms-status`} aria-live="polite">
             {statusText}
           </div>
         </section>
-        <section className={styles.topGrid}>
-          <section className={styles.detailsPanel} aria-label="Grid details form">
-            <p className={styles.panelTitle}>Grid Details</p>
+        <section className={`${styles.topGrid} erp-ms-designer-top erp-ms-designer-top--split`}>
+          <section className={`${styles.detailsPanel} erp-ms-panel`} aria-label="Grid details form">
+            <p className={`${styles.panelTitle} erp-ms-panel-title`}>Grid Details</p>
             <div className={styles.fieldStack}>
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Grid Id :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Grid Id :</span>
                 <input
-                  className={styles.textField}
+                  className={`${styles.textField} erp-ms-fctl`}
                   value={gridSearchText}
                   list="grid-id-options"
                   placeholder={isGridListLoading ? "Loading grids..." : "Search grids..."}
@@ -878,18 +878,18 @@ export default function GridDesignerPage({
                   ))}
                 </datalist>
               </label>
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Grid Name :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Grid Name :</span>
                 <input
-                  className={styles.textField}
+                  className={`${styles.textField} erp-ms-fctl`}
                   value={form.gridName}
                   onChange={(event) => updateForm("gridName", event.target.value)}
                 />
               </label>
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Sort Column :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Sort Column :</span>
                 <select
-                  className={styles.selectField}
+                  className={`${styles.selectField} erp-ms-fctl`}
                   value={form.sortColumn}
                   onChange={(event) => updateForm("sortColumn", event.target.value)}
                 >
@@ -901,10 +901,10 @@ export default function GridDesignerPage({
                   ))}
                 </select>
               </label>
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Sort Order :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Sort Order :</span>
                 <select
-                  className={styles.selectField}
+                  className={`${styles.selectField} erp-ms-fctl`}
                   value={form.sortOrder}
                   onChange={(event) => updateForm("sortOrder", event.target.value as SortOrder)}
                 >
@@ -915,10 +915,10 @@ export default function GridDesignerPage({
                   ))}
                 </select>
               </label>
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Device Type :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Device Type :</span>
                 <select
-                  className={styles.selectField}
+                  className={`${styles.selectField} erp-ms-fctl`}
                   value={form.gridDeviceType}
                   onChange={(event) => updateForm("gridDeviceType", event.target.value as GridDeviceType)}
                 >
@@ -929,7 +929,7 @@ export default function GridDesignerPage({
                   ))}
                 </select>
               </label>
-              <label className={styles.checkboxField}>
+              <label className={`${styles.checkboxField} erp-ms-fcheck`}>
                 <input
                   type="checkbox"
                   checked={form.gridStatus}
@@ -938,31 +938,31 @@ export default function GridDesignerPage({
                 <span>Grid Status Active</span>
               </label>
             </div>
-            <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Grid Description :</span>
+            <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Grid Description :</span>
                 <input
-                  className={styles.textField}
+                  className={`${styles.textField} erp-ms-fctl`}
                   value={form.gridDescription}
                 onChange={(event) => updateForm("gridDescription", event.target.value)}
               />
             </label>
           </section>
-          <section className={styles.sqlSection} aria-label="Grid SQL">
-            <p className={styles.panelTitle}>Grid SQL</p>
-            <label className={styles.blockField}>
-              <span className={styles.fieldLabel}>Grid Sql :</span>
+          <section className={`${styles.sqlSection} erp-ms-panel`} aria-label="Grid SQL">
+            <p className={`${styles.panelTitle} erp-ms-panel-title`}>Grid SQL</p>
+            <label className={`${styles.blockField} erp-ms-fblock`}>
+              <span className={`${styles.fieldLabel} erp-ms-flabel`}>Grid Sql :</span>
               <textarea
-                className={styles.sqlEditor}
+                className={`${styles.sqlEditor} erp-ms-fctl erp-ms-sql`}
                 value={form.gridSql}
                 onChange={(event) => updateForm("gridSql", event.target.value)}
               />
             </label>
           </section>
         </section>
-        <section className={styles.columnsSection} aria-label="Grid columns table">
-          <div className={styles.sectionLabelRow}>
+        <section className={`${styles.columnsSection} erp-ms-panel`} aria-label="Grid columns table">
+          <div className={`${styles.sectionLabelRow} erp-ms-panel-title`}>
             <span className={styles.sectionLabel}>Grid Columns :</span>
-            <span className={styles.sectionMeta}>
+            <span className={`${styles.sectionMeta} erp-ms-panel-meta`}>
               {columns.length} columns
               {selectedColumn ? ` | Selected: ${selectedColumn.columnName || "Untitled"}` : ""}
             </span>
@@ -974,8 +974,8 @@ export default function GridDesignerPage({
             minWidth={GRID_COLUMNS_TABLE_MIN_WIDTH}
             activeRowKey={selectedColumnId}
             onRowClick={(row) => setSelectedColumnId(row.id)}
-            wrapperClassName={styles.columnsUiTableShell}
-            tableClassName={styles.columnsUiTable}
+            wrapperClassName={`${styles.columnsUiTableShell} erp-ms-gridwrap`}
+            tableClassName={`${styles.columnsUiTable} erp-ms-grid`}
             rowClassName={(row) => (row.id === selectedColumnId ? styles.uiTableSelectedRow : undefined)}
             fullViewHeight={false}
             tableMaxHeight="100%"
@@ -983,10 +983,10 @@ export default function GridDesignerPage({
             showActionsColumn={false}
             emptyText='No grid columns yet. Use "Add Column" to create schema-backed rows.'
           />
-          <div className={styles.actionRow}>
+          <div className={`${styles.actionRow} erp-ms-panel-foot`}>
             <button
               type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-btn erp-ms-btn--primary`}
               onClick={handleAddColumn}
               disabled={isBusy}
             >
@@ -994,7 +994,7 @@ export default function GridDesignerPage({
             </button>
             <button
               type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-btn`}
               onClick={() => void handleDeleteColumn()}
               disabled={isBusy || !selectedColumnId}
             >

@@ -181,6 +181,9 @@ export type CrudMasterPageProps = {
   customFields?: ERPDynamicModalField[];
   createInitialValues?: Record<string, string>;
   modalPanelStyle?: CSSProperties;
+  /** Extra class on the create/update modal panel, for pages that carry their
+   *  own skin (the panel renders outside the page's DOM subtree). */
+  modalPanelClassName?: string;
   modalFormGridColumns?: number;
   modalFormDenseGrid?: boolean;
   modalStackLabels?: boolean;

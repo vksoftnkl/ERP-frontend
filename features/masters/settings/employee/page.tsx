@@ -36,9 +36,15 @@ const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const UUID_PATTERN = "^[0-9a-fA-F-]{36}$";
 const EMPLOYEE_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(92vw, 62rem)",
-  height: "75vh",
-  maxHeight: "75vh",
+  // 62rem left the controls ~163px wide once the labels moved beside them
+  // (3 columns × a 130px label column), which truncated the select placeholders.
+  width: "min(92vw, 76rem)",
+  // The tallest tab (Primary Details / Contact & Address) needs ~310px of
+  // chrome + fields; 75vh was ~675px, so most of the panel was empty. Sized to
+  // the tallest tab rather than to the content of whichever tab is open, so the
+  // modal does not resize as you move between them.
+  height: "min(80vh, 400px)",
+  maxHeight: "80vh",
 };
 const FILE_CONSTRAINTS = {
   MAX_UPLOAD_IMAGE_BYTES: 5 * 1024 * 1024,
@@ -849,7 +855,6 @@ export default function EmployeeMasterPage() {
       modalPanelStyle={EMPLOYEE_MODAL_PANEL_STYLE}
       modalFormGridColumns={3}
       modalFormDenseGrid={false}
-      modalStackLabels
       modalSectionNavigationMode="tabs"
       modalHideFieldHelperText
       modalHideFieldErrorText

@@ -210,6 +210,9 @@ export type ERPDynamicModalFormProps = {
   hideSectionHeader?: boolean;
   submitError?: string | null;
   panelStyle?: CSSProperties;
+  /** Extra class on the modal panel, so a host page can re-skin its own modal
+   *  (the panel sits outside the page's DOM subtree, out of reach otherwise). */
+  panelClassName?: string;
   formGridColumns?: number;
   denseGrid?: boolean;
   stackLabels?: boolean;

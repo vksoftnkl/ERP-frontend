@@ -964,10 +964,9 @@ function syncSerializedItemPriceRows(
     ? conversionSyncedRows
     : serializeLinkedRecordRows(normalizedRows);
 }
-// ir_branch_id/ir_unit_id/ir_godown_id default to blank ("global rule", no
-// scoping) rather than the item's branch/base unit: ir_unit_id is a FK to
-// item_unit_conversion(iuc_id), not the raw unit master, so it can only be
-// resolved to a real option once a matching unit-conversion row exists.
+// ir_branch_id/ir_unit_id/ir_godown_id default to blank rather than to the
+// item's branch/base unit: the server stores a blank as NULL, which is the
+// "global rule" (no branch/unit/godown scoping) the user gets by default.
 function buildEmptyItemReorderRow(): LinkedRecordRow {
   return { ...ITEM_REORDER_INITIAL_FORM_VALUES };
 }
@@ -1069,32 +1068,18 @@ function buildItemPriceUnitOptions(
       !usedUnitIds.has(option.value),
   );
 }
-// ir_unit_id is a FK to item_unit_conversion(iuc_id), not the raw unit
-// master, so reorder row options come from the item's own Unit Conversion
-// Table rows (value = iuc_id) rather than the flat unitOptions list.
+// ir_unit_id is stored as a FK to item_unit_conversion(iuc_id), but the
+// composite save translates a unit_id into this item's conversion row before
+// writing it (server: resolveUnitConversionId), exactly as it does for the EAN
+// table's ean_unit_id — so reorder rows carry a unit_id in the form and list
+// the same units as the EAN table. Keying the options by iuc_id instead leaves
+// the column empty until the item is saved, because conversion rows added in
+// this form have no iuc_id yet.
 function buildItemReorderUnitOptions(
   values: Record<string, string>,
   unitOptions: ERPDynamicSelectOption[],
 ): ERPDynamicSelectOption[] {
-  const unitLabelById = new Map(unitOptions.map((option) => [option.value, option.label]));
-  const seenUnitConversionIds = new Set<string>();
-  const options: ERPDynamicSelectOption[] = [];
-  for (const row of buildManagedItemUnitConversionRows(values)) {
-    if ((row.iuc_is_active ?? "true") !== "true") {
-      continue;
-    }
-    const unitConversionId = (row.iuc_id ?? "").trim();
-    if (!unitConversionId || seenUnitConversionIds.has(unitConversionId)) {
-      continue;
-    }
-    seenUnitConversionIds.add(unitConversionId);
-    const unitId = (row.iuc_unit_id ?? "").trim();
-    options.push({
-      value: unitConversionId,
-      label: unitLabelById.get(unitId) ?? unitId,
-    });
-  }
-  return options;
+  return buildSelectableItemUnitOptions(values, unitOptions);
 }
 function resolvePreferredItemEanUnitId(values: Record<string, string>): string {
   const primaryPriceUnitId = (values.ipm_unit_id ?? "").trim();
@@ -1241,6 +1226,30 @@ function mapSourceToLinkedRow(
     );
   }
   return row;
+}
+// The composite GET returns item_reorders.ir_unit_id and item_ean_codes
+// .ean_unit_id as an iuc_id (their FK target is item_unit_conversion), while
+// both Unit columns are keyed by unit_id. Hop back through the item's own
+// conversion rows on load so the saved unit shows as the selected option; the
+// save path maps the picked unit_id back to the iuc_id. Values that match no
+// conversion row (e.g. one since deleted) are left untouched.
+function mapLinkedRowUnitConversionIdsToUnitIds(
+  rows: Record<string, unknown>[],
+  unitFieldName: string,
+  unitConversionRows: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  const unitIdByConversionId = new Map(
+    unitConversionRows.map((row) => [
+      toDisplayValue(getFieldValue(row, "iuc_id")),
+      toDisplayValue(getFieldValue(row, "iuc_unit_id")),
+    ]),
+  );
+  return rows.map((row) => {
+    const unitId = unitIdByConversionId.get(
+      toDisplayValue(getFieldValue(row, unitFieldName)),
+    );
+    return unitId ? { ...row, [unitFieldName]: unitId } : row;
+  });
 }
 function assignLinkedRowToValues(
   values: Record<string, string>,
@@ -1742,13 +1751,246 @@ function validateItemEanRows(value: string, values: Record<string, string>): str
   // }
   return null;
 }
+// Rules & Status lives inside the EAN Table tab, below the EAN and Reorder
+// tables. Its fields keep the column layout they were authored with; the rows
+// are shifted down past the tables by ITEM_EAN_SECTION_RULES_ROW_OFFSET.
+const ITEM_EAN_SECTION_EAN_TABLE_ROW = 1;
+const ITEM_EAN_SECTION_REORDER_HEADING_ROW = 2;
+const ITEM_EAN_SECTION_REORDER_TABLE_ROW = 3;
+const ITEM_EAN_SECTION_RULES_HEADING_ROW = 4;
+const ITEM_EAN_SECTION_RULES_ROW_OFFSET = ITEM_EAN_SECTION_RULES_HEADING_ROW;
+const ITEM_RULES_AND_STATUS_FIELDS: (ERPDynamicModalField & {
+  gridRowStart: number;
+})[] = [
+  {
+    name: "item_is_active",
+    label: "Is Active",
+    type: "checkbox",
+    controlStyle: {
+      accentColor: "#dc2626",
+    },
+    gridRowStart: 1,
+    gridColumnStart: 1,
+  },
+  {
+    name: "item_retail_item",
+    label: "Retail Item",
+    type: "checkbox",
+    gridRowStart: 2,
+    gridColumnStart: 1,
+  },
+  {
+    name: "item_price_list",
+    label: "Price List",
+    type: "checkbox",
+    onValueChange: ({ value, values }) => {
+      if (value !== "true") {
+        return;
+      }
+      return {
+        values: applyItemPriceDefaults(applyItemUnitConversionDefaults(values)),
+      };
+    },
+    gridRowStart: 3,
+    gridColumnStart: 1,
+  },
+  {
+    name: "item_allow_neg_stock",
+    label: "Allow Negative Stock",
+    type: "checkbox",
+    gridRowStart: 1,
+    gridColumnStart: 5,
+  },
+  {
+    name: "item_allow_promo",
+    label: "Allow Promo",
+    type: "checkbox",
+    gridRowStart: 1,
+    gridColumnStart: 6,
+  },
+  {
+    name: "item_allow_purchase",
+    label: "Allow Purchase",
+    type: "checkbox",
+    gridRowStart: 3,
+    gridColumnStart: 2,
+  },
+  {
+    name: "item_is_service",
+    label: "Service Item",
+    type: "checkbox",
+    gridRowStart: 5,
+    gridColumnStart: 1,
+  },
+  {
+    name: "item_allow_freight",
+    label: "Allow Freight",
+    type: "checkbox",
+    gridRowStart: 2,
+    gridColumnStart: 3,
+  },
+  {
+    name: "item_allow_negative_so",
+    label: "Allow Negative SO",
+    type: "checkbox",
+    gridRowStart: 2,
+    gridColumnStart: 5,
+  },
+  {
+    name: "item_allow_loyalty",
+    label: "Allow Loyalty",
+    type: "checkbox",
+    gridRowStart: 2,
+    gridColumnStart: 6,
+  },
+  {
+    name: "item_allow_sales",
+    label: "Allow Sales",
+    type: "checkbox",
+    gridRowStart: 1,
+    gridColumnStart: 2,
+  },
+  {
+    name: "item_allow_loading",
+    label: "Allow Loading",
+    type: "checkbox",
+    gridRowStart: 1,
+    gridColumnStart: 3,
+  },
+  {
+    name: "item_damagable_product",
+    label: "Damagable Product",
+    type: "checkbox",
+    gridRowStart: 1,
+    gridColumnStart: 4,
+  },
+  {
+    name: "item_has_offer",
+    label: "Has Offer",
+    type: "checkbox",
+    controlStyle: {
+      accentColor: "#16a34a",
+    },
+    gridRowStart: 3,
+    gridColumnStart: 5,
+  },
+  {
+    name: "item_allow_sales_return",
+    label: "Allow Sales Return",
+    type: "checkbox",
+    gridRowStart: 2,
+    gridColumnStart: 2,
+  },
+  {
+    name: "item_weigh_scale",
+    label: "Weigh Scale",
+    type: "checkbox",
+    controlStyle: {
+      accentColor: "#ea580c",
+    },
+    gridRowStart: 5,
+    gridColumnStart: 3,
+  },
+  {
+    name: "item_auto_break",
+    label: "Auto Break",
+    type: "checkbox",
+    controlStyle: {
+      accentColor: "#2563eb",
+    },
+    gridRowStart: 3,
+    gridColumnStart: 3,
+  },
+  {
+    name: "item_auto_make",
+    label: "Auto Make",
+    type: "checkbox",
+    controlStyle: {
+      accentColor: "#2563eb",
+    },
+    gridRowStart: 4,
+    gridColumnStart: 3,
+  },
+  {
+    name: "item_is_batch_based",
+    label: "Batch Based",
+    type: "checkbox",
+    gridRowStart: 4,
+    gridColumnStart: 1,
+  },
+  {
+    name: "item_expiry_days",
+    label: "Expiry Days",
+    type: "number",
+    visibleWhen: (values) => values.item_is_expiry_item === "true",
+    gridRowStart: 5,
+    gridColumnStart: 4,
+  },
+  {
+    name: "item_is_expiry_item",
+    label: "Expiry Item",
+    type: "checkbox",
+    gridRowStart: 4,
+    gridColumnStart: 4,
+  },
+  {
+    name: "item_intimate_before_days",
+    label: "Intimate Before Days",
+    type: "number",
+    visibleWhen: (values) => values.item_is_expiry_item === "true",
+    gridRowStart: 6,
+    gridColumnStart: 4,
+  },
+  {
+    name: "item_allow_po",
+    label: "Allow PO",
+    type: "checkbox",
+    gridRowStart: 4,
+    gridColumnStart: 2,
+  },
+  {
+    name: "item_allow_so",
+    label: "Allow SO",
+    type: "checkbox",
+    gridRowStart: 5,
+    gridColumnStart: 2,
+  },
+  {
+    name: "item_is_kit",
+    label: "Is Kit",
+    type: "checkbox",
+    gridRowStart: 2,
+    gridColumnStart: 4,
+  },
+  {
+    name: "item_is_demand",
+    label: "Is Demand",
+    type: "checkbox",
+    gridRowStart: 3,
+    gridColumnStart: 4,
+  },
+  {
+    name: "item_random_stock",
+    label: "Random Stock",
+    type: "checkbox",
+    gridRowStart: 4,
+    gridColumnStart: 5,
+  },
+  {
+    name: "item_barcode_sticker",
+    label: "Barcode Sticker",
+    type: "checkbox",
+    gridRowStart: 3,
+    gridColumnStart: 6,
+  },
+];
+
 function buildCustomFieldEditor(
   columns: LinkedRecordColumn[],
   createRow: (
     values: Record<string, string>,
     sourceRow?: LinkedRecordRow,
   ) => LinkedRecordRow,
-  addLabel: string,
   emptyState: string,
   options: {
     actionsLabel?: string;
@@ -1758,7 +2000,12 @@ function buildCustomFieldEditor(
       columnKey: string;
       focusColumnKey?: string;
     };
+    autoAppendOnSelect?: {
+      columnKey: string;
+      focusColumnKey?: string;
+    };
     columnLayoutStorageKey?: string;
+    removeDisabledRowIndexes?: number[];
     onColumnLayoutChange?: (columns: LinkedRecordColumnLayoutEntry[]) => void;
     showRowIndex?: boolean;
   } = {},
@@ -1771,16 +2018,17 @@ function buildCustomFieldEditor(
   }: ERPDynamicCustomFieldRenderProps) {
     return (
       <ItemLinkedRecordsEditor
-        addLabel={addLabel}
         actionsLabel={options.actionsLabel}
         autoCreateFirstRowOnMount={options.autoCreateFirstRowOnMount}
         autoFocusInitialRowOnMount={options.autoFocusInitialRowOnMount}
         autoAppendOnEnter={options.autoAppendOnEnter}
+        autoAppendOnSelect={options.autoAppendOnSelect}
         columnLayoutStorageKey={options.columnLayoutStorageKey}
         columns={columns}
         createRow={(sourceRow) => createRow(values, sourceRow)}
         disabled={disabled}
         emptyState={emptyState}
+        removeDisabledRowIndexes={options.removeDisabledRowIndexes}
         onColumnLayoutChange={options.onColumnLayoutChange}
         onChange={setValue}
         showRowIndex={options.showRowIndex}
@@ -2830,13 +3078,14 @@ function buildItemFormFields(
           ),
         render: ({ disabled, setValue, value, values }) => (
           <ItemLinkedRecordsEditor
-            addLabel="+"
             autoCreateFirstRowOnMount
             autoFocusInitialRowOnMount={false}
+            autoAppendOnSelect={{ columnKey: "iuc_unit_id" }}
             columnLayoutStorageKey="item-master-unit-conversion"
             columns={unitConversionRowColumns}
-            createRow={() => {
-              const rows = buildManagedItemUnitConversionRows(values);
+            createRow={(_sourceRow, currentRows) => {
+              const rows =
+                currentRows ?? buildManagedItemUnitConversionRows(values);
               return buildEmptyItemUnitConversionRow(
                 (values.item_base_unit_id ?? "").trim(),
                 rows.length + 1,
@@ -2899,9 +3148,9 @@ function buildItemFormFields(
           );
           return (
             <ItemLinkedRecordsEditor
-              addLabel="+"
               autoCreateFirstRowOnMount
               autoFocusInitialRowOnMount={false}
+              autoAppendOnSelect={{ columnKey: "ipm_unit_id" }}
               columnLayoutStorageKey="item-master-price-list"
               columns={nextPriceRowColumns}
               createRow={() =>
@@ -2932,7 +3181,8 @@ function buildItemFormFields(
         label: "EAN Table",
         type: "heading",
         defaultExpanded: true,
-        sectionGridColumns: 4,
+        // Six columns so the Rules & Status block below keeps its column layout.
+        sectionGridColumns: 6,
       },
       {
         name: ITEM_EAN_ROWS_FIELD_NAME,
@@ -2941,6 +3191,11 @@ function buildItemFormFields(
         fieldStyle: {
           gridColumn: "1 / -1",
         },
+        // The tables and the Rules & Status block share this section's grid, so
+        // every row here is placed explicitly. Anchoring the first one at row 1
+        // keeps the row numbers below as written (the form normalizes a
+        // section's rows against its lowest gridRowStart).
+        gridRowStart: ITEM_EAN_SECTION_EAN_TABLE_ROW,
         helperText:
           "Scan in the EAN Code column and press Enter from the scanner to open the next row automatically.",
         validation: {
@@ -2960,7 +3215,6 @@ function buildItemFormFields(
           );
           return (
             <ItemLinkedRecordsEditor
-              addLabel="+"
               actionsLabel="Remove"
               autoCreateFirstRowOnMount
               autoFocusInitialRowOnMount={false}
@@ -2968,6 +3222,7 @@ function buildItemFormFields(
                 columnKey: "ean_code",
                 focusColumnKey: "ean_code",
               }}
+              autoAppendOnSelect={{ columnKey: "ean_unit_id" }}
               columnLayoutStorageKey="item-master-ean-code"
               columns={nextEanRowColumns}
               createRow={(sourceRow) =>
@@ -2979,6 +3234,7 @@ function buildItemFormFields(
               }
               disabled={disabled}
               emptyState="No EAN rows added."
+              removeDisabledRowIndexes={[0]}
               onColumnLayoutChange={(columns) =>
                 onLinkedTableColumnLayoutChange?.({
                   tableId: ITEM_EAN_TABLE_UI_ID,
@@ -2995,11 +3251,14 @@ function buildItemFormFields(
         },
       },
       {
-        name: "itemHeadingReorderTable",
-        label: "Reorder Table",
-        type: "heading",
-        defaultExpanded: true,
-        sectionGridColumns: 4,
+        name: "itemInlineReorderTableHeading",
+        label: "",
+        type: "custom",
+        fieldStyle: {
+          gridColumn: "1 / -1",
+        },
+        gridRowStart: ITEM_EAN_SECTION_REORDER_HEADING_ROW,
+        render: () => <div style={ITEM_INLINE_SECTION_HEADING_STYLE}>Reorder Table</div>,
       },
       {
         name: ITEM_REORDER_ROWS_FIELD_NAME,
@@ -3008,6 +3267,7 @@ function buildItemFormFields(
         fieldStyle: {
           gridColumn: "1 / -1",
         },
+        gridRowStart: ITEM_EAN_SECTION_REORDER_TABLE_ROW,
         helperText: "Optional. Use rows when this item needs multiple reorder rules.",
         validation: {
           custom: validateItemReorderRows,
@@ -3026,14 +3286,15 @@ function buildItemFormFields(
           );
           return (
             <ItemLinkedRecordsEditor
-              addLabel="+"
               autoCreateFirstRowOnMount
               autoFocusInitialRowOnMount={false}
+              autoAppendOnSelect={{ columnKey: "ir_unit_id" }}
               columnLayoutStorageKey="item-master-reorder"
               columns={nextReorderRowColumns}
               createRow={() => buildEmptyItemReorderRow()}
               disabled={disabled}
               emptyState="No reorder rows added."
+              removeDisabledRowIndexes={[0]}
               onColumnLayoutChange={(columns) =>
                 onLinkedTableColumnLayoutChange?.({
                   tableId: ITEM_REORDER_TABLE_UI_ID,
@@ -3048,6 +3309,20 @@ function buildItemFormFields(
           );
         },
       },
+      {
+        name: "itemInlineRulesHeading",
+        label: "",
+        type: "custom",
+        fieldStyle: {
+          gridColumn: "1 / -1",
+        },
+        gridRowStart: ITEM_EAN_SECTION_RULES_HEADING_ROW,
+        render: () => <div style={ITEM_INLINE_SECTION_HEADING_STYLE}>Rules & Status</div>,
+      },
+      ...ITEM_RULES_AND_STATUS_FIELDS.map((field) => ({
+        ...field,
+        gridRowStart: field.gridRowStart + ITEM_EAN_SECTION_RULES_ROW_OFFSET,
+      })),
       {
         name: "itemHeadingInventory",
         label: "Inventory & Notes",
@@ -3092,234 +3367,6 @@ function buildItemFormFields(
           maxLength: 250,
           maxLengthMessage: "Notes must be at most 250 characters.",
         },
-      },
-      {
-        name: "itemHeadingRules",
-        label: "Rules & Status",
-        type: "heading",
-        defaultExpanded: false,
-        sectionGridColumns: 6,
-      },
-      {
-        name: "item_is_active",
-        label: "Is Active",
-        type: "checkbox",
-        controlStyle: {
-          accentColor: "#dc2626",
-        },
-        gridRowStart: 1,
-        gridColumnStart: 1,
-      },
-      {
-        name: "item_retail_item",
-        label: "Retail Item",
-        type: "checkbox",
-        gridRowStart: 2,
-        gridColumnStart: 1,
-      },
-      {
-        name: "item_price_list",
-        label: "Price List",
-        type: "checkbox",
-        onValueChange: ({ value, values }) => {
-          if (value !== "true") {
-            return;
-          }
-          return {
-            values: applyItemPriceDefaults(applyItemUnitConversionDefaults(values)),
-          };
-        },
-        gridRowStart: 3,
-        gridColumnStart: 1,
-      },
-      {
-        name: "item_allow_neg_stock",
-        label: "Allow Negative Stock",
-        type: "checkbox",
-        gridRowStart: 1,
-        gridColumnStart: 5,
-      },
-      {
-        name: "item_allow_promo",
-        label: "Allow Promo",
-        type: "checkbox",
-        gridRowStart: 1,
-        gridColumnStart: 6,
-      },
-      {
-        name: "item_allow_purchase",
-        label: "Allow Purchase",
-        type: "checkbox",
-        gridRowStart: 3,
-        gridColumnStart: 2,
-      },
-      {
-        name: "item_is_service",
-        label: "Service Item",
-        type: "checkbox",
-        gridRowStart: 5,
-        gridColumnStart: 1,
-      },
-      {
-        name: "item_allow_freight",
-        label: "Allow Freight",
-        type: "checkbox",
-        gridRowStart: 2,
-        gridColumnStart: 3,
-      },
-      {
-        name: "item_allow_negative_so",
-        label: "Allow Negative SO",
-        type: "checkbox",
-        gridRowStart: 2,
-        gridColumnStart: 5,
-      },
-      {
-        name: "item_allow_loyalty",
-        label: "Allow Loyalty",
-        type: "checkbox",
-        gridRowStart: 2,
-        gridColumnStart: 6,
-      },
-      {
-        name: "item_allow_sales",
-        label: "Allow Sales",
-        type: "checkbox",
-        gridRowStart: 1,
-        gridColumnStart: 2,
-      },
-      {
-        name: "item_allow_loading",
-        label: "Allow Loading",
-        type: "checkbox",
-        gridRowStart: 1,
-        gridColumnStart: 3,
-      },
-      {
-        name: "item_damagable_product",
-        label: "Damagable Product",
-        type: "checkbox",
-        gridRowStart: 1,
-        gridColumnStart: 4,
-      },
-      {
-        name: "item_has_offer",
-        label: "Has Offer",
-        type: "checkbox",
-        controlStyle: {
-          accentColor: "#16a34a",
-        },
-        gridRowStart: 3,
-        gridColumnStart: 5,
-      },
-      {
-        name: "item_allow_sales_return",
-        label: "Allow Sales Return",
-        type: "checkbox",
-        gridRowStart: 2,
-        gridColumnStart: 2,
-      },
-      {
-        name: "item_weigh_scale",
-        label: "Weigh Scale",
-        type: "checkbox",
-        controlStyle: {
-          accentColor: "#ea580c",
-        },
-        gridRowStart: 5,
-        gridColumnStart: 3,
-      },
-      {
-        name: "item_auto_break",
-        label: "Auto Break",
-        type: "checkbox",
-        controlStyle: {
-          accentColor: "#2563eb",
-        },
-        gridRowStart: 3,
-        gridColumnStart: 3,
-      },
-      {
-        name: "item_auto_make",
-        label: "Auto Make",
-        type: "checkbox",
-        controlStyle: {
-          accentColor: "#2563eb",
-        },
-        gridRowStart: 4,
-        gridColumnStart: 3,
-      },
-      {
-        name: "item_is_batch_based",
-        label: "Batch Based",
-        type: "checkbox",
-        gridRowStart: 4,
-        gridColumnStart: 1,
-      },
-      {
-        name: "item_expiry_days",
-        label: "Expiry Days",
-        type: "number",
-        visibleWhen: (values) => values.item_is_expiry_item === "true",
-        gridRowStart: 5,
-        gridColumnStart: 4,
-      },
-      {
-        name: "item_is_expiry_item",
-        label: "Expiry Item",
-        type: "checkbox",
-        gridRowStart: 4,
-        gridColumnStart: 4,
-      },
-      {
-        name: "item_intimate_before_days",
-        label: "Intimate Before Days",
-        type: "number",
-        visibleWhen: (values) => values.item_is_expiry_item === "true",
-        gridRowStart: 6,
-        gridColumnStart: 4,
-      },
-      {
-        name: "item_allow_po",
-        label: "Allow PO",
-        type: "checkbox",
-        gridRowStart: 4,
-        gridColumnStart: 2,
-      },
-      {
-        name: "item_allow_so",
-        label: "Allow SO",
-        type: "checkbox",
-        gridRowStart: 5,
-        gridColumnStart: 2,
-      },
-      {
-        name: "item_is_kit",
-        label: "Is Kit",
-        type: "checkbox",
-        gridRowStart: 2,
-        gridColumnStart: 4,
-      },
-      {
-        name: "item_is_demand",
-        label: "Is Demand",
-        type: "checkbox",
-        gridRowStart: 3,
-        gridColumnStart: 4,
-      },
-      {
-        name: "item_random_stock",
-        label: "Random Stock",
-        type: "checkbox",
-        gridRowStart: 4,
-        gridColumnStart: 5,
-      },
-      {
-        name: "item_barcode_sticker",
-        label: "Barcode Sticker",
-        type: "checkbox",
-        gridRowStart: 3,
-        gridColumnStart: 6,
       },
       ]),
     ),
@@ -4053,13 +4100,21 @@ export default function ItemMasterPageContent({
         ),
         resolveItemPriceScope(itemSource),
       );
-      const reorderRows = extractArrayRecords(
-        getFieldValue(compositeSource ?? {}, "reorders"),
-        DEFAULT_LOOKUP_ARRAY_KEYS,
+      const reorderRows = mapLinkedRowUnitConversionIdsToUnitIds(
+        extractArrayRecords(
+          getFieldValue(compositeSource ?? {}, "reorders"),
+          DEFAULT_LOOKUP_ARRAY_KEYS,
+        ),
+        "ir_unit_id",
+        itemUnitConversionRows,
       );
-      const eanRows = extractArrayRecords(
-        getFieldValue(compositeSource ?? {}, "ean_codes"),
-        DEFAULT_LOOKUP_ARRAY_KEYS,
+      const eanRows = mapLinkedRowUnitConversionIdsToUnitIds(
+        extractArrayRecords(
+          getFieldValue(compositeSource ?? {}, "ean_codes"),
+          DEFAULT_LOOKUP_ARRAY_KEYS,
+        ),
+        "ean_unit_id",
+        itemUnitConversionRows,
       );
       const managedPriceRow = selectManagedItemPriceRecord(priceRows, preferredUnitId);
       const managedReorderRow = selectManagedItemReorderRecord(
@@ -4257,6 +4312,9 @@ export default function ItemMasterPageContent({
       iconName="item_master"
       entityLabel="item"
       entityLabelPlural="items"
+      // The modal appends its own "— New" / "— Edit" mode suffix.
+      createModalTitle="Item Master"
+      editModalTitle="Item Master"
       auditHistory={{ screenName: "Item Master" }}
       apiEndpoints={API_ENDPOINTS}
       buildListQuery={buildListQuery}
@@ -4290,7 +4348,6 @@ export default function ItemMasterPageContent({
       createInitialValues={ITEM_INITIAL_FORM_VALUES}
       modalPanelStyle={ITEM_MODAL_PANEL_STYLE}
       modalFormGridColumns={3}
-      modalStackLabels
       modalSectionNavigationMode="tabs"
       modalHideFieldHelperText
       modalFocusFirstInvalidFieldOnValidationError

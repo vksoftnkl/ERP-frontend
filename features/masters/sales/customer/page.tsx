@@ -30,6 +30,10 @@ import {
   type WidgetMastersResponse,
 } from "@/features/masters/shared/widget-config";
 import styles from "@/app/master/state-master/page.module.scss";
+// Dense "Simple ERP" skin for this page's modals only (the list keeps the
+// shared master look). The panels render outside this page's DOM subtree, so
+// the skin travels to them through panelClassName.
+import modalSkin from "./customer-modal.module.scss";
 import {
   buildLookupOptions,
   DEFAULT_LOOKUP_ARRAY_KEYS,
@@ -1795,7 +1799,7 @@ export default function CustomerPage() {
         modalTitle: "New State",
         modalDescription: "Create state from customer form.",
         submitLabel: stateSaveLoading ? "Saving..." : "Save",
-        accent: "blue",
+        accent: "primary",
         fields: stateCreateModalFields,
       },
       {
@@ -1948,7 +1952,7 @@ export default function CustomerPage() {
         modalTitle: "New Area",
         modalDescription: "Create area from customer form.",
         submitLabel: areaSaveLoading ? "Saving..." : "Save",
-        accent: "blue",
+        accent: "primary",
         fields: areaModalFields,
       },
       {
@@ -2108,7 +2112,7 @@ export default function CustomerPage() {
         modalTitle: "New Customer Group",
         modalDescription: "Create customer group from customer form.",
         submitLabel: groupSaveLoading ? "Saving..." : "Save",
-        accent: "blue",
+        accent: "primary",
         fields: groupModalFields,
       },
       {
@@ -2668,15 +2672,20 @@ export default function CustomerPage() {
           </div>
         }
         toolbarActions={
-          <button
-            type="button"
-            className={`${styles.iconBtn} ${styles.iconBtnShipping}`}
-            onClick={handleNavigateToShippingAddress}
-            title="Ledger Shipping Address"
-          >
-            <span className={styles.iconBtnBox}><FiTruck aria-hidden="true" /></span>
-            <span>Shipping Address</span>
-          </button>
+          <>
+            <span className="erp-ms-tsep" aria-hidden="true" />
+            <button
+              type="button"
+              className={`${styles.iconBtn} ${styles.iconBtnShipping} erp-ms-tbtn`}
+              onClick={handleNavigateToShippingAddress}
+              title="Ledger Shipping Address"
+            >
+              <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
+                <FiTruck aria-hidden="true" />
+              </span>
+              <span>Shipping Address</span>
+            </button>
+          </>
         }
         gridTableName={GRID_TABLE_NAME}
         gridDetailId={8}
@@ -2696,7 +2705,7 @@ export default function CustomerPage() {
         customFields={customerFormFields}
         createInitialValues={customerCreateInitialValues}
         modalPanelStyle={CUSTOMER_MODAL_PANEL_STYLE}
-        modalFormGridColumns={2}
+        modalPanelClassName={`${modalSkin.modalSkin} ${modalSkin.customerModal}`}
         modalFormDenseGrid={false}
         modalSectionNavigationMode="tabs"
         modalHideFieldHelperText
@@ -2905,6 +2914,7 @@ export default function CustomerPage() {
         variants={stateModalVariants}
         submitError={stateSaveError || stateDetailsError}
         panelStyle={STATE_MODAL_PANEL_STYLE}
+        panelClassName={modalSkin.modalSkin}
         controllerRef={stateModalControllerRef}
         onSubmit={handleStateModalSubmit}
         onCancel={handleStateModalCancel}
@@ -2915,6 +2925,7 @@ export default function CustomerPage() {
         variants={areaModalVariants}
         submitError={areaSaveError || areaDetailsError}
         panelStyle={AREA_MODAL_PANEL_STYLE}
+        panelClassName={modalSkin.modalSkin}
         controllerRef={areaModalControllerRef}
         onSubmit={handleAreaModalSubmit}
         onCancel={handleAreaModalCancel}
@@ -2925,6 +2936,7 @@ export default function CustomerPage() {
         variants={groupModalVariants}
         submitError={groupSaveError || groupDetailsError}
         panelStyle={GROUP_MODAL_PANEL_STYLE}
+        panelClassName={modalSkin.modalSkin}
         controllerRef={groupModalControllerRef}
         onSubmit={handleGroupModalSubmit}
         onCancel={handleGroupModalCancel}

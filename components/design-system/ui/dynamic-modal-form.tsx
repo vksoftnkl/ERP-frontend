@@ -100,6 +100,7 @@ export function ERPDynamicModalForm({
   hideSectionHeader = false,
   submitError,
   panelStyle,
+  panelClassName,
   formGridColumns,
   denseGrid = true,
   stackLabels = false,
@@ -153,6 +154,28 @@ export function ERPDynamicModalForm({
     () => variants.find((variant) => variant.key === activeVariantKey),
     [activeVariantKey, variants],
   );
+  // "State Entry — New". Derived from the open variant, but suppressed when the
+  // title already carries the mode, so the default "New State" doesn't render
+  // as "New State — New".
+  const headerModeLabel = useMemo(() => {
+    if (!activeVariant) {
+      return null;
+    }
+    const key = activeVariant.key.toLowerCase();
+    const mode = key.includes("create")
+      ? "New"
+      : key.includes("update") || key.includes("edit")
+        ? "Edit"
+        : key.includes("view")
+          ? "View"
+          : null;
+    if (!mode) {
+      return null;
+    }
+    return new RegExp(`\\b${mode}\\b`, "i").test(activeVariant.modalTitle)
+      ? null
+      : mode;
+  }, [activeVariant]);
   useEffect(() => {
     if (variants.length === 0) {
       setActiveVariantKey("");
@@ -243,12 +266,12 @@ export function ERPDynamicModalForm({
         closeModal();
         return;
       }
-      if (
-        event.key === "Enter" &&
+      const isSubmitChord =
         !event.altKey &&
         !event.shiftKey &&
-        (event.ctrlKey || event.metaKey)
-      ) {
+        (event.ctrlKey || event.metaKey) &&
+        (event.key === "Enter" || event.key.toLowerCase() === "s");
+      if (isSubmitChord) {
         if (!activeVariant || isSubmitting) {
           return;
         }
@@ -256,6 +279,7 @@ export function ERPDynamicModalForm({
         if (!formElement) {
           return;
         }
+        // Also swallows the browser's own Ctrl+S (Save Page) while the modal is open.
         event.preventDefault();
         formElement.requestSubmit();
       }
@@ -1334,9 +1358,9 @@ export function ERPDynamicModalForm({
       return (
         <div
           key={field.name}
-          className={cx(styles.field, styles.fieldWide, styles.subheadingField)}
+          className={cx(styles.field, styles.fieldWide, styles.subheadingField, "erp-ms-modal-band")}
         >
-          <span className={styles.subheading}>{field.label}</span>
+          <span className={cx(styles.subheading, "erp-ms-modal-band-title")}>{field.label}</span>
         </div>
       );
     }
@@ -1470,6 +1494,7 @@ export function ERPDynamicModalForm({
         data-erp-modal-field-type={inputType}
         className={cx(
           styles.field,
+          "erp-ms-modal-field",
           stackLabels &&
             inputType !== "checkbox" &&
             styles.fieldStacked,
@@ -1494,7 +1519,7 @@ export function ERPDynamicModalForm({
         }}
       >
         {inputType !== "checkbox" && field.label.trim().length > 0 ? (
-          <label className={styles.label} htmlFor={commonProps.id}>
+          <label className={cx(styles.label, "erp-ms-modal-label")} htmlFor={commonProps.id}>
             {field.label}{" "}
             {fieldRequired ? (
               <span className={styles.requiredMark}>*</span>
@@ -1521,6 +1546,7 @@ export function ERPDynamicModalForm({
             <div
               className={cx(
                 styles.searchSelectTrigger,
+                "erp-ms-modal-control erp-ms-modal-trigger",
                 isMultiSelect && styles.searchMultiSelectControl,
                 hasSearchSelectValue && styles.searchSelectTriggerClearable,
                 fieldError && styles.controlInvalid,
@@ -1584,6 +1610,7 @@ export function ERPDynamicModalForm({
                 autoComplete="off"
                 className={cx(
                   styles.searchSelectInput,
+                  "erp-ms-modal-select-input",
                   isMultiSelect && styles.searchSelectInputMulti,
                 )}
                 role="combobox"
@@ -1651,6 +1678,7 @@ export function ERPDynamicModalForm({
                   viewBox="0 0 20 20"
                   className={cx(
                     styles.searchSelectChevron,
+                    "erp-ms-modal-chevron",
                     isSearchOpen &&
                       styles.searchSelectChevronOpen,
                   )}
@@ -1766,6 +1794,7 @@ export function ERPDynamicModalForm({
             multiple={isMultiSelect}
             className={cx(
               styles.control,
+              "erp-ms-modal-control",
               fieldError && styles.controlInvalid,
             )}
             style={field.controlStyle}
@@ -1795,11 +1824,12 @@ export function ERPDynamicModalForm({
               checked={fieldValue === "true"}
               className={cx(
                 styles.checkboxControl,
+                "erp-ms-modal-check",
                 fieldError && styles.checkboxControlInvalid,
               )}
               style={field.controlStyle}
             />
-            <span className={styles.checkboxLabel}>
+            <span className={cx(styles.checkboxLabel, "erp-ms-modal-check-label")}>
               {field.label}
               {fieldRequired ? (
                 <span className={styles.requiredMark}>*</span>
@@ -1815,6 +1845,7 @@ export function ERPDynamicModalForm({
             autoComplete="off"
             className={cx(
               styles.control,
+              "erp-ms-modal-control",
               styles.textarea,
               fieldError && styles.controlInvalid,
             )}
@@ -1830,6 +1861,8 @@ export function ERPDynamicModalForm({
               accept={field.accept}
               className={cx(
                 styles.control,
+                "erp-ms-modal-control",
+              "erp-ms-modal-control",
                 styles.fileInput,
                 fieldError && styles.controlInvalid,
               )}
@@ -1876,18 +1909,19 @@ export function ERPDynamicModalForm({
             step={field.step}
             className={cx(
               styles.control,
+              "erp-ms-modal-control",
               fieldError && styles.controlInvalid,
             )}
             style={field.controlStyle}
           />
         )}
         {!hideFieldHelperText && field.helperText ? (
-          <p id={helpId} className={styles.helpText}>
+          <p id={helpId} className={cx(styles.helpText, "erp-ms-modal-help")}>
             {field.helperText}
           </p>
         ) : null}
         {!hideFieldErrorText && fieldError ? (
-          <p id={errorId} className={styles.errorText}>
+          <p id={errorId} className={cx(styles.errorText, "erp-ms-modal-error")}>
             {fieldError}
           </p>
         ) : null}
@@ -1953,31 +1987,37 @@ export function ERPDynamicModalForm({
         </div>
       ) : null}
       {isOpen && activeVariant ? (
-        <div className={styles.overlay} style={modalStyle}>
+        <div className={cx(styles.overlay, "erp-ms-modal-overlay")} style={modalStyle}>
           <div
             className={styles.backdrop}
             onClick={closeOnBackdrop ? closeModal : undefined}
             aria-hidden
           />
           <section
-            className={styles.panel}
+            className={cx(styles.panel, "erp-ms-modal", panelClassName)}
             style={panelStyle}
             role="dialog"
             aria-modal="true"
             aria-labelledby={`${formId}-title`}
           >
-            <header className={styles.header}>
+            <header className={cx(styles.header, "erp-ms-modal-header")}>
               <div className={styles.headerRow}>
                 <div className={styles.headerIntro}>
-                  <span className={styles.headerIcon} aria-hidden="true">
+                  <span className={cx(styles.headerIcon, "erp-ms-modal-icon")} aria-hidden="true">
                     {activeVariant.icon ?? <IconPlaceholder />}
                   </span>
                   <div className={styles.headerText}>
-                    <h3 id={`${formId}-title`} className={styles.headerTitle}>
+                    <h3 id={`${formId}-title`} className={cx(styles.headerTitle, "erp-ms-modal-title")}>
                       {activeVariant.modalTitle}
+                      {headerModeLabel ? (
+                        <span className="erp-ms-modal-mode">
+                          {" — "}
+                          {headerModeLabel}
+                        </span>
+                      ) : null}
                     </h3>
                     {activeVariant.modalDescription ? (
-                      <p className={styles.headerDescription}>
+                      <p className={cx(styles.headerDescription, "erp-ms-modal-subtitle")}>
                         {activeVariant.modalDescription}
                       </p>
                     ) : null}
@@ -1985,7 +2025,7 @@ export function ERPDynamicModalForm({
                 </div>
                 <button
                   type="button"
-                  className={styles.closeButton}
+                  className={cx(styles.closeButton, "erp-ms-modal-close")}
                   onClick={closeModal}
                   aria-label="Close modal"
                 >
@@ -2006,12 +2046,12 @@ export function ERPDynamicModalForm({
               </div>
             </header>
             <div
-              className={styles.scrollArea}
+              className={cx(styles.scrollArea, "erp-ms-modal-body")}
               ref={scrollAreaRef}
               data-erp-modal-scroll-area="true"
             >
               {sectionNavigationMode === "tabs" && tabSections.length > 0 ? (
-                <div className={styles.sectionTabs} role="tablist" aria-label="Form sections">
+                <div className={cx(styles.sectionTabs, "erp-ms-modal-tabs")} role="tablist" aria-label="Form sections">
                   {tabSections.map((section, sectionIndex) => (
                     <button
                       key={section.key}
@@ -2026,6 +2066,7 @@ export function ERPDynamicModalForm({
                       tabIndex={section.key === activeSectionKey ? 0 : -1}
                       className={cx(
                         styles.sectionTab,
+                        "erp-ms-modal-tab",
                         section.key === activeSectionKey && styles.sectionTabActive,
                       )}
                       onClick={() => setActiveSection(section.key)}
@@ -2094,6 +2135,7 @@ export function ERPDynamicModalForm({
                               styles.field,
                               styles.fieldWide,
                               styles.sectionHeadingField,
+                              "erp-ms-modal-band",
                             )}
                           >
                             <label
@@ -2109,7 +2151,7 @@ export function ERPDynamicModalForm({
                                 disabled={isSubmitting}
                                 onChange={() => toggleSectionExpanded(heading.name)}
                               />
-                              <span className={styles.sectionHeading}>
+                              <span className={cx(styles.sectionHeading, "erp-ms-modal-band-title")}>
                                 {heading.label}
                               </span>
                             </label>
@@ -2136,16 +2178,19 @@ export function ERPDynamicModalForm({
                 )}
               </form>
             </div>
-            <footer className={styles.footer}>
+            <footer className={cx(styles.footer, "erp-ms-modal-footer")}>
               {submitError ? (
                 <p className={styles.submitError} role="alert">
                   {submitError}
                 </p>
               ) : null}
-              <div className={styles.footerActions}>
+              <p className="erp-ms-modal-hint" aria-hidden="true">
+                <kbd>Ctrl+S</kbd>: Save <span>|</span> <kbd>Esc</kbd>: Cancel
+              </p>
+              <div className={cx(styles.footerActions, "erp-ms-modal-footer-actions")}>
                 <button
                   type="button"
-                  className={styles.cancelButton}
+                  className={cx(styles.cancelButton, "erp-ms-modal-cancel")}
                   onClick={handleCancel}
                   disabled={isSubmitting}
                 >
@@ -2157,7 +2202,7 @@ export function ERPDynamicModalForm({
                 <button
                   type="submit"
                   form={formId}
-                  className={styles.submitButton}
+                  className={cx(styles.submitButton, "erp-ms-modal-save")}
                   disabled={isSubmitting}
                 >
                   <span className={styles.footerButtonIcon}>

@@ -19,7 +19,7 @@ import {
   type WidgetMastersResponse,
 } from "@/features/masters/shared/widget-config";
 import { useApi } from "@/hooks/useApi";
-import styles from "@/app/master/state-master/page.module.scss";
+import styles from "./page.module.scss";
 import {
   getFirstDefinedValue,
   toDisplayValue,
@@ -48,10 +48,14 @@ const WIDGET_SECTION_PLATFORM = "Web";
 // (state_* column-style keys, matched case-insensitively). Form fields with no
 // mapping — or no matching response entry — keep their hardcoded label and
 // render after all configured fields.
+// `stm_decription` is spelled that way in fixed.form_field for this menu (the
+// stored field_name is missing an "s"); the key has to match what the server
+// sends or the Description field falls back to its hardcoded label and order.
 const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
   masterName: "state_name",
   masterAlias: "state_alias",
   masterShortName: "state_short",
+  masterDescription: "stm_decription",
   position: "state_order",
   stateIsActive: "state_is_active",
 };
@@ -72,7 +76,7 @@ const LOOKUP_KEYS = {
   alias: ["stmAlias", "stm_alias", "state_alias", "alias"],
   active: ["stmIsActive", "stm_is_active", "active", "is_active", "isActive", "status"],
   position: ["stmOrder", "stm_order", "state_order", "state_sort", "position", "sort"],
-  description: ["stmAlias", "stm_alias"],
+  description: ["stmDescription", "stm_description", "state_description"],
   array: ["data", "items", "results", "rows", "list", "states"],
 } as const;
 const REQUEST_PAYLOAD_KEYS = {
@@ -80,7 +84,7 @@ const REQUEST_PAYLOAD_KEYS = {
   name: "stmName",
   alias: "stmAlias",
   short: "stmShort",
-  description: "stmAlias",
+  description: "stmDescription",
   sort: "stmOrder",
 } as const;
 const STATE_IS_ACTIVE_KEYS = ["stmIsActive", "stm_is_active", "isActive", "is_active", "status"] as const;
@@ -88,6 +92,7 @@ const STATE_INITIAL_FORM_VALUES = {
   masterName: "",
   masterAlias: "",
   masterShortName: "",
+  masterDescription: "",
   position: "0",
   stateIsActive: "true",
 } as const;
@@ -110,6 +115,13 @@ const STATE_FORM_FIELDS: ERPDynamicModalField[] = [
   {
     name: "masterShortName",
     label: "Short Name",
+    colSpan: 2,
+  },
+  {
+    name: "masterDescription",
+    label: "Description",
+    type: "textarea",
+    rows: 3,
     colSpan: 2,
   },
   {
@@ -427,7 +439,6 @@ export default function StateMasterPage() {
       editModalTitle="Edit State Entry"
       formTitle="State Form"
       formDescription="Create and update states."
-        modalPanelStyle={{ width: "min(40rem, calc(100vw - 2.4rem))" }}
       customFields={formFields}
       createInitialValues={STATE_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {
@@ -440,6 +451,9 @@ export default function StateMasterPage() {
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.alias)) || defaults.masterAlias,
           masterShortName:
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.short)) || defaults.masterShortName,
+          masterDescription:
+            toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.description)) ||
+            defaults.masterDescription,
           position:
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) || defaults.position,
           stateIsActive: toSelectBoolean(getFirstDefinedValue(rowSource, STATE_IS_ACTIVE_KEYS), "true"),
@@ -449,6 +463,7 @@ export default function StateMasterPage() {
         stmName: (values.masterName ?? "").trim(),
         stmAlias: (values.masterAlias ?? "").trim() || null,
         stmShort: (values.masterShortName ?? "").trim() || null,
+        stmDescription: (values.masterDescription ?? "").trim() || null,
         stmOrder: Math.max(0, toNonNegativeInteger(values.position ?? "0", 0)),
         stmIsActive: (values.stateIsActive ?? "true") !== "false",
         ...(shouldUpdate && editingItemId !== null ? { stmId: toUpdateId(editingItemId) } : {}),

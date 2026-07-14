@@ -29,6 +29,7 @@ export default function InlineRelatedMasterModal({
   variants,
   submitError,
   panelStyle,
+  panelClassName,
   formGridColumns,
   denseGrid,
   stackLabels,
@@ -45,6 +46,7 @@ export default function InlineRelatedMasterModal({
       hideSectionHeader
       submitError={submitError}
       panelStyle={panelStyle}
+      panelClassName={panelClassName}
       formGridColumns={formGridColumns}
       denseGrid={denseGrid}
       stackLabels={stackLabels}

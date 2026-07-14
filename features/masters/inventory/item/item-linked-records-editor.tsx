@@ -46,14 +46,17 @@ type LinkedRecordEditorAutoAppendConfig = {
   focusColumnKey?: string;
 };
 type ItemLinkedRecordsEditorProps = {
-  addLabel: string;
   actionsLabel?: string;
   autoCreateFirstRowOnMount?: boolean;
   autoFocusInitialRowOnMount?: boolean;
   autoAppendOnEnter?: LinkedRecordEditorAutoAppendConfig;
+  autoAppendOnSelect?: LinkedRecordEditorAutoAppendConfig;
   columnLayoutStorageKey?: string;
   columns: LinkedRecordColumn[];
-  createRow: (sourceRow?: LinkedRecordRow) => LinkedRecordRow;
+  createRow: (
+    sourceRow?: LinkedRecordRow,
+    currentRows?: LinkedRecordRow[],
+  ) => LinkedRecordRow;
   disabled?: boolean;
   emptyState: string;
   exclusiveTrueColumnKeys?: string[];
@@ -335,11 +338,11 @@ function applyColumnLayout(
   ];
 }
 export default function ItemLinkedRecordsEditor({
-  addLabel,
   actionsLabel = "Actions",
   autoCreateFirstRowOnMount = false,
   autoFocusInitialRowOnMount = true,
   autoAppendOnEnter,
+  autoAppendOnSelect,
   columnLayoutStorageKey,
   columns,
   createRow,
@@ -673,7 +676,7 @@ export default function ItemLinkedRecordsEditor({
     if (autoFocusInitialRowOnMount && focusColumnKey) {
       queueFocus(0, focusColumnKey);
     }
-    updateRows([createRow()]);
+    updateRows([createRow(undefined, [])]);
   }, [
     autoAppendOnEnter,
     autoCreateFirstRowOnMount,
@@ -684,13 +687,6 @@ export default function ItemLinkedRecordsEditor({
     autoFocusInitialRowOnMount,
     visibleColumns,
   ]);
-  const handleAddRow = () => {
-    const focusColumnKey = resolveFocusColumnKey(autoAppendOnEnter);
-    if (focusColumnKey) {
-      queueFocus(rows.length, focusColumnKey);
-    }
-    updateRows([...rows, createRow()]);
-  };
   const handleRemoveRow = (rowIndex: number) => {
     if (removeDisabledRowIndexes.includes(rowIndex)) {
       return;
@@ -816,6 +812,7 @@ export default function ItemLinkedRecordsEditor({
     columnKey: string,
     nextValue: string,
   ) => {
+    const previousValue = rows[rowIndex]?.[columnKey] ?? "";
     let nextRows = setLinkedRecordRowValue(rows, rowIndex, columnKey, nextValue);
     if (nextValue === "true") {
       const conflictingKeys = new Set(
@@ -846,6 +843,15 @@ export default function ItemLinkedRecordsEditor({
               },
         );
       }
+    }
+    if (
+      !disabled &&
+      autoAppendOnSelect?.columnKey === columnKey &&
+      rowIndex === nextRows.length - 1 &&
+      nextValue.trim() !== "" &&
+      nextValue !== previousValue
+    ) {
+      nextRows = [...nextRows, createRow(nextRows[rowIndex], nextRows)];
     }
     updateRows(nextRows);
   };
@@ -914,7 +920,7 @@ export default function ItemLinkedRecordsEditor({
       updateRows(nextRows);
       return;
     }
-    updateRows([...nextRows, createRow(nextRows[rowIndex])]);
+    updateRows([...nextRows, createRow(nextRows[rowIndex], nextRows)]);
   };
   const handleInputKeyDown = (
     event: ReactKeyboardEvent<HTMLInputElement>,
@@ -1354,19 +1360,6 @@ export default function ItemLinkedRecordsEditor({
       {bodyMenu}
       {adminSettingsModal}
       <div className={styles.editor}>
-        <div className={styles.toolbar}>
-          <span className={styles.summary}>
-            {rows.length} {rows.length === 1 ? "row" : "rows"}
-          </span>
-          <button
-            type="button"
-            className={styles.addButton}
-            disabled={disabled}
-            onClick={handleAddRow}
-          >
-            {addLabel}
-          </button>
-        </div>
         {parseError ? <p className={styles.parseError}>{parseError}</p> : null}
         {rows.length === 0 ? (
           <div className={styles.emptyState}>{emptyState}</div>

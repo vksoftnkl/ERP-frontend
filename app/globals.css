@@ -12,8 +12,9 @@
   --row-hover: #f8fbff;
   --row-selected: #eaf2ff;
   --table-header-text: #000;
-  --primary: #1f6fde;
-  --primary-hover: #155ec2;
+  /* Brand primary — the header/nav bar red. */
+  --primary: #7b1515;
+  --primary-hover: #611010;
   --success-bg: #e8f8ee;
   --success-border: #a8e0bb;
   --success-text: #16803c;

@@ -1,0 +1,535 @@
+/* State Master — "Simple ERP" skin.
+   Self-contained: it defines every class CrudMasterPage + this page consume, so
+   State Master can carry this look without touching the master module shared by
+   the other ~35 master screens. */
+
+.page {
+  --accent: var(--primary, #7b1515);
+  --accent-dk: var(--primary-hover, #611010);
+  --ink: #222;
+  --ink2: #555;
+  --ink3: #888;
+  --line: #c9c9c9;
+  --line2: #e3e3e3;
+  --bg: #f2f2f2;
+  --paper: #fff;
+  --head: #ededed;
+  --sel: #f7ecec;
+  --hover: #f6f6f6;
+
+  /* globals.css forces `border-radius: var(--erp-radius) !important` onto every
+     button/input/select/table, so the skin's tighter corners are set by
+     re-scoping the variable rather than by fighting that !important. */
+  --erp-radius: 2px;
+
+  height: 100dvh;
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, Arial, sans-serif;
+  font-size: 13px;
+}
+.viewport {
+  height: 100%;
+  min-height: 0;
+}
+.board,
+.content {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  overflow: hidden;
+}
+.content {
+  flex: 1;
+}
+
+/* ── Page header ──────────────────────────────────────────── */
+.pageHeader {
+  flex: none;
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--line2);
+}
+.pageHeaderText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.pageTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.pageSubtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink3);
+}
+
+/* ── Toolbar: flat text+icon buttons, Add is the primary ──── */
+.iconToolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.iconBtn {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--ink2);
+  font: inherit;
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    background: #e7e7e7;
+    border-color: var(--line);
+  }
+  &:disabled {
+    color: #bbb;
+    cursor: default;
+  }
+}
+/* The icon wrapper is a plain inline glyph slot here, not a tinted 38px box. */
+.iconBtnBox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    stroke-width: 2;
+  }
+}
+.iconBtnAdd {
+  background: var(--accent);
+  border-color: var(--accent-dk);
+  color: #fff;
+  font-weight: 600;
+  &:hover:not(:disabled) {
+    background: var(--accent-dk);
+    border-color: var(--accent-dk);
+  }
+  &:disabled {
+    background: #cbb3b3;
+    border-color: #cbb3b3;
+    color: #fff;
+  }
+}
+/* Stand-ins for the mock's toolbar separators — there is no divider element in
+   the shared toolbar markup, so the group boundaries are drawn on the buttons
+   that start a new group (Refresh, Export Excel). */
+.iconBtnRefresh,
+.iconBtnExcel {
+  position: relative;
+  margin-left: 13px;
+  &::before {
+    content: "";
+    position: absolute;
+    left: -7px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1px;
+    height: 20px;
+    background: var(--line);
+  }
+}
+/* ── Filter strip ─────────────────────────────────────────── */
+.filterCard {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line2);
+  background: var(--paper);
+}
+.filterBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 2px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+.filterRow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.filterGroup {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.filterLabel {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink2);
+  white-space: nowrap;
+}
+.filterSearchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 240px;
+}
+.filterSlot {
+  display: contents;
+}
+.masterSearchIconButton {
+  position: absolute;
+  left: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink3);
+}
+.masterSearchIcon {
+  width: 13px;
+  height: 13px;
+}
+.masterSearchInput {
+  width: 100%;
+  height: 26px;
+  padding: 0 8px 0 24px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  &::placeholder {
+    color: #aaa;
+  }
+  &:focus {
+    outline: 1px solid var(--accent);
+    border-color: var(--accent);
+  }
+}
+.filterCheckGroup {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+.filterCheckLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink2);
+  white-space: nowrap;
+  cursor: pointer;
+  input[type="checkbox"] {
+    width: 13px;
+    height: 13px;
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+}
+
+/* ── Error strip ──────────────────────────────────────────── */
+.errorBox {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 12px;
+  padding: 7px 10px;
+  border: 1px solid #d89a9a;
+  background: #fff3f3;
+  color: #7a1c1c;
+}
+.errorText {
+  margin: 0;
+  font-size: 12.5px;
+}
+.retryButton {
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  background: #fff;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    background: var(--sel);
+  }
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+/* ── Grid ─────────────────────────────────────────────────── */
+.masterTable {
+  flex: 1 1 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+
+  /* ReusableTable themes itself from these; setting them here re-skins the rows,
+     hover and selection tints it paints internally (including the frozen S.No
+     column) without having to out-specify each of its own rules. */
+  --table-border: var(--line2);
+  --table-border-soft: var(--line2);
+  --table-surface: var(--paper);
+  --table-surface-muted: var(--head);
+  --table-surface-accent: var(--paper);
+  --table-text: var(--ink);
+  --table-text-muted: var(--ink2);
+  --table-text-subtle: var(--ink3);
+  --table-hover: var(--hover);
+  --table-active: var(--sel);
+  --table-primary: var(--accent);
+  --table-primary-hover: var(--accent-dk);
+  --table-shadow: none;
+
+  /* The frozen S.No column hardcodes a light-blue header and a white body cell
+     rather than reading the tokens above. `table` is the extra element selector
+     that out-specifies those two rules. */
+  table th[class*="serialNumberCell"] {
+    background: var(--head) !important;
+  }
+  table td[class*="serialNumberCell"] {
+    background: var(--paper) !important;
+  }
+
+  /* The list already has its own header/toolbar/search above the grid. */
+  [data-erp-table-toolbar="true"] {
+    display: none !important;
+  }
+  [data-erp-table-viewport="true"] {
+    border: 0;
+    box-shadow: none;
+    overflow: auto;
+  }
+  [data-erp-table-pagination="true"] {
+    margin: 0;
+    padding: 6px 12px;
+    border: 0;
+    border-top: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink2);
+    font-size: 12px;
+  }
+  [class*="pageSizeControl"] {
+    gap: 6px;
+    font-size: 12px;
+    color: var(--ink2);
+  }
+  [class*="pageSizeSelect"] {
+    height: 26px !important;
+    min-height: 26px !important;
+    padding: 0 6px !important;
+    border: 1px solid var(--line) !important;
+    background: #fff !important;
+    color: var(--ink) !important;
+    font-size: 12px !important;
+  }
+  [class*="paginationControls"] {
+    gap: 3px;
+  }
+  [class*="paginationButton"] {
+    min-width: 26px !important;
+    height: 26px !important;
+    padding: 0 6px !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 2px !important;
+    background: #fff !important;
+    color: var(--ink2) !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    &:hover:not(:disabled) {
+      border-color: var(--accent) !important;
+      background: var(--sel) !important;
+      color: var(--accent) !important;
+    }
+    &[class*="paginationButtonActive"] {
+      border-color: var(--accent-dk) !important;
+      background: var(--accent) !important;
+      color: #fff !important;
+      font-weight: 600 !important;
+    }
+  }
+}
+.masterDataTable {
+  font-size: 12.5px;
+
+  th {
+    height: auto !important;
+    padding: 5px 8px !important;
+    border: 1px solid var(--line2) !important;
+    border-top: 0 !important;
+    border-radius: 0 !important;
+    background: var(--head) !important;
+    color: var(--ink2) !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    &:hover {
+      background: #e4e4e4 !important;
+    }
+  }
+  tbody td {
+    height: auto !important;
+    padding: 4px 8px !important;
+    border: 1px solid var(--line2) !important;
+    background: transparent !important;
+    color: var(--ink) !important;
+    font-size: 12.5px !important;
+    line-height: 1.45 !important;
+    overflow-wrap: anywhere !important;
+  }
+  tbody tr {
+    background: var(--paper) !important;
+    &:hover {
+      background: var(--hover) !important;
+    }
+  }
+  tbody tr[class*="activeRow"] {
+    background: var(--sel) !important;
+    td {
+      border-color: #e0c7c7 !important;
+    }
+  }
+  [class*="sortIndicator"] {
+    color: var(--accent);
+  }
+}
+
+/* ── Grid-settings popup + dialog (right-click on the grid) ── */
+.masterSearchSettingsTooltip {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  min-width: 11.5rem;
+  padding: 5px 6px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.masterTableContextTooltip {
+  position: fixed;
+  top: auto;
+  left: auto;
+  z-index: 10000;
+}
+.masterSearchSettingsItem {
+  width: 100%;
+  min-height: 26px;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  &:hover,
+  &:focus-visible {
+    background: var(--sel);
+    color: var(--accent);
+    outline: 0;
+  }
+}
+.gridSettingsDialog {
+  width: min(32rem, calc(100vw - 2.4rem));
+  max-height: min(80vh, 34rem);
+}
+.gridSettingsBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px;
+  background: #fafafa;
+}
+.gridSettingsRow {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--line2);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  &:hover {
+    background: var(--hover);
+  }
+  input {
+    width: 13px;
+    height: 13px;
+    margin: 0;
+    flex: 0 0 auto;
+    accent-color: var(--accent);
+  }
+}
+.gridSettingsEmpty {
+  margin: 0;
+  padding: 1rem;
+  color: var(--ink3);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* The entry modal is skinned globally in styles/library/_master-shell.scss
+   (`.erp-ms-modal`), so this page no longer carries its own copy. */
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .iconToolbar {
+    flex-wrap: wrap;
+  }
+  .filterCard {
+    align-items: flex-start;
+  }
+  .filterRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filterSearchWrap {
+    width: 100%;
+  }
+  .filterCheckGroup {
+    margin-left: 0;
+  }
+}

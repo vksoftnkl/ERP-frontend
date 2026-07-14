@@ -557,7 +557,7 @@ export default function UiTableDesignerPage({
       mobileLabel: "Column Name",
       render: (row) => (
         <input
-          className={styles.cellInput}
+          className={`${styles.cellInput} erp-ms-cellctl`}
           value={row.columnName}
           onChange={(event) => updateColumn(row.id, "columnName", event.target.value)}
         />
@@ -570,7 +570,7 @@ export default function UiTableDesignerPage({
       mobileLabel: "Width",
       render: (row) => (
         <input
-          className={styles.cellInput}
+          className={`${styles.cellInput} erp-ms-cellctl`}
           value={row.width}
           onChange={(event) => updateColumn(row.id, "width", event.target.value)}
         />
@@ -615,7 +615,7 @@ export default function UiTableDesignerPage({
       mobileLabel: "Position",
       render: (row) => (
         <input
-          className={styles.cellInput}
+          className={`${styles.cellInput} erp-ms-cellctl`}
           value={positionDrafts[row.id] ?? row.position}
           onChange={(event) => handleColumnPositionChange(row.id, event.target.value)}
           onBlur={() => handleColumnPositionBlur(row.id)}
@@ -645,7 +645,7 @@ export default function UiTableDesignerPage({
       mobileLabel: "Next",
       render: (row) => (
         <input
-          className={styles.cellInput}
+          className={`${styles.cellInput} erp-ms-cellctl`}
           value={row.nextColumn}
           onChange={(event) => updateColumn(row.id, "nextColumn", event.target.value)}
         />
@@ -658,7 +658,7 @@ export default function UiTableDesignerPage({
       mobileLabel: "Previous",
       render: (row) => (
         <input
-          className={styles.cellInput}
+          className={`${styles.cellInput} erp-ms-cellctl`}
           value={row.previousColumn}
           onChange={(event) => updateColumn(row.id, "previousColumn", event.target.value)}
         />
@@ -1041,41 +1041,41 @@ export default function UiTableDesignerPage({
     startNew,
   ]);
   return (
-    <main className={styles.page}>
-      <div className={styles.workspace}>
-        <section className={styles.toolbar} aria-label="UI table actions">
+    <main className={`${styles.page} erp-master-shell erp-ms-designer`}>
+      <div className={`${styles.workspace} erp-ms-designer-main`}>
+        <section className={`${styles.toolbar} erp-ms-toolbar`} aria-label="UI table actions">
           <div className={styles.toolbarGroup}>
             <button
               type="button"
-              className={styles.desktopButton}
-              onClick={() => void handleLoadTable()}
-              disabled={isBusy || !form.uiTblId.trim()}
-            >
-              Load Table
-            </button>
-            <button
-              type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-tbtn erp-ms-tbtn--primary`}
               onClick={() => void handleSaveTable()}
               disabled={isBusy}
             >
-              Save Table
+              Save
             </button>
             <button
               type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-tbtn`}
               onClick={handleCreateNewTable}
               disabled={isBusy}
             >
-              New Table
+              New
             </button>
             <button
               type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-tbtn`}
+              onClick={() => void handleLoadTable()}
+              disabled={isBusy || !form.uiTblId.trim()}
+            >
+              Load
+            </button>
+            <button
+              type="button"
+              className={`${styles.desktopButton} erp-ms-tbtn`}
               onClick={() => void handleDeleteTable()}
               disabled={isBusy || !form.uiTblId.trim()}
             >
-              Delete Table
+              Delete
             </button>
           </div>
           <div
@@ -1092,7 +1092,7 @@ export default function UiTableDesignerPage({
           </div>
         </section>
         {statusErrors.length > 0 ? (
-          <section className={styles.errorPanel} aria-live="polite">
+          <section className={`${styles.errorPanel} erp-ms-issues`} aria-live="polite">
             <ul className={styles.errorList}>
               {statusErrors.map((error, index) => (
                 <li key={`${error.field}-${index}`}>
@@ -1103,14 +1103,14 @@ export default function UiTableDesignerPage({
           </section>
         ) : null}
 
-        <section className={styles.topGrid}>
-          <section className={styles.detailsPanel} aria-label="UI table details form">
-            <p className={styles.panelTitle}>UI Table Details</p>
+        <section className={`${styles.topGrid} erp-ms-designer-top erp-ms-designer-top--single`}>
+          <section className={`${styles.detailsPanel} erp-ms-panel`} aria-label="UI table details form">
+            <p className={`${styles.panelTitle} erp-ms-panel-title`}>UI Table Details</p>
             <div className={styles.fieldStack}>
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Table Id :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Table Id :</span>
                 <select
-                  className={styles.selectField}
+                  className={`${styles.selectField} erp-ms-fctl`}
                   value={form.uiTblId}
                   onChange={(event) => void handleTableSelectionChange(event.target.value)}
                   disabled={isBusy || isTableListLoading}
@@ -1127,26 +1127,26 @@ export default function UiTableDesignerPage({
                 </select>
               </label>
 
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Table Name :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Table Name :</span>
                 <input
-                  className={styles.textField}
+                  className={`${styles.textField} erp-ms-fctl`}
                   value={form.uiTblName}
                   onChange={(event) => updateForm("uiTblName", event.target.value)}
                 />
               </label>
 
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Device Type :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Device Type :</span>
                 <input
-                  className={styles.textField}
+                  className={`${styles.textField} erp-ms-fctl`}
                   value={form.uiTblDeviceType}
                   maxLength={MAX_DEVICE_TYPE_LENGTH}
                   onChange={(event) => updateForm("uiTblDeviceType", event.target.value)}
                 />
               </label>
 
-              <label className={styles.checkboxField}>
+              <label className={`${styles.checkboxField} erp-ms-fcheck`}>
                 <input
                   type="checkbox"
                   checked={form.uiTblEditable}
@@ -1155,7 +1155,7 @@ export default function UiTableDesignerPage({
                 <span>Table Editable</span>
               </label>
 
-              <label className={styles.checkboxField}>
+              <label className={`${styles.checkboxField} erp-ms-fcheck`}>
                 <input
                   type="checkbox"
                   checked={form.uiTblIsActive}
@@ -1167,10 +1167,10 @@ export default function UiTableDesignerPage({
           </section>
         </section>
 
-        <section className={styles.columnsSection} aria-label="UI table columns table">
-            <div className={styles.sectionLabelRow}>
+        <section className={`${styles.columnsSection} erp-ms-panel`} aria-label="UI table columns table">
+            <div className={`${styles.sectionLabelRow} erp-ms-panel-title`}>
               <span className={styles.sectionLabel}>UI Table Columns :</span>
-              <span className={styles.sectionMeta}>
+              <span className={`${styles.sectionMeta} erp-ms-panel-meta`}>
                 {columns.length} columns
                 {selectedColumn ? ` | Selected: ${selectedColumn.columnName || "Untitled"}` : ""}
               </span>
@@ -1185,8 +1185,8 @@ export default function UiTableDesignerPage({
               onRowClick={(row) => setSelectedColumnId(row.id)}
               reorderableRows
               onRowReorder={handleRowReorder}
-              wrapperClassName={styles.columnsUiTableShell}
-              tableClassName={styles.columnsUiTable}
+              wrapperClassName={`${styles.columnsUiTableShell} erp-ms-gridwrap`}
+              tableClassName={`${styles.columnsUiTable} erp-ms-grid`}
               rowClassName={(row) =>
                 row.id === selectedColumnId ? styles.uiTableSelectedRow : undefined
               }
@@ -1197,10 +1197,10 @@ export default function UiTableDesignerPage({
               emptyText={emptyColumnsMessage}
             />
 
-            <div className={styles.actionRow}>
+            <div className={`${styles.actionRow} erp-ms-panel-foot`}>
               <button
                 type="button"
-                className={styles.desktopButton}
+                className={`${styles.desktopButton} erp-ms-btn erp-ms-btn--primary`}
                 onClick={handleAddColumn}
                 disabled={isBusy}
               >
@@ -1208,7 +1208,7 @@ export default function UiTableDesignerPage({
               </button>
               <button
                 type="button"
-                className={styles.desktopButton}
+                className={`${styles.desktopButton} erp-ms-btn`}
                 onClick={() => void handleDeleteColumn()}
                 disabled={isBusy || !selectedColumnId}
               >

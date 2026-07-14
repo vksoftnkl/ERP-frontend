@@ -291,7 +291,7 @@ export default function DropdownDesignerPage({
         mobileLabel: "Column Name",
         render: (row) => (
           <input
-            className={styles.cellInput}
+            className={`${styles.cellInput} erp-ms-cellctl`}
             value={row.columnName}
             onChange={(event) => updateColumn(row.id, "columnName", event.target.value)}
           />
@@ -304,7 +304,7 @@ export default function DropdownDesignerPage({
         mobileLabel: "Alias",
         render: (row) => (
           <input
-            className={styles.cellInput}
+            className={`${styles.cellInput} erp-ms-cellctl`}
             value={row.columnAlias}
             onChange={(event) => updateColumn(row.id, "columnAlias", event.target.value)}
           />
@@ -317,7 +317,7 @@ export default function DropdownDesignerPage({
         mobileLabel: "SQL Name",
         render: (row) => (
           <input
-            className={styles.cellInput}
+            className={`${styles.cellInput} erp-ms-cellctl`}
             value={row.sqlName}
             onChange={(event) => updateColumn(row.id, "sqlName", event.target.value)}
           />
@@ -330,7 +330,7 @@ export default function DropdownDesignerPage({
         mobileLabel: "Data Type",
         render: (row) => (
           <input
-            className={styles.cellInput}
+            className={`${styles.cellInput} erp-ms-cellctl`}
             value={row.dataType}
             list="dropdown-column-data-type-options"
             onChange={(event) => updateColumn(row.id, "dataType", event.target.value)}
@@ -344,7 +344,7 @@ export default function DropdownDesignerPage({
         mobileLabel: "Width",
         render: (row) => (
           <input
-            className={styles.cellInput}
+            className={`${styles.cellInput} erp-ms-cellctl`}
             value={row.width}
             onChange={(event) => updateColumn(row.id, "width", event.target.value)}
           />
@@ -357,7 +357,7 @@ export default function DropdownDesignerPage({
         mobileLabel: "Alignment",
         render: (row) => (
           <select
-            className={styles.cellSelect}
+            className={`${styles.cellSelect} erp-ms-cellctl`}
             value={row.alignment}
             onChange={(event) => updateColumn(row.id, "alignment", event.target.value as Alignment)}
           >
@@ -666,13 +666,13 @@ export default function DropdownDesignerPage({
     void loadInitialState();
   }, [loadDropdownById, normalizedInitialDropdownId, refreshDropdownOptions, startNew]);
   return (
-    <main className={styles.page}>
-      <div className={styles.workspace}>
-        <section className={styles.toolbar} aria-label="Dropdown actions">
+    <main className={`${styles.page} erp-master-shell erp-ms-designer`}>
+      <div className={`${styles.workspace} erp-ms-designer-main`}>
+        <section className={`${styles.toolbar} erp-ms-toolbar`} aria-label="Dropdown actions">
           <div className={styles.toolbarGroup}>
             <button
               type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-tbtn`}
               onClick={() => void handleLoadDropdown()}
               disabled={isBusy || !form.dropdownId.trim()}
             >
@@ -680,7 +680,7 @@ export default function DropdownDesignerPage({
             </button>
             <button
               type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-tbtn erp-ms-tbtn--primary`}
               onClick={() => void handleSaveDropdown()}
               disabled={isBusy}
             >
@@ -688,33 +688,34 @@ export default function DropdownDesignerPage({
             </button>
             <button
               type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-tbtn`}
               onClick={handleCreateNewDropdown}
               disabled={isBusy}
             >
               New Dropdown
             </button>
+            <span className="erp-ms-tsep" aria-hidden="true" />
             <button
               type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-tbtn`}
               onClick={() => void handleDeleteDropdown()}
               disabled={isBusy || !form.dropdownId.trim()}
             >
               Delete Dropdown
             </button>
           </div>
-          <div className={styles.statusBadge} aria-live="polite">
+          <div className={`${styles.statusBadge} erp-ms-status`} aria-live="polite">
             {statusText}
           </div>
         </section>
-        <section className={responsiveStyles.headerGrid}>
-          <section className={styles.detailsPanel} aria-label="Dropdown details form">
-            <p className={styles.panelTitle}>Dropdown Details</p>
+        <section className={`${responsiveStyles.headerGrid} erp-ms-designer-top`}>
+          <section className={`${styles.detailsPanel} erp-ms-panel`} aria-label="Dropdown details form">
+            <p className={`${styles.panelTitle} erp-ms-panel-title`}>Dropdown Details</p>
             <div className={styles.fieldStack}>
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Dropdown Id :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Dropdown Id :</span>
                 <select
-                  className={styles.selectField}
+                  className={`${styles.selectField} erp-ms-fctl`}
                   value={form.dropdownId}
                   onChange={(event) => void handleDropdownSelectionChange(event.target.value)}
                   disabled={isBusy || isDropdownListLoading}
@@ -730,18 +731,18 @@ export default function DropdownDesignerPage({
                   ))}
                 </select>
               </label>
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Dropdown Name :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Dropdown Name :</span>
                 <input
-                  className={styles.textField}
+                  className={`${styles.textField} erp-ms-fctl`}
                   value={form.dropdownName}
                   onChange={(event) => updateForm("dropdownName", event.target.value)}
                 />
               </label>
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Sort Column :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Sort Column :</span>
                 <select
-                  className={styles.selectField}
+                  className={`${styles.selectField} erp-ms-fctl`}
                   value={form.sortColumn}
                   onChange={(event) => updateForm("sortColumn", event.target.value)}
                 >
@@ -753,10 +754,10 @@ export default function DropdownDesignerPage({
                   ))}
                 </select>
               </label>
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Sort Order :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Sort Order :</span>
                 <select
-                  className={styles.selectField}
+                  className={`${styles.selectField} erp-ms-fctl`}
                   value={form.sortOrder}
                   onChange={(event) => updateForm("sortOrder", event.target.value as SortOrder)}
                 >
@@ -769,29 +770,29 @@ export default function DropdownDesignerPage({
               </label>
             </div>            
           </section>
-          <section className={styles.descriptionPanel} aria-label="Dropdown settings">
-            <p className={styles.panelTitle}>Dropdown Settings</p>
+          <section className={`${styles.descriptionPanel} erp-ms-panel`} aria-label="Dropdown settings">
+            <p className={`${styles.panelTitle} erp-ms-panel-title`}>Dropdown Settings</p>
             <div className={responsiveStyles.settingsGrid}>
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Visible Items :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Visible Items :</span>
                 <input
-                  className={styles.textField}
+                  className={`${styles.textField} erp-ms-fctl`}
                   inputMode="numeric"
                   value={form.maxVisibleItems}
                   onChange={(event) => updateForm("maxVisibleItems", event.target.value)}
                 />
               </label>
-              <label className={styles.inlineField}>
-                <span className={styles.fieldLabel}>Dropdown Width :</span>
+              <label className={`${styles.inlineField} erp-ms-frow`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Dropdown Width :</span>
                 <input
-                  className={styles.textField}
+                  className={`${styles.textField} erp-ms-fctl`}
                   inputMode="numeric"
                   value={form.dropdownWidth}
                   onChange={(event) => updateForm("dropdownWidth", event.target.value)}
                 />
               </label>
             </div>
-            <label className={styles.checkboxField}>
+            <label className={`${styles.checkboxField} erp-ms-fcheck`}>
               <input
                 type="checkbox"
                 checked={form.showHeader}
@@ -799,38 +800,38 @@ export default function DropdownDesignerPage({
               />
               <span>Show Header Row</span>
             </label>
-            <label className={styles.blockField}>
-              <span className={styles.fieldLabel}>Description :</span>
+            <label className={`${styles.blockField} erp-ms-fblock`}>
+              <span className={`${styles.fieldLabel} erp-ms-flabel`}>Description :</span>
               <textarea
-                className={styles.largeTextField}
+                className={`${styles.largeTextField} erp-ms-fctl erp-ms-ftext`}
                 value={form.dropdownDescription}
                 onChange={(event) => updateForm("dropdownDescription", event.target.value)}
               />
             </label>
-            <label className={styles.blockField}>
-              <span className={styles.fieldLabel}>Completion Logic :</span>
+            <label className={`${styles.blockField} erp-ms-fblock`}>
+              <span className={`${styles.fieldLabel} erp-ms-flabel`}>Completion Logic :</span>
               <textarea
-                className={styles.cardTextarea}
+                className={`${styles.cardTextarea} erp-ms-fctl erp-ms-ftext`}
                 value={form.dropdownCompletion}
                 onChange={(event) => updateForm("dropdownCompletion", event.target.value)}
               />
             </label>
           </section>
-          <section className={styles.sqlSection} aria-label="Dropdown SQL">
-            <p className={styles.panelTitle}>Dropdown SQL</p>
+          <section className={`${styles.sqlSection} erp-ms-panel`} aria-label="Dropdown SQL">
+            <p className={`${styles.panelTitle} erp-ms-panel-title`}>Dropdown SQL</p>
             <div className={responsiveStyles.sqlGrid}>
-              <label className={styles.blockField}>
-                <span className={styles.fieldLabel}>Primary SQL :</span>
+              <label className={`${styles.blockField} erp-ms-fblock`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Primary SQL :</span>
                 <textarea
-                  className={styles.sqlEditor}
+                  className={`${styles.sqlEditor} erp-ms-fctl erp-ms-sql`}
                   value={form.dropdownSql}
                   onChange={(event) => updateForm("dropdownSql", event.target.value)}
                 />
               </label>
-              <label className={styles.blockField}>
-                <span className={styles.fieldLabel}>Regional SQL :</span>
+              <label className={`${styles.blockField} erp-ms-fblock`}>
+                <span className={`${styles.fieldLabel} erp-ms-flabel`}>Regional SQL :</span>
                 <textarea
-                  className={styles.sqlEditor}
+                  className={`${styles.sqlEditor} erp-ms-fctl erp-ms-sql`}
                   value={form.dropdownSqlRegional}
                   onChange={(event) => updateForm("dropdownSqlRegional", event.target.value)}
                 />
@@ -838,10 +839,10 @@ export default function DropdownDesignerPage({
             </div>
           </section>
         </section>
-        <section className={styles.columnsSection} aria-label="Dropdown columns table">
-          <div className={styles.sectionLabelRow}>
+        <section className={`${styles.columnsSection} erp-ms-panel`} aria-label="Dropdown columns table">
+          <div className={`${styles.sectionLabelRow} erp-ms-panel-title`}>
             <span className={styles.sectionLabel}>Dropdown Columns :</span>
-            <span className={styles.sectionMeta}>
+            <span className={`${styles.sectionMeta} erp-ms-panel-meta`}>
               {columns.length} columns
               {selectedColumn ? ` | Selected: ${selectedColumn.columnName || "Untitled"}` : ""}
             </span>
@@ -854,7 +855,8 @@ export default function DropdownDesignerPage({
               minWidth={DROPDOWN_COLUMNS_TABLE_MIN_WIDTH}
               activeRowKey={selectedColumnId}
               onRowClick={(row) => setSelectedColumnId(row.id)}
-              wrapperClassName={styles.columnsUiTableShell}
+              wrapperClassName={`${styles.columnsUiTableShell} erp-ms-gridwrap`}
+              tableClassName="erp-ms-grid"
               rowClassName={(row) =>
                 row.id === selectedColumnId ? styles.uiTableSelectedRow : undefined
               }
@@ -984,10 +986,10 @@ export default function DropdownDesignerPage({
               ))
             )}
           </div>
-          <div className={styles.actionRow}>
+          <div className={`${styles.actionRow} erp-ms-panel-foot`}>
             <button
               type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-btn erp-ms-btn--primary`}
               onClick={handleAddColumn}
               disabled={isBusy}
             >
@@ -995,7 +997,7 @@ export default function DropdownDesignerPage({
             </button>
             <button
               type="button"
-              className={styles.desktopButton}
+              className={`${styles.desktopButton} erp-ms-btn`}
               onClick={handleDeleteColumn}
               disabled={isBusy || !selectedColumnId}
             >

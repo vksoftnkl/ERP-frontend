@@ -503,7 +503,7 @@ export default function CustomerTemplatePage() {
       modalTitle: "Customer Template",
       modalDescription: "Configure the default field values for new customers.",
       submitLabel: "Save Template",
-      accent: "blue",
+      accent: "primary",
       fields: buildCustomerTemplateFields(
         company.options,
         company.handlers,

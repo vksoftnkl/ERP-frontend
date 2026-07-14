@@ -215,7 +215,7 @@ export default function ItemTemplatePage() {
       modalTitle: "Item Template",
       modalDescription: "Select the item group, category, and brand.",
       submitLabel: "Save Template",
-      accent: "blue",
+      accent: "primary",
       fields: buildItemTemplateFields(
         group.options,
         group.handlers,

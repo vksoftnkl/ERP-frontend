@@ -5,8 +5,10 @@
   --ds-border: #ccd8e4;
   --ds-text: #0f2536;
   --ds-text-muted: #4e6374;
-  --ds-primary: #0f74c9;
-  --ds-primary-strong: #095f9f;
+  // Derived from the app primary in globals.css so the brand red has one source
+  // of truth; the fallbacks only apply if globals.css isn't loaded.
+  --ds-primary: var(--primary, #7b1515);
+  --ds-primary-strong: var(--primary-hover, #611010);
   --ds-success: #1a8c69;
   --ds-warning: #b97506;
   --ds-danger: #bf3f3f;

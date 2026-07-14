@@ -12,9 +12,15 @@ export const API_ENDPOINTS = {
 export const GRID_TABLE_NAME = "suppliers";
 // Modal Panel Styles
 export const CUSTOMER_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(62vw, 62rem)",
-  height: "75vh",
-  maxHeight: "75vh",
+  // 3 columns × a 130px label column. Measured across every tab: placeholders
+  // start truncating below 60rem, so this keeps one step of headroom for longer
+  // labels arriving from widget config.
+  width: "min(92vw, 64rem)",
+  // The tallest tab needs ~310px of chrome + fields; 75vh was ~675px, so most
+  // of the panel was empty. Sized to the tallest tab rather than to whichever
+  // tab is open, so the modal does not resize as you move between them.
+  height: "min(80vh, 400px)",
+  maxHeight: "80vh",
 };
 export const STATE_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(34vw, 34rem)",

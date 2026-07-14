@@ -1,4 +1,14 @@
 export const ACCENT_PRESETS = {
+  // The app's brand primary (the header/nav red). Kept as literal hex rather
+  // than var(--primary) because the accent is read in JS to build the soft ring.
+  primary: {
+    accent: "#7b1515",
+    accentStrong: "#611010",
+    softFrom: "#f7ecec",
+    softTo: "#eed6d6",
+    iconBg: "#f7ecec",
+    iconFg: "#611010",
+  },
   blue: {
     accent: "#2563eb",
     accentStrong: "#1d4ed8",
@@ -41,7 +51,7 @@ export const ACCENT_PRESETS = {
   },
 } as const;
 
-export const DEFAULT_ACCENT = ACCENT_PRESETS.blue;
+export const DEFAULT_ACCENT = ACCENT_PRESETS.primary;
 export const SEARCH_SELECT_LIST_MAX_HEIGHT = 220;
 export const SEARCH_SELECT_LIST_OFFSET = 4;
 export const FIELD_CONTAINER_SELECTOR = "[data-erp-modal-field-name]";

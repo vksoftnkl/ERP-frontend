@@ -540,7 +540,7 @@ export default function AreaMasterPage() {
         modalTitle: "New City",
         modalDescription: "Create city from area form.",
         submitLabel: citySaveLoading ? "Saving..." : "Save",
-        accent: "blue",
+        accent: "primary",
         fields: cityModalFields,
       },
       {

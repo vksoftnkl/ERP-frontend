@@ -34,6 +34,10 @@ export type InlineRelatedMasterDefinition = {
   variants: ERPDynamicModalVariant[];
   submitError?: string | null;
   panelStyle?: CSSProperties;
+  /** Extra class on the modal panel, so a host page's skin also covers the
+   *  related-master modals opened from it (the panel renders outside the
+   *  page's DOM subtree). */
+  panelClassName?: string;
   formGridColumns?: number;
   denseGrid?: boolean;
   stackLabels?: boolean;

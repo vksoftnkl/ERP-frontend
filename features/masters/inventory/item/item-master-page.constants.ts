@@ -494,15 +494,19 @@ export function normalizeItemBatchConfigValue(value: unknown): string {
   }
   return "";
 }
+// A banded group title, matching `.erp-ms-modal-band` in the global master
+// skin. It stays an inline style (rather than that class) only because the
+// grid placement below has to travel with the element.
 export const ITEM_INLINE_SECTION_HEADING_STYLE: CSSProperties = {
   gridColumn: "1 / -1",
-  marginTop: "0.35rem",
-  paddingTop: "0.65rem",
-  borderTop: "1px solid #e2e8f0",
-  color: "#475569",
-  fontSize: "0.78rem",
-  fontWeight: 700,
-  letterSpacing: "0.08em",
+  margin: "10px 0 0",
+  padding: "5px 10px",
+  border: "1px solid var(--erp-ms-line-soft, #e3e3e3)",
+  background: "var(--erp-ms-head, #ededed)",
+  color: "var(--erp-ms-ink-soft, #555)",
+  fontSize: "12px",
+  fontWeight: 600,
+  letterSpacing: "0.04em",
   textTransform: "uppercase",
 };
 export const ITEM_CHECKBOX_CONTROL_STYLE: CSSProperties = {
@@ -670,8 +674,17 @@ export const ITEM_EAN_ROW_TEXT_FIELD_NAMES = [
   "ean_remarks",
 ] as const;
 export const ITEM_EAN_ROW_BOOLEAN_FIELD_NAMES = ["ean_is_default", "ean_is_active"] as const;
+// A new price row is created with these already filled in, so they say nothing
+// about whether the user has actually used the row. Only the remaining fields
+// make a row count as a real one for validation and submission.
+const ITEM_PRICE_PREFILLED_FIELD_NAMES: readonly string[] = [
+  "ipm_id",
+  "ipm_to_base_factor",
+  "ipm_unit_factor",
+  "ipm_profit_type",
+];
 export const ITEM_PRICE_CONTENT_FIELD_NAMES = ITEM_PRICE_TEXT_FIELD_NAMES.filter(
-  (fieldName) => fieldName !== "ipm_id",
+  (fieldName) => !ITEM_PRICE_PREFILLED_FIELD_NAMES.includes(fieldName),
 );
 export const ITEM_PRICE_SUBMISSION_FIELD_NAMES = [
   "ipm_godown_id",

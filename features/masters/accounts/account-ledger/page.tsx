@@ -13,6 +13,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
+import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons";
 import ReusableTable, {
   type ReusableTableBodyContextMenuPayload,
   type ReusableTableColumn,
@@ -30,17 +31,7 @@ import styles from "@/app/master/state-master/page.module.scss";
 import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { MasterIcon } from "@/components/design-system/icons/master-icons";
 import { RecordHistoryModal } from "@/features/masters/record-history/page";
-import {
-  FiClock,
-  FiDownload,
-  FiEdit2,
-  FiPlusCircle,
-  FiPrinter,
-  FiRefreshCw,
-  FiSearch,
-  FiTrash2,
-  FiUpload,
-} from "react-icons/fi";
+import { FiSearch } from "react-icons/fi";
 // Import all modular logic
 import {
   API_ENDPOINTS,
@@ -311,15 +302,16 @@ function LedgerFieldRenderer({
   const disabled =
     isReadOnlyMode || detailsLoading || saveLoading || lockedFieldNames.has(fieldName);
   const isValidationInvalid = validationFieldName === fieldName;
-  const wrapperClassName = dynamicFormStyles.field;
+  const wrapperClassName = `${dynamicFormStyles.field} erp-ms-modal-field`;
+  // Layout comes from the global modal skin (`.erp-ms-modal-field`): a label
+  // column beside the control, not stacked above it. Only the column span stays
+  // inline, since it is per-field.
   const wrapperInlineStyle: CSSProperties = {
-    gridTemplateColumns: "1fr",
-    rowGap: "0.35rem",
     gridColumn:
       field.colSpan && field.colSpan > 1 ? `span ${Math.min(3, field.colSpan)}` : undefined,
   };
   const labelInlineStyle: CSSProperties = { paddingTop: 0 };
-  const controlInlineStyle: CSSProperties = { gridColumn: "1" };
+  const controlInlineStyle: CSSProperties = {};
   // Checkbox type
   if (inputType === "checkbox") {
     const isChecked = fieldValue === "true";
@@ -331,14 +323,14 @@ function LedgerFieldRenderer({
         style={wrapperInlineStyle}
       >
         <label
-          className={dynamicFormStyles.checkboxWrapper}
+          className={`${dynamicFormStyles.checkboxWrapper} erp-ms-modal-check-wrap`}
           htmlFor={field.name}
           style={{ ...controlInlineStyle, display: "inline-flex", alignItems: "center", justifyContent: "flex-start", width: "100%" }}
         >
           <input
             id={field.name}
             data-ledger-modal-field-control="true"
-            className={`${dynamicFormStyles.checkboxControl} ${isValidationInvalid ? dynamicFormStyles.checkboxControlInvalid : ""}`}
+            className={`${dynamicFormStyles.checkboxControl} erp-ms-modal-check ${isValidationInvalid ? dynamicFormStyles.checkboxControlInvalid : ""}`}
             type="checkbox"
             autoComplete="off"
             checked={isChecked}
@@ -349,7 +341,7 @@ function LedgerFieldRenderer({
               handleFieldChange(fieldName, event.target.checked ? "true" : "false")
             }
           />
-          <span className={dynamicFormStyles.label} style={labelInlineStyle}>
+          <span className={`${dynamicFormStyles.label} erp-ms-modal-check-label`} style={labelInlineStyle}>
             {field.label}
             {field.required ? <span className={dynamicFormStyles.requiredMark}>*</span> : null}
           </span>
@@ -396,7 +388,7 @@ function LedgerFieldRenderer({
         className={wrapperClassName}
         style={wrapperInlineStyle}
       >
-        <label className={dynamicFormStyles.label} htmlFor={field.name} style={labelInlineStyle}>
+        <label className={`${dynamicFormStyles.label} erp-ms-modal-label`} htmlFor={field.name} style={labelInlineStyle}>
           {field.label}
           {field.required ? <span className={dynamicFormStyles.requiredMark}>*</span> : null}
         </label>
@@ -405,7 +397,7 @@ function LedgerFieldRenderer({
             id={field.name}
             type="button"
             data-ledger-modal-field-control="true"
-            className={`${dynamicFormStyles.searchSelectTrigger} ${
+            className={`${dynamicFormStyles.searchSelectTrigger} erp-ms-modal-control erp-ms-modal-trigger ${
               isValidationInvalid ? dynamicFormStyles.controlInvalid : ""
             } ${fieldValue ? dynamicFormStyles.searchSelectTriggerClearable : ""} ${
               isSearchOpen ? dynamicFormStyles.searchSelectTriggerOpen : ""
@@ -555,14 +547,14 @@ function LedgerFieldRenderer({
         className={wrapperClassName}
         style={wrapperInlineStyle}
       >
-        <label className={dynamicFormStyles.label} htmlFor={field.name} style={labelInlineStyle}>
+        <label className={`${dynamicFormStyles.label} erp-ms-modal-label`} htmlFor={field.name} style={labelInlineStyle}>
           {field.label}
           {field.required ? <span className={dynamicFormStyles.requiredMark}>*</span> : null}
         </label>
         <textarea
           id={field.name}
           data-ledger-modal-field-control="true"
-          className={`${dynamicFormStyles.control} ${dynamicFormStyles.textarea} ${
+          className={`${dynamicFormStyles.control} erp-ms-modal-control ${dynamicFormStyles.textarea} ${
             isValidationInvalid ? dynamicFormStyles.controlInvalid : ""
           }`}
           style={controlInlineStyle}
@@ -587,14 +579,14 @@ function LedgerFieldRenderer({
         className={wrapperClassName}
         style={wrapperInlineStyle}
       >
-        <label className={dynamicFormStyles.label} htmlFor={field.name} style={labelInlineStyle}>
+        <label className={`${dynamicFormStyles.label} erp-ms-modal-label`} htmlFor={field.name} style={labelInlineStyle}>
           {field.label}
           {field.required ? <span className={dynamicFormStyles.requiredMark}>*</span> : null}
         </label>
         <select
           id={field.name}
           data-ledger-modal-field-control="true"
-          className={`${dynamicFormStyles.control} ${
+          className={`${dynamicFormStyles.control} erp-ms-modal-control ${
             isValidationInvalid ? dynamicFormStyles.controlInvalid : ""
           }`}
           style={controlInlineStyle}
@@ -621,14 +613,14 @@ function LedgerFieldRenderer({
       className={wrapperClassName}
       style={wrapperInlineStyle}
     >
-      <label className={dynamicFormStyles.label} htmlFor={field.name} style={labelInlineStyle}>
+      <label className={`${dynamicFormStyles.label} erp-ms-modal-label`} htmlFor={field.name} style={labelInlineStyle}>
         {field.label}
         {field.required ? <span className={dynamicFormStyles.requiredMark}>*</span> : null}
       </label>
       <input
         id={field.name}
         data-ledger-modal-field-control="true"
-        className={`${dynamicFormStyles.control} ${
+        className={`${dynamicFormStyles.control} erp-ms-modal-control ${
           isValidationInvalid ? dynamicFormStyles.controlInvalid : ""
         }`}
         style={controlInlineStyle}
@@ -1338,14 +1330,16 @@ export default function AccountLedgerMasterPage() {
         closeModal();
         return;
       }
+      const isSubmitChord =
+        (event.key === "Enter" || event.key.toLowerCase() === "s") &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (event.ctrlKey || event.metaKey);
       if (
         modalMode === "view" ||
         saveLoading ||
         detailsLoading ||
-        event.key !== "Enter" ||
-        event.altKey ||
-        event.shiftKey ||
-        (!event.ctrlKey && !event.metaKey)
+        !isSubmitChord
       ) {
         return;
       }
@@ -2343,108 +2337,111 @@ export default function AccountLedgerMasterPage() {
   return (
     <>
       {gridSettingsContextMenu}
-      <main className={styles.page}>
-      <div className={styles.viewport}>
-        <div className={styles.board}>
+      <main className={`${styles.page} erp-master-shell`}>
+      <div className={`${styles.viewport} erp-ms-viewport`}>
+        <div className={`${styles.board} erp-ms-board`}>
           <section className={styles.content}>
             {/* Page Header */}
-            <div className={styles.pageHeader}>
+            <div className={`${styles.pageHeader} erp-ms-pagehead`}>
               <div className={styles.pageHeaderText}>
-                <h1 className={styles.pageTitle}>{listHeading}</h1>
-                <p className={styles.pageSubtitle}>
+                <h1 className={`${styles.pageTitle} erp-ms-title`}>{listHeading}</h1>
+                <p className={`${styles.pageSubtitle} erp-ms-sub`}>
                   Manage all account ledgers in your organization
                 </p>
               </div>
             </div>
             {/* Icon Toolbar */}
-            <div className={styles.iconToolbar}>
+            <div className={`${styles.iconToolbar} erp-ms-toolbar`}>
               <button
                 type="button"
-                className={`${styles.iconBtn} ${styles.iconBtnAdd}`}
+                className={`${styles.iconBtn} ${styles.iconBtnAdd} erp-ms-tbtn erp-ms-tbtn--primary`}
                 onClick={openCreateModal}
                 disabled={saveLoading || detailsLoading}
                 title="Add"
               >
-                <span className={styles.iconBtnBox}><FiPlusCircle aria-hidden="true" /></span>
+                <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}><ErpActionIcon name="add" /></span>
                 <span>Add</span>
               </button>
               <button
                 type="button"
-                className={`${styles.iconBtn} ${styles.iconBtnEdit}`}
+                className={`${styles.iconBtn} ${styles.iconBtnEdit} erp-ms-tbtn`}
                 onClick={handleToolbarEdit}
                 disabled={!selectedRow || saveLoading || detailsLoading}
                 title="Edit selected row"
               >
-                <span className={styles.iconBtnBox}><FiEdit2 aria-hidden="true" /></span>
+                <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}><ErpActionIcon name="edit" /></span>
                 <span>Edit</span>
               </button>
               <button
                 type="button"
-                className={`${styles.iconBtn} ${styles.iconBtnDelete}`}
+                className={`${styles.iconBtn} ${styles.iconBtnDelete} erp-ms-tbtn`}
                 onClick={handleToolbarDelete}
                 disabled={!selectedRow || deleteLoading || saveLoading || detailsLoading}
                 title="Delete selected row"
               >
-                <span className={styles.iconBtnBox}><FiTrash2 aria-hidden="true" /></span>
+                <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}><ErpActionIcon name="delete" /></span>
                 <span>Delete</span>
               </button>
+              <span className="erp-ms-tsep" aria-hidden="true" />
               <button
                 type="button"
-                className={`${styles.iconBtn} ${styles.iconBtnRefresh}`}
+                className={`${styles.iconBtn} ${styles.iconBtnRefresh} erp-ms-tbtn`}
                 onClick={handleRefresh}
                 disabled={loading}
                 title="Refresh"
               >
-                <span className={styles.iconBtnBox}><FiRefreshCw aria-hidden="true" /></span>
+                <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}><ErpActionIcon name="refresh" /></span>
                 <span>Refresh</span>
               </button>
+              <span className="erp-ms-tsep" aria-hidden="true" />
               <button
                 type="button"
-                className={`${styles.iconBtn} ${styles.iconBtnImport}`}
+                className={`${styles.iconBtn} ${styles.iconBtnImport} erp-ms-tbtn`}
                 title="Import"
                 disabled
               >
-                <span className={styles.iconBtnBox}><FiUpload aria-hidden="true" /></span>
+                <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}><ErpActionIcon name="import" /></span>
                 <span>Import</span>
               </button>
               <button
                 type="button"
-                className={`${styles.iconBtn} ${styles.iconBtnExcel}`}
+                className={`${styles.iconBtn} ${styles.iconBtnExcel} erp-ms-tbtn`}
                 onClick={handleDownloadRows}
                 disabled={renderedRows.length === 0}
                 title={`Export ${listHeading} as CSV`}
               >
-                <span className={styles.iconBtnBox}><FiDownload aria-hidden="true" /></span>
+                <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}><ErpActionIcon name="excel" /></span>
                 <span>Export Excel</span>
               </button>
               <button
                 type="button"
-                className={`${styles.iconBtn} ${styles.iconBtnPrint}`}
+                className={`${styles.iconBtn} ${styles.iconBtnPrint} erp-ms-tbtn`}
                 title="Print"
                 disabled
               >
-                <span className={styles.iconBtnBox}><FiPrinter aria-hidden="true" /></span>
+                <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}><ErpActionIcon name="print" /></span>
                 <span>Print</span>
               </button>
+              <span className="erp-ms-tsep" aria-hidden="true" />
               <button
                 type="button"
-                className={`${styles.iconBtn} ${styles.iconBtnHistory}`}
+                className={`${styles.iconBtn} ${styles.iconBtnHistory} erp-ms-tbtn`}
                 onClick={handleToolbarLogs}
                 disabled={isToolbarLogsDisabled}
                 title="View history"
               >
-                <span className={styles.iconBtnBox}><FiClock aria-hidden="true" /></span>
+                <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}><ErpActionIcon name="history" /></span>
                 <span>History</span>
               </button>
             </div>
             {error ? (
-              <div className={styles.errorBox}>
-                <p className={styles.errorText}>
+              <div className={`${styles.errorBox} erp-ms-error`}>
+                <p className={`${styles.errorText} erp-ms-error-text`}>
                   Unable to load account ledger data: {error}
                 </p>
                 <button
                   type="button"
-                  className={styles.retryButton}
+                  className={`${styles.retryButton} erp-ms-retry`}
                   onClick={() => void loadRecords(searchTerm, currentPage, pageSize)}
                 >
                   Retry
@@ -2452,20 +2449,20 @@ export default function AccountLedgerMasterPage() {
               </div>
             ) : null}
             {deleteError ? (
-              <div className={styles.errorBox}>
-                <p className={styles.errorText}>
+              <div className={`${styles.errorBox} erp-ms-error`}>
+                <p className={`${styles.errorText} erp-ms-error-text`}>
                   Unable to delete selected account ledger: {deleteError}
                 </p>
               </div>
             ) : null}
             {gridColumnsError ? (
-              <div className={styles.errorBox}>
-                <p className={styles.errorText}>
+              <div className={`${styles.errorBox} erp-ms-error`}>
+                <p className={`${styles.errorText} erp-ms-error-text`}>
                   Unable to load table headers: {gridColumnsError}. Retry to load the configured columns.
                 </p>
                 <button
                   type="button"
-                  className={styles.retryButton}
+                  className={`${styles.retryButton} erp-ms-retry`}
                   onClick={() => {
                     if (accountLedgerGridId === null) return;
                     void refetchGridColumns();
@@ -2477,21 +2474,21 @@ export default function AccountLedgerMasterPage() {
               </div>
             ) : null}
             {/* Filter Card */}
-            <div className={styles.filterCard}>
-              {searchTerm.trim() ? <span className={styles.filterBadge}>1</span> : null}
-              <div className={styles.filterRow}>
+            <div className={`${styles.filterCard} erp-ms-filters`}>
+              {searchTerm.trim() ? <span className={`${styles.filterBadge} erp-ms-filter-badge`}>1</span> : null}
+              <div className={`${styles.filterRow} erp-ms-filter-row`}>
                 <div className={styles.filterGroup}>
-                  <label className={styles.filterLabel} htmlFor="account-ledger-search-input">
+                  <label className={`${styles.filterLabel} erp-ms-filter-label`} htmlFor="account-ledger-search-input">
                     Search
                   </label>
                   <div className={styles.filterSearchWrap}>
-                    <span className={styles.masterSearchIconButton} aria-hidden="true">
-                      <FiSearch className={styles.masterSearchIcon} />
+                    <span className={`${styles.masterSearchIconButton} erp-ms-search-icon`} aria-hidden="true">
+                      <ErpActionIcon name="search" size={13} />
                     </span>
                     <input
                       id="account-ledger-search-input"
                       type="text"
-                      className={styles.masterSearchInput}
+                      className={`${styles.masterSearchInput} erp-ms-search-input`}
                       value={searchTerm}
                       onChange={(event) => handleSearchChange(event.target.value)}
                       placeholder="Search by account ledger name..."
@@ -2517,8 +2514,8 @@ export default function AccountLedgerMasterPage() {
               rows={renderedRows}
               onWrapperContextMenu={handleTableWrapperContextMenu}
               rowKey="__rowId"
-              wrapperClassName={styles.masterTable}
-              tableClassName={styles.masterDataTable}
+              wrapperClassName={`${styles.masterTable} erp-ms-gridwrap`}
+              tableClassName={`${styles.masterDataTable} erp-ms-grid`}
               tableLayout="fixed"
               minWidth="980px"
               reorderableColumns
@@ -2553,8 +2550,8 @@ export default function AccountLedgerMasterPage() {
         <div
           className={dynamicFormStyles.overlay}
           style={{
-            "--erp-modal-accent": "#0f74c9",
-            "--erp-modal-accent-soft-ring": "rgba(15, 116, 201, 0.2)",
+            "--erp-modal-accent": "var(--primary, #7b1515)",
+            "--erp-modal-accent-soft-ring": "rgba(123, 21, 21, 0.2)",
             "--erp-modal-overlay-z-index": 330,
           } as CSSProperties}
         >
@@ -2571,17 +2568,17 @@ export default function AccountLedgerMasterPage() {
               void saveGridSettings();
             }}
           >
-            <header className={dynamicFormStyles.header}>
+            <header className={`${dynamicFormStyles.header} erp-ms-modal-header`}>
               <div className={dynamicFormStyles.headerRow}>
                 <div className={dynamicFormStyles.headerIntro}>
-                  <span className={dynamicFormStyles.headerIcon} aria-hidden="true">
+                  <span className={`${dynamicFormStyles.headerIcon} erp-ms-modal-icon`} aria-hidden="true">
                     <FiSearch />
                   </span>
                   <div className={dynamicFormStyles.headerText}>
                     <h2 className={dynamicFormStyles.headerTitle}>
                       {gridSettingsTitle}
                     </h2>
-                    <p className={dynamicFormStyles.headerDescription}>
+                    <p className={`${dynamicFormStyles.headerDescription} erp-ms-modal-subtitle`}>
                       Select columns for this grid setting.
                     </p>
                   </div>
@@ -2624,8 +2621,8 @@ export default function AccountLedgerMasterPage() {
                 </p>
               )}
             </div>
-            <footer className={dynamicFormStyles.footer}>
-              <div className={dynamicFormStyles.footerActions}>
+            <footer className={`${dynamicFormStyles.footer} erp-ms-modal-footer`}>
+              <div className={`${dynamicFormStyles.footerActions} erp-ms-modal-footer-actions`}>
                 <button
                   type="submit"
                   className={dynamicFormStyles.submitButton}
@@ -2642,7 +2639,7 @@ export default function AccountLedgerMasterPage() {
                 </button>
                 <button
                   type="button"
-                  className={dynamicFormStyles.cancelButton}
+                  className={`${dynamicFormStyles.cancelButton} erp-ms-modal-cancel`}
                   onClick={closeGridSettingsModal}
                   disabled={gridSettingsSaving}
                 >
@@ -2657,34 +2654,34 @@ export default function AccountLedgerMasterPage() {
         </div>
       ) : null}
       {isFormModalOpen ? (
-        <div className={dynamicFormStyles.overlay} style={modalStyle}>
+        <div className={`${dynamicFormStyles.overlay} erp-ms-modal-overlay`} style={modalStyle}>
           <div
             className={dynamicFormStyles.backdrop}
             onClick={saveLoading ? undefined : closeModal}
             aria-hidden
           />
           <div
-            className={dynamicFormStyles.panel}
+            className={`${dynamicFormStyles.panel} erp-ms-modal`}
             role="dialog"
             aria-modal="true"
             style={modalPanelStyle}
           >
-            <header className={dynamicFormStyles.header}>
+            <header className={`${dynamicFormStyles.header} erp-ms-modal-header`}>
               <div className={dynamicFormStyles.headerRow}>
                 <div className={dynamicFormStyles.headerIntro}>
-                  <span className={dynamicFormStyles.headerIcon} aria-hidden="true">
+                  <span className={`${dynamicFormStyles.headerIcon} erp-ms-modal-icon`} aria-hidden="true">
                     <MasterIcon name="account_ledger_master" />
                   </span>
                   <div className={dynamicFormStyles.headerText}>
-                    <h2 className={dynamicFormStyles.headerTitle}>{modalTitle}</h2>
-                    <p className={dynamicFormStyles.headerDescription}>
+                    <h2 className={`${dynamicFormStyles.headerTitle} erp-ms-modal-title`}>{modalTitle}</h2>
+                    <p className={`${dynamicFormStyles.headerDescription} erp-ms-modal-subtitle`}>
                       {modalDescription}
                     </p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  className={dynamicFormStyles.closeButton}
+                  className={`${dynamicFormStyles.closeButton} erp-ms-modal-close`}
                   onClick={closeModal}
                   disabled={saveLoading}
                   aria-label="Close modal"
@@ -2701,10 +2698,10 @@ export default function AccountLedgerMasterPage() {
                 </button>
               </div>
             </header>
-            <div className={dynamicFormStyles.scrollArea}>
+            <div className={`${dynamicFormStyles.scrollArea} erp-ms-modal-body`}>
               {visibleLedgerFormSections.length > 0 ? (
                 <div
-                  className={dynamicFormStyles.sectionTabs}
+                  className={`${dynamicFormStyles.sectionTabs} erp-ms-modal-tabs`}
                   role="tablist"
                   aria-label="Ledger form sections"
                 >
@@ -2720,7 +2717,7 @@ export default function AccountLedgerMasterPage() {
                       aria-controls={`${modalFormId}-${section.key}-panel`}
                       id={`${modalFormId}-${section.key}-tab`}
                       tabIndex={section.key === activeSectionKey ? 0 : -1}
-                      className={`${dynamicFormStyles.sectionTab} ${
+                      className={`${dynamicFormStyles.sectionTab} erp-ms-modal-tab ${
                         section.key === activeSectionKey
                           ? dynamicFormStyles.sectionTabActive
                           : ""
@@ -2762,9 +2759,9 @@ export default function AccountLedgerMasterPage() {
                         return (
                           <div
                             key={field.name}
-                            className={dynamicFormStyles.subheadingField}
+                            className={`${dynamicFormStyles.subheadingField} erp-ms-modal-band`}
                           >
-                            <span className={dynamicFormStyles.subheading}>
+                            <span className={`${dynamicFormStyles.subheading} erp-ms-modal-band-title`}>
                               {field.label}
                             </span>
                           </div>
@@ -2824,11 +2821,14 @@ export default function AccountLedgerMasterPage() {
                 ) : null}
               </form>
             </div>
-            <footer className={dynamicFormStyles.footer}>
-              <div className={dynamicFormStyles.footerActions}>
+            <footer className={`${dynamicFormStyles.footer} erp-ms-modal-footer`}>
+              <p className="erp-ms-modal-hint" aria-hidden="true">
+                <kbd>Ctrl+S</kbd>: Save <span>|</span> <kbd>Esc</kbd>: Cancel
+              </p>
+              <div className={`${dynamicFormStyles.footerActions} erp-ms-modal-footer-actions`}>
                 <button
                   type="button"
-                  className={dynamicFormStyles.cancelButton}
+                  className={`${dynamicFormStyles.cancelButton} erp-ms-modal-cancel`}
                   onClick={closeModal}
                   disabled={saveLoading}
                 >
@@ -2838,7 +2838,7 @@ export default function AccountLedgerMasterPage() {
                   <button
                     type="submit"
                     form={modalFormId}
-                    className={dynamicFormStyles.submitButton}
+                    className={`${dynamicFormStyles.submitButton} erp-ms-modal-save`}
                     disabled={saveLoading || detailsLoading}
                   >
                     {saveLoading

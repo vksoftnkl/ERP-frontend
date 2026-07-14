@@ -425,7 +425,7 @@ export default function SuppliersMasterPage() {
         modalTitle: "New State",
         modalDescription: "Create state from supplier form.",
         submitLabel: stateSaveLoading ? "Saving..." : "Save",
-        accent: "blue",
+        accent: "primary",
         fields: stateCreateModalFields,
       },
       {
@@ -456,7 +456,7 @@ export default function SuppliersMasterPage() {
         modalTitle: "New Supplier Group",
         modalDescription: "Create supplier group from supplier form.",
         submitLabel: supplierGroupSaveLoading ? "Saving..." : "Save",
-        accent: "blue",
+        accent: "primary",
         fields: supplierGroupModalFields,
       },
       {
@@ -826,6 +826,9 @@ export default function SuppliersMasterPage() {
         auditHistory={{ screenName: "Supplier Master" }}
         entityLabel="supplier"
         entityLabelPlural="suppliers"
+        // The modal appends its own "— New" / "— Edit" mode suffix.
+        createModalTitle="Supplier Master"
+        editModalTitle="Supplier Master"
         apiEndpoints={API_ENDPOINTS}
         buildListQuery={buildListQuery}
         toolbarContent={
@@ -854,7 +857,6 @@ export default function SuppliersMasterPage() {
         nameFieldPlaceholder="ABC Distributors"
         modalPanelStyle={CUSTOMER_MODAL_PANEL_STYLE}
         modalFormGridColumns={3}
-        modalStackLabels
         modalSectionNavigationMode="tabs"
         modalHideFieldHelperText
         modalHideFieldErrorText

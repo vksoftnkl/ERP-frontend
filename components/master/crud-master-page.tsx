@@ -34,17 +34,8 @@ import {
 } from "@/components/design-system/ui/dynamic-modal-form";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { MasterIcon } from "@/components/design-system/icons/master-icons";
-import {
-  FiClock,
-  FiDownload,
-  FiEdit2,
-  FiPlusCircle,
-  FiPrinter,
-  FiRefreshCw,
-  FiSearch,
-  FiTrash2,
-  FiUpload,
-} from "react-icons/fi";
+import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons";
+import { FiSearch } from "react-icons/fi";
 export type {
   CrudMasterApiEndpoints,
   CrudMasterAuditHistoryConfig,
@@ -2272,6 +2263,7 @@ export default function CrudMasterPage({
   customFields,
   createInitialValues,
   modalPanelStyle,
+  modalPanelClassName,
   modalFormGridColumns,
   modalFormDenseGrid,
   modalStackLabels,
@@ -3396,7 +3388,7 @@ export default function CrudMasterPage({
         modalTitle: createModalTitle ?? `New ${effectiveTitle}`,
         modalDescription: `Configure ${entityLabel} details.`,
         submitLabel: saveLoading ? "Saving..." : "Save",
-        accent: "blue",
+        accent: "primary",
         icon: modalIcon,
         fields,
       },
@@ -3742,116 +3734,137 @@ export default function CrudMasterPage({
     <>
       {gridSettingsContextMenu}
       {!hideListPage ? (
-        <main className={styles.page}>
-          <div className={styles.viewport}>
-            <div className={styles.board}>
+        <main className={`${styles.page} erp-master-shell`}>
+          <div className={`${styles.viewport} erp-ms-viewport`}>
+            <div className={`${styles.board} erp-ms-board`}>
               <section className={styles.content}>
                 {/* Page Header */}
-                <div className={styles.pageHeader}>
+                <div className={`${styles.pageHeader} erp-ms-pagehead`}>
                   <div className={styles.pageHeaderText}>
-                    <h1 className={styles.pageTitle}>{listHeading}</h1>
-                    <p className={styles.pageSubtitle}>
+                    <h1 className={`${styles.pageTitle} erp-ms-title`}>{listHeading}</h1>
+                    <p className={`${styles.pageSubtitle} erp-ms-sub`}>
                       {listSubtitleOverride ??
                         `Manage all ${entityLabelPlural} in your organization`}
                     </p>
                   </div>
-                 
+
                 </div>
 
                 {/* Icon Toolbar */}
-                <div className={styles.iconToolbar}>
+                <div className={`${styles.iconToolbar} erp-ms-toolbar`}>
                   <button
                     type="button"
-                    className={`${styles.iconBtn} ${styles.iconBtnAdd}`}
+                    className={`${styles.iconBtn} ${styles.iconBtnAdd} erp-ms-tbtn erp-ms-tbtn--primary`}
                     onClick={handleCreateAction}
                     disabled={saveLoading || detailsLoading}
                     title={createLabel ?? "Add"}
                   >
-                    <span className={styles.iconBtnBox}><FiPlusCircle aria-hidden="true" /></span>
+                    <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
+                      <ErpActionIcon name="add" />
+                    </span>
                     <span>Add</span>
                   </button>
                   <button
                     type="button"
-                    className={`${styles.iconBtn} ${styles.iconBtnEdit}`}
+                    className={`${styles.iconBtn} ${styles.iconBtnEdit} erp-ms-tbtn`}
                     onClick={handleToolbarEdit}
                     disabled={!selectedRow || saveLoading || detailsLoading}
                     title="Edit selected row"
                   >
-                    <span className={styles.iconBtnBox}><FiEdit2 aria-hidden="true" /></span>
+                    <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
+                      <ErpActionIcon name="edit" />
+                    </span>
                     <span>Edit</span>
                   </button>
                   <button
                     type="button"
-                    className={`${styles.iconBtn} ${styles.iconBtnDelete}`}
+                    className={`${styles.iconBtn} ${styles.iconBtnDelete} erp-ms-tbtn`}
                     onClick={handleToolbarDelete}
                     disabled={!selectedRow || deleteLoading || saveLoading || detailsLoading}
                     title="Delete selected row"
                   >
-                    <span className={styles.iconBtnBox}><FiTrash2 aria-hidden="true" /></span>
+                    <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
+                      <ErpActionIcon name="delete" />
+                    </span>
                     <span>Delete</span>
                   </button>
+                  <span className="erp-ms-tsep" aria-hidden="true" />
                   <button
                     type="button"
-                    className={`${styles.iconBtn} ${styles.iconBtnRefresh}`}
+                    className={`${styles.iconBtn} ${styles.iconBtnRefresh} erp-ms-tbtn`}
                     onClick={handleRefresh}
                     disabled={loading}
                     title="Refresh"
                   >
-                    <span className={styles.iconBtnBox}><FiRefreshCw aria-hidden="true" /></span>
+                    <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
+                      <ErpActionIcon name="refresh" />
+                    </span>
                     <span>Refresh</span>
                   </button>
+                  <span className="erp-ms-tsep" aria-hidden="true" />
                   <button
                     type="button"
-                    className={`${styles.iconBtn} ${styles.iconBtnImport}`}
+                    className={`${styles.iconBtn} ${styles.iconBtnImport} erp-ms-tbtn`}
                     title="Import"
                     disabled
                   >
-                    <span className={styles.iconBtnBox}><FiUpload aria-hidden="true" /></span>
+                    <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
+                      <ErpActionIcon name="import" />
+                    </span>
                     <span>Import</span>
                   </button>
                   <button
                     type="button"
-                    className={`${styles.iconBtn} ${styles.iconBtnExcel}`}
+                    className={`${styles.iconBtn} ${styles.iconBtnExcel} erp-ms-tbtn`}
                     onClick={handleDownloadRows}
                     disabled={renderedRows.length === 0}
                     title={`Export ${listHeading} as CSV`}
                   >
-                    <span className={styles.iconBtnBox}><FiDownload aria-hidden="true" /></span>
+                    <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
+                      <ErpActionIcon name="excel" />
+                    </span>
                     <span>Export Excel</span>
                   </button>
                   <button
                     type="button"
-                    className={`${styles.iconBtn} ${styles.iconBtnPrint}`}
+                    className={`${styles.iconBtn} ${styles.iconBtnPrint} erp-ms-tbtn`}
                     title="Print"
                     disabled
                   >
-                    <span className={styles.iconBtnBox}><FiPrinter aria-hidden="true" /></span>
+                    <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
+                      <ErpActionIcon name="print" />
+                    </span>
                     <span>Print</span>
                   </button>
                   {auditHistory ? (
-                    <button
-                      type="button"
-                      className={`${styles.iconBtn} ${styles.iconBtnHistory}`}
-                      onClick={handleToolbarLogs}
-                      disabled={!selectedRow}
-                      title="View history"
-                    >
-                      <span className={styles.iconBtnBox}><FiClock aria-hidden="true" /></span>
-                      <span>History</span>
-                    </button>
+                    <>
+                      <span className="erp-ms-tsep" aria-hidden="true" />
+                      <button
+                        type="button"
+                        className={`${styles.iconBtn} ${styles.iconBtnHistory} erp-ms-tbtn`}
+                        onClick={handleToolbarLogs}
+                        disabled={!selectedRow}
+                        title="View history"
+                      >
+                        <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
+                          <ErpActionIcon name="history" />
+                        </span>
+                        <span>History</span>
+                      </button>
+                    </>
                   ) : null}
                   {toolbarActions}
                 </div>
 
                 {/* Error boxes */}
                 {error ? (
-                  <div className={styles.errorBox}>
-                    <p className={styles.errorText}>
+                  <div className={`${styles.errorBox} erp-ms-error`}>
+                    <p className={`${styles.errorText} erp-ms-error-text`}>
                       Unable to load {entityLabel} data: {error}
                     </p>
                     <button
                       type="button"
-                      className={styles.retryButton}
+                      className={`${styles.retryButton} erp-ms-retry`}
                       onClick={() =>
                         void loadRecords(searchTerm, currentPage, pageSize)
                       }
@@ -3861,15 +3874,15 @@ export default function CrudMasterPage({
                   </div>
                 ) : null}
                 {deleteError ? (
-                  <div className={styles.errorBox}>
-                    <p className={styles.errorText}>
+                  <div className={`${styles.errorBox} erp-ms-error`}>
+                    <p className={`${styles.errorText} erp-ms-error-text`}>
                       Unable to delete selected {entityLabel}: {deleteError}
                     </p>
                   </div>
                 ) : null}
                 {detailsError ? (
-                  <div className={styles.errorBox}>
-                    <p className={styles.errorText}>
+                  <div className={`${styles.errorBox} erp-ms-error`}>
+                    <p className={`${styles.errorText} erp-ms-error-text`}>
                       Unable to load selected {entityLabel} details: {detailsError}
                     </p>
                   </div>
@@ -3879,15 +3892,15 @@ export default function CrudMasterPage({
                   : normalizedGridTableNames.length > 0
                     ? gridColumnsError
                     : null) ? (
-                  <div className={styles.errorBox}>
-                    <p className={styles.errorText}>
+                  <div className={`${styles.errorBox} erp-ms-error`}>
+                    <p className={`${styles.errorText} erp-ms-error-text`}>
                       Unable to load table headers:{" "}
                       {shouldUseUiTableColumns ? uiTableColumnsError : gridColumnsError}
                       {useConfiguredGridColumnsOnly ? "." : " Showing default headers."}
                     </p>
                     <button
                       type="button"
-                      className={styles.retryButton}
+                      className={`${styles.retryButton} erp-ms-retry`}
                       onClick={() => {
                         if (shouldUseUiTableColumns) {
                           void loadUiTableColumns();
@@ -3912,27 +3925,27 @@ export default function CrudMasterPage({
                 ) : null}
 
                 {/* Filter Card */}
-                  <div className={styles.filterCard}>
+                  <div className={`${styles.filterCard} erp-ms-filters`}>
                     {(() => {
                       const activeCount = (searchTerm.trim() ? 1 : 0) + (showOnlyInactive ? 1 : 0);
                       return activeCount > 0 ? (
-                        <span className={styles.filterBadge}>{activeCount}</span>
+                        <span className={`${styles.filterBadge} erp-ms-filter-badge`}>{activeCount}</span>
                       ) : null;
                     })()}
-                    <div className={styles.filterRow}>
+                    <div className={`${styles.filterRow} erp-ms-filter-row`}>
                       <div className={styles.filterGroup}>
-                        <label className={styles.filterLabel} htmlFor="master-search-input">
+                        <label className={`${styles.filterLabel} erp-ms-filter-label`} htmlFor="master-search-input">
                           Search
                         </label>
                         <div className={styles.filterSearchWrap}>
-                          <span className={styles.masterSearchIconButton} aria-hidden="true">
-                            <FiSearch className={styles.masterSearchIcon} />
+                          <span className={`${styles.masterSearchIconButton} erp-ms-search-icon`} aria-hidden="true">
+                            <ErpActionIcon name="search" size={13} />
                           </span>
                           <input
                             ref={searchInputRef}
                             id="master-search-input"
                             type="text"
-                            className={styles.masterSearchInput}
+                            className={`${styles.masterSearchInput} erp-ms-search-input`}
                             value={searchTerm}
                             onChange={(event) => handleSearchChange(event.target.value)}
                             placeholder={`Search by ${entityLabel} name...`}
@@ -3952,8 +3965,8 @@ export default function CrudMasterPage({
                   columns={renderedColumns}
                   rows={renderedRows}
                   rowKey="__rowId"
-                  wrapperClassName={styles.masterTable}
-                  tableClassName={styles.masterDataTable}
+                  wrapperClassName={`${styles.masterTable} erp-ms-gridwrap`}
+                  tableClassName={`${styles.masterDataTable} erp-ms-grid`}
                   tableLayout="fixed"
                   minWidth="980px"
                   reorderableColumns
@@ -3999,8 +4012,8 @@ export default function CrudMasterPage({
         <div
           className={dynamicModalStyles.overlay}
           style={{
-            "--erp-modal-accent": "#0f74c9",
-            "--erp-modal-accent-soft-ring": "rgba(15, 116, 201, 0.2)",
+            "--erp-modal-accent": "var(--primary, #7b1515)",
+            "--erp-modal-accent-soft-ring": "rgba(123, 21, 21, 0.2)",
             "--erp-modal-overlay-z-index": 330,
           } as CSSProperties}
         >
@@ -4119,6 +4132,7 @@ export default function CrudMasterPage({
         hideSectionHeader
         submitError={saveError}
         panelStyle={modalPanelStyle}
+        panelClassName={modalPanelClassName}
         formGridColumns={modalFormGridColumns}
         denseGrid={modalFormDenseGrid}
         stackLabels={modalStackLabels}

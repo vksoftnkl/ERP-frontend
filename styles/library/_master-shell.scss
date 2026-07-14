@@ -1,0 +1,1401 @@
+/* ── Master shell — dense, utilitarian "Simple ERP" skin ──────────────────
+   Globally available (loaded via styles/library/index.scss), so any master
+   page can opt in by adding `erp-master-shell` to its root element and the
+   `erp-ms-*` classes to its parts. No component owns these; they sit next to
+   whatever CSS module a page already passes as its `styles` prop.
+
+   Everything is written as a descendant of `.erp-master-shell` so it outranks
+   the single-class CSS-module rules it layers over. `!important` appears only
+   where the page modules already use it (the table interior).
+──────────────────────────────────────────────────────────────────────────── */
+
+/* On :root, not on .erp-master-shell — the entry modal renders in a portal
+   outside the page shell, so it cannot inherit tokens scoped to it. */
+:root {
+  --erp-ms-accent: #7e1717;
+  --erp-ms-accent-dark: #651212;
+  --erp-ms-ink: #222;
+  --erp-ms-ink-soft: #555;
+  --erp-ms-ink-faint: #888;
+  --erp-ms-line: #c9c9c9;
+  --erp-ms-line-soft: #e3e3e3;
+  --erp-ms-bg: #f2f2f2;
+  --erp-ms-paper: #fff;
+  --erp-ms-head: #ededed;
+  --erp-ms-selected: #f7ecec;
+  --erp-ms-hover: #f6f6f6;
+  --erp-ms-font: "Segoe UI", system-ui, Arial, sans-serif;
+  --erp-ms-mono: Consolas, "SFMono-Regular", monospace;
+}
+
+.erp-master-shell {
+  font-family: var(--erp-ms-font);
+  font-size: 13px;
+  color: var(--erp-ms-ink);
+  background: var(--erp-ms-paper);
+}
+
+/* 1rem of breathing room between the window and the page content. */
+.erp-master-shell .erp-ms-viewport {
+  padding: 1rem;
+}
+
+/* The skin is flat: no border, no rounding, no floating board. */
+.erp-master-shell .erp-ms-board {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--erp-ms-paper);
+}
+
+/* ── Page header ─────────────────────────────────────────────────────────── */
+.erp-master-shell .erp-ms-pagehead {
+  flex: none;
+  min-height: 0;
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--erp-ms-line-soft);
+}
+
+.erp-master-shell .erp-ms-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--erp-ms-ink);
+}
+
+.erp-master-shell .erp-ms-sub {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--erp-ms-ink-faint);
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+.erp-master-shell .erp-ms-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  margin: 0;
+  padding: 6px 12px;
+  background: var(--erp-ms-bg);
+  border-bottom: 1px solid var(--erp-ms-line);
+}
+
+.erp-master-shell .erp-ms-tbtn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  /* The designer pages' `.desktopButton` is a bevelled 3D control: a gradient
+     fill plus inset box-shadow highlights. The fill is overridden below, but the
+     bevel survives a `background`/`border` reset and still reads as a raised
+     box — so it has to be cleared explicitly, along with the 34px min-height. */
+  min-height: 0;
+  box-shadow: none;
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  /* `!important` to match globals.css, which forces `--erp-radius` (4px) onto
+     every `button` with `!important`. The dense skin wants a 2px corner. */
+  border-radius: 2px !important;
+  background: none;
+  color: var(--erp-ms-ink-soft);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 400;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 1;
+
+  &:hover:not(:disabled) {
+    background: #e7e7e7;
+    border-color: var(--erp-ms-line);
+    opacity: 1;
+  }
+
+  &:disabled {
+    color: #bbb;
+    background: none;
+    border-color: transparent;
+    opacity: 1;
+    cursor: default;
+  }
+
+  /* Keyboard hint, for pages that expose a shortcut. */
+  kbd {
+    font-family: var(--erp-ms-mono);
+    font-size: 10px;
+    color: inherit;
+    opacity: 0.65;
+  }
+}
+
+/* The icon loses its boxed, colour-coded chip — it is just a stroke glyph.
+   Deliberately four classes deep: the page modules paint the chip with
+   `.iconBtnAdd .iconBtnBox` (pale green/blue/red fill + border), which *ties*
+   a two-class rule on specificity. A tie is settled by stylesheet order, and
+   Next emits the route CSS chunk before or after this sheet depending on the
+   page — so a two-class rule drops the chip on some masters and not others. */
+.erp-master-shell .erp-ms-toolbar .erp-ms-tbtn .erp-ms-tbtn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+
+  svg {
+    width: 14px;
+    height: 14px;
+    color: inherit;
+  }
+}
+
+.erp-master-shell .erp-ms-tbtn--primary {
+  background: var(--erp-ms-accent);
+  border-color: var(--erp-ms-accent-dark);
+  color: #fff;
+  font-weight: 600;
+
+  &:hover:not(:disabled) {
+    background: var(--erp-ms-accent-dark);
+    border-color: var(--erp-ms-accent-dark);
+  }
+
+  &:disabled {
+    background: #c8a5a5;
+    border-color: #c8a5a5;
+    color: #f2e6e6;
+  }
+}
+
+.erp-master-shell .erp-ms-tsep {
+  width: 1px;
+  height: 20px;
+  margin: 0 6px;
+  background: var(--erp-ms-line);
+  flex: none;
+}
+
+/* ── Filter strip ────────────────────────────────────────────────────────── */
+.erp-master-shell .erp-ms-filters {
+  flex: none;
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--erp-ms-paper);
+  border: 0;
+  border-bottom: 1px solid var(--erp-ms-line-soft);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.erp-master-shell .erp-ms-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.erp-master-shell .erp-ms-filter-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--erp-ms-ink-soft);
+}
+
+.erp-master-shell .erp-ms-search-input {
+  /* `flex: none` — the wrapper is a flex row, so without it the 260px base
+     gets shrunk by the surrounding filter layout. */
+  flex: none;
+  width: 260px;
+  height: auto;
+  /* 26px left inset clears the magnifier pinned at 7px + 14px wide. */
+  padding: 4px 8px 4px 26px;
+  border: 1px solid var(--erp-ms-line);
+  /* `!important` — globals.css forces `--erp-radius` onto every `input`. */
+  border-radius: 2px !important;
+  background: var(--erp-ms-paper);
+  color: var(--erp-ms-ink);
+  font: inherit;
+  font-size: 13px;
+  box-shadow: none;
+
+  &::placeholder {
+    color: var(--erp-ms-ink-faint);
+  }
+
+  /* Border only — an outline on top of it would double the apparent thickness. */
+  &:focus {
+    outline: none;
+    border-color: var(--erp-ms-accent);
+    box-shadow: none;
+  }
+}
+
+/* Pinned explicitly, not left to the page module: the modules size this as a
+   36px-wide button-style hit area, which overruns the input's 26px text inset
+   and sits on top of the placeholder. Three classes so it wins over any of
+   them regardless of stylesheet order. */
+.erp-master-shell .erp-ms-filters .erp-ms-search-icon {
+  left: 7px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--erp-ms-ink-faint);
+  pointer-events: none;
+
+  svg {
+    width: 13px;
+    height: 13px;
+  }
+}
+
+.erp-master-shell .erp-ms-count {
+  font-size: 12px;
+  color: var(--erp-ms-ink-faint);
+}
+
+.erp-master-shell .erp-ms-filter-badge {
+  border-radius: 0 0 0 2px;
+  background: var(--erp-ms-accent);
+}
+
+/* ── Error strip ─────────────────────────────────────────────────────────── */
+.erp-master-shell .erp-ms-error {
+  margin: 0;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 1px solid #e8c5c2;
+  border-radius: 0;
+  background: #fbedec;
+  color: #b00;
+  font-size: 12.5px;
+}
+
+.erp-master-shell .erp-ms-retry {
+  border: 1px solid var(--erp-ms-accent-dark);
+  border-radius: 2px;
+  background: var(--erp-ms-accent);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+
+  &:hover:not(:disabled) {
+    background: var(--erp-ms-accent-dark);
+  }
+}
+
+/* ── Grid ────────────────────────────────────────────────────────────────── */
+.erp-master-shell .erp-ms-gridwrap {
+  /* ReusableTable paints itself from these custom properties, which it declares
+     on this same element — so restating them here (one class heavier) re-skins
+     the parts we don't select directly, e.g. the pinned serial column's hover
+     and selected states. */
+  --table-border: var(--erp-ms-line-soft);
+  --table-border-soft: var(--erp-ms-line-soft);
+  --table-surface: var(--erp-ms-paper);
+  --table-surface-muted: var(--erp-ms-head);
+  --table-surface-accent: var(--erp-ms-paper);
+  --table-text: var(--erp-ms-ink);
+  --table-text-muted: var(--erp-ms-ink-soft);
+  --table-hover: var(--erp-ms-hover);
+  --table-active: var(--erp-ms-selected);
+  --table-primary: var(--erp-ms-accent);
+  --table-primary-hover: var(--erp-ms-accent-dark);
+
+  /* The page modules inset the table by 1rem on every side. Only the top gap is
+     wanted — the grid runs flush to the page's own 1rem gutter otherwise. */
+  margin: 1rem 0 0;
+  padding: 0 !important;
+
+  [data-erp-table-viewport="true"] {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  [data-erp-table-pagination="true"] {
+    margin: 0;
+    padding: 6px 12px;
+    background: var(--erp-ms-bg);
+    border-top: 1px solid var(--erp-ms-line);
+    color: var(--erp-ms-ink-soft);
+    font-size: 12px;
+  }
+
+  [class*="pageSizeSelect"],
+  [class*="paginationButton"] {
+    height: 24px !important;
+    min-height: 24px !important;
+    min-width: 26px !important;
+    border: 1px solid var(--erp-ms-line) !important;
+    border-radius: 2px !important;
+    background: var(--erp-ms-paper) !important;
+    color: var(--erp-ms-ink-soft) !important;
+    font-size: 12px !important;
+    font-weight: 400 !important;
+  }
+
+  [class*="paginationButton"] {
+    &:hover:not(:disabled) {
+      background: var(--erp-ms-bg) !important;
+      border-color: var(--erp-ms-line) !important;
+      color: var(--erp-ms-ink-soft) !important;
+    }
+
+    &:disabled {
+      color: #ccc !important;
+    }
+
+    &[class*="paginationButtonActive"] {
+      background: var(--erp-ms-accent) !important;
+      border-color: var(--erp-ms-accent-dark) !important;
+      color: #fff !important;
+      font-weight: 600 !important;
+    }
+  }
+}
+
+/* No `width` here: ReusableTable sets the table width inline when
+   `resizableColumns` is on, and that inline value drives column resizing. */
+.erp-master-shell .erp-ms-grid {
+  font-size: 12.5px;
+
+  th {
+    height: auto !important;
+    padding: 5px 8px !important;
+    background: var(--erp-ms-head) !important;
+    color: var(--erp-ms-ink-soft) !important;
+    border: 1px solid var(--erp-ms-line-soft) !important;
+    border-top: 0 !important;
+    border-radius: 0 !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    text-align: left !important;
+
+    &:hover {
+      background: #e4e4e4 !important;
+    }
+  }
+
+  tbody td {
+    height: auto !important;
+    padding: 4px 8px !important;
+    border: 1px solid var(--erp-ms-line-soft) !important;
+    color: var(--erp-ms-ink) !important;
+    font-size: 12.5px !important;
+  }
+
+  tbody tr {
+    background: var(--erp-ms-paper) !important;
+
+    &:nth-child(even) {
+      background: var(--erp-ms-paper) !important;
+    }
+
+    &:hover {
+      background: var(--erp-ms-hover) !important;
+    }
+
+    &[class*="activeRow"] {
+      background: var(--erp-ms-selected) !important;
+
+      td {
+        border-color: #e0c7c7 !important;
+      }
+    }
+  }
+}
+
+/* The pinned S.No header hardcodes a blue in the table module; it is the one
+   colour there that isn't driven by a custom property. */
+.erp-master-shell .erp-ms-gridwrap .erp-ms-grid th[class*="serialNumberCell"] {
+  background: var(--erp-ms-head) !important;
+}
+
+/* ── Entry modal ─────────────────────────────────────────────────────────────
+   Skins ERPDynamicModalForm wherever it is used, not just on master pages.
+
+   Most of the dense sizing goes through the modal's own token API
+   (--erp-modal-*), which is the supported way to retheme it — no specificity
+   fight, no !important. Only the parts it does not tokenise (the accent title
+   bar, label typography, row rhythm, footer) need real rules, and those are
+   nested under `.erp-ms-modal` so they sit two classes deep and beat the
+   component's single-class module rules outright.
+──────────────────────────────────────────────────────────────────────────── */
+
+.erp-ms-modal-overlay .erp-ms-modal {
+  /* The component's own theming tokens. */
+  --erp-modal-accent: var(--erp-ms-accent);
+  --erp-modal-accent-soft-ring: rgba(126, 23, 23, 0.2);
+  --erp-modal-surface: var(--erp-ms-paper);
+  --erp-modal-panel-radius: 0;
+  --erp-modal-label-width: 130px;
+  --erp-modal-control-height: 1.7rem;
+  --erp-modal-control-padding-y: 0.25rem;
+  --erp-modal-control-padding-x: 0.45rem;
+  /* globals.css forces `border-radius: var(--erp-radius) !important` onto every
+     button/input/select/textarea. Re-pointing the token here re-corners the
+     whole modal at once, instead of !important-ing each control back down. */
+  --erp-radius: 2px;
+
+  width: min(460px, 94vw);
+  border: 1px solid #999;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  font-family: var(--erp-ms-font);
+  font-size: 13px;
+  color: var(--erp-ms-ink);
+  overflow: hidden;
+}
+
+/* ── Header: solid accent title bar ──────────────────────────────────────── */
+.erp-ms-modal .erp-ms-modal-header {
+  padding: 7px 12px;
+  border-bottom: 0;
+  background: var(--erp-ms-accent);
+}
+
+/* The dense header is a single line of text — no icon, no description. */
+.erp-ms-modal .erp-ms-modal-icon,
+.erp-ms-modal .erp-ms-modal-subtitle {
+  display: none;
+}
+
+.erp-ms-modal .erp-ms-modal-title {
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* The "— New" / "— Edit" mode suffix. */
+.erp-ms-modal .erp-ms-modal-mode {
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 400;
+}
+
+.erp-ms-modal .erp-ms-modal-close {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  background: none;
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+  }
+}
+
+/* ── Body: label column + control column, on the mock's compact rows ─────── */
+.erp-ms-modal .erp-ms-modal-body {
+  padding: 14px 16px;
+  background: var(--erp-ms-paper);
+}
+
+/* The module's 0.92rem row gap is what makes the stock form airy. The inner
+   `.sectionFields` grid inherits the gap, so both need retuning. */
+.erp-ms-modal .erp-ms-modal-body > form,
+.erp-ms-modal .erp-ms-modal-body div[class*="sectionFields"] {
+  row-gap: 9px;
+  padding: 0;
+}
+
+.erp-ms-modal .erp-ms-modal-field {
+  column-gap: 12px;
+  row-gap: 3px;
+  align-items: center;
+  margin: 0;
+}
+
+/* Custom-rendered fields (the inline tables, the section bands) are plain
+   divs, not one of the module's `.control`/`.searchSelect` classes — so with a
+   two-column field grid they auto-place into the *label* column and collapse to
+   its width. They own the whole row instead. */
+.erp-ms-modal .erp-ms-modal-field[data-erp-modal-field-type="custom"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.erp-ms-modal .erp-ms-modal-field[data-erp-modal-field-type="custom"] > * {
+  grid-column: 1 / -1;
+}
+
+.erp-ms-modal .erp-ms-modal-label {
+  /* The module pads the label down to meet a ~40px control; at 1.7rem it just
+     centres. */
+  padding-top: 0;
+  color: var(--erp-ms-ink-soft);
+  font-size: 12.5px;
+  font-weight: 400;
+  text-align: right;
+  line-height: 1.25;
+}
+
+.erp-ms-modal .erp-ms-modal-control {
+  border: 1px solid var(--erp-ms-line);
+  color: var(--erp-ms-ink);
+  font-family: inherit;
+  font-size: 13px;
+  box-shadow: none;
+
+  &::placeholder {
+    color: #b9b9b9;
+  }
+
+  /* Border only — the extra ring doubled the apparent thickness. */
+  &:focus,
+  &:focus-visible {
+    outline: none;
+    border-color: var(--erp-ms-accent);
+    box-shadow: none;
+  }
+}
+
+/* Textareas are the one control that must keep growing. */
+.erp-ms-modal textarea.erp-ms-modal-control {
+  height: auto;
+  min-height: 56px;
+  padding: 5px 7px;
+  line-height: 1.4;
+}
+
+.erp-ms-modal .erp-ms-modal-help {
+  margin: 2px 0 0;
+  color: var(--erp-ms-ink-faint);
+  font-size: 11.5px;
+}
+
+.erp-ms-modal .erp-ms-modal-error {
+  margin: 2px 0 0;
+  color: #b00;
+  font-size: 11.5px;
+}
+
+/* Sit the checkbox in the control column rather than spanning under the label. */
+.erp-ms-modal div[class*="checkboxField"] > label[class*="checkboxWrapper"] {
+  grid-column: 2 / -1;
+  min-height: 0;
+}
+
+.erp-ms-modal .erp-ms-modal-check {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--erp-ms-accent);
+}
+
+.erp-ms-modal .erp-ms-modal-check-label {
+  color: var(--erp-ms-ink);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+/* ── Footer: shortcut hint left, text-only actions right ─────────────────── */
+.erp-ms-modal .erp-ms-modal-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--erp-ms-line);
+  background: var(--erp-ms-bg);
+}
+
+.erp-ms-modal .erp-ms-modal-hint {
+  margin: 0;
+  color: var(--erp-ms-ink-faint);
+  font-size: 11.5px;
+  white-space: nowrap;
+
+  kbd {
+    font-family: var(--erp-ms-mono);
+    font-size: 11px;
+    color: inherit;
+  }
+
+  span {
+    margin: 0 2px;
+    color: var(--erp-ms-line);
+  }
+}
+
+.erp-ms-modal .erp-ms-modal-footer-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.erp-ms-modal .erp-ms-modal-cancel,
+.erp-ms-modal .erp-ms-modal-save {
+  min-width: 0;
+  min-height: 30px;
+  padding: 6px 18px;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  justify-content: center;
+
+  /* The mock's buttons are text-only. */
+  svg {
+    display: none;
+  }
+
+  &:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
+.erp-ms-modal .erp-ms-modal-cancel {
+  border-color: var(--erp-ms-line);
+  background: var(--erp-ms-paper);
+  color: var(--erp-ms-ink-soft);
+
+  &:hover:not(:disabled) {
+    background: var(--erp-ms-bg);
+  }
+}
+
+.erp-ms-modal .erp-ms-modal-save {
+  border-color: var(--erp-ms-accent-dark);
+  background: var(--erp-ms-accent);
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background: var(--erp-ms-accent-dark);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+
+/* The real focus lives on the input *inside* the trigger, and the module flags
+   the open state with a class — so a plain `:focus` rule misses both, and with
+   the module's ring suppressed the trigger would sit grey while its dropdown is
+   open. Same single 1px accent border as every other control, no halo. */
+.erp-ms-modal .erp-ms-modal-trigger:focus-within,
+.erp-ms-modal .erp-ms-modal-trigger[class*="TriggerOpen"] {
+  outline: none;
+  border-color: var(--erp-ms-accent);
+  box-shadow: none;
+}
+
+/* Search-select trigger: the outer control is sized by the token API, but its
+   inner input and chevron keep the component's own larger, bluer type. */
+.erp-ms-modal .erp-ms-modal-select-input {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--erp-ms-ink);
+  font-family: inherit;
+  font-size: 13px;
+
+  &::placeholder {
+    color: #b9b9b9;
+  }
+}
+
+.erp-ms-modal .erp-ms-modal-chevron {
+  width: 13px;
+  height: 13px;
+  color: var(--erp-ms-ink-faint);
+}
+
+/* ── Confirm dialog ──────────────────────────────────────────────────────────
+   Skins DeleteConfirmModal (delete / replace / leave-page confirmations).
+   Same shape as the entry modal — accent title bar, dense body, flat footer —
+   but tinted by tone: destructive actions get the danger red, everything else
+   the house accent. Nested under `.erp-ms-confirm` so the rules sit two
+   classes deep and beat the component's single-class module rules.
+──────────────────────────────────────────────────────────────────────────── */
+
+.erp-ms-confirm-overlay .erp-ms-confirm {
+  /* Same red as the accent: the destructive confirm reads as one family with
+     the entry modal rather than switching to a separate alarm red. */
+  --erp-ms-danger: #7e1717;
+  --erp-ms-danger-dark: #651212;
+  /* Re-corners the buttons: globals.css forces `--erp-radius` on them. */
+  --erp-radius: 2px;
+
+  display: block;
+  width: min(430px, 94vw);
+  padding: 0;
+  border: 1px solid #999;
+  border-radius: 2px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  background: var(--erp-ms-paper);
+  font-family: var(--erp-ms-font);
+  font-size: 13px;
+  color: var(--erp-ms-ink);
+  overflow: hidden;
+  text-align: left;
+}
+
+.erp-ms-confirm.erp-ms-confirm--danger {
+  --erp-ms-tone: var(--erp-ms-danger);
+  --erp-ms-tone-dark: var(--erp-ms-danger-dark);
+  --erp-ms-tone-tint: #fbedec;
+  --erp-ms-tone-edge: #e8c5c2;
+}
+
+.erp-ms-confirm.erp-ms-confirm--info {
+  --erp-ms-tone: var(--erp-ms-accent);
+  --erp-ms-tone-dark: var(--erp-ms-accent-dark);
+  --erp-ms-tone-tint: var(--erp-ms-selected);
+  --erp-ms-tone-edge: #e0c7c7;
+}
+
+/* ── Title bar ───────────────────────────────────────────────────────────── */
+.erp-ms-confirm .erp-ms-confirm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: var(--erp-ms-tone);
+  color: #fff;
+}
+
+.erp-ms-confirm .erp-ms-confirm-head-title {
+  margin: 0;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.erp-ms-confirm .erp-ms-confirm-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+/* ── Body ────────────────────────────────────────────────────────────────── */
+.erp-ms-confirm .erp-ms-confirm-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+}
+
+/* The stock modal centres one large glyph above the text; here it becomes a
+   small tinted chip beside it. */
+.erp-ms-confirm .erp-ms-confirm-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  border: 1px solid var(--erp-ms-tone-edge);
+  border-radius: 2px;
+  background: var(--erp-ms-tone-tint);
+  color: var(--erp-ms-tone);
+
+  svg {
+    width: 18px;
+    height: 18px;
+    color: inherit;
+  }
+}
+
+.erp-ms-confirm .erp-ms-confirm-msg {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  text-align: left;
+  line-height: 1.45;
+}
+
+.erp-ms-confirm .erp-ms-confirm-q {
+  margin: 0 0 3px;
+  color: var(--erp-ms-ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.erp-ms-confirm .erp-ms-confirm-record {
+  margin: 0;
+  color: var(--erp-ms-ink2, var(--erp-ms-ink-soft));
+  font-size: 13px;
+}
+
+.erp-ms-confirm .erp-ms-confirm-entity {
+  padding: 1px 5px;
+  border: 1px solid var(--erp-ms-line-soft);
+  border-radius: 2px;
+  background: var(--erp-ms-bg);
+  font-family: var(--erp-ms-mono);
+  font-size: 12.5px;
+}
+
+.erp-ms-confirm .erp-ms-confirm-note {
+  margin: 6px 0 0;
+  color: var(--erp-ms-ink-faint);
+  font-size: 12px;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.erp-ms-confirm .erp-ms-confirm-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--erp-ms-line);
+  background: var(--erp-ms-bg);
+}
+
+.erp-ms-confirm .erp-ms-confirm-hint {
+  color: var(--erp-ms-ink-faint);
+  font-size: 11.5px;
+  white-space: nowrap;
+
+  kbd {
+    font-family: var(--erp-ms-mono);
+    font-size: 11px;
+    color: inherit;
+  }
+
+  span {
+    margin: 0 2px;
+    color: var(--erp-ms-line);
+  }
+}
+
+.erp-ms-confirm .erp-ms-confirm-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.erp-ms-confirm .erp-ms-confirm-cancel,
+.erp-ms-confirm .erp-ms-confirm-ok {
+  min-width: 0;
+  min-height: 30px;
+  padding: 6px 18px;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: normal;
+
+  &:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
+.erp-ms-confirm .erp-ms-confirm-cancel {
+  border: 1px solid var(--erp-ms-line);
+  background: var(--erp-ms-paper);
+  color: var(--erp-ms-ink-soft);
+  font-weight: 400;
+
+  &:hover:not(:disabled) {
+    background: var(--erp-ms-bg);
+  }
+}
+
+.erp-ms-confirm .erp-ms-confirm-ok {
+  border: 1px solid var(--erp-ms-tone-dark);
+  background: var(--erp-ms-tone);
+  color: #fff;
+  font-weight: 600;
+
+  &:hover:not(:disabled) {
+    background: var(--erp-ms-tone-dark);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+
+/* ── Entry modal · tabbed forms ──────────────────────────────────────────────
+   The wide, multi-section master forms (item master and friends). Same dense
+   language as the single-section modal, plus a tab strip, banded section
+   headings and compact inline tables.
+──────────────────────────────────────────────────────────────────────────── */
+
+.erp-ms-modal .erp-ms-modal-tabs {
+  gap: 0;
+  /* Breathing room before the first field row; the module butts them together. */
+  margin-bottom: 14px;
+  padding: 0;
+  border-bottom: 1px solid var(--erp-ms-line);
+  background: var(--erp-ms-bg);
+}
+
+.erp-ms-modal .erp-ms-modal-tab {
+  gap: 6px;
+  padding: 7px 16px;
+  border: 0;
+  border-right: 1px solid var(--erp-ms-line-soft);
+  border-radius: 0;
+  background: none;
+  color: var(--erp-ms-ink-soft);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 400;
+
+  &:hover {
+    background: #e7e7e7;
+    color: var(--erp-ms-ink-soft);
+  }
+
+  /* The module draws the active underline with a ::after bar; keep using it. */
+  &::after {
+    height: 2px;
+    border-radius: 0;
+  }
+}
+
+.erp-ms-modal .erp-ms-modal-tab[class*="sectionTabActive"] {
+  background: var(--erp-ms-paper);
+  color: var(--erp-ms-accent);
+  font-weight: 600;
+
+  &::after {
+    background: var(--erp-ms-accent);
+  }
+}
+
+/* ── Section heading → a full-width banded title bar ─────────────────────── */
+.erp-ms-modal .erp-ms-modal-band {
+  margin: 10px 0 0;
+  padding: 5px 10px;
+  border: 1px solid var(--erp-ms-line-soft);
+  background: var(--erp-ms-head);
+
+  /* The module trails each heading with a hairline rule; the band replaces it. */
+  &::after {
+    display: none;
+  }
+}
+
+.erp-ms-modal .erp-ms-modal-body div[class*="sectionFields"] > .erp-ms-modal-band:first-child {
+  margin-top: 0;
+}
+
+.erp-ms-modal .erp-ms-modal-band-title {
+  color: var(--erp-ms-ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Inline tables (unit conversion, EAN, reorder, price list) ───────────── */
+.erp-ms-modal .erp-ms-modal-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.erp-ms-modal .erp-ms-modal-body table thead th {
+  height: auto;
+  padding: 3px 6px;
+  border: 1px solid var(--erp-ms-line-soft);
+  background: var(--erp-ms-head);
+  color: var(--erp-ms-ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.erp-ms-modal .erp-ms-modal-body table td {
+  height: auto;
+  padding: 3px 6px;
+  border: 1px solid var(--erp-ms-line-soft);
+  color: var(--erp-ms-ink);
+  font-size: 12.5px;
+}
+
+/* Cell editors read as part of the grid until focused. */
+.erp-ms-modal .erp-ms-modal-body table :is(input, select, button[class*="Trigger"]) {
+  min-height: 0;
+  height: 24px;
+  padding: 3px 5px;
+  border: 1px solid transparent;
+  background: none;
+  font-size: 12.5px;
+
+  &:focus,
+  &:focus-visible {
+    border-color: var(--erp-ms-accent);
+    outline: 0;
+    box-shadow: none;
+  }
+}
+
+.erp-ms-modal .erp-ms-modal-body table :is(input[type="checkbox"]) {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--erp-ms-accent);
+}
+
+/* Row remove: a red glyph-weight action, not a filled button. */
+.erp-ms-modal .erp-ms-modal-body table button[class*="removeButton"] {
+  min-height: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: #b00;
+  font-size: 12px;
+
+  &:hover:not(:disabled) {
+    background: none;
+    color: var(--erp-ms-accent-dark);
+    text-decoration: underline;
+  }
+}
+
+/* The editor's own chrome: add-row control and the "N rows" counter. */
+.erp-ms-modal .erp-ms-modal-body [class*="editor"] > [class*="toolbar"] {
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.erp-ms-modal .erp-ms-modal-body [class*="summary"] {
+  color: var(--erp-ms-ink-faint);
+  font-size: 12px;
+}
+
+/* ── Designer pages ──────────────────────────────────────────────────────────
+   Configurator screens (dropdown designer, grid designer): a toolbar, a row of
+   bordered "group" panels with banded uppercase titles, dense label-left field
+   rows, and an inline column grid. Reuses the shell's toolbar/grid classes —
+   only the panel + field vocabulary is new.
+──────────────────────────────────────────────────────────────────────────── */
+
+.erp-master-shell.erp-ms-designer {
+  height: 100%;
+  background: var(--erp-ms-bg);
+  overflow: auto;
+}
+
+.erp-ms-designer .erp-ms-designer-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  min-height: 0;
+}
+
+.erp-ms-designer .erp-ms-designer-top {
+  display: grid;
+  grid-template-columns: 340px 1fr 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+/* Toolbar status pill → a plain right-aligned caption. */
+.erp-ms-designer .erp-ms-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--erp-ms-ink-faint);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* ── Group panel ─────────────────────────────────────────────────────────── */
+/* Padding lives on the panel and the title bleaks back out over it, so the
+   banded header is full-bleed without needing a wrapper element. */
+.erp-ms-designer .erp-ms-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--erp-ms-line-soft);
+  border-radius: 0;
+  background: var(--erp-ms-paper);
+  box-shadow: none;
+}
+
+.erp-ms-designer .erp-ms-panel-title {
+  display: flex;
+  align-items: center;
+  margin: -10px -12px 10px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--erp-ms-line-soft);
+  background: var(--erp-ms-head);
+  color: var(--erp-ms-ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.erp-ms-designer .erp-ms-panel-meta {
+  margin-left: auto;
+  color: var(--erp-ms-ink-faint);
+  font-size: 11.5px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── Fields: label left, control right ───────────────────────────────────── */
+.erp-ms-designer .erp-ms-frow {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 8px 12px;
+  align-items: center;
+  margin: 0 0 8px;
+}
+
+.erp-ms-designer .erp-ms-flabel {
+  color: var(--erp-ms-ink-soft);
+  font-size: 12.5px;
+  font-weight: 400;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.erp-ms-designer .erp-ms-fblock {
+  display: block;
+  margin: 0 0 8px;
+
+  .erp-ms-flabel {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 600;
+    text-align: left;
+  }
+}
+
+.erp-ms-designer .erp-ms-fctl {
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  padding: 4px 7px;
+  border: 1px solid var(--erp-ms-line);
+  border-radius: 2px !important;
+  background: var(--erp-ms-paper);
+  color: var(--erp-ms-ink);
+  font-family: inherit;
+  font-size: 13px;
+  box-shadow: none;
+
+  /* Border only — no outline on top of it. */
+  &:focus,
+  &:focus-visible {
+    outline: none;
+    border-color: var(--erp-ms-accent);
+    box-shadow: none;
+  }
+}
+
+.erp-ms-designer .erp-ms-ftext {
+  min-height: 58px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.erp-ms-designer .erp-ms-sql {
+  min-height: 150px;
+  resize: vertical;
+  background: #fbfbf8;
+  font-family: var(--erp-ms-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.erp-ms-designer .erp-ms-fcheck {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: var(--erp-ms-ink);
+  font-size: 13px;
+  cursor: pointer;
+
+  input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--erp-ms-accent);
+  }
+}
+
+/* ── Column grid: cell editors read as part of the grid until focused ────── */
+.erp-ms-designer .erp-ms-cellctl {
+  width: 100%;
+  min-height: 0;
+  height: 24px;
+  padding: 3px 5px;
+  border: 1px solid transparent;
+  border-radius: 2px !important;
+  background: transparent;
+  color: var(--erp-ms-ink);
+  font-family: inherit;
+  font-size: 12.5px;
+  box-shadow: none;
+
+  &:hover:not(:disabled) {
+    border-color: var(--erp-ms-line);
+    background: var(--erp-ms-paper);
+  }
+
+  &:focus,
+  &:focus-visible {
+    outline: 0;
+    border-color: var(--erp-ms-accent);
+    background: var(--erp-ms-paper);
+  }
+}
+
+/* ── Panel footer: count left, actions right ─────────────────────────────── */
+.erp-ms-designer .erp-ms-panel-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 10px -12px -10px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--erp-ms-line-soft);
+  background: var(--erp-ms-bg);
+}
+
+.erp-ms-designer .erp-ms-btn {
+  min-height: 0;
+  padding: 5px 14px;
+  border: 1px solid var(--erp-ms-line);
+  border-radius: 2px !important;
+  background: var(--erp-ms-paper);
+  color: var(--erp-ms-ink-soft);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 400;
+  box-shadow: none;
+
+  &:hover:not(:disabled) {
+    background: var(--erp-ms-bg);
+    transform: none;
+  }
+
+  &:disabled {
+    color: #bbb;
+    cursor: default;
+  }
+}
+
+/* `order` rather than reordering the markup: the primary action sits last in the
+   footer regardless of the order the page renders its buttons in. */
+.erp-ms-designer .erp-ms-btn--primary {
+  order: 1;
+  border-color: var(--erp-ms-accent-dark);
+  background: var(--erp-ms-accent);
+  color: #fff;
+  font-weight: 600;
+
+  &:hover:not(:disabled) {
+    background: var(--erp-ms-accent-dark);
+  }
+}
+
+@media (max-width: 1100px) {
+  .erp-ms-designer .erp-ms-designer-top {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Grid designer runs a two-column top row (details | SQL) rather than three. */
+.erp-ms-designer .erp-ms-designer-top--split {
+  grid-template-columns: 380px minmax(0, 1fr);
+  align-items: stretch;
+}
+
+/* The SQL panel fills its column, so the editor can stretch with it. */
+.erp-ms-designer .erp-ms-designer-top--split .erp-ms-fblock {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+
+  .erp-ms-sql {
+    flex: 1;
+  }
+}
+
+/* ── Colour cells in the column grid ─────────────────────────────────────── */
+.erp-ms-designer .erp-ms-colorcell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.erp-ms-designer .erp-ms-swatch {
+  width: 22px;
+  height: 18px;
+  min-height: 0;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--erp-ms-line);
+  border-radius: 2px !important;
+  background: none;
+  cursor: pointer;
+}
+
+/* UI-table designer's top row carries a single panel; cap it so the label-left
+   rows don't stretch the full page width. */
+.erp-ms-designer .erp-ms-designer-top--single {
+  grid-template-columns: minmax(0, 460px);
+}
+
+/* Validation summary strip (the designer's existing error list). */
+.erp-ms-designer .erp-ms-issues {
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid #e8c5c2;
+  border-radius: 0;
+  background: #fbedec;
+  color: #b00;
+  font-size: 12.5px;
+
+  ul,
+  ol {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  strong {
+    font-weight: 700;
+  }
+}
