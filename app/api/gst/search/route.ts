@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-
 const GST_LOOKUP_ENDPOINT =
   process.env.GST_LOOKUP_ENDPOINT?.trim() ||
   "https://deprecatedgstapi.charteredinfo.com/commonapi/v1.1/search";

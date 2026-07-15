@@ -1762,21 +1762,13 @@ const ITEM_EAN_SECTION_RULES_ROW_OFFSET = ITEM_EAN_SECTION_RULES_HEADING_ROW;
 const ITEM_RULES_AND_STATUS_FIELDS: (ERPDynamicModalField & {
   gridRowStart: number;
 })[] = [
-  {
-    name: "item_is_active",
-    label: "Is Active",
-    type: "checkbox",
-    controlStyle: {
-      accentColor: "#dc2626",
-    },
-    gridRowStart: 1,
-    gridColumnStart: 1,
-  },
+  // `item_is_active` lives in the Core Details tab; the remaining column-1 rows
+  // shift up one so this column stays gapless.
   {
     name: "item_retail_item",
     label: "Retail Item",
     type: "checkbox",
-    gridRowStart: 2,
+    gridRowStart: 1,
     gridColumnStart: 1,
   },
   {
@@ -1791,7 +1783,7 @@ const ITEM_RULES_AND_STATUS_FIELDS: (ERPDynamicModalField & {
         values: applyItemPriceDefaults(applyItemUnitConversionDefaults(values)),
       };
     },
-    gridRowStart: 3,
+    gridRowStart: 2,
     gridColumnStart: 1,
   },
   {
@@ -1819,7 +1811,7 @@ const ITEM_RULES_AND_STATUS_FIELDS: (ERPDynamicModalField & {
     name: "item_is_service",
     label: "Service Item",
     type: "checkbox",
-    gridRowStart: 5,
+    gridRowStart: 4,
     gridColumnStart: 1,
   },
   {
@@ -1915,7 +1907,7 @@ const ITEM_RULES_AND_STATUS_FIELDS: (ERPDynamicModalField & {
     name: "item_is_batch_based",
     label: "Batch Based",
     type: "checkbox",
-    gridRowStart: 4,
+    gridRowStart: 3,
     gridColumnStart: 1,
   },
   {
@@ -2951,6 +2943,14 @@ function buildItemFormFields(
           return {
             values: changedValues,
           };
+        },
+      },
+      {
+        name: "item_is_active",
+        label: "Is Active",
+        type: "checkbox",
+        controlStyle: {
+          accentColor: "#dc2626",
         },
       },
       {

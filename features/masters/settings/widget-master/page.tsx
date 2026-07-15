@@ -84,7 +84,10 @@ const MENU_ID_KEYS = ["menuId", "menu_id", "id"] as const;
 const MENU_NAME_KEYS = ["menuName", "menu_name", "name"] as const;
 const MENU_CHILDREN_KEYS = ["children", "items", "subMenus"] as const;
 const DEFAULT_MENU_OPTION: ERPDynamicSelectOption = { value: "", label: "Select menu" };
-const MENU_LOOKUP_QUERY = { activeOnly: "true" } as const;
+// GET /menu-masters/get only whitelists `visibleOnly` (GetMenuQueryDto). The server's
+// global ValidationPipe runs with forbidNonWhitelisted, so any other param (previously
+// `activeOnly`) 400s — the lookup then swallows the error and the dropdown shows no menus.
+const MENU_LOOKUP_QUERY = { visibleOnly: "true" } as const;
 const MENU_LOOKUP_DEFINITION = {
   query: MENU_LOOKUP_QUERY,
   defaultOption: DEFAULT_MENU_OPTION,
@@ -430,6 +433,8 @@ export default function WidgetMasterPage() {
       formDescription="Create and update widget sections and their fields."
       createModalTitle="Widget Section Entry"
       editModalTitle="Edit Widget Section Entry"
+      // Widen the modal (default is 64rem) so the Fields editor table has room.
+      modalPanelStyle={{ width: "min(80rem, calc(100vw - 2.4rem))" }}
       customFields={widgetFormFields}
       createInitialValues={createInitialValues}
       gridTableName={GRID_TABLE_NAME}

@@ -8,7 +8,6 @@ import GlobalErpHeader from "@/components/layout/global-erp-header";
 import GlobalRouteGuard from "@/components/auth/global-route-guard";
 import GlobalLoader from "@/components/feedback/global-loader";
 import GlobalToasterWrapper from "@/components/feedback/global-toaster-wrapper";
-
 export const metadata: Metadata = {
   title: "ERP Client | Operations Platform",
   description: "Landing page and login experience for ERP Client.",
@@ -17,7 +16,6 @@ export const metadata: Metadata = {
     shortcut: [{ url: "/favicon.svg", type: "image/svg+xml" }],
   },
 };
-
 const enableFigmaCapture =
   process.env.NEXT_PUBLIC_ENABLE_FIGMA_CAPTURE === "true";
 
