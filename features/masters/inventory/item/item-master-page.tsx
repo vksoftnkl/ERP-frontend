@@ -849,7 +849,15 @@ function syncItemPriceRowsWithUnitConversions(
   const itemUnitConversionsByUnitId = buildItemUnitConversionRowsByUnitId(values);
   let hasChanges = false;
   const nextRows = rows.map((row) => {
-    const unitId = (row.ipm_unit_id ?? "").trim() || baseUnitId;
+    // Only mirror conversion data onto rows the user already assigned a unit
+    // to. Falling back to the base unit here would silently pre-select it in
+    // an untouched price row, which reads as "the Unit Conversion Table filled
+    // this in for me". The first row still gets the base unit, but from
+    // normalizeItemPriceRowsForRules below, where that invariant belongs.
+    const unitId = (row.ipm_unit_id ?? "").trim();
+    if (!unitId) {
+      return row;
+    }
     const matchingUnitConversion = itemUnitConversionsByUnitId.get(unitId);
     if (!matchingUnitConversion) {
       return row;
@@ -968,10 +976,7 @@ function syncSerializedItemPriceRows(
     nextRows = normalizeItemPriceRows(effectiveRows);
   }
   const normalizedRows = normalizeItemPriceRows(nextRows);
-  const roleNormalizedRows = normalizeItemPriceRowsForRules(
-    normalizedRows,
-    (values.item_base_unit_id ?? "").trim(),
-  );
+  const roleNormalizedRows = normalizeItemPriceRowsForRules(normalizedRows);
   if (roleNormalizedRows !== normalizedRows) {
     return serializeLinkedRecordRows(roleNormalizedRows);
   }
@@ -1065,7 +1070,11 @@ function buildItemUnitConversionUnitOptions(
       !usedUnitIds.has(option.value),
   );
 }
+// Price rows list the same units as the EAN table — the base unit plus the
+// active Unit Conversion Table rows — and additionally never offer a unit a
+// sibling price row already claimed.
 function buildItemPriceUnitOptions(
+  values: Record<string, string>,
   rows: LinkedRecordRow[],
   unitOptions: ERPDynamicSelectOption[],
   rowIndex: number,
@@ -1076,7 +1085,7 @@ function buildItemPriceUnitOptions(
       .map((row, index) => (index === rowIndex ? "" : (row.ipm_unit_id ?? "").trim()))
       .filter(Boolean),
   );
-  return unitOptions.filter(
+  return buildSelectableItemUnitOptions(values, unitOptions).filter(
     (option) =>
       !option.value ||
       option.value === currentUnitId ||
@@ -1607,7 +1616,6 @@ function validateItemPriceRows(value: string, values: Record<string, string>): s
   if (rows.length === 0) {
     return "Add at least one price row when Price List is enabled.";
   }
-  const baseUnitId = (effectiveValues.item_base_unit_id ?? "").trim();
   const usedUnitIds = new Set<string>();
   let defaultRows = 0;
   let baseRows = 0;
@@ -1621,7 +1629,9 @@ function validateItemPriceRows(value: string, values: Record<string, string>): s
     { key: "ipm_addl_cess", label: "Cess" },
   ] as const;
   for (const [index, row] of rows.entries()) {
-    const unitId = (row.ipm_unit_id ?? "").trim() || baseUnitId;
+    // No base-unit fallback: rows no longer inherit a unit, so an unpicked one
+    // has to be reported rather than quietly saved as the base unit.
+    const unitId = (row.ipm_unit_id ?? "").trim();
     if (!unitId) {
       return `Price row ${index + 1}: Unit is required.`;
     }
@@ -2091,7 +2101,6 @@ function applyItemPriceDefaults(
   values: Record<string, string>,
 ): Record<string, string> {
   const nextValues = { ...values };
-  const baseUnitId = (nextValues.item_base_unit_id ?? "").trim();
   if (!(nextValues.ipm_profit_type ?? "").trim()) {
     nextValues.ipm_profit_type = ITEM_PRICE_DEFAULT_PROFIT_TYPE;
   }
@@ -2099,8 +2108,9 @@ function applyItemPriceDefaults(
     nextValues.ipm_is_active = ITEM_PRICE_INITIAL_FORM_VALUES.ipm_is_active;
   }
   if (!hasLinkedRows(nextValues[ITEM_PRICE_ROWS_FIELD_NAME])) {
+    // Seeded with no unit: the user picks it from the Unit Conversion Table's units.
     nextValues[ITEM_PRICE_ROWS_FIELD_NAME] = serializeLinkedRecordRows([
-      buildEmptyItemPriceRow(baseUnitId),
+      buildEmptyItemPriceRow(""),
     ]);
   }
   return nextValues;
@@ -3064,16 +3074,21 @@ function buildItemFormFields(
           custom: validateItemPriceRows,
         },
         render: ({ disabled, setValue, value, values }) => {
+          const priceUnitOptions = buildSelectableItemUnitOptions(
+            values,
+            unitOptions,
+          );
           const nextPriceRowColumns = priceRowColumns.map((column) =>
             column.key === "ipm_unit_id"
               ? {
                 ...column,
-                options: unitOptions,
+                options: priceUnitOptions,
                 optionsResolver: (params: {
                   rowIndex: number;
                   rows: LinkedRecordRow[];
                 }) =>
                   buildItemPriceUnitOptions(
+                    values,
                     params.rows,
                     unitOptions,
                     params.rowIndex,
@@ -3088,11 +3103,7 @@ function buildItemFormFields(
               autoAppendOnSelect={{ columnKey: "ipm_unit_id" }}
               columnLayoutStorageKey="item-master-price-list"
               columns={nextPriceRowColumns}
-              createRow={() =>
-                buildEmptyItemPriceRow(
-                  hasLinkedRows(value) ? "" : (values.item_base_unit_id ?? "").trim(),
-                )
-              }
+              createRow={() => buildEmptyItemPriceRow("")}
               disabled={disabled}
               emptyState="No price rows added."
               exclusiveTrueColumnKeys={["ipm_is_default_unit", "ipm_is_base_unit"]}
@@ -3160,13 +3171,11 @@ function buildItemFormFields(
               autoAppendOnSelect={{ columnKey: "ean_unit_id" }}
               columnLayoutStorageKey="item-master-ean-code"
               columns={nextEanRowColumns}
-              createRow={(sourceRow) =>
-                buildEmptyItemEanRow(
-                  (values.item_base_unit_id ?? "").trim(),
-                  resolvePreferredItemEanUnitId(values),
-                  sourceRow,
-                )
-              }
+              // A new EAN row starts with no unit picked: the Unit Conversion
+              // Table decides which units the dropdown *offers*, not which one
+              // is selected. Only sourceRow still carries a unit forward, so a
+              // scanner appending rows from Enter keeps the unit the user chose.
+              createRow={(sourceRow) => buildEmptyItemEanRow("", "", sourceRow)}
               disabled={disabled}
               emptyState="No EAN rows added."
               removeDisabledRowIndexes={[0]}
@@ -3909,12 +3918,10 @@ export default function ItemMasterPageContent({
           ipm_cost_remarks: toNullableString(row.ipm_cost_remarks ?? ""),
           ipm_is_active: (row.ipm_is_active ?? "true") === "true",
         };
-
         const itemPriceId = toTrimmedOrUndefined(row.ipm_id);
         if (itemPriceId) {
           payload.ipm_id = itemPriceId;
         }
-
         return payload;
       });
     },

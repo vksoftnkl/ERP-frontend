@@ -1,25 +1,24 @@
 import type { LinkedRecordRow } from "./item-linked-records-editor.shared";
+// The first row is the base row — factor 1, base flag on — but its unit is left
+// for the user to pick. This used to force the unit to the item's base unit,
+// which meant choosing a unit in the Unit Conversion Table (whose first row
+// defines the base unit) immediately showed up as the price list's selected
+// unit. That is why neither function takes a baseUnitId any more.
 export function normalizeItemPriceRowForEditor(
   row: LinkedRecordRow,
   rowIndex: number,
-  baseUnitId: string,
 ): LinkedRecordRow {
-  const normalizedBaseUnitId = baseUnitId.trim();
   const nextRow: LinkedRecordRow = {
     ...row,
   };
   if (rowIndex === 0) {
     nextRow.ipm_to_base_factor = "1";
     nextRow.ipm_unit_factor = "1";
-    if (normalizedBaseUnitId) {
-      nextRow.ipm_unit_id = normalizedBaseUnitId;
-    }
   }
   return nextRow;
 }
 export function normalizeItemPriceRowsForRules(
   rows: LinkedRecordRow[],
-  baseUnitId: string,
   preferredDefaultRowIndex: number | null = null,
 ): LinkedRecordRow[] {
   if (rows.length === 0) {
@@ -44,7 +43,7 @@ export function normalizeItemPriceRowsForRules(
     return discoveredBaseRowIndex >= 0 ? discoveredBaseRowIndex : null;
   })();
   return rows.map((row, index) => {
-    const nextRow = normalizeItemPriceRowForEditor(row, index, baseUnitId);
+    const nextRow = normalizeItemPriceRowForEditor(row, index);
     nextRow.ipm_is_default_unit =
       resolvedDefaultRowIndex !== null && index === resolvedDefaultRowIndex
         ? "true"

@@ -35,7 +35,6 @@ const FIRST_ROW_LOCKED_FIELD_NAMES = new Set([
 ]);
 type ItemPriceRowsModalEditorProps = {
   addLabel: string;
-  baseUnitId: string;
   columns: LinkedRecordColumn[];
   createRow: (rowIndex: number) => LinkedRecordRow;
   disabled?: boolean;
@@ -57,9 +56,8 @@ function resolveModalFieldName(columnKey: string): string {
 function mapRowToModalValues(
   row: LinkedRecordRow,
   rowIndex: number,
-  baseUnitId: string,
 ): LinkedRecordRow {
-  const nextRow = normalizeItemPriceRowForEditor(row, rowIndex, baseUnitId);
+  const nextRow = normalizeItemPriceRowForEditor(row, rowIndex);
   const conversionFactor = resolveDisplayedConversionValue(nextRow);
   if (!conversionFactor) {
     return nextRow;
@@ -158,7 +156,6 @@ function buildItemPriceRowFieldValidation(
 }
 export default function ItemPriceRowsModalEditor({
   addLabel,
-  baseUnitId,
   columns,
   createRow,
   disabled = false,
@@ -181,8 +178,8 @@ export default function ItemPriceRowsModalEditor({
       editingRowIndex === null
         ? createRow(rows.length)
         : (rows[editingRowIndex] ?? createRow(editingRowIndex));
-    return mapRowToModalValues(sourceRow, modalRowIndex, baseUnitId);
-  }, [baseUnitId, createRow, editingRowIndex, modalRowIndex, rows]);
+    return mapRowToModalValues(sourceRow, modalRowIndex);
+  }, [createRow, editingRowIndex, modalRowIndex, rows]);
   const modalFields = useMemo<ERPDynamicModalField[]>(
     () =>
       columns.map((column) => {
@@ -250,11 +247,7 @@ export default function ItemPriceRowsModalEditor({
     setEditingRowIndex(null);
     setSubmitError(null);
     controllerRef.current?.openModal(CREATE_VARIANT_KEY, {
-      values: mapRowToModalValues(
-        createRow(rows.length),
-        rows.length,
-        baseUnitId,
-      ),
+      values: mapRowToModalValues(createRow(rows.length), rows.length),
     });
   };
   const openEditModal = (rowIndex: number) => {
@@ -265,13 +258,12 @@ export default function ItemPriceRowsModalEditor({
     setEditingRowIndex(rowIndex);
     setSubmitError(null);
     controllerRef.current?.openModal(EDIT_VARIANT_KEY, {
-      values: mapRowToModalValues(sourceRow, rowIndex, baseUnitId),
+      values: mapRowToModalValues(sourceRow, rowIndex),
     });
   };
   const handleRemoveRow = (rowIndex: number) => {
     const nextRows = normalizeItemPriceRowsForRules(
       rows.filter((_, index) => index !== rowIndex),
-      baseUnitId,
     );
     onChange(serializeLinkedRecordRows(nextRows));
   };
@@ -285,11 +277,7 @@ export default function ItemPriceRowsModalEditor({
     const sourceRow = isEditing
       ? (rows[editingRowIndex] ?? createRow(editingRowIndex))
       : createRow(rows.length);
-    const originalRow = normalizeItemPriceRowForEditor(
-      sourceRow,
-      targetRowIndex,
-      baseUnitId,
-    );
+    const originalRow = normalizeItemPriceRowForEditor(sourceRow, targetRowIndex);
     const nextConversionFactor = (
       (values.ipm_to_base_factor ?? "").trim() ||
       resolveDisplayedConversionValue(originalRow) ||
@@ -302,7 +290,6 @@ export default function ItemPriceRowsModalEditor({
         ipm_unit_factor: nextConversionFactor,
       },
       targetRowIndex,
-      baseUnitId,
     );
     const nextRows =
       isEditing
@@ -310,7 +297,6 @@ export default function ItemPriceRowsModalEditor({
         : [...rows, nextRow];
     const normalizedRows = normalizeItemPriceRowsForRules(
       nextRows,
-      baseUnitId,
       targetRowIndex > 0 && nextRow.ipm_is_default_unit === "true"
         ? targetRowIndex
         : null,
