@@ -98,9 +98,22 @@ export function applyWidgetFieldConfig(
   fields: ERPDynamicModalField[],
   config: Map<string, ResolvedFieldConfig>,
   fieldNameByFormField: Record<string, string>,
+  options?: { mode?: "reorder" | "visibility-only" },
 ): ERPDynamicModalField[] {
   if (config.size === 0) {
     return fields;
+  }
+  // "visibility-only": the page's hardcoded field order and labels are the source
+  // of truth (its layout is designed in code), so the config is used solely to
+  // drop fields an admin has hidden. Order, grouping (headings/subheadings), and
+  // labels stay exactly as authored; a bridged field with visibility=false is
+  // removed, everything else is kept in place.
+  if (options?.mode === "visibility-only") {
+    return fields.filter((field) => {
+      const backendName = fieldNameByFormField[field.name];
+      const resolved = backendName ? config.get(backendName.toLowerCase()) : undefined;
+      return resolved ? resolved.visible : true;
+    });
   }
   const configured: Array<{ field: ERPDynamicModalField; order: number; index: number }> = [];
   const pinned: Array<{ field: ERPDynamicModalField; index: number }> = [];

@@ -1159,3 +1159,42 @@
     transform: translateY(0) scale(1);
   }
 }
+
+/* ── Bulk Load Items · "Simple ERP" maroon variant ───────────────────────
+   Scoped modifier: these rules only apply when a panel opts in with
+   `bulkLoadScope`, so the 15 other modals that share this module are
+   unaffected. Turns the neutral white header into a solid maroon voucher
+   bar (white title + close) and flattens the footer to the grey family
+   tone. The Load button already renders in the brand maroon (--ds-primary),
+   so only the chrome needs adjusting. */
+.bulkLoadScope {
+  border-color: #999999;
+}
+.bulkLoadScope .header {
+  padding: 0.4rem 0.75rem;
+  background: #8b1d1d;
+  border-bottom-color: #6e1414;
+}
+.bulkLoadScope .headerTitle {
+  color: #ffffff;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.bulkLoadScope .closeButton {
+  color: #ffffff;
+}
+.bulkLoadScope .closeButton:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+.bulkLoadScope .closeButton:focus-visible {
+  outline-color: #ffffff;
+}
+.bulkLoadScope .footer {
+  background: #f2f2f2;
+  border-top-color: #c9c9c9;
+}
+.bulkLoadScope .label {
+  color: #555555;
+}

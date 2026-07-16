@@ -202,6 +202,9 @@ const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
   cusUnloadingCharge: "cus_unloading_charge",
   cusIsActive: "cus_active",
   cusNotes: "cus_notes",
+  cusContactPerson: "cus_contact_person",
+  cusCountry: "cus_country",
+  cusCreditAllowed: "cus_credit_allowed",
 };
 // Right-clicking inside the open create/update modal opens a tree popup of this
 // menu's configured sections/fields (GET /widget-masters/config?menu_id=…).
@@ -384,11 +387,65 @@ function buildCustomerFormFields(
   onGroupEditShortcut: (payload: ERPDynamicSearchShortcutPayload) => void | Promise<void>,
   onCustomerGstinValueChange: ERPDynamicFieldValueChangeHandler,
 ): ERPDynamicModalField[] {
+  // Column span within each tab's grid (see `sectionGridColumns` on the headings).
+  // Identity is a 12-col grid: normal inputs span 4 (three per row), the Credit &&
+  // Terms group spans 3 (four per row), attribute checkboxes span 2 (six per row).
+  // Notes/Regional are 6-col grids where inputs span 2 (three per row). Full-width
+  // fields use `colSpan: 2` instead.
+  const span = (columns: number) => ({
+    fieldStyle: { gridColumn: `span ${columns}` },
+  });
   const fields: ERPDynamicModalField[] = [
+    // ── Identity tab ──────────────────────────────────────────────
     {
-      name: "scopeHeadingPrimary",
-      label: "Primary details",
+      name: "identitySection",
+      label: "Identity",
       type: "heading",
+      sectionGridColumns: 12,
+    },
+    {
+      name: "cusName",
+      label: "Customer Name",
+      required: true,
+      ...span(4),
+      validation: {
+        minLength: 2,
+        minLengthMessage: "Customer Name must be at least 2 characters.",
+      },
+    },
+    {
+      name: "cusGstNo",
+      label: "GST No",
+      placeholder: "24ABCDE1234F1Z5",
+      helperText: GST_LOOKUP_HELPER_TEXT,
+      onValueChange: onCustomerGstinValueChange,
+      ...span(4),
+      validation: {
+        custom: (value, values) => validateCustomerGstin(value, values),
+      },
+    },
+    {
+      name: "cusShort",
+      label: "Short Name",
+      ...span(4),
+    },
+    {
+      name: "cusGroupId",
+      label: "Group",
+      type: "select",
+      searchable: true,
+      serverSearch: true,
+      required: true,
+      options: groupOptions,
+      onSearchOpenChange: lazy.cusGroupId.onSearchOpenChange,
+      onSearchQueryChange: lazy.cusGroupId.onSearchQueryChange,
+      onValueChange: lazy.cusGroupId.onValueChange,
+      onSearchCreateShortcut: onGroupCreateShortcut,
+      onSearchEditShortcut: onGroupEditShortcut,
+      ...span(4),
+      validation: {
+        requiredMessage: "Customer Group is required.",
+      },
     },
     {
       name: "cusCompanyId",
@@ -400,6 +457,19 @@ function buildCustomerFormFields(
       onSearchOpenChange: lazy.cusCompanyId.onSearchOpenChange,
       onSearchQueryChange: lazy.cusCompanyId.onSearchQueryChange,
       onValueChange: lazy.cusCompanyId.onValueChange,
+      ...span(4),
+    },
+    {
+      name: "cusBranchId",
+      label: "Branch",
+      type: "select",
+      searchable: true,
+      serverSearch: true,
+      options: branchOptions,
+      onSearchOpenChange: lazy.cusBranchId.onSearchOpenChange,
+      onSearchQueryChange: lazy.cusBranchId.onSearchQueryChange,
+      onValueChange: lazy.cusBranchId.onValueChange,
+      ...span(4),
     },
     {
       name: "cusAreaId",
@@ -414,93 +484,113 @@ function buildCustomerFormFields(
       onValueChange: lazy.cusAreaId.onValueChange,
       onSearchCreateShortcut: onAreaCreateShortcut,
       onSearchEditShortcut: onAreaEditShortcut,
+      ...span(4),
       validation: {
         requiredMessage: "Area is required.",
       },
-    },  {
+    },
+    {
+      name: "cusGstType",
+      label: "GST Type",
+      type: "select",
+      searchable: true,
+      required: true,
+      options: GST_TYPE_OPTIONS,
+      ...span(4),
+      validation: {
+        requiredMessage: "GST Type is required.",
+      },
+    },
+    {
+      name: "cusPriceLevelId",
+      label: "Price Level",
+      type: "select",
+      searchable: true,
+      required: true,
+      options: priceLevelOptions,
+      ...span(4),
+      validation: {
+        requiredMessage: "Price Level is required.",
+      },
+    },
+    {
+      name: "cusPanNo",
+      label: "PAN No",
+      ...span(4),
+      validation: {
+        pattern: "^[A-Z]{5}[0-9]{4}[A-Z]{1}$",
+        patternMessage: "PAN must be 10 characters (e.g., ABCDE1234F).",
+      },
+    },
+    {
+      name: "cusEcommerceGstin",
+      label: "e-Commerce GSTIN",
+      ...span(4),
+      validation: {
+        custom: (value) => validateOptionalGstin(value),
+      },
+    },
+    {
+      name: "cusIsActive",
+      label: "Active",
+      type: "checkbox",
+      ...span(4),
+    },
+    {
+      name: "cusCode",
+      label: "Customer Code",
+      ...span(4),
+    },
+    {
+      name: "cusSortOrder",
+      label: "Sort Order",
+      type: "number",
+      min: 0,
+      step: 1,
+      ...span(4),
+      validation: {
+        minMessage: "Sort Order must be 0 or greater.",
+      },
+    },
+    {
       name: "cusDefaultSalesman",
-      label: "Salesman ",
+      label: "Salesman",
+      ...span(4),
       validation: {
         pattern: "^[0-9a-fA-F-]{36}$",
         patternMessage: "Default Salesman Id must be a valid UUID.",
       },
     },
+    // ── Address ───────────────────────────────────────────────────
     {
-      name: "cusBranchId",
-      label: "Branch",
-      type: "select",
-      searchable: true,
-      serverSearch: true,
-      options: branchOptions,
-      onSearchOpenChange: lazy.cusBranchId.onSearchOpenChange,
-      onSearchQueryChange: lazy.cusBranchId.onSearchQueryChange,
-      onValueChange: lazy.cusBranchId.onValueChange,
-    },{
-      name: "cusGroupId",
-      label: "Customer Group",
-      type: "select",
-      searchable: true,
-      serverSearch: true,
-      required: true,
-      options: groupOptions,
-      onSearchOpenChange: lazy.cusGroupId.onSearchOpenChange,
-      onSearchQueryChange: lazy.cusGroupId.onSearchQueryChange,
-      onValueChange: lazy.cusGroupId.onValueChange,
-      onSearchCreateShortcut: onGroupCreateShortcut,
-      onSearchEditShortcut: onGroupEditShortcut,
-      validation: {
-        requiredMessage: "Customer Group is required.",
-      },
+      name: "addressSubheading",
+      label: "Address",
+      type: "subheading",
     },
     {
-      name: "cusCollectionDays",
-      label: "Collection Days",
-      type: "select",
-      searchable: true,
-      multiple: true,
-      options: COLLECTION_DAY_OPTIONS,
+      name: "cusAddr1",
+      label: "Address 1",
+      ...span(4),
     },
     {
-      name: "scopeHeadingBasic",
-      label: "Basic details",
-      type: "heading",
+      name: "cusAddr2",
+      label: "Address 2",
+      ...span(4),
     },
     {
-      name: "cusName",
-      label: "Customer Name",
-      required: true,
-      validation: {
-        minLength: 2,
-        minLengthMessage: "Customer Name must be at least 2 characters.",
-      },
+      name: "cusAddr3",
+      label: "Address 3",
+      ...span(4),
     },
     {
       name: "cusCity",
       label: "City",
+      ...span(4),
     },
-    {
-      name: "cusPhone1",
-      label: "Phone 1",
-      type: "tel",
-    },
-    {
-      name: "cusCode",
-      label: "Customer Code",
-    },
-
     {
       name: "cusDistrict",
       label: "District",
-    },
-    
-    {
-      name: "cusPhone2",
-      label: "Phone 2",
-      type: "tel",
-    },
-    {
-      name: "cusShort",
-      label: "Short Name",
+      ...span(4),
     },
     {
       name: "cusStateCode",
@@ -515,83 +605,77 @@ function buildCustomerFormFields(
       onValueChange: lazy.cusStateCode.onValueChange,
       onSearchCreateShortcut: onStateCreateShortcut,
       onSearchEditShortcut: onStateEditShortcut,
+      ...span(4),
       validation: {
         requiredMessage: "State is required.",
       },
     },
     {
-      name: "cusTel",
-      label: "Tel",
-      type: "tel",
-    },
-    {
-      name: "cusPriceLevelId",
-      label: "Price Level",
-      type: "select",
-      searchable: true,
-      required: true,
-      options: priceLevelOptions,
-      validation: {
-        requiredMessage: "Price Level is required.",
-      },
-    },
-    {
       name: "cusPin",
-      label: "PIN",
+      label: "Pincode",
+      ...span(4),
+    },
+    {
+      name: "cusCountry",
+      label: "Country",
+      ...span(4),
+    },
+    // ── Contact ───────────────────────────────────────────────────
+    {
+      name: "contactSubheading",
+      label: "Contact",
+      type: "subheading",
+    },
+    {
+      name: "cusTel",
+      label: "Telephone",
+      type: "tel",
+      ...span(4),
+    },
+    {
+      name: "cusPhone1",
+      label: "Phone 1",
+      type: "tel",
+      ...span(4),
+    },
+    {
+      name: "cusPhone2",
+      label: "Phone 2",
+      type: "tel",
+      ...span(4),
     },
     {
       name: "cusWhatsappNo",
-      label: "WhatsApp No",
+      label: "WhatsApp",
       type: "tel",
-    },
-    {
-      name: "cusAddr1",
-      label: "Address Line 1",
-    },
-    {
-      name: "cusLandmark",
-      label: "Landmark",
+      ...span(4),
     },
     {
       name: "cusEmail",
       label: "Email",
       type: "email",
+      ...span(4),
     },
     {
-      name: "cusAddr2",
-      label: "Address Line 2",
-    },
-    {
-      name: "cusTransportName",
-      label: "Transport Name",
-    },
-    {
-      name: "cusSortOrder",
-      label: "Sort Order",
-      type: "number",
-      colSpan: 1,
-      min: 0,
-      step: 1,
+      name: "cusAadharNo",
+      label: "Aadhaar",
+      ...span(4),
       validation: {
-        minMessage: "Sort Order must be 0 or greater.",
+        pattern: "^[0-9]{12}$",
+        patternMessage: "Aadhar must be 12 digits.",
       },
     },
+    // ── Credit && Terms ───────────────────────────────────────────
     {
-      name: "cusAddr3",
-      label: "Address Line 3",
+      name: "creditSubheading",
+      label: "Credit && Terms",
+      type: "subheading",
     },
-    // {
-    //   name: "cusCountry",
-    //   label: "Country",
-    // },
-    // {
-    //   name: "cusGeoLocation",
-    //   label: "Geo Location",
-    // },
     {
-      name: "creditHeading",
-      label: "Credit Details",
-      type: "heading",
+      name: "cusCreditAllowed",
+      label: "Credit Allowed",
+      type: "checkbox",
+      ...span(3),
     },
     {
       name: "cusCreditDays",
@@ -599,28 +683,9 @@ function buildCustomerFormFields(
       type: "number",
       min: 0,
       step: 1,
+      ...span(3),
       validation: {
         minMessage: "Credit Days must be 0 or greater.",
-      },
-    },
-    {
-      name: "cusCreditAmtLimit",
-      label: "Credit Amount Limit",
-      type: "number",
-      min: 0,
-      step: "0.01",
-      validation: {
-        minMessage: "Credit Amount Limit must be 0 or greater.",
-      },
-    },
-    {
-      name: "cusDebitBalance",
-      label: "Debit Balance",
-      type: "number",
-      min: 0,
-      step: "0.01",
-      validation: {
-        minMessage: "Debit Balance must be 0 or greater.",
       },
     },
     {
@@ -629,124 +694,43 @@ function buildCustomerFormFields(
       type: "number",
       min: 0,
       step: 1,
+      ...span(3),
       validation: {
         minMessage: "Credit Bill Limit must be 0 or greater.",
       },
     },
     {
+      name: "cusCreditAmtLimit",
+      label: "Credit Amt Limit",
+      type: "number",
+      min: 0,
+      step: "0.01",
+      ...span(3),
+      validation: {
+        minMessage: "Credit Amount Limit must be 0 or greater.",
+      },
+    },
+    {
       name: "cusDebitGraceDays",
-      label: "Debit Grace Days",
+      label: "Grace Days",
       type: "number",
       min: 0,
       step: 1,
+      ...span(3),
       validation: {
         minMessage: "Debit Grace Days must be 0 or greater.",
       },
     },
     {
-      name: "taxHeading",
-      label: "Tax Details",
-      type: "heading",
-    },
-    {
-      name: "cusGstType",
-      label: "GST Type",
-      type: "select",
-      searchable: true,
-      options: GST_TYPE_OPTIONS,
-    },
-    {
-      name: "cusPanNo",
-      label: "PAN No",
-      validation: {
-        pattern: "^[A-Z]{5}[0-9]{4}[A-Z]{1}$",
-        patternMessage: "PAN must be 10 characters (e.g., ABCDE1234F).",
-      },
-    },
-    {
-      name: "cusEcommerceGstin",
-      label: "Ecommerce GSTIN",
-      validation: {
-        custom: (value) => validateOptionalGstin(value),
-      },
-    },
-    {
-      name: "cusGstNo",
-      label: "GST No",
-      placeholder: "24ABCDE1234F1Z5",
-      helperText: GST_LOOKUP_HELPER_TEXT,
-      onValueChange: onCustomerGstinValueChange,
-      validation: {
-        custom: (value, values) => validateCustomerGstin(value, values),
-      },
-    },
-    {
-      name: "cusAadharNo",
-      label: "Aadhar No",
-      validation: {
-        pattern: "^[0-9]{12}$",
-        patternMessage: "Aadhar must be 12 digits.",
-      },
-    },
-    {
-      name: "cusDistanceKm",
-      label: "Distance (Km)",
+      name: "cusDebitBalance",
+      label: "Debit Balance",
       type: "number",
       min: 0,
-      step: 1,
+      step: "0.01",
+      ...span(3),
       validation: {
-        minMessage: "Distance must be 0 or greater.",
+        minMessage: "Debit Balance must be 0 or greater.",
       },
-    },
-    {
-      name: "regionHeading",
-      label: "Region Details",
-      type: "heading",
-      defaultExpanded: false,
-    },
-    {
-      name: "cusRegionName",
-      label: "Region Name",
-    },
-    {
-      name: "cusRegionAddr1",
-      label: "Region Address 1",
-    },
-    {
-      name: "cusRegionAddr2",
-      label: "Region Address 2",
-    },
-    {
-      name: "cusRegionAddr3",
-      label: "Region Address 3",
-    },
-    {
-      name: "cusRegionCity",
-      label: "Region City",
-    },
-    {
-      name: "cusRegionDistrict",
-      label: "Region District",
-    },
-    {
-      name: "cusRegionStateName",
-      label: "Region State Name",
-      type: "select",
-      searchable: true,
-      serverSearch: true,
-      options: regionStateOptions,
-      onSearchOpenChange: lazy.cusRegionStateName.onSearchOpenChange,
-      onSearchQueryChange: lazy.cusRegionStateName.onSearchQueryChange,
-      onValueChange: lazy.cusRegionStateName.onValueChange,
-    },
-    {
-      name: "cusRegionCountry",
-      label: "Region Country",
-    },
-    {
-      name: "statusHeading",
-      label: "Status and Notes",
-      type: "heading",
     },
     {
       name: "cusDiscPerc",
@@ -754,85 +738,213 @@ function buildCustomerFormFields(
       type: "number",
       min: 0,
       step: "0.001",
+      ...span(3),
       validation: {
         minMessage: "Discount % must be 0 or greater.",
       },
     },
+    // ── Attributes ────────────────────────────────────────────────
     {
-      name: "cusBirthDate",
-      label: "Birth Date",
-      type: "date",
-    },
-    {
-      name: "cusMarriageDate",
-      label: "Anniversary Date",
-      type: "date",
-    },
-    {
-      name: "cusEnableSms",
-      label: "Enable SMS",
-      type: "checkbox",
-    },
-    {
-      name: "cusOverdueSms",
-      label: "Overdue SMS",
-      type: "checkbox",
-    },
-    {
-      name: "cusOverdueBilling",
-      label: "Overdue Billing",
-      type: "checkbox",
-    },
-    {
-      name: "cusAllowPromotion",
-      label: "Allow Promotion",
-      type: "checkbox",
-    },
-    {
-      name: "cusAllowLoyalty",
-      label: "Allow Loyalty",
-      type: "checkbox",
+      name: "attributesSubheading",
+      label: "Attributes",
+      type: "subheading",
     },
     {
       name: "cusAllowDiscount",
       label: "Allow Discount",
       type: "checkbox",
+      ...span(2),
+    },
+    {
+      name: "cusAllowLoyalty",
+      label: "Allow Loyalty",
+      type: "checkbox",
+      ...span(2),
+    },
+    {
+      name: "cusAllowPromotion",
+      label: "Allow Promotion",
+      type: "checkbox",
+      ...span(2),
+    },
+    {
+      name: "cusEnableSms",
+      label: "Enable SMS",
+      type: "checkbox",
+      ...span(2),
+    },
+    {
+      name: "cusOverdueSms",
+      label: "Overdue SMS",
+      type: "checkbox",
+      ...span(2),
+    },
+    {
+      name: "cusOverdueBilling",
+      label: "Overdue Billing",
+      type: "checkbox",
+      ...span(2),
     },
     {
       name: "cusTcsApplicable",
-      label: "TCS Allowable",
+      label: "TCS Applicable",
       type: "checkbox",
+      ...span(2),
     },
     {
       name: "cusItcollExempted",
-      label: "IT Collection Exempted",
+      label: "IT Coll. Exempted",
       type: "checkbox",
+      ...span(2),
     },
     {
       name: "cusFreightCharge",
       label: "Freight Charge",
       type: "checkbox",
+      ...span(2),
     },
     {
       name: "cusLoadingCharge",
       label: "Loading Charge",
       type: "checkbox",
+      ...span(2),
     },
     {
       name: "cusUnloadingCharge",
       label: "Unloading Charge",
       type: "checkbox",
+      ...span(2),
+    },
+    // ── Notes tab ─────────────────────────────────────────────────
+    {
+      name: "notesSection",
+      label: "Notes",
+      type: "heading",
+      sectionGridColumns: 6,
     },
     {
-      name: "cusIsActive",
-      label: "Active",
-      type: "checkbox",
+      name: "deliverySubheading",
+      label: "Delivery",
+      type: "subheading",
+    },
+    {
+      name: "cusContactPerson",
+      label: "Contact Person",
+      ...span(2),
+    },
+    {
+      name: "cusTransportName",
+      label: "Transport Name",
+      ...span(2),
+    },
+    {
+      name: "cusLandmark",
+      label: "Landmark",
+      ...span(2),
+    },
+    {
+      name: "cusDistanceKm",
+      label: "Distance (km)",
+      type: "number",
+      min: 0,
+      step: 1,
+      ...span(2),
+      validation: {
+        minMessage: "Distance must be 0 or greater.",
+      },
+    },
+    // ── Dates ─────────────────────────────────────────────────────
+    {
+      name: "datesSubheading",
+      label: "Dates",
+      type: "subheading",
+    },
+    {
+      name: "cusBirthDate",
+      label: "Birth Date",
+      type: "date",
+      ...span(2),
+    },
+    {
+      name: "cusMarriageDate",
+      label: "Marriage Date",
+      type: "date",
+      ...span(2),
+    },
+    // ── Collection Days ───────────────────────────────────────────
+    {
+      name: "collectionDaysSubheading",
+      label: "Collection Days",
+      type: "subheading",
+    },
+    {
+      name: "cusCollectionDays",
+      label: "Collection Days",
+      type: "select",
+      searchable: true,
+      multiple: true,
+      options: COLLECTION_DAY_OPTIONS,
+      colSpan: 2,
     },
     {
       name: "cusNotes",
       label: "Notes",
       colSpan: 2,
       rows: 3,
+    },
+    // ── Regional Details tab ──────────────────────────────────────
+    {
+      name: "regionalSection",
+      label: "Regional Details",
+      type: "heading",
+      sectionGridColumns: 6,
+    },
+    {
+      name: "cusRegionName",
+      label: "Regional Name",
+      colSpan: 2,
+    },
+    {
+      name: "cusRegionAddr1",
+      label: "Address 1",
+      ...span(2),
+    },
+    {
+      name: "cusRegionAddr2",
+      label: "Address 2",
+      ...span(2),
+    },
+    {
+      name: "cusRegionAddr3",
+      label: "Address 3",
+      ...span(2),
+    },
+    {
+      name: "cusRegionCity",
+      label: "City",
+      ...span(2),
+    },
+    {
+      name: "cusRegionDistrict",
+      label: "District",
+      ...span(2),
+    },
+    {
+      name: "cusRegionStateName",
+      label: "State",
+      type: "select",
+      searchable: true,
+      serverSearch: true,
+      options: regionStateOptions,
+      onSearchOpenChange: lazy.cusRegionStateName.onSearchOpenChange,
+      onSearchQueryChange: lazy.cusRegionStateName.onSearchQueryChange,
+      onValueChange: lazy.cusRegionStateName.onValueChange,
+      ...span(2),
+    },
+    {
+      name: "cusRegionCountry",
+      label: "Country",
+      ...span(2),
     },
   ];
   return fields.map(withCustomerBasicValidation);
@@ -2354,6 +2466,9 @@ export default function CustomerPage() {
         ),
         widgetFieldConfig,
         WIDGET_FIELD_NAME_BY_FORM_FIELD,
+        // This screen's tabs/subheadings/order/labels are authored in
+        // buildCustomerFormFields; the widget config only shows/hides fields here.
+        { mode: "visibility-only" },
       ),
     [
       areaOptions,
@@ -2823,8 +2938,14 @@ export default function CustomerPage() {
           const cusDebitBalance = toNonNegativeNumber(values.cusDebitBalance ?? "0", 0);
           const cusDiscPerc = toNonNegativeNumber(values.cusDiscPerc ?? "0", 0);
           const cusDebitGraceDays = toNonNegativeInteger(values.cusDebitGraceDays ?? "0", 0);
+          // Honours the explicit "Credit Allowed" checkbox, but still falls back to
+          // the derived value so records saved before the checkbox existed (or with
+          // it left unticked despite credit limits) keep credit enabled.
           const cusCreditAllowed =
-            cusCreditBillLimit > 0 || cusCreditAmtLimit > 0 || cusCreditDays > 0;
+            (values.cusCreditAllowed ?? "false") === "true" ||
+            cusCreditBillLimit > 0 ||
+            cusCreditAmtLimit > 0 ||
+            cusCreditDays > 0;
           const payload: Record<string, unknown> = {
             cusTitle: toNullableString(values.cusTitle ?? ""),
             cusShort: toNullableString(values.cusShort ?? ""),

@@ -220,7 +220,7 @@ export function BulkLoadItemsModal({
         aria-label="Close bulk load items"
       />
       <section
-        className={dynamicModalStyles.panel}
+        className={`${dynamicModalStyles.panel} ${dynamicModalStyles.bulkLoadScope}`}
         style={{ width: "min(500px, calc(100vw - 2rem))", maxHeight: "min(92vh, 620px)" }}
         role="dialog"
         aria-modal="true"

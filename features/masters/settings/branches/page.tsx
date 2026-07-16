@@ -864,7 +864,7 @@ export default function BranchesMasterPage() {
       modalPanelStyle={BRANCH_MODAL_PANEL_STYLE}
       modalFormGridColumns={3}
       modalFormDenseGrid={false}
-      modalStackLabels={true}
+      modalStackLabels={false}
       modalSectionNavigationMode="tabs"
       createModalTitle=" Branch Entry"
       editModalTitle="Edit Branch Entry"

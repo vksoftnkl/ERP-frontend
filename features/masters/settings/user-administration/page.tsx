@@ -110,8 +110,8 @@ const USER_BOOLEAN_FIELD_NAMES = [
 // ── Modal style ───────────────────────────────────────────────────────────────
 const USER_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(92vw, 60rem)",
-  height: "78vh",
-  maxHeight: "78vh",
+  height: "61vh",
+  maxHeight: "61vh",
 };
 const CHECKBOX_FIELD_STYLE: CSSProperties = { paddingBlock: "0.45rem" };
 const USER_FORM_MODE_FIELD = "__userFormMode";
@@ -496,7 +496,7 @@ export default function UserAdministrationPage() {
       modalPanelStyle={USER_MODAL_PANEL_STYLE}
       modalFormGridColumns={2}
       modalFormDenseGrid={false}
-      modalStackLabels={true}
+      modalStackLabels={false}
       modalSectionNavigationMode="tabs"
       modalHideFieldHelperText
       modalHideFieldErrorText

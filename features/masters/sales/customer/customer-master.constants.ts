@@ -381,12 +381,13 @@ export const GROUP_MODAL_INITIAL_VALUES: Record<string, string> = {
 export const CUSTOMER_MODAL_PANEL_STYLE: CSSProperties = {
   // Measured across every tab: labels/placeholders start clipping below 50rem,
   // so this keeps headroom for longer labels arriving from widget config.
-  width: "min(92vw, 56rem)",
-  // The tallest tab (Basic details, 19 fields) needs ~415px of chrome + fields;
-  // 75vh was ~675px, so the panel was mostly empty. Sized to the tallest tab
-  // rather than to whichever tab is open, so it does not resize as you switch.
-  height: "min(80vh, 460px)",
-  maxHeight: "80vh",
+  width: "min(94vw, 72rem)",
+  // The tallest tab is now Identity (primary + Address + Contact + Credit && Terms +
+  // Attributes), so the panel is sized taller to show most of it before scrolling.
+  // Fixed to the tallest tab rather than the open one, so it does not resize as you
+  // switch tabs; capped to the viewport so it never overflows on short screens.
+  height: "min(88vh, 760px)",
+  maxHeight: "88vh",
 };
 export const CUSTOMER_PHONE_PATTERN = "^[0-9+()\\-\\s]{0,20}$";
 export const CUSTOMER_BASIC_VALIDATIONS: Record<string, ERPDynamicFieldValidation> = {

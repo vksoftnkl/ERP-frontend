@@ -1,5 +1,5 @@
 "use client";
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage, {
   type CrudMasterPageController,
 } from "@/components/master/crud-master-page";
@@ -8,12 +8,25 @@ import {
   useLazyConfiguredDropdown,
   type LazyDropdownHandlers,
 } from "@/features/masters/shared/use-lazy-configured-dropdown";
-import type {
-  ERPDynamicCustomFieldRenderProps,
-  ERPDynamicFieldValueChangePayload,
-  ERPDynamicFieldValueChangeResult,
-  ERPDynamicModalField,
-  ERPDynamicSelectOption,
+import {
+  buildControllableFieldNames,
+  buildWidgetFieldConfig,
+  type ResolvedFieldConfig,
+  type WidgetMasterSectionConfig,
+  type WidgetMastersResponse,
+} from "@/features/masters/shared/widget-config";
+import WidgetVisibilityTree, {
+  type WidgetTreeSectionView,
+} from "@/features/masters/shared/widget-visibility-tree";
+import {
+  ERPDynamicModalForm,
+  type ERPDynamicCustomFieldRenderProps,
+  type ERPDynamicFieldValueChangePayload,
+  type ERPDynamicFieldValueChangeResult,
+  type ERPDynamicModalController,
+  type ERPDynamicModalField,
+  type ERPDynamicModalVariant,
+  type ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
@@ -62,7 +75,6 @@ import {
   API_ENDPOINTS,
   GRID_TABLE_NAME,
   LOOKUP_ENDPOINT,
-  TAX_LOOKUP_ENDPOINT,
   BRANCH_LOOKUP_ENDPOINT,
   BRANCH_BY_COMPANY_ENDPOINT,
   UNIT_LOOKUP_ENDPOINT,
@@ -71,13 +83,14 @@ import {
   UI_TABLE_COLUMNS_ENDPOINT,
   UI_TABLE_COLUMNS_CREATE_ENDPOINT,
   WIDGET_MASTER_LIST_ENDPOINT,
+  WIDGET_CONFIG_TREE_ENDPOINT,
+  WIDGET_VISIBILITY_ENDPOINT,
+  ITEM_MASTER_WIDGET_SECTION_MENU_ID,
+  ITEM_MASTER_WIDGET_TYPE,
   ITEM_TAX_MASTER_LIST_ENDPOINT,
-  ITEM_WIDGET_QUERY_LIMIT,
   ITEM_REORDER_TABLE_UI_ID,
   ITEM_PRICE_TABLE_UI_ID,
   ITEM_EAN_TABLE_UI_ID,
-  ITEM_MASTER_WIDGET_GROUP_ID,
-  ITEM_MASTER_WIDGET_TYPE,
   UUID_PATTERN,
   ITEM_PRICE_ROWS_FIELD_NAME,
   ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME,
@@ -90,7 +103,6 @@ import {
   UI_REORDER_TABLE_COLUMNS_QUERY,
   UI_EAN_TABLE_COLUMNS_QUERY,
   ITEM_MASTER_WIDGET_QUERY,
-  LOOKUP_QUERY_ITEM_TAXES,
   ITEM_TAX_LIST_QUERY,
   LOOKUP_QUERY_ITEMS,
   HSN_LOOKUP_QUERY,
@@ -108,7 +120,6 @@ import {
   DEFAULT_UNIT_OPTION,
   DEFAULT_GODOWN_OPTION,
   DEFAULT_TAX_OPTION,
-  TAX_LOOKUP_KEYS,
   DEFAULT_SUPPLIER_OPTION,
   DEFAULT_HSN_OPTION,
   DEFAULT_CUSTOMER_GROUP_OPTION,
@@ -149,17 +160,17 @@ import {
   ITEM_UNIT_CONVERSION_CONTENT_FIELD_NAMES,
   ITEM_REORDER_CONTENT_FIELD_NAMES,
   ITEM_EAN_CONTENT_FIELD_NAMES,
-  WIDGET_NUMBER_KEYS,
-  WIDGET_GROUP_ID_KEYS,
-  WIDGET_NAME_KEYS,
-  WIDGET_POSITION_KEYS,
-  WIDGET_VISIBILITY_KEYS,
-  WIDGET_GUI_NAME_KEYS,
-  WIDGET_SECONDARY_TEXT_KEYS,
+  WIDGET_FIELD_NAME_BY_FORM_FIELD,
   type SaveUiTableColumnLayoutRequest,
   type UiTableColumnLayoutItem,
   normalizeItemBatchConfigValue,
 } from "./item-master-page.constants";
+// Backend fieldNames (lowercased) that map to a real item form field, so their
+// popup checkbox can actually show/hide something. Fields with no bridge entry
+// render read-only in the tree ("not on form").
+const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(
+  WIDGET_FIELD_NAME_BY_FORM_FIELD,
+);
 // Company is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
 // 8=company comp_id/comp_name). Loaded on open + on debounced server-side search via
 // /dropdown-details/run; nothing fetched up front.
@@ -236,15 +247,19 @@ const SUPPLIER_DROPDOWN_CONFIG = {
 } as const;
 const SUPPLIER_SOURCE_ID_KEYS = ["item_supplier_id", "itemSupplierId"] as const;
 const SUPPLIER_SOURCE_NAME_KEYS = ["item_supplier_name", "itemSupplierName"] as const;
-type ItemWidgetConfigRecord = {
-  widgetNo: string;
-  widgetGroupId: string;
-  widgetName: string;
-  widgetPosition: number;
-  widgetVisibility: boolean;
-  widgetGuiName: string;
-  widgetSecondaryText: string;
-};
+// Default Tax is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
+// 36=TAXES tax_id/tax_name from inventory.item_tax_master where active & not deleted). Loaded
+// on open + on debounced server-side search via /dropdown-details/run; nothing fetched up front.
+// The full tax records (GST/CESS percentages) still load eagerly via grid 5 into
+// itemTaxRecordsById for the price-with-tax math — this dropdown only supplies the field options.
+const TAX_DROPDOWN_CONFIG = {
+  dropdownId: "36",
+  idKeys: ["tax_id", "taxId"] as const,
+  labelKeys: ["tax_name", "taxName"] as const,
+  defaultOption: DEFAULT_TAX_OPTION,
+} as const;
+const TAX_SOURCE_ID_KEYS = ["item_default_tax_id", "itemDefaultTaxId"] as const;
+const TAX_SOURCE_NAME_KEYS = ["item_default_tax_name", "itemDefaultTaxName"] as const;
 type ItemMasterPageContentProps = {
   inlineModalOnly?: boolean;
   onCrudControllerReady?: (controller: CrudMasterPageController | null) => void;
@@ -2255,14 +2270,6 @@ function removeDefaultLinkedColumnPlaceholders(
       : column,
   );
 }
-function normalizeItemWidgetKey(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 function buildItemFormSections(
   fields: ERPDynamicModalField[],
 ): ItemFormSection[] {
@@ -2297,64 +2304,6 @@ function flattenItemFormSections(sections: ItemFormSection[]): ERPDynamicModalFi
     section.heading ? [section.heading, ...section.fields] : section.fields,
   );
 }
-function resolveItemWidgetMatchKey(
-  widget: ItemWidgetConfigRecord,
-  type: "heading" | "field",
-): string {
-  const candidates =
-    type === "heading"
-      ? [widget.widgetName, widget.widgetGuiName, widget.widgetSecondaryText]
-      : [widget.widgetGuiName, widget.widgetName, widget.widgetSecondaryText];
-  for (const candidate of candidates) {
-    const normalized = normalizeItemWidgetKey(candidate);
-    if (normalized) {
-      return normalized;
-    }
-  }
-  return "";
-}
-function resolveItemWidgetLabel(widget: ItemWidgetConfigRecord): string {
-  return (
-    widget.widgetSecondaryText.trim() ||
-    widget.widgetGuiName.trim() ||
-    widget.widgetName.trim()
-  );
-}
-function combineItemWidgetVisibility(
-  visibleWhen: ERPDynamicModalField["visibleWhen"],
-  widgetVisibility: boolean,
-): ERPDynamicModalField["visibleWhen"] {
-  if (widgetVisibility && !visibleWhen) {
-    return undefined;
-  }
-  return (values) => {
-    if (!widgetVisibility) {
-      return false;
-    }
-    if (!visibleWhen) {
-      return true;
-    }
-    try {
-      return visibleWhen(values);
-    } catch {
-      return true;
-    }
-  };
-}
-function applyItemWidgetOverrides(
-  field: ERPDynamicModalField,
-  widget: ItemWidgetConfigRecord | undefined,
-): ERPDynamicModalField {
-  if (!widget) {
-    return field;
-  }
-  const nextLabel = resolveItemWidgetLabel(widget);
-  return {
-    ...field,
-    label: nextLabel || field.label,
-    visibleWhen: combineItemWidgetVisibility(field.visibleWhen, widget.widgetVisibility),
-  };
-}
 function reorderConfiguredItems<T>(
   items: Array<{
     item: T;
@@ -2388,90 +2337,54 @@ function reorderConfiguredItems<T>(
       : configuredItems[configuredItemIndex++]?.item ?? item.item,
   );
 }
-function toItemWidgetConfigRecords(payload: unknown): ItemWidgetConfigRecord[] {
-  return extractArrayRecords(payload)
-    .map((record) => ({
-      widgetNo: toDisplayValue(getFirstDefinedValue(record, WIDGET_NUMBER_KEYS)),
-      widgetGroupId: toDisplayValue(getFirstDefinedValue(record, WIDGET_GROUP_ID_KEYS)),
-      widgetName: toDisplayValue(getFirstDefinedValue(record, WIDGET_NAME_KEYS)),
-      widgetPosition: toNonNegativeInteger(
-        toDisplayValue(getFirstDefinedValue(record, WIDGET_POSITION_KEYS)),
-        0,
-      ),
-      widgetVisibility:
-        toSelectBoolean(getFirstDefinedValue(record, WIDGET_VISIBILITY_KEYS), "true") ===
-        "true",
-      widgetGuiName: toDisplayValue(getFirstDefinedValue(record, WIDGET_GUI_NAME_KEYS)),
-      widgetSecondaryText: toDisplayValue(
-        getFirstDefinedValue(record, WIDGET_SECONDARY_TEXT_KEYS),
-      ),
-    }))
-    .filter((record) => Boolean(record.widgetNo));
-}
-function applyItemWidgetConfigToFields(
+// Re-label, re-order, and show/hide the item form's hardcoded fields from the
+// widget-masters config for menu 29 (fixed.form_section / form_field), matched
+// via WIDGET_FIELD_NAME_BY_FORM_FIELD (each field `name` → backend field_name,
+// case-insensitively). Unlike the shared applyWidgetFieldConfig, the many
+// unconfigured item fields (flags, linked tables, notes) are kept in place
+// rather than trailed to the end — only the configured fields are reordered,
+// and only within their own form section. A configured field whose visibility
+// is false is dropped; a field's fieldSecondaryText, when set, wins over
+// fieldGuiName as its rendered label. An empty config map is a no-op, so a
+// failed/empty fetch leaves the form on its hardcoded labels and order.
+function applyItemWidgetFieldConfig(
   fields: ERPDynamicModalField[],
-  widgets: ItemWidgetConfigRecord[],
-  rootWidgetGroupId: string,
+  config: Map<string, ResolvedFieldConfig>,
+  fieldNameByFormField: Record<string, string>,
 ): ERPDynamicModalField[] {
-  if (widgets.length === 0) {
+  if (config.size === 0) {
     return fields;
   }
   const sections = buildItemFormSections(fields);
-  const sectionWidgets = widgets.filter(
-    (widget) => widget.widgetGroupId === rootWidgetGroupId,
-  );
-  const sectionWidgetByKey = new Map(
-    sectionWidgets
-      .map((widget) => [resolveItemWidgetMatchKey(widget, "heading"), widget] as const)
-      .filter(([key]) => Boolean(key)),
-  );
-  const nextSections = sections.map((section, sectionIndex) => {
-    const headingWidget =
-      section.heading
-        ? sectionWidgetByKey.get(normalizeItemWidgetKey(section.heading.label))
-        : undefined;
-    const sectionHidden = headingWidget?.widgetVisibility === false;
-    const childWidgetByKey = new Map(
-      widgets
-        .filter((widget) => widget.widgetGroupId === headingWidget?.widgetNo)
-        .map((widget) => [resolveItemWidgetMatchKey(widget, "field"), widget] as const)
-        .filter(([key]) => Boolean(key)),
-    );
-    const nextHeading = section.heading
-      ? applyItemWidgetOverrides(section.heading, headingWidget)
-      : null;
-    const nextFields = reorderConfiguredItems(
-      section.fields.map((field, fieldIndex) => {
-        const matchingWidget = childWidgetByKey.get(normalizeItemWidgetKey(field.label));
-        const effectiveWidget =
-          sectionHidden && matchingWidget
-            ? {
-              ...matchingWidget,
-              widgetVisibility: false,
-            }
-            : matchingWidget;
-        return {
-          item: sectionHidden
-            ? {
-              ...field,
-              visibleWhen: combineItemWidgetVisibility(field.visibleWhen, false),
-            }
-            : applyItemWidgetOverrides(field, effectiveWidget),
-          originalIndex: fieldIndex,
-          configuredPosition: matchingWidget?.widgetPosition ?? null,
-        };
-      }),
-    );
+  const nextSections = sections.map((section) => {
+    const resolvedFields: Array<{
+      item: ERPDynamicModalField;
+      originalIndex: number;
+      configuredPosition: number | null;
+    }> = [];
+    section.fields.forEach((field, fieldIndex) => {
+      const backendName = fieldNameByFormField[field.name];
+      const resolved = backendName ? config.get(backendName.toLowerCase()) : undefined;
+      // Drop a configured-but-hidden field entirely (both the field and its slot),
+      // so the remaining configured fields still fill their own slots exactly.
+      if (resolved && !resolved.visible) {
+        return;
+      }
+      const nextLabel = resolved
+        ? (resolved.secondaryText ?? "").trim() || resolved.label
+        : "";
+      resolvedFields.push({
+        item: nextLabel ? { ...field, label: nextLabel } : field,
+        originalIndex: fieldIndex,
+        configuredPosition: resolved ? resolved.order : null,
+      });
+    });
     return {
-      item: {
-        heading: nextHeading,
-        fields: nextFields,
-      },
-      originalIndex: sectionIndex,
-      configuredPosition: headingWidget?.widgetPosition ?? null,
+      heading: section.heading,
+      fields: reorderConfiguredItems(resolvedFields),
     };
   });
-  return flattenItemFormSections(reorderConfiguredItems(nextSections));
+  return flattenItemFormSections(nextSections);
 }
 type LinkedTableColumnLayoutChangeArgs = {
   tableId: string;
@@ -2579,6 +2492,7 @@ function buildItemFormFields(
   unitOptions: ERPDynamicSelectOption[],
   godownOptions: ERPDynamicSelectOption[],
   taxOptions: ERPDynamicSelectOption[],
+  taxHandlers: LazyDropdownHandlers,
   itemTaxRecordsById: ReadonlyMap<string, Record<string, unknown>>,
   hsnOptions: ERPDynamicSelectOption[],
   supplierOptions: ERPDynamicSelectOption[],
@@ -2589,7 +2503,7 @@ function buildItemFormFields(
   itemPriceTableColumnsConfig: Record<string, unknown>[],
   itemReorderTableColumnsConfig: Record<string, unknown>[],
   itemEanTableColumnsConfig: Record<string, unknown>[],
-  itemWidgetConfigRecords: ItemWidgetConfigRecord[],
+  widgetFieldConfig: Map<string, ResolvedFieldConfig>,
   onLinkedTableColumnLayoutChange?: LinkedTableColumnLayoutChangeHandler,
 ): ERPDynamicModalField[] {
   const basePriceRowColumns: LinkedRecordColumn[] = [
@@ -2839,7 +2753,7 @@ function buildItemFormFields(
       ITEM_EAN_TABLE_COLUMN_NAME_TO_KEY,
     ),
   );
-  return applyItemWidgetConfigToFields(
+  return applyItemWidgetFieldConfig(
     removeDefaultSelectPlaceholders(
       applyItemCheckboxControlStyle([
       {
@@ -2909,6 +2823,7 @@ function buildItemFormFields(
         label: "HSN Code",
         type: "select",
         searchable: true,
+        required: true,
         options: hsnOptions,
       },
       {
@@ -2916,8 +2831,16 @@ function buildItemFormFields(
         label: "Default Tax",
         type: "select",
         searchable: true,
+        serverSearch: true,
+        required: true,
         options: taxOptions,
-        onValueChange: ({ value, values }) => {
+        onSearchOpenChange: taxHandlers.onSearchOpenChange,
+        onSearchQueryChange: taxHandlers.onSearchQueryChange,
+        onValueChange: (payload) => {
+          // Pin the picked option so it stays visible after the next lazy fetch
+          // replaces the list, then run the price-with-tax recalculation.
+          taxHandlers.onValueChange(payload);
+          const { value, values } = payload;
           const nextFormValues: Record<string, string> = {
             ...values,
             item_default_tax_id: value,
@@ -2943,6 +2866,16 @@ function buildItemFormFields(
           return {
             values: changedValues,
           };
+        },
+      },
+      {
+        name: "item_sort_order",
+        label: "Sort Order",
+        type: "number",
+        min: 0,
+        step: 1,
+        validation: {
+          minMessage: "Sort Order must be 0 or greater.",
         },
       },
       {
@@ -2986,6 +2919,7 @@ function buildItemFormFields(
         type: "select",
         searchable: true,
         serverSearch: true,
+        required: true,
         options: groupOptions,
         onSearchOpenChange: groupHandlers.onSearchOpenChange,
         onSearchQueryChange: groupHandlers.onSearchQueryChange,
@@ -3019,6 +2953,7 @@ function buildItemFormFields(
         type: "select",
         searchable: true,
         serverSearch: true,
+        required: true,
         options: brandOptions,
         onSearchOpenChange: brandHandlers.onSearchOpenChange,
         onSearchQueryChange: brandHandlers.onSearchQueryChange,
@@ -3329,16 +3264,6 @@ function buildItemFormFields(
         type: "heading",
       },
       {
-        name: "item_sort_order",
-        label: "Sort Order",
-        type: "number",
-        min: 0,
-        step: 1,
-        validation: {
-          minMessage: "Sort Order must be 0 or greater.",
-        },
-      },
-      {
         name: "item_storage_location",
         label: "Storage Location",
         validation: {
@@ -3370,8 +3295,8 @@ function buildItemFormFields(
       },
       ]),
     ),
-    itemWidgetConfigRecords,
-    ITEM_MASTER_WIDGET_GROUP_ID,
+    widgetFieldConfig,
+    WIDGET_FIELD_NAME_BY_FORM_FIELD,
   );
 }
 // POST /items/create, GET /items/get and DELETE /items/delete now return the
@@ -3604,7 +3529,6 @@ export default function ItemMasterPageContent({
   onItemSaved,
 }: ItemMasterPageContentProps = {}) {
   const { getAll: getItemLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const { getAll: getTaxLookup } = useApi<unknown>(TAX_LOOKUP_ENDPOINT);
   const { getAll: listItemTaxes } = useApi<unknown>(ITEM_TAX_MASTER_LIST_ENDPOINT);
   const { getAll: getItemPriceTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
   const { getAll: getItemReorderTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
@@ -3635,10 +3559,10 @@ export default function ItemMasterPageContent({
   const section = useLazyConfiguredDropdown(SECTION_DROPDOWN_CONFIG);
   const customerGroup = useLazyConfiguredDropdown(CUSTOMER_GROUP_DROPDOWN_CONFIG);
   const supplier = useLazyConfiguredDropdown(SUPPLIER_DROPDOWN_CONFIG);
+  const tax = useLazyConfiguredDropdown(TAX_DROPDOWN_CONFIG);
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [unitOptions, setUnitOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [godownOptions, setGodownOptions] = useState<ERPDynamicSelectOption[]>([]);
-  const [taxOptions, setTaxOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [hsnOptions, setHsnOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [itemOptions, setItemOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [itemTaxRecords, setItemTaxRecords] = useState<Record<string, unknown>[]>([]);
@@ -3651,9 +3575,9 @@ export default function ItemMasterPageContent({
   const [itemEanTableColumnsConfig, setItemEanTableColumnsConfig] = useState<
     Record<string, unknown>[]
   >([]);
-  const [itemWidgetConfigRecords, setItemWidgetConfigRecords] = useState<
-    ItemWidgetConfigRecord[]
-  >([]);
+  const [widgetFieldConfig, setWidgetFieldConfig] = useState<
+    Map<string, ResolvedFieldConfig>
+  >(() => new Map());
   const itemTaxRecordsById = useMemo(
     () =>
       new Map(
@@ -3746,7 +3670,6 @@ export default function ItemMasterPageContent({
         branchesPayload,
         unitsPayload,
         godownsPayload,
-        taxesPayload,
         itemTaxesPayload,
         hsnPayload,
         itemsPayload,
@@ -3758,7 +3681,6 @@ export default function ItemMasterPageContent({
         getBranchLookup(BRANCH_LOOKUP_QUERY),
         getUnitLookup(UNIT_LOOKUP_QUERY),
         getGodownLookup(GODOWN_LOOKUP_QUERY),
-        getTaxLookup(LOOKUP_QUERY_ITEM_TAXES),
         listItemTaxes(ITEM_TAX_LIST_QUERY),
         getHsnLookup(HSN_LOOKUP_QUERY),
         getItemLookup(LOOKUP_QUERY_ITEMS),
@@ -3787,11 +3709,6 @@ export default function ItemMasterPageContent({
       setGodownOptions(
         godownsPayload.status === "fulfilled"
           ? toLookupOptions(godownsPayload.value, DEFAULT_GODOWN_OPTION, GODOWN_LOOKUP_KEYS)
-          : [],
-      );
-      setTaxOptions(
-        taxesPayload.status === "fulfilled"
-          ? toLookupOptions(taxesPayload.value, DEFAULT_TAX_OPTION, TAX_LOOKUP_KEYS)
           : [],
       );
       setItemTaxRecords(
@@ -3833,10 +3750,10 @@ export default function ItemMasterPageContent({
           )
           : [],
       );
-      setItemWidgetConfigRecords(
+      setWidgetFieldConfig(
         itemMasterWidgetsPayload.status === "fulfilled"
-          ? toItemWidgetConfigRecords(itemMasterWidgetsPayload.value)
-          : [],
+          ? buildWidgetFieldConfig(itemMasterWidgetsPayload.value as WidgetMastersResponse)
+          : new Map(),
       );
     })();
     return () => {
@@ -3851,7 +3768,6 @@ export default function ItemMasterPageContent({
     getItemLookup,
     getItemPriceTableColumns,
     getItemReorderTableColumns,
-    getTaxLookup,
     getUnitLookup,
     listItemTaxes,
   ]);
@@ -4239,7 +4155,8 @@ export default function ItemMasterPageContent({
         section.handlers,
         unitOptions,
         godownOptions,
-        taxOptions,
+        tax.options,
+        tax.handlers,
         itemTaxRecordsById,
         hsnOptions,
         supplier.options,
@@ -4250,7 +4167,7 @@ export default function ItemMasterPageContent({
         itemPriceTableColumnsConfig,
         itemReorderTableColumnsConfig,
         itemEanTableColumnsConfig,
-        itemWidgetConfigRecords,
+        widgetFieldConfig,
         handleLinkedTableColumnLayoutChange,
       ),
     [
@@ -4270,7 +4187,7 @@ export default function ItemMasterPageContent({
       itemOptions,
       itemEanTableColumnsConfig,
       itemTaxRecordsById,
-      itemWidgetConfigRecords,
+      widgetFieldConfig,
       itemPriceTableColumnsConfig,
       itemReorderTableColumnsConfig,
       handleLinkedTableColumnLayoutChange,
@@ -4278,7 +4195,8 @@ export default function ItemMasterPageContent({
       section.handlers,
       supplier.options,
       supplier.handlers,
-      taxOptions,
+      tax.options,
+      tax.handlers,
       unitOptions,
     ],
   );
@@ -4306,7 +4224,222 @@ export default function ItemMasterPageContent({
     }),
     [wantDelete],
   );
+  // Right-click "Visible Settings" popup over the item create/update modal —
+  // brings the item master to parity with the other master pages (unit/godown/
+  // etc.). Toggling a field's visibility updates widgetFieldConfig, which the
+  // itemFormFields memo re-applies live; Save persists the change to the server.
+  const { getAll: getWidgetConfigTree } = useApi<WidgetMastersResponse>(
+    WIDGET_CONFIG_TREE_ENDPOINT,
+    { toast: { error: false } },
+  );
+  const { run: saveVisibility, loading: savingVisibility } = useApi(
+    WIDGET_VISIBILITY_ENDPOINT,
+    { method: "PATCH" },
+  );
+  const [configSections, setConfigSections] = useState<WidgetMasterSectionConfig[]>([]);
+  // Section-level visibility overrides keyed by sectionId; falls back to the
+  // fetched sectionVisibility until the user toggles a section.
+  const [sectionVisibility, setSectionVisibility] = useState<Map<number, boolean>>(
+    () => new Map(),
+  );
+  // Edited secondary text keyed by fieldId; falls back to the fetched value.
+  const [secondaryTextById, setSecondaryTextById] = useState<Map<number, string>>(
+    () => new Map(),
+  );
+  const [treeLoading, setTreeLoading] = useState(false);
+  const [treeError, setTreeError] = useState<string | null>(null);
+  const [visibilityModalOpen, setVisibilityModalOpen] = useState(false);
+  const treeLoadedRef = useRef(false);
+  const visibilityControllerRef = useRef<ERPDynamicModalController | null>(null);
+  // Fetched lazily the first time the popup opens, then cached. Scoped to the
+  // "Web" platform so a menu's Desktop-only section stays out of the tree.
+  const loadConfigTree = useCallback(async () => {
+    if (treeLoadedRef.current) {
+      return;
+    }
+    treeLoadedRef.current = true;
+    setTreeLoading(true);
+    setTreeError(null);
+    try {
+      const payload = await getWidgetConfigTree({
+        menu_id: ITEM_MASTER_WIDGET_SECTION_MENU_ID,
+        platform: ITEM_MASTER_WIDGET_TYPE,
+      });
+      setConfigSections(Array.isArray(payload?.data) ? payload.data : []);
+    } catch {
+      treeLoadedRef.current = false;
+      setTreeError("Unable to load field configuration.");
+    } finally {
+      setTreeLoading(false);
+    }
+  }, [getWidgetConfigTree]);
+  // Hijack right-clicks that land inside the open create/update modal only; clicks
+  // elsewhere keep the browser's native context menu. Opens the Visible Settings
+  // modal on top via its controller.
+  useEffect(() => {
+    const handleContextMenu = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('[role="dialog"][aria-modal="true"]')) {
+        return;
+      }
+      event.preventDefault();
+      void loadConfigTree();
+      visibilityControllerRef.current?.openModal("visibility");
+    };
+    window.addEventListener("contextmenu", handleContextMenu);
+    return () => window.removeEventListener("contextmenu", handleContextMenu);
+  }, [loadConfigTree]);
+  const handleToggleField = useCallback(
+    (backendName: string, checked: boolean) => {
+      const key = backendName.toLowerCase();
+      setWidgetFieldConfig((prev) => {
+        const next = new Map(prev);
+        const existing = next.get(key);
+        next.set(
+          key,
+          existing
+            ? { ...existing, visible: checked }
+            : { label: "", order: Number.MAX_SAFE_INTEGER, visible: checked },
+        );
+        return next;
+      });
+    },
+    [],
+  );
+  const handleToggleSection = useCallback((sectionId: number, checked: boolean) => {
+    setSectionVisibility((prev) => {
+      const next = new Map(prev);
+      next.set(sectionId, checked);
+      return next;
+    });
+  }, []);
+  const handleChangeSecondaryText = useCallback((fieldId: number, value: string) => {
+    setSecondaryTextById((prev) => {
+      const next = new Map(prev);
+      next.set(fieldId, value);
+      return next;
+    });
+  }, []);
+  // Build the tree view from the /config payload, deriving each checkbox from the
+  // live form visibility map so the popup and the rendered form stay in sync.
+  const treeSections = useMemo<WidgetTreeSectionView[]>(
+    () =>
+      configSections.map((section) => ({
+        sectionId: section.sectionId,
+        label: section.sectionGuiName?.trim() || section.sectionName || "Section",
+        visible:
+          sectionVisibility.get(section.sectionId) ?? section.sectionVisibility !== false,
+        fields: (Array.isArray(section.fields) ? section.fields : []).map((field) => {
+          const key = (field.fieldName ?? "").trim().toLowerCase();
+          const configEntry = widgetFieldConfig.get(key);
+          return {
+            fieldId: field.fieldId,
+            fieldName: field.fieldName,
+            label: (field.fieldGuiName ?? "").trim() || field.fieldName,
+            secondaryText:
+              secondaryTextById.get(field.fieldId) ?? (field.fieldSecondaryText ?? ""),
+            checked: configEntry ? configEntry.visible : field.fieldVisibility !== false,
+            controllable: WIDGET_CONTROLLABLE_FIELD_NAMES.has(key),
+          };
+        }),
+      })),
+    [configSections, sectionVisibility, secondaryTextById, widgetFieldConfig],
+  );
+  // PATCH the current section/field visibility + secondary text back to the server
+  // in the documented { data: [{ sectionId, sectionGuiName, sectionVisibility,
+  // fields: [{ fieldId, fieldSecondaryText, fieldVisibility }] }] } shape. Throws on
+  // failure so the hosting modal stays open (useApi toasts the error).
+  const handleVisibilitySubmit = useCallback(async () => {
+    const payload = {
+      data: configSections.map((section) => ({
+        sectionId: section.sectionId,
+        sectionGuiName: section.sectionGuiName?.trim() || section.sectionName || "Section",
+        sectionVisibility:
+          sectionVisibility.get(section.sectionId) ?? section.sectionVisibility !== false,
+        fields: (Array.isArray(section.fields) ? section.fields : []).map((field) => {
+          const key = (field.fieldName ?? "").trim().toLowerCase();
+          const configEntry = widgetFieldConfig.get(key);
+          return {
+            fieldId: field.fieldId,
+            fieldSecondaryText:
+              secondaryTextById.get(field.fieldId) ?? field.fieldSecondaryText ?? "",
+            fieldVisibility: configEntry ? configEntry.visible : field.fieldVisibility !== false,
+          };
+        }),
+      })),
+    };
+    await saveVisibility({ body: payload });
+  }, [configSections, sectionVisibility, secondaryTextById, widgetFieldConfig, saveVisibility]);
+  // While the Visible Settings modal is open, intercept Escape/F5 in the capture
+  // phase so they act on it alone — without this, the underlying create/update
+  // modal's window-level Escape would also fire and close both. F5 mirrors the
+  // legacy "Save (F5)" shortcut.
+  useEffect(() => {
+    if (!visibilityModalOpen) {
+      return;
+    }
+    const handleKeyDownCapture = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        visibilityControllerRef.current?.closeModal();
+      } else if (event.key === "F5") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (!savingVisibility) {
+          void handleVisibilitySubmit()
+            .then(() => visibilityControllerRef.current?.closeModal())
+            .catch(() => {
+              // Error toast handled by useApi; keep the modal open to retry.
+            });
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDownCapture, true);
+    return () => window.removeEventListener("keydown", handleKeyDownCapture, true);
+  }, [visibilityModalOpen, savingVisibility, handleVisibilitySubmit]);
+  // The Visible Settings modal hosts the whole tree as a single custom field so it
+  // reuses the standard ERP modal chrome (header, backdrop, Save/Cancel footer).
+  const visibilityVariant = useMemo<ERPDynamicModalVariant>(
+    () => ({
+      key: "visibility",
+      cardTitle: "Visible Settings",
+      cardDescription: "",
+      cardButtonLabel: "Open",
+      modalTitle: "Visible Settings",
+      submitLabel: "Save (F5)",
+      fields: [
+        {
+          name: "visibilityTree",
+          label: "",
+          type: "custom",
+          colSpan: 2,
+          render: () => (
+            <WidgetVisibilityTree
+              sections={treeSections}
+              loading={treeLoading}
+              error={treeError}
+              disabled={savingVisibility}
+              onToggleSection={handleToggleSection}
+              onToggleField={handleToggleField}
+              onChangeSecondaryText={handleChangeSecondaryText}
+            />
+          ),
+        },
+      ],
+    }),
+    [
+      treeSections,
+      treeLoading,
+      treeError,
+      savingVisibility,
+      handleToggleSection,
+      handleToggleField,
+      handleChangeSecondaryText,
+    ],
+  );
   return (
+    <>
     <CrudMasterPage
       title="Item"
       iconName="item_master"
@@ -4348,6 +4481,12 @@ export default function ItemMasterPageContent({
       createInitialValues={ITEM_INITIAL_FORM_VALUES}
       modalPanelStyle={ITEM_MODAL_PANEL_STYLE}
       modalFormGridColumns={3}
+      // Non-dense flow so an inline section heading (e.g. "Reference Links")
+      // always breaks to a fresh row. With dense packing, the lone "Is Active"
+      // checkbox that ends Core Details leaves two empty cells, and the grid
+      // back-fills them with the fields that follow the full-width heading
+      // (Company/Branch) — visually pulling them above their own subsection.
+      modalFormDenseGrid={false}
       modalSectionNavigationMode="tabs"
       modalHideFieldHelperText
       modalFocusFirstInvalidFieldOnValidationError
@@ -4362,8 +4501,8 @@ export default function ItemMasterPageContent({
       }
       mapFormValues={({ source, defaults }) => {
         // Seed the lazy Company/Item Group/Category/Brand/Section/Customer Group/
-        // Supplier dropdowns so the triggers show the saved labels on edit/view
-        // before each field is opened (and lazily loaded).
+        // Supplier/Default Tax dropdowns so the triggers show the saved labels on
+        // edit/view before each field is opened (and lazily loaded).
         const rowSource = unwrapItemSource(source);
         company.seedSelected(
           toDisplayValue(getFirstDefinedValue(rowSource, COMPANY_SOURCE_ID_KEYS)),
@@ -4392,6 +4531,10 @@ export default function ItemMasterPageContent({
         supplier.seedSelected(
           toDisplayValue(getFirstDefinedValue(rowSource, SUPPLIER_SOURCE_ID_KEYS)),
           toDisplayValue(getFirstDefinedValue(rowSource, SUPPLIER_SOURCE_NAME_KEYS)),
+        );
+        tax.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, TAX_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, TAX_SOURCE_NAME_KEYS)),
         );
         return mapItemFormValues(source, defaults, itemTaxRecordsById);
       }}
@@ -4428,8 +4571,8 @@ export default function ItemMasterPageContent({
       onCrudControllerReady={onCrudControllerReady}
       onModalOpenChange={(open, variantKey) => {
         // Clear the lazy Company/Item Group/Category/Brand/Section/Customer Group/
-        // Supplier dropdowns when the create modal opens so no stale selection from
-        // a previously edited item lingers (they reload on open).
+        // Supplier/Default Tax dropdowns when the create modal opens so no stale
+        // selection from a previously edited item lingers (they reload on open).
         if (open && variantKey === "master-create") {
           company.seedSelected("", "");
           group.seedSelected("", "");
@@ -4438,6 +4581,7 @@ export default function ItemMasterPageContent({
           section.seedSelected("", "");
           customerGroup.seedSelected("", "");
           supplier.seedSelected("", "");
+          tax.seedSelected("", "");
         }
         onModalOpenChange?.(open, variantKey);
       }}
@@ -4464,5 +4608,19 @@ export default function ItemMasterPageContent({
         });
       }}
     />
+    <ERPDynamicModalForm
+      title="Visible Settings"
+      variants={[visibilityVariant]}
+      showDefaultCards={false}
+      hideSectionHeader
+      resetOnSubmit={false}
+      panelStyle={{ width: "min(680px, calc(100vw - 2rem))", maxHeight: "min(82vh, 620px)" }}
+      onControllerReady={(controller) => {
+        visibilityControllerRef.current = controller;
+      }}
+      onOpenChange={(open) => setVisibilityModalOpen(open)}
+      onSubmit={() => handleVisibilitySubmit()}
+    />
+    </>
   );
 }

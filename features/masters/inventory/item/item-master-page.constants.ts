@@ -22,12 +22,16 @@ export const HSN_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 export const UI_TABLE_COLUMNS_ENDPOINT = "/ui-table-masters/get";
 export const UI_TABLE_COLUMNS_CREATE_ENDPOINT = "/ui-table-masters/create";
 export const WIDGET_MASTER_LIST_ENDPOINT = "/widget-masters/get";
+// Right-clicking inside the open item create/update modal opens a tree popup of
+// this menu's configured sections/fields (GET /widget-masters/config?menu_id=…);
+// ticking a field toggles its live visibility in the form. Edits are persisted
+// with a PATCH to /widget-masters/visibility.
+export const WIDGET_CONFIG_TREE_ENDPOINT = "/widget-masters/config";
+export const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 export const ITEM_TAX_MASTER_LIST_ENDPOINT = "/configured-grid-sql/run?grid_id=5";
-export const ITEM_WIDGET_QUERY_LIMIT = "100";
 export const ITEM_REORDER_TABLE_UI_ID = "2";
 export const ITEM_PRICE_TABLE_UI_ID = "3";
 export const ITEM_EAN_TABLE_UI_ID = "4";
-export const ITEM_MASTER_WIDGET_GROUP_ID = "5";
 // Item Master screen's menu id (fixed.menu_master). Selects this screen's
 // configured widget sections/fields from GET /widget-masters/get.
 export const ITEM_MASTER_WIDGET_SECTION_MENU_ID = "29";
@@ -64,6 +68,70 @@ export const ITEM_MASTER_WIDGET_QUERY = {
   sectionMenuId: ITEM_MASTER_WIDGET_SECTION_MENU_ID,
   sectionPlatform: ITEM_MASTER_WIDGET_TYPE,
 } as const;
+// Bridges each hardcoded item form field `name` to the backend `field_name` it
+// is configured under on menu 29's "Web" sections (fixed.form_field, matched
+// case-insensitively). This is what lets the widget-masters config re-label,
+// re-order, and show/hide the item form fields — a field with no entry here is
+// left untouched. Covers the "Core Details" (55), "Reference Links" (56), "Ean
+// table" (57, the Rules & Status checkboxes) and "Inventory& notes" (58)
+// sections. Keep the values in sync with fixed.form_field.field_name (verify with
+// a SQL diff; provisioned by ERP server prisma/seed/Item_Master_Widget_Config_Menu29.sql).
+export const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
+  // Section 55 — Core Details (item_sku is intentionally unmapped: no config row)
+  item_name_en: "item_name",
+  item_name_ta: "item_local",
+  item_alias: "item_alias",
+  item_code: "item_code",
+  item_default_barcode: "item_barcode",
+  item_batch_config: "item_batch_config",
+  item_hsn_code: "item_hsn",
+  item_default_tax_id: "item_default_tax",
+  item_is_active: "item_is_active",
+  // Section 56 — Reference Links
+  item_company_id: "item_company",
+  item_branch_id: "item_branch",
+  item_group_id: "item_group",
+  item_brand_id: "Item_Brand",
+  item_section_id: "Item_Section",
+  item_category_id: "Item_category",
+  item_supplier_id: "item_default_supplier",
+  item_cust_group: "Item_customer_group",
+  // Section 57 — Ean table (the Rules & Status checkboxes + expiry number fields).
+  // Config field_names were normalized to these binding keys, so all identity.
+  item_retail_item: "item_retail_item",
+  item_allow_sales: "item_allow_sales",
+  item_allow_loading: "item_allow_loading",
+  item_damagable_product: "item_damagable_product",
+  item_allow_neg_stock: "item_allow_neg_stock",
+  item_allow_promo: "item_allow_promo",
+  item_price_list: "item_price_list",
+  item_allow_sales_return: "item_allow_sales_return",
+  item_allow_freight: "item_allow_freight",
+  item_is_kit: "item_is_kit",
+  item_allow_negative_so: "item_allow_negative_so",
+  item_allow_loyalty: "item_allow_loyalty",
+  item_is_batch_based: "item_is_batch_based",
+  item_allow_purchase: "item_allow_purchase",
+  item_auto_break: "item_auto_break",
+  item_is_demand: "item_is_demand",
+  item_has_offer: "item_has_offer",
+  item_barcode_sticker: "item_barcode_sticker",
+  item_is_service: "item_is_service",
+  item_allow_po: "item_allow_po",
+  item_auto_make: "item_auto_make",
+  item_is_expiry_item: "item_is_expiry_item",
+  item_random_stock: "item_random_stock",
+  item_allow_so: "item_allow_so",
+  item_weigh_scale: "item_weigh_scale",
+  item_expiry_days: "item_expiry_days",
+  item_intimate_before_days: "item_intimate_before_days",
+  // Section 58 — Inventory& notes
+  item_sort_order: "item_sort_order",
+  item_storage_location: "item_storage_location",
+  item_image_url: "item_image_url",
+  item_photo_file: "item_photo_file",
+  item_notes: "item_notes",
+};
 export const LOOKUP_QUERY_ITEM_TAXES = {
   module: "itemTaxes",
 } as const;
@@ -726,20 +794,3 @@ export const ITEM_REORDER_CONTENT_FIELD_NAMES = [
   "ir_reorder_type",
 ] as const;
 export const ITEM_EAN_CONTENT_FIELD_NAMES = ["ean_code", "ean_remarks"] as const;
-export const WIDGET_NUMBER_KEYS = ["widgetNo", "widget_no", "id", "_id"] as const;
-export const WIDGET_GROUP_ID_KEYS = ["widgetGroupId", "widget_group_id", "groupId", "group_id"] as const;
-export const WIDGET_NAME_KEYS = ["widgetName", "widget_name", "name"] as const;
-export const WIDGET_POSITION_KEYS = ["widgetPosition", "widget_position", "position", "sort"] as const;
-export const WIDGET_VISIBILITY_KEYS = [
-  "widgetVisibility",
-  "widget_visibility",
-  "visible",
-  "isVisible",
-] as const;
-export const WIDGET_GUI_NAME_KEYS = ["widgetGuiName", "widget_gui_name", "guiName", "gui_name"] as const;
-export const WIDGET_SECONDARY_TEXT_KEYS = [
-  "widgetSecondaryText",
-  "widget_secondary_text",
-  "secondaryText",
-  "secondary_text",
-] as const;

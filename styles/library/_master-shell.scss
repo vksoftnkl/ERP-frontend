@@ -575,10 +575,31 @@
   font-size: 11.5px;
 }
 
+/* The module collapses checkbox fields to a single column, which strands the
+   box in a right-drifting implicit track. Restore the two-column field grid
+   (matching text fields) so the `grid-column: 2` rule below lands the box in the
+   control column, aligned under the inputs. Excludes the explicitly-placed
+   checkboxes of dense multi-column sections (they own the `1 / -1` rule below
+   and must not gain a label-width gutter that would overflow their cells). */
+.erp-ms-modal div[class*="checkboxField"]:not([style*="grid-column-start"]) {
+  grid-template-columns: minmax(7.5rem, var(--erp-modal-label-width)) minmax(0, 1fr);
+}
+
 /* Sit the checkbox in the control column rather than spanning under the label. */
 .erp-ms-modal div[class*="checkboxField"] > label[class*="checkboxWrapper"] {
   grid-column: 2 / -1;
   min-height: 0;
+}
+
+/* In a multi-column section (e.g. Item Rules & Status) each checkbox cell is a
+   single 1fr track explicitly placed via an inline grid-column-start. The rule
+   above would drop the checkbox into a content-sized implicit column so its left
+   edge drifts with label length; keep it at the left of its own cell instead so
+   every column's boxes line up. */
+.erp-ms-modal
+  div[class*="checkboxField"][style*="grid-column-start"]
+  > label[class*="checkboxWrapper"] {
+  grid-column: 1 / -1;
 }
 
 .erp-ms-modal .erp-ms-modal-check {
@@ -949,6 +970,16 @@
   padding: 0;
   border-bottom: 1px solid var(--erp-ms-line);
   background: var(--erp-ms-bg);
+  /* The bar is `position: sticky; top: 0` inside `.erp-ms-modal-body`, which
+     carries `padding: 14px 16px`. Sticky pins to the body's content box, so a
+     14px strip of that top padding sits *above* the pinned bar — and scrolling
+     field/table content bleeds through it, appearing to float over the tabs.
+     Cap that strip with an opaque paper-coloured block that rides with the bar.
+     A box-shadow (not a ::before) is used because the bar's `overflow-x: auto`
+     would clip a pseudo-element sitting above it; a shadow paints outside the
+     box and is immune to that clipping. Keep the 14px offset in sync with the
+     body's top padding. */
+  box-shadow: 0 -14px 0 0 var(--erp-ms-paper);
 }
 
 .erp-ms-modal .erp-ms-modal-tab {

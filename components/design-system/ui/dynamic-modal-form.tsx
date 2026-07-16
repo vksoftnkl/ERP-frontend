@@ -2184,9 +2184,6 @@ export function ERPDynamicModalForm({
                   {submitError}
                 </p>
               ) : null}
-              <p className="erp-ms-modal-hint" aria-hidden="true">
-                <kbd>Ctrl+S</kbd>: Save <span>|</span> <kbd>Esc</kbd>: Cancel
-              </p>
               <div className={cx(styles.footerActions, "erp-ms-modal-footer-actions")}>
                 <button
                   type="button"
