@@ -962,7 +962,6 @@ export default function ItemLinkedRecordsEditor({
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
-
       if (!isSearchOpen) {
         openSearchableSelect(cellKey, filteredOptions, cellValue, 0);
         return;

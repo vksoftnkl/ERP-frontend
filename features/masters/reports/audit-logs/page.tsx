@@ -419,6 +419,7 @@ export default function AuditLogsPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [refreshKey, setRefreshKey] = useState(0);
   const [openRowId, setOpenRowId] = useState<string | null>(null);
+  const [detailLog, setDetailLog] = useState<AuditLogListItem | null>(null);
   const { getAll: listAuditLogs, loading, error } = useApi<
     ApiSuccessResponse<AuditLogListItem[], ListMeta>
   >(AUDIT_LOG_LIST_ENDPOINT, {
@@ -737,6 +738,7 @@ export default function AuditLogsPage() {
                   index={(currentPage - 1) * pageSize + rowIndex + 1}
                   open={openRowId === row.log_id}
                   onToggle={() => setOpenRowId(openRowId === row.log_id ? null : row.log_id)}
+                  onDetail={() => setDetailLog(row)}
                 />
               ))
             )}
@@ -784,6 +786,164 @@ export default function AuditLogsPage() {
           </button>
         </div>
       </div>
+
+      {detailLog ? (
+        <AuditDetailModal row={detailLog} onClose={() => setDetailLog(null)} />
+      ) : null}
+    </div>
+  );
+}
+function AuditDetailModal({ row, onClose }: { row: AuditLogListItem; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const diffRows = useMemo(() => flattenAuditDiff(row.log_changed_fields), [row.log_changed_fields]);
+  const snapshotRows = useMemo(() => (diffRows.length === 0 ? resolveSnapshot(row) : []), [diffRows, row]);
+  const user = getRowUserLabel(row);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.stopPropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+  useEffect(() => {
+    if (!copied) {
+      return;
+    }
+    const timer = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard?.writeText(JSON.stringify(row, null, 2));
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <div
+      className={styles.overlay}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <section
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="audit-detail-title"
+      >
+        <header className={styles.modalHead}>
+          <span id="audit-detail-title">Audit Event</span>
+          <span className={styles.modalHeadId}>#{truncateMiddle(row.log_id)}</span>
+          <span className={cx(styles.badge, ACTION_BADGE_CLASS[resolveActionVariant(row.log_action)])}>
+            {formatActionLabel(row.log_action)}
+          </span>
+          <button className={styles.modalClose} type="button" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </header>
+
+        <div className={styles.modalBody}>
+          <div className={styles.kv}>
+            <span className={styles.kvKey}>Date / Time</span>
+            <span className={cx(styles.kvValue, styles.kvMono)}>{formatDateTime(row.log_date)}</span>
+
+            <span className={styles.kvKey}>Screen</span>
+            <span className={styles.kvValue}>
+              {row.screen_name}
+              <span className={styles.kvScreenId}>#{row.log_screen_id}</span>
+            </span>
+
+            <span className={styles.kvKey}>Table</span>
+            <span className={cx(styles.kvValue, styles.kvMono)}>{row.log_table_name}</span>
+
+            <span className={styles.kvKey}>Entity</span>
+            <span className={styles.kvValue}>{getRowEntityLabel(row)}</span>
+
+            <span className={styles.kvKey}>User</span>
+            <span className={cx(styles.kvValue, styles.kvMono)}>{user.title || "—"}</span>
+
+            <span className={styles.kvKey}>Branch</span>
+            <span className={styles.kvValue}>
+              {row.log_branch_name?.trim() || row.log_branch_id?.trim() || "—"}
+            </span>
+
+            <span className={styles.kvKey}>Notes</span>
+            <span className={styles.kvValue}>{row.log_notes?.trim() || "—"}</span>
+          </div>
+
+          <div className={styles.modalSection}>
+            <div className={styles.modalSectionTitle}>
+              {diffRows.length > 0 ? "Field Changes" : "Record Snapshot"}
+            </div>
+            {diffRows.length > 0 ? (
+              <table className={styles.modalDiff}>
+                <thead>
+                  <tr>
+                    <th style={{ width: "34%" }}>Field</th>
+                    <th style={{ width: "33%" }}>Old Value</th>
+                    <th>New Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {diffRows.map((diff, diffIndex) => (
+                    <tr key={`${diff.field}-${diffIndex + 1}`}>
+                      <td>{diff.field}</td>
+                      <td className={styles.modalDiffOld}>{formatAuditPrimitiveValue(diff.from)}</td>
+                      <td className={styles.modalDiffNew}>{formatAuditPrimitiveValue(diff.to)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : snapshotRows.length > 0 ? (
+              <table className={styles.modalDiff}>
+                <thead>
+                  <tr>
+                    <th style={{ width: "34%" }}>Field</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {snapshotRows.map((snapshot, snapshotIndex) => (
+                    <tr key={`${snapshot.field}-${snapshotIndex + 1}`}>
+                      <td>{snapshot.field}</td>
+                      <td>{formatAuditPrimitiveValue(snapshot.value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <span className={styles.modalEmpty}>
+                No field-level changes recorded for this event
+                {resolveActionVariant(row.log_action) === "new"
+                  ? " — the full record was created."
+                  : "."}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <footer className={styles.modalFoot}>
+          <span className={styles.modalHint}>Esc: Close</span>
+          <button className={styles.modalBtn} type="button" onClick={handleCopy}>
+            {copied ? "Copied" : "Copy JSON"}
+          </button>
+          <button
+            className={cx(styles.modalBtn, styles.modalBtnClose)}
+            type="button"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </footer>
+      </section>
     </div>
   );
 }
@@ -792,11 +952,13 @@ function AuditRow({
   index,
   open,
   onToggle,
+  onDetail,
 }: {
   row: AuditLogListItem;
   index: number;
   open: boolean;
   onToggle: () => void;
+  onDetail: () => void;
 }) {
   const diffRows = useMemo(() => flattenAuditDiff(row.log_changed_fields), [row.log_changed_fields]);
   const snapshotRows = useMemo(() => (diffRows.length === 0 ? resolveSnapshot(row) : []), [diffRows, row]);
@@ -804,7 +966,11 @@ function AuditRow({
   const expandable = diffRows.length > 0 || snapshotRows.length > 0;
   return (
     <>
-      <tr className={cx(styles.row, open && styles.rowOpen)}>
+      <tr
+        className={cx(styles.row, open && styles.rowOpen)}
+        onDoubleClick={onDetail}
+        title="Double-click for full detail"
+      >
         <td className={styles.cellSno}>{index}</td>
         <td className={cx(styles.cellMono, styles.cellDate)} title={formatDateTime(row.log_date)}>
           {formatDateOnly(row.log_date)} {formatTimeOnly(row.log_date)}
