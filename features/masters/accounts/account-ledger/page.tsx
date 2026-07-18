@@ -71,9 +71,9 @@ import {
   buildLedgerGstLookupValues,
   getLookupErrorMessage,
   extractPaginationInfo,
+  extractRows,
+  extractDetailSource,
   resolveAccountLedgerGridDetails,
-  toSafePageNumber,
-  toSafePageSize,
 } from "./transformers";
 import {
   isLedgerFieldName,
@@ -1138,18 +1138,13 @@ export default function AccountLedgerMasterPage() {
       const fallbackTotal = rows.length;
       const resolvedTotal = paginationInfo.totalEntries ?? fallbackTotal;
       setTotalEntries(Math.max(0, resolvedTotal));
-      if (paginationInfo.currentPage !== null) {
-        const nextPage = paginationInfo.currentPage;
-        setCurrentPage((existingPage) =>
-          existingPage === nextPage ? existingPage : toSafePageNumber(nextPage),
-        );
-      }
-      if (paginationInfo.pageSize !== null) {
-        const nextPageSize = paginationInfo.pageSize;
-        setPageSize((existingPageSize) =>
-          existingPageSize === nextPageSize ? existingPageSize : toSafePageSize(nextPageSize),
-        );
-      }
+      // Only the total is taken from the response. `page`/`limit` are echoed
+      // straight back from the request, so feeding them into state adds nothing
+      // and actively fights the table's auto-fit sizing: the reply to an
+      // in-flight request would reset `pageSize` to the limit that request was
+      // issued with, undoing a newer auto-fit value. The table only notifies a
+      // given auto-fit size once, so it never re-sends it and the grid stays
+      // stuck fetching fewer rows per page than it renders room for.
     },
     [getAll, wantDelete],
   );
@@ -1164,18 +1159,10 @@ export default function AccountLedgerMasterPage() {
   }, [currentPage, loadRecords, pageSize, searchTerm]);
   // Build rows
   const serialOffset = Math.max(0, (currentPage - 1) * pageSize);
-  const rows = useMemo(() => {
-    const extractedRows = extractRows(data, [
-      "data",
-      "items",
-      "results",
-      "rows",
-      "list",
-      "accountLedgers",
-      "account_ledgers",
-    ]);
-    return buildLedgerRows(data, serialOffset);
-  }, [data, serialOffset]);
+  const rows = useMemo(
+    () => buildLedgerRows(data, serialOffset),
+    [data, serialOffset],
+  );
   // Build columns
   // Headers come solely from /configured-grid-sql/columns (grid_id); no hardcoded defaults.
   const columns = useMemo<ReusableTableColumn<LedgerTableRow>[]>(
@@ -2313,27 +2300,6 @@ export default function AccountLedgerMasterPage() {
     maxHeight: "75vh",
   } as CSSProperties;
   const modalFormId = "account-ledger-master-form";
-  // Helper function to extract rows
-  function extractRows(payload: unknown, arrayKeys: string[]): unknown[] {
-    if (Array.isArray(payload)) return payload;
-    if (!payload || typeof payload !== "object") return [];
-    const objectPayload = payload as Record<string, unknown>;
-    for (const key of arrayKeys) {
-      const value = objectPayload[key];
-      if (Array.isArray(value)) return value;
-    }
-    return [];
-  }
-  // Helper function to extract detail source
-  function extractDetailSource(payload: unknown): Record<string, unknown> | null {
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
-    const objectPayload = payload as Record<string, unknown>;
-    const nestedData = objectPayload.data;
-    if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
-      return nestedData as Record<string, unknown>;
-    }
-    return objectPayload;
-  }
   return (
     <>
       {gridSettingsContextMenu}

@@ -557,6 +557,31 @@ export default function ItemLinkedRecordsEditor({
   const closeAdminSettings = () => {
     setIsAdminSettingsOpen(false);
   };
+  // Escape must only dismiss this nested dialog. The enclosing dynamic modal
+  // form listens for Escape on `window` and closes itself, so without our own
+  // handler the keypress fell through and tore down the whole Item Master
+  // modal, discarding unsaved edits. Marking the event handled is what stops
+  // it: that listener bails on `event.defaultPrevented`.
+  //
+  // Listen on the capture phase: the parent's listener is on the same target
+  // and was registered first (it mounts before this dialog opens), so a bubble
+  // -phase listener here would run second — too late to stop it.
+  useEffect(() => {
+    if (!isAdminSettingsOpen) {
+      return;
+    }
+    const handleAdminSettingsEscape = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key !== "Escape") {
+        return;
+      }
+      event.preventDefault();
+      closeAdminSettings();
+    };
+    window.addEventListener("keydown", handleAdminSettingsEscape, true);
+    return () => {
+      window.removeEventListener("keydown", handleAdminSettingsEscape, true);
+    };
+  }, [isAdminSettingsOpen]);
   const handleAdminSettingsChange = (
     columnKey: string,
     field: keyof AdminSettingsDraftEntry,

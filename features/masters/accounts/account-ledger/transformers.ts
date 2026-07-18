@@ -530,7 +530,16 @@ export function extractPaginationInfo(payload: unknown): PaginationInfo {
     }
   }
   if (root.data && typeof root.data === "object" && !Array.isArray(root.data)) {
-    candidates.push(root.data as Record<string, unknown>);
+    const dataObject = root.data as Record<string, unknown>;
+    candidates.push(dataObject);
+    // The list endpoints wrap their payload as `{ success, message, data: { items, meta } }`,
+    // so the pagination container sits one level deeper than the root scan reaches.
+    for (const key of PAGINATION_CONTAINER_KEYS) {
+      const nested = dataObject[key];
+      if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+        candidates.push(nested as Record<string, unknown>);
+      }
+    }
   }
   return {
     totalEntries: findPaginationNumber(candidates, TOTAL_ENTRIES_KEYS, true),
