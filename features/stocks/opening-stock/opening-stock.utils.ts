@@ -319,10 +319,10 @@ export function buildUnitDecimalCountById(payload: unknown): Record<string, numb
 }
 export function normalizeOpeningStockProfitType(value: string | null | undefined): string {
   const normalized = (value ?? "").trim().toUpperCase();
-  if (normalized === "BY_AMOUNT" || normalized === "BY RS" || normalized === "VALUE") {
+  if (normalized === "By %" || normalized === "By Rs" || normalized === "VALUE") {
     return "BY_AMOUNT";
   }
-  if (normalized === "MANUAL" || normalized === "BY USER" || normalized === "USER") {
+  if (normalized === "By User" || normalized === "By User" || normalized === "USER") {
     return "MANUAL";
   }
   return "BY_PERCENT";

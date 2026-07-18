@@ -263,11 +263,11 @@ export const BATCH_CONFIG_OPTIONS: ERPDynamicSelectOption[] = [
   { value: ITEM_BATCH_CONFIG_MRP_VALUE, label: "MRP" },
   { value: ITEM_BATCH_CONFIG_BATCH_VALUE, label: "BATCH" },
 ];
-export const ITEM_PRICE_DEFAULT_PROFIT_TYPE = "BY_PERCENT";
+export const ITEM_PRICE_DEFAULT_PROFIT_TYPE = "By %";
 export const ITEM_PRICE_PROFIT_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
-  { value: "BY_PERCENT", label: "BY %" },
-  { value: "BY_AMOUNT", label: "BY Rs " },
-  { value: "MANUAL", label: "BY User" },
+  { value: "By %", label: "BY %" },
+  { value: "By Rs ", label: "BY Rs " },
+  { value: "By User", label: "BY User" },
 ];
 export const ITEM_PRICE_ROUND_OFF_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "0.01", label: "0.01" },

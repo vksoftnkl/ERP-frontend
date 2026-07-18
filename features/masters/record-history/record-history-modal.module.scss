@@ -1,0 +1,426 @@
+/* Record History modal — "Simple ERP" skin.
+   Shares the token block, action badges and diff-table treatment with
+   Audit Logs (features/masters/reports/audit-logs/page.module.scss) so the
+   record's change history reads as the same family. The accent tracks
+   --primary rather than hardcoding the maroon. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.modal {
+  --accent: var(--primary, #7b1515);
+  --accent-dk: var(--primary-hover, #611010);
+  --ink: #222;
+  --ink2: #555;
+  --ink3: #888;
+  --line: #c9c9c9;
+  --line2: #e3e3e3;
+  --bg: #f2f2f2;
+  --paper: #fff;
+  --head: #ededed;
+  --sel: #f7ecec;
+  --hover: #f6f6f6;
+  --ok: #1b6e2a;
+  --err: #b00020;
+  --warn: #9a6700;
+  --info: #0b5cad;
+
+  /* globals.css forces `border-radius: var(--erp-radius) !important` onto every
+     button/input/select/table; re-scope the variable so the skin's tighter
+     corners win without fighting that !important. */
+  --erp-radius: 2px;
+
+  display: flex;
+  flex-direction: column;
+  width: min(860px, 96vw);
+  height: min(600px, 90vh);
+  border: 1px solid #999;
+  background: var(--paper);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, Arial, sans-serif;
+  font-size: 13px;
+}
+
+/* ── Header (accent bar) ──────────────────────────────────── */
+.head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.headRec {
+  padding: 1px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.15);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12.5px;
+  font-weight: 400;
+}
+.close {
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.18);
+  }
+}
+
+/* ── Summary strip ────────────────────────────────────────── */
+.summary {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line2);
+  color: var(--ink2);
+  font-size: 12.5px;
+
+  b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+}
+.mono {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+}
+
+/* ── Error strip ──────────────────────────────────────────── */
+.errorBox {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 12px 0;
+  padding: 7px 10px;
+  border: 1px solid #d89a9a;
+  background: #fff3f3;
+  color: #7a1c1c;
+}
+.errorText {
+  margin: 0;
+  font-size: 12.5px;
+}
+.retryBtn {
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  background: #fff;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--sel);
+  }
+}
+
+/* ── Grid ─────────────────────────────────────────────────── */
+.gridWrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+
+  /* `:where(th)` in globals.css forces header colour/weight with !important;
+     these plain-class rules out-specify it. */
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 5px 8px;
+    border: 1px solid var(--line2);
+    border-top: 0;
+    background: var(--head) !important;
+    color: var(--ink2) !important;
+    font-weight: 600 !important;
+    font-size: 12.5px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  td {
+    padding: 4px 8px;
+    border: 1px solid var(--line2);
+    line-height: 1.45;
+    vertical-align: top;
+  }
+}
+.colSno {
+  width: 40px;
+}
+.colDate {
+  width: 140px;
+}
+.colAction {
+  width: 96px;
+}
+.colUser {
+  width: 120px;
+}
+.colChanges {
+  width: 116px;
+}
+.row {
+  background: var(--paper);
+
+  &.clickable {
+    cursor: pointer;
+  }
+  &:hover {
+    background: var(--hover);
+  }
+}
+.rowOpen {
+  background: var(--sel);
+
+  &:hover {
+    background: var(--sel);
+  }
+  td {
+    border-bottom-color: #e0c7c7;
+  }
+}
+.cellSno {
+  color: var(--ink3);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  text-align: right;
+}
+.cellMono {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.userMuted {
+  color: var(--ink3);
+}
+.stateCell {
+  padding: 34px 8px !important;
+  color: var(--ink3);
+  text-align: center;
+}
+
+/* ── Action badges (family palette) ───────────────────────── */
+.badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.badgeNew {
+  border-color: #c4dfc9;
+  background: #ebf5ed;
+  color: var(--ok);
+}
+.badgeUpdate {
+  border-color: #e8d6a8;
+  background: #fbf3e0;
+  color: var(--warn);
+}
+.badgeApprove {
+  border-color: #bfd8f2;
+  background: #e8f1fb;
+  color: var(--info);
+}
+.badgeCancel {
+  border-color: #e8c5c2;
+  background: #fbedec;
+  color: var(--err);
+}
+.badgeNeutral {
+  border-color: var(--line);
+  background: var(--bg);
+  color: var(--ink2);
+}
+
+/* ── Changes cell ─────────────────────────────────────────── */
+.diffBtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+.noDiff {
+  color: var(--ink3);
+  font-size: 12px;
+}
+
+/* ── Expanded diff row ────────────────────────────────────── */
+.detailRow td {
+  padding: 8px 12px 10px 44px;
+  background: #fbfbf8;
+}
+/* A diff leaf can hold a whole array (e.g. a table's `columns`), which
+   stringifies into many lines. Bound the panel and let it scroll so one
+   expanded row can never push the grid off-screen. */
+.detailScroll {
+  max-height: 240px;
+  overflow: auto;
+}
+.diffTable {
+  border-collapse: collapse;
+  font-size: 12px;
+
+  th {
+    position: sticky;
+    top: 0;
+    padding: 3px 14px 3px 0;
+    border: 0;
+    border-bottom: 1px solid var(--line2);
+    background: #fbfbf8 !important;
+    color: var(--ink3) !important;
+    font-size: 10.5px;
+    font-weight: 600 !important;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-align: left;
+    white-space: nowrap;
+  }
+  td {
+    padding: 3px 14px 3px 0;
+    border: 0;
+    border-bottom: 1px solid #f0ede5;
+    background: transparent;
+    vertical-align: top;
+  }
+}
+.diffField {
+  min-width: 190px;
+  color: var(--ink2);
+  font-family: Consolas, "Courier New", monospace;
+  overflow-wrap: anywhere;
+}
+.diffOld {
+  min-width: 200px;
+  color: var(--err);
+  font-family: Consolas, "Courier New", monospace;
+  text-decoration: line-through;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.diffNew {
+  color: var(--ok);
+  font-family: Consolas, "Courier New", monospace;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+.footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink2);
+  font-size: 12px;
+}
+.expandBtn {
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--sel);
+  }
+}
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.pagerInfo {
+  color: var(--ink3);
+}
+.pagerBtn {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--sel);
+    color: var(--accent);
+  }
+  &:disabled {
+    color: #ccc;
+    cursor: default;
+  }
+}
+.closeBtn {
+  padding: 6px 18px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg);
+  }
+}
+/* When there is no pager, the Close button takes the right edge. */
+.closeBtnEnd {
+  margin-left: auto;
+}

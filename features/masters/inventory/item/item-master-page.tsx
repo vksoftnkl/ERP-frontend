@@ -302,14 +302,14 @@ function formatDerivedItemPriceNumber(value: number): string {
 }
 function normalizeItemPriceProfitType(value: string | undefined): string {
   const normalized = (value ?? "").trim();
-  if (normalized === "BY %" || normalized === "BY_PERCENT") {
-    return "BY_PERCENT";
+  if (normalized === "By %" || normalized === "By %") {
+    return "By %";
   }
-  if (normalized === "BY RS" || normalized === "BY_AMOUNT") {
-    return "BY_AMOUNT";
+  if (normalized === "By Rs " || normalized === "By Rs " || normalized === "BY_AMOUNT") {
+    return "By Rs";
   }
-  if (normalized === "BY USER" || normalized === "MANUAL") {
-    return "MANUAL";
+  if (normalized === "By User" || normalized === "By User" || normalized === "MANUAL") {
+    return "By User";
   }
   return ITEM_PRICE_DEFAULT_PROFIT_TYPE;
 }
@@ -1325,28 +1325,39 @@ function normalizeComparisonString(value: unknown): string {
 }
 type ItemPriceScope = {
   branchId: string;
-  companyId: string;
 };
 
 function resolveItemPriceScope(
   source: Record<string, unknown> | null | undefined,
 ): ItemPriceScope {
   return {
-    companyId: normalizeComparisonString(getFieldValue(source ?? {}, "item_company_id")),
     branchId: normalizeComparisonString(getFieldValue(source ?? {}, "item_branch_id")),
   };
 }
 
+/**
+ * Keeps only the price rows that belong to the item's branch. Rows are already
+ * scoped to the item by ipm_item_id server-side, so this is just a guard against
+ * showing another branch's rows; a row with no branch of its own is treated as
+ * item-wide and always kept, as is every row when the item itself has no branch.
+ *
+ * Deliberately does NOT compare ipm_company_id against item_company_id: the
+ * server overwrites item_company_id with the caller's token company on save
+ * (items-master.service applyOptionalFields) while the price rows keep the
+ * company picked in the form, so on a company-bound token the two legitimately
+ * differ and comparing them silently emptied the price table on edit.
+ */
 function filterItemPriceRowsByScope(
   rows: Record<string, unknown>[],
   scope: ItemPriceScope,
 ): Record<string, unknown>[] {
-  return rows.filter(
-    (row) =>
-      normalizeComparisonString(getFieldValue(row, "ipm_company_id")) ===
-        scope.companyId &&
-      normalizeComparisonString(getFieldValue(row, "ipm_branch_id")) === scope.branchId,
-  );
+  if (!scope.branchId) {
+    return rows;
+  }
+  return rows.filter((row) => {
+    const rowBranchId = normalizeComparisonString(getFieldValue(row, "ipm_branch_id"));
+    return !rowBranchId || rowBranchId === scope.branchId;
+  });
 }
 
 function selectManagedItemPriceLinkedRow(
@@ -4016,12 +4027,20 @@ export default function ItemMasterPageContent({
         getFieldValue(compositeSource ?? {}, "unit_conversions"),
         DEFAULT_LOOKUP_ARRAY_KEYS,
       );
-      const priceRows = filterItemPriceRowsByScope(
-        extractArrayRecords(
-          getFieldValue(compositeSource ?? {}, "prices"),
-          DEFAULT_LOOKUP_ARRAY_KEYS,
+      // ipm_unit_id comes back as an iuc_id (it is a FK to item_unit_conversion),
+      // but every price-row control matches on unit ids, so retarget it the same
+      // way reorder/EAN rows are below — otherwise the Unit cell renders blank
+      // and the conversion-factor lookups miss.
+      const priceRows = mapLinkedRowUnitConversionIdsToUnitIds(
+        filterItemPriceRowsByScope(
+          extractArrayRecords(
+            getFieldValue(compositeSource ?? {}, "prices"),
+            DEFAULT_LOOKUP_ARRAY_KEYS,
+          ),
+          resolveItemPriceScope(itemSource),
         ),
-        resolveItemPriceScope(itemSource),
+        "ipm_unit_id",
+        itemUnitConversionRows,
       );
       const reorderRows = mapLinkedRowUnitConversionIdsToUnitIds(
         extractArrayRecords(

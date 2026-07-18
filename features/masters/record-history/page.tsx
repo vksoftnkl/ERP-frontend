@@ -18,6 +18,7 @@ import {
 import { useApi } from "@/hooks/useApi";
 import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
+import styles from "./record-history-modal.module.scss";
 const AUDIT_LOG_LIST_ENDPOINT = "/audit-logs/list";
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
@@ -108,6 +109,9 @@ function buildRecordHistoryQuery(
     record_pk: recordPk,
     page: String(page),
     limit: String(limit),
+    /* total/total_pages come back null unless this is opted into, which leaves
+       the pager stuck on a single page. */
+    include_total: "true",
   };
 }
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-IN", {
@@ -385,10 +389,6 @@ const DETAIL_JSON_TABLE_ROW_CLASS = "border-b border-slate-100 last:border-b-0";
 const DETAIL_JSON_TABLE_FIELD_CLASS = "min-w-[180px]";
 const DETAIL_JSON_TABLE_VALUE_CLASS = "min-w-[220px]";
 const DETAIL_JSON_TABLE_STATUS_CLASS = "min-w-[140px]";
-const MODAL_PANEL_CLASS = cx(
-  PANEL_CLASS,
-  "w-full max-w-[min(1320px,96vw)] min-h-0 overflow-hidden bg-white p-0 max-h-[calc(100vh-72px)]",
-);
 function renderStructuredAuditValue(value: unknown, path = "root"): ReactNode {
   const normalizedValue = normalizeStructuredValue(value);
   if (normalizedValue === null || normalizedValue === undefined) {
@@ -477,9 +477,7 @@ function getActionBadgeClass(value: string): string {
 }
 type RecordHistoryViewerProps = {
   displayName?: string | null;
-  mode?: "modal" | "page";
   onBack?: (() => void) | undefined;
-  onClose?: (() => void) | undefined;
   recordPk: string | number | null | undefined;
   screenName: string | number | null | undefined;
 };
@@ -498,9 +496,7 @@ function normalizeViewerValue(value: string | number | null | undefined): string
 }
 function RecordHistoryViewer({
   displayName: displayNameProp,
-  mode = "page",
   onBack,
-  onClose,
   recordPk: recordPkProp,
   screenName: screenNameProp,
 }: RecordHistoryViewerProps) {
@@ -606,10 +602,6 @@ function RecordHistoryViewer({
   const handleCloseDetail = useCallback(() => {
     setSelectedLog(null);
   }, []);
-  const handleViewerClose = useCallback(() => {
-    setSelectedLog(null);
-    onClose?.();
-  }, [onClose]);
   const tableSummary =
     meta.total === 0
       ? "Showing 0 of 0 history records"
@@ -644,13 +636,9 @@ function RecordHistoryViewer({
         history.
       </p>
       <div>
-        <button
-          className={BACK_BUTTON_CLASS}
-          type="button"
-          onClick={mode === "modal" ? handleViewerClose : onBack}
-        >
+        <button className={BACK_BUTTON_CLASS} type="button" onClick={onBack}>
           <FiArrowLeft aria-hidden="true" />
-          <span>{mode === "modal" ? "Close" : "Go back"}</span>
+          <span>Go back</span>
         </button>
       </div>
     </section>
@@ -1002,54 +990,6 @@ function RecordHistoryViewer({
       ) : null}
     </>
   );
-  if (mode === "modal") {
-    return (
-      <div
-        aria-modal="true"
-        className="fixed inset-0 z-[200] overflow-hidden bg-slate-950/45 px-3 py-4 backdrop-blur-[1px]"
-        role="dialog"
-        onClick={handleViewerClose}
-      >
-        <div className="flex h-full items-center justify-center">
-          <section
-            className={cx(
-              MODAL_PANEL_CLASS,
-              "flex h-[calc(100vh-2rem)] w-full max-w-[min(1290px,92vw)] flex-col gap-4 p-2",
-            )}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="flex shrink-0 flex-col gap-2 min-[781px]:flex-row min-[781px]:items-start min-[781px]:justify-between">
-              <div className="grid min-w-0 gap-2">
-                <div className="flex items-start gap-2.5">
-                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] bg-indigo-50 text-indigo-600">
-                    <FiRotateCcw className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <div className="grid min-w-0 gap-0.5">
-                    <p className="m-0 text-[12px] leading-none font-extrabold uppercase text-slate-600">
-                      Record History
-                    </p>
-                    <h2 className="m-0 text-[20px] leading-tight font-bold text-slate-950 max-[780px]:text-[22px]">
-                      {displayName || "Selected record"}
-                    </h2>
-                  </div>
-                </div>
-                {historySummaryChips}
-              </div>
-              <button
-                aria-label="Close record history"
-                className={cx(ICON_BUTTON_CLASS, "h-10 w-10 self-start text-[20px]")}
-                type="button"
-                onClick={handleViewerClose}
-              >
-                <FiX aria-hidden="true" />
-              </button>
-            </header>
-            {viewerBody}
-          </section>
-        </div>
-      </div>
-    );
-  }
   return (
     <main className="min-h-[calc(100vh-72px)] bg-gradient-to-b from-[#f7f7f8] to-[#f1f2f4] text-slate-800">
       <div className="flex min-h-[calc(100vh-72px)] flex-col gap-3 p-3 max-[780px]:gap-2.5 max-[780px]:p-2.5">
@@ -1080,25 +1020,373 @@ function RecordHistoryViewer({
     </main>
   );
 }
-export function RecordHistoryModal({
+type ModalDiffRow = {
+  field: string;
+  old: string;
+  new: string;
+};
+type ModalHistoryRowView = {
+  id: string;
+  date: string;
+  actionLabel: string;
+  badgeClass: string;
+  user: string;
+  userKnown: boolean;
+  notes: string;
+  diff: ModalDiffRow[];
+};
+function buildModalDiffRows(changedFields: unknown): ModalDiffRow[] {
+  return flattenAuditDiff(changedFields).map((row) => ({
+    field: row.field,
+    old: formatAuditPrimitiveValue(row.from),
+    new: formatAuditPrimitiveValue(row.to),
+  }));
+}
+function getModalBadgeClass(action: string): string {
+  switch (resolveActionVariant(action)) {
+    case "new":
+      return styles.badgeNew;
+    case "update":
+      return styles.badgeUpdate;
+    case "approve":
+      return styles.badgeApprove;
+    case "cancel":
+      return styles.badgeCancel;
+    default:
+      return styles.badgeNeutral;
+  }
+}
+function ModalHistoryRow({
+  row,
+  index,
+  open,
+  onToggle,
+}: {
+  row: ModalHistoryRowView;
+  index: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const hasDiff = row.diff.length > 0;
+  return (
+    <>
+      <tr
+        className={cx(styles.row, hasDiff && styles.clickable, open && styles.rowOpen)}
+        onClick={hasDiff ? onToggle : undefined}
+      >
+        <td className={styles.cellSno}>{index}</td>
+        <td className={styles.cellMono}>{row.date}</td>
+        <td>
+          <span className={cx(styles.badge, row.badgeClass)}>{row.actionLabel}</span>
+        </td>
+        <td className={row.userKnown ? undefined : styles.userMuted}>{row.user}</td>
+        <td>
+          {hasDiff ? (
+            <span className={styles.diffBtn}>
+              {open ? "▾" : "▸"} {row.diff.length} field{row.diff.length > 1 ? "s" : ""}
+            </span>
+          ) : (
+            <span className={styles.noDiff}>—</span>
+          )}
+        </td>
+        <td>{row.notes ? row.notes : <span className={styles.userMuted}>—</span>}</td>
+      </tr>
+      {open && hasDiff ? (
+        <tr className={styles.detailRow}>
+          <td colSpan={6}>
+            <div className={styles.detailScroll}>
+              <table className={styles.diffTable}>
+                <thead>
+                  <tr>
+                    <th style={{ width: 190 }}>Field</th>
+                    <th style={{ width: 200 }}>Old Value</th>
+                    <th>New Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {row.diff.map((diffRow, diffIndex) => (
+                    <tr key={`${diffRow.field}-${diffIndex + 1}`}>
+                      <td className={styles.diffField}>{diffRow.field}</td>
+                      <td className={styles.diffOld}>{diffRow.old}</td>
+                      <td className={styles.diffNew}>{diffRow.new}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+}
+type RecordHistoryModalContentProps = Omit<RecordHistoryModalProps, "isOpen">;
+function RecordHistoryModalContent({
   displayName,
-  isOpen,
   onClose,
   recordPk,
   screenName,
-}: RecordHistoryModalProps) {
-  if (!isOpen) {
+}: RecordHistoryModalContentProps) {
+  const screen = normalizeViewerValue(screenName);
+  const recordPkValue = normalizeViewerValue(recordPk);
+  const recordName = normalizeViewerValue(displayName);
+  const hasContext = Boolean(screen && recordPkValue);
+  const [logs, setLogs] = useState<AuditLogListItem[]>([]);
+  const [meta, setMeta] = useState<ListMeta>(EMPTY_META);
+  const [page, setPage] = useState(DEFAULT_PAGE);
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { getAll: listAuditLogs, loading, error } = useApi<
+    ApiSuccessResponse<AuditLogListItem[], ListMeta>
+  >(AUDIT_LOG_LIST_ENDPOINT, {
+    toast: { success: false, error: true },
+  });
+  const safeTotalPages = Math.max(
+    1,
+    meta.total_pages ||
+      Math.ceil(Math.max(meta.total, 1) / Math.max(meta.limit || DEFAULT_PAGE_SIZE, 1)),
+  );
+  const fetchHistory = useCallback(async () => {
+    if (!hasContext) {
+      setLogs([]);
+      setMeta(EMPTY_META);
+      return;
+    }
+    try {
+      const response = await listAuditLogs(
+        buildRecordHistoryQuery(screen, recordPkValue, page, DEFAULT_PAGE_SIZE),
+      );
+      if (!response) {
+        return;
+      }
+      setLogs(response.data);
+      setMeta({
+        page: response.meta?.page ?? page,
+        limit: response.meta?.limit ?? DEFAULT_PAGE_SIZE,
+        total: response.meta?.total ?? response.data.length,
+        total_pages:
+          response.meta?.total_pages ??
+          Math.max(
+            1,
+            Math.ceil((response.meta?.total ?? response.data.length) / DEFAULT_PAGE_SIZE),
+          ),
+      });
+    } catch {
+      // useApi already exposes the error state.
+    }
+  }, [hasContext, listAuditLogs, page, recordPkValue, screen]);
+  useEffect(() => {
+    void fetchHistory();
+  }, [fetchHistory, refreshKey]);
+  useEffect(() => {
+    setOpenRows(new Set());
+  }, [page, refreshKey]);
+  useEffect(() => {
+    if (page > safeTotalPages) {
+      setPage(safeTotalPages);
+    }
+  }, [page, safeTotalPages]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const rows = useMemo<ModalHistoryRowView[]>(
+    () =>
+      logs.map((log) => {
+        const user = getRowUserLabel(log);
+        return {
+          id: log.log_id,
+          date: formatDateTime(log.log_date),
+          actionLabel: formatActionLabel(log.log_action),
+          badgeClass: getModalBadgeClass(log.log_action),
+          user,
+          userKnown: user !== "-",
+          notes: log.log_notes?.trim() ?? "",
+          diff: buildModalDiffRows(log.log_changed_fields),
+        };
+      }),
+    [logs],
+  );
+  const withDiff = useMemo(() => rows.filter((row) => row.diff.length > 0), [rows]);
+  const allOpen = withDiff.length > 0 && withDiff.every((row) => openRows.has(row.id));
+  const toggleRow = useCallback((id: string) => {
+    setOpenRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+  const toggleAll = useCallback(() => {
+    setOpenRows(allOpen ? new Set() : new Set(withDiff.map((row) => row.id)));
+  }, [allOpen, withDiff]);
+  const totalRecords = meta.total || logs.length;
+  const newestLog = logs[0] ?? null;
+  const createdLog = useMemo(
+    () =>
+      [...logs].reverse().find((log) => resolveActionVariant(log.log_action) === "new") ?? null,
+    [logs],
+  );
+  const startIndex = (page - 1) * (meta.limit || DEFAULT_PAGE_SIZE);
+  return (
+    <div
+      className={styles.overlay}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Record history"
+      >
+        <div className={styles.head}>
+          Record History
+          <span className={styles.headRec}>{recordName || "Selected record"}</span>
+          <button className={styles.close} type="button" aria-label="Close" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        <div className={styles.summary}>
+          <span>
+            <b>{totalRecords}</b> {totalRecords === 1 ? "change" : "changes"}
+          </span>
+          {createdLog ? (
+            <span>
+              Created <span className={styles.mono}>{formatDateTime(createdLog.log_date)}</span> by{" "}
+              <b>{getRowUserLabel(createdLog)}</b>
+            </span>
+          ) : null}
+          {newestLog ? (
+            <span>
+              Last change <span className={styles.mono}>{formatDateTime(newestLog.log_date)}</span>{" "}
+              by <b>{getRowUserLabel(newestLog)}</b>
+            </span>
+          ) : null}
+        </div>
+        {error ? (
+          <div className={styles.errorBox}>
+            <p className={styles.errorText}>{error}</p>
+            <button
+              className={styles.retryBtn}
+              type="button"
+              onClick={() => setRefreshKey((value) => value + 1)}
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
+        <div className={styles.gridWrap}>
+          <table className={styles.grid}>
+            <thead>
+              <tr>
+                <th className={styles.colSno}>#</th>
+                <th className={styles.colDate}>Date / Time</th>
+                <th className={styles.colAction}>Action</th>
+                <th className={styles.colUser}>User</th>
+                <th className={styles.colChanges}>Changes</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!hasContext ? (
+                <tr>
+                  <td className={styles.stateCell} colSpan={6}>
+                    Open this from a record&apos;s History action to load its change history.
+                  </td>
+                </tr>
+              ) : loading && rows.length === 0 ? (
+                <tr>
+                  <td className={styles.stateCell} colSpan={6}>
+                    Loading record history…
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td className={styles.stateCell} colSpan={6}>
+                    No history was found for this record.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row, rowIndex) => (
+                  <ModalHistoryRow
+                    key={row.id}
+                    row={row}
+                    index={startIndex + rowIndex + 1}
+                    open={openRows.has(row.id)}
+                    onToggle={() => toggleRow(row.id)}
+                  />
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className={styles.footer}>
+          <span>
+            {totalRecords} history record{totalRecords === 1 ? "" : "s"}
+          </span>
+          {withDiff.length > 0 ? (
+            <button className={styles.expandBtn} type="button" onClick={toggleAll}>
+              {allOpen ? "Collapse all" : "Expand all changes"}
+            </button>
+          ) : null}
+          {safeTotalPages > 1 ? (
+            <div className={styles.pager}>
+              <button
+                className={styles.pagerBtn}
+                type="button"
+                disabled={page <= DEFAULT_PAGE}
+                onClick={() => setPage((value) => Math.max(DEFAULT_PAGE, value - 1))}
+                aria-label="Previous page"
+              >
+                ‹
+              </button>
+              <span className={styles.pagerInfo}>
+                {page} / {safeTotalPages}
+              </span>
+              <button
+                className={styles.pagerBtn}
+                type="button"
+                disabled={page >= safeTotalPages}
+                onClick={() => setPage((value) => Math.min(safeTotalPages, value + 1))}
+                aria-label="Next page"
+              >
+                ›
+              </button>
+              <button className={styles.closeBtn} type="button" onClick={onClose}>
+                Close
+              </button>
+            </div>
+          ) : (
+            <button
+              className={cx(styles.closeBtn, styles.closeBtnEnd)}
+              type="button"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+export function RecordHistoryModal(props: RecordHistoryModalProps) {
+  if (!props.isOpen) {
     return null;
   }
-  return (
-    <RecordHistoryViewer
-      displayName={displayName}
-      mode="modal"
-      onClose={onClose}
-      recordPk={recordPk}
-      screenName={screenName}
-    />
-  );
+  return <RecordHistoryModalContent {...props} />;
 }
 export default function RecordHistoryPage() {
   const router = useRouter();
@@ -1118,7 +1406,6 @@ export default function RecordHistoryPage() {
   return (
     <RecordHistoryViewer
       displayName={displayName}
-      mode="page"
       onBack={handleBack}
       recordPk={recordPk}
       screenName={screenName}

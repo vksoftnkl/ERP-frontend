@@ -67,14 +67,14 @@ export const TRACKING_REQUIRED_FIELD_LABELS: Record<string, string> = {
 export const TRACKING_VALIDATION_FIELD_KEYS = Array.from(
   new Set(Object.values(TRACKING_REQUIRED_FIELD_KEYS).flatMap((fieldKeys) => fieldKeys ?? [])),
 );
-export const PROFIT_TYPE_OPTIONS = ["BY_PERCENT", "BY_AMOUNT", "MANUAL"] as const;
+export const PROFIT_TYPE_OPTIONS = ["By %", "By Rs", "By User"] as const;
 export const PROFIT_TYPE_OPTION_LABELS: Record<
   (typeof PROFIT_TYPE_OPTIONS)[number],
   string
 > = {
-  BY_PERCENT: "BY %",
-  BY_AMOUNT: "BY RS",
-  MANUAL: "BY USER",
+  "By %": "BY %",
+  "By Rs": "BY RS",
+  "By User": "BY USER",
 };
 export const ROUND_OFF_OPTIONS = ["0.01", "0.5", "1", "5", "10", "50", "100"] as const;
 export const CESS_TYPE_OPTIONS = ["NONE", "PERCENT", "PER_UNIT"] as const;
