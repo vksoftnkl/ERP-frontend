@@ -48,6 +48,7 @@ import ItemLinkedRecordsEditor, {
   type LinkedRecordColumnLayoutEntry,
   type LinkedRecordRow,
 } from "./item-linked-records-editor";
+import type { LinkedRecordColumnOptionsResolverParams } from "./item-linked-records-editor.shared";
 import { normalizeItemPriceRowsForRules } from "./item-price-row-rules";
 import {
   applyConfiguredLinkedTableColumnConfig,
@@ -129,8 +130,14 @@ import {
   ITEM_BATCH_CONFIG_BATCH_VALUE,
   BATCH_CONFIG_OPTIONS,
   ITEM_PRICE_DEFAULT_PROFIT_TYPE,
+  ITEM_PRICE_DEFAULT_ROUND_OFF,
   ITEM_PRICE_PROFIT_TYPE_OPTIONS,
   ITEM_PRICE_ROUND_OFF_OPTIONS,
+  ITEM_PRICE_SKIP_MRP_VALIDATION,
+  ITEM_PRICE_BELOW_COST_SETTING,
+  ITEM_PRICE_MAX_LEVEL_COUNT,
+  ITEM_HSN_MIN_LENGTH,
+  PRICE_LEVEL_MASTERS_ENDPOINT,
   ITEM_REORDER_TYPE_OPTIONS,
   ITEM_PRICE_MARGIN_SALE_FIELD_PAIRS,
   ITEM_PRICE_TABLE_COLUMN_NAME_TO_KEY,
@@ -300,18 +307,60 @@ function formatDerivedItemPriceNumber(value: number): string {
   const normalized = value.toFixed(4).replace(/\.?0+$/, "");
   return normalized === "-0" ? "0" : normalized;
 }
+// The grid shows the profit type as a human label; item_price_master rows can
+// arrive as either the label (freshly edited) or the older stored codes
+// (BY_PERCENT/BY_AMOUNT/MANUAL read back from the server), so both spellings
+// normalize to the label here. A blank stays blank: the "By User" default is
+// applied lazily, the moment a row's unit is first picked, never earlier.
 function normalizeItemPriceProfitType(value: string | undefined): string {
   const normalized = (value ?? "").trim();
-  if (normalized === "By %" || normalized === "By %") {
+  if (!normalized) {
+    return "";
+  }
+  if (normalized === "By %" || normalized === "BY_PERCENT") {
     return "By %";
   }
-  if (normalized === "By Rs " || normalized === "By Rs " || normalized === "BY_AMOUNT") {
+  if (normalized === "By Rs" || normalized === "By Rs " || normalized === "BY_AMOUNT") {
     return "By Rs";
   }
-  if (normalized === "By User" || normalized === "By User" || normalized === "MANUAL") {
+  if (normalized === "By User" || normalized === "MANUAL") {
     return "By User";
   }
-  return ITEM_PRICE_DEFAULT_PROFIT_TYPE;
+  return normalized;
+}
+// The calculation mode behind a profit type value: blank or unrecognized
+// values behave as "By User" (operator-typed prices, markup unused).
+function resolveItemPriceProfitTypeMode(
+  value: string | undefined,
+): "By %" | "By Rs" | "By User" {
+  const normalized = normalizeItemPriceProfitType(value);
+  if (normalized === "By %" || normalized === "By Rs") {
+    return normalized;
+  }
+  return "By User";
+}
+function toServerItemPriceProfitType(value: string | undefined): string {
+  return resolveItemPriceProfitTypeMode(
+    normalizeItemPriceProfitType(value) || ITEM_PRICE_DEFAULT_PROFIT_TYPE,
+  );
+}
+// Round Off is saved as a number but the combo only offers the four canonical
+// strings, so numeric spellings read back from the server ("0.5", "1") are
+// reformatted onto the matching option. Unrecognized values are kept verbatim
+// so an out-of-range stored step is not silently dropped from the payload.
+function normalizeItemPriceRoundOffValue(value: string | undefined): string {
+  const normalized = (value ?? "").trim();
+  if (!normalized) {
+    return "";
+  }
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) {
+    return normalized;
+  }
+  const matchingOption = ITEM_PRICE_ROUND_OFF_OPTIONS.find(
+    (option) => Number(option.value) === parsed,
+  );
+  return matchingOption ? matchingOption.value : normalized;
 }
 function toDerivedItemPriceString(value: number | null): string {
   return value === null ? "" : formatDerivedItemPriceNumber(value);
@@ -350,14 +399,22 @@ function resolveItemPriceTaxContext(
   const standardSgst = toItemPriceNumberFromUnknown(
     getFieldValue(taxRecord, "tax_sgst_perc"),
   );
+  // The legacy tax resolve consumed /item-taxes/get's tax_gst_rate_total; the
+  // grid-5 record carries it too when configured, so prefer it and only fall
+  // back to summing the component percentages when it is absent/zero.
+  const gstRateTotal = toItemPriceNumberFromUnknown(
+    getFieldValue(taxRecord, "tax_gst_rate_total"),
+  );
   const gstPerc =
-    purchaseIgst > 0
-      ? purchaseIgst
-      : purchaseCgst > 0 || purchaseSgst > 0
-        ? purchaseCgst + purchaseSgst
-        : standardIgst > 0
-          ? standardIgst
-          : standardCgst + standardSgst;
+    gstRateTotal > 0
+      ? gstRateTotal
+      : purchaseIgst > 0
+        ? purchaseIgst
+        : purchaseCgst > 0 || purchaseSgst > 0
+          ? purchaseCgst + purchaseSgst
+          : standardIgst > 0
+            ? standardIgst
+            : standardCgst + standardSgst;
   const purchaseCessPerc = toItemPriceNumberFromUnknown(
     getFieldValue(taxRecord, "tax_cess_pur_perc"),
   );
@@ -456,10 +513,17 @@ function syncItemPriceRowFromProfitInputs(
   row: LinkedRecordRow,
   taxContext: ItemPriceTaxContext,
 ): LinkedRecordRow {
-  let nextRow = { ...row };
+  const nextRow = { ...row };
   const normalizedProfitType = normalizeItemPriceProfitType(nextRow.ipm_profit_type);
   setItemPriceRowValue(nextRow, "ipm_profit_type", normalizedProfitType);
-  if (normalizedProfitType !== "MANUAL") {
+  const profitTypeMode = resolveItemPriceProfitTypeMode(normalizedProfitType);
+  if (profitTypeMode === "By User") {
+    // Operator-typed prices: the markup cells are unused and cleared; the
+    // sales prices are left exactly as typed.
+    for (const { marginFieldName } of ITEM_PRICE_MARGIN_SALE_FIELD_PAIRS) {
+      setItemPriceRowValue(nextRow, marginFieldName, "");
+    }
+  } else {
     const costPriceValue = parseOptionalItemPriceNumber(nextRow.ipm_cost_price);
     for (const { marginFieldName, saleFieldName } of ITEM_PRICE_MARGIN_SALE_FIELD_PAIRS) {
       const marginValue = parseOptionalItemPriceNumber(nextRow[marginFieldName]) ?? 0;
@@ -467,7 +531,7 @@ function syncItemPriceRowFromProfitInputs(
         costPriceValue === null
           ? null
           : roundDerivedItemPriceValue(
-            normalizedProfitType === "BY_AMOUNT"
+            profitTypeMode === "By Rs"
               ? costPriceValue + marginValue
               : costPriceValue + (costPriceValue * marginValue) / 100,
             nextRow.ipm_round_off,
@@ -485,7 +549,8 @@ function syncItemPriceRowFromSaleInputs(
   let nextRow = syncItemPriceRowSaleWotValues(row, taxContext);
   const normalizedProfitType = normalizeItemPriceProfitType(nextRow.ipm_profit_type);
   setItemPriceRowValue(nextRow, "ipm_profit_type", normalizedProfitType);
-  if (normalizedProfitType === "MANUAL") {
+  const profitTypeMode = resolveItemPriceProfitTypeMode(normalizedProfitType);
+  if (profitTypeMode === "By User") {
     return nextRow;
   }
   const costPriceValue = parseOptionalItemPriceNumber(nextRow.ipm_cost_price);
@@ -498,7 +563,7 @@ function syncItemPriceRowFromSaleInputs(
     const nextMarginValue =
       saleValue === null
         ? null
-        : normalizedProfitType === "BY_AMOUNT"
+        : profitTypeMode === "By Rs"
           ? saleValue - costPriceValue
           : costPriceValue > 0
             ? ((saleValue - costPriceValue) / costPriceValue) * 100
@@ -507,124 +572,268 @@ function syncItemPriceRowFromSaleInputs(
   }
   return nextRow;
 }
+// A tier's Price Wot was typed directly: derive that tier's Sales Price from
+// it via the with-tax formula, then back-calculate markup exactly the way a
+// direct Sales Price edit would.
+function syncItemPriceRowFromSaleWotInput(
+  row: LinkedRecordRow,
+  taxContext: ItemPriceTaxContext,
+  changedSaleWotFieldName: string,
+): LinkedRecordRow {
+  const nextRow = { ...row };
+  const changedPair = ITEM_PRICE_MARGIN_SALE_FIELD_PAIRS.find(
+    ({ saleWotFieldName }) => saleWotFieldName === changedSaleWotFieldName,
+  );
+  if (changedPair) {
+    const saleWotValue = parseOptionalItemPriceNumber(
+      nextRow[changedPair.saleWotFieldName],
+    );
+    setDerivedItemPriceRowValue(
+      nextRow,
+      changedPair.saleFieldName,
+      saleWotValue === null
+        ? null
+        : calculateItemPriceCostWithTax(saleWotValue, taxContext),
+    );
+  }
+  return syncItemPriceRowFromSaleInputs(nextRow, taxContext);
+}
+/**
+ * Unit-to-unit cost conversion: a pure adjacent-row chain across the Unit
+ * Conversion rows in their current display order, independent of which row is
+ * marked base. Walking toward a unit later in the list divides by each
+ * traversed row's own factor; walking earlier multiplies by the factor of the
+ * row being left. Returns null ("not resolvable") when either unit is missing
+ * from the ladder or any traversed factor is zero.
+ */
+function convertItemCostBetweenUnits(
+  unitConversionRows: LinkedRecordRow[],
+  fromUnitId: string,
+  toUnitId: string,
+  value: number,
+): number | null {
+  const normalizedFromUnitId = fromUnitId.trim();
+  const normalizedToUnitId = toUnitId.trim();
+  if (!normalizedFromUnitId || !normalizedToUnitId) {
+    return null;
+  }
+  if (normalizedFromUnitId === normalizedToUnitId) {
+    return value;
+  }
+  const unitIds = unitConversionRows.map((row) => (row.iuc_unit_id ?? "").trim());
+  const fromIndex = unitIds.indexOf(normalizedFromUnitId);
+  const toIndex = unitIds.indexOf(normalizedToUnitId);
+  if (fromIndex < 0 || toIndex < 0) {
+    return null;
+  }
+  let result = value;
+  if (toIndex > fromIndex) {
+    for (let index = fromIndex + 1; index <= toIndex; index += 1) {
+      const factor = parseOptionalItemPriceNumber(
+        resolveItemUnitConversionUnitFactorValue(unitConversionRows[index] ?? {}),
+      );
+      if (factor === null || factor <= 0) {
+        return null;
+      }
+      result /= factor;
+    }
+    return result;
+  }
+  for (let index = fromIndex; index > toIndex; index -= 1) {
+    const factor = parseOptionalItemPriceNumber(
+      resolveItemUnitConversionUnitFactorValue(unitConversionRows[index] ?? {}),
+    );
+    if (factor === null || factor <= 0) {
+      return null;
+    }
+    result *= factor;
+  }
+  return result;
+}
+function hasNonZeroItemPriceRowCost(row: LinkedRecordRow): boolean {
+  const costWot = parseOptionalItemPriceNumber(row.ipm_cost_wot);
+  const costPrice = parseOptionalItemPriceNumber(row.ipm_cost_price);
+  return (costWot !== null && costWot !== 0) || (costPrice !== null && costPrice !== 0);
+}
+/**
+ * The one sanctioned piece of cross-row cost behavior: whenever a row's cost
+ * changes, sibling rows that (a) have a unit picked and (b) still sit at a
+ * literal zero/blank cost get their Cost Wot pulled from the source row via
+ * the unit-to-unit conversion walk (and their Cost re-derived from it).
+ * Deliberately touches ONLY the cost pair — a caught-up sibling's sales
+ * prices/markup are left for that row's own future edits — and never touches
+ * a sibling that already carries any non-zero cost of its own.
+ */
+function fillZeroCostSiblingItemPriceRows(
+  rows: LinkedRecordRow[],
+  sourceRowIndex: number,
+  taxContext: ItemPriceTaxContext,
+  unitConversionRows: LinkedRecordRow[],
+): LinkedRecordRow[] {
+  const sourceRow = rows[sourceRowIndex];
+  if (!sourceRow) {
+    return rows;
+  }
+  const sourceUnitId = (sourceRow.ipm_unit_id ?? "").trim();
+  const sourceCostWot = parseOptionalItemPriceNumber(sourceRow.ipm_cost_wot);
+  if (!sourceUnitId || sourceCostWot === null || sourceCostWot === 0) {
+    return rows;
+  }
+  return rows.map((row, index) => {
+    if (index === sourceRowIndex) {
+      return row;
+    }
+    const unitId = (row.ipm_unit_id ?? "").trim();
+    if (!unitId || hasNonZeroItemPriceRowCost(row)) {
+      return row;
+    }
+    const convertedCostWot = convertItemCostBetweenUnits(
+      unitConversionRows,
+      sourceUnitId,
+      unitId,
+      sourceCostWot,
+    );
+    if (convertedCostWot === null) {
+      return row;
+    }
+    const nextRow = { ...row };
+    setDerivedItemPriceRowValue(nextRow, "ipm_cost_wot", convertedCostWot);
+    setDerivedItemPriceRowValue(
+      nextRow,
+      "ipm_cost_price",
+      calculateItemPriceCostWithTax(convertedCostWot, taxContext),
+    );
+    return nextRow;
+  });
+}
+// A row's own Cost Wot was edited: recompute that row's Cost (with tax) and
+// re-run its profit-type-driven sales derivation, then run the zero-cost
+// sibling catch-up. Siblings with any cost of their own are never touched.
 function recalculateItemPriceRowsFromCostWot(
   rows: LinkedRecordRow[],
   rowIndex: number,
   taxContext: ItemPriceTaxContext,
+  unitConversionRows: LinkedRecordRow[],
 ): LinkedRecordRow[] {
   const nextRows = cloneItemPriceRows(rows);
-  for (let index = rowIndex - 1; index >= 0; index -= 1) {
-    const nextCostWot = parseOptionalItemPriceNumber(nextRows[index + 1]?.ipm_cost_wot);
-    const conversionFactor = parseOptionalItemPriceNumber(
-      nextRows[index + 1]?.ipm_unit_factor,
-    );
-    setDerivedItemPriceRowValue(
-      nextRows[index],
-      "ipm_cost_wot",
-      nextCostWot === null || conversionFactor === null
-        ? null
-        : nextCostWot * conversionFactor,
-    );
-  }
-  for (let index = rowIndex + 1; index < nextRows.length; index += 1) {
-    const previousCostWot = parseOptionalItemPriceNumber(nextRows[index - 1]?.ipm_cost_wot);
-    const conversionFactor = parseOptionalItemPriceNumber(
-      nextRows[index]?.ipm_unit_factor,
-    );
-    setDerivedItemPriceRowValue(
-      nextRows[index],
-      "ipm_cost_wot",
-      previousCostWot === null || conversionFactor === null || conversionFactor <= 0
-        ? null
-        : previousCostWot / conversionFactor,
-    );
-  }
-  return nextRows.map((row) => {
-    const nextRow = { ...row };
-    const costWotValue = parseOptionalItemPriceNumber(nextRow.ipm_cost_wot);
-    setDerivedItemPriceRowValue(
-      nextRow,
-      "ipm_cost_price",
-      costWotValue === null
-        ? null
-        : calculateItemPriceCostWithTax(costWotValue, taxContext),
-    );
-    return syncItemPriceRowFromProfitInputs(nextRow, taxContext);
-  });
+  const editedRow = { ...(nextRows[rowIndex] ?? {}) };
+  const costWotValue = parseOptionalItemPriceNumber(editedRow.ipm_cost_wot);
+  setDerivedItemPriceRowValue(
+    editedRow,
+    "ipm_cost_price",
+    costWotValue === null
+      ? null
+      : calculateItemPriceCostWithTax(costWotValue, taxContext),
+  );
+  nextRows[rowIndex] = syncItemPriceRowFromProfitInputs(editedRow, taxContext);
+  return fillZeroCostSiblingItemPriceRows(
+    nextRows,
+    rowIndex,
+    taxContext,
+    unitConversionRows,
+  );
 }
+// Same as above for a direct Cost (with tax) edit: Cost Wot re-derives first.
 function recalculateItemPriceRowsFromCostPrice(
   rows: LinkedRecordRow[],
   rowIndex: number,
   taxContext: ItemPriceTaxContext,
+  unitConversionRows: LinkedRecordRow[],
 ): LinkedRecordRow[] {
   const nextRows = cloneItemPriceRows(rows);
-  for (let index = rowIndex - 1; index >= 0; index -= 1) {
-    const nextCost = parseOptionalItemPriceNumber(nextRows[index + 1]?.ipm_cost_price);
-    const conversionFactor = parseOptionalItemPriceNumber(
-      nextRows[index + 1]?.ipm_to_base_factor,
-    );
-    setDerivedItemPriceRowValue(
-      nextRows[index],
-      "ipm_cost_price",
-      nextCost === null || conversionFactor === null ? null : nextCost * conversionFactor,
-    );
-  }
-  for (let index = rowIndex + 1; index < nextRows.length; index += 1) {
-    const previousCost = parseOptionalItemPriceNumber(nextRows[index - 1]?.ipm_cost_price);
-    const conversionFactor = parseOptionalItemPriceNumber(
-      nextRows[index]?.ipm_to_base_factor,
-    );
-    setDerivedItemPriceRowValue(
-      nextRows[index],
-      "ipm_cost_price",
-      previousCost === null || conversionFactor === null || conversionFactor <= 0
-        ? null
-        : previousCost / conversionFactor,
-    );
-  }
-  return nextRows.map((row) => {
-    const nextRow = { ...row };
-    const costPriceValue = parseOptionalItemPriceNumber(nextRow.ipm_cost_price);
-    setDerivedItemPriceRowValue(
-      nextRow,
-      "ipm_cost_wot",
-      costPriceValue === null
-        ? null
-        : calculateItemPriceCostWithoutTax(costPriceValue, taxContext),
-    );
-    return syncItemPriceRowFromProfitInputs(nextRow, taxContext);
-  });
+  const editedRow = { ...(nextRows[rowIndex] ?? {}) };
+  const costPriceValue = parseOptionalItemPriceNumber(editedRow.ipm_cost_price);
+  setDerivedItemPriceRowValue(
+    editedRow,
+    "ipm_cost_wot",
+    costPriceValue === null
+      ? null
+      : calculateItemPriceCostWithoutTax(costPriceValue, taxContext),
+  );
+  nextRows[rowIndex] = syncItemPriceRowFromProfitInputs(editedRow, taxContext);
+  return fillZeroCostSiblingItemPriceRows(
+    nextRows,
+    rowIndex,
+    taxContext,
+    unitConversionRows,
+  );
 }
+// A unit conversion factor changed, so the ratios costs were derived through
+// are stale: pick the first row that actually has a cost as the anchor and
+// re-run the zero-cost catch-up from it. Rows with their own non-zero cost
+// keep their operator-entered values.
 function recalculateItemPriceRowsFromConversion(
+  rows: LinkedRecordRow[],
+  taxContext: ItemPriceTaxContext,
+  unitConversionRows: LinkedRecordRow[],
+): LinkedRecordRow[] {
+  const anchorRowIndex = rows.findIndex((row) => {
+    const costWot = parseOptionalItemPriceNumber(row.ipm_cost_wot);
+    return Boolean((row.ipm_unit_id ?? "").trim()) && costWot !== null && costWot !== 0;
+  });
+  if (anchorRowIndex < 0) {
+    return rows;
+  }
+  return fillZeroCostSiblingItemPriceRows(
+    cloneItemPriceRows(rows),
+    anchorRowIndex,
+    taxContext,
+    unitConversionRows,
+  );
+}
+// A row's Unit was just picked: apply the lazy Profit Type/Round Off defaults,
+// and — if the row never got a cost — pull one from a sibling that already has
+// a non-zero Cost Wot, converted through the unit ladder, cascading into this
+// row's own Cost and profit-type-driven sales prices exactly as if typed.
+function recalculateItemPriceRowsFromUnitPick(
   rows: LinkedRecordRow[],
   rowIndex: number,
   taxContext: ItemPriceTaxContext,
+  unitConversionRows: LinkedRecordRow[],
 ): LinkedRecordRow[] {
   const nextRows = cloneItemPriceRows(rows);
-  for (let index = Math.max(rowIndex, 1); index < nextRows.length; index += 1) {
-    const previousCost = parseOptionalItemPriceNumber(nextRows[index - 1]?.ipm_cost_price);
-    const previousCostWot = parseOptionalItemPriceNumber(nextRows[index - 1]?.ipm_cost_wot);
-    const conversionFactor = parseOptionalItemPriceNumber(
-      nextRows[index]?.ipm_unit_factor,
-    );
-    setDerivedItemPriceRowValue(
-      nextRows[index],
-      "ipm_cost_price",
-      previousCost === null || conversionFactor === null || conversionFactor <= 0
-        ? null
-        : previousCost / conversionFactor,
-    );
-    setDerivedItemPriceRowValue(
-      nextRows[index],
-      "ipm_cost_wot",
-      previousCostWot === null || conversionFactor === null || conversionFactor <= 0
-        ? null
-        : previousCostWot / conversionFactor,
-    );
-    nextRows[index] = syncItemPriceRowFromProfitInputs(nextRows[index], taxContext);
+  const editedRow = { ...(nextRows[rowIndex] ?? {}) };
+  const unitId = (editedRow.ipm_unit_id ?? "").trim();
+  if (!unitId) {
+    nextRows[rowIndex] = editedRow;
+    return nextRows;
   }
+  if (!normalizeItemPriceProfitType(editedRow.ipm_profit_type)) {
+    setItemPriceRowValue(editedRow, "ipm_profit_type", ITEM_PRICE_DEFAULT_PROFIT_TYPE);
+  }
+  if (!(editedRow.ipm_round_off ?? "").trim()) {
+    setItemPriceRowValue(editedRow, "ipm_round_off", ITEM_PRICE_DEFAULT_ROUND_OFF);
+  }
+  if (!hasNonZeroItemPriceRowCost(editedRow)) {
+    const sourceRow = nextRows.find(
+      (row, index) =>
+        index !== rowIndex &&
+        Boolean((row.ipm_unit_id ?? "").trim()) &&
+        (parseOptionalItemPriceNumber(row.ipm_cost_wot) ?? 0) !== 0,
+    );
+    if (sourceRow) {
+      const convertedCostWot = convertItemCostBetweenUnits(
+        unitConversionRows,
+        (sourceRow.ipm_unit_id ?? "").trim(),
+        unitId,
+        parseOptionalItemPriceNumber(sourceRow.ipm_cost_wot) ?? 0,
+      );
+      if (convertedCostWot !== null) {
+        setDerivedItemPriceRowValue(editedRow, "ipm_cost_wot", convertedCostWot);
+        setDerivedItemPriceRowValue(
+          editedRow,
+          "ipm_cost_price",
+          calculateItemPriceCostWithTax(convertedCostWot, taxContext),
+        );
+      }
+    }
+  }
+  nextRows[rowIndex] = syncItemPriceRowFromProfitInputs(editedRow, taxContext);
   return nextRows;
 }
+// The item's tax changed: every row's Cost (with tax) re-derives from its
+// already-set Cost Wot — never the other way around — followed by the full
+// profit-type-driven sales recompute for every row.
 function recalculateAllItemPriceRowsForTaxContext(
   rows: LinkedRecordRow[],
   taxContext: ItemPriceTaxContext,
@@ -633,17 +842,17 @@ function recalculateAllItemPriceRowsForTaxContext(
     const nextRow = { ...row };
     const costWotValue = parseOptionalItemPriceNumber(nextRow.ipm_cost_wot);
     const costPriceValue = parseOptionalItemPriceNumber(nextRow.ipm_cost_price);
-    if (costPriceValue !== null) {
-      setDerivedItemPriceRowValue(
-        nextRow,
-        "ipm_cost_wot",
-        calculateItemPriceCostWithoutTax(costPriceValue, taxContext),
-      );
-    } else if (costWotValue !== null) {
+    if (costWotValue !== null) {
       setDerivedItemPriceRowValue(
         nextRow,
         "ipm_cost_price",
         calculateItemPriceCostWithTax(costWotValue, taxContext),
+      );
+    } else if (costPriceValue !== null) {
+      setDerivedItemPriceRowValue(
+        nextRow,
+        "ipm_cost_wot",
+        calculateItemPriceCostWithoutTax(costPriceValue, taxContext),
       );
     }
     return syncItemPriceRowFromProfitInputs(nextRow, taxContext);
@@ -655,9 +864,11 @@ function normalizeItemPriceRows(
   let hasChanges = false;
   const nextRows = rows.map((row) => {
     const normalizedProfitType = normalizeItemPriceProfitType(row.ipm_profit_type);
+    const normalizedRoundOff = normalizeItemPriceRoundOffValue(row.ipm_round_off);
     const normalizedFactor = resolveItemPriceUnitFactorValue(row);
     if (
       (row.ipm_profit_type ?? "") === normalizedProfitType &&
+      (row.ipm_round_off ?? "") === normalizedRoundOff &&
       (row.ipm_to_base_factor ?? "") === normalizedFactor &&
       (row.ipm_unit_factor ?? "") === normalizedFactor
     ) {
@@ -667,6 +878,7 @@ function normalizeItemPriceRows(
     return {
       ...row,
       ipm_profit_type: normalizedProfitType,
+      ipm_round_off: normalizedRoundOff,
       ipm_to_base_factor: normalizedFactor,
       ipm_unit_factor: normalizedFactor,
     };
@@ -677,11 +889,16 @@ function detectChangedItemPriceField(
   previousRows: LinkedRecordRow[],
   nextRows: LinkedRecordRow[],
 ): { fieldName: string; rowIndex: number } | null {
-  if (previousRows.length !== nextRows.length) {
+  // Picking a unit on the last row appends a blank placeholder in the same
+  // change, so an append must still resolve the edited field — compare the
+  // common prefix (the appended row is always last and blank). Row removals
+  // shift indexes and have no single "edited field"; bail to normalization.
+  if (nextRows.length < previousRows.length) {
     return null;
   }
+  const commonRowCount = Math.min(previousRows.length, nextRows.length);
   const rowFieldNames = [...ITEM_PRICE_TEXT_FIELD_NAMES, ...ITEM_PRICE_BOOLEAN_FIELD_NAMES];
-  for (let rowIndex = 0; rowIndex < nextRows.length; rowIndex += 1) {
+  for (let rowIndex = 0; rowIndex < commonRowCount; rowIndex += 1) {
     const previousRow = previousRows[rowIndex] ?? {};
     const nextRow = nextRows[rowIndex] ?? {};
     for (const fieldName of rowFieldNames) {
@@ -709,7 +926,9 @@ function buildEmptyItemPriceRow(
     ipm_unit_id: normalizedBaseUnitId,
     ipm_to_base_factor: "1",
     ipm_unit_factor: "1",
-    ipm_profit_type: ITEM_PRICE_DEFAULT_PROFIT_TYPE,
+    // Profit Type / Round Off stay blank until the row's unit is picked; the
+    // lazy defaults ("By User" / "0.01") are applied at that moment.
+    ipm_profit_type: "",
     ipm_is_default_unit: options.isDefaultUnit ? "true" : "false",
     ipm_is_base_unit: options.isBaseUnit ? "true" : "false",
     ipm_is_active: ITEM_PRICE_INITIAL_FORM_VALUES.ipm_is_active,
@@ -921,23 +1140,36 @@ function syncSerializedItemPriceRows(
       : parseLinkedRecordRows(conversionSyncedRows);
   const previousRows = parseLinkedRecordRows(values[ITEM_PRICE_ROWS_FIELD_NAME] ?? "");
   const taxContext = resolveItemPriceTaxContext(values, itemTaxRecordsById);
-  const changedField = detectChangedItemPriceField(previousRows, effectiveRows);
+  const unitConversionRows = buildManagedItemUnitConversionRows(values);
+  // Detect the edited field against the RAW incoming rows, before the unit
+  // conversion mirror rewrites factors/slno — otherwise a mirror-induced
+  // factor refresh masks the operator's actual edit and mis-dispatches.
+  const changedField = detectChangedItemPriceField(previousRows, rows);
   let nextRows = effectiveRows;
   if (forceRecalculateAll) {
     nextRows = recalculateAllItemPriceRowsForTaxContext(effectiveRows, taxContext);
   } else if (!changedField) {
     nextRows = normalizeItemPriceRows(effectiveRows);
+  } else if (changedField.fieldName === "ipm_unit_id") {
+    nextRows = recalculateItemPriceRowsFromUnitPick(
+      effectiveRows,
+      changedField.rowIndex,
+      taxContext,
+      unitConversionRows,
+    );
   } else if (changedField.fieldName === "ipm_cost_wot") {
     nextRows = recalculateItemPriceRowsFromCostWot(
       effectiveRows,
       changedField.rowIndex,
       taxContext,
+      unitConversionRows,
     );
   } else if (changedField.fieldName === "ipm_cost_price") {
     nextRows = recalculateItemPriceRowsFromCostPrice(
       effectiveRows,
       changedField.rowIndex,
       taxContext,
+      unitConversionRows,
     );
   } else if (
     changedField.fieldName === "ipm_to_base_factor" ||
@@ -945,8 +1177,8 @@ function syncSerializedItemPriceRows(
   ) {
     nextRows = recalculateItemPriceRowsFromConversion(
       effectiveRows,
-      changedField.rowIndex,
       taxContext,
+      unitConversionRows,
     );
   } else if (
     changedField.fieldName === "ipm_profit_type" ||
@@ -970,6 +1202,18 @@ function syncSerializedItemPriceRows(
     recalculatedRows[changedField.rowIndex] = syncItemPriceRowFromSaleInputs(
       recalculatedRows[changedField.rowIndex] ?? {},
       taxContext,
+    );
+    nextRows = recalculatedRows;
+  } else if (
+    ITEM_PRICE_MARGIN_SALE_FIELD_PAIRS.some(
+      ({ saleWotFieldName }) => saleWotFieldName === changedField.fieldName,
+    )
+  ) {
+    const recalculatedRows = cloneItemPriceRows(effectiveRows);
+    recalculatedRows[changedField.rowIndex] = syncItemPriceRowFromSaleWotInput(
+      recalculatedRows[changedField.rowIndex] ?? {},
+      taxContext,
+      changedField.fieldName,
     );
     nextRows = recalculatedRows;
   } else {
@@ -1153,6 +1397,46 @@ function syncSerializedRowUnitIds(
   });
   return hasChanges ? serializeLinkedRecordRows(nextRows) : null;
 }
+/**
+ * The legacy recalcAllUnitConversionFactors chain: every row's To-Base Factor
+ * is re-derived relative to whichever row is currently marked base, one
+ * adjacent-row step at a time — the base row is always 1; walking away from
+ * base toward later rows divides by each row's own Unit Factor; walking toward
+ * earlier rows multiplies by the factor of the row closer to base. A zero
+ * factor along the way poisons everything further out to 0. Also refreshes the
+ * cosmetic iuc_base_unit_id column from the base row's unit.
+ */
+function recalculateItemUnitConversionToBaseFactors(
+  rows: LinkedRecordRow[],
+): LinkedRecordRow[] {
+  if (rows.length === 0) {
+    return rows;
+  }
+  const discoveredBaseRowIndex = rows.findIndex(
+    (row) => (row.iuc_is_base_unit ?? "false") === "true",
+  );
+  const baseRowIndex = discoveredBaseRowIndex >= 0 ? discoveredBaseRowIndex : 0;
+  const baseUnitId = (rows[baseRowIndex]?.iuc_unit_id ?? "").trim();
+  const factorAt = (index: number): number =>
+    parseOptionalItemPriceNumber(
+      resolveItemUnitConversionUnitFactorValue(rows[index] ?? {}),
+    ) ?? 0;
+  const toBaseFactors = new Array<number>(rows.length).fill(0);
+  toBaseFactors[baseRowIndex] = 1;
+  for (let index = baseRowIndex + 1; index < rows.length; index += 1) {
+    const factor = factorAt(index);
+    toBaseFactors[index] =
+      factor === 0 ? 0 : (toBaseFactors[index - 1] ?? 0) / factor;
+  }
+  for (let index = baseRowIndex - 1; index >= 0; index -= 1) {
+    toBaseFactors[index] = (toBaseFactors[index + 1] ?? 0) * factorAt(index + 1);
+  }
+  return rows.map((row, index) => ({
+    ...row,
+    iuc_to_base_factor: formatDerivedItemPriceNumber(toBaseFactors[index] ?? 0),
+    iuc_base_unit_id: baseUnitId,
+  }));
+}
 function syncSerializedItemUnitConversionRows(
   serializedRows: string,
   values: Record<string, string>,
@@ -1179,19 +1463,24 @@ function syncSerializedItemUnitConversionRows(
       nextRow.iuc_is_active = ITEM_UNIT_CONVERSION_INITIAL_FORM_VALUES.iuc_is_active;
       hasChanges = true;
     }
-    const normalizedToBaseFactor = resolveItemUnitConversionToBaseFactorValue(nextRow);
-    const normalizedUnitFactor = resolveItemUnitConversionUnitFactorValue(nextRow);
-    if ((nextRow.iuc_to_base_factor ?? "") !== normalizedToBaseFactor) {
-      nextRow.iuc_to_base_factor = normalizedToBaseFactor;
-      hasChanges = true;
-    }
+    // Row 0 is the atomic/smallest unit: its factor is pinned to exactly 1.
+    const normalizedUnitFactor =
+      index === 0 ? "1" : resolveItemUnitConversionUnitFactorValue(nextRow);
     if ((nextRow.iuc_unit_factor ?? "") !== normalizedUnitFactor) {
       nextRow.iuc_unit_factor = normalizedUnitFactor;
       hasChanges = true;
     }
     return nextRow;
   });
-  return hasChanges ? serializeLinkedRecordRows(nextRows) : serializedRows;
+  const chainRecalculatedRows = recalculateItemUnitConversionToBaseFactors(nextRows);
+  hasChanges =
+    hasChanges ||
+    chainRecalculatedRows.some(
+      (row, index) =>
+        (row.iuc_to_base_factor ?? "") !== (rows[index]?.iuc_to_base_factor ?? "") ||
+        (row.iuc_base_unit_id ?? "") !== (rows[index]?.iuc_base_unit_id ?? ""),
+    );
+  return hasChanges ? serializeLinkedRecordRows(chainRecalculatedRows) : serializedRows;
 }
 function syncSerializedItemUnitConversionRowsForBaseUnitChange(
   serializedRows: string,
@@ -1257,6 +1546,24 @@ function mapSourceToLinkedRow(
 // conversion rows on load so the saved unit shows as the selected option; the
 // save path maps the picked unit_id back to the iuc_id. Values that match no
 // conversion row (e.g. one since deleted) are left untouched.
+/**
+ * Move a response field onto the key the grid edits it under, for columns whose
+ * server name differs from the client field name (ipm_uc_unit_id → ipm_unit_id).
+ * Rows that already carry the target key are left alone.
+ */
+function renameLinkedRowField(
+  rows: Record<string, unknown>[],
+  fromFieldName: string,
+  toFieldName: string,
+): Record<string, unknown>[] {
+  return rows.map((row) => {
+    if (!(fromFieldName in row) || toFieldName in row) {
+      return row;
+    }
+    const { [fromFieldName]: value, ...rest } = row;
+    return { ...rest, [toFieldName]: value };
+  });
+}
 function mapLinkedRowUnitConversionIdsToUnitIds(
   rows: Record<string, unknown>[],
   unitFieldName: string,
@@ -1274,6 +1581,29 @@ function mapLinkedRowUnitConversionIdsToUnitIds(
     );
     return unitId ? { ...row, [unitFieldName]: unitId } : row;
   });
+}
+/**
+ * Bulk-loading an existing item leaves each grid ending on a populated row, so
+ * append one blank placeholder the operator can keep adding lines from — the
+ * same trailing-blank invariant interactive editing maintains via
+ * autoAppendOnSelect. Placeholders carry no content fields, so validation and
+ * the save payload keep excluding them. Empty grids are left alone (the
+ * mount/default seeding paths own those).
+ */
+function appendTrailingBlankLinkedRow(
+  serializedRows: string,
+  buildBlankRow: (rows: LinkedRecordRow[]) => LinkedRecordRow,
+  isBlankRow: (row: LinkedRecordRow) => boolean,
+): string {
+  const rows = parseLinkedRecordRows(serializedRows);
+  if (rows.length === 0) {
+    return serializedRows;
+  }
+  const lastRow = rows[rows.length - 1];
+  if (lastRow && isBlankRow(lastRow)) {
+    return serializedRows;
+  }
+  return serializeLinkedRecordRows([...rows, buildBlankRow(rows)]);
 }
 function assignLinkedRowToValues(
   values: Record<string, string>,
@@ -1463,13 +1793,77 @@ function buildItemPriceRowsValueChangeResult(
     values: changedValues,
   };
 }
+/**
+ * Structural default/base invariants after an interactive Unit Conversion grid
+ * edit: marking a row base also promotes it to default (legacy
+ * promoteUnitConversionRow), and when the row that carried the base/default
+ * flag was removed, row 0 is promoted to both. Exclusivity across rows is
+ * enforced upstream by the editor's exclusiveTrueColumnKeys.
+ */
+function applyItemUnitConversionRoleInvariants(
+  serializedRows: string,
+  previousSerializedRows: string,
+): string {
+  const rows = parseLinkedRecordRows(serializedRows);
+  if (rows.length === 0) {
+    return serializedRows;
+  }
+  const previousRows = parseLinkedRecordRows(previousSerializedRows);
+  let nextRows = rows;
+  const setRowFlags = (
+    rowIndex: number,
+    flags: { base?: boolean; defaultUnit?: boolean },
+  ) => {
+    nextRows = nextRows.map((row, index) => {
+      const nextRow = { ...row };
+      if (flags.base !== undefined) {
+        nextRow.iuc_is_base_unit =
+          flags.base && index === rowIndex ? "true" : "false";
+      }
+      if (flags.defaultUnit !== undefined) {
+        nextRow.iuc_is_default_unit =
+          flags.defaultUnit && index === rowIndex ? "true" : "false";
+      }
+      return nextRow;
+    });
+  };
+  const newlyBaseRowIndex = nextRows.findIndex(
+    (row, index) =>
+      (row.iuc_is_base_unit ?? "false") === "true" &&
+      previousRows.length === nextRows.length &&
+      (previousRows[index]?.iuc_is_base_unit ?? "false") !== "true",
+  );
+  if (newlyBaseRowIndex >= 0) {
+    setRowFlags(newlyBaseRowIndex, { defaultUnit: true });
+  }
+  const rowsWereRemoved = previousRows.length > nextRows.length;
+  if (rowsWereRemoved) {
+    if (!nextRows.some((row) => (row.iuc_is_base_unit ?? "false") === "true")) {
+      setRowFlags(0, { base: true, defaultUnit: true });
+    } else if (
+      !nextRows.some((row) => (row.iuc_is_default_unit ?? "false") === "true")
+    ) {
+      setRowFlags(0, { defaultUnit: true });
+    }
+  }
+  return nextRows === rows ? serializedRows : serializeLinkedRecordRows(nextRows);
+}
 function buildItemUnitConversionRowsValueChangeResult(
   values: Record<string, string>,
   previousValues: Record<string, string>,
   serializedRows: string,
   itemTaxRecordsById: ReadonlyMap<string, Record<string, unknown>>,
 ): ERPDynamicFieldValueChangeResult | void {
-  const normalizedRows = syncSerializedItemUnitConversionRows(serializedRows, values);
+  const roleNormalizedSerializedRows = applyItemUnitConversionRoleInvariants(
+    serializedRows,
+    previousValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ??
+      values[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME] ??
+      "",
+  );
+  const normalizedRows = syncSerializedItemUnitConversionRows(
+    roleNormalizedSerializedRows,
+    values,
+  );
   // The Unit Conversion Table is the source of truth for the item's base unit,
   // so derive item_base_unit_id from its base row here. Without this the base
   // unit is only ever populated when editing/viewing a saved record (from the
@@ -1559,6 +1953,49 @@ function syncPrimaryItemEanValuesFromRows(
     defaultRow,
   );
 }
+const ITEM_REORDER_UNIQUE_KEY_FIELD_NAMES = [
+  "ir_branch_id",
+  "ir_godown_id",
+  "ir_unit_id",
+] as const;
+/**
+ * Live (Branch, Godown, Unit) duplicate guard: the instant one of the triple's
+ * members is edited into a combination another row already uses, that
+ * just-edited field is reverted back to blank and the operator is told. Blank
+ * Branch/Godown are real comparable values; only rows with a unit take part.
+ */
+function revertDuplicateItemReorderTripleEdit(
+  serializedRows: string,
+  previousSerializedRows: string,
+): string {
+  const rows = parseLinkedRecordRows(serializedRows);
+  const previousRows = parseLinkedRecordRows(previousSerializedRows);
+  if (rows.length === 0 || rows.length !== previousRows.length) {
+    return serializedRows;
+  }
+  for (const [rowIndex, row] of rows.entries()) {
+    const previousRow = previousRows[rowIndex] ?? {};
+    for (const fieldName of ITEM_REORDER_UNIQUE_KEY_FIELD_NAMES) {
+      if ((row[fieldName] ?? "").trim() === (previousRow[fieldName] ?? "").trim()) {
+        continue;
+      }
+      if (findDuplicateItemReorderRowIndex(rows) < 0) {
+        return serializedRows;
+      }
+      const now = Date.now();
+      if (typeof window !== "undefined" && now - itemReorderDuplicateAlertAt > 500) {
+        itemReorderDuplicateAlertAt = now;
+        window.alert("This Branch/Godown/Unit combination is already added.");
+      }
+      return serializeLinkedRecordRows(
+        rows.map((nextRow, index) =>
+          index === rowIndex ? { ...nextRow, [fieldName]: "" } : nextRow,
+        ),
+      );
+    }
+  }
+  return serializedRows;
+}
 function buildItemReorderRowsValueChangeResult(
   values: Record<string, string>,
   previousValues: Record<string, string>,
@@ -1571,14 +2008,30 @@ function buildItemReorderRowsValueChangeResult(
       values[ITEM_REORDER_ROWS_FIELD_NAME] ??
       "",
   };
+  const duplicateGuardedRows = revertDuplicateItemReorderTripleEdit(
+    serializedRows,
+    comparisonValues[ITEM_REORDER_ROWS_FIELD_NAME] ?? "",
+  );
   const nextValues = syncPrimaryItemReorderValuesFromRows(
     values,
-    serializedRows,
+    duplicateGuardedRows,
   );
+  if (duplicateGuardedRows !== serializedRows) {
+    // The just-edited duplicate field was reverted to blank: push the guarded
+    // rows back onto the grid, not only the mirrored primary fields.
+    nextValues[ITEM_REORDER_ROWS_FIELD_NAME] = duplicateGuardedRows;
+  }
   const changedValues = collectChangedFieldValues(
-    comparisonValues,
+    {
+      ...comparisonValues,
+      [ITEM_REORDER_ROWS_FIELD_NAME]: serializedRows,
+    },
     nextValues,
-    [...ITEM_REORDER_ROW_TEXT_FIELD_NAMES, ...ITEM_REORDER_ROW_BOOLEAN_FIELD_NAMES],
+    [
+      ...ITEM_REORDER_ROW_TEXT_FIELD_NAMES,
+      ...ITEM_REORDER_ROW_BOOLEAN_FIELD_NAMES,
+      ITEM_REORDER_ROWS_FIELD_NAME,
+    ],
   );
   if (Object.keys(changedValues).length === 0) {
     return;
@@ -1612,7 +2065,18 @@ function buildItemEanRowsValueChangeResult(
     values: changedValues,
   };
 }
-function validateItemPriceRows(value: string, values: Record<string, string>): string | null {
+const ITEM_PRICE_TIER_LABELS = ["A", "B", "C", "D"] as const;
+function resolveValidatedItemPriceTierCount(priceLevelCount: number): number {
+  if (!Number.isFinite(priceLevelCount) || priceLevelCount <= 0) {
+    return ITEM_PRICE_MAX_LEVEL_COUNT;
+  }
+  return Math.min(priceLevelCount, ITEM_PRICE_MAX_LEVEL_COUNT);
+}
+function validateItemPriceRows(
+  value: string,
+  values: Record<string, string>,
+  priceLevelCount: number = ITEM_PRICE_MAX_LEVEL_COUNT,
+): string | null {
   const effectiveValues: Record<string, string> = {
     ...values,
     [ITEM_PRICE_ROWS_FIELD_NAME]: value,
@@ -1627,6 +2091,12 @@ function validateItemPriceRows(value: string, values: Record<string, string>): s
   if (rows.length === 0) {
     return "Add at least one price row when Price List is enabled.";
   }
+  const conversionUnitIds = new Set(
+    buildManagedItemUnitConversionRows(effectiveValues)
+      .map((row) => (row.iuc_unit_id ?? "").trim())
+      .filter(Boolean),
+  );
+  const validatedTierCount = resolveValidatedItemPriceTierCount(priceLevelCount);
   const usedUnitIds = new Set<string>();
   let defaultRows = 0;
   let baseRows = 0;
@@ -1646,17 +2116,16 @@ function validateItemPriceRows(value: string, values: Record<string, string>): s
     if (!unitId) {
       return `Price row ${index + 1}: Unit is required.`;
     }
-    const toBaseFactor = parseOptionalItemPriceNumber(row.ipm_to_base_factor);
-    if (toBaseFactor === null || toBaseFactor <= 0) {
-      return `Price row ${index + 1}: Conv must be greater than 0.`;
+    if (conversionUnitIds.size > 0 && !conversionUnitIds.has(unitId)) {
+      return `Price row ${index + 1}: Unit must be one of the units in the Unit Conversion Table.`;
     }
     const unitFactor = parseOptionalItemPriceNumber(resolveItemPriceUnitFactorValue(row));
     if (unitFactor === null || unitFactor <= 0) {
       return `Price row ${index + 1}: Unit Factor must be greater than 0.`;
     }
-    const godownId = (row.ipm_godown_id ?? "").trim();
-    if (!godownId) {
-      return `Price row ${index + 1}: Godown is required.`;
+    const toBaseFactor = parseOptionalItemPriceNumber(row.ipm_to_base_factor);
+    if (toBaseFactor === null || toBaseFactor <= 0) {
+      return `Price row ${index + 1}: Conv must be greater than 0.`;
     }
     if (usedUnitIds.has(unitId)) {
       return `Price row ${index + 1}: Unit is already used in another price row.`;
@@ -1670,6 +2139,37 @@ function validateItemPriceRows(value: string, values: Record<string, string>): s
       const numericValue = parseOptionalItemPriceNumber(row[fieldConfig.key]);
       if (numericValue !== null && numericValue < 0) {
         return `Price row ${index + 1}: ${fieldConfig.label} cannot be negative.`;
+      }
+    }
+    // Per configured price tier: MRP ceiling, hard below-cost restriction, and
+    // min-price floor. The "warning" flavor of the below-cost rule needs a
+    // Yes/No confirmation, so it runs at submit time (see the below-cost
+    // confirm in buildRequestPayload), not here.
+    const maxPrice = parseOptionalItemPriceNumber(row.ipm_max_price) ?? 0;
+    const minPrice = parseOptionalItemPriceNumber(row.ipm_min_price) ?? 0;
+    const costPrice = parseOptionalItemPriceNumber(row.ipm_cost_price) ?? 0;
+    for (let tierIndex = 0; tierIndex < validatedTierCount; tierIndex += 1) {
+      const pair = ITEM_PRICE_MARGIN_SALE_FIELD_PAIRS[tierIndex];
+      if (!pair) {
+        break;
+      }
+      const tierLabel = ITEM_PRICE_TIER_LABELS[tierIndex] ?? String(tierIndex + 1);
+      const saleValue = parseOptionalItemPriceNumber(row[pair.saleFieldName]);
+      if (saleValue === null) {
+        continue;
+      }
+      if (!ITEM_PRICE_SKIP_MRP_VALIDATION && maxPrice > 0 && saleValue > maxPrice) {
+        return `Price row ${index + 1}: Sale ${tierLabel} (${saleValue}) exceeds Max Price (${maxPrice}).`;
+      }
+      if (
+        ITEM_PRICE_BELOW_COST_SETTING === "restrict" &&
+        costPrice > 0 &&
+        saleValue < costPrice
+      ) {
+        return `Price row ${index + 1}: Sale ${tierLabel} (${saleValue}) is below Cost (${costPrice}).`;
+      }
+      if (minPrice > 0 && saleValue < minPrice) {
+        return `Price row ${index + 1}: Sale ${tierLabel} (${saleValue}) is below Min Price (${minPrice}).`;
       }
     }
     const isDefaultUnit = (row.ipm_is_default_unit ?? "false") === "true";
@@ -1693,11 +2193,10 @@ function validateItemUnitConversionRows(
   value: string,
   values: Record<string, string>,
 ): string | null {
-  const baseUnitId = (values.item_base_unit_id ?? "").trim();
-  if (!baseUnitId) {
-    return null;
-  }
-  const rows = buildManagedItemUnitConversionRows(values);
+  const rows = buildManagedItemUnitConversionRows({
+    ...values,
+    [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]: value,
+  });
   if (rows.length === 0) {
     return "Add at least one unit conversion row.";
   }
@@ -1713,15 +2212,19 @@ function validateItemUnitConversionRows(
       return `Unit conversion row ${index + 1}: Unit is already used in another conversion row.`;
     }
     usedUnitIds.add(unitId);
-    const factor = parseOptionalItemPriceNumber(row.iuc_to_base_factor);
-    if (factor === null || factor <= 0) {
-      return `Unit conversion row ${index + 1}: To Base must be greater than 0.`;
-    }
     const unitFactor = parseOptionalItemPriceNumber(
       resolveItemUnitConversionUnitFactorValue(row),
     );
     if (unitFactor === null || unitFactor <= 0) {
       return `Unit conversion row ${index + 1}: Unit Factor must be greater than 0.`;
+    }
+    // Row 0 is the atomic/smallest unit: its factor must be exactly 1.
+    if (index === 0 && unitFactor !== 1) {
+      return "Unit conversion row 1: Unit Factor must be exactly 1.";
+    }
+    const factor = parseOptionalItemPriceNumber(row.iuc_to_base_factor);
+    if (factor === null || factor <= 0) {
+      return `Unit conversion row ${index + 1}: To Base must be greater than 0.`;
     }
     const weight = parseOptionalItemPriceNumber(row.iuc_uom_weight);
     if (weight !== null && weight < 0) {
@@ -1736,57 +2239,92 @@ function validateItemUnitConversionRows(
     if (isActive && isDefaultUnit) {
       activeDefaultRows += 1;
     }
-    if (!isBaseUnit) {
-      continue;
-    }
   }
   if (activeBaseRows === 0) {
-    return "Add one active base unit conversion row.";
+    return "Mark one unit conversion row as the base unit.";
   }
   if (activeBaseRows > 1) {
     return "Only one active base unit conversion row is allowed.";
+  }
+  if (activeDefaultRows === 0) {
+    return "Mark one unit conversion row as the default unit.";
   }
   if (activeDefaultRows > 1) {
     return "Only one active default unit conversion row is allowed.";
   }
   return null;
 }
+// A reorder row is keyed by (Branch, Godown, Unit); a blank Branch/Godown is a
+// real, comparable value — two rows that leave both blank but pick the same
+// unit ARE duplicates. Only rows with a unit take part in the check.
+function findDuplicateItemReorderRowIndex(rows: LinkedRecordRow[]): number {
+  const seenKeys = new Set<string>();
+  for (const [index, row] of rows.entries()) {
+    const unitId = (row.ir_unit_id ?? "").trim();
+    if (!unitId) {
+      continue;
+    }
+    const key = [
+      (row.ir_branch_id ?? "").trim(),
+      (row.ir_godown_id ?? "").trim(),
+      unitId,
+    ].join(" ");
+    if (seenKeys.has(key)) {
+      return index;
+    }
+    seenKeys.add(key);
+  }
+  return -1;
+}
 function validateItemReorderRows(value: string, values: Record<string, string>): string | null {
-  const rows = buildManagedItemReorderRows(values);
+  const rows = buildManagedItemReorderRows({
+    ...values,
+    [ITEM_REORDER_ROWS_FIELD_NAME]: value,
+  });
   if (rows.length === 0) {
     return null;
   }
- // const baseUnitId = (values.item_base_unit_id ?? "").trim();
-  // for (const [index, row] of rows.entries()) {
-  //   const unitId = (row.ir_unit_id ?? "").trim() || baseUnitId;
-  //   if (!unitId) {
-  //     return `Reorder row ${index + 1}: Unit is required.`;
-  //   }
-  //   const reorderType = (row.ir_reorder_type ?? "").trim();
-  //   if (!reorderType) {
-  //     return `Reorder row ${index + 1}: Reorder Type is required.`;
-  //   }
-  // }
+  for (const [index, row] of rows.entries()) {
+    const unitId = (row.ir_unit_id ?? "").trim();
+    if (!unitId) {
+      return `Reorder row ${index + 1}: Unit is required.`;
+    }
+    const godownId = (row.ir_godown_id ?? "").trim();
+    if (!godownId) {
+      return `Reorder row ${index + 1}: Godown is required.`;
+    }
+  }
+  const duplicateRowIndex = findDuplicateItemReorderRowIndex(rows);
+  if (duplicateRowIndex >= 0) {
+    return `Reorder row ${duplicateRowIndex + 1}: This Branch/Godown/Unit combination is already added.`;
+  }
   return null;
 }
 function validateItemEanRows(value: string, values: Record<string, string>): string | null {
-  const rows = buildManagedItemEanRows(values);
+  const rows = buildManagedItemEanRows({
+    ...values,
+    [ITEM_EAN_ROWS_FIELD_NAME]: value,
+  });
   if (rows.length === 0) {
     return null;
   }
-  // const baseUnitId = (values.item_base_unit_id ?? "").trim();
-  // for (const [index, row] of rows.entries()) {
-  //   const unitId = (row.ean_unit_id ?? "").trim() || baseUnitId;
-  //   if (!unitId) {
-  //     return `EAN row ${index + 1}: Unit is required.`;
-  //   }
-  //   const eanCode = (row.ean_code ?? "").trim();
-  //   if (!eanCode) {
-  //     return `EAN row ${index + 1}: EAN Code is required.`;
-  //   }
-  // }
+  for (const [index, row] of rows.entries()) {
+    const unitId = (row.ean_unit_id ?? "").trim();
+    if (!unitId) {
+      return `EAN row ${index + 1}: Unit is required.`;
+    }
+    const eanCode = (row.ean_code ?? "").trim();
+    if (!eanCode) {
+      return `EAN row ${index + 1}: EAN Code is required.`;
+    }
+  }
   return null;
 }
+// Briefly memoized dialog answers: the dynamic modal invokes onValueChange
+// inside a state updater, which dev StrictMode double-runs — these gates stop
+// the same interaction from prompting twice.
+let itemServiceConfirmMemo: { accepted: boolean; at: number } | null = null;
+let itemReorderDuplicateAlertAt = 0;
 // Rules & Status lives inside the EAN Table tab, below the EAN and Reorder
 // tables. Its fields keep the column layout they were authored with; the rows
 // are shifted down past the tables by ITEM_EAN_SECTION_RULES_ROW_OFFSET.
@@ -1847,6 +2385,30 @@ const ITEM_RULES_AND_STATUS_FIELDS: (ERPDynamicModalField & {
     name: "item_is_service",
     label: "Service Item",
     type: "checkbox",
+    // Turning the flag ON needs an explicit confirmation (service items don't
+    // track stock); answering No reverts the tick. Unchecking never asks.
+    // The answer is memoized briefly because the modal invokes onValueChange
+    // inside a state updater, which dev StrictMode double-runs — without the
+    // gate the same toggle would prompt twice.
+    onValueChange: ({ value }) => {
+      if (value !== "true" || typeof window === "undefined") {
+        return;
+      }
+      const now = Date.now();
+      const recentAnswer =
+        itemServiceConfirmMemo && now - itemServiceConfirmMemo.at < 500
+          ? itemServiceConfirmMemo.accepted
+          : null;
+      const accepted =
+        recentAnswer ??
+        window.confirm(
+          "Service items don't track stock. Mark this item as a Service Item?",
+        );
+      itemServiceConfirmMemo = { accepted, at: now };
+      if (!accepted) {
+        return { values: { item_is_service: "false" } };
+      }
+    },
     gridRowStart: 4,
     gridColumnStart: 1,
   },
@@ -2525,8 +3087,52 @@ function buildItemFormFields(
   itemReorderTableColumnsConfig: Record<string, unknown>[],
   itemEanTableColumnsConfig: Record<string, unknown>[],
   widgetFieldConfig: Map<string, ResolvedFieldConfig>,
+  priceLevelShortByTier: ReadonlyMap<number, string>,
+  priceLevelCount: number,
   onLinkedTableColumnLayoutChange?: LinkedTableColumnLayoutChangeHandler,
 ): ERPDynamicModalField[] {
+  // One Wot/Margin/Price column triple per tier. Tier A..D maps to configured
+  // price levels 1..4: a configured level's short code replaces the generic
+  // header ("RTL Wot"/"RTL Margin"/"RTL Price"); an unconfigured tier keeps
+  // the generic one. The Margin cells hold a % markup in "By %" mode and a
+  // flat Rs markup in "By Rs" mode, and are locked in "By User" mode.
+  const priceTierColumns: LinkedRecordColumn[] = ITEM_PRICE_MARGIN_SALE_FIELD_PAIRS.flatMap(
+    (pair, tierIndex) => {
+      const tierLabel = ITEM_PRICE_TIER_LABELS[tierIndex] ?? String(tierIndex + 1);
+      const shortName = (priceLevelShortByTier.get(tierIndex + 1) ?? "").trim();
+      const lockMarkupForUserMode = ({
+        row,
+      }: LinkedRecordColumnOptionsResolverParams) =>
+        resolveItemPriceProfitTypeMode(row.ipm_profit_type) === "By User";
+      return [
+        {
+          key: pair.saleWotFieldName,
+          label: shortName ? `${shortName} Wot` : `${tierLabel} Wot`,
+          type: "number" as const,
+          min: 0,
+          step: "0.0001",
+          width: "7rem",
+        },
+        {
+          key: pair.marginFieldName,
+          label: shortName ? `${shortName} Margin` : `${tierLabel} Margin`,
+          type: "number" as const,
+          min: 0,
+          step: "0.0001",
+          width: "7rem",
+          readOnlyResolver: lockMarkupForUserMode,
+        },
+        {
+          key: pair.saleFieldName,
+          label: shortName ? `${shortName} Price` : `Sale ${tierLabel}`,
+          type: "number" as const,
+          min: 0,
+          step: "0.0001",
+          width: "7rem",
+        },
+      ];
+    },
+  );
   const basePriceRowColumns: LinkedRecordColumn[] = [
     {
       key: "ipm_unit_id",
@@ -2590,14 +3196,7 @@ function buildItemFormFields(
       options: ITEM_PRICE_ROUND_OFF_OPTIONS,
       width: "7rem",
     },
-    { key: "ipm_price_a_markup_perc", label: "A Margin", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_sales_price_a", label: "Sale A", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_price_b_markup_perc", label: "B Margin", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_sales_price_b", label: "Sale B", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_price_c_markup_perc", label: "C Margin", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_sales_price_c", label: "Sale C", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_price_d_markup_perc", label: "D Margin", type: "number", min: 0, step: "0.0001", width: "7rem" },
-    { key: "ipm_sales_price_d", label: "Sale D", type: "number", min: 0, step: "0.0001", width: "7rem" },
+    ...priceTierColumns,
     { key: "ipm_max_price", label: "Max", type: "number", min: 0, step: "0.0001", width: "7rem" },
     { key: "ipm_min_price", label: "Min", type: "number", min: 0, step: "0.0001", width: "7rem" },
     { key: "ipm_disc_perc", label: "Disc %", type: "number", min: 0, step: "0.001", width: "7rem" },
@@ -2638,7 +3237,9 @@ function buildItemFormFields(
       min: 0.0001,
       step: "0.0001",
       width: "7rem",
-      readOnlyResolver: ({ row }) => (row.iuc_is_base_unit ?? "false") === "true",
+      // Computed by the To-Base chain (recalculateItemUnitConversionToBaseFactors)
+      // relative to whichever row is marked base — never hand-typed.
+      readOnly: true,
     },
     {
       key: "iuc_unit_factor",
@@ -2846,6 +3447,19 @@ function buildItemFormFields(
         searchable: true,
         required: true,
         options: hsnOptions,
+        validation: {
+          custom: (value) => {
+            const normalized = (value ?? "").trim();
+            if (
+              ITEM_HSN_MIN_LENGTH > 0 &&
+              normalized &&
+              normalized.length < ITEM_HSN_MIN_LENGTH
+            ) {
+              return `HSN Code must be at least ${ITEM_HSN_MIN_LENGTH} digits.`;
+            }
+            return null;
+          },
+        },
       },
       {
         name: "item_default_tax_id",
@@ -2952,6 +3566,7 @@ function buildItemFormFields(
         type: "select",
         searchable: true,
         serverSearch: true,
+        required: true,
         options: categoryOptions,
         onSearchOpenChange: categoryHandlers.onSearchOpenChange,
         onSearchQueryChange: categoryHandlers.onSearchQueryChange,
@@ -3051,6 +3666,18 @@ function buildItemFormFields(
             emptyState="No unit conversions added."
             exclusiveTrueColumnKeys={["iuc_is_default_unit", "iuc_is_base_unit"]}
             removeDisabledRowIndexes={[0]}
+            // The trailing blank placeholder can never be removed, and neither
+            // can the last remaining real (unit-bearing) row. Row 0 is covered
+            // by removeDisabledRowIndexes above.
+            canRemoveRow={(row, _rowIndex, rows) => {
+              if (!(row.iuc_unit_id ?? "").trim()) {
+                return false;
+              }
+              return (
+                rows.filter((candidate) => (candidate.iuc_unit_id ?? "").trim())
+                  .length > 1
+              );
+            }}
             onChange={setValue}
             value={value}
           />
@@ -3082,7 +3709,8 @@ function buildItemFormFields(
             itemTaxRecordsById,
           ),
         validation: {
-          custom: validateItemPriceRows,
+          custom: (value, values) =>
+            validateItemPriceRows(value, values, priceLevelCount),
         },
         render: ({ disabled, setValue, value, values }) => {
           const priceUnitOptions = buildSelectableItemUnitOptions(
@@ -3119,6 +3747,11 @@ function buildItemFormFields(
               emptyState="No price rows added."
               exclusiveTrueColumnKeys={["ipm_is_default_unit", "ipm_is_base_unit"]}
               removeDisabledRowIndexes={[0]}
+              // The trailing blank placeholder row can never be removed.
+              canRemoveRow={(row) =>
+                Boolean((row.ipm_unit_id ?? "").trim()) ||
+                hasLinkedRowContent(row, ITEM_PRICE_CONTENT_FIELD_NAMES)
+              }
               onColumnLayoutChange={(columns) =>
                 onLinkedTableColumnLayoutChange?.({
                   tableId: ITEM_PRICE_TABLE_UI_ID,
@@ -3190,6 +3823,10 @@ function buildItemFormFields(
               disabled={disabled}
               emptyState="No EAN rows added."
               removeDisabledRowIndexes={[0]}
+              // The trailing blank placeholder row can never be removed.
+              canRemoveRow={(row) =>
+                hasLinkedRowContent(row, ITEM_EAN_CONTENT_FIELD_NAMES)
+              }
               onColumnLayoutChange={(columns) =>
                 onLinkedTableColumnLayoutChange?.({
                   tableId: ITEM_EAN_TABLE_UI_ID,
@@ -3250,6 +3887,10 @@ function buildItemFormFields(
               disabled={disabled}
               emptyState="No reorder rows added."
               removeDisabledRowIndexes={[0]}
+              // The trailing blank placeholder row can never be removed.
+              canRemoveRow={(row) =>
+                hasLinkedRowContent(row, ITEM_REORDER_CONTENT_FIELD_NAMES)
+              }
               onColumnLayoutChange={(columns) =>
                 onLinkedTableColumnLayoutChange?.({
                   tableId: ITEM_REORDER_TABLE_UI_ID,
@@ -3308,10 +3949,9 @@ function buildItemFormFields(
         label: "Notes",
         rows: 3,
         colSpan: 2,
-        validation: {
-          maxLength: 250,
-          maxLengthMessage: "Notes must be at most 250 characters.",
-        },
+        // No blocking length validation: notes are silently truncated to 250
+        // characters at save time (see buildItemRequestPayload), so a long or
+        // legacy-loaded note can never make the record un-savable.
       },
       ]),
     ),
@@ -3487,10 +4127,11 @@ async function buildItemRequestPayload({
     item_is_service: (values.item_is_service ?? "false") === "true",
     item_is_batch_based: (values.item_is_batch_based ?? "false") === "true",
     item_is_expiry_item: (values.item_is_expiry_item ?? "false") === "true",
-    item_expiry_days: toOptionalNonNegativeInteger(values.item_expiry_days ?? ""),
-    item_intimate_before_days: toOptionalNonNegativeInteger(
-      values.item_intimate_before_days ?? "",
-    ),
+    // Always present in the payload — 0 when hidden/unset (the two fields are
+    // only visible while item_is_expiry_item is checked).
+    item_expiry_days: toOptionalNonNegativeInteger(values.item_expiry_days ?? "") ?? 0,
+    item_intimate_before_days:
+      toOptionalNonNegativeInteger(values.item_intimate_before_days ?? "") ?? 0,
     item_allow_sales: (values.item_allow_sales ?? "true") === "true",
     item_allow_sales_return: (values.item_allow_sales_return ?? "true") === "true",
     item_allow_purchase: (values.item_allow_purchase ?? "true") === "true",
@@ -3502,20 +4143,20 @@ async function buildItemRequestPayload({
     item_price_list:
       (values.item_price_list ?? "false") === "true" || hasMeaningfulItemPriceRows(values),
     item_weigh_scale: (values.item_weigh_scale ?? "false") === "true",
-    item_retail_item: (values.item_retail_item ?? "true") === "true",
+    item_retail_item: (values.item_retail_item ?? "false") === "true",
     item_is_kit: (values.item_is_kit ?? "false") === "true",
     item_auto_break: (values.item_auto_break ?? "false") === "true",
     item_auto_make: (values.item_auto_make ?? "false") === "true",
-    item_allow_loyalty: (values.item_allow_loyalty ?? "false") === "true",
-    item_allow_promo: (values.item_allow_promo ?? "false") === "true",
+    item_allow_loyalty: (values.item_allow_loyalty ?? "true") === "true",
+    item_allow_promo: (values.item_allow_promo ?? "true") === "true",
     item_has_offer: (values.item_has_offer ?? "false") === "true",
     item_damagable_product:
-      (values.item_damagable_product ?? "false") === "true",
+      (values.item_damagable_product ?? "true") === "true",
     item_is_demand: (values.item_is_demand ?? "false") === "true",
-    item_allow_loading: (values.item_allow_loading ?? "false") === "true",
-    item_allow_freight: (values.item_allow_freight ?? "false") === "true",
-    item_random_stock: (values.item_random_stock ?? "false") === "true",
-    item_barcode_sticker: (values.item_barcode_sticker ?? "false") === "true",
+    item_allow_loading: (values.item_allow_loading ?? "true") === "true",
+    item_allow_freight: (values.item_allow_freight ?? "true") === "true",
+    item_random_stock: (values.item_random_stock ?? "true") === "true",
+    item_barcode_sticker: (values.item_barcode_sticker ?? "true") === "true",
     item_default_tax_id: toNullableString(values.item_default_tax_id ?? ""),
     item_hsn_code: toUpperNullable(values.item_hsn_code ?? ""),
     item_batch_config: toNonNegativeInteger(
@@ -3524,7 +4165,8 @@ async function buildItemRequestPayload({
     ),
     item_sort_order: toOptionalNonNegativeInteger(values.item_sort_order ?? ""),
     item_image_url: toNullableString(values.item_image_url ?? ""),
-    item_notes: toNullableString(values.item_notes ?? ""),
+    // Free text, silently truncated to 250 characters at save time.
+    item_notes: toNullableString((values.item_notes ?? "").trim().slice(0, 250)),
     item_storage_location: toNullableString(values.item_storage_location ?? ""),
     item_packing_item_ids: toUniqueStringArrayFromCsv(
       values.item_packing_item_ids ?? "",
@@ -3550,6 +4192,13 @@ export default function ItemMasterPageContent({
 }: ItemMasterPageContentProps = {}) {
   const { getAll: getItemLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: listItemTaxes } = useApi<unknown>(ITEM_TAX_MASTER_LIST_ENDPOINT);
+  // Configured price levels (fixed.price_levels): levels 1-4 relabel the price
+  // grid's A-D tier columns with their short codes, and their count caps how
+  // many tiers the price-row validation actually checks.
+  const { getAll: getPriceLevelMasters } = useApi<unknown>(
+    PRICE_LEVEL_MASTERS_ENDPOINT,
+    { toast: { error: false } },
+  );
   const { getAll: getItemPriceTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
   const { getAll: getItemReorderTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
   const { getAll: getItemEanTableColumns } = useApi<unknown>(UI_TABLE_COLUMNS_ENDPOINT);
@@ -3586,6 +4235,9 @@ export default function ItemMasterPageContent({
   const [hsnOptions, setHsnOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [itemOptions, setItemOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [itemTaxRecords, setItemTaxRecords] = useState<Record<string, unknown>[]>([]);
+  const [priceLevelRecords, setPriceLevelRecords] = useState<Record<string, unknown>[]>(
+    [],
+  );
   const [itemPriceTableColumnsConfig, setItemPriceTableColumnsConfig] = useState<
     Record<string, unknown>[]
   >([]);
@@ -3697,6 +4349,7 @@ export default function ItemMasterPageContent({
         uiReorderTableColumnsPayload,
         uiEanTableColumnsPayload,
         itemMasterWidgetsPayload,
+        priceLevelsPayload,
       ] = await Promise.allSettled([
         getBranchLookup(BRANCH_LOOKUP_QUERY),
         getUnitLookup(UNIT_LOOKUP_QUERY),
@@ -3708,6 +4361,7 @@ export default function ItemMasterPageContent({
         getItemReorderTableColumns(UI_REORDER_TABLE_COLUMNS_QUERY),
         getItemEanTableColumns(UI_EAN_TABLE_COLUMNS_QUERY),
         getItemMasterWidgets(ITEM_MASTER_WIDGET_QUERY),
+        getPriceLevelMasters(),
       ]);
       if (!mounted) {
         return;
@@ -3775,6 +4429,11 @@ export default function ItemMasterPageContent({
           ? buildWidgetFieldConfig(itemMasterWidgetsPayload.value as WidgetMastersResponse)
           : new Map(),
       );
+      setPriceLevelRecords(
+        priceLevelsPayload.status === "fulfilled"
+          ? extractArrayRecords(priceLevelsPayload.value, DEFAULT_LOOKUP_ARRAY_KEYS)
+          : [],
+      );
     })();
     return () => {
       mounted = false;
@@ -3788,28 +4447,69 @@ export default function ItemMasterPageContent({
     getItemLookup,
     getItemPriceTableColumns,
     getItemReorderTableColumns,
+    getPriceLevelMasters,
     getUnitLookup,
     listItemTaxes,
   ]);
+  // Tier A..D ↔ price level 1..4: short codes for the grid's column headers,
+  // and the number of configured levels caps how many tiers get validated.
+  const priceLevelShortByTier = useMemo(() => {
+    const shortByTier = new Map<number, string>();
+    for (const record of priceLevelRecords) {
+      const isActive = toSelectBoolean(
+        getFieldValue(record, "priceLvlIsActive"),
+        "true",
+      );
+      const isDeleted = toSelectBoolean(
+        getFieldValue(record, "priceLvlIsDeleted"),
+        "false",
+      );
+      if (isActive !== "true" || isDeleted === "true") {
+        continue;
+      }
+      const tier = Number(toDisplayValue(getFieldValue(record, "priceLvlId")));
+      if (!Number.isInteger(tier) || tier < 1 || tier > ITEM_PRICE_MAX_LEVEL_COUNT) {
+        continue;
+      }
+      const shortName = toDisplayValue(getFieldValue(record, "priceLvlShort")).trim();
+      if (shortName && !shortByTier.has(tier)) {
+        shortByTier.set(tier, shortName);
+      }
+    }
+    return shortByTier;
+  }, [priceLevelRecords]);
+  const priceLevelCount = useMemo(() => {
+    const configuredTiers = new Set<number>();
+    for (const record of priceLevelRecords) {
+      const tier = Number(toDisplayValue(getFieldValue(record, "priceLvlId")));
+      if (Number.isInteger(tier) && tier >= 1 && tier <= ITEM_PRICE_MAX_LEVEL_COUNT) {
+        configuredTiers.add(tier);
+      }
+    }
+    return configuredTiers.size > 0 ? configuredTiers.size : ITEM_PRICE_MAX_LEVEL_COUNT;
+  }, [priceLevelRecords]);
   const buildItemUnitConversionPayloadRows = useCallback(
     (itemId: string, values: Record<string, string>) => {
       const normalizedValues = normalizeItemLinkedSubmissionValues(
         values,
         itemTaxRecordsById,
       );
-      const baseUnitId = resolveLinkedBaseUnitId(normalizedValues);
+      // The base unit is whichever conversion row is currently marked base —
+      // resolved fresh at save time from this grid alone (never read back from
+      // the cosmetic Base Unit Id column, and never overridden by price rows).
+      const baseUnitId = resolveLinkedBaseUnitId(normalizedValues, { priceRows: [] });
       // The Unit Conversion Table is the source of truth for its own payload.
       // Price rows are kept in sync with these rows via the value-change
       // handlers, so we always serialize the unit conversion rows directly
       // instead of deriving them from the price list.
-      return buildManagedItemUnitConversionRows(normalizedValues).map((row) => {
+      return buildManagedItemUnitConversionRows(normalizedValues).map((row, index) => {
         const unitId = (row.iuc_unit_id ?? "").trim() || baseUnitId;
         const payload: Record<string, unknown> = {
           iuc_item_id: itemId,
           iuc_unit_id: unitId,
           iuc_base_unit_id: baseUnitId,
-          iuc_unit_slno:
-            toOptionalNonNegativeInteger(row.iuc_unit_slno ?? "") ?? 0,
+          // Row sequence derives from grid position, not the editable column.
+          iuc_unit_slno: index + 1,
           iuc_to_base_factor: toOptionalNonNegativeNumber(
             resolveItemUnitConversionToBaseFactorValue(row) ||
               (unitId === baseUnitId ? "1" : ""),
@@ -3842,34 +4542,24 @@ export default function ItemMasterPageContent({
         values,
         itemTaxRecordsById,
       );
-      const baseUnitId = resolveLinkedBaseUnitId(normalizedValues);
-      const itemUnitConversionsByUnitId = buildItemUnitConversionRowsByUnitId(
-        normalizedValues,
-      );
-      return buildManagedItemPriceRows(normalizedValues).map((row) => {
+      const baseUnitId = resolveLinkedBaseUnitId(normalizedValues, { priceRows: [] });
+      return buildManagedItemPriceRows(normalizedValues).map((row, index) => {
         const unitId = (row.ipm_unit_id ?? "").trim() || baseUnitId;
-        const matchingUnitConversion = itemUnitConversionsByUnitId.get(unitId);
-        const nextToBaseFactor =
-          resolveItemPriceToBaseFactorValue(row) ||
-          resolveItemUnitConversionToBaseFactorValue(matchingUnitConversion ?? {}) ||
-          "1";
-        const nextUnitFactor =
-          resolveItemPriceUnitFactorValue(row) ||
-          resolveItemUnitConversionUnitFactorValue(matchingUnitConversion ?? {}) ||
-          "1";
         const payload: Record<string, unknown> = {
           ipm_company_id: toNullableString(normalizedValues.item_company_id ?? ""),
           ipm_branch_id: toNullableString(normalizedValues.item_branch_id ?? ""),
           ipm_item_id: itemId,
-          ipm_unit_id: unitId,
+          ipm_sl_no: index + 1,
+          // item_price_master owns no unit shape of its own — the base unit,
+          // factors, slno and is_* flags all live on the item_unit_conversion
+          // row this points at, which the unit_conversions[] half of this same
+          // composite payload maintains. Sending them here is now a 400, so the
+          // grid's mirrored copies stay client-side. The server accepts either
+          // the iuc_id or the unit_id behind it and resolves the latter against
+          // the item's conversion rows, exactly like ean_unit_id / ir_unit_id.
+          ipm_uc_unit_id: unitId,
           ipm_godown_id: (row.ipm_godown_id ?? "").trim(),
-          ipm_base_unit_id: toNullableString(baseUnitId),
-          ipm_profit_type: normalizeItemPriceProfitType(row.ipm_profit_type),
-          ipm_unit_slno: toOptionalNonNegativeInteger(
-            matchingUnitConversion?.iuc_unit_slno ?? row.ipm_unit_slno ?? "",
-          ),
-          ipm_to_base_factor: toOptionalNonNegativeNumber(nextToBaseFactor),
-          ipm_unit_factor: toOptionalNonNegativeNumber(nextUnitFactor),
+          ipm_profit_type: toServerItemPriceProfitType(row.ipm_profit_type),
           ipm_cost_price: toOptionalNonNegativeNumber(row.ipm_cost_price ?? ""),
           ipm_cost_wot: toOptionalNonNegativeNumber(row.ipm_cost_wot ?? ""),
           ipm_sales_price_a: toOptionalNonNegativeNumber(
@@ -3906,16 +4596,6 @@ export default function ItemMasterPageContent({
           ipm_disc_qty: toOptionalNonNegativeNumber(row.ipm_disc_qty ?? ""),
           ipm_addl_cess: toOptionalNonNegativeNumber(row.ipm_addl_cess ?? ""),
           ipm_round_off: toOptionalNonNegativeNumber(row.ipm_round_off ?? ""),
-          ipm_is_default_unit:
-            (row.ipm_is_default_unit ??
-              matchingUnitConversion?.iuc_is_default_unit ??
-              "false") === "true",
-          ipm_is_base_unit:
-            (row.ipm_is_base_unit ?? matchingUnitConversion?.iuc_is_base_unit ?? "false") ===
-            "true",
-          ipm_is_big_unit:
-            (row.ipm_is_big_unit ?? matchingUnitConversion?.iuc_is_big_unit ?? "false") ===
-            "true",
           ipm_loading_charge: toOptionalNonNegativeNumber(
             row.ipm_loading_charge ?? "",
           ),
@@ -3940,11 +4620,13 @@ export default function ItemMasterPageContent({
   );
   const buildItemReorderPayloadRows = useCallback(
     (itemId: string, values: Record<string, string>) => {
-      const itemBranchId = (values.item_branch_id ?? "").trim();
-      return buildManagedItemReorderRows(values).map((row) => {
+      // A blank Branch is a real value (a global, branch-unscoped rule) — it is
+      // saved as null, never silently replaced by the item's branch.
+      return buildManagedItemReorderRows(values).map((row, index) => {
         const payload: Record<string, unknown> = {
           ir_item_id: itemId,
-          ir_branch_id: toNullableString((row.ir_branch_id ?? "").trim() || itemBranchId),
+          ir_sl_no: index + 1,
+          ir_branch_id: toNullableString(row.ir_branch_id ?? ""),
           ir_unit_id: toNullableString(row.ir_unit_id ?? ""),
           ir_godown_id: toNullableString(row.ir_godown_id ?? ""),
           ir_min_level: toOptionalNonNegativeNumber(row.ir_min_level ?? ""),
@@ -3964,7 +4646,9 @@ export default function ItemMasterPageContent({
             row.ir_expiry_buffer_days ?? "",
           ),
           ir_reorder_type: (row.ir_reorder_type ?? "").trim(),
-          ir_is_active: (row.ir_is_active ?? "true") === "true",
+          // Always true on save, matching the legacy contract (the grid has no
+          // Active column; soft-deactivation is the server's cleanup concern).
+          ir_is_active: true,
           ir_remarks: toNullableString(row.ir_remarks ?? ""),
         };
         const itemReorderId = toTrimmedOrUndefined(row.ir_id);
@@ -3979,12 +4663,21 @@ export default function ItemMasterPageContent({
   const buildItemEanPayloadRows = useCallback(
     (itemId: string, values: Record<string, string>) => {
       const baseUnitId = (values.item_base_unit_id ?? "").trim();
-      return buildManagedItemEanRows(values).map((row) => {
+      const managedRows = buildManagedItemEanRows(values);
+      // When the operator marked no row as default, the first real row is the
+      // default barcode (legacy contract: ean_is_default true only for row 1).
+      const hasExplicitDefaultRow = managedRows.some(
+        (row) => (row.ean_is_default ?? "false") === "true",
+      );
+      return managedRows.map((row, index) => {
         const payload: Record<string, unknown> = {
           ean_item_id: itemId,
+          ean_sl_no: index + 1,
           ean_unit_id: (row.ean_unit_id ?? "").trim() || baseUnitId,
           ean_code: (row.ean_code ?? "").trim(),
-          ean_is_default: (row.ean_is_default ?? "false") === "true",
+          ean_is_default: hasExplicitDefaultRow
+            ? (row.ean_is_default ?? "false") === "true"
+            : index === 0,
           ean_is_active: (row.ean_is_active ?? "true") === "true",
           ean_remarks: toNullableString(row.ean_remarks ?? ""),
         };
@@ -4027,17 +4720,22 @@ export default function ItemMasterPageContent({
         getFieldValue(compositeSource ?? {}, "unit_conversions"),
         DEFAULT_LOOKUP_ARRAY_KEYS,
       );
-      // ipm_unit_id comes back as an iuc_id (it is a FK to item_unit_conversion),
-      // but every price-row control matches on unit ids, so retarget it the same
-      // way reorder/EAN rows are below — otherwise the Unit cell renders blank
-      // and the conversion-factor lookups miss.
+      // The server names the column ipm_uc_unit_id and stores an iuc_id in it
+      // (it is a FK to item_unit_conversion), but every price-row control here
+      // matches on unit ids under the ipm_unit_id key, so rename the field and
+      // retarget the value the same way reorder/EAN rows are below — otherwise
+      // the Unit cell renders blank and the conversion-factor lookups miss.
       const priceRows = mapLinkedRowUnitConversionIdsToUnitIds(
-        filterItemPriceRowsByScope(
-          extractArrayRecords(
-            getFieldValue(compositeSource ?? {}, "prices"),
-            DEFAULT_LOOKUP_ARRAY_KEYS,
+        renameLinkedRowField(
+          filterItemPriceRowsByScope(
+            extractArrayRecords(
+              getFieldValue(compositeSource ?? {}, "prices"),
+              DEFAULT_LOOKUP_ARRAY_KEYS,
+            ),
+            resolveItemPriceScope(itemSource),
           ),
-          resolveItemPriceScope(itemSource),
+          "ipm_uc_unit_id",
+          "ipm_unit_id",
         ),
         "ipm_unit_id",
         itemUnitConversionRows,
@@ -4064,20 +4762,24 @@ export default function ItemMasterPageContent({
         preferredUnitId,
       );
       const managedEanRow = selectManagedItemEanCodeRecord(eanRows, preferredUnitId);
-      const serializedItemUnitConversionRows = syncSerializedItemUnitConversionRows(
-        serializeLinkedRecordRows(
-          itemUnitConversionRows.map((row) =>
-            mapSourceToLinkedRow(
-              row,
-              ITEM_UNIT_CONVERSION_ROW_TEXT_FIELD_NAMES,
-              ITEM_UNIT_CONVERSION_ROW_BOOLEAN_FIELD_NAMES,
-              buildEmptyItemUnitConversionRow(preferredUnitId, 2),
+      const serializedItemUnitConversionRows = appendTrailingBlankLinkedRow(
+        syncSerializedItemUnitConversionRows(
+          serializeLinkedRecordRows(
+            itemUnitConversionRows.map((row) =>
+              mapSourceToLinkedRow(
+                row,
+                ITEM_UNIT_CONVERSION_ROW_TEXT_FIELD_NAMES,
+                ITEM_UNIT_CONVERSION_ROW_BOOLEAN_FIELD_NAMES,
+                buildEmptyItemUnitConversionRow(preferredUnitId, 2),
+              ),
             ),
           ),
+          {
+            item_base_unit_id: preferredUnitId,
+          },
         ),
-        {
-          item_base_unit_id: preferredUnitId,
-        },
+        (rows) => buildEmptyItemUnitConversionRow("", rows.length + 1),
+        (row) => !(row.iuc_unit_id ?? "").trim(),
       );
       const itemPriceSyncValues: Record<string, string> = {
         item_default_tax_id:
@@ -4086,39 +4788,53 @@ export default function ItemMasterPageContent({
         [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]: serializedItemUnitConversionRows,
         [ITEM_PRICE_ROWS_FIELD_NAME]: "",
       };
-      const serializedPriceRows = syncSerializedItemPriceRows(
+      const serializedPriceRows = appendTrailingBlankLinkedRow(
+        syncSerializedItemPriceRows(
+          serializeLinkedRecordRows(
+            priceRows.map((row) =>
+              mapSourceToLinkedRow(
+                row,
+                ITEM_PRICE_TEXT_FIELD_NAMES,
+                ITEM_PRICE_BOOLEAN_FIELD_NAMES,
+                buildEmptyItemPriceRow(preferredUnitId),
+              ),
+            ),
+          ),
+          itemPriceSyncValues,
+          itemTaxRecordsById,
+        ),
+        () => buildEmptyItemPriceRow(""),
+        (row) =>
+          !(row.ipm_unit_id ?? "").trim() &&
+          !hasLinkedRowContent(row, ITEM_PRICE_CONTENT_FIELD_NAMES),
+      );
+      const serializedReorderRows = appendTrailingBlankLinkedRow(
         serializeLinkedRecordRows(
-          priceRows.map((row) =>
+          reorderRows.map((row) =>
             mapSourceToLinkedRow(
               row,
-              ITEM_PRICE_TEXT_FIELD_NAMES,
-              ITEM_PRICE_BOOLEAN_FIELD_NAMES,
-              buildEmptyItemPriceRow(preferredUnitId),
+              ITEM_REORDER_ROW_TEXT_FIELD_NAMES,
+              ITEM_REORDER_ROW_BOOLEAN_FIELD_NAMES,
+              buildEmptyItemReorderRow(),
             ),
           ),
         ),
-        itemPriceSyncValues,
-        itemTaxRecordsById,
+        () => buildEmptyItemReorderRow(),
+        (row) => !hasLinkedRowContent(row, ITEM_REORDER_CONTENT_FIELD_NAMES),
       );
-      const serializedReorderRows = serializeLinkedRecordRows(
-        reorderRows.map((row) =>
-          mapSourceToLinkedRow(
-            row,
-            ITEM_REORDER_ROW_TEXT_FIELD_NAMES,
-            ITEM_REORDER_ROW_BOOLEAN_FIELD_NAMES,
-            buildEmptyItemReorderRow(),
+      const serializedEanRows = appendTrailingBlankLinkedRow(
+        serializeLinkedRecordRows(
+          eanRows.map((row) =>
+            mapSourceToLinkedRow(
+              row,
+              ITEM_EAN_ROW_TEXT_FIELD_NAMES,
+              ITEM_EAN_ROW_BOOLEAN_FIELD_NAMES,
+              buildEmptyItemEanRow(preferredUnitId, preferredUnitId),
+            ),
           ),
         ),
-      );
-      const serializedEanRows = serializeLinkedRecordRows(
-        eanRows.map((row) =>
-          mapSourceToLinkedRow(
-            row,
-            ITEM_EAN_ROW_TEXT_FIELD_NAMES,
-            ITEM_EAN_ROW_BOOLEAN_FIELD_NAMES,
-            buildEmptyItemEanRow(preferredUnitId, preferredUnitId),
-          ),
-        ),
+        () => buildEmptyItemEanRow(preferredUnitId, preferredUnitId),
+        (row) => !hasLinkedRowContent(row, ITEM_EAN_CONTENT_FIELD_NAMES),
       );
       if (
         !managedPriceRow &&
@@ -4194,6 +4910,8 @@ export default function ItemMasterPageContent({
         itemReorderTableColumnsConfig,
         itemEanTableColumnsConfig,
         widgetFieldConfig,
+        priceLevelShortByTier,
+        priceLevelCount,
         handleLinkedTableColumnLayoutChange,
       ),
     [
@@ -4217,6 +4935,8 @@ export default function ItemMasterPageContent({
       itemPriceTableColumnsConfig,
       itemReorderTableColumnsConfig,
       handleLinkedTableColumnLayoutChange,
+      priceLevelShortByTier,
+      priceLevelCount,
       section.options,
       section.handlers,
       supplier.options,
@@ -4574,6 +5294,46 @@ export default function ItemMasterPageContent({
           params.values,
           itemTaxRecordsById,
         );
+        // Below-cost check, "warning" flavor: a sales price below cost needs a
+        // Yes/No confirmation; answering No aborts the whole save (the thrown
+        // error is swallowed by the modal's submit handler, which keeps the
+        // form open with everything still entered). The "restrict" flavor is a
+        // hard validation stop and runs earlier, in validateItemPriceRows.
+        if (
+          ITEM_PRICE_BELOW_COST_SETTING === "warning" &&
+          typeof window !== "undefined"
+        ) {
+          const validatedTierCount = resolveValidatedItemPriceTierCount(priceLevelCount);
+          const belowCostMessages: string[] = [];
+          for (const [rowIndex, row] of buildManagedItemPriceRows(
+            normalizedValues,
+          ).entries()) {
+            const costPrice = parseOptionalItemPriceNumber(row.ipm_cost_price) ?? 0;
+            if (costPrice <= 0) {
+              continue;
+            }
+            for (let tierIndex = 0; tierIndex < validatedTierCount; tierIndex += 1) {
+              const pair = ITEM_PRICE_MARGIN_SALE_FIELD_PAIRS[tierIndex];
+              if (!pair) {
+                break;
+              }
+              const saleValue = parseOptionalItemPriceNumber(row[pair.saleFieldName]);
+              if (saleValue !== null && saleValue < costPrice) {
+                belowCostMessages.push(
+                  `Price row ${rowIndex + 1}: Sale ${
+                    ITEM_PRICE_TIER_LABELS[tierIndex] ?? tierIndex + 1
+                  } (${saleValue}) is below Cost (${costPrice}).`,
+                );
+              }
+            }
+          }
+          if (
+            belowCostMessages.length > 0 &&
+            !window.confirm(`${belowCostMessages.join("\n")}\n\nSave anyway?`)
+          ) {
+            throw new Error("Save cancelled: sales price below cost.");
+          }
+        }
         const childItemId =
           params.shouldUpdate && params.editingItemId !== null
             ? String(params.editingItemId)

@@ -62,6 +62,16 @@ type ItemLinkedRecordsEditorProps = {
   exclusiveTrueColumnKeys?: string[];
   mutuallyExclusiveTrueColumnKeyGroups?: string[][];
   removeDisabledRowIndexes?: number[];
+  /**
+   * Row-level removal veto shared by the Remove button and the Ctrl+Minus
+   * shortcut — e.g. "the trailing blank placeholder and the last real row can
+   * never be removed". Return true to allow removal.
+   */
+  canRemoveRow?: (
+    row: LinkedRecordRow,
+    rowIndex: number,
+    rows: LinkedRecordRow[],
+  ) => boolean;
   onColumnLayoutChange?: (columns: LinkedRecordColumnLayoutEntry[]) => void;
   onChange: (value: string) => void;
   showRowIndex?: boolean;
@@ -351,6 +361,7 @@ export default function ItemLinkedRecordsEditor({
   exclusiveTrueColumnKeys = [],
   mutuallyExclusiveTrueColumnKeyGroups = [],
   removeDisabledRowIndexes = [],
+  canRemoveRow,
   onColumnLayoutChange,
   onChange,
   showRowIndex = true,
@@ -712,11 +723,44 @@ export default function ItemLinkedRecordsEditor({
     autoFocusInitialRowOnMount,
     visibleColumns,
   ]);
-  const handleRemoveRow = (rowIndex: number) => {
+  const isRowRemovable = (rowIndex: number): boolean => {
     if (removeDisabledRowIndexes.includes(rowIndex)) {
+      return false;
+    }
+    const row = rows[rowIndex];
+    if (!row) {
+      return false;
+    }
+    return canRemoveRow ? canRemoveRow(row, rowIndex, rows) : true;
+  };
+  const handleRemoveRow = (rowIndex: number) => {
+    if (!isRowRemovable(rowIndex)) {
       return;
     }
     updateRows(rows.filter((_, index) => index !== rowIndex));
+  };
+  // Ctrl+Minus removes the row the focused cell belongs to, honoring the same
+  // refusal rules as the Remove button (it silently no-ops on protected rows,
+  // e.g. the trailing blank placeholder).
+  const handleEditorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (
+      disabled ||
+      !event.ctrlKey ||
+      event.altKey ||
+      event.shiftKey ||
+      (event.key !== "-" && event.key !== "Subtract")
+    ) {
+      return;
+    }
+    const rowElement = (event.target as HTMLElement | null)?.closest?.(
+      "tr[data-linked-row-index]",
+    );
+    const rowIndex = Number(rowElement?.getAttribute("data-linked-row-index"));
+    if (!Number.isInteger(rowIndex)) {
+      return;
+    }
+    event.preventDefault();
+    handleRemoveRow(rowIndex);
   };
   const handleColumnResizePointerDown = (
     event: ReactPointerEvent<HTMLSpanElement>,
@@ -1383,7 +1427,7 @@ export default function ItemLinkedRecordsEditor({
     <>
       {bodyMenu}
       {adminSettingsModal}
-      <div className={styles.editor}>
+      <div className={styles.editor} onKeyDown={handleEditorKeyDown}>
         {parseError ? <p className={styles.parseError}>{parseError}</p> : null}
         {rows.length === 0 ? (
           <div className={styles.emptyState}>{emptyState}</div>
@@ -1431,6 +1475,7 @@ export default function ItemLinkedRecordsEditor({
               {rows.map((row, rowIndex) => (
                 <tr
                   key={getRowKey(row, rowIndex)}
+                  data-linked-row-index={rowIndex}
                   onContextMenu={handleBodyRowContextMenu}
                 >
                   {showRowIndex ? (
@@ -1448,7 +1493,7 @@ export default function ItemLinkedRecordsEditor({
                     <button
                       type="button"
                       className={styles.removeButton}
-                      disabled={disabled || removeDisabledRowIndexes.includes(rowIndex)}
+                      disabled={disabled || !isRowRemovable(rowIndex)}
                       onClick={() => handleRemoveRow(rowIndex)}
                     >
                       Remove

@@ -267,10 +267,18 @@ export function ERPDynamicModalForm({
         return;
       }
       const isSubmitChord =
-        !event.altKey &&
-        !event.shiftKey &&
-        (event.ctrlKey || event.metaKey) &&
-        (event.key === "Enter" || event.key.toLowerCase() === "s");
+        (!event.altKey &&
+          !event.shiftKey &&
+          (event.ctrlKey || event.metaKey) &&
+          (event.key === "Enter" || event.key.toLowerCase() === "s")) ||
+        // Plain F12 is the legacy primary Save shortcut. preventDefault below
+        // cannot stop the browser's devtools binding, but where the page
+        // receives the key it saves, matching the legacy form.
+        (event.key === "F12" &&
+          !event.altKey &&
+          !event.shiftKey &&
+          !event.ctrlKey &&
+          !event.metaKey);
       if (isSubmitChord) {
         if (!activeVariant || isSubmitting) {
           return;
@@ -420,6 +428,32 @@ export function ERPDynamicModalForm({
     },
     [activeVariant],
   );
+  // Ctrl/Cmd+1..9 jumps straight to the Nth section tab while the modal is
+  // open (the legacy form's Ctrl+1..4 tab shortcuts, generalized).
+  useEffect(() => {
+    if (!isOpen || sectionNavigationMode !== "tabs" || tabSections.length === 0) {
+      return;
+    }
+    const onSectionShortcut = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.shiftKey ||
+        (!event.ctrlKey && !event.metaKey) ||
+        !/^[1-9]$/.test(event.key)
+      ) {
+        return;
+      }
+      const targetSection = tabSections[Number(event.key) - 1];
+      if (!targetSection) {
+        return;
+      }
+      event.preventDefault();
+      setActiveSection(targetSection.key);
+    };
+    window.addEventListener("keydown", onSectionShortcut);
+    return () => window.removeEventListener("keydown", onSectionShortcut);
+  }, [isOpen, sectionNavigationMode, setActiveSection, tabSections]);
   const handleSectionTabKeyDown = useCallback(
     (
       event: ReactKeyboardEvent<HTMLButtonElement>,

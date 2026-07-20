@@ -38,7 +38,6 @@ import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
 import {
   DEFAULT_LOOKUP_ARRAY_KEYS,
-  extractPaginationInfo,
   extractRows,
 } from "@/features/masters/shared/normalizers";
 import { useApi } from "@/hooks/useApi";
@@ -136,13 +135,13 @@ import { PartyTab } from "./tabs/party-tab";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import styles from "./page.module.scss";
 const DEFAULT_PARTY_SCOPE_TYPE: PartyScopeType = "CUSTOMER_GROUP";
-const BRANCH_LIST_ENDPOINT = "/branch-masters/get";
-const BRANCH_LIST_PAGE_LIMIT = 100;
+// `/branch-masters/get` is a fetch-by-id route (it requires a `brId` UUID), not a
+// company-filtered list, so querying it with `compId` only ever returned 400 and
+// left the branch dropdown empty. This is the company-scoped lookup the business
+// context switcher already uses; the id goes in the path.
+const BRANCH_BY_COMPANY_ENDPOINT = "/master-lookups/branches/by-company";
 const ITEM_PRICE_LIST_ENDPOINT = "/item-prices/get";
 const ITEM_LIST_ENDPOINT = "/configured-grid-sql/run?grid_id=1"
-const UNIT_LIST_ENDPOINT = "/units/get";
-const CUSTOMER_LIST_ENDPOINT = "/customers/get";
-const CUSTOMER_GROUP_LIST_ENDPOINT = "/customer-groups/get";
 const MODAL_FIELD_STYLE_VARS = {
   "--erp-modal-control-height": "2.15rem",
   "--erp-modal-control-padding-y": "0.5rem",
@@ -171,8 +170,9 @@ type BranchRecord = {
 };
 type ItemPriceRecord = {
   ipm_item_id?: string | null;
-  ipm_unit_id?: string | null;
-  ipm_base_unit_id?: string | null;
+  // FK to item_unit_conversion(iuc_id) — item_price_master stores no raw unit
+  // id, and no base unit at all; both moved onto the conversion row.
+  ipm_uc_unit_id?: string | null;
   item_id?: string | null;
   itemId?: string | null;
   ipmItemId?: string | null;
@@ -263,14 +263,13 @@ function getItemPriceItemId(row: ItemPriceRecord): string {
 }
 function getItemPriceUnitId(row: ItemPriceRecord): string {
   const candidates = [
-    row.ipm_unit_id,
+    row.ipm_uc_unit_id,
     row.unit_id,
     row.unitId,
     row.ipmUnitId,
     row.item_unit_id,
     row.itemUnitId,
     row.uom_id,
-    row.ipm_base_unit_id,
   ];
   for (const candidate of candidates) {
     if (typeof candidate === "string" && candidate.trim()) {
@@ -501,7 +500,7 @@ export default function PromotionLoyaltyPointsPage() {
     LOYALTY_GIFT_DELETE_ENDPOINT,
     { method: "DELETE", toast: { success: false, error: true } },
   );
-  const { run: loadBranchesForCompany } = useApi<unknown>(BRANCH_LIST_ENDPOINT, {
+  const { run: loadBranchesForCompany } = useApi<unknown>(BRANCH_BY_COMPANY_ENDPOINT, {
     toast: { success: false, error: false },
   });
   const { getAll: listItemPrices } = useApi<ApiSuccessResponse<ItemPriceRecord[]>>(ITEM_PRICE_LIST_ENDPOINT, {
@@ -517,9 +516,6 @@ export default function PromotionLoyaltyPointsPage() {
   const { getAll: getCustomerLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, { toast: { success: false, error: false } });
   const { getAll: getCustomerGroupLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, { toast: { success: false, error: false } });
   const { getAll: getItemsList } = useApi<unknown>(ITEM_LIST_ENDPOINT, { toast: { success: false, error: false } });
-  const { getAll: getUnitsList } = useApi<unknown>(UNIT_LIST_ENDPOINT, { toast: { success: false, error: false } });
-  const { getAll: getCustomersList } = useApi<unknown>(CUSTOMER_LIST_ENDPOINT, { toast: { success: false, error: false } });
-  const { getAll: getCustomerGroupsList } = useApi<unknown>(CUSTOMER_GROUP_LIST_ENDPOINT, { toast: { success: false, error: false } });
   const loadActiveBranchesForCompany = useCallback(
     async (companyId: string) => {
       const normalizedCompanyId = companyId.trim();
@@ -529,47 +525,27 @@ export default function PromotionLoyaltyPointsPage() {
           defaultBranchId: "",
         };
       }
+      // The lookup returns every active branch for the company in one unpaginated
+      // response, so there is no page loop to run.
+      const payload = await loadBranchesForCompany({
+        url: `${BRANCH_BY_COMPANY_ENDPOINT}/${encodeURIComponent(normalizedCompanyId)}`,
+      });
+      const branches = extractRows<BranchRecord>(payload).filter(
+        (branch) => Boolean(getBranchId(branch) && getBranchName(branch)),
+      );
       const branchChoiceMap = new Map<string, ERPDynamicSelectOption>();
-      let defaultBranchId = "";
-      let page = 1;
-      while (true) {
-        const payload = await loadBranchesForCompany({
-          query: {
-            compId: normalizedCompanyId,
-            brIsActive: "true",
-            page: String(page),
-            limit: String(BRANCH_LIST_PAGE_LIMIT),
-          },
-        });
-        const nextBranches = extractRows<BranchRecord>(payload).filter(
-          (branch) => Boolean(getBranchId(branch) && getBranchName(branch)),
-        );
-        nextBranches.forEach((branch) => {
-          const branchId = getBranchId(branch);
-          if (!branchChoiceMap.has(branchId)) {
-            branchChoiceMap.set(branchId, {
-              value: branchId,
-              label: getBranchName(branch),
-            });
-          }
-        });
-        if (!defaultBranchId) {
-          defaultBranchId = getBranchId(
-            nextBranches.find(isDefaultBranch) ?? nextBranches[0] ?? {},
-          );
+      branches.forEach((branch) => {
+        const branchId = getBranchId(branch);
+        if (!branchChoiceMap.has(branchId)) {
+          branchChoiceMap.set(branchId, {
+            value: branchId,
+            label: getBranchName(branch),
+          });
         }
-        const paginationInfo = extractPaginationInfo(payload);
-        const pageSize = paginationInfo.pageSize ?? BRANCH_LIST_PAGE_LIMIT;
-        const totalEntries = paginationInfo.totalEntries;
-        const hasMorePages =
-          totalEntries !== null
-            ? page * pageSize < totalEntries
-            : nextBranches.length === BRANCH_LIST_PAGE_LIMIT;
-        if (!hasMorePages) {
-          break;
-        }
-        page += 1;
-      }
+      });
+      const defaultBranchId = getBranchId(
+        branches.find(isDefaultBranch) ?? branches[0] ?? {},
+      );
       const choices = Array.from(branchChoiceMap.values());
       return {
         choices,
@@ -1089,12 +1065,9 @@ export default function PromotionLoyaltyPointsPage() {
         brandsPayload,
         sectionsPayload,
         unitsPayload,
-        unitsListPayload,
         branchesPayload,
         customersPayload,
-        customersListPayload,
         customerGroupsPayload,
-        customerGroupsListPayload,
       ] = await Promise.allSettled([
         getItemLookup({ module: "items" }),
         getItemsList({ limit: "100" }),
@@ -1103,12 +1076,9 @@ export default function PromotionLoyaltyPointsPage() {
         getItemBrandLookup({ module: "itemBrands" }),
         getItemSectionLookup({ module: "itemSections" }),
         getUnitLookup({ module: "units" }),
-        getUnitsList({ limit: "100" }),
         getBranchLookup({ module: "branches" }),
         getCustomerLookup({ module: "customers" }),
-        getCustomersList({ limit: "100" }),
         getCustomerGroupLookup({ module: "customerGroups" }),
-        getCustomerGroupsList({ limit: "100" }),
       ]);
       // ── Items ────────────────────────────────────────────────────────────────
       // Pass the RAW payload so buildLookupOptions can extract the array using
@@ -1166,15 +1136,11 @@ export default function PromotionLoyaltyPointsPage() {
       );
       // ── Units ─────────────────────────────────────────────────────────────
       // Same fix: pass raw payload, not pre-extracted rows.
-      const masterUnitChoices =
+      setUnitChoices(
         unitsPayload.status === "fulfilled"
           ? buildLookupChoices(unitsPayload.value, UNIT_LOOKUP_KEYS)
-          : [];
-      const listUnitChoices =
-        unitsListPayload.status === "fulfilled"
-          ? buildLookupChoices(unitsListPayload.value, UNIT_LOOKUP_KEYS)
-          : [];
-      setUnitChoices(masterUnitChoices.length > 0 ? masterUnitChoices : listUnitChoices);
+          : [],
+      );
       // ── Branches ──────────────────────────────────────────────────────────
       setBranchLookupChoices(
         branchesPayload.status === "fulfilled"
@@ -1183,38 +1149,24 @@ export default function PromotionLoyaltyPointsPage() {
       );
       // ── Customers ─────────────────────────────────────────────────────────
       // Same fix: pass raw payload.
-      const masterCustomerChoices =
+      setCustomerChoices(
         customersPayload.status === "fulfilled"
           ? buildLookupChoices(customersPayload.value, CUSTOMER_LOOKUP_KEYS)
-          : [];
-      const listCustomerChoices =
-        customersListPayload.status === "fulfilled"
-          ? buildLookupChoices(customersListPayload.value, CUSTOMER_LOOKUP_KEYS)
-          : [];
-      setCustomerChoices(
-        masterCustomerChoices.length > 0 ? masterCustomerChoices : listCustomerChoices,
+          : [],
       );
       // ── Customer Groups ───────────────────────────────────────────────────
       // Same fix: pass raw payload.
-      const masterCustomerGroupChoices =
+      setCustomerGroupChoices(
         customerGroupsPayload.status === "fulfilled"
           ? buildLookupChoices(customerGroupsPayload.value, CUSTOMER_GROUP_LOOKUP_KEYS)
-          : [];
-      const listCustomerGroupChoices =
-        customerGroupsListPayload.status === "fulfilled"
-          ? buildLookupChoices(customerGroupsListPayload.value, CUSTOMER_GROUP_LOOKUP_KEYS)
-          : [];
-      setCustomerGroupChoices(
-        masterCustomerGroupChoices.length > 0
-          ? masterCustomerGroupChoices
-          : listCustomerGroupChoices,
+          : [],
       );
     };
     void loadLookups();
   }, [
     getCustomerGroupLookup, getCustomerLookup, getItemBrandLookup, getItemCategoryLookup,
     getBranchLookup, getItemGroupLookup, getItemLookup, getItemSectionLookup, getUnitLookup,
-    getCustomerGroupsList, getCustomersList, getItemsList, getUnitsList,
+    getItemsList,
   ]);
   useEffect(() => {
     const uniqueItemIds = Array.from(

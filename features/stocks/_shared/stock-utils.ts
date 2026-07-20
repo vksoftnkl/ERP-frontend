@@ -1,6 +1,9 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
-import type { ItemPriceDetailsPayload } from "@/store/api/lookupsApi";
+import type {
+  ItemPriceDetailsPayload,
+  ItemPriceDetailsUnitConversion,
+} from "@/store/api/lookupsApi";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import type { UiTableColumnPayload, SaveUiTableColumnRequest } from "./types";
 import { DEFAULT_GODOWN_OPTION, QUANTITY_FORMATTER, VALUE_FORMATTER } from "./constants";
@@ -229,21 +232,48 @@ export function buildUomOptions(
   if (!detail) return [];
   const optionMap = new Map<string, string>();
   for (const [index, priceRecord] of detail.item_prices.entries()) {
-    if (!priceRecord.ipm_unit_id.trim() || optionMap.has(priceRecord.ipm_unit_id)) continue;
-    optionMap.set(
-      priceRecord.ipm_unit_id,
-      unitOptionsByValue.get(priceRecord.ipm_unit_id) ?? `UOM ${index + 1}`,
-    );
+    const unitId = resolveItemPriceUnitId(detail, priceRecord);
+    if (!unitId || optionMap.has(unitId)) continue;
+    optionMap.set(unitId, unitOptionsByValue.get(unitId) ?? `UOM ${index + 1}`);
   }
   return Array.from(optionMap, ([value, label]) => ({ value, label }));
 }
 
 // ─── Item price helpers ───────────────────────────────────────────────────────
 
+/**
+ * A price row points at a unit conversion (ipm_uc_unit_id -> iuc_id) and carries
+ * no unit shape of its own, so the unit id, its factors and the default-unit
+ * flag all come from the item_unit_conversions half of the same payload.
+ */
+export function resolveItemPriceUnitConversion(
+  detail: ItemPriceDetailsPayload | null | undefined,
+  priceRecord: ItemPriceDetailsPayload["item_prices"][number] | null | undefined,
+): ItemPriceDetailsUnitConversion | null {
+  if (!detail || !priceRecord) return null;
+  const conversionId = (priceRecord.ipm_uc_unit_id ?? "").trim();
+  if (!conversionId) return null;
+  return detail.item_unit_conversions.find((c) => c.iuc_id === conversionId) ?? null;
+}
+
+export function resolveItemPriceUnitId(
+  detail: ItemPriceDetailsPayload | null | undefined,
+  priceRecord: ItemPriceDetailsPayload["item_prices"][number] | null | undefined,
+): string {
+  return (resolveItemPriceUnitConversion(detail, priceRecord)?.iuc_unit_id ?? "").trim();
+}
+
 export function resolveDefaultItemPriceRecord(
-  itemPrices: ItemPriceDetailsPayload["item_prices"],
+  detail: ItemPriceDetailsPayload | null | undefined,
 ): ItemPriceDetailsPayload["item_prices"][number] | null {
-  return itemPrices.find((r) => r.ipm_is_default_unit) ?? itemPrices[0] ?? null;
+  const itemPrices = detail?.item_prices ?? [];
+  return (
+    itemPrices.find(
+      (r) => resolveItemPriceUnitConversion(detail, r)?.iuc_is_default_unit === true,
+    ) ??
+    itemPrices[0] ??
+    null
+  );
 }
 
 export function resolveItemPriceRecordByUnitId(
@@ -251,10 +281,14 @@ export function resolveItemPriceRecordByUnitId(
   unitId: string,
 ): ItemPriceDetailsPayload["item_prices"][number] | null {
   const normalized = unitId.trim();
-  if (!normalized) return resolveDefaultItemPriceRecord(detail.item_prices);
+  if (!normalized) return resolveDefaultItemPriceRecord(detail);
   return (
-    detail.item_prices.find((r) => r.ipm_unit_id === normalized) ??
-    resolveDefaultItemPriceRecord(detail.item_prices)
+    // Callers hold a unit id, but an already-resolved iuc_id matches too.
+    detail.item_prices.find(
+      (r) =>
+        resolveItemPriceUnitId(detail, r) === normalized ||
+        r.ipm_uc_unit_id === normalized,
+    ) ?? resolveDefaultItemPriceRecord(detail)
   );
 }
 

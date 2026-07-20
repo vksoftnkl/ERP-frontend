@@ -1,21 +1,16 @@
 import type { LinkedRecordRow } from "./item-linked-records-editor.shared";
-// The first row is the base row — factor 1, base flag on — but its unit is left
-// for the user to pick. This used to force the unit to the item's base unit,
-// which meant choosing a unit in the Unit Conversion Table (whose first row
-// defines the base unit) immediately showed up as the price list's selected
-// unit. That is why neither function takes a baseUnitId any more.
+// A price row's factors mirror the Unit Conversion Table row for the unit the
+// operator picked (syncItemPriceRowsWithUnitConversions) — any row, including
+// the first, may carry a non-base unit, so nothing is forced here any more.
+// Forcing row 0 to factor 1 (the old row-0-is-base model) fought that mirror:
+// each pass flip-flopped the factor, which the change detector then read as an
+// operator factor edit and mis-dispatched every recalculation.
 export function normalizeItemPriceRowForEditor(
   row: LinkedRecordRow,
   rowIndex: number,
 ): LinkedRecordRow {
-  const nextRow: LinkedRecordRow = {
-    ...row,
-  };
-  if (rowIndex === 0) {
-    nextRow.ipm_to_base_factor = "1";
-    nextRow.ipm_unit_factor = "1";
-  }
-  return nextRow;
+  void rowIndex;
+  return { ...row };
 }
 export function normalizeItemPriceRowsForRules(
   rows: LinkedRecordRow[],

@@ -94,6 +94,7 @@ import {
   parseDecimal,
   resolveDefaultItemPriceRecord,
   resolveItemPriceRecordByUnitId,
+  resolveItemPriceUnitConversion,
   resolveTrackingType,
   mergeLookupOptions,
   toCanonicalDateValue,
@@ -764,11 +765,17 @@ export default function PhysicalStockPage() {
     ) => {
       const priceRecord = preferredUnitId
         ? resolveItemPriceRecordByUnitId(detail, preferredUnitId)
-        : resolveDefaultItemPriceRecord(detail.item_prices);
-      const unitId = priceRecord?.ipm_unit_id ?? detail.item.item_base_unit_id ?? "";
-      const baseUnitId = priceRecord?.ipm_base_unit_id ?? detail.item.item_base_unit_id ?? unitId;
-      const displayConvFactor = priceRecord?.ipm_unit_factor ?? priceRecord?.ipm_to_base_factor ?? 1;
-      const toBaseFactor = priceRecord?.ipm_to_base_factor ?? displayConvFactor;
+        : resolveDefaultItemPriceRecord(detail);
+      // The price row only points at a unit conversion (ipm_uc_unit_id); the
+      // unit, its base unit and both factors live on that conversion row, which
+      // arrives as item_unit_conversions on the same payload.
+      const unitConversion = resolveItemPriceUnitConversion(detail, priceRecord);
+      const unitId = unitConversion?.iuc_unit_id ?? detail.item.item_base_unit_id ?? "";
+      const baseUnitId =
+        unitConversion?.iuc_base_unit_id ?? detail.item.item_base_unit_id ?? unitId;
+      const displayConvFactor =
+        unitConversion?.iuc_unit_factor ?? unitConversion?.iuc_to_base_factor ?? 1;
+      const toBaseFactor = unitConversion?.iuc_to_base_factor ?? displayConvFactor;
       const godownId = priceRecord?.ipm_godown_id ?? "";
       const currentRowValues = rows.find((row) => row.id === rowId)?.values;
       const resolvedGodownId = godownId || currentRowValues?.oslgodownid?.trim() || "";

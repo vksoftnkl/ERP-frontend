@@ -175,12 +175,14 @@ export type ItemPriceDetailsItem = {
 };
 export type ItemPriceDetailsPrice = {
   ipm_id: string;
-  ipm_unit_id: string;
+  /**
+   * FK to item_unit_conversion(iuc_id). The unit itself and its shape (base
+   * unit, factors, slno, the is_* flags) live on that conversion row, which
+   * arrives as item_unit_conversions on the same payload — join on this id
+   * rather than expecting unit fields here.
+   */
+  ipm_uc_unit_id: string;
   ipm_godown_id: string;
-  ipm_base_unit_id: string | null;
-  ipm_to_base_factor: number;
-  ipm_unit_factor: number;
-  ipm_is_default_unit: boolean;
   ipm_cost_price: number;
   ipm_cost_wot: number;
   ipm_sales_price_a: number;
@@ -218,11 +220,26 @@ export type ItemTaxDetailPayload = {
   tax_cess_perc: number;
   tax_cess_unit: number;
 };
+export type ItemPriceDetailsUnitConversion = {
+  iuc_id: string;
+  iuc_item_id: string;
+  iuc_unit_id: string;
+  iuc_base_unit_id: string;
+  iuc_to_base_factor: number;
+  iuc_unit_slno: number;
+  iuc_unit_factor: number;
+  iuc_is_default_unit: boolean;
+  iuc_is_base_unit: boolean;
+  iuc_is_big_unit: boolean;
+  iuc_uom_weight: number;
+  iuc_uom_remarks: string | null;
+  iuc_is_active: boolean;
+};
 export type ItemPriceDetailsPayload = {
   item: ItemPriceDetailsItem;
   item_prices: ItemPriceDetailsPrice[];
+  item_unit_conversions: ItemPriceDetailsUnitConversion[];
   item_tax: ItemPriceDetailsTax | null;
-  
 };
 export const lookupsApi = baseApi.injectEndpoints({
   overrideExisting: true,

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiDownload, FiRefreshCw, FiSearch } from "react-icons/fi";
 import { useApi } from "@/hooks/useApi";
+import ModalPortal from "@/components/ui/modal-portal";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import styles from "./page.module.scss";
 const AUDIT_LOG_LIST_ENDPOINT = "/audit-logs/list";
@@ -825,126 +826,128 @@ function AuditDetailModal({ row, onClose }: { row: AuditLogListItem; onClose: ()
     }
   };
   return (
-    <div
-      className={styles.overlay}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-    >
-      <section
-        className={styles.modal}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="audit-detail-title"
+    <ModalPortal>
+      <div
+        className={styles.overlay}
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            onClose();
+          }
+        }}
       >
-        <header className={styles.modalHead}>
-          <span id="audit-detail-title">Audit Event</span>
-          <span className={styles.modalHeadId}>#{truncateMiddle(row.log_id)}</span>
-          <span className={cx(styles.badge, ACTION_BADGE_CLASS[resolveActionVariant(row.log_action)])}>
-            {formatActionLabel(row.log_action)}
-          </span>
-          <button className={styles.modalClose} type="button" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </header>
-
-        <div className={styles.modalBody}>
-          <div className={styles.kv}>
-            <span className={styles.kvKey}>Date / Time</span>
-            <span className={cx(styles.kvValue, styles.kvMono)}>{formatDateTime(row.log_date)}</span>
-
-            <span className={styles.kvKey}>Screen</span>
-            <span className={styles.kvValue}>
-              {row.screen_name}
-              <span className={styles.kvScreenId}>#{row.log_screen_id}</span>
+        <section
+          className={styles.modal}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="audit-detail-title"
+        >
+          <header className={styles.modalHead}>
+            <span id="audit-detail-title">Audit Event</span>
+            <span className={styles.modalHeadId}>#{truncateMiddle(row.log_id)}</span>
+            <span className={cx(styles.badge, ACTION_BADGE_CLASS[resolveActionVariant(row.log_action)])}>
+              {formatActionLabel(row.log_action)}
             </span>
+            <button className={styles.modalClose} type="button" onClick={onClose} aria-label="Close">
+              ✕
+            </button>
+          </header>
 
-            <span className={styles.kvKey}>Table</span>
-            <span className={cx(styles.kvValue, styles.kvMono)}>{row.log_table_name}</span>
+          <div className={styles.modalBody}>
+            <div className={styles.kv}>
+              <span className={styles.kvKey}>Date / Time</span>
+              <span className={cx(styles.kvValue, styles.kvMono)}>{formatDateTime(row.log_date)}</span>
 
-            <span className={styles.kvKey}>Entity</span>
-            <span className={styles.kvValue}>{getRowEntityLabel(row)}</span>
-
-            <span className={styles.kvKey}>User</span>
-            <span className={cx(styles.kvValue, styles.kvMono)}>{user.title || "—"}</span>
-
-            <span className={styles.kvKey}>Branch</span>
-            <span className={styles.kvValue}>
-              {row.log_branch_name?.trim() || row.log_branch_id?.trim() || "—"}
-            </span>
-
-            <span className={styles.kvKey}>Notes</span>
-            <span className={styles.kvValue}>{row.log_notes?.trim() || "—"}</span>
-          </div>
-
-          <div className={styles.modalSection}>
-            <div className={styles.modalSectionTitle}>
-              {diffRows.length > 0 ? "Field Changes" : "Record Snapshot"}
-            </div>
-            {diffRows.length > 0 ? (
-              <table className={styles.modalDiff}>
-                <thead>
-                  <tr>
-                    <th style={{ width: "34%" }}>Field</th>
-                    <th style={{ width: "33%" }}>Old Value</th>
-                    <th>New Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {diffRows.map((diff, diffIndex) => (
-                    <tr key={`${diff.field}-${diffIndex + 1}`}>
-                      <td>{diff.field}</td>
-                      <td className={styles.modalDiffOld}>{formatAuditPrimitiveValue(diff.from)}</td>
-                      <td className={styles.modalDiffNew}>{formatAuditPrimitiveValue(diff.to)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : snapshotRows.length > 0 ? (
-              <table className={styles.modalDiff}>
-                <thead>
-                  <tr>
-                    <th style={{ width: "34%" }}>Field</th>
-                    <th>Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshotRows.map((snapshot, snapshotIndex) => (
-                    <tr key={`${snapshot.field}-${snapshotIndex + 1}`}>
-                      <td>{snapshot.field}</td>
-                      <td>{formatAuditPrimitiveValue(snapshot.value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <span className={styles.modalEmpty}>
-                No field-level changes recorded for this event
-                {resolveActionVariant(row.log_action) === "new"
-                  ? " — the full record was created."
-                  : "."}
+              <span className={styles.kvKey}>Screen</span>
+              <span className={styles.kvValue}>
+                {row.screen_name}
+                <span className={styles.kvScreenId}>#{row.log_screen_id}</span>
               </span>
-            )}
-          </div>
-        </div>
 
-        <footer className={styles.modalFoot}>
-          <span className={styles.modalHint}>Esc: Close</span>
-          <button className={styles.modalBtn} type="button" onClick={handleCopy}>
-            {copied ? "Copied" : "Copy JSON"}
-          </button>
-          <button
-            className={cx(styles.modalBtn, styles.modalBtnClose)}
-            type="button"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </footer>
-      </section>
-    </div>
+              <span className={styles.kvKey}>Table</span>
+              <span className={cx(styles.kvValue, styles.kvMono)}>{row.log_table_name}</span>
+
+              <span className={styles.kvKey}>Entity</span>
+              <span className={styles.kvValue}>{getRowEntityLabel(row)}</span>
+
+              <span className={styles.kvKey}>User</span>
+              <span className={cx(styles.kvValue, styles.kvMono)}>{user.title || "—"}</span>
+
+              <span className={styles.kvKey}>Branch</span>
+              <span className={styles.kvValue}>
+                {row.log_branch_name?.trim() || row.log_branch_id?.trim() || "—"}
+              </span>
+
+              <span className={styles.kvKey}>Notes</span>
+              <span className={styles.kvValue}>{row.log_notes?.trim() || "—"}</span>
+            </div>
+
+            <div className={styles.modalSection}>
+              <div className={styles.modalSectionTitle}>
+                {diffRows.length > 0 ? "Field Changes" : "Record Snapshot"}
+              </div>
+              {diffRows.length > 0 ? (
+                <table className={styles.modalDiff}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: "34%" }}>Field</th>
+                      <th style={{ width: "33%" }}>Old Value</th>
+                      <th>New Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {diffRows.map((diff, diffIndex) => (
+                      <tr key={`${diff.field}-${diffIndex + 1}`}>
+                        <td>{diff.field}</td>
+                        <td className={styles.modalDiffOld}>{formatAuditPrimitiveValue(diff.from)}</td>
+                        <td className={styles.modalDiffNew}>{formatAuditPrimitiveValue(diff.to)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : snapshotRows.length > 0 ? (
+                <table className={styles.modalDiff}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: "34%" }}>Field</th>
+                      <th>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {snapshotRows.map((snapshot, snapshotIndex) => (
+                      <tr key={`${snapshot.field}-${snapshotIndex + 1}`}>
+                        <td>{snapshot.field}</td>
+                        <td>{formatAuditPrimitiveValue(snapshot.value)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <span className={styles.modalEmpty}>
+                  No field-level changes recorded for this event
+                  {resolveActionVariant(row.log_action) === "new"
+                    ? " — the full record was created."
+                    : "."}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <footer className={styles.modalFoot}>
+            <span className={styles.modalHint}>Esc: Close</span>
+            <button className={styles.modalBtn} type="button" onClick={handleCopy}>
+              {copied ? "Copied" : "Copy JSON"}
+            </button>
+            <button
+              className={cx(styles.modalBtn, styles.modalBtnClose)}
+              type="button"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </footer>
+        </section>
+      </div>
+    </ModalPortal>
   );
 }
 function AuditRow({

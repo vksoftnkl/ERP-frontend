@@ -3,7 +3,12 @@
    so the two screens stay one family; the accent tracks --primary rather than
    hardcoding the maroon. */
 
-.page {
+/* The skin tokens live in a mixin, not only on `.page`, because the detail
+   modal is portaled to <body> (see components/ui/modal-portal.tsx) and so
+   renders OUTSIDE `.page`'s subtree. A custom property declared on `.page`
+   simply does not exist out there, which silently collapses
+   `background: var(--paper)` to transparent — the modal renders see-through. */
+@mixin skin-tokens {
   --accent: var(--primary, #7b1515);
   --accent-dk: var(--primary-hover, #611010);
   --ink: #222;
@@ -25,6 +30,10 @@
      button/input/select/table, so the skin's tighter corners are set by
      re-scoping the variable rather than by fighting that !important. */
   --erp-radius: 2px;
+}
+
+.page {
+  @include skin-tokens;
 
   /* The shell slot (.erp-app-content) is already a definite-height flex child,
      so the page fills it rather than measuring the viewport — a 100dvh page
@@ -491,9 +500,18 @@
 
 /* ── Detail popup (double-click a row) ────────────────────── */
 .overlay {
+  /* Portaled to <body>, so it must carry the skin tokens and typography that it
+     used to inherit from `.page`. */
+  @include skin-tokens;
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, Arial, sans-serif;
+  font-size: 13px;
+
   position: fixed;
   inset: 0;
-  z-index: 280;
+  /* Matches the shared modal shell (dynamic-modal-form) so audit detail stacks
+     above the app header, which climbs to 200. */
+  z-index: var(--erp-modal-overlay-z-index, 320);
   display: flex;
   align-items: center;
   justify-content: center;

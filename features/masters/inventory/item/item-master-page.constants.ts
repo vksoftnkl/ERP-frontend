@@ -263,20 +263,24 @@ export const BATCH_CONFIG_OPTIONS: ERPDynamicSelectOption[] = [
   { value: ITEM_BATCH_CONFIG_MRP_VALUE, label: "MRP" },
   { value: ITEM_BATCH_CONFIG_BATCH_VALUE, label: "BATCH" },
 ];
-export const ITEM_PRICE_DEFAULT_PROFIT_TYPE = "By %";
+// A price row's profit type stays unset until its unit is picked; the lazy
+// default the legacy form applies at that moment is "By User" (operator-typed
+// prices, markup unused).
+export const ITEM_PRICE_DEFAULT_PROFIT_TYPE = "By User";
 export const ITEM_PRICE_PROFIT_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "By %", label: "BY %" },
-  { value: "By Rs ", label: "BY Rs " },
+  { value: "By Rs", label: "BY Rs" },
   { value: "By User", label: "BY User" },
 ];
+// Round Off is a fixed four-choice combo. It is saved as a number, so values
+// read back from the server ("0.5", "1") are reformatted onto these canonical
+// strings via normalizeItemPriceRoundOffValue before they reach the combo.
+export const ITEM_PRICE_DEFAULT_ROUND_OFF = "0.01";
 export const ITEM_PRICE_ROUND_OFF_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "0.01", label: "0.01" },
-  { value: "0.5", label: "0.5" },
-  { value: "1", label: "1" },
-  { value: "5", label: "5" },
-  { value: "10", label: "10" },
-  { value: "50", label: "50" },
-  { value: "100", label: "100" },
+  { value: "0.50", label: "0.50" },
+  { value: "1.00", label: "1.00" },
+  { value: "5.00", label: "5.00" },
 ];
 export const ITEM_REORDER_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "purchase", label: "Purchase" },
@@ -284,6 +288,18 @@ export const ITEM_REORDER_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "repack", label: "Repack" },
   { value: "transfer", label: "Transfer" },
 ];
+// Company-level settings the legacy AppSession supplied. The server has no
+// config endpoint for them yet, so they sit here with the legacy defaults;
+// wire them to the real config source when one exists.
+export const ITEM_PRICE_SKIP_MRP_VALIDATION = false;
+export type ItemPriceBelowCostSetting = "restrict" | "warning" | "allow";
+export const ITEM_PRICE_BELOW_COST_SETTING: ItemPriceBelowCostSetting = "warning";
+// 0 disables the minimum-length rule for the selected HSN code.
+export const ITEM_HSN_MIN_LENGTH = 0;
+// Upper bound on price tiers (A-D); the effective count comes from the
+// configured price levels fetched from /price-level-masters/get.
+export const ITEM_PRICE_MAX_LEVEL_COUNT = 4;
+export const PRICE_LEVEL_MASTERS_ENDPOINT = "/price-level-masters/get";
 export const ITEM_PRICE_MARGIN_SALE_FIELD_PAIRS = [
   {
     marginFieldName: "ipm_price_a_markup_perc",
@@ -321,12 +337,20 @@ export const ITEM_PRICE_TABLE_COLUMN_NAME_TO_KEY = {
   roundoff: "ipm_round_off",
   amargin: "ipm_price_a_markup_perc",
   salea: "ipm_sales_price_a",
+  awot: "ipm_price_a_wot",
+  priceawot: "ipm_price_a_wot",
   bmargin: "ipm_price_b_markup_perc",
   saleb: "ipm_sales_price_b",
+  bwot: "ipm_price_b_wot",
+  pricebwot: "ipm_price_b_wot",
   cmargin: "ipm_price_c_markup_perc",
   salec: "ipm_sales_price_c",
+  cwot: "ipm_price_c_wot",
+  pricecwot: "ipm_price_c_wot",
   dmargin: "ipm_price_d_markup_perc",
   saled: "ipm_sales_price_d",
+  dwot: "ipm_price_d_wot",
+  pricedwot: "ipm_price_d_wot",
   max: "ipm_max_price",
   min: "ipm_min_price",
   disc: "ipm_disc_perc",
@@ -504,19 +528,19 @@ export const ITEM_INITIAL_FORM_VALUES: Record<string, string> = {
   item_allow_negative_so: "true",
   item_price_list: "false",
   item_weigh_scale: "false",
-  item_retail_item: "true",
+  item_retail_item: "false",
   item_is_kit: "false",
   item_auto_break: "false",
   item_auto_make: "false",
-  item_allow_loyalty: "false",
-  item_allow_promo: "false",
+  item_allow_loyalty: "true",
+  item_allow_promo: "true",
   item_has_offer: "false",
-  item_damagable_product: "false",
+  item_damagable_product: "true",
   item_is_demand: "false",
-  item_allow_loading: "false",
-  item_allow_freight: "false",
-  item_random_stock: "false",
-  item_barcode_sticker: "false",
+  item_allow_loading: "true",
+  item_allow_freight: "true",
+  item_random_stock: "true",
+  item_barcode_sticker: "true",
   ir_is_active: "true",
   ean_is_default: "false",
   ean_is_active: "true",

@@ -37,7 +37,11 @@ import type {
   RowValidationIssue,
   UiTableColumnPayload,
 } from "./opening-stock.types";
-import { toColumnWidth } from "@/features/stocks/_shared/stock-utils";
+import {
+  toColumnWidth,
+  resolveDefaultItemPriceRecord,
+  resolveItemPriceUnitConversion,
+} from "@/features/stocks/_shared/stock-utils";
 export function cx(...tokens: Array<string | false | undefined>): string {
   return tokens.filter(Boolean).join(" ");
 }
@@ -317,12 +321,18 @@ export function buildUnitDecimalCountById(payload: unknown): Record<string, numb
   }
   return unitDecimalCountById;
 }
+/**
+ * item_price_master stores the profit type as one of the codes its
+ * chk_ipm_profit_type constraint allows, so those pass straight through. The
+ * legacy display labels and short forms are still accepted for values that
+ * predate the constraint or come from an imported sheet.
+ */
 export function normalizeOpeningStockProfitType(value: string | null | undefined): string {
   const normalized = (value ?? "").trim().toUpperCase();
-  if (normalized === "By %" || normalized === "By Rs" || normalized === "VALUE") {
+  if (normalized === "By" || normalized === "BY RS" || normalized === "VALUE") {
     return "BY_AMOUNT";
   }
-  if (normalized === "By User" || normalized === "By User" || normalized === "USER") {
+  if (normalized === "MANUAL" || normalized === "BY USER" || normalized === "USER") {
     return "MANUAL";
   }
   return "BY_PERCENT";
@@ -382,9 +392,13 @@ export function buildPriceSelectionValues(
   godownOptionsByValue: Map<string, string>,
   currentValues: Record<string, string>,
 ): Record<string, string> {
-  const resolvedUnitId = priceRecord?.ipm_unit_id ?? detail.item.item_base_unit_id ?? "";
-  const actualConvFactor = priceRecord?.ipm_to_base_factor ?? 1;
-  const displayConvFactor = priceRecord?.ipm_unit_factor ?? actualConvFactor;
+  // The price row only points at a unit conversion; the unit and both factors
+  // live on that conversion row, which rides along on the same payload.
+  const unitConversion = resolveItemPriceUnitConversion(detail, priceRecord);
+  const resolvedUnitId =
+    unitConversion?.iuc_unit_id ?? detail.item.item_base_unit_id ?? "";
+  const actualConvFactor = unitConversion?.iuc_to_base_factor ?? 1;
+  const displayConvFactor = unitConversion?.iuc_unit_factor ?? actualConvFactor;
   const openingQty = parseDecimal(currentValues.openingqty);
   const freeQty = parseDecimal(currentValues.freeqty);
   const requestedGodownId = priceRecord?.ipm_godown_id ?? "";
@@ -423,44 +437,18 @@ export function buildPriceSelectionValues(
     oslgodownid: toInputValue(resolvedGodownId),
   };
 }
-export function resolveDefaultItemPriceRecord(
-  itemPrices: ItemPriceDetailsPayload["item_prices"],
-): ItemPriceDetailsPayload["item_prices"][number] | null {
-  return itemPrices.find((record) => record.ipm_is_default_unit) ?? itemPrices[0] ?? null;
-}
-export function resolveItemPriceRecordByUnitId(
-  detail: ItemPriceDetailsPayload,
-  unitId: string,
-): ItemPriceDetailsPayload["item_prices"][number] | null {
-  const normalizedUnitId = unitId.trim();
-  if (!normalizedUnitId) {
-    return resolveDefaultItemPriceRecord(detail.item_prices);
-  }
-  return (
-    detail.item_prices.find((record) => record.ipm_unit_id === normalizedUnitId) ??
-    resolveDefaultItemPriceRecord(detail.item_prices)
-  );
-}
-export function buildUomOptions(
-  detail: ItemPriceDetailsPayload | null | undefined,
-  unitOptionsByValue: Map<string, string>,
-): ERPDynamicSelectOption[] {
-  if (!detail) {
-    return [];
-  }
-  const optionMap = new Map<string, string>();
-  for (const [index, priceRecord] of detail.item_prices.entries()) {
-    if (!priceRecord.ipm_unit_id.trim() || optionMap.has(priceRecord.ipm_unit_id)) {
-      continue;
-    }
-    optionMap.set(
-      priceRecord.ipm_unit_id,
-      unitOptionsByValue.get(priceRecord.ipm_unit_id) ?? `UOM ${index + 1}`,
-    );
-  }
-  return Array.from(optionMap, ([value, label]) => ({ value, label }));
-}
-export { parseColumnWidth, toColumnWidth, reorderColumns } from "@/features/stocks/_shared/stock-utils";
+// These all need the item_unit_conversions half of the payload to resolve a
+// price row's unit, so they live with the shared conversion-join helpers.
+export {
+  parseColumnWidth,
+  toColumnWidth,
+  reorderColumns,
+  buildUomOptions,
+  resolveDefaultItemPriceRecord,
+  resolveItemPriceRecordByUnitId,
+  resolveItemPriceUnitConversion,
+  resolveItemPriceUnitId,
+} from "@/features/stocks/_shared/stock-utils";
 export function mergeResolvedColumns(
   previous: ColumnDefinition[],
   incoming: ColumnDefinition[],
@@ -1410,7 +1398,7 @@ export function buildItemAutofillValues(
   currentValues: Record<string, string>,
   selectedLabel: string,
 ): Record<string, string> {
-  const defaultPrice = resolveDefaultItemPriceRecord(detail.item_prices);
+  const defaultPrice = resolveDefaultItemPriceRecord(detail);
   const defaultTaxId = toInputValue(detail.item.item_default_tax_id);
 
   return {
