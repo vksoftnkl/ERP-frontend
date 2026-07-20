@@ -121,6 +121,23 @@ function clamp(value: number, min: number, max: number): number {
   }
   return Math.min(Math.max(value, min), max);
 }
+// Native <input type="number"> still lets a user type "e"/"+"/"-", so strip
+// anything but digits and a single decimal point instead of trusting it.
+function sanitizeNumericCellInput(value: string): string {
+  let hasDecimalPoint = false;
+  let result = "";
+  for (const char of value) {
+    if (char >= "0" && char <= "9") {
+      result += char;
+      continue;
+    }
+    if (char === "." && !hasDecimalPoint) {
+      hasDecimalPoint = true;
+      result += char;
+    }
+  }
+  return result;
+}
 function isColumnVisibleInLayout(
   column: LinkedRecordColumn,
   layout: ColumnLayoutState,
@@ -1206,7 +1223,9 @@ export default function ItemLinkedRecordsEditor({
           handleCellChange(
             rowIndex,
             boundColumnKey,
-            event.currentTarget.value,
+            columnType === "number"
+              ? sanitizeNumericCellInput(event.currentTarget.value)
+              : event.currentTarget.value,
           )
         }
         onKeyDown={(event) => handleInputKeyDown(event, rowIndex, boundColumnKey)}

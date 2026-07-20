@@ -846,38 +846,6 @@ export function ERPDynamicModalForm({
     },
     [fileData, revalidateFieldNames, runFieldValueChangeHandler],
   );
-  const handleSearchableSelectClear = useCallback(
-    (field: ERPDynamicModalField) => {
-      const fieldName = field.name;
-      setFormData((current) => {
-        const nextValues = {
-          ...current,
-          [fieldName]: "",
-        };
-        revalidateFieldNames([fieldName], nextValues, fileData);
-        runFieldValueChangeHandler(field, "", nextValues, current);
-        return nextValues;
-      });
-      setSearchQueries((current) => {
-        if (!(fieldName in current)) {
-          return current;
-        }
-        const nextState = { ...current };
-        delete nextState[fieldName];
-        return nextState;
-      });
-      setSearchActiveOptionIndex((current) => {
-        if (!(fieldName in current)) {
-          return current;
-        }
-        const nextState = { ...current };
-        delete nextState[fieldName];
-        return nextState;
-      });
-      setOpenSearchField((current) => (current === fieldName ? null : current));
-    },
-    [fileData, revalidateFieldNames, runFieldValueChangeHandler],
-  );
   const focusNextFieldControl = useCallback((originControl: HTMLElement) => {
     const formElement = formRef.current;
     if (!formElement) {
@@ -1420,9 +1388,6 @@ export function ERPDynamicModalForm({
     const searchInputValue = searchQuery ?? "";
     const shouldUseSearchableSelect =
       inputType === "select" && field.searchable !== false;
-    const hasSearchSelectValue = isMultiSelect
-      ? selectedValues.length > 0
-      : fieldValue.trim().length > 0;
     const isSearchOpen = openSearchField === field.name;
     const searchTriggerValue = isMultiSelect
       ? searchInputValue
@@ -1584,7 +1549,6 @@ export function ERPDynamicModalForm({
                 styles.searchSelectTrigger,
                 "erp-ms-modal-control erp-ms-modal-trigger",
                 isMultiSelect && styles.searchMultiSelectControl,
-                hasSearchSelectValue && styles.searchSelectTriggerClearable,
                 showAddButton &&
                   Boolean(field.onSearchCreateShortcut) &&
                   styles.searchSelectTriggerWithAdd,
@@ -1771,24 +1735,6 @@ export function ERPDynamicModalForm({
                 </svg>
               </button>
             </div>
-            {hasSearchSelectValue && !field.disabled && !isSubmitting ? (
-              <button
-                type="button"
-                data-search-select-clear="true"
-                className={styles.searchSelectClearButton}
-                aria-label={`Clear ${field.label}`}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleSearchableSelectClear(field);
-                }}
-              >
-                x
-              </button>
-            ) : null}
             {isSearchOpen && !field.disabled ? (
               <div
                 id={`${controlId}-search-list`}

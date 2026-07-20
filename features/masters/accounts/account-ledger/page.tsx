@@ -252,7 +252,6 @@ function LedgerFieldRenderer({
   handleSearchableFieldKeyDown,
   handleSearchableFieldPointerToggle,
   handleSearchableOptionSelect,
-  handleSearchableFieldClear,
   searchInputRefs,
   serverSearchFieldNames,
   loadingFieldNames,
@@ -290,7 +289,6 @@ function LedgerFieldRenderer({
     fieldName: LedgerFormFieldName,
     option: ERPDynamicSelectOption,
   ) => void;
-  handleSearchableFieldClear: (fieldName: LedgerFormFieldName) => void;
   searchInputRefs: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
 }) {
   if (!isLedgerFieldName(field.name)) {
@@ -399,9 +397,7 @@ function LedgerFieldRenderer({
             data-ledger-modal-field-control="true"
             className={`${dynamicFormStyles.searchSelectTrigger} erp-ms-modal-control erp-ms-modal-trigger ${
               isValidationInvalid ? dynamicFormStyles.controlInvalid : ""
-            } ${fieldValue ? dynamicFormStyles.searchSelectTriggerClearable : ""} ${
-              isSearchOpen ? dynamicFormStyles.searchSelectTriggerOpen : ""
-            }`}
+            } ${isSearchOpen ? dynamicFormStyles.searchSelectTriggerOpen : ""}`}
             disabled={disabled}
             role="combobox"
             aria-expanded={isSearchOpen}
@@ -438,23 +434,6 @@ function LedgerFieldRenderer({
               </svg>
             </span>
           </button>
-          {fieldValue && !disabled ? (
-            <button
-              type="button"
-              className={dynamicFormStyles.searchSelectClearButton}
-              aria-label={`Clear ${field.label}`}
-              onMouseDown={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-              }}
-              onClick={(event) => {
-                event.stopPropagation();
-                handleSearchableFieldClear(fieldName);
-              }}
-            >
-              x
-            </button>
-          ) : null}
           {isSearchOpen && !disabled ? (
             <div
               id={`${field.name}-search-list`}
@@ -1503,40 +1482,6 @@ export default function AccountLedgerMasterPage() {
     (fieldName: LedgerFormFieldName) => {
       setOpenSearchField((current) => (current === fieldName ? null : fieldName));
       clearSearchableFieldActiveIndex(fieldName);
-    },
-    [clearSearchableFieldActiveIndex],
-  );
-  const handleSearchableFieldClear = useCallback(
-    (fieldName: LedgerFormFieldName) => {
-      setFormValues((current) => {
-        if (fieldName === "ledStateName") {
-          return {
-            ...current,
-            ledStateName: "",
-            ledStateCode: "",
-          };
-        }
-        return {
-          ...current,
-          [fieldName]: "",
-        };
-      });
-      // Clearing the group resets the form to the minimal General profile.
-      if (fieldName === "ledGroupId") {
-        groupProfileRequestIdRef.current += 1;
-        setLedgerProfile("General");
-      }
-      setSearchQueries((current) => {
-        if (!(fieldName in current)) {
-          return current;
-        }
-        const nextState = { ...current };
-        delete nextState[fieldName];
-        return nextState;
-      });
-      setOpenSearchField(null);
-      clearSearchableFieldActiveIndex(fieldName);
-      setValidationFieldName((current) => (current === fieldName ? null : current));
     },
     [clearSearchableFieldActiveIndex],
   );
@@ -2770,7 +2715,6 @@ export default function AccountLedgerMasterPage() {
                             handleSearchableFieldPointerToggle
                           }
                           handleSearchableOptionSelect={handleSearchableOptionSelect}
-                          handleSearchableFieldClear={handleSearchableFieldClear}
                           searchInputRefs={searchInputRefs}
                           serverSearchFieldNames={LEDGER_DROPDOWN_FIELD_NAMES}
                           loadingFieldNames={loadingDropdownFieldNames}

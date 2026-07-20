@@ -2155,11 +2155,11 @@ function validateItemPriceRows(
     }
     const unitFactor = parseOptionalItemPriceNumber(resolveItemPriceUnitFactorValue(row));
     if (unitFactor === null || unitFactor <= 0) {
-      return `Price row ${index + 1}: Unit Factor must be greater than 0.`;
+      return `Price row ${index + 1}: Unit Factor from the Unit Conversion Table must be greater than 0.`;
     }
     const toBaseFactor = parseOptionalItemPriceNumber(row.ipm_to_base_factor);
     if (toBaseFactor === null || toBaseFactor <= 0) {
-      return `Price row ${index + 1}: Conv must be greater than 0.`;
+      return `Price row ${index + 1}: Unit Factor from the Unit Conversion Table must be greater than 0.`;
     }
     if (usedUnitIds.has(unitId)) {
       return `Price row ${index + 1}: Unit is already used in another price row.`;
@@ -2717,7 +2717,11 @@ function applyItemPriceDefaults(
   if (!hasLinkedRows(nextValues[ITEM_PRICE_ROWS_FIELD_NAME])) {
     // Seeded with no unit: the user picks it from the Unit Conversion Table's units.
     nextValues[ITEM_PRICE_ROWS_FIELD_NAME] = serializeLinkedRecordRows([
-      buildEmptyItemPriceRow(""),
+      {
+        ...buildEmptyItemPriceRow(""),
+        ipm_company_id: (nextValues.item_company_id ?? "").trim(),
+        ipm_branch_id: (nextValues.item_branch_id ?? "").trim(),
+      },
     ]);
   }
   return nextValues;
@@ -3177,16 +3181,6 @@ function buildItemFormFields(
       readOnlyResolver: ({ rowIndex }) => rowIndex === 0,
     },
     {
-      key: "ipm_to_base_factor",
-      bindingKey: "ipm_unit_factor",
-      label: "Conv",
-      type: "number",
-      min: 0.0001,
-      step: "0.0001",
-      width: "7rem",
-      readOnlyResolver: ({ rowIndex }) => rowIndex === 0,
-    },
-    {
       key: "ipm_is_default_unit",
       label: "Default",
       type: "checkbox",
@@ -3197,6 +3191,24 @@ function buildItemFormFields(
       label: "Base",
       type: "checkbox",
       width: "6rem",
+    },
+    {
+      key: "ipm_company_id",
+      label: "Company",
+      type: "select",
+      searchable: true,
+      options: companyOptions,
+      placeholder: "Select Company",
+      width: "10rem",
+    },
+    {
+      key: "ipm_branch_id",
+      label: "Branch",
+      type: "select",
+      searchable: true,
+      options: branchOptions,
+      placeholder: "Select Branch",
+      width: "10rem",
     },
     {
       key: "ipm_godown_id",
@@ -3263,7 +3275,6 @@ function buildItemFormFields(
         (row.iuc_is_base_unit ?? "false") === "true",
       width: "10rem",
     },
-    { key: "iuc_unit_slno", label: "Sl No", type: "number", min: 1, step: "1", width: "6rem" },
     {
       key: "iuc_to_base_factor",
       label: "To Base",
@@ -3316,12 +3327,6 @@ function buildItemFormFields(
       key: "iuc_uom_remarks",
       label: "Remarks",
       width: "12rem",
-    },
-    {
-      key: "iuc_is_active",
-      label: "Active",
-      type: "checkbox",
-      width: "6rem",
     },
   ]);
   const baseReorderRowColumns: LinkedRecordColumn[] = [
@@ -3776,7 +3781,11 @@ function buildItemFormFields(
               autoAppendOnSelect={{ columnKey: "ipm_unit_id" }}
               columnLayoutStorageKey="item-master-price-list"
               columns={nextPriceRowColumns}
-              createRow={() => buildEmptyItemPriceRow("")}
+              createRow={() => ({
+                ...buildEmptyItemPriceRow(""),
+                ipm_company_id: (values.item_company_id ?? "").trim(),
+                ipm_branch_id: (values.item_branch_id ?? "").trim(),
+              })}
               disabled={disabled}
               emptyState="No price rows added."
               exclusiveTrueColumnKeys={["ipm_is_default_unit", "ipm_is_base_unit"]}
@@ -4580,8 +4589,12 @@ export default function ItemMasterPageContent({
       return buildManagedItemPriceRows(normalizedValues).map((row, index) => {
         const unitId = (row.ipm_unit_id ?? "").trim() || baseUnitId;
         const payload: Record<string, unknown> = {
-          ipm_company_id: toNullableString(normalizedValues.item_company_id ?? ""),
-          ipm_branch_id: toNullableString(normalizedValues.item_branch_id ?? ""),
+          ipm_company_id: toNullableString(
+            (row.ipm_company_id ?? "").trim() || (normalizedValues.item_company_id ?? ""),
+          ),
+          ipm_branch_id: toNullableString(
+            (row.ipm_branch_id ?? "").trim() || (normalizedValues.item_branch_id ?? ""),
+          ),
           ipm_item_id: itemId,
           ipm_sl_no: index + 1,
           // item_price_master owns no unit shape of its own — the base unit,

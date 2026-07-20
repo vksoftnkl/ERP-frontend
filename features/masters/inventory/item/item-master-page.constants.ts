@@ -355,8 +355,6 @@ export const ITEM_PRICE_TABLE_COLUMN_NAME_TO_KEY = {
   min: "ipm_min_price",
   disc: "ipm_disc_perc",
   discqty: "ipm_disc_qty",
-  conv: "ipm_to_base_factor",
-  conversionfactor: "ipm_to_base_factor",
   cess: "ipm_addl_cess",
   loading: "ipm_loading_charge",
   freight: "ipm_freight_charge",
@@ -392,6 +390,8 @@ export const ITEM_EAN_TABLE_COLUMN_NAME_TO_KEY = {
 export const ITEM_PRICE_INITIAL_FORM_VALUES: Record<string, string> = {
   ipm_id: "",
   ipm_unit_id: "",
+  ipm_company_id: "",
+  ipm_branch_id: "",
   ipm_godown_id: "",
   ipm_unit_slno: "",
   ipm_to_base_factor: "1",
@@ -686,6 +686,8 @@ export const ITEM_BOOLEAN_FIELD_NAMES = [
 export const ITEM_PRICE_TEXT_FIELD_NAMES = [
   "ipm_id",
   "ipm_unit_id",
+  "ipm_company_id",
+  "ipm_branch_id",
   "ipm_godown_id",
   "ipm_unit_slno",
   "ipm_to_base_factor",
@@ -781,6 +783,8 @@ export const ITEM_PRICE_CONTENT_FIELD_NAMES = ITEM_PRICE_TEXT_FIELD_NAMES.filter
   (fieldName) => !ITEM_PRICE_PREFILLED_FIELD_NAMES.includes(fieldName),
 );
 export const ITEM_PRICE_SUBMISSION_FIELD_NAMES = [
+  "ipm_company_id",
+  "ipm_branch_id",
   "ipm_godown_id",
   "ipm_cost_price",
   "ipm_cost_wot",

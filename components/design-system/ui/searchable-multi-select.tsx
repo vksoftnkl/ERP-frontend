@@ -137,10 +137,6 @@ export function SearchableMultiSelect({
     },
     [onChange, options, values],
   );
-  const clearSelection = useCallback(() => {
-    onChange([]);
-    closeDropdown(false);
-  }, [closeDropdown, onChange]);
   const handleTriggerKeyDown = useCallback(
     (event: KeyboardEvent<HTMLButtonElement>) => {
       if (disabled) return;
@@ -255,7 +251,6 @@ export function SearchableMultiSelect({
         className={cx(
           dynamicFormStyles.searchSelectTrigger,
           dynamicFormStyles.searchMultiSelectControl,
-          selectedValueSet.size > 0 && dynamicFormStyles.searchSelectTriggerClearable,
           isOpen && dynamicFormStyles.searchSelectTriggerOpen,
           disabled && dynamicFormStyles.searchSelectTriggerDisabled,
         )}
@@ -297,23 +292,6 @@ export function SearchableMultiSelect({
           </svg>
         </span>
       </button>
-      {selectedValueSet.size > 0 && !disabled ? (
-        <button
-          type="button"
-          className={dynamicFormStyles.searchSelectClearButton}
-          aria-label="Clear selected options"
-          onMouseDown={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-          onClick={(event) => {
-            event.stopPropagation();
-            clearSelection();
-          }}
-        >
-          x
-        </button>
-      ) : null}
       {isOpen ? (
         <div
           id={listId}
