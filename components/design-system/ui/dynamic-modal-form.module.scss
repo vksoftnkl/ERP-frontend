@@ -580,6 +580,56 @@
   cursor: not-allowed;
 }
 
+/* Inline "Add New" (+) action, left of the clear/chevron slots. Rendered only
+   when the form's showAddButton flag is on (see config/ui.ts). */
+.searchSelectTriggerWithAdd,
+.searchSelectTriggerWithAdd.searchSelectTriggerClearable,
+.searchMultiSelectControl.searchSelectTriggerWithAdd {
+  padding-right: 4.1rem;
+}
+
+.searchSelectAddButton {
+  position: absolute;
+  top: 50%;
+  right: 2.75rem;
+  transform: translateY(-50%);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.18rem;
+  height: 1.18rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #60758a;
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.searchSelectAddButton:hover {
+  background: #e9eff6;
+  color: #1f3548;
+}
+
+.searchSelectAddButton:focus-visible {
+  outline: 2px solid var(--erp-modal-accent);
+  outline-offset: 1px;
+}
+
+.searchSelectAddButton:disabled {
+  color: #9aaabc;
+  cursor: not-allowed;
+}
+
+.searchSelectAddIcon {
+  width: 0.82rem;
+  height: 0.82rem;
+}
+
 .searchSelectClearButton {
   position: absolute;
   top: 50%;

@@ -221,6 +221,10 @@ export type ERPDynamicModalFormProps = {
   hideFieldErrorText?: boolean;
   focusFirstInvalidFieldOnValidationError?: boolean;
   enableArrowKeyFieldNavigation?: boolean;
+  /** Shows the inline "Add New" (+) button on searchable select fields that
+   *  have an onSearchCreateShortcut handler. Defaults to the global
+   *  SHOW_DROPDOWN_ADD_BUTTON switch in config/ui.ts. */
+  showAddButton?: boolean;
   className?: string;
   cardGridClassName?: string;
 };

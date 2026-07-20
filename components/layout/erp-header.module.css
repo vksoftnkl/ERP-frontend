@@ -413,25 +413,6 @@
   color: #6e0c0c;
 }
 
-.homeButton {
-  width: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 6px;
-  border: none;
-  background: transparent;
-}
-
-.homeButton:hover {
-  background: rgba(0, 0, 0, 0.06);
-}
-
-.headerLogo {
-  height: 30px;
-  width: auto;
-}
-
 .cartButton {
   min-width: 40px;
 }

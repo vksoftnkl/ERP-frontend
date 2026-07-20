@@ -643,9 +643,6 @@ export default function ErpHeader({
     setSelectedRecentPage("");
     handleNavigate(value);
   }, [handleNavigate]);
-  const handleHomeClick = useCallback(() => {
-    handleNavigate("/");
-  }, [handleNavigate]);
   const handleLogout = useCallback(() => {
     clearRecentPagesSession();
     if (onLogout) { onLogout(); return; }
@@ -659,35 +656,6 @@ export default function ErpHeader({
   return (
     <div className={styles.headerShell}>
       <header className={styles.topHeader}>
-        <button
-          type="button"
-          className={styles.homeButton}
-          onClick={handleHomeClick}
-          aria-label="Go to home page"
-          title="Home"
-        >
-          <svg
-            viewBox="8 18 240 240"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
-            className={styles.headerLogo}
-          >
-            <svg x="8" y="18" width="240" height="240" viewBox="0 0 512 512">
-              <defs>
-                <path id="petal" d="M 0 0 C -40 -55 -30 -135 0 -175 C 30 -135 40 -55 0 0 Z" />
-              </defs>
-              <g transform="translate(256 410)">
-                <use href="#petal" transform="rotate(-66) scale(0.80)" fill="#1E9E4B" />
-                <use href="#petal" transform="rotate(66)  scale(0.80)" fill="#7B2E8E" />
-                <use href="#petal" transform="rotate(-44) scale(0.90)" fill="#8DC63F" />
-                <use href="#petal" transform="rotate(44)  scale(0.90)" fill="#EC008C" />
-                <use href="#petal" transform="rotate(-22) scale(0.97)" fill="#FFD200" />
-                <use href="#petal" transform="rotate(22)  scale(0.97)" fill="#EF4123" />
-                <use href="#petal" transform="rotate(0)   scale(1.00)" fill="#F7941D" />
-              </g>
-            </svg>
-          </svg>
-        </button>
         <nav
           ref={primaryMenuRef}
           className={styles.primaryMenu}

@@ -426,6 +426,7 @@ export const ITEM_PRICE_INITIAL_FORM_VALUES: Record<string, string> = {
   ipm_uom_remarks: "",
   ipm_cost_remarks: "",
   ipm_is_active: "true",
+  ipm_cost_is_derived: "false",
 };
 export const ITEM_REORDER_INITIAL_FORM_VALUES: Record<string, string> = {
   ir_id: "",
@@ -721,6 +722,7 @@ export const ITEM_PRICE_BOOLEAN_FIELD_NAMES = [
   "ipm_is_base_unit",
   "ipm_is_big_unit",
   "ipm_is_active",
+  "ipm_cost_is_derived",
 ] as const;
 export const ITEM_PRICE_SYNC_FIELD_NAMES = [
   ...ITEM_PRICE_TEXT_FIELD_NAMES,

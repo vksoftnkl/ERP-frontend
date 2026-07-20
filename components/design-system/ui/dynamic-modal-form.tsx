@@ -13,6 +13,7 @@ import {
 } from "react";
 import { cx } from "@/components/design-system/cx";
 import { ERPColorPicker } from "@/components/design-system/ui/color-picker";
+import { SHOW_DROPDOWN_ADD_BUTTON } from "@/config/ui";
 import styles from "./dynamic-modal-form.module.scss";
 import {
   FIELD_CONTAINER_SELECTOR,
@@ -109,6 +110,7 @@ export function ERPDynamicModalForm({
   hideFieldErrorText = false,
   focusFirstInvalidFieldOnValidationError = false,
   enableArrowKeyFieldNavigation = false,
+  showAddButton = SHOW_DROPDOWN_ADD_BUTTON,
   className,
   cardGridClassName,
 }: ERPDynamicModalFormProps) {
@@ -1583,6 +1585,9 @@ export function ERPDynamicModalForm({
                 "erp-ms-modal-control erp-ms-modal-trigger",
                 isMultiSelect && styles.searchMultiSelectControl,
                 hasSearchSelectValue && styles.searchSelectTriggerClearable,
+                showAddButton &&
+                  Boolean(field.onSearchCreateShortcut) &&
+                  styles.searchSelectTriggerWithAdd,
                 fieldError && styles.controlInvalid,
                 isSearchOpen && styles.searchSelectTriggerOpen,
                 (field.disabled || isSubmitting) &&
@@ -1593,6 +1598,7 @@ export function ERPDynamicModalForm({
                 if (
                   target.closest('[data-search-select-remove="true"]') ||
                   target.closest('[data-search-select-chevron="true"]') ||
+                  target.closest('[data-search-select-add="true"]') ||
                   target.closest('[data-search-select-input="true"]')
                 ) {
                   return;
@@ -1686,6 +1692,43 @@ export function ERPDynamicModalForm({
                   )
                 }
               />
+              {showAddButton && field.onSearchCreateShortcut ? (
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  data-search-select-add="true"
+                  className={styles.searchSelectAddButton}
+                  aria-label={`Add new ${field.label}`}
+                  title={`Add new ${field.label} (Alt+C)`}
+                  disabled={field.disabled || isSubmitting}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (field.disabled || isSubmitting) {
+                      return;
+                    }
+                    void field.onSearchCreateShortcut?.({
+                      fieldName: field.name,
+                      query: (searchQueries[field.name] ?? "").trim(),
+                      value: fieldValue,
+                      values: { ...formData },
+                    });
+                  }}
+                >
+                  <svg viewBox="0 0 20 20" className={styles.searchSelectAddIcon} aria-hidden="true">
+                    <path
+                      d="M10 4.5v11M4.5 10h11"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              ) : null}
               <button
                 type="button"
                 tabIndex={-1}

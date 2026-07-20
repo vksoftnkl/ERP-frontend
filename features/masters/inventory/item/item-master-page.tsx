@@ -655,14 +655,29 @@ function hasNonZeroItemPriceRowCost(row: LinkedRecordRow): boolean {
   const costPrice = parseOptionalItemPriceNumber(row.ipm_cost_price);
   return (costWot !== null && costWot !== 0) || (costPrice !== null && costPrice !== 0);
 }
+// A row's cost only becomes "operator-owned" (off-limits to auto-fill) once it
+// is both non-zero AND was typed directly rather than pulled from a sibling.
+// ipm_cost_is_derived tracks that provenance: cleared the moment the operator
+// edits ipm_cost_wot/ipm_cost_price on a row directly, set whenever this row's
+// cost was instead computed from another row's cost via the unit ladder — so a
+// still-derived row keeps tracking a later unit-conversion factor edit even
+// after it has already been auto-filled once.
+function isItemPriceRowCostOperatorOwned(row: LinkedRecordRow): boolean {
+  return (
+    hasNonZeroItemPriceRowCost(row) && (row.ipm_cost_is_derived ?? "false") !== "true"
+  );
+}
 /**
  * The one sanctioned piece of cross-row cost behavior: whenever a row's cost
- * changes, sibling rows that (a) have a unit picked and (b) still sit at a
- * literal zero/blank cost get their Cost Wot pulled from the source row via
- * the unit-to-unit conversion walk (and their Cost re-derived from it).
- * Deliberately touches ONLY the cost pair — a caught-up sibling's sales
- * prices/markup are left for that row's own future edits — and never touches
- * a sibling that already carries any non-zero cost of its own.
+ * changes — typed directly, or itself re-derived by a later unit conversion
+ * factor edit — sibling rows that (a) have a unit picked and (b) were never
+ * typed into directly get their Cost Wot pulled from the source row via the
+ * unit-to-unit conversion walk (and their Cost re-derived from it). That
+ * includes a sibling that was already auto-filled once and is now stale
+ * against a changed factor, not just a blank one. Deliberately touches ONLY
+ * the cost pair — a caught-up sibling's sales prices/markup are left for that
+ * row's own future edits — and never touches a sibling once the operator has
+ * typed a cost into it directly.
  */
 function fillZeroCostSiblingItemPriceRows(
   rows: LinkedRecordRow[],
@@ -684,7 +699,7 @@ function fillZeroCostSiblingItemPriceRows(
       return row;
     }
     const unitId = (row.ipm_unit_id ?? "").trim();
-    if (!unitId || hasNonZeroItemPriceRowCost(row)) {
+    if (!unitId || isItemPriceRowCostOperatorOwned(row)) {
       return row;
     }
     const convertedCostWot = convertItemCostBetweenUnits(
@@ -703,12 +718,15 @@ function fillZeroCostSiblingItemPriceRows(
       "ipm_cost_price",
       calculateItemPriceCostWithTax(convertedCostWot, taxContext),
     );
+    setItemPriceRowValue(nextRow, "ipm_cost_is_derived", "true");
     return nextRow;
   });
 }
 // A row's own Cost Wot was edited: recompute that row's Cost (with tax) and
 // re-run its profit-type-driven sales derivation, then run the zero-cost
 // sibling catch-up. Siblings with any cost of their own are never touched.
+// The edited row itself is now operator-owned — it stops tracking future
+// unit-conversion factor edits until cleared back to blank/zero.
 function recalculateItemPriceRowsFromCostWot(
   rows: LinkedRecordRow[],
   rowIndex: number,
@@ -718,6 +736,7 @@ function recalculateItemPriceRowsFromCostWot(
   const nextRows = cloneItemPriceRows(rows);
   const editedRow = { ...(nextRows[rowIndex] ?? {}) };
   const costWotValue = parseOptionalItemPriceNumber(editedRow.ipm_cost_wot);
+  setItemPriceRowValue(editedRow, "ipm_cost_is_derived", "false");
   setDerivedItemPriceRowValue(
     editedRow,
     "ipm_cost_price",
@@ -743,6 +762,7 @@ function recalculateItemPriceRowsFromCostPrice(
   const nextRows = cloneItemPriceRows(rows);
   const editedRow = { ...(nextRows[rowIndex] ?? {}) };
   const costPriceValue = parseOptionalItemPriceNumber(editedRow.ipm_cost_price);
+  setItemPriceRowValue(editedRow, "ipm_cost_is_derived", "false");
   setDerivedItemPriceRowValue(
     editedRow,
     "ipm_cost_wot",
@@ -759,9 +779,10 @@ function recalculateItemPriceRowsFromCostPrice(
   );
 }
 // A unit conversion factor changed, so the ratios costs were derived through
-// are stale: pick the first row that actually has a cost as the anchor and
-// re-run the zero-cost catch-up from it. Rows with their own non-zero cost
-// keep their operator-entered values.
+// are stale: pick the first row that actually has a cost as the anchor (in
+// practice always row 0, the locked base row) and re-run the sibling catch-up
+// from it. Rows the operator has typed a cost into directly keep that value;
+// previously auto-filled rows re-derive against the new factor.
 function recalculateItemPriceRowsFromConversion(
   rows: LinkedRecordRow[],
   taxContext: ItemPriceTaxContext,
@@ -825,6 +846,7 @@ function recalculateItemPriceRowsFromUnitPick(
           "ipm_cost_price",
           calculateItemPriceCostWithTax(convertedCostWot, taxContext),
         );
+        setItemPriceRowValue(editedRow, "ipm_cost_is_derived", "true");
       }
     }
   }
@@ -1149,7 +1171,19 @@ function syncSerializedItemPriceRows(
   if (forceRecalculateAll) {
     nextRows = recalculateAllItemPriceRowsForTaxContext(effectiveRows, taxContext);
   } else if (!changedField) {
-    nextRows = normalizeItemPriceRows(effectiveRows);
+    // No edit inside the price table itself, but the mirror above may still
+    // have pulled in a changed factor/slno/default from the Unit Conversion
+    // Table (e.g. the operator edited a factor there, not here) — run the
+    // same conversion-triggered recompute that a direct Conv/Unit Factor edit
+    // would, so derived-but-now-stale sibling costs pick up the new ratio.
+    nextRows =
+      conversionSyncedRows === serializedRows
+        ? normalizeItemPriceRows(effectiveRows)
+        : recalculateItemPriceRowsFromConversion(
+            effectiveRows,
+            taxContext,
+            unitConversionRows,
+          );
   } else if (changedField.fieldName === "ipm_unit_id") {
     nextRows = recalculateItemPriceRowsFromUnitPick(
       effectiveRows,
