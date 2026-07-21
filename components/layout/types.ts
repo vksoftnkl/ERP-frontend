@@ -37,6 +37,10 @@ export type ErpHeaderProps = {
   selectedBranch?: string;
   onBranchChange?: (value: string) => void;
   branchDisabled?: boolean;
+  fiscalYearOptions?: ERPDynamicSelectOption[];
+  selectedFiscalYear?: string;
+  onFiscalYearChange?: (value: string) => void;
+  fiscalYearDisabled?: boolean;
   cartCount?: number;
   onCartClick?: () => void;
   goLabel?: string;
@@ -79,6 +83,10 @@ export type HeaderRightProps = {
   selectedBranch: string;
   onBranchChange?: (value: string) => void;
   branchDisabled: boolean;
+  fiscalYearOptions: ERPDynamicSelectOption[];
+  selectedFiscalYear: string;
+  onFiscalYearChange?: (value: string) => void;
+  fiscalYearDisabled: boolean;
   cartCount: number;
   onCartClick?: () => void;
   goLabel: string;

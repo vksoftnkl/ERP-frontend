@@ -21,6 +21,7 @@ import {
   DEFAULT_BRANCH_OPTIONS,
   DEFAULT_COMPANY_OPTIONS,
   DEFAULT_DATE_FORMAT_OPTIONS,
+  DEFAULT_FISCAL_YEAR_OPTIONS,
   DEFAULT_PRIMARY_MENU,
 } from "./constants";
 import type {
@@ -55,6 +56,10 @@ function getDefaultBranchValue(options: Array<{ value: string }>): string {
 function getDefaultCompanyValue(options: Array<{ value: string }>): string {
   const firstNamedCompany = options.find((option) => option.value.trim().length > 0);
   return firstNamedCompany?.value ?? options[0]?.value ?? "";
+}
+function getDefaultFiscalYearValue(options: Array<{ value: string }>): string {
+  const firstNamedFiscalYear = options.find((option) => option.value.trim().length > 0);
+  return firstNamedFiscalYear?.value ?? options[0]?.value ?? "";
 }
 function toTitleCaseLabel(value: string): string {
   return value
@@ -430,6 +435,10 @@ function HeaderRight({
   selectedBranch,
   onBranchChange,
   branchDisabled,
+  fiscalYearOptions,
+  selectedFiscalYear,
+  onFiscalYearChange,
+  fiscalYearDisabled,
   cartCount,
   onCartClick,
   goLabel,
@@ -478,6 +487,19 @@ function HeaderRight({
             </option>
           ))}
         </select>
+        <select
+          className={cx(styles.contextSelect, styles.fiscalYearContextSelect)}
+          value={selectedFiscalYear}
+          onChange={(e) => onFiscalYearChange?.(e.target.value)}
+          disabled={fiscalYearDisabled}
+          aria-label="Fiscal Year"
+        >
+          {fiscalYearOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
       {onCartClick && (
         <button
@@ -513,6 +535,10 @@ export default function ErpHeader({
   selectedBranch,
   onBranchChange,
   branchDisabled = false,
+  fiscalYearOptions = DEFAULT_FISCAL_YEAR_OPTIONS,
+  selectedFiscalYear,
+  onFiscalYearChange,
+  fiscalYearDisabled = false,
   cartCount = 0,
   onCartClick,
   goLabel = "Go",
@@ -540,6 +566,9 @@ export default function ErpHeader({
   const [localBranch, setLocalBranch] = useState(
     selectedBranch ?? getDefaultBranchValue(branchOptions)
   );
+  const [localFiscalYear, setLocalFiscalYear] = useState(
+    selectedFiscalYear ?? getDefaultFiscalYearValue(fiscalYearOptions)
+  );
   const [selectedRecentPage, setSelectedRecentPage] = useState("");
   // Tracks the date shown in the header. Starts as today; updated on calendar pick.
   const [pickedDate, setPickedDate] = useState<Date>(() => new Date());
@@ -563,6 +592,16 @@ export default function ErpHeader({
       !branchOptions.some((o) => o.value === localBranch)
     ) setLocalBranch(getDefaultBranchValue(branchOptions));
   }, [branchOptions, localBranch, selectedBranch]);
+  useEffect(() => {
+    if (selectedFiscalYear !== undefined) setLocalFiscalYear(selectedFiscalYear);
+  }, [selectedFiscalYear]);
+  useEffect(() => {
+    if (
+      selectedFiscalYear === undefined &&
+      fiscalYearOptions.length > 0 &&
+      !fiscalYearOptions.some((o) => o.value === localFiscalYear)
+    ) setLocalFiscalYear(getDefaultFiscalYearValue(fiscalYearOptions));
+  }, [fiscalYearOptions, localFiscalYear, selectedFiscalYear]);
   // If caller supplies dateText prop, use it; otherwise format the picked date.
   const resolvedDateText = useMemo(
     () => dateText ?? formatDateLabel(pickedDate),
@@ -575,6 +614,7 @@ export default function ErpHeader({
   }, [primaryMenu, primaryMenuFromApi, isMenuLoading, isMenuUninitialized, shouldUseMenuMasterLabels]);
   const resolvedCompany = selectedCompany ?? localCompany;
   const resolvedBranch = selectedBranch ?? localBranch;
+  const resolvedFiscalYear = selectedFiscalYear ?? localFiscalYear;
   const routeLabelLookup = useMemo(
     () => buildRouteLabelLookup(resolvedPrimaryMenu),
     [resolvedPrimaryMenu],
@@ -631,6 +671,10 @@ export default function ErpHeader({
     if (selectedBranch === undefined) setLocalBranch(value);
     onBranchChange?.(value);
   }, [selectedBranch, onBranchChange]);
+  const handleFiscalYearChange = useCallback((value: string) => {
+    if (selectedFiscalYear === undefined) setLocalFiscalYear(value);
+    onFiscalYearChange?.(value);
+  }, [selectedFiscalYear, onFiscalYearChange]);
   const handleNavigate = useCallback((destination: string) => {
     const route = toInternalRoute(destination);
     if (!route) return;
@@ -684,6 +728,10 @@ export default function ErpHeader({
           selectedBranch={resolvedBranch}
           onBranchChange={handleBranchChange}
           branchDisabled={branchDisabled}
+          fiscalYearOptions={fiscalYearOptions}
+          selectedFiscalYear={resolvedFiscalYear}
+          onFiscalYearChange={handleFiscalYearChange}
+          fiscalYearDisabled={fiscalYearDisabled}
           cartCount={cartCount}
           onCartClick={onCartClick}
           goLabel={goLabel}

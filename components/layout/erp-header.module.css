@@ -309,6 +309,13 @@
   flex: 0 0 180px;
 }
 
+.fiscalYearContextSelect {
+  width: 140px;
+  min-width: 140px;
+  max-width: 140px;
+  flex: 0 0 140px;
+}
+
 .recentPagesSelect {
   height: 24px;
   min-width: 200px;
@@ -735,6 +742,11 @@
     width: auto;
   }
 
+  .fiscalYearContextSelect {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
   .recentPagesSelect {
     flex: 1 1 100%;
     min-width: 0;
@@ -778,6 +790,11 @@
   }
 
   .companyContextSelect {
+    width: auto;
+    min-width: 0;
+  }
+
+  .fiscalYearContextSelect {
     width: auto;
     min-width: 0;
   }

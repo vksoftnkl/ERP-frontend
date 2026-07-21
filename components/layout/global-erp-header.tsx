@@ -14,12 +14,15 @@ export default function GlobalErpHeader() {
   const {
     companyOptions,
     branchOptions,
+    fiscalYearOptions,
     selectedCompanyId,
     selectedBranchId,
+    selectedFiscalYearId,
     isCompanySelectionLocked,
     isBranchSelectionLocked,
     setSelectedCompanyId,
     setSelectedBranchId,
+    setSelectedFiscalYearId,
   } = useBusinessContext();
 
   const visibleCompanyOptions = useMemo(
@@ -29,6 +32,10 @@ export default function GlobalErpHeader() {
   const visibleBranchOptions = useMemo(
     () => branchOptions.filter((option) => option.value.trim().length > 0),
     [branchOptions],
+  );
+  const visibleFiscalYearOptions = useMemo(
+    () => fiscalYearOptions.filter((option) => option.value.trim().length > 0),
+    [fiscalYearOptions],
   );
   const resolvedCompanyId = useMemo(() => {
     if (visibleCompanyOptions.some((option) => option.value === selectedCompanyId)) {
@@ -42,6 +49,12 @@ export default function GlobalErpHeader() {
     }
     return visibleBranchOptions[0]?.value ?? "";
   }, [selectedBranchId, visibleBranchOptions]);
+  const resolvedFiscalYearId = useMemo(() => {
+    if (visibleFiscalYearOptions.some((option) => option.value === selectedFiscalYearId)) {
+      return selectedFiscalYearId;
+    }
+    return visibleFiscalYearOptions[0]?.value ?? "";
+  }, [selectedFiscalYearId, visibleFiscalYearOptions]);
 
   if (hideHeader) {
     return null;
@@ -56,6 +69,9 @@ export default function GlobalErpHeader() {
       selectedBranch={resolvedBranchId}
       onBranchChange={setSelectedBranchId}
       branchDisabled={isBranchSelectionLocked}
+      fiscalYearOptions={visibleFiscalYearOptions}
+      selectedFiscalYear={resolvedFiscalYearId}
+      onFiscalYearChange={setSelectedFiscalYearId}
       searchMenuCount={0}
       cartCount={6}
       goLabel="K Go"

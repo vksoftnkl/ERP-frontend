@@ -154,6 +154,7 @@ export const baseApi = createApi({
     // Business context
     "CompanyList",
     "BranchList",
+    "FiscalYearList",
     // Generic master list (keyed by list URL)
     "MasterList",
     // Per-module lookup caches (invalidated by masters saga on save)

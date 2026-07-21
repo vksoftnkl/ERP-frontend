@@ -14,8 +14,10 @@ import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import {
   useGetBranchesByCompanyQuery,
   useGetCompanyListQuery,
+  useGetFiscalYearsByCompanyQuery,
   type BranchRecord,
   type CompanyRecord,
+  type FiscalYearRecord,
 } from "@/store/api/businessContextApi";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
@@ -38,22 +40,31 @@ const DEFAULT_BRANCH_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Branch",
 };
+const DEFAULT_FISCAL_YEAR_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Select Fiscal Year",
+};
 
 type BusinessContextValue = {
   companyOptions: ERPDynamicSelectOption[];
   branchOptions: ERPDynamicSelectOption[];
+  fiscalYearOptions: ERPDynamicSelectOption[];
   selectedCompanyId: string;
   selectedBranchId: string;
+  selectedFiscalYearId: string;
   activeCompany: CompanyRecord | null;
   activeBranch: BranchRecord | null;
+  activeFiscalYear: FiscalYearRecord | null;
   isCompanySelectionLocked: boolean;
   isBranchSelectionLocked: boolean;
   loading: boolean;
   companyLoading: boolean;
   branchLoading: boolean;
+  fiscalYearLoading: boolean;
   error: string | null;
   setSelectedCompanyId: (value: string) => void;
   setSelectedBranchId: (value: string) => void;
+  setSelectedFiscalYearId: (value: string) => void;
   setCompanySelectionLocked: (value: boolean) => void;
   setBranchSelectionLocked: (value: boolean) => void;
   refresh: () => void;
@@ -79,6 +90,13 @@ function mapBranchOptions(branches: BranchRecord[]): ERPDynamicSelectOption[] {
   ];
 }
 
+function mapFiscalYearOptions(fiscalYears: FiscalYearRecord[]): ERPDynamicSelectOption[] {
+  return [
+    DEFAULT_FISCAL_YEAR_OPTION,
+    ...fiscalYears.map((f) => ({ value: f.id, label: f.name })),
+  ];
+}
+
 export function clearBusinessContextSession(): void {
   // Business context is cleared through the persisted Redux auth slice on logout.
 }
@@ -99,6 +117,7 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
   const [selectedBranchId, setSelectedBranchIdState] = useState(
     persistedContext?.branchId ?? "",
   );
+  const [selectedFiscalYearId, setSelectedFiscalYearIdState] = useState("");
 
   // ── RTK Query fetches (replace the two useApi calls) ──────────────────────
 
@@ -117,12 +136,21 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     skip: hideShell || !selectedCompanyId,
   });
 
+  const {
+    data: fiscalYears = [],
+    isLoading: fiscalYearLoading,
+    error: fiscalYearQueryError,
+  } = useGetFiscalYearsByCompanyQuery(selectedCompanyId, {
+    skip: hideShell || !selectedCompanyId,
+  });
+
   // ── Clear local state on logout (replaces DOM AUTH_SESSION_EVENT listener) ─
 
   useEffect(() => {
     if (!isAuthenticated) {
       setSelectedCompanyIdState("");
       setSelectedBranchIdState("");
+      setSelectedFiscalYearIdState("");
     }
   }, [isAuthenticated]);
 
@@ -152,6 +180,21 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     }
   }, [branches, hideShell, selectedBranchId, selectedCompanyId]);
 
+  // ── Auto-select current (or first) fiscal year when company changes ───────
+
+  useEffect(() => {
+    if (hideShell || !selectedCompanyId) return;
+    if (fiscalYears.length === 0) {
+      setSelectedFiscalYearIdState("");
+      return;
+    }
+    const valid = fiscalYears.some((f) => f.id === selectedFiscalYearId);
+    if (!valid) {
+      const preferred = fiscalYears.find((f) => f.isCurrent) ?? fiscalYears[0];
+      if (preferred) setSelectedFiscalYearIdState(preferred.id);
+    }
+  }, [fiscalYears, hideShell, selectedCompanyId, selectedFiscalYearId]);
+
   // ── Sync selection to Redux authSlice (for persistence + saga) ───────────
 
   const activeCompany = useMemo(
@@ -162,6 +205,10 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     () => branches.find((b) => b.id === selectedBranchId) ?? null,
     [branches, selectedBranchId],
   );
+  const activeFiscalYear = useMemo(
+    () => fiscalYears.find((f) => f.id === selectedFiscalYearId) ?? null,
+    [fiscalYears, selectedFiscalYearId],
+  );
 
   useEffect(() => {
     if (hideShell) return;
@@ -171,15 +218,15 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
           ? {
               companyId: activeCompany.id,
               companyName: activeCompany.name,
-              compFinYearFrom: null,
-              compFinYearTo: null,
+              compFinYearFrom: activeFiscalYear?.beginDate ?? null,
+              compFinYearTo: activeFiscalYear?.endDate ?? null,
               branchId: activeBranch?.id ?? null,
               branchName: activeBranch?.name ?? null,
             }
           : null,
       ),
     );
-  }, [activeBranch, activeCompany, dispatch, hideShell]);
+  }, [activeBranch, activeCompany, activeFiscalYear, dispatch, hideShell]);
 
   // ── Context value ─────────────────────────────────────────────────────────
 
@@ -188,6 +235,7 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
       if (isCompanySelectionLocked) return;
       setSelectedCompanyIdState(value);
       setSelectedBranchIdState("");
+      setSelectedFiscalYearIdState("");
     },
     [isCompanySelectionLocked],
   );
@@ -199,6 +247,10 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     },
     [isBranchSelectionLocked],
   );
+
+  const setSelectedFiscalYearId = useCallback((value: string) => {
+    setSelectedFiscalYearIdState(value);
+  }, []);
 
   const setCompanySelectionLocked = useCallback(
     (value: boolean) => dispatch(companySelectionLockChanged(value)),
@@ -227,18 +279,26 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     () => ({
       companyOptions: mapCompanyOptions(companies),
       branchOptions: mapBranchOptions(branches),
+      fiscalYearOptions: mapFiscalYearOptions(fiscalYears),
       selectedCompanyId,
       selectedBranchId,
+      selectedFiscalYearId,
       activeCompany,
       activeBranch,
+      activeFiscalYear,
       isCompanySelectionLocked,
       isBranchSelectionLocked,
-      loading: companyLoading || branchLoading,
+      loading: companyLoading || branchLoading || fiscalYearLoading,
       companyLoading,
       branchLoading,
-      error: extractErrorMsg(companyQueryError) ?? extractErrorMsg(branchQueryError),
+      fiscalYearLoading,
+      error:
+        extractErrorMsg(companyQueryError) ??
+        extractErrorMsg(branchQueryError) ??
+        extractErrorMsg(fiscalYearQueryError),
       setSelectedCompanyId,
       setSelectedBranchId,
+      setSelectedFiscalYearId,
       setCompanySelectionLocked,
       setBranchSelectionLocked,
       refresh,
@@ -246,21 +306,27 @@ export function BusinessContextProvider({ children }: { children: ReactNode }) {
     [
       activeBranch,
       activeCompany,
+      activeFiscalYear,
       branchLoading,
       branchQueryError,
       branches,
       companyLoading,
       companyQueryError,
       companies,
+      fiscalYearLoading,
+      fiscalYearQueryError,
+      fiscalYears,
       isBranchSelectionLocked,
       isCompanySelectionLocked,
       refresh,
       selectedBranchId,
       selectedCompanyId,
+      selectedFiscalYearId,
       setBranchSelectionLocked,
       setCompanySelectionLocked,
       setSelectedBranchId,
       setSelectedCompanyId,
+      setSelectedFiscalYearId,
     ],
   );
 

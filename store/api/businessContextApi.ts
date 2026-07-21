@@ -12,8 +12,17 @@ export type BranchRecord = {
   brId: string;
   name: string;
 };
+export type FiscalYearRecord = {
+  id: string;
+  name: string;
+  beginDate: string | null;
+  endDate: string | null;
+  status: string;
+  isCurrent: boolean;
+};
 const COMPANY_LIST_ENDPOINT = "/master-lookups/name-id/all-masters";
 const BRANCH_BY_COMPANY_ENDPOINT = "/master-lookups/branches/by-company";
+const FISCAL_YEAR_BY_COMPANY_ENDPOINT = "/master-lookups/fiscal-years/by-company";
 const COMPANY_ID_KEYS = ["compId", "comp_id", "company_id", "companyId", "id", "_id"] as const;
 const COMPANY_NAME_KEYS = [
   "compName",
@@ -52,6 +61,16 @@ function normalizeBranch(raw: Record<string, unknown>): BranchRecord | null {
   if (!id || !name) return null;
   return { id, brId: id, name };
 }
+function normalizeFiscalYear(raw: Record<string, unknown>): FiscalYearRecord | null {
+  const id = getFirstString(raw, ["id", "fyId", "fy_id"]);
+  const name = getFirstString(raw, ["name", "fyYearName", "fy_year_name"]);
+  if (!id || !name) return null;
+  const beginDate = getFirstString(raw, ["beginDate", "fyBeginDate", "fy_begin_date"]);
+  const endDate = getFirstString(raw, ["endDate", "fyEndDate", "fy_end_date"]);
+  const status = getFirstString(raw, ["status", "fyStatus", "fy_status"]) ?? "";
+  const isCurrent = raw.isCurrent === true || raw.fyIsCurrent === true || raw.fy_is_current === true;
+  return { id, name, beginDate, endDate, status, isCurrent };
+}
 export const businessContextApi = baseApi.injectEndpoints({
   overrideExisting: true,
   endpoints: (builder) => ({
@@ -78,10 +97,22 @@ export const businessContextApi = baseApi.injectEndpoints({
       providesTags: (_, __, companyId) => [{ type: "BranchList", id: companyId }],
       keepUnusedDataFor: 60,
     }),
+    getFiscalYearsByCompany: builder.query<FiscalYearRecord[], string>({
+      query: (companyId) => ({
+        url: `${FISCAL_YEAR_BY_COMPANY_ENDPOINT}/${encodeURIComponent(companyId)}`,
+      }),
+      transformResponse: (payload: unknown) =>
+        extractRows<Record<string, unknown>>(payload)
+          .map(normalizeFiscalYear)
+          .filter((f): f is FiscalYearRecord => f !== null),
+      providesTags: (_, __, companyId) => [{ type: "FiscalYearList", id: companyId }],
+      keepUnusedDataFor: 60,
+    }),
   }),
 });
 export const {
   useGetCompanyListQuery,
   useGetBranchesByCompanyQuery,
   useLazyGetBranchesByCompanyQuery,
+  useGetFiscalYearsByCompanyQuery,
 } = businessContextApi;
