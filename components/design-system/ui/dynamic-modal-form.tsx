@@ -13,6 +13,7 @@ import {
 } from "react";
 import { cx } from "@/components/design-system/cx";
 import { ERPColorPicker } from "@/components/design-system/ui/color-picker";
+import ModalPortal from "@/components/ui/modal-portal";
 import { SHOW_DROPDOWN_ADD_BUTTON } from "@/config/ui";
 import styles from "./dynamic-modal-form.module.scss";
 import {
@@ -2010,6 +2011,7 @@ export function ERPDynamicModalForm({
         </div>
       ) : null}
       {isOpen && activeVariant ? (
+        <ModalPortal>
         <div className={cx(styles.overlay, "erp-ms-modal-overlay")} style={modalStyle}>
           <div
             className={styles.backdrop}
@@ -2236,6 +2238,7 @@ export function ERPDynamicModalForm({
             </footer>
           </section>
         </div>
+        </ModalPortal>
       ) : null}
     </section>
   );

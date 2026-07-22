@@ -6,7 +6,6 @@
   align-items: center;
   justify-content: center;
   padding: 16px;
-  animation: overlayIn 0.2s ease-out forwards;
 }
 
 .backdrop {
@@ -27,6 +26,11 @@
   padding: 24px;
   display: grid;
   gap: 14px;
+  // See dynamic-modal-form.module.scss .panel: pre-promoting to a GPU layer
+  // (instead of letting the animation trigger it mid-flight) avoids a flash
+  // of stale/ghost tile content on open. The wrapper's own fade-in was
+  // dropped so only this element animates.
+  will-change: transform, opacity;
   animation: modalIn 0.24s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 

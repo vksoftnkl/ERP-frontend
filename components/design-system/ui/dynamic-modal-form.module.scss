@@ -38,7 +38,6 @@
   justify-content: center;
   padding: 1.8rem;
   overscroll-behavior: contain;
-  animation: erp-modal-fade-in 0.2s ease-out;
 }
 .backdrop {
   position: absolute;
@@ -58,6 +57,13 @@
   border: 1px solid #d6deea;
   background: var(--erp-modal-surface, #fff);
   box-shadow: 0 28px 72px rgba(2, 8, 23, 0.38);
+  // Pre-promotes the panel to its own GPU layer before the animation starts
+  // (rather than mid-animation), and is the one animated element in this
+  // portaled overlay now (the wrapper's own fade was removed). Chromium can
+  // otherwise paint the freshly-created layer with a stale/partial frame for
+  // a tick — visible as dark ghost tiles over the panel right as a modal
+  // opens (worst on GPU-accelerated, non-headless Chromium).
+  will-change: transform, opacity;
   animation: erp-modal-slide-up 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .header {

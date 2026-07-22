@@ -98,6 +98,7 @@ import {
   ITEM_REORDER_ROWS_FIELD_NAME,
   ITEM_EAN_ROWS_FIELD_NAME,
   BRANCH_LOOKUP_QUERY,
+  COMPANY_LOOKUP_QUERY,
   UNIT_LOOKUP_QUERY,
   GODOWN_LOOKUP_QUERY,
   UI_TABLE_COLUMNS_QUERY,
@@ -108,6 +109,7 @@ import {
   LOOKUP_QUERY_ITEMS,
   HSN_LOOKUP_QUERY,
   BRANCH_LOOKUP_KEYS,
+  COMPANY_LOOKUP_KEYS,
   UNIT_LOOKUP_KEYS,
   GODOWN_LOOKUP_KEYS,
   LOOKUP_KEYS,
@@ -449,7 +451,9 @@ function calculateItemPriceCostWithoutTax(
   if (divisor <= 0) {
     return Math.max(0, cost - taxContext.cessQty);
   }
-  return (cost - taxContext.cessQty) / divisor;
+  // A zero (or small) cost/sales price with a fixed cess-per-unit would
+  // otherwise divide out to a negative "without tax" figure.
+  return Math.max(0, (cost - taxContext.cessQty) / divisor);
 }
 function cloneItemPriceRows(rows: LinkedRecordRow[]): LinkedRecordRow[] {
   return rows.map((row) => ({ ...row }));
@@ -667,6 +671,7 @@ function isItemPriceRowCostOperatorOwned(row: LinkedRecordRow): boolean {
     hasNonZeroItemPriceRowCost(row) && (row.ipm_cost_is_derived ?? "false") !== "true"
   );
 }
+const NO_FORCED_ITEM_PRICE_COST_UNIT_IDS: ReadonlySet<string> = new Set();
 /**
  * The one sanctioned piece of cross-row cost behavior: whenever a row's cost
  * changes — typed directly, or itself re-derived by a later unit conversion
@@ -677,13 +682,17 @@ function isItemPriceRowCostOperatorOwned(row: LinkedRecordRow): boolean {
  * against a changed factor, not just a blank one. Deliberately touches ONLY
  * the cost pair — a caught-up sibling's sales prices/markup are left for that
  * row's own future edits — and never touches a sibling once the operator has
- * typed a cost into it directly.
+ * typed a cost into it directly, UNLESS that sibling's own unit is listed in
+ * forceUnitIds: the Unit Conversion Table's factor for that specific unit
+ * just changed, which invalidates any cost — typed or derived — that was
+ * computed under the old ratio.
  */
 function fillZeroCostSiblingItemPriceRows(
   rows: LinkedRecordRow[],
   sourceRowIndex: number,
   taxContext: ItemPriceTaxContext,
   unitConversionRows: LinkedRecordRow[],
+  forceUnitIds: ReadonlySet<string> = NO_FORCED_ITEM_PRICE_COST_UNIT_IDS,
 ): LinkedRecordRow[] {
   const sourceRow = rows[sourceRowIndex];
   if (!sourceRow) {
@@ -699,7 +708,10 @@ function fillZeroCostSiblingItemPriceRows(
       return row;
     }
     const unitId = (row.ipm_unit_id ?? "").trim();
-    if (!unitId || isItemPriceRowCostOperatorOwned(row)) {
+    if (!unitId) {
+      return row;
+    }
+    if (isItemPriceRowCostOperatorOwned(row) && !forceUnitIds.has(unitId)) {
       return row;
     }
     const convertedCostWot = convertItemCostBetweenUnits(
@@ -787,6 +799,7 @@ function recalculateItemPriceRowsFromConversion(
   rows: LinkedRecordRow[],
   taxContext: ItemPriceTaxContext,
   unitConversionRows: LinkedRecordRow[],
+  forceUnitIds: ReadonlySet<string> = NO_FORCED_ITEM_PRICE_COST_UNIT_IDS,
 ): LinkedRecordRow[] {
   const anchorRowIndex = rows.findIndex((row) => {
     const costWot = parseOptionalItemPriceNumber(row.ipm_cost_wot);
@@ -800,6 +813,7 @@ function recalculateItemPriceRowsFromConversion(
     anchorRowIndex,
     taxContext,
     unitConversionRows,
+    forceUnitIds,
   );
 }
 // A row's Unit was just picked: apply the lazy Profit Type/Round Off defaults,
@@ -888,22 +902,41 @@ function normalizeItemPriceRows(
     const normalizedProfitType = normalizeItemPriceProfitType(row.ipm_profit_type);
     const normalizedRoundOff = normalizeItemPriceRoundOffValue(row.ipm_round_off);
     const normalizedFactor = resolveItemPriceUnitFactorValue(row);
+    // A "By User" row's markup cells are unused (prices are typed directly),
+    // so blank any stale value here too -- not just on the profit-type-changed
+    // edit path (syncItemPriceRowFromProfitInputs) -- otherwise a row loaded
+    // with legacy data keeps showing a leftover markup from before it was
+    // switched to "By User".
+    const isByUser =
+      resolveItemPriceProfitTypeMode(normalizedProfitType) === "By User";
+    const hasStaleMargin =
+      isByUser &&
+      ITEM_PRICE_MARGIN_SALE_FIELD_PAIRS.some(
+        ({ marginFieldName }) => (row[marginFieldName] ?? "") !== "",
+      );
     if (
       (row.ipm_profit_type ?? "") === normalizedProfitType &&
       (row.ipm_round_off ?? "") === normalizedRoundOff &&
       (row.ipm_to_base_factor ?? "") === normalizedFactor &&
-      (row.ipm_unit_factor ?? "") === normalizedFactor
+      (row.ipm_unit_factor ?? "") === normalizedFactor &&
+      !hasStaleMargin
     ) {
       return row;
     }
     hasChanges = true;
-    return {
+    const nextRow: LinkedRecordRow = {
       ...row,
       ipm_profit_type: normalizedProfitType,
       ipm_round_off: normalizedRoundOff,
       ipm_to_base_factor: normalizedFactor,
       ipm_unit_factor: normalizedFactor,
     };
+    if (isByUser) {
+      for (const { marginFieldName } of ITEM_PRICE_MARGIN_SALE_FIELD_PAIRS) {
+        nextRow[marginFieldName] = "";
+      }
+    }
+    return nextRow;
   });
   return hasChanges ? nextRows : rows;
 }
@@ -1147,6 +1180,7 @@ function syncSerializedItemPriceRows(
   values: Record<string, string>,
   itemTaxRecordsById: ReadonlyMap<string, Record<string, unknown>>,
   forceRecalculateAll = false,
+  forceCostRecalcUnitIds: ReadonlySet<string> = NO_FORCED_ITEM_PRICE_COST_UNIT_IDS,
 ): string {
   const rows = parseLinkedRecordRows(serializedRows);
   if (rows.length === 0) {
@@ -1183,6 +1217,7 @@ function syncSerializedItemPriceRows(
             effectiveRows,
             taxContext,
             unitConversionRows,
+            forceCostRecalcUnitIds,
           );
   } else if (changedField.fieldName === "ipm_unit_id") {
     nextRows = recalculateItemPriceRowsFromUnitPick(
@@ -1213,6 +1248,7 @@ function syncSerializedItemPriceRows(
       effectiveRows,
       taxContext,
       unitConversionRows,
+      forceCostRecalcUnitIds,
     );
   } else if (
     changedField.fieldName === "ipm_profit_type" ||
@@ -1882,6 +1918,36 @@ function applyItemUnitConversionRoleInvariants(
   }
   return nextRows === rows ? serializedRows : serializeLinkedRecordRows(nextRows);
 }
+// Which units actually had their Unit Conversion Table factor change between
+// the previous and next snapshot (matched by unit id, so a row add/remove/
+// reorder elsewhere doesn't get misread as every unit's factor changing).
+function findChangedItemUnitConversionFactorUnitIds(
+  previousSerializedRows: string,
+  nextSerializedRows: string,
+): Set<string> {
+  const previousFactorByUnitId = new Map(
+    parseLinkedRecordRows(previousSerializedRows)
+      .map(
+        (row) =>
+          [
+            (row.iuc_unit_id ?? "").trim(),
+            resolveItemUnitConversionUnitFactorValue(row),
+          ] as const,
+      )
+      .filter(([unitId]) => Boolean(unitId)),
+  );
+  const changedUnitIds = new Set<string>();
+  for (const row of parseLinkedRecordRows(nextSerializedRows)) {
+    const unitId = (row.iuc_unit_id ?? "").trim();
+    if (!unitId || !previousFactorByUnitId.has(unitId)) {
+      continue;
+    }
+    if (previousFactorByUnitId.get(unitId) !== resolveItemUnitConversionUnitFactorValue(row)) {
+      changedUnitIds.add(unitId);
+    }
+  }
+  return changedUnitIds;
+}
 function buildItemUnitConversionRowsValueChangeResult(
   values: Record<string, string>,
   previousValues: Record<string, string>,
@@ -1919,6 +1985,10 @@ function buildItemUnitConversionRowsValueChangeResult(
     item_base_unit_id: nextBaseUnitId,
     [ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME]: normalizedRows,
   };
+  const changedUnitConversionFactorUnitIds = findChangedItemUnitConversionFactorUnitIds(
+    comparisonValues[ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME],
+    normalizedRows,
+  );
   const nextPriceRows = syncSerializedItemPriceRows(
     nextValues[ITEM_PRICE_ROWS_FIELD_NAME] ?? "",
     {
@@ -1929,6 +1999,8 @@ function buildItemUnitConversionRowsValueChangeResult(
         "",
     },
     itemTaxRecordsById,
+    false,
+    changedUnitConversionFactorUnitIds,
   );
   nextValues[ITEM_PRICE_ROWS_FIELD_NAME] = nextPriceRows;
   const syncedPriceValues = syncPrimaryItemPriceValuesFromRows(nextValues, nextPriceRows);
@@ -3101,6 +3173,7 @@ function buildUiTableColumnLayoutRequest(
 function buildItemFormFields(
   companyOptions: ERPDynamicSelectOption[],
   companyHandlers: LazyDropdownHandlers,
+  priceRowCompanyOptions: ERPDynamicSelectOption[],
   branchOptions: ERPDynamicSelectOption[],
   groupOptions: ERPDynamicSelectOption[],
   groupHandlers: LazyDropdownHandlers,
@@ -3197,7 +3270,7 @@ function buildItemFormFields(
       label: "Company",
       type: "select",
       searchable: true,
-      options: companyOptions,
+      options: priceRowCompanyOptions,
       placeholder: "Select Company",
       width: "10rem",
     },
@@ -4256,6 +4329,10 @@ export default function ItemMasterPageContent({
   });
   const { getAll: getItemMasterWidgets } = useApi<unknown>(WIDGET_MASTER_LIST_ENDPOINT);
   const { getAll: getBranchLookup } = useApi<unknown>(BRANCH_LOOKUP_ENDPOINT);
+  // Eager full company list for the price row table's Company column — see
+  // COMPANY_LOOKUP_QUERY. Separate from the header Company field's lazy
+  // `company.options` below.
+  const { getAll: getPriceRowCompanyLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   // Errors aren't toasted — a failed company-scoped branch refresh shouldn't
   // interrupt the form; the Branch field just keeps its prior option list.
   const { run: getBranchesByCompany } = useApi<unknown>(BRANCH_BY_COMPANY_ENDPOINT, {
@@ -4273,6 +4350,9 @@ export default function ItemMasterPageContent({
   const supplier = useLazyConfiguredDropdown(SUPPLIER_DROPDOWN_CONFIG);
   const tax = useLazyConfiguredDropdown(TAX_DROPDOWN_CONFIG);
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([]);
+  const [priceRowCompanyOptions, setPriceRowCompanyOptions] = useState<
+    ERPDynamicSelectOption[]
+  >([]);
   const [unitOptions, setUnitOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [godownOptions, setGodownOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [hsnOptions, setHsnOptions] = useState<ERPDynamicSelectOption[]>([]);
@@ -4383,6 +4463,7 @@ export default function ItemMasterPageContent({
     void (async () => {
       const [
         branchesPayload,
+        priceRowCompaniesPayload,
         unitsPayload,
         godownsPayload,
         itemTaxesPayload,
@@ -4395,6 +4476,7 @@ export default function ItemMasterPageContent({
         priceLevelsPayload,
       ] = await Promise.allSettled([
         getBranchLookup(BRANCH_LOOKUP_QUERY),
+        getPriceRowCompanyLookup(COMPANY_LOOKUP_QUERY),
         getUnitLookup(UNIT_LOOKUP_QUERY),
         getGodownLookup(GODOWN_LOOKUP_QUERY),
         listItemTaxes(ITEM_TAX_LIST_QUERY),
@@ -4415,6 +4497,15 @@ export default function ItemMasterPageContent({
             branchesPayload.value,
             DEFAULT_BRANCH_OPTION,
             BRANCH_LOOKUP_KEYS,
+          )
+          : [],
+      );
+      setPriceRowCompanyOptions(
+        priceRowCompaniesPayload.status === "fulfilled"
+          ? toLookupOptions(
+            priceRowCompaniesPayload.value,
+            DEFAULT_COMPANY_OPTION,
+            COMPANY_LOOKUP_KEYS,
           )
           : [],
       );
@@ -4491,6 +4582,7 @@ export default function ItemMasterPageContent({
     getItemPriceTableColumns,
     getItemReorderTableColumns,
     getPriceLevelMasters,
+    getPriceRowCompanyLookup,
     getUnitLookup,
     listItemTaxes,
   ]);
@@ -4933,6 +5025,7 @@ export default function ItemMasterPageContent({
       buildItemFormFields(
         company.options,
         companyFieldHandlers,
+        priceRowCompanyOptions,
         branchOptions,
         group.options,
         group.handlers,
@@ -4984,6 +5077,7 @@ export default function ItemMasterPageContent({
       handleLinkedTableColumnLayoutChange,
       priceLevelShortByTier,
       priceLevelCount,
+      priceRowCompanyOptions,
       section.options,
       section.handlers,
       supplier.options,

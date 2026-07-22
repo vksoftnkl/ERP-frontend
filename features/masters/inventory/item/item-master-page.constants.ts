@@ -46,6 +46,19 @@ export const ITEM_EAN_ROWS_FIELD_NAME = "item_ean_rows_json";
 export const BRANCH_LOOKUP_QUERY = {
   module: "branches",
 } as const;
+// Eager, full company list for the price row table's Company column. Unlike
+// the header Company field (a lazy, server-searched configured dropdown that
+// only ever holds a handful of recently fetched/selected companies — see
+// COMPANY_DROPDOWN_CONFIG), each price row can carry its own company id
+// (item_price_master.ipm_company_id is independent of item_company_id), and
+// the row's plain in-table select only ever filters client-side over
+// whatever options it's given. A lazy, near-empty option list left that
+// dropdown showing just the current selection (or the raw id when it wasn't
+// even loaded yet) with nothing else to pick. Companies are few, so loading
+// them all upfront (like Branch/Unit/Godown/HSN already do) is cheap.
+export const COMPANY_LOOKUP_QUERY = {
+  module: "companies",
+} as const;
 export const UNIT_LOOKUP_QUERY = {
   module: "units",
 } as const;
@@ -152,6 +165,11 @@ export const BRANCH_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "branches", "branch_masters"],
   idKeys: ["brId", "br_id", "branch_id", "branchId", "id", "_id", "value"],
   labelKeys: ["brName", "br_name", "branch_name", "branchName", "name", "label"],
+} as const;
+export const COMPANY_LOOKUP_KEYS = {
+  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "companies", "company_masters"],
+  idKeys: ["comp_id", "compId", "company_id", "companyId", "id", "_id", "value"],
+  labelKeys: ["comp_name", "compName", "company_name", "companyName", "name", "label"],
 } as const;
 export const UNIT_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "units", "itemUnits"],

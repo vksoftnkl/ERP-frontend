@@ -475,7 +475,6 @@
   min-width: 220px;
   color: var(--err);
   font-family: Consolas, "Courier New", monospace;
-  text-decoration: line-through;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -643,7 +642,6 @@
 }
 .modalDiffOld {
   color: var(--err);
-  text-decoration: line-through;
 }
 .modalDiffNew {
   color: var(--ok);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import ModalPortal from "@/components/ui/modal-portal";
 import styles from "./delete-confirm-modal.module.scss";
 
 type DeleteConfirmModalProps = {
@@ -116,6 +117,7 @@ export default function DeleteConfirmModal({
   const tone = iconVariant === "replace" ? "info" : "danger";
 
   return (
+    <ModalPortal>
     <div
       className={`${styles.overlay} erp-ms-confirm-overlay`}
       role="dialog"
@@ -224,5 +226,6 @@ export default function DeleteConfirmModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
