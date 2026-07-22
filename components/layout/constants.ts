@@ -38,6 +38,8 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
           { label: "City Master", href: "/master/city-master" },
           { label: "Area Master", href: "/master/area-master" },
           {label: "Customer Type master", href: "/master/customer-groups"},
+          { label: "Vehicle Freight Charges", href: "/master/freight-charges-master" },
+          { label: "Loading Charges", href: "/master/loading-charges-master" },
         ],
       },
       {
