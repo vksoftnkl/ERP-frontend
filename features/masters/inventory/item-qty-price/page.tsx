@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { FiRefreshCw, FiSave, FiTrash2 } from "react-icons/fi";
 import { toast } from "react-toastify";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
@@ -14,7 +14,7 @@ import {
 import {
   useDeleteItemQtyPriceMutation,
   useGetItemQtyPriceColumnConfigQuery,
-  useListItemQtyPricesQuery,
+  useLazyListItemQtyPricesQuery,
   useSaveItemQtyPricesMutation,
   ITEM_QTY_PRICE_UI_TABLE_ID,
   type ItemQtyPriceMode,
@@ -38,6 +38,7 @@ import {
 import styles from "./item-qty-price.module.scss";
 type CellRenderCtx = {
   updateRow: (localId: string, patch: Partial<ItemQtyPriceRow>) => void;
+  onUnitSelect: (row: ItemQtyPriceRow, unitId: string, unitLabel: string) => void;
   companyOptions: ERPDynamicSelectOption[];
   branchOptions: ERPDynamicSelectOption[];
   partyOptions: ERPDynamicSelectOption[];
@@ -107,10 +108,11 @@ function renderDynamicCell(key: DynamicColumnKey, row: ItemQtyPriceRow, ctx: Cel
           disabled={!row.itemId}
           placeholder={row.itemId ? "Select unit" : "Select item first"}
           onChange={(unitId) =>
-            ctx.updateRow(row.localId, {
-              itemUnitId: unitId,
-              unitLabel: ctx.unitOptions.find((option) => option.value === unitId)?.label ?? "",
-            })
+            ctx.onUnitSelect(
+              row,
+              unitId,
+              ctx.unitOptions.find((option) => option.value === unitId)?.label ?? "",
+            )
           }
         />
       );
@@ -233,18 +235,48 @@ function renderDynamicCell(key: DynamicColumnKey, row: ItemQtyPriceRow, ctx: Cel
       return null;
   }
 }
+function ensureTrailingBlankRow(list: ItemQtyPriceRow[]): ItemQtyPriceRow[] {
+  const lastRow = list[list.length - 1];
+  return list.length === 0 || lastRow.itemId ? [...list, createBlankRow()] : list;
+}
+// Qty-wise slabs are usually several ranges for the SAME item (0-10, 10-50,
+// 50+ ...), so the auto-added row after completing one carries over the item,
+// unit and shared scoping/date fields from it — only the slab-specific values
+// (qty range, discount/flat/price) are left blank for the next entry. Kept
+// isDirty:false so an untouched trailing clone never gets silently saved as a
+// duplicate slab; touching any field flips it dirty via updateRow/onUnitSelect.
+function cloneRowAsTemplate(sourceRow: ItemQtyPriceRow): ItemQtyPriceRow {
+  return {
+    ...createBlankRow(),
+    itemId: sourceRow.itemId,
+    itemLabel: sourceRow.itemLabel,
+    itemUnitId: sourceRow.itemUnitId,
+    unitLabel: sourceRow.unitLabel,
+    companyId: sourceRow.companyId,
+    branchId: sourceRow.branchId,
+    partyId: sourceRow.partyId,
+    priceLevel: sourceRow.priceLevel,
+    priceMode: sourceRow.priceMode,
+    isTaxIncl: sourceRow.isTaxIncl,
+    effectiveFrom: sourceRow.effectiveFrom,
+    effectiveTo: sourceRow.effectiveTo,
+    isActive: sourceRow.isActive,
+  };
+}
+function ensureTrailingRowFrom(
+  list: ItemQtyPriceRow[],
+  sourceRow: ItemQtyPriceRow,
+): ItemQtyPriceRow[] {
+  const lastRow = list[list.length - 1];
+  return list.length === 0 || lastRow.itemId ? [...list, cloneRowAsTemplate(sourceRow)] : list;
+}
 export default function ItemQtyPricePage() {
-  const [rows, setRows] = useState<ItemQtyPriceRow[]>([]);
+  const [rows, setRows] = useState<ItemQtyPriceRow[]>([createBlankRow()]);
   const [unitOptionsByItemId, setUnitOptionsByItemId] = useState<
     Record<string, ERPDynamicSelectOption[]>
   >({});
   const [isSaving, setIsSaving] = useState(false);
-  const hasLoadedInitialRows = useRef(false);
-  const {
-    data: listResponse,
-    isFetching: isListLoading,
-    refetch,
-  } = useListItemQtyPricesQuery({ page: 1, limit: 100 });
+  const [triggerListItemQtyPrices, { isFetching: isListLoading }] = useLazyListItemQtyPricesQuery();
   const { data: columnConfig } = useGetItemQtyPriceColumnConfigQuery({
     uiTableId: ITEM_QTY_PRICE_UI_TABLE_ID,
   });
@@ -267,11 +299,14 @@ export default function ItemQtyPricePage() {
     columnConfig && columnConfig.length > 0
       ? resolveConfiguredColumns(columnConfig)
       : DEFAULT_DYNAMIC_COLUMNS;
-  useEffect(() => {
-    if (!listResponse || hasLoadedInitialRows.current) return;
-    hasLoadedInitialRows.current = true;
-    setRows(listResponse.data.map(mapPayloadToRow));
-  }, [listResponse]);
+  async function handleRefresh() {
+    try {
+      const response = await triggerListItemQtyPrices({ page: 1, limit: 100 }, true).unwrap();
+      setRows(ensureTrailingBlankRow(response.data.map(mapPayloadToRow)));
+    } catch (error) {
+      toast.error(extractApiErrorMessage(error));
+    }
+  }
   function updateRow(localId: string, patch: Partial<ItemQtyPriceRow>) {
     setRows((currentRows) =>
       currentRows.map((row) =>
@@ -291,30 +326,68 @@ export default function ItemQtyPricePage() {
     },
     [triggerUnitsByItem, unitOptionsByItemId],
   );
-  function handleToolbarItemSelect(itemId: string, itemLabel: string, presetUnitId?: string) {
-    const newRow: ItemQtyPriceRow = {
-      ...createBlankRow(),
-      itemId,
-      itemLabel,
-      itemUnitId: presetUnitId ?? "",
-      isDirty: true,
-    };
-    setRows((currentRows) => [...currentRows, newRow]);
+  // Fills the item into whichever row is currently being built (the last
+  // one) instead of always appending a brand-new row. The row only advances
+  // — spawning a fresh trailing blank row — once it has both an item and a
+  // unit (barcode resolves both at once; a plain search leaves the unit for
+  // handleUnitSelect to complete the row and trigger the append itself).
+  function applyItemSelection(itemId: string, itemLabel: string, presetUnitId?: string) {
+    setRows((currentRows) => {
+      const lastIndex = currentRows.length - 1;
+      const filledRow = (row: ItemQtyPriceRow): ItemQtyPriceRow => ({
+        ...row,
+        itemId,
+        itemLabel,
+        itemUnitId: presetUnitId ?? "",
+        isDirty: true,
+      });
+      const nextRows =
+        lastIndex < 0
+          ? [filledRow(createBlankRow())]
+          : currentRows.map((row, index) => (index === lastIndex ? filledRow(row) : row));
+      return presetUnitId
+        ? ensureTrailingRowFrom(nextRows, nextRows[nextRows.length - 1])
+        : nextRows;
+    });
     void loadUnitOptionsForItem(itemId);
   }
 
+  function handleToolbarItemSelect(itemId: string, itemLabel: string) {
+    applyItemSelection(itemId, itemLabel);
+  }
+
   function handleBarcodeResolved(itemId: string, itemLabel: string, unitId: string) {
-    handleToolbarItemSelect(itemId, itemLabel, unitId);
+    applyItemSelection(itemId, itemLabel, unitId);
     toast.success(`Added ${itemLabel} from barcode.`);
+  }
+
+  function handleUnitSelect(row: ItemQtyPriceRow, unitId: string, unitLabel: string) {
+    setRows((currentRows) => {
+      const index = currentRows.findIndex((current) => current.localId === row.localId);
+      if (index === -1) return currentRows;
+      const nextRows = currentRows.map((current, currentIndex) =>
+        currentIndex === index
+          ? { ...current, itemUnitId: unitId, unitLabel, isDirty: true }
+          : current,
+      );
+      const isLastRow = index === currentRows.length - 1;
+      return isLastRow && unitId ? ensureTrailingRowFrom(nextRows, nextRows[index]) : nextRows;
+    });
+  }
+  function removeRowLocally(localId: string) {
+    setRows((currentRows) => {
+      const nextRows = currentRows.filter((current) => current.localId !== localId);
+      return nextRows.length === 0 ? [createBlankRow()] : nextRows;
+    });
   }
   async function handleRemoveRow(row: ItemQtyPriceRow) {
     if (!row.iqpId) {
-      setRows((currentRows) => currentRows.filter((current) => current.localId !== row.localId));
+      removeRowLocally(row.localId);
       return;
     }
     try {
       await deleteItemQtyPrice(row.iqpId).unwrap();
-      setRows((currentRows) => currentRows.filter((current) => current.localId !== row.localId));
+      removeRowLocally(row.localId);
       toast.success("Item qty price deleted.");
     } catch (error) {
       toast.error(extractApiErrorMessage(error));
@@ -381,10 +454,7 @@ export default function ItemQtyPricePage() {
           <button
             type="button"
             className={styles.button}
-            onClick={() => {
-              hasLoadedInitialRows.current = false;
-              void refetch();
-            }}
+            onClick={() => void handleRefresh()}
             disabled={isListLoading}
           >
             <FiRefreshCw /> Refresh
@@ -423,6 +493,7 @@ export default function ItemQtyPricePage() {
                 rows.map((row, index) => {
                   const ctx: CellRenderCtx = {
                     updateRow,
+                    onUnitSelect: handleUnitSelect,
                     companyOptions,
                     branchOptions,
                     partyOptions,
