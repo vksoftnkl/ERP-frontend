@@ -14,6 +14,8 @@ const ITEM_PRICE_DETAILS_ENDPOINT = "/item-price-details/get";
 const ITEM_PRICE_DETAILS_BY_BARCODE_ENDPOINT = "/item-price-details/get-by-barcode";
 const ITEM_TAX_LIST_ENDPOINT = "/configured-grid-sql/run";
 const ITEM_TAX_GET_ENDPOINT = "/item-taxes/get";
+const ITEM_UNITS_BY_ITEM_ENDPOINT = "/master-lookups/units/by-item";
+const ITEM_BY_BARCODE_ENDPOINT = "/master-lookups/item-by-barcode";
 // `dropdown_details.dropdown_id` for the configured items dropdown. The seeded
 // items dropdown is id 6 (`SELECT item_id, ..., item_name_en ... FROM inventory.item_master`).
 const ITEM_DROPDOWN_ID = "6";
@@ -41,6 +43,12 @@ const COMPANY_LOOKUP_QUERY = {
 const USER_LOOKUP_QUERY = {
   module: "userMasters",
 } as const;
+const CUSTOMER_LOOKUP_QUERY = {
+  module: "customers",
+} as const;
+const PRICE_LEVEL_LOOKUP_QUERY = {
+  module: "priceLevels",
+} as const;
 const ITEM_TAX_LIST_QUERY = {
   grid_id: "5",
 } as const;
@@ -63,6 +71,14 @@ const DEFAULT_COMPANY_OPTION: ERPDynamicSelectOption = {
 const DEFAULT_USER_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select User",
+};
+const DEFAULT_CUSTOMER_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "None",
+};
+const DEFAULT_PRICE_LEVEL_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "None",
 };
 const DEFAULT_UNIT_OPTION: ERPDynamicSelectOption = {
   value: "",
@@ -143,6 +159,16 @@ const USER_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS],
   idKeys: ["id", "usrId", "usr_id", "userId", "user_id", "_id", "value"],
   labelKeys: ["name", "usrDisplayName", "usrLoginName", "usr_display_name", "displayName", "label"],
+} as const;
+const CUSTOMER_LOOKUP_KEYS = {
+  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "customers", "customer_masters"],
+  idKeys: ["cusId", "cus_id", "customer_id", "customerId", "id", "_id", "value"],
+  labelKeys: ["cusName", "cus_name", "customer_name", "customerName", "name", "label"],
+} as const;
+const PRICE_LEVEL_LOOKUP_KEYS = {
+  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "priceLevels", "price_levels"],
+  idKeys: ["iplId", "ipl_id", "price_level_id", "priceLevelId", "id", "_id", "value"],
+  labelKeys: ["iplName", "ipl_name", "price_level_name", "priceLevelName", "name", "label"],
 } as const;
 const ITEM_TAX_LOOKUP_KEYS = {
   arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "itemTaxes"],
@@ -241,6 +267,18 @@ export type ItemPriceDetailsPayload = {
   item_unit_conversions: ItemPriceDetailsUnitConversion[];
   item_tax: ItemPriceDetailsTax | null;
 };
+// GET /master-lookups/item-by-barcode. `unitId` is actually item_ean_codes.ean_uc_unit_id
+// — an item_unit_conversion PK (iuc_id), matching the `*_unit_id` naming quirk
+// covered by the erp-item-price-unit-id-is-iuc-id memory, not a raw unit id.
+export type BarcodeItemLookup = {
+  itemId: string;
+  unitId: string;
+  itemName: string;
+  batchConfig: number;
+  allowSales: boolean;
+  itemStatus: boolean;
+  weighScale: boolean;
+};
 export const lookupsApi = baseApi.injectEndpoints({
   overrideExisting: true,
   endpoints: (builder) => ({
@@ -318,6 +356,42 @@ export const lookupsApi = baseApi.injectEndpoints({
         buildLookupOptions(payload, DEFAULT_USER_OPTION, USER_LOOKUP_KEYS),
       keepUnusedDataFor: 300,
     }),
+    getCustomerOptions: builder.query<ERPDynamicSelectOption[], LookupSearchArg | void>({
+      query: (arg) => ({
+        url: MASTER_LOOKUP_ENDPOINT,
+        params: arg?.search
+          ? { ...CUSTOMER_LOOKUP_QUERY, search: arg.search.trim() }
+          : CUSTOMER_LOOKUP_QUERY,
+      }),
+      transformResponse: (payload: unknown) =>
+        buildLookupOptions(payload, DEFAULT_CUSTOMER_OPTION, CUSTOMER_LOOKUP_KEYS),
+      keepUnusedDataFor: 300,
+    }),
+    getPriceLevelOptions: builder.query<ERPDynamicSelectOption[], void>({
+      query: () => ({
+        url: MASTER_LOOKUP_ENDPOINT,
+        params: PRICE_LEVEL_LOOKUP_QUERY,
+      }),
+      transformResponse: (payload: unknown) =>
+        buildLookupOptions(payload, DEFAULT_PRICE_LEVEL_OPTION, PRICE_LEVEL_LOOKUP_KEYS),
+      keepUnusedDataFor: 300,
+    }),
+    getUnitsByItem: builder.query<ERPDynamicSelectOption[], { itemId: string }>({
+      query: ({ itemId }) => ({ url: `${ITEM_UNITS_BY_ITEM_ENDPOINT}/${itemId.trim()}` }),
+      transformResponse: (payload: unknown) => {
+        const rows = extractRows<{ itemUnitId: string; unitName: string }>(payload, ["data"]);
+        return rows.map((row) => ({ value: row.itemUnitId, label: row.unitName }));
+      },
+      keepUnusedDataFor: 300,
+    }),
+    getItemByBarcode: builder.query<BarcodeItemLookup, { barcode: string }>({
+      query: ({ barcode }) => ({
+        url: ITEM_BY_BARCODE_ENDPOINT,
+        params: { barcode: barcode.trim() },
+      }),
+      transformResponse: (payload: unknown) => extractDetailSource(payload) as BarcodeItemLookup,
+      keepUnusedDataFor: 0,
+    }),
     getItemPriceDetails: builder.query<ItemPriceDetailsPayload, ItemPriceDetailsQueryArg>({
       query: ({ itemId }) => ({
         url: ITEM_PRICE_DETAILS_ENDPOINT,
@@ -351,8 +425,12 @@ export const {
   useGetBranchOptionsQuery,
   useGetCompanyOptionsQuery,
   useGetUserOptionsQuery,
+  useGetCustomerOptionsQuery,
+  useGetPriceLevelOptionsQuery,
   useLazyGetGodownOptionsQuery,
   useLazyGetItemOptionsQuery,
+  useLazyGetUnitsByItemQuery,
+  useLazyGetItemByBarcodeQuery,
   useLazyGetItemPriceDetailsQuery,
   useLazyGetItemPriceDetailsByBarcodeQuery,
   useLazyGetItemTaxByIdQuery,

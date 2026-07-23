@@ -1,0 +1,310 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.85rem 1rem;
+  height: 100%;
+  font-family: "Segoe UI", system-ui, Arial, sans-serif;
+  color: #222222;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #222222;
+}
+
+.subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  color: #6b6b6b;
+}
+
+.shell {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #c9c9c9;
+  border-radius: 2px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  background: #f2f2f2;
+  border-bottom: 1px solid #c9c9c9;
+  flex-wrap: wrap;
+}
+
+.summary {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: #666666;
+}
+
+.toolbarItemPicker {
+  width: 20rem;
+  max-width: 100%;
+}
+
+.toolbarBarcodeField {
+  width: 13rem;
+  max-width: 100%;
+}
+
+// The toolbar's barcode/item fields are standalone controls (not table
+// cells) — they should read like the toolbar's other bordered buttons, not
+// the flush/borderless inputs inside the grid.
+.toolbarBarcodeField .cellInput,
+.toolbarItemPicker .cellInput {
+  border: 1px solid #d5d5d5;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  padding: 0 0.85rem;
+  border: 1px solid #c9c9c9;
+  border-radius: 2px;
+  background: #ffffff;
+  color: #333333;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.button:hover:not(:disabled) {
+  background: #ececec;
+}
+.button:disabled {
+  color: #bbbbbb;
+  cursor: not-allowed;
+}
+.buttonPrimary {
+  composes: button;
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #ffffff;
+}
+.buttonPrimary:hover:not(:disabled) {
+  background: #0c5f58;
+}
+.buttonPrimary:disabled {
+  background: #9dc9c5;
+  border-color: #9dc9c5;
+  color: #ffffff;
+}
+.tableViewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 92rem;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #ededed;
+  color: #555555;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid #c9c9c9;
+  border-right: 1px solid #e3e3e3;
+  white-space: nowrap;
+}
+
+.table tbody td {
+  padding: 0.28rem 0.4rem;
+  border-bottom: 1px solid #e3e3e3;
+  border-right: 1px solid #e3e3e3;
+  vertical-align: middle;
+}
+
+.table tbody tr:hover td {
+  background: #fbf7f7;
+}
+
+.rowDirty td {
+  background: #fdfbf2;
+}
+
+.cellIndex {
+  width: 2.5rem;
+  text-align: center;
+  color: #888888;
+}
+
+.cellInput {
+  width: 100%;
+  min-height: 2rem;
+  padding: 0.3rem 0.45rem;
+  border: none;
+  border-radius: 2px;
+  background: #ffffff;
+  font-size: 0.8rem;
+  color: #222222;
+  box-sizing: border-box;
+}
+
+.cellInput:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: -1px;
+}
+
+.cellInput:disabled {
+  background: #f4f4f4;
+  color: #aaaaaa;
+}
+
+.cellSelect {
+  composes: cellInput;
+}
+
+// SearchableSelect (Company/Branch/Customer/Price Level/Uom cells) renders its
+// own trigger button with a hardcoded border via the shared
+// dynamic-modal-form.module.scss .searchSelectTrigger class; strip it here so
+// every table control reads flush like a plain grid cell instead of a form.
+.table :global(button[role="combobox"]) {
+  border: none;
+}
+
+.cellCheckboxWrap {
+  display: flex;
+  justify-content: center;
+}
+
+.cellCheckbox {
+  width: 1.05rem;
+  height: 1.05rem;
+  cursor: pointer;
+}
+
+.numberCell {
+  width: 6.5rem;
+}
+
+.dateCell {
+  width: 8.5rem;
+}
+
+.selectCell {
+  width: 11rem;
+}
+
+.smallSelectCell {
+  width: 9rem;
+}
+
+.removeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid #e3c9c9;
+  border-radius: 2px;
+  background: #fdf3f3;
+  color: #b13b3b;
+  cursor: pointer;
+}
+
+.removeButton:hover {
+  background: #f9e2e2;
+}
+
+.emptyState {
+  padding: 1.5rem;
+  text-align: center;
+  color: #888888;
+  font-size: 0.85rem;
+}
+
+.itemSearchCell {
+  position: relative;
+  width: 100%;
+}
+
+.itemSearchPlaceholder {
+  color: #999999;
+}
+
+.itemDropdown {
+  display: flex;
+  flex-direction: column;
+  max-height: 18rem;
+  background: #ffffff;
+  border: 1px solid #c9c9c9;
+  border-radius: 2px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+}
+
+.itemDropdownSearch {
+  border: 0;
+  border-bottom: 1px solid #e3e3e3;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.itemDropdownList {
+  overflow-y: auto;
+}
+
+.itemDropdownOption {
+  display: block;
+  width: 100%;
+  padding: 0.42rem 0.6rem;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 0.8rem;
+  color: #222222;
+  cursor: pointer;
+}
+
+.itemDropdownOption:hover {
+  background: #f3efe2;
+}
+
+.itemDropdownEmpty {
+  padding: 0.6rem;
+  font-size: 0.78rem;
+  color: #888888;
+}
+
+.errorBanner {
+  margin: 0;
+  padding: 0.5rem 0.6rem;
+  background: #fdf3f3;
+  border-bottom: 1px solid #e3c9c9;
+  color: #b13b3b;
+  font-size: 0.8rem;
+}
