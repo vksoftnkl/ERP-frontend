@@ -29,6 +29,10 @@ export type SaveItemQtyPriceDto = {
   iqp_effective_from: string;
   iqp_effective_to?: string | null;
   iqp_is_active?: boolean;
+  // Actor name (falls back server-side to the JWT user id when omitted); the
+  // server only reads created_by on insert and modified_by on update.
+  iqp_created_by?: string | null;
+  iqp_modified_by?: string | null;
 };
 
 export type ItemQtyPricePayload = SaveItemQtyPriceDto & {

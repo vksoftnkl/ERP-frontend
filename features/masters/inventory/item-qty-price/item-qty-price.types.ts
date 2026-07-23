@@ -25,8 +25,11 @@ export type ItemQtyPriceRow = {
   isNew: boolean;
 };
 
+// Mode letters are the server's (`iqp_price_mode` accepts P | R | F only).
+// The desktop-port spec calls the flat-rupees-off mode "Q"; the API has never
+// accepted that letter, so R stays and only the label follows the spec.
 export const PRICE_MODE_OPTIONS: ReadonlyArray<{ value: ItemQtyPriceMode; label: string }> = [
-  { value: "P", label: "% Discount" },
-  { value: "R", label: "Flat Off (Qty)" },
+  { value: "P", label: "% Off" },
+  { value: "R", label: "Flat Rs Off" },
   { value: "F", label: "Fixed Price" },
 ];

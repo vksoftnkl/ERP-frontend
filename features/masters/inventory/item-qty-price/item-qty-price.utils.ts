@@ -1,4 +1,8 @@
-import type { ItemQtyPricePayload, SaveItemQtyPriceDto } from "@/store/api/itemQtyPriceApi";
+import type {
+  ItemQtyPriceMode,
+  ItemQtyPricePayload,
+  SaveItemQtyPriceDto,
+} from "@/store/api/itemQtyPriceApi";
 import type { ItemQtyPriceRow } from "./item-qty-price.types";
 
 let localIdCounter = 0;
@@ -8,12 +12,14 @@ export function createLocalId(): string {
   return `new-${localIdCounter}`;
 }
 
-export function createBlankRow(): ItemQtyPriceRow {
+// Every row belongs to the item the page is scoped to, so a blank row is
+// seeded with it — the grid never mixes items.
+export function createBlankRow(item?: { id: string; label: string } | null): ItemQtyPriceRow {
   return {
     localId: createLocalId(),
     iqpId: null,
-    itemId: "",
-    itemLabel: "",
+    itemId: item?.id ?? "",
+    itemLabel: item?.label ?? "",
     itemUnitId: "",
     unitLabel: "",
     companyId: "",
@@ -79,9 +85,44 @@ function toNumberOrNull(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+// A row counts as "real" (and so must pass validation and take part in the
+// duplicate check) once the operator has put anything of substance into it —
+// a pristine trailing row that only carries the page's item is not one.
+export function isFilledRow(row: ItemQtyPriceRow): boolean {
+  return Boolean(
+    row.iqpId ||
+      row.itemUnitId ||
+      row.companyId ||
+      row.branchId ||
+      row.partyId ||
+      row.priceLevel ||
+      row.toQty.trim() ||
+      row.discPct.trim() ||
+      row.flatOff.trim() ||
+      row.price.trim(),
+  );
+}
+// Two rows are the same pricing rule when their whole scope + band matches:
+// company, branch, customer, price level, unit, from qty and to qty.
+export function buildRowUniquenessKey(row: ItemQtyPriceRow): string {
+  return [
+    row.companyId,
+    row.branchId,
+    row.partyId,
+    row.priceLevel,
+    row.itemUnitId,
+    String(toNumberOrNull(row.fromQty) ?? 0),
+    row.toQty.trim() ? String(toNumberOrNull(row.toQty)) : "",
+  ].join("|");
+}
+export function describeRowScope(row: ItemQtyPriceRow): string {
+  const band = row.toQty.trim() ? `${row.fromQty}–${row.toQty}` : `${row.fromQty} & above`;
+  return `${row.unitLabel || "unit"} · qty ${band}`;
+}
 export function validateRow(row: ItemQtyPriceRow): string | null {
   if (!row.itemId) return "Item is required.";
   if (!row.itemUnitId) return "Unit is required.";
+  if (!row.fromQty.trim()) return "From Qty is required.";
   if (!row.effectiveFrom) return "Effective From date is required.";
   const fromQty = toNumberOrNull(row.fromQty) ?? 0;
   const toQty = toNumberOrNull(row.toQty);
@@ -103,9 +144,44 @@ export function validateRow(row: ItemQtyPriceRow): string | null {
   return null;
 }
 
-export function buildSavePayload(row: ItemQtyPriceRow): SaveItemQtyPriceDto {
+// Exactly one of Disc % / Disc Rs / Price drives a row's price. Switching
+// Mode wipes the two it just locked, so a value the operator can no longer
+// see or edit never rides along into the payload.
+export function applyPriceModeChange(
+  row: ItemQtyPriceRow,
+  priceMode: ItemQtyPriceMode,
+): Partial<ItemQtyPriceRow> {
+  return {
+    priceMode,
+    discPct: priceMode === "P" ? row.discPct : "",
+    flatOff: priceMode === "R" ? row.flatOff : "",
+    price: priceMode === "F" ? row.price : "",
+  };
+}
+// The list endpoint returns `data` as an array, but tolerate a single object
+// too — one sampled response shape came back that way.
+export function normalizeListPayload(data: unknown): ItemQtyPricePayload[] {
+  if (Array.isArray(data)) return data as ItemQtyPricePayload[];
+  if (data && typeof data === "object") return [data as ItemQtyPricePayload];
+  return [];
+}
+// The server reads iqp_created_by only when inserting and iqp_modified_by only
+// when updating, so stamp the logged-in user's name onto whichever applies for
+// this row. Omitted entirely when no name is available — the server then falls
+// back to the JWT user id.
+export function buildSavePayload(
+  row: ItemQtyPriceRow,
+  actorName?: string | null,
+): SaveItemQtyPriceDto {
+  const actor = actorName?.trim() ? actorName.trim() : null;
+  const actorFields: Partial<SaveItemQtyPriceDto> = actor
+    ? row.iqpId
+      ? { iqp_modified_by: actor }
+      : { iqp_created_by: actor }
+    : {};
   return {
     ...(row.iqpId ? { iqp_id: row.iqpId } : {}),
+    ...actorFields,
     iqp_item_id: row.itemId,
     iqp_item_unit_id: row.itemUnitId,
     iqp_company_id: row.companyId || null,
