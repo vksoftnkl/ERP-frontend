@@ -6,6 +6,12 @@
   align-items: center;
   justify-content: center;
   padding: 16px;
+  // Promote the whole overlay into one isolated GPU-composited layer so the
+  // page's promoted sticky-header grid scroller cannot bleed dark ghost tiles
+  // over this portaled modal (same Chromium layer-overlap fix as
+  // dynamic-modal-form's .overlay).
+  isolation: isolate;
+  transform: translateZ(0);
 }
 
 .backdrop {

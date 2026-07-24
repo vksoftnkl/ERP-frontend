@@ -135,6 +135,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       },
       {
         label:"Tender Master",href:"/master/tender-master"
+      },
+      {
+        label:"Charge Master",href:"/master/charge-master"
       }
     ],
   },

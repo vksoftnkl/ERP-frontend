@@ -2963,6 +2963,19 @@ function removeDefaultLinkedColumnPlaceholders(
       : column,
   );
 }
+// The banded in-tab group titles ("Reference Links", "Rules & Status", …) are
+// full-width `custom` fields named `itemInline<Name>Heading`, not `heading`
+// fields. They still separate two groups of fields visually, so they have to
+// break a section here as well — otherwise the config-driven reorder below
+// shuffles configured fields straight across the band (Company jumping up into
+// "Core Details" and Sort Order dropping under "Reference Links").
+function isItemInlineSectionHeadingField(field: ERPDynamicModalField): boolean {
+  return (
+    (field.type ?? "text") === "custom" &&
+    field.name.startsWith("itemInline") &&
+    field.name.endsWith("Heading")
+  );
+}
 function buildItemFormSections(
   fields: ERPDynamicModalField[],
 ): ItemFormSection[] {
@@ -2975,7 +2988,7 @@ function buildItemFormSections(
     fields: [],
   };
   for (const field of fields) {
-    if ((field.type ?? "text") === "heading") {
+    if ((field.type ?? "text") === "heading" || isItemInlineSectionHeadingField(field)) {
       if (currentSection.heading !== null || currentSection.fields.length > 0) {
         sections.push(currentSection);
       }

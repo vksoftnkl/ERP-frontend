@@ -38,6 +38,16 @@
   justify-content: center;
   padding: 1.8rem;
   overscroll-behavior: contain;
+  // Promote the whole overlay (backdrop + panel) into a single isolated,
+  // GPU-composited layer. Portaling the overlay to <body> and pre-promoting
+  // just the panel (see .panel below) are not enough on their own: Chromium's
+  // layer-overlap test can still order the page's promoted sticky-header grid
+  // scroller *above* the modal, painting stale dark grid tiles over the panel
+  // (worst on GPU-accelerated, non-headless Chromium). Owning one isolated
+  // top-level composited layer here forces the entire overlay above every
+  // page layer, so nothing can bleed through.
+  isolation: isolate;
+  transform: translateZ(0);
 }
 .backdrop {
   position: absolute;
