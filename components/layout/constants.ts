@@ -135,9 +135,6 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       },
       {
         label:"Tender Master",href:"/master/tender-master"
-      },
-      {
-        label:"Charge Master",href:"/master/charge-master"
       }
     ],
   },
@@ -212,7 +209,8 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       {
         label:"Configuration",
         children:[
-          {label:"Price Level Configuration",href:"/master/price-level-configuration"}
+          {label:"Price Level Configuration",href:"/master/price-level-configuration"},
+          {label:"Charge Master",href:"/master/charge-master"}
         ]
       },
       {label:"User Administration",href:"/master/user-administration"},

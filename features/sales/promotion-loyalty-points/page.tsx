@@ -134,6 +134,7 @@ import { GiftsTab } from "./tabs/gifts-tab";
 import { PartyTab } from "./tabs/party-tab";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import styles from "./page.module.scss";
+import { Z_MODAL } from "@/lib/z-index";
 const DEFAULT_PARTY_SCOPE_TYPE: PartyScopeType = "CUSTOMER_GROUP";
 // `/branch-masters/get` is a fetch-by-id route (it requires a `brId` UUID), not a
 // company-filtered list, so querying it with `compId` only ever returned 400 and
@@ -1493,7 +1494,7 @@ export default function PromotionLoyaltyPointsPage() {
     },
   ];
   const editorModalStyle = {
-    "--erp-modal-overlay-z-index": "2000",
+    "--erp-modal-overlay-z-index": Z_MODAL,
     "--erp-modal-accent": "#365b9d",
     "--erp-modal-surface": "#ffffff",
   } as CSSProperties;
@@ -1814,7 +1815,11 @@ export default function PromotionLoyaltyPointsPage() {
         onConfirm={() => void confirmDelete()}
       />
       {(detailLoading || schemeSaving) && selectedScheme ? (
-        <div className="fixed bottom-6 right-6 px-4 py-3 rounded-pill bg-[rgba(15,23,42,0.92)] text-white text-sm-compact shadow-lg shadow-[rgba(15,23,42,0.24)] z-status">
+        // An arbitrary-value z utility, not a named one: tailwind.config.ts is
+        // not loaded under Tailwind v4 (see the note in that file), so the
+        // previous "z-status" emitted no CSS at all and this fixed pill fell
+        // back to z-index:auto — behind every dialog.
+        <div className="fixed bottom-6 right-6 px-4 py-3 rounded-pill bg-[rgba(15,23,42,0.92)] text-white text-sm-compact shadow-lg shadow-[rgba(15,23,42,0.24)] z-[var(--erp-z-toast)]">
           <span>{detailLoading ? "Loading scheme details..." : "Saving scheme..."}</span>
         </div>
       ) : null}

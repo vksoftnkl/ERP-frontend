@@ -101,7 +101,7 @@
   position: fixed;
   top: auto;
   left: auto;
-  z-index: 10000;
+  z-index: var(--erp-z-popup);
   min-width: 11.375rem;
   padding: 0.4rem;
   border: 1px solid #d9e2ec;
@@ -965,7 +965,7 @@
   left: auto;
   right: 1rem;
   bottom: 4rem;
-  z-index: 240;
+  z-index: var(--erp-z-popup);
   min-width: 24rem;
 }
 .lookupTableHead {
@@ -1118,7 +1118,7 @@
 .inlineMasterOverlay {
   position: fixed;
   inset: 0;
-  z-index: 1900;
+  z-index: var(--erp-z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1178,7 +1178,7 @@
 .stockBrowserModalOverlay {
   position: fixed;
   inset: 0;
-  z-index: 260;
+  z-index: var(--erp-z-modal);
   display: grid;
   place-items: center;
   padding: 1rem;

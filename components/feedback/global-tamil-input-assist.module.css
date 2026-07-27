@@ -1,6 +1,8 @@
 .panel {
   position: fixed;
-  z-index: 1400;
+  /* Follows the caret into any field, including ones inside modals and inside
+     a portaled dropdown's own search box, so it outranks both. */
+  z-index: var(--erp-z-input-assist);
   border: 1px solid rgba(15, 35, 53, 0.14);
   border-radius: var(--erp-radius);
   background:

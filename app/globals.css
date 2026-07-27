@@ -28,7 +28,55 @@
   --app-bg: var(--page-bg);
   --app-text: var(--text-main);
   --erp-font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+
+  /* ── Overlay stacking scale ────────────────────────────────────────────
+     Every layer that escapes the page flow — anything portaled to <body> or
+     `position: fixed` — ends up in the SAME root stacking context, so its
+     z-index is compared against every other overlay in the app, not just
+     against its own page. Hand-picked literals therefore cannot stay
+     correct: this app had ten such layers spread over 300…10001 with
+     several pairs already inverted (a dropdown behind the modal that owns
+     it, a toast behind a modal, the record-history dialog behind the form
+     dialog it opens over).
+
+     Rules:
+       - An overlay layer MUST take its z-index from a token below. Never
+         write a literal, and never "just add a zero" to win a fight.
+       - Order is derived from what has to sit above what:
+           header  <  modal  <  nested modal  <  popup  <  confirm
+                   <  input assist  <  toast  <  global loader
+         A portaled dropdown must clear the modal that contains it, so
+         popups outrank every modal. A confirm dialog interrupts whatever
+         is open, so it outranks popups. The typing assist follows the
+         caret into any of them, and toasts must be readable over all of it.
+       - Values are spaced by 1000 so a layer can be slotted between two
+         tiers later without renumbering the app.
+     In-page z-indexes (sticky table headers, cell overlaps, tabs) are NOT
+     part of this scale — they live inside their own stacking context and
+     stay small and local. From TS/TSX, import the mirrors in lib/z-index.ts
+     rather than re-typing these names. */
+  --erp-z-app-header: 150;
+  --erp-z-modal: 2000;
+  --erp-z-modal-nested: 2100;
+  --erp-z-popup: 3000;
+  --erp-z-confirm: 4000;
+  --erp-z-input-assist: 5000;
+  --erp-z-toast: 6000;
+  --erp-z-global-loader: 2147483640;
+
   color-scheme: light;
+}
+
+/* react-toastify hardcodes `--toastify-z-index: 9999`, which loses to any
+   overlay stacked above it — toasts fired from a dialog were painted behind it.
+   Pin it to our toast tier.
+
+   `:root:root` is deliberate, not a typo: ReactToastify.css declares that token
+   on plain `:root` and app/layout.tsx imports it *after* this file, so at equal
+   specificity the vendor rule would win on source order. Doubling the selector
+   outranks it regardless of import order. */
+:root:root {
+  --toastify-z-index: var(--erp-z-toast);
 }
 
 *,
@@ -121,7 +169,7 @@ textarea {
 .erp-global-loader {
   position: fixed;
   inset: 0 0 auto;
-  z-index: 2147483640;
+  z-index: var(--erp-z-global-loader);
   height: 3px;
   opacity: 0;
   pointer-events: none;

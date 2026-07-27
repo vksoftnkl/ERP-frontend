@@ -15,6 +15,7 @@ import {
   FiUser,
   FiX,
 } from "react-icons/fi";
+import ModalPortal from "@/components/ui/modal-portal";
 import { useApi } from "@/hooks/useApi";
 import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
@@ -114,6 +115,28 @@ function buildRecordHistoryQuery(
     include_total: "true",
   };
 }
+const HISTORY_ALL_TAB = "__all__";
+/* Page size the modal reads with when it has to pull the whole history to
+   filter it into tabs (server allows up to 100 per page), plus a hard stop so a
+   record with a runaway history can never spin an unbounded fetch loop. */
+const MODAL_FETCH_ALL_LIMIT = 100;
+const MODAL_FETCH_ALL_MAX_PAGES = 50;
+type HistorySubEntityTab = { screen: string; label: string };
+/* Composite screens whose audit history the server fans out across several
+   child screens (mirrors the server's RELATED_AUDIT_SCREENS_BY_SCREEN_NAME).
+   For these the merged history is grouped under one tab per sub-entity, keyed on
+   each row's `screen_name` — the reliable discriminator (`log_table_name` is a
+   free-text label). Any master not listed here keeps the plain single-list,
+   server-paginated view. */
+const HISTORY_SUB_ENTITY_TABS: Record<string, HistorySubEntityTab[]> = {
+  "Item Master": [
+    { screen: "Item Master", label: "Item" },
+    { screen: "Item Unit Conversion Master", label: "Unit Conversion" },
+    { screen: "Item EAN Code Master", label: "EAN Codes" },
+    { screen: "Item Reorder Master", label: "Reorders" },
+    { screen: "Item Price Master", label: "Price List" },
+  ],
+};
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-IN", {
   dateStyle: "medium",
   timeStyle: "short",
@@ -1027,6 +1050,7 @@ type ModalDiffRow = {
 };
 type ModalHistoryRowView = {
   id: string;
+  screen: string;
   date: string;
   actionLabel: string;
   badgeClass: string;
@@ -1136,6 +1160,9 @@ function RecordHistoryModalContent({
   const [page, setPage] = useState(DEFAULT_PAGE);
   const [openRows, setOpenRows] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
+  const [activeTab, setActiveTab] = useState<string>(HISTORY_ALL_TAB);
+  const tabConfig = HISTORY_SUB_ENTITY_TABS[screen] ?? null;
+  const isTabbed = tabConfig !== null;
   const { getAll: listAuditLogs, loading, error } = useApi<
     ApiSuccessResponse<AuditLogListItem[], ListMeta>
   >(AUDIT_LOG_LIST_ENDPOINT, {
@@ -1153,6 +1180,39 @@ function RecordHistoryModalContent({
       return;
     }
     try {
+      if (isTabbed) {
+        /* The server merges the composite screen's child histories into one
+           server-paginated stream, so tab filtering needs the whole set in
+           memory. Page through it (100 at a time) and paginate client-side. */
+        const collected: AuditLogListItem[] = [];
+        let pageNo = DEFAULT_PAGE;
+        let totalPages = 1;
+        do {
+          const response = await listAuditLogs(
+            buildRecordHistoryQuery(screen, recordPkValue, pageNo, MODAL_FETCH_ALL_LIMIT),
+          );
+          if (!response) {
+            break;
+          }
+          collected.push(...response.data);
+          const reportedTotal = response.meta?.total ?? collected.length;
+          totalPages =
+            response.meta?.total_pages ??
+            Math.max(1, Math.ceil(reportedTotal / MODAL_FETCH_ALL_LIMIT));
+          if (response.data.length === 0) {
+            break;
+          }
+          pageNo += 1;
+        } while (pageNo <= totalPages && pageNo <= MODAL_FETCH_ALL_MAX_PAGES);
+        setLogs(collected);
+        setMeta({
+          page: DEFAULT_PAGE,
+          limit: MODAL_FETCH_ALL_LIMIT,
+          total: collected.length,
+          total_pages: 1,
+        });
+        return;
+      }
       const response = await listAuditLogs(
         buildRecordHistoryQuery(screen, recordPkValue, page, DEFAULT_PAGE_SIZE),
       );
@@ -1174,18 +1234,17 @@ function RecordHistoryModalContent({
     } catch {
       // useApi already exposes the error state.
     }
-  }, [hasContext, listAuditLogs, page, recordPkValue, screen]);
+  }, [hasContext, isTabbed, listAuditLogs, page, recordPkValue, screen]);
   useEffect(() => {
     void fetchHistory();
   }, [fetchHistory, refreshKey]);
   useEffect(() => {
     setOpenRows(new Set());
-  }, [page, refreshKey]);
+  }, [page, refreshKey, activeTab]);
   useEffect(() => {
-    if (page > safeTotalPages) {
-      setPage(safeTotalPages);
-    }
-  }, [page, safeTotalPages]);
+    // Tabs paginate client-side; jump back to the first page when switching.
+    setPage(DEFAULT_PAGE);
+  }, [activeTab]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -1201,6 +1260,7 @@ function RecordHistoryModalContent({
         const user = getRowUserLabel(log);
         return {
           id: log.log_id,
+          screen: normalizeViewerValue(log.screen_name),
           date: formatDateTime(log.log_date),
           actionLabel: formatActionLabel(log.log_action),
           badgeClass: getModalBadgeClass(log.log_action),
@@ -1212,7 +1272,40 @@ function RecordHistoryModalContent({
       }),
     [logs],
   );
-  const withDiff = useMemo(() => rows.filter((row) => row.diff.length > 0), [rows]);
+  const tabCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      counts.set(row.screen, (counts.get(row.screen) ?? 0) + 1);
+    }
+    return counts;
+  }, [rows]);
+  /* Rows the active tab shows. Non-tabbed masters and the "All" tab show
+     everything the fetch returned; a sub-entity tab filters by screen_name. */
+  const filteredRows = useMemo(() => {
+    if (!isTabbed || activeTab === HISTORY_ALL_TAB) {
+      return rows;
+    }
+    return rows.filter((row) => row.screen === activeTab);
+  }, [rows, isTabbed, activeTab]);
+  /* Tabbed mode holds the whole history in memory, so it paginates the filtered
+     rows client-side; the plain view keeps the server's page as-is. */
+  const clientTotalPages = Math.max(1, Math.ceil(filteredRows.length / DEFAULT_PAGE_SIZE));
+  const effectiveTotalPages = isTabbed ? clientTotalPages : safeTotalPages;
+  const startIndex = isTabbed
+    ? (page - 1) * DEFAULT_PAGE_SIZE
+    : (page - 1) * (meta.limit || DEFAULT_PAGE_SIZE);
+  const displayRows = isTabbed
+    ? filteredRows.slice(startIndex, startIndex + DEFAULT_PAGE_SIZE)
+    : rows;
+  useEffect(() => {
+    if (page > effectiveTotalPages) {
+      setPage(effectiveTotalPages);
+    }
+  }, [page, effectiveTotalPages]);
+  const withDiff = useMemo(
+    () => displayRows.filter((row) => row.diff.length > 0),
+    [displayRows],
+  );
   const allOpen = withDiff.length > 0 && withDiff.every((row) => openRows.has(row.id));
   const toggleRow = useCallback((id: string) => {
     setOpenRows((prev) => {
@@ -1235,7 +1328,6 @@ function RecordHistoryModalContent({
       [...logs].reverse().find((log) => resolveActionVariant(log.log_action) === "new") ?? null,
     [logs],
   );
-  const startIndex = (page - 1) * (meta.limit || DEFAULT_PAGE_SIZE);
   return (
     <div
       className={styles.overlay}
@@ -1275,6 +1367,28 @@ function RecordHistoryModalContent({
             </span>
           ) : null}
         </div>
+        {isTabbed && tabConfig ? (
+          <div className={styles.tabBar} role="tablist" aria-label="History categories">
+            {[{ screen: HISTORY_ALL_TAB, label: "All" }, ...tabConfig].map((tab) => {
+              const active = activeTab === tab.screen;
+              const count =
+                tab.screen === HISTORY_ALL_TAB ? rows.length : tabCounts.get(tab.screen) ?? 0;
+              return (
+                <button
+                  key={tab.screen}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  className={cx(styles.tab, active && styles.tabActive)}
+                  onClick={() => setActiveTab(tab.screen)}
+                >
+                  {tab.label}
+                  <span className={styles.tabCount}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         {error ? (
           <div className={styles.errorBox}>
             <p className={styles.errorText}>{error}</p>
@@ -1306,20 +1420,22 @@ function RecordHistoryModalContent({
                     Open this from a record&apos;s History action to load its change history.
                   </td>
                 </tr>
-              ) : loading && rows.length === 0 ? (
+              ) : loading && logs.length === 0 ? (
                 <tr>
                   <td className={styles.stateCell} colSpan={6}>
                     Loading record history…
                   </td>
                 </tr>
-              ) : rows.length === 0 ? (
+              ) : displayRows.length === 0 ? (
                 <tr>
                   <td className={styles.stateCell} colSpan={6}>
-                    No history was found for this record.
+                    {isTabbed && activeTab !== HISTORY_ALL_TAB
+                      ? "No changes in this category."
+                      : "No history was found for this record."}
                   </td>
                 </tr>
               ) : (
-                rows.map((row, rowIndex) => (
+                displayRows.map((row, rowIndex) => (
                   <ModalHistoryRow
                     key={row.id}
                     row={row}
@@ -1334,14 +1450,15 @@ function RecordHistoryModalContent({
         </div>
         <div className={styles.footer}>
           <span>
-            {totalRecords} history record{totalRecords === 1 ? "" : "s"}
+            {isTabbed ? filteredRows.length : totalRecords} history record
+            {(isTabbed ? filteredRows.length : totalRecords) === 1 ? "" : "s"}
           </span>
           {withDiff.length > 0 ? (
             <button className={styles.expandBtn} type="button" onClick={toggleAll}>
               {allOpen ? "Collapse all" : "Expand all changes"}
             </button>
           ) : null}
-          {safeTotalPages > 1 ? (
+          {effectiveTotalPages > 1 ? (
             <div className={styles.pager}>
               <button
                 className={styles.pagerBtn}
@@ -1353,13 +1470,13 @@ function RecordHistoryModalContent({
                 ‹
               </button>
               <span className={styles.pagerInfo}>
-                {page} / {safeTotalPages}
+                {page} / {effectiveTotalPages}
               </span>
               <button
                 className={styles.pagerBtn}
                 type="button"
-                disabled={page >= safeTotalPages}
-                onClick={() => setPage((value) => Math.min(safeTotalPages, value + 1))}
+                disabled={page >= effectiveTotalPages}
+                onClick={() => setPage((value) => Math.min(effectiveTotalPages, value + 1))}
                 aria-label="Next page"
               >
                 ›
@@ -1386,7 +1503,16 @@ export function RecordHistoryModal(props: RecordHistoryModalProps) {
   if (!props.isOpen) {
     return null;
   }
-  return <RecordHistoryModalContent {...props} />;
+  // Portaled for the same reason as every other dialog here: left inline it is
+  // a sibling of the page's promoted grid scroller, which Chromium can order
+  // above it regardless of z-index (see ModalPortal). Its skin tokens are
+  // declared on `.modal` rather than a page wrapper, so nothing is lost by
+  // moving it to <body>.
+  return (
+    <ModalPortal>
+      <RecordHistoryModalContent {...props} />
+    </ModalPortal>
+  );
 }
 export default function RecordHistoryPage() {
   const router = useRouter();

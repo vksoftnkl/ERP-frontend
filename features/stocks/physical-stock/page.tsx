@@ -199,6 +199,7 @@ import {
   getTrackingOptionFromPayload,
   mapPhysicalStockDocumentToRows,
 } from "./physical-stock.utils";
+import { Z_MODAL_NESTED } from "@/lib/z-index";
 type TableSettingsContextMenuPosition = Pick<CSSProperties, "left" | "top">;
 type InlineItemMasterRequest = {
   itemId: string;
@@ -2641,7 +2642,7 @@ export default function PhysicalStockPage() {
             className={dynamicModalStyles.overlay}
             style={
               {
-                "--erp-modal-overlay-z-index": 10001,
+                "--erp-modal-overlay-z-index": Z_MODAL_NESTED,
                 "--erp-modal-accent": "var(--ds-primary, #0f74c9)",
               } as CSSProperties
             }

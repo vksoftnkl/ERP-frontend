@@ -7,7 +7,10 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 300;
+  // Nested tier: history is opened from a row action on pages that also own a
+  // form modal, so it has to clear the standard modal tier (it was 300, i.e.
+  // *below* it).
+  z-index: var(--erp-z-modal-nested);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -106,6 +109,67 @@
 .mono {
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
+}
+
+/* ── Sub-entity tabs (composite screens) ──────────────────── */
+.tabBar {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 12px 0;
+  border-bottom: 1px solid var(--line2);
+  background: var(--paper);
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  background: none;
+  color: var(--ink2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
+}
+.tabActive {
+  border-color: var(--line2);
+  border-bottom-color: var(--paper);
+  background: var(--paper);
+  color: var(--accent);
+  /* Sit on top of the .tabBar bottom border so the active tab reads as joined
+     to the panel below it. */
+  margin-bottom: -1px;
+
+  &:hover {
+    background: var(--paper);
+    color: var(--accent);
+  }
+}
+.tabCount {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--ink3);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+
+  .tabActive & {
+    background: var(--sel);
+    color: var(--accent);
+  }
 }
 
 /* ── Error strip ──────────────────────────────────────────── */

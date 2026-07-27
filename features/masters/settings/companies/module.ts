@@ -151,7 +151,9 @@ const APPLICABILITY_CHECKBOX_FIELD_STYLE: CSSProperties = {
 };
 const COMPANY_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(92vw, 70rem)",
-  height: "86vh",
+  // No fixed height: let the panel size to its content so short tabs don't leave
+  // an empty band above the footer. maxHeight still caps it and enables scrolling
+  // when a tab's content is taller than the viewport.
   maxHeight: "86vh",
 };
 const COMPANY_STANDARD_FIELD_NAMES = [

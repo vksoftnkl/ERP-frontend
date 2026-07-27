@@ -669,7 +669,7 @@
   background: #ffffff;
   box-shadow: 0 18px 32px rgba(15, 35, 60, 0.14);
   padding: 0.4rem;
-  z-index: 10000;
+  z-index: var(--erp-z-popup);
 
   .actionsDropdownItem {
     width: 100%;

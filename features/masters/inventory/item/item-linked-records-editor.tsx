@@ -32,6 +32,7 @@ import {
 } from "./item-linked-records-editor.shared";
 import { useItemLinkedRecordsSearchSelect } from "./use-item-linked-records-search-select";
 import styles from "./item-linked-records-editor.module.scss";
+import { Z_MODAL_NESTED } from "@/lib/z-index";
 export type {
   LinkedRecordColumn,
   LinkedRecordOption,
@@ -1261,7 +1262,7 @@ export default function ItemLinkedRecordsEditor({
             className={modalStyles.overlay}
             style={
               {
-                "--erp-modal-overlay-z-index": 10001,
+                "--erp-modal-overlay-z-index": Z_MODAL_NESTED,
                 "--erp-modal-accent": "var(--ds-primary, #0f74c9)",
               } as CSSProperties
             }

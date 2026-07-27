@@ -178,6 +178,7 @@ import {
   TABLE_SETTINGS_CONTEXT_MENU_HEIGHT,
   TABLE_SETTINGS_CONTEXT_MENU_PADDING,
 } from "./opening-stock.column-settings";
+import { Z_MODAL_NESTED } from "@/lib/z-index";
 function renderValidationToastContent(
   issues: Array<{ rowId: number; fieldKey: string; message: string }>,
 ) {
@@ -3043,7 +3044,7 @@ export default function OpeningStockPage() {
           className={dynamicModalStyles.overlay}
           style={
             {
-              "--erp-modal-overlay-z-index": 10001,
+              "--erp-modal-overlay-z-index": Z_MODAL_NESTED,
               "--erp-modal-accent": "var(--ds-primary, #0f74c9)",
             } as CSSProperties
           }

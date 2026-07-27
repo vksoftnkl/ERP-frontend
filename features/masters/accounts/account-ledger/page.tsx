@@ -124,6 +124,7 @@ import {
   getFirstLedgerFocusableFieldTarget,
   focusLedgerFieldControl,
 } from "./form-navigation";
+import { Z_MODAL_NESTED } from "@/lib/z-index";
 const GRID_SETTINGS_CONTEXT_MENU_WIDTH = 190;
 const GRID_SETTINGS_CONTEXT_MENU_HEIGHT = 130;
 const GRID_SETTINGS_CONTEXT_MENU_PADDING = 8;
@@ -2463,7 +2464,7 @@ export default function AccountLedgerMasterPage() {
           style={{
             "--erp-modal-accent": "var(--primary, #7b1515)",
             "--erp-modal-accent-soft-ring": "rgba(123, 21, 21, 0.2)",
-            "--erp-modal-overlay-z-index": 330,
+            "--erp-modal-overlay-z-index": Z_MODAL_NESTED,
           } as CSSProperties}
         >
           <div

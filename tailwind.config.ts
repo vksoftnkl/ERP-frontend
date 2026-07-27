@@ -73,6 +73,13 @@ const config: Config = {
         'field': '14px',
         'pill': '999px',
       },
+      // HEADS UP: nothing in this file is applied. The project is on Tailwind
+      // v4, where app/globals.css does `@import "tailwindcss"` with no
+      // `@config` directive, so this JS config is never loaded and none of the
+      // named utilities below are emitted. Classes referencing them (`z-status`,
+      // `rounded-pill`, `text-sm-compact`, …) silently produce no CSS.
+      // For z-index specifically, use an arbitrary value pointing at the
+      // overlay scale on :root — `z-[var(--erp-z-toast)]` — not a name here.
       zIndex: {
         'sticky': '1',
         'modal': '4',

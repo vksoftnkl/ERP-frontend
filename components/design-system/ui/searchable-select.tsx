@@ -15,6 +15,7 @@ import { cx } from "@/components/design-system/cx";
 import { focusNextInteractiveControl } from "@/components/design-system/ui/focus-next-control";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
+import { Z_POPUP } from "@/lib/z-index";
 export type SearchableSelectProps = {
   id?: string;
   value: string;
@@ -31,7 +32,6 @@ export type SearchableSelectProps = {
 };
 const DEFAULT_DROPDOWN_MAX_HEIGHT = 280;
 const DROPDOWN_VIEWPORT_PADDING = 8;
-const DROPDOWN_PORTAL_Z_INDEX = 2500;
 function normalizeSearchValue(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -112,7 +112,7 @@ export function SearchableSelect({
       right: "auto",
       width: `${dropdownWidth}px`,
       maxHeight: `${Math.min(maxDropdownHeight, Math.max(120, availableHeight))}px`,
-      zIndex: DROPDOWN_PORTAL_Z_INDEX,
+      zIndex: Z_POPUP,
       ...(nextPlacement === "up"
         ? {
             top: "auto",

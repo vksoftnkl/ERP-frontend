@@ -1,7 +1,10 @@
 .headerShell {
   position: sticky;
   top: 0;
-  z-index: 150;
+  /* Creates the stacking context every header menu/popover lives in, so the
+     small z-indexes further down this file are local to the header and never
+     compete with app overlays. */
+  z-index: var(--erp-z-app-header);
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
 }
 

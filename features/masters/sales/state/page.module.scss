@@ -451,7 +451,7 @@
   position: fixed;
   top: auto;
   left: auto;
-  z-index: 10000;
+  z-index: var(--erp-z-popup);
 }
 .masterSearchSettingsItem {
   width: 100%;

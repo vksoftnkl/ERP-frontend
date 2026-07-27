@@ -510,7 +510,7 @@
   inset: 0;
   /* Matches the shared modal shell (dynamic-modal-form) so audit detail stacks
      above the app header, which climbs to 200. */
-  z-index: var(--erp-modal-overlay-z-index, 320);
+  z-index: var(--erp-modal-overlay-z-index, var(--erp-z-modal));
   display: flex;
   align-items: center;
   justify-content: center;

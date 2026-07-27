@@ -17,6 +17,7 @@ import {
 import WidgetVisibilityTree, {
   type WidgetTreeSectionView,
 } from "@/features/masters/shared/widget-visibility-tree";
+import { useVisibleSettingsContextMenu } from "@/features/masters/shared/use-visible-settings-context-menu";
 import {
   applyWidgetFieldConfig,
   buildControllableFieldNames,
@@ -755,22 +756,13 @@ export default function AreaMasterPage() {
     }
   }, [getWidgetConfigTree]);
 
-  // Hijack right-clicks that land inside the open create/update modal only; clicks
-  // elsewhere keep the browser's native context menu. Opens the Visible Settings
-  // modal (an ERPDynamicModalForm) on top via its controller.
-  useEffect(() => {
-    const handleContextMenu = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target?.closest('[role="dialog"][aria-modal="true"]')) {
-        return;
-      }
-      event.preventDefault();
-      void loadConfigTree();
-      visibilityControllerRef.current?.openModal("visibility");
-    };
-    window.addEventListener("contextmenu", handleContextMenu);
-    return () => window.removeEventListener("contextmenu", handleContextMenu);
-  }, [loadConfigTree]);
+  // Right-clicking inside the open create/update modal opens the Visible Settings
+  // modal (an ERPDynamicModalForm) on top via its controller; right-clicks
+  // elsewhere keep the browser's native context menu.
+  useVisibleSettingsContextMenu({
+    loadConfigTree,
+    openVisibilitySettings: () => visibilityControllerRef.current?.openModal("visibility"),
+  });
 
   const handleToggleField = useCallback((backendName: string, checked: boolean) => {
     const key = backendName.toLowerCase();

@@ -131,7 +131,7 @@
   right: auto;
   bottom: auto;
   left: auto;
-  z-index: 10000;
+  z-index: var(--erp-z-popup);
   min-width: 11.375rem;
   border: 1px solid #d9e2ec;
   border-radius: var(--erp-radius);
@@ -386,7 +386,9 @@
 }
 .searchSelectList {
   position: fixed;
-  z-index: 360;
+  // Portaled to <body>, so it has to clear the modal that hosts this editor
+  // rather than merely the grid it sits in.
+  z-index: var(--erp-z-popup);
   min-width: 8rem;
   border: 1px solid #cbd5e1;
   border-radius: var(--erp-radius);

@@ -36,6 +36,7 @@ import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form
 import { MasterIcon } from "@/components/design-system/icons/master-icons";
 import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons";
 import { FiSearch } from "react-icons/fi";
+import { Z_MODAL_NESTED } from "@/lib/z-index";
 export type {
   CrudMasterApiEndpoints,
   CrudMasterAuditHistoryConfig,
@@ -4014,7 +4015,7 @@ export default function CrudMasterPage({
           style={{
             "--erp-modal-accent": "var(--primary, #7b1515)",
             "--erp-modal-accent-soft-ring": "rgba(123, 21, 21, 0.2)",
-            "--erp-modal-overlay-z-index": 330,
+            "--erp-modal-overlay-z-index": Z_MODAL_NESTED,
           } as CSSProperties}
         >
           <div

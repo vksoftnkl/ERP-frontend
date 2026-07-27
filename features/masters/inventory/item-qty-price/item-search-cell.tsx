@@ -2,6 +2,7 @@
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLazyGetItemOptionsQuery } from "@/store/api/lookupsApi";
+import { Z_POPUP } from "@/lib/z-index";
 import styles from "./item-qty-price.module.scss";
 type ItemOption = { value: string; label: string };
 type ItemSearchCellProps = {
@@ -42,7 +43,7 @@ export function ItemSearchCell({ placeholder, selectedLabel, onSelect }: ItemSea
       left: `${rect.left}px`,
       top: `${rect.bottom + 2}px`,
       width: `${Math.max(rect.width, 220)}px`,
-      zIndex: 2500,
+      zIndex: Z_POPUP,
     });
   }, []);
   useLayoutEffect(() => {
