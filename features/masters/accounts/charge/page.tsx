@@ -92,6 +92,11 @@ const ROLE_OPTIONS: ERPDynamicSelectOption[] = [
 const METHOD_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "FIXED", label: "Fixed" },
   { value: "PERCENT", label: "Percent" },
+  { value: "QTY", label: "Quantity" },
+  { value: "NET_QTY", label: "Net Quantity" },
+  { value: "KG", label: "Kg" },
+  { value: "QTL", label: "Quintal" },
+  { value: "TON", label: "Ton" },
 ];
 const TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "ADD", label: "Add" },

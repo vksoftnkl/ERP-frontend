@@ -3,7 +3,6 @@
    Audit Logs (features/masters/reports/audit-logs/page.module.scss) so the
    record's change history reads as the same family. The accent tracks
    --primary rather than hardcoding the maroon. */
-
 .overlay {
   position: fixed;
   inset: 0;
@@ -17,7 +16,6 @@
   padding: 16px;
   background: rgba(0, 0, 0, 0.45);
 }
-
 .modal {
   --accent: var(--primary, #7b1515);
   --accent-dk: var(--primary-hover, #611010);
@@ -35,12 +33,13 @@
   --err: #b00020;
   --warn: #9a6700;
   --info: #0b5cad;
-
   /* globals.css forces `border-radius: var(--erp-radius) !important` onto every
      button/input/select/table; re-scope the variable so the skin's tighter
      corners win without fighting that !important. */
   --erp-radius: 2px;
-
+  /* Accordion column track: caret · # · when · action · user · counts ·
+     sections. Shared by the list header and every group row. */
+  --group-cols: 16px 26px 132px auto 120px 132px 1fr;
   display: flex;
   flex-direction: column;
   width: min(860px, 96vw);
@@ -52,7 +51,6 @@
   font-family: "Segoe UI", system-ui, Arial, sans-serif;
   font-size: 13px;
 }
-
 /* ── Header (accent bar) ──────────────────────────────────── */
 .head {
   flex: none;
@@ -88,7 +86,6 @@
     background: rgba(255, 255, 255, 0.18);
   }
 }
-
 /* ── Summary strip ────────────────────────────────────────── */
 .summary {
   flex: none;
@@ -100,7 +97,6 @@
   border-bottom: 1px solid var(--line2);
   color: var(--ink2);
   font-size: 12.5px;
-
   b {
     color: var(--ink);
     font-weight: 600;
@@ -110,68 +106,6 @@
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
 }
-
-/* ── Sub-entity tabs (composite screens) ──────────────────── */
-.tabBar {
-  flex: none;
-  display: flex;
-  align-items: stretch;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: 6px 12px 0;
-  border-bottom: 1px solid var(--line2);
-  background: var(--paper);
-}
-.tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border: 1px solid transparent;
-  border-bottom: 0;
-  background: none;
-  color: var(--ink2);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1.4;
-  cursor: pointer;
-
-  &:hover {
-    background: var(--hover);
-    color: var(--ink);
-  }
-}
-.tabActive {
-  border-color: var(--line2);
-  border-bottom-color: var(--paper);
-  background: var(--paper);
-  color: var(--accent);
-  /* Sit on top of the .tabBar bottom border so the active tab reads as joined
-     to the panel below it. */
-  margin-bottom: -1px;
-
-  &:hover {
-    background: var(--paper);
-    color: var(--accent);
-  }
-}
-.tabCount {
-  min-width: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: var(--bg);
-  color: var(--ink3);
-  font-size: 11px;
-  font-weight: 700;
-  text-align: center;
-
-  .tabActive & {
-    background: var(--sel);
-    color: var(--accent);
-  }
-}
-
 /* ── Error strip ──────────────────────────────────────────── */
 .errorBox {
   flex: none;
@@ -200,101 +134,182 @@
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-
   &:hover {
     background: var(--sel);
   }
 }
-
-/* ── Grid ─────────────────────────────────────────────────── */
+/* ── Accordion (one item per date/time) ───────────────────── */
 .gridWrap {
   flex: 1;
   min-height: 0;
   overflow: auto;
 }
-.grid {
-  width: 100%;
-  border-collapse: collapse;
+.stateBox {
+  margin: 0;
+  padding: 34px 12px;
+  color: var(--ink3);
   font-size: 12.5px;
-
-  /* `:where(th)` in globals.css forces header colour/weight with !important;
-     these plain-class rules out-specify it. */
-  th {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    padding: 5px 8px;
-    border: 1px solid var(--line2);
-    border-top: 0;
-    background: var(--head) !important;
-    color: var(--ink2) !important;
-    font-weight: 600 !important;
-    font-size: 12.5px;
-    text-align: left;
-    white-space: nowrap;
-  }
-  td {
-    padding: 4px 8px;
-    border: 1px solid var(--line2);
-    line-height: 1.45;
-    vertical-align: top;
-  }
+  text-align: center;
 }
-.colSno {
-  width: 40px;
+.accordion {
+  display: flex;
+  flex-direction: column;
 }
-.colDate {
-  width: 140px;
+/* Single-entity masters drop the sections track; the counts column takes the
+   remaining width instead. */
+.accordionPlain {
+  --group-cols: 16px 26px 132px auto 120px 1fr;
 }
-.colAction {
-  width: 96px;
+/* Column labels for the collapsed group rows; shares --group-cols with
+   `.groupHead` so the two stay aligned. */
+.listHead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: var(--group-cols);
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--line2);
+  background: var(--head);
+  color: var(--ink2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
-.colUser {
-  width: 120px;
+.listHeadNum {
+  text-align: right;
 }
-.colChanges {
-  width: 116px;
+.listHeadEnd {
+  text-align: right;
 }
-.row {
+.group {
+  border-bottom: 1px solid var(--line2);
   background: var(--paper);
-
-  &.clickable {
-    cursor: pointer;
-  }
+}
+.groupHead {
+  display: grid;
+  grid-template-columns: var(--group-cols);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   &:hover {
     background: var(--hover);
   }
-}
-.rowOpen {
-  background: var(--sel);
-
-  &:hover {
+  .groupOpen & {
     background: var(--sel);
   }
-  td {
-    border-bottom-color: #e0c7c7;
-  }
 }
-.cellSno {
+.caret {
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1;
+}
+.groupIndex {
   color: var(--ink3);
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
   text-align: right;
 }
-.cellMono {
+.groupWhen {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   font-family: Consolas, "Courier New", monospace;
-  font-size: 12px;
   white-space: nowrap;
 }
-.userMuted {
-  color: var(--ink3);
+.groupDate {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
 }
-.stateCell {
-  padding: 34px 8px !important;
-  color: var(--ink3);
-  text-align: center;
+.groupTime {
+  color: var(--ink2);
+  font-size: 11.5px;
 }
+.groupBadges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.groupUser {
+  overflow: hidden;
+  color: var(--ink2);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.groupCount {
+  color: var(--ink3);
+  font-size: 11.5px;
+  white-space: nowrap;
+  /* Last column when there is no sections track — track it to the right edge
+     so it stays under its header label. */
+  .accordionPlain & {
+    text-align: right;
+  }
+}
+.groupSections {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.sectionChip {
+  padding: 1px 7px;
+  border: 1px solid var(--line2);
+  background: var(--bg);
+  color: var(--ink2);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* ── Expanded group body ──────────────────────────────────── */
+.groupBody {
+  padding: 4px 12px 10px 44px;
+  border-top: 1px solid #e0c7c7;
+  background: #fbfbf8;
+}
+.entry {
+  padding: 8px 0;
 
+  & + & {
+    border-top: 1px solid #efece4;
+  }
+}
+.entryHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.entryLabel {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.entryNotes {
+  color: var(--ink2);
+  font-size: 11.5px;
+}
+.entryEmpty {
+  margin: 0;
+  color: var(--ink3);
+  font-size: 11.5px;
+}
 /* ── Action badges (family palette) ───────────────────────── */
 .badge {
   display: inline-block;
@@ -332,32 +347,7 @@
   background: var(--bg);
   color: var(--ink2);
 }
-
-/* ── Changes cell ─────────────────────────────────────────── */
-.diffBtn {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-
-  &:hover {
-    text-decoration: underline;
-  }
-}
-.noDiff {
-  color: var(--ink3);
-  font-size: 12px;
-}
-
-/* ── Expanded diff row ────────────────────────────────────── */
-.detailRow td {
-  padding: 8px 12px 10px 44px;
-  background: #fbfbf8;
-}
+/* ── Diff table (inside an expanded group) ────────────────── */
 /* A diff leaf can hold a whole array (e.g. a table's `columns`), which
    stringifies into many lines. Bound the panel and let it scroll so one
    expanded row can never push the grid off-screen. */
@@ -368,7 +358,6 @@
 .diffTable {
   border-collapse: collapse;
   font-size: 12px;
-
   th {
     position: sticky;
     top: 0;
@@ -412,7 +401,6 @@
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-
 /* ── Footer ───────────────────────────────────────────────── */
 .footer {
   flex: none;
@@ -435,7 +423,6 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-
   &:hover {
     background: var(--sel);
   }
@@ -459,7 +446,6 @@
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-
   &:hover:not(:disabled) {
     border-color: var(--accent);
     background: var(--sel);
@@ -478,7 +464,6 @@
   font: inherit;
   font-size: 13px;
   cursor: pointer;
-
   &:hover {
     background: var(--bg);
   }

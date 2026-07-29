@@ -115,27 +115,28 @@ function buildRecordHistoryQuery(
     include_total: "true",
   };
 }
-const HISTORY_ALL_TAB = "__all__";
-/* Page size the modal reads with when it has to pull the whole history to
-   filter it into tabs (server allows up to 100 per page), plus a hard stop so a
-   record with a runaway history can never spin an unbounded fetch loop. */
+/* Page size the modal reads with when it has to pull the whole history in one
+   go (server allows up to 100 per page), plus a hard stop so a record with a
+   runaway history can never spin an unbounded fetch loop. */
 const MODAL_FETCH_ALL_LIMIT = 100;
 const MODAL_FETCH_ALL_MAX_PAGES = 50;
-type HistorySubEntityTab = { screen: string; label: string };
+/* Accordion groups shown per page once the whole history is in memory. */
+const MODAL_GROUPS_PER_PAGE = 10;
 /* Composite screens whose audit history the server fans out across several
    child screens (mirrors the server's RELATED_AUDIT_SCREENS_BY_SCREEN_NAME).
-   For these the merged history is grouped under one tab per sub-entity, keyed on
-   each row's `screen_name` — the reliable discriminator (`log_table_name` is a
-   free-text label). Any master not listed here keeps the plain single-list,
+   Their rows are merged into one date/time-keyed list; this map only supplies
+   the short label each sub-entity carries inside a group, keyed on the row's
+   `screen_name` — the reliable discriminator (`log_table_name` is a free-text
+   label). Any master not listed here keeps the plain single-list,
    server-paginated view. */
-const HISTORY_SUB_ENTITY_TABS: Record<string, HistorySubEntityTab[]> = {
-  "Item Master": [
-    { screen: "Item Master", label: "Item" },
-    { screen: "Item Unit Conversion Master", label: "Unit Conversion" },
-    { screen: "Item EAN Code Master", label: "EAN Codes" },
-    { screen: "Item Reorder Master", label: "Reorders" },
-    { screen: "Item Price Master", label: "Price List" },
-  ],
+const HISTORY_SUB_ENTITY_LABELS: Record<string, Record<string, string>> = {
+  "Item Master": {
+    "Item Master": "Item",
+    "Item Unit Conversion Master": "Unit Conversion",
+    "Item EAN Code Master": "EAN Codes",
+    "Item Reorder Master": "Reorders",
+    "Item Price Master": "Price List",
+  },
 };
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-IN", {
   dateStyle: "medium",
@@ -1048,17 +1049,46 @@ type ModalDiffRow = {
   old: string;
   new: string;
 };
-type ModalHistoryRowView = {
+/* One audit row inside a date/time group (e.g. the EAN-code write of a save). */
+type ModalHistoryEntry = {
   id: string;
-  screen: string;
-  date: string;
+  label: string;
   actionLabel: string;
   badgeClass: string;
-  user: string;
-  userKnown: boolean;
   notes: string;
   diff: ModalDiffRow[];
 };
+/* Every audit row written at the same date/time, folded into one accordion
+   item — a single save fans out across the record's child tables, and the user
+   reads that as one change, not five. */
+type ModalHistoryGroup = {
+  id: string;
+  dateLabel: string;
+  timeLabel: string;
+  users: string[];
+  actions: Array<{ label: string; badgeClass: string }>;
+  sections: string[];
+  entries: ModalHistoryEntry[];
+  changeCount: number;
+};
+/* Rows are folded to the minute — that is the precision the modal prints, and
+   the child writes of one save land within the same minute. */
+function getHistoryGroupKey(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  date.setSeconds(0, 0);
+  return String(date.getTime());
+}
+function resolveSubEntityLabel(parentScreen: string, rowScreen: string): string {
+  const normalizedRowScreen = normalizeViewerValue(rowScreen);
+  const labels = HISTORY_SUB_ENTITY_LABELS[parentScreen];
+  if (labels?.[normalizedRowScreen]) {
+    return labels[normalizedRowScreen];
+  }
+  return normalizedRowScreen.replace(/\s*Master$/i, "").trim() || "Record";
+}
 function buildModalDiffRows(changedFields: unknown): ModalDiffRow[] {
   return flattenAuditDiff(changedFields).map((row) => ({
     field: row.field,
@@ -1080,68 +1110,97 @@ function getModalBadgeClass(action: string): string {
       return styles.badgeNeutral;
   }
 }
-function ModalHistoryRow({
-  row,
+function ModalHistoryGroupRow({
+  group,
   index,
   open,
+  showSections,
   onToggle,
 }: {
-  row: ModalHistoryRowView;
+  group: ModalHistoryGroup;
   index: number;
   open: boolean;
+  showSections: boolean;
   onToggle: () => void;
 }) {
-  const hasDiff = row.diff.length > 0;
   return (
-    <>
-      <tr
-        className={cx(styles.row, hasDiff && styles.clickable, open && styles.rowOpen)}
-        onClick={hasDiff ? onToggle : undefined}
+    <section className={cx(styles.group, open && styles.groupOpen)}>
+      <button
+        aria-expanded={open}
+        className={styles.groupHead}
+        type="button"
+        onClick={onToggle}
       >
-        <td className={styles.cellSno}>{index}</td>
-        <td className={styles.cellMono}>{row.date}</td>
-        <td>
-          <span className={cx(styles.badge, row.badgeClass)}>{row.actionLabel}</span>
-        </td>
-        <td className={row.userKnown ? undefined : styles.userMuted}>{row.user}</td>
-        <td>
-          {hasDiff ? (
-            <span className={styles.diffBtn}>
-              {open ? "▾" : "▸"} {row.diff.length} field{row.diff.length > 1 ? "s" : ""}
+        <span className={styles.caret} aria-hidden="true">
+          {open ? "▾" : "▸"}
+        </span>
+        <span className={styles.groupIndex}>{index}</span>
+        <span className={styles.groupWhen}>
+          <span className={styles.groupDate}>{group.dateLabel}</span>
+          <span className={styles.groupTime}>{group.timeLabel}</span>
+        </span>
+        <span className={styles.groupBadges}>
+          {group.actions.map((action) => (
+            <span className={cx(styles.badge, action.badgeClass)} key={action.label}>
+              {action.label}
             </span>
-          ) : (
-            <span className={styles.noDiff}>—</span>
-          )}
-        </td>
-        <td>{row.notes ? row.notes : <span className={styles.userMuted}>—</span>}</td>
-      </tr>
-      {open && hasDiff ? (
-        <tr className={styles.detailRow}>
-          <td colSpan={6}>
-            <div className={styles.detailScroll}>
-              <table className={styles.diffTable}>
-                <thead>
-                  <tr>
-                    <th style={{ width: 190 }}>Field</th>
-                    <th style={{ width: 200 }}>Old Value</th>
-                    <th>New Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {row.diff.map((diffRow, diffIndex) => (
-                    <tr key={`${diffRow.field}-${diffIndex + 1}`}>
-                      <td className={styles.diffField}>{diffRow.field}</td>
-                      <td className={styles.diffOld}>{diffRow.old}</td>
-                      <td className={styles.diffNew}>{diffRow.new}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          ))}
+        </span>
+        <span className={styles.groupUser}>{group.users.join(", ") || "—"}</span>
+        <span className={styles.groupCount}>
+          {group.changeCount} field{group.changeCount === 1 ? "" : "s"} ·{" "}
+          {group.entries.length} record{group.entries.length === 1 ? "" : "s"}
+        </span>
+        {/* Single-entity masters repeat one label on every row, so the column
+            only earns its space on composite screens. */}
+        {showSections ? (
+          <span className={styles.groupSections}>
+            {group.sections.map((section) => (
+              <span className={styles.sectionChip} key={section}>
+                {section}
+              </span>
+            ))}
+          </span>
+        ) : null}
+      </button>
+      {open ? (
+        <div className={styles.groupBody}>
+          {group.entries.map((entry) => (
+            <div className={styles.entry} key={entry.id}>
+              <div className={styles.entryHead}>
+                <span className={styles.entryLabel}>{entry.label}</span>
+                <span className={cx(styles.badge, entry.badgeClass)}>{entry.actionLabel}</span>
+                {entry.notes ? <span className={styles.entryNotes}>{entry.notes}</span> : null}
+              </div>
+              {entry.diff.length > 0 ? (
+                <div className={styles.detailScroll}>
+                  <table className={styles.diffTable}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 190 }}>Field</th>
+                        <th style={{ width: 200 }}>Old Value</th>
+                        <th>New Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entry.diff.map((diffRow, diffIndex) => (
+                        <tr key={`${diffRow.field}-${diffIndex + 1}`}>
+                          <td className={styles.diffField}>{diffRow.field}</td>
+                          <td className={styles.diffOld}>{diffRow.old}</td>
+                          <td className={styles.diffNew}>{diffRow.new}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className={styles.entryEmpty}>No field-level changes were recorded.</p>
+              )}
             </div>
-          </td>
-        </tr>
+          ))}
+        </div>
       ) : null}
-    </>
+    </section>
   );
 }
 type RecordHistoryModalContentProps = Omit<RecordHistoryModalProps, "isOpen">;
@@ -1158,11 +1217,11 @@ function RecordHistoryModalContent({
   const [logs, setLogs] = useState<AuditLogListItem[]>([]);
   const [meta, setMeta] = useState<ListMeta>(EMPTY_META);
   const [page, setPage] = useState(DEFAULT_PAGE);
-  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
-  const [activeTab, setActiveTab] = useState<string>(HISTORY_ALL_TAB);
-  const tabConfig = HISTORY_SUB_ENTITY_TABS[screen] ?? null;
-  const isTabbed = tabConfig !== null;
+  /* Composite screens are read whole so every sub-entity write of one save can
+     land in the same date/time group; plain masters stay server-paginated. */
+  const isComposite = Boolean(HISTORY_SUB_ENTITY_LABELS[screen]);
   const { getAll: listAuditLogs, loading, error } = useApi<
     ApiSuccessResponse<AuditLogListItem[], ListMeta>
   >(AUDIT_LOG_LIST_ENDPOINT, {
@@ -1180,9 +1239,9 @@ function RecordHistoryModalContent({
       return;
     }
     try {
-      if (isTabbed) {
+      if (isComposite) {
         /* The server merges the composite screen's child histories into one
-           server-paginated stream, so tab filtering needs the whole set in
+           server-paginated stream, so date/time grouping needs the whole set in
            memory. Page through it (100 at a time) and paginate client-side. */
         const collected: AuditLogListItem[] = [];
         let pageNo = DEFAULT_PAGE;
@@ -1234,17 +1293,13 @@ function RecordHistoryModalContent({
     } catch {
       // useApi already exposes the error state.
     }
-  }, [hasContext, isTabbed, listAuditLogs, page, recordPkValue, screen]);
+  }, [hasContext, isComposite, listAuditLogs, page, recordPkValue, screen]);
   useEffect(() => {
     void fetchHistory();
   }, [fetchHistory, refreshKey]);
   useEffect(() => {
-    setOpenRows(new Set());
-  }, [page, refreshKey, activeTab]);
-  useEffect(() => {
-    // Tabs paginate client-side; jump back to the first page when switching.
-    setPage(DEFAULT_PAGE);
-  }, [activeTab]);
+    setOpenGroups(new Set());
+  }, [page, refreshKey]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -1254,61 +1309,69 @@ function RecordHistoryModalContent({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-  const rows = useMemo<ModalHistoryRowView[]>(
-    () =>
-      logs.map((log) => {
-        const user = getRowUserLabel(log);
-        return {
-          id: log.log_id,
-          screen: normalizeViewerValue(log.screen_name),
-          date: formatDateTime(log.log_date),
-          actionLabel: formatActionLabel(log.log_action),
-          badgeClass: getModalBadgeClass(log.log_action),
-          user,
-          userKnown: user !== "-",
-          notes: log.log_notes?.trim() ?? "",
-          diff: buildModalDiffRows(log.log_changed_fields),
+  /* One accordion item per date/time: every audit row the server returned for
+     that minute — item, unit conversion, EAN code, reorder, price — is folded
+     into a single group instead of standing as its own line. */
+  const groups = useMemo<ModalHistoryGroup[]>(() => {
+    const byKey = new Map<string, ModalHistoryGroup>();
+    for (const log of logs) {
+      const key = getHistoryGroupKey(log.log_date);
+      let group = byKey.get(key);
+      if (!group) {
+        group = {
+          id: key,
+          dateLabel: formatDateOnly(log.log_date),
+          timeLabel: formatTimeOnly(log.log_date),
+          users: [],
+          actions: [],
+          sections: [],
+          entries: [],
+          changeCount: 0,
         };
-      }),
-    [logs],
-  );
-  const tabCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const row of rows) {
-      counts.set(row.screen, (counts.get(row.screen) ?? 0) + 1);
+        byKey.set(key, group);
+      }
+      const diff = buildModalDiffRows(log.log_changed_fields);
+      const actionLabel = formatActionLabel(log.log_action);
+      const label = resolveSubEntityLabel(screen, log.screen_name);
+      const user = getRowUserLabel(log);
+      group.entries.push({
+        id: log.log_id,
+        label,
+        actionLabel,
+        badgeClass: getModalBadgeClass(log.log_action),
+        notes: log.log_notes?.trim() ?? "",
+        diff,
+      });
+      group.changeCount += diff.length;
+      if (user !== "-" && !group.users.includes(user)) {
+        group.users.push(user);
+      }
+      if (!group.actions.some((action) => action.label === actionLabel)) {
+        group.actions.push({ label: actionLabel, badgeClass: getModalBadgeClass(log.log_action) });
+      }
+      if (!group.sections.includes(label)) {
+        group.sections.push(label);
+      }
     }
-    return counts;
-  }, [rows]);
-  /* Rows the active tab shows. Non-tabbed masters and the "All" tab show
-     everything the fetch returned; a sub-entity tab filters by screen_name. */
-  const filteredRows = useMemo(() => {
-    if (!isTabbed || activeTab === HISTORY_ALL_TAB) {
-      return rows;
-    }
-    return rows.filter((row) => row.screen === activeTab);
-  }, [rows, isTabbed, activeTab]);
-  /* Tabbed mode holds the whole history in memory, so it paginates the filtered
-     rows client-side; the plain view keeps the server's page as-is. */
-  const clientTotalPages = Math.max(1, Math.ceil(filteredRows.length / DEFAULT_PAGE_SIZE));
-  const effectiveTotalPages = isTabbed ? clientTotalPages : safeTotalPages;
-  const startIndex = isTabbed
-    ? (page - 1) * DEFAULT_PAGE_SIZE
-    : (page - 1) * (meta.limit || DEFAULT_PAGE_SIZE);
-  const displayRows = isTabbed
-    ? filteredRows.slice(startIndex, startIndex + DEFAULT_PAGE_SIZE)
-    : rows;
+    return [...byKey.values()];
+  }, [logs, screen]);
+  /* Composite mode holds the whole history in memory, so it paginates the
+     groups client-side; the plain view keeps the server's page as-is. */
+  const clientTotalPages = Math.max(1, Math.ceil(groups.length / MODAL_GROUPS_PER_PAGE));
+  const effectiveTotalPages = isComposite ? clientTotalPages : safeTotalPages;
+  const startIndex = isComposite ? (page - 1) * MODAL_GROUPS_PER_PAGE : 0;
+  const displayGroups = isComposite
+    ? groups.slice(startIndex, startIndex + MODAL_GROUPS_PER_PAGE)
+    : groups;
   useEffect(() => {
     if (page > effectiveTotalPages) {
       setPage(effectiveTotalPages);
     }
   }, [page, effectiveTotalPages]);
-  const withDiff = useMemo(
-    () => displayRows.filter((row) => row.diff.length > 0),
-    [displayRows],
-  );
-  const allOpen = withDiff.length > 0 && withDiff.every((row) => openRows.has(row.id));
-  const toggleRow = useCallback((id: string) => {
-    setOpenRows((prev) => {
+  const allOpen =
+    displayGroups.length > 0 && displayGroups.every((group) => openGroups.has(group.id));
+  const toggleGroup = useCallback((id: string) => {
+    setOpenGroups((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
@@ -1319,8 +1382,8 @@ function RecordHistoryModalContent({
     });
   }, []);
   const toggleAll = useCallback(() => {
-    setOpenRows(allOpen ? new Set() : new Set(withDiff.map((row) => row.id)));
-  }, [allOpen, withDiff]);
+    setOpenGroups(allOpen ? new Set() : new Set(displayGroups.map((group) => group.id)));
+  }, [allOpen, displayGroups]);
   const totalRecords = meta.total || logs.length;
   const newestLog = logs[0] ?? null;
   const createdLog = useMemo(
@@ -1367,28 +1430,6 @@ function RecordHistoryModalContent({
             </span>
           ) : null}
         </div>
-        {isTabbed && tabConfig ? (
-          <div className={styles.tabBar} role="tablist" aria-label="History categories">
-            {[{ screen: HISTORY_ALL_TAB, label: "All" }, ...tabConfig].map((tab) => {
-              const active = activeTab === tab.screen;
-              const count =
-                tab.screen === HISTORY_ALL_TAB ? rows.length : tabCounts.get(tab.screen) ?? 0;
-              return (
-                <button
-                  key={tab.screen}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  className={cx(styles.tab, active && styles.tabActive)}
-                  onClick={() => setActiveTab(tab.screen)}
-                >
-                  {tab.label}
-                  <span className={styles.tabCount}>{count}</span>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
         {error ? (
           <div className={styles.errorBox}>
             <p className={styles.errorText}>{error}</p>
@@ -1402,58 +1443,46 @@ function RecordHistoryModalContent({
           </div>
         ) : null}
         <div className={styles.gridWrap}>
-          <table className={styles.grid}>
-            <thead>
-              <tr>
-                <th className={styles.colSno}>#</th>
-                <th className={styles.colDate}>Date / Time</th>
-                <th className={styles.colAction}>Action</th>
-                <th className={styles.colUser}>User</th>
-                <th className={styles.colChanges}>Changes</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!hasContext ? (
-                <tr>
-                  <td className={styles.stateCell} colSpan={6}>
-                    Open this from a record&apos;s History action to load its change history.
-                  </td>
-                </tr>
-              ) : loading && logs.length === 0 ? (
-                <tr>
-                  <td className={styles.stateCell} colSpan={6}>
-                    Loading record history…
-                  </td>
-                </tr>
-              ) : displayRows.length === 0 ? (
-                <tr>
-                  <td className={styles.stateCell} colSpan={6}>
-                    {isTabbed && activeTab !== HISTORY_ALL_TAB
-                      ? "No changes in this category."
-                      : "No history was found for this record."}
-                  </td>
-                </tr>
-              ) : (
-                displayRows.map((row, rowIndex) => (
-                  <ModalHistoryRow
-                    key={row.id}
-                    row={row}
-                    index={startIndex + rowIndex + 1}
-                    open={openRows.has(row.id)}
-                    onToggle={() => toggleRow(row.id)}
-                  />
-                ))
-              )}
-            </tbody>
-          </table>
+          {!hasContext ? (
+            <p className={styles.stateBox}>
+              Open this from a record&apos;s History action to load its change history.
+            </p>
+          ) : loading && logs.length === 0 ? (
+            <p className={styles.stateBox}>Loading record history…</p>
+          ) : displayGroups.length === 0 ? (
+            <p className={styles.stateBox}>No history was found for this record.</p>
+          ) : (
+            <div className={cx(styles.accordion, !isComposite && styles.accordionPlain)}>
+              <div className={styles.listHead} aria-hidden="true">
+                <span />
+                <span className={styles.listHeadNum}>#</span>
+                <span>Date / Time</span>
+                <span>Action</span>
+                <span>User</span>
+                <span className={isComposite ? undefined : styles.listHeadEnd}>Changes</span>
+                {isComposite ? <span className={styles.listHeadEnd}>Sections</span> : null}
+              </div>
+              {displayGroups.map((group, groupIndex) => (
+                <ModalHistoryGroupRow
+                  key={group.id}
+                  group={group}
+                  index={startIndex + groupIndex + 1}
+                  open={openGroups.has(group.id)}
+                  showSections={isComposite}
+                  onToggle={() => toggleGroup(group.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
         <div className={styles.footer}>
           <span>
-            {isTabbed ? filteredRows.length : totalRecords} history record
-            {(isTabbed ? filteredRows.length : totalRecords) === 1 ? "" : "s"}
+            {totalRecords} history record{totalRecords === 1 ? "" : "s"}
+            {/* Only composite mode holds the whole history, so only there is the
+                group count a total rather than a per-page figure. */}
+            {isComposite ? ` in ${groups.length} change${groups.length === 1 ? "" : "s"}` : ""}
           </span>
-          {withDiff.length > 0 ? (
+          {displayGroups.length > 0 ? (
             <button className={styles.expandBtn} type="button" onClick={toggleAll}>
               {allOpen ? "Collapse all" : "Expand all changes"}
             </button>
