@@ -1,0 +1,1586 @@
+<meta charset="utf-8">
+<title>Quotation Module — Developer Guide</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm 16mm 14mm; }
+
+  :root {
+    --ink: #16191d;
+    --muted: #5b6570;
+    --line: #d5dae0;
+    --line-soft: #e8ecf0;
+    --accent: #1f4e79;
+    --accent-soft: #eef3f8;
+    --warn: #8a5a00;
+    --warn-soft: #fdf6e6;
+    --ok: #1d6b45;
+    --ok-soft: #eef7f2;
+    --code-bg: #f4f6f8;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "Noto Sans Tamil UI", "Noto Sans Tamil", "Noto Sans", "DejaVu Sans", sans-serif;
+    color: var(--ink);
+    font-size: 9.4pt;
+    line-height: 1.5;
+    margin: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* The Tamil face is last on purpose: none of the mono faces carry Tamil, and
+     without an explicit fallback Chromium picks a different one per text run —
+     which renders some Tamil words in the flow diagrams as tofu boxes. */
+  code, pre, .mono, td.mono {
+    font-family: "DejaVu Sans Mono", "Noto Sans Mono", "Liberation Mono",
+                 "Noto Sans Tamil UI", "Noto Sans Tamil", monospace;
+  }
+
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--line-soft);
+    border-radius: 2px;
+    padding: 0 2px;
+    font-size: 0.88em;
+    white-space: nowrap;
+  }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--line-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 3px;
+    padding: 7px 9px;
+    font-size: 7.9pt;
+    line-height: 1.42;
+    overflow: hidden;
+    white-space: pre;
+    break-inside: avoid;
+    margin: 8px 0;
+  }
+
+  pre code { background: none; border: 0; padding: 0; font-size: 1em; white-space: pre; }
+
+  /* ---------- cover ---------- */
+  .cover {
+    height: 246mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    break-after: page;
+    text-align: left;
+  }
+  .cover .kicker {
+    font-size: 9pt; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  .cover h1 {
+    font-size: 30pt; line-height: 1.15; margin: 10px 0 4px; border: 0; padding: 0;
+    color: var(--ink); font-weight: 700;
+  }
+  .cover .sub { font-size: 13pt; color: var(--muted); margin: 0 0 26px; }
+  .cover .rule { height: 3px; background: var(--accent); width: 70mm; margin: 0 0 26px; }
+  .cover dl { display: grid; grid-template-columns: 34mm 1fr; gap: 5px 12px; margin: 0; font-size: 9pt; }
+  .cover dt { color: var(--muted); }
+  .cover dd { margin: 0; }
+  .cover .foot { margin-top: 30px; font-size: 8.4pt; color: var(--muted); }
+
+  /* ---------- headings ---------- */
+  h2 {
+    font-size: 14.5pt;
+    margin: 0 0 12px;
+    padding: 0 0 5px;
+    border-bottom: 2px solid var(--accent);
+    color: var(--accent);
+    break-after: avoid;
+  }
+  h3 {
+    font-size: 11pt;
+    margin: 16px 0 6px;
+    color: var(--ink);
+    break-after: avoid;
+    border-left: 3px solid var(--accent);
+    padding-left: 7px;
+  }
+  h4 {
+    font-size: 9.6pt;
+    margin: 12px 0 4px;
+    color: var(--accent);
+    break-after: avoid;
+  }
+  section { break-before: page; }
+  section.first { break-before: auto; }
+
+  p { margin: 6px 0; text-align: justify; }
+  ul, ol { margin: 6px 0 6px 0; padding-left: 17px; }
+  li { margin: 3px 0; }
+
+  /* ---------- tables ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 10px;
+    font-size: 8.1pt;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-size: 8.4pt;
+    font-weight: 700;
+    color: var(--muted);
+    padding-bottom: 4px;
+  }
+  th {
+    background: var(--accent-soft);
+    text-align: left;
+    font-weight: 700;
+    border: 1px solid var(--line);
+    padding: 4px 6px;
+    vertical-align: top;
+  }
+  td {
+    border: 1px solid var(--line);
+    padding: 4px 6px;
+    vertical-align: top;
+  }
+  tr { break-inside: avoid; }
+  thead { display: table-header-group; }
+  td.mono, th.mono { font-size: 7.6pt; word-break: break-word; }
+  td.nowrap { white-space: nowrap; }
+  tbody tr:nth-child(even) td { background: #fafbfc; }
+
+  /* ---------- callouts ---------- */
+  .note, .warn, .ok {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 7px 10px;
+    margin: 9px 0;
+    break-inside: avoid;
+    font-size: 8.8pt;
+  }
+  .warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .ok { border-left-color: var(--ok); background: var(--ok-soft); }
+  .note p, .warn p, .ok p { margin: 3px 0; }
+  .note b, .warn b, .ok b { display: block; margin-bottom: 2px; font-size: 8.4pt; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .lead {
+    font-size: 10pt;
+    color: var(--muted);
+    border-left: 3px solid var(--line);
+    padding-left: 10px;
+    margin: 0 0 14px;
+  }
+
+  /* ---------- toc ---------- */
+  .toc { columns: 2; column-gap: 12mm; font-size: 9pt; }
+  .toc div { break-inside: avoid; margin: 3px 0; }
+  .toc .n { display: inline-block; width: 9mm; color: var(--accent); font-weight: 700; }
+  .toc .sub2 { padding-left: 9mm; color: var(--muted); font-size: 8.3pt; }
+
+  .kv { display: grid; grid-template-columns: 42mm 1fr; gap: 3px 10px; font-size: 8.7pt; margin: 8px 0; }
+  .kv dt { font-weight: 700; }
+  .kv dd { margin: 0; }
+
+  .tag {
+    display: inline-block; font-size: 7pt; font-weight: 700; letter-spacing: 0.05em;
+    padding: 1px 5px; border-radius: 8px; background: var(--accent-soft);
+    color: var(--accent); border: 1px solid #cddceb; vertical-align: 1px;
+  }
+  .tag.pure { background: var(--ok-soft); color: var(--ok); border-color: #c6e3d3; }
+  .tag.io { background: var(--warn-soft); color: var(--warn); border-color: #ecd9a8; }
+
+  .small { font-size: 8.2pt; color: var(--muted); }
+  hr { border: 0; border-top: 1px solid var(--line-soft); margin: 14px 0; }
+</style>
+
+<div class="cover">
+  <div class="kicker">ERP Client · Sales</div>
+  <h1>Quotation Entry<br>Developer Guide</h1>
+  <p class="sub">நோக்கம், code structure, function usage மற்றும் workflow</p>
+  <div class="rule"></div>
+  <dl>
+    <dt>Module</dt><dd><code>features/sales/quotation</code> + <code>domain/pricing</code></dd>
+    <dt>Route</dt><dd><code>/sales/quotation</code></dd>
+    <dt>State</dt><dd><code>store/slices/quotationSlice.ts</code> (Redux Toolkit)</dd>
+    <dt>API</dt><dd><code>store/api/quotationApi.ts</code> (RTK Query)</dd>
+    <dt>Size</dt><dd>~11,300 lines across 32 files (1,750 of them tests)</dd>
+    <dt>Origin</dt><dd>Port of the Qt desktop "Quotation Entry" screen</dd>
+    <dt>Date</dt><dd>2026-07-31</dd>
+  </dl>
+  <p class="foot">
+    விளக்கம் தமிழில்; file map, function reference மற்றும் API tables ஆங்கிலத்தில்.<br>
+    Generated from the source at <code>/home/vk/Dev/erp/ERP client</code>.
+  </p>
+</div>
+
+<!-- ==================== CONTENTS ==================== -->
+<section class="first">
+  <h2>பொருளடக்கம் · Contents</h2>
+  <div class="toc">
+    <div><span class="n">1</span> நோக்கம் — What this module is for</div>
+    <div><span class="n">2</span> File map — ஒவ்வொரு கோப்பின் வேலை</div>
+    <div><span class="n">3</span> Architecture — layers மற்றும் dependency direction</div>
+    <div><span class="n">4</span> The draft — state-இன் உடற்கூறு</div>
+    <div><span class="n">5</span> Redux slice — action reference</div>
+    <div><span class="n">6</span> Hook — thunk / network reference</div>
+    <div><span class="n">7</span> Pricing engine — function reference</div>
+    <div><span class="n">8</span> Payload — save மற்றும் load translation</div>
+    <div><span class="n">9</span> Validation</div>
+    <div><span class="n">10</span> Grid column configuration</div>
+    <div><span class="n">11</span> UI components</div>
+    <div><span class="n">12</span> Workflows — படிப்படியான ஓட்டம்</div>
+    <div><span class="n">13</span> Keyboard reference</div>
+    <div><span class="n">14</span> API endpoint reference</div>
+    <div><span class="n">15</span> Function index — முழு பட்டியல்</div>
+    <div><span class="n">16</span> Known gaps</div>
+  </div>
+
+  <h3>இந்த ஆவணத்தை எப்படிப் படிப்பது</h3>
+  <p>
+    முதன்முறை படிப்பவர் §1 → §3 → §12 (workflows) வரிசையில் படித்தால் முழுப் படமும் கிடைக்கும்.
+    ஒரு குறிப்பிட்ட function-ஐத் தேடுபவர் நேராக §15-க்குச் செல்லலாம். ஒரு bug-ஐத் துரத்துபவர்
+    §4 (state), §7 (arithmetic), §8 (wire) — இந்த மூன்றில் ஏதோ ஒன்றில் பதில் இருக்கும்.
+  </p>
+
+  <div class="note">
+    <b>ஒரே வாக்கியத்தில்</b>
+    <p>
+      Draft ஒன்றே mutable state; reducer pure; pricing engine pure; திரையின் கீழ்ப்பகுதி முழுவதும்
+      ஒரு <code>useMemo</code>. Qt-இல் இருந்த "ஒவ்வொரு handler-ம் <code>recalcDocumentTotals()</code>-இல்
+      முடிய வேண்டும்" என்ற ஒழுக்கம் port செய்யப்படவில்லை — <b>கணக்கு மட்டுமே</b> port செய்யப்பட்டது.
+    </p>
+  </div>
+</section>
+
+<!-- ==================== 1. PURPOSE ==================== -->
+<section>
+  <h2>1 · நோக்கம் — What this module is for</h2>
+
+  <p class="lead">
+    வாடிக்கையாளருக்கு ஒரு விலைப் புள்ளி (quotation / மதிப்பீடு) தயாரித்து, விலை நிர்ணயம் செய்து,
+    சேமித்து, பின்னர் திறந்து பார்க்க / திருத்த / நீக்கப் பயன்படும் திரை. இது Qt desktop client-இல்
+    இருந்த "Quotation Entry" திரையின் React port.
+  </p>
+
+  <h3>1.1 வணிக ரீதியாக இது என்ன செய்கிறது</h3>
+  <ul>
+    <li>ஒரு <b>customer</b>-ஐத் தேர்ந்தெடுத்து அவரது master-இல் இருந்து விலைநிலை (price level), பகுதி, salesman, மற்றும் freight / loading / unloading / promotion பொருந்துமா என்பதை எடுத்துக்கொள்கிறது.</li>
+    <li>பல <b>item வரிகள்</b> — ஒவ்வொன்றுக்கும் அளவு, unit, விலை, நான்கு வகை discount, GST / cess.</li>
+    <li>பல <b>additional charge வரிகள்</b> — freight, loading, cash discount, மற்றவை — ஒவ்வொன்றும் item வரிகளின் மேல் பரவுகிறது.</li>
+    <li>ஆவணம் முழுவதற்கும் <b>taxable, CGST/SGST/IGST, cess, round-off, bill</b> மற்றும் இரண்டு புள்ளிவிவரங்கள் (customer saving, company margin).</li>
+    <li><code>POST /quotations/create</code> மூலம் சேமிப்பு (ஒரே route create + update இரண்டுக்கும்).</li>
+  </ul>
+
+  <h3>1.2 இந்த port-இன் மைய வடிவமைப்பு முடிவு</h3>
+  <p>
+    Qt-இல் derived values grid cell-களில் <i>சேமிக்கப்பட்டன</i>, அதனால் ஒவ்வொரு handler-ம் கடைசியில்
+    <code>recalcDocumentTotals()</code>-ஐ சரியாக ஒருமுறை கூப்பிட வேண்டியிருந்தது. மறந்தால் bill தவறு.
+    இங்கே <b>derived value எதுவும் state-இல் சேமிக்கப்படுவதில்லை</b> —
+    <code>recalcDocument(draft)</code> ஒரு <code>useMemo</code>. அதனால் அந்த bug வகையே இல்லை.
+  </p>
+
+  <h3>1.3 இரண்டு நுட்பமான விதிகள் (ஆவணத்தின் நம்பகத்தன்மைக்கு)</h3>
+  <table>
+    <thead><tr><th style="width:32%">விதி</th><th>ஏன்</th><th style="width:26%">எங்கே</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Load-இல் எதுவும் மறு-கணக்கு இல்லை</b><br><span class="small">pricing: "stored"</span></td>
+        <td>Master-இல் விலை மாறியிருந்தாலும், policy மாறியிருந்தாலும், சேமித்த ஆவணம் அது quote செய்யப்பட்ட எண்களையே காட்ட வேண்டும். முதல் edit-இல் மட்டுமே <code>live</code>-க்கு மாறுகிறது.</td>
+        <td class="mono">quotationSlice.ts<br>quotation.payload.ts</td>
+      </tr>
+      <tr>
+        <td><b>Policy ஒரு snapshot</b><br><span class="small">draft.policy</span></td>
+        <td>Session setting-இல் இருந்து சரியாக இரண்டு முறை மட்டுமே copy ஆகும் (new + Clear). இரண்டு quotation-களுக்கு இடையில் company setting மாறினால் திரையில் உள்ளது மறு-விலை நிர்ணயம் ஆகக்கூடாது.</td>
+        <td class="mono">quotation.state.ts<br><span class="small">seedDocumentPolicy</span></td>
+      </tr>
+      <tr>
+        <td><b>Tenant scope voucher-இன், session-இன் அல்ல</b></td>
+        <td>Admin மற்றொரு company-யின் ஆவணத்தைத் திறந்தால், ஒவ்வொரு lookup-ம் save-ம் <i>அந்த</i> company/branch/year-ஐ quote செய்ய வேண்டும்.</td>
+        <td class="mono">draft.companyId /<br>branchId / accYear</td>
+      </tr>
+      <tr>
+        <td><b>Customer ஒரு snapshot</b></td>
+        <td>Master edit ஆன பிறகும் சேமித்த quotation, எந்த customer-க்கு எழுப்பப்பட்டதோ அவரையே print செய்ய வேண்டும்.</td>
+        <td class="mono">draft.customer</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ==================== 2. FILE MAP ==================== -->
+<section>
+  <h2>2 · File map — ஒவ்வொரு கோப்பின் வேலை</h2>
+  <p class="lead">
+    <span class="tag pure">PURE</span> = React இல்லை, network இல்லை, சோதிக்க எளிது ·
+    <span class="tag io">I/O</span> = network அல்லது browser API ·
+    <span class="tag">UI</span> = render
+  </p>
+
+  <h3>2.1 <code>features/sales/quotation/</code></h3>
+  <table>
+    <thead><tr><th style="width:26%">File</th><th class="nowrap" style="width:7%">Lines</th><th style="width:9%">Kind</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">page.tsx</td><td>51</td><td><span class="tag">UI</span></td><td>The route. Holds a <code>view</code> state and renders either the list or the entry form. No data logic.</td></tr>
+      <tr><td class="mono">quotation.types.ts</td><td>866</td><td><span class="tag pure">PURE</span></td><td>Three type families kept strictly apart: wire DTOs / payloads, draft state, and lookup payloads. Documents that every <code>numeric</code> column arrives as a <b>string</b>.</td></tr>
+      <tr><td class="mono">quotation.constants.ts</td><td>453</td><td><span class="tag pure">PURE</span></td><td>Endpoints, configured grid / dropdown ids, status &amp; enum vocabularies, and the 89 + 33 grid <b>column meanings</b> that bridge the server layout to client fields.</td></tr>
+      <tr><td class="mono">quotation.state.ts</td><td>551</td><td><span class="tag pure">PURE</span></td><td>Draft factories and state transitions: <code>createDraft</code>, <code>createDraftLine</code>, <code>applyItemPrice</code>, <code>chargeRowFromMaster</code>, <code>customerFromDetail</code>, <code>applySaveResponse</code>, <code>applyHeaderField</code>. Shared by the slice, the payload builders and the tests.</td></tr>
+      <tr><td class="mono">quotation.payload.ts</td><td>694</td><td><span class="tag pure">PURE</span></td><td>The two translations between draft and wire: <code>buildSavePayload</code> (knows every save-contract trap) and <code>parseLoadedDocument</code> (+ <code>storedPricingOf</code>).</td></tr>
+      <tr><td class="mono">quotation.validate.ts</td><td>188</td><td><span class="tag pure">PURE</span></td><td><code>validateSaveInputs</code> — first violation wins, always names a field to send the operator to. Plus the live, non-blocking <code>rateWarning</code>.</td></tr>
+      <tr><td class="mono">quotation.utils.ts</td><td>299</td><td><span class="tag pure">PURE</span></td><td>Number / date parsers, the grid column resolver (server layout ⋈ local meanings), stable row keys, <code>asEnum</code>.</td></tr>
+      <tr><td class="mono">use-quotation-draft.ts</td><td>757</td><td><span class="tag io">I/O</span></td><td>The screen's façade over the store: selectors, derived pricing memo, and every action that needs the network (pick customer / item, switch unit, barcode, price level, save, load, delete, clear).</td></tr>
+      <tr><td class="mono">page.module.scss</td><td>727</td><td><span class="tag">UI</span></td><td>Layout, both grids, modals, totals strip.</td></tr>
+      <tr><td class="mono">quotation.payload.test.ts</td><td>980</td><td><span class="tag pure">PURE</span></td><td>Round-trip and contract tests — catches a save the API would reject.</td></tr>
+      <tr><td class="mono">quotation.utils.test.ts</td><td>183</td><td><span class="tag pure">PURE</span></td><td>Column resolution and the small parsers.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.2 <code>features/sales/quotation/components/</code></h3>
+  <table>
+    <thead><tr><th style="width:26%">File</th><th class="nowrap" style="width:7%">Lines</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">quotation-list-view.tsx</td><td>151</td><td>The list, built on the shared <code>CrudMasterPage</code> shell (grid 84). Create / Edit hand off to the form instead of opening the shell's modal.</td></tr>
+      <tr><td class="mono">quotation-entry-view.tsx</td><td>604</td><td>The voucher form. Layout and wiring only — nothing here computes a total. Owns the document-level shortcuts and the dirty guard.</td></tr>
+      <tr><td class="mono">item-grid.tsx</td><td>330</td><td>ui table 18 (89 configured columns). No trailing blank row; nothing derived is written back.</td></tr>
+      <tr><td class="mono">charge-grid.tsx</td><td>187</td><td>ui table 21 (33 columns). Mostly a read-out of the master snapshot and the distribution.</td></tr>
+      <tr><td class="mono">grid-cell.tsx</td><td>315</td><td>One cell of either grid. Holds a local edit buffer while focused; commits on blur / Enter.</td></tr>
+      <tr><td class="mono">grid-focus.ts</td><td>84</td><td>Enter-to-next-cell walking, done by reading the DOM (<code>data-quotation-*</code>).</td></tr>
+      <tr><td class="mono">header-blocks.tsx</td><td>381</td><td>The four header blocks: Customer, Quotation, Sales info, Terms.</td></tr>
+      <tr><td class="mono">fields.tsx</td><td>407</td><td>Field primitives + <code>DropdownCombo</code>, a server-searched combobox over a configured dropdown.</td></tr>
+      <tr><td class="mono">item-picker-modal.tsx</td><td>166</td><td>Configured grid 71 — one row per item × unit conversion.</td></tr>
+      <tr><td class="mono">charge-picker-modal.tsx</td><td>146</td><td>Backed by <code>/charges/get</code>, not the popup grid — the grid lacks <code>chgLedgerCode</code>.</td></tr>
+      <tr><td class="mono">quotation-list-modal.tsx</td><td>216</td><td>F8 — open another quotation without leaving the form.</td></tr>
+      <tr><td class="mono">price-level-prompt.tsx</td><td>55</td><td>Ctrl+1..4 — "this line" or "all lines".</td></tr>
+      <tr><td class="mono">totals-strip.tsx</td><td>79</td><td>Display only, in both modes.</td></tr>
+      <tr><td class="mono">quotation-toolbar.tsx</td><td>72</td><td>The button bar with its F-key hints.</td></tr>
+      <tr><td class="mono">modal-shell.tsx</td><td>78</td><td>Shared modal chrome for the four pickers.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.3 <code>domain/pricing/</code> — the engine <span class="tag pure">PURE</span></h3>
+  <p class="small">
+    Framework agnostic: no React import, no API import, no session read. Unit tested against the Qt
+    client's numbers and meant to be reused by sales invoice / purchase.
+  </p>
+  <table>
+    <thead><tr><th style="width:26%">File</th><th class="nowrap" style="width:7%">Lines</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">types.ts</td><td>277</td><td><code>Line</code>, <code>PricedLine</code>, <code>ChargeRow</code>, <code>PricedChargeRow</code>, <code>VoucherPolicy</code>, <code>DocumentTotals</code>, <code>DocumentPricing</code>.</td></tr>
+      <tr><td class="mono">money.ts</td><td>112</td><td>A private <code>decimal.js-light</code> clone and the rounding table: currency 2 dp, divisor rates 12 dp, percentages 2 dp.</td></tr>
+      <tr><td class="mono">lines.ts</td><td>236</td><td><b>Pass 1</b> — one item row priced on its own down to <code>netGross</code>.</td></tr>
+      <tr><td class="mono">charges.ts</td><td>310</td><td>Charge distribution — the port of <code>ChargeGridController::distribute</code>.</td></tr>
+      <tr><td class="mono">document.ts</td><td>310</td><td>The whole pipeline + document totals + the <code>reconcile</code> invariant.</td></tr>
+      <tr><td class="mono">factories.ts</td><td>84</td><td>Blank engine records, shared by the reducer and the golden tests.</td></tr>
+      <tr><td class="mono">format.ts</td><td>46</td><td>Indian 3-2 digit grouping, zero suppression.</td></tr>
+      <tr><td class="mono">index.ts</td><td>37</td><td>The public surface.</td></tr>
+      <tr><td class="mono">pricing.test.ts</td><td>590</td><td>38 golden tests; each asserts the §3.5 reconciliation.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.4 <code>store/</code></h3>
+  <table>
+    <thead><tr><th style="width:26%">File</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">store/api/quotationApi.ts</td><td>All 14 RTK Query endpoints. Casing on the wire is deliberately inconsistent and is <b>not</b> normalised — each endpoint spells out what its own route accepts.</td></tr>
+      <tr><td class="mono">store/slices/quotationSlice.ts</td><td>The draft reducer, as a slice. 24 actions, the dirty/live wrapper, and the selectors.</td></tr>
+      <tr><td class="mono">store/store.ts</td><td>Registers <code>quotation:</code> in the root reducer.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ==================== 3. ARCHITECTURE ==================== -->
+<section>
+  <h2>3 · Architecture — layers மற்றும் dependency direction</h2>
+  <p class="lead">
+    ஒவ்வொரு layer-ம் தனக்குக் கீழ் உள்ளதை மட்டுமே அறியும். மேல்நோக்கிய import எதுவும் இல்லை.
+  </p>
+
+<pre>          ┌──────────────────────────────────────────────────────────┐
+          │  page.tsx            list ⇄ entry, ஒரே route             │
+          └────────────┬─────────────────────────┬───────────────────┘
+                       │                         │
+          ┌────────────▼──────────┐   ┌──────────▼────────────────────┐
+          │ quotation-list-view   │   │ quotation-entry-view          │
+          │  (CrudMasterPage)     │   │  header blocks · 2 grids ·    │
+          └───────────────────────┘   │  modals · toolbar · totals    │
+                                      └──────────┬────────────────────┘
+                                                 │  useQuotationDraft()
+                                      ┌──────────▼────────────────────┐
+                                      │ use-quotation-draft.ts        │
+                                      │  selector + dispatch + thunks │
+                                      └───┬──────────────┬────────────┘
+                        dispatch(action)  │              │  fetch
+                                      ┌───▼──────────┐ ┌─▼──────────────┐
+                                      │ quotation    │ │ quotationApi   │
+                                      │ Slice.ts     │ │ (RTK Query)    │
+                                      └───┬──────────┘ └─┬──────────────┘
+                                          │              │  JSON
+                                      ┌───▼──────────────▼──────────────┐
+                                      │ quotation.state.ts (factories)  │
+                                      │ quotation.payload.ts (wire)     │
+                                      │ quotation.validate.ts           │
+                                      └───┬─────────────────────────────┘
+                                          │
+                                      ┌───▼─────────────────────────────┐
+                                      │ domain/pricing  — pure numbers  │
+                                      │ money → lines → charges → doc   │
+                                      └─────────────────────────────────┘</pre>
+
+  <h3>3.1 The one derived value</h3>
+  <p>
+    திரையின் கீழ்ப்பகுதி முழுவதும் — இரண்டு grid-இன் derived column-கள், totals strip, save payload —
+    இந்த மூன்று வரிகளில் இருந்து வருகிறது:
+  </p>
+<pre><code>const livePricing = useMemo(
+  () =&gt; recalcDocument(draft.lines, draft.charges, draft.policy, {
+    isLocalSale: draft.isLocalSale,
+    hasFreight:  draft.header.hasFreight,
+    hasLoad:     draft.header.hasLoad,
+    hasUnload:   draft.header.hasUnload,
+  }),
+  [draft.lines, draft.charges, draft.policy, draft.isLocalSale, /* …flags */],
+);
+
+// ஒரு load ஆன ஆவணம் முதல் edit வரை தன் சேமித்த எண்களையே காட்டும்.
+const pricing =
+  draft.pricing === "stored" &amp;&amp; draft.storedPricing ? draft.storedPricing : livePricing;</code></pre>
+
+  <div class="ok">
+    <b>ஏன் இது முக்கியம்</b>
+    <p>
+      Immer ஒரு draft-ஐ மாற்றும்போது மாறிய பாதையை மட்டுமே copy செய்கிறது. அதனால் header-இல் ஒரு
+      field-ஐ மாற்றினால் <code>draft.lines</code>-இன் identity மாறாது — memo மீண்டும் ஓடாது.
+      100 வரிகள் உள்ள ஆவணத்திலும் keystroke-க்கு ஒரு engine run மட்டுமே.
+    </p>
+  </div>
+</section>
+
+<!-- ==================== 4. DRAFT STATE ==================== -->
+<section>
+  <h2>4 · The draft — state-இன் உடற்கூறு</h2>
+  <p class="lead">
+    <code>QuotationDraft</code> தான் திரையின் <b>ஒரே</b> mutable state. மற்ற எல்லாம் இதிலிருந்து
+    கணக்கிடப்படுகிறது அல்லது component-local UI state (modal திறந்துள்ளதா, எந்த row active).
+  </p>
+
+  <h3>4.1 மூன்று mode flag</h3>
+  <table>
+    <thead><tr><th style="width:20%">Field</th><th style="width:22%">Values</th><th>பொருள்</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">mode</td><td class="mono">"entry" | "browse"</td><td>Editable-ஆ அல்லது read-only-ஆ. இது <b>ஒரே gate</b> — நான்கு header block, இரண்டு grid-இன் editor, ஒவ்வொரு grid shortcut எல்லாவற்றையும் ஒன்றாக disable செய்கிறது.</td></tr>
+      <tr><td class="mono">pricing</td><td class="mono">"live" | "stored"</td><td>Engine ஓடுகிறதா, அல்லது சேமித்த எண்கள் அப்படியே காட்டப்படுகின்றனவா. Load-இல் <code>stored</code>; முதல் edit-இல் <code>live</code>.</td></tr>
+      <tr><td class="mono">isDirty</td><td class="mono">boolean</td><td>சேமிக்கப்படாத மாற்றம். Clear / F8 / back / browser navigation — நான்கும் இதைப் பார்த்து கேட்கின்றன.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.2 முழு வடிவம்</h3>
+  <table>
+    <thead><tr><th style="width:24%">Group</th><th style="width:30%">Fields</th><th>குறிப்பு</th></tr></thead>
+    <tbody>
+      <tr><td><b>Tenant</b></td><td class="mono">companyId, branchId, accYear, companyStateCode</td><td>Voucher-இன் scope. ஒவ்வொரு lookup-ம் save-ம் இதைப் படிக்கின்றன, session-ஐ அல்ல. <code>companyStateCode</code> local vs inter-state முடிவுக்கு.</td></tr>
+      <tr><td><b>Server identity</b></td><td class="mono">docId, quoteSlno, quoteRefno, revisionNo, docType, status, isNewEntry</td><td>Server ஒதுக்கியவை; update-இல் அப்படியே திரும்பக் கொடுக்கப்படுகின்றன. <code>quoteSlno</code> முழுவதும் <b>string</b> — <code>QT/0001</code> போன்ற தொடர் தாண்ட வேண்டும்.</td></tr>
+      <tr><td><b>policy</b></td><td class="mono">freightCalcType, loadingCalcType, discountAlterBaseRate, roundOffStep</td><td>ஆவணத்தின் சொந்த snapshot. §1.3 பார்க்க.</td></tr>
+      <tr><td><b>customer</b></td><td class="mono">CustomerSnapshot (26 fields)</td><td>Master-இல் இருந்து ஒருமுறை; மீண்டும் படிக்கப்படுவதில்லை.</td></tr>
+      <tr><td><b>header</b></td><td class="mono">usrRefno, quoteDate, validUntil, validityDays, contact*, areaId, agentId, salesmanId, posState*, has*, priceLevel</td><td><code>validUntil</code> ⇄ <code>validityDays</code> ஒரே காலத்தின் இரண்டு பார்வை — ஒன்றை edit செய்தால் மற்றது மறு-கணக்கு.</td></tr>
+      <tr><td><b>terms</b></td><td class="mono">remarks, paymentTerms, deliveryTerms, termsConditions</td><td>Free text.</td></tr>
+      <tr><td><b>lines</b></td><td class="mono">DraftLine[]</td><td>Engine-இன் <code>Line</code> + engine படிக்காத எல்லாம் (பெயர்கள், ids, batch, remarks, cash discount). <b>Trailing blank row இல்லை.</b></td></tr>
+      <tr><td><b>charges</b></td><td class="mono">DraftChargeRow[]</td><td>Engine-இன் <code>ChargeRow</code> + master snapshot (<code>ledgerCode</code>, <code>chgName</code>, <code>hsn</code>…).</td></tr>
+      <tr><td><b>Tax basis</b></td><td class="mono">isLocalSale</td><td>Place of supply = company-யின் state-ஆ. CGST+SGST vs IGST-ஐ முடிவு செய்கிறது.</td></tr>
+      <tr><td><b>Cache</b></td><td class="mono">freightBands</td><td>Customer-இன் தூரத்திற்கான slabs.</td></tr>
+      <tr><td><b>storedPricing</b></td><td class="mono">DocumentPricing | null</td><td>சேமித்த ஆவணம் engine-இன் output வடிவத்தில். <code>pricing === "stored"</code> ஆக இருக்கும்போது இதுவே திரையில்.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.3 Row keys — ஏன் index அல்ல</h3>
+  <p>
+    ஒவ்வொரு line / charge row-க்கும் <code>key: "line-17"</code> போன்ற stable client-side id
+    (<code>nextRowKey</code>). Reducer, focus walker, validation map — <b>எல்லாம் key மூலமே</b> row-ஐ
+    அடையாளம் காண்கின்றன. Row 3-க்கு மேலே insert செய்தால் பழைய index 3-ஐ இலக்காகக் கொண்ட ஒரு edit
+    மௌனமாக வேறு வரிக்குப் போய்விடக்கூடாது.
+  </p>
+
+  <h3>4.4 <code>toBaseFactorKnown</code> — ஒரு persist ஆகாத column-இன் விளைவு</h3>
+  <p>
+    <code>sqi_to_base_factor</code> DB-இல் சேமிக்கப்படுவதில்லை. Load-இல் அது சேமித்த அளவுகளில் இருந்து
+    பின்னோக்கிக் கணக்கிடப்படுகிறது:
+  </p>
+<pre>netQty = caseQty × factor + billQty × (lengthQty || 1)
+     ⟹ factor = (netQty − billQty × (lengthQty || 1)) / caseQty</pre>
+  <div class="warn">
+    <b>பொறி</b>
+    <p>
+      <code>caseQty === 0</code> ஆக இருந்தால் வகுக்க ஒன்றுமில்லை — factor <code>1</code> ஆக load ஆகும்.
+      அது placeholder, உண்மையான factor அல்ல. அந்த 1-க்கு எதிராக Case Qty type செய்தால்
+      <code>caseQty × 1</code> — சரியான பணத்தின் ஒரு பகுதி மட்டுமே quote ஆகும்.
+      அதனால் <code>toBaseFactorKnown: caseQty !== 0</code>, மற்றும் Case Qty முதன்முதலில் தொடும்போது
+      <code>recoverBaseFactor()</code> item lookup-இல் இருந்து உண்மையான factor-ஐ <b>மட்டும்</b> எடுக்கிறது.
+    </p>
+  </div>
+</section>
+
+<!-- ==================== 5. SLICE ==================== -->
+<section>
+  <h2>5 · Redux slice — action reference</h2>
+  <p class="lead">
+    <code>store/slices/quotationSlice.ts</code>. Reducer pure; API-ஐ ஒருபோதும் கூப்பிடாது.
+    Network வேண்டிய எல்லாம் §6-இன் thunk-கள்.
+  </p>
+
+  <h3>5.1 இரண்டு cross-cutting விதிகள்</h3>
+  <p>
+    Slice-இன் reducer-ஐ ஒரு wrapper சுற்றுகிறது. இது ஒவ்வொரு case-இலும் திரும்பத் திரும்ப எழுதாமல்
+    இரண்டு விதிகளை ஒரே இடத்தில் வைக்கிறது:
+  </p>
+<pre><code>export function quotationReducer(state, action) {
+  const next = quotationSlice.reducer(state, action);
+  if (state === undefined || next === state || NON_EDIT_ACTIONS.has(action.type)) {
+    return next;                       // ← store init, மாற்றமில்லை, அல்லது edit அல்ல
+  }
+  if (next.isDirty &amp;&amp; next.pricing === "live") {
+    return next;                       // ← ஏற்கனவே அப்படித்தான், தேவையற்ற copy வேண்டாம்
+  }
+  return { ...next, isDirty: true, pricing: "live" };
+}</code></pre>
+  <p class="small">
+    மற்ற slice-களின் actions மற்றும் RTK Query-இன் ஒவ்வொரு action-ம் இதன் வழியாகச் செல்கின்றன —
+    ஆனால் அவை state-ஐ மாற்றாததால் (<code>next === state</code>) draft-ஐ dirty ஆக்க முடியாது.
+  </p>
+
+  <h3>5.2 Actions</h3>
+  <table>
+    <caption>Non-edit actions are shaded — they never set <code>isDirty</code> / <code>pricing: "live"</code>.</caption>
+    <thead><tr><th style="width:24%">Action</th><th style="width:26%">Payload</th><th>Effect</th></tr></thead>
+    <tbody>
+      <tr><td class="mono"><b>draftReplaced</b> <span class="tag">non-edit</span></td><td class="mono">QuotationDraft</td><td>Replace the whole draft. Used by Clear and by load.</td></tr>
+      <tr><td class="mono"><b>saveResponseApplied</b> <span class="tag">non-edit</span></td><td class="mono">{ payload, sentDraft }</td><td>Fold the server-owned identity (docId, refno, per-row ids) into whatever the state is <i>now</i>. Decides the dirty flag itself — see §5.3.</td></tr>
+      <tr><td class="mono">modeSet <span class="tag">non-edit</span></td><td class="mono">"entry" | "browse"</td><td>F2 / the list's Edit action.</td></tr>
+      <tr><td class="mono">tenantSet <span class="tag">non-edit</span></td><td class="mono">{ companyId, branchId, accYear }</td><td>Pushed in as the business context resolves.</td></tr>
+      <tr><td class="mono">companyStateCodeSet <span class="tag">non-edit</span></td><td class="mono">string</td><td>Also re-resolves <code>isLocalSale</code>.</td></tr>
+      <tr><td class="mono">chargesSeeded <span class="tag">non-edit</span></td><td class="mono">DraftChargeRow[]</td><td>Pre-seed the <code>chgAutoApply</code> charges. No-op if the grid already has rows.</td></tr>
+      <tr><td class="mono">freightBandsSet <span class="tag">non-edit</span></td><td class="mono">FreightBand[]</td><td>Cache the distance slabs.</td></tr>
+      <tr><td class="mono">policyPatched</td><td class="mono">Partial&lt;VoucherPolicy&gt;</td><td>The three voucher-policy controls in the Quotation block.</td></tr>
+      <tr><td class="mono">headerFieldSet</td><td class="mono">{ field, value }</td><td>Runs <code>applyHeaderField</code> — keeps the validity pair and the price-level clamp in step.</td></tr>
+      <tr><td class="mono">posSet</td><td class="mono">{ stateCode, stateName }</td><td>Place of supply → re-resolves <code>isLocalSale</code>.</td></tr>
+      <tr><td class="mono">termsFieldSet</td><td class="mono">{ field, value }</td><td>One of the four free-text fields.</td></tr>
+      <tr><td class="mono">statusSet</td><td class="mono">string</td><td>DRAFT / SENT / ACCEPTED / …</td></tr>
+      <tr><td class="mono"><b>customerApplied</b></td><td class="mono">CustomerDetailPayload</td><td>Snapshot + place of supply + area + salesman + contact + price level + the four charge checkboxes + <code>isLocalSale</code>; clears cached bands when the distance changed.</td></tr>
+      <tr><td class="mono">customerCleared</td><td>—</td><td>Blank snapshot, drop the bands.</td></tr>
+      <tr><td class="mono">lineAdded</td><td>—</td><td>Append a line inheriting the document's price level.</td></tr>
+      <tr><td class="mono">lineInserted</td><td class="mono">string (beforeKey)</td><td>Ctrl + <b>+</b></td></tr>
+      <tr><td class="mono">lineRemoved</td><td class="mono">string (key)</td><td>Ctrl + <b>−</b> / the row's × button.</td></tr>
+      <tr><td class="mono"><b>lineFieldSet</b></td><td class="mono">{ key, field, value }</td><td>One cell. If the field is in a discount group and the value is non-zero, clears its two siblings — see §5.4.</td></tr>
+      <tr><td class="mono"><b>itemPriceApplied</b></td><td class="mono">{ key, lookup, unitName?, unitId? }</td><td>Fill the whole line from <code>/master-lookups/item-price</code>.</td></tr>
+      <tr><td class="mono">linePriceLevelSet</td><td class="mono">{ keys, priceLevel, commitDocument }</td><td>Only "Apply to all" commits the document's own level.</td></tr>
+      <tr><td class="mono">chargeAdded</td><td class="mono">DraftChargeRow?</td><td>Blank row, or a pre-built one.</td></tr>
+      <tr><td class="mono">chargeRemoved</td><td class="mono">string (key)</td><td></td></tr>
+      <tr><td class="mono">chargeFieldSet</td><td class="mono">{ key, field, value }</td><td>Rate ⇄ Amount are mutually exclusive when non-zero — see §5.4.</td></tr>
+      <tr><td class="mono">chargeMasterApplied</td><td class="mono">{ key, master }</td><td>Snapshot the master row, keeping <code>key</code> / <code>cdId</code> / <code>remarks</code> so focus is not lost and an existing server line is updated rather than replaced.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>5.3 <code>saveResponseApplied</code> — Immer-இன் ஒரு நுட்பம்</h3>
+  <p>
+    <code>applySaveResponse</code> "இந்த request எந்த draft-இல் இருந்து கட்டப்பட்டதோ அது இன்னும்
+    தற்போதையதுதானா?" என்று <b>identity</b>-யால் சோதிக்கிறது. அது சரியானால் ஆவணம் உண்மையில்
+    சேமிக்கப்பட்டது; இல்லையெனில் POST பயணத்தில் இருக்கும்போது operator வேறொரு cell-ஐ commit
+    செய்திருக்கிறார், அந்த edit சேமிக்கப்படவில்லை — dirty flag நிற்க வேண்டும்.
+  </p>
+  <div class="warn">
+    <b>Immer draft ஒருபோதும் அந்த identity-க்குப் பொருந்தாது</b>
+    <p>
+      Case reducer-க்கு வருவது proxy, உண்மையான state object அல்ல. அதனால் ஒவ்வொரு save-ம் dirty ஆகவே
+      நின்றுவிடும். தீர்வு RTK re-export செய்யும் <code>original(state)</code>:
+    </p>
+<pre><code>const base = (original(state) ?? state) as QuotationDraft;
+return applySaveResponse(base, action.payload.payload, action.payload.sentDraft);</code></pre>
+  </div>
+
+  <h3>5.4 இரண்டு "one takes over from the other" விதிகள்</h3>
+  <table>
+    <thead><tr><th style="width:26%">Group</th><th>விதி</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Line discounts</b><br><span class="small">disc / splDisc / sch</span></td>
+        <td>
+          ஒவ்வொரு group-க்கும் மூன்று column: <code>*Perc</code>, <code>*PerQty</code>, <code>*Amt</code>.
+          ஒன்றை <b>non-zero</b> ஆக type செய்தால் மற்ற இரண்டும் 0. இதுவே <code>applyLineDiscounts</code>-இன்
+          "percentage ஜெயிக்கும், பிறகு per-qty, பிறகு keyed amount" precedence-ஐ தெளிவாக்குகிறது.
+          <br><b>0-ஐ type செய்தால் எதுவும் clear ஆகாது</b> — "no percentage" என்பது per-qty rate பற்றிய
+          அறிக்கை அல்ல; grid focus sibling cell-கள் வழியாக நகர்வதால் ஒரு தவறான 0 உண்மையில்
+          செயல்பாட்டில் உள்ள discount-ஐ அழித்துவிடும்.
+        </td>
+      </tr>
+      <tr>
+        <td><b>Charge Rate ⇄ Amount</b></td>
+        <td>
+          Engine <code>rate === 0 &amp;&amp; amount !== 0</code>-ஐ "operator மொத்தத் தொகையால் விலை
+          நிர்ணயித்தார்" எனப் படிக்கிறது. அதனால் ஒன்றை non-zero ஆக set செய்தால் மற்றது 0.
+          இங்கும் clear செய்தால் எதுவும் clear ஆகாது — Amount-ஐ காலி செய்வது
+          "manual override இல்லை, rate-ஐ வைத்துக்கொள்" என்று மட்டுமே.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>5.5 Selectors</h3>
+  <table>
+    <thead><tr><th style="width:38%">Selector</th><th>Returns</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">selectQuotationDraft</td><td><code>state.quotation</code> — the whole draft. இதுவே hook பயன்படுத்துவது.</td></tr>
+      <tr><td class="mono">selectQuotationLines / Charges</td><td>The two arrays.</td></tr>
+      <tr><td class="mono">selectQuotationIsDirty / Mode / DocId</td><td>Toolbar மற்றும் guard-களுக்கான scalars.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>Store-இல் இருப்பதன் ஒரு விளைவு</b>
+    <p>
+      <code>useReducer</code> ஒவ்வொரு mount-க்கும் புதிய draft கொடுத்தது; slice கொடுக்காது —
+      draft form-ஐ விட நீண்ட ஆயுள் கொண்டது. அதனால் entry view-இன் mount effect
+      <code>useLayoutEffect</code>, மற்றும் இரண்டு பாதையிலும் (புதியது / load) முதலில்
+      <code>clear()</code> செய்கிறது. இல்லாவிட்டால் முந்தைய ஆவணம் ஒரு frame மின்னும்.
+    </p>
+  </div>
+</section>
+
+<!-- ==================== 6. HOOK ==================== -->
+<section>
+  <h2>6 · Hook — thunk / network reference</h2>
+  <p class="lead">
+    <code>useQuotationDraft()</code> — திரையின் ஒரே façade. Reducer network-ஐ அறியாது; இங்குள்ள
+    functions fetch செய்து பிறகு dispatch செய்கின்றன.
+  </p>
+
+  <h3>6.1 Mount-இல் ஓடும் queries</h3>
+  <table>
+    <thead><tr><th style="width:34%">Query</th><th>எதற்கு</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">useGetCompanyStateCodeQuery</td><td>Company-யின் GST state code — local vs inter-state முடிவுக்கு. Business-context payload இதைச் சுமப்பதில்லை.</td></tr>
+      <tr><td class="mono">useGetUserCapabilitiesQuery</td><td><code>usrEditRate</code> (rate / price-level cell editable-ஆ), <code>usrLanguage</code> (regional names).</td></tr>
+      <tr><td class="mono">useGetQuotationGridLayoutQuery ×2</td><td>ui table 18 (items) மற்றும் 21 (charges) layout.</td></tr>
+      <tr><td class="mono">useGetSalesChargesQuery</td><td>முழு sales charge master (<code>chgModule=S</code>) — ஒரே அழைப்பு, unpaginated by design.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>6.2 மூன்று seeding effect</h3>
+  <table>
+    <thead><tr><th style="width:22%">Effect</th><th>நடத்தை</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Tenant seed</b></td>
+        <td>
+          Business context resolve ஆகும்போது <code>tenantSet</code>. ஆனால் ஏற்கனவே ஒரு quotation
+          type செய்யப்பட்டிருந்தால் (<code>isDirty</code> அல்லது வரிகள் உள்ளன) <b>re-tenant
+          செய்யப்படுவதில்லை</b> — company A-இன் விலைகள் company B-க்கு stamp ஆன ஆவணம் உருவாகும்,
+          மற்றும் அதன் tax basis operator-இன் அடியில் மாறிவிடும். மாறாக ஒரு toast:
+          "clear (F7) செய்து புதிய context-இல் ஆரம்பியுங்கள்".
+        </td>
+      </tr>
+      <tr>
+        <td><b>Charge seed</b></td>
+        <td><code>chgAutoApply</code> charges புதிய entry-இல் ஒருமுறை. ஏற்கனவே rows உள்ள ஆவணத்தின் மேல் ஒருபோதும் இல்லை.</td>
+      </tr>
+      <tr>
+        <td><b>Unit prefetch</b></td>
+        <td>Load ஆன வரிகளின் item-கள் இந்த session-இல் தேர்ந்தெடுக்கப்படவில்லை, அதனால் அவற்றின் unit list fetch ஆகவில்லை. இது இல்லாமல் reload ஆன வரியின் Uom dropdown அதற்கு ஏற்கனவே உள்ள unit-ஐ மட்டுமே காட்டும்.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>6.3 Thunks — முழு reference</h3>
+  <table>
+    <thead><tr><th style="width:22%">Function</th><th style="width:24%">Signature</th><th>என்ன செய்கிறது</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">pickCustomer</td>
+        <td class="mono">(customerId) ⇒ Promise&lt;void&gt;</td>
+        <td><code>/customer-detail</code> → <code>customerApplied</code>. Distance மாறியிருந்தால் <b>மற்றும்</b> freight policy manual இல்லையெனில் bands-ஐயும் fetch செய்கிறது. Company/branch இன்னும் resolve ஆகவில்லை என்றால் அமைதியாக blank-க்குத் திரும்பாமல் அதைச் சொல்கிறது.</td>
+      </tr>
+      <tr>
+        <td class="mono">pickItem</td>
+        <td class="mono">(lineKey, itemId, itemUnitId?)</td>
+        <td><code>/item-price</code> → <code>itemPriceApplied</code>, பிறகு unit list-ஐ prefetch.</td>
+      </tr>
+      <tr>
+        <td class="mono">setLineUnit</td>
+        <td class="mono">(lineKey, itemUnitId)</td>
+        <td>Uom dropdown — அதே item-ஐ புதிய unit-இல் மறு-விலை (<code>pickItem</code>-ஐயே கூப்பிடுகிறது).</td>
+      </tr>
+      <tr>
+        <td class="mono">switchUnit</td>
+        <td class="mono">(lineKey)</td>
+        <td><b>F4.</b> Backend unit cycle-க்குச் சொந்தக்காரன்: அது அடுத்த <code>iuc_id</code>-ஐ மட்டும் திருப்பும், விலையை அல்ல. அதனால் <b>client-side எதுவும் scale செய்யப்படுவதில்லை</b>, மற்றும் follow-up price lookup திரும்பும் வரை வரியில் எதுவும் எழுதப்படுவதில்லை.</td>
+      </tr>
+      <tr>
+        <td class="mono">resolveBarcode</td>
+        <td class="mono">(lineKey, barcode) ⇒ Promise&lt;boolean&gt;</td>
+        <td>Barcode → item. <code>allowSales</code> false என்றால் warn செய்து நிற்கிறது. Barcode lookup-இன் <code>unitId</code> ஏற்கனவே ஒரு <code>iuc_id</code>, அதை <code>/item-price</code> நேரடியாக ஏற்கிறது.</td>
+      </tr>
+      <tr>
+        <td class="mono">recoverBaseFactor</td>
+        <td class="mono">(lineKey)</td>
+        <td>§4.4-இன் placeholder factor-ஐ சரி செய்கிறது. <b>Factor மட்டுமே</b> எடுக்கப்படுகிறது — வரியில் வேறெதுவும் தொடப்படுவதில்லை, அதனால் இது மறு-விலை நிர்ணயம் அல்ல.</td>
+      </tr>
+      <tr>
+        <td class="mono">applyPriceLevel</td>
+        <td class="mono">(level, scope, lineKeys)</td>
+        <td><b>Ctrl+1..4.</b> Level மாற்றுவது local edit அல்ல — ஒவ்வொரு பாதிக்கப்பட்ட வரியும் server-இல் புதிய level-இல் மறு-விலை நிர்ணயம் ஆக வேண்டும். <code>scope === "all"</code> மட்டுமே ஆவணத்தின் level-ஐ commit செய்கிறது.</td>
+      </tr>
+      <tr>
+        <td class="mono">validate</td>
+        <td class="mono">() ⇒ Violation | null</td>
+        <td><code>validateSaveInputs(draft, pricing)</code>.</td>
+      </tr>
+      <tr>
+        <td class="mono">save</td>
+        <td class="mono">() ⇒ Promise&lt;boolean&gt;</td>
+        <td>validate → <code>buildSavePayload</code> → POST → <code>saveResponseApplied</code>. Response <b>மீண்டும் parse செய்யப்படுவதில்லை</b> (§8.3).</td>
+      </tr>
+      <tr>
+        <td class="mono">loadDocument</td>
+        <td class="mono">(key) ⇒ Promise&lt;boolean&gt;</td>
+        <td><code>GET /quotations/get</code> (நான்கு field key) → <code>parseLoadedDocument</code> → <code>draftReplaced</code>.</td>
+      </tr>
+      <tr>
+        <td class="mono">deleteDocument</td>
+        <td class="mono">() ⇒ Promise&lt;boolean&gt;</td>
+        <td><b>F3.</b> Soft delete, பிறகு <code>clear()</code>.</td>
+      </tr>
+      <tr>
+        <td class="mono">clear</td>
+        <td class="mono">() ⇒ void</td>
+        <td><b>F7.</b> தற்போதைய context-இல் புதிய draft; charge seed flag-ஐயும் reset செய்கிறது.</td>
+      </tr>
+      <tr>
+        <td class="mono">beginEdit</td>
+        <td class="mono">() ⇒ void</td>
+        <td><b>F2.</b> browse → entry. இது non-edit, அதனால் <code>pricing</code> இன்னும் <code>stored</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>6.4 மூன்று பாதுகாப்பு நுட்பங்கள்</h3>
+  <table>
+    <thead><tr><th style="width:24%">பொறி</th><th>தீர்வு</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>இரட்டை save</b></td>
+        <td>
+          <code>busy</code> state மட்டும் போதாது: <code>setBusy</code> asynchronous, அதனால் ஒரே
+          render-இல் இரண்டு F5-ம் "idle" எனப் பார்க்கும். Voucher number server-இன் create
+          transaction-க்குள் allocate ஆவதால் இரண்டாவது save <b>தனி refno-வுடன் இரண்டாவது
+          quotation</b> உருவாக்கும். <code>inFlight</code> ஒரு <code>useRef</code> — synchronous.
+        </td>
+      </tr>
+      <tr>
+        <td><b>Lazy trigger die-on-mount</b></td>
+        <td>
+          <code>loadDocument</code> mount effect-இலும் கூப்பிடப்படுகிறது, மற்றும் தன் subscription
+          உருவாகுவதற்கு முன் fire ஆகும் lazy trigger <code>undefined</code>-ஆக resolve ஆகி
+          network-ஐ <b>தொடாது</b>. அதனால் <code>endpoints.getQuotation.initiate(key, {subscribe:false, forceRefetch:true})</code>.
+        </td>
+      </tr>
+      <tr>
+        <td><b>Free-text calc type</b></td>
+        <td>
+          <code>loading_type</code> / <code>freight_type</code> server-side closed set; தவறான value 400.
+          Load ஆன ஆவணத்தின் snapshot free text, அதனால் <code>clampLoadingType</code> /
+          <code>clampFreightType</code> வழியாகவே அனுப்பப்படுகிறது.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ==================== 7. ENGINE ==================== -->
+<section>
+  <h2>7 · Pricing engine — function reference</h2>
+  <p class="lead">
+    <code>domain/pricing/</code>. React இல்லை, API இல்லை, session இல்லை — அதன் arguments-இன்
+    pure function. 38 golden tests Qt client-இன் எண்களுக்கு எதிராக.
+  </p>
+
+  <h3>7.1 The pipeline</h3>
+<pre>Pass 1      ஒவ்வொரு வரியையும் தனியாக விலை நிர்ணயம்            lines.ts
+  ↓         → netQty, rateBeforeTax, grossAmt, netGross, 4 discounts
+basis       charge பரவலுக்கு ஒவ்வொரு வரியையும் அளவிடு
+  ↓         → { netGross, billQty, netQty, weight }
+override    FREIGHT / LOADING per-line amounts               document.ts
+  ↓         header checkbox ON  AND  policy ≠ MANUAL  ஆக இருந்தால் மட்டும்
+distribute  charges, net totals-க்கு callback                charges.ts
+  ↓         → per-line { beforeTax, afterTax } shares + priced rows
+Pass 2      charge shares + வரியுடன் ஒவ்வொரு வரியையும் இறுதி
+  ↓         → taxableAmt, cgst/sgst/igst, cess, total, netPrice, profit
+totals      document sums, round-off, இரண்டு stat label</pre>
+  <p class="small">ஒரு திசை மட்டும், circularity இல்லை.</p>
+
+  <h3>7.2 <code>money.ts</code> — rounding ஒழுக்கம்</h3>
+  <p>
+    Postgres money-ஐ <code>numeric(15,2)</code>-ஆக சேமிக்கிறது; JS number ஒரு double. அதனால் ஒவ்வொரு
+    இடைநிலைப் படியும் <code>decimal.js-light</code> வழியாக ஓடி, value <b>சேமிக்கப்படும் இடத்தில்
+    மட்டுமே</b> number-ஆக மாறுகிறது.
+  </p>
+  <table>
+    <thead><tr><th style="width:30%">Function</th><th style="width:10%">dp</th><th>Purpose / ஏன் அந்த dp</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">dec(value: unknown)</td><td>—</td><td>Anything (string, number, bigint, blank, garbage) → <code>Decimal</code>. Blank / unparseable = 0 — காலி rate cell ஒரு சாதாரண நிலை, error அல்ல.</td></tr>
+      <tr><td class="mono">money(v)</td><td>2</td><td>Stored currency amount. Qt <code>NexTable</code> Currency cell-உடன் ஒத்துப்போகிறது. <code>−0</code>-ஐ <code>0</code> ஆக normalise செய்கிறது.</td></tr>
+      <tr><td class="mono">rate(v)</td><td><b>12</b></td><td>Downstream <b>divisor</b>-ஆகப் பயன்படும் rate. இதை 2 dp-க்கு round செய்வதுதான் bill அதன் சொந்த வரிகளுடன் ஒத்துப்போகாமல் போவதற்குக் காரணம்.</td></tr>
+      <tr><td class="mono">perc(v)</td><td>2</td><td>Persist ஆகும் percentage — cell, print, column மூன்றும் ஒத்துப்போக வேண்டும்.</td></tr>
+      <tr><td class="mono">safeDiv(n, d)</td><td>—</td><td><code>n / d</code>, அல்லது <code>d === 0</code> எனில் 0.</td></tr>
+      <tr><td class="mono">percentOf(part, whole)</td><td>—</td><td><code>part / whole × 100</code>, whole 0 எனில் 0.</td></tr>
+      <tr><td class="mono">sum(values)</td><td>—</td><td>Decimal reduce.</td></tr>
+      <tr><td class="mono">roundToStep(amount, step)</td><td>—</td><td><code>floor((amount + step/2) / step) × step</code>. Step ≤ 0 = rounding இல்லை.</td></tr>
+    </tbody>
+  </table>
+  <p class="small">
+    <code>Decimal</code> ஒரு <b>private clone</b> (<code>precision: 34</code>, <code>ROUND_HALF_UP</code>) —
+    recharts அதே package-ஐ இழுப்பதால், பிறர் global setting-ஐ மாற்றி engine-ஐ கெடுக்க முடியாது.
+  </p>
+
+  <h3>7.3 <code>lines.ts</code> — Pass 1</h3>
+  <table>
+    <thead><tr><th style="width:30%">Function</th><th>கணக்கு / விதி</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">netBillableQty(caseQty, billQty, lengthQty, toBaseFactor)</td>
+        <td>
+          <code>caseQty × toBaseFactor + billQty × (lengthQty &gt; 0 ? lengthQty : 1)</code><br>
+          <code>lengthQty</code> இரட்டைப் பொருள்: cut-to-length பொருட்களுக்கு multiplier, மற்றும்
+          "பொருந்தாது" எனும் 0. <b>0 = 1</b> என்பதால் அதை <code>toBaseFactor</code>-இல் சேர்க்க முடியாது.
+        </td>
+      </tr>
+      <tr>
+        <td class="mono">baseRateOf(inclusiveRate, line)</td>
+        <td>
+          <code>(inclusiveRate − cessPerUnit) / (1 + (gstPerc + cessPerc)/100)</code><br>
+          Per-unit cess ஒரு flat adder, அதனால் percentage division-க்கு <b>முன்</b> கழிக்கப்படுகிறது.
+          Exclusive வரி rate-ஐ அப்படியே திருப்பும்.
+        </td>
+      </tr>
+      <tr>
+        <td class="mono">applyLineDiscounts(amount, line, netQty)</td>
+        <td>
+          நான்கு discount, ஓடும் balance-இல்: item → special → scheme → bill scheme.<br>
+          முதல் மூன்றில் precedence: <b>percentage → per-qty rate → keyed amount</b>.
+          Bill scheme percentage-மட்டும். Returns the four amounts + what is left.
+        </td>
+      </tr>
+      <tr>
+        <td class="mono">applyGstAndCess(amount, line, netQty, isLocal)</td>
+        <td>
+          <code>cess = amount × cessPerc/100 + netQty × cessPerUnit</code>; பிறகு local supply
+          GST-ஐ cgst + sgst ஆகப் பிரிக்கிறது, inter-state igst சுமக்கிறது.
+        </td>
+      </tr>
+      <tr>
+        <td class="mono">priceRowGoods(line, policy)</td>
+        <td>
+          Pass 1-இன் நுழைவாயில். <code>netQty === 0</code> எனில் ஒவ்வொரு per-unit rate-ம் பூஜ்ஜியத்தால்
+          வகுத்தல் ஆகிவிடும் — அந்த வரி இன்னும் எதற்கும் மதிப்பில்லை, ஆனால் extracted rate தக்கவைக்கப்படுகிறது
+          (grid keyed rate வரிக்கு முன் என்ன மதிப்பு என்று காட்ட வேண்டும்).
+        </td>
+      </tr>
+      <tr>
+        <td class="mono">roundGoodsPricing(pricing)</td>
+        <td>Qt grid சேமிக்கும் வடிவத்திற்கு round: currency 2 dp, rate 12 dp.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h4>இரண்டு pricing வரிசை — <code>policy.discountAlterBaseRate</code></h4>
+  <table>
+    <thead><tr><th style="width:16%">Setting</th><th style="width:42%">வரிசை</th><th>விளைவு</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">false<br><span class="small">(standard)</span></td>
+        <td>keyed rate → வரியை extract → <code>grossAmt</code> (discount-க்கு முந்தைய tax-exclusive மதிப்பு) → discount</td>
+        <td><code>netGross = grossAmt − discounts</code>. "Savings" (gross − netGross) அர்த்தமுள்ளது.</td>
+      </tr>
+      <tr>
+        <td class="mono">true<br><span class="small">(discount first)</span></td>
+        <td>keyed (tax-inclusive) பணத்தை discount → discount ஆன rate-இல் இருந்து வரியை extract</td>
+        <td><code>grossAmt === netGross</code> <b>வேண்டுமென்றே</b>. Discount columns tax-inclusive பணத்தை வைத்திருப்பதால் எந்த tax-exclusive gross-ம் அவற்றுடன் ஒத்துப்போகாது.</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="warn">
+    <b>"Do not fix it"</b>
+    <p>
+      Discount-first பாதையில் savings 0-ஆகப் படிக்கும் — அது bug அல்ல, Qt source-இலும் அப்படியே
+      ஆவணப்படுத்தப்பட்டுள்ளது. இரண்டு வரிசைகளும் per-unit cess இல்லாத percentage discount-களில்
+      ஒத்துப்போகும், per-quantity discount மற்றும் cess வரிகளில் விலகும் — <b>அந்த விலகலே setting-இன்
+      நோக்கம்</b>.
+    </p>
+  </div>
+
+  <h3>7.4 <code>charges.ts</code> — distribution</h3>
+  <p class="small">
+    Code-இல் சொல்லப்பட்டது: <i>"இதில் உள்ள ஒவ்வொரு விதியும் Qt client-இல் ஒருமுறை fix செய்யப்பட்ட bug."</i>
+  </p>
+
+  <h4>Method → per-line amount</h4>
+  <table>
+    <thead><tr><th style="width:16%">Method</th><th style="width:34%">கணக்கு</th><th>குறிப்பு</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">FIXED</td><td>lump sum, <code>applyOn</code>-ஆல் பரவல்</td><td><code>applyOn</code> <b>இங்கே மட்டுமே</b> முக்கியம்.</td></tr>
+      <tr><td class="mono">QTY</td><td><code>billQty × rate</code></td><td></td></tr>
+      <tr><td class="mono">NET_QTY</td><td><code>netQty × rate</code></td><td></td></tr>
+      <tr><td class="mono">KG / QTL / TON</td><td><code>weight × rate</code></td><td>Unit conversion இல்லை — rate charge-இன் சொந்த unit-இல் quote செய்யப்படுகிறது, Qt-ஐப் போலவே.</td></tr>
+      <tr><td class="mono">PERCENT</td><td><code>basis × rate / 100</code></td><td></td></tr>
+      <tr><td class="mono">(manual)</td><td><code>rate === 0 &amp;&amp; amount !== 0</code></td><td>Method-ஐப் புறக்கணித்து <code>amount</code>-ஐ <code>applyOn</code>-ஆல் பரப்பு.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>நான்கு நுட்பமான விதி</h4>
+  <table>
+    <thead><tr><th style="width:24%">விதி</th><th>விவரம்</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Lump spread-இன் மீதம்</b></td>
+        <td>வகுத்தலின் மீதம் <b>கடைசி வரியில்</b> விழுகிறது, அதனால் shares சரியாக lump-க்கு மீண்டும் கூடும்.</td>
+      </tr>
+      <tr>
+        <td><b>Zero basis fallback</b></td>
+        <td>தேர்ந்தெடுத்த basis மொத்தம் பூஜ்ஜியம் எனில் (weightless வரிகளின் மேல் WEIGHT பரவல், இன்னும் எல்லாம் 0-ஆக உள்ள ஆவணத்தின் மேல் VALUE) <b>சம பங்கு</b>. Qt அங்கே பூஜ்ஜியத்தால் வகுத்து charge மௌனமாக bill-இல் இருந்து மறைந்துவிடும் — அது சம பிரிவைவிட மோசம்.</td>
+      </tr>
+      <tr>
+        <td><b>Basis by row (இரண்டு pass)</b></td>
+        <td>
+          <code>DEDUCT</code> + not <code>beforeTax</code> = ஏற்கனவே வரி விதிக்கப்பட்ட bill-இல் இருந்து
+          discount → line-இன் <b>net total</b> basis. மற்ற எல்லாம் <code>netGross</code> basis.
+          அதனால் goods-basis rows முதலில், பிறகு <code>netTotalOf</code> callback, பிறகு after-tax
+          DEDUCT rows. இதனால் <b>பல after-tax discount-களும் ஒரே pre-discount total-ஐ அளக்கின்றன</b> —
+          compounding இல்லை, row order-ஐப் பொறுத்ததும் இல்லை.
+        </td>
+      </tr>
+      <tr>
+        <td><b>Own tax</b></td>
+        <td>
+          ஒரு charge row தன் சொந்த GST-ஐ தாங்குவது <code>taxApl &amp;&amp; !beforeTax</code> ஆக இருந்தால்
+          <b>மட்டுமே</b>. மற்ற எல்லா combination-ம் முழு tax block-ஐயும் — <b>percentage உட்பட</b> —
+          பூஜ்ஜியமாக்கும். Charges ஒருபோதும் cess தாங்குவதில்லை.
+        </td>
+      </tr>
+      <tr>
+        <td><b>Role override, ஒரு row-க்கு ஒன்று</b></td>
+        <td>
+          <code>consumedRoles</code> set. ஒரே role-இன் இரண்டு rows உள்ள ஆவணம் (picker duplicate-ஐ
+          warn செய்யும், block செய்யாது) இல்லாவிட்டால் ஒவ்வொன்றும் முழு per-line freight-ஐ எடுத்து
+          <b>இருமுறை bill</b> செய்யும்.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>7.5 <code>document.ts</code></h3>
+  <table>
+    <thead><tr><th style="width:30%">Function</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">recalcDocument(lines, charges, policy, flags)</td>
+        <td>The whole pipeline. Returns <code>{ lines: PricedLine[], charges: PricedChargeRow[], totals }</code>.</td>
+      </tr>
+      <tr>
+        <td class="mono">reconcile(totals)</td>
+        <td>
+          §3.5 invariant, இரண்டு எண்களாக — அவை சமமாக இருக்க வேண்டும்:<br>
+          <code>amount + freeSchemeAmount === docTaxable + docTax + afterTaxNonTaxable</code><br>
+          இடமிருந்து வலமாக: வரிகளில் இருந்து bill எவ்வளவு கூடுகிறது, மற்றும் tax summary-இல் இருந்து எவ்வளவு. ஒவ்வொரு golden test-ம் இதை assert செய்கிறது.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h4>Role override gate</h4>
+  <p>
+    Per-line freight / loading columns <b>matching role தாங்கும் charge row வழியாக மட்டுமே</b>
+    bill-ஐ அடைகின்றன. Header checkbox off எனில், அல்லது policy <code>MANUAL</code> எனில், override
+    வழங்கப்படுவதில்லை — row தன் சொந்த method-ஆல் விலை நிர்ணயம் ஆகும். <b>ஒருபோதும் இருமுறை இல்லை.</b>
+  </p>
+  <p class="small">
+    <code>UNLOADING</code>-க்கு இந்தத் திரையில் per-line column இல்லை (item grid-இல்
+    <code>FreightPerQty</code>, <code>LoadingPerQty</code> மட்டுமே), அதனால் அது ஒருபோதும் override ஆகாது.
+  </p>
+
+  <h4>இரண்டு stat label — வேறு வேறு விஷயங்களை அளக்கின்றன</h4>
+  <table>
+    <thead><tr><th style="width:16%">Label</th><th style="width:34%">கணக்கு</th><th>யாருடையது</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Saving</b></td>
+        <td><code>Σ (mrp − netPrice) × netQty</code> ÷ <code>Σ mrp × netQty</code></td>
+        <td>வாடிக்கையாளரின், MRP-க்கு எதிராக. <b>MRP இல்லாத வரி fraction-இன் இரு பக்கத்திலும் வெளியே.</b></td>
+      </tr>
+      <tr>
+        <td><b>Margin</b></td>
+        <td><code>totalProfitBeforeTax</code> ÷ <code>lineTaxable</code></td>
+        <td>நிறுவனத்தின், pre-tax. <b>Charge வருவாய் இரு பக்கமும் வெளியே.</b></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ==================== 8. PAYLOAD ==================== -->
+<section>
+  <h2>8 · Payload — save மற்றும் load translation</h2>
+
+  <h3>8.1 <code>buildSavePayload(draft, pricing, actor)</code></h3>
+  <p class="lead">Save contract-இன் பொறிகளை அறிந்த ஒரே இடம்.</p>
+  <table>
+    <thead><tr><th style="width:32%">பொறி</th><th>விளைவு / கையாளுதல்</th></tr></thead>
+    <tbody>
+      <tr><td><b>ஆறு field ஒவ்வொரு request-க்கும்</b><br><span class="mono small">sqCompanyId, sqBranchId, sqAccYear, sqPriceLevel, sqCustName, sqUserId</span></td><td>Update-இல் ஐந்து புறக்கணிக்கப்பட்டாலும், விடுபட்டால் <b>400</b>.</td></tr>
+      <tr><td><b>Server-owned fields</b></td><td><code>sqQuoteSlno</code> / <code>sqQuoteRefno</code> voucher sequence-ஆல் ஒதுக்கப்பட்டு input-இல் புறக்கணிக்கப்படுகின்றன → <b>அனுப்பப்படுவதே இல்லை</b>.</td></tr>
+      <tr><td><b>Boolean ≠ null</b></td><td><code>OptionalBoolean</code> <code>null</code>-ஐ validation வழியாக அனுமதிக்கும், பிறகு NOT NULL column-இல் மோதி <b>500</b>.</td></tr>
+      <tr><td><b><code>sqStatus</code></b></td><td>Upper-case CHECK constraint, DTO validation இல்லை → lower-case ஏற்கப்பட்டு பிறகு Postgres <b>500</b>. <code>statusOf()</code> வழியாகவே.</td></tr>
+      <tr><td><b><code>cdTaxApl</code> ⊕ <code>cdBeforeTax</code></b></td><td>ஒன்றுக்கொன்று exclusive → <b>400</b>. Draft snapshot-நேரத்திலேயே தீர்க்கிறது; இங்கே belt-and-braces.</td></tr>
+      <tr><td><b><code>forbidNonWhitelisted</code></b></td><td>Declared field மட்டுமே — தவறான key ஒன்று போதும் <b>400</b>-க்கு.</td></tr>
+      <tr><td><b>Calc types lower case</b></td><td>DTO normalise செய்யாது. இவை <code>/item-price</code>-இன் <code>loading_type</code> / <code>freight_type</code> அதே vocabulary — வேறு case-இல் சேமித்தால் மீண்டும் lookup-க்குக் கொடுக்க முடியாது.</td></tr>
+      <tr><td><b><code>sqiFreeType</code></b></td><td><code>ck_sqi_free_type</code> <code>NULL</code> / <code>'SCHEME'</code> / <code>'SAMPLE'</code> மட்டுமே — வேறெதுவும் DB-இல் இருந்து <b>500</b>.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Keyed vs computed</h4>
+  <p>
+    மூன்று keyed column (<code>*Perc</code>, <code>*Qty</code>) keyed-ஆகவே போகின்றன; <code>*Amt</code>
+    column-கள் <b>engine கணக்கிட்டதை</b> எடுத்துச் செல்கின்றன — அதுவே grid காட்டியது, அதுவே print-க்குத் தேவை.
+  </p>
+  <h4>Line / charge skip</h4>
+  <p>
+    Item இல்லாத வரி operator ஆரம்பித்து விட்டுவிட்ட row — நிராகரிக்கப்படுவதில்லை, <b>தவிர்க்கப்படுகிறது</b>.
+    Array-இல் இல்லாத active line server-side soft delete ஆகும் — row நீக்குவதன் சரியான பொருள் அதுவே.
+    Charge row-க்கு <code>chgId</code> <b>மற்றும்</b> <code>ledgerCode</code> இரண்டும் வேண்டும்.
+  </p>
+
+  <h3>8.2 <code>parseLoadedDocument(payload, fallbackCompanyStateCode)</code></h3>
+  <p>Qt-இல் இருந்து மாறாத மூன்று விதிகள்:</p>
+  <ol>
+    <li><b>Load-இல் எதுவும் மறு-விலை நிர்ணயம் ஆகாது</b> — <code>pricing: "stored"</code>, மற்றும் <code>storedPricing</code> engine-இன் வடிவத்தில் கட்டப்படுகிறது.</li>
+    <li><b>Tenant context voucher-இன்</b> — <code>sqCompanyId/BranchId/AccYear</code> draft-ஐ overwrite செய்கின்றன.</li>
+    <li><b>Server-owned fields அப்படியே திரும்பக் கொடுக்கப்படுகின்றன</b> — <code>sqQuoteSlno</code> string-ஆகவே, <code>sqRevisionNo</code> / <code>sqDocType</code> load ஆனபடியே.</li>
+  </ol>
+  <p>
+    ஆவணத்தின் tax split அதன் <b>சொந்த சேமித்த தொகைகளில்</b> இருந்து படிக்கப்படுகிறது: cgst+sgst
+    இருந்தால் local supply. வரி பூஜ்ஜியமான ஆவணம் <b>மட்டுமே</b> place-of-supply ஒப்பீட்டுக்கு fallback ஆகும் —
+    ஏனெனில் ஒப்பிடப்பட வேண்டிய state <i>voucher-இன்</i> company-யினது, ஆனால் client-க்கு session
+    company-யினது மட்டுமே தெரியும்.
+  </p>
+  <div class="warn">
+    <b>DEDUCT row-ஐ இருமுறை negate செய்யாதே</b>
+    <p>
+      <code>cd_rate</code> magnitude-ஆகவும் <code>cd_amount</code> signed total-ஆகவும் சேமிக்கப்படுகிறது
+      (<code>cd_type</code> sign-ஐ சுமக்கிறது). <code>Math.abs</code> இல்லாமல், மொத்தத்தால் விலை நிர்ணயித்த
+      DEDUCT row-ஐ reload செய்தால் அடுத்த edit-இல் <b>இரண்டாவது முறை negate</b> ஆகிவிடும்.
+    </p>
+  </div>
+
+  <h3>8.3 <code>applySaveResponse</code> — ஏன் response மீண்டும் parse செய்யப்படுவதில்லை</h3>
+  <p>
+    Save path-இல் server join செய்யாததால் <code>sqiItemName</code> / <code>sqiUnitName</code>
+    <code>null</code>-ஆக வரும். மீண்டும் parse செய்தால் திரையில் உள்ள <b>எல்லா item பெயர்களும்
+    காலியாகிவிடும்</b>. அதனால் server-owned identity மட்டுமே எடுக்கப்படுகிறது:
+    <code>sqId</code>, <code>sqQuoteSlno</code>, <code>sqQuoteRefno</code>, <code>revisionNo</code>,
+    மற்றும் per-line <code>sqiId</code> / per-charge <code>cdId</code> (அடுத்த save duplicate-ஆக
+    இல்லாமல் update ஆக).
+  </p>
+
+  <h3>8.4 Wire quirks</h3>
+  <table>
+    <thead><tr><th style="width:30%">Quirk</th><th>விவரம்</th></tr></thead>
+    <tbody>
+      <tr><td><b>Decimals are strings</b></td><td>ஒவ்வொரு <code>numeric</code> column-ம் trailing zero trim ஆன <b>string</b>-ஆக வருகிறது (<code>0.00 → "0"</code>, <code>1234.50 → "1234.5"</code>). அதனால் <code>toNumber()</code> வழியாகவே — number என்று அனுமானிக்கக் கூடாது.</td></tr>
+      <tr><td><b>Dates are ISO timestamps</b></td><td><code>toDateInput()</code> <code>yyyy-mm-dd</code> ஆக வெட்டுகிறது.</td></tr>
+      <tr><td><b>Casing is inconsistent</b></td><td><code>/quotations/*</code> மற்றும் <code>/ui-table-masters/*</code> camelCase; configured-grid மற்றும் dropdown runners snake_case; <code>/master-lookups/*</code> item-price &amp; customer-detail-க்கு snake_case, மற்றவற்றுக்கு camelCase. Generic normalizer குறைந்தது பாதிக்குத் தவறாக இருக்கும், அதனால் <b>normalise செய்யப்படவில்லை</b>.</td></tr>
+      <tr><td><b><code>acccyear</code></b></td><td>மூன்று <code>c</code>. இல்லாவிட்டால் <code>stock</code> null ஆக வரும்.</td></tr>
+      <tr><td><b><code>*_unit_id</code> = <code>iuc_id</code></b></td><td>Line சேமிப்பது unit-conversion id, raw <code>unit_id</code> அல்ல.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ==================== 9. VALIDATION ==================== -->
+<section>
+  <h2>9 · Validation</h2>
+  <p class="lead">
+    Pure, முதல் violation ஜெயிக்கும், மற்றும் <b>operator-ஐ அனுப்பக்கூடிய இடத்தை எப்போதும் பெயரிடுகிறது</b> —
+    <code>Violation = { message, field, lineKey? }</code>.
+  </p>
+
+  <h3>9.1 <code>validateSaveInputs(draft, pricing, context)</code> — வரிசை</h3>
+  <table>
+    <thead><tr><th class="nowrap" style="width:6%">#</th><th style="width:26%">சோதனை</th><th>ஏன்</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>mode === "entry"</td><td>Browse-இல் save கிளிக் செய்ய முடியும் — dead button-ஐ விட ஒரு காரணத்துடன் மறுப்பது சிறந்தது.</td></tr>
+      <tr><td>2</td><td>customer தேர்ந்தெடுக்கப்பட்டதா</td><td><code>sqCustName</code> required.</td></tr>
+      <tr><td>3</td><td>quoteDate உண்மையான தேதியா</td><td></td></tr>
+      <tr><td>4</td><td><b>accounting year match</b></td><td><code>sq_acc_year</code> create-க்குப் பிறகு immutable <b>மற்றும்</b> voucher sequence-இன் period key-இன் பகுதி. வெளியே விழும் தேதி voucher-ஐ நிரந்தரமாகத் தவறான ஆண்டில் எண்ணிடும்.</td></tr>
+      <tr><td>5</td><td>validUntil ≥ quoteDate</td><td>Reducer இதைத் திருத்தவில்லை — வேண்டுமென்றே. இங்கே சொல்லப்படுகிறது.</td></tr>
+      <tr><td>6</td><td>ஒவ்வொரு populated வரிக்கும்: billQty ≠ 0</td><td></td></tr>
+      <tr><td>7</td><td>rate ≠ 0, அல்லது <code>isFree</code></td><td>"Mark it free if that is intended."</td></tr>
+      <tr><td>8</td><td>rate ≥ minPrice</td><td></td></tr>
+      <tr><td>9</td><td>rate ≤ mrp (skipMrp இல்லையெனில்)</td><td></td></tr>
+      <tr><td>10</td><td>குறைந்தது ஒரு item</td><td></td></tr>
+      <tr><td>11</td><td>ஒவ்வொரு charge row-க்கும் ledgerCode</td><td><code>cd_ledger_code</code> NOT NULL, server default இல்லை — இல்லாவிட்டால் save <b>404</b> ஆகும், field error அல்ல.</td></tr>
+      <tr><td>12</td><td><b>roleGate</b></td><td>கீழே.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>9.2 <code>roleGate</code> — module-இன் மிக நுட்பமான சோதனை</h3>
+  <p>
+    FREIGHT / LOADING / UNLOADING ஒவ்வொன்றுக்கும்: header checkbox on, policy MANUAL அல்ல,
+    <b>மற்றும் வரிகள் உண்மையில் positive தொகை கணக்கிடுகின்றன</b> என்றால், அந்த role தாங்கும்
+    charge row <b>இருக்க வேண்டும்</b>.
+  </p>
+  <div class="warn">
+    <b>இல்லாவிட்டால் என்ன நடக்கும்</b>
+    <p>
+      Row இல்லாத role override தரையில் விழுந்துவிடும், மற்றும் operator freight-க்கு customer
+      ஒருபோதும் bill செய்யப்படாத quotation-ஐ சேமிப்பார் — திரையில் அது சரியாகத் தெரிந்துகொண்டே.
+    </p>
+  </div>
+  <p class="small">
+    <code>UNLOADING</code>-க்கு per-line column இல்லாததால் அது ஒருபோதும் positive தொகை கணக்கிடாது —
+    ஆனால் சோதனை <b>எழுதப்பட்டிருக்கிறது</b>, column சேர்க்கப்பட்டால் மௌனமாகத் தவிர்க்கப்படாமல் இருக்க.
+  </p>
+
+  <h3>9.3 <code>rateWarning(rate, minPrice, mrp, skipMrp?)</code></h3>
+  <p>
+    தனியாக இருக்கிறது, ஏனெனில் இது <b>ஒவ்வொரு keystroke-க்கும்</b> fire ஆகும் — operator தொடாத எதைப்
+    பற்றியும் பேசக்கூடாது. minPrice-க்கு கீழே <b>cell revert ஆகிறது</b>; MRP-க்கு மேல் warn மட்டுமே
+    (அது save-நேர மறுப்பு). காலி cell (rate 0) இன்னும் violation அல்ல — operator இன்னும் type செய்கிறார்.
+  </p>
+</section>
+
+<!-- ==================== 10. COLUMNS ==================== -->
+<section>
+  <h2>10 · Grid column configuration</h2>
+  <p class="lead">
+    இரண்டு grid-ம் <b>server-ஆல் layout</b> செய்யப்படுகின்றன (<code>fixed.ui_tables</code> rows 18 மற்றும் 21),
+    ஆனால் column-இன் <b>பொருள்</b> client-side. இரண்டையும் <code>normalizeColumnToken</code> இணைக்கிறது.
+  </p>
+
+  <table>
+    <thead><tr><th style="width:26%">Source</th><th>என்ன கொடுக்கிறது</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">GET /ui-table-masters/get</td><td>Order, width, visibility, focus, heading text.</td></tr>
+      <tr><td class="mono">ITEM_COLUMN_MEANINGS<br>CHARGE_COLUMN_MEANINGS</td><td>எந்த draft field, என்ன cell kind, alignment, precision, editability condition. <code>fixed.ui_table_columns</code> <b>display name-ஐ மட்டுமே</b> சேமிக்கிறது — field token இல்லை, data type இல்லை.</td></tr>
+    </tbody>
+  </table>
+
+<pre>normalizeColumnToken("Case Qty")  → "caseqty"
+normalizeColumnToken("Rate.BTax") → "ratebtax"
+normalizeColumnToken("Gst %")     → "gst"
+normalizeColumnToken("#")         → ""   ← charge grid-இன் முதல் column;
+                                            column NUMBER-ஆல் match செய்யப்படுகிறது</pre>
+
+  <h3>10.1 நான்கு நுட்பம்</h3>
+  <table>
+    <thead><tr><th style="width:26%">பிரச்சினை</th><th>கையாளுதல்</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Position ஒரு நம்பகமான வரிசை அல்ல</b></td>
+        <td>Live data-இல் position 58 <b>இருமுறை</b> (<code>ChrgAfterTax</code>, <code>Total</code>), 62 காலி. அதனால் <code>uiTblClmNo</code>-ஆல் sort, position-ஆல் அல்ல — இல்லையெனில் அந்த இரண்டும் non-deterministic-ஆக இடம் மாறும்.</td>
+      </tr>
+      <tr>
+        <td><b>Width ஒரு percent அல்ல</b></td>
+        <td><code>ui_tbl_clm_column_width</code> Qt திரைக்காக அளக்கப்பட்டது; 76 visible item column சேர்ந்து <b>~460%</b>. <code>table-layout: fixed</code> + <code>width: max-content</code> table-இல் <code>%</code>-ஆக render செய்தால் percentage-கள் தமக்கே சார்ந்த width-க்கு எதிராக resolve ஆகி <b>table பல கோடி pixel</b> ஆக வளரும். அதனால் <code>11px</code> per unit-ஆக மாற்றப்படுகிறது (min 34px).</td>
+      </tr>
+      <tr>
+        <td><b>Read ≠ write</b></td>
+        <td>மூன்று discount amount column engine கணக்கிட்டதைக் <b>காட்டுகின்றன</b>, ஆனால் operator-இன் keyed தொகையை <b>எழுதுகின்றன</b>.</td>
+      </tr>
+      <tr>
+        <td><b>Layout இல்லாத deployment</b></td>
+        <td>ui tables 18/21-ஐ எந்த migration-ம் provision செய்யவில்லை — அவை dev database-இல் மட்டுமே உள்ள data. புதிய environment-க்கு layout காலி, அதனால் <code>fallbackColumns</code>: எல்லா local meaning-ம், declaration order-இல், எல்லாம் visible. (இதற்கென தனி test உள்ளது.)</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ==================== 11. UI ==================== -->
+<section>
+  <h2>11 · UI components</h2>
+
+  <h3>11.1 <code>grid-cell.tsx</code> — edit buffer</h3>
+  <p>
+    Numeric cell focus உள்ளபோது <b>local edit buffer</b> வைத்திருக்கிறது. ஒவ்வொரு keystroke-ம் commit
+    செய்தால் operator-இன் cursor-க்கு அடியில் text reformat ஆகும் (பாதி type செய்த <code>1.</code> →
+    <code>1</code>). Blur / Enter-இல் commit, பிறகு draft-ஐ மீண்டும் படித்தல்.
+  </p>
+  <table>
+    <thead><tr><th style="width:28%">Guard</th><th>ஏன்</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Re-seed on external change</b></td>
+        <td>Focus உள்ள editor-க்கு <b>அடியில்</b> draft மாறினால் (DiscPerc type செய்வது DiscPerQty-ஐ clear செய்கிறது, Enter focus-ஐ அதில் இறக்குகிறது), buffer மீண்டும் seed ஆகிறது. இல்லாமல் பழைய text blur-இல் commit ஆகி <b>இப்போது keyed ஆன discount-ஐ மௌனமாக undo</b> செய்யும்.</td>
+      </tr>
+      <tr>
+        <td><b>Commit only what changed</b></td>
+        <td><code>buffer !== seedText</code> ஆக இருந்தால் மட்டுமே commit. தொடப்படாத buffer-ஐ எழுதுவது பெரும்பாலான column-க்கு no-op, ஆனால் discount group-க்கு அல்ல: DiscPerQty வழியாக tab செய்வது DiscPerc-ஐ clear செய்யும் write-ஐ dispatch செய்யும்.</td>
+      </tr>
+      <tr>
+        <td><b>Data attrs on the INPUT</b></td>
+        <td>Enter walker மற்றும் <code>data-quotation-row</code> lookup இரண்டும் <i>focused element</i>-இல் இருந்து படிக்கின்றன. Checkbox-இன் wrapper-இல் வைத்தபோது walk முடிந்துவிட்டு, checkbox-இல் focus இருக்கும்போது F4 / Ctrl+± செத்துவிட்டன.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>11.2 <code>grid-focus.ts</code></h3>
+  <p>
+    Cell-கள் <code>data-quotation-*</code>-ஆல் தமை அறிவிக்கின்றன; walker <b>DOM-ஐப் படிக்கிறது</b>.
+    DOM order ஏற்கனவே row-then-column order, அதனால் "அடுத்த cell"-க்கு layout model தேவையில்லை
+    மற்றும் configured column order-உடன் drift ஆக முடியாது.
+  </p>
+  <table>
+    <thead><tr><th style="width:34%">Function</th><th>Usage</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">moveCellFocus(gridName, from, ±1)</td><td>Enter / Shift+Enter. Disabled cell walk-இல் இருந்து விழுகிறது; <b>read-only cell விழாது</b> — lookup cells picker திறக்கும் read-only input, அவற்றைத் தவிர்த்தால் Enter item column-ஐக் கடந்து பாய்ந்துவிடும்.</td></tr>
+      <tr><td class="mono">focusCell(gridName, rowKey, fieldKey)</td><td>Barcode commit → அடுத்த row-இன் <i>அதே</i> column.</td></tr>
+      <tr><td class="mono">focusLastCellAfterRender(gridName, fieldKey)</td><td>கடைசி row-இல் barcode commit புதிய row சேர்க்கிறது; scanner உடனே அடுத்த code-ஐ அனுப்பும், அதனால் focus <code>requestAnimationFrame</code>-க்குப் பிறகு புதிய row-இல் காத்திருக்க வேண்டும்.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>11.3 <code>header-blocks.tsx</code> + <code>fields.tsx</code></h3>
+  <p>
+    நான்கு block draft-இல் இருந்து controlled. அதனால் Qt திரையின் <b>ஆறு <code>QSignalBlocker</code>
+    guard</b> (validity pair, place-of-supply dropdown, load path) இங்கே இல்லை — controlled input
+    தன் சொந்த handler-க்கு மீண்டும் நுழைய முடியாது.
+  </p>
+  <div class="note">
+    <b>DropdownCombo — menu ஏன் portal செய்யப்படவில்லை</b>
+    <p>
+      Header block scroll container-க்குள் இல்லை, அதனால் clip செய்ய எதுவும் இல்லை; tree-இல்
+      வைத்திருப்பது outside-click test-ஐ ஒரு <code>contains</code> சோதனையாக ஆக்குகிறது.
+      Portaled menu-இன் ref அந்த test-இல் விடுபட்டால் <b>ஒவ்வொரு option click-ஐயும் விழுங்கிவிடும்</b> —
+      இந்த codebase ஏற்கனவே ஒருமுறை இதற்கு விலை கொடுத்தது.
+    </p>
+  </div>
+
+  <h3>11.4 Modals மற்றும் keyboard ownership</h3>
+  <p>
+    ஒரு dialog திறந்திருக்கும்போது keyboard அதற்குச் சொந்தம் (<code>modalOpen</code> gate).
+    Browse list-க்குப் பின்னால் F5 operator பார்க்காத ஆவணத்தைச் சேமிக்கும்; item picker-க்குப்
+    பின்னால் F7 விழப்போகும் pick-இன் அடியில் இருந்து ஆவணத்தை clear செய்யும். மேலும்
+    <code>event.repeat</code> guard — function key-ஐ அழுத்திப் பிடித்தால் ஒரு press
+    <b>டஜன் create</b> post செய்யும்.
+  </p>
+</section>
+
+<!-- ==================== 12. WORKFLOWS ==================== -->
+<section>
+  <h2>12 · Workflows — படிப்படியான ஓட்டம்</h2>
+
+  <h3>12.1 புதிய Quotation</h3>
+<pre>Menu → List → "New Quotation"
+  │
+  ├─ QuotationEntryView mount (initialDocument இல்லை)
+  │    useLayoutEffect → api.clear()          ← store-இல் இருந்த பழையது அழிகிறது
+  │                                              (paint-க்கு முன், flash இல்லாமல்)
+  ├─ effects:  tenantSet  →  companyStateCodeSet  →  chargesSeeded (chgAutoApply)
+  │
+  ├─ Customer தேர்வு
+  │    GET /master-lookups/customer-detail
+  │      → customerApplied
+  │          place of supply · area · salesman · price level · 4 checkbox · isLocalSale
+  │      → distance மாறியிருந்தால் + policy ≠ manual
+  │          GET /freight-charges/charge → freightBandsSet
+  │
+  ├─ "Add row" → lineAdded  (draft.header.priceLevel-ஐ inherit)
+  │
+  ├─ Description cell + Enter → ItemPickerModal (grid 71)
+  │    GET /master-lookups/item-price
+  │      → itemPriceApplied
+  │          rate · mrp · minPrice · cost · GST split · weight ·
+  │          freight/loading per qty · batchConfig · decimalCount · stock
+  │
+  ├─ Bill Qty / Case Qty / DiscPerc … type
+  │    → lineFieldSet   (discount alternates clear ஆகின்றன)
+  │
+  │  ⟳ ஒவ்வொரு dispatch-க்குப் பிறகும் தானாக:
+  │       recalcDocument(...) → grid-இன் derived columns + TotalsStrip
+  │
+  ├─ "Add charge" → ChargePickerModal (/charges/get)
+  │    → chargeMasterApplied   (cd* snapshot; before-tax வென்றால் taxApl false)
+  │
+  └─ F5
+       validate  →  buildSavePayload  →  POST /quotations/create
+         → saveResponseApplied
+             sqId · quoteRefno · revisionNo · per-row sqiId/cdId · isDirty=false</pre>
+
+  <h3>12.2 பழைய Quotation-ஐத் திறப்பது</h3>
+<pre>List row → Edit → onOpen(docKey, "entry")
+  │
+  ├─ useLayoutEffect:  api.clear()      ← GET பயணத்தில் இருக்கும்போது வேறு ஆவணம் தெரியக்கூடாது
+  │                    api.loadDocument(key)
+  │
+  ├─ GET /quotations/get?sqId&amp;sqCompanyId&amp;sqBranchId&amp;sqAccYear
+  │      ← நான்கு field key: ஒரு quotation-ஐ ஒரே id-யால் அடையாளம் காண முடியாது
+  │
+  ├─ parseLoadedDocument(payload, companyStateCode)
+  │      mode: "browse"     pricing: "stored"
+  │      tenant  = voucher-இன்      policy = voucher-இன் snapshot
+  │      storedPricing = storedPricingOf(payload, lines, charges)
+  │  → draftReplaced
+  │
+  ├─ திரையில் **சேமித்த எண்கள்** — engine ஓடவே இல்லை
+  │
+  ├─ initialMode === "entry"  →  beginEdit()   (non-edit; pricing இன்னும் "stored")
+  │
+  └─ முதல் உண்மையான edit
+       reducer wrapper → isDirty: true, pricing: "live"
+       இப்போது engine ஓடுகிறது — **ஆவணத்தின்** policy-இல், session-இன் அல்ல</pre>
+
+  <h3>12.3 Save (update)</h3>
+<pre>draft.docId உள்ளது
+  → payload-இல் sqId சேர்க்கப்படுகிறது
+  → தனி update route இல்லை; sqId-இன் இருப்பு create/update-ஐத் தேர்ந்தெடுக்கிறது
+  → array-இல் இல்லாத active line / charge  ⟹  server-side soft delete
+  → per-row sqiId / cdId இருப்பதால் update, duplicate அல்ல</pre>
+
+  <h3>12.4 Barcode scanner ஓட்டம்</h3>
+<pre>Barcode cell-இல் scan + Enter
+  → GET /master-lookups/item-by-barcode
+      allowSales === false  →  warn, நிற்கிறது
+  → GET /master-lookups/item-price   (barcode-இன் unitId ஏற்கனவே ஒரு iuc_id)
+  → itemPriceApplied
+  → focus  ⇢  அடுத்த row-இன் **Barcode** cell   (இந்த row-இன் அடுத்த column அல்ல)
+      கடைசி row எனில்: lineAdded + focusLastCellAfterRender
+  ArrowDown = scanner-இல் இருந்து வெளியேறி item picker-ஐத் திற</pre>
+
+  <h3>12.5 Price level (Ctrl+1..4)</h3>
+<pre>Ctrl+2
+  → canEditPrice இல்லையெனில் warn, முடிவு
+  → PriceLevelPrompt:  "இந்த வரி"  அல்லது  "எல்லா வரி"
+  → linePriceLevelSet({ keys, priceLevel, commitDocument: scope === "all" })
+  → ஒவ்வொரு target வரிக்கும் தனித்தனியாக:
+       GET /item-price(level) → itemPriceApplied
+    (local edit அல்ல — server-இல் மறு-விலை நிர்ணயம் ஆக வேண்டும்)</pre>
+
+  <h3>12.6 Dirty guard</h3>
+<pre>Clear (F7) / Show list (F8) / "‹ Quotations"
+  → draft.isDirty ?
+       ஆம்  → DeleteConfirmModal "Discard unsaved changes?"
+                Discard → செயல்
+                Keep editing → ரத்து
+       இல்லை → நேரடியாகச் செயல்
+Browser navigation → beforeunload listener</pre>
+</section>
+
+<!-- ==================== 13. KEYBOARD ==================== -->
+<section>
+  <h2>13 · Keyboard reference</h2>
+  <table>
+    <thead><tr><th style="width:16%">Key</th><th style="width:18%">Scope</th><th>செயல்</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">F2</td><td>document</td><td>browse → entry (Edit)</td></tr>
+      <tr><td class="mono">F3</td><td>document</td><td>Delete (<code>docId</code> இருந்தால்)</td></tr>
+      <tr><td class="mono">F4</td><td>item grid</td><td>Unit cycle — backend அடுத்த <code>iuc_id</code>-ஐத் தருகிறது</td></tr>
+      <tr><td class="mono">F5</td><td>document</td><td>Save</td></tr>
+      <tr><td class="mono">F6</td><td>document</td><td>Save &amp; print <span class="small">(print endpoint இன்னும் இல்லை)</span></td></tr>
+      <tr><td class="mono">F7</td><td>document</td><td>Clear (dirty guard)</td></tr>
+      <tr><td class="mono">F8</td><td>document</td><td>Quotation list modal (dirty guard)</td></tr>
+      <tr><td class="mono">Ctrl + <b>+</b> / <b>=</b></td><td>item grid</td><td>இந்த row-க்கு மேலே ஒரு வரி insert</td></tr>
+      <tr><td class="mono">Ctrl + <b>−</b></td><td>item grid</td><td>இந்த வரியை நீக்கு</td></tr>
+      <tr><td class="mono">Ctrl + 1..4</td><td>item grid</td><td>Price level A/B/C/D</td></tr>
+      <tr><td class="mono">Enter</td><td>இரு grid</td><td>Commit + அடுத்த cell</td></tr>
+      <tr><td class="mono">Shift + Enter</td><td>இரு grid</td><td>Commit + முந்தைய cell</td></tr>
+      <tr><td class="mono">Enter / F2</td><td>lookup cell</td><td>Item / charge picker-ஐத் திற</td></tr>
+      <tr><td class="mono">Escape</td><td>cell</td><td>Buffer-ஐக் கைவிடு (draft ஜெயிக்கும்)</td></tr>
+      <tr><td class="mono">ArrowDown</td><td>barcode cell</td><td>Scanner-இல் இருந்து வெளியேறி picker-ஐத் திற</td></tr>
+      <tr><td class="mono">↑ / ↓ / Enter</td><td>modals</td><td>List navigation + தேர்வு</td></tr>
+    </tbody>
+  </table>
+  <p class="small">
+    Modal திறந்திருக்கும்போது document-level function keys <b>எதுவும்</b> வேலை செய்யாது —
+    dialog-க்கு keyboard சொந்தம்.
+  </p>
+</section>
+
+<!-- ==================== 14. API ==================== -->
+<section>
+  <h2>14 · API endpoint reference</h2>
+  <p class="lead"><code>/api/v1</code> ஏற்கனவே <code>API_BASE</code>-இன் பகுதி — path-இல் ஒருபோதும் எழுதக்கூடாது.</p>
+  <table>
+    <thead><tr><th style="width:23%">RTK endpoint</th><th style="width:28%">Route</th><th>குறிப்பு</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">getQuotation</td><td class="mono">GET /quotations/get</td><td>நான்கு field key. <code>sqAccYear</code>-க்கு server-side pipe இல்லை — விடுபட்டால் filter மௌனமாக விழும், அதனால் எப்போதும் அனுப்பப்படுகிறது. <code>keepUnusedDataFor: 0</code>.</td></tr>
+      <tr><td class="mono">saveQuotation</td><td class="mono">POST /quotations/create</td><td>Create + update ஒரே route; <code>sqId</code>-இன் இருப்பு தேர்ந்தெடுக்கிறது.</td></tr>
+      <tr><td class="mono">deleteQuotation</td><td class="mono">DELETE /quotations/delete</td><td>Soft delete.</td></tr>
+      <tr><td class="mono">listQuotations</td><td class="mono">GET /configured-grid-sql/run<br>grid_id=84</td><td><code>/quotations/list</code> route இல்லை — grid 84 தான் list. <code>search</code> <b>வேண்டுமென்றே அனுப்பப்படுவதில்லை</b> (filterable column இல்லை → runner <code>1 = 0</code> inject செய்யும்).</td></tr>
+      <tr><td class="mono">getQuotationGridLayout</td><td class="mono">GET /ui-table-masters/get</td><td><code>uiTableId</code> camelCase, மற்றும் அதுவே <b>ஒரே</b> ஏற்கப்படும் param — <code>uiTblClmTableId</code> <code>forbidNonWhitelisted</code>-ஆல் நிராகரிக்கப்படும்.</td></tr>
+      <tr><td class="mono">searchPickerItems</td><td class="mono">GET /configured-grid-sql/run<br>grid_id=71</td><td>Item × unit conversion. <code>item_name_en</code> மட்டுமே searchable.</td></tr>
+      <tr><td class="mono">getSalesCharges</td><td class="mono">GET /charges/get?chgModule=S</td><td><code>S</code> → <code>('S','B')</code>. Unpaginated by design. Grid 82-ஐ விட இது தேவை, ஏனெனில் <code>chgLedgerCode</code> இங்கே மட்டுமே உள்ளது.</td></tr>
+      <tr><td class="mono">runDropdown</td><td class="mono">GET /dropdown-details/run</td><td>Customer 39 · POS 21 · Agent/Salesman 38. <code>dropdown_param</code> ஒருபோதும் அனுப்பப்படுவதில்லை — substitution textual, ஒரு தவறான key query-ஐக் கெடுக்கும்.</td></tr>
+      <tr><td class="mono">getCustomerDetail</td><td class="mono">GET /master-lookups/customer-detail</td><td>snake_case. <code>local_sales</code> server-side கணக்கிடப்படுவதால் authoritative.</td></tr>
+      <tr><td class="mono">getItemPrice</td><td class="mono">GET /master-lookups/item-price</td><td>snake_case. <code>price_level</code> required, 1-based (1..4 = A..D, 5 = MRP, 6 = min, 7 = cost).</td></tr>
+      <tr><td class="mono">switchItemUom</td><td class="mono">GET /master-lookups/item-switch-uom</td><td>அடுத்த <code>iuc_id</code> மட்டும், விலை அல்ல.</td></tr>
+      <tr><td class="mono">getItemUnits</td><td class="mono">GET /master-lookups/units/by-item/:id</td><td>camelCase; <code>itemUnitId</code> ஒரு <code>iuc_id</code>.</td></tr>
+      <tr><td class="mono">getQuotationItemByBarcode</td><td class="mono">GET /master-lookups/item-by-barcode</td><td>இந்த feature-க்காகவே பெயரிடப்பட்டது: <code>lookupsApi</code>-ம் ஒரு <code>getItemByBarcode</code>-ஐ அதே <code>baseApi</code>-இல் inject செய்கிறது, இரண்டும் <code>overrideExisting: true</code> — generic பெயர் மற்றதை மௌனமாக மாற்றிவிடும்.</td></tr>
+      <tr><td class="mono">getFreightBands</td><td class="mono">GET /master-lookups/freight-charges/charge</td><td>ஒரே தூரத்திற்கு பல band (எடையால் வேறுபடும்); client எடையால் தேர்ந்தெடுக்கிறது.</td></tr>
+      <tr><td class="mono">getCompanyStateCode</td><td class="mono">GET /company-masters/get</td><td><code>compStateCode</code> மட்டும்.</td></tr>
+      <tr><td class="mono">getUserCapabilities</td><td class="mono">GET /user-administration/get</td><td><code>usrEditRate</code>, <code>usrLanguage</code>. <code>usrId</code> v7 uuid ஆக இருக்க வேண்டும்; தோல்வி = "restriction இல்லை".</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ==================== 15. FUNCTION INDEX ==================== -->
+<section>
+  <h2>15 · Function index — முழு பட்டியல்</h2>
+  <p class="lead">Alphabetical within each file. "Called by" சொல்வது யார் இதை உண்மையில் பயன்படுத்துகிறார்கள் என்பதை.</p>
+
+  <h3>15.1 <code>quotation.state.ts</code> <span class="tag pure">PURE</span></h3>
+  <table>
+    <thead><tr><th style="width:27%">Function</th><th style="width:33%">Signature</th><th>Purpose / called by</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">applyHeaderField</td><td class="mono">(header, field, value) ⇒ QuotationHeader</td><td>ஒரு header field + சார்ந்த fields (validity pair, price-level clamp). ← <code>headerFieldSet</code></td></tr>
+      <tr><td class="mono">applyItemPrice</td><td class="mono">(line, lookup, extra?) ⇒ DraftLine</td><td>Item price lookup-ஐ ஒரு வரியில் நிரப்புகிறது. ← <code>itemPriceApplied</code></td></tr>
+      <tr><td class="mono">applySaveResponse</td><td class="mono">(draft, payload, sentDraft?) ⇒ QuotationDraft</td><td>Server identity merge + dirty முடிவு. ← <code>saveResponseApplied</code></td></tr>
+      <tr><td class="mono">chargeRowFromMaster</td><td class="mono">(master) ⇒ DraftChargeRow</td><td><code>cd*</code> snapshot; before-tax ⊕ taxApl முரண்பாட்டைத் தீர்க்கிறது. ← slice, hook (auto-apply seed)</td></tr>
+      <tr><td class="mono">clampPriceLevel</td><td class="mono">(level) ⇒ 1..7</td><td>FK-checked server-side, DTO-இல் range guard இல்லை. ← எல்லா இடமும்</td></tr>
+      <tr><td class="mono">createDraft</td><td class="mono">(context) ⇒ QuotationDraft</td><td>புதிய ஆவணம். ← <code>clear()</code>, slice <code>initialState</code></td></tr>
+      <tr><td class="mono">createDraftChargeRow</td><td class="mono">(overrides?) ⇒ DraftChargeRow</td><td>காலி charge row — charge தேர்ந்தெடுக்கப்படாததால் எதற்கும் விலை நிர்ணயம் ஆகாது.</td></tr>
+      <tr><td class="mono">createDraftLine</td><td class="mono">(overrides?) ⇒ DraftLine</td><td>காலி வரி + புதிய <code>key</code>. ← <code>lineAdded</code>, <code>lineFromPayload</code></td></tr>
+      <tr><td class="mono">customerFromDetail</td><td class="mono">(detail) ⇒ CustomerSnapshot</td><td>snake_case payload → snapshot. Price level 1-based-ஆகவே கடந்து செல்கிறது.</td></tr>
+      <tr><td class="mono">emptyCustomer / emptyHeader / emptyTerms</td><td class="mono">() ⇒ …</td><td>Blank sub-objects.</td></tr>
+      <tr><td class="mono">resolveLocalSale</td><td class="mono">(posCode, companyCode, fallback) ⇒ boolean</td><td>காலி state code புறக்கணிக்கப்படுகிறது — dropdown-ஐ clear செய்வது ஆவணத்தை மறு-வரி விதிக்கும் கோரிக்கை அல்ல.</td></tr>
+      <tr><td class="mono">seedDocumentPolicy</td><td class="mono">(overrides?) ⇒ VoucherPolicy</td><td>Session → document policy copy (சரியாக இரண்டு முறை).</td></tr>
+    </tbody>
+  </table>
+
+  <h3>15.2 <code>quotation.payload.ts</code> <span class="tag pure">PURE</span></h3>
+  <table>
+    <thead><tr><th style="width:27%">Function</th><th style="width:33%">Signature</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">buildSavePayload</td><td class="mono">(draft, pricing, actor) ⇒ SaveQuotationDto</td><td>Export. §8.1.</td></tr>
+      <tr><td class="mono">parseLoadedDocument</td><td class="mono">(payload, fallbackStateCode) ⇒ QuotationDraft</td><td>Export. §8.2.</td></tr>
+      <tr><td class="mono">itemDto</td><td class="mono">(line, priced, index) ⇒ SaveQuotationItemDto</td><td>Private. Keyed columns keyed-ஆக, <code>*Amt</code> computed-ஆக.</td></tr>
+      <tr><td class="mono">chargeDto</td><td class="mono">(row, priced, index, totals) ⇒ …</td><td>Private. <code>cdQtyVal</code> / <code>cdWeight</code> = எதற்கு எதிராகக் கணக்கிடப்பட்டது (audit-க்கு).</td></tr>
+      <tr><td class="mono">lineFromPayload</td><td class="mono">(item) ⇒ DraftLine</td><td>Private. <code>toBaseFactor</code> back-derivation இங்கே.</td></tr>
+      <tr><td class="mono">chargeFromPayload</td><td class="mono">(charge) ⇒ DraftChargeRow</td><td>Private. <code>Math.abs</code> — §8.2 warn.</td></tr>
+      <tr><td class="mono">storedPricingOf</td><td class="mono">(payload, lines, charges) ⇒ DocumentPricing</td><td>Private. சேமித்த எண்களை engine-இன் வடிவத்தில். ஒரே arithmetic = கூட்டல்.</td></tr>
+      <tr><td class="mono">statusOf / dateOrNull</td><td class="mono">(value) ⇒ …</td><td>Private guards.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>15.3 <code>quotation.utils.ts</code> <span class="tag pure">PURE</span></h3>
+  <table>
+    <thead><tr><th style="width:27%">Function</th><th style="width:33%">Signature</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">toNumber</td><td class="mono">(value, fallback = 0) ⇒ number</td><td>Wire decimal (string!) → number.</td></tr>
+      <tr><td class="mono">toNullableNumber</td><td class="mono">(value) ⇒ number | null</td><td><code>null</code>-ஐ <code>null</code>-ஆகவே வைக்கிறது.</td></tr>
+      <tr><td class="mono">parseCell</td><td class="mono">(text) ⇒ number</td><td>Grid cell-இல் type செய்ததை. காலி cell = 0, NaN அல்ல.</td></tr>
+      <tr><td class="mono">toNullableText</td><td class="mono">(value, maxLength?) ⇒ string | null</td><td>Trim → <code>null</code>, மற்றும் column length-க்கு வெட்டு.</td></tr>
+      <tr><td class="mono">todayIso</td><td class="mono">() ⇒ "yyyy-mm-dd"</td><td><b>Local</b> time — <code>toISOString()</code> நாளை நகர்த்திவிடும்.</td></tr>
+      <tr><td class="mono">toDateInput</td><td class="mono">(iso) ⇒ "yyyy-mm-dd"</td><td>API-இன் முழு timestamp-இல் இருந்து.</td></tr>
+      <tr><td class="mono">isRealDate</td><td class="mono">(value) ⇒ boolean</td><td>Calendar-இல் உண்மையில் உள்ளதா (Feb 31 அல்ல).</td></tr>
+      <tr><td class="mono">addDays / daysBetween</td><td class="mono">(…) ⇒ string | number | null</td><td>Validity pair-க்கு. UTC arithmetic.</td></tr>
+      <tr><td class="mono">accountingYearOf</td><td class="mono">(date) ⇒ "2026-2027"</td><td>April-start fiscal year, <code>char(9)</code>.</td></tr>
+      <tr><td class="mono">resolveItemColumns<br>resolveChargeColumns</td><td class="mono">(rows?) ⇒ ResolvedColumn[]</td><td>Server layout ⋈ local meanings; காலியெனில் fallback.</td></tr>
+      <tr><td class="mono">totalColumnWidth</td><td class="mono">(columns, extraPx) ⇒ number</td><td><code>table-layout: fixed</code>-க்கு table-இன் சொந்த width.</td></tr>
+      <tr><td class="mono">visibleGridColumns</td><td class="mono">(columns?) ⇒ GridColumnConfig[]</td><td>List grid-க்கு.</td></tr>
+      <tr><td class="mono">nextRowKey</td><td class="mono">(prefix) ⇒ "line-17"</td><td>Stable row id.</td></tr>
+      <tr><td class="mono">asEnum</td><td class="mono">(value, allowed, fallback) ⇒ T</td><td>Wire string → closed set (upper-cased).</td></tr>
+    </tbody>
+  </table>
+
+  <h3>15.4 <code>domain/pricing</code> <span class="tag pure">PURE</span></h3>
+  <table>
+    <thead><tr><th style="width:27%">Function</th><th style="width:14%">File</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">recalcDocument</td><td class="mono">document.ts</td><td><b>The entry point.</b> <code>(lines, charges, policy, flags) ⇒ DocumentPricing</code></td></tr>
+      <tr><td class="mono">reconcile</td><td class="mono">document.ts</td><td>§3.5 invariant, சோதனைகளுக்கு.</td></tr>
+      <tr><td class="mono">distribute</td><td class="mono">charges.ts</td><td><code>(basis, rows, options) ⇒ ChargeDistribution</code>. இரண்டு pass.</td></tr>
+      <tr><td class="mono">priceRowGoods</td><td class="mono">lines.ts</td><td>Pass 1, ஒரு வரி.</td></tr>
+      <tr><td class="mono">roundGoodsPricing</td><td class="mono">lines.ts</td><td>Pass 1 output-ஐ grid dp-க்கு.</td></tr>
+      <tr><td class="mono">netBillableQty</td><td class="mono">lines.ts</td><td>§7.3.</td></tr>
+      <tr><td class="mono">baseRateOf</td><td class="mono">lines.ts</td><td>Tax-inclusive → exclusive.</td></tr>
+      <tr><td class="mono">applyLineDiscounts</td><td class="mono">lines.ts</td><td>நான்கு discount, வரிசையாக.</td></tr>
+      <tr><td class="mono">applyGstAndCess</td><td class="mono">lines.ts</td><td>GST split + cess.</td></tr>
+      <tr><td class="mono">dec / money / rate / perc</td><td class="mono">money.ts</td><td>§7.2.</td></tr>
+      <tr><td class="mono">safeDiv / percentOf / sum / roundToStep</td><td class="mono">money.ts</td><td>§7.2.</td></tr>
+      <tr><td class="mono">emptyLine / emptyChargeRow / defaultPolicy</td><td class="mono">factories.ts</td><td>Blank records — ஒரு புதிய field ஒரே இடத்தில் <code>undefined</code>-ஆக விடப்பட முடியாது.</td></tr>
+      <tr><td class="mono">formatCurrency</td><td class="mono">format.ts</td><td>Indian 3-2 grouping (<code>12,34,567.89</code>), zero suppression.</td></tr>
+      <tr><td class="mono">formatQty / formatPerc</td><td class="mono">format.ts</td><td>Qty zero-suppressed; perc எப்போதும் காட்டப்படும் (0% discount ஒரு discount cell-இல் அர்த்தமுள்ளது).</td></tr>
+    </tbody>
+  </table>
+
+  <h3>15.5 <code>quotationSlice.ts</code> · <code>quotation.validate.ts</code></h3>
+  <table>
+    <thead><tr><th style="width:27%">Function</th><th style="width:14%">File</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">quotationReducer</td><td class="mono">quotationSlice</td><td>Slice reducer + dirty/live wrapper. Root reducer-இல் <code>quotation:</code>.</td></tr>
+      <tr><td class="mono">selectQuotationDraft</td><td class="mono">quotationSlice</td><td>Hook-இன் ஒரே selector.</td></tr>
+      <tr><td class="mono">validateSaveInputs</td><td class="mono">validate</td><td>§9.1. முதல் violation.</td></tr>
+      <tr><td class="mono">roleGate</td><td class="mono">validate</td><td>Private. §9.2.</td></tr>
+      <tr><td class="mono">rateWarning</td><td class="mono">validate</td><td>Live, non-blocking. §9.3.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ==================== 16. GAPS ==================== -->
+<section>
+  <h2>16 · Known gaps</h2>
+  <p class="lead">எல்லாம் source-இல் ஆவணப்படுத்தப்பட்டவை — மறைந்த கடன் அல்ல, அறியப்பட்ட கடன்.</p>
+  <table>
+    <thead><tr><th style="width:26%">Gap</th><th style="width:38%">தற்போதைய நடத்தை</th><th>சரி செய்ய</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Print</b></td>
+        <td>Server-இல் print pipeline இல்லை — PDF இல்லை, report endpoint இல்லை. F6 சேமித்து பிறகு அதைச் சொல்கிறது.</td>
+        <td><code>runSave(print)</code>-இல் ஒரே இடம்.</td>
+      </tr>
+      <tr>
+        <td><b>Agent / Salesman பெயர்</b></td>
+        <td><code>GET /quotations/get</code> பெயரைச் சுமப்பதில்லை; load ஆன ஆவணத்தில் காலி (id சரி).</td>
+        <td>Server join அல்லது ஒரு lookup.</td>
+      </tr>
+      <tr>
+        <td><b><code>roundOffStep</code></b></td>
+        <td>Backend column இல்லை; <code>defaultPolicy</code>-இல் <code>1</code>.</td>
+        <td>ஒரு column + policy snapshot-இல் சேர்.</td>
+      </tr>
+      <tr>
+        <td><b><code>skipMrp</code> capability</b></td>
+        <td>DB-இல் column இல்லை; <code>SESSION_CAPABILITIES</code>-இல் constant.</td>
+        <td><code>user_master</code>-இல் ஒரு column.</td>
+      </tr>
+      <tr>
+        <td><b>Per-line UNLOADING</b></td>
+        <td>Item grid-இல் column இல்லை → role override ஒருபோதும் வழங்கப்படுவதில்லை.</td>
+        <td>Column சேர்த்தால் <code>document.ts</code>-இன் override block-இல் ஒரு வரி.</td>
+      </tr>
+      <tr>
+        <td><b>Grid 84-இல் <code>WHERE</code> இல்லை</b></td>
+        <td>Deleted மற்றும் மற்ற tenant rows client-side filter.</td>
+        <td>Grid SQL-ஐ திருத்து (charge master-இன் grid 81-க்கும் இதே பிரச்சினை).</td>
+      </tr>
+      <tr>
+        <td><b>Server: audit <code>delete</code> action</b></td>
+        <td><code>DELETE /quotations/delete</code> மற்றும் ஒரு line/charge-ஐ நீக்கும் எந்த update-ம் 400 ஆகலாம்.</td>
+        <td>Client bug அல்ல — server-side.</td>
+      </tr>
+      <tr>
+        <td><b>ui tables 18 / 21 provisioning</b></td>
+        <td>எந்த migration-ம் இவற்றை உருவாக்கவில்லை; dev DB-இல் மட்டுமே. புதிய environment fallback columns-ஐப் பயன்படுத்தும்.</td>
+        <td>ஒரு seed migration.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr>
+  <h3>சோதனை நிலை</h3>
+  <table>
+    <thead><tr><th style="width:34%">Command</th><th>நிலை</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">npx tsc --noEmit</td><td>சுத்தம்</td></tr>
+      <tr><td class="mono">npx vitest run</td><td>93 / 93 pass (38 pricing + 39 payload + 16 utils)</td></tr>
+      <tr><td class="mono">npx next build</td><td>வெற்றி; <code>/sales/quotation</code> prerendered</td></tr>
+    </tbody>
+  </table>
+
+  <p class="small" style="margin-top:18px">
+    ஆவணம் உருவாக்கப்பட்டது 2026-07-31 · source: <code>/home/vk/Dev/erp/ERP client</code> ·
+    மீண்டும் உருவாக்க: <code>docs/quotation-module-guide.html</code>-ஐ திருத்தி chromium
+    <code>--print-to-pdf</code> ஓட்டவும்.
+  </p>
+</section>

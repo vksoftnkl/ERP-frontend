@@ -168,6 +168,8 @@ export const baseApi = createApi({
     "PhysicalStock",
     // Pricing modules
     "ItemQtyPrice",
+    // Sales transactions
+    "Quotation",
   ],
   endpoints: () => ({}),
 });
