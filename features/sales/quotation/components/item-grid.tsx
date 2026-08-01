@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * The item grid — ui table 18 ("Quotation", 89 configured columns).
+ * The item grid — ui table 23 ("Quotation-item", 89 configured columns, widths
+ * in pixels).
  *
  * Two structural decisions worth stating:
  *
@@ -13,7 +14,7 @@
  *    `{ draft line, engine output }`; the three discount amount columns read the
  *    engine's computed amount and write the operator's keyed one.
  */
-import { useMemo, type KeyboardEvent } from "react";
+import { useMemo, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { cx } from "@/components/design-system/cx";
 import type { PricedLine } from "@/domain/pricing";
 import {
@@ -40,7 +41,10 @@ export type ItemGridProps = {
   /** `${rowKey}:${fieldKey}` of the cells validation has flagged. */
   invalidCells: Record<string, true>;
   activeRowKey: string | null;
+  /** The column a width drag is live on, for the handle's own highlight. */
+  resizingKey: string | null;
   unitOptionsFor: (itemId: string) => ItemUnitOption[];
+  onColumnResizeStart: (event: ReactMouseEvent<HTMLElement>, columnKey: string) => void;
   onActiveRowChange: (rowKey: string) => void;
   onSetField: (rowKey: string, field: keyof DraftLine, raw: string) => void;
   onToggleField: (rowKey: string, field: keyof DraftLine, checked: boolean) => void;
@@ -97,7 +101,9 @@ export function ItemGrid(props: ItemGridProps) {
     canEditPrice,
     invalidCells,
     activeRowKey,
+    resizingKey,
     unitOptionsFor,
+    onColumnResizeStart,
     onActiveRowChange,
     onSetField,
     onToggleField,
@@ -168,8 +174,22 @@ export function ItemGrid(props: ItemGridProps) {
         <thead>
           <tr>
             {visible.map((column) => (
-              <th key={column.key} scope="col" title={column.token}>
+              <th
+                key={column.key}
+                scope="col"
+                title={column.token}
+                className={cx(
+                  styles.gridHeaderCell,
+                  resizingKey === column.key && styles.gridHeaderCellResizing,
+                )}
+              >
                 {column.header}
+                <span
+                  className={styles.columnResizeHandle}
+                  role="presentation"
+                  title="Drag to resize the column"
+                  onMouseDown={(event) => onColumnResizeStart(event, column.key)}
+                />
               </th>
             ))}
             <th scope="col" aria-label="Row actions" />

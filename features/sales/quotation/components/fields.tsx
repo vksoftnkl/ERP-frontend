@@ -332,7 +332,7 @@ export function DropdownCombo(props: DropdownComboProps) {
       >
         <input
           id={id}
-          className={styles.input}
+          className={cx(styles.input, styles.comboInput)}
           value={open ? query : selectedLabel}
           disabled={disabled}
           placeholder={placeholder ?? "Search…"}
@@ -376,6 +376,41 @@ export function DropdownCombo(props: DropdownComboProps) {
             }
           }}
         />
+        <button
+          type="button"
+          className={styles.comboToggle}
+          disabled={disabled}
+          // Not a tab stop: the input beside it already is, and this only
+          // duplicates what focusing that input does.
+          tabIndex={-1}
+          aria-hidden="true"
+          onMouseDown={(event) => {
+            // Keep focus where it is, so an open menu closes on click instead of
+            // blurring and immediately reopening from the input's own onFocus.
+            event.preventDefault();
+          }}
+          onClick={() => {
+            if (disabled) {
+              return;
+            }
+            if (open) {
+              setOpen(false);
+              setQuery("");
+              return;
+            }
+            document.getElementById(id)?.focus();
+          }}
+        >
+          <svg className={styles.comboToggleIcon} viewBox="0 0 10 6" aria-hidden="true">
+            <path
+              d="M1 1l4 4 4-4"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeWidth="1.4"
+            />
+          </svg>
+        </button>
         {open ? (
           <div className={styles.comboMenu} id={`${id}-menu`} role="listbox">
             {isFetching && options.length === 0 ? (

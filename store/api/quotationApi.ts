@@ -27,7 +27,9 @@ import {
   QUOTATION_GET_ENDPOINT,
   QUOTATION_LIST_GRID_ID,
   QUOTATION_SAVE_ENDPOINT,
+  UI_TABLE_COLUMN_WIDTH_ENDPOINT,
   UI_TABLE_MASTERS_ENDPOINT,
+  UI_TABLE_VISIBILITY_ENDPOINT,
   USER_ADMINISTRATION_GET_ENDPOINT,
 } from "@/features/sales/quotation/quotation.constants";
 import type {
@@ -142,6 +144,80 @@ export const quotationApi = baseApi.injectEndpoints({
         return table?.columns ?? [];
       },
       keepUnusedDataFor: 300,
+    }),
+    /**
+     * The columns the operator dragged, saved together from the grid's
+     * "save column width" menu item. Widths are stored in the layout's own unit
+     * (see `configWidthFromPx`), and the cached layout is patched in place so
+     * re-entering the screen keeps them without a refetch.
+     */
+    saveQuotationColumnWidths: builder.mutation<
+      { updated: number },
+      { uiTableId: string; columns: Array<{ columnId: string; configWidth: number }> }
+    >({
+      query: ({ columns }) => ({
+        url: UI_TABLE_COLUMN_WIDTH_ENDPOINT,
+        method: "PUT",
+        body: {
+          columns: columns.map((column) => ({
+            uiTblClmId: column.columnId,
+            uiTblClmColumnWidth: column.configWidth,
+          })),
+        },
+      }),
+      transformResponse: (payload: ApiSuccessResponse<{ updated: number }>) => payload.data,
+      async onQueryStarted({ uiTableId, columns }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          quotationApi.util.updateQueryData("getQuotationGridLayout", { uiTableId }, (rows) => {
+            for (const column of columns) {
+              const row = rows.find((candidate) => candidate.uiTblClmId === column.columnId);
+              if (row) {
+                row.uiTblClmColumnWidth = column.configWidth;
+              }
+            }
+          }),
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          // The grid keeps the local widths either way; only the cache rolls back.
+          patch.undo();
+        }
+      },
+    }),
+    /** Which columns the grid shows — the screen's "Admin settings" dialog. */
+    saveQuotationColumnVisibility: builder.mutation<
+      { updated: number },
+      { uiTableId: string; columns: Array<{ columnId: string; visible: boolean }> }
+    >({
+      query: ({ columns }) => ({
+        url: UI_TABLE_VISIBILITY_ENDPOINT,
+        method: "PUT",
+        body: {
+          columns: columns.map((column) => ({
+            uiTblClmId: column.columnId,
+            uiTblClmColumnVisibility: column.visible,
+          })),
+        },
+      }),
+      transformResponse: (payload: ApiSuccessResponse<{ updated: number }>) => payload.data,
+      async onQueryStarted({ uiTableId, columns }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          quotationApi.util.updateQueryData("getQuotationGridLayout", { uiTableId }, (rows) => {
+            for (const column of columns) {
+              const row = rows.find((candidate) => candidate.uiTblClmId === column.columnId);
+              if (row) {
+                row.uiTblClmColumnVisibility = column.visible;
+              }
+            }
+          }),
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patch.undo();
+        }
+      },
     }),
     // -- pickers -----------------------------------------------------------
     /**
@@ -300,6 +376,8 @@ export const {
   useListQuotationsQuery,
   useLazyListQuotationsQuery,
   useGetQuotationGridLayoutQuery,
+  useSaveQuotationColumnWidthsMutation,
+  useSaveQuotationColumnVisibilityMutation,
   useSearchPickerItemsQuery,
   useLazySearchPickerItemsQuery,
   useGetSalesChargesQuery,

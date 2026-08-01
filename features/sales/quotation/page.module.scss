@@ -159,8 +159,9 @@
 }
 
 .label {
-  color: var(--text-muted, #555555);
+  color: var(--text-main, #222222);
   font-size: 0.72rem;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -252,6 +253,40 @@
   min-width: 0;
 }
 
+/* Room for the chevron, so a long selected label does not run under it. */
+.comboInput {
+  padding-right: 1.6rem;
+}
+
+/* The affordance that says "this one is a list, not a text box". */
+.comboToggle {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  border: 0;
+  border-left: 1px solid var(--border, #c9c9c9);
+  border-radius: 0 var(--erp-radius, 4px) var(--erp-radius, 4px) 0;
+  background: #ffffff;
+  color: var(--text-muted, #666666);
+  cursor: pointer;
+}
+
+.comboToggle:disabled {
+  background: #f2f2f2;
+  color: var(--text-soft, #999999);
+  cursor: default;
+}
+
+.comboToggleIcon {
+  width: 0.6rem;
+  height: 0.6rem;
+}
+
 .comboMenu {
   position: absolute;
   z-index: var(--erp-z-popup, 1200);
@@ -320,9 +355,57 @@
   flex: 1 1 auto;
 }
 
+/* Once the splitter pins a height it arrives inline; the items shell takes the
+   rest either way. */
 .chargeGridShell {
   flex: 0 0 auto;
+}
+
+/* Unpinned, the pane is still content-sized under the original 13rem cap. */
+.chargeGridShellAuto {
   max-height: 13rem;
+}
+
+/* ------------------------------------------------------------- pane splitter */
+
+/* While a drag is live the pointer is captured by the handle, so the cursor and
+   the text-selection lock have to sit on the whole row. */
+.gridsRowDragging {
+  cursor: row-resize;
+  user-select: none;
+}
+
+.paneSplitter {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  /* Negative margins eat the row's own gap, so the handle reads as a divider
+     between the panes rather than a third band. */
+  height: 0.6rem;
+  margin: -0.3rem 0;
+  cursor: row-resize;
+  /* Without this the browser scrolls the pane instead of dragging on touch. */
+  touch-action: none;
+}
+
+.paneSplitterGrip {
+  width: 3.25rem;
+  height: 0.2rem;
+  border-radius: 999px;
+  background: var(--border, #c9c9c9);
+  transition: background-color 0.12s ease, width 0.12s ease;
+}
+
+.paneSplitter:hover .paneSplitterGrip,
+.paneSplitter:focus-visible .paneSplitterGrip,
+.paneSplitterActive .paneSplitterGrip {
+  width: 4.5rem;
+  background: var(--primary, #7b1515);
+}
+
+.paneSplitter:focus-visible {
+  outline: none;
 }
 
 .gridHead {
@@ -381,6 +464,150 @@
   font-size: 0.7rem;
   font-weight: 700;
   white-space: nowrap;
+}
+
+/* --------------------------------------------- grid settings context menu */
+
+/* Portaled to `document.body`, so it carries its own tokens rather than the
+   page wrapper's. */
+.settingsMenu {
+  position: fixed;
+  z-index: var(--erp-z-modal, 1000);
+  display: flex;
+  flex-direction: column;
+  min-width: 11.5rem;
+  padding: 0.2rem;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+}
+
+.settingsMenuItem {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.32rem 0.5rem;
+  border: 0;
+  border-radius: var(--erp-radius, 4px);
+  background: transparent;
+  color: var(--text-main, #222222);
+  font: inherit;
+  font-size: 0.74rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settingsMenuItem:hover:not(:disabled) {
+  background: var(--row-selected, #f6ecec);
+  color: var(--primary, #7b1515);
+}
+
+.settingsMenuItem:disabled {
+  color: var(--text-soft, #999999);
+  cursor: default;
+}
+
+.settingsMenuBadge {
+  padding: 0 0.34rem;
+  border-radius: 999px;
+  background: var(--primary, #7b1515);
+  color: #ffffff;
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+/* ------------------------------------------------ admin settings dialog */
+
+.settingsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.74rem;
+}
+
+.settingsTable th,
+.settingsTable td {
+  padding: 0.22rem 0.4rem;
+  border-bottom: 1px solid var(--border-light, #eeeeee);
+  text-align: left;
+}
+
+.settingsTable thead th {
+  position: sticky;
+  top: 0;
+  background: var(--header-bg, #efe6e6);
+  color: var(--table-header-text, #4a0f0f);
+  font-weight: 700;
+}
+
+.settingsTableNumber {
+  width: 2.5rem;
+  color: var(--text-muted, #666666);
+  text-align: right;
+}
+
+.settingsTableCheck {
+  width: 4rem;
+  text-align: center;
+}
+
+.settingsEmpty {
+  margin: 0;
+  padding: 0.6rem;
+  color: var(--text-muted, #666666);
+  font-size: 0.74rem;
+}
+
+.settingsNote {
+  color: var(--text-muted, #666666);
+  font-size: 0.7rem;
+}
+
+.settingsFooterActions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+/* ------------------------------------------------------- resizable columns */
+
+.gridHeaderCell {
+  position: relative;
+}
+
+.gridHeaderCellResizing {
+  background: var(--row-selected, #f6ecec);
+}
+
+/* Straddles the cell border so the grab zone is the same on both sides of it,
+   and reaches past the header's own padding for a comfortable target. */
+.columnResizeHandle {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: -4px;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+}
+
+.columnResizeHandle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: transparent;
+}
+
+.columnResizeHandle:hover::after,
+.gridHeaderCellResizing .columnResizeHandle::after {
+  background: var(--primary, #7b1515);
 }
 
 .grid tbody td {
@@ -705,6 +932,10 @@
   width: min(34rem, 100%);
 }
 
+.modalPanelWide {
+  width: min(78rem, 100%);
+}
+
 .modalHeader {
   display: flex;
   gap: 0.6rem;
@@ -762,6 +993,136 @@
   font-size: 0.7rem;
 }
 
+/* ------------------------------------------------------- list-picker chrome */
+
+.listToolbar {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.toolButton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  align-items: center;
+  min-width: 3.6rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  color: var(--text-main, #222222);
+  font: inherit;
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.toolButton svg {
+  font-size: 1rem;
+}
+
+.toolButton:hover {
+  border-color: var(--primary, #7b1515);
+}
+
+.toolButtonActive {
+  border-color: var(--primary, #7b1515);
+  background: var(--row-selected, #f6ecec);
+  color: var(--primary, #7b1515);
+  font-weight: 700;
+}
+
+.listFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  align-items: center;
+}
+
+.filterField {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--text-muted, #666666);
+}
+
+.filterField .input,
+.filterField .select {
+  width: auto;
+  min-width: 8rem;
+}
+
+.filterField:first-child {
+  flex: 1 1 16rem;
+}
+
+.filterField:first-child .input {
+  width: 100%;
+}
+
+.pagerBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.7rem;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.pagerInfo {
+  color: var(--text-muted, #666666);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.pagerControls {
+  display: flex;
+  gap: 0.2rem;
+  align-items: center;
+}
+
+.pagerButton {
+  min-width: 1.6rem;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.pagerButton:hover:not(:disabled) {
+  border-color: var(--primary, #7b1515);
+}
+
+.pagerButton:disabled {
+  color: var(--text-soft, #bbbbbb);
+  cursor: default;
+}
+
+.pagerButtonActive {
+  border-color: var(--primary, #7b1515);
+  background: var(--primary, #7b1515);
+  color: #ffffff;
+}
+
+.pagerEllipsis {
+  padding: 0 0.2rem;
+  color: var(--text-muted, #666666);
+}
+
+.deletedTag {
+  margin-left: 0.35rem;
+  padding: 0 0.3rem;
+  border-radius: var(--erp-radius, 4px);
+  background: var(--danger-light, #ffc4c4);
+  color: var(--danger, #b3261e);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .listViewport {
   flex: 1 1 auto;
   overflow: auto;
@@ -806,6 +1167,11 @@
 
 .listTable tbody tr[data-selected="true"] {
   background: var(--row-selected, #f6ecec);
+}
+
+.listTable tbody tr[data-deleted="true"] {
+  color: var(--text-soft, #888888);
+  font-style: italic;
 }
 
 .promptOptions {

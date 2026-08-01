@@ -748,10 +748,12 @@ describe("validateSaveInputs", () => {
     expect(violation?.field).toBe("mode");
   });
 
-  it("requires a customer", () => {
+  it("requires a customer name, but not a master record behind it", () => {
     const draft = baseDraft();
-    const violation = check({ ...draft, customer: { ...draft.customer, custId: null } });
+    const violation = check({ ...draft, customer: { ...draft.customer, name: "  " } });
     expect(violation?.field).toBe("customer");
+    // A walk-in keyed by hand has no `custId`; the server's `sqCustId` is optional.
+    expect(check({ ...draft, customer: { ...draft.customer, custId: null } })).toBeNull();
   });
 
   it("requires a real quotation date", () => {

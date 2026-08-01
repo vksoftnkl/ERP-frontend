@@ -17,7 +17,7 @@
  * weight methods are measured against the LINES, not against the charge row's own
  * snapshot columns, so a hidden column cannot stop a charge from pricing.
  */
-import { useMemo, type KeyboardEvent } from "react";
+import { useMemo, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { cx } from "@/components/design-system/cx";
 import type { PricedChargeRow } from "@/domain/pricing";
 import {
@@ -42,6 +42,9 @@ export type ChargeGridProps = {
   rows: DraftChargeRow[];
   priced: PricedChargeRow[];
   editable: boolean;
+  /** The column a width drag is live on, for the handle's own highlight. */
+  resizingKey: string | null;
+  onColumnResizeStart: (event: ReactMouseEvent<HTMLElement>, columnKey: string) => void;
   onOpenChargePicker: (rowKey: string) => void;
   onSetField: (rowKey: string, field: keyof DraftChargeRow, raw: string) => void;
   onRemoveRow: (rowKey: string) => void;
@@ -63,7 +66,17 @@ function labelFor(fieldKey: string, value: unknown): string {
 }
 
 export function ChargeGrid(props: ChargeGridProps) {
-  const { columns, rows, priced, editable, onOpenChargePicker, onSetField, onRemoveRow } = props;
+  const {
+    columns,
+    rows,
+    priced,
+    editable,
+    resizingKey,
+    onColumnResizeStart,
+    onOpenChargePicker,
+    onSetField,
+    onRemoveRow,
+  } = props;
   const visible = useMemo(() => columns.filter((column) => column.visible), [columns]);
   const pricedByKey = useMemo(() => new Map(priced.map((row) => [row.key, row])), [priced]);
   const tableWidth = useMemo(() => totalColumnWidth(visible, ROW_ACTION_PX), [visible]);
@@ -90,8 +103,21 @@ export function ChargeGrid(props: ChargeGridProps) {
         <thead>
           <tr>
             {visible.map((column) => (
-              <th key={column.key} scope="col">
+              <th
+                key={column.key}
+                scope="col"
+                className={cx(
+                  styles.gridHeaderCell,
+                  resizingKey === column.key && styles.gridHeaderCellResizing,
+                )}
+              >
                 {column.header}
+                <span
+                  className={styles.columnResizeHandle}
+                  role="presentation"
+                  title="Drag to resize the column"
+                  onMouseDown={(event) => onColumnResizeStart(event, column.key)}
+                />
               </th>
             ))}
             <th scope="col" aria-label="Row actions" />

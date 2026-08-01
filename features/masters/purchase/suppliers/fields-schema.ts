@@ -17,7 +17,7 @@ export type SupplierLazyDropdownHandlers = Record<
   SupplierLazyFieldHandlers
 >;
 import {
-  COLLECTION_DAY_OPTIONS,
+  COLLECTION_DAY_SHORT_OPTIONS,
   GST_LOOKUP_HELPER_TEXT,
   GST_TYPE_OPTIONS,
   PURCHASE_TYPE_OPTIONS,
@@ -354,15 +354,15 @@ export function buildSupplierFormFields(
       },
     },
     {
+      // Mirrors the legacy Supplier Entry screen: one checkbox per weekday on
+      // its own full-width row rather than a dropdown.
       name: "supCollectionDays",
       label: "Collection Days",
-      placeholder: "Select Days",
-      type: "select",
-      gridColumnStart: 3,
-      gridRowStart: 12,
-      searchable: true,
-      multiple: true,
-      options: COLLECTION_DAY_OPTIONS,
+      type: "checkbox-group",
+      gridColumnStart: 1,
+      gridRowStart: 13,
+      colSpan: 2,
+      options: COLLECTION_DAY_SHORT_OPTIONS,
     },
     {
       name: "regionHeading",

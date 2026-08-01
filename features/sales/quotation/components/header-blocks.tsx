@@ -13,6 +13,7 @@
  * three separate framed boxes. Terms keeps its own `GroupBox`.
  */
 import {
+  AREA_DROPDOWN_ID,
   CUSTOMER_DROPDOWN_ID,
   POS_DROPDOWN_ID,
   PRICE_LEVEL_OPTIONS,
@@ -21,7 +22,12 @@ import {
   AGENT_DROPDOWN_ID,
 } from "../quotation.constants";
 import type { VoucherPolicy } from "@/domain/pricing";
-import type { CustomerSnapshot, QuotationHeader, QuotationTerms } from "../quotation.types";
+import type {
+  CustomerSnapshot,
+  EditableCustomerField,
+  QuotationHeader,
+  QuotationTerms,
+} from "../quotation.types";
 import {
   CheckField,
   DateField,
@@ -63,6 +69,7 @@ export type CustomerBlockProps = {
   header: QuotationHeader;
   disabled: boolean;
   onPickCustomer: (customerId: string, label: string) => void;
+  onSetCustomerField: (field: EditableCustomerField, value: string) => void;
   onSetPos: (stateCode: string, stateName: string) => void;
 };
 
@@ -71,6 +78,7 @@ export function CustomerBlock({
   header,
   disabled,
   onPickCustomer,
+  onSetCustomerField,
   onSetPos,
 }: CustomerBlockProps) {
   return (
@@ -87,11 +95,49 @@ export function CustomerBlock({
         placeholder="Search customers…"
         onSelect={onPickCustomer}
       />
-      <ReadOnlyField label="Customer Name" value={customer.name} />
-      <ReadOnlyField label="Address" value={customer.address ?? ""} />
-      <ReadOnlyField label="Place" value={customer.place ?? ""} />
-      <ReadOnlyField label="Phone" value={customer.phone ?? ""} />
-      <ReadOnlyField label="GSTIN" value={customer.gstin ?? ""} />
+      {/* Keyed, not just displayed: the document stores its own copy of these,
+          so they can be corrected for this quotation — or typed outright for a
+          walk-in with no master record. Max lengths match the save payload. */}
+      <TextField
+        id="quotation-customer-name"
+        label="Customer Name"
+        value={customer.name}
+        disabled={disabled}
+        maxLength={200}
+        onChange={(value) => onSetCustomerField("name", value)}
+      />
+      <TextField
+        id="quotation-customer-address"
+        label="Address"
+        value={customer.address ?? ""}
+        disabled={disabled}
+        maxLength={500}
+        onChange={(value) => onSetCustomerField("address", value)}
+      />
+      <TextField
+        id="quotation-customer-place"
+        label="Place"
+        value={customer.place ?? ""}
+        disabled={disabled}
+        maxLength={100}
+        onChange={(value) => onSetCustomerField("place", value)}
+      />
+      <TextField
+        id="quotation-customer-phone"
+        label="Phone"
+        value={customer.phone ?? ""}
+        disabled={disabled}
+        maxLength={20}
+        onChange={(value) => onSetCustomerField("phone", value)}
+      />
+      <TextField
+        id="quotation-customer-gstin"
+        label="GSTIN"
+        value={customer.gstin ?? ""}
+        disabled={disabled}
+        maxLength={15}
+        onChange={(value) => onSetCustomerField("gstin", value.toUpperCase())}
+      />
       <DropdownCombo
         id="quotation-pos"
         label="POS State Code"
@@ -104,7 +150,8 @@ export function CustomerBlock({
         disabled={disabled}
         onSelect={onSetPos}
       />
-      <ReadOnlyField label="Area" value={customer.areaName ?? ""} />
+      {/* The area lives in the sales block as "Beat", where the operator can
+          change it — the customer master only seeds it. */}
       {customer.debitAllowed ? (
         <p className={styles.inlineHint}>
           Credit {customer.debitDays} days, limit {customer.debitLimit}
@@ -199,8 +246,11 @@ export function QuoteInfoBlock({
 export type SalesInfoBlockProps = {
   header: QuotationHeader;
   policy: VoucherPolicy;
+  /** Display name for the header's `areaId`, which is all the voucher stores. */
+  beatName: string;
   disabled: boolean;
   onSetHeader: (field: keyof QuotationHeader, value: string | number | boolean) => void;
+  onSetBeat: (areaId: string, areaName: string) => void;
   onSetSalesman: (id: string, name: string) => void;
   onSetAgent: (id: string, name: string) => void;
   onSetPolicy: (policy: Partial<VoucherPolicy>) => void;
@@ -209,14 +259,27 @@ export type SalesInfoBlockProps = {
 export function SalesInfoBlock({
   header,
   policy,
+  beatName,
   disabled,
   onSetHeader,
+  onSetBeat,
   onSetSalesman,
   onSetAgent,
   onSetPolicy,
 }: SalesInfoBlockProps) {
   return (
     <div className={styles.fieldGrid}>
+      <DropdownCombo
+        id="quotation-beat"
+        label="Beat"
+        dropdownId={AREA_DROPDOWN_ID}
+        valueKey="arm_id"
+        labelKey="arm_name"
+        value={header.areaId ?? ""}
+        selectedLabel={beatName}
+        disabled={disabled}
+        onSelect={onSetBeat}
+      />
       <DropdownCombo
         id="quotation-salesman"
         label="Salesman"

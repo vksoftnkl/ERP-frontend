@@ -608,6 +608,17 @@
   accent-color: var(--erp-ms-accent);
 }
 
+/* A checkbox group is a control, so it has to sit on the compact control height
+   rather than the module's roomier 40px row. */
+.erp-ms-modal .erp-ms-modal-check-group {
+  min-height: var(--erp-modal-control-height);
+  gap: 3px 16px;
+}
+
+.erp-ms-modal .erp-ms-modal-check-item {
+  gap: 5px;
+}
+
 .erp-ms-modal .erp-ms-modal-check-label {
   color: var(--erp-ms-ink);
   font-size: 13px;

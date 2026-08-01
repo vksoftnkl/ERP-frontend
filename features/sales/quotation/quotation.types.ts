@@ -765,6 +765,13 @@ export type CustomerSnapshot = {
   tcsCompany: boolean;
 };
 
+/**
+ * The customer details the entry screen lets an operator key by hand — the ones
+ * the document stores its own copy of. `custId` and everything derived from the
+ * master (price level, credit terms, area) stay read-only.
+ */
+export type EditableCustomerField = "name" | "address" | "place" | "phone" | "gstin";
+
 export type QuotationHeader = {
   /** The operator's own reference. The quote number itself is server-assigned. */
   usrRefno: string;

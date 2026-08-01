@@ -32,6 +32,9 @@ export type ERPDynamicFieldType =
   | "tel"
   | "number"
   | "checkbox"
+  // A row of independent checkboxes driven by `options`; the value is the
+  // comma-joined list of checked option values (same shape as a multi-select).
+  | "checkbox-group"
   | "color"
   | "date"
   | "select"

@@ -75,8 +75,11 @@ export function validateSaveInputs(
     };
   }
 
-  if (!draft.customer.custId || !draft.customer.name.trim()) {
-    return { message: "Pick a customer first.", field: "customer" };
+  // The NAME is what the document needs, not a master record: `sqCustName` is
+  // required by the save DTO while `sqCustId` is optional, so a walk-in keyed
+  // straight into the customer fields is a legitimate quotation.
+  if (!draft.customer.name.trim()) {
+    return { message: "Enter a customer name, or pick one from the list.", field: "customer" };
   }
 
   if (!isRealDate(draft.header.quoteDate)) {

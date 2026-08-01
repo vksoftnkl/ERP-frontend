@@ -41,6 +41,7 @@ import type {
   CustomerDetailPayload,
   DraftChargeRow,
   DraftLine,
+  EditableCustomerField,
   FreightBand,
   ItemPriceLookupPayload,
   QuotationDraft,
@@ -164,6 +165,33 @@ const quotationSlice = createSlice({
       if (customer.distanceKm !== previousDistance) {
         state.freightBands = [];
       }
+    },
+    /**
+     * A hand-keyed customer detail.
+     *
+     * The document stores its own copy of these (`sqCustName`, `sqCustAddr`, …)
+     * rather than pointing at the master, so editing them here amends THIS
+     * quotation only — and lets a walk-in be keyed without a master record at
+     * all, which is what the server's optional `sqCustId` allows for.
+     */
+    customerFieldSet(
+      state,
+      action: PayloadAction<{ field: EditableCustomerField; value: string }>,
+    ) {
+      state.customer[action.payload.field] = action.payload.value;
+      if (action.payload.field === "name") {
+        // The contact person defaults to the customer until it is keyed itself.
+        state.header.contactPerson = state.header.contactPerson || action.payload.value;
+      }
+    },
+    /**
+     * The Beat (route) this quotation is raised on. One id — `sq_cust_area_id` —
+     * seeded from the customer master and overridable per document; the name
+     * rides along on the snapshot purely so the picker can show it back.
+     */
+    beatSet(state, action: PayloadAction<{ areaId: string; areaName: string }>) {
+      state.header.areaId = action.payload.areaId || null;
+      state.customer.areaName = action.payload.areaName || null;
     },
     customerCleared(state) {
       state.customer = emptyCustomer();
@@ -324,8 +352,10 @@ export const {
   posSet,
   termsFieldSet,
   statusSet,
+  beatSet,
   customerApplied,
   customerCleared,
+  customerFieldSet,
   freightBandsSet,
   lineAdded,
   lineInserted,

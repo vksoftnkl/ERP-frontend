@@ -1,7 +1,7 @@
 /**
  * Column resolution and the small parsers.
  *
- * The column tests matter because no migration provisions ui tables 18/21 — they
+ * The column tests matter because no migration provisions ui tables 23/21 — they
  * are data in the dev database only. A fresh environment gets an empty layout, and
  * the screen has to render every column from the local defaults rather than an
  * empty grid.
@@ -12,6 +12,7 @@ import type { UiTableColumnRow } from "./quotation.types";
 import {
   accountingYearOf,
   addDays,
+  buildPageList,
   daysBetween,
   isRealDate,
   parseCell,
@@ -51,17 +52,18 @@ describe("resolveItemColumns", () => {
     }
   });
 
-  it("scales the configured width into pixels rather than treating it as a percent", () => {
-    const columns = resolveItemColumns([layoutRow(3, "Description")]);
+  it("takes the item layout's width as pixels — ui table 23 stores px", () => {
+    const columns = resolveItemColumns([
+      layoutRow(4, "Description", { uiTblClmColumnWidth: 140 }),
+    ]);
     expect(columns).toHaveLength(1);
-    // 9.6 configured units → ~106px, not "9.6%".
-    expect(columns[0].widthPx).toBe(106);
+    expect(columns[0].widthPx).toBe(140);
     expect(columns[0].key).toBe("description");
     expect(columns[0].header).toBe("Description");
   });
 
   it("floors a very narrow column so its heading stays readable", () => {
-    const columns = resolveItemColumns([layoutRow(0, "Id", { uiTblClmColumnWidth: 2.13 })]);
+    const columns = resolveItemColumns([layoutRow(1, "id", { uiTblClmColumnWidth: 12 })]);
     expect(columns[0].widthPx).toBe(34);
   });
 
@@ -109,6 +111,13 @@ describe("resolveChargeColumns", () => {
 
   it("falls back to every local column when the server has no layout", () => {
     expect(resolveChargeColumns(undefined)).toHaveLength(CHARGE_COLUMN_MEANINGS.length);
+  });
+
+  it("still scales its width — ui table 21 stores the Qt grid's percents", () => {
+    // 9.6 configured units → ~106px, not 9.6px and not "9.6%". The item grid
+    // (ui table 23) stores pixels; these two must not drift into one rule.
+    const columns = resolveChargeColumns([layoutRow(1, "Charge Name")]);
+    expect(columns[0].widthPx).toBe(106);
   });
 });
 
@@ -179,5 +188,32 @@ describe("dates", () => {
     expect(accountingYearOf("2026-03-31")).toBe("2025-2026");
     expect(accountingYearOf("2026-04-01")).toBe("2026-2027");
     expect(accountingYearOf("2026-07-30")).toHaveLength(9);
+  });
+});
+
+describe("buildPageList", () => {
+  it("lists every page when the current page's neighbours already reach both ends", () => {
+    expect(buildPageList(5, 3)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("still ellipsis-truncates a short list once the current page sits at an end", () => {
+    // Page 1's neighbour window (0..2) does not reach page 5, so the gap
+    // still collapses — "few pages" alone does not skip the ellipsis rule.
+    expect(buildPageList(5, 1)).toEqual([1, 2, "ellipsis", 5]);
+  });
+
+  it("keeps first, last and the current page's neighbours, ellipsis for the rest", () => {
+    expect(buildPageList(10, 6)).toEqual([1, "ellipsis", 5, 6, 7, "ellipsis", 10]);
+  });
+
+  it("does not ellipsis a run of exactly one skipped page", () => {
+    // Page 3 is the only one between {1,2} and {4,5,6,7}, still worth an ellipsis
+    // marker rather than being spelled out — this is the boundary case.
+    expect(buildPageList(7, 5)).toEqual([1, "ellipsis", 4, 5, 6, 7]);
+  });
+
+  it("never drops below page 1 even when currentPage is out of range", () => {
+    expect(buildPageList(1, 1)).toEqual([1]);
+    expect(buildPageList(0, 1)).toEqual([1]);
   });
 });

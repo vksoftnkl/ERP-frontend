@@ -16,12 +16,14 @@ export type ModalShellProps = {
   title: string;
   isOpen: boolean;
   narrow?: boolean;
+  /** Wider panel for dialogs with more columns than the default fits — e.g. the quote-list picker's toolbar + filter row + 9-column table. */
+  wide?: boolean;
   footer?: ReactNode;
   children: ReactNode;
   onClose: () => void;
 };
 
-export function ModalShell({ title, isOpen, narrow, footer, children, onClose }: ModalShellProps) {
+export function ModalShell({ title, isOpen, narrow, wide, footer, children, onClose }: ModalShellProps) {
   const panelRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -58,7 +60,7 @@ export function ModalShell({ title, isOpen, narrow, footer, children, onClose }:
       }}>
         <section
           ref={panelRef}
-          className={cx(styles.modalPanel, narrow && styles.modalPanelNarrow)}
+          className={cx(styles.modalPanel, narrow && styles.modalPanelNarrow, wide && styles.modalPanelWide)}
           role="dialog"
           aria-modal="true"
           aria-label={title}

@@ -20,6 +20,10 @@ export const QUOTATION_SAVE_ENDPOINT = "/quotations/create";
 export const QUOTATION_GET_ENDPOINT = "/quotations/get";
 export const QUOTATION_DELETE_ENDPOINT = "/quotations/delete";
 export const UI_TABLE_MASTERS_ENDPOINT = "/ui-table-masters/get";
+/** PUT, `{ columns: [{ uiTblClmId, uiTblClmColumnWidth }] }` — dragged columns. */
+export const UI_TABLE_COLUMN_WIDTH_ENDPOINT = "/ui-table-masters/column-width";
+/** PUT, `{ columns: [{ uiTblClmId, uiTblClmColumnVisibility }] }` — admin settings. */
+export const UI_TABLE_VISIBILITY_ENDPOINT = "/ui-table-masters/visibility-settings";
 export const CONFIGURED_GRID_RUN_ENDPOINT = "/configured-grid-sql/run";
 export const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
 export const CHARGES_GET_ENDPOINT = "/charges/get";
@@ -32,8 +36,14 @@ export const FREIGHT_CHARGE_ENDPOINT = "/master-lookups/freight-charges/charge";
 export const COMPANY_GET_ENDPOINT = "/company-masters/get";
 export const USER_ADMINISTRATION_GET_ENDPOINT = "/user-administration/get";
 
-/** `fixed.ui_tables.ui_tbl_id` for the item grid ("Quotation", 89 columns). */
-export const ITEM_GRID_UI_TABLE_ID = "18";
+/**
+ * `fixed.ui_tables.ui_tbl_id` for the item grid — 23 ("Quotation-item", 89
+ * columns, one per `ITEM_COLUMN_MEANINGS` entry and in the same order).
+ *
+ * NOT 18 ("Quotation"): that is the Qt screen's own layout, and its widths are
+ * that grid's fractional percents rather than pixels — see `ColumnWidthUnit`.
+ */
+export const ITEM_GRID_UI_TABLE_ID = "23";
 /** `fixed.ui_tables.ui_tbl_id` for the additional-charges grid ("CHARGES"). */
 export const CHARGE_GRID_UI_TABLE_ID = "21";
 /** `fixed.grid_details.grid_id` for the item picker popup ("POPUP - ITEMS"). */
@@ -65,6 +75,12 @@ export const CUSTOMER_DROPDOWN_ID = "39";
  */
 export const POS_DROPDOWN_ID = "21";
 export const AGENT_DROPDOWN_ID = "38";
+/**
+ * The Beat picker — dropdown 13 ("AREA LIST", active non-deleted rows ordered by
+ * name). Beat IS the area on this screen: the voucher stores one route id,
+ * `sq_cust_area_id`, which the customer master seeds and the operator can change.
+ */
+export const AREA_DROPDOWN_ID = "13";
 export const SALESMAN_DROPDOWN_ID = "38";
 
 /** Sales-side charges only: `chgModule IN ('S','B')`. */
@@ -241,11 +257,13 @@ function itemColumn(
 }
 
 /**
- * All 89 configured columns of ui table 18, in `uiTblClmNo` order.
+ * All 89 configured columns of ui table 23 ("Quotation-item"), in `uiTblClmNo`
+ * order — the same order this list declares them in.
  *
- * Sorted by column NUMBER, not position: position 58 is used twice in the live
- * data (`ChrgAfterTax` and `Total`) and 62 is unused, so sorting by position
- * makes those two swap non-deterministically.
+ * Sorted by column NUMBER, not position: on ui table 18 (the Qt screen's own
+ * layout, which these meanings also cover) position 58 is used twice
+ * (`ChrgAfterTax` and `Total`) and 62 is unused, so sorting by position makes
+ * those two swap non-deterministically.
  */
 export const ITEM_COLUMN_MEANINGS: ItemColumnMeaning[] = [
   itemColumn("Id", "serial", "right"),

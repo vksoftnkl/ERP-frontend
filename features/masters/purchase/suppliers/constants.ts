@@ -1,6 +1,10 @@
 import type { CSSProperties } from "react";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
-import { COLLECTION_DAY_OPTIONS, GST_TYPE_OPTIONS } from "@/utils/constant";
+import {
+  COLLECTION_DAY_OPTIONS,
+  COLLECTION_DAY_SHORT_OPTIONS,
+  GST_TYPE_OPTIONS,
+} from "@/utils/constant";
 // API Endpoints
 export const API_ENDPOINTS = {
  list: "/configured-grid-sql/run?grid_id=17",
@@ -263,4 +267,8 @@ export const SUPPLIER_INITIAL_FORM_VALUES = {
 } as const;
 
 // Re-export shared constants
-export { COLLECTION_DAY_OPTIONS, GST_TYPE_OPTIONS };
+export {
+  COLLECTION_DAY_OPTIONS,
+  COLLECTION_DAY_SHORT_OPTIONS,
+  GST_TYPE_OPTIONS,
+};

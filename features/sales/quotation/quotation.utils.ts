@@ -154,23 +154,30 @@ export function accountingYearOf(quoteDate: string): string {
 // Column resolution
 // ---------------------------------------------------------------------------
 
+/**
+ * What `ui_tbl_clm_column_width` means on a given layout.
+ *
+ * `"px"` — the web tables (item grid 23, opening stock 5): the number is the
+ * column's pixel width, which is also what a drag saves back.
+ *
+ * `"qtPercent"` — the layouts the Qt screens own (charges 21): a percent-of-grid
+ * number sized for that grid, where the visible columns sum to ~460%. It is not
+ * a percent of anything this layout has, and rendering it as a `%` on a
+ * `table-layout: fixed` table whose width derives from those same percentages
+ * blows the table up to tens of millions of pixels. Such a layout is scaled into
+ * pixels at the ratio the Qt grid used.
+ */
+export type ColumnWidthUnit = "px" | "qtPercent";
+
 export type ResolvedColumn<TMeaning> = TMeaning & {
   header: string;
-  /**
-   * Column width in **pixels**.
-   *
-   * `ui_tbl_clm_column_width` is a percent-of-grid number sized for the Qt
-   * screen, and the 76 visible item columns sum to ~460% — so it is not a percent
-   * of anything this layout has. Rendering it as a `%` on a `table-layout: fixed`
-   * table whose width is `max-content` is worse than wrong: the percentages
-   * resolve against a width that is itself derived from them and the table grows
-   * to tens of millions of pixels. The number is therefore scaled into pixels at
-   * the ratio the Qt grid used.
-   */
+  /** Column width in **pixels**, whatever unit the layout stored. */
   widthPx: number;
   visible: boolean;
   focus: boolean;
   columnNumber: number;
+  /** `ui_tbl_clm_id`, the handle a resize is saved against. Null on fallback. */
+  columnId: string | null;
 };
 
 /** Pixels per configured "percent". 9.6 (the Description column) → ~106px. */
@@ -179,11 +186,25 @@ const PX_PER_CONFIG_UNIT = 11;
 const MIN_COLUMN_PX = 34;
 const DEFAULT_COLUMN_PX = 90;
 
-function widthPxOf(configured: number | null): number {
+function widthPxOf(configured: number | null, unit: ColumnWidthUnit): number {
   if (typeof configured !== "number" || !Number.isFinite(configured) || configured <= 0) {
     return DEFAULT_COLUMN_PX;
   }
-  return Math.max(MIN_COLUMN_PX, Math.round(configured * PX_PER_CONFIG_UNIT));
+  const px = unit === "px" ? configured : configured * PX_PER_CONFIG_UNIT;
+  return Math.max(MIN_COLUMN_PX, Math.round(px));
+}
+
+/** The floor a drag may take a column to — same one the resolver enforces. */
+export const MIN_RESIZED_COLUMN_PX = MIN_COLUMN_PX;
+
+/**
+ * The inverse of `widthPxOf`: a dragged pixel width back into the unit the
+ * layout stores. On a `qtPercent` layout, writing raw pixels would be read back
+ * multiplied by `PX_PER_CONFIG_UNIT` — an 11× wider column every reload.
+ */
+export function configWidthFromPx(widthPx: number, unit: ColumnWidthUnit): number {
+  const safe = Math.max(MIN_COLUMN_PX, Math.round(widthPx));
+  return unit === "px" ? safe : Math.round((safe / PX_PER_CONFIG_UNIT) * 100) / 100;
 }
 
 /** Total width of the visible columns, for the table's own `width`. */
@@ -210,6 +231,7 @@ function resolveColumns<TMeaning extends { key: string; token: string }>(
   rows: UiTableColumnRow[] | undefined,
   meanings: TMeaning[],
   serialKey: string,
+  unit: ColumnWidthUnit,
 ): ResolvedColumn<TMeaning>[] {
   if (!rows || rows.length === 0) {
     return [];
@@ -230,10 +252,11 @@ function resolveColumns<TMeaning extends { key: string; token: string }>(
     resolved.push({
       ...meaning,
       header: rawName || meaning.token,
-      widthPx: widthPxOf(row.uiTblClmColumnWidth),
+      widthPx: widthPxOf(row.uiTblClmColumnWidth, unit),
       visible: row.uiTblClmColumnVisibility !== false,
       focus: row.uiTblClmColumnFocus === true,
       columnNumber: Number.parseInt(row.uiTblClmNo ?? "0", 10) || 0,
+      columnId: row.uiTblClmId ?? null,
     });
   }
 
@@ -251,19 +274,29 @@ function fallbackColumns<TMeaning extends { key: string; token: string }>(
     visible: true,
     focus: false,
     columnNumber: index,
+    columnId: null,
   }));
 }
 
 export type ResolvedItemColumn = ResolvedColumn<ItemColumnMeaning>;
 export type ResolvedChargeColumn = ResolvedColumn<ChargeColumnMeaning>;
 
+/** The unit each grid's layout stores its widths in. */
+export const ITEM_COLUMN_WIDTH_UNIT: ColumnWidthUnit = "px";
+export const CHARGE_COLUMN_WIDTH_UNIT: ColumnWidthUnit = "qtPercent";
+
 export function resolveItemColumns(rows: UiTableColumnRow[] | undefined): ResolvedItemColumn[] {
-  const resolved = resolveColumns(rows, ITEM_COLUMN_MEANINGS, "id");
+  const resolved = resolveColumns(rows, ITEM_COLUMN_MEANINGS, "id", ITEM_COLUMN_WIDTH_UNIT);
   return resolved.length > 0 ? resolved : fallbackColumns(ITEM_COLUMN_MEANINGS);
 }
 
 export function resolveChargeColumns(rows: UiTableColumnRow[] | undefined): ResolvedChargeColumn[] {
-  const resolved = resolveColumns(rows, CHARGE_COLUMN_MEANINGS, CHARGE_SERIAL_KEY);
+  const resolved = resolveColumns(
+    rows,
+    CHARGE_COLUMN_MEANINGS,
+    CHARGE_SERIAL_KEY,
+    CHARGE_COLUMN_WIDTH_UNIT,
+  );
   return resolved.length > 0 ? resolved : fallbackColumns(CHARGE_COLUMN_MEANINGS);
 }
 
@@ -296,4 +329,25 @@ export function asEnum<T extends string>(
 ): T {
   const upper = (value ?? "").trim().toUpperCase();
   return (allowed as readonly string[]).includes(upper) ? (upper as T) : fallback;
+}
+
+/**
+ * The page-number list a pager renders: first, last, the current page's
+ * immediate neighbours, and an `"ellipsis"` wherever a run is skipped. Same
+ * shape `components/ui/table.tsx`'s pagination bar builds, so the quote-list
+ * popup's pager reads like every other one in the app.
+ */
+export function buildPageList(totalPages: number, currentPage: number): Array<number | "ellipsis"> {
+  const pages: Array<number | "ellipsis"> = [];
+  const safeTotal = Math.max(1, totalPages);
+  for (let page = 1; page <= safeTotal; page += 1) {
+    if (page === 1 || page === safeTotal || (page >= currentPage - 1 && page <= currentPage + 1)) {
+      pages.push(page);
+      continue;
+    }
+    if ((page === currentPage - 2 || page === currentPage + 2) && pages[pages.length - 1] !== "ellipsis") {
+      pages.push("ellipsis");
+    }
+  }
+  return pages;
 }

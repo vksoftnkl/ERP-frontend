@@ -761,6 +761,41 @@ export function ERPDynamicModalForm({
       return nextValues;
     });
   };
+  // `checkbox-group` fields keep the multi-select value shape (comma-joined
+  // option values) but toggle one box at a time. Selections stay in the order
+  // the options are declared so the stored string is stable regardless of the
+  // order the user ticked them.
+  const handleCheckboxGroupToggle = useCallback(
+    (field: ERPDynamicModalField, optionValue: string) => {
+      const fieldName = field.name;
+      setFormData((current) => {
+        const existingValues = parseMultiSelectValue(current[fieldName] ?? "");
+        const nextSelected = new Set(existingValues);
+        if (nextSelected.has(optionValue)) {
+          nextSelected.delete(optionValue);
+        } else {
+          nextSelected.add(optionValue);
+        }
+        const optionOrder = (field.options ?? []).map((option) => option.value);
+        const orderedValues = [
+          ...optionOrder.filter((value) => nextSelected.has(value)),
+          // Values with no matching option (stale data) keep their place at the end.
+          ...existingValues.filter(
+            (value) => nextSelected.has(value) && !optionOrder.includes(value),
+          ),
+        ];
+        const nextFieldValue = formatMultiSelectValue(orderedValues);
+        const nextValues = {
+          ...current,
+          [fieldName]: nextFieldValue,
+        };
+        revalidateFieldNames([fieldName], nextValues, fileData);
+        runFieldValueChangeHandler(field, nextFieldValue, nextValues, current);
+        return nextValues;
+      });
+    },
+    [fileData, revalidateFieldNames, runFieldValueChangeHandler],
+  );
   const handleCheckboxKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLInputElement>) => {
       if (event.key !== "Enter") {
@@ -1370,9 +1405,11 @@ export function ERPDynamicModalForm({
       );
     }
     const isMultiSelect = inputType === "select" && field.multiple;
-    const selectedValues = isMultiSelect
-      ? parseMultiSelectValue(fieldValue)
-      : [];
+    const isCheckboxGroup = inputType === "checkbox-group";
+    const selectedValues =
+      isMultiSelect || isCheckboxGroup
+        ? parseMultiSelectValue(fieldValue)
+        : [];
     const selectedOptionEntries = isMultiSelect
       ? selectedValues.map((selectedValue) => {
           const matchedOption = field.options?.find(
@@ -1521,7 +1558,13 @@ export function ERPDynamicModalForm({
         }}
       >
         {inputType !== "checkbox" && field.label.trim().length > 0 ? (
-          <label className={cx(styles.label, "erp-ms-modal-label")} htmlFor={commonProps.id}>
+          <label
+            className={cx(styles.label, "erp-ms-modal-label")}
+            // A checkbox group has no single control to label; it names the
+            // group through `aria-labelledby` instead.
+            id={isCheckboxGroup ? `${controlId}-label` : undefined}
+            htmlFor={isCheckboxGroup ? undefined : commonProps.id}
+          >
             {field.label}{" "}
             {fieldRequired ? (
               <span className={styles.requiredMark}>*</span>
@@ -1834,6 +1877,59 @@ export function ERPDynamicModalForm({
               </option>
             ))}
           </select>
+        ) : isCheckboxGroup ? (
+          <div
+            className={cx(styles.checkboxGroup, "erp-ms-modal-check-group")}
+            role="group"
+            aria-labelledby={
+              field.label.trim().length > 0 ? `${controlId}-label` : undefined
+            }
+            aria-describedby={describedBy}
+          >
+            {(field.options ?? []).map((option, optionIndex) => {
+              const optionId = `${controlId}-${option.value}`;
+              return (
+                <label
+                  key={optionId}
+                  className={cx(
+                    styles.checkboxGroupOption,
+                    "erp-ms-modal-check-item",
+                  )}
+                  htmlFor={optionId}
+                >
+                  <input
+                    id={optionId}
+                    type="checkbox"
+                    // Arrow-key field navigation targets one control per field.
+                    data-erp-modal-field-control={
+                      optionIndex === 0 ? "true" : undefined
+                    }
+                    autoComplete="off"
+                    disabled={field.disabled || isSubmitting}
+                    checked={selectedValues.includes(option.value)}
+                    onChange={() =>
+                      handleCheckboxGroupToggle(field, option.value)
+                    }
+                    onKeyDown={handleCheckboxKeyDown}
+                    className={cx(
+                      styles.checkboxControl,
+                      "erp-ms-modal-check",
+                      fieldError && styles.checkboxControlInvalid,
+                    )}
+                    style={field.controlStyle}
+                  />
+                  <span
+                    className={cx(
+                      styles.checkboxGroupOptionLabel,
+                      "erp-ms-modal-check-label",
+                    )}
+                  >
+                    {option.label}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
         ) : inputType === "checkbox" ? (
           <label
             className={styles.checkboxWrapper}

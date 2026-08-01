@@ -196,14 +196,14 @@
   row-gap: 0.34rem;
   align-items: start;
 }
-.field > :is(.control, .searchSelect, .fileField, .checkboxWrapper) {
+.field > :is(.control, .searchSelect, .fileField, .checkboxWrapper, .checkboxGroup) {
   grid-column: 2;
 }
 .fieldStacked {
   grid-template-columns: 1fr;
   row-gap: 0.28rem;
 }
-.fieldStacked > :is(.control, .searchSelect, .fileField, .checkboxWrapper),
+.fieldStacked > :is(.control, .searchSelect, .fileField, .checkboxWrapper, .checkboxGroup),
 .fieldStacked > .helpText,
 .fieldStacked > .errorText {
   grid-column: 1;
@@ -834,6 +834,30 @@
   accent-color: var(--erp-modal-accent);
   cursor: pointer;
 }
+.checkboxGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 1.15rem;
+  min-height: 40px;
+}
+.checkboxGroupOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  user-select: none;
+}
+.checkboxGroupOption:has(> .checkboxControl:disabled) {
+  cursor: not-allowed;
+}
+.checkboxGroupOptionLabel {
+  margin: 0;
+  color: #172033;
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
 .checkboxControlInvalid {
   outline: 2px solid rgba(209, 67, 67, 0.2);
   outline-offset: 1px;
@@ -1111,7 +1135,7 @@
     grid-template-columns: 1fr;
     row-gap: 0.36rem;
   }
-  .field > :is(.control, .searchSelect, .fileField, .checkboxWrapper),
+  .field > :is(.control, .searchSelect, .fileField, .checkboxWrapper, .checkboxGroup),
   .helpText,
   .errorText {
     grid-column: 1;
