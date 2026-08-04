@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, dev ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, dev ]
 
 jobs:
   build:
@@ -15,14 +15,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Use Node.js 20.x
+      - name: Use Node.js 22.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      # Ordered fastest-feedback first: a type error or a lint error should not
+      # wait on a full Next build to be reported.
+      #
+      # `if: ${{ !cancelled() }}` runs every gate even after an earlier one
+      # fails, so a PR gets its complete list of problems in one run instead of
+      # one-per-push. Install failure still short-circuits the job.
+      - name: Typecheck
+        if: ${{ !cancelled() }}
+        run: npm run typecheck
+
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: npm run lint
+
+      - name: Test
+        if: ${{ !cancelled() }}
+        run: npm test
+
       - name: Build (webpack)
+        if: ${{ !cancelled() }}
         run: npm run build -- --webpack
