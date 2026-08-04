@@ -1,4 +1,7 @@
-import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
+import type {
+  ERPDynamicFieldType,
+  ERPDynamicSelectOption,
+} from "@/components/design-system/ui/dynamic-modal-form";
 import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import type { ReusableTableColumn } from "@/components/ui/table";
 
@@ -122,14 +125,19 @@ export type PaginationInfo = {
 export type LedgerFormField = {
   name: LedgerFormFieldName | string;
   label: string;
-  type?: string;
+  // The dynamic-modal field union (which already covers "heading"/"subheading")
+  // plus the one ledger-local sentinel, rather than a bare `string`: these
+  // fields are handed straight to LedgerFieldRenderer, and a loose type here
+  // forced an `as any` at the call site that defeated checking on every other
+  // prop too.
+  type?: ERPDynamicFieldType | "bank-editor";
   required?: boolean;
   searchable?: boolean;
   options?: ERPDynamicSelectOption[];
   placeholder?: string;
   helperText?: string;
   validation?: Record<string, unknown>;
-  colSpan?: number;
+  colSpan?: 1 | 2;
   min?: number | string;
   max?: number | string;
   step?: string;

@@ -82,8 +82,11 @@ describe("createDraft", () => {
     expect(draft.charges).toEqual([]);
     expect(draft.header.quoteDate).toBe("2026-07-30");
     // The calc types are sent lower-case; the server does not normalise them.
+    // Nothing on the entry screen sets these any more — the seed IS the policy,
+    // so this assertion is the only thing holding it.
     expect(draft.policy.freightCalcType).toBe("manual");
     expect(draft.policy.loadingCalcType).toBe("manual");
+    expect(draft.policy.discountAlterBaseRate).toBe(false);
   });
 
   it("defaults the quote date to today when the caller gives none", () => {
@@ -138,7 +141,12 @@ describe("applyHeaderField — the validity date/day pair", () => {
   });
 
   it("moving the quote date leaves a manually keyed expiry date alone when no validity period is set", () => {
-    const withExpiry: QuotationHeader = { ...header(), validUntil: "2026-09-01" };
+    // Explicitly no period: a new header seeds one (DEFAULT_VALIDITY_DAYS).
+    const withExpiry: QuotationHeader = {
+      ...header(),
+      validityDays: 0,
+      validUntil: "2026-09-01",
+    };
     const moved = applyHeaderField(withExpiry, "quoteDate", "2026-08-01");
     expect(moved.validUntil).toBe("2026-09-01");
   });
@@ -159,9 +167,16 @@ describe("applyHeaderField — the validity date/day pair", () => {
   });
 
   it("passes any other field straight through untouched", () => {
-    const next = applyHeaderField(header(), "contactPerson", "Ravi");
+    const before = header();
+    const next = applyHeaderField(before, "contactPerson", "Ravi");
     expect(next.contactPerson).toBe("Ravi");
-    expect(next.validUntil).toBe("");
+    expect(next.validUntil).toBe(before.validUntil);
+    expect(next.validityDays).toBe(before.validityDays);
+  });
+
+  it("opens a new header on the standard validity window", () => {
+    expect(header().validityDays).toBe(7);
+    expect(header().validUntil).toBe("2026-08-06");
   });
 });
 

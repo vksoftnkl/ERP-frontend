@@ -14,11 +14,13 @@ import {
   addDays,
   buildPageList,
   daysBetween,
+  fromDisplayDate,
   isRealDate,
   parseCell,
   resolveChargeColumns,
   resolveItemColumns,
   toDateInput,
+  toDisplayDate,
   toNullableNumber,
   toNullableText,
   toNumber,
@@ -165,6 +167,21 @@ describe("dates", () => {
     expect(toDateInput("2026-07-30")).toBe("2026-07-30");
     expect(toDateInput(null)).toBe("");
     expect(toDateInput("nonsense")).toBe("");
+  });
+
+  it("shows dates as dd-mm-yyyy and reads back what the operator types", () => {
+    expect(toDisplayDate("2026-08-01")).toBe("01-08-2026");
+    expect(toDisplayDate("")).toBe("");
+    expect(toDisplayDate("nonsense")).toBe("");
+
+    expect(fromDisplayDate("01-08-2026")).toBe("2026-08-01");
+    expect(fromDisplayDate("01/08/2026")).toBe("2026-08-01");
+    expect(fromDisplayDate("01.08.2026")).toBe("2026-08-01");
+    expect(fromDisplayDate("01082026")).toBe("2026-08-01");
+    // Half-typed or impossible: the caller keeps the value it had.
+    expect(fromDisplayDate("01-08")).toBeNull();
+    expect(fromDisplayDate("31-02-2026")).toBeNull();
+    expect(fromDisplayDate("")).toBeNull();
   });
 
   it("rejects a date that is not on the calendar", () => {

@@ -23,6 +23,7 @@ import {
   ITEM_PRICE_ENDPOINT,
   ITEM_SWITCH_UOM_ENDPOINT,
   ITEM_UNITS_ENDPOINT,
+  PRICE_LEVEL_DROPDOWN_ID,
   QUOTATION_DELETE_ENDPOINT,
   QUOTATION_GET_ENDPOINT,
   QUOTATION_LIST_GRID_ID,
@@ -282,6 +283,27 @@ export const quotationApi = baseApi.injectEndpoints({
       ) => payload.data,
       keepUnusedDataFor: 120,
     }),
+    /**
+     * The price-level master, as select options. The value is the level NUMBER
+     * (`ipl_id` 1..7) the voucher stores and `/item-price` expects — only the
+     * label is configurable, so a deployment can call level 1 "WS Price".
+     */
+    getPriceLevels: builder.query<Array<{ value: string; label: string }>, void>({
+      query: () => ({
+        url: DROPDOWN_RUN_ENDPOINT,
+        params: { dropdown_id: PRICE_LEVEL_DROPDOWN_ID, page: 1, limit: 50 },
+      }),
+      transformResponse: (
+        payload: ApiSuccessResponse<ConfiguredGridPage<Record<string, unknown>>>,
+      ) =>
+        (payload.data?.items ?? [])
+          .map((row) => ({
+            value: String(row.ipl_id ?? ""),
+            label: String(row.ipl_name ?? ""),
+          }))
+          .filter((option) => option.value && option.label),
+      keepUnusedDataFor: 300,
+    }),
     // -- line + header lookups --------------------------------------------
     getCustomerDetail: builder.query<
       CustomerDetailPayload,
@@ -381,6 +403,7 @@ export const {
   useSearchPickerItemsQuery,
   useLazySearchPickerItemsQuery,
   useGetSalesChargesQuery,
+  useGetPriceLevelsQuery,
   useLazyGetCustomerDetailQuery,
   useLazyGetItemPriceQuery,
   useLazySwitchItemUomQuery,

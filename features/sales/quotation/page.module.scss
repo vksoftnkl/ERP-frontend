@@ -138,11 +138,41 @@
   background: var(--card-bg, #ffffff);
 }
 
-.termsRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+/* Charges, Terms and Totals side by side under the items grid. The splitter
+   above owns the row's height; each panel scrolls inside its own share. */
+.bottomRow {
+  display: flex;
+  flex: 0 0 auto;
   gap: 0.5rem;
-  align-items: start;
+  min-height: 0;
+}
+
+/* Unpinned, the row is as tall as its tallest panel wants to be, capped. */
+.bottomRowAuto {
+  max-height: 13rem;
+}
+
+.bottomRow > * {
+  min-width: 0;
+  /* Every panel is as tall as the row, so the three line up top and bottom. */
+  height: 100%;
+  overflow: auto;
+}
+
+/* Charges scrolls sideways whatever it gets, so the shares are set by what the
+   other two need to show in full: the terms fields, and the totals INCLUDING
+   the Bill figure at their right. */
+.bottomRow > .gridShell {
+  flex: 1.4 1 0;
+  overflow: hidden;
+}
+
+.bottomRow > :nth-child(2) {
+  flex: 1 1 0;
+}
+
+.bottomRow > :nth-child(3) {
+  flex: 1.5 1 0;
 }
 
 /* ------------------------------------------------------------------- fields */
@@ -196,6 +226,59 @@
 .textarea {
   min-height: 2.6rem;
   resize: vertical;
+}
+
+.inputReadOnly {
+  color: var(--text-muted, #555555);
+  cursor: default;
+}
+
+/* ------------------------------------------------------------- date fields */
+
+.dateField {
+  position: relative;
+  min-width: 0;
+}
+
+/* Room for the calendar button. */
+.dateInput {
+  padding-right: 1.7rem;
+}
+
+.dateButton {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  color: var(--primary, #7b1515);
+}
+
+.dateButtonIcon {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+/* The native picker, kept rendered so `showPicker()` will open it, but with its
+   own text and icon hidden — the text input beside it owns the display. */
+.datePicker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.datePicker:disabled {
+  cursor: default;
 }
 
 .readOnlyValue {
@@ -355,15 +438,9 @@
   flex: 1 1 auto;
 }
 
-/* Once the splitter pins a height it arrives inline; the items shell takes the
-   rest either way. */
+/* Its height comes from the bottom row it sits in, not from its own content. */
 .chargeGridShell {
   flex: 0 0 auto;
-}
-
-/* Unpinned, the pane is still content-sized under the original 13rem cap. */
-.chargeGridShellAuto {
-  max-height: 13rem;
 }
 
 /* ------------------------------------------------------------- pane splitter */
@@ -755,8 +832,10 @@
 
 .totalsPrimary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(8.5rem, 1fr)) auto;
-  gap: 0.2rem 1rem;
+  /* Narrow enough that the Bill column still fits beside the three figure
+     columns now that the panel shares a row with charges and terms. */
+  grid-template-columns: repeat(3, minmax(7rem, 1fr)) auto;
+  gap: 0.2rem 0.7rem;
   align-items: end;
 }
 
@@ -1196,9 +1275,20 @@
 }
 
 @media (max-width: 1100px) {
-  .headerRow,
-  .termsRow {
+  .headerRow {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Three panels side by side stop being readable; stack and let the row
+     scroll instead. */
+  .bottomRow {
+    flex-wrap: wrap;
+    overflow: auto;
+  }
+
+  .bottomRow > * {
+    flex: 1 1 100%;
+    height: auto;
   }
 
   .totalsPrimary {

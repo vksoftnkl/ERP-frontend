@@ -30,6 +30,7 @@ import {
   useDeleteQuotationMutation,
   useGetCompanyStateCodeQuery,
   useGetQuotationGridLayoutQuery,
+  useGetPriceLevelsQuery,
   useGetSalesChargesQuery,
   useGetUserCapabilitiesQuery,
   useLazyGetCustomerDetailQuery,
@@ -42,7 +43,6 @@ import {
 } from "@/store/api/quotationApi";
 import type { ItemPriceQuery } from "@/store/api/quotationApi";
 import {
-  chargesSeeded,
   companyStateCodeSet,
   customerApplied,
   draftReplaced,
@@ -62,11 +62,12 @@ import {
   FREIGHT_CALC_TYPES,
   ITEM_GRID_UI_TABLE_ID,
   LOADING_CALC_TYPES,
+  PRICE_LEVEL_OPTIONS,
   SESSION_CAPABILITIES,
 } from "./quotation.constants";
 import { buildSavePayload, parseLoadedDocument } from "./quotation.payload";
 import type { SaveActor } from "./quotation.payload";
-import { chargeRowFromMaster, clampPriceLevel, copyDraftAsNew, createDraft } from "./quotation.state";
+import { clampPriceLevel, copyDraftAsNew, createDraft } from "./quotation.state";
 import type {
   ChargeMasterRow,
   DraftLine,
@@ -145,6 +146,8 @@ export type QuotationDraftApi = {
   regional: boolean;
   itemColumns: ReturnType<typeof resolveItemColumns>;
   chargeColumns: ReturnType<typeof resolveChargeColumns>;
+  /** Price levels as select options, named by the master. */
+  priceLevelOptions: ReadonlyArray<{ value: string; label: string }>;
   chargeMasters: ChargeMasterRow[];
   unitOptionsFor: (itemId: string) => ItemUnitOption[];
 
@@ -211,6 +214,7 @@ export function useQuotationDraft(): QuotationDraftApi {
     uiTableId: CHARGE_GRID_UI_TABLE_ID,
   });
   const { data: chargeMasters = [] } = useGetSalesChargesQuery();
+  const { data: priceLevelNames = [] } = useGetPriceLevelsQuery();
 
   const [fetchCustomerDetail] = useLazyGetCustomerDetailQuery();
   const [fetchItemPrice] = useLazyGetItemPriceQuery();
@@ -250,7 +254,10 @@ export function useQuotationDraft(): QuotationDraftApi {
     }
     const firstSeed = seededTenant.current === "";
     seededTenant.current = signature;
-    if (!firstSeed && (draftRef.current.isDirty || draftRef.current.lines.length > 0)) {
+    // Populated lines, not `lines.length`: the grid always carries one trailing
+    // blank row, which is not work worth protecting.
+    const hasWork = draftRef.current.lines.some((line) => Boolean(line.itemId));
+    if (!firstSeed && (draftRef.current.isDirty || hasWork)) {
       // The shell's company/branch/year changed while a quotation was being
       // entered. Re-tenanting it would leave company A's prices, freight and
       // loading on a document stamped for company B, and would flip its tax
@@ -276,25 +283,10 @@ export function useQuotationDraft(): QuotationDraftApi {
     }
   }, [companyStateCode]);
 
-  // `chgAutoApply` charges are the rows the Qt screen pre-loads into a new
-  // entry — freight, loading, the standing cash discount. Seeded once, and never
-  // over a document that already has rows (a loaded one, or one the operator has
-  // started editing).
-  const seededCharges = useRef(false);
-  useEffect(() => {
-    if (seededCharges.current || chargeMasters.length === 0) {
-      return;
-    }
-    if (!draft.isNewEntry || draft.charges.length > 0) {
-      return;
-    }
-    const autoRows = chargeMasters.filter((master) => master.chgAutoApply).map(chargeRowFromMaster);
-    if (autoRows.length === 0) {
-      return;
-    }
-    seededCharges.current = true;
-    dispatch(chargesSeeded(autoRows));
-  }, [chargeMasters, draft.isNewEntry, draft.charges.length]);
+  // A new quotation starts with NO charges. The masters' `chgAutoApply` flag
+  // used to pre-load freight, loading and the standing cash discount here (as
+  // the Qt screen does); the operator now picks what the document needs, on the
+  // charge grid's own blank row.
 
   // A loaded document's lines were never picked in this session, so their unit
   // lists have not been fetched — without this the Uom dropdown on a reloaded
@@ -309,6 +301,12 @@ export function useQuotationDraft(): QuotationDraftApi {
 
   const itemColumns = useMemo(() => resolveItemColumns(itemLayout), [itemLayout]);
   const chargeColumns = useMemo(() => resolveChargeColumns(chargeLayout), [chargeLayout]);
+  // The master names the levels; the built-in A/B/C/D list is the fallback for a
+  // deployment that has not configured one (and for the moment before it loads).
+  const priceLevelOptions = useMemo(
+    () => (priceLevelNames.length > 0 ? priceLevelNames : PRICE_LEVEL_OPTIONS.map((o) => ({ ...o }))),
+    [priceLevelNames],
+  );
 
   const canEditPrice = capabilities?.editRate ?? SESSION_CAPABILITIES.editPrice;
   const regional = isRegionalLanguage(capabilities?.language) ?? SESSION_CAPABILITIES.regional;
@@ -699,7 +697,6 @@ export function useQuotationDraft(): QuotationDraftApi {
   );
 
   const clear = useCallback(() => {
-    seededCharges.current = false;
     dispatch(
       draftReplaced(
         createDraft({
@@ -764,6 +761,7 @@ export function useQuotationDraft(): QuotationDraftApi {
     regional,
     itemColumns,
     chargeColumns,
+    priceLevelOptions,
     chargeMasters,
     unitOptionsFor,
     pickCustomer,

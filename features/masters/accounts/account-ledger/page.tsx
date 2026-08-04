@@ -2699,7 +2699,12 @@ export default function AccountLedgerMasterPage() {
                       return (
                         <LedgerFieldRenderer
                           key={field.name}
-                          field={field as any}
+                          // Narrowing cast, not a bypass: LedgerFormField is
+                          // ERPDynamicModalField plus the "bank-editor"
+                          // sentinel, and that one variant already returned
+                          // above. TypeScript cannot carry that narrowing
+                          // across the `field.name` check.
+                          field={field as ERPDynamicModalField}
                           formValues={formValues}
                           isReadOnlyMode={isReadOnlyMode}
                           detailsLoading={detailsLoading}

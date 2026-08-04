@@ -26,6 +26,7 @@ import {
   DEFAULT_POS_STATE_CODE,
   DEFAULT_POS_STATE_NAME,
   DEFAULT_QUOTATION_STATUS,
+  DEFAULT_VALIDITY_DAYS,
   QUOTATION_DOC_TYPE,
   QUOTATION_STATUSES,
 } from "./quotation.constants";
@@ -113,8 +114,11 @@ export function emptyHeader(quoteDate: string): QuotationHeader {
   return {
     usrRefno: "",
     quoteDate,
-    validUntil: "",
-    validityDays: 0,
+    // A new quotation opens with the standard validity window already counted
+    // out; both fields are seeded because they are two views of one period and
+    // nothing re-derives them until the operator edits one.
+    validUntil: addDays(quoteDate, DEFAULT_VALIDITY_DAYS),
+    validityDays: DEFAULT_VALIDITY_DAYS,
     contactPerson: "",
     contactNo: "",
     areaId: null,
@@ -141,6 +145,12 @@ export function emptyTerms(): QuotationTerms {
  * document exactly twice: when a new quotation is started, and on Clear. After
  * that `draft.policy` is the only source, so changing the company setting
  * between two quotations cannot reprice the one already on screen.
+ *
+ * These are FIXED values, not defaults waiting for an operator: the entry screen
+ * exposes no Freight Basis / Loading Basis / discount-alters-base controls, so a
+ * new quotation always carries the policy stamped here. Change it here (or pass
+ * an override) to change it for every new document. A loaded document still
+ * prices under the policy it was saved with — that comes off the payload.
  */
 export function seedDocumentPolicy(overrides: Partial<VoucherPolicy> = {}): VoucherPolicy {
   return defaultPolicy({

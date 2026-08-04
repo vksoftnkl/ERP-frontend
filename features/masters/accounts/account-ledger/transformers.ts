@@ -20,6 +20,14 @@ import {
   GST_PRIMARY_ADDRESS_KEYS,
   GST_REGISTRATION_TYPE_KEYS,
   GST_TRADE_NAME_KEYS,
+  PAGINATION_CONTAINER_KEYS,
+  TOTAL_ENTRIES_KEYS,
+  CURRENT_PAGE_KEYS,
+  PAGE_SIZE_KEYS,
+  GRID_DETAIL_ID_KEYS,
+  GRID_DETAIL_SQL_KEYS,
+  GRID_DETAIL_NAME_KEYS,
+  ACCOUNT_LEDGER_TABLE_NAME_ALIASES,
 } from "./constants";
 import type {
   LedgerFormValues,
@@ -507,13 +515,6 @@ function findPaginationNumber(
   return null;
 }
 export function extractPaginationInfo(payload: unknown): PaginationInfo {
-  const {
-    PAGINATION_CONTAINER_KEYS,
-    TOTAL_ENTRIES_KEYS,
-    CURRENT_PAGE_KEYS,
-    PAGE_SIZE_KEYS,
-  } = require("./constants");
-
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return {
       totalEntries: null,
@@ -549,7 +550,6 @@ export function extractPaginationInfo(payload: unknown): PaginationInfo {
 }
 // ============ Grid Details ============
 export function resolveAccountLedgerGridDetails(payload: unknown): ResolvedGridDetails {
-  const { GRID_DETAIL_ID_KEYS, GRID_DETAIL_SQL_KEYS, GRID_DETAIL_NAME_KEYS, ACCOUNT_LEDGER_TABLE_NAME_ALIASES } = require("./constants");
   const rows = extractRows(payload, LOOKUP_ARRAY_KEYS);
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) {

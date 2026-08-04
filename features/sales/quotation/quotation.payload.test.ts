@@ -12,8 +12,10 @@ import { QUOTATION_STATUSES } from "./quotation.constants";
 import { buildSavePayload, parseLoadedDocument } from "./quotation.payload";
 import type { SaveActor } from "./quotation.payload";
 import {
+  draftReplaced,
   headerFieldSet,
   lineFieldSet,
+  modeSet,
   quotationReducer,
   saveResponseApplied,
 } from "@/store/slices/quotationSlice";
@@ -671,6 +673,69 @@ describe("parseLoadedDocument", () => {
     );
     // 27 = 2 × 12 + 3 × 1
     expect(withCases.lines[0].toBaseFactor).toBe(12);
+  });
+});
+
+describe("the trailing blank row", () => {
+  it("opens a row on a fresh draft and another one as soon as the last gets an item", () => {
+    const fresh = quotationReducer(
+      undefined as never,
+      draftReplaced(
+        createDraft({
+          companyId: COMPANY_ID,
+          branchId: BRANCH_ID,
+          accYear: ACC_YEAR,
+          companyStateCode: "33",
+          quoteDate: QUOTE_DATE,
+        }),
+      ),
+    );
+    expect(fresh.lines).toHaveLength(1);
+    expect(fresh.lines[0].itemId).toBe("");
+    // Opening it is not an edit.
+    expect(fresh.isDirty).toBe(false);
+
+    const picked = quotationReducer(
+      fresh,
+      lineFieldSet({ key: fresh.lines[0].key, field: "itemId", value: ITEM_ID }),
+    );
+    expect(picked.lines).toHaveLength(2);
+    expect(picked.lines[1].itemId).toBe("");
+    expect(picked.isDirty).toBe(true);
+  });
+
+  it("keeps the blank row out of the payload and out of the item count", () => {
+    const draft = baseDraft();
+    const withBlank = quotationReducer(
+      draft,
+      lineFieldSet({ key: draft.lines[0].key, field: "billQty", value: 10 }),
+    );
+    expect(withBlank.lines).toHaveLength(2);
+
+    const pricing = pricingOf(withBlank);
+    expect(pricing.totals.totItems).toBe(1);
+    expect(validateSaveInputs(withBlank, pricing)).toBeNull();
+    expect(buildSavePayload(withBlank, pricing, ACTOR).items).toHaveLength(1);
+  });
+
+  it("opens a blank charge row too, and keeps it out of the payload", () => {
+    const draft = baseDraft();
+    const withBlanks = quotationReducer(
+      draft,
+      lineFieldSet({ key: draft.lines[0].key, field: "billQty", value: 10 }),
+    );
+    expect(withBlanks.charges).toHaveLength(1);
+    expect(withBlanks.charges[0].chgId).toBe("");
+    expect(
+      buildSavePayload(withBlanks, pricingOf(withBlanks), ACTOR).charges,
+    ).toHaveLength(0);
+  });
+
+  it("leaves a read-only document alone", () => {
+    const loaded = parseLoadedDocument(loadedPayload(), "33");
+    const browsing = quotationReducer({ ...loaded, mode: "browse" }, modeSet("browse"));
+    expect(browsing.lines).toHaveLength(1);
+    expect(browsing.lines[0].itemId).toBeTruthy();
   });
 });
 

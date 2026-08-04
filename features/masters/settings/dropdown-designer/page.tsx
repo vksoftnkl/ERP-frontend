@@ -870,7 +870,7 @@ export default function DropdownDesignerPage({
           <div className={styles.mobileColumnsList}>
             {columns.length === 0 ? (
               <div className={styles.emptyColumnsState}>
-                No dropdown columns yet. Use "Add Column" to create schema-backed rows.
+                No dropdown columns yet. Use &quot;Add Column&quot; to create schema-backed rows.
               </div>
             ) : (
               columns.map((column) => (

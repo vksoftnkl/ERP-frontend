@@ -81,6 +81,12 @@ export const AGENT_DROPDOWN_ID = "38";
  * `sq_cust_area_id`, which the customer master seeds and the operator can change.
  */
 export const AREA_DROPDOWN_ID = "13";
+/**
+ * Dropdown 34 ("PRICE LEVELS") over `inventory.item_price_levels` — `ipl_id` is
+ * the same 1..7 level the voucher and `/item-price` use, `ipl_name` is what the
+ * deployment calls it ("WS Price", "Retail Price", …).
+ */
+export const PRICE_LEVEL_DROPDOWN_ID = "34";
 export const SALESMAN_DROPDOWN_ID = "38";
 
 /** Sales-side charges only: `chgModule IN ('S','B')`. */
@@ -108,6 +114,13 @@ export const QUOTATION_STATUSES = [
 ] as const;
 export type QuotationStatus = (typeof QUOTATION_STATUSES)[number];
 export const DEFAULT_QUOTATION_STATUS: QuotationStatus = "DRAFT";
+
+/**
+ * How long a new quotation is valid for. The screen has no other source for it —
+ * there is no company setting — so this is the standard window, counted onto the
+ * quote date as `validUntil` the moment a draft is created.
+ */
+export const DEFAULT_VALIDITY_DAYS = 7;
 
 /**
  * `sq_freight_calc_type` / `sq_loading_calc_type` share their vocabulary with

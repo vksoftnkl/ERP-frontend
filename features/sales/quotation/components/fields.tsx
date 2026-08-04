@@ -15,6 +15,7 @@ import {
 } from "react";
 import { cx } from "@/components/design-system/cx";
 import { useLazyRunDropdownQuery } from "@/store/api/quotationApi";
+import { fromDisplayDate, toDisplayDate } from "../quotation.utils";
 import styles from "../page.module.scss";
 
 export function GroupBox({
@@ -121,6 +122,15 @@ export function NumberField({
   );
 }
 
+/**
+ * A `dd-mm-yyyy` date field.
+ *
+ * Not `<input type="date">`: that renders in the BROWSER's locale, so the same
+ * screen reads `08/01/2026` here and `01/08/2026` on the next desk. The text
+ * input owns the format and the calendar button borrows the native picker —
+ * kept in the DOM (transparent, not `display: none`) because `showPicker()`
+ * refuses to open for an unrendered input.
+ */
 export function DateField({
   id,
   label,
@@ -134,17 +144,96 @@ export function DateField({
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
+  const [text, setText] = useState(() => toDisplayDate(value));
+  const pickerRef = useRef<HTMLInputElement | null>(null);
+
+  // The draft is the source of truth: a re-derived validity date, a load or a
+  // Clear all arrive as a new `value` and must be shown as typed-in text.
+  useEffect(() => {
+    setText(toDisplayDate(value));
+  }, [value]);
+
+  const commit = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      onChange("");
+      return;
+    }
+    const iso = fromDisplayDate(trimmed);
+    if (iso) {
+      onChange(iso);
+      setText(toDisplayDate(iso));
+      return;
+    }
+    // Not a date — snap back rather than leave a half-typed cell standing.
+    setText(toDisplayDate(value));
+  };
+
   return (
     <Field label={label} htmlFor={id}>
-      <input
-        id={id}
-        className={styles.input}
-        type="date"
-        value={value}
-        disabled={disabled}
-        data-quotation-focus={id}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      <div className={styles.dateField}>
+        <input
+          id={id}
+          className={cx(styles.input, styles.dateInput)}
+          value={text}
+          placeholder="dd-mm-yyyy"
+          inputMode="numeric"
+          autoComplete="off"
+          disabled={disabled}
+          data-quotation-focus={id}
+          onChange={(event) => {
+            setText(event.target.value);
+            const iso = fromDisplayDate(event.target.value);
+            if (iso) {
+              onChange(iso);
+            }
+          }}
+          onBlur={(event) => commit(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              commit(event.currentTarget.value);
+            }
+          }}
+        />
+        <span className={styles.dateButton} aria-hidden="true">
+          <svg className={styles.dateButtonIcon} viewBox="0 0 16 16">
+            <rect
+              x="1.75"
+              y="3"
+              width="12.5"
+              height="11.25"
+              rx="1.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.3"
+            />
+            <path
+              d="M1.75 6.5h12.5M5 1.75v2.5M11 1.75v2.5"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeWidth="1.3"
+            />
+          </svg>
+          <input
+            ref={pickerRef}
+            type="date"
+            className={styles.datePicker}
+            value={value}
+            tabIndex={-1}
+            disabled={disabled}
+            aria-label={`${label} calendar`}
+            onChange={(event) => onChange(event.target.value)}
+            onClick={(event) => {
+              const picker = event.currentTarget;
+              if (typeof picker.showPicker === "function") {
+                // Clicking anywhere but the native icon does nothing otherwise.
+                picker.showPicker();
+              }
+            }}
+          />
+        </span>
+      </div>
     </Field>
   );
 }
@@ -205,6 +294,38 @@ export function CheckField({
       />
       {label}
     </label>
+  );
+}
+
+/**
+ * A value the operator cannot change but which still reads as a field — the
+ * quote number, which the server allocates inside its create transaction.
+ * `readOnly` rather than `disabled`: it keeps the white box of the fields around
+ * it instead of greying out, and stays selectable so the number can be copied.
+ */
+export function ReadOnlyInput({
+  id,
+  label,
+  value,
+  placeholder,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  placeholder?: string;
+}) {
+  return (
+    <Field label={label} htmlFor={id}>
+      <input
+        id={id}
+        className={cx(styles.input, styles.inputReadOnly)}
+        value={value}
+        placeholder={placeholder}
+        readOnly
+        tabIndex={-1}
+        autoComplete="off"
+      />
+    </Field>
   );
 }
 

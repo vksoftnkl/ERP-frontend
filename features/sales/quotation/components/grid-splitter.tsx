@@ -1,9 +1,10 @@
 "use client";
 
 /**
- * The draggable divider between the Items grid and the Additional charges grid.
+ * The draggable divider between the Items grid and the bottom row (charges,
+ * terms and totals).
  *
- * The charges pane owns the explicit height and the items pane simply takes what
+ * The bottom row owns the explicit height and the items grid simply takes what
  * is left, so the split needs no recomputation when the window resizes — but the
  * stored height is re-clamped against the live container on every resize, or a
  * value saved on a taller window would squeeze the items grid out of view.
@@ -24,8 +25,8 @@ import { cx } from "@/components/design-system/cx";
 import styles from "../page.module.scss";
 
 const STORAGE_KEY = "erp.quotation.chargesPaneHeight";
-/** Head band plus one row, so a collapsed pane still shows what it is. */
-const MIN_CHARGES_PANE_HEIGHT = 92;
+/** A charge row and the terms fields beside it still legible when collapsed. */
+const MIN_CHARGES_PANE_HEIGHT = 116;
 /** Head band, the column header and a couple of rows kept on the items side. */
 const MIN_ITEMS_PANE_HEIGHT = 110;
 /** The row's own gaps around the handle — not usable by either pane. */

@@ -336,10 +336,12 @@ export function ItemGrid(props: ItemGridProps) {
               </tr>
             );
           })}
+          {/* Entry mode always has its trailing blank row, so this is the
+              read-only view of a document that was saved without lines. */}
           {lines.length === 0 ? (
             <tr>
               <td className={styles.emptyGrid} colSpan={visible.length + 1}>
-                No items yet. Use <strong>Add row</strong> and pick an item in the Description cell.
+                No items on this quotation.
               </td>
             </tr>
           ) : null}

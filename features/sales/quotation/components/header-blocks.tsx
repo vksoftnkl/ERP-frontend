@@ -16,12 +16,9 @@ import {
   AREA_DROPDOWN_ID,
   CUSTOMER_DROPDOWN_ID,
   POS_DROPDOWN_ID,
-  PRICE_LEVEL_OPTIONS,
-  QUOTATION_STATUSES,
   SALESMAN_DROPDOWN_ID,
   AGENT_DROPDOWN_ID,
 } from "../quotation.constants";
-import type { VoucherPolicy } from "@/domain/pricing";
 import type {
   CustomerSnapshot,
   EditableCustomerField,
@@ -35,35 +32,17 @@ import {
   Field,
   GroupBox,
   NumberField,
-  ReadOnlyField,
+  ReadOnlyInput,
   SelectField,
   TextField,
 } from "./fields";
 import styles from "../page.module.scss";
-
-const STATUS_OPTIONS = QUOTATION_STATUSES.map((status) => ({
-  value: status,
-  label: status.charAt(0) + status.slice(1).toLowerCase(),
-}));
-
-const PRICE_LEVEL_SELECT = PRICE_LEVEL_OPTIONS.map((option) => ({ ...option }));
 
 /**
  * Lower case on purpose: these values are both stored verbatim on the voucher and
  * sent back as `/item-price`'s `freight_type` / `loading_type`, which are closed
  * sets. `freight` has no `auto` — distance slabs are a separate lookup.
  */
-const FREIGHT_BASIS_OPTIONS = [
-  { value: "manual", label: "Typed in by hand" },
-  { value: "item_basis", label: "From the item master" },
-] as const;
-
-const LOADING_BASIS_OPTIONS = [
-  { value: "manual", label: "Typed in by hand" },
-  { value: "item_basis", label: "From the item master" },
-  { value: "auto", label: "Automatic (weight slab)" },
-] as const;
-
 export type CustomerBlockProps = {
   customer: CustomerSnapshot;
   header: QuotationHeader;
@@ -171,33 +150,29 @@ export function CustomerBlock({
 export type QuoteInfoBlockProps = {
   header: QuotationHeader;
   quoteRefno: string;
-  status: string;
+  /** `inventory.item_price_levels`, level number → its configured name. */
+  priceLevelOptions: ReadonlyArray<{ value: string; label: string }>;
   disabled: boolean;
   onSetHeader: (field: keyof QuotationHeader, value: string | number | boolean) => void;
-  onSetStatus: (status: string) => void;
 };
 
 export function QuoteInfoBlock({
   header,
   quoteRefno,
-  status,
+  priceLevelOptions,
   disabled,
   onSetHeader,
-  onSetStatus,
 }: QuoteInfoBlockProps) {
   return (
     <div className={styles.fieldGrid}>
       {/* The voucher number is allocated by the server inside the create
           transaction and there is no peek endpoint, so it is blank until the
           first successful save. */}
-      <ReadOnlyField label="Quote No" value={quoteRefno || "(auto)"} />
-      <TextField
-        id="quotation-usr-refno"
-        label="Ref No"
-        value={header.usrRefno}
-        disabled={disabled}
-        maxLength={100}
-        onChange={(value) => onSetHeader("usrRefno", value)}
+      <ReadOnlyInput
+        id="quotation-quote-no"
+        label="Quote No"
+        value={quoteRefno}
+        placeholder="(auto)"
       />
       <DateField
         id="quotation-date"
@@ -223,19 +198,13 @@ export function QuoteInfoBlock({
         min={0}
         onChange={(value) => onSetHeader("validityDays", value)}
       />
-      <SelectField
-        id="quotation-status"
-        label="Status"
-        value={status}
-        options={STATUS_OPTIONS}
-        disabled={disabled}
-        onChange={onSetStatus}
-      />
+      {/* Status is not an operator field on this screen: a new quotation is
+          stamped DRAFT and a loaded one keeps the status it was saved with. */}
       <SelectField
         id="quotation-price-level"
         label="Price Level"
         value={String(header.priceLevel)}
-        options={PRICE_LEVEL_SELECT}
+        options={priceLevelOptions}
         disabled={disabled}
         onChange={(value) => onSetHeader("priceLevel", Number.parseInt(value, 10) || 1)}
       />
@@ -245,7 +214,6 @@ export function QuoteInfoBlock({
 
 export type SalesInfoBlockProps = {
   header: QuotationHeader;
-  policy: VoucherPolicy;
   /** Display name for the header's `areaId`, which is all the voucher stores. */
   beatName: string;
   disabled: boolean;
@@ -253,19 +221,16 @@ export type SalesInfoBlockProps = {
   onSetBeat: (areaId: string, areaName: string) => void;
   onSetSalesman: (id: string, name: string) => void;
   onSetAgent: (id: string, name: string) => void;
-  onSetPolicy: (policy: Partial<VoucherPolicy>) => void;
 };
 
 export function SalesInfoBlock({
   header,
-  policy,
   beatName,
   disabled,
   onSetHeader,
   onSetBeat,
   onSetSalesman,
   onSetAgent,
-  onSetPolicy,
 }: SalesInfoBlockProps) {
   return (
     <div className={styles.fieldGrid}>
@@ -345,38 +310,13 @@ export function SalesInfoBlock({
         />
       </div>
       {/*
-        These three are the voucher's own charge policy — `sq_freight_calc_type`,
-        `sq_loading_calc_type` and `sq_disc_alter_base`. They exist on
-        `sale_quotation` and NOWHERE else: there is no company setting and no
-        session field to seed them from, so leaving them implicit pinned every
-        new quotation to `manual`, which in turn made the per-line freight and
-        loading columns, the distance lookup and the role gate unreachable. A
-        loaded document keeps its own snapshot and these controls show it.
+        Freight Basis, Loading Basis and "discount alters the base rate" used to
+        be three controls here. They are not operator choices on this screen: the
+        voucher takes the fixed policy `seedDocumentPolicy` stamps on it
+        (`manual` / `manual` / off), which is what these controls always showed
+        anyway. A LOADED document still prices with the policy it was saved
+        under — that snapshot is data, not a default.
       */}
-      <SelectField
-        id="quotation-freight-basis"
-        label="Freight Basis"
-        value={policy.freightCalcType}
-        options={FREIGHT_BASIS_OPTIONS}
-        disabled={disabled}
-        onChange={(value) => onSetPolicy({ freightCalcType: value })}
-      />
-      <SelectField
-        id="quotation-loading-basis"
-        label="Loading Basis"
-        value={policy.loadingCalcType}
-        options={LOADING_BASIS_OPTIONS}
-        disabled={disabled}
-        onChange={(value) => onSetPolicy({ loadingCalcType: value })}
-      />
-      <div className={styles.checkRow}>
-        <CheckField
-          label="Discount alters the base rate"
-          checked={policy.discountAlterBaseRate}
-          disabled={disabled}
-          onChange={(checked) => onSetPolicy({ discountAlterBaseRate: checked })}
-        />
-      </div>
     </div>
   );
 }

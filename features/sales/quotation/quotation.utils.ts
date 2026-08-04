@@ -97,6 +97,34 @@ export function toDateInput(value: string | null | undefined): string {
   return `${parsed.getUTCFullYear()}-${month}-${day}`;
 }
 
+/**
+ * `yyyy-mm-dd` (what the draft and the wire use) → `dd-mm-yyyy` (what the screen
+ * shows). A native `<input type="date">` renders in the BROWSER's locale, which
+ * is why the date fields are text inputs with their own formatting.
+ */
+export function toDisplayDate(value: string): string {
+  const match = ISO_DATE.exec((value ?? "").trim());
+  if (!match) {
+    return "";
+  }
+  const [, year, month, day] = match;
+  return `${day}-${month}-${year}`;
+}
+
+/**
+ * The inverse, tolerant of what an operator actually types: `-`, `/` or `.` as
+ * separators, or eight bare digits. Returns null when it is not a real date, so
+ * a half-typed cell leaves the stored value alone.
+ */
+export function fromDisplayDate(value: string): string | null {
+  const digits = (value ?? "").replace(/[^0-9]/g, "");
+  if (digits.length !== 8) {
+    return null;
+  }
+  const iso = `${digits.slice(4)}-${digits.slice(2, 4)}-${digits.slice(0, 2)}`;
+  return isRealDate(iso) ? iso : null;
+}
+
 export function isRealDate(value: string): boolean {
   const match = ISO_DATE.exec(value.trim());
   if (!match) {

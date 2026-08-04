@@ -215,6 +215,170 @@ textarea {
   color: var(--text-soft);
 }
 
+/* ── Error boundaries ──────────────────────────────────────────────────────
+   Shared by app/error.tsx, app/global-error.tsx and <ErrorBoundary>. Styled
+   here rather than in a CSS module because global-error.tsx renders after the
+   root layout failed, and must not depend on anything the app tree provides. */
+
+.erp-error-state {
+  height: 100%;
+  min-height: 18rem;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  padding: 1.5rem;
+  background: var(--page-bg);
+  color: var(--text-main);
+  font-family: var(--erp-font-family);
+  overflow: auto;
+}
+
+.erp-error-state__panel {
+  width: min(34rem, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 2rem 1.75rem;
+  text-align: center;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  box-shadow: var(--shadow);
+}
+
+.erp-error-state__badge {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: var(--danger-light);
+  color: var(--danger);
+  font-size: 1.4rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.erp-error-state__title {
+  margin: 0.25rem 0 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.erp-error-state__description {
+  margin: 0;
+  max-width: 30rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.erp-error-state__reference {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin: 0.35rem 0 0;
+  max-width: 100%;
+}
+
+.erp-error-state__reference-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.erp-error-state__reference-value {
+  max-width: 100%;
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--erp-radius);
+  background: var(--header-bg);
+  border: 1px solid var(--border-light);
+  font-size: 0.76rem;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
+.erp-error-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.erp-error-state__actions .ui-btn {
+  text-decoration: none;
+}
+
+.erp-error-state__details {
+  width: 100%;
+  margin-top: 1rem;
+  text-align: left;
+}
+
+.erp-error-state__details-summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.erp-error-state__stack {
+  margin: 0.5rem 0 0;
+  padding: 0.65rem;
+  max-height: 16rem;
+  overflow: auto;
+  border-radius: var(--erp-radius);
+  background: var(--header-bg);
+  border: 1px solid var(--border-light);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-soft);
+}
+
+/* Compact variant for shell regions (e.g. the header) where a full-height
+   panel would push the actual page out of view. */
+.erp-error-state--inline {
+  height: auto;
+  min-height: 0;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+}
+
+.erp-error-state--inline .erp-error-state__panel {
+  width: 100%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  box-shadow: none;
+}
+
+.erp-error-state--inline .erp-error-state__badge {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.erp-error-state--inline .erp-error-state__title {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.erp-error-state--inline .erp-error-state__actions {
+  margin: 0 0 0 auto;
+}
+
 @keyframes erpGlobalLoaderBar {
   0% {
     transform: translateX(-90%) scaleX(0.18);

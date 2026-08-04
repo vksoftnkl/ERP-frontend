@@ -8,6 +8,8 @@ import GlobalErpHeader from "@/components/layout/global-erp-header";
 import GlobalRouteGuard from "@/components/auth/global-route-guard";
 import GlobalLoader from "@/components/feedback/global-loader";
 import GlobalToasterWrapper from "@/components/feedback/global-toaster-wrapper";
+import ErrorBoundary from "@/components/feedback/error-boundary";
+import RegionErrorBoundary from "@/components/feedback/region-error-boundary";
 export const metadata: Metadata = {
   title: "ERP Client | Operations Platform",
   description: "Landing page and login experience for ERP Client.",
@@ -53,14 +55,26 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: removeExtensionInjectedNodesScript }} />
         <Providers>
           <GlobalLoader />
-          <GlobalRouteGuard>
-            <BusinessContextProvider>
-              <div className="erp-app-shell">
-                <GlobalErpHeader />
-                <div className="erp-app-content">{children}</div>
-              </div>
-            </BusinessContextProvider>
-          </GlobalRouteGuard>
+          {/* Guards the shell itself. `app/error.tsx` only wraps the page below
+              this layout, so without this a throw in the header or the
+              business-context provider would escalate to global-error.tsx and
+              blank the whole application. */}
+          <ErrorBoundary>
+            <GlobalRouteGuard>
+              <BusinessContextProvider>
+                <div className="erp-app-shell">
+                  {/* Scoped separately: a broken header must not cost the user
+                      the screen they are working in. The fallback lives inside
+                      RegionErrorBoundary because this file is a Server
+                      Component and cannot hand a function to a client one. */}
+                  <RegionErrorBoundary title="The navigation bar failed to load">
+                    <GlobalErpHeader />
+                  </RegionErrorBoundary>
+                  <div className="erp-app-content">{children}</div>
+                </div>
+              </BusinessContextProvider>
+            </GlobalRouteGuard>
+          </ErrorBoundary>
           <GlobalToasterWrapper />
         </Providers>
       </body>

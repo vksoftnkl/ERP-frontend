@@ -192,7 +192,6 @@ export function BulkLoadItemsModal({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleSubmit = useMemo(() => () => {
     onLoadItems({ companyId, branchId, godownId, itemGroupId, itemBrandId, itemSectionId, itemCategoryId });
   }, [companyId, branchId, godownId, itemGroupId, itemBrandId, itemSectionId, itemCategoryId, onLoadItems]);

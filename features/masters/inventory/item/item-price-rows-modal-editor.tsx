@@ -94,7 +94,7 @@ function buildItemPriceRowFieldValidation(
   if (columnKey === "ipm_to_base_factor") {
     return {
       minMessage: "Conv must be greater than 0.",
-      custom: (value:any) => {
+      custom: (value: string) => {
         const normalizedValue = value.trim();
         if (!normalizedValue) {
           return "Conv is required.";

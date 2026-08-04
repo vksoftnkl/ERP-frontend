@@ -308,14 +308,14 @@ export function useApi<TResp = unknown, TBody = unknown>(
               : requestOverride?.body ?? defaultBodyRef.current ?? {},
           signal: controller.signal,
         };
-        let resp = await axios.request<TResp>(requestConfig);
+        const resp = await axios.request<TResp>(requestConfig);
         const json = resp.data as TResp;
         setData(json);
         if (shouldToastSuccess) {
           showSuccessToast(successMessage);
         }
         return json;
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (isCanceledRequestError(e)) {
           return;
         }

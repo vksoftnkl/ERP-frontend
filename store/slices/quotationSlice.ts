@@ -279,15 +279,6 @@ const quotationSlice = createSlice({
         }
       }
     },
-    /** Pre-seed the `chgAutoApply` charges of a brand-new document. Not an edit. */
-    chargesSeeded(state, action: PayloadAction<DraftChargeRow[]>) {
-      // Only ever applied to a document that has no charge rows yet, so seeding
-      // cannot overwrite the operator's own.
-      if (state.charges.length > 0) {
-        return;
-      }
-      state.charges = action.payload;
-    },
     chargeAdded(state, action: PayloadAction<DraftChargeRow | undefined>) {
       state.charges.push(action.payload ?? createDraftChargeRow());
     },
@@ -363,7 +354,6 @@ export const {
   lineFieldSet,
   itemPriceApplied,
   linePriceLevelSet,
-  chargesSeeded,
   chargeAdded,
   chargeRemoved,
   chargeFieldSet,
@@ -376,7 +366,6 @@ const NON_EDIT_ACTIONS = new Set<string>([
   tenantSet.type,
   companyStateCodeSet.type,
   freightBandsSet.type,
-  chargesSeeded.type,
   // A save is not an operator edit: `applySaveResponse` decides the dirty flag
   // itself (clear when the response matches what was sent, still dirty when the
   // operator committed something while it was in flight), and the wrapper below
@@ -384,7 +373,40 @@ const NON_EDIT_ACTIONS = new Set<string>([
   saveResponseApplied.type,
 ]);
 /**
- * The reducer. Two cross-cutting rules live here rather than in every case:
+ * One empty row always waiting at the bottom of BOTH grids, the way the Qt
+ * screen behaves: a fresh quotation opens on a blank row, and picking an item —
+ * or a charge — on the last row opens the next one. Neither grid has an "add
+ * row" button to press.
+ *
+ * Expressed here as an invariant rather than as an append inside every case, so
+ * it holds after a pick, a delete, a load, a Clear and a copy-as-new alike. A
+ * blank row costs nothing downstream: the payload builder, the validator and the
+ * totals all key off `itemId` / `chgId` and skip rows that have none.
+ *
+ * Browse mode gets no blank rows — there is nothing to type into them.
+ */
+function withTrailingBlankRows(state: QuotationState): QuotationState {
+  if (state.mode !== "entry") {
+    return state;
+  }
+  const lastLine = state.lines[state.lines.length - 1];
+  const lastCharge = state.charges[state.charges.length - 1];
+  const needsLine = !lastLine || Boolean(lastLine.itemId);
+  const needsCharge = !lastCharge || Boolean(lastCharge.chgId);
+  if (!needsLine && !needsCharge) {
+    return state;
+  }
+  return {
+    ...state,
+    lines: needsLine
+      ? [...state.lines, createDraftLine({ priceLevel: state.header.priceLevel })]
+      : state.lines,
+    charges: needsCharge ? [...state.charges, createDraftChargeRow()] : state.charges,
+  };
+}
+
+/**
+ * The reducer. Three cross-cutting rules live here rather than in every case:
  *
  *  - an operator edit marks the draft dirty, so the close/F8 guard can ask
  *    before throwing work away;
@@ -392,7 +414,10 @@ const NON_EDIT_ACTIONS = new Set<string>([
  *    `live`. Until then every figure on screen is the one that was saved, which
  *    is why a document keeps the numbers it was quoted with even after the
  *    masters and the policy have moved on. Qt needed an `m_loading` guard at the
- *    top of the recalc for this; here it is one assignment.
+ *    top of the recalc for this; here it is one assignment;
+ *  - both grids always end on an empty row (see `withTrailingBlankRows`).
+ *    It is applied LAST, so opening that row is never itself an edit — a
+ *    pristine draft with its one blank row is still clean.
  *
  * An action the slice does not handle — every other slice's, and every RTK Query
  * action — leaves the state object identical and so cannot dirty the draft.
@@ -403,12 +428,12 @@ export function quotationReducer(
 ): QuotationState {
   const next = quotationSlice.reducer(state, action);
   if (state === undefined || next === state || NON_EDIT_ACTIONS.has(action.type)) {
-    return next;
+    return withTrailingBlankRows(next);
   }
   if (next.isDirty && next.pricing === "live") {
-    return next;
+    return withTrailingBlankRows(next);
   }
-  return { ...next, isDirty: true, pricing: "live" };
+  return withTrailingBlankRows({ ...next, isDirty: true, pricing: "live" });
 }
 export const selectQuotationDraft = (state: RootState): QuotationState => state.quotation;
 export const selectQuotationLines = (state: RootState) => state.quotation.lines;
