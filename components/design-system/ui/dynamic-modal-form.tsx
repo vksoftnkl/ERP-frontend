@@ -120,6 +120,12 @@ export function ERPDynamicModalForm({
     variants[0]?.key ?? "",
   );
   const [formData, setFormData] = useState<Record<string, string>>({});
+  // Mirrors `formData` so value changes can be computed outside a `setFormData`
+  // updater. Updaters run during render and must stay pure — the validation and
+  // `onValueChange` side effects below would otherwise fire mid-render (React
+  // warns when a caller's handler updates the parent) and run twice in
+  // StrictMode. Every write to `formData` goes through here to keep it accurate.
+  const formDataRef = useRef<Record<string, string>>({});
   const [fileData, setFileData] = useState<Record<string, File | null>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [searchQueries, setSearchQueries] = useState<Record<string, string>>(
@@ -153,6 +159,24 @@ export function ERPDynamicModalForm({
   const [filePreviews, setFilePreviews] = useState<Record<string, string>>({});
   const fieldValueChangeRequestIdsRef = useRef<Record<string, number>>({});
   const sectionTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  // Replaces the whole form value set (open/reset). Keeps `formDataRef` in sync.
+  const replaceFormData = useCallback((nextValues: Record<string, string>) => {
+    formDataRef.current = nextValues;
+    setFormData(nextValues);
+  }, []);
+  // Derives the next values from the latest committed values and returns both
+  // sides, so callers can run validation and `onValueChange` after the commit
+  // instead of inside the updater.
+  const commitFormData = useCallback(
+    (updater: (current: Record<string, string>) => Record<string, string>) => {
+      const previousValues = formDataRef.current;
+      const nextValues = updater(previousValues);
+      formDataRef.current = nextValues;
+      setFormData(nextValues);
+      return { previousValues, nextValues };
+    },
+    [],
+  );
   const activeVariant = useMemo(
     () => variants.find((variant) => variant.key === activeVariantKey),
     [activeVariantKey, variants],
@@ -213,7 +237,7 @@ export function ERPDynamicModalForm({
         ...(options?.values ?? {}),
       };
       setActiveVariantKey(variantKey);
-      setFormData(nextFormData);
+      replaceFormData(nextFormData);
       setFileData({});
       setFilePreviews({});
       setFieldErrors({});
@@ -240,7 +264,7 @@ export function ERPDynamicModalForm({
       setIsOpen(true);
       onOpenChange?.(true, variantKey);
     },
-    [initialValuesByVariant, onOpenChange, variants],
+    [initialValuesByVariant, onOpenChange, replaceFormData, variants],
   );
   useEffect(() => {
     onControllerReady?.({ openModal, closeModal });
@@ -589,20 +613,17 @@ export function ERPDynamicModalForm({
       }
       if (result.values && Object.keys(result.values).length > 0) {
         const resultValues = result.values;
-        setFormData((current) => {
-          const nextValues = {
-            ...current,
-            ...resultValues,
-          };
-          revalidateFieldNames(Object.keys(resultValues), nextValues, fileData);
-          return nextValues;
-        });
+        const { nextValues } = commitFormData((current) => ({
+          ...current,
+          ...resultValues,
+        }));
+        revalidateFieldNames(Object.keys(resultValues), nextValues, fileData);
       }
       if (result.errors) {
         applyResolvedFieldErrors(result.errors);
       }
     },
-    [applyResolvedFieldErrors, fileData, revalidateFieldNames],
+    [applyResolvedFieldErrors, commitFormData, fileData, revalidateFieldNames],
   );
   const runFieldValueChangeHandler = useCallback(
     (
@@ -743,23 +764,20 @@ export function ERPDynamicModalForm({
         });
       }
     }
-    setFormData((current) => {
-      const nextValues = {
-        ...current,
-        [name]: nextValue,
-      };
+    const { previousValues, nextValues } = commitFormData((current) => ({
+      ...current,
+      [name]: nextValue,
+    }));
+    if (field) {
       const nextFiles = isFileInput
         ? {
             ...fileData,
             [name]: nextFile,
           }
         : fileData;
-      if (field) {
-        revalidateFieldNames([name], nextValues, nextFiles);
-        runFieldValueChangeHandler(field, nextValue, nextValues, current);
-      }
-      return nextValues;
-    });
+      revalidateFieldNames([name], nextValues, nextFiles);
+      runFieldValueChangeHandler(field, nextValue, nextValues, previousValues);
+    }
   };
   // `checkbox-group` fields keep the multi-select value shape (comma-joined
   // option values) but toggle one box at a time. Selections stay in the order
@@ -768,7 +786,8 @@ export function ERPDynamicModalForm({
   const handleCheckboxGroupToggle = useCallback(
     (field: ERPDynamicModalField, optionValue: string) => {
       const fieldName = field.name;
-      setFormData((current) => {
+      let nextFieldValue = "";
+      const { previousValues, nextValues } = commitFormData((current) => {
         const existingValues = parseMultiSelectValue(current[fieldName] ?? "");
         const nextSelected = new Set(existingValues);
         if (nextSelected.has(optionValue)) {
@@ -784,17 +803,21 @@ export function ERPDynamicModalForm({
             (value) => nextSelected.has(value) && !optionOrder.includes(value),
           ),
         ];
-        const nextFieldValue = formatMultiSelectValue(orderedValues);
-        const nextValues = {
+        nextFieldValue = formatMultiSelectValue(orderedValues);
+        return {
           ...current,
           [fieldName]: nextFieldValue,
         };
-        revalidateFieldNames([fieldName], nextValues, fileData);
-        runFieldValueChangeHandler(field, nextFieldValue, nextValues, current);
-        return nextValues;
       });
+      revalidateFieldNames([fieldName], nextValues, fileData);
+      runFieldValueChangeHandler(
+        field,
+        nextFieldValue,
+        nextValues,
+        previousValues,
+      );
     },
-    [fileData, revalidateFieldNames, runFieldValueChangeHandler],
+    [commitFormData, fileData, revalidateFieldNames, runFieldValueChangeHandler],
   );
   const handleCheckboxKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -838,8 +861,9 @@ export function ERPDynamicModalForm({
       const fieldName = field.name;
       const isMultipleSelect =
         (field.type ?? "text") === "select" && field.multiple;
-      setFormData((current) => {
-        const nextFieldValue = isMultipleSelect
+      let nextFieldValue = "";
+      const { previousValues, nextValues } = commitFormData((current) => {
+        nextFieldValue = isMultipleSelect
           ? (() => {
               const existingValues = parseMultiSelectValue(
                 current[fieldName] ?? "",
@@ -851,14 +875,18 @@ export function ERPDynamicModalForm({
               return formatMultiSelectValue(updatedValues);
             })()
           : option.value;
-        const nextValues = {
+        return {
           ...current,
           [fieldName]: nextFieldValue,
         };
-        revalidateFieldNames([fieldName], nextValues, fileData);
-        runFieldValueChangeHandler(field, nextFieldValue, nextValues, current);
-        return nextValues;
       });
+      revalidateFieldNames([fieldName], nextValues, fileData);
+      runFieldValueChangeHandler(
+        field,
+        nextFieldValue,
+        nextValues,
+        previousValues,
+      );
       setSearchQueries((current) => {
         if (isMultipleSelect) {
           return {
@@ -880,7 +908,20 @@ export function ERPDynamicModalForm({
       });
       setOpenSearchField(isMultipleSelect ? fieldName : null);
     },
-    [fileData, revalidateFieldNames, runFieldValueChangeHandler],
+    [commitFormData, fileData, revalidateFieldNames, runFieldValueChangeHandler],
+  );
+  // Backs the `setValue` handed to custom field renderers. Kept out of
+  // `renderField` so the ref read never sits in a render-time closure.
+  const setCustomFieldValue = useCallback(
+    (field: ERPDynamicModalField, nextValue: string) => {
+      const { previousValues, nextValues } = commitFormData((current) => ({
+        ...current,
+        [field.name]: nextValue,
+      }));
+      revalidateFieldNames([field.name], nextValues, fileData);
+      runFieldValueChangeHandler(field, nextValue, nextValues, previousValues);
+    },
+    [commitFormData, fileData, revalidateFieldNames, runFieldValueChangeHandler],
   );
   const focusNextFieldControl = useCallback((originControl: HTMLElement) => {
     const formElement = formRef.current;
@@ -1239,7 +1280,7 @@ export function ERPDynamicModalForm({
         sectionExpandedState: activeSectionExpandedState ?? {},
       });
       if (resetOnSubmit) {
-        setFormData(buildInitialValues(activeVariant, initialValuesByVariant));
+        replaceFormData(buildInitialValues(activeVariant, initialValuesByVariant));
         setFileData({});
         setFilePreviews({});
         setFieldErrors({});
@@ -1503,15 +1544,7 @@ export function ERPDynamicModalForm({
       "aria-describedby": describedBy,
     };
     const setCustomValue = (nextValue: string) => {
-      setFormData((current) => {
-        const nextValues = {
-          ...current,
-          [field.name]: nextValue,
-        };
-        revalidateFieldNames([field.name], nextValues, fileData);
-        runFieldValueChangeHandler(field, nextValue, nextValues, current);
-        return nextValues;
-      });
+      setCustomFieldValue(field, nextValue);
     };
     const setCustomError = (message: string | null | undefined) => {
       applyResolvedFieldErrors({
