@@ -16,11 +16,11 @@
  *  - **no `grid_param`**, so `meta.total` counts the unfiltered, cross-tenant set,
  *    not this tenant's — never shown as if it were a real total for this list.
  *
- * Unlike the old version of this dialog, a soft-deleted row is shown, not
- * hidden: it is dimmed and tagged, and picking it still opens the document —
- * read-only, which is what `onPick` → `loadDocument` already does for every
- * document by default (the operator presses Edit/F2 to make ANY loaded
- * document editable, deleted or not).
+ * A soft-deleted row is shown, not hidden — the grid returns it either way, and
+ * hiding it would leave the operator hunting for a quotation the list clearly
+ * has. It is dimmed, tagged and NOT selectable: `GET /quotations/get` filters
+ * soft-deleted rows out and answers 404, so picking one could only clear the
+ * form and raise a "not found" toast.
  *
  * A row's whole document key is returned (company, branch and year included),
  * which is what lets another branch's quotation load correctly.
@@ -181,6 +181,10 @@ export function QuotationListModal(props: QuotationListModalProps) {
   }, [currentLocalPage, filtered.length]);
 
   const choose = (row: QuotationListRow) => {
+    if (isDeleted(row.sq_is_deleted)) {
+      toast.info("This quotation is deleted — it can no longer be opened.");
+      return;
+    }
     onPick({
       sqId: row.sq_id,
       sqCompanyId: row.sq_company_id,
@@ -213,7 +217,7 @@ export function QuotationListModal(props: QuotationListModalProps) {
           <span className={styles.modalNote}>
             ↑↓ move · Enter select · Ctrl+Enter view · Esc cancel
             {activeRowDeleted ? (
-              <span className={styles.warning}> · Deleted quotation — read only.</span>
+              <span className={styles.warning}> · Deleted quotation — cannot be opened.</span>
             ) : null}
           </span>
           <nav className={styles.pagerBar} aria-label="Quotation list pages">
@@ -292,7 +296,8 @@ export function QuotationListModal(props: QuotationListModalProps) {
         <button
           type="button"
           className={cx(styles.toolButton, styles.toolButtonActive)}
-          disabled={!activeRow}
+          disabled={!activeRow || activeRowDeleted}
+          title={activeRowDeleted ? "This quotation is deleted and cannot be opened" : undefined}
           onClick={() => activeRow && choose(activeRow)}
         >
           <FiEdit3 aria-hidden="true" />

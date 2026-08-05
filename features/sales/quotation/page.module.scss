@@ -92,6 +92,18 @@
   text-transform: uppercase;
 }
 
+/* Louder than `readOnlyBadge`: read-only is a mode the operator can leave,
+   deleted is not. */
+.deletedBadge {
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--erp-radius, 4px);
+  background: var(--danger, #b3261e);
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .dirtyDot {
   color: var(--danger, #b3261e);
   font-weight: 700;

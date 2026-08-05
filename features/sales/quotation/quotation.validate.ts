@@ -68,6 +68,17 @@ export function validateSaveInputs(
   pricing: DocumentPricing,
   context: ValidationContext = {},
 ): Violation | null {
+  // Checked before the mode gate, because "press Edit" is not advice a deleted
+  // document can act on — Edit refuses it too. An update would either resurrect
+  // a deleted quotation or be rejected server-side; Copy as new is the way out.
+  if (draft.isDeleted) {
+    return {
+      message:
+        "This quotation is deleted and cannot be changed. Use Copy as new (F9) to raise a fresh one from it.",
+      field: "mode",
+    };
+  }
+
   if (draft.mode !== "entry") {
     return {
       message: "This quotation is read-only — press Edit to change it.",

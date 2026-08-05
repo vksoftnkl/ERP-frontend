@@ -596,6 +596,15 @@ describe("parseLoadedDocument", () => {
     expect(draft.lines[0].sqiId).toBe("019f1111-0000-7000-8000-000000000001");
   });
 
+  it("carries the document's own soft-delete flag onto the draft", () => {
+    expect(parseLoadedDocument(loadedPayload(), "33").isDeleted).toBe(false);
+    const deleted = parseLoadedDocument(loadedPayload({ sqIsDeleted: true }), "33");
+    expect(deleted.isDeleted).toBe(true);
+    // Still fully readable — only the write side is closed off.
+    expect(deleted.lines).toHaveLength(1);
+    expect(deleted.storedPricing?.totals.bill).toBe(1180);
+  });
+
   it("reads the tax split off the document's own stored amounts", () => {
     expect(parseLoadedDocument(loadedPayload(), "33").isLocalSale).toBe(true);
 
@@ -811,6 +820,14 @@ describe("validateSaveInputs", () => {
   it("refuses to save a read-only document", () => {
     const violation = check({ ...baseDraft(), mode: "browse" });
     expect(violation?.field).toBe("mode");
+  });
+
+  it("refuses to save a deleted document, even one somehow left in entry mode", () => {
+    const violation = check({ ...baseDraft(), mode: "entry", isDeleted: true });
+    expect(violation?.field).toBe("mode");
+    expect(violation?.message).toContain("deleted");
+    // ...and says something the operator can act on, unlike "press Edit".
+    expect(violation?.message).toContain("Copy as new");
   });
 
   it("requires a customer name, but not a master record behind it", () => {

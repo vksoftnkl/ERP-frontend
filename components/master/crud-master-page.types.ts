@@ -162,6 +162,22 @@ export type CrudMasterPageProps = {
   columnRenderOverrides?: Record<string, (row: MasterTableRow) => ReactNode>;
   onCreateAction?: () => void;
   onEditAction?: (row: MasterTableRow) => void;
+  /**
+   * Rows this page refuses to edit. While such a row is selected the toolbar's
+   * Edit button is inactive, and `onEditAction` / the update modal are not
+   * reached at all — for records that are readable but not writable, e.g. a
+   * soft-deleted voucher. Optional `reason` becomes the button's tooltip.
+   */
+  isRowEditDisabled?: (row: MasterTableRow) => boolean;
+  rowEditDisabledReason?: string;
+  /**
+   * Open a row for READING — Ctrl+Enter on the selection, and double-click.
+   * Supplied by pages whose record does not fit the shell's view modal (a
+   * voucher opens its own screen); without it both gestures fall back to that
+   * modal, as they always have. A row `isRowEditDisabled` refuses is still
+   * viewable through this: it is the read side, not the write side.
+   */
+  onViewAction?: (row: MasterTableRow) => void;
   useResponseTableColumns?: boolean;
   responseTableColumnExcludeKeys?: readonly string[];
   toolbarContent?: ReactNode;

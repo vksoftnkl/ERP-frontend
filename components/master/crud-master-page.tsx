@@ -2248,6 +2248,9 @@ export default function CrudMasterPage({
   columnRenderOverrides,
   onCreateAction,
   onEditAction,
+  isRowEditDisabled,
+  rowEditDisabledReason,
+  onViewAction,
   useResponseTableColumns,
   responseTableColumnExcludeKeys,
   toolbarContent,
@@ -2690,6 +2693,8 @@ export default function CrudMasterPage({
   const selectedRowIdRef = useRef<string | number | null>(selectedRowId);
   const gridSettingsModeRef = useRef<"filter" | "visibility" | null>(gridSettingsMode);
   const pendingDeleteRowRef = useRef<MasterTableRow | null>(pendingDeleteRow);
+  /** Declared here, filled below: the Ctrl+Enter handler is bound once. */
+  const handleRowViewRef = useRef<((row: MasterTableRow) => void) | null>(null);
   useEffect(() => {
     searchInputRef.current?.focus();
   }, []);
@@ -3411,19 +3416,30 @@ export default function CrudMasterPage({
   const handleRowUpdate = useCallback(
     (row: MasterTableRow) => {
       setSelectedRowId(row.__rowId);
+      // The toolbar button is already inactive for such a row; this is the guard
+      // that makes the rule hold for every other way in (double-click, a future
+      // shortcut) rather than only for the one that is currently wired.
+      if (isRowEditDisabled?.(row)) {
+        return;
+      }
       if (onEditAction) {
         onEditAction(row);
         return;
       }
       openUpdateModalForRow(row);
     },
-    [onEditAction, openUpdateModalForRow],
+    [isRowEditDisabled, onEditAction, openUpdateModalForRow],
   );
   const handleRowView = useCallback(
     (row: MasterTableRow) => {
+      setSelectedRowId(row.__rowId);
+      if (onViewAction) {
+        onViewAction(row);
+        return;
+      }
       openViewModalForRow(row);
     },
-    [openViewModalForRow],
+    [onViewAction, openViewModalForRow],
   );
   const handleRowDelete = useCallback(
     (row: MasterTableRow) => {
@@ -3475,6 +3491,7 @@ export default function CrudMasterPage({
   useEffect(() => { selectedRowIdRef.current = selectedRowId; }, [selectedRowId]);
   useEffect(() => { gridSettingsModeRef.current = gridSettingsMode; }, [gridSettingsMode]);
   useEffect(() => { pendingDeleteRowRef.current = pendingDeleteRow; }, [pendingDeleteRow]);
+  useEffect(() => { handleRowViewRef.current = handleRowView; }, [handleRowView]);
 
   // Scroll active row into view whenever selection changes
   useEffect(() => {
@@ -3483,13 +3500,22 @@ export default function CrudMasterPage({
     activeRow?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [selectedRowId]);
 
-  // Arrow key navigation: Up/Down = row select, Left/Right = horizontal scroll
+  // Table keyboard: Up/Down = row select, Left/Right = horizontal scroll,
+  // Ctrl+Enter = open the selected row for reading.
   useEffect(() => {
     if (hideListPage || typeof document === "undefined") return;
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key;
-      if (key !== "ArrowUp" && key !== "ArrowDown" && key !== "ArrowLeft" && key !== "ArrowRight") return;
-      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      const isArrow =
+        key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight";
+      // Ctrl+Enter (Cmd+Enter on a Mac) — plain Enter is deliberately left
+      // alone, since it submits the search box and activates focused buttons.
+      const isViewChord =
+        key === "Enter" && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
+      if (!isArrow && !isViewChord) return;
+      if (event.defaultPrevented) return;
+      // The arrows are the unmodified ones only; the chord owns its modifier.
+      if (isArrow && (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)) return;
 
       const target = event.target as HTMLElement;
       const tag = target.tagName;
@@ -3500,6 +3526,16 @@ export default function CrudMasterPage({
 
       const container = tableContainerRef.current;
       if (!container) return;
+
+      if (isViewChord) {
+        const currentId = selectedRowIdRef.current;
+        if (currentId === null) return;
+        const row = renderedRowsRef.current.find((r) => r.__rowId === currentId);
+        if (!row) return;
+        event.preventDefault();
+        handleRowViewRef.current?.(row);
+        return;
+      }
 
       if (key === "ArrowDown" || key === "ArrowUp") {
         event.preventDefault();
@@ -3545,6 +3581,9 @@ export default function CrudMasterPage({
       handleRowUpdate(selectedRow);
     }
   }, [selectedRow, handleRowUpdate]);
+
+  /** The selected row is readable but not writable — Edit goes inactive on it. */
+  const editDisabledForSelection = Boolean(selectedRow && isRowEditDisabled?.(selectedRow));
 
   const handleToolbarDelete = useCallback(() => {
     if (selectedRow) {
@@ -3769,8 +3808,14 @@ export default function CrudMasterPage({
                     type="button"
                     className={`${styles.iconBtn} ${styles.iconBtnEdit} erp-ms-tbtn`}
                     onClick={handleToolbarEdit}
-                    disabled={!selectedRow || saveLoading || detailsLoading}
-                    title="Edit selected row"
+                    disabled={
+                      !selectedRow || editDisabledForSelection || saveLoading || detailsLoading
+                    }
+                    title={
+                      editDisabledForSelection
+                        ? rowEditDisabledReason ?? "This row cannot be edited"
+                        : "Edit selected row"
+                    }
                   >
                     <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
                       <ErpActionIcon name="edit" />

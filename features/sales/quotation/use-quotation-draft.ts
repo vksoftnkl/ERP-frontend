@@ -159,7 +159,8 @@ export type QuotationDraftApi = {
   resolveBarcode: (lineKey: string, barcode: string) => Promise<boolean>;
   applyPriceLevel: (priceLevel: number, scope: PriceLevelScope, lineKeys: string[]) => Promise<void>;
   save: () => Promise<boolean>;
-  loadDocument: (key: QuotationDocKey) => Promise<boolean>;
+  /** The loaded draft, or `null` when the fetch failed. */
+  loadDocument: (key: QuotationDocKey) => Promise<QuotationDraft | null>;
   deleteDocument: () => Promise<boolean>;
   clear: () => void;
   copyAsNew: () => void;
@@ -670,8 +671,14 @@ export function useQuotationDraft(): QuotationDraftApi {
     }
   }, [actor, draft, pricing, saveQuotation, validate]);
 
+  /**
+   * Returns the draft it loaded, not just a flag, so the caller can decide what
+   * to do with it before the store round-trips back through render — the entry
+   * screen's "open ready to edit" path has to know whether the document it just
+   * loaded is a deleted one.
+   */
   const loadDocument = useCallback(
-    async (key: QuotationDocKey): Promise<boolean> => {
+    async (key: QuotationDocKey): Promise<QuotationDraft | null> => {
       setBusy("loading");
       try {
         // Dispatched through `initiate` rather than a lazy-query trigger: this is
@@ -684,11 +691,12 @@ export function useQuotationDraft(): QuotationDraftApi {
             forceRefetch: true,
           }),
         ).unwrap();
-        dispatch(draftReplaced(parseLoadedDocument(payload, companyStateCode)));
-        return true;
+        const loaded = parseLoadedDocument(payload, companyStateCode);
+        dispatch(draftReplaced(loaded));
+        return loaded;
       } catch (error) {
         toast.error(errorMessage(error));
-        return false;
+        return null;
       } finally {
         setBusy("idle");
       }
@@ -714,6 +722,10 @@ export function useQuotationDraft(): QuotationDraftApi {
       toast.warn("There is nothing saved to delete.");
       return false;
     }
+    if (draft.isDeleted) {
+      toast.info("This quotation is already deleted.");
+      return false;
+    }
     setBusy("deleting");
     try {
       await deleteQuotation(draft.docId).unwrap();
@@ -726,7 +738,7 @@ export function useQuotationDraft(): QuotationDraftApi {
     } finally {
       setBusy("idle");
     }
-  }, [clear, deleteQuotation, draft.docId]);
+  }, [clear, deleteQuotation, draft.docId, draft.isDeleted]);
 
   /**
    * Copy as new (F9). Starts a fresh, unsaved document pre-filled from the one
@@ -742,9 +754,20 @@ export function useQuotationDraft(): QuotationDraftApi {
     dispatch(draftReplaced(copyDraftAsNew(draft, todayIso())));
   }, [dispatch, draft]);
 
+  /**
+   * F2. The one gate that turns a loaded document editable — so refusing a
+   * deleted one here is what keeps every editor, grid and shortcut on the screen
+   * closed, without a guard per handler.
+   */
   const beginEdit = useCallback(() => {
+    if (draft.isDeleted) {
+      toast.warn(
+        "This quotation is deleted and cannot be edited. Use Copy as new (F9) to raise a fresh one from it.",
+      );
+      return;
+    }
     dispatch(modeSet("entry"));
-  }, []);
+  }, [draft.isDeleted]);
 
   const unitOptionsFor = useCallback(
     (itemId: string): ItemUnitOption[] => unitOptions[itemId] ?? [],

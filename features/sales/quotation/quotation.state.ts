@@ -187,6 +187,7 @@ export function createDraft(context: DraftContext): QuotationDraft {
     docType: QUOTATION_DOC_TYPE,
     status: DEFAULT_QUOTATION_STATUS,
     isNewEntry: true,
+    isDeleted: false,
     policy: seedDocumentPolicy(context.policy),
     customer: emptyCustomer(),
     header: emptyHeader(quoteDate),
@@ -428,6 +429,11 @@ export function resolveLocalSale(
  * Each line's and charge's own `sqiId`/`cdId` are cleared for the same reason.
  * The quote date is reset to today and `validUntil` re-derived from it, exactly
  * as `applyHeaderField` already does for an operator edit to the date.
+ *
+ * `isDeleted` is cleared with the identity: the copy is a document that has
+ * never existed server-side, so it cannot be deleted. This is deliberately the
+ * ONE action a soft-deleted quotation still allows — it is how the operator
+ * rescues the contents of one without resurrecting it.
  */
 export function copyDraftAsNew(draft: QuotationDraft, quoteDate: string): QuotationDraft {
   return {
@@ -441,6 +447,7 @@ export function copyDraftAsNew(draft: QuotationDraft, quoteDate: string): Quotat
     revisionNo: 0,
     status: DEFAULT_QUOTATION_STATUS,
     isNewEntry: true,
+    isDeleted: false,
     header: applyHeaderField(draft.header, "quoteDate", quoteDate),
     lines: draft.lines.map((line) => ({ ...line, sqiId: null })),
     charges: draft.charges.map((row) => ({ ...row, cdId: null })),
@@ -513,6 +520,7 @@ export function applySaveResponse(
     docType: payload.sqDocType || draft.docType,
     status: asEnum(payload.sqStatus, QUOTATION_STATUSES, DEFAULT_QUOTATION_STATUS),
     isNewEntry: false,
+    isDeleted: payload.sqIsDeleted === true,
     isDirty: sentDraft === undefined ? false : sentDraft !== draft,
     lines,
     charges,

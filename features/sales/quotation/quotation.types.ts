@@ -845,6 +845,14 @@ export type QuotationDraft = {
   docType: string;
   status: string;
   isNewEntry: boolean;
+  /**
+   * `sq_is_deleted` as loaded. A soft-deleted quotation is still readable — the
+   * list shows it and F8 opens it — but it is permanently read-only: Edit,
+   * Delete and Save all refuse it, because the server would either resurrect a
+   * deleted document or reject the write outright. Copy as new is the only way
+   * to carry its contents forward.
+   */
+  isDeleted: boolean;
 
   policy: VoucherPolicy;
   customer: CustomerSnapshot;

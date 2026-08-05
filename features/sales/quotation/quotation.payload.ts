@@ -633,6 +633,9 @@ export function parseLoadedDocument(
     docType: payload.sqDocType || QUOTATION_DOC_TYPE,
     status: statusOf(payload.sqStatus ?? DEFAULT_QUOTATION_STATUS),
     isNewEntry: false,
+    // A soft-deleted document still loads and still reads — it is the write
+    // side that is closed off. See `QuotationDraft.isDeleted`.
+    isDeleted: payload.sqIsDeleted === true,
     // The policy comes off the document; a legacy row with none falls back to
     // the engine default, never to the current session setting.
     policy: defaultPolicy({

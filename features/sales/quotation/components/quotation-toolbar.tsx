@@ -13,6 +13,8 @@ import styles from "../page.module.scss";
 export type QuotationToolbarProps = {
   mode: "entry" | "browse";
   busy: QuotationBusy;
+  /** False for a deleted document, which stays read-only for good. */
+  canEdit: boolean;
   canDelete: boolean;
   onShowList: () => void;
   onEdit: () => void;
@@ -34,6 +36,7 @@ export function QuotationToolbar(props: QuotationToolbarProps) {
   const {
     mode,
     busy,
+    canEdit,
     canDelete,
     onShowList,
     onEdit,
@@ -75,7 +78,8 @@ export function QuotationToolbar(props: QuotationToolbarProps) {
       <button
         type="button"
         className={styles.button}
-        disabled={isBusy || mode === "entry"}
+        disabled={isBusy || mode === "entry" || !canEdit}
+        title={canEdit ? undefined : "This quotation is deleted and cannot be edited."}
         onClick={onEdit}
       >
         Edit<Hint>F2</Hint>

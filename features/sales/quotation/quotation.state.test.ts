@@ -409,4 +409,11 @@ describe("copyDraftAsNew", () => {
     expect(next.header.validityDays).toBe(7);
     expect(next.header.validUntil).toBe("2026-08-08");
   });
+
+  it("clears the soft-delete flag — this is the way out of a deleted quotation", () => {
+    const next = copyDraftAsNew({ ...savedDraft(), isDeleted: true }, "2026-08-01");
+    expect(next.isDeleted).toBe(false);
+    expect(next.mode).toBe("entry");
+    expect(next.lines[0].itemId).toBe(savedDraft().lines[0].itemId);
+  });
 });

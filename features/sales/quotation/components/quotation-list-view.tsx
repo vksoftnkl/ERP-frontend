@@ -22,6 +22,7 @@
  * kept visible for exactly that reason: without it the list would show a deleted
  * quotation as though it were live.
  */
+import { toast } from "react-toastify";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import styles from "@/app/master/state-master/page.module.scss";
@@ -80,6 +81,12 @@ function asText(value: unknown): string {
   return value === null || value === undefined ? "" : String(value);
 }
 
+/** The grid returns `sq_is_deleted` as a boolean, `'t'`/`'f'` or `'true'`/`'false'`. */
+function isDeletedRow(row: MasterTableRow): boolean {
+  const value = asText(sourceValue(row, "sq_is_deleted")).trim().toLowerCase();
+  return value === "true" || value === "t" || value === "1";
+}
+
 /** Per-column formatting, keyed by the grid's own SQL field names. */
 const COLUMN_RENDER_OVERRIDES: Record<string, (row: MasterTableRow) => string> = {
   sq_quote_date: (row) => toDateInput(asText(sourceValue(row, "sq_quote_date"))),
@@ -88,10 +95,7 @@ const COLUMN_RENDER_OVERRIDES: Record<string, (row: MasterTableRow) => string> =
   sq_quote_amt: (row) =>
     formatCurrency(toNumber(asText(sourceValue(row, "sq_quote_amt"))), 2, true),
   sq_tot_bags: (row) => formatCurrency(toNumber(asText(sourceValue(row, "sq_tot_bags"))), 3, true),
-  sq_is_deleted: (row) => {
-    const value = asText(sourceValue(row, "sq_is_deleted")).trim().toLowerCase();
-    return value === "true" || value === "t" || value === "1" ? "Deleted" : "";
-  },
+  sq_is_deleted: (row) => (isDeletedRow(row) ? "Deleted" : ""),
 };
 
 /** The whole document key, not just the id: a quotation is keyed by four fields. */
@@ -136,7 +140,32 @@ export function QuotationListView({ onCreate, onOpen }: QuotationListViewProps) 
       // The voucher form replaces the shell's modal on both paths, so the form
       // props (fields, titles, payload builders) are deliberately absent.
       onCreateAction={onCreate}
-      onEditAction={(row) => onOpen(docKeyOf(row), "entry")}
+      // The grid has no `WHERE`, so soft-deleted rows are listed. Selecting one
+      // greys the toolbar's Edit button out rather than opening the voucher
+      // screen on a document it would refuse to make editable anyway. Such a
+      // quotation is still readable through the entry screen's own F8 picker.
+      isRowEditDisabled={isDeletedRow}
+      rowEditDisabledReason="This quotation is deleted and cannot be edited"
+      // Unreachable for a deleted row while the gate above stands; the mode is
+      // still resolved from the row so the two cannot disagree.
+      onEditAction={(row) => onOpen(docKeyOf(row), isDeletedRow(row) ? "browse" : "entry")}
+      // Ctrl+Enter (and double-click) open the voucher to be READ. A quotation
+      // does not fit the shell's view modal — it has lines, charges and totals —
+      // so it opens its own screen in browse mode.
+      //
+      // A deleted row is refused here rather than navigated to: `GET
+      // /quotations/get` filters soft-deleted rows out and answers 404, so
+      // opening one would clear the form, raise a "not found" toast and leave
+      // the operator on a blank new quotation. Unlike the greyed-out Edit
+      // button, a keyboard chord has no visible affordance, so this one says
+      // why nothing happened.
+      onViewAction={(row) => {
+        if (isDeletedRow(row)) {
+          toast.info("This quotation is deleted — it can no longer be opened.");
+          return;
+        }
+        onOpen(docKeyOf(row), "browse");
+      }}
       auditHistory={{
         // What the server stamps on `sale_quotation` audit rows.
         screenName: "Sale Quotation",

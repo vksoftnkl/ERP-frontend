@@ -1709,6 +1709,14 @@ export function ReusableTable<T extends Record<string, unknown>>({
                               return;
                             }
 
+                            // Only the UNMODIFIED key selects the row. A chord
+                            // (Ctrl+Enter, say) belongs to whoever listens for
+                            // it further up; swallowing it here would consume
+                            // the modifier gesture along with the plain one.
+                            if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+                              return;
+                            }
+
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
                               onRowClick(row, rowIndex);
