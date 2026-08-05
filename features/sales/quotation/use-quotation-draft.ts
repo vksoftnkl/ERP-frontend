@@ -28,6 +28,8 @@ import { extractApiErrorMessage } from "@/lib/api/client";
 import {
   quotationApi,
   useDeleteQuotationMutation,
+  useLazyGetTransactionHoldQuery,
+  useSaveTransactionHoldMutation,
   useGetCompanyStateCodeQuery,
   useGetQuotationGridLayoutQuery,
   useGetPriceLevelsQuery,
@@ -47,6 +49,7 @@ import {
   customerApplied,
   draftReplaced,
   freightBandsSet,
+  holdSet,
   itemPriceApplied,
   lineFieldSet,
   linePriceLevelSet,
@@ -65,6 +68,15 @@ import {
   PRICE_LEVEL_OPTIONS,
   SESSION_CAPABILITIES,
 } from "./quotation.constants";
+import {
+  buildConvertedPayload,
+  buildHoldPayload,
+  buildResumePayload,
+  draftFromHold,
+  holdAccYearOf,
+  nextHoldNo,
+  readHoldUiState,
+} from "./quotation.hold";
 import { buildSavePayload, parseLoadedDocument } from "./quotation.payload";
 import type { SaveActor } from "./quotation.payload";
 import { clampPriceLevel, copyDraftAsNew, createDraft } from "./quotation.state";
@@ -130,7 +142,14 @@ function clampFreightType(value: string): string {
 }
 
 /** Where the screen is in its life cycle, for the toolbar and the guards. */
-export type QuotationBusy = "idle" | "loading" | "saving" | "deleting" | "pricing";
+export type QuotationBusy =
+  | "idle"
+  | "loading"
+  | "saving"
+  | "deleting"
+  | "pricing"
+  | "holding"
+  | "resuming";
 
 export type PriceLevelScope = "selected" | "all";
 
@@ -159,6 +178,10 @@ export type QuotationDraftApi = {
   resolveBarcode: (lineKey: string, barcode: string) => Promise<boolean>;
   applyPriceLevel: (priceLevel: number, scope: PriceLevelScope, lineKeys: string[]) => Promise<void>;
   save: () => Promise<boolean>;
+  /** Park the cart in `transaction_hold` and clear the form. */
+  hold: () => Promise<boolean>;
+  /** Pull a parked cart back onto the screen. */
+  resumeHold: (thId: string) => Promise<boolean>;
   /** The loaded draft, or `null` when the fetch failed. */
   loadDocument: (key: QuotationDocKey) => Promise<QuotationDraft | null>;
   deleteDocument: () => Promise<boolean>;
@@ -225,6 +248,8 @@ export function useQuotationDraft(): QuotationDraftApi {
   const [fetchFreightBands] = useLazyGetFreightBandsQuery();
   const [saveQuotation] = useSaveQuotationMutation();
   const [deleteQuotation] = useDeleteQuotationMutation();
+  const [saveHold] = useSaveTransactionHoldMutation();
+  const [fetchHold] = useLazyGetTransactionHoldQuery();
 
   const [busy, setBusy] = useState<QuotationBusy>("idle");
   /**
@@ -234,6 +259,12 @@ export function useQuotationDraft(): QuotationDraftApi {
    * stores a SECOND quotation with its own refno.
    */
   const inFlight = useRef(false);
+  /**
+   * The same guard for Hold, and it matters more: the hold number is minted
+   * client-side, so two F9 presses inside one render would not even collide —
+   * they would quietly park the cart TWICE under two different numbers.
+   */
+  const holdInFlight = useRef(false);
   const [unitOptions, setUnitOptions] = useState<Record<string, ItemUnitOption[]>>({});
   /** The live draft, for effects that must not re-run when it changes. */
   const draftRef = useRef(draft);
@@ -661,6 +692,27 @@ export function useQuotationDraft(): QuotationDraftApi {
           ? `Quotation ${saved.sqQuoteRefno} saved.`
           : "Quotation saved.",
       );
+      // A cart that was parked has now become a real document, so the hold is
+      // closed against it rather than left sitting in the held list for someone
+      // to resume and bill a second time. Deliberately not fatal: the quotation
+      // IS saved by this point, and failing the whole action over the hold row
+      // would tell the operator otherwise.
+      if (draft.holdId) {
+        try {
+          await saveHold(
+            buildConvertedPayload(
+              draft.holdId,
+              { sqId: saved.sqId, quoteRefno: saved.sqQuoteRefno ?? null },
+              actor,
+            ),
+          ).unwrap();
+        } catch (error) {
+          toast.warn(
+            `Saved, but hold ${draft.holdNo || draft.holdId} could not be closed: ${errorMessage(error)}`,
+          );
+        }
+        dispatch(holdSet({ holdId: null, holdNo: "" }));
+      }
       return true;
     } catch (error) {
       toast.error(errorMessage(error));
@@ -669,7 +721,7 @@ export function useQuotationDraft(): QuotationDraftApi {
       inFlight.current = false;
       setBusy("idle");
     }
-  }, [actor, draft, pricing, saveQuotation, validate]);
+  }, [actor, draft, pricing, saveHold, saveQuotation, validate]);
 
   /**
    * Returns the draft it loaded, not just a flag, so the caller can decide what
@@ -741,7 +793,140 @@ export function useQuotationDraft(): QuotationDraftApi {
   }, [clear, deleteQuotation, draft.docId, draft.isDeleted]);
 
   /**
-   * Copy as new (F9). Starts a fresh, unsaved document pre-filled from the one
+   * Hold (F9). Parks the cart in `transaction_hold` and clears the form so the
+   * next customer can be served.
+   *
+   * Nothing is written to `sale_quotation`: this is the alternative to saving,
+   * not a step towards it, so it deliberately does NOT run `validate()` — a
+   * parked cart is unfinished by definition and refusing to park one because it
+   * has no customer yet would defeat the point. The one thing it insists on is
+   * something to park.
+   *
+   * Holding a cart that was itself resumed updates that same hold rather than
+   * creating a second one; see `QuotationDraft.holdId`.
+   */
+  const hold = useCallback(async (): Promise<boolean> => {
+    if (holdInFlight.current) {
+      return false;
+    }
+    if (!actor.userId) {
+      toast.error("Your session has no user id — sign in again before holding.");
+      return false;
+    }
+    // Guarded here rather than on the button alone, because the F9 shortcut does
+    // not go through it. Holding parks work in progress; a document being read
+    // has none, and one already saved is not waiting on anything.
+    if (draft.mode !== "entry" || draft.isDeleted) {
+      toast.warn("Only a quotation being entered can be held — press F2 to edit this one.");
+      return false;
+    }
+    if (!draft.lines.some((line) => line.itemId)) {
+      toast.warn("There is nothing to hold — add at least one item first.");
+      return false;
+    }
+    // Checked even when this cart already has a hold row, because the update
+    // below can fall back to a create — and the scope is immutable once the row
+    // exists, so a hold parked under a half-resolved tenant could never be
+    // corrected.
+    if (!draft.companyId || !draft.branchId || holdAccYearOf(draft.accYear) === null) {
+      toast.warn("The company, branch or year is still loading — try again in a moment.");
+      return false;
+    }
+    if (!actor.deviceId) {
+      toast.error("This browser has no device id — holding needs one.");
+      return false;
+    }
+
+    holdInFlight.current = true;
+    setBusy("holding");
+    try {
+      let holdId = draft.holdId;
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          const saved = await saveHold(
+            buildHoldPayload(draft, pricing, actor, { holdId, holdNo: nextHoldNo() }),
+          ).unwrap();
+          toast.success(`Held as ${saved.thHoldNo}. Pick held (F10) brings it back.`);
+          clear();
+          return true;
+        } catch (error) {
+          const status = (error as { status?: number }).status;
+          // The row this cart was resumed from is gone — discarded from the
+          // held list by someone else while it was open. Park it as a new hold
+          // rather than leaving F9 failing forever against a row that no longer
+          // exists. Cannot loop: the retry has no id to 404 on.
+          if (status === 404 && holdId) {
+            holdId = null;
+            continue;
+          }
+          // `th_hold_no` is minted client-side (nothing generates one
+          // server-side) and is unique per company / branch / year / document
+          // type. The random tail makes a clash between two tills improbable
+          // rather than impossible, so one is answered by minting another
+          // instead of by losing the cart.
+          if (status === 409 && !holdId && attempt < 2) {
+            continue;
+          }
+          throw error;
+        }
+      }
+    } catch (error) {
+      toast.error(errorMessage(error));
+      return false;
+    } finally {
+      holdInFlight.current = false;
+      setBusy("idle");
+    }
+  }, [actor, clear, draft, pricing, saveHold]);
+
+  /**
+   * Pick held (F10). Pulls a parked cart back onto the screen.
+   *
+   * The cart is restored from the hold's own `th_ui_state` — the server stores
+   * that JSON verbatim and never reads into it, so a row this screen did not
+   * write cannot be restored and is refused rather than half-drawn.
+   *
+   * The hold is then marked `RESUMED`, which is what takes it out of the picker
+   * (it lists `HELD` only) so two operators cannot pull the same cart back. That
+   * status is deliberately not terminal: the row survives, so a browser that dies
+   * mid-edit leaves a recoverable hold rather than nothing.
+   */
+  const resumeHold = useCallback(
+    async (thId: string): Promise<boolean> => {
+      setBusy("resuming");
+      try {
+        const held = await fetchHold(thId).unwrap();
+        const uiState = readHoldUiState(held.thUiState);
+        if (!uiState) {
+          toast.error(
+            `Hold ${held.thHoldNo} was not parked from Quotation entry — it cannot be opened here.`,
+          );
+          return false;
+        }
+        dispatch(draftReplaced(draftFromHold(held, uiState)));
+        try {
+          await saveHold(buildResumePayload(held, actor)).unwrap();
+        } catch (error) {
+          // The cart is already on screen and editable; what failed is only the
+          // flag that hides it from other tills, so say so and carry on.
+          toast.warn(
+            `Restored, but hold ${held.thHoldNo} is still listed as held: ${errorMessage(error)}`,
+          );
+        }
+        toast.success(`Hold ${held.thHoldNo} restored.`);
+        return true;
+      } catch (error) {
+        toast.error(errorMessage(error));
+        return false;
+      } finally {
+        setBusy("idle");
+      }
+    },
+    [actor, fetchHold, saveHold],
+  );
+
+  /**
+   * Copy as new (Ctrl+F9). Starts a fresh, unsaved document pre-filled from the one
    * on screen — including whatever the operator has not saved yet. Nothing
    * about the original is touched: its last save stands in the database
    * exactly as it was.
@@ -762,7 +947,7 @@ export function useQuotationDraft(): QuotationDraftApi {
   const beginEdit = useCallback(() => {
     if (draft.isDeleted) {
       toast.warn(
-        "This quotation is deleted and cannot be edited. Use Copy as new (F9) to raise a fresh one from it.",
+        "This quotation is deleted and cannot be edited. Use Copy as new (Ctrl+F9) to raise a fresh one from it.",
       );
       return;
     }
@@ -795,6 +980,8 @@ export function useQuotationDraft(): QuotationDraftApi {
     resolveBarcode,
     applyPriceLevel,
     save,
+    hold,
+    resumeHold,
     loadDocument,
     deleteDocument,
     clear,

@@ -99,6 +99,18 @@ const quotationSlice = createSlice({
       state.branchId = action.payload.branchId;
       state.accYear = action.payload.accYear;
     },
+    /**
+     * Which `transaction_hold` row this cart is parked as — set when it is held
+     * or resumed, cleared when the hold is converted or dropped.
+     *
+     * Not an operator edit: parking a cart and pulling it back leave the
+     * document itself untouched, so neither may mark it dirty (which would then
+     * pop the discard guard on the very next F7 / F8).
+     */
+    holdSet(state, action: PayloadAction<{ holdId: string | null; holdNo: string }>) {
+      state.holdId = action.payload.holdId;
+      state.holdNo = action.payload.holdNo;
+    },
     companyStateCodeSet(state, action: PayloadAction<string>) {
       state.companyStateCode = action.payload;
       state.isLocalSale = resolveLocalSale(
@@ -337,6 +349,7 @@ export const {
   saveResponseApplied,
   modeSet,
   tenantSet,
+  holdSet,
   companyStateCodeSet,
   policyPatched,
   headerFieldSet,
@@ -364,6 +377,7 @@ const NON_EDIT_ACTIONS = new Set<string>([
   draftReplaced.type,
   modeSet.type,
   tenantSet.type,
+  holdSet.type,
   companyStateCodeSet.type,
   freightBandsSet.type,
   // A save is not an operator edit: `applySaveResponse` decides the dirty flag

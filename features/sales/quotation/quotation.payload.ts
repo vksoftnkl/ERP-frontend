@@ -45,13 +45,11 @@ import {
   toNullableText,
   toNumber,
 } from "./quotation.utils";
-
 const CHARGE_ROLES = ["FREIGHT", "LOADING", "UNLOADING", "CASH_DISC", "OTHERS", "NONE"] as const;
 const CHARGE_METHODS = ["FIXED", "QTY", "NET_QTY", "KG", "QTL", "TON", "PERCENT"] as const;
 const CHARGE_TYPES = ["ADD", "DEDUCT"] as const;
 const CHARGE_APPLY_ONS = ["FLAT", "QTY", "VALUE", "WEIGHT"] as const;
 const CHARGE_COST_ALLOCS = ["VALUE", "QTY", "WEIGHT"] as const;
-
 /** Actor / device context the save needs and the draft has no business holding. */
 export type SaveActor = {
   userId: string;
@@ -59,17 +57,14 @@ export type SaveActor = {
   deviceId: string | null;
   deviceType: string | null;
 };
-
 function statusOf(value: string): QuotationStatus {
   return asEnum(value, QUOTATION_STATUSES, DEFAULT_QUOTATION_STATUS);
 }
-
 /** `''` and blanks become `null`; a date is sent as `yyyy-mm-dd`. */
 function dateOrNull(value: string): string | null {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
 }
-
 function itemDto(line: DraftLine, priced: PricedLine, index: number): SaveQuotationItemDto {
   return {
     // Present → update that line; absent → insert. An active line missing from
@@ -155,7 +150,6 @@ function itemDto(line: DraftLine, priced: PricedLine, index: number): SaveQuotat
     sqiRemarks: toNullableText(line.remarks, 250),
   };
 }
-
 function chargeDto(
   row: DraftChargeRow,
   priced: PricedChargeRow | undefined,
@@ -167,7 +161,6 @@ function chargeDto(
   // braces here so a hand-edited row cannot 400 the whole save.
   const beforeTax = row.beforeTax;
   const taxApl = row.taxApl && !beforeTax;
-
   return {
     ...(row.cdId ? { cdId: row.cdId } : {}),
     cdSlno: index + 1,
@@ -207,7 +200,6 @@ function chargeDto(
     cdIsActive: row.isActive,
   };
 }
-
 export function buildSavePayload(
   draft: QuotationDraft,
   pricing: DocumentPricing,
@@ -222,7 +214,6 @@ export function buildSavePayload(
   const chargeRows = draft.charges.filter((row) => Boolean(row.chgId) && Boolean(row.ledgerCode));
   const pricedByKey = new Map(pricing.charges.map((row) => [row.key, row]));
   const chargeTotals = { totQty: totals.totQty, totWeight: totals.totWeight };
-
   return {
     ...(draft.docId ? { sqId: draft.docId } : {}),
     // Required on every request. Five of the six are ignored on update, but
@@ -233,7 +224,6 @@ export function buildSavePayload(
     sqPriceLevel: clampPriceLevel(draft.header.priceLevel),
     sqCustName: draft.customer.name.trim(),
     sqUserId: actor.userId,
-
     sqDocType: draft.docType || QUOTATION_DOC_TYPE,
     sqUsrRefno: toNullableText(draft.header.usrRefno, 100),
     sqQuoteDate: draft.header.quoteDate,
@@ -241,7 +231,6 @@ export function buildSavePayload(
     sqValidityDays: draft.header.validityDays || null,
     sqRevisionNo: draft.revisionNo,
     sqSessionId: actor.sessionId,
-
     sqCustId: draft.customer.custId,
     sqCustAreaId: draft.header.areaId,
     sqCustAddr: toNullableText(draft.customer.address, 500),
@@ -255,15 +244,12 @@ export function buildSavePayload(
     sqStateName: toNullableText(draft.header.posStateName, 100),
     sqContactPerson: toNullableText(draft.header.contactPerson, 150),
     sqContactPhone: toNullableText(draft.header.contactNo, 20),
-
     sqHasLoad: draft.header.hasLoad,
     sqHasUnload: draft.header.hasUnload,
     sqHasFreight: draft.header.hasFreight,
     sqHasPromo: draft.header.hasPromo,
-
     sqSalesmanId: draft.header.salesmanId,
     sqAgentId: draft.header.agentId,
-
     sqTotItems: totals.totItems,
     sqTotWeight: totals.totWeight,
     // "Bags" is the piece count the document was quoted in.
@@ -291,23 +277,19 @@ export function buildSavePayload(
     sqMarginPerc: totals.marginPerc,
     sqMrpSavings: totals.savingAmt,
     sqMrpSavingsPerc: totals.savingPerc,
-
     sqPaymentTerms: toNullableText(draft.terms.paymentTerms, 250),
     sqDeliveryTerms: toNullableText(draft.terms.deliveryTerms, 250),
     sqTermsConditions: toNullableText(draft.terms.termsConditions),
     sqRemarks: toNullableText(draft.terms.remarks, 500),
     sqStatus: statusOf(draft.status),
-
     sqDeviceType: toNullableText(actor.deviceType, 20),
     sqDeviceId: toNullableText(actor.deviceId),
-
     // Lower case, and NOT normalised by the DTO: these are the same vocabulary
     // as `/item-price`'s `loading_type` / `freight_type`, so a value stored in
     // any other case can never be fed back into the lookup.
     sqFreightCalcType: draft.policy.freightCalcType.trim().toLowerCase() || null,
     sqLoadingCalcType: draft.policy.loadingCalcType.trim().toLowerCase() || null,
     sqDiscAlterBase: draft.policy.discountAlterBaseRate,
-
     items: lineIndexes.map(({ line, index }, position) =>
       itemDto(line, pricing.lines[index], position),
     ),
@@ -316,17 +298,14 @@ export function buildSavePayload(
     ),
   };
 }
-
 // ---------------------------------------------------------------------------
 // Load
-// ---------------------------------------------------------------------------
-
+// --------------------------------------------------------------------------
 function lineFromPayload(item: NonNullable<QuotationPayload["items"]>[number]): DraftLine {
   const caseQty = toNumber(item.sqiCaseQty);
   const billQty = toNumber(item.sqiBillQty);
   const lengthQty = toNumber(item.sqiLengthQty);
   const netQty = toNumber(item.sqiNetQty);
-
   // `sqi_to_base_factor` is not persisted, so it is back-derived from the stored
   // quantities: netQty = caseQty × factor + billQty × (lengthQty || 1).
   // Unrecoverable on a line with no case quantity — it loads as 1 there, which
@@ -334,7 +313,6 @@ function lineFromPayload(item: NonNullable<QuotationPayload["items"]>[number]): 
   // keyed quantity contributes nothing until an item is re-picked.
   const loose = billQty * (lengthQty > 0 ? lengthQty : 1);
   const toBaseFactor = caseQty !== 0 ? (netQty - loose) / caseQty : 1;
-
   return createDraftLine({
     key: nextRowKey("line"),
     sqiId: item.sqiId,
@@ -397,7 +375,6 @@ function lineFromPayload(item: NonNullable<QuotationPayload["items"]>[number]): 
     remarks: item.sqiRemarks,
   });
 }
-
 function chargeFromPayload(
   charge: NonNullable<QuotationPayload["charges"]>[number],
 ): DraftChargeRow {
@@ -440,7 +417,6 @@ function chargeFromPayload(
     isActive: charge.cdIsActive !== false,
   };
 }
-
 /**
  * The saved document, in the shape the engine produces, with every figure read
  * straight out of the payload. This is what "nothing is repriced on load" means
@@ -459,7 +435,6 @@ function storedPricingOf(
 ): DocumentPricing {
   const items = (payload.items ?? []).filter((item) => item.sqiIsDeleted !== true);
   const storedCharges = (payload.charges ?? []).filter((charge) => charge.cdIsDeleted !== true);
-
   const pricedLines: PricedLine[] = lines.map((line, index) => {
     const item = items[index];
     const netQty = toNumber(item?.sqiNetQty);
@@ -492,7 +467,6 @@ function storedPricingOf(
       rateDiff: toNumber(item?.sqiRate) - toNumber(item?.sqiActPrice),
     };
   });
-
   const pricedCharges: PricedChargeRow[] = charges.map((row, index) => {
     const stored = storedCharges[index];
     const amountValue = toNumber(stored?.cdAmount);
@@ -514,7 +488,6 @@ function storedPricingOf(
       netAmt: toNumber(stored?.cdNetAmt),
     };
   });
-
   const sumLines = (pick: (line: PricedLine) => number): number =>
     pricedLines.reduce((total, line) => total + pick(line), 0);
   const chargeOwnTax = pricedCharges.reduce((total, row) => total + row.taxAmt, 0);
@@ -528,7 +501,6 @@ function storedPricingOf(
     pricedCharges
       .filter((row) => roles.includes(row.role))
       .reduce((total, row) => total + row.amountValue, 0);
-
   const totals: DocumentTotals = {
     grossAmt: toNumber(payload.sqGrossAmt),
     netGross: sumLines((line) => line.netGross),
@@ -574,10 +546,8 @@ function storedPricingOf(
     marginAmt: toNumber(payload.sqMarginAmt),
     marginPerc: toNumber(payload.sqMarginPerc),
   };
-
   return { lines: pricedLines, charges: pricedCharges, totals };
 }
-
 /**
  * Turn a loaded document into a draft.
  *
@@ -609,7 +579,6 @@ export function parseLoadedDocument(
   const charges = (payload.charges ?? [])
     .filter((charge) => charge.cdIsDeleted !== true)
     .map(chargeFromPayload);
-
   const localTax = toNumber(payload.sqCgstAmt) + toNumber(payload.sqSgstAmt);
   const interStateTax = toNumber(payload.sqIgstAmt);
   const posStateCode = payload.sqPosStcd ?? "";
@@ -617,7 +586,6 @@ export function parseLoadedDocument(
     localTax > 0 || interStateTax > 0
       ? localTax > 0
       : !posStateCode || posStateCode === fallbackCompanyStateCode;
-
   return {
     mode: "browse",
     pricing: "stored",
@@ -636,6 +604,10 @@ export function parseLoadedDocument(
     // A soft-deleted document still loads and still reads — it is the write
     // side that is closed off. See `QuotationDraft.isDeleted`.
     isDeleted: payload.sqIsDeleted === true,
+    // A document read back from `sale_quotation` is not a parked cart, whatever
+    // the screen was showing before it was opened.
+    holdId: null,
+    holdNo: "",
     // The policy comes off the document; a legacy row with none falls back to
     // the engine default, never to the current session setting.
     policy: defaultPolicy({

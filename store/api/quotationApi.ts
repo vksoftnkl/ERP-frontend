@@ -28,6 +28,10 @@ import {
   QUOTATION_GET_ENDPOINT,
   QUOTATION_LIST_GRID_ID,
   QUOTATION_SAVE_ENDPOINT,
+  TRANSACTION_HOLD_DELETE_ENDPOINT,
+  TRANSACTION_HOLD_GET_ENDPOINT,
+  TRANSACTION_HOLD_LIST_ENDPOINT,
+  TRANSACTION_HOLD_SAVE_ENDPOINT,
   UI_TABLE_COLUMN_WIDTH_ENDPOINT,
   UI_TABLE_MASTERS_ENDPOINT,
   UI_TABLE_VISIBILITY_ENDPOINT,
@@ -45,6 +49,8 @@ import type {
   QuotationListRow,
   QuotationPayload,
   SaveQuotationDto,
+  SaveTransactionHoldDto,
+  TransactionHoldPayload,
   UiTableColumnRow,
 } from "@/features/sales/quotation/quotation.types";
 /** `/configured-grid-sql/run` — a page of rows plus a real total. */
@@ -109,6 +115,72 @@ export const quotationApi = baseApi.injectEndpoints({
       transformResponse: (payload: ApiSuccessResponse<{ sqId: string; deleted: boolean }>) =>
         payload.data,
       invalidatesTags: ["Quotation"],
+    }),
+    // -- held carts (F9 / F10) --------------------------------------------
+    /**
+     * One route for create and update, `thId`'s presence selecting which —
+     * the same contract as `/quotations/create`.
+     */
+    saveTransactionHold: builder.mutation<TransactionHoldPayload, SaveTransactionHoldDto>({
+      query: (body) => ({ url: TRANSACTION_HOLD_SAVE_ENDPOINT, method: "POST", body }),
+      transformResponse: (payload: ApiSuccessResponse<TransactionHoldPayload>) => payload.data,
+      invalidatesTags: ["TransactionHold"],
+    }),
+    /**
+     * The held list, newest first, soft-deleted rows already excluded.
+     *
+     * Unlike the quotation browse list this route filters properly — but only
+     * off the module's own Prisma query, which it takes ONLY when a structured
+     * filter is present. Sending the tenant scope is therefore doing two jobs:
+     * narrowing the list, and keeping it off the configured-grid path whose
+     * stored SQL knows none of these filters and would answer with every
+     * company's holds.
+     */
+    listTransactionHolds: builder.query<
+      { items: TransactionHoldPayload[]; total: number },
+      {
+        thCompanyId: string;
+        thBranchId: string;
+        thAccYear?: number;
+        thDocType?: string;
+        thStatus?: string;
+        search?: string;
+        page?: number;
+        limit?: number;
+      }
+    >({
+      query: ({ page = 1, limit = 100, search, ...filters }) => ({
+        url: TRANSACTION_HOLD_LIST_ENDPOINT,
+        params: {
+          ...filters,
+          page,
+          limit,
+          ...(search?.trim() ? { search: search.trim() } : {}),
+        },
+      }),
+      transformResponse: (
+        payload: ApiSuccessResponse<TransactionHoldPayload[], { total?: number | null }>,
+      ) => ({
+        items: payload.data ?? [],
+        total: payload.meta?.total ?? payload.data?.length ?? 0,
+      }),
+      providesTags: ["TransactionHold"],
+      keepUnusedDataFor: 0,
+    }),
+    getTransactionHold: builder.query<TransactionHoldPayload, string>({
+      query: (thId) => ({ url: TRANSACTION_HOLD_GET_ENDPOINT, params: { thId } }),
+      transformResponse: (payload: ApiSuccessResponse<TransactionHoldPayload>) => payload.data,
+      keepUnusedDataFor: 0,
+    }),
+    deleteTransactionHold: builder.mutation<{ thId: string; deleted: boolean }, string>({
+      query: (thId) => ({
+        url: TRANSACTION_HOLD_DELETE_ENDPOINT,
+        method: "DELETE",
+        params: { thId },
+      }),
+      transformResponse: (payload: ApiSuccessResponse<{ thId: string; deleted: boolean }>) =>
+        payload.data,
+      invalidatesTags: ["TransactionHold"],
     }),
     // -- the browse list (there is no /quotations/list route; grid 84 is it) --
     listQuotations: builder.query<ConfiguredGridPage<QuotationListRow>, QuotationListQuery | void>({
@@ -395,6 +467,10 @@ export const {
   useLazyGetQuotationQuery,
   useSaveQuotationMutation,
   useDeleteQuotationMutation,
+  useSaveTransactionHoldMutation,
+  useListTransactionHoldsQuery,
+  useLazyGetTransactionHoldQuery,
+  useDeleteTransactionHoldMutation,
   useListQuotationsQuery,
   useLazyListQuotationsQuery,
   useGetQuotationGridLayoutQuery,

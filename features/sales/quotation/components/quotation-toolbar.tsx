@@ -1,5 +1,4 @@
 "use client";
-
 /**
  * The button bar.
  *
@@ -9,7 +8,6 @@
 import { cx } from "@/components/design-system/cx";
 import type { QuotationBusy } from "../use-quotation-draft";
 import styles from "../page.module.scss";
-
 export type QuotationToolbarProps = {
   mode: "entry" | "browse";
   busy: QuotationBusy;
@@ -25,13 +23,17 @@ export type QuotationToolbarProps = {
   /** Same gate as Delete/Edit — there is a saved document to base the copy on. */
   canCopyAsNew: boolean;
   onCopyAsNew: () => void;
+  /** False when there is nothing on the grid worth parking. */
+  canHold: boolean;
+  /** Set once the cart has been parked — Hold then updates that same row. */
+  heldNo: string;
+  onHold: () => void;
+  onPickHeld: () => void;
   onCancel: () => void;
 };
-
 function Hint({ children }: { children: string }) {
   return <span className={styles.buttonHint}>{children}</span>;
 }
-
 export function QuotationToolbar(props: QuotationToolbarProps) {
   const {
     mode,
@@ -46,10 +48,13 @@ export function QuotationToolbar(props: QuotationToolbarProps) {
     onSave,
     canCopyAsNew,
     onCopyAsNew,
+    canHold,
+    heldNo,
+    onHold,
+    onPickHeld,
     onCancel,
   } = props;
   const isBusy = busy !== "idle";
-
   return (
     <div className={styles.buttonBar}>
       <button
@@ -67,13 +72,36 @@ export function QuotationToolbar(props: QuotationToolbarProps) {
       <button type="button" className={styles.button} disabled={isBusy} onClick={onShowList}>
         Show list<Hint>F8</Hint>
       </button>
+      {/* Park and recall. Hold is the alternative to Save, not a step towards
+          it: nothing is written to `sale_quotation` until the cart is resumed
+          and saved. */}
+      <button
+        type="button"
+        className={styles.button}
+        disabled={isBusy || !canHold}
+        title={
+          canHold
+            ? heldNo
+              ? `Update hold ${heldNo} and clear the form`
+              : "Park this quotation and clear the form"
+            : "Only a quotation being entered, with at least one item, can be held"
+        }
+        onClick={onHold}
+      >
+        {busy === "holding" ? "Holding…" : heldNo ? "Re-hold" : "Hold"}
+        <Hint>F9</Hint>
+      </button>
+      <button type="button" className={styles.button} disabled={isBusy} onClick={onPickHeld}>
+        {busy === "resuming" ? "Resuming…" : "Pick held"}
+        <Hint>F10</Hint>
+      </button>
       <button
         type="button"
         className={styles.button}
         disabled={isBusy || !canCopyAsNew}
         onClick={onCopyAsNew}
       >
-        Copy as new<Hint>F9</Hint>
+        Copy as new<Hint>Ctrl+F9</Hint>
       </button>
       <button
         type="button"

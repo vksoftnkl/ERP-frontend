@@ -854,6 +854,19 @@ export type QuotationDraft = {
    */
   isDeleted: boolean;
 
+  /**
+   * The `transaction_hold` row this draft is currently parked as, or was pulled
+   * back from — `null` for a draft that has never been held.
+   *
+   * It is what makes Hold idempotent: holding a resumed cart UPDATES that row
+   * back to `HELD` instead of leaving the original behind and creating a second
+   * one. Cleared by Clear, by Copy as new and once the hold is converted into a
+   * saved quotation. `holdNo` is carried alongside only so the screen can name
+   * the hold; the id is the handle.
+   */
+  holdId: string | null;
+  holdNo: string;
+
   policy: VoucherPolicy;
   customer: CustomerSnapshot;
   header: QuotationHeader;
@@ -870,6 +883,99 @@ export type QuotationDraft = {
    * `pricing === "stored"` without a single value being recomputed.
    */
   storedPricing: DocumentPricing | null;
+};
+
+// ---------------------------------------------------------------------------
+// Transaction hold — the wire shapes of `/transaction-holds/*`
+// ---------------------------------------------------------------------------
+
+/**
+ * `POST /transaction-holds/create`. One route for create and update, selected by
+ * `thId`'s presence, and the DTO declares every field optional — what a *create*
+ * actually requires (`thCompanyId`, `thBranchId`, `thAccYear`, `thHoldNo`,
+ * `thDeviceId`, `thDeviceType`) is enforced in the service, not by the decorators,
+ * so omitting one is a 400 rather than a type error. `forbidNonWhitelisted` is on:
+ * a stray key 400s the whole request.
+ *
+ * The scope (company / branch / accounting year) is immutable after create, so an
+ * update deliberately does not resend it.
+ */
+export type SaveTransactionHoldDto = {
+  thId?: string;
+  thCompanyId?: string;
+  thBranchId?: string;
+  /** SMALLINT — the fiscal year as its starting year (2026 for 2026-2027). */
+  thAccYear?: number;
+  thHoldNo?: string;
+  thHoldDate?: string;
+  thDocType?: string;
+  thSessionId?: string | null;
+  thUserId?: string | null;
+  thDeviceId?: string;
+  thDeviceType?: string;
+  thCustomerName?: string | null;
+  thItemCount?: number;
+  thTotalQty?: number;
+  /** `ck_th_total_amount` — gross, never negative, even on a return hold. */
+  thTotalAmount?: number;
+  thStatus?: string;
+  thHoldReason?: string | null;
+  thRemarks?: string | null;
+  thResumedBy?: string | null;
+  thResumedAt?: string | null;
+  thResumeCount?: number;
+  thConvertedDocType?: string | null;
+  thConvertedDocId?: string | null;
+  thConvertedNo?: string | null;
+  thConvertedAt?: string | null;
+  thConvertedBy?: string | null;
+  /** Stored and handed back verbatim; the server never reads into it. */
+  thUiState?: Record<string, unknown> | null;
+  /** `varchar(50)`, not a uuid — an actor id, name or login. */
+  thCreatedBy?: string | null;
+  thModifiedBy?: string | null;
+};
+
+/** One `transaction_hold` row, as `create` / `get` / `list` return it. */
+export type TransactionHoldPayload = {
+  thId: string;
+  thCompanyId: string;
+  thBranchId: string;
+  thAccYear: number;
+  thHoldNo: string;
+  thHoldDate: string;
+  thDocType: string;
+  thCounterId: string | null;
+  thSessionId: string | null;
+  thUserId: string | null;
+  thDeviceId: string;
+  thDeviceType: string;
+  thCustomerName: string | null;
+  thItemCount: number;
+  /** `numeric` columns arrive as strings, exactly as on the quotation payload. */
+  thTotalQty: WireDecimal;
+  thTotalAmount: WireDecimal;
+  thStatus: string;
+  thHoldReason: string | null;
+  thRemarks: string | null;
+  thExpiresAt: string | null;
+  thLockedBy: string | null;
+  thLockedAt: string | null;
+  thResumedBy: string | null;
+  thResumedAt: string | null;
+  thResumeCount: number;
+  thConvertedDocType: string | null;
+  thConvertedDocId: string | null;
+  thConvertedNo: string | null;
+  thConvertedAt: string | null;
+  thConvertedBy: string | null;
+  thIsStockReserved: boolean;
+  thUiState: unknown;
+  thIsDeleted: boolean;
+  thCreatedBy: string | null;
+  thCreatedAt: string;
+  thModifiedBy: string | null;
+  thModifiedAt: string | null;
 };
 
 /** What `validate` returns: the first violation, and where to send the operator. */

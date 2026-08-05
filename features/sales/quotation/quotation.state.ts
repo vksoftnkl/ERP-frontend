@@ -188,6 +188,8 @@ export function createDraft(context: DraftContext): QuotationDraft {
     status: DEFAULT_QUOTATION_STATUS,
     isNewEntry: true,
     isDeleted: false,
+    holdId: null,
+    holdNo: "",
     policy: seedDocumentPolicy(context.policy),
     customer: emptyCustomer(),
     header: emptyHeader(quoteDate),
@@ -434,6 +436,10 @@ export function resolveLocalSale(
  * never existed server-side, so it cannot be deleted. This is deliberately the
  * ONE action a soft-deleted quotation still allows — it is how the operator
  * rescues the contents of one without resurrecting it.
+ *
+ * The hold link goes with the identity for the same reason: the copy is not the
+ * cart that was parked, so holding it must park a second one rather than
+ * overwrite the original.
  */
 export function copyDraftAsNew(draft: QuotationDraft, quoteDate: string): QuotationDraft {
   return {
@@ -448,6 +454,8 @@ export function copyDraftAsNew(draft: QuotationDraft, quoteDate: string): Quotat
     status: DEFAULT_QUOTATION_STATUS,
     isNewEntry: true,
     isDeleted: false,
+    holdId: null,
+    holdNo: "",
     header: applyHeaderField(draft.header, "quoteDate", quoteDate),
     lines: draft.lines.map((line) => ({ ...line, sqiId: null })),
     charges: draft.charges.map((row) => ({ ...row, cdId: null })),

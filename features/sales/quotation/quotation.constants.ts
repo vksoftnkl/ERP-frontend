@@ -37,6 +37,15 @@ export const COMPANY_GET_ENDPOINT = "/company-masters/get";
 export const USER_ADMINISTRATION_GET_ENDPOINT = "/user-administration/get";
 
 /**
+ * Hold / Pick held — `public.transaction_hold`. One route creates AND updates
+ * (`thId`'s presence selects which), exactly like `/quotations/create`.
+ */
+export const TRANSACTION_HOLD_SAVE_ENDPOINT = "/transaction-holds/create";
+export const TRANSACTION_HOLD_LIST_ENDPOINT = "/transaction-holds/list";
+export const TRANSACTION_HOLD_GET_ENDPOINT = "/transaction-holds/get";
+export const TRANSACTION_HOLD_DELETE_ENDPOINT = "/transaction-holds/delete";
+
+/**
  * `fixed.ui_tables.ui_tbl_id` for the item grid — 23 ("Quotation-item", 89
  * columns, one per `ITEM_COLUMN_MEANINGS` entry and in the same order).
  *
@@ -114,6 +123,68 @@ export const QUOTATION_STATUSES = [
 ] as const;
 export type QuotationStatus = (typeof QUOTATION_STATUSES)[number];
 export const DEFAULT_QUOTATION_STATUS: QuotationStatus = "DRAFT";
+
+// ---------------------------------------------------------------------------
+// Transaction hold (F9 park / F10 recall)
+// ---------------------------------------------------------------------------
+
+/**
+ * `th_doc_type` for a parked quotation.
+ *
+ * The column's allowed set is fixed in the server module
+ * (`TransactionHoldDocType`) and has **no `QUOTATION` member** — the table was
+ * built for the till, so the closest document this screen can call itself is
+ * `SALE_ORDER`. Two consequences, both handled rather than assumed away:
+ *
+ *  - `ux_th_hold_no` is scoped per document type, so quotation holds share a
+ *    number space with any future sale-order screen. The generated hold number
+ *    carries its own random suffix, so a collision is a retry, not a loss.
+ *  - the held list would show another screen's `SALE_ORDER` holds. Every hold
+ *    this screen writes stamps `HOLD_UI_STATE_SCREEN` inside `th_ui_state`, and
+ *    the picker refuses anything that is not stamped — see `isQuotationHold`.
+ *
+ * Change this one constant if the server's enum ever grows a `QUOTATION`.
+ */
+export const QUOTATION_HOLD_DOC_TYPE = "SALE_ORDER";
+
+/** `ck_th_device_type` — the hardware the hold was taken on. */
+export const HOLD_DEVICE_TYPES = ["DESKTOP", "WEB", "MOBILE"] as const;
+export type HoldDeviceType = (typeof HOLD_DEVICE_TYPES)[number];
+/** This client is a browser; the session's own value only narrows it further. */
+export const DEFAULT_HOLD_DEVICE_TYPE: HoldDeviceType = "WEB";
+
+/**
+ * `ck_th_status`. `CONVERTED` / `CANCELLED` / `EXPIRED` are terminal — the
+ * server refuses to move a hold out of them, so nothing here ever tries.
+ */
+export const HOLD_STATUSES = [
+  "HELD",
+  "LOCKED",
+  "RESUMED",
+  "CONVERTED",
+  "CANCELLED",
+  "EXPIRED",
+] as const;
+export type HoldStatus = (typeof HOLD_STATUSES)[number];
+
+/**
+ * What `th_ui_state` holds, and how a reader knows it is ours. The server
+ * stores and returns the object verbatim and never reads into it, so this
+ * envelope is the only contract there is — hence a `kind` and a `version` on
+ * every write, checked on every read.
+ */
+export const HOLD_UI_STATE_KIND = "erp.sales.quotation.hold";
+export const HOLD_UI_STATE_VERSION = 1;
+export const HOLD_UI_STATE_SCREEN = "QUOTATION";
+
+/**
+ * `th_hold_no` is required on create, is NOT generated server-side, and is
+ * unique per company / branch / year / document type. The till it was designed
+ * for owns a counter; this screen has none, so the number is minted from the
+ * clock plus a random tail — see `nextHoldNo`. `varchar(30)`.
+ */
+export const HOLD_NO_PREFIX = "QH";
+export const HOLD_NO_MAX_LENGTH = 30;
 
 /**
  * How long a new quotation is valid for. The screen has no other source for it —

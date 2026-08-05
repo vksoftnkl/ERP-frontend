@@ -170,6 +170,7 @@ export const baseApi = createApi({
     "ItemQtyPrice",
     // Sales transactions
     "Quotation",
+    "TransactionHold",
   ],
   endpoints: () => ({}),
 });
