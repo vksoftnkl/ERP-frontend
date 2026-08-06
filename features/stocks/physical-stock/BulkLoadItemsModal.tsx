@@ -4,6 +4,7 @@ import { FiX } from "react-icons/fi";
 import { useBusinessContext } from "@/components/layout/business-context";
 import { useApi } from "@/hooks/useApi";
 import { SearchableSelect, type ERPDynamicSelectOption } from "@/components/design-system/ui";
+import ModalPortal from "@/components/ui/modal-portal";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const NONE_OPTION: ERPDynamicSelectOption = { value: "", label: "--None--" };
@@ -212,144 +213,146 @@ export function BulkLoadItemsModal({
   if (!isOpen) return null;
   const isDisabled = loading || isMasterLoading;
   return (
-    <div className={dynamicModalStyles.overlay}>
-      <button
-        type="button"
-        className={dynamicModalStyles.backdrop}
-        onClick={onClose}
-        aria-label="Close bulk load items"
-      />
-      <section
-        className={`${dynamicModalStyles.panel} ${dynamicModalStyles.bulkLoadScope}`}
-        style={{ width: "min(500px, calc(100vw - 2rem))", maxHeight: "min(92vh, 620px)" }}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Bulk Load Items"
-      >
-        <header className={dynamicModalStyles.header}>
-          <div className={dynamicModalStyles.headerRow}>
-            <div className={dynamicModalStyles.headerIntro}>
-              <div className={dynamicModalStyles.headerText}>
-                <h2 className={dynamicModalStyles.headerTitle}>Bulk Load Items</h2>
+    <ModalPortal>
+      <div className={dynamicModalStyles.overlay}>
+        <button
+          type="button"
+          className={dynamicModalStyles.backdrop}
+          onClick={onClose}
+          aria-label="Close bulk load items"
+        />
+        <section
+          className={`${dynamicModalStyles.panel} ${dynamicModalStyles.bulkLoadScope}`}
+          style={{ width: "min(500px, calc(100vw - 2rem))", maxHeight: "min(92vh, 620px)" }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Bulk Load Items"
+        >
+          <header className={dynamicModalStyles.header}>
+            <div className={dynamicModalStyles.headerRow}>
+              <div className={dynamicModalStyles.headerIntro}>
+                <div className={dynamicModalStyles.headerText}>
+                  <h2 className={dynamicModalStyles.headerTitle}>Bulk Load Items</h2>
+                </div>
+              </div>
+              <button
+                type="button"
+                className={dynamicModalStyles.closeButton}
+                onClick={onClose}
+                aria-label="Close"
+              >
+                <FiX className={dynamicModalStyles.closeIcon} aria-hidden="true" />
+              </button>
+            </div>
+          </header>
+          <div className={dynamicModalStyles.scrollArea}>
+            <div
+              className={dynamicModalStyles.formGrid}
+              style={{ "--erp-modal-form-columns": "1" } as React.CSSProperties}
+            >
+              <div className={dynamicModalStyles.field}>
+                <p className={dynamicModalStyles.label}>Company</p>
+                <SearchableSelect
+                  value={companyId}
+                  options={companyOptions}
+                  onChange={(val) => { setCompanyId(val); setBranchId(""); }}
+                  placeholder="Select company"
+                  disabled={isDisabled}
+                />
+              </div>
+              <div className={dynamicModalStyles.field}>
+                <p className={dynamicModalStyles.label}>Branch</p>
+                <SearchableSelect
+                  value={branchId}
+                  options={branchOptions}
+                  onChange={setBranchId}
+                  placeholder="Select branch"
+                  disabled={isDisabled || !companyId}
+                />
+              </div>
+              <div className={dynamicModalStyles.field}>
+                <p className={dynamicModalStyles.label}>Item Group</p>
+                <SearchableSelect
+                  value={itemGroupId}
+                  options={itemGroupOptions}
+                  onChange={setItemGroupId}
+                  placeholder="All item groups"
+                  disabled={isDisabled}
+                />
+              </div>
+              <div className={dynamicModalStyles.field}>
+                <p className={dynamicModalStyles.label}>Item Brand</p>
+                <SearchableSelect
+                  value={itemBrandId}
+                  options={itemBrandOptions}
+                  onChange={setItemBrandId}
+                  placeholder="All item brands"
+                  disabled={isDisabled}
+                />
+              </div>
+              <div className={dynamicModalStyles.field}>
+                <p className={dynamicModalStyles.label}>Item Section</p>
+                <SearchableSelect
+                  value={itemSectionId}
+                  options={itemSectionOptions}
+                  onChange={setItemSectionId}
+                  placeholder="All item sections"
+                  disabled={isDisabled}
+                />
+              </div>
+              <div className={dynamicModalStyles.field}>
+                <p className={dynamicModalStyles.label}>Item Category</p>
+                <SearchableSelect
+                  value={itemCategoryId}
+                  options={itemCategoryOptions}
+                  onChange={setItemCategoryId}
+                  placeholder="All item categories"
+                  disabled={isDisabled}
+                />
+              </div>
+              <div className={dynamicModalStyles.field}>
+                <p className={dynamicModalStyles.label}>Godown</p>
+                <SearchableSelect
+                  value={godownId}
+                  options={godownOptions}
+                  onChange={setGodownId}
+                  placeholder="All godowns"
+                  disabled={isDisabled}
+                />
+              </div>
+              <div className={dynamicModalStyles.field}>
+                <p className={dynamicModalStyles.label}>Stock Type</p>
+                <SearchableSelect
+                  value={stockType}
+                  options={STOCK_TYPE_OPTIONS}
+                  onChange={(val) => setStockType(val as "ALL" | "NEGATIVE" | "ZERO")}
+                  disabled={loading}
+                />
               </div>
             </div>
-            <button
-              type="button"
-              className={dynamicModalStyles.closeButton}
-              onClick={onClose}
-              aria-label="Close"
-            >
-              <FiX className={dynamicModalStyles.closeIcon} aria-hidden="true" />
-            </button>
           </div>
-        </header>
-        <div className={dynamicModalStyles.scrollArea}>
-          <div
-            className={dynamicModalStyles.formGrid}
-            style={{ "--erp-modal-form-columns": "1" } as React.CSSProperties}
-          >
-            <div className={dynamicModalStyles.field}>
-              <p className={dynamicModalStyles.label}>Company</p>
-              <SearchableSelect
-                value={companyId}
-                options={companyOptions}
-                onChange={(val) => { setCompanyId(val); setBranchId(""); }}
-                placeholder="Select company"
-                disabled={isDisabled}
-              />
-            </div>
-            <div className={dynamicModalStyles.field}>
-              <p className={dynamicModalStyles.label}>Branch</p>
-              <SearchableSelect
-                value={branchId}
-                options={branchOptions}
-                onChange={setBranchId}
-                placeholder="Select branch"
-                disabled={isDisabled || !companyId}
-              />
-            </div>
-            <div className={dynamicModalStyles.field}>
-              <p className={dynamicModalStyles.label}>Item Group</p>
-              <SearchableSelect
-                value={itemGroupId}
-                options={itemGroupOptions}
-                onChange={setItemGroupId}
-                placeholder="All item groups"
-                disabled={isDisabled}
-              />
-            </div>
-            <div className={dynamicModalStyles.field}>
-              <p className={dynamicModalStyles.label}>Item Brand</p>
-              <SearchableSelect
-                value={itemBrandId}
-                options={itemBrandOptions}
-                onChange={setItemBrandId}
-                placeholder="All item brands"
-                disabled={isDisabled}
-              />
-            </div>
-            <div className={dynamicModalStyles.field}>
-              <p className={dynamicModalStyles.label}>Item Section</p>
-              <SearchableSelect
-                value={itemSectionId}
-                options={itemSectionOptions}
-                onChange={setItemSectionId}
-                placeholder="All item sections"
-                disabled={isDisabled}
-              />
-            </div>
-            <div className={dynamicModalStyles.field}>
-              <p className={dynamicModalStyles.label}>Item Category</p>
-              <SearchableSelect
-                value={itemCategoryId}
-                options={itemCategoryOptions}
-                onChange={setItemCategoryId}
-                placeholder="All item categories"
-                disabled={isDisabled}
-              />
-            </div>
-            <div className={dynamicModalStyles.field}>
-              <p className={dynamicModalStyles.label}>Godown</p>
-              <SearchableSelect
-                value={godownId}
-                options={godownOptions}
-                onChange={setGodownId}
-                placeholder="All godowns"
-                disabled={isDisabled}
-              />
-            </div>
-            <div className={dynamicModalStyles.field}>
-              <p className={dynamicModalStyles.label}>Stock Type</p>
-              <SearchableSelect
-                value={stockType}
-                options={STOCK_TYPE_OPTIONS}
-                onChange={(val) => setStockType(val as "ALL" | "NEGATIVE" | "ZERO")}
+          <footer className={dynamicModalStyles.footer}>
+            <div className={dynamicModalStyles.footerActions}>
+              <button
+                type="button"
+                className={dynamicModalStyles.cancelButton}
+                onClick={onClose}
                 disabled={loading}
-              />
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`${dynamicModalStyles.submitButton} ${dynamicModalStyles.submitButtonSave}`}
+                onClick={handleSubmit}
+                disabled={loading || isMasterLoading || !companyId || !branchId}
+              >
+                {loading ? "Loading..." : isMasterLoading ? "Fetching..." : "Load Stock"}
+              </button>
             </div>
-          </div>
-        </div>
-        <footer className={dynamicModalStyles.footer}>
-          <div className={dynamicModalStyles.footerActions}>
-            <button
-              type="button"
-              className={dynamicModalStyles.cancelButton}
-              onClick={onClose}
-              disabled={loading}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className={`${dynamicModalStyles.submitButton} ${dynamicModalStyles.submitButtonSave}`}
-              onClick={handleSubmit}
-              disabled={loading || isMasterLoading || !companyId || !branchId}
-            >
-              {loading ? "Loading..." : isMasterLoading ? "Fetching..." : "Load Stock"}
-            </button>
-          </div>
-        </footer>
-      </section>
-    </div>
+          </footer>
+        </section>
+      </div>
+    </ModalPortal>
   );
 }

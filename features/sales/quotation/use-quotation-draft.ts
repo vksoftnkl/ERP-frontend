@@ -19,16 +19,21 @@ import { useBusinessContext } from "@/components/layout/business-context";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import type { AppDispatch } from "@/store/store";
 import {
+  getAuthSession,
   getAuthSessionId,
   getAuthUserId,
   getOrCreateClientDeviceId,
   getUserInfo,
 } from "@/lib/auth/session";
-import { extractApiErrorMessage } from "@/lib/api/client";
+import { API_BASE, extractApiErrorMessage, getAuthHeaderValue } from "@/lib/api/client";
 import {
   quotationApi,
+  useConvertTransactionHoldMutation,
   useDeleteQuotationMutation,
+  useForceReleaseTransactionHoldMutation,
   useLazyGetTransactionHoldQuery,
+  useReleaseTransactionHoldMutation,
+  useResumeTransactionHoldMutation,
   useSaveTransactionHoldMutation,
   useGetCompanyStateCodeQuery,
   useGetQuotationGridLayoutQuery,
@@ -63,17 +68,20 @@ import {
   DEFAULT_FREIGHT_CALC_TYPE,
   DEFAULT_LOADING_CALC_TYPE,
   FREIGHT_CALC_TYPES,
+  HOLD_DEVICE_ID_HEADER,
   ITEM_GRID_UI_TABLE_ID,
   LOADING_CALC_TYPES,
   PRICE_LEVEL_OPTIONS,
   SESSION_CAPABILITIES,
+  transactionHoldLockEndpoint,
 } from "./quotation.constants";
 import {
-  buildConvertedPayload,
   buildHoldPayload,
-  buildResumePayload,
   draftFromHold,
   holdAccYearOf,
+  holdConversionOf,
+  holdLockMessage,
+  holdLockScope,
   nextHoldNo,
   readHoldUiState,
 } from "./quotation.hold";
@@ -86,6 +94,8 @@ import type {
   ItemUnitOption,
   QuotationDocKey,
   QuotationDraft,
+  TransactionHoldLockScope,
+  TransactionHoldPayload,
   Violation,
 } from "./quotation.types";
 import { validateSaveInputs } from "./quotation.validate";
@@ -180,8 +190,16 @@ export type QuotationDraftApi = {
   save: () => Promise<boolean>;
   /** Park the cart in `transaction_hold` and clear the form. */
   hold: () => Promise<boolean>;
-  /** Pull a parked cart back onto the screen. */
+  /**
+   * Pull a parked cart back onto the screen, taking its edit lock. `false` when
+   * another device has it — the screen is left untouched.
+   */
   resumeHold: (thId: string) => Promise<boolean>;
+  /**
+   * Take a cart off the device holding it, so it can be resumed here. Frees the
+   * hold; it does not open it.
+   */
+  takeOverHold: (hold: TransactionHoldPayload) => Promise<boolean>;
   /** The loaded draft, or `null` when the fetch failed. */
   loadDocument: (key: QuotationDocKey) => Promise<QuotationDraft | null>;
   deleteDocument: () => Promise<boolean>;
@@ -250,6 +268,10 @@ export function useQuotationDraft(): QuotationDraftApi {
   const [deleteQuotation] = useDeleteQuotationMutation();
   const [saveHold] = useSaveTransactionHoldMutation();
   const [fetchHold] = useLazyGetTransactionHoldQuery();
+  const [resumeHoldLock] = useResumeTransactionHoldMutation();
+  const [releaseHoldLock] = useReleaseTransactionHoldMutation();
+  const [forceReleaseHoldLock] = useForceReleaseTransactionHoldMutation();
+  const [convertHoldLock] = useConvertTransactionHoldMutation();
 
   const [busy, setBusy] = useState<QuotationBusy>("idle");
   /**
@@ -265,6 +287,20 @@ export function useQuotationDraft(): QuotationDraftApi {
    * they would quietly park the cart TWICE under two different numbers.
    */
   const holdInFlight = useRef(false);
+  /**
+   * The hold this device currently has LOCKED, if any.
+   *
+   * A ref rather than a value derived from the draft, because the release has to
+   * be able to run when the draft is already gone — replaced by another cart,
+   * cleared, or unmounted on the way back to the list. It carries the scope with
+   * it for the same reason: the row's own company / branch, captured when the
+   * lock was taken, not whatever the screen is showing by then.
+   */
+  const lockedHold = useRef<{
+    thId: string;
+    holdNo: string;
+    scope: TransactionHoldLockScope;
+  } | null>(null);
   const [unitOptions, setUnitOptions] = useState<Record<string, ItemUnitOption[]>>({});
   /** The live draft, for effects that must not re-run when it changes. */
   const draftRef = useRef(draft);
@@ -698,18 +734,37 @@ export function useQuotationDraft(): QuotationDraftApi {
       // IS saved by this point, and failing the whole action over the hold row
       // would tell the operator otherwise.
       if (draft.holdId) {
-        try {
-          await saveHold(
-            buildConvertedPayload(
-              draft.holdId,
-              { sqId: saved.sqId, quoteRefno: saved.sqQuoteRefno ?? null },
-              actor,
-            ),
-          ).unwrap();
-        } catch (error) {
-          toast.warn(
-            `Saved, but hold ${draft.holdNo || draft.holdId} could not be closed: ${errorMessage(error)}`,
-          );
+        // Converting ends the lock by closing the hold, so the release paths
+        // must not also fire — a CONVERTED hold is terminal and would refuse.
+        lockedHold.current = null;
+        const deviceId = actor.deviceId;
+        const holdLabel = draft.holdNo || draft.holdId;
+        if (!deviceId) {
+          // Only the holding DEVICE may close a hold, and this browser can no
+          // longer say which it is. The quotation is saved either way; the hold
+          // is left for the picker's take-over.
+          toast.warn(`Saved, but hold ${holdLabel} could not be closed: this browser has no device id.`);
+        } else {
+          try {
+            // Only the device holding the lock may close a hold onto a document,
+            // and this is that device — it resumed the cart. The scope comes off
+            // the draft here because the hold row is not to hand; both halves are
+            // the ones the cart was parked under, which is what the row carries.
+            await convertHoldLock({
+              thId: draft.holdId,
+              deviceId,
+              scope: { thCompanyId: draft.companyId, thBranchId: draft.branchId },
+              conversion: holdConversionOf(
+                { sqId: saved.sqId, quoteRefno: saved.sqQuoteRefno ?? null },
+                actor,
+              ),
+            }).unwrap();
+          } catch (error) {
+            toast.warn(
+              `Saved, but hold ${holdLabel} could not be closed: ` +
+                holdLockMessage(error, holdLabel),
+            );
+          }
         }
         dispatch(holdSet({ holdId: null, holdNo: "" }));
       }
@@ -721,7 +776,7 @@ export function useQuotationDraft(): QuotationDraftApi {
       inFlight.current = false;
       setBusy("idle");
     }
-  }, [actor, draft, pricing, saveHold, saveQuotation, validate]);
+  }, [actor, convertHoldLock, draft, pricing, saveQuotation, validate]);
 
   /**
    * Returns the draft it loaded, not just a flag, so the caller can decide what
@@ -793,6 +848,37 @@ export function useQuotationDraft(): QuotationDraftApi {
   }, [clear, deleteQuotation, draft.docId, draft.isDeleted]);
 
   /**
+   * Hand back the lock this device holds, if it still holds one.
+   *
+   * The single place a lock is given up on the way out — reached by every route
+   * off the cart (opening another hold, Clear, Cancel back to the list,
+   * unmounting the screen), so no caller has to remember. The ref is claimed
+   * before the request goes out, so two of those firing at once cannot both
+   * release.
+   *
+   * Deliberately quiet: the operator is already leaving, a failed release is not
+   * something they can act on, and the picker's take-over is the backstop for
+   * exactly this. Nothing here is fatal to whatever the caller was doing.
+   */
+  const releaseLockedHold = useCallback(async (): Promise<void> => {
+    const locked = lockedHold.current;
+    if (!locked || !actor.deviceId) {
+      return;
+    }
+    lockedHold.current = null;
+    try {
+      await releaseHoldLock({
+        thId: locked.thId,
+        deviceId: actor.deviceId,
+        scope: locked.scope,
+      }).unwrap();
+    } catch {
+      // Left LOCKED. Recoverable from the held list, and on this device the
+      // resume is re-entrant, so the operator can simply open it again.
+    }
+  }, [actor.deviceId, releaseHoldLock]);
+
+  /**
    * Hold (F9). Parks the cart in `transaction_hold` and clears the form so the
    * next customer can be served.
    *
@@ -846,6 +932,32 @@ export function useQuotationDraft(): QuotationDraftApi {
           const saved = await saveHold(
             buildHoldPayload(draft, pricing, actor, { holdId, holdNo: nextHoldNo() }),
           ).unwrap();
+          // Re-parking a cart this device resumed: the row is still LOCKED to
+          // it, and only `/release` can put it back to HELD *and* clear
+          // `th_locked_by`. Writing the status through the save above would
+          // leave the lock pointing at a device that has moved on, and the next
+          // operator would find a free-looking hold nobody can take.
+          if (holdId) {
+            // Claimed before the request so the draft-change effect below does
+            // not race this one and release the same lock twice.
+            lockedHold.current = null;
+            try {
+              await releaseHoldLock({
+                thId: holdId,
+                deviceId: actor.deviceId,
+                scope: holdLockScope(saved),
+              }).unwrap();
+            } catch (error) {
+              // The cart IS parked — only the lock is still on this device, and
+              // the picker's take-over clears that. Not worth failing F9 over.
+              toast.warn(
+                `Held as ${saved.thHoldNo}, but it is still locked to this device: ` +
+                  holdLockMessage(error, saved.thHoldNo),
+              );
+              clear();
+              return true;
+            }
+          }
           toast.success(`Held as ${saved.thHoldNo}. Pick held (F10) brings it back.`);
           clear();
           return true;
@@ -877,43 +989,70 @@ export function useQuotationDraft(): QuotationDraftApi {
       holdInFlight.current = false;
       setBusy("idle");
     }
-  }, [actor, clear, draft, pricing, saveHold]);
+  }, [actor, clear, draft, pricing, releaseHoldLock, saveHold]);
 
   /**
-   * Pick held (F10). Pulls a parked cart back onto the screen.
+   * Pick held (F10). Pulls a parked cart back onto the screen — and takes its
+   * edit lock, so no other device can open the same cart.
    *
-   * The cart is restored from the hold's own `th_ui_state` — the server stores
-   * that JSON verbatim and never reads into it, so a row this screen did not
-   * write cannot be restored and is refused rather than half-drawn.
+   * The order is deliberate and is the opposite of what it used to be. The lock
+   * is taken FIRST and the screen is only redrawn if it was granted: `/resume`
+   * is one conditional update (`th_status = 'HELD'` lives in its WHERE clause),
+   * so two operators pressing F10 on the same row serialize on it and exactly
+   * one wins. Restoring the cart first and then flagging it would put the same
+   * cart on two screens and only afterwards discover the clash.
    *
-   * The hold is then marked `RESUMED`, which is what takes it out of the picker
-   * (it lists `HELD` only) so two operators cannot pull the same cart back. That
-   * status is deliberately not terminal: the row survives, so a browser that dies
-   * mid-edit leaves a recoverable hold rather than nothing.
+   * The cart itself is restored from the hold's own `th_ui_state`, which the
+   * server stores verbatim and never reads into — the resume response carries
+   * it, so there is no second fetch. A row this screen did not write cannot be
+   * redrawn, and is refused rather than half-drawn; the lock is handed straight
+   * back so the refusal costs nobody the cart.
    */
   const resumeHold = useCallback(
     async (thId: string): Promise<boolean> => {
+      if (!actor.deviceId) {
+        toast.error("This browser has no device id — resuming a held cart needs one.");
+        return false;
+      }
+      // Opening another cart gives up the one this device is on. Done here
+      // rather than left to the draft-change effect: the ref is about to be
+      // overwritten with the new hold, and the old lock would have nothing left
+      // pointing at it — stranded on the server until somebody took it over.
+      if (lockedHold.current && lockedHold.current.thId !== thId) {
+        await releaseLockedHold();
+      }
       setBusy("resuming");
       try {
+        // Read first ONLY for the scope: the lock body is keyed on the row's own
+        // company / branch (immutable since create), not on whatever tenant the
+        // screen happens to be showing.
         const held = await fetchHold(thId).unwrap();
-        const uiState = readHoldUiState(held.thUiState);
-        if (!uiState) {
-          toast.error(
-            `Hold ${held.thHoldNo} was not parked from Quotation entry — it cannot be opened here.`,
-          );
+        const scope = holdLockScope(held);
+        let locked: TransactionHoldPayload;
+        try {
+          locked = await resumeHoldLock({ thId, deviceId: actor.deviceId, scope }).unwrap();
+        } catch (error) {
+          // 409 names the device that has it, 403/404 speak for themselves —
+          // all of them mean the cart stays where it is and the screen is
+          // untouched.
+          toast.error(holdLockMessage(error, held.thHoldNo));
           return false;
         }
-        dispatch(draftReplaced(draftFromHold(held, uiState)));
-        try {
-          await saveHold(buildResumePayload(held, actor)).unwrap();
-        } catch (error) {
-          // The cart is already on screen and editable; what failed is only the
-          // flag that hides it from other tills, so say so and carry on.
-          toast.warn(
-            `Restored, but hold ${held.thHoldNo} is still listed as held: ${errorMessage(error)}`,
+        const uiState = readHoldUiState(locked.thUiState);
+        if (!uiState) {
+          toast.error(
+            `Hold ${locked.thHoldNo} was not parked from Quotation entry — it cannot be opened here.`,
           );
+          // Nothing was restored, so nothing is being edited: give the lock back
+          // rather than leaving a cart nobody can reach.
+          void releaseHoldLock({ thId, deviceId: actor.deviceId, scope })
+            .unwrap()
+            .catch(() => undefined);
+          return false;
         }
-        toast.success(`Hold ${held.thHoldNo} restored.`);
+        lockedHold.current = { thId, holdNo: locked.thHoldNo, scope };
+        dispatch(draftReplaced(draftFromHold(locked, uiState)));
+        toast.success(`Hold ${locked.thHoldNo} restored — it is locked to this device.`);
         return true;
       } catch (error) {
         toast.error(errorMessage(error));
@@ -922,7 +1061,101 @@ export function useQuotationDraft(): QuotationDraftApi {
         setBusy("idle");
       }
     },
-    [actor, fetchHold, saveHold],
+    [actor.deviceId, fetchHold, releaseHoldLock, releaseLockedHold, resumeHoldLock],
+  );
+
+
+  /**
+   * The cart on screen is no longer the one this device locked — it opened
+   * another hold, cleared the form, or went back to the list — so the lock goes
+   * back. Paths that end a lock deliberately (re-parking with F9, converting on
+   * save) clear the ref themselves, so this does not fire a second time behind
+   * them.
+   */
+  useEffect(() => {
+    const locked = lockedHold.current;
+    if (locked && draft.holdId !== locked.thId) {
+      void releaseLockedHold();
+    }
+  }, [draft.holdId, releaseLockedHold]);
+
+  /**
+   * The tab is going away. `pagehide` rather than `beforeunload` (which mobile
+   * Safari never fires), and a bare `fetch` with `keepalive` rather than the
+   * mutation: React will not finish an in-flight hook call once the document is
+   * unloading. `sendBeacon` cannot be used at all — it takes no custom headers,
+   * and the device id IS a header.
+   *
+   * Best effort by nature: a crash, a lost network or a killed process never
+   * reaches this. That is what the picker's take-over exists for.
+   */
+  useEffect(() => {
+    const releaseOnUnload = () => {
+      const locked = lockedHold.current;
+      if (!locked || !actor.deviceId) {
+        return;
+      }
+      lockedHold.current = null;
+      const authorization = getAuthHeaderValue(getAuthSession());
+      void fetch(`${API_BASE}${transactionHoldLockEndpoint(locked.thId, "release")}`, {
+        method: "POST",
+        keepalive: true,
+        headers: {
+          "Content-Type": "application/json",
+          [HOLD_DEVICE_ID_HEADER]: actor.deviceId,
+          ...(authorization ? { Authorization: authorization } : {}),
+        },
+        body: JSON.stringify(locked.scope),
+      }).catch(() => undefined);
+    };
+    window.addEventListener("pagehide", releaseOnUnload);
+    return () => window.removeEventListener("pagehide", releaseOnUnload);
+  }, [actor.deviceId]);
+
+  /**
+   * Leaving the screen for the list is an ordinary unmount — the document is
+   * still alive, so the real request goes rather than the keepalive one.
+   *
+   * Two effects, not one, and the empty dep array is the point: a cleanup that
+   * depended on `releaseLockedHold` would run again every time that callback's
+   * identity changed, handing the lock back while the operator was still
+   * editing. The ref keeps the latest implementation without making the unmount
+   * effect depend on it.
+   */
+  const releaseOnUnmount = useRef<() => void>(() => {});
+  useEffect(() => {
+    releaseOnUnmount.current = () => void releaseLockedHold();
+  }, [releaseLockedHold]);
+  useEffect(() => () => releaseOnUnmount.current(), []);
+
+  /**
+   * Take a cart off the device that is holding it.
+   *
+   * The escape hatch the picker offers on an in-use row, and the only one there
+   * is: nothing times a lock out, so a browser that died mid-edit would
+   * otherwise strand its cart for good. It frees the row — it does not open it —
+   * so the caller resumes afterwards like any other free hold.
+   */
+  const takeOverHold = useCallback(
+    async (hold: TransactionHoldPayload): Promise<boolean> => {
+      if (!actor.deviceId) {
+        toast.error("This browser has no device id — taking over a held cart needs one.");
+        return false;
+      }
+      try {
+        await forceReleaseHoldLock({
+          thId: hold.thId,
+          deviceId: actor.deviceId,
+          scope: holdLockScope(hold),
+        }).unwrap();
+        toast.success(`Hold ${hold.thHoldNo} is free again — resume it to continue.`);
+        return true;
+      } catch (error) {
+        toast.error(holdLockMessage(error, hold.thHoldNo));
+        return false;
+      }
+    },
+    [actor.deviceId, forceReleaseHoldLock],
   );
 
   /**
@@ -982,6 +1215,7 @@ export function useQuotationDraft(): QuotationDraftApi {
     save,
     hold,
     resumeHold,
+    takeOverHold,
     loadDocument,
     deleteDocument,
     clear,

@@ -19,12 +19,15 @@ import {
   QUOTATION_HOLD_DOC_TYPE,
 } from "./quotation.constants";
 import {
-  buildConvertedPayload,
   buildHoldPayload,
-  buildResumePayload,
   draftFromHold,
   holdAccYearOf,
+  holdConversionOf,
   holdDeviceTypeOf,
+  holdHolderLabel,
+  holdLockMessage,
+  holdLockScope,
+  isHoldInUse,
   isQuotationHold,
   nextHoldNo,
   readHoldUiState,
@@ -260,8 +263,15 @@ describe("buildHoldPayload — update", () => {
     expect(payload.thHoldNo).toBeUndefined();
   });
 
-  it("puts a resumed cart back to HELD", () => {
-    expect(payload.thStatus).toBe("HELD");
+  it("does not touch the status — that is /release's job", () => {
+    // The row is LOCKED to this device while it is being re-parked, and only
+    // `/release` puts it back to HELD *and* clears `th_locked_by`. Writing HELD
+    // here would leave the lock pointing at a device that has moved on, and the
+    // next operator would find a free-looking hold nobody can take.
+    expect(payload.thStatus).toBeUndefined();
+    // `thLockedBy` is not even on the DTO — the lock columns are the lock
+    // endpoints' to move, never the save route's.
+    expect(payload).not.toHaveProperty("thLockedBy");
   });
 });
 
@@ -324,31 +334,96 @@ describe("draftFromHold", () => {
   });
 });
 
-describe("buildResumePayload", () => {
-  it("takes the hold out of the picker without closing it", () => {
-    const payload = buildResumePayload(holdRow({ thResumeCount: 2 }), ACTOR, NOW);
-    expect(payload.thId).toBe(HOLD_ID);
-    // RESUMED is not terminal: the row survives a browser that dies mid-edit.
-    expect(payload.thStatus).toBe("RESUMED");
-    expect(payload.thResumeCount).toBe(3);
-    expect(payload.thResumedBy).toBe(ACTOR.userId);
+describe("holdLockScope", () => {
+  it("keys the transition on the row's own tenant, not the screen's", () => {
+    // A hold is scoped once, at create, and can never be re-scoped — so the
+    // row's values are the ones the server compares against. Sending whatever
+    // the screen is showing would answer 404 the moment its context moved on.
+    expect(holdLockScope(holdRow())).toEqual({
+      thCompanyId: COMPANY_ID,
+      thBranchId: BRANCH_ID,
+    });
+  });
+
+  it("sends nothing else — the device is a header, and a stray key 400s", () => {
+    expect(Object.keys(holdLockScope(holdRow())).sort()).toEqual(["thBranchId", "thCompanyId"]);
   });
 });
 
-describe("buildConvertedPayload", () => {
+describe("holdConversionOf", () => {
   it("stamps both halves of the polymorphic reference", () => {
-    // `thConvertedDocId` with no type leaves the reference unresolvable, and
-    // CONVERTED without the id and the instant is a 400.
-    const payload = buildConvertedPayload(
-      HOLD_ID,
+    // `thConvertedDocId` with no type leaves the reference unresolvable.
+    const conversion = holdConversionOf(
       { sqId: "019fb1db-1654-7ef5-88e8-7dbbed0dc3ee", quoteRefno: "QT-0001" },
       ACTOR,
-      NOW,
     );
-    expect(payload.thStatus).toBe("CONVERTED");
-    expect(payload.thConvertedDocType).toBe(QUOTATION_HOLD_DOC_TYPE);
-    expect(payload.thConvertedDocId).toBe("019fb1db-1654-7ef5-88e8-7dbbed0dc3ee");
-    expect(payload.thConvertedAt).toBe(NOW.toISOString());
-    expect(payload.thConvertedNo).toBe("QT-0001");
+    expect(conversion.thConvertedDocType).toBe(QUOTATION_HOLD_DOC_TYPE);
+    expect(conversion.thConvertedDocId).toBe("019fb1db-1654-7ef5-88e8-7dbbed0dc3ee");
+    expect(conversion.thConvertedNo).toBe("QT-0001");
+    expect(conversion.thConvertedBy).toBe(ACTOR.userId);
+  });
+
+  it("leaves the status and the instant to the server", () => {
+    // `/convert` sets CONVERTED and stamps `th_converted_at` itself; a client
+    // clock has no business deciding when a hold closed.
+    const conversion = holdConversionOf({ sqId: "x", quoteRefno: null }, ACTOR);
+    expect(conversion).not.toHaveProperty("thStatus");
+    expect(conversion).not.toHaveProperty("thConvertedAt");
+    expect(conversion.thConvertedNo).toBeNull();
+  });
+});
+
+describe("isHoldInUse / holdHolderLabel", () => {
+  it("reads LOCKED as in use, and names the device holding it", () => {
+    const locked = holdRow({ thStatus: "LOCKED", thLockedBy: "TILL-02" });
+    expect(isHoldInUse(locked)).toBe(true);
+    expect(holdHolderLabel(locked)).toBe("TILL-02");
+  });
+
+  // Parked before the lock existed: "in use" was a status with no device on it.
+  it("reads a pre-lock RESUMED row as in use, falling back to the user", () => {
+    const legacy = holdRow({ thStatus: "RESUMED", thLockedBy: null, thResumedBy: "user-7" });
+    expect(isHoldInUse(legacy)).toBe(true);
+    expect(holdHolderLabel(legacy)).toBe("user-7");
+  });
+
+  it("never reads as free just because nobody is named", () => {
+    const nameless = holdRow({ thStatus: "LOCKED", thLockedBy: null, thResumedBy: null });
+    expect(isHoldInUse(nameless)).toBe(true);
+    expect(holdHolderLabel(nameless)).toBe("another device");
+  });
+
+  it("leaves a free hold alone", () => {
+    expect(isHoldInUse(holdRow())).toBe(false);
+  });
+});
+
+describe("holdLockMessage", () => {
+  const refusal = (status: number, message?: string) => ({
+    status,
+    ...(message ? { data: { success: false, message, errors: [] } } : {}),
+  });
+
+  it("prefers the server's message, which names the device holding it", () => {
+    expect(holdLockMessage(refusal(409, "Hold is LOCKED by device TILL-02"), "QH1")).toBe(
+      "Hold is LOCKED by device TILL-02",
+    );
+  });
+
+  it("still says something useful when the server sent no message", () => {
+    expect(holdLockMessage(refusal(409), "QH1")).toContain("already open on another device");
+    expect(holdLockMessage(refusal(403), "QH1")).toContain("take it over");
+  });
+
+  // A discarded hold is not a lock problem, and telling the operator to take it
+  // over would send them after a row that is gone.
+  it("calls a missing hold what it is", () => {
+    expect(holdLockMessage(refusal(404, "Hold not found"), "QH1")).toBe(
+      "Hold QH1 no longer exists — it was discarded from the held list.",
+    );
+  });
+
+  it("falls back for anything else, including a dead network", () => {
+    expect(holdLockMessage(undefined, "QH1")).toBe("Hold QH1 could not be updated.");
   });
 });

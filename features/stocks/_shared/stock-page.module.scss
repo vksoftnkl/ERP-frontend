@@ -1125,6 +1125,11 @@
   padding: 1.25rem;
   background: rgba(15, 23, 42, 0.42);
   backdrop-filter: blur(3px);
+  // Own one isolated composited layer so the page's promoted scroll container
+  // cannot be ordered above the modal and paint grid tiles over it. See the
+  // long-form rationale on `.overlay` in dynamic-modal-form.module.scss.
+  isolation: isolate;
+  transform: translateZ(0);
 }
 .inlineMasterPanel {
   width: min(96vw, 92rem);
@@ -1182,6 +1187,11 @@
   display: grid;
   place-items: center;
   padding: 1rem;
+  // Own one isolated composited layer so the page's promoted scroll container
+  // cannot be ordered above the modal and paint grid tiles over it. See the
+  // long-form rationale on `.overlay` in dynamic-modal-form.module.scss.
+  isolation: isolate;
+  transform: translateZ(0);
 }
 .stockBrowserModalBackdrop {
   position: absolute;

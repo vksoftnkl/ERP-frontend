@@ -46,6 +46,26 @@ export const TRANSACTION_HOLD_GET_ENDPOINT = "/transaction-holds/get";
 export const TRANSACTION_HOLD_DELETE_ENDPOINT = "/transaction-holds/delete";
 
 /**
+ * The edit lock — `HELD → LOCKED → CONVERTED`, with `release` (and the
+ * `force-release` escape hatch) going back to `HELD`.
+ *
+ * These are NOT the save route with a different status: each is one conditional
+ * UPDATE server-side, with the status it moves *from* — and, on release and
+ * convert, `th_locked_by = this device` — inside the WHERE clause. That is what
+ * makes two tills resuming one cart serialize on the row instead of both
+ * winning, and what stops one till spending a lock another one holds.
+ *
+ * The lock holder is the DEVICE, named by the `X-Device-Id` header (never a
+ * body field, so there is no second, disagreeing source of truth). See
+ * `HOLD_DEVICE_ID_HEADER`.
+ */
+export const transactionHoldLockEndpoint = (
+  thId: string,
+  action: "resume" | "release" | "force-release" | "convert",
+): string => `/transaction-holds/${thId}/${action}`;
+export const HOLD_DEVICE_ID_HEADER = "X-Device-Id";
+
+/**
  * `fixed.ui_tables.ui_tbl_id` for the item grid — 23 ("Quotation-item", 89
  * columns, one per `ITEM_COLUMN_MEANINGS` entry and in the same order).
  *
@@ -131,21 +151,21 @@ export const DEFAULT_QUOTATION_STATUS: QuotationStatus = "DRAFT";
 /**
  * `th_doc_type` for a parked quotation.
  *
- * The column's allowed set is fixed in the server module
- * (`TransactionHoldDocType`) and has **no `QUOTATION` member** — the table was
- * built for the till, so the closest document this screen can call itself is
- * `SALE_ORDER`. Two consequences, both handled rather than assumed away:
+ * This screen shipped before the server's `TransactionHoldDocType` had a
+ * `QUOTATION` member and parked its carts under `SALE_ORDER` — the closest
+ * document the till-shaped enum offered. The member exists now, but **rows
+ * written before it keep the old type**, so anything that goes looking for
+ * parked quotations has to accept both. The picker does not filter on the
+ * document type at all for exactly this reason: `isQuotationHold` reads the
+ * `th_ui_state` stamp, which is the real test of "this screen wrote it" and is
+ * blind to which type the row carries.
  *
- *  - `ux_th_hold_no` is scoped per document type, so quotation holds share a
- *    number space with any future sale-order screen. The generated hold number
- *    carries its own random suffix, so a collision is a retry, not a loss.
- *  - the held list would show another screen's `SALE_ORDER` holds. Every hold
- *    this screen writes stamps `HOLD_UI_STATE_SCREEN` inside `th_ui_state`, and
- *    the picker refuses anything that is not stamped — see `isQuotationHold`.
- *
- * Change this one constant if the server's enum ever grows a `QUOTATION`.
+ * `ux_th_hold_no` is scoped per document type, so quotation holds now get their
+ * own number space rather than sharing the sale-order one.
  */
-export const QUOTATION_HOLD_DOC_TYPE = "SALE_ORDER";
+export const QUOTATION_HOLD_DOC_TYPE = "QUOTATION";
+/** What this screen parked carts under before `QUOTATION` existed. */
+export const LEGACY_QUOTATION_HOLD_DOC_TYPE = "SALE_ORDER";
 
 /** `ck_th_device_type` — the hardware the hold was taken on. */
 export const HOLD_DEVICE_TYPES = ["DESKTOP", "WEB", "MOBILE"] as const;
@@ -166,6 +186,18 @@ export const HOLD_STATUSES = [
   "EXPIRED",
 ] as const;
 export type HoldStatus = (typeof HOLD_STATUSES)[number];
+/**
+ * The statuses a parked cart can still be picked up from, which is what the
+ * held list shows.
+ *
+ * `HELD` is free and `LOCKED` is open on a device — the lock endpoints move a
+ * hold between exactly those two. `RESUMED` is neither: it is what this screen
+ * wrote to mean "in use" BEFORE the lock existed, so pre-upgrade rows carry it
+ * and are shown (and offered a take-over) rather than left invisible.
+ */
+export const HOLD_LIVE_STATUSES = ["HELD", "LOCKED", "RESUMED"] as const;
+/** In use by somebody — `LOCKED` by this lock, `RESUMED` by the one before it. */
+export const HOLD_IN_USE_STATUSES = ["LOCKED", "RESUMED"] as const;
 
 /**
  * What `th_ui_state` holds, and how a reader knows it is ours. The server

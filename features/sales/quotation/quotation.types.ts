@@ -978,6 +978,32 @@ export type TransactionHoldPayload = {
   thModifiedAt: string | null;
 };
 
+/**
+ * The body every lock transition posts (`/:id/resume`, `/release`,
+ * `/force-release`, `/convert`).
+ *
+ * Both halves are required and both are checked server-side, so a hold can be
+ * neither taken nor spent across a company or branch boundary. The device is
+ * NOT here — it travels as the `X-Device-Id` header, and `forbidNonWhitelisted`
+ * rejects a body that tries to name it (or the status, or `thLockedBy`) anyway.
+ */
+export type TransactionHoldLockScope = {
+  thCompanyId: string;
+  thBranchId: string;
+};
+
+/**
+ * The extra fields `/convert` carries: the document the hold became.
+ * `th_converted_doc_id` is polymorphic — no foreign key — so the type travels
+ * with the id and neither half is optional.
+ */
+export type TransactionHoldConversion = {
+  thConvertedDocType: string;
+  thConvertedDocId: string;
+  thConvertedNo?: string | null;
+  thConvertedBy?: string | null;
+};
+
 /** What `validate` returns: the first violation, and where to send the operator. */
 export type Violation = {
   message: string;

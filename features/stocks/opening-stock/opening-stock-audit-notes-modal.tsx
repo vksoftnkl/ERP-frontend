@@ -1,6 +1,7 @@
 "use client";
 import { type ReactNode, useEffect, useRef } from "react";
 import { FiX } from "react-icons/fi";
+import ModalPortal from "@/components/ui/modal-portal";
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 const MAX_AUDIT_NOTES_LENGTH = 1000;
 type OpeningStockAuditNotesModalProps = {
@@ -77,83 +78,85 @@ export function OpeningStockAuditNotesModal({
     ? `${styles.auditNotesTextarea} ${styles.auditNotesTextareaInvalid}`
     : styles.auditNotesTextarea;
   return (
-    <div className={styles.stockBrowserModalOverlay}>
-      <button
-        type="button"
-        className={styles.stockBrowserModalBackdrop}
-        onClick={onCancel}
-        disabled={loading}
-        aria-label="Close update audit notes"
-      />
-      <section
-        className={styles.auditNotesModalPanel}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Opening stock update audit notes"
-      >
-        <header className={styles.stockBrowserModalHeader}>
-          <div className={styles.stockBrowserModalTitleBlock}>
-            <p className={styles.stockBrowserModalEyebrow}>Audit Notes</p>
-            <h2 className={styles.stockBrowserModalTitle}>Update Opening Stock</h2>
-            <p className={styles.stockBrowserModalSubtitle}>{helperText}</p>
-          </div>
-          <button
-            type="button"
-            className={styles.stockBrowserModalCloseButton}
-            onClick={onCancel}
-            disabled={loading}
-            aria-label="Close update audit notes"
-          >
-            <FiX aria-hidden="true" />
-          </button>
-        </header>
-        <div className={styles.auditNotesModalBody}>
-          <label className={styles.auditNotesField}>
-            <span className={styles.auditNotesLabel}>Notes</span>
-            <textarea
-              ref={textareaRef}
-              value={notes}
-              onChange={(event) => onChange(event.target.value)}
-              maxLength={MAX_AUDIT_NOTES_LENGTH}
-              rows={6}
-              disabled={loading}
-              placeholder="Describe the stock changes you made"
-              className={textareaClassName}
-            />
-          </label>
-          <div className={styles.auditNotesMetaRow}>
-            <p className={error ? styles.auditNotesErrorText : styles.auditNotesHelperText}>
-              {error ?? "This note is required for updates."}
-            </p>
-            <span className={styles.auditNotesCharCount}>
-              {notes.length}/{MAX_AUDIT_NOTES_LENGTH}
-            </span>
-          </div>
-        </div>
-        <footer className={styles.stockBrowserModalFooter}>
-          <span className={styles.stockBrowserSelectionText}>
-            {loading ? "Saving updated opening stock..." : "Audit note will appear in record history."}
-          </span>
-          <div className={styles.stockBrowserModalActions}>
+    <ModalPortal>
+      <div className={styles.stockBrowserModalOverlay}>
+        <button
+          type="button"
+          className={styles.stockBrowserModalBackdrop}
+          onClick={onCancel}
+          disabled={loading}
+          aria-label="Close update audit notes"
+        />
+        <section
+          className={styles.auditNotesModalPanel}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Opening stock update audit notes"
+        >
+          <header className={styles.stockBrowserModalHeader}>
+            <div className={styles.stockBrowserModalTitleBlock}>
+              <p className={styles.stockBrowserModalEyebrow}>Audit Notes</p>
+              <h2 className={styles.stockBrowserModalTitle}>Update Opening Stock</h2>
+              <p className={styles.stockBrowserModalSubtitle}>{helperText}</p>
+            </div>
             <button
               type="button"
-              className={styles.stockBrowserSecondaryButton}
+              className={styles.stockBrowserModalCloseButton}
               onClick={onCancel}
               disabled={loading}
+              aria-label="Close update audit notes"
             >
-              Cancel
+              <FiX aria-hidden="true" />
             </button>
-            <button
-              type="button"
-              className={styles.stockBrowserPrimaryButton}
-              onClick={onConfirm}
-              disabled={loading}
-            >
-              {loading ? "Saving..." : "Save Update"}
-            </button>
+          </header>
+          <div className={styles.auditNotesModalBody}>
+            <label className={styles.auditNotesField}>
+              <span className={styles.auditNotesLabel}>Notes</span>
+              <textarea
+                ref={textareaRef}
+                value={notes}
+                onChange={(event) => onChange(event.target.value)}
+                maxLength={MAX_AUDIT_NOTES_LENGTH}
+                rows={6}
+                disabled={loading}
+                placeholder="Describe the stock changes you made"
+                className={textareaClassName}
+              />
+            </label>
+            <div className={styles.auditNotesMetaRow}>
+              <p className={error ? styles.auditNotesErrorText : styles.auditNotesHelperText}>
+                {error ?? "This note is required for updates."}
+              </p>
+              <span className={styles.auditNotesCharCount}>
+                {notes.length}/{MAX_AUDIT_NOTES_LENGTH}
+              </span>
+            </div>
           </div>
-        </footer>
-      </section>
-    </div>
+          <footer className={styles.stockBrowserModalFooter}>
+            <span className={styles.stockBrowserSelectionText}>
+              {loading ? "Saving updated opening stock..." : "Audit note will appear in record history."}
+            </span>
+            <div className={styles.stockBrowserModalActions}>
+              <button
+                type="button"
+                className={styles.stockBrowserSecondaryButton}
+                onClick={onCancel}
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.stockBrowserPrimaryButton}
+                onClick={onConfirm}
+                disabled={loading}
+              >
+                {loading ? "Saving..." : "Save Update"}
+              </button>
+            </div>
+          </footer>
+        </section>
+      </div>
+    </ModalPortal>
   );
 }

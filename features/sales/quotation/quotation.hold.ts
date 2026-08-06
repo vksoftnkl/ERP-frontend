@@ -20,13 +20,22 @@
  *    from `quotation` would come back with every Description cell blank.
  *
  * Every write stamps `kind` / `version` / `screen`; every read checks them, which
- * is also what keeps another screen's `SALE_ORDER` holds out of the picker (see
- * `QUOTATION_HOLD_DOC_TYPE` for why the two share a document type at all).
+ * is what keeps another screen's holds out of the picker AND what keeps carts
+ * parked before `QUOTATION_HOLD_DOC_TYPE` changed — they carry `SALE_ORDER` —
+ * still reachable, since the stamp is blind to the document type.
+ *
+ * Who may open a parked cart is NOT decided here. That is the server's edit
+ * lock: `/transaction-holds/:id/resume` moves the row `HELD → LOCKED` in one
+ * conditional update keyed on the device (`X-Device-Id`), so two operators
+ * racing the same cart serialize on the row and the loser is told which device
+ * has it. This module builds the bodies; `use-quotation-draft` drives the
+ * transitions.
  */
 import type { DocumentPricing } from "@/domain/pricing";
 import {
   DEFAULT_HOLD_DEVICE_TYPE,
   HOLD_DEVICE_TYPES,
+  HOLD_IN_USE_STATUSES,
   HOLD_NO_MAX_LENGTH,
   HOLD_NO_PREFIX,
   HOLD_UI_STATE_KIND,
@@ -41,6 +50,8 @@ import type {
   QuotationDraft,
   SaveQuotationDto,
   SaveTransactionHoldDto,
+  TransactionHoldConversion,
+  TransactionHoldLockScope,
   TransactionHoldPayload,
 } from "./quotation.types";
 import { toNullableText, toNumber } from "./quotation.utils";
@@ -193,7 +204,6 @@ export function buildHoldPayload(
   const summary: SaveTransactionHoldDto = {
     thDocType: QUOTATION_HOLD_DOC_TYPE,
     thHoldDate: now.toISOString(),
-    thStatus: "HELD",
     thUserId: actor.userId || null,
     // `thSessionId` is deliberately NOT sent, even though the screen has a
     // session id to hand. The hold service checks it against
@@ -216,10 +226,17 @@ export function buildHoldPayload(
     thModifiedBy: actor.userId || null,
   };
   if (options.holdId) {
+    // No `thStatus`. This cart is being re-parked, which means the row is
+    // LOCKED to this device — and clearing a lock is `/release`'s job, done
+    // right after this write: setting HELD through the CRUD route would leave
+    // `th_locked_by` pointing at a device that has moved on, and the next
+    // resume would hand the cart to nobody.
     return { thId: options.holdId, ...summary };
   }
   return {
     ...summary,
+    // A brand-new row starts free — nothing holds it until a resume does.
+    thStatus: "HELD",
     thCompanyId: draft.companyId,
     thBranchId: draft.branchId,
     // Guarded by the caller: `holdAccYearOf` returning null refuses the hold
@@ -232,48 +249,76 @@ export function buildHoldPayload(
   };
 }
 /**
- * Mark a hold as pulled back onto this screen.
+ * The tenant scope every lock transition is keyed on.
  *
- * `RESUMED` is not terminal, so the row survives the operator's session: a
- * browser that dies mid-edit leaves a recoverable hold rather than nothing. The
- * picker lists `HELD` only, which is what stops two operators resuming one cart.
+ * Read off the HOLD rather than the draft wherever one is to hand: a hold is
+ * scoped once, at create, and can never be re-scoped, so the row's own values
+ * are the ones the server will compare against. Sending the draft's instead
+ * would answer 404 (`no such hold here`) the moment the screen's context has
+ * moved on.
  */
-export function buildResumePayload(
-  hold: TransactionHoldPayload,
-  actor: SaveActor,
-  now: Date = new Date(),
-): SaveTransactionHoldDto {
-  return {
-    thId: hold.thId,
-    thStatus: "RESUMED",
-    thResumedBy: toNullableText(actor.userId, 50),
-    thResumedAt: now.toISOString(),
-    thResumeCount: (hold.thResumeCount ?? 0) + 1,
-    thModifiedBy: actor.userId || null,
-  };
+export function holdLockScope(
+  source: Pick<TransactionHoldPayload, "thCompanyId" | "thBranchId">,
+): TransactionHoldLockScope {
+  return { thCompanyId: source.thCompanyId, thBranchId: source.thBranchId };
 }
 /**
- * Close a hold that has become a real quotation.
+ * The document a saved quotation closes its hold onto.
  *
- * `CONVERTED` is terminal and the server enforces the pair: an id with no type
- * leaves the polymorphic reference unresolvable, and the status without both the
- * id and the instant is a 400. Nothing here is optional, so a save with no
- * document id must not call this.
+ * `th_converted_doc_id` is polymorphic — no foreign key — so the type travels
+ * with the id and neither half is optional; a save with no document id must not
+ * call this.
  */
-export function buildConvertedPayload(
-  holdId: string,
+export function holdConversionOf(
   document: { sqId: string; quoteRefno: string | null },
   actor: SaveActor,
-  now: Date = new Date(),
-): SaveTransactionHoldDto {
+): TransactionHoldConversion {
   return {
-    thId: holdId,
-    thStatus: "CONVERTED",
     thConvertedDocType: QUOTATION_HOLD_DOC_TYPE,
     thConvertedDocId: document.sqId,
     thConvertedNo: toNullableText(document.quoteRefno, 30),
-    thConvertedAt: now.toISOString(),
     thConvertedBy: toNullableText(actor.userId, 50),
-    thModifiedBy: actor.userId || null,
   };
+}
+/** Somebody has this cart open — `LOCKED` now, `RESUMED` before the lock existed. */
+export function isHoldInUse(hold: TransactionHoldPayload): boolean {
+  return (HOLD_IN_USE_STATUSES as readonly string[]).includes(hold.thStatus);
+}
+/**
+ * Who is on the cart, for the picker's "In use — …" line.
+ *
+ * `th_locked_by` is a DEVICE id and is the authority. A pre-lock `RESUMED` row
+ * has none — it recorded the *user* in `th_resumed_by` instead — so that stands
+ * in, and a row with neither still reads as in use rather than as free.
+ */
+export function holdHolderLabel(hold: TransactionHoldPayload): string {
+  const holder = (hold.thLockedBy ?? hold.thResumedBy ?? "").trim();
+  return holder || "another device";
+}
+/**
+ * What to tell the operator when a lock transition is refused.
+ *
+ * The three the server distinguishes, and they mean genuinely different things:
+ * 409 — somebody else has it, or it is finished with; 403 — this device is not
+ * the holder, so the lock is not its to spend; 404 — the row is gone. The
+ * server's own message names the device holding it, so it is preferred over
+ * anything invented here.
+ */
+export function holdLockMessage(error: unknown, holdNo: string): string {
+  const status = (error as { status?: number } | null)?.status;
+  const served = serverMessageOf(error);
+  if (status === 409) {
+    return served || `Hold ${holdNo} is already open on another device.`;
+  }
+  if (status === 403) {
+    return served || `Hold ${holdNo} is open on another device — take it over to continue here.`;
+  }
+  if (status === 404) {
+    return `Hold ${holdNo} no longer exists — it was discarded from the held list.`;
+  }
+  return served || `Hold ${holdNo} could not be updated.`;
+}
+function serverMessageOf(error: unknown): string {
+  const data = (error as { data?: { message?: unknown } } | null)?.data;
+  return typeof data?.message === "string" ? data.message.trim() : "";
 }

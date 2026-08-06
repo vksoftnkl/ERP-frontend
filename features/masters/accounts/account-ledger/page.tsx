@@ -13,6 +13,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
+import ModalPortal from "@/components/ui/modal-portal";
 import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons";
 import ReusableTable, {
   type ReusableTableBodyContextMenuPayload,
@@ -2459,317 +2460,324 @@ export default function AccountLedgerMasterPage() {
         </div>
       </div>
       {gridSettingsMode !== null ? (
-        <div
-          className={dynamicFormStyles.overlay}
-          style={{
-            "--erp-modal-accent": "var(--primary, #7b1515)",
-            "--erp-modal-accent-soft-ring": "rgba(123, 21, 21, 0.2)",
-            "--erp-modal-overlay-z-index": Z_MODAL_NESTED,
-          } as CSSProperties}
-        >
+        <ModalPortal>
           <div
-            className={dynamicFormStyles.backdrop}
-            role="presentation"
-            onMouseDown={closeGridSettingsModal}
-          />
-          <form
-            className={`${dynamicFormStyles.panel} ${styles.gridSettingsDialog}`}
-            aria-label={gridSettingsTitle}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveGridSettings();
-            }}
+            className={dynamicFormStyles.overlay}
+            style={{
+              // Portaled to <body>, so `--primary` resolves from :root (the
+              // brand maroon every other modal uses) rather than the page
+              // skin's own override.
+              "--erp-modal-accent": "var(--primary, #7b1515)",
+              "--erp-modal-accent-soft-ring": "rgba(123, 21, 21, 0.2)",
+              "--erp-modal-overlay-z-index": Z_MODAL_NESTED,
+            } as CSSProperties}
           >
-            <header className={`${dynamicFormStyles.header} erp-ms-modal-header`}>
-              <div className={dynamicFormStyles.headerRow}>
-                <div className={dynamicFormStyles.headerIntro}>
-                  <span className={`${dynamicFormStyles.headerIcon} erp-ms-modal-icon`} aria-hidden="true">
-                    <FiSearch />
-                  </span>
-                  <div className={dynamicFormStyles.headerText}>
-                    <h2 className={dynamicFormStyles.headerTitle}>
-                      {gridSettingsTitle}
-                    </h2>
-                    <p className={`${dynamicFormStyles.headerDescription} erp-ms-modal-subtitle`}>
-                      Select columns for this grid setting.
-                    </p>
+            <div
+              className={dynamicFormStyles.backdrop}
+              role="presentation"
+              onMouseDown={closeGridSettingsModal}
+            />
+            <form
+              className={`${dynamicFormStyles.panel} ${styles.gridSettingsDialog}`}
+              aria-label={gridSettingsTitle}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveGridSettings();
+              }}
+            >
+              <header className={`${dynamicFormStyles.header} erp-ms-modal-header`}>
+                <div className={dynamicFormStyles.headerRow}>
+                  <div className={dynamicFormStyles.headerIntro}>
+                    <span className={`${dynamicFormStyles.headerIcon} erp-ms-modal-icon`} aria-hidden="true">
+                      <FiSearch />
+                    </span>
+                    <div className={dynamicFormStyles.headerText}>
+                      <h2 className={dynamicFormStyles.headerTitle}>
+                        {gridSettingsTitle}
+                      </h2>
+                      <p className={`${dynamicFormStyles.headerDescription} erp-ms-modal-subtitle`}>
+                        Select columns for this grid setting.
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <button
-                  type="button"
-                  className={dynamicFormStyles.closeButton}
-                  onClick={closeGridSettingsModal}
-                  disabled={gridSettingsSaving}
-                  aria-label={gridSettingsCloseLabel}
-                >
-                  x
-                </button>
-              </div>
-            </header>
-            <div className={styles.gridSettingsBody}>
-              {gridSettingsColumns.length > 0 ? (
-                gridSettingsColumns.map((column) => {
-                  const serialId = column.serialId ?? "";
-                  return (
-                    <label key={serialId} className={styles.gridSettingsRow}>
-                      <input
-                        type="checkbox"
-                        checked={gridSettingsSelections[serialId] === true}
-                        disabled={gridSettingsSaving}
-                        onChange={(event) =>
-                          handleGridSettingsSelectionChange(
-                            serialId,
-                            event.target.checked,
-                          )
-                        }
-                      />
-                      <span>{column.columnName ?? column.header}</span>
-                    </label>
-                  );
-                })
-              ) : (
-                <p className={styles.gridSettingsEmpty}>
-                  No saved grid columns found.
-                </p>
-              )}
-            </div>
-            <footer className={`${dynamicFormStyles.footer} erp-ms-modal-footer`}>
-              <div className={`${dynamicFormStyles.footerActions} erp-ms-modal-footer-actions`}>
-                <button
-                  type="submit"
-                  className={dynamicFormStyles.submitButton}
-                  disabled={
-                    gridSettingsSaving ||
-                    accountLedgerGridId === null ||
-                    gridSettingsColumns.length === 0
-                  }
-                >
-                  <span className={dynamicFormStyles.footerButtonIcon} aria-hidden="true">
-                    OK
-                  </span>
-                  <span>{gridSettingsSaving ? "Saving..." : "Save"}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`${dynamicFormStyles.cancelButton} erp-ms-modal-cancel`}
-                  onClick={closeGridSettingsModal}
-                  disabled={gridSettingsSaving}
-                >
-                  <span className={dynamicFormStyles.footerButtonIcon} aria-hidden="true">
-                    x
-                  </span>
-                  <span>Cancel</span>
-                </button>
-              </div>
-            </footer>
-          </form>
-        </div>
-      ) : null}
-      {isFormModalOpen ? (
-        <div className={`${dynamicFormStyles.overlay} erp-ms-modal-overlay`} style={modalStyle}>
-          <div
-            className={dynamicFormStyles.backdrop}
-            onClick={saveLoading ? undefined : closeModal}
-            aria-hidden
-          />
-          <div
-            className={`${dynamicFormStyles.panel} erp-ms-modal`}
-            role="dialog"
-            aria-modal="true"
-            style={modalPanelStyle}
-          >
-            <header className={`${dynamicFormStyles.header} erp-ms-modal-header`}>
-              <div className={dynamicFormStyles.headerRow}>
-                <div className={dynamicFormStyles.headerIntro}>
-                  <span className={`${dynamicFormStyles.headerIcon} erp-ms-modal-icon`} aria-hidden="true">
-                    <MasterIcon name="account_ledger_master" />
-                  </span>
-                  <div className={dynamicFormStyles.headerText}>
-                    <h2 className={`${dynamicFormStyles.headerTitle} erp-ms-modal-title`}>{modalTitle}</h2>
-                    <p className={`${dynamicFormStyles.headerDescription} erp-ms-modal-subtitle`}>
-                      {modalDescription}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className={`${dynamicFormStyles.closeButton} erp-ms-modal-close`}
-                  onClick={closeModal}
-                  disabled={saveLoading}
-                  aria-label="Close modal"
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
-                    <path
-                      d="M6 18 18 6M6 6l12 12"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </header>
-            <div className={`${dynamicFormStyles.scrollArea} erp-ms-modal-body`}>
-              {visibleLedgerFormSections.length > 0 ? (
-                <div
-                  className={`${dynamicFormStyles.sectionTabs} erp-ms-modal-tabs`}
-                  role="tablist"
-                  aria-label="Ledger form sections"
-                >
-                  {visibleLedgerFormSections.map((section, sectionIndex) => (
-                    <button
-                      key={section.key}
-                      ref={(element) => {
-                        sectionTabRefs.current[section.key] = element;
-                      }}
-                      type="button"
-                      role="tab"
-                      aria-selected={section.key === activeSectionKey}
-                      aria-controls={`${modalFormId}-${section.key}-panel`}
-                      id={`${modalFormId}-${section.key}-tab`}
-                      tabIndex={section.key === activeSectionKey ? 0 : -1}
-                      className={`${dynamicFormStyles.sectionTab} erp-ms-modal-tab ${
-                        section.key === activeSectionKey
-                          ? dynamicFormStyles.sectionTabActive
-                          : ""
-                      }`}
-                      onClick={() => setActiveSectionKey(section.key)}
-                      onKeyDown={(event) =>
-                        handleSectionTabKeyDown(event, sectionIndex, section.key)
-                      }
-                    >
-                      {section.title}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              <form
-                id={modalFormId}
-                ref={formRef}
-                className={dynamicFormStyles.formGrid}
-                onSubmit={handleModalSubmit}
-                onKeyDown={handleLedgerFieldArrowNavigation}
-                noValidate
-                autoComplete="off"
-                style={{
-                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                  rowGap: "0.75rem",
-                  columnGap: "2rem",
-                }}
-              >
-                {activeLedgerSection ? (
-                  <div
-                    id={`${modalFormId}-${activeLedgerSection.key}-panel`}
-                    role="tabpanel"
-                    aria-labelledby={`${modalFormId}-${activeLedgerSection.key}-tab`}
-                    className={dynamicFormStyles.sectionFields}
+                  <button
+                    type="button"
+                    className={dynamicFormStyles.closeButton}
+                    onClick={closeGridSettingsModal}
+                    disabled={gridSettingsSaving}
+                    aria-label={gridSettingsCloseLabel}
                   >
-                    {activeLedgerSectionFields.map((field) => {
-                      // Inline sub-heading row (C++ inline heading).
-                      if (field.type === "subheading") {
-                        return (
-                          <div
-                            key={field.name}
-                            className={`${dynamicFormStyles.subheadingField} erp-ms-modal-band`}
-                          >
-                            <span className={`${dynamicFormStyles.subheading} erp-ms-modal-band-title`}>
-                              {field.label}
-                            </span>
-                          </div>
-                        );
-                      }
-                      // Inline bank-accounts grid (C++ NexBankGrid under Identity).
-                      if (field.name === BANK_EDITOR_FIELD_NAME) {
-                        return (
-                          <div key={field.name} className={dynamicFormStyles.fieldWide}>
-                            <BankAccountsEditor
-                              rows={bankAccounts}
-                              disabled={isReadOnlyMode || detailsLoading || saveLoading}
-                              invalidRowKey={bankAccountError?.rowKey ?? null}
-                              invalidField={bankAccountError?.field ?? null}
-                              onAddRow={handleBankAccountAdd}
-                              onChangeRow={handleBankAccountChange}
-                              onRemoveRow={handleBankAccountRemove}
-                              onSetDefault={handleBankAccountSetDefault}
-                            />
-                          </div>
-                        );
-                      }
-                      return (
-                        <LedgerFieldRenderer
-                          key={field.name}
-                          // Narrowing cast, not a bypass: LedgerFormField is
-                          // ERPDynamicModalField plus the "bank-editor"
-                          // sentinel, and that one variant already returned
-                          // above. TypeScript cannot carry that narrowing
-                          // across the `field.name` check.
-                          field={field as ERPDynamicModalField}
-                          formValues={formValues}
-                          isReadOnlyMode={isReadOnlyMode}
-                          detailsLoading={detailsLoading}
-                          saveLoading={saveLoading}
-                          validationFieldName={validationFieldName}
-                          openSearchField={openSearchField}
-                          searchQueries={searchQueries}
-                          searchActiveOptionIndex={searchActiveOptionIndex}
-                          handleFieldChange={handleFieldChange}
-                          handleCheckboxKeyDown={handleCheckboxKeyDown}
-                          handleSearchableFieldInput={handleSearchableFieldInput}
-                          handleSearchableFieldKeyDown={handleSearchableFieldKeyDown}
-                          handleSearchableFieldPointerToggle={
-                            handleSearchableFieldPointerToggle
+                    x
+                  </button>
+                </div>
+              </header>
+              <div className={styles.gridSettingsBody}>
+                {gridSettingsColumns.length > 0 ? (
+                  gridSettingsColumns.map((column) => {
+                    const serialId = column.serialId ?? "";
+                    return (
+                      <label key={serialId} className={styles.gridSettingsRow}>
+                        <input
+                          type="checkbox"
+                          checked={gridSettingsSelections[serialId] === true}
+                          disabled={gridSettingsSaving}
+                          onChange={(event) =>
+                            handleGridSettingsSelectionChange(
+                              serialId,
+                              event.target.checked,
+                            )
                           }
-                          handleSearchableOptionSelect={handleSearchableOptionSelect}
-                          searchInputRefs={searchInputRefs}
-                          serverSearchFieldNames={LEDGER_DROPDOWN_FIELD_NAMES}
-                          loadingFieldNames={loadingDropdownFieldNames}
-                          lockedFieldNames={LEDGER_DERIVED_LOCKED_FIELDS}
                         />
-                      );
-                    })}
-                  </div>
-                ) : null}
-                {effectiveModalError ? (
-                  <p className={dynamicFormStyles.submitError} role="alert">
-                    {effectiveModalError}
+                        <span>{column.columnName ?? column.header}</span>
+                      </label>
+                    );
+                  })
+                ) : (
+                  <p className={styles.gridSettingsEmpty}>
+                    No saved grid columns found.
                   </p>
-                ) : null}
-              </form>
-            </div>
-            <footer className={`${dynamicFormStyles.footer} erp-ms-modal-footer`}>
-              <p className="erp-ms-modal-hint" aria-hidden="true">
-                <kbd>Ctrl+S</kbd>: Save <span>|</span> <kbd>Esc</kbd>: Cancel
-              </p>
-              <div className={`${dynamicFormStyles.footerActions} erp-ms-modal-footer-actions`}>
-                <button
-                  type="button"
-                  className={`${dynamicFormStyles.cancelButton} erp-ms-modal-cancel`}
-                  onClick={closeModal}
-                  disabled={saveLoading}
-                >
-                  {isReadOnlyMode ? "Close" : "Cancel"}
-                </button>
-                {!isReadOnlyMode ? (
+                )}
+              </div>
+              <footer className={`${dynamicFormStyles.footer} erp-ms-modal-footer`}>
+                <div className={`${dynamicFormStyles.footerActions} erp-ms-modal-footer-actions`}>
                   <button
                     type="submit"
-                    form={modalFormId}
-                    className={`${dynamicFormStyles.submitButton} erp-ms-modal-save`}
-                    disabled={saveLoading || detailsLoading}
+                    className={dynamicFormStyles.submitButton}
+                    disabled={
+                      gridSettingsSaving ||
+                      accountLedgerGridId === null ||
+                      gridSettingsColumns.length === 0
+                    }
                   >
-                    {saveLoading
-                      ? modalMode === "update"
-                        ? "Updating..."
-                        : "Saving..."
-                      : modalMode === "update"
-                        ? "Update"
-                        : "Save"}
+                    <span className={dynamicFormStyles.footerButtonIcon} aria-hidden="true">
+                      OK
+                    </span>
+                    <span>{gridSettingsSaving ? "Saving..." : "Save"}</span>
                   </button>
-                ) : null}
-              </div>
-            </footer>
+                  <button
+                    type="button"
+                    className={`${dynamicFormStyles.cancelButton} erp-ms-modal-cancel`}
+                    onClick={closeGridSettingsModal}
+                    disabled={gridSettingsSaving}
+                  >
+                    <span className={dynamicFormStyles.footerButtonIcon} aria-hidden="true">
+                      x
+                    </span>
+                    <span>Cancel</span>
+                  </button>
+                </div>
+              </footer>
+            </form>
           </div>
-        </div>
+        </ModalPortal>
+      ) : null}
+      {isFormModalOpen ? (
+        <ModalPortal>
+          <div className={`${dynamicFormStyles.overlay} erp-ms-modal-overlay`} style={modalStyle}>
+            <div
+              className={dynamicFormStyles.backdrop}
+              onClick={saveLoading ? undefined : closeModal}
+              aria-hidden
+            />
+            <div
+              className={`${dynamicFormStyles.panel} erp-ms-modal`}
+              role="dialog"
+              aria-modal="true"
+              style={modalPanelStyle}
+            >
+              <header className={`${dynamicFormStyles.header} erp-ms-modal-header`}>
+                <div className={dynamicFormStyles.headerRow}>
+                  <div className={dynamicFormStyles.headerIntro}>
+                    <span className={`${dynamicFormStyles.headerIcon} erp-ms-modal-icon`} aria-hidden="true">
+                      <MasterIcon name="account_ledger_master" />
+                    </span>
+                    <div className={dynamicFormStyles.headerText}>
+                      <h2 className={`${dynamicFormStyles.headerTitle} erp-ms-modal-title`}>{modalTitle}</h2>
+                      <p className={`${dynamicFormStyles.headerDescription} erp-ms-modal-subtitle`}>
+                        {modalDescription}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`${dynamicFormStyles.closeButton} erp-ms-modal-close`}
+                    onClick={closeModal}
+                    disabled={saveLoading}
+                    aria-label="Close modal"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+                      <path
+                        d="M6 18 18 6M6 6l12 12"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </header>
+              <div className={`${dynamicFormStyles.scrollArea} erp-ms-modal-body`}>
+                {visibleLedgerFormSections.length > 0 ? (
+                  <div
+                    className={`${dynamicFormStyles.sectionTabs} erp-ms-modal-tabs`}
+                    role="tablist"
+                    aria-label="Ledger form sections"
+                  >
+                    {visibleLedgerFormSections.map((section, sectionIndex) => (
+                      <button
+                        key={section.key}
+                        ref={(element) => {
+                          sectionTabRefs.current[section.key] = element;
+                        }}
+                        type="button"
+                        role="tab"
+                        aria-selected={section.key === activeSectionKey}
+                        aria-controls={`${modalFormId}-${section.key}-panel`}
+                        id={`${modalFormId}-${section.key}-tab`}
+                        tabIndex={section.key === activeSectionKey ? 0 : -1}
+                        className={`${dynamicFormStyles.sectionTab} erp-ms-modal-tab ${
+                          section.key === activeSectionKey
+                            ? dynamicFormStyles.sectionTabActive
+                            : ""
+                        }`}
+                        onClick={() => setActiveSectionKey(section.key)}
+                        onKeyDown={(event) =>
+                          handleSectionTabKeyDown(event, sectionIndex, section.key)
+                        }
+                      >
+                        {section.title}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <form
+                  id={modalFormId}
+                  ref={formRef}
+                  className={dynamicFormStyles.formGrid}
+                  onSubmit={handleModalSubmit}
+                  onKeyDown={handleLedgerFieldArrowNavigation}
+                  noValidate
+                  autoComplete="off"
+                  style={{
+                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    rowGap: "0.75rem",
+                    columnGap: "2rem",
+                  }}
+                >
+                  {activeLedgerSection ? (
+                    <div
+                      id={`${modalFormId}-${activeLedgerSection.key}-panel`}
+                      role="tabpanel"
+                      aria-labelledby={`${modalFormId}-${activeLedgerSection.key}-tab`}
+                      className={dynamicFormStyles.sectionFields}
+                    >
+                      {activeLedgerSectionFields.map((field) => {
+                        // Inline sub-heading row (C++ inline heading).
+                        if (field.type === "subheading") {
+                          return (
+                            <div
+                              key={field.name}
+                              className={`${dynamicFormStyles.subheadingField} erp-ms-modal-band`}
+                            >
+                              <span className={`${dynamicFormStyles.subheading} erp-ms-modal-band-title`}>
+                                {field.label}
+                              </span>
+                            </div>
+                          );
+                        }
+                        // Inline bank-accounts grid (C++ NexBankGrid under Identity).
+                        if (field.name === BANK_EDITOR_FIELD_NAME) {
+                          return (
+                            <div key={field.name} className={dynamicFormStyles.fieldWide}>
+                              <BankAccountsEditor
+                                rows={bankAccounts}
+                                disabled={isReadOnlyMode || detailsLoading || saveLoading}
+                                invalidRowKey={bankAccountError?.rowKey ?? null}
+                                invalidField={bankAccountError?.field ?? null}
+                                onAddRow={handleBankAccountAdd}
+                                onChangeRow={handleBankAccountChange}
+                                onRemoveRow={handleBankAccountRemove}
+                                onSetDefault={handleBankAccountSetDefault}
+                              />
+                            </div>
+                          );
+                        }
+                        return (
+                          <LedgerFieldRenderer
+                            key={field.name}
+                            // Narrowing cast, not a bypass: LedgerFormField is
+                            // ERPDynamicModalField plus the "bank-editor"
+                            // sentinel, and that one variant already returned
+                            // above. TypeScript cannot carry that narrowing
+                            // across the `field.name` check.
+                            field={field as ERPDynamicModalField}
+                            formValues={formValues}
+                            isReadOnlyMode={isReadOnlyMode}
+                            detailsLoading={detailsLoading}
+                            saveLoading={saveLoading}
+                            validationFieldName={validationFieldName}
+                            openSearchField={openSearchField}
+                            searchQueries={searchQueries}
+                            searchActiveOptionIndex={searchActiveOptionIndex}
+                            handleFieldChange={handleFieldChange}
+                            handleCheckboxKeyDown={handleCheckboxKeyDown}
+                            handleSearchableFieldInput={handleSearchableFieldInput}
+                            handleSearchableFieldKeyDown={handleSearchableFieldKeyDown}
+                            handleSearchableFieldPointerToggle={
+                              handleSearchableFieldPointerToggle
+                            }
+                            handleSearchableOptionSelect={handleSearchableOptionSelect}
+                            searchInputRefs={searchInputRefs}
+                            serverSearchFieldNames={LEDGER_DROPDOWN_FIELD_NAMES}
+                            loadingFieldNames={loadingDropdownFieldNames}
+                            lockedFieldNames={LEDGER_DERIVED_LOCKED_FIELDS}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  {effectiveModalError ? (
+                    <p className={dynamicFormStyles.submitError} role="alert">
+                      {effectiveModalError}
+                    </p>
+                  ) : null}
+                </form>
+              </div>
+              <footer className={`${dynamicFormStyles.footer} erp-ms-modal-footer`}>
+                <p className="erp-ms-modal-hint" aria-hidden="true">
+                  <kbd>Ctrl+S</kbd>: Save <span>|</span> <kbd>Esc</kbd>: Cancel
+                </p>
+                <div className={`${dynamicFormStyles.footerActions} erp-ms-modal-footer-actions`}>
+                  <button
+                    type="button"
+                    className={`${dynamicFormStyles.cancelButton} erp-ms-modal-cancel`}
+                    onClick={closeModal}
+                    disabled={saveLoading}
+                  >
+                    {isReadOnlyMode ? "Close" : "Cancel"}
+                  </button>
+                  {!isReadOnlyMode ? (
+                    <button
+                      type="submit"
+                      form={modalFormId}
+                      className={`${dynamicFormStyles.submitButton} erp-ms-modal-save`}
+                      disabled={saveLoading || detailsLoading}
+                    >
+                      {saveLoading
+                        ? modalMode === "update"
+                          ? "Updating..."
+                          : "Saving..."
+                        : modalMode === "update"
+                          ? "Update"
+                          : "Save"}
+                    </button>
+                  ) : null}
+                </div>
+              </footer>
+            </div>
+          </div>
+        </ModalPortal>
       ) : null}
       <DeleteConfirmModal
         isOpen={pendingDeleteRow !== null}

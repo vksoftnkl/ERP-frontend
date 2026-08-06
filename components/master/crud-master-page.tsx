@@ -32,6 +32,7 @@ import {
   type ERPDynamicModalSubmitPayload,
   type ERPDynamicModalVariant,
 } from "@/components/design-system/ui/dynamic-modal-form";
+import ModalPortal from "@/components/ui/modal-portal";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { MasterIcon } from "@/components/design-system/icons/master-icons";
 import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons";
@@ -4055,114 +4056,116 @@ export default function CrudMasterPage({
         </main>
       ) : null}
       {!hideListPage && gridSettingsMode !== null ? (
-        <div
-          className={dynamicModalStyles.overlay}
-          style={{
-            "--erp-modal-accent": "var(--primary, #7b1515)",
-            "--erp-modal-accent-soft-ring": "rgba(123, 21, 21, 0.2)",
-            "--erp-modal-overlay-z-index": Z_MODAL_NESTED,
-          } as CSSProperties}
-        >
+        <ModalPortal>
           <div
-            className={dynamicModalStyles.backdrop}
-            role="presentation"
-            onMouseDown={closeGridSettingsModal}
-          />
-          <form
-            className={`${dynamicModalStyles.panel} ${styles.gridSettingsDialog}`}
-            aria-label={gridSettingsTitle}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveGridSettings();
-            }}
+            className={dynamicModalStyles.overlay}
+            style={{
+              "--erp-modal-accent": "var(--primary, #7b1515)",
+              "--erp-modal-accent-soft-ring": "rgba(123, 21, 21, 0.2)",
+              "--erp-modal-overlay-z-index": Z_MODAL_NESTED,
+            } as CSSProperties}
           >
-            <header className={dynamicModalStyles.header}>
-              <div className={dynamicModalStyles.headerRow}>
-                <div className={dynamicModalStyles.headerIntro}>
-                  <span className={dynamicModalStyles.headerIcon} aria-hidden="true">
-                    <FiSearch />
-                  </span>
-                  <div className={dynamicModalStyles.headerText}>
-                    <h2 className={dynamicModalStyles.headerTitle}>
-                      {gridSettingsTitle}
-                    </h2>
-                    <p className={dynamicModalStyles.headerDescription}>
-                      Select columns for this grid setting.
-                    </p>
+            <div
+              className={dynamicModalStyles.backdrop}
+              role="presentation"
+              onMouseDown={closeGridSettingsModal}
+            />
+            <form
+              className={`${dynamicModalStyles.panel} ${styles.gridSettingsDialog}`}
+              aria-label={gridSettingsTitle}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveGridSettings();
+              }}
+            >
+              <header className={dynamicModalStyles.header}>
+                <div className={dynamicModalStyles.headerRow}>
+                  <div className={dynamicModalStyles.headerIntro}>
+                    <span className={dynamicModalStyles.headerIcon} aria-hidden="true">
+                      <FiSearch />
+                    </span>
+                    <div className={dynamicModalStyles.headerText}>
+                      <h2 className={dynamicModalStyles.headerTitle}>
+                        {gridSettingsTitle}
+                      </h2>
+                      <p className={dynamicModalStyles.headerDescription}>
+                        Select columns for this grid setting.
+                      </p>
+                    </div>
                   </div>
-                </div>
-              <button
-                type="button"
-                className={dynamicModalStyles.closeButton}
-                onClick={closeGridSettingsModal}
-                disabled={gridSettingsSaving}
-                aria-label={gridSettingsCloseLabel}
-              >
-                x
-              </button>
-              </div>
-            </header>
-            <div className={styles.gridSettingsBody}>
-              {gridSettingsColumns.length > 0 ? (
-                gridSettingsColumns.map((column) => {
-                  const serialId = column.serialId ?? "";
-                  return (
-                    <label
-                      key={serialId}
-                      className={styles.gridSettingsRow}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={gridSettingsSelections[serialId] === true}
-                        disabled={gridSettingsSaving}
-                        onChange={(event) =>
-                          handleGridSettingsSelectionChange(
-                            serialId,
-                            event.target.checked,
-                          )
-                        }
-                      />
-                      <span>{column.columnName ?? column.header}</span>
-                    </label>
-                  );
-                })
-              ) : (
-                <p className={styles.gridSettingsEmpty}>
-                  No saved grid columns found.
-                </p>
-              )}
-            </div>
-            <footer className={dynamicModalStyles.footer}>
-              <div className={dynamicModalStyles.footerActions}>
-              <button
-                type="submit"
-                className={dynamicModalStyles.submitButton}
-                disabled={
-                  gridSettingsSaving ||
-                  gridId === null ||
-                  gridSettingsColumns.length === 0
-                }
-              >
-                <span className={dynamicModalStyles.footerButtonIcon} aria-hidden="true">
-                  OK
-                </span>
-                <span>{gridSettingsSaving ? "Saving..." : "Save"}</span>
-              </button>
-              <button
-                type="button"
-                className={dynamicModalStyles.cancelButton}
-                onClick={closeGridSettingsModal}
-                disabled={gridSettingsSaving}
-              >
-                <span className={dynamicModalStyles.footerButtonIcon} aria-hidden="true">
+                <button
+                  type="button"
+                  className={dynamicModalStyles.closeButton}
+                  onClick={closeGridSettingsModal}
+                  disabled={gridSettingsSaving}
+                  aria-label={gridSettingsCloseLabel}
+                >
                   x
-                </span>
-                <span>Cancel</span>
-              </button>
+                </button>
+                </div>
+              </header>
+              <div className={styles.gridSettingsBody}>
+                {gridSettingsColumns.length > 0 ? (
+                  gridSettingsColumns.map((column) => {
+                    const serialId = column.serialId ?? "";
+                    return (
+                      <label
+                        key={serialId}
+                        className={styles.gridSettingsRow}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={gridSettingsSelections[serialId] === true}
+                          disabled={gridSettingsSaving}
+                          onChange={(event) =>
+                            handleGridSettingsSelectionChange(
+                              serialId,
+                              event.target.checked,
+                            )
+                          }
+                        />
+                        <span>{column.columnName ?? column.header}</span>
+                      </label>
+                    );
+                  })
+                ) : (
+                  <p className={styles.gridSettingsEmpty}>
+                    No saved grid columns found.
+                  </p>
+                )}
               </div>
-            </footer>
-          </form>
-        </div>
+              <footer className={dynamicModalStyles.footer}>
+                <div className={dynamicModalStyles.footerActions}>
+                <button
+                  type="submit"
+                  className={dynamicModalStyles.submitButton}
+                  disabled={
+                    gridSettingsSaving ||
+                    gridId === null ||
+                    gridSettingsColumns.length === 0
+                  }
+                >
+                  <span className={dynamicModalStyles.footerButtonIcon} aria-hidden="true">
+                    OK
+                  </span>
+                  <span>{gridSettingsSaving ? "Saving..." : "Save"}</span>
+                </button>
+                <button
+                  type="button"
+                  className={dynamicModalStyles.cancelButton}
+                  onClick={closeGridSettingsModal}
+                  disabled={gridSettingsSaving}
+                >
+                  <span className={dynamicModalStyles.footerButtonIcon} aria-hidden="true">
+                    x
+                  </span>
+                  <span>Cancel</span>
+                </button>
+                </div>
+              </footer>
+            </form>
+          </div>
+        </ModalPortal>
       ) : null}
       <ERPDynamicModalForm
         title={

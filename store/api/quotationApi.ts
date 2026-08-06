@@ -14,6 +14,7 @@ import {
   CHARGES_GET_ENDPOINT,
   CHARGE_MODULE_SALES,
   COMPANY_GET_ENDPOINT,
+  HOLD_DEVICE_ID_HEADER,
   CONFIGURED_GRID_RUN_ENDPOINT,
   CUSTOMER_DETAIL_ENDPOINT,
   DROPDOWN_RUN_ENDPOINT,
@@ -32,6 +33,7 @@ import {
   TRANSACTION_HOLD_GET_ENDPOINT,
   TRANSACTION_HOLD_LIST_ENDPOINT,
   TRANSACTION_HOLD_SAVE_ENDPOINT,
+  transactionHoldLockEndpoint,
   UI_TABLE_COLUMN_WIDTH_ENDPOINT,
   UI_TABLE_MASTERS_ENDPOINT,
   UI_TABLE_VISIBILITY_ENDPOINT,
@@ -50,6 +52,8 @@ import type {
   QuotationPayload,
   SaveQuotationDto,
   SaveTransactionHoldDto,
+  TransactionHoldConversion,
+  TransactionHoldLockScope,
   TransactionHoldPayload,
   UiTableColumnRow,
 } from "@/features/sales/quotation/quotation.types";
@@ -85,6 +89,19 @@ export type QuotationListQuery = {
   search?: string;
   sort_by?: string;
   sort_dir?: "asc" | "desc";
+};
+/**
+ * What every lock transition needs: the hold, the device asking (which travels
+ * as a header, not a body field) and the tenant scope the server keys its
+ * conditional update on.
+ */
+export type HoldLockArgs = {
+  thId: string;
+  deviceId: string;
+  scope: TransactionHoldLockScope;
+};
+export type HoldConvertArgs = HoldLockArgs & {
+  conversion: TransactionHoldConversion;
 };
 export const quotationApi = baseApi.injectEndpoints({
   overrideExisting: true,
@@ -166,6 +183,69 @@ export const quotationApi = baseApi.injectEndpoints({
       }),
       providesTags: ["TransactionHold"],
       keepUnusedDataFor: 0,
+    }),
+    /**
+     * Take the edit lock — `HELD` → `LOCKED`, held by `deviceId`.
+     *
+     * A 409 means another device has it (the message names which); the same
+     * device asking twice is a no-op that answers 200, so a retried request or a
+     * double-press costs nothing. The response carries `thUiState`, which is the
+     * cart to redraw.
+     */
+    resumeTransactionHold: builder.mutation<TransactionHoldPayload, HoldLockArgs>({
+      query: ({ thId, deviceId, scope }) => ({
+        url: transactionHoldLockEndpoint(thId, "resume"),
+        method: "POST",
+        headers: { [HOLD_DEVICE_ID_HEADER]: deviceId },
+        body: scope,
+      }),
+      transformResponse: (payload: ApiSuccessResponse<TransactionHoldPayload>) => payload.data,
+      invalidatesTags: ["TransactionHold"],
+    }),
+    /** Give the lock back — `LOCKED` → `HELD`. 403 if this device is not the holder. */
+    releaseTransactionHold: builder.mutation<TransactionHoldPayload, HoldLockArgs>({
+      query: ({ thId, deviceId, scope }) => ({
+        url: transactionHoldLockEndpoint(thId, "release"),
+        method: "POST",
+        headers: { [HOLD_DEVICE_ID_HEADER]: deviceId },
+        body: scope,
+      }),
+      transformResponse: (payload: ApiSuccessResponse<TransactionHoldPayload>) => payload.data,
+      invalidatesTags: ["TransactionHold"],
+    }),
+    /**
+     * Take the lock off whichever device holds it.
+     *
+     * The escape hatch, not an alternative release: nothing times a lock out, so
+     * a browser that died mid-edit would otherwise strand its cart for good.
+     * `deviceId` is this device — the one doing the taking — and the server
+     * records both sides. It also clears the pre-lock `RESUMED` rows, which
+     * nothing else can move.
+     */
+    forceReleaseTransactionHold: builder.mutation<TransactionHoldPayload, HoldLockArgs>({
+      query: ({ thId, deviceId, scope }) => ({
+        url: transactionHoldLockEndpoint(thId, "force-release"),
+        method: "POST",
+        headers: { [HOLD_DEVICE_ID_HEADER]: deviceId },
+        body: scope,
+      }),
+      transformResponse: (payload: ApiSuccessResponse<TransactionHoldPayload>) => payload.data,
+      invalidatesTags: ["TransactionHold"],
+    }),
+    /**
+     * Close the hold onto the document it became — `LOCKED` → `CONVERTED`, which
+     * is terminal. Only the holding device may, and afterwards nothing can
+     * resume the cart and bill it twice.
+     */
+    convertTransactionHold: builder.mutation<TransactionHoldPayload, HoldConvertArgs>({
+      query: ({ thId, deviceId, scope, conversion }) => ({
+        url: transactionHoldLockEndpoint(thId, "convert"),
+        method: "POST",
+        headers: { [HOLD_DEVICE_ID_HEADER]: deviceId },
+        body: { ...scope, ...conversion },
+      }),
+      transformResponse: (payload: ApiSuccessResponse<TransactionHoldPayload>) => payload.data,
+      invalidatesTags: ["TransactionHold"],
     }),
     getTransactionHold: builder.query<TransactionHoldPayload, string>({
       query: (thId) => ({ url: TRANSACTION_HOLD_GET_ENDPOINT, params: { thId } }),
@@ -471,6 +551,10 @@ export const {
   useListTransactionHoldsQuery,
   useLazyGetTransactionHoldQuery,
   useDeleteTransactionHoldMutation,
+  useResumeTransactionHoldMutation,
+  useReleaseTransactionHoldMutation,
+  useForceReleaseTransactionHoldMutation,
+  useConvertTransactionHoldMutation,
   useListQuotationsQuery,
   useLazyListQuotationsQuery,
   useGetQuotationGridLayoutQuery,

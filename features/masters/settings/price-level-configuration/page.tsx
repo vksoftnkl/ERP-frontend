@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApi } from "@/hooks/useApi";
+import ModalPortal from "@/components/ui/modal-portal";
 import styles from "./price-level-configuration.module.scss";
 // Settings -> Configuration -> Price Level Configuration.
 // Loads data from GET /price-level-masters/get and saves via PATCH /price-level-masters/bulk
@@ -136,117 +137,119 @@ export default function PriceLevelConfigurationPage() {
           </button>
         </div>
       ) : (
-        <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Price Level">
-          <button
-            type="button"
-            className={styles.backdrop}
-            aria-label="Close Price Level"
-            onClick={() => setOpen(false)}
-          />
-          <div ref={modalRef} className={styles.modal}>
-            <div className={styles.header}>
-              <h2 className={styles.title}>Price Level</h2>
-              <button
-                type="button"
-                className={styles.closeButton}
-                aria-label="Close"
-                onClick={() => setOpen(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <div className={styles.body}>
-              <div className={styles.gridWrap}>
-                <table className={styles.grid}>
-                  <thead>
-                    <tr>
-                      <th className={styles.levelHead}>Level Name</th>
-                      <th>Short Name</th>
-                      <th>Active</th>
-                      <th>Admin</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
+        <ModalPortal>
+          <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Price Level">
+            <button
+              type="button"
+              className={styles.backdrop}
+              aria-label="Close Price Level"
+              onClick={() => setOpen(false)}
+            />
+            <div ref={modalRef} className={styles.modal}>
+              <div className={styles.header}>
+                <h2 className={styles.title}>Price Level</h2>
+                <button
+                  type="button"
+                  className={styles.closeButton}
+                  aria-label="Close"
+                  onClick={() => setOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className={styles.body}>
+                <div className={styles.gridWrap}>
+                  <table className={styles.grid}>
+                    <thead>
                       <tr>
-                        <td className={styles.stateRow} colSpan={4}>
-                          Loading price levels…
-                        </td>
+                        <th className={styles.levelHead}>Level Name</th>
+                        <th>Short Name</th>
+                        <th>Active</th>
+                        <th>Admin</th>
                       </tr>
-                    ) : rows.length === 0 ? (
-                      <tr>
-                        <td className={styles.stateRow} colSpan={4}>
-                          No price levels found.
-                        </td>
-                      </tr>
-                    ) : (
-                      rows.map((row) => (
-                        <tr key={row.priceLvlId}>
-                          <td>
-                            <input
-                              className={styles.cellInput}
-                              value={row.priceLvlName}
-                              aria-label={`Level name for row ${row.priceLvlId}`}
-                              onChange={(event) =>
-                                setField(row.priceLvlId, "priceLvlName", event.target.value)
-                              }
-                            />
-                          </td>
-                          <td>
-                            <input
-                              className={`${styles.cellInput} ${styles.shortInput}`}
-                              value={row.priceLvlShort}
-                              aria-label={`Short name for ${row.priceLvlName || row.priceLvlId}`}
-                              onChange={(event) =>
-                                setField(row.priceLvlId, "priceLvlShort", event.target.value)
-                              }
-                            />
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              className={`${styles.flagButton} ${
-                                row.priceLvlIsActive ? styles.flagYes : styles.flagNo
-                              }`}
-                              aria-pressed={row.priceLvlIsActive}
-                              aria-label={`Active for ${row.priceLvlName || row.priceLvlId}`}
-                              onClick={() => toggleFlag(row.priceLvlId, "priceLvlIsActive")}
-                            >
-                              {row.priceLvlIsActive ? "Y" : "N"}
-                            </button>
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              className={`${styles.flagButton} ${
-                                row.priceLvlIsAdmin ? styles.flagYes : styles.flagNo
-                              }`}
-                              aria-pressed={row.priceLvlIsAdmin}
-                              aria-label={`Admin for ${row.priceLvlName || row.priceLvlId}`}
-                              onClick={() => toggleFlag(row.priceLvlId, "priceLvlIsAdmin")}
-                            >
-                              {row.priceLvlIsAdmin ? "Y" : "N"}
-                            </button>
+                    </thead>
+                    <tbody>
+                      {loading ? (
+                        <tr>
+                          <td className={styles.stateRow} colSpan={4}>
+                            Loading price levels…
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : rows.length === 0 ? (
+                        <tr>
+                          <td className={styles.stateRow} colSpan={4}>
+                            No price levels found.
+                          </td>
+                        </tr>
+                      ) : (
+                        rows.map((row) => (
+                          <tr key={row.priceLvlId}>
+                            <td>
+                              <input
+                                className={styles.cellInput}
+                                value={row.priceLvlName}
+                                aria-label={`Level name for row ${row.priceLvlId}`}
+                                onChange={(event) =>
+                                  setField(row.priceLvlId, "priceLvlName", event.target.value)
+                                }
+                              />
+                            </td>
+                            <td>
+                              <input
+                                className={`${styles.cellInput} ${styles.shortInput}`}
+                                value={row.priceLvlShort}
+                                aria-label={`Short name for ${row.priceLvlName || row.priceLvlId}`}
+                                onChange={(event) =>
+                                  setField(row.priceLvlId, "priceLvlShort", event.target.value)
+                                }
+                              />
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className={`${styles.flagButton} ${
+                                  row.priceLvlIsActive ? styles.flagYes : styles.flagNo
+                                }`}
+                                aria-pressed={row.priceLvlIsActive}
+                                aria-label={`Active for ${row.priceLvlName || row.priceLvlId}`}
+                                onClick={() => toggleFlag(row.priceLvlId, "priceLvlIsActive")}
+                              >
+                                {row.priceLvlIsActive ? "Y" : "N"}
+                              </button>
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className={`${styles.flagButton} ${
+                                  row.priceLvlIsAdmin ? styles.flagYes : styles.flagNo
+                                }`}
+                                aria-pressed={row.priceLvlIsAdmin}
+                                aria-label={`Admin for ${row.priceLvlName || row.priceLvlId}`}
+                                onClick={() => toggleFlag(row.priceLvlId, "priceLvlIsAdmin")}
+                              >
+                                {row.priceLvlIsAdmin ? "Y" : "N"}
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className={styles.footer}>
+                <button
+                  type="button"
+                  className={styles.saveButton}
+                  onClick={handleSave}
+                  disabled={saving || loading}
+                >
+                  {saving ? "Saving…" : "Save Changes"}
+                </button>
               </div>
             </div>
-            <div className={styles.footer}>
-              <button
-                type="button"
-                className={styles.saveButton}
-                onClick={handleSave}
-                disabled={saving || loading}
-              >
-                {saving ? "Saving…" : "Save Changes"}
-              </button>
-            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
     </div>
   );

@@ -1007,6 +1007,11 @@
   justify-content: center;
   padding: 1rem;
   background: rgb(0 0 0 / 45%);
+  /* Own one isolated composited layer so the page's promoted scroll container
+     cannot be ordered above the modal and paint grid tiles over it. See the
+     long-form rationale on `.overlay` in dynamic-modal-form.module.scss. */
+  isolation: isolate;
+  transform: translateZ(0);
 }
 
 .modalPanel {
@@ -1263,6 +1268,24 @@
 .listTable tbody tr[data-deleted="true"] {
   color: var(--text-soft, #888888);
   font-style: italic;
+}
+/**
+ * A held cart another device has open. Greyed rather than hidden — a cart that
+ * simply vanished from the list reads as lost, not as busy — and it keeps the
+ * pointer cursor, because clicking it is what explains why it will not open and
+ * points at Take over.
+ */
+.listTable tbody tr[data-disabled="true"] {
+  color: var(--text-soft, #888888);
+  background: var(--row-disabled, #f7f7f7);
+}
+.listTable tbody tr[data-disabled="true"]:hover {
+  background: var(--row-disabled-hover, #f1eded);
+}
+.holdInUse {
+  color: var(--warn, #8a6100);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .promptOptions {

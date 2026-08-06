@@ -4,30 +4,40 @@
  *
  * Two filters run, and both are load-bearing:
  *
- *  - **on the wire**, the tenant scope plus `thDocType` and `thStatus=HELD`.
- *    Sending them is also what keeps the request off the configured-grid path:
- *    the module answers from its own Prisma query only when a structured filter
- *    is present, and the stored grid SQL knows none of these, so a search-only
- *    request would list every company's holds.
- *  - **client-side**, `isQuotationHold`. `transaction_hold` has no document type
- *    for a quotation (see `QUOTATION_HOLD_DOC_TYPE`), so this screen's carts
- *    share `SALE_ORDER` with anything else that parks one. A row whose
- *    `th_ui_state` this screen did not write cannot be redrawn here, so it is
- *    left out rather than offered and then refused.
+ *  - **on the wire**, the tenant scope. Sending it is also what keeps the
+ *    request off the configured-grid path: the module answers from its own
+ *    Prisma query only when a structured filter is present, and the stored grid
+ *    SQL knows none of these, so a search-only request would list every
+ *    company's holds. `thDocType` is deliberately NOT sent — carts parked before
+ *    the server's enum grew `QUOTATION` carry `SALE_ORDER`, and filtering on
+ *    either one alone would hide half of them. Neither is `thStatus`: the list
+ *    shows both free and in-use carts (see below), and the filter takes one
+ *    value.
+ *  - **client-side**, `isQuotationHold` — the `th_ui_state` stamp, which is the
+ *    real test of "this screen wrote it" and is blind to the document type. A
+ *    row it did not write cannot be redrawn here, so it is left out rather than
+ *    offered and then refused. Then `HOLD_LIVE_STATUSES`, which drops the
+ *    converted, cancelled and expired rows the unfiltered query brings back.
+ *
+ * **In-use rows are listed, not hidden.** A cart another device has open shows
+ * greyed with who holds it, because hiding it would leave an operator staring at
+ * a cart that has simply vanished. Resume refuses it — the server would answer
+ * 409 anyway — and offers **Take over** instead: nothing times a lock out, so a
+ * till that died holding a cart would otherwise strand it for good.
  *
  * Discard is a soft delete, and it is offered because a hold nobody is coming
  * back for otherwise sits in this list forever — nothing expires it.
  */
 import { useEffect, useMemo, useState } from "react";
-import { FiCheckCircle, FiRefreshCw, FiTrash2 } from "react-icons/fi";
+import { FiCheckCircle, FiRefreshCw, FiTrash2, FiUnlock } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { cx } from "@/components/design-system/cx";
 import {
   useDeleteTransactionHoldMutation,
   useListTransactionHoldsQuery,
 } from "@/store/api/quotationApi";
-import { QUOTATION_HOLD_DOC_TYPE } from "../quotation.constants";
-import { holdAccYearOf, isQuotationHold } from "../quotation.hold";
+import { HOLD_LIVE_STATUSES } from "../quotation.constants";
+import { holdAccYearOf, holdHolderLabel, isHoldInUse, isQuotationHold } from "../quotation.hold";
 import type { TransactionHoldPayload } from "../quotation.types";
 import { toNumber } from "../quotation.utils";
 import { ModalShell } from "./modal-shell";
@@ -40,6 +50,8 @@ export type HeldListModalProps = {
   accYear: string;
   onClose: () => void;
   onPick: (thId: string) => void;
+  /** Frees a cart another device holds. Resolves `false` when the server refused. */
+  onTakeOver: (hold: TransactionHoldPayload) => Promise<boolean>;
 };
 /** The server's own cap; asking for more is a 400. */
 const FETCH_LIMIT = 100;
@@ -57,10 +69,11 @@ function heldAt(value: string | null): string {
   return `${date} ${time}`;
 }
 export function HeldListModal(props: HeldListModalProps) {
-  const { isOpen, companyId, branchId, accYear, onClose, onPick } = props;
+  const { isOpen, companyId, branchId, accYear, onClose, onPick, onTakeOver } = props;
   const [search, setSearch] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [discarding, setDiscarding] = useState<string | null>(null);
+  const [takingOver, setTakingOver] = useState<string | null>(null);
   const [deleteHold] = useDeleteTransactionHoldMutation();
   useEffect(() => {
     if (isOpen) {
@@ -74,8 +87,6 @@ export function HeldListModal(props: HeldListModalProps) {
       thCompanyId: companyId,
       thBranchId: branchId,
       ...(holdAccYear === null ? {} : { thAccYear: holdAccYear }),
-      thDocType: QUOTATION_HOLD_DOC_TYPE,
-      thStatus: "HELD",
       page: 1,
       limit: FETCH_LIMIT,
     },
@@ -84,7 +95,9 @@ export function HeldListModal(props: HeldListModalProps) {
     { skip: !isOpen || !companyId || !branchId },
   );
   const rows = useMemo(() => {
-    const all = (data?.items ?? []).filter(isQuotationHold);
+    const all = (data?.items ?? [])
+      .filter(isQuotationHold)
+      .filter((row) => (HOLD_LIVE_STATUSES as readonly string[]).includes(row.thStatus));
     const needle = search.trim().toLowerCase();
     if (!needle) {
       return all;
@@ -99,7 +112,28 @@ export function HeldListModal(props: HeldListModalProps) {
     setActiveIndex(0);
   }, [rows.length]);
   const choose = (row: TransactionHoldPayload) => {
+    // The server would refuse this with a 409 anyway; saying so here costs a
+    // round trip less and points at the way through.
+    if (isHoldInUse(row)) {
+      toast.info(
+        `Hold ${row.thHoldNo} is open on ${holdHolderLabel(row)}. ` +
+          "Use Take over if that device is not coming back.",
+      );
+      return;
+    }
     onPick(row.thId);
+  };
+  const takeOver = async (row: TransactionHoldPayload) => {
+    setTakingOver(row.thId);
+    try {
+      if (await onTakeOver(row)) {
+        // The row is free now, not open: the operator still has to resume it,
+        // which is the same deliberate step as for any other held cart.
+        await refetch();
+      }
+    } finally {
+      setTakingOver(null);
+    }
   };
   const discard = async (row: TransactionHoldPayload) => {
     setDiscarding(row.thId);
@@ -121,8 +155,8 @@ export function HeldListModal(props: HeldListModalProps) {
       onClose={onClose}
       footer={
         <span className={styles.modalNote}>
-          ↑↓ move · Enter resume · Esc cancel · a resumed cart leaves this list until it is held
-          again
+          ↑↓ move · Enter resume · Esc cancel · a cart in use is locked to another device until it
+          releases it or you take it over
         </span>
       }
     >
@@ -135,6 +169,22 @@ export function HeldListModal(props: HeldListModalProps) {
         >
           <FiCheckCircle aria-hidden="true" />
           Resume
+        </button>
+        <button
+          type="button"
+          className={styles.toolButton}
+          // Only ever offered on a cart somebody else has: it interrupts that
+          // device, so it is not a shortcut for the ordinary resume.
+          disabled={!activeRow || !isHoldInUse(activeRow) || takingOver !== null}
+          title={
+            activeRow && isHoldInUse(activeRow)
+              ? `Free this cart from ${holdHolderLabel(activeRow)} — use it when that device is not coming back`
+              : "Only a cart open on another device can be taken over"
+          }
+          onClick={() => activeRow && void takeOver(activeRow)}
+        >
+          <FiUnlock aria-hidden="true" />
+          Take over
         </button>
         <button
           type="button"
@@ -187,29 +237,47 @@ export function HeldListModal(props: HeldListModalProps) {
               <th scope="col">Items</th>
               <th scope="col">Qty</th>
               <th scope="col">Amount</th>
+              <th scope="col">Status</th>
               <th scope="col">Remarks</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => (
-              <tr
-                key={row.thId}
-                data-selected={index === activeIndex ? "true" : undefined}
-                onMouseEnter={() => setActiveIndex(index)}
-                onClick={() => choose(row)}
-              >
-                <td>{heldAt(row.thHoldDate)}</td>
-                <td>{row.thHoldNo}</td>
-                <td>{row.thCustomerName ?? ""}</td>
-                <td className={styles.alignRight}>{row.thItemCount ?? 0}</td>
-                <td className={styles.alignRight}>{toNumber(row.thTotalQty).toFixed(3)}</td>
-                <td className={styles.alignRight}>{toNumber(row.thTotalAmount).toFixed(2)}</td>
-                <td>{row.thRemarks ?? ""}</td>
-              </tr>
-            ))}
+            {rows.map((row, index) => {
+              const inUse = isHoldInUse(row);
+              return (
+                <tr
+                  key={row.thId}
+                  data-selected={index === activeIndex ? "true" : undefined}
+                  // Greyed rather than removed: a cart that simply vanished from
+                  // the list reads as lost, not as busy.
+                  data-disabled={inUse ? "true" : undefined}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => choose(row)}
+                >
+                  <td>{heldAt(row.thHoldDate)}</td>
+                  <td>{row.thHoldNo}</td>
+                  <td>{row.thCustomerName ?? ""}</td>
+                  <td className={styles.alignRight}>{row.thItemCount ?? 0}</td>
+                  <td className={styles.alignRight}>{toNumber(row.thTotalQty).toFixed(3)}</td>
+                  <td className={styles.alignRight}>{toNumber(row.thTotalAmount).toFixed(2)}</td>
+                  <td>
+                    {inUse ? (
+                      <span className={styles.holdInUse}>
+                        {takingOver === row.thId
+                          ? "Freeing…"
+                          : `In use — ${holdHolderLabel(row)}`}
+                      </span>
+                    ) : (
+                      "Free"
+                    )}
+                  </td>
+                  <td>{row.thRemarks ?? ""}</td>
+                </tr>
+              );
+            })}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className={styles.emptyGrid}>
+                <td colSpan={8} className={styles.emptyGrid}>
                   {isFetching ? "Loading…" : "No quotation is on hold."}
                 </td>
               </tr>

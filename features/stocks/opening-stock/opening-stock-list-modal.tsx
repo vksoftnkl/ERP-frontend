@@ -4,6 +4,7 @@ import { FiChevronLeft, FiChevronRight, FiSearch, FiX } from "react-icons/fi";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
 import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import type { OpeningStockHeaderPayload } from "./opening-stock.types";
+import ModalPortal from "@/components/ui/modal-portal";
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 import { QUANTITY_FORMATTER, VALUE_FORMATTER } from "./constants";
 import { cx, formatDateForDisplay } from "./opening-stock.utils";
@@ -342,265 +343,267 @@ export function OpeningStockListModal({
     return null;
   }
   return (
-    <div className={styles.stockBrowserModalOverlay}>
-      <button
-        type="button"
-        className={styles.stockBrowserModalBackdrop}
-        onClick={onClose}
-        aria-label="Close opening stock list"
-      />
-      <section
-        className={styles.stockBrowserModalPanel}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Opening stock list"
-      >
-        <header className={styles.stockBrowserModalHeader}>
-          <div className={styles.stockBrowserModalTitleBlock}>
-            <p className={styles.stockBrowserModalEyebrow}>Opening Stock list</p>            
-          </div>
-          <button
-            type="button"
-            className={styles.stockBrowserModalCloseButton}
-            onClick={onClose}
-            aria-label="Close opening stock list"
-          >
-            <FiX aria-hidden="true" />
-          </button>
-        </header>
-        <div className={styles.stockBrowserModalBody}>
-          {error ? (
-            <div className={styles.stockBrowserErrorBox}>
-              <p className={styles.stockBrowserErrorText}>{error}</p>
+    <ModalPortal>
+      <div className={styles.stockBrowserModalOverlay}>
+        <button
+          type="button"
+          className={styles.stockBrowserModalBackdrop}
+          onClick={onClose}
+          aria-label="Close opening stock list"
+        />
+        <section
+          className={styles.stockBrowserModalPanel}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Opening stock list"
+        >
+          <header className={styles.stockBrowserModalHeader}>
+            <div className={styles.stockBrowserModalTitleBlock}>
+              <p className={styles.stockBrowserModalEyebrow}>Opening Stock list</p>            
             </div>
-          ) : null}
-          <div className={styles.stockBrowserFilters}>
-            <label className={styles.toolbarDateField}>
-              <span className={styles.toolbarDateLabel}>Search</span>
-              <div className={cx(styles.toolbarDateControl, styles.stockBrowserSearchControl)}>
-                <FiSearch className={styles.stockBrowserSearchIcon} aria-hidden="true" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={filters.search}
-                  onChange={(event) => onSearchChange(event.target.value)}
-                  placeholder="Search ref no"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className={cx(styles.toolbarDateInput, styles.stockBrowserSearchInput)}
-                />
+            <button
+              type="button"
+              className={styles.stockBrowserModalCloseButton}
+              onClick={onClose}
+              aria-label="Close opening stock list"
+            >
+              <FiX aria-hidden="true" />
+            </button>
+          </header>
+          <div className={styles.stockBrowserModalBody}>
+            {error ? (
+              <div className={styles.stockBrowserErrorBox}>
+                <p className={styles.stockBrowserErrorText}>{error}</p>
               </div>
-            </label>
-            <label className={styles.toolbarDateField}>
-              <span className={styles.toolbarDateLabel}>From Date</span>
-              <div className={styles.toolbarDateControl}>
-                <input
-                  type="date"
-                  value={filters.dateFrom}
-                  onChange={(event) => onDateFromChange(event.target.value)}
-                  className={styles.toolbarDateInput}
-                />
-              </div>
-            </label>
-            <label className={styles.toolbarDateField}>
-              <span className={styles.toolbarDateLabel}>To Date</span>
-              <div className={styles.toolbarDateControl}>
-                <input
-                  type="date"
-                  value={filters.dateTo}
-                  onChange={(event) => onDateToChange(event.target.value)}
-                  className={styles.toolbarDateInput}
-                />
-              </div>
-            </label>
-          </div>
-          <div className={styles.stockBrowserTableShell}>
-            <div className={styles.stockBrowserTableViewport}>
-              <table className={styles.stockBrowserTable}>
-                <colgroup>
-                  <col style={{ width: "72px" }} />
-                  {columns.map((column) => (
-                    <col key={column.key} style={{ width: column.width }} />
-                  ))}
-                </colgroup>
-                <thead className={styles.stockBrowserTableHead}>
-                  <tr>
-                    <th
-                      className={cx(
-                        styles.stockBrowserTableHeadCell,
-                        styles.alignCenter,
-                      )}
-                    >
-                      S.No
-                    </th>
+            ) : null}
+            <div className={styles.stockBrowserFilters}>
+              <label className={styles.toolbarDateField}>
+                <span className={styles.toolbarDateLabel}>Search</span>
+                <div className={cx(styles.toolbarDateControl, styles.stockBrowserSearchControl)}>
+                  <FiSearch className={styles.stockBrowserSearchIcon} aria-hidden="true" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={filters.search}
+                    onChange={(event) => onSearchChange(event.target.value)}
+                    placeholder="Search ref no"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className={cx(styles.toolbarDateInput, styles.stockBrowserSearchInput)}
+                  />
+                </div>
+              </label>
+              <label className={styles.toolbarDateField}>
+                <span className={styles.toolbarDateLabel}>From Date</span>
+                <div className={styles.toolbarDateControl}>
+                  <input
+                    type="date"
+                    value={filters.dateFrom}
+                    onChange={(event) => onDateFromChange(event.target.value)}
+                    className={styles.toolbarDateInput}
+                  />
+                </div>
+              </label>
+              <label className={styles.toolbarDateField}>
+                <span className={styles.toolbarDateLabel}>To Date</span>
+                <div className={styles.toolbarDateControl}>
+                  <input
+                    type="date"
+                    value={filters.dateTo}
+                    onChange={(event) => onDateToChange(event.target.value)}
+                    className={styles.toolbarDateInput}
+                  />
+                </div>
+              </label>
+            </div>
+            <div className={styles.stockBrowserTableShell}>
+              <div className={styles.stockBrowserTableViewport}>
+                <table className={styles.stockBrowserTable}>
+                  <colgroup>
+                    <col style={{ width: "72px" }} />
                     {columns.map((column) => (
+                      <col key={column.key} style={{ width: column.width }} />
+                    ))}
+                  </colgroup>
+                  <thead className={styles.stockBrowserTableHead}>
+                    <tr>
                       <th
-                        key={column.key}
                         className={cx(
                           styles.stockBrowserTableHeadCell,
-                          column.align === "right" && styles.alignRight,
-                          column.align === "center" && styles.alignCenter,
+                          styles.alignCenter,
                         )}
                       >
-                        {column.header}
+                        S.No
                       </th>
-                    ))}                   
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.length === 0 ? (
-                    <tr className={styles.stockBrowserTableRow}>
-                      <td
-                        colSpan={columns.length + 1}
-                        className={cx(
-                          styles.stockBrowserTableCell,
-                          styles.stockBrowserTableEmptyCell,
-                        )}
-                      >
-                        {loading
-                          ? "Loading opening stock list..."
-                          : "No opening stock vouchers found"}
-                      </td>
-                    </tr>
-                  ) : (
-                    rows.map((row, rowIndex) => {
-                      const isSelected = row.avh_voucher_id === selectedVoucherId;
-                      const serialNumber = currentStartEntry + rowIndex;
-                      return (
-                        <tr
-                          key={row.avh_voucher_id}
-                          ref={(element) => {
-                            rowRefs.current[row.avh_voucher_id] = element;
-                          }}
+                      {columns.map((column) => (
+                        <th
+                          key={column.key}
                           className={cx(
-                            styles.stockBrowserTableRow,
-                            styles.stockBrowserTableRowClickable,
-                            isSelected && styles.stockBrowserTableRowSelected,
+                            styles.stockBrowserTableHeadCell,
+                            column.align === "right" && styles.alignRight,
+                            column.align === "center" && styles.alignCenter,
                           )}
-                          onClick={() => onSelectRow(row)}
-                          onDoubleClick={() => onLoadRow(row)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              onSelectRow(row);
-                            }
-                          }}
-                          tabIndex={0}
                         >
-                          <td
+                          {column.header}
+                        </th>
+                      ))}                   
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.length === 0 ? (
+                      <tr className={styles.stockBrowserTableRow}>
+                        <td
+                          colSpan={columns.length + 1}
+                          className={cx(
+                            styles.stockBrowserTableCell,
+                            styles.stockBrowserTableEmptyCell,
+                          )}
+                        >
+                          {loading
+                            ? "Loading opening stock list..."
+                            : "No opening stock vouchers found"}
+                        </td>
+                      </tr>
+                    ) : (
+                      rows.map((row, rowIndex) => {
+                        const isSelected = row.avh_voucher_id === selectedVoucherId;
+                        const serialNumber = currentStartEntry + rowIndex;
+                        return (
+                          <tr
+                            key={row.avh_voucher_id}
+                            ref={(element) => {
+                              rowRefs.current[row.avh_voucher_id] = element;
+                            }}
                             className={cx(
-                              styles.stockBrowserTableCell,
-                              styles.alignCenter,
+                              styles.stockBrowserTableRow,
+                              styles.stockBrowserTableRowClickable,
+                              isSelected && styles.stockBrowserTableRowSelected,
                             )}
+                            onClick={() => onSelectRow(row)}
+                            onDoubleClick={() => onLoadRow(row)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                onSelectRow(row);
+                              }
+                            }}
+                            tabIndex={0}
                           >
-                            {serialNumber}
-                          </td>
-                          {columns.map((column) => (
                             <td
-                              key={column.key}
                               className={cx(
                                 styles.stockBrowserTableCell,
-                                column.align === "right" && styles.alignRight,
-                                column.align === "center" && styles.alignCenter,
+                                styles.alignCenter,
                               )}
                             >
-                              {column.render(row)}
+                              {serialNumber}
                             </td>
-                          ))}
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className={styles.stockBrowserTablePagination}>
-              <div className={styles.stockBrowserTableMeta}>
-                {totalEntries > 0
-                  ? `${currentStartEntry}-${currentEndEntry} of ${totalEntries}`
-                  : "0 records"}
+                            {columns.map((column) => (
+                              <td
+                                key={column.key}
+                                className={cx(
+                                  styles.stockBrowserTableCell,
+                                  column.align === "right" && styles.alignRight,
+                                  column.align === "center" && styles.alignCenter,
+                                )}
+                              >
+                                {column.render(row)}
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
-              <div className={styles.stockBrowserTablePaginationControls}>
-                <label className={styles.stockBrowserPageSizeField}>
-                  <span className={styles.stockBrowserPageSizeLabel}>Rows</span>
-                  <select
-                    value={pageSize}
-                    onChange={(event) => onPageSizeChange(Number(event.target.value))}
-                    className={styles.stockBrowserPageSizeSelect}
-                  >
-                    {PAGE_SIZE_OPTIONS.map((size) => (
-                      <option key={size} value={size}>
-                        {size}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className={styles.stockBrowserPageButtons}>
-                  <button
-                    type="button"
-                    className={styles.stockBrowserPageButton}
-                    onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-                    disabled={currentPage <= 1}
-                    aria-label="Previous page"
-                  >
-                    <FiChevronLeft aria-hidden="true" />
-                  </button>
-                  {pageList.map((pageItem, index) =>
-                    pageItem === "ellipsis" ? (
-                      <span
-                        key={`ellipsis-${index}`}
-                        className={styles.stockBrowserPageEllipsis}
-                      >
-                        ...
-                      </span>
-                    ) : (
-                      <button
-                        key={pageItem}
-                        type="button"
-                        className={cx(
-                          styles.stockBrowserPageButton,
-                          pageItem === currentPage && styles.stockBrowserPageButtonActive,
-                        )}
-                        onClick={() => onPageChange(pageItem)}
-                      >
-                        {pageItem}
-                      </button>
-                    ),
-                  )}
-                  <button
-                    type="button"
-                    className={styles.stockBrowserPageButton}
-                    onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage >= totalPages}
-                    aria-label="Next page"
-                  >
-                    <FiChevronRight aria-hidden="true" />
-                  </button>
+              <div className={styles.stockBrowserTablePagination}>
+                <div className={styles.stockBrowserTableMeta}>
+                  {totalEntries > 0
+                    ? `${currentStartEntry}-${currentEndEntry} of ${totalEntries}`
+                    : "0 records"}
+                </div>
+                <div className={styles.stockBrowserTablePaginationControls}>
+                  <label className={styles.stockBrowserPageSizeField}>
+                    <span className={styles.stockBrowserPageSizeLabel}>Rows</span>
+                    <select
+                      value={pageSize}
+                      onChange={(event) => onPageSizeChange(Number(event.target.value))}
+                      className={styles.stockBrowserPageSizeSelect}
+                    >
+                      {PAGE_SIZE_OPTIONS.map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className={styles.stockBrowserPageButtons}>
+                    <button
+                      type="button"
+                      className={styles.stockBrowserPageButton}
+                      onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+                      disabled={currentPage <= 1}
+                      aria-label="Previous page"
+                    >
+                      <FiChevronLeft aria-hidden="true" />
+                    </button>
+                    {pageList.map((pageItem, index) =>
+                      pageItem === "ellipsis" ? (
+                        <span
+                          key={`ellipsis-${index}`}
+                          className={styles.stockBrowserPageEllipsis}
+                        >
+                          ...
+                        </span>
+                      ) : (
+                        <button
+                          key={pageItem}
+                          type="button"
+                          className={cx(
+                            styles.stockBrowserPageButton,
+                            pageItem === currentPage && styles.stockBrowserPageButtonActive,
+                          )}
+                          onClick={() => onPageChange(pageItem)}
+                        >
+                          {pageItem}
+                        </button>
+                      ),
+                    )}
+                    <button
+                      type="button"
+                      className={styles.stockBrowserPageButton}
+                      onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage >= totalPages}
+                      aria-label="Next page"
+                    >
+                      <FiChevronRight aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-        <footer className={styles.stockBrowserModalFooter}>        
-          <div className={styles.stockBrowserModalActions}>
-            <button
-              type="button"
-              className={styles.stockBrowserSecondaryButton}
-              onClick={onClose}
-            >
-              Close
-            </button>
-            <button
-              type="button"
-              className={cx(styles.createButton, styles.updateButton)}
-              onClick={onLoadSelected}
-              disabled={!selectedVoucherId || loading}
-            >
-              {loading ? "Loading..." : "Load Selected"}
-            </button>
-          </div>
-        </footer>
-      </section>
-    </div>
+          <footer className={styles.stockBrowserModalFooter}>        
+            <div className={styles.stockBrowserModalActions}>
+              <button
+                type="button"
+                className={styles.stockBrowserSecondaryButton}
+                onClick={onClose}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className={cx(styles.createButton, styles.updateButton)}
+                onClick={onLoadSelected}
+                disabled={!selectedVoucherId || loading}
+              >
+                {loading ? "Loading..." : "Load Selected"}
+              </button>
+            </div>
+          </footer>
+        </section>
+      </div>
+    </ModalPortal>
   );
 }
