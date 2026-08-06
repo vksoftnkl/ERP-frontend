@@ -1,5 +1,4 @@
 "use client";
-
 /**
  * Quotations — the route.
  *
@@ -19,26 +18,20 @@ import { useCallback, useState } from "react";
 import { QuotationEntryView } from "./components/quotation-entry-view";
 import { QuotationListView } from "./components/quotation-list-view";
 import type { QuotationDocKey } from "./quotation.types";
-
 type View =
   | { screen: "list" }
   | { screen: "entry"; document?: QuotationDocKey; mode: "browse" | "entry" };
-
 export default function QuotationsPage() {
   const [view, setView] = useState<View>({ screen: "list" });
-
   const onOpen = useCallback((document: QuotationDocKey, mode: "browse" | "entry") => {
     setView({ screen: "entry", document, mode });
   }, []);
-
   const onCreate = useCallback(() => {
     setView({ screen: "entry", mode: "entry" });
   }, []);
-
   const onBackToList = useCallback(() => {
     setView({ screen: "list" });
   }, []);
-
   return view.screen === "list" ? (
     <QuotationListView onCreate={onCreate} onOpen={onOpen} />
   ) : (

@@ -35,7 +35,6 @@ export const ITEM_BY_BARCODE_ENDPOINT = "/master-lookups/item-by-barcode";
 export const FREIGHT_CHARGE_ENDPOINT = "/master-lookups/freight-charges/charge";
 export const COMPANY_GET_ENDPOINT = "/company-masters/get";
 export const USER_ADMINISTRATION_GET_ENDPOINT = "/user-administration/get";
-
 /**
  * Hold / Pick held — `public.transaction_hold`. One route creates AND updates
  * (`thId`'s presence selects which), exactly like `/quotations/create`.
@@ -44,7 +43,6 @@ export const TRANSACTION_HOLD_SAVE_ENDPOINT = "/transaction-holds/create";
 export const TRANSACTION_HOLD_LIST_ENDPOINT = "/transaction-holds/list";
 export const TRANSACTION_HOLD_GET_ENDPOINT = "/transaction-holds/get";
 export const TRANSACTION_HOLD_DELETE_ENDPOINT = "/transaction-holds/delete";
-
 /**
  * The edit lock — `HELD → LOCKED → CONVERTED`, with `release` (and the
  * `force-release` escape hatch) going back to `HELD`.
@@ -64,7 +62,6 @@ export const transactionHoldLockEndpoint = (
   action: "resume" | "release" | "force-release" | "convert",
 ): string => `/transaction-holds/${thId}/${action}`;
 export const HOLD_DEVICE_ID_HEADER = "X-Device-Id";
-
 /**
  * `fixed.ui_tables.ui_tbl_id` for the item grid — 23 ("Quotation-item", 89
  * columns, one per `ITEM_COLUMN_MEANINGS` entry and in the same order).
@@ -117,17 +114,13 @@ export const AREA_DROPDOWN_ID = "13";
  */
 export const PRICE_LEVEL_DROPDOWN_ID = "34";
 export const SALESMAN_DROPDOWN_ID = "38";
-
 /** Sales-side charges only: `chgModule IN ('S','B')`. */
 export const CHARGE_MODULE_SALES = "S";
-
 /** Default place of supply: Tamil Nadu. */
 export const DEFAULT_POS_STATE_CODE = "33";
 export const DEFAULT_POS_STATE_NAME = "Tamil Nadu";
-
 /** `sale_quotation.sq_doc_type` for this screen. */
 export const QUOTATION_DOC_TYPE = "QUOTATION";
-
 /**
  * `ck_sq_status` is an upper-case CHECK constraint with no DTO validation — a
  * lower-case value is accepted by the API and then 500s from Postgres.
@@ -143,11 +136,9 @@ export const QUOTATION_STATUSES = [
 ] as const;
 export type QuotationStatus = (typeof QUOTATION_STATUSES)[number];
 export const DEFAULT_QUOTATION_STATUS: QuotationStatus = "DRAFT";
-
 // ---------------------------------------------------------------------------
 // Transaction hold (F9 park / F10 recall)
 // ---------------------------------------------------------------------------
-
 /**
  * `th_doc_type` for a parked quotation.
  *
@@ -166,13 +157,11 @@ export const DEFAULT_QUOTATION_STATUS: QuotationStatus = "DRAFT";
 export const QUOTATION_HOLD_DOC_TYPE = "QUOTATION";
 /** What this screen parked carts under before `QUOTATION` existed. */
 export const LEGACY_QUOTATION_HOLD_DOC_TYPE = "SALE_ORDER";
-
 /** `ck_th_device_type` — the hardware the hold was taken on. */
 export const HOLD_DEVICE_TYPES = ["DESKTOP", "WEB", "MOBILE"] as const;
 export type HoldDeviceType = (typeof HOLD_DEVICE_TYPES)[number];
 /** This client is a browser; the session's own value only narrows it further. */
 export const DEFAULT_HOLD_DEVICE_TYPE: HoldDeviceType = "WEB";
-
 /**
  * `ck_th_status`. `CONVERTED` / `CANCELLED` / `EXPIRED` are terminal — the
  * server refuses to move a hold out of them, so nothing here ever tries.
@@ -198,7 +187,6 @@ export type HoldStatus = (typeof HOLD_STATUSES)[number];
 export const HOLD_LIVE_STATUSES = ["HELD", "LOCKED", "RESUMED"] as const;
 /** In use by somebody — `LOCKED` by this lock, `RESUMED` by the one before it. */
 export const HOLD_IN_USE_STATUSES = ["LOCKED", "RESUMED"] as const;
-
 /**
  * What `th_ui_state` holds, and how a reader knows it is ours. The server
  * stores and returns the object verbatim and never reads into it, so this
@@ -208,7 +196,6 @@ export const HOLD_IN_USE_STATUSES = ["LOCKED", "RESUMED"] as const;
 export const HOLD_UI_STATE_KIND = "erp.sales.quotation.hold";
 export const HOLD_UI_STATE_VERSION = 1;
 export const HOLD_UI_STATE_SCREEN = "QUOTATION";
-
 /**
  * `th_hold_no` is required on create, is NOT generated server-side, and is
  * unique per company / branch / year / document type. The till it was designed
@@ -217,14 +204,12 @@ export const HOLD_UI_STATE_SCREEN = "QUOTATION";
  */
 export const HOLD_NO_PREFIX = "QH";
 export const HOLD_NO_MAX_LENGTH = 30;
-
 /**
  * How long a new quotation is valid for. The screen has no other source for it —
  * there is no company setting — so this is the standard window, counted onto the
  * quote date as `validUntil` the moment a draft is created.
  */
 export const DEFAULT_VALIDITY_DAYS = 7;
-
 /**
  * `sq_freight_calc_type` / `sq_loading_calc_type` share their vocabulary with
  * the `/item-price` `freight_type` / `loading_type` query params — lower case,
@@ -235,7 +220,6 @@ export const LOADING_CALC_TYPES = ["manual", "item_basis", "auto"] as const;
 export const FREIGHT_CALC_TYPES = ["manual", "item_basis"] as const;
 export const DEFAULT_LOADING_CALC_TYPE = "manual";
 export const DEFAULT_FREIGHT_CALC_TYPE = "manual";
-
 /** How many price levels the grid's CTRL+1..4 shortcuts can reach. */
 export const PRICE_LEVEL_COUNT = 4;
 export const PRICE_LEVEL_OPTIONS = [
@@ -247,7 +231,6 @@ export const PRICE_LEVEL_OPTIONS = [
   { value: "6", label: "Min" },
   { value: "7", label: "Cost" },
 ] as const;
-
 /**
  * Permissions the Qt session carries and this client has no source for yet
  * (`grep` finds no runtime permission gating anywhere). Kept in one place, named,
