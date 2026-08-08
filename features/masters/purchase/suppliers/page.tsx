@@ -24,7 +24,7 @@ import {
 import {
   API_ENDPOINTS,
   GRID_TABLE_NAME,
-  CUSTOMER_MODAL_PANEL_STYLE,
+  SUPPLIER_MODAL_PANEL_STYLE,
   STATE_MODAL_PANEL_STYLE,
   SUPPLIER_GROUP_MODAL_PANEL_STYLE,
   SUPPLIER_GROUP_GET_ENDPOINT,
@@ -747,7 +747,8 @@ export default function SuppliersMasterPage() {
     () => getBankAccountValidationError(bankAccounts),
     [bankAccounts],
   );
-  // The bank-accounts grid, rendered as a full-width `custom` field under its own tab.
+  // The bank-accounts grid, rendered as a full-width `custom` field under the Notes
+  // tab's "Bank Details" subheading, as on the legacy screen.
   // `validation.custom` blocks submit while a row is invalid (mirrors the server rules).
   const bankAccountsField = useMemo<ERPDynamicModalField>(
     () => ({
@@ -783,8 +784,8 @@ export default function SuppliersMasterPage() {
   );
   // Build Form Fields
   const supplierFormFields = useMemo<ERPDynamicModalField[]>(
-    () => [
-      ...buildSupplierFormFields(
+    () =>
+      buildSupplierFormFields(
         supplierGroupOptions,
         companyOptions,
         branchOptions,
@@ -795,15 +796,8 @@ export default function SuppliersMasterPage() {
         handleStateCreateShortcut,
         handleStateEditShortcut,
         handleSupplierGstinValueChange,
+        bankAccountsField,
       ),
-      {
-        name: "bankAccountsHeading",
-        label: "Bank Accounts",
-        type: "heading",
-        gridColumnStart: 1,
-      },
-      bankAccountsField,
-    ],
     [
       bankAccountsField,
       branchOptions,
@@ -855,8 +849,12 @@ export default function SuppliersMasterPage() {
         nameColumnHeader="Supplier Name"
         nameFieldLabel="Supplier Name"
         nameFieldPlaceholder="ABC Distributors"
-        modalPanelStyle={CUSTOMER_MODAL_PANEL_STYLE}
-        modalFormGridColumns={3}
+        modalPanelStyle={SUPPLIER_MODAL_PANEL_STYLE}
+        // Each tab sets its own column count through `sectionGridColumns`; this is
+        // only the fallback. `denseGrid` off keeps fields from back-filling above a
+        // full-width subheading into the wrong group.
+        modalFormGridColumns={12}
+        modalFormDenseGrid={false}
         modalSectionNavigationMode="tabs"
         modalHideFieldHelperText
         modalHideFieldErrorText

@@ -1,44 +1,47 @@
 import type { SupplierFormFieldName, SupplierHeadingFieldName } from "./types";
 
-// Focusable Supplier Form Fields (excluding headings)
+// Focusable Supplier Form Fields (excluding headings), in the order they are laid
+// out in the entry modal — Identity, then Notes, then Regional Details.
 const SUPPLIER_FOCUSABLE_FIELDS: SupplierFormFieldName[] = [
   "supGstNo",
-  "supGstType",
   "supName",
+  "supShort",
   "supGroupId",
   "supCompanyId",
-  "supShort",
-  "supPurchaseType",
   "supBranchId",
+  "supGstType",
+  "supPurchaseType",
   "supPanNo",
   "supDrugLiscenceNo",
+  "supIsActive",
   "supAddr1",
-  "supDistrict",
-  "supPhone",
   "supAddr2",
-  "supStateName",
-  "supWhatsappNo",
   "supAddr3",
-  "supPincode",
-  "supTel",
   "supCity",
-  "supWebsiteAddress",
+  "supDistrict",
+  "supStateName",
+  "supPincode",
+  "supCountry",
+  "supTel",
+  "supPhone",
   "supMailId",
+  "supWhatsappNo",
+  "supWebsiteAddress",
+  "supChequePreName",
   "supCreditDays",
   "supCashDiscPerc",
-  "supCollectionDays",
-  "supRegionName",
-  "supRegionAddr3",
-  "supRegionCountry",
-  "supRegionAddr1",
-  "supRegionCity",
-  "supRegionAddr2",
-  "supChequePreName",
   "supSortOrder",
-  "supIsActive",
+  "supCollectionDays",
   "supNotes",
+  "supRegionName",
+  "supRegionAddr1",
+  "supRegionAddr2",
+  "supRegionAddr3",
+  "supRegionCity",
+  "supRegionDistrict",
+  "supRegionStateName",
+  "supRegionCountry",
 ];
-
 // Get All Focusable Supplier Field Controls
 export function getSupplierFocusableFieldControl(
   fieldName: SupplierFormFieldName | SupplierHeadingFieldName,
@@ -46,12 +49,10 @@ export function getSupplierFocusableFieldControl(
   const selectorId = `field-control-${fieldName}`;
   return document.getElementById(selectorId);
 }
-
 // Get Focusable Field Targets
 export function getSupplierFocusableFieldTargets(): SupplierFormFieldName[] {
   return SUPPLIER_FOCUSABLE_FIELDS;
 }
-
 // Find Next Focusable Field Target
 export function findNextSupplierFieldTarget(
   currentFieldName: SupplierFormFieldName | SupplierHeadingFieldName,
@@ -61,20 +62,16 @@ export function findNextSupplierFieldTarget(
   const currentIndex = focusableFields.indexOf(
     currentFieldName as SupplierFormFieldName,
   );
-
   if (currentIndex === -1) {
     return focusableFields.length > 0 ? focusableFields[0] : null;
   }
-
   if (direction === "forward") {
     return currentIndex < focusableFields.length - 1
       ? focusableFields[currentIndex + 1]
       : null;
   }
-
   return currentIndex > 0 ? focusableFields[currentIndex - 1] : null;
 }
-
 // Focus Supplier Field Control
 export function focusSupplierFieldControl(
   fieldName: SupplierFormFieldName,
@@ -83,20 +80,16 @@ export function focusSupplierFieldControl(
   if (!control) {
     return false;
   }
-
   const input = control.querySelector(
     'input[type="text"], input[type="number"], input[type="tel"], input[type="email"], input[type="url"], select, textarea',
   ) as HTMLElement | null;
-
   if (input) {
     input.focus();
     return true;
   }
-
   control.focus();
   return true;
 }
-
 // Handle Arrow Key Navigation
 export function handleSupplierFieldArrowKeyNavigation(
   event: KeyboardEvent,
@@ -106,7 +99,6 @@ export function handleSupplierFieldArrowKeyNavigation(
   if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
     return false;
   }
-
   const direction = event.key === "ArrowUp" ? "backward" : "forward";
   const nextFieldName = findNextSupplierFieldTarget(currentFieldName, direction);
 

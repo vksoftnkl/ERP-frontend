@@ -51,8 +51,11 @@ export function buildSupplierRequestPayload(
 ): Record<string, unknown> {
   const selectedStateName = (values.supStateName ?? "").trim();
   const resolvedStateCode = stateCodeByName[selectedStateName] ?? (values.supStateCode ?? "").trim().toUpperCase();
+  // Regional Details keeps its own State box, pre-filled by mirroring the Identity
+  // tab's State. What is in that box wins, so a manual edit there is not discarded;
+  // the Identity state is only the fallback for records saved before it was shown.
   const resolvedRegionStateName =
-    selectedStateName || (values.supRegionStateName ?? "").trim();
+    (values.supRegionStateName ?? "").trim() || selectedStateName;
 
   const payload: Record<string, unknown> = {
     supCompanyId: toNullableLookupSelection(values.supCompanyId ?? ""),

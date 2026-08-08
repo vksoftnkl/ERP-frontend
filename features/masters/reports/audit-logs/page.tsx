@@ -827,14 +827,14 @@ function AuditDetailModal({ row, onClose }: { row: AuditLogListItem; onClose: ()
   };
   return (
     <ModalPortal>
-      <div
-        className={styles.overlay}
-        onMouseDown={(event) => {
-          if (event.target === event.currentTarget) {
-            onClose();
-          }
-        }}
-      >
+      <div className={styles.overlay}>
+        <button
+          type="button"
+          className={styles.overlayBackdrop}
+          aria-label="Close audit detail"
+          onMouseDown={onClose}
+          tabIndex={-1}
+        />
         <section
           className={styles.modal}
           role="dialog"

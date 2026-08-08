@@ -906,12 +906,25 @@
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: rgb(0 0 0 / 45%);
   /* Own one isolated composited layer so the page's promoted scroll container
      cannot be ordered above the modal and paint grid tiles over it. See the
      long-form rationale on `.overlay` in dynamic-modal-form.module.scss. */
   isolation: isolate;
   transform: translateZ(0);
+}
+
+.modalBackdrop {
+  /* The scrim lives on its own layer below the panel, never on the overlay
+     itself: painted on the overlay it composites over the pre-promoted panel
+     for a frame and the page ghosts through the dialog (same split as
+     `.backdrop` in dynamic-modal-form.module.scss). */
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: 0;
+  padding: 0;
+  background: rgb(0 0 0 / 45%);
+  cursor: pointer;
 }
 
 .modalPanel {

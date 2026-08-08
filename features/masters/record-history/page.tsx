@@ -806,19 +806,28 @@ function RecordHistoryViewer({
         </div>
       </section>
       {selectedLog ? (
-        <div
-          aria-modal="true"
-          className="fixed inset-0 z-[210] overflow-hidden bg-slate-950/45 px-4 py-4 backdrop-blur-[1px]"
-          role="dialog"
-          onClick={handleCloseDetail}
-        >
-          <div className="flex h-full items-center justify-center">
+        /* Portaled + scrim-on-backdrop like every other dialog: left inline
+           the page's promoted grid scroller can composite over the overlay,
+           and a scrim painted on the overlay itself ghosts over the panel
+           (see ModalPortal / dynamic-modal-form's .overlay + .backdrop). */
+        <ModalPortal>
+          <div
+            aria-modal="true"
+            className="isolate fixed inset-0 z-[var(--erp-z-modal)] flex transform-gpu items-center justify-center overflow-hidden px-4 py-4"
+            role="dialog"
+          >
+            <button
+              aria-label="Close audit detail"
+              className="absolute inset-0 z-0 cursor-pointer border-0 bg-slate-950/45 p-0 backdrop-blur-[1px]"
+              tabIndex={-1}
+              type="button"
+              onClick={handleCloseDetail}
+            />
             <section
               className={cx(
                 PANEL_CLASS,
-                "flex h-[calc(100vh-2rem)] w-full max-w-[min(1180px,92vw)] min-h-0 flex-col overflow-hidden bg-white p-2",
+                "relative z-[1] flex h-[calc(100vh-2rem)] w-full max-w-[min(1180px,92vw)] min-h-0 flex-col overflow-hidden bg-white p-2 will-change-transform",
               )}
-              onClick={(event) => event.stopPropagation()}
             >
               <header className="flex shrink-0 flex-col gap-3 p-2 min-[781px]:flex-row min-[781px]:items-start min-[781px]:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
@@ -1010,7 +1019,7 @@ function RecordHistoryViewer({
               </footer>
             </section>
           </div>
-        </div>
+        </ModalPortal>
       ) : null}
     </>
   );

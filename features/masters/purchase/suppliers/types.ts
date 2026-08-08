@@ -44,13 +44,16 @@ export type SupplierFormFieldName =
   | "supIsActive"
   | "supCreatedBy"
   | "supModifiedBy";
-// Heading Field Names
+// Heading Field Names (tab headings + in-tab subheadings)
 export type SupplierHeadingFieldName =
-  | "scopeHeading"
-  | "contactHeading"
-  | "creditHeading"
-  | "regionHeading"
-  | "statusHeading";
+  | "identitySection"
+  | "notesSection"
+  | "regionalSection"
+  | "bankAccountsHeading"
+  | "addressSubheading"
+  | "contactSubheading"
+  | "creditSubheading"
+  | "otherSubheading";
 // Modal Field Names - State
 export type StateModalFieldName =
   | "stateCode"

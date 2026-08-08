@@ -53,11 +53,14 @@ export function ModalShell({ title, isOpen, narrow, wide, footer, children, onCl
 
   return (
     <ModalPortal>
-      <div className={styles.modalOverlay} onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}>
+      <div className={styles.modalOverlay}>
+        <button
+          type="button"
+          className={styles.modalBackdrop}
+          aria-label="Close dialog"
+          onMouseDown={onClose}
+          tabIndex={-1}
+        />
         <section
           ref={panelRef}
           className={cx(styles.modalPanel, narrow && styles.modalPanelNarrow, wide && styles.modalPanelWide)}

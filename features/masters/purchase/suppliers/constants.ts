@@ -7,7 +7,7 @@ import {
 } from "@/utils/constant";
 // API Endpoints
 export const API_ENDPOINTS = {
- list: "/configured-grid-sql/run?grid_id=17",
+  list: "/configured-grid-sql/run?grid_id=17",
   getById: "/suppliers/get",
   create: "/suppliers/create",
   delete: "/suppliers/delete",
@@ -15,16 +15,16 @@ export const API_ENDPOINTS = {
 // Grid/Table Configuration
 export const GRID_TABLE_NAME = "suppliers";
 // Modal Panel Styles
-export const CUSTOMER_MODAL_PANEL_STYLE: CSSProperties = {
-  // 3 columns × a 130px label column. Measured across every tab: placeholders
-  // start truncating below 60rem, so this keeps one step of headroom for longer
-  // labels arriving from widget config.
-  width: "min(92vw, 64rem)",
-  // The tallest tab needs ~310px of chrome + fields; 75vh was ~675px, so most
-  // of the panel was empty. Sized to the tallest tab rather than to whichever
-  // tab is open, so the modal does not resize as you move between them.
-  height: "min(80vh, 400px)",
-  maxHeight: "80vh",
+export const SUPPLIER_MODAL_PANEL_STYLE: CSSProperties = {
+  // 2 label/control pairs per row × a 130px label column, as in the legacy
+  // Supplier Entry screen, which is ~72rem wide at that density.
+  width: "min(94vw, 72rem)",
+  // Both dimensions are pinned so the panel keeps one fixed size for every tab
+  // instead of resizing as you switch between them: the height is sized to the
+  // tallest tab (Identity), and each tab's body scrolls inside it. Capped to the
+  // viewport so it never overflows on short screens.
+  height: "min(90vh, 780px)",
+  maxHeight: "90vh",
 };
 export const STATE_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(34vw, 34rem)",
@@ -199,10 +199,8 @@ export const SUPPLIER_GROUP_DETAIL_KEYS = {
   description: ["spgDesc", "spg_desc", "description", "desc"],
   active: ["spgIsActive", "spg_is_active", "isActive", "is_active", "status"],
 } as const;
-
 // GST Type Values
 export const GST_TYPE_VALUES = new Set(GST_TYPE_OPTIONS.map((option) => option.value));
-
 // Modal Initial Form Values
 export const STATE_MODAL_INITIAL_VALUES = {
   stateCode: "",
@@ -211,14 +209,12 @@ export const STATE_MODAL_INITIAL_VALUES = {
   tinCode: "",
   isActive: "true",
 } as const;
-
 export const SUPPLIER_GROUP_MODAL_INITIAL_VALUES = {
   spgName: "",
   spgShort: "",
   spgDesc: "",
   spgIsActive: "true",
 } as const;
-
 // Supplier Form Initial Values
 export const SUPPLIER_INITIAL_FORM_VALUES = {
   supCompanyId: "",
@@ -265,7 +261,6 @@ export const SUPPLIER_INITIAL_FORM_VALUES = {
   supCreatedBy: "",
   supModifiedBy: "",
 } as const;
-
 // Re-export shared constants
 export {
   COLLECTION_DAY_OPTIONS,
