@@ -18,6 +18,7 @@ import {
   type LazyDropdownHandlers,
 } from "@/features/masters/shared/use-lazy-configured-dropdown";
 import styles from "@/app/master/state-master/page.module.scss";
+import modalStyles from "./company-modal.module.scss";
 import {
   buildLookupOptions,
   defineMasterModule,
@@ -151,9 +152,13 @@ const APPLICABILITY_CHECKBOX_FIELD_STYLE: CSSProperties = {
 };
 const COMPANY_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(92vw, 70rem)",
-  // No fixed height: let the panel size to its content so short tabs don't leave
-  // an empty band above the footer. maxHeight still caps it and enables scrolling
-  // when a tab's content is taller than the viewport.
+  // Fixed height, sized to the tallest tab rather than to whichever tab is open,
+  // so the panel does not resize as you move between them (content-sized, the
+  // four tabs measured 612 / 714 / 604 / 270px). 720px clears the tallest one
+  // ("Tax and Compliance") with the header and footer; shorter tabs leave an
+  // empty band above the footer, which is the cost of a stable panel. The vh
+  // term keeps it inside short viewports, where the body scrolls instead.
+  height: "min(86vh, 720px)",
   maxHeight: "86vh",
 };
 const COMPANY_STANDARD_FIELD_NAMES = [
@@ -1095,6 +1100,7 @@ export function useCompaniesModule() {
         customFields: companyFormFields,
         createInitialValues: COMPANY_INITIAL_FORM_VALUES,
         modalPanelStyle: COMPANY_MODAL_PANEL_STYLE,
+        modalPanelClassName: modalStyles.fixedHeightPanel,
          createModalTitle:"Company Entry",
       editModalTitle:"Edit Company Entry",
         modalFormGridColumns: 2,

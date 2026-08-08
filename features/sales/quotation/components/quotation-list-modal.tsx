@@ -4,17 +4,17 @@
  * F8 — open another quotation without leaving the form.
  *
  * The same configured grid the list screen uses (84, "Quotation"), so it inherits
- * the same three constraints, each handled rather than papered over:
+ * the same constraints, each handled rather than papered over:
  *
- *  - **no filterable column**, so `search=` on the wire returns nothing; the box
- *    filters the fetched page;
- *  - **no `WHERE` clause**, so the fetch is unscoped across EVERY tenant, not
- *    just this one — the tenant filter below is what narrows it, and `FETCH_LIMIT`
- *    rows may not even contain all of this tenant's own quotations if other
- *    tenants dominate the unsorted-by-tenant result. The "may be more" note under
- *    the search box is what keeps that honest rather than silently truncating;
- *  - **no `grid_param`**, so `meta.total` counts the unfiltered, cross-tenant set,
- *    not this tenant's — never shown as if it were a real total for this list.
+ *  - `search=` is not sent on the wire; the box filters the fetched page over more
+ *    fields than the grid marks filterable;
+ *  - the grid's own `WHERE` scopes on company, branch and year, bound from the
+ *    `grid_param` this modal's props supply — the client-side tenant filter below
+ *    is now a second belt on the same trousers, kept because a row is only usable
+ *    if its whole document key matches;
+ *  - `FETCH_LIMIT` rows are still one page of the tenant's quotations rather than
+ *    all of them, so the "may be more" note under the search box keeps that honest
+ *    rather than silently truncating.
  *
  * A soft-deleted row is shown, not hidden — the grid returns it either way, and
  * hiding it would leave the operator hunting for a quotation the list clearly
@@ -120,7 +120,7 @@ export function QuotationListModal(props: QuotationListModalProps) {
   }, [search]);
 
   const { data, isFetching, refetch } = useListQuotationsQuery(
-    { page: 1, limit: FETCH_LIMIT },
+    { page: 1, limit: FETCH_LIMIT, companyId, branchId, accYear },
     { skip: !isOpen },
   );
 

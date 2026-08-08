@@ -47,15 +47,23 @@ export type ResolvedFieldConfig = {
   /** fieldVisibility; when false the field is dropped from rendering. */
   visible: boolean;
 };
-// Flatten the configured sections into a lookup keyed by the lowercased backend
-// fieldName. Sections are ordered by sectionPosition and fields by fieldPosition
-// so the assigned `order` is a stable ascending render order across the form.
+/** The flatten below, for callers holding the whole `/widget-masters/get` envelope. */
 export function buildWidgetFieldConfig(
   response: WidgetMastersResponse | null | undefined,
 ): Map<string, ResolvedFieldConfig> {
+  return buildWidgetFieldConfigFromSections(response?.data);
+}
+// Flatten the configured sections into a lookup keyed by the lowercased backend
+// fieldName. Sections are ordered by sectionPosition and fields by fieldPosition
+// so the assigned `order` is a stable ascending render order across the form.
+//
+// Takes the sections rather than the response envelope, for screens that fetch
+// the config through RTK Query and unwrap `data` in their `transformResponse`.
+export function buildWidgetFieldConfigFromSections(
+  sections: WidgetMasterSectionConfig[] | null | undefined,
+): Map<string, ResolvedFieldConfig> {
   const config = new Map<string, ResolvedFieldConfig>();
-  const sections = Array.isArray(response?.data) ? response.data : [];
-  const orderedSections = [...sections].sort(
+  const orderedSections = [...(Array.isArray(sections) ? sections : [])].sort(
     (a, b) => (a.sectionPosition ?? 0) - (b.sectionPosition ?? 0),
   );
   let order = 0;

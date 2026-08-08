@@ -1392,14 +1392,8 @@ function RecordHistoryModalContent({
     [logs],
   );
   return (
-    <div
-      className={styles.overlay}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-    >
+    <div className={styles.overlay}>
+      <div className={styles.backdrop} onMouseDown={onClose} aria-hidden />
       <div
         className={styles.modal}
         role="dialog"

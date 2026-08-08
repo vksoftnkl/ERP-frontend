@@ -10,11 +10,9 @@
  */
 import type { ChargeApplyOn, ChargeMethod, ChargeRole, ChargeType } from "@/domain/pricing";
 import type { DraftChargeRow, DraftLine } from "./quotation.types";
-
 // ---------------------------------------------------------------------------
 // Endpoints and configured ids
 // ---------------------------------------------------------------------------
-
 /** `/api/v1` is already part of `API_BASE` — never write it in a path. */
 export const QUOTATION_SAVE_ENDPOINT = "/quotations/create";
 export const QUOTATION_GET_ENDPOINT = "/quotations/get";
@@ -35,6 +33,15 @@ export const ITEM_BY_BARCODE_ENDPOINT = "/master-lookups/item-by-barcode";
 export const FREIGHT_CHARGE_ENDPOINT = "/master-lookups/freight-charges/charge";
 export const COMPANY_GET_ENDPOINT = "/company-masters/get";
 export const USER_ADMINISTRATION_GET_ENDPOINT = "/user-administration/get";
+/** GET, `?sectionMenuId=…&sectionPlatform=…` — the header panel's field config. */
+export const WIDGET_MASTERS_GET_ENDPOINT = "/widget-masters/get";
+/**
+ * PATCH, `{ data: [{ sectionId, sectionGuiName, sectionVisibility, fields: [{
+ * fieldId, fieldSecondaryText, fieldVisibility }] }] }` — the Visible Settings
+ * dialog. Both string fields are required by the DTO, so an unset one is sent as
+ * `""` rather than the null the config carries.
+ */
+export const WIDGET_MASTERS_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 /**
  * Hold / Pick held — `public.transaction_hold`. One route creates AND updates
  * (`thId`'s presence selects which), exactly like `/quotations/create`.
@@ -63,7 +70,7 @@ export const transactionHoldLockEndpoint = (
 ): string => `/transaction-holds/${thId}/${action}`;
 export const HOLD_DEVICE_ID_HEADER = "X-Device-Id";
 /**
- * `fixed.ui_tables.ui_tbl_id` for the item grid — 23 ("Quotation-item", 89
+ * `fixed.ui_tables.ui_tbl_id` for the item grid — 23 ("Quotation-item", 90
  * columns, one per `ITEM_COLUMN_MEANINGS` entry and in the same order).
  *
  * NOT 18 ("Quotation"): that is the Qt screen's own layout, and its widths are
@@ -79,17 +86,20 @@ export const ITEM_PICKER_GRID_ID = "71";
  *
  * Two properties of this grid drive how the list is built:
  *
- *  - **No column has `grid_column_filter = true`**, so passing `search=` makes the
- *    runner inject `1 = 0` and return zero rows. Searching is therefore done
- *    client-side over the fetched window, never on the wire.
- *  - Its SQL has **no `WHERE` clause and no `grid_param`**, so soft-deleted rows
- *    and rows from every company, branch and year come back, and `meta.total`
- *    counts that unfiltered set. The list filters to the current tenant itself
- *    and reports what it actually holds rather than the server's total.
+ *  - Its SQL is **parameterised, and the parameters are not optional**:
+ *    `sq_company_id = 'icompany_id'::uuid`, `ibranch_id`, `iacc_year`, and an
+ *    `ifrom_date` / `ito_date` window. The runner binds each named token from
+ *    `grid_param`; one left unbound stays in the SQL as a literal, and the cast
+ *    then fails the whole run (`invalid input syntax for type uuid`). Every
+ *    caller of this grid therefore sends all five keys — the dates as `""`,
+ *    which the SQL's `NULLIF(…) IS NULL OR` guards read as "no bound".
+ *  - It does **not** filter `sq_is_deleted`, so soft-deleted rows come back and
+ *    `meta.total` counts them; the list shows them, tagged, rather than hiding
+ *    rows the grid plainly returned.
  *
- * (Grid 83, "QUOTATION - MAIN LIST", selects the same columns and does have four
- * filterable ones, but hides half the columns and is not the configured list for
- * this screen.)
+ * (Grid 83, "QUOTATION - MAIN LIST", selects the same columns behind the same
+ * parameters, but hides half of them and is not the configured list for this
+ * screen.)
  */
 export const QUOTATION_LIST_GRID_ID = "84";
 /** `fixed.dropdown_details.dropdown_id` for the customer combobox. */
@@ -136,6 +146,58 @@ export const QUOTATION_STATUSES = [
 ] as const;
 export type QuotationStatus = (typeof QUOTATION_STATUSES)[number];
 export const DEFAULT_QUOTATION_STATUS: QuotationStatus = "DRAFT";
+// ---------------------------------------------------------------------------
+// Visible Settings — the header panel's configured fields
+// ---------------------------------------------------------------------------
+/**
+ * `fixed.menu_master.menu_id` for Quotation. Its Web config is one section,
+ * "Quoation entry" (`fixed.form_section` 61), holding one row per field in the
+ * three header blocks.
+ */
+export const QUOTATION_WIDGET_MENU_ID = "14";
+/**
+ * Sections are scoped by platform as well as by menu, and the server validates
+ * this against a case-sensitive enum (Mobile | Desktop | Web).
+ */
+export const QUOTATION_WIDGET_PLATFORM = "Web";
+/**
+ * Bridges each header field to the backend `fixed.form_field.field_name` it is
+ * configured under (matched case-insensitively). A key missing from the config
+ * keeps its hardcoded label and stays visible, so a failed or empty fetch leaves
+ * the screen exactly as authored.
+ *
+ * The shipped config names every field after the label this screen already
+ * showed, so the same string doubles as the fallback label — a configured
+ * `fieldGuiName` / `fieldSecondaryText` overrides it, nothing else does.
+ *
+ * Only the header is configurable. The two grids take their column layout from
+ * `fixed.ui_table_columns` instead (their own right-click "Admin settings"), and
+ * the Terms block has no configured rows at all.
+ */
+export const QUOTATION_HEADER_FIELD_NAMES = {
+  existingCustomer: "Existing Customer",
+  customerName: "Customer Name",
+  address: "Address",
+  place: "Place",
+  phone: "Phone",
+  gstin: "GSTIN",
+  posStateCode: "POS State Code",
+  beat: "Beat",
+  salesman: "Salesman",
+  agent: "Agent",
+  contactPerson: "Contact Person",
+  contactNo: "Contact No",
+  freight: "Freight",
+  load: "Load",
+  unload: "Unload",
+  promo: "Promo",
+  quoteNo: "Quote No",
+  quoteDate: "Quote Date",
+  validUntil: "Valid Until",
+  validityDays: "Validity Days",
+  priceLevel: "Price Level",
+} as const;
+export type QuotationHeaderFieldKey = keyof typeof QUOTATION_HEADER_FIELD_NAMES;
 // ---------------------------------------------------------------------------
 // Transaction hold (F9 park / F10 recall)
 // ---------------------------------------------------------------------------
@@ -244,7 +306,6 @@ export const SESSION_CAPABILITIES = {
   /** Names and addresses come from the regional-language columns. */
   regional: false,
 } as const;
-
 export const CHARGE_ROLE_OPTIONS: { value: ChargeRole; label: string }[] = [
   { value: "NONE", label: "None" },
   { value: "FREIGHT", label: "Freight" },
@@ -253,7 +314,6 @@ export const CHARGE_ROLE_OPTIONS: { value: ChargeRole; label: string }[] = [
   { value: "CASH_DISC", label: "Cash Discount" },
   { value: "OTHERS", label: "Others" },
 ];
-
 export const CHARGE_METHOD_LABELS: Record<ChargeMethod, string> = {
   FIXED: "Fixed",
   PERCENT: "Percent",
@@ -263,19 +323,16 @@ export const CHARGE_METHOD_LABELS: Record<ChargeMethod, string> = {
   QTL: "Qtl",
   TON: "Ton",
 };
-
 export const CHARGE_TYPE_LABELS: Record<ChargeType, string> = {
   ADD: "Add",
   DEDUCT: "Deduct",
 };
-
 export const CHARGE_APPLY_ON_LABELS: Record<ChargeApplyOn, string> = {
   FLAT: "Flat",
   QTY: "Qty",
   VALUE: "Value",
   WEIGHT: "Weight",
 };
-
 /**
  * The suffix a rate cell paints for each method — at paint time only. The cell
  * value stays a bare number so it round-trips through the reducer unchanged.
@@ -289,11 +346,9 @@ export const CHARGE_RATE_SUFFIX: Record<ChargeMethod, string> = {
   QTL: "/Qtl",
   TON: "/Ton",
 };
-
 // ---------------------------------------------------------------------------
 // Column bridge
 // ---------------------------------------------------------------------------
-
 /**
  * `ui_table_columns` stores a display name, never a field token, so both stock
  * grids match on the name with punctuation and case stripped. Same function,
@@ -306,7 +361,28 @@ export const CHARGE_RATE_SUFFIX: Record<ChargeMethod, string> = {
 export function normalizeColumnToken(value: string): string {
   return value.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
 }
-
+/**
+ * The row-number column both grids open on. It is the one column whose configured
+ * name is not a field at all, so deployments rename it freely — item grid 23 is
+ * configured as `"sl.no"` here and as `"Id"` elsewhere, charge grid 21 as `"#"` —
+ * and a name this list misses drops the column off the grid entirely rather than
+ * rendering it blank.
+ */
+export const SERIAL_COLUMN_KEY = "slno";
+const SERIAL_COLUMN_ALIASES = new Set([
+  SERIAL_COLUMN_KEY,
+  "id",
+  "sl",
+  "sno",
+  "srno",
+  "serial",
+  "serialno",
+  "rowno",
+]);
+/** Whether a normalised `ui_tbl_clm_name` names the serial column. */
+export function isSerialColumnName(normalized: string): boolean {
+  return SERIAL_COLUMN_ALIASES.has(normalized);
+}
 export type GridCellKind =
   | "serial"
   | "text"
@@ -322,9 +398,7 @@ export type GridCellKind =
   | "itemLookup"
   | "chargeLookup"
   | "label";
-
 export type ColumnAlign = "left" | "center" | "right";
-
 /**
  * One column's meaning. `read` names the field the cell displays and `write` the
  * draft field an edit lands on — they differ for the three discount amount
@@ -345,7 +419,6 @@ export type ItemColumnMeaning = {
   /** Only editable while this predicate holds (beyond the screen-wide gate). */
   editableWhen?: "batchConfig" | "hasFreight" | "editPrice";
 };
-
 function itemColumn(
   token: string,
   kind: GridCellKind,
@@ -354,9 +427,8 @@ function itemColumn(
 ): ItemColumnMeaning {
   return { token, key: normalizeColumnToken(token), kind, align, ...extra };
 }
-
 /**
- * All 89 configured columns of ui table 23 ("Quotation-item"), in `uiTblClmNo`
+ * All 90 configured columns of ui table 23 ("Quotation-item"), in `uiTblClmNo`
  * order — the same order this list declares them in.
  *
  * Sorted by column NUMBER, not position: on ui table 18 (the Qt screen's own
@@ -365,7 +437,10 @@ function itemColumn(
  * those two swap non-deterministically.
  */
 export const ITEM_COLUMN_MEANINGS: ItemColumnMeaning[] = [
-  itemColumn("Id", "serial", "right"),
+  // The row number. Named `"sl.no"` on this deployment and `"Id"` on others —
+  // both resolve here through `isSerialColumnName`, and the heading is painted
+  // from this token rather than from whichever of the two the layout carries.
+  itemColumn("Sl.No", "serial", "right"),
   itemColumn("Barcode", "text", "left", { write: "barcode", read: "barcode" }),
   itemColumn("Code", "text", "left", { read: "itemCode" }),
   itemColumn("Description", "itemLookup", "left", { read: "itemName" }),
@@ -478,8 +553,8 @@ export const ITEM_COLUMN_MEANINGS: ItemColumnMeaning[] = [
   itemColumn("IsInclusiveTax", "check", "center", { read: "isInclusiveTax" }),
   itemColumn("NetB.Tax", "rate", "right", { read: "netPriceBeforeTax", precision: 4 }),
   itemColumn("Diff", "currency", "right", { read: "rateDiff" }),
+  itemColumn("ItemSize", "text", "left", { write: "itemSize", read: "itemSize" }),
 ];
-
 export type ChargeColumnMeaning = {
   token: string;
   key: string;
@@ -491,23 +566,16 @@ export type ChargeColumnMeaning = {
   /** A FIXED row's rate is the lump sum and is priced through Amount instead. */
   readOnlyWhenFixed?: boolean;
 };
-
-/**
- * The charge grid's first column is named `"#"`, which normalises to the empty
- * string — an unusable map key. It gets this sentinel instead, and the configured
- * row is matched to it by its column number.
- */
-export const CHARGE_SERIAL_KEY = "slno";
-
 function chargeColumn(
   token: string,
   kind: GridCellKind,
   align: ColumnAlign,
   extra: Omit<ChargeColumnMeaning, "token" | "key" | "kind" | "align"> = {},
 ): ChargeColumnMeaning {
-  return { token, key: normalizeColumnToken(token) || CHARGE_SERIAL_KEY, kind, align, ...extra };
+  // `"#"` normalises to the empty string — an unusable map key, so the serial
+  // column takes the shared sentinel the item grid's own one does.
+  return { token, key: normalizeColumnToken(token) || SERIAL_COLUMN_KEY, kind, align, ...extra };
 }
-
 /** All 33 configured columns of ui table 21, in `uiTblClmNo` order. */
 export const CHARGE_COLUMN_MEANINGS: ChargeColumnMeaning[] = [
   // `"#"` normalises to "" — matched by column number, see `resolveChargeColumns`.
@@ -545,7 +613,6 @@ export const CHARGE_COLUMN_MEANINGS: ChargeColumnMeaning[] = [
   chargeColumn("TaxCode", "label", "left", { read: "taxCode" }),
   chargeColumn("TaxApl", "check", "center", { read: "taxApl" }),
 ];
-
 /**
  * The one-of-three discount groups. Editing any member clears its siblings, so
  * `applyLineDiscounts`'s "percent, else per-qty, else the keyed amount" choice is
@@ -562,7 +629,6 @@ export const DISCOUNT_ALTERNATES: Partial<Record<keyof DraftLine, (keyof DraftLi
   schPerQty: ["schPerc", "schAmt"],
   schAmt: ["schPerc", "schPerQty"],
 };
-
 /** Data attributes the Enter-to-next-cell walker reads off each editable cell. */
 export const GRID_FIELD_ATTR = "data-quotation-field";
 export const GRID_ROW_ATTR = "data-quotation-row";

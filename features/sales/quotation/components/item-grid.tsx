@@ -22,7 +22,7 @@ import {
   type ItemColumnMeaning,
 } from "../quotation.constants";
 import type { DraftLine, ItemUnitOption } from "../quotation.types";
-import { totalColumnWidth, type ResolvedItemColumn } from "../quotation.utils";
+import { isFrozenColumn, totalColumnWidth, type ResolvedItemColumn } from "../quotation.utils";
 import { GridCell } from "./grid-cell";
 import { focusCell, focusLastCellAfterRender, moveCellFocus } from "./grid-focus";
 import styles from "../page.module.scss";
@@ -173,13 +173,14 @@ export function ItemGrid(props: ItemGridProps) {
         </colgroup>
         <thead>
           <tr>
-            {visible.map((column) => (
+            {visible.map((column, columnIndex) => (
               <th
                 key={column.key}
                 scope="col"
                 title={column.token}
                 className={cx(
                   styles.gridHeaderCell,
+                  isFrozenColumn(columnIndex) && styles.gridHeaderFrozenCell,
                   resizingKey === column.key && styles.gridHeaderCellResizing,
                 )}
               >
@@ -192,7 +193,7 @@ export function ItemGrid(props: ItemGridProps) {
                 />
               </th>
             ))}
-            <th scope="col" aria-label="Row actions" />
+            <th scope="col" aria-label="Row actions" className={styles.gridHeaderActionCell} />
           </tr>
         </thead>
         <tbody onKeyDown={onGridKeyDown}>
@@ -242,7 +243,7 @@ export function ItemGrid(props: ItemGridProps) {
                   return (
                     <td
                       key={column.key}
-                      className={cx(columnIndex === 0 && styles.serialCell)}
+                      className={cx(isFrozenColumn(columnIndex) && styles.frozenCell)}
                     >
                       <GridCell
                         kind={column.kind}

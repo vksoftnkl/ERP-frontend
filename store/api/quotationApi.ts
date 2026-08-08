@@ -38,7 +38,12 @@ import {
   UI_TABLE_MASTERS_ENDPOINT,
   UI_TABLE_VISIBILITY_ENDPOINT,
   USER_ADMINISTRATION_GET_ENDPOINT,
+  QUOTATION_WIDGET_MENU_ID,
+  QUOTATION_WIDGET_PLATFORM,
+  WIDGET_MASTERS_GET_ENDPOINT,
+  WIDGET_MASTERS_VISIBILITY_ENDPOINT,
 } from "@/features/sales/quotation/quotation.constants";
+import type { WidgetMasterSectionConfig } from "@/features/masters/shared/widget-config";
 import type {
   BarcodeItemLookup,
   ChargeMasterRow,
@@ -89,7 +94,17 @@ export type QuotationListQuery = {
   search?: string;
   sort_by?: string;
   sort_dir?: "asc" | "desc";
+  /**
+   * The tenant grid 84's SQL scopes on. Required, not optional: its WHERE reads
+   * `sq_company_id = 'icompany_id'::uuid`, and a token the request binds no
+   * value for stays in the SQL as a literal the cast then rejects.
+   */
+  companyId: string;
+  branchId: string;
+  accYear: string;
 };
+/** A uuid that matches nothing, so an unresolved tenant lists no rows instead of failing the cast. */
+const NO_TENANT_ID = "00000000-0000-0000-0000-000000000000";
 /**
  * What every lock transition needs: the hold, the device asking (which travels
  * as a header, not a body field) and the tenant scope the server keys its
@@ -263,18 +278,27 @@ export const quotationApi = baseApi.injectEndpoints({
       invalidatesTags: ["TransactionHold"],
     }),
     // -- the browse list (there is no /quotations/list route; grid 84 is it) --
-    listQuotations: builder.query<ConfiguredGridPage<QuotationListRow>, QuotationListQuery | void>({
+    listQuotations: builder.query<ConfiguredGridPage<QuotationListRow>, QuotationListQuery>({
       query: (params) => ({
         url: CONFIGURED_GRID_RUN_ENDPOINT,
         params: {
           grid_id: QUOTATION_LIST_GRID_ID,
-          page: params?.page ?? 1,
-          limit: params?.limit ?? 20,
-          // `search` is deliberately NOT forwarded: grid 84 has no filterable
-          // column, so the runner would inject `1 = 0` and answer with an empty
-          // page. The caller filters what it fetched.
-          ...(params?.sort_by ? { sort_by: params.sort_by } : {}),
-          ...(params?.sort_dir ? { sort_dir: params.sort_dir } : {}),
+          page: params.page ?? 1,
+          limit: params.limit ?? 20,
+          // `search` is deliberately NOT forwarded: the caller filters what it
+          // fetched, over more fields than the grid marks filterable.
+          ...(params.sort_by ? { sort_by: params.sort_by } : {}),
+          ...(params.sort_dir ? { sort_dir: params.sort_dir } : {}),
+          // Grid 84's own WHERE. Every token it names must be bound — the dates
+          // travel empty, which its `NULLIF('ifrom_date', '') IS NULL OR …`
+          // guards read as "no bound", and an absent key would not.
+          grid_param: JSON.stringify({
+            icompany_id: params.companyId || NO_TENANT_ID,
+            ibranch_id: params.branchId || NO_TENANT_ID,
+            iacc_year: params.accYear,
+            ifrom_date: "",
+            ito_date: "",
+          }),
         },
       }),
       transformResponse: (payload: ApiSuccessResponse<ConfiguredGridPage<QuotationListRow>>) =>
@@ -371,6 +395,54 @@ export const quotationApi = baseApi.injectEndpoints({
           patch.undo();
         }
       },
+    }),
+    /**
+     * The header panel's field config — which of the three header blocks' fields
+     * this deployment shows, and what it calls them. Shared with the master
+     * screens' "Visible Settings", so the shape is theirs: sections, each with
+     * its fields, for one menu id and platform.
+     */
+    getQuotationWidgetConfig: builder.query<WidgetMasterSectionConfig[], void>({
+      query: () => ({
+        url: WIDGET_MASTERS_GET_ENDPOINT,
+        // camelCase here; the sibling `/widget-masters/config` route spells the
+        // same two filters `menu_id` / `platform`.
+        params: {
+          sectionMenuId: QUOTATION_WIDGET_MENU_ID,
+          sectionPlatform: QUOTATION_WIDGET_PLATFORM,
+        },
+      }),
+      transformResponse: (payload: ApiSuccessResponse<WidgetMasterSectionConfig[]>) =>
+        payload.data ?? [],
+      providesTags: [{ type: "WidgetConfig", id: QUOTATION_WIDGET_MENU_ID }],
+      keepUnusedDataFor: 300,
+    }),
+    /**
+     * Saves the Visible Settings dialog. Every section is sent whole — the
+     * server updates by `sectionId` / `fieldId` and rolls the batch back if any
+     * id is missing, so a partial body would not be a partial save.
+     */
+    saveQuotationWidgetVisibility: builder.mutation<
+      unknown,
+      {
+        data: Array<{
+          sectionId: number;
+          sectionGuiName: string;
+          sectionVisibility: boolean;
+          fields: Array<{
+            fieldId: number;
+            fieldSecondaryText: string;
+            fieldVisibility: boolean;
+          }>;
+        }>;
+      }
+    >({
+      query: (body) => ({
+        url: WIDGET_MASTERS_VISIBILITY_ENDPOINT,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: [{ type: "WidgetConfig", id: QUOTATION_WIDGET_MENU_ID }],
     }),
     // -- pickers -----------------------------------------------------------
     /**
@@ -560,6 +632,8 @@ export const {
   useGetQuotationGridLayoutQuery,
   useSaveQuotationColumnWidthsMutation,
   useSaveQuotationColumnVisibilityMutation,
+  useGetQuotationWidgetConfigQuery,
+  useSaveQuotationWidgetVisibilityMutation,
   useSearchPickerItemsQuery,
   useLazySearchPickerItemsQuery,
   useGetSalesChargesQuery,

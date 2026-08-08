@@ -15,16 +15,23 @@
  * `/configured-grid-sql/columns` path the other master pages use. Nothing here
  * overrides it, so a config change moves this list without touching code.
  *
- * One property of the grid the shell cannot paper over: **its SQL has no `WHERE`
- * and no `grid_param`**, so soft-deleted rows and rows from other companies,
- * branches and years are listed too — the same behaviour every other master page
- * has with its own grid (see grid 81 / Charge Master). The `Deleted` column is
- * kept visible for exactly that reason: without it the list would show a deleted
- * quotation as though it were live.
+ * Grid 84's SQL scopes itself on the shell's company, branch and year, and it
+ * does so with the legacy named tokens the runner binds from `grid_param` —
+ * `sq_company_id = 'icompany_id'::uuid`, `ibranch_id`, `iacc_year`, plus an
+ * optional `ifrom_date` / `ito_date` window. Those tokens are NOT optional: left
+ * unbound they reach Postgres as string literals and the `::uuid` cast fails, so
+ * `buildListQuery` below always sends every one of them.
+ *
+ * What the SQL does not filter is `sq_is_deleted`, so soft-deleted rows are
+ * listed — the same behaviour every other master page has with its own grid (see
+ * grid 81 / Charge Master). The `Deleted` column is kept visible for exactly that
+ * reason: without it the list would show a deleted quotation as though it were live.
  */
+import { useCallback } from "react";
 import { toast } from "react-toastify";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
+import { useBusinessContext } from "@/components/layout/business-context";
 import styles from "@/app/master/state-master/page.module.scss";
 import { formatCurrency } from "@/domain/pricing";
 import {
@@ -45,6 +52,16 @@ const API_ENDPOINTS = {
   create: QUOTATION_SAVE_ENDPOINT,
   delete: QUOTATION_DELETE_ENDPOINT,
 } as const;
+
+/**
+ * Stands in for a company or branch id while the shell's business context is
+ * still loading — the list fires once before it resolves. A uuid the SQL can
+ * cast and match nothing on keeps that first request a valid, empty page; an
+ * empty string would fail the `::uuid` cast and surface an error the operator
+ * would see flash by for no reason. The real ids arrive on the refetch the
+ * changed query triggers.
+ */
+const NO_TENANT_ID = "00000000-0000-0000-0000-000000000000";
 
 /**
  * A quotation has no code / short / alias / active column, so these name the
@@ -114,9 +131,50 @@ export type QuotationListViewProps = {
 };
 
 export function QuotationListView({ onCreate, onOpen }: QuotationListViewProps) {
+  const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
+  const companyId = activeCompany?.compId ?? activeCompany?.id ?? "";
+  const branchId = activeBranch?.id ?? "";
+  const accYear = (activeFiscalYear?.name ?? "").trim();
+
+  // The shell's default page/limit/search/sort query, plus the `grid_param` grid
+  // 84's SQL needs. The date window is sent empty on purpose: each date sits
+  // behind a `NULLIF('ifrom_date', '') IS NULL OR …` guard, so an empty string
+  // means "no bound" while an absent key would leave the token unbound and fail
+  // the run. Screen-level date filtering, when it lands, sets these two.
+  const buildListQuery = useCallback(
+    ({
+      searchTerm,
+      currentPage,
+      pageSize,
+      sortBy,
+      sortDir,
+    }: {
+      searchTerm: string;
+      currentPage: number;
+      pageSize: number;
+      sortBy?: string;
+      sortDir?: "asc" | "desc";
+    }): Record<string, string> => ({
+      page: String(currentPage),
+      limit: String(pageSize),
+      ...(searchTerm ? { search: searchTerm } : {}),
+      ...(sortBy ? { sort_by: sortBy } : {}),
+      ...(sortBy && sortDir ? { sort_dir: sortDir } : {}),
+      grid_param: JSON.stringify({
+        icompany_id: companyId || NO_TENANT_ID,
+        ibranch_id: branchId || NO_TENANT_ID,
+        iacc_year: accYear,
+        ifrom_date: "",
+        ito_date: "",
+      }),
+    }),
+    [accYear, branchId, companyId],
+  );
+
   return (
     <CrudMasterPage
       title="Quotations"
+      buildListQuery={buildListQuery}
       entityLabel="quotation"
       entityLabelPlural="quotations"
       apiEndpoints={API_ENDPOINTS}
@@ -140,7 +198,8 @@ export function QuotationListView({ onCreate, onOpen }: QuotationListViewProps) 
       // The voucher form replaces the shell's modal on both paths, so the form
       // props (fields, titles, payload builders) are deliberately absent.
       onCreateAction={onCreate}
-      // The grid has no `WHERE`, so soft-deleted rows are listed. Selecting one
+      // The grid's `WHERE` scopes on tenant only, so soft-deleted rows are
+      // listed with the live ones. Selecting one
       // greys the toolbar's Edit button out rather than opening the voucher
       // screen on a document it would refuse to make editable anyway. Such a
       // quotation is still readable through the entry screen's own F8 picker.

@@ -125,6 +125,7 @@ export type SaveQuotationItemDto = {
   sqiSchemeId?: string | null;
   sqiSchemeName?: string | null;
   sqiRemarks?: string | null;
+  sqiItemSize?: string | null;
 };
 
 export type SaveQuotationChargeDto = {
@@ -175,6 +176,13 @@ export type SaveQuotationDto = {
   sqPriceLevel: number;
   sqCustName: string;
   sqUserId: string;
+
+  /**
+   * Free-text actor columns, unlike the uuid `sqUserId`: the audit trail stores
+   * whichever of the two applies verbatim, so these carry the user's *name*.
+   */
+  sqCreatedBy?: string | null;
+  sqModifiedBy?: string | null;
 
   sqDocType?: string | null;
   sqUsrRefno?: string | null;
@@ -325,6 +333,7 @@ export type QuotationItemPayload = {
   sqiSchemeId: string | null;
   sqiSchemeName: string | null;
   sqiRemarks: string | null;
+  sqiItemSize: string | null;
   /** Joined display names — populated on GET only, `null` on the save response. */
   sqiItemName: string | null;
   sqiUnitName: string | null;
@@ -698,6 +707,8 @@ export type DraftLine = Line & {
   cashDiscPerc: number;
   cashDiscAmt: number;
   remarks: string | null;
+  /** Free text, `sqi_item_size` — no master backs it, the operator types it. */
+  itemSize: string | null;
   /** Quantity precision for this line's unit. */
   decimalCount: number;
   batchConfig: number;
@@ -738,7 +749,15 @@ export type DraftChargeRow = ChargeRow & {
  */
 export type CustomerSnapshot = {
   custId: string | null;
+  /** The document's own copy of the name, which the operator may amend. */
   name: string;
+  /**
+   * The linked master record's name, as picked or as the document stored it.
+   * Display-only, and deliberately not re-derived from `name`: the Existing
+   * Customer combobox says which master record this quotation points at, so
+   * amending the document's own copy must not rewrite which record it names.
+   */
+  masterName: string;
   englishName: string | null;
   address: string | null;
   place: string | null;

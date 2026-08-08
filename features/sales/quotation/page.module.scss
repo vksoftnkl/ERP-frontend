@@ -179,6 +179,23 @@
   font-weight: 700;
   white-space: nowrap;
 }
+/* A field the save refuses to go without. */
+.requiredMark {
+  margin-left: 0.15rem;
+  color: var(--danger, #b3261e);
+}
+/* Read by a screen reader, never drawn — the asterisk alone is a colour cue. */
+.srOnly {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  margin: -1px;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .input,
 .select,
 .textarea {
@@ -479,6 +496,21 @@
   font-weight: 700;
   white-space: nowrap;
 }
+/* The two headings above a frozen column stick on BOTH axes: `top` comes from
+   the rule above, `left` / `right` pin them over the columns scrolling past.
+   Written against `.grid thead th` rather than on their own — that rule's
+   `z-index: 2` is the more specific of the two and would otherwise win, leaving
+   the heading to slide under its neighbours. */
+.grid thead th.gridHeaderFrozenCell {
+  z-index: 3;
+  left: 0;
+  box-shadow: 1px 0 0 var(--border-light, #e2e2e2);
+}
+.grid thead th.gridHeaderActionCell {
+  z-index: 3;
+  right: 0;
+  box-shadow: -1px 0 0 var(--border-light, #e2e2e2);
+}
 /* --------------------------------------------- grid settings context menu */
 /* Portaled to `document.body`, so it carries its own tokens rather than the
    page wrapper's. */
@@ -672,13 +704,16 @@
   background: #fdecec;
   box-shadow: inset 0 0 0 1px var(--danger, #b3261e);
 }
-.serialCell {
+/* The leftmost column stays put while the grid scrolls sideways — see
+   `isFrozenColumn`, which is what decides a cell carries this. No `text-align`:
+   the cell keeps its column's own alignment (Sl.No right, Charge Name left),
+   which a rule here would override for every grid at once. */
+.frozenCell {
   position: sticky;
   z-index: 1;
   left: 0;
   background: inherit;
   box-shadow: 1px 0 0 var(--border-light, #e2e2e2);
-  text-align: right;
 }
 .actionCell {
   position: sticky;
@@ -880,6 +915,13 @@
 }
 
 .modalPanel {
+  /* Pre-promote the panel to its own GPU layer above the overlay's scrim
+     before first paint — created lazily it can composite with a stale/partial
+     frame for a tick, leaving a dark ghost block over the panel (same fix as
+     `.panel` in dynamic-modal-form.module.scss). */
+  position: relative;
+  z-index: 1;
+  will-change: transform, opacity;
   display: flex;
   flex-direction: column;
   width: min(64rem, 100%);

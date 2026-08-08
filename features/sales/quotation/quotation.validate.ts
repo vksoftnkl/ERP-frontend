@@ -6,12 +6,19 @@ import type { DocumentPricing } from "@/domain/pricing";
 import { SESSION_CAPABILITIES } from "./quotation.constants";
 import type { QuotationDraft, Violation } from "./quotation.types";
 import { accountingYearOf, isRealDate } from "./quotation.utils";
-
 export type ValidationContext = {
   /** Operator may quote above MRP. No source for this on the wire yet. */
   skipMrp?: boolean;
+  /**
+   * Whether the Phone field is actually on the form. It is mandatory when it
+   * is, but a deployment can hide it from Visible Settings (menu 14) — and
+   * refusing to save over a field the operator cannot see, with a message
+   * pointing at nothing, would leave the screen with no way forward. Defaults
+   * to on, so a caller that knows nothing about the form config still gets the
+   * check.
+   */
+  phoneOnForm?: boolean;
 };
-
 /**
  * The role gate. For each of FREIGHT / LOADING / UNLOADING: if the header
  * checkbox is on, the policy is not MANUAL, and the lines actually compute a
@@ -23,7 +30,6 @@ export type ValidationContext = {
 function roleGate(draft: QuotationDraft, pricing: DocumentPricing): Violation | null {
   const isManual = (calcType: string) => calcType.trim().toUpperCase() === "MANUAL";
   const hasRole = (role: string) => draft.charges.some((row) => row.role === role && row.chgId);
-
   const computedFreight = pricing.lines.reduce((total, line) => total + line.freightAmt, 0);
   if (draft.header.hasFreight && !isManual(draft.policy.freightCalcType) && computedFreight > 0) {
     if (!hasRole("FREIGHT")) {
@@ -34,7 +40,6 @@ function roleGate(draft: QuotationDraft, pricing: DocumentPricing): Violation | 
       };
     }
   }
-
   const computedLoading = pricing.lines.reduce((total, line) => total + line.loadingAmt, 0);
   if (draft.header.hasLoad && !isManual(draft.policy.loadingCalcType) && computedLoading > 0) {
     if (!hasRole("LOADING")) {
@@ -45,7 +50,6 @@ function roleGate(draft: QuotationDraft, pricing: DocumentPricing): Violation | 
       };
     }
   }
-
   // UNLOADING has no per-line column on this screen, so it can never compute a
   // positive amount and the gate can never fire for it. The check is written out
   // rather than omitted so that adding the column later cannot silently skip it.
@@ -59,10 +63,8 @@ function roleGate(draft: QuotationDraft, pricing: DocumentPricing): Violation | 
       };
     }
   }
-
   return null;
 }
-
 export function validateSaveInputs(
   draft: QuotationDraft,
   pricing: DocumentPricing,
@@ -78,25 +80,31 @@ export function validateSaveInputs(
       field: "mode",
     };
   }
-
   if (draft.mode !== "entry") {
     return {
       message: "This quotation is read-only — press Edit to change it.",
       field: "mode",
     };
   }
-
   // The NAME is what the document needs, not a master record: `sqCustName` is
   // required by the save DTO while `sqCustId` is optional, so a walk-in keyed
   // straight into the customer fields is a legitimate quotation.
   if (!draft.customer.name.trim()) {
     return { message: "Enter a customer name, or pick one from the list.", field: "customer" };
   }
-
+  // Mandatory alongside the name, and for the same reason: the quotation has to
+  // be followed up on, and a document keyed for a walk-in carries the only copy
+  // of how to reach them. Not format-checked — landlines, extensions and country
+  // codes are all legitimate here, and a picky rule would reject real numbers.
+  if ((context.phoneOnForm ?? true) && !(draft.customer.phone ?? "").trim()) {
+    return {
+      message: "Enter the customer's phone number.",
+      field: "customerPhone",
+    };
+  }
   if (!isRealDate(draft.header.quoteDate)) {
     return { message: "The quotation date is not a real calendar date.", field: "quoteDate" };
   }
-
   // `sqAccYear` is immutable after create and is part of the voucher sequence's
   // period key, so a quote date that falls outside the document's accounting
   // year would number the voucher into the wrong year for good.
@@ -107,7 +115,6 @@ export function validateSaveInputs(
       field: "quoteDate",
     };
   }
-
   if (draft.header.validUntil) {
     if (!isRealDate(draft.header.validUntil)) {
       return { message: "The validity date is not a real calendar date.", field: "validUntil" };
@@ -119,17 +126,14 @@ export function validateSaveInputs(
       };
     }
   }
-
   const skipMrp = context.skipMrp ?? SESSION_CAPABILITIES.skipMrp;
   let populated = 0;
-
   for (let index = 0; index < draft.lines.length; index += 1) {
     const line = draft.lines[index];
     if (!line.itemId) {
       continue;
     }
     populated += 1;
-
     if (line.billQty === 0) {
       return {
         message: `${line.itemName || "This line"} has no quantity.`,
@@ -159,11 +163,9 @@ export function validateSaveInputs(
       };
     }
   }
-
   if (populated === 0) {
     return { message: "Add at least one item.", field: "items" };
   }
-
   for (const row of draft.charges) {
     if (!row.chgId) {
       continue;
@@ -177,10 +179,8 @@ export function validateSaveInputs(
       };
     }
   }
-
   return roleGate(draft, pricing);
 }
-
 /**
  * The live, non-blocking warning the rate cell raises as it is keyed. Separate
  * from `validateSaveInputs` because it fires on every keystroke and must not

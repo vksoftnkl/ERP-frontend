@@ -14,12 +14,23 @@
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: rgba(0, 0, 0, 0.45);
   // Own one isolated composited layer so the page's promoted scroll container
   // cannot be ordered above the modal and paint grid tiles over it. See the
   // long-form rationale on `.overlay` in dynamic-modal-form.module.scss.
   isolation: isolate;
   transform: translateZ(0);
+}
+// The scrim is its own explicit layer *below* the panel rather than a
+// background on `.overlay`: with the scrim painted into the overlay's base
+// layer, Chromium could composite it over the panel's freshly-promoted
+// sub-layers (the sticky list header / diff-table scroller) for a frame,
+// leaving a dark ghost block on the modal until the next full repaint —
+// visible on open and on the repaint a mouse click triggers.
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: rgba(0, 0, 0, 0.45);
 }
 .modal {
   --accent: var(--primary, #7b1515);
@@ -45,6 +56,13 @@
   /* Accordion column track: caret · # · when · action · user · counts ·
      sections. Shared by the list header and every group row. */
   --group-cols: 16px 26px 132px auto 120px 132px 1fr;
+  // Sit above the backdrop layer, and pre-promote the panel to its own GPU
+  // layer *before* first paint — created lazily it can composite with a
+  // stale/partial frame for a tick (same fix as `.panel` in
+  // dynamic-modal-form.module.scss).
+  position: relative;
+  z-index: 1;
+  will-change: transform, opacity;
   display: flex;
   flex-direction: column;
   width: min(860px, 96vw);
@@ -86,7 +104,6 @@
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
-
   &:hover {
     background: rgba(255, 255, 255, 0.18);
   }

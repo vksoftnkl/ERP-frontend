@@ -1132,6 +1132,13 @@
   transform: translateZ(0);
 }
 .inlineMasterPanel {
+  // Pre-promote the panel to its own GPU layer above the overlay's scrim
+  // before first paint — created lazily it can composite with a stale/partial
+  // frame for a tick, leaving a dark ghost block over the panel (same fix as
+  // `.panel` in dynamic-modal-form.module.scss).
+  position: relative;
+  z-index: 1;
+  will-change: transform, opacity;
   width: min(96vw, 92rem);
   height: min(92vh, 56rem);
   display: flex;
@@ -1203,6 +1210,8 @@
 .stockBrowserModalPanel {
   position: relative;
   z-index: 1;
+  // Pre-promoted for the same reason as .inlineMasterPanel above.
+  will-change: transform, opacity;
   width: min(1280px, calc(100vw - 2rem));
   height: min(760px, calc(100dvh - 2rem));
   max-height: calc(100dvh - 2rem);

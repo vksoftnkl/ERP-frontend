@@ -47,6 +47,7 @@ import {
 import type { SaveActor } from "./quotation.payload";
 import { buildSavePayload } from "./quotation.payload";
 import type {
+  CustomerSnapshot,
   QuotationDraft,
   SaveQuotationDto,
   SaveTransactionHoldDto,
@@ -155,8 +156,21 @@ export function draftFromHold(
   hold: TransactionHoldPayload,
   state: QuotationHoldUiState,
 ): QuotationDraft {
+  // `th_ui_state` is JSON written by whatever version parked the cart, and
+  // `readHoldUiState` checks the envelope rather than every leaf — so a field
+  // added to the draft since then is simply absent from an older row. Only
+  // `customer.masterName` needs saying: it was split out of `name` after carts
+  // were already parked, and `undefined` reaching the Existing Customer
+  // combobox would flip that input from uncontrolled to controlled mid-life,
+  // which loses what the operator types into it. The document's own copy of the
+  // name is what the box showed before the two were told apart.
+  const heldCustomer = state.draft.customer as Partial<CustomerSnapshot> | undefined;
   return {
     ...state.draft,
+    customer: {
+      ...state.draft.customer,
+      masterName: heldCustomer?.masterName ?? heldCustomer?.name ?? "",
+    },
     mode: "entry",
     pricing: "live",
     isDirty: false,

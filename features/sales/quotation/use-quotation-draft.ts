@@ -1,5 +1,4 @@
 "use client";
-
 /**
  * Quotation Entry — the draft, its derived pricing, and every action that needs
  * the network.
@@ -98,9 +97,8 @@ import type {
   TransactionHoldPayload,
   Violation,
 } from "./quotation.types";
-import { validateSaveInputs } from "./quotation.validate";
+import { validateSaveInputs, type ValidationContext } from "./quotation.validate";
 import { accountingYearOf, resolveChargeColumns, resolveItemColumns, todayIso } from "./quotation.utils";
-
 /**
  * An RTK Query rejection reaches a `catch` as `unknown`; every message the user
  * sees goes through here so the three error envelopes this API family uses
@@ -120,7 +118,6 @@ function errorMessage(error: unknown): string {
   }
   return extractApiErrorMessage(error, "The request failed.");
 }
-
 /**
  * `user_master.usr_language` is an ISO-ish code, not a language name — the only
  * live value is `'en'`. Anything that is not recognisably English asks the
@@ -128,7 +125,6 @@ function errorMessage(error: unknown): string {
  * caller's default stands.
  */
 const ENGLISH_LANGUAGE_CODES = new Set(["en", "eng", "en-in", "en_in", "english"]);
-
 function isRegionalLanguage(language: string | null | undefined): boolean | null {
   const code = (language ?? "").trim().toLowerCase();
   if (!code) {
@@ -136,21 +132,18 @@ function isRegionalLanguage(language: string | null | undefined): boolean | null
   }
   return !ENGLISH_LANGUAGE_CODES.has(code);
 }
-
 function clampLoadingType(value: string): string {
   const code = (value ?? "").trim().toLowerCase();
   return (LOADING_CALC_TYPES as readonly string[]).includes(code)
     ? code
     : DEFAULT_LOADING_CALC_TYPE;
 }
-
 function clampFreightType(value: string): string {
   const code = (value ?? "").trim().toLowerCase();
   return (FREIGHT_CALC_TYPES as readonly string[]).includes(code)
     ? code
     : DEFAULT_FREIGHT_CALC_TYPE;
 }
-
 /** Where the screen is in its life cycle, for the toolbar and the guards. */
 export type QuotationBusy =
   | "idle"
@@ -160,9 +153,7 @@ export type QuotationBusy =
   | "pricing"
   | "holding"
   | "resuming";
-
 export type PriceLevelScope = "selected" | "all";
-
 export type QuotationDraftApi = {
   draft: QuotationDraft;
   /** The store's dispatch, for the slice actions the components raise directly. */
@@ -179,7 +170,6 @@ export type QuotationDraftApi = {
   priceLevelOptions: ReadonlyArray<{ value: string; label: string }>;
   chargeMasters: ChargeMasterRow[];
   unitOptionsFor: (itemId: string) => ItemUnitOption[];
-
   pickCustomer: (customerId: string) => Promise<void>;
   pickItem: (lineKey: string, itemId: string, itemUnitId?: string) => Promise<void>;
   recoverBaseFactor: (lineKey: string) => Promise<void>;
@@ -187,7 +177,7 @@ export type QuotationDraftApi = {
   setLineUnit: (lineKey: string, itemUnitId: string) => Promise<void>;
   resolveBarcode: (lineKey: string, barcode: string) => Promise<boolean>;
   applyPriceLevel: (priceLevel: number, scope: PriceLevelScope, lineKeys: string[]) => Promise<void>;
-  save: () => Promise<boolean>;
+  save: (context?: ValidationContext) => Promise<boolean>;
   /** Park the cart in `transaction_hold` and clear the form. */
   hold: () => Promise<boolean>;
   /**
@@ -206,9 +196,8 @@ export type QuotationDraftApi = {
   clear: () => void;
   copyAsNew: () => void;
   beginEdit: () => void;
-  validate: () => Violation | null;
+  validate: (context?: ValidationContext) => Violation | null;
 };
-
 /**
  * The context a new draft is seeded from. `accYear` prefers the stored fiscal
  * year (`fiscal_years.fy_year_name`, already 9 characters) and only falls back to
@@ -224,11 +213,11 @@ function useDraftContext() {
   const accYear = (activeFiscalYear?.name ?? "").trim() || accountingYearOf(todayIso());
   return { companyId, branchId, accYear, loading };
 }
-
 function useSaveActor(): SaveActor {
   return useMemo(
     () => ({
       userId: getAuthUserId() ?? "",
+      userName: getUserInfo()?.userName ?? null,
       sessionId: getAuthSessionId(),
       deviceId: getOrCreateClientDeviceId(),
       deviceType: getUserInfo()?.deviceType ?? null,
@@ -236,13 +225,11 @@ function useSaveActor(): SaveActor {
     [],
   );
 }
-
 export function useQuotationDraft(): QuotationDraftApi {
   const context = useDraftContext();
   const actor = useSaveActor();
   const dispatch = useAppDispatch();
   const draft = useAppSelector(selectQuotationDraft);
-
   const { data: companyStateCode = "" } = useGetCompanyStateCodeQuery(context.companyId, {
     skip: !context.companyId,
   });
@@ -257,7 +244,6 @@ export function useQuotationDraft(): QuotationDraftApi {
   });
   const { data: chargeMasters = [] } = useGetSalesChargesQuery();
   const { data: priceLevelNames = [] } = useGetPriceLevelsQuery();
-
   const [fetchCustomerDetail] = useLazyGetCustomerDetailQuery();
   const [fetchItemPrice] = useLazyGetItemPriceQuery();
   const [fetchNextUnit] = useLazySwitchItemUomQuery();
@@ -272,7 +258,6 @@ export function useQuotationDraft(): QuotationDraftApi {
   const [releaseHoldLock] = useReleaseTransactionHoldMutation();
   const [forceReleaseHoldLock] = useForceReleaseTransactionHoldMutation();
   const [convertHoldLock] = useConvertTransactionHoldMutation();
-
   const [busy, setBusy] = useState<QuotationBusy>("idle");
   /**
    * `busy` cannot guard re-entry on its own: `setBusy` is asynchronous, so two
@@ -307,7 +292,6 @@ export function useQuotationDraft(): QuotationDraftApi {
   draftRef.current = draft;
   /** Set below; held in a ref so the unit-prefetch effect has a stable dep list. */
   const loadUnitOptionsRef = useRef<(itemId: string) => Promise<void>>(async () => {});
-
   // The draft is created before the business context resolves (the screen must
   // render something), so the tenant scope is pushed in as it arrives. This is
   // deliberately not an edit: it must not mark the document dirty.
@@ -344,13 +328,11 @@ export function useQuotationDraft(): QuotationDraftApi {
       }),
     );
   }, [context.companyId, context.branchId, context.accYear]);
-
   useEffect(() => {
     if (companyStateCode) {
       dispatch(companyStateCodeSet(companyStateCode));
     }
   }, [companyStateCode]);
-
   // A new quotation starts with NO charges. The masters' `chgAutoApply` flag
   // used to pre-load freight, loading and the standing cash discount here (as
   // the Qt screen does); the operator now picks what the document needs, on the
@@ -366,7 +348,6 @@ export function useQuotationDraft(): QuotationDraftApi {
       void loadUnitOptionsRef.current(itemId);
     }
   }, [lineItemIds]);
-
   const itemColumns = useMemo(() => resolveItemColumns(itemLayout), [itemLayout]);
   const chargeColumns = useMemo(() => resolveChargeColumns(chargeLayout), [chargeLayout]);
   // The master names the levels; the built-in A/B/C/D list is the fallback for a
@@ -375,10 +356,8 @@ export function useQuotationDraft(): QuotationDraftApi {
     () => (priceLevelNames.length > 0 ? priceLevelNames : PRICE_LEVEL_OPTIONS.map((o) => ({ ...o }))),
     [priceLevelNames],
   );
-
   const canEditPrice = capabilities?.editRate ?? SESSION_CAPABILITIES.editPrice;
   const regional = isRegionalLanguage(capabilities?.language) ?? SESSION_CAPABILITIES.regional;
-
   /**
    * The whole screen below the header, in one derived value.
    *
@@ -404,9 +383,7 @@ export function useQuotationDraft(): QuotationDraftApi {
       draft.header.hasUnload,
     ],
   );
-  const pricing =
-    draft.pricing === "stored" && draft.storedPricing ? draft.storedPricing : livePricing;
-
+  const pricing =draft.pricing === "stored" && draft.storedPricing ? draft.storedPricing : livePricing;
   const loadUnitOptions = useCallback(
     async (itemId: string): Promise<void> => {
       if (!itemId || unitOptions[itemId]) {
@@ -423,7 +400,6 @@ export function useQuotationDraft(): QuotationDraftApi {
     [fetchItemUnits, unitOptions],
   );
   loadUnitOptionsRef.current = loadUnitOptions;
-
   /** Every `/item-price` call quotes the DOCUMENT's scope, never the session's. */
   const priceQueryFor = useCallback(
     (line: DraftLine | undefined, itemId: string, itemUnitId: string | undefined, priceLevel: number): ItemPriceQuery => ({
@@ -453,7 +429,6 @@ export function useQuotationDraft(): QuotationDraftApi {
       regional,
     ],
   );
-
   const pickItem = useCallback(
     async (lineKey: string, itemId: string, itemUnitId?: string) => {
       const line = draft.lines.find((row) => row.key === lineKey);
@@ -471,7 +446,6 @@ export function useQuotationDraft(): QuotationDraftApi {
     },
     [draft.lines, draft.header.priceLevel, fetchItemPrice, loadUnitOptions, priceQueryFor],
   );
-
   /**
    * Recover a loaded line's real unit-conversion factor.
    *
@@ -507,7 +481,6 @@ export function useQuotationDraft(): QuotationDraftApi {
     },
     [fetchItemPrice, priceQueryFor],
   );
-
   const setLineUnit = useCallback(
     async (lineKey: string, itemUnitId: string) => {
       const line = draft.lines.find((row) => row.key === lineKey);
@@ -518,7 +491,6 @@ export function useQuotationDraft(): QuotationDraftApi {
     },
     [draft.lines, pickItem],
   );
-
   /**
    * F4. The backend owns the unit cycle: it returns the next `iuc_id` and no
    * price, so nothing is scaled client-side and nothing is written to the line
@@ -548,7 +520,6 @@ export function useQuotationDraft(): QuotationDraftApi {
     },
     [draft.lines, fetchItemPrice, fetchNextUnit, priceQueryFor],
   );
-
   const resolveBarcode = useCallback(
     async (lineKey: string, barcode: string): Promise<boolean> => {
       const trimmed = barcode.trim();
@@ -587,7 +558,6 @@ export function useQuotationDraft(): QuotationDraftApi {
       priceQueryFor,
     ],
   );
-
   const pickCustomer = useCallback(
     async (customerId: string) => {
       if (!customerId) {
@@ -608,7 +578,6 @@ export function useQuotationDraft(): QuotationDraftApi {
           regional,
         }).unwrap();
         dispatch(customerApplied(detail));
-
         // Freight bands are only worth fetching when the area/distance actually
         // changed and the policy is not manual. Unlike the Qt client, the fetched
         // bands reach the bill immediately: they are draft state and the engine is
@@ -641,7 +610,6 @@ export function useQuotationDraft(): QuotationDraftApi {
       regional,
     ],
   );
-
   /**
    * CTRL+1..4 / the price-level combo. Changing a level is not a local edit: each
    * affected line has to be repriced from the server at the new level, and only
@@ -668,7 +636,6 @@ export function useQuotationDraft(): QuotationDraftApi {
           commitDocument: scope === "all",
         }),
       );
-
       setBusy("pricing");
       try {
         for (const key of targets) {
@@ -691,17 +658,23 @@ export function useQuotationDraft(): QuotationDraftApi {
     },
     [canEditPrice, draft.lines, fetchItemPrice, priceQueryFor],
   );
-
+  // `context` carries what only the screen knows — which header fields the
+  // deployment's Visible Settings actually put on the form. Both callers pass
+  // the same one: `save` re-runs the check itself so no path can commit a
+  // document that was never validated.
   const validate = useCallback(
-    () => validateSaveInputs(draft, pricing, { skipMrp: SESSION_CAPABILITIES.skipMrp }),
+    (context: ValidationContext = {}) =>
+      validateSaveInputs(draft, pricing, {
+        skipMrp: SESSION_CAPABILITIES.skipMrp,
+        ...context,
+      }),
     [draft, pricing],
   );
-
-  const save = useCallback(async (): Promise<boolean> => {
+  const save = useCallback(async (context: ValidationContext = {}): Promise<boolean> => {
     if (inFlight.current) {
       return false;
     }
-    const violation = validate();
+    const violation = validate(context);
     if (violation) {
       toast.error(violation.message);
       return false;
@@ -777,7 +750,6 @@ export function useQuotationDraft(): QuotationDraftApi {
       setBusy("idle");
     }
   }, [actor, convertHoldLock, draft, pricing, saveQuotation, validate]);
-
   /**
    * Returns the draft it loaded, not just a flag, so the caller can decide what
    * to do with it before the store round-trips back through render — the entry
@@ -810,7 +782,6 @@ export function useQuotationDraft(): QuotationDraftApi {
     },
     [companyStateCode, dispatch],
   );
-
   const clear = useCallback(() => {
     dispatch(
       draftReplaced(
@@ -823,7 +794,6 @@ export function useQuotationDraft(): QuotationDraftApi {
       ),
     );
   }, [companyStateCode, context.accYear, context.branchId, context.companyId]);
-
   const deleteDocument = useCallback(async (): Promise<boolean> => {
     if (!draft.docId) {
       toast.warn("There is nothing saved to delete.");
@@ -846,7 +816,6 @@ export function useQuotationDraft(): QuotationDraftApi {
       setBusy("idle");
     }
   }, [clear, deleteQuotation, draft.docId, draft.isDeleted]);
-
   /**
    * Hand back the lock this device holds, if it still holds one.
    *
@@ -877,7 +846,6 @@ export function useQuotationDraft(): QuotationDraftApi {
       // resume is re-entrant, so the operator can simply open it again.
     }
   }, [actor.deviceId, releaseHoldLock]);
-
   /**
    * Hold (F9). Parks the cart in `transaction_hold` and clears the form so the
    * next customer can be served.

@@ -39,6 +39,7 @@ import { accountingYearOf, todayIso } from "./quotation.utils";
 
 const ACTOR: SaveActor = {
   userId: "019c6f6c-be87-7a11-8905-36092c46fe05",
+  userName: "vijay",
   sessionId: "3f1c9d3e-6b1e-4c8f-9a55-2c3d4e5f6a7b",
   deviceId: "device-abc",
   deviceType: "web",
@@ -61,7 +62,9 @@ function baseDraft(): QuotationDraft {
   });
   return {
     ...draft,
-    customer: { ...draft.customer, name: "Acme" },
+    // A customer picked from the master, so the document's own copy of the name
+    // and the master's own start out agreeing.
+    customer: { ...draft.customer, name: "Acme", masterName: "Acme" },
     terms: { ...draft.terms, remarks: "call before delivery" },
     lines: [
       createDraftLine({
@@ -331,6 +334,35 @@ describe("draftFromHold", () => {
   it("keeps the cart intact", () => {
     expect(restored.lines[0].itemName).toBe("New Claw");
     expect(restored.customer.name).toBe("Acme");
+    expect(restored.customer.masterName).toBe("Acme");
+  });
+
+  // `th_ui_state` is written by whatever version parked the cart, so a field
+  // added to the draft afterwards is absent from rows already in the table.
+  // `customer.masterName` was split out of `customer.name` after carts were
+  // parked; restoring one as `undefined` flips the Existing Customer combobox
+  // from uncontrolled to controlled and drops what is typed into it.
+  it("fills in a customer field a cart was parked before", () => {
+    const legacy = JSON.parse(JSON.stringify(uiState)) as typeof uiState;
+    delete (legacy.draft.customer as Partial<typeof legacy.draft.customer>).masterName;
+
+    const fromLegacy = draftFromHold(holdRow(), legacy);
+
+    // The document's own copy of the name — what that box showed before the
+    // two were told apart.
+    expect(fromLegacy.customer.masterName).toBe("Acme");
+    expect(fromLegacy.customer.name).toBe("Acme");
+  });
+
+  it("leaves a walk-in's blank master name blank rather than borrowing the typed one", () => {
+    // A cart with no master record behind it: the combobox has nothing to name,
+    // and the hand-keyed name belongs to the document alone.
+    const walkIn = JSON.parse(JSON.stringify(uiState)) as typeof uiState;
+    walkIn.draft.customer.custId = null;
+    walkIn.draft.customer.masterName = "";
+    walkIn.draft.customer.name = "CASH SALE";
+
+    expect(draftFromHold(holdRow(), walkIn).customer.masterName).toBe("");
   });
 });
 

@@ -523,6 +523,13 @@
   transform: translateZ(0);
 }
 .modal {
+  /* Pre-promote the panel to its own GPU layer above the overlay's scrim
+     before first paint — created lazily it can composite with a stale/partial
+     frame for a tick, leaving a dark ghost block over the panel (same fix as
+     `.panel` in dynamic-modal-form.module.scss). */
+  position: relative;
+  z-index: 1;
+  will-change: transform, opacity;
   display: flex;
   flex-direction: column;
   width: min(640px, 94vw);

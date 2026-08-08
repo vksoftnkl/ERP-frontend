@@ -53,10 +53,26 @@ const CHARGE_COST_ALLOCS = ["VALUE", "QTY", "WEIGHT"] as const;
 /** Actor / device context the save needs and the draft has no business holding. */
 export type SaveActor = {
   userId: string;
+  /** The login name. Only the audit trail reads it — see `actorLabel`. */
+  userName: string | null;
   sessionId: string | null;
   deviceId: string | null;
   deviceType: string | null;
 };
+
+/**
+ * What "who did this" is stored as.
+ *
+ * `sq_user_id` is a uuid column with a uuid validator, so the *id* is the only
+ * thing that may ever go there. `sq_created_by` / `sq_modified_by` are free text
+ * — the DTO calls them "actor id or name" — and the audit log copies whichever
+ * one applies straight into its own user column, unresolved. Sending the id
+ * there is what makes Record History read as a row of uuids, so the name goes
+ * out instead, falling back to the id only for a session that has no name.
+ */
+export function actorLabel(actor: SaveActor): string {
+  return actor.userName?.trim() || actor.userId;
+}
 function statusOf(value: string): QuotationStatus {
   return asEnum(value, QUOTATION_STATUSES, DEFAULT_QUOTATION_STATUS);
 }
@@ -148,6 +164,7 @@ function itemDto(line: DraftLine, priced: PricedLine, index: number): SaveQuotat
     sqiSchemeId: line.schemeId,
     sqiSchemeName: toNullableText(line.schemeName, 150),
     sqiRemarks: toNullableText(line.remarks, 250),
+    sqiItemSize: toNullableText(line.itemSize, 50),
   };
 }
 function chargeDto(
@@ -224,6 +241,10 @@ export function buildSavePayload(
     sqPriceLevel: clampPriceLevel(draft.header.priceLevel),
     sqCustName: draft.customer.name.trim(),
     sqUserId: actor.userId,
+    // Both go on every request: the server writes `sqCreatedBy` on the create
+    // path and `sqModifiedBy` on the update path, and ignores the other one.
+    sqCreatedBy: actorLabel(actor),
+    sqModifiedBy: actorLabel(actor),
     sqDocType: draft.docType || QUOTATION_DOC_TYPE,
     sqUsrRefno: toNullableText(draft.header.usrRefno, 100),
     sqQuoteDate: draft.header.quoteDate,
@@ -373,6 +394,7 @@ function lineFromPayload(item: NonNullable<QuotationPayload["items"]>[number]): 
     schemeName: item.sqiSchemeName,
     schemeFlag: Boolean(item.sqiSchemeId),
     remarks: item.sqiRemarks,
+    itemSize: item.sqiItemSize,
   });
 }
 function chargeFromPayload(
@@ -619,6 +641,9 @@ export function parseLoadedDocument(
       ...emptyCustomer(),
       custId: payload.sqCustId,
       name: payload.sqCustName ?? "",
+      // The GET carries no separate master name — the document stores only its
+      // own copy — so the combobox names the customer as this document has it.
+      masterName: payload.sqCustName ?? "",
       address: payload.sqCustAddr,
       place: payload.sqCustPlace,
       phone: payload.sqCustPhone,

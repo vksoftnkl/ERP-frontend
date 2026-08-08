@@ -55,13 +55,12 @@ describe("resolveItemColumns", () => {
   });
 
   it("takes the item layout's width as pixels — ui table 23 stores px", () => {
-    const columns = resolveItemColumns([
+    const [, description] = resolveItemColumns([
       layoutRow(4, "Description", { uiTblClmColumnWidth: 140 }),
     ]);
-    expect(columns).toHaveLength(1);
-    expect(columns[0].widthPx).toBe(140);
-    expect(columns[0].key).toBe("description");
-    expect(columns[0].header).toBe("Description");
+    expect(description.widthPx).toBe(140);
+    expect(description.key).toBe("description");
+    expect(description.header).toBe("Description");
   });
 
   it("floors a very narrow column so its heading stays readable", () => {
@@ -77,7 +76,12 @@ describe("resolveItemColumns", () => {
       layoutRow(58, "ChrgAfterTax", { uiTblClmColumnPosition: 58 }),
       layoutRow(22, "Rate", { uiTblClmColumnPosition: 22 }),
     ]);
-    expect(columns.map((column) => column.key)).toEqual(["rate", "chrgaftertax", "total"]);
+    expect(columns.map((column) => column.key)).toEqual([
+      "slno",
+      "rate",
+      "chrgaftertax",
+      "total",
+    ]);
   });
 
   it("honours the configured visibility and drops a column it has no meaning for", () => {
@@ -86,8 +90,8 @@ describe("resolveItemColumns", () => {
       layoutRow(4, "AliasName", { uiTblClmColumnVisibility: false }),
       layoutRow(90, "Something Nobody Implemented"),
     ]);
-    expect(columns.map((column) => column.key)).toEqual(["description", "aliasname"]);
-    expect(columns[1].visible).toBe(false);
+    expect(columns.map((column) => column.key)).toEqual(["slno", "description", "aliasname"]);
+    expect(columns[2].visible).toBe(false);
   });
 
   it("matches on the name with punctuation and case stripped", () => {
@@ -96,7 +100,54 @@ describe("resolveItemColumns", () => {
       layoutRow(42, "Gst %"),
       layoutRow(13, "Case Qty"),
     ]);
-    expect(columns.map((column) => column.key)).toEqual(["caseqty", "ratebtax", "gst"]);
+    // Every layout gets its serial column, so the three configured ones follow it.
+    expect(columns.map((column) => column.key)).toEqual([
+      "slno",
+      "caseqty",
+      "ratebtax",
+      "gst",
+    ]);
+  });
+
+  it("matches the serial column under whichever name the layout gives it", () => {
+    // ui table 23 is named "sl.no" on this deployment and "Id" on others. Before
+    // both resolved here, "sl.no" matched nothing and the grid opened on Barcode.
+    for (const name of ["sl.no", "Sl.No", "Id", "S.No"]) {
+      const columns = resolveItemColumns([layoutRow(1, name), layoutRow(2, "Barcode")]);
+      expect(columns.map((column) => column.key)).toEqual(["slno", "barcode"]);
+      expect(columns[0].kind).toBe("serial");
+      // The heading is the shipped caption, not the configured casing.
+      expect(columns[0].header).toBe("Sl.No");
+    }
+  });
+
+  it("gives a layout with no serial row one of its own, first", () => {
+    const columns = resolveItemColumns([layoutRow(2, "Barcode"), layoutRow(4, "Description")]);
+    expect(columns.map((column) => column.key)).toEqual(["slno", "barcode", "description"]);
+    // Nothing to save a width against — it is not a configured row.
+    expect(columns[0].columnId).toBeNull();
+    expect(columns[0].visible).toBe(true);
+  });
+
+  it("leaves a serial column the layout hides hidden rather than adding a second", () => {
+    const columns = resolveItemColumns([
+      layoutRow(1, "sl.no", { uiTblClmColumnVisibility: false }),
+      layoutRow(2, "Barcode"),
+    ]);
+    expect(columns.map((column) => column.key)).toEqual(["slno", "barcode"]);
+    expect(columns[0].visible).toBe(false);
+  });
+
+  it("keeps one column per meaning when two rows claim the same one", () => {
+    // Two serial aliases in one layout would otherwise be two columns sharing a
+    // React key.
+    const columns = resolveItemColumns([
+      layoutRow(1, "Id", { uiTblClmColumnWidth: 40 }),
+      layoutRow(2, "sl.no", { uiTblClmColumnWidth: 90 }),
+      layoutRow(3, "Barcode"),
+    ]);
+    expect(columns.map((column) => column.key)).toEqual(["slno", "barcode"]);
+    expect(columns[0].widthPx).toBe(40);
   });
 });
 
@@ -126,7 +177,8 @@ describe("resolveChargeColumns", () => {
 describe("totalColumnWidth", () => {
   it("adds the row-action column so the table can state its own width", () => {
     const columns = resolveItemColumns([layoutRow(3, "Description"), layoutRow(22, "Rate")]);
-    expect(totalColumnWidth(columns, 30)).toBe(columns[0].widthPx + columns[1].widthPx + 30);
+    const sum = columns.reduce((total, column) => total + column.widthPx, 0);
+    expect(totalColumnWidth(columns, 30)).toBe(sum + 30);
   });
 });
 

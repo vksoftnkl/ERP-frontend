@@ -11,6 +11,11 @@
  * border or legend) — the caller lays out all three inside one shared bordered
  * panel, matching the legacy screen's single continuous header rather than
  * three separate framed boxes. Terms keeps its own `GroupBox`.
+ *
+ * Every field in those three columns is gated on `fields` (see
+ * `visible-settings.tsx`): the deployment's widget config decides which of them
+ * this site shows and what it calls them. Terms is not configured, so it
+ * renders as authored.
  */
 import {
   AREA_DROPDOWN_ID,
@@ -36,6 +41,7 @@ import {
   SelectField,
   TextField,
 } from "./fields";
+import type { HeaderFieldConfig } from "./visible-settings";
 import styles from "../page.module.scss";
 
 /**
@@ -46,6 +52,7 @@ import styles from "../page.module.scss";
 export type CustomerBlockProps = {
   customer: CustomerSnapshot;
   header: QuotationHeader;
+  fields: HeaderFieldConfig;
   disabled: boolean;
   onPickCustomer: (customerId: string, label: string) => void;
   onSetCustomerField: (field: EditableCustomerField, value: string) => void;
@@ -55,6 +62,7 @@ export type CustomerBlockProps = {
 export function CustomerBlock({
   customer,
   header,
+  fields,
   disabled,
   onPickCustomer,
   onSetCustomerField,
@@ -62,73 +70,96 @@ export function CustomerBlock({
 }: CustomerBlockProps) {
   return (
     <div className={styles.fieldGrid}>
-      <DropdownCombo
-        id="quotation-customer"
-        label="Existing Customer"
-        dropdownId={CUSTOMER_DROPDOWN_ID}
-        valueKey="cus_id"
-        labelKey="cus_name"
-        value={customer.custId ?? ""}
-        selectedLabel={customer.name}
-        disabled={disabled}
-        placeholder="Search customers…"
-        onSelect={onPickCustomer}
-      />
+      {fields.isVisible("existingCustomer") ? (
+        <DropdownCombo
+          id="quotation-customer"
+          label={fields.labelFor("existingCustomer")}
+          dropdownId={CUSTOMER_DROPDOWN_ID}
+          valueKey="cus_id"
+          labelKey="cus_name"
+          value={customer.custId ?? ""}
+          // The MASTER's name, not the document's editable copy — this box says
+          // which customer record the quotation is linked to, and amending the
+          // name below must not appear to relink it to something else.
+          selectedLabel={customer.masterName}
+          disabled={disabled}
+          placeholder="Search customers…"
+          onSelect={onPickCustomer}
+        />
+      ) : null}
       {/* Keyed, not just displayed: the document stores its own copy of these,
           so they can be corrected for this quotation — or typed outright for a
           walk-in with no master record. Max lengths match the save payload. */}
-      <TextField
-        id="quotation-customer-name"
-        label="Customer Name"
-        value={customer.name}
-        disabled={disabled}
-        maxLength={200}
-        onChange={(value) => onSetCustomerField("name", value)}
-      />
-      <TextField
-        id="quotation-customer-address"
-        label="Address"
-        value={customer.address ?? ""}
-        disabled={disabled}
-        maxLength={500}
-        onChange={(value) => onSetCustomerField("address", value)}
-      />
-      <TextField
-        id="quotation-customer-place"
-        label="Place"
-        value={customer.place ?? ""}
-        disabled={disabled}
-        maxLength={100}
-        onChange={(value) => onSetCustomerField("place", value)}
-      />
-      <TextField
-        id="quotation-customer-phone"
-        label="Phone"
-        value={customer.phone ?? ""}
-        disabled={disabled}
-        maxLength={20}
-        onChange={(value) => onSetCustomerField("phone", value)}
-      />
-      <TextField
-        id="quotation-customer-gstin"
-        label="GSTIN"
-        value={customer.gstin ?? ""}
-        disabled={disabled}
-        maxLength={15}
-        onChange={(value) => onSetCustomerField("gstin", value.toUpperCase())}
-      />
-      <DropdownCombo
-        id="quotation-pos"
-        label="POS State Code"
-        dropdownId={POS_DROPDOWN_ID}
-        valueKey="state_code"
-        labelKey="state_name"
-        metaKey="state_code"
-        value={header.posStateCode}
-        selectedLabel={header.posStateName || header.posStateCode}
-        disabled={disabled}
-        onSelect={onSetPos}
-      />
+      {fields.isVisible("customerName") ? (
+        <TextField
+          id="quotation-customer-name"
+          label={fields.labelFor("customerName")}
+          value={customer.name}
+          disabled={disabled}
+          required
+          maxLength={200}
+          // Upper-cased as it is typed, the way the GSTIN field below is: the
+          // customer master is keyed in capitals on this floor, so a quotation
+          // typed in mixed case reads as a different party on the printed
+          // document. A name PICKED from the master keeps the master's casing.
+          onChange={(value) => onSetCustomerField("name", value.toUpperCase())}
+        />
+      ) : null}
+      {fields.isVisible("address") ? (
+        <TextField
+          id="quotation-customer-address"
+          label={fields.labelFor("address")}
+          value={customer.address ?? ""}
+          disabled={disabled}
+          maxLength={500}
+          onChange={(value) => onSetCustomerField("address", value)}
+        />
+      ) : null}
+      {fields.isVisible("place") ? (
+        <TextField
+          id="quotation-customer-place"
+          label={fields.labelFor("place")}
+          value={customer.place ?? ""}
+          disabled={disabled}
+          maxLength={100}
+          onChange={(value) => onSetCustomerField("place", value)}
+        />
+      ) : null}
+      {fields.isVisible("phone") ? (
+        <TextField
+          id="quotation-customer-phone"
+          label={fields.labelFor("phone")}
+          value={customer.phone ?? ""}
+          disabled={disabled}
+          required
+          maxLength={20}
+          onChange={(value) => onSetCustomerField("phone", value)}
+        />
+      ) : null}
+      {fields.isVisible("gstin") ? (
+        <TextField
+          id="quotation-customer-gstin"
+          label={fields.labelFor("gstin")}
+          value={customer.gstin ?? ""}
+          disabled={disabled}
+          maxLength={15}
+          onChange={(value) => onSetCustomerField("gstin", value.toUpperCase())}
+        />
+      ) : null}
+      {fields.isVisible("posStateCode") ? (
+        <DropdownCombo
+          id="quotation-pos"
+          label={fields.labelFor("posStateCode")}
+          dropdownId={POS_DROPDOWN_ID}
+          valueKey="state_code"
+          labelKey="state_name"
+          metaKey="state_code"
+          value={header.posStateCode}
+          selectedLabel={header.posStateName || header.posStateCode}
+          disabled={disabled}
+          onSelect={onSetPos}
+        />
+      ) : null}
       {/* The area lives in the sales block as "Beat", where the operator can
           change it — the customer master only seeds it. */}
       {customer.debitAllowed ? (
@@ -152,6 +183,7 @@ export type QuoteInfoBlockProps = {
   quoteRefno: string;
   /** `inventory.item_price_levels`, level number → its configured name. */
   priceLevelOptions: ReadonlyArray<{ value: string; label: string }>;
+  fields: HeaderFieldConfig;
   disabled: boolean;
   onSetHeader: (field: keyof QuotationHeader, value: string | number | boolean) => void;
 };
@@ -160,6 +192,7 @@ export function QuoteInfoBlock({
   header,
   quoteRefno,
   priceLevelOptions,
+  fields,
   disabled,
   onSetHeader,
 }: QuoteInfoBlockProps) {
@@ -168,46 +201,57 @@ export function QuoteInfoBlock({
       {/* The voucher number is allocated by the server inside the create
           transaction and there is no peek endpoint, so it is blank until the
           first successful save. */}
-      <ReadOnlyInput
-        id="quotation-quote-no"
-        label="Quote No"
-        value={quoteRefno}
-        placeholder="(auto)"
-      />
-      <DateField
-        id="quotation-date"
-        label="Quote Date"
-        value={header.quoteDate}
-        disabled={disabled}
-        onChange={(value) => onSetHeader("quoteDate", value)}
-      />
-      <DateField
-        id="quotation-valid-until"
-        label="Valid Until"
-        value={header.validUntil}
-        disabled={disabled}
-        onChange={(value) => onSetHeader("validUntil", value)}
-      />
+      {fields.isVisible("quoteNo") ? (
+        <ReadOnlyInput
+          id="quotation-quote-no"
+          label={fields.labelFor("quoteNo")}
+          value={quoteRefno}
+          placeholder="(auto)"
+        />
+      ) : null}
+      {fields.isVisible("quoteDate") ? (
+        <DateField
+          id="quotation-date"
+          label={fields.labelFor("quoteDate")}
+          value={header.quoteDate}
+          disabled={disabled}
+          onChange={(value) => onSetHeader("quoteDate", value)}
+        />
+      ) : null}
       {/* Two views of one period: editing the days re-derives the date and
-          editing the date re-derives the days. */}
-      <NumberField
-        id="quotation-validity-days"
-        label="Validity Days"
-        value={header.validityDays}
-        disabled={disabled}
-        min={0}
-        onChange={(value) => onSetHeader("validityDays", value)}
-      />
+          editing the date re-derives the days. Hiding one leaves the other in
+          charge of both — the derivation is the draft's, not the field's. */}
+      {fields.isVisible("validUntil") ? (
+        <DateField
+          id="quotation-valid-until"
+          label={fields.labelFor("validUntil")}
+          value={header.validUntil}
+          disabled={disabled}
+          onChange={(value) => onSetHeader("validUntil", value)}
+        />
+      ) : null}
+      {fields.isVisible("validityDays") ? (
+        <NumberField
+          id="quotation-validity-days"
+          label={fields.labelFor("validityDays")}
+          value={header.validityDays}
+          disabled={disabled}
+          min={0}
+          onChange={(value) => onSetHeader("validityDays", value)}
+        />
+      ) : null}
       {/* Status is not an operator field on this screen: a new quotation is
           stamped DRAFT and a loaded one keeps the status it was saved with. */}
-      <SelectField
-        id="quotation-price-level"
-        label="Price Level"
-        value={String(header.priceLevel)}
-        options={priceLevelOptions}
-        disabled={disabled}
-        onChange={(value) => onSetHeader("priceLevel", Number.parseInt(value, 10) || 1)}
-      />
+      {fields.isVisible("priceLevel") ? (
+        <SelectField
+          id="quotation-price-level"
+          label={fields.labelFor("priceLevel")}
+          value={String(header.priceLevel)}
+          options={priceLevelOptions}
+          disabled={disabled}
+          onChange={(value) => onSetHeader("priceLevel", Number.parseInt(value, 10) || 1)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -216,6 +260,7 @@ export type SalesInfoBlockProps = {
   header: QuotationHeader;
   /** Display name for the header's `areaId`, which is all the voucher stores. */
   beatName: string;
+  fields: HeaderFieldConfig;
   disabled: boolean;
   onSetHeader: (field: keyof QuotationHeader, value: string | number | boolean) => void;
   onSetBeat: (areaId: string, areaName: string) => void;
@@ -226,89 +271,117 @@ export type SalesInfoBlockProps = {
 export function SalesInfoBlock({
   header,
   beatName,
+  fields,
   disabled,
   onSetHeader,
   onSetBeat,
   onSetSalesman,
   onSetAgent,
 }: SalesInfoBlockProps) {
+  // The four flags share one row, which is only worth drawing if at least one
+  // of them survived the config.
+  const showChecks =
+    fields.isVisible("freight") ||
+    fields.isVisible("load") ||
+    fields.isVisible("unload") ||
+    fields.isVisible("promo");
   return (
     <div className={styles.fieldGrid}>
-      <DropdownCombo
-        id="quotation-beat"
-        label="Beat"
-        dropdownId={AREA_DROPDOWN_ID}
-        valueKey="arm_id"
-        labelKey="arm_name"
-        value={header.areaId ?? ""}
-        selectedLabel={beatName}
-        disabled={disabled}
-        onSelect={onSetBeat}
-      />
-      <DropdownCombo
-        id="quotation-salesman"
-        label="Salesman"
-        dropdownId={SALESMAN_DROPDOWN_ID}
-        valueKey="emp_id"
-        labelKey="emp_name"
-        value={header.salesmanId ?? ""}
-        selectedLabel={header.salesmanName}
-        disabled={disabled}
-        onSelect={(value, label) => onSetSalesman(value, label)}
-      />
-      <DropdownCombo
-        id="quotation-agent"
-        label="Agent"
-        dropdownId={AGENT_DROPDOWN_ID}
-        valueKey="emp_id"
-        labelKey="emp_name"
-        value={header.agentId ?? ""}
-        selectedLabel={header.agentName}
-        disabled={disabled}
-        onSelect={(value, label) => onSetAgent(value, label)}
-      />
-      <TextField
-        id="quotation-contact-person"
-        label="Contact Person"
-        value={header.contactPerson}
-        disabled={disabled}
-        maxLength={150}
-        onChange={(value) => onSetHeader("contactPerson", value)}
-      />
-      <TextField
-        id="quotation-contact-no"
-        label="Contact No"
-        value={header.contactNo}
-        disabled={disabled}
-        maxLength={20}
-        onChange={(value) => onSetHeader("contactNo", value)}
-      />
-      <div className={styles.checkRow}>
-        <CheckField
-          label="Freight"
-          checked={header.hasFreight}
+      {fields.isVisible("beat") ? (
+        <DropdownCombo
+          id="quotation-beat"
+          label={fields.labelFor("beat")}
+          dropdownId={AREA_DROPDOWN_ID}
+          valueKey="arm_id"
+          labelKey="arm_name"
+          value={header.areaId ?? ""}
+          selectedLabel={beatName}
           disabled={disabled}
-          onChange={(checked) => onSetHeader("hasFreight", checked)}
+          onSelect={onSetBeat}
         />
-        <CheckField
-          label="Load"
-          checked={header.hasLoad}
+      ) : null}
+      {fields.isVisible("salesman") ? (
+        <DropdownCombo
+          id="quotation-salesman"
+          label={fields.labelFor("salesman")}
+          dropdownId={SALESMAN_DROPDOWN_ID}
+          valueKey="emp_id"
+          labelKey="emp_name"
+          value={header.salesmanId ?? ""}
+          selectedLabel={header.salesmanName}
           disabled={disabled}
-          onChange={(checked) => onSetHeader("hasLoad", checked)}
+          onSelect={(value, label) => onSetSalesman(value, label)}
         />
-        <CheckField
-          label="Unload"
-          checked={header.hasUnload}
+      ) : null}
+      {fields.isVisible("agent") ? (
+        <DropdownCombo
+          id="quotation-agent"
+          label={fields.labelFor("agent")}
+          dropdownId={AGENT_DROPDOWN_ID}
+          valueKey="emp_id"
+          labelKey="emp_name"
+          value={header.agentId ?? ""}
+          selectedLabel={header.agentName}
           disabled={disabled}
-          onChange={(checked) => onSetHeader("hasUnload", checked)}
+          onSelect={(value, label) => onSetAgent(value, label)}
         />
-        <CheckField
-          label="Promo"
-          checked={header.hasPromo}
+      ) : null}
+      {fields.isVisible("contactPerson") ? (
+        <TextField
+          id="quotation-contact-person"
+          label={fields.labelFor("contactPerson")}
+          value={header.contactPerson}
           disabled={disabled}
-          onChange={(checked) => onSetHeader("hasPromo", checked)}
+          maxLength={150}
+          onChange={(value) => onSetHeader("contactPerson", value)}
         />
-      </div>
+      ) : null}
+      {fields.isVisible("contactNo") ? (
+        <TextField
+          id="quotation-contact-no"
+          label={fields.labelFor("contactNo")}
+          value={header.contactNo}
+          disabled={disabled}
+          maxLength={20}
+          onChange={(value) => onSetHeader("contactNo", value)}
+        />
+      ) : null}
+      {showChecks ? (
+        <div className={styles.checkRow}>
+          {fields.isVisible("freight") ? (
+            <CheckField
+              label={fields.labelFor("freight")}
+              checked={header.hasFreight}
+              disabled={disabled}
+              onChange={(checked) => onSetHeader("hasFreight", checked)}
+            />
+          ) : null}
+          {fields.isVisible("load") ? (
+            <CheckField
+              label={fields.labelFor("load")}
+              checked={header.hasLoad}
+              disabled={disabled}
+              onChange={(checked) => onSetHeader("hasLoad", checked)}
+            />
+          ) : null}
+          {fields.isVisible("unload") ? (
+            <CheckField
+              label={fields.labelFor("unload")}
+              checked={header.hasUnload}
+              disabled={disabled}
+              onChange={(checked) => onSetHeader("hasUnload", checked)}
+            />
+          ) : null}
+          {fields.isVisible("promo") ? (
+            <CheckField
+              label={fields.labelFor("promo")}
+              checked={header.hasPromo}
+              disabled={disabled}
+              onChange={(checked) => onSetHeader("hasPromo", checked)}
+            />
+          ) : null}
+        </div>
+      ) : null}
       {/*
         Freight Basis, Loading Basis and "discount alters the base rate" used to
         be three controls here. They are not operator choices on this screen: the

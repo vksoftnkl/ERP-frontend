@@ -27,7 +27,7 @@ import {
   CHARGE_TYPE_LABELS,
 } from "../quotation.constants";
 import type { DraftChargeRow } from "../quotation.types";
-import { totalColumnWidth, type ResolvedChargeColumn } from "../quotation.utils";
+import { isFrozenColumn, totalColumnWidth, type ResolvedChargeColumn } from "../quotation.utils";
 import { GridCell } from "./grid-cell";
 import { moveCellFocus } from "./grid-focus";
 import styles from "../page.module.scss";
@@ -102,12 +102,13 @@ export function ChargeGrid(props: ChargeGridProps) {
         </colgroup>
         <thead>
           <tr>
-            {visible.map((column) => (
+            {visible.map((column, columnIndex) => (
               <th
                 key={column.key}
                 scope="col"
                 className={cx(
                   styles.gridHeaderCell,
+                  isFrozenColumn(columnIndex) && styles.gridHeaderFrozenCell,
                   resizingKey === column.key && styles.gridHeaderCellResizing,
                 )}
               >
@@ -120,7 +121,7 @@ export function ChargeGrid(props: ChargeGridProps) {
                 />
               </th>
             ))}
-            <th scope="col" aria-label="Row actions" />
+            <th scope="col" aria-label="Row actions" className={styles.gridHeaderActionCell} />
           </tr>
         </thead>
         <tbody onKeyDown={onGridKeyDown}>
@@ -158,7 +159,7 @@ export function ChargeGrid(props: ChargeGridProps) {
                   return (
                     <td
                       key={column.key}
-                      className={cx(columnIndex === 0 && styles.serialCell)}
+                      className={cx(isFrozenColumn(columnIndex) && styles.frozenCell)}
                     >
                       <GridCell
                         kind={column.kind}

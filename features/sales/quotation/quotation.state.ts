@@ -84,6 +84,7 @@ export function emptyCustomer(): CustomerSnapshot {
   return {
     custId: null,
     name: "",
+    masterName: "",
     englishName: null,
     address: null,
     place: null,
@@ -234,6 +235,7 @@ export function createDraftLine(overrides: Partial<DraftLine> = {}): DraftLine {
     cashDiscPerc: 0,
     cashDiscAmt: 0,
     remarks: null,
+    itemSize: null,
     decimalCount: 2,
     batchConfig: 0,
     allowNegative: false,
@@ -374,6 +376,7 @@ export function customerFromDetail(detail: CustomerDetailPayload): CustomerSnaps
   return {
     custId: detail.cust_id,
     name: detail.cust_name,
+    masterName: detail.cust_name,
     englishName: detail.cust_ename,
     address: detail.cust_address,
     place: detail.cust_place,

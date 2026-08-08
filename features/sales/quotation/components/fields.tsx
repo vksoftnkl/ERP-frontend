@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
 import { cx } from "@/components/design-system/cx";
@@ -38,16 +39,26 @@ export function GroupBox({
 export function Field({
   label,
   htmlFor,
+  required,
   children,
 }: {
   label: string;
   htmlFor?: string;
+  /** Marks the label, for a field the save refuses to go without. */
+  required?: boolean;
   children: ReactNode;
 }) {
   return (
     <>
       <label className={styles.label} htmlFor={htmlFor}>
         {label}
+        {required ? (
+          // Carries the word too, for a reader who cannot see the colour the
+          // asterisk is drawn in.
+          <span className={styles.requiredMark} title="Required">
+            *<span className={styles.srOnly}> (required)</span>
+          </span>
+        ) : null}
       </label>
       {children}
     </>
@@ -61,6 +72,7 @@ export function TextField({
   disabled,
   maxLength,
   placeholder,
+  required,
   onChange,
 }: {
   id: string;
@@ -69,10 +81,11 @@ export function TextField({
   disabled?: boolean;
   maxLength?: number;
   placeholder?: string;
+  required?: boolean;
   onChange: (value: string) => void;
 }) {
   return (
-    <Field label={label} htmlFor={id}>
+    <Field label={label} htmlFor={id} required={required}>
       <input
         id={id}
         className={styles.input}
@@ -341,6 +354,17 @@ export function ReadOnlyField({ label, value }: { label: string; value: string }
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Whether this keystroke is the operator starting to edit the box, as opposed
+ * to navigating it (arrows, Enter, Escape, Tab) or running a shortcut.
+ */
+function startsEditing(event: ReactKeyboardEvent<HTMLInputElement>): boolean {
+  if (event.ctrlKey || event.metaKey || event.altKey) {
+    return false;
+  }
+  return event.key.length === 1 || event.key === "Backspace" || event.key === "Delete";
+}
+
 export type DropdownComboProps = {
   id: string;
   label: string;
@@ -385,7 +409,17 @@ export function DropdownCombo(props: DropdownComboProps) {
   } = props;
 
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  /**
+   * What has been typed into the box, or `null` for "the menu is open but no
+   * search has been keyed yet".
+   *
+   * The distinction is what keeps the picked customer readable: an empty string
+   * is a real search (everything matches) and renders as an empty box, so
+   * collapsing the two made simply clicking into the field blank the name that
+   * was already chosen. While the query is `null` the box shows the selection
+   * and the first keystroke replaces it, because focusing also selects the text.
+   */
+  const [query, setQuery] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [runDropdown, { data, isFetching }] = useLazyRunDropdownQuery();
@@ -414,7 +448,7 @@ export function DropdownCombo(props: DropdownComboProps) {
     if (!open) {
       return;
     }
-    const timer = window.setTimeout(() => fetchOptions(query), 250);
+    const timer = window.setTimeout(() => fetchOptions(query ?? ""), 250);
     return () => window.clearTimeout(timer);
   }, [fetchOptions, open, query]);
 
@@ -434,7 +468,7 @@ export function DropdownCombo(props: DropdownComboProps) {
   const commit = (option: { value: string; label: string }) => {
     onSelect(option.value, option.label);
     setOpen(false);
-    setQuery("");
+    setQuery(null);
   };
 
   return (
@@ -443,18 +477,27 @@ export function DropdownCombo(props: DropdownComboProps) {
         className={styles.combo}
         ref={rootRef}
         // Tabbing out fires no mousedown, so without this the menu stays open and
-        // the input keeps rendering the empty search text over a selected value.
+        // the input keeps rendering a half-typed search over the selected value.
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
             setOpen(false);
-            setQuery("");
+            setQuery(null);
           }
         }}
       >
         <input
           id={id}
           className={cx(styles.input, styles.comboInput)}
-          value={open ? query : selectedLabel}
+          // The typed search only takes over once there IS one; otherwise the
+          // box reads back what is selected, open or not.
+          //
+          // `selectedLabel` is coerced even though the prop is typed `string`: a
+          // draft restored from JSON (a parked cart) or held across a dev
+          // hot-reload can be missing a field the type promises, and an
+          // `undefined` here would make React switch the input from
+          // uncontrolled to controlled and drop whatever had been typed into it.
+          // A blank label is the right reading of "nothing picked" anyway.
+          value={open && query !== null ? query : (selectedLabel ?? "")}
           disabled={disabled}
           placeholder={placeholder ?? "Search…"}
           autoComplete="off"
@@ -462,10 +505,17 @@ export function DropdownCombo(props: DropdownComboProps) {
           aria-expanded={open}
           aria-controls={`${id}-menu`}
           data-quotation-focus={id}
-          onFocus={() => {
+          onFocus={(event) => {
             if (!disabled) {
               setOpen(true);
-              setQuery("");
+              // Not `""`: that is a search for everything and would blank the
+              // box, hiding the very name the operator came back to check.
+              setQuery(null);
+              setActiveIndex(0);
+              // Selected rather than cleared, so the first keystroke still
+              // replaces the whole thing and searching feels the same as before
+              // — the grid cells arrive focused the same way.
+              event.currentTarget.select();
               fetchOptions("");
             }
           }}
@@ -475,6 +525,15 @@ export function DropdownCombo(props: DropdownComboProps) {
             setOpen(true);
           }}
           onKeyDown={(event) => {
+            // The box is showing the current selection rather than a search, so
+            // this keystroke has to replace the whole label instead of being
+            // appended to it — otherwise the search runs for "KARTHIKV".
+            // Focusing selects the text for exactly this reason, but focus does
+            // not fire again when the field already has it: after Escape, or
+            // after picking with Enter, which leaves the caret in place.
+            if (query === null && startsEditing(event)) {
+              event.currentTarget.select();
+            }
             if (event.key === "ArrowDown") {
               event.preventDefault();
               setOpen(true);
@@ -494,6 +553,9 @@ export function DropdownCombo(props: DropdownComboProps) {
             if (event.key === "Escape" && open) {
               event.preventDefault();
               setOpen(false);
+              // Abandons the half-typed search rather than leaving it to
+              // reappear the next time the menu opens.
+              setQuery(null);
             }
           }}
         />
@@ -516,7 +578,7 @@ export function DropdownCombo(props: DropdownComboProps) {
             }
             if (open) {
               setOpen(false);
-              setQuery("");
+              setQuery(null);
               return;
             }
             document.getElementById(id)?.focus();

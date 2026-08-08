@@ -38,6 +38,7 @@ import { accountingYearOf, todayIso } from "./quotation.utils";
 
 const ACTOR: SaveActor = {
   userId: "019c6f6c-be87-7a11-8905-36092c46fe05",
+  userName: "vijay",
   sessionId: "3f1c9d3e-6b1e-4c8f-9a55-2c3d4e5f6a7b",
   deviceId: "device-abc",
   deviceType: "WEB",
@@ -60,7 +61,13 @@ function baseDraft(): QuotationDraft {
   });
   return {
     ...draft,
-    customer: { ...draft.customer, custId: "019f659c-1111-7000-8000-000000000001", name: "Acme" },
+    customer: {
+      ...draft.customer,
+      custId: "019f659c-1111-7000-8000-000000000001",
+      name: "Acme",
+      // Mandatory, so a draft without it is not a complete one.
+      phone: "9876543210",
+    },
     lines: [
       createDraftLine({
         itemId: ITEM_ID,
@@ -100,6 +107,8 @@ const ALLOWED_HEADER_KEYS = new Set<string>([
   "sqPriceLevel",
   "sqCustName",
   "sqUserId",
+  "sqCreatedBy",
+  "sqModifiedBy",
   "sqDocType",
   "sqUsrRefno",
   "sqQuoteDate",
@@ -185,6 +194,21 @@ describe("buildSavePayload", () => {
     for (const key of ["sqCompanyId", "sqBranchId", "sqAccYear", "sqPriceLevel", "sqCustName", "sqUserId"] as const) {
       expect(update[key]).toBeDefined();
     }
+  });
+
+  it("names the actor in the free-text audit columns and keeps the uuid in sqUserId", () => {
+    const payload = payloadOf(baseDraft());
+    expect(payload.sqUserId).toBe(ACTOR.userId);
+    expect(payload.sqCreatedBy).toBe("vijay");
+    expect(payload.sqModifiedBy).toBe("vijay");
+
+    // A session with no name still has to identify itself somehow.
+    const anonymous = buildSavePayload(baseDraft(), pricingOf(baseDraft()), {
+      ...ACTOR,
+      userName: "  ",
+    });
+    expect(anonymous.sqCreatedBy).toBe(ACTOR.userId);
+    expect(anonymous.sqModifiedBy).toBe(ACTOR.userId);
   });
 
   it("never sends the server-owned voucher number or refno", () => {
@@ -836,6 +860,31 @@ describe("validateSaveInputs", () => {
     expect(violation?.field).toBe("customer");
     // A walk-in keyed by hand has no `custId`; the server's `sqCustId` is optional.
     expect(check({ ...draft, customer: { ...draft.customer, custId: null } })).toBeNull();
+  });
+
+  it("requires a customer phone", () => {
+    const draft = baseDraft();
+    // Both "never keyed" and "keyed as blanks" are the same missing number.
+    expect(check({ ...draft, customer: { ...draft.customer, phone: null } })?.field).toBe(
+      "customerPhone",
+    );
+    expect(check({ ...draft, customer: { ...draft.customer, phone: "   " } })?.field).toBe(
+      "customerPhone",
+    );
+    // Not format-checked: landlines, extensions and country codes all pass.
+    expect(check({ ...draft, customer: { ...draft.customer, phone: "+91 44 2841-0000" } })).toBeNull();
+  });
+
+  it("does not require a phone the deployment has taken off the form", () => {
+    // Visible Settings (menu 14) can hide the field. Blocking the save over one
+    // the operator cannot see would leave the screen with no way forward.
+    const draft = { ...baseDraft(), customer: { ...baseDraft().customer, phone: null } };
+    expect(
+      validateSaveInputs(draft, pricingOf(draft), { phoneOnForm: false }),
+    ).toBeNull();
+    expect(validateSaveInputs(draft, pricingOf(draft), { phoneOnForm: true })?.field).toBe(
+      "customerPhone",
+    );
   });
 
   it("requires a real quotation date", () => {

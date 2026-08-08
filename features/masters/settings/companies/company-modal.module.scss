@@ -1,0 +1,9 @@
+/* The Company entry panel is a fixed height (see COMPANY_MODAL_PANEL_STYLE), so
+   the scroll area must fill whatever the header and footer leave over. The
+   shared modal module caps it at `calc(88vh - 148px)`, which on viewports below
+   ~840px tall is *shorter* than that leftover — the panel then renders a blank
+   band under the footer. Dropping the cap lets `flex: 1` size the body exactly;
+   the panel's own max-height still bounds the whole thing. */
+.fixedHeightPanel :global(.erp-ms-modal-body) {
+  max-height: none;
+}
