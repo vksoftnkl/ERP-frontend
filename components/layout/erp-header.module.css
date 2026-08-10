@@ -9,6 +9,33 @@
 }
 
 .topHeader {
+  /* Header metrics scale linearly between 1024px (the smallest supported
+     desktop width) and 1600px so the menu and the right-hand controls shrink
+     instead of wrapping — the whole header stays on ONE line down to 1024x768.
+     Each value is written as
+     `clamp(min, calc(min + span * (100vw - 1024px) / 576), max)`, i.e. it holds
+     `min` at <=1024px, `max` at >=1600px, and interpolates in between. Below
+     1024px the floors hold and the header is allowed to wrap again. */
+  --hdr-menu-font: clamp(11px, calc(11px + 2 * (100vw - 1024px) / 576), 13px);
+  --hdr-menu-pad-y: clamp(4px, calc(4px + 3 * (100vw - 1024px) / 576), 7px);
+  --hdr-menu-pad-x: clamp(5px, calc(5px + 2 * (100vw - 1024px) / 576), 7px);
+  --hdr-menu-min-h: clamp(24px, calc(24px + 6 * (100vw - 1024px) / 576), 30px);
+  --hdr-menu-gap: clamp(1px, calc(1px + 2 * (100vw - 1024px) / 576), 3px);
+  --hdr-menu-label-gap: clamp(4px, calc(4px + 2 * (100vw - 1024px) / 576), 6px);
+  --hdr-menu-arrow-gap: clamp(2px, calc(2px + 5 * (100vw - 1024px) / 576), 7px);
+  --hdr-menu-icon: clamp(13px, calc(13px + 2 * (100vw - 1024px) / 576), 15px);
+  --hdr-menu-arrow: clamp(10px, calc(10px + 6 * (100vw - 1024px) / 576), 16px);
+
+  --hdr-ctl-font: clamp(11px, calc(11px + 2 * (100vw - 1024px) / 576), 13px);
+  --hdr-ctl-gap: clamp(4px, calc(4px + 3 * (100vw - 1024px) / 576), 7px);
+  --hdr-ctl-icon-pad: clamp(2px, calc(2px + 2 * (100vw - 1024px) / 576), 4px);
+  --hdr-ctl-icon-size: clamp(16px, calc(16px + 2 * (100vw - 1024px) / 576), 18px);
+  --hdr-select-gap: clamp(4px, calc(4px + 2 * (100vw - 1024px) / 576), 6px);
+  --hdr-select-company: clamp(112px, calc(112px + 60 * (100vw - 1024px) / 576), 172px);
+  --hdr-select-branch: clamp(112px, calc(112px + 60 * (100vw - 1024px) / 576), 172px);
+  --hdr-select-fy: clamp(80px, calc(80px + 52 * (100vw - 1024px) / 576), 132px);
+  --hdr-go-min: clamp(32px, calc(32px + 16 * (100vw - 1024px) / 576), 48px);
+
   background: linear-gradient(180deg, #8b1d1d 0%, #711010 100%);
   color: #fff;
   border-bottom: 1px solid rgba(71, 0, 0, 0.72);
@@ -29,7 +56,7 @@
 .primaryMenuList {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--hdr-menu-gap);
   flex-wrap: wrap;
   margin: 0;
   padding: 0;
@@ -88,8 +115,30 @@
 
 .primaryMenuItem {
   color: #fff;
-  font-size: 13px;
+  font-size: var(--hdr-menu-font);
   font-weight: 600;
+  gap: var(--hdr-menu-arrow-gap);
+  min-height: var(--hdr-menu-min-h);
+  padding: var(--hdr-menu-pad-y) var(--hdr-menu-pad-x);
+}
+
+.primaryMenuItem .menuLinkContent {
+  gap: var(--hdr-menu-label-gap);
+}
+
+.primaryMenuItem .menuIcon {
+  width: var(--hdr-menu-icon);
+  height: var(--hdr-menu-icon);
+}
+
+.primaryMenuItem .submenuArrow {
+  width: var(--hdr-menu-arrow);
+  height: var(--hdr-menu-arrow);
+}
+
+.primaryMenuItem .submenuArrow svg {
+  width: calc(var(--hdr-menu-arrow) - 2px);
+  height: calc(var(--hdr-menu-arrow) - 2px);
 }
 
 .quickTab {
@@ -263,14 +312,15 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--hdr-ctl-gap);
   flex-wrap: wrap;
   margin-left: auto;
+  min-width: 0;
 }
 
 .searchText,
 .date {
-  font-size: 13px;
+  font-size: var(--hdr-ctl-font);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -289,34 +339,38 @@
 
 .contextSelect {
   height: 24px;
-  width: 180px;
-  min-width: 180px;
-  max-width: 180px;
-  flex: 0 0 180px;
+  width: var(--hdr-select-branch);
+  min-width: 0;
+  max-width: var(--hdr-select-branch);
+  /* Shrinkable so an unusually wide menu squeezes the selects instead of
+     pushing the header onto a second line. */
+  flex: 0 1 var(--hdr-select-branch);
   border: 1px solid #4f4f4f;
   background: #fff;
   color: #111;
-  font-size: 13px;
-  padding: 0 6px;
+  font-size: var(--hdr-ctl-font);
+  padding: 0 4px;
 }
 
 .companyContextGroup {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--hdr-select-gap);
   min-width: 0;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
 }
 
 .companyContextSelect {
-  flex: 0 0 180px;
+  width: var(--hdr-select-company);
+  max-width: var(--hdr-select-company);
+  flex: 0 1 var(--hdr-select-company);
 }
 
 .fiscalYearContextSelect {
-  width: 140px;
-  min-width: 140px;
-  max-width: 140px;
-  flex: 0 0 140px;
+  width: var(--hdr-select-fy);
+  min-width: 0;
+  max-width: var(--hdr-select-fy);
+  flex: 0 1 var(--hdr-select-fy);
 }
 
 .recentPagesSelect {
@@ -417,18 +471,20 @@
   height: 24px;
   border: 1px solid #4f4f4f;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--hdr-ctl-font);
   font-weight: 700;
   background: #fff;
   color: #6e0c0c;
+  flex: 0 0 auto;
+  padding: 0 4px;
 }
 
 .cartButton {
-  min-width: 40px;
+  min-width: var(--hdr-go-min);
 }
 
 .goButton {
-  min-width: 48px;
+  min-width: var(--hdr-go-min);
 }
 
 .logoutButton {
@@ -680,6 +736,77 @@
   font-weight: 500;
 }
 .calendarTodayBtn:hover { text-decoration: underline; }
+/* Desktop (>=1024px): the whole header is one row on one line. The menu keeps
+   its content width (it never wraps and never clips — the scaled metrics above
+   shrink it instead), and the right-hand controls sit on the same line, with
+   the selects absorbing any leftover pressure. */
+@media (min-width: 1024px) {
+  .topHeader {
+    flex-wrap: nowrap;
+  }
+
+  .primaryMenu {
+    flex: 0 1 auto;
+    min-width: min(100%, max-content);
+  }
+
+  .primaryMenuList {
+    flex-wrap: nowrap;
+  }
+
+  .primaryMenuItem {
+    flex-shrink: 0;
+  }
+
+  .headerRight {
+    flex-wrap: nowrap;
+  }
+
+  .headerRight .date {
+    flex: 0 0 auto;
+  }
+
+  /* Never let the shrink safety collapse a select to an unusable sliver. */
+  .contextSelect {
+    min-width: 64px;
+  }
+
+  .calendarPickerShell,
+  .recentPagesDropdown,
+  .userMenuDropdown {
+    flex: 0 0 auto;
+  }
+
+  .calendarIconButton,
+  .recentPagesIconButton,
+  .userIconButton {
+    padding: var(--hdr-ctl-icon-pad);
+  }
+
+  .calendarIconButton svg,
+  .recentPagesIconButton svg {
+    width: var(--hdr-ctl-icon-size);
+    height: var(--hdr-ctl-icon-size);
+  }
+
+  .userIconButton svg {
+    width: calc(var(--hdr-ctl-icon-size) + 2px);
+    height: calc(var(--hdr-ctl-icon-size) + 2px);
+  }
+}
+
+/* Below 1366px the module icons are what push the menu past the line — the
+   labels stay, the decorative icons drop out. */
+@media (min-width: 1024px) and (max-width: 1365px) {
+  .primaryMenuItem .menuIcon {
+    display: none;
+  }
+
+  .primaryMenuItem .menuLinkContent {
+    gap: 0;
+  }
+}
+
 @media (max-width: 820px) {
   .topHeader {
     row-gap: 6px;

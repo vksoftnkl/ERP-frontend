@@ -298,11 +298,11 @@ function resolveColumnPixelWidth<T extends Record<string, unknown>>(
   if (isSerialNumberColumn(column)) {
     return Number.parseFloat(SERIAL_NUMBER_COLUMN_WIDTH);
   }
-  if (isActionsColumn(column)) {
-    return Number.parseFloat(FIXED_ACTIONS_COLUMN_WIDTH);
-  }
   const normalizedWidth = column.width?.trim();
   const pixelWidth = normalizedWidth?.match(/^(\d+(?:\.\d+)?)px$/i);
+  if (isActionsColumn(column)) {
+    return pixelWidth ? Number(pixelWidth[1]) : Number.parseFloat(FIXED_ACTIONS_COLUMN_WIDTH);
+  }
   if (pixelWidth) {
     return Math.max(Number(pixelWidth[1]), MIN_RESIZABLE_COLUMN_WIDTH);
   }
@@ -551,11 +551,6 @@ export function ReusableTable<T extends Record<string, unknown>>({
     edge: ReusableTableColumnReorderEdge;
   } | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, string>>({});
-  const [tableWidthOverride, setTableWidthOverride] = useState<number | null>(null);
-  const activeResizeTableWidthRef = useRef<{
-    startTableWidth: number;
-    startColumnWidth: number;
-  } | null>(null);
   const resolvedOnUpdate = onUpdate ?? onEdit;
   const resolvedIsUpdateDisabled = isUpdateDisabled ?? isEditDisabled;
   const resolvedUpdateLabel = updateLabel ?? editLabel ?? "Edit";
@@ -729,69 +724,60 @@ export function ReusableTable<T extends Record<string, unknown>>({
   }, [paginatedRows, remeasureAutoPageSize]);
   useLayoutEffect(() => {
     remeasureAutoPageSize({ invalidateRowHeight: true });
-  }, [columnWidths, displayColumnSignature, remeasureAutoPageSize, tableWidthOverride]);
+  }, [columnWidths, displayColumnSignature, remeasureAutoPageSize]);
   const enableRowReorder = reorderableRows && typeof onRowReorder === "function";
   const enableColumnReorder = reorderableColumns && displayColumns.some(isColumnReorderable);
   const enableColumnResize = resizableColumns && displayColumns.some(isColumnReorderable);
-  const displayColumnsWithWidths = displayColumns.map((column) => {
+  const configuredColumns = displayColumns.map((column) => {
     if (isSerialNumberColumn(column)) {
       return { ...column, width: SERIAL_NUMBER_COLUMN_WIDTH };
-    }
-    const resizedWidth = columnWidths[column.key];
-    return resizedWidth ? { ...column, width: resizedWidth } : column;
-  });
-  const fixedColumnWidth = displayColumnsWithWidths.reduce(
-    (total, column) =>
-      isSerialNumberColumn(column) || isActionsColumn(column)
-        ? total + resolveColumnPixelWidth(column)
-        : total,
-    0,
-  );
-  const dataColumns = displayColumnsWithWidths.filter(
-    (column) => !isSerialNumberColumn(column) && !isActionsColumn(column),
-  );
-  const configuredTableWidth = resolveMinimumTableWidth(displayColumnsWithWidths);
-  const fallbackMinWidthMatch = minWidth.trim().match(/^(\d+(?:\.\d+)?)px$/i);
-  const fallbackTableWidth = fallbackMinWidthMatch
-    ? Number(fallbackMinWidthMatch[1])
-    : configuredTableWidth;
-  const extraDataWidth = Math.max(0, fallbackTableWidth - configuredTableWidth);
-  const extraDataWidthPerColumn =
-    dataColumns.length > 0 ? extraDataWidth / dataColumns.length : 0;
-  const expandedDataColumnKeys =
-    extraDataWidthPerColumn > 0
-      ? new Set(dataColumns.map((column) => column.key))
-      : null;
-  const displayColumnsForRender = displayColumnsWithWidths.map((column) => {
-    // Expanded data column: add the distributed extra width.
-    if (expandedDataColumnKeys?.has(column.key)) {
-      return {
-        ...column,
-        width: `${resolveColumnPixelWidth(column) + extraDataWidthPerColumn}px`,
-      };
     }
     // Data column with no explicit width: pin it to its pixel baseline.
     // Without an explicit <col> width, table-layout:fixed hands all remaining
     // table space to the last such column, making it appear "full width".
-    if (!column.width && !isSerialNumberColumn(column) && !isActionsColumn(column)) {
+    if (!column.width && !isActionsColumn(column)) {
       return { ...column, width: `${resolveColumnPixelWidth(column)}px` };
     }
     return column;
   });
+  // Distribute the min-width floor's slack into the data columns once, from
+  // the CONFIGURED widths only, so every column initially renders at exactly
+  // its specified pixel width (no browser-distributed slack). Resized widths
+  // then replace this baseline per column and never trigger redistribution —
+  // dragging one column moves only that column's edge and the table edge.
+  const fallbackMinWidthMatch = minWidth.trim().match(/^(\d+(?:\.\d+)?)px$/i);
+  const fallbackTableWidth = fallbackMinWidthMatch ? Number(fallbackMinWidthMatch[1]) : 0;
+  const configuredColumnsWidth = resolveMinimumTableWidth(configuredColumns);
+  const dataColumnCount = configuredColumns.filter(
+    (column) => !isSerialNumberColumn(column) && !isActionsColumn(column),
+  ).length;
+  const floorSlackPerDataColumn =
+    dataColumnCount > 0
+      ? Math.max(0, fallbackTableWidth - configuredColumnsWidth) / dataColumnCount
+      : 0;
+  const displayColumnsForRender = configuredColumns.map((column) => {
+    if (isSerialNumberColumn(column) || isActionsColumn(column)) {
+      return column;
+    }
+    const resizedWidth = columnWidths[column.key];
+    if (resizedWidth) {
+      return { ...column, width: resizedWidth };
+    }
+    if (floorSlackPerDataColumn > 0) {
+      return {
+        ...column,
+        width: `${resolveColumnPixelWidth(column) + floorSlackPerDataColumn}px`,
+      };
+    }
+    return column;
+  });
   const hasRenderableColumns = displayColumnsForRender.length > 0;
-  const minimumTableWidth = fixedColumnWidth + dataColumns.reduce(
-    (total, column) =>
-      total +
-      resolveColumnPixelWidth(column) +
-      (expandedDataColumnKeys?.has(column.key) ? extraDataWidthPerColumn : 0),
-    0,
-  );
-  const resolvedTableWidth = `${Math.max(minimumTableWidth, tableWidthOverride ?? 0)}px`;
-
-  useEffect(() => {
-    setTableWidthOverride(null);
-    activeResizeTableWidthRef.current = null;
-  }, [displayColumnSignature]);
+  // The table is exactly as wide as the sum of its column widths, floored at
+  // the configured minimum.
+  const resolvedTableWidth = `${Math.max(
+    resolveMinimumTableWidth(displayColumnsForRender),
+    fallbackTableWidth,
+  )}px`;
 
   useEffect(() => {
     if (openActionMenuKey === null) {
@@ -1288,12 +1274,11 @@ export function ReusableTable<T extends Record<string, unknown>>({
 
     const headerRow = event.currentTarget.closest("tr");
     const tableElement = event.currentTarget.closest("table");
-    const tableStartWidth = tableElement?.getBoundingClientRect().width ?? 0;
 
-    // Snapshot every resizable column's current rendered pixel width before
-    // the drag begins. Without this, the expansion-distribution logic
-    // recalculates for all columns on every frame, making columns other than
-    // the one being dragged jump around (appearing to resize the wrong column).
+    // Pin every resizable column to its current rendered pixel width before
+    // the drag begins so the drag only moves the dragged column's edge —
+    // columns whose width came from browser-distributed slack would otherwise
+    // reflow on every frame.
     let primaryStartWidth = 120;
     const widthSnapshot: Record<string, string> = {};
     if (headerRow) {
@@ -1315,13 +1300,6 @@ export function ReusableTable<T extends Record<string, unknown>>({
 
     const startX = event.clientX;
     let latestPrimaryWidth = primaryStartWidth;
-    activeResizeTableWidthRef.current =
-      tableStartWidth > 0
-        ? {
-            startTableWidth: Math.round(tableStartWidth),
-            startColumnWidth: primaryStartWidth,
-          }
-        : null;
 
     const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
       const delta = moveEvent.clientX - startX;
@@ -1333,17 +1311,6 @@ export function ReusableTable<T extends Record<string, unknown>>({
         ...current,
         [column.key]: `${latestPrimaryWidth}px`,
       }));
-      const activeTableResize = activeResizeTableWidthRef.current;
-      if (activeTableResize) {
-        setTableWidthOverride(
-          Math.max(
-            0,
-            activeTableResize.startTableWidth +
-              latestPrimaryWidth -
-              activeTableResize.startColumnWidth,
-          ),
-        );
-      }
     };
 
     const handleMouseUp = () => {
@@ -1351,7 +1318,6 @@ export function ReusableTable<T extends Record<string, unknown>>({
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
-      activeResizeTableWidthRef.current = null;
       const tableWidth = tableElement?.getBoundingClientRect().width ?? 0;
       onColumnResizeEnd?.({
         column,

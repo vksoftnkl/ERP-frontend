@@ -21,3 +21,12 @@
   > label[class*="checkboxWrapper"] {
   grid-column: 1 / -1;
 }
+
+/* The payment-integration block switches off for every tender type but UPI. The
+   shared skin only tints the control itself, which is easy to miss on a light
+   input — fade the caption with it so the whole pair reads as unavailable. */
+.tenderModal.tenderModal.tenderModal
+  div[class*="field"]:has(> :is(input, textarea):disabled)
+  > label[class*="label"] {
+  color: var(--erp-ms-ink-faint);
+}
