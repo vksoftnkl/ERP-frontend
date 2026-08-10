@@ -122,6 +122,9 @@ export type ERPDynamicModalField = {
   required?: boolean;
   requiredWhen?: (values: Record<string, string>) => boolean;
   disabled?: boolean;
+  /** Disable the control from the live form values — for a field another field
+   *  switches off. `disabled: true` still wins outright. */
+  disabledWhen?: (values: Record<string, string>) => boolean;
   searchable?: boolean;
   // When true the field's options are treated as already filtered by the owner
   // (e.g. a server-side/lazy dropdown), so the built-in client-side substring

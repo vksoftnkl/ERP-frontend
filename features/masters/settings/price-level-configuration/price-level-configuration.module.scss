@@ -2,7 +2,6 @@
 // A grid popup that mirrors the desktop "Price Level" dialog: gold column headers,
 // bordered cells, editable Level/Short names and Y/N toggles for Active/Admin, and a
 // Save Changes action. The page renders a launch card behind the auto-opened modal.
-
 .page {
   height: 100%;
   min-height: 0;
@@ -11,7 +10,6 @@
   padding: 24px;
   background: var(--page-bg);
 }
-
 // ---- Launch card (shown when the popup is closed) --------------------------
 .launchCard {
   width: min(100%, 30rem);
@@ -24,21 +22,18 @@
   border-radius: var(--erp-radius);
   box-shadow: var(--shadow);
 }
-
 .launchTitle {
   margin: 0;
   font-size: 1.15rem;
   font-weight: 700;
   color: var(--text-main);
 }
-
 .launchText {
   margin: 0;
   font-size: 0.86rem;
   line-height: 1.45;
   color: var(--text-muted);
 }
-
 .launchButton {
   justify-self: center;
   margin-top: 4px;
@@ -51,12 +46,10 @@
   border-radius: var(--erp-radius);
   cursor: pointer;
   transition: background-color 0.16s ease;
-
   &:hover {
     background: var(--primary-hover);
   }
 }
-
 // ---- Modal shell -----------------------------------------------------------
 .overlay {
   position: fixed;
@@ -73,7 +66,6 @@
   isolation: isolate;
   transform: translateZ(0);
 }
-
 .backdrop {
   position: absolute;
   inset: 0;
@@ -82,7 +74,6 @@
   background: rgb(0 0 0 / 42%);
   cursor: pointer;
 }
-
 .modal {
   position: relative;
   width: min(100%, 40rem);
@@ -96,7 +87,6 @@
   overflow: hidden;
   animation: modalIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
-
 .header {
   display: flex;
   align-items: center;
@@ -106,14 +96,12 @@
   background: var(--header-bg);
   border-bottom: 1px solid var(--border);
 }
-
 .title {
   margin: 0;
   font-size: 1rem;
   font-weight: 700;
   color: var(--text-main);
 }
-
 .closeButton {
   width: 30px;
   height: 30px;
@@ -128,30 +116,25 @@
   border-radius: var(--erp-radius);
   cursor: pointer;
   transition: background-color 0.16s ease, color 0.16s ease;
-
   &:hover {
     background: rgb(15 23 42 / 6%);
     color: var(--text-main);
   }
 }
-
 .body {
   padding: 16px;
   overflow: auto;
 }
-
 // ---- Grid ------------------------------------------------------------------
 .gridWrap {
   overflow-x: auto;
 }
-
 .grid {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.86rem;
   background: var(--card-bg);
 }
-
 .grid th {
   padding: 9px 12px;
   text-align: center;
@@ -160,21 +143,17 @@
   border: 1px solid #cdbf6f;
   white-space: nowrap;
 }
-
 .grid th.levelHead {
-  text-align: left;
+  text-align: center;
 }
-
 .grid td {
   padding: 0;
   border: 1px solid var(--border);
   background: var(--card-bg);
 }
-
 .grid tbody tr:nth-child(even) td {
   background: #fafbfe;
 }
-
 .cellInput {
   width: 100%;
   height: 100%;
@@ -185,17 +164,14 @@
   background: transparent;
   border: 0;
   outline: none;
-
   &:focus {
     background: var(--row-selected);
     box-shadow: inset 0 0 0 2px var(--primary);
   }
 }
-
 .shortInput {
   text-transform: uppercase;
 }
-
 // Y / N toggle cell — click to flip.
 .flagButton {
   width: 100%;
@@ -208,32 +184,26 @@
   border: 0;
   cursor: pointer;
   transition: background-color 0.14s ease;
-
   &:hover {
     background: var(--row-hover);
   }
-
   &:focus-visible {
     outline: 2px solid var(--primary);
     outline-offset: -2px;
   }
 }
-
 .flagYes {
   color: var(--success-text);
 }
-
 .flagNo {
   color: var(--text-muted);
 }
-
 .stateRow {
   padding: 28px 12px;
   text-align: center;
   font-size: 0.86rem;
   color: var(--text-muted);
 }
-
 // ---- Footer ----------------------------------------------------------------
 .footer {
   display: flex;
@@ -244,7 +214,6 @@
   border-top: 1px solid var(--border);
   background: var(--card-bg);
 }
-
 .saveButton {
   padding: 0.55rem 1.4rem;
   font-size: 0.86rem;
@@ -255,17 +224,14 @@
   border-radius: var(--erp-radius);
   cursor: pointer;
   transition: background-color 0.16s ease;
-
   &:hover:not(:disabled) {
     background: var(--primary-hover);
   }
-
   &:disabled {
     opacity: 0.6;
     cursor: not-allowed;
   }
 }
-
 @keyframes overlayIn {
   from {
     opacity: 0;
@@ -274,7 +240,6 @@
     opacity: 1;
   }
 }
-
 @keyframes modalIn {
   from {
     opacity: 0;

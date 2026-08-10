@@ -23,6 +23,7 @@ import {
   type WidgetMastersResponse,
 } from "@/features/masters/shared/widget-config";
 import styles from "@/app/master/state-master/page.module.scss";
+import modalSkin from "./tender-modal.module.scss";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import {
   getFirstDefinedValue,
@@ -44,10 +45,11 @@ const API_ENDPOINTS = {
 } as const;
 const GRID_TABLE_NAME = "tender_master";
 const GRID_DETAIL_ID = 44;
-// The form fields below are re-labelled, re-ordered, and shown/hidden from the
-// backend widget-masters config (fixed.form_section / form_field) for this
-// screen's menu id. Only those three properties come from the API — validation,
-// state shape, and submit logic stay defined locally.
+// The form below is laid out in code to match the legacy "Tender Entry" screen
+// (tabs + label-left groups), so the backend widget-masters config
+// (fixed.form_section / form_field) is applied in "visibility-only" mode: an
+// admin can hide a configured field, but labels, order, and grouping stay as
+// authored here. Validation, state shape, and submit logic are local too.
 const WIDGET_CONFIG_ENDPOINT = "/widget-masters/get";
 const WIDGET_SECTION_MENU_ID = 95;
 // Matches the section_platform stored for this menu (case-sensitive equality on
@@ -55,10 +57,8 @@ const WIDGET_SECTION_MENU_ID = 95;
 const WIDGET_SECTION_PLATFORM = "Web";
 // Bridge each hardcoded form field `name` (camelCase aliases used by form state
 // and the submit payload) to the backend `fieldName` it is configured under
-// (tnd_*/tender_* keys, matched case-insensitively). Form fields with no mapping
-// — or no matching response entry — keep their hardcoded label and render after
-// all configured fields. (Display Position is not configured for this menu, so
-// `position` has no mapping and always renders last.)
+// (tnd_*/tender_* keys, matched case-insensitively). Only mapped fields can be
+// hidden from the config/right-click tree; everything else always renders.
 const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
   masterName: "tender_name",
   tndTypeId: "tender_type",
@@ -186,13 +186,12 @@ const YES_NO_OPTIONS: ERPDynamicSelectOption[] = [
   { label: "Yes", value: "true" },
   { label: "No", value: "false" },
 ];
-// tnd_needs_ref / tnd_allow_change / tnd_allow_in_return are tri-state: NULL
-// means the POS falls back to the tender type's own flag.
-const INHERIT_YES_NO_OPTIONS: ERPDynamicSelectOption[] = [
-  { label: "Inherit from tender type", value: "" },
-  { label: "Yes", value: "true" },
-  { label: "No", value: "false" },
-];
+// Sized to the taller tab (Tender) and pinned on BOTH axes so the panel keeps one
+// size as the user switches tabs; each tab body scrolls on short viewports.
+const TENDER_MODAL_PANEL_STYLE = {
+  width: "min(54rem, calc(100vw - 2rem))",
+  height: "min(88vh, 45rem)",
+} as const;
 const TENDER_INITIAL_FORM_VALUES = {
   masterName: "",
   tndCompanyId: "",
@@ -242,15 +241,42 @@ function buildTenderFormFields(
     OPTIONAL_LEDGER_OPTION,
     ...ledgerOptions.filter((option) => option.value !== ""),
   ];
+  // Column span inside each tab's 12-column grid: every label/control pair spans
+  // 6 so two pairs sit per row, the way the legacy dialog lays them out. The two
+  // textareas use `colSpan: 2` (full width) instead.
+  const span = (columns: number) => ({
+    fieldStyle: { gridColumn: `span ${columns}` },
+  });
+  // The payment-integration block only applies to a UPI tender: the ids come from
+  // the tender-type lookup, so the match is on the option label rather than a
+  // hardcoded id. Until the lookup resolves the set is empty and the block stays
+  // disabled, which is the same state a non-UPI tender leaves it in.
+  const upiTenderTypeIds = new Set(
+    tenderTypeOptions
+      .filter((option) => option.value !== "" && /upi/i.test(option.label))
+      .map((option) => option.value),
+  );
+  const upiOnly = {
+    disabledWhen: (values: Record<string, string>) =>
+      !upiTenderTypeIds.has((values.tndTypeId ?? "").trim()),
+  } as const;
+  // Checkboxes are placed on an explicit column so each caption starts at the left
+  // edge of its own half-row, the way the legacy dialog draws them (see
+  // tender-modal.module.scss for the gutter the shared skin would otherwise add).
+  const checkboxAt = (start: number) => ({
+    fieldStyle: { gridColumnStart: start, gridColumnEnd: "span 6" },
+  });
+  // Columns the legacy dialog does not surface. They stay in the field list — and
+  // therefore in the modal's form state — so an edit round-trips their stored
+  // values instead of blanking them on save; they are just never rendered.
+  const hidden = { visibleWhen: () => false } as const;
   return [
+    // ── Tender tab ────────────────────────────────────────────────
     {
-      name: "masterName",
-      label: "Tender Name",
-      required: true,
-      validation: {
-        minLength: 2,
-        minLengthMessage: "Tender Name must be at least 2 characters.",
-      },
+      name: "tenderSection",
+      label: "Tender",
+      type: "heading",
+      sectionGridColumns: 12,
     },
     {
       name: "tndCompanyId",
@@ -259,6 +285,7 @@ function buildTenderFormFields(
       searchable: true,
       required: true,
       options: companyOptions,
+      ...span(6),
       validation: {
         requiredMessage: "Company is required.",
       },
@@ -269,7 +296,7 @@ function buildTenderFormFields(
       type: "select",
       searchable: true,
       options: branchOptions,
-      helperText: "Leave blank to make the tender available to every branch.",
+      ...span(6),
     },
     {
       name: "tndTypeId",
@@ -278,77 +305,111 @@ function buildTenderFormFields(
       searchable: true,
       required: true,
       options: tenderTypeOptions,
+      ...span(6),
       validation: {
         requiredMessage: "Tender Type is required.",
       },
     },
     {
+      name: "tndLedgerId",
+      label: "Posting Ledger",
+      type: "select",
+      searchable: true,
+      required: true,
+      options: ledgerOptions,
+      ...span(6),
+      validation: {
+        requiredMessage: "Posting Ledger is required.",
+      },
+    },
+    {
+      name: "masterName",
+      label: "Tender Name",
+      required: true,
+      placeholder: "e.g. HDFC Card, GPay QR",
+      ...span(6),
+      validation: {
+        minLength: 2,
+        minLengthMessage: "Tender Name must be at least 2 characters.",
+      },
+    },
+    {
       name: "tndShortName",
       label: "Short Name",
-      helperText: "POS key label. Defaults to the first 30 characters of the tender name.",
+      required: true,
+      placeholder: "shown on the tender screen",
+      ...span(6),
       validation: {
+        requiredMessage: "Short Name is required.",
         maxLength: 30,
         maxLengthMessage: "Short Name must be 30 characters or fewer.",
       },
     },
     {
-      name: "tndLedgerId",
-      label: "Account Ledger",
-      type: "select",
-      searchable: true,
-      required: true,
-      options: ledgerOptions,
-      validation: {
-        requiredMessage: "Account Ledger is required.",
-      },
+      name: "displayStatusSubheading",
+      label: "Display && Status",
+      type: "subheading",
     },
     {
-      name: "tndSettlementLedgerId",
-      label: "Settlement Ledger",
-      type: "select",
-      searchable: true,
-      options: optionalLedgerOptions,
-      helperText: "Clearing/suspense ledger money sits in until the bank settles it.",
-    },
-    {
-      name: "tndSettlementDays",
-      label: "Settlement Days",
+      name: "position",
+      label: "Display Position",
       type: "number",
       min: 0,
-      max: 90,
       step: 1,
+      ...span(6),
       validation: {
-        minMessage: "Settlement Days must be 0 or greater.",
-        maxMessage: "Settlement Days must be 90 or fewer.",
+        minMessage: "Display Position must be 0 or greater.",
       },
     },
     {
-      name: "tndBankAccountId",
-      label: "Bank Account",
-      type: "select",
-      searchable: true,
-      options: bankAccountOptions,
+      name: "tndIsDefault",
+      label: "Default tender on the settle screen",
+      type: "checkbox",
+      options: YES_NO_OPTIONS,
+      ...checkboxAt(7),
+    },
+    {
+      name: "tndEditLedger",
+      label: "Cashier may change the ledger",
+      type: "checkbox",
+      options: YES_NO_OPTIONS,
+      ...checkboxAt(1),
+    },
+    {
+      name: "tndIsActive",
+      label: "Active",
+      type: "checkbox",
+      options: STATUS_OPTIONS,
+      ...checkboxAt(7),
+    },
+    {
+      name: "limitsSubheading",
+      label: "Limits && Surcharge",
+      type: "subheading",
     },
     {
       name: "tndMinAmount",
-      label: "Min Amount",
+      label: "Minimum Amount",
       type: "number",
       required: true,
       min: 0,
       step: "0.01",
+      ...span(6),
       validation: {
-        requiredMessage: "Min Amount is required.",
-        minMessage: "Min Amount must be 0 or greater.",
+        requiredMessage: "Minimum Amount is required.",
+        minMessage: "Minimum Amount must be 0 or greater.",
       },
     },
     {
       name: "tndMaxAmount",
-      label: "Max Amount",
+      label: "Maximum Amount",
       type: "number",
       min: 0,
       step: "0.01",
+      placeholder: "blank = no limit",
+      ...span(6),
       validation: {
-        minMessage: "Max Amount must be 0 or greater.",
+        minMessage: "Maximum Amount must be 0 or greater.",
         custom: (value, values) => {
           const trimmedValue = value.trim();
           if (!trimmedValue) {
@@ -356,14 +417,14 @@ function buildTenderFormFields(
           }
           const maxAmount = Number(trimmedValue);
           if (!Number.isFinite(maxAmount)) {
-            return "Max Amount must be a valid number.";
+            return "Maximum Amount must be a valid number.";
           }
           const minAmount = Number((values.tndMinAmount ?? "").trim());
           if (!Number.isFinite(minAmount)) {
             return null;
           }
           if (maxAmount < minAmount) {
-            return "Max Amount must be greater than or equal to Min Amount.";
+            return "Maximum Amount must be greater than or equal to Minimum Amount.";
           }
           return null;
         },
@@ -375,83 +436,10 @@ function buildTenderFormFields(
       type: "number",
       min: 0,
       step: "0.01",
-      helperText: "Leave blank for no per-day cap.",
+      placeholder: "blank = no limit",
+      ...span(6),
       validation: {
         minMessage: "Daily Limit must be 0 or greater.",
-      },
-    },
-    {
-      name: "tndSurchargePerc",
-      label: "Surcharge %",
-      type: "number",
-      min: 0,
-      max: 100,
-      step: "0.001",
-      validation: {
-        minMessage: "Surcharge % must be 0 or greater.",
-        maxMessage: "Surcharge % must be 100 or less.",
-      },
-    },
-    {
-      name: "tndSurchargeAmount",
-      label: "Surcharge Amount",
-      type: "number",
-      min: 0,
-      step: "0.01",
-      validation: {
-        minMessage: "Surcharge Amount must be 0 or greater.",
-      },
-    },
-    {
-      name: "tndSurchargeLedgerId",
-      label: "Surcharge Ledger",
-      type: "select",
-      searchable: true,
-      options: optionalLedgerOptions,
-      helperText: "Income ledger the surcharge/MDR is booked to.",
-    },
-    {
-      name: "tndEditSurcharge",
-      label: "Allow Edit Surcharge",
-      type: "checkbox",
-      options: YES_NO_OPTIONS,
-    },
-    {
-      name: "tndEditLedger",
-      label: "Allow Edit Ledger",
-      type: "checkbox",
-      options: YES_NO_OPTIONS,
-    },
-    {
-      name: "tndUpiVpa",
-      label: "UPI VPA",
-      placeholder: "merchant@bank",
-      validation: {
-        maxLength: 100,
-        maxLengthMessage: "UPI VPA must be 100 characters or fewer.",
-      },
-    },
-    {
-      name: "tndUpiQrPayload",
-      label: "UPI QR Payload",
-      type: "textarea",
-      colSpan: 2,
-      helperText: "Static QR string shown on the payment device.",
-    },
-    {
-      name: "tndMerchantId",
-      label: "Merchant ID (MID)",
-      validation: {
-        maxLength: 50,
-        maxLengthMessage: "Merchant ID must be 50 characters or fewer.",
-      },
-    },
-    {
-      name: "tndTerminalId",
-      label: "Terminal ID (TID)",
-      validation: {
-        maxLength: 50,
-        maxLengthMessage: "Terminal ID must be 50 characters or fewer.",
       },
     },
     {
@@ -460,7 +448,7 @@ function buildTenderFormFields(
       type: "number",
       min: "0.0001",
       step: "0.0001",
-      helperText: "Loyalty points / voucher units to INR. Must be greater than 0.",
+      ...span(6),
       validation: {
         custom: (value) => {
           const trimmedValue = value.trim();
@@ -479,99 +467,187 @@ function buildTenderFormFields(
       },
     },
     {
-      name: "tndNeedsRef",
-      label: "Needs Reference",
+      name: "surchargeSubheading",
+      label: "Surcharge",
+      type: "subheading",
+    },
+    {
+      name: "tndSurchargePerc",
+      label: "Surcharge %",
+      type: "number",
+      min: 0,
+      max: 100,
+      step: "0.001",
+      ...span(6),
+      validation: {
+        minMessage: "Surcharge % must be 0 or greater.",
+        maxMessage: "Surcharge % must be 100 or less.",
+      },
+    },
+    {
+      name: "tndSurchargeAmount",
+      label: "Surcharge Amount",
+      type: "number",
+      min: 0,
+      step: "0.01",
+      ...span(6),
+      validation: {
+        minMessage: "Surcharge Amount must be 0 or greater.",
+      },
+    },
+    {
+      name: "tndSurchargeLedgerId",
+      label: "Surcharge Ledger",
       type: "select",
-      options: INHERIT_YES_NO_OPTIONS,
+      searchable: true,
+      options: optionalLedgerOptions,
+      ...span(6),
+    },
+    {
+      name: "tndEditSurcharge",
+      label: "Cashier may edit the surcharge",
+      type: "checkbox",
+      options: YES_NO_OPTIONS,
+      ...checkboxAt(7),
+    },
+    // ── Payment & Behaviour tab ───────────────────────────────────
+    {
+      name: "paymentSection",
+      label: "Payment & Behaviour",
+      type: "heading",
+      sectionGridColumns: 12,
+    },
+    {
+      name: "tndUpiVpa",
+      label: "UPI VPA",
+      placeholder: "name@bank",
+      ...span(6),
+      ...upiOnly,
+      validation: {
+        maxLength: 100,
+        maxLengthMessage: "UPI VPA must be 100 characters or fewer.",
+      },
+    },
+    {
+      name: "tndMerchantId",
+      label: "Merchant ID",
+      ...span(6),
+      ...upiOnly,
+      validation: {
+        maxLength: 50,
+        maxLengthMessage: "Merchant ID must be 50 characters or fewer.",
+      },
+    },
+    {
+      name: "tndTerminalId",
+      label: "Terminal ID",
+      ...span(6),
+      ...upiOnly,
+      validation: {
+        maxLength: 50,
+        maxLengthMessage: "Terminal ID must be 50 characters or fewer.",
+      },
+    },
+    {
+      name: "tndUpiQrPayload",
+      label: "UPI QR Payload",
+      type: "textarea",
+      rows: 3,
+      colSpan: 2,
+      ...upiOnly,
+    },
+    {
+      name: "behaviourSubheading",
+      label: "Behaviour",
+      type: "subheading",
+    },
+    // The three flags below stay tri-state underneath: an untouched checkbox keeps
+    // the stored "" (null), which the POS reads as "inherit the tender type's own
+    // flag". Ticking/unticking pins an explicit true/false.
+    {
+      name: "tndNeedsRef",
+      label: "Reference no is mandatory (card / UPI txn)",
+      type: "checkbox",
+      ...checkboxAt(1),
     },
     {
       name: "tndAllowChange",
-      label: "Allow Change",
-      type: "select",
-      options: INHERIT_YES_NO_OPTIONS,
+      label: "Can give change back (cash-like)",
+      type: "checkbox",
+      ...checkboxAt(7),
     },
     {
       name: "tndAllowInReturn",
-      label: "Allow In Return",
-      type: "select",
-      options: INHERIT_YES_NO_OPTIONS,
+      label: "Usable for refunds on sales returns",
+      type: "checkbox",
+      ...checkboxAt(1),
     },
     {
       name: "tndOpenCashDrawer",
-      label: "Open Cash Drawer",
+      label: "Open the cash drawer",
       type: "checkbox",
       options: YES_NO_OPTIONS,
+      ...checkboxAt(7),
     },
     {
-      name: "tndIsDefault",
-      label: "Default Tender",
-      type: "checkbox",
-      options: YES_NO_OPTIONS,
-      helperText: "Only one active default tender is allowed per company/branch.",
-    },
-    {
-      name: "position",
-      label: "Display Position",
-      type: "number",
-      min: 0,
-      step: 1,
-      validation: {
-        minMessage: "Display Position must be 0 or greater.",
-      },
-    },
-    {
-      name: "tndHotkey",
-      label: "Hotkey",
-      helperText: "Unique per company/branch.",
-      validation: {
-        maxLength: 10,
-        maxLengthMessage: "Hotkey must be 10 characters or fewer.",
-      },
-    },
-    {
-      name: "tndColour",
-      label: "Colour",
-      type: "color",
-      helperText: "#RRGGBB or #RRGGBBAA.",
-      validation: {
-        pattern: /^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/,
-        patternMessage: "Colour must be a hex value like #00A3FF.",
-      },
-    },
-    {
-      name: "tndEffectiveFrom",
-      label: "Effective From",
-      type: "date",
-    },
-    {
-      name: "tndEffectiveTo",
-      label: "Effective To",
-      type: "date",
-      validation: {
-        custom: (value, values) => {
-          const trimmedValue = value.trim();
-          const effectiveFrom = (values.tndEffectiveFrom ?? "").trim();
-          if (!trimmedValue || !effectiveFrom) {
-            return null;
-          }
-          if (trimmedValue < effectiveFrom) {
-            return "Effective To must be on or after Effective From.";
-          }
-          return null;
-        },
-      },
-    },
-    {
-      name: "tndIsActive",
-      label: "Status",
-      type: "checkbox",
-      options: STATUS_OPTIONS,
+      name: "remarksSubheading",
+      label: "Remarks",
+      type: "subheading",
     },
     {
       name: "masterDescription",
       label: "Remarks",
       type: "textarea",
+      rows: 3,
       colSpan: 2,
+    },
+    {
+      name: "tndSettlementLedgerId",
+      label: "Settlement Ledger",
+      type: "select",
+      searchable: true,
+      options: optionalLedgerOptions,
+      ...hidden,
+    },
+    {
+      name: "tndSettlementDays",
+      label: "Settlement Days",
+      type: "number",
+      min: 0,
+      max: 90,
+      step: 1,
+      ...hidden,
+    },
+    {
+      name: "tndBankAccountId",
+      label: "Bank Account",
+      type: "select",
+      searchable: true,
+      options: bankAccountOptions,
+      ...hidden,
+    },
+    {
+      name: "tndHotkey",
+      label: "Hotkey",
+      ...hidden,
+    },
+    {
+      name: "tndColour",
+      label: "Colour",
+      type: "color",
+      ...hidden,
+    },
+    {
+      name: "tndEffectiveFrom",
+      label: "Effective From",
+      type: "date",
+      ...hidden,
+    },
+    {
+      name: "tndEffectiveTo",
+      label: "Effective To",
+      type: "date",
+      ...hidden,
     },
   ];
 }
@@ -719,8 +795,9 @@ export default function TenderMasterPage() {
     };
   }, [getWidgetConfig]);
 
-  // Re-label/re-order/show-hide the dynamically-built fields (the Tender Type +
-  // Account Ledger select options come from lookups) from the resolved config.
+  // Drop any field an admin has hidden in the config. "visibility-only" keeps the
+  // authored tab/group order and labels — reordering by config would scatter the
+  // fields across the wrong tabs and groups.
   const tenderFormFields = useMemo(
     () =>
       applyWidgetFieldConfig(
@@ -733,6 +810,7 @@ export default function TenderMasterPage() {
         ),
         widgetFieldConfig,
         WIDGET_FIELD_NAME_BY_FORM_FIELD,
+        { mode: "visibility-only" },
       ),
     [
       bankAccountOptions,
@@ -767,7 +845,6 @@ export default function TenderMasterPage() {
     }),
     [wantDelete],
   );
-
   // Right-click config tree popup over the create/update modal.
   const { getAll: getWidgetConfigTree } = useApi<WidgetMastersResponse>(
     WIDGET_CONFIG_TREE_ENDPOINT,
@@ -787,7 +864,6 @@ export default function TenderMasterPage() {
   const [visibilityModalOpen, setVisibilityModalOpen] = useState(false);
   const treeLoadedRef = useRef(false);
   const visibilityControllerRef = useRef<ERPDynamicModalController | null>(null);
-
   // Fetched lazily the first time the popup is opened, then cached.
   const loadConfigTree = useCallback(async () => {
     if (treeLoadedRef.current) {
@@ -806,7 +882,6 @@ export default function TenderMasterPage() {
       setTreeLoading(false);
     }
   }, [getWidgetConfigTree]);
-
   // Right-clicking inside the open create/update modal opens the Visible Settings
   // modal (an ERPDynamicModalForm) on top via its controller; right-clicks
   // elsewhere keep the browser's native context menu.
@@ -814,7 +889,6 @@ export default function TenderMasterPage() {
     loadConfigTree,
     openVisibilitySettings: () => visibilityControllerRef.current?.openModal("visibility"),
   });
-
   const handleToggleField = useCallback((backendName: string, checked: boolean) => {
     const key = backendName.toLowerCase();
     setWidgetFieldConfig((prev) => {
@@ -829,7 +903,6 @@ export default function TenderMasterPage() {
       return next;
     });
   }, []);
-
   const handleToggleSection = useCallback((sectionId: number, checked: boolean) => {
     setSectionVisibility((prev) => {
       const next = new Map(prev);
@@ -837,7 +910,6 @@ export default function TenderMasterPage() {
       return next;
     });
   }, []);
-
   const handleChangeSecondaryText = useCallback((fieldId: number, value: string) => {
     setSecondaryTextById((prev) => {
       const next = new Map(prev);
@@ -845,7 +917,6 @@ export default function TenderMasterPage() {
       return next;
     });
   }, []);
-
   // Build the tree view from the /config payload, deriving each checkbox from the
   // live form visibility map so the popup and the rendered form stay in sync.
   const treeSections = useMemo<WidgetTreeSectionView[]>(
@@ -869,7 +940,6 @@ export default function TenderMasterPage() {
       })),
     [configSections, sectionVisibility, secondaryTextById, widgetFieldConfig],
   );
-
   // PATCH the current section/field visibility for every configured field back to
   // the server in the documented { data: [{ sectionId, sectionGuiName,
   // sectionVisibility, fields: [{ fieldId, fieldSecondaryText, fieldVisibility }] }] }
@@ -897,7 +967,6 @@ export default function TenderMasterPage() {
     };
     await saveVisibility({ body: payload });
   }, [configSections, sectionVisibility, secondaryTextById, widgetFieldConfig, saveVisibility]);
-
   // While the Visible Settings modal is open, intercept Escape/F5 in the capture
   // phase so they act on it alone — without this, the underlying create/update
   // modal's window-level Escape would also fire and close both. F5 mirrors the
@@ -926,7 +995,6 @@ export default function TenderMasterPage() {
     window.addEventListener("keydown", handleKeyDownCapture, true);
     return () => window.removeEventListener("keydown", handleKeyDownCapture, true);
   }, [visibilityModalOpen, savingVisibility, handleVisibilitySubmit]);
-
   // The Visible Settings modal hosts the whole tree as a single custom field so it
   // reuses the standard ERP modal chrome (header, backdrop, Save/Cancel footer).
   const visibilityVariant = useMemo<ERPDynamicModalVariant>(
@@ -967,7 +1035,6 @@ export default function TenderMasterPage() {
       handleChangeSecondaryText,
     ],
   );
-
   return (
     <>
     <CrudMasterPage
@@ -1004,7 +1071,14 @@ export default function TenderMasterPage() {
       formTitle="Tender Form"
       formDescription="Create and update tenders."
       createModalTitle="Tender Entry"
-      editModalTitle="Edit Tender Entry"
+      editModalTitle="Tender Entry"
+      modalPanelStyle={TENDER_MODAL_PANEL_STYLE}
+      modalPanelClassName={modalSkin.tenderModal}
+      // Legacy "Tender Entry" layout: each `heading` field is a tab, each
+      // `subheading` an in-tab band. Dense packing has to be off or fields
+      // back-fill into the band above them.
+      modalSectionNavigationMode="tabs"
+      modalFormDenseGrid={false}
       customFields={tenderFormFields}
       createInitialValues={TENDER_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {

@@ -6,7 +6,6 @@ import {
   type LedgerBankAccountFieldName,
   type LedgerBankAccountFormRow,
 } from "./bank-accounts";
-
 type BankAccountsEditorProps = {
   rows: LedgerBankAccountFormRow[];
   disabled: boolean;
@@ -17,7 +16,6 @@ type BankAccountsEditorProps = {
   onRemoveRow: (rowKey: string) => void;
   onSetDefault: (rowKey: string) => void;
 };
-
 // Editable grid (mirrors the desktop NexBankGrid / table_id 13): one row per
 // beneficiary bank account, one column per field, an A/c Type combo, and a single
 // "Default" radio with Add/Delete actions.
@@ -29,7 +27,6 @@ type BankColumn = {
   placeholder?: string;
   maxLength?: number;
 };
-
 const TEXT_COLUMNS: BankColumn[] = [
   { field: "lbaAccountHolder", label: "Account Holder", required: true, minWidth: 160, maxLength: 200 },
   { field: "lbaBankName", label: "Bank Name", required: true, minWidth: 150, maxLength: 200 },
@@ -38,41 +35,35 @@ const TEXT_COLUMNS: BankColumn[] = [
   { field: "lbaIfscCode", label: "IFSC", minWidth: 120, placeholder: "HDFC0001234", maxLength: 11 },
   { field: "lbaMicrCode", label: "MICR", minWidth: 110, maxLength: 15 },
 ];
-
 const TRAILING_TEXT_COLUMNS: BankColumn[] = [
   { field: "lbaUpiId", label: "UPI Id", minWidth: 130, maxLength: 100 },
   { field: "lbaChequeName", label: "Cheque Name", minWidth: 140, maxLength: 200 },
   { field: "lbaRemarks", label: "Remarks", minWidth: 150, maxLength: 250 },
 ];
-
 const wrapperStyle: CSSProperties = {
   gridColumn: "1 / -1",
   display: "flex",
   flexDirection: "column",
   rowGap: "0.6rem",
 };
-
 const toolbarStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
   gap: "0.75rem",
 };
-
 const tableScrollStyle: CSSProperties = {
   overflowX: "auto",
   border: "1px solid var(--erp-modal-border, #cfdae6)",
   borderRadius: "0.5rem",
 };
-
 const tableStyle: CSSProperties = {
   borderCollapse: "collapse",
   width: "100%",
   fontSize: "0.8rem",
 };
-
 const thStyle: CSSProperties = {
-  textAlign: "left",
+  textAlign: "center",
   padding: "0.5rem 0.55rem",
   background: "#f1f5f9",
   color: "#334155",
@@ -81,17 +72,13 @@ const thStyle: CSSProperties = {
   whiteSpace: "nowrap",
   borderBottom: "1px solid #d8e1ea",
 };
-
 const thCenterStyle: CSSProperties = { ...thStyle, textAlign: "center" };
-
 const tdStyle: CSSProperties = {
   padding: "0.25rem 0.35rem",
   borderBottom: "1px solid #eef2f7",
   verticalAlign: "middle",
 };
-
 const tdCenterStyle: CSSProperties = { ...tdStyle, textAlign: "center" };
-
 const cellInputBaseStyle: CSSProperties = {
   width: "100%",
   padding: "0.32rem 0.45rem",
@@ -100,7 +87,6 @@ const cellInputBaseStyle: CSSProperties = {
   fontSize: "0.8rem",
   background: "#fff",
 };
-
 const addButtonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -113,7 +99,6 @@ const addButtonStyle: CSSProperties = {
   cursor: "pointer",
   fontWeight: 600,
 };
-
 const removeButtonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -125,7 +110,6 @@ const removeButtonStyle: CSSProperties = {
   color: "#c0392b",
   cursor: "pointer",
 };
-
 export default function BankAccountsEditor({
   rows,
   disabled,
@@ -162,11 +146,9 @@ export default function BankAccountsEditor({
       </td>
     );
   };
-
   // Column count for the empty-state row's colSpan: index + text cols + type +
   // trailing text cols + active + default + delete.
   const columnCount = 1 + TEXT_COLUMNS.length + 1 + TRAILING_TEXT_COLUMNS.length + 3;
-
   return (
     <div style={wrapperStyle}>
       <div style={toolbarStyle}>

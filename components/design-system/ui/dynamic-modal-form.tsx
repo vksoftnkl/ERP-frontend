@@ -71,6 +71,7 @@ import {
   getFirstFocusableFieldTarget,
   getSelectOptionLabel,
   getSectionRowStartOffset,
+  isFieldDisabled,
   isFieldRequired,
   isEmptyValue,
   parseMultiSelectValue,
@@ -1432,6 +1433,10 @@ export function ERPDynamicModalForm({
     const fieldError = fieldErrors[field.name];
     const inputType = field.type ?? "text";
     const fieldRequired = isFieldRequired(field, formData);
+    // `disabled` is the fixed answer; `disabledWhen` re-decides on every render from
+    // the current values, for controls another field switches off (a payment
+    // integration block that only applies to one tender type, say).
+    const fieldDisabled = isFieldDisabled(field, formData);
     if (inputType === "heading") {
       return null;
     }
@@ -1537,7 +1542,7 @@ export function ERPDynamicModalForm({
       id: controlId,
       name: field.name,
       required: fieldRequired,
-      disabled: field.disabled || isSubmitting,
+      disabled: fieldDisabled || isSubmitting,
       onChange: handleChange,
       autoComplete: "off",
       "aria-invalid": fieldError ? true : undefined,
@@ -1606,7 +1611,7 @@ export function ERPDynamicModalForm({
         ) : null}
         {inputType === "custom" ? (
           field.render?.({
-            disabled: Boolean(field.disabled || isSubmitting),
+            disabled: Boolean(fieldDisabled || isSubmitting),
             error: fieldError ?? null,
             field,
             setError: setCustomError,
@@ -1631,7 +1636,7 @@ export function ERPDynamicModalForm({
                   styles.searchSelectTriggerWithAdd,
                 fieldError && styles.controlInvalid,
                 isSearchOpen && styles.searchSelectTriggerOpen,
-                (field.disabled || isSubmitting) &&
+                (fieldDisabled || isSubmitting) &&
                   styles.searchSelectTriggerDisabled,
               )}
               onMouseDown={(event) => {
@@ -1645,7 +1650,7 @@ export function ERPDynamicModalForm({
                   return;
                 }
                 event.preventDefault();
-                if (field.disabled || isSubmitting) {
+                if (fieldDisabled || isSubmitting) {
                   return;
                 }
                 searchInputRefs.current[field.name]?.focus();
@@ -1667,11 +1672,11 @@ export function ERPDynamicModalForm({
                         data-search-select-remove="true"
                         className={styles.searchSelectTokenRemove}
                         aria-label={`Remove ${option.label}`}
-                        disabled={field.disabled || isSubmitting}
+                        disabled={fieldDisabled || isSubmitting}
                         onMouseDown={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
-                          if (field.disabled || isSubmitting) {
+                          if (fieldDisabled || isSubmitting) {
                             return;
                           }
                           handleSearchableSelectChoose(field, option);
@@ -1702,7 +1707,7 @@ export function ERPDynamicModalForm({
                 aria-required={fieldRequired ? true : undefined}
                 aria-invalid={fieldError ? true : undefined}
                 aria-describedby={describedBy}
-                disabled={field.disabled || isSubmitting}
+                disabled={fieldDisabled || isSubmitting}
                 value={searchTriggerValue}
                 placeholder={searchTriggerPlaceholder}
                 ref={(element) => {
@@ -1713,7 +1718,7 @@ export function ERPDynamicModalForm({
                 }}
                 onMouseDown={(event) => {
                   event.stopPropagation();
-                  if (field.disabled || isSubmitting) {
+                  if (fieldDisabled || isSubmitting) {
                     return;
                   }
                   setOpenSearchField(field.name);
@@ -1741,14 +1746,14 @@ export function ERPDynamicModalForm({
                   className={styles.searchSelectAddButton}
                   aria-label={`Add new ${field.label}`}
                   title={`Add new ${field.label} (Alt+C)`}
-                  disabled={field.disabled || isSubmitting}
+                  disabled={fieldDisabled || isSubmitting}
                   onMouseDown={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                   }}
                   onClick={(event) => {
                     event.stopPropagation();
-                    if (field.disabled || isSubmitting) {
+                    if (fieldDisabled || isSubmitting) {
                       return;
                     }
                     void field.onSearchCreateShortcut?.({
@@ -1776,11 +1781,11 @@ export function ERPDynamicModalForm({
                 aria-hidden="true"
                 data-search-select-chevron="true"
                 className={styles.searchSelectChevronSlot}
-                disabled={field.disabled || isSubmitting}
+                disabled={fieldDisabled || isSubmitting}
                 onMouseDown={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  if (field.disabled || isSubmitting) {
+                  if (fieldDisabled || isSubmitting) {
                     return;
                   }
                   if (isSearchOpen) {
@@ -1812,7 +1817,7 @@ export function ERPDynamicModalForm({
                 </svg>
               </button>
             </div>
-            {isSearchOpen && !field.disabled ? (
+            {isSearchOpen && !fieldDisabled ? (
               <div
                 id={`${controlId}-search-list`}
                 data-erp-modal-search-dropdown="true"
@@ -1938,7 +1943,7 @@ export function ERPDynamicModalForm({
                       optionIndex === 0 ? "true" : undefined
                     }
                     autoComplete="off"
-                    disabled={field.disabled || isSubmitting}
+                    disabled={fieldDisabled || isSubmitting}
                     checked={selectedValues.includes(option.value)}
                     onChange={() =>
                       handleCheckboxGroupToggle(field, option.value)
@@ -1995,6 +2000,7 @@ export function ERPDynamicModalForm({
             data-erp-modal-field-control="true"
             value={fieldValue}
             rows={field.rows ?? 4}
+            placeholder={field.placeholder}
             autoComplete="off"
             className={cx(
               styles.control,
@@ -2055,6 +2061,7 @@ export function ERPDynamicModalForm({
             data-erp-modal-field-control="true"
             value={fieldValue}
             type={inputType}
+            placeholder={field.placeholder}
             autoComplete="off"
             inputMode={field.inputMode}
             min={field.min}

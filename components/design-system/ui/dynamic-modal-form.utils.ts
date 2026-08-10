@@ -82,6 +82,23 @@ export function isFieldRequired(
   }
   return Boolean(field.required);
 }
+export function isFieldDisabled(
+  field: ERPDynamicModalField,
+  values: Record<string, string>,
+): boolean {
+  if (field.disabled) {
+    return true;
+  }
+  if (!field.disabledWhen) {
+    return false;
+  }
+  try {
+    return Boolean(field.disabledWhen(values));
+  } catch {
+    // A throwing predicate must not lock the user out of the control.
+    return false;
+  }
+}
 export function toRegExp(pattern: string | RegExp): RegExp | null {
   if (pattern instanceof RegExp) {
     return pattern;

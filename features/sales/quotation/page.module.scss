@@ -494,6 +494,7 @@
   color: var(--table-header-text, #4a0f0f);
   font-size: 0.7rem;
   font-weight: 700;
+  text-align: center;
   white-space: nowrap;
 }
 /* The two headings above a frozen column stick on BOTH axes: `top` comes from
@@ -575,6 +576,7 @@
   background: var(--header-bg, #efe6e6);
   color: var(--table-header-text, #4a0f0f);
   font-weight: 700;
+  text-align: center;
 }
 .settingsTableNumber {
   width: 2.5rem;
@@ -1163,7 +1165,7 @@
   border-bottom: 1px solid var(--border, #c9c9c9);
   background: var(--header-bg, #efe6e6);
   font-weight: 700;
-  text-align: left;
+  text-align: center;
   white-space: nowrap;
 }
 

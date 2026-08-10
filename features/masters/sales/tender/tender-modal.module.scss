@@ -1,0 +1,23 @@
+/* Skin for the Tender Entry modal panel only. The panel renders through a portal,
+   outside this page's DOM subtree, so it is reached via `modalPanelClassName`.
+
+   The shared master-shell stylesheet gives every auto-placed checkbox field a
+   label-width gutter (`minmax(7.5rem, --erp-modal-label-width)`) and drops the box
+   into the control column. It exempts cells that carry an inline
+   `grid-column-start`, but React serialises this screen's `{gridColumnStart,
+   gridColumnEnd}` pair back into the `grid-column` shorthand, so the exemption
+   never matches. In the legacy Tender Entry layout each checkbox owns half of a
+   12-column row and its caption IS the label — the 130px gutter only eats the cell
+   and wraps the longer captions onto two lines.
+
+   The class is repeated so these rules outrank the global ones no matter which
+   stylesheet is emitted last. */
+.tenderModal.tenderModal.tenderModal div[class*="checkboxField"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.tenderModal.tenderModal.tenderModal
+  div[class*="checkboxField"]
+  > label[class*="checkboxWrapper"] {
+  grid-column: 1 / -1;
+}
