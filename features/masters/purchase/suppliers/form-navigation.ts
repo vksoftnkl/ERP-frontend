@@ -1,5 +1,4 @@
 import type { SupplierFormFieldName, SupplierHeadingFieldName } from "./types";
-
 // Focusable Supplier Form Fields (excluding headings), in the order they are laid
 // out in the entry modal — Identity, then Notes, then Regional Details.
 const SUPPLIER_FOCUSABLE_FIELDS: SupplierFormFieldName[] = [
@@ -27,19 +26,17 @@ const SUPPLIER_FOCUSABLE_FIELDS: SupplierFormFieldName[] = [
   "supMailId",
   "supWhatsappNo",
   "supWebsiteAddress",
-  "supChequePreName",
   "supCreditDays",
   "supCashDiscPerc",
-  "supSortOrder",
   "supCollectionDays",
+  "supChequePreName",
+  "supSortOrder",
   "supNotes",
   "supRegionName",
+  "supRegionCity",
   "supRegionAddr1",
   "supRegionAddr2",
   "supRegionAddr3",
-  "supRegionCity",
-  "supRegionDistrict",
-  "supRegionStateName",
   "supRegionCountry",
 ];
 // Get All Focusable Supplier Field Controls
@@ -101,16 +98,12 @@ export function handleSupplierFieldArrowKeyNavigation(
   }
   const direction = event.key === "ArrowUp" ? "backward" : "forward";
   const nextFieldName = findNextSupplierFieldTarget(currentFieldName, direction);
-
   if (!nextFieldName) {
     return false;
   }
-
   event.preventDefault();
-
   if (focusSupplierFieldControl(nextFieldName) && onFieldChange) {
     onFieldChange(nextFieldName);
   }
-
   return true;
 }
