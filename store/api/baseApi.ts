@@ -170,6 +170,7 @@ export const baseApi = createApi({
     "ItemQtyPrice",
     // Sales transactions
     "Quotation",
+    "SaleOrder",
     "TransactionHold",
     // Screen field config (fixed.form_section / form_field), keyed by menu id
     "WidgetConfig",

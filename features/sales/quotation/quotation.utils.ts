@@ -331,10 +331,21 @@ function withSerialColumn<TMeaning extends { key: string; token: string; kind: G
   ];
 }
 export function resolveItemColumns(rows: UiTableColumnRow[] | undefined): ResolvedItemColumn[] {
-  const resolved = resolveColumns(rows, ITEM_COLUMN_MEANINGS, ITEM_COLUMN_WIDTH_UNIT);
-  return resolved.length > 0
-    ? withSerialColumn(resolved, ITEM_COLUMN_MEANINGS)
-    : fallbackColumns(ITEM_COLUMN_MEANINGS);
+  return resolveItemColumnsWith(rows, ITEM_COLUMN_MEANINGS, ITEM_COLUMN_WIDTH_UNIT);
+}
+
+/**
+ * The same resolution against a caller-supplied meaning list — the Sale Order
+ * screen's grid 24 shares this grid machinery with its own 96-column map (and
+ * its own width unit: table 24 stores Qt-style percents, not pixels).
+ */
+export function resolveItemColumnsWith(
+  rows: UiTableColumnRow[] | undefined,
+  meanings: ItemColumnMeaning[],
+  unit: ColumnWidthUnit,
+): ResolvedItemColumn[] {
+  const resolved = resolveColumns(rows, meanings, unit);
+  return resolved.length > 0 ? withSerialColumn(resolved, meanings) : fallbackColumns(meanings);
 }
 export function resolveChargeColumns(rows: UiTableColumnRow[] | undefined): ResolvedChargeColumn[] {
   const resolved = resolveColumns(rows, CHARGE_COLUMN_MEANINGS, CHARGE_COLUMN_WIDTH_UNIT);

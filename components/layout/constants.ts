@@ -29,6 +29,11 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       {label: "Customers", href: "/master/customer"},
       { label: "Promotion Loyalty Points", href: "/sales/promotion-loyalty-points" },
       { label: "Quotation", href: "/sales/quotation" },
+      // The live menu tree (fixed.menu_master) names this "Sales Order" —
+      // singular, a direct child of Sales (menu 11) — and hrefs are attached
+      // to the server-driven menu by normalized-label match against THIS
+      // list, so the label must match the DB's menu_name exactly.
+      { label: "Sales Order", href: "/sales/sale-order" },
       { label: "Sales Entry", href: "/dashboard" },
       { label: "Sales Return" },
       {
@@ -45,10 +50,10 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       {
         label: "SO Management",
         children: [
-          { label: "Sales Orders" },
+          { label: "Sales Orders", href: "/sales/sale-order" },
           { label: "Order Approvals" },
           { label: "Dispatch Planning" },
-        
+
         ],
       },
       {

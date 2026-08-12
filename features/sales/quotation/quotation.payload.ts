@@ -167,7 +167,12 @@ function itemDto(line: DraftLine, priced: PricedLine, index: number): SaveQuotat
     sqiItemSize: toNullableText(line.itemSize, 50),
   };
 }
-function chargeDto(
+/**
+ * Exported for the Sale Order screen: `txn_charge_detail` is one polymorphic
+ * table and `charges[]` is the same charge-detail DTO on both vouchers, so the
+ * translation is stated once here and imported there.
+ */
+export function chargeDto(
   row: DraftChargeRow,
   priced: PricedChargeRow | undefined,
   index: number,
@@ -397,7 +402,8 @@ function lineFromPayload(item: NonNullable<QuotationPayload["items"]>[number]): 
     itemSize: item.sqiItemSize,
   });
 }
-function chargeFromPayload(
+/** Exported for the Sale Order screen — same table, same wire, same parse. */
+export function chargeFromPayload(
   charge: NonNullable<QuotationPayload["charges"]>[number],
 ): DraftChargeRow {
   const taxPerc = toNumber(charge.cdTaxPerc);
