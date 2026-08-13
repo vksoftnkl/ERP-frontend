@@ -84,8 +84,13 @@ function tenderRow(overrides: Partial<TenderDraftRow> = {}): TenderDraftRow {
     surchargePerc: 0,
     surchargeFlat: 0,
     settlementDays: 0,
+    minAmount: 0,
+    maxAmount: null,
+    conversionRate: 1,
+    editSurcharge: false,
     allowChange: true,
     needsRef: false,
+    hotkey: "A",
     keyed: 0,
     settleStatus: "NA",
     refNo: null,
@@ -133,6 +138,24 @@ describe("buildSavePayload", () => {
     for (const key of ["soiDeliveredQty", "soiCancelledQty", "soiPendingQty", "soiLineStatus"]) {
       expect(item, key).not.toHaveProperty(key);
     }
+  });
+
+  it("sends the two uuid[] people columns as lists, never null", () => {
+    const draft = draftWithLine();
+    draft.header = {
+      ...draft.header,
+      salesmanId: "emp-1",
+      packedId: "emp-2",
+      hasLoyalty: true,
+    };
+    const payload = buildSavePayload(draft, pricingOf(draft), ACTOR);
+    expect(payload.soSalesmanId).toEqual(["emp-1"]);
+    expect(payload.soPackedId).toEqual(["emp-2"]);
+    expect(payload.soHasLoyalty).toBe(true);
+    // A Prisma scalar list has no nullable form: unset means [], not null.
+    const blank = buildSavePayload(draftWithLine(), pricingOf(draftWithLine()), ACTOR);
+    expect(blank.soSalesmanId).toEqual([]);
+    expect(blank.soPackedId).toEqual([]);
   });
 
   it("sends the source trail as nulls when there is no source", () => {
@@ -280,8 +303,8 @@ describe("tender round trip", () => {
     // The reloaded row keys the same money and reproduces the same figures.
     const recomputed = computeTenders([toArithRow(reloaded)], 1400);
     expect(recomputed.rows[0].base).toBe(1400);
-    expect(recomputed.rows[0].surcharge).toBe(14);
-    expect(recomputed.rows[0].total).toBe(1414);
+    expect(recomputed.rows[0].surchargeAmt).toBe(14);
+    expect(recomputed.rows[0].amount).toBe(1414);
     expect(reloaded.refNo).toBe("UTR999");
     expect(reloaded.typeCode).toBe("UPI");
     expect(reloaded.tdId).toBe("td-1");
@@ -319,8 +342,8 @@ describe("tender round trip", () => {
     } satisfies SaleOrderTenderPayload;
     const reloaded = tenderRowFromPayload(wire);
     const recomputed = computeTenders([toArithRow(reloaded)], 1000);
-    expect(recomputed.rows[0].surcharge).toBe(14);
-    expect(recomputed.rows[0].total).toBe(1014);
+    expect(recomputed.rows[0].surchargeAmt).toBe(14);
+    expect(recomputed.rows[0].amount).toBe(1014);
   });
 });
 

@@ -6,6 +6,121 @@
  * panel, the source chip, the tender dialog and the fulfilment paints.
  */
 
+/* ----------------------------------------------------------------- title -- */
+/* The legacy screen shouts its name; the shared `.title` is sentence case. */
+.entryTitle {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* ---------------------------------------------------------- icon toolbar -- */
+.iconToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 6px;
+  border-bottom: 1px solid var(--erp-border-color, #e2e8f0);
+  margin-bottom: 6px;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  border: 1px solid var(--erp-border-color, #cbd5e1);
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 15px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.iconButton:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.iconButton:focus-visible {
+  outline: 2px solid var(--primary, #b91c1c);
+  outline-offset: 1px;
+}
+
+.iconButtonDisabled,
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.iconToolbarNote {
+  margin-left: auto;
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------- header panel -- */
+/*
+ * The shared header panel is three columns (the quotation's); the order adds a
+ * fourth for the credit figures. The customer column stays widest — it carries
+ * the longest values on the screen.
+ */
+.headerRowFour {
+  grid-template-columns:
+    minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1.05fr)
+    minmax(0, 0.8fr);
+}
+
+@media (max-width: 1400px) {
+  .headerRowFour {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1000px) {
+  .headerRowFour {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------------------------------------------------------- credit column -- */
+/*
+ * The credit figures are the server's answer about the party, not something
+ * this document states, so they render as values in the header's own field
+ * grid rather than as inputs — same rhythm, no false affordance.
+ */
+.creditFieldValue {
+  display: block;
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--erp-radius, 6px);
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Red only for the two facts that change a decision (the plan's §7.2). */
+.creditFieldAlert {
+  color: #b91c1c;
+  font-weight: 700;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.creditColumnOff {
+  opacity: 0.6;
+}
+
 /* ------------------------------------------------------------------ chip -- */
 .sourceChip {
   display: inline-flex;
@@ -194,6 +309,50 @@
 
 .tenderShortfallSettlement {
   color: #b91c1c;
+}
+
+.tenderKeyHint {
+  font-size: 11.5px;
+  color: #64748b;
+  padding: 2px 2px 8px;
+}
+
+.tenderHotkey {
+  width: 26px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.tenderRowNote {
+  margin-left: 8px;
+  font-size: 10.5px;
+  color: #94a3b8;
+}
+
+.tenderRef {
+  font-size: 11.5px;
+  color: #475569;
+}
+
+/* The balance box: one box, three states (the plan's §5). */
+.tenderBalanceSettled {
+  color: #a9a9a9;
+}
+
+.tenderBalanceShort {
+  color: #ff4500;
+}
+
+/* A shortfall on an advance is the NORMAL case — what will be billed later —
+   so amber says "still to collect", not "you are short". */
+.tenderBalanceToCollect {
+  color: #fb8c00;
+}
+
+.tenderBalanceOver {
+  color: #006400;
 }
 
 .tenderHintBar {

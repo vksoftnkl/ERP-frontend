@@ -14,10 +14,8 @@ import {
   FiCreditCard,
   FiDownload,
   FiList,
-  FiPercent,
   FiPrinter,
   FiRotateCcw,
-  FiSettings,
   FiTrash2,
 } from "react-icons/fi";
 import { cx } from "@/components/design-system/cx";
@@ -39,7 +37,6 @@ export type OrderIconToolbarProps = {
   onPrint: () => void;
   onClear: () => void;
   onDelete: () => void;
-  onGridSettings: () => void;
   canTender: boolean;
   canDelete: boolean;
   canCopy: boolean;
@@ -85,12 +82,6 @@ export function OrderIconToolbar(props: OrderIconToolbarProps) {
       onClick: props.onDelete,
       disabled: !props.canDelete,
     },
-    {
-      key: "settings",
-      label: "Item grid columns",
-      icon: <FiSettings />,
-      onClick: props.onGridSettings,
-    },
   ];
 
   return (
@@ -108,11 +99,9 @@ export function OrderIconToolbar(props: OrderIconToolbarProps) {
           {action.icon}
         </button>
       ))}
-      {/* A discount icon the legacy strip carries: the per-line and charge-row
-          discounts are keyed in the grids, so it only points there. */}
-      <span className={styles.iconToolbarNote} aria-hidden="true">
-        <FiPercent /> discounts are keyed in the grids
-      </span>
+      {/* Column widths and visibility are the grids' own right-click menu, so
+          there is no button for them here. */}
+      <span className={styles.iconToolbarNote}>right-click a grid for its column settings</span>
     </div>
   );
 }

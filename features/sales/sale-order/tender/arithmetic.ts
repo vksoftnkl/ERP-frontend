@@ -1,24 +1,39 @@
 /**
- * Sale Order — tender arithmetic. Pure: no React, no API, no wire shapes.
+ * Sale Tender — arithmetic. Pure: no React, no API, no wire shapes.
  *
- * The one rule everything below enforces (the plan's §5.1): **the surcharge is
- * never part of what settles the document.** A card fee is the company's income
- * for taking the card, not the customer's money against the order — so every
- * comparison against the document amount uses the base / settled figures, and
- * `payStatus` is decided by the net. The Qt client got this wrong in exactly one
- * place (the per-row ceiling compared the gross) and that bug is deliberately
- * not ported.
+ *   surcharge(base, master, perc) = base <= 0 ? 0 : base * perc / 100 + master.flat
+ *   amount                        = base + surcharge
+ *   tendered                      = Σ amount
+ *   surchargeTotal                = Σ surcharge
+ *   balance                       = tendered − surchargeTotal − documentAmount
  *
- *   rowTotal   = base + surcharge(base, master)
- *   tendered   = Σ rowTotal            — what crossed the counter, fee included
- *   settled    = tendered − Σ surcharge − change   ( = Σ base )
- *   balance    = settled − documentAmount
+ * Two rules carry the whole screen:
+ *
+ *  - **The surcharge is the bank's cut, not the shop's takings.** It settles no
+ *    part of the document, so it nets back out of the balance and EVERY
+ *    comparison against the document amount is made on the `base`. Get this
+ *    wrong and the screen refuses to settle a full bill on a card that carries
+ *    a fee.
+ *  - **The flat fee applies only once the row is used** (`base > 0`), so an
+ *    untouched card row cannot quietly add ₹5 to the bill.
+ *
+ * **Deviation from the plan, deliberate (§11 / §13).** The plan keeps the keyed
+ * amount as the row's `base` and hands change back as a separate `refundAmt`,
+ * letting the DOCUMENT net it out. This backend cannot: `acc_bill_balance`'s
+ * ADVANCE row is seeded from `Σ td_amount` and never sees the change, so a
+ * ₹2,000 note against a ₹1,500 order would post a ₹2,000 advance and hold ₹500
+ * that was handed straight back across the counter. Here the change comes out
+ * of the row's own base instead — `td_amount` is what was KEPT, `td_change_amt`
+ * what was returned, `td_received_amt` what was physically handed over — so
+ * every server-side roll-up reads true. The document's net is unchanged either
+ * way; only where the subtraction happens moves.
  */
 import { money } from "@/domain/pricing";
 
 /**
- * Why the dialog exists. Not a preference — the two are different transactions:
- * a settlement must cover the bill, an advance is partial by nature.
+ * Why the dialog exists. Not a preference — the two are different
+ * transactions: a settlement must cover the bill, an advance is partial by
+ * nature.
  */
 export type TenderPurpose = "settlement" | "advance";
 
@@ -26,47 +41,46 @@ export type TenderPurpose = "settlement" | "advance";
 export type SurchargeConfig = {
   /** Percent of the settled base. */
   perc: number;
-  /** Flat fee per use of the tender. */
+  /** Flat fee, charged once the row is used at all. */
   flat: number;
 };
 
 /**
- * One tender row as the arithmetic sees it. `keyed` is what the operator typed
- * into the amount cell — for a cash row that is what the customer handed over,
- * which is why change can come out of it; for every other type it is the amount
- * charged and change never applies.
+ * One tender row as the arithmetic sees it. `keyed` is what the cashier typed:
+ * what the customer handed over on a change-capable row, what is being charged
+ * on every other.
  */
 export type TenderArithRow = {
   key: string;
   keyed: number;
-  /** From the tender type (master override applied): may change be returned? */
+  /** `givesChange(master)` — CASH always can, whatever the master says. */
   allowChange: boolean;
   surcharge: SurchargeConfig;
 };
 
-/** The five money figures each row persists (`td_*`), plus the change share. */
+/** The five money figures each row persists (`td_*`). */
 export type PricedTenderRow = {
   key: string;
-  /** `tdAmount` — what settles the document. `keyed` minus this row's change. */
+  /** `tdAmount` — what settles the document. The keyed amount less its change. */
   base: number;
   /** `tdSurchargeAmt` — the fee, computed on the base. */
-  surcharge: number;
-  /** `tdTotalAmt` = base + surcharge (`ck_td_total_amt` insists). */
-  total: number;
-  /** `tdReceivedAmt` — what was physically handed: total + change. */
+  surchargeAmt: number;
+  /** `tdTotalAmt` = base + surcharge (`ck_td_total_amt` re-derives it). */
+  amount: number;
+  /** `tdReceivedAmt` — what physically crossed the counter. */
   received: number;
   /** `tdChangeAmt` — returned to the customer out of this row. */
-  change: number;
+  refundAmt: number;
 };
 
 export type TenderTotals = {
-  /** Σ rowTotal — gross across the counter, net of change. → `soTenderAmt`. */
+  /** Σ amount — gross, the fee included. → `soTenderAmt`. */
   tendered: number;
   /** Σ surcharge. → `soSurchargeAmt`. */
-  surcharge: number;
-  /** Returned to the customer. */
-  change: number;
-  /** What actually settles the document: tendered − surcharge − change. */
+  surchargeTotal: number;
+  /** Handed back. → the row's `tdChangeAmt`, and the balance box when positive. */
+  refund: number;
+  /** What actually settles the document: tendered − surcharge − refund. */
   settled: number;
   /** settled − documentAmount. Negative = still to collect. */
   balance: number;
@@ -77,7 +91,7 @@ export type TenderComputation = {
   totals: TenderTotals;
 };
 
-/** Money-rounded surcharge on a settled base. Zero base carries no fee. */
+/** Money-rounded surcharge on a settled base. An unused row carries no fee. */
 export function surchargeOf(base: number, config: SurchargeConfig): number {
   if (base <= 0) {
     return 0;
@@ -90,55 +104,70 @@ export function surchargeOf(base: number, config: SurchargeConfig): number {
  *
  * Change: keying more than the document needs is only meaningful where change
  * can physically be handed back, so the overpayment is absorbed by the
- * change-allowed rows in row order (the Qt till attributes it to CASH). A row's
- * settled base is its keyed amount minus its change share; the surcharge is then
- * computed on that base — never on money that went straight back across the
- * counter.
+ * change-capable rows in row order — which is the plan's "all of it out of the
+ * first change-capable row" whenever that row can cover it, and degrades
+ * safely (rather than driving a base negative) when it cannot.
  *
- * In advance mode nothing requires coverage, but the same change rule holds: an
- * operator who keys cash beyond the order's value is handing the difference
- * back, not banking it as a bigger advance.
+ * A document with NO value yet — an order still being keyed — has nothing to
+ * overpay: every rupee is a deposit, and computing change against 0 would hand
+ * the whole advance back and settle nothing.
  */
 export function computeTenders(
   rows: TenderArithRow[],
   documentAmount: number,
 ): TenderComputation {
   const keyedTotal = rows.reduce((total, row) => total + Math.max(0, row.keyed), 0);
-  let changeToGive = Math.max(0, money(keyedTotal - Math.max(0, documentAmount)));
+  let changeToGive =
+    documentAmount > 0 ? Math.max(0, money(keyedTotal - documentAmount)) : 0;
 
   const priced: PricedTenderRow[] = rows.map((row) => {
     const keyed = Math.max(0, row.keyed);
-    let change = 0;
+    let refundAmt = 0;
     if (row.allowChange && changeToGive > 0) {
-      change = Math.min(keyed, changeToGive);
-      changeToGive = money(changeToGive - change);
+      refundAmt = Math.min(keyed, changeToGive);
+      changeToGive = money(changeToGive - refundAmt);
     }
-    const base = money(keyed - change);
-    const surcharge = surchargeOf(base, row.surcharge);
-    const total = money(base + surcharge);
+    const base = money(keyed - refundAmt);
+    const surchargeAmt = surchargeOf(base, row.surcharge);
+    const amount = money(base + surchargeAmt);
     return {
       key: row.key,
       base,
-      surcharge,
-      total,
-      received: money(total + change),
-      change,
+      surchargeAmt,
+      amount,
+      received: money(amount + refundAmt),
+      refundAmt,
     };
   });
 
-  const tendered = money(priced.reduce((total, row) => total + row.total, 0));
-  const surcharge = money(priced.reduce((total, row) => total + row.surcharge, 0));
-  const change = money(priced.reduce((total, row) => total + row.change, 0));
-  // The formula's `tendered − surcharge − change` reduces to Σ base because
-  // change is already out of every base above; summing the bases keeps the
-  // identity exact under rounding.
+  const tendered = money(priced.reduce((total, row) => total + row.amount, 0));
+  const surchargeTotal = money(priced.reduce((total, row) => total + row.surchargeAmt, 0));
+  const refund = money(priced.reduce((total, row) => total + row.refundAmt, 0));
+  // `tendered − surcharge − refund` reduces to Σ base because the change is
+  // already out of every base above; summing the bases keeps it exact under
+  // rounding.
   const settled = money(priced.reduce((total, row) => total + row.base, 0));
-  const balance = money(settled - Math.max(0, documentAmount));
 
   return {
     rows: priced,
-    totals: { tendered, surcharge, change, settled, balance },
+    totals: {
+      tendered,
+      surchargeTotal,
+      refund,
+      settled,
+      balance: money(settled - Math.max(0, documentAmount)),
+    },
   };
+}
+
+/**
+ * Whether money keyed beyond the document can actually be handed back. CASH
+ * always can whatever the master says — the drawer is exactly what change
+ * comes out of, and taking a ₹500 note for a ₹470 bill is how a counter works.
+ * Everything else goes by the master: a card or UPI collection returns nothing.
+ */
+export function givesChange(allowChange: boolean, typeCode: string): boolean {
+  return allowChange || typeCode === "CASH";
 }
 
 /**
@@ -150,26 +179,52 @@ export function payStatusOf(settled: number, documentAmount: number): "UNPAID" |
   if (settled <= epsilon) {
     return "UNPAID";
   }
+  // A document with no value yet cannot be "paid": money taken against an
+  // order still being keyed is a deposit on account. The save recomputes this
+  // against the finished total.
+  if (documentAmount <= epsilon) {
+    return "PARTIAL";
+  }
   return settled >= documentAmount - epsilon ? "PAID" : "PARTIAL";
 }
 
-/**
- * The per-row ceiling, settlement mode only: a row may not settle more than the
- * document still needs. Judged on the BASE — a card settling a full bill whose
- * fee takes the gross past the bill total is legal (the ported Qt bug refused
- * it). Advance mode has no ceiling: a customer may deposit any amount.
- */
-export function rowExceedsDocument(
-  base: number,
-  settledByOtherRows: number,
-  documentAmount: number,
-  purpose: TenderPurpose,
-): boolean {
-  if (purpose !== "settlement") {
-    return false;
+/** How the balance box paints. One box, three states (the plan's §5). */
+export type BalanceTone = "settled" | "short" | "over";
+
+export type BalancePresentation = {
+  tone: BalanceTone;
+  caption: string;
+  /** The figure to show — always a magnitude; the caption carries the sense. */
+  value: number;
+};
+
+export function presentBalance(balance: number, purpose: TenderPurpose): BalancePresentation {
+  const epsilon = 0.005;
+  if (Math.abs(balance) <= epsilon) {
+    return { tone: "settled", caption: "Refund", value: 0 };
   }
-  const remaining = money(documentAmount - settledByOtherRows);
-  return money(base) > money(remaining + 0.005);
+  if (balance < 0) {
+    // On an advance a shortfall is the NORMAL case — it is what will be billed
+    // later — so it is not painted as a problem.
+    return {
+      tone: "short",
+      caption: purpose === "advance" ? "Balance to Collect" : "Balance",
+      value: money(-balance),
+    };
+  }
+  return { tone: "over", caption: "Refund", value: money(balance) };
+}
+
+/**
+ * F1 — settle the outstanding balance with this row. The keyed base absorbs
+ * whatever is still short; the surcharge is then recomputed from the master by
+ * the ordinary pricing pass. Does nothing when nothing is outstanding.
+ */
+export function payBalanceWithRow(currentKeyed: number, balance: number): number {
+  if (balance >= -0.005) {
+    return currentKeyed;
+  }
+  return money(Math.max(0, currentKeyed - balance));
 }
 
 /**

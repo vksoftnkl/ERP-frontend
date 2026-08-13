@@ -10,7 +10,7 @@
  * type's own columns (the plan's §5.2).
  */
 import type { TenderMasterRow, TenderDraftRow } from "../sale-order.types";
-import type { TenderPurpose } from "./arithmetic";
+import { givesChange, type TenderPurpose } from "./arithmetic";
 import type { TenderTypeCode } from "./instruments";
 
 export type TenderTypeDefaults = {
@@ -124,9 +124,13 @@ function nextTenderKey(): string {
  * false. (`row.tndAllowChange === null` on a CASH master must still hand out
  * change.)
  */
-export function tenderRowFromMaster(master: TenderMasterRow): TenderDraftRow {
+export function tenderRowFromMaster(master: TenderMasterRow, position = 0): TenderDraftRow {
   const typeId = Number.parseInt(master.tndTypeId, 10) || 0;
   const defaults = typeDefaultsOf(typeId);
+  // `{}` / null on the three behaviour flags means INHERIT the type's default,
+  // never false — `Boolean(master.tndAllowChange)` is the classic way to stop
+  // cash giving change (the plan's §3.1).
+  const allowChange = master.tndAllowChange ?? defaults.allowChange;
   return {
     key: nextTenderKey(),
     tdId: null,
@@ -140,8 +144,14 @@ export function tenderRowFromMaster(master: TenderMasterRow): TenderDraftRow {
     surchargePerc: master.tndSurchargePerc || 0,
     surchargeFlat: master.tndSurchargeAmount || 0,
     settlementDays: master.tndSettlementDays || 0,
-    allowChange: master.tndAllowChange ?? defaults.allowChange,
+    minAmount: master.tndMinAmount || 0,
+    maxAmount: master.tndMaxAmount ?? null,
+    conversionRate: master.tndConversionRate || 1,
+    editSurcharge: master.tndEditSurcharge === true,
+    // CASH gives change whatever the master says (the plan's §11).
+    allowChange: givesChange(allowChange, defaults.code),
     needsRef: master.tndNeedsRef ?? defaults.needsRef,
+    hotkey: hotkeyFor(master.tndHotkey, position),
     keyed: 0,
     settleStatus: "NA",
     refNo: null,
@@ -153,12 +163,64 @@ export function tenderRowFromMaster(master: TenderMasterRow): TenderDraftRow {
   };
 }
 
+/** `A`…`L` by position when the master names no hotkey of its own. */
+const POSITIONAL_HOTKEYS = "ABCDEFGHIJKL";
+
+export function hotkeyFor(masterHotkey: string | null | undefined, position: number): string | null {
+  const keyed = (masterHotkey ?? "").trim();
+  if (keyed) {
+    return keyed.slice(0, 1).toUpperCase();
+  }
+  return POSITIONAL_HOTKEYS[position] ?? null;
+}
+
 /**
- * The degraded dialog when the master list is empty or the fetch failed: CASH
- * always, CREDIT too in settlement mode. The caller MUST surface why in the
- * hint bar — a silently degraded dialog reads as "this shop only takes cash".
- * These rows carry no master id, so they cannot be saved; they exist so the
- * operator can at least see and key the split while the master is down.
+ * Whether the cursor may LAND on this row when the dialog opens. A cash-only
+ * customer's CREDIT row stays keyable — using it just asks first (the plan's
+ * §8) — but suggesting it would be strange. Keyable and suggested are
+ * different things.
+ */
+export function rowIsUsable(row: TenderDraftRow, creditAllowed: boolean): boolean {
+  if (row.typeCode === "CREDIT") {
+    return creditAllowed;
+  }
+  // The two redemption rows are owned by their panels, which are not built yet
+  // (phases 5 and 6); until then they are shown read-only rather than hidden.
+  return row.typeCode !== "RRN" && row.typeCode !== "LOYALTY";
+}
+
+/** A row whose amount belongs to a panel, not to the amount cell (§4.2). */
+export function rowIsPanelOwned(row: TenderDraftRow): boolean {
+  return row.typeCode === "RRN" || row.typeCode === "LOYALTY";
+}
+
+/**
+ * Why the dialog is running on seeded rows rather than the master's own.
+ * Three failure shapes, three different sentences — a screen offering one
+ * tender when the shop has six is a fault to be FIXED in the master, not a
+ * layout the operator should quietly get used to (the plan's §3.2).
+ */
+export type TenderFallbackReason = "unavailable" | "empty" | "none-offerable";
+
+export function fallbackReasonMessage(
+  reason: TenderFallbackReason,
+  detail?: string,
+): string {
+  switch (reason) {
+    case "unavailable":
+      return `Tender master unavailable${detail ? ` (${detail})` : ""} — only cash can be taken.`;
+    case "empty":
+      return "No tender is configured — add one in the Tender Master.";
+    default:
+      return "No configured tender can be used here — check the Tender Master's active dates.";
+  }
+}
+
+/**
+ * The degraded dialog: CASH always, CREDIT too in settlement mode, seeded by
+ * hand with no ledger — the backend resolves that. These rows carry no master
+ * id, so `validate` refuses to save money keyed on them; they exist so the
+ * counter can still see and split a payment while the master is down.
  */
 export function fallbackTenderRows(purpose: TenderPurpose): TenderDraftRow[] {
   const cash: TenderDraftRow = {
@@ -174,8 +236,13 @@ export function fallbackTenderRows(purpose: TenderPurpose): TenderDraftRow[] {
     surchargePerc: 0,
     surchargeFlat: 0,
     settlementDays: 0,
+    minAmount: 0,
+    maxAmount: null,
+    conversionRate: 1,
+    editSurcharge: false,
     allowChange: true,
     needsRef: false,
+    hotkey: "A",
     keyed: 0,
     settleStatus: "NA",
     refNo: null,
@@ -197,6 +264,7 @@ export function fallbackTenderRows(purpose: TenderPurpose): TenderDraftRow[] {
       typeCode: "CREDIT",
       tenderName: "Credit",
       allowChange: false,
+      hotkey: "B",
     },
   ];
 }

@@ -64,7 +64,7 @@ import type {
   SourceTrail,
   TenderDraftRow,
 } from "./sale-order.types";
-import { computeTenders, payStatusOf } from "./tender/arithmetic";
+import { computeTenders, givesChange, payStatusOf } from "./tender/arithmetic";
 import type { PricedTenderRow, TenderArithRow } from "./tender/arithmetic";
 import { cardLast4OrNull, instrumentSpecOf, isPdc } from "./tender/instruments";
 import { typeDefaultsOf } from "./tender/rows";
@@ -194,7 +194,9 @@ export function toArithRow(row: TenderDraftRow): TenderArithRow {
   return {
     key: row.key,
     keyed: row.keyed,
-    allowChange: row.allowChange,
+    // CASH gives change whatever the master says, so the row's own flag is
+    // re-judged here rather than trusted (the plan's §11).
+    allowChange: givesChange(row.allowChange, row.typeCode),
     surcharge: { perc: row.surchargePerc, flat: row.surchargeFlat },
   };
 }
@@ -221,11 +223,11 @@ export function buildTenderPayload(
     tdTenderLedgerId: row.tenderLedgerId,
     tdAmount: priced.base,
     tdSurchargePerc: row.surchargePerc,
-    tdSurchargeAmt: priced.surcharge,
+    tdSurchargeAmt: priced.surchargeAmt,
     tdSurchargeLedgerId: row.surchargeLedgerId,
-    tdTotalAmt: priced.total,
+    tdTotalAmt: priced.amount,
     tdReceivedAmt: priced.received,
-    tdChangeAmt: priced.change,
+    tdChangeAmt: priced.refundAmt,
     tdRefNo: toNullableText(row.refNo, 100),
     tdAuthCode: toNullableText(row.authCode, 50),
     // Four digits or null — a cheque (or any digit-less type) goes out null.
@@ -366,7 +368,7 @@ export function buildSavePayload(
     // and a status decided by the NET.
     soTenderAmt: tenderRows.length > 0 ? tenderComputation.totals.tendered : draft.settlement.tenderAmt,
     soSurchargeAmt:
-      tenderRows.length > 0 ? tenderComputation.totals.surcharge : draft.settlement.surchargeAmt,
+      tenderRows.length > 0 ? tenderComputation.totals.surchargeTotal : draft.settlement.surchargeAmt,
     soRefundAmt: draft.settlement.refundAmt,
     soPayStatus:
       tenderRows.length > 0
@@ -529,8 +531,16 @@ export function tenderRowFromPayload(tender: SaleOrderTenderPayload): TenderDraf
     surchargePerc,
     surchargeFlat,
     settlementDays: 0,
-    allowChange: defaults.allowChange || change > 0,
+    // The GET carries no master behind the line, so the row falls back to the
+    // TYPE's behaviour; the dialog re-merges the live master by tender id when
+    // it opens, which is where the limits and the hotkey come back.
+    minAmount: 0,
+    maxAmount: null,
+    conversionRate: 1,
+    editSurcharge: false,
+    allowChange: givesChange(defaults.allowChange, defaults.code) || change > 0,
     needsRef: defaults.needsRef,
+    hotkey: null,
     keyed: money(base + change),
     settleStatus: tender.tdSettleStatus || "NA",
     refNo: tender.tdRefNo,

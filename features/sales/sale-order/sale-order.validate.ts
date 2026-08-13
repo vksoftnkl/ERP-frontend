@@ -16,7 +16,7 @@ import { SESSION_CAPABILITIES } from "@/features/sales/quotation/quotation.const
 import { accountingYearOf, isRealDate } from "@/features/sales/quotation/quotation.utils";
 import type { SaleOrderDraft, SaleOrderViolation } from "./sale-order.types";
 import { computeTenders } from "./tender/arithmetic";
-import { instrumentSpecOf } from "./tender/instruments";
+import { validateTenderRows } from "./tender/validate";
 import { settledTenderRows, toArithRow } from "./sale-order.payload";
 
 export type OrderValidationContext = {
@@ -197,9 +197,10 @@ export function validateSaveInputs(
 }
 
 /**
- * The advance rows' own rules. The ceiling question does not arise here — this
- * screen's dialog is `purpose="advance"` — but the instrument rules are the
- * server's own 400s said early and by name.
+ * The advance rows' own rules — the SAME ordered gate list the dialog runs
+ * (`tender/validate.ts`), so the two can never disagree about what is
+ * postable. Only the shape of the answer differs: this screen's violations
+ * carry a `field` for its own focus map.
  */
 export function validateTenders(
   draft: SaleOrderDraft,
@@ -209,41 +210,16 @@ export function validateTenders(
   if (rows.length === 0) {
     return null;
   }
-  for (const row of rows) {
-    if (!row.tenderId) {
-      return {
-        message: `The ${row.tenderName || "tender"} row is not backed by a tender master record and cannot be saved.`,
-        field: "tenders",
-      };
-    }
-    const spec = instrumentSpecOf(row.typeCode);
-    if (row.typeCode === "CHEQUE") {
-      if (!(row.refNo ?? "").trim()) {
-        return { message: "The cheque needs its cheque number.", field: "tenders" };
-      }
-      if (!(row.bankName ?? "").trim()) {
-        return { message: "The cheque needs its bank name.", field: "tenders" };
-      }
-      if (!row.instrumentDate) {
-        return { message: "The cheque needs its cheque date.", field: "tenders" };
-      }
-      if (draft.header.orderDate && row.instrumentDate < draft.header.orderDate) {
-        return {
-          message: "A cheque cannot be dated before the order — it cannot mature before it arrived.",
-          field: "tenders",
-        };
-      }
-    } else if (spec.refRequired || (row.needsRef && spec.refLabel)) {
-      if (!(row.refNo ?? "").trim()) {
-        return {
-          message: `${row.tenderName} needs its ${spec.refLabel ?? "reference"}.`,
-          field: "tenders",
-        };
-      }
-    }
+  const violation = validateTenderRows(draft.tenders, {
+    purpose: "advance",
+    documentAmount: pricing.totals.bill,
+    documentDate: draft.header.orderDate,
+  });
+  if (violation) {
+    return { message: violation.message, field: "tenders" };
   }
-  // Advance mode never requires coverage, but money that exceeds the order and
-  // cannot be handed back has nowhere to go.
+  // An advance never requires coverage, but money that exceeds the order and
+  // that no row can hand back has nowhere to go.
   const computation = computeTenders(rows.map(toArithRow), pricing.totals.bill);
   if (computation.totals.balance > 0.005) {
     return {

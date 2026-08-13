@@ -74,12 +74,13 @@ import {
   SALES_ITEM_COLUMN_WIDTH_UNIT,
   useSaleOrderDraft,
 } from "../use-sale-order-draft";
-import { CreditPanel } from "./credit-panel";
+import { OrderIconToolbar } from "./order-icon-toolbar";
 import { SaleOrderListModal } from "./sale-order-list-modal";
 import { SaleOrderToolbar } from "./sale-order-toolbar";
 import { TenderDialog } from "./tender-dialog";
 import styles from "../page.module.scss";
 import {
+  OrderCreditBlock,
   OrderCustomerBlock,
   OrderInfoBlock,
   OrderSalesInfoBlock,
@@ -415,17 +416,21 @@ export function SaleOrderEntryView({
     [canEditPrice],
   );
 
+  /**
+   * The advance dialog. Open on any editable order — including a brand-new one
+   * with no lines yet: a customer who pays a deposit at the counter does it
+   * before the operator has finished keying the goods, and the arithmetic
+   * treats an unpriced document as "nothing to overpay" rather than handing
+   * the whole deposit back as change. The save is the backstop: it needs items
+   * and a positive total, and re-judges the tenders against the final bill.
+   */
   const openTender = useCallback(() => {
     if (!editable) {
       toast.warn("Open the order for editing before recording an advance.");
       return;
     }
-    if (pricing.totals.bill <= 0) {
-      toast.warn("Add at least one item before recording an advance.");
-      return;
-    }
     setTenderOpen(true);
-  }, [editable, pricing.totals.bill]);
+  }, [editable]);
 
   // --------------------------------------------------------------- shortcuts
   const modalOpen =
@@ -440,8 +445,24 @@ export function SaleOrderEntryView({
     creditQuestion !== null ||
     pendingGuard !== null;
 
-  const shortcutsRef = useRef({ runSave, guardedRun, requestEdit, copyAsNew: api.copyAsNew, modalOpen });
-  shortcutsRef.current = { runSave, guardedRun, requestEdit, copyAsNew: api.copyAsNew, modalOpen };
+  const shortcutsRef = useRef({
+    runSave,
+    guardedRun,
+    requestEdit,
+    openTender,
+    copyAsNew: api.copyAsNew,
+    loadLastOrder: api.loadLastOrder,
+    modalOpen,
+  });
+  shortcutsRef.current = {
+    runSave,
+    guardedRun,
+    requestEdit,
+    openTender,
+    copyAsNew: api.copyAsNew,
+    loadLastOrder: api.loadLastOrder,
+    modalOpen,
+  };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -449,13 +470,18 @@ export function SaleOrderEntryView({
         return;
       }
       switch (event.key) {
+        // The legacy binding: F5 takes the money, F6 commits the document.
         case "F5":
           event.preventDefault();
-          void shortcutsRef.current.runSave(false);
+          shortcutsRef.current.openTender();
           break;
         case "F6":
           event.preventDefault();
           void shortcutsRef.current.runSave(true);
+          break;
+        case "F11":
+          event.preventDefault();
+          void shortcutsRef.current.loadLastOrder();
           break;
         case "F7":
           event.preventDefault();
@@ -474,12 +500,6 @@ export function SaleOrderEntryView({
             setDeleteOpen(true);
           }
           break;
-        case "F9":
-          if (event.ctrlKey || event.metaKey) {
-            event.preventDefault();
-            shortcutsRef.current.copyAsNew();
-          }
-          break;
         case "F2":
           if (draft.mode === "browse" && !draft.isDeleted) {
             event.preventDefault();
@@ -487,6 +507,12 @@ export function SaleOrderEntryView({
           }
           break;
         default:
+          // Copy as new is Alt+Y here, not Ctrl+F9: the order screen's own
+          // binding, and `event.key` for it is the letter, not a function key.
+          if (event.altKey && (event.key === "y" || event.key === "Y")) {
+            event.preventDefault();
+            shortcutsRef.current.copyAsNew();
+          }
           break;
       }
     };
@@ -530,7 +556,7 @@ export function SaleOrderEntryView({
           <button type="button" className={quotationStyles.button} onClick={() => guardedRun("back")}>
             ‹ Sale Orders
           </button>
-          <h1 className={quotationStyles.title}>Sale Order entry</h1>
+          <h1 className={cx(quotationStyles.title, styles.entryTitle)}>Sales Order Entry</h1>
         </span>
         <span
           className={cx(
@@ -590,7 +616,21 @@ export function SaleOrderEntryView({
         </div>
       </header>
 
-      <div className={quotationStyles.headerRow}>
+      <OrderIconToolbar
+        editable={editable}
+        canTender={editable}
+        canDelete={canAlter}
+        canCopy={Boolean(draft.docId)}
+        onOpenTender={openTender}
+        onImportQuotation={() => guardedRun("import")}
+        onShowList={() => guardedRun("list")}
+        onCopyAsNew={api.copyAsNew}
+        onPrint={() => void runSave(true)}
+        onClear={() => guardedRun("clear")}
+        onDelete={() => setDeleteOpen(true)}
+      />
+
+      <div className={cx(quotationStyles.headerRow, styles.headerRowFour)}>
         <OrderCustomerBlock
           customer={draft.customer}
           header={draft.header}
@@ -600,6 +640,22 @@ export function SaleOrderEntryView({
           onPickCustomer={(customerId) => void api.pickCustomer(customerId)}
           onSetCustomerField={(field, value) => dispatch(customerFieldSet({ field, value }))}
           onSetPos={(stateCode, stateName) => dispatch(posSet({ stateCode, stateName }))}
+        />
+        <OrderInfoBlock
+          header={draft.header}
+          orderRefno={draft.orderRefno}
+          priceLevelOptions={priceLevelOptions}
+          disabled={!editable}
+          onSetHeader={(field, value) => {
+            const switchedToCash =
+              field === "orderType" && value === "CASH" && draft.header.orderType !== "CASH";
+            dispatch(headerFieldSet({ field, value }));
+            // A CASH term means the money is taken now — switching to it opens
+            // the receive dialog immediately, exactly as F5 would.
+            if (switchedToCash) {
+              openTender();
+            }
+          }}
         />
         <OrderSalesInfoBlock
           header={draft.header}
@@ -613,15 +669,15 @@ export function SaleOrderEntryView({
             dispatch(headerFieldSet({ field: "agentId", value: id }));
             dispatch(headerFieldSet({ field: "agentName", value: name }));
           }}
+          onSetPackedBy={(id, name) => {
+            dispatch(headerFieldSet({ field: "packedId", value: id }));
+            dispatch(headerFieldSet({ field: "packedName", value: name }));
+          }}
         />
-        <OrderInfoBlock
-          header={draft.header}
-          orderRefno={draft.orderRefno}
-          priceLevelOptions={priceLevelOptions}
-          disabled={!editable}
-          onSetHeader={(field, value) => dispatch(headerFieldSet({ field, value }))}
+        <OrderCreditBlock
+          credit={draft.partyCredit}
+          hasCustomer={Boolean(draft.customer.custId)}
         />
-        <CreditPanel credit={draft.partyCredit} hasCustomer={Boolean(draft.customer.custId)} />
       </div>
 
       {draft.docId && draft.fulfilment.status ? (
@@ -735,29 +791,26 @@ export function SaleOrderEntryView({
             disabled={!editable}
             onSetTerms={(field, value) => dispatch(termsFieldSet({ field, value }))}
           />
-          <div>
-            <TotalsStrip totals={pricing.totals} stored={draft.pricing === "stored"} />
-            <div className={styles.fulfilmentStrip} style={{ marginTop: 6 }}>
-              <span>
-                <span className={styles.fulfilmentLabel}>Advance Tendered </span>
-                <span className={styles.fulfilmentValue}>
-                  {formatCurrency(draft.settlement.tenderAmt)}
-                </span>
-              </span>
-              {draft.settlement.surchargeAmt > 0 ? (
-                <span>
-                  <span className={styles.fulfilmentLabel}>Surcharge </span>
-                  <span className={styles.fulfilmentValue}>
-                    {formatCurrency(draft.settlement.surchargeAmt)}
-                  </span>
-                </span>
-              ) : null}
-              <span>
-                <span className={styles.fulfilmentLabel}>Balance Due </span>
-                <span className={styles.fulfilmentValue}>{formatCurrency(balanceDue)}</span>
-              </span>
-            </div>
-          </div>
+          {/*
+            The order's own money reads in the same grid as the rest of the
+            totals: Balance Due under column one, Advance and Refund under
+            column two. Advance is what CROSSED THE COUNTER (surcharge
+            included); Balance Due is measured on the net, so a card fee never
+            looks like it reduced what the customer still owes.
+          */}
+          <TotalsStrip
+            totals={pricing.totals}
+            stored={draft.pricing === "stored"}
+            showMoreTotals={false}
+            extraColumnOne={[{ label: "Balance Due", value: formatCurrency(balanceDue, 2, true) }]}
+            extraColumnTwo={[
+              {
+                label: "Advance",
+                value: formatCurrency(draft.settlement.tenderAmt, 2, true),
+              },
+              { label: "Refund", value: formatCurrency(draft.settlement.refundAmt, 2, true) },
+            ]}
+          />
         </div>
       </div>
 
@@ -769,16 +822,15 @@ export function SaleOrderEntryView({
         canEdit={!draft.isDeleted}
         canDelete={canAlter}
         canCopyAsNew={Boolean(draft.docId)}
-        canTender={editable && pricing.totals.bill > 0}
+        canTender={editable}
+        onOpenTender={openTender}
+        onSaveAndPrint={() => void runSave(true)}
         onShowList={() => guardedRun("list")}
+        onCopyAsNew={api.copyAsNew}
         onEdit={requestEdit}
         onDelete={() => setDeleteOpen(true)}
         onClear={() => guardedRun("clear")}
-        onImportQuotation={() => guardedRun("import")}
-        onOpenTender={openTender}
-        onCopyAsNew={api.copyAsNew}
-        onSave={() => void runSave(false)}
-        onSaveAndPrint={() => void runSave(true)}
+        onLastOrder={() => void api.loadLastOrder()}
         onCancel={() => guardedRun("back")}
       />
 
@@ -821,7 +873,9 @@ export function SaleOrderEntryView({
         documentRefno={draft.orderRefno}
         existingRows={draft.tenders}
         masters={tenderMasters}
-        masterError={tenderMasterError}
+        mastersFailed={Boolean(tenderMasterError)}
+        mastersError={tenderMasterError}
+        creditAllowed={draft.customer.debitAllowed}
         refundAmt={draft.settlement.refundAmt}
         onClose={() => setTenderOpen(false)}
         onApply={(tenders, settlement) => {

@@ -38,6 +38,13 @@ export type TotalsStripProps = {
   /** Appended to the first / second totals column, in order. */
   extraColumnOne?: TotalsExtraCell[];
   extraColumnTwo?: TotalsExtraCell[];
+  /**
+   * The "More totals" disclosure. On by default (the quotation wants it); the
+   * sale order turns it off — its panel already carries the order's own money
+   * rows, and the extra fold made the block taller than the space the grids
+   * leave it.
+   */
+  showMoreTotals?: boolean;
   /** True while a loaded document is still painting its stored figures. */
   stored: boolean;
 };
@@ -65,7 +72,13 @@ function Cell({
   );
 }
 
-export function TotalsStrip({ totals, extraColumnOne, extraColumnTwo, stored }: TotalsStripProps) {
+export function TotalsStrip({
+  totals,
+  extraColumnOne,
+  extraColumnTwo,
+  showMoreTotals = true,
+  stored,
+}: TotalsStripProps) {
   return (
     <div className={styles.totalsPanel} aria-label={stored ? "Saved totals" : "Totals"}>
       <div className={styles.totalsPrimary}>
@@ -96,6 +109,7 @@ export function TotalsStrip({ totals, extraColumnOne, extraColumnTwo, stored }: 
           <span className={styles.totalsGrandValue}>{formatCurrency(totals.bill, 2, true)}</span>
         </div>
       </div>
+      {showMoreTotals ? (
       <details className={styles.totalsDetails}>
         <summary>More totals</summary>
         <dl className={styles.totalsStrip}>
@@ -112,6 +126,7 @@ export function TotalsStrip({ totals, extraColumnOne, extraColumnTwo, stored }: 
           <Cell label="Cess" value={formatCurrency(totals.docCess, 2, true)} />
         </dl>
       </details>
+      ) : null}
     </div>
   );
 }

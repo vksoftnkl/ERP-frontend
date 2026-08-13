@@ -683,8 +683,19 @@ export type TenderDraftRow = {
   surchargePerc: number;
   surchargeFlat: number;
   settlementDays: number;
+  /** `tndMinAmount` — the floor this tender may be used for. */
+  minAmount: number;
+  /** `tndMaxAmount` — null means no ceiling. */
+  maxAmount: number | null;
+  /** Loyalty points → money. 1 for every other tender. */
+  conversionRate: number;
+  /** Whether the master lets the counter edit the surcharge percent. */
+  editSurcharge: boolean;
+  /** `givesChange(master)` — CASH is always true, whatever the master says. */
   allowChange: boolean;
   needsRef: boolean;
+  /** The master's hotkey, or `A`…`L` by display position. */
+  hotkey: string | null;
   /** What the operator typed in the amount cell. */
   keyed: number;
   /**
