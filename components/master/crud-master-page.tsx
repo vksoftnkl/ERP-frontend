@@ -2247,6 +2247,7 @@ export default function CrudMasterPage({
   customTableColumns,
   appendTableColumns,
   columnRenderOverrides,
+  rowClassName,
   onCreateAction,
   onEditAction,
   isRowEditDisabled,
@@ -2287,6 +2288,8 @@ export default function CrudMasterPage({
   getByIdMethod,
   buildListQuery,
   listStateResetKey,
+  searchPlaceholder,
+  buildDeleteRequest,
   buildGetByIdRequest,
   mapFormValues,
   augmentDetailSource,
@@ -3270,9 +3273,17 @@ export default function CrudMasterPage({
       try {
         const row = pendingDeleteRow;
         const deleteId = resolveRecordId(row, lookupKeys.id);
+        // A record keyed by more than one field (a partitioned voucher) hands
+        // its whole compound key over; the id param stays unless restated.
+        const deleteOverride = buildDeleteRequest?.({
+          deleteId,
+          rowSource: row.__source,
+        });
         await deleteRecord({
+          ...(deleteOverride?.url ? { url: deleteOverride.url } : {}),
           query: {
             [requestPayloadKeys.id]: String(deleteId),
+            ...(deleteOverride?.query ?? {}),
           },
         });
         setSelectedRowId((current) =>
@@ -3309,6 +3320,7 @@ export default function CrudMasterPage({
     saveLoading,
     searchTerm,
     afterDeleteSuccess,
+    buildDeleteRequest,
   ]);
   const fields = useMemo<ERPDynamicModalField[]>(
     () =>
@@ -3995,7 +4007,7 @@ export default function CrudMasterPage({
                             className={`${styles.masterSearchInput} erp-ms-search-input`}
                             value={searchTerm}
                             onChange={(event) => handleSearchChange(event.target.value)}
-                            placeholder={`Search by ${entityLabel} name...`}
+                            placeholder={searchPlaceholder ?? `Search by ${entityLabel} name...`}
                             autoComplete="off"
                             aria-label={`Search ${entityLabelPlural}`}
                           />
@@ -4026,6 +4038,7 @@ export default function CrudMasterPage({
                       : undefined
                   }
                   activeRowKey={selectedRowId}
+                  rowClassName={rowClassName}
                   onRowClick={(row) => {
                     setSelectedRowId(row.__rowId);
                     setSelectedRow(row);

@@ -207,6 +207,89 @@
 }
 
 /* ----------------------------------------------------------------- list -- */
+/*
+ * The list's own filter controls, sized to sit level with the shell's search
+ * box (34px, same border and radius) so the filter card reads as one row.
+ */
+.filterDateInput,
+.filterSelect {
+  height: 34px;
+  border: 1px solid #d5dfec;
+  border-radius: var(--erp-radius, 6px);
+  background: #ffffff;
+  color: var(--text-main, #1f2937);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 0 0.6rem;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.filterDateInput:focus,
+.filterSelect:focus {
+  outline: 0;
+  border-color: var(--primary, #b91c1c);
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.12);
+}
+
+.filterSelect {
+  min-width: 150px;
+  cursor: pointer;
+}
+
+/* Status, as a pill — the state is the fastest thing to scan down a column. */
+.statusPill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.statusPillDraft {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.statusPillConfirmed {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.statusPillPartial {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.statusPillCompleted {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.statusPillCancelled {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/*
+ * A cancelled order is struck through across the whole row — a deleted order
+ * is a cancelled one and grid 87 projects no `so_is_deleted`, so the status is
+ * the only signal the list has that this document is closed. The status pill
+ * itself keeps its own type: striking out the word "CANCELLED" would read as a
+ * correction rather than a state.
+ */
+.cancelledRow td {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+
+.cancelledRow td .statusPill {
+  text-decoration: none;
+}
+
 .listPager {
   display: flex;
   gap: 4px;

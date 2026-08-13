@@ -160,6 +160,12 @@ export type CrudMasterPageProps = {
   customTableColumns?: ReusableTableColumn<MasterTableRow>[];
   appendTableColumns?: ReusableTableColumn<MasterTableRow>[];
   columnRenderOverrides?: Record<string, (row: MasterTableRow) => ReactNode>;
+  /**
+   * Extra class per row, for pages that paint a record's state on the whole
+   * row rather than in one cell — a cancelled voucher struck through, say.
+   * Forwarded to the table's own `rowClassName`.
+   */
+  rowClassName?: (row: MasterTableRow, rowIndex: number) => string | undefined;
   onCreateAction?: () => void;
   onEditAction?: (row: MasterTableRow) => void;
   /**
@@ -224,6 +230,21 @@ export type CrudMasterPageProps = {
     sortDir?: "asc" | "desc";
   }) => Record<string, string>;
   listStateResetKey?: string | number | null;
+  /** Overrides the search box's placeholder ("Search by {entityLabel} name..."). */
+  searchPlaceholder?: string;
+  /**
+   * Extra url/query for DELETE, for records keyed by more than one field — a
+   * partitioned voucher wants its whole compound key, not just the id. The id
+   * param the shell already sends is merged in unless the query restates it.
+   * Mirrors `buildGetByIdRequest`.
+   */
+  buildDeleteRequest?: (params: {
+    deleteId: string | number;
+    rowSource: Record<string, unknown> | null;
+  }) => {
+    url?: string;
+    query?: Record<string, string>;
+  };
   buildGetByIdRequest?: (params: {
     recordId: string | number;
     action: "view" | "update";

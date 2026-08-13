@@ -1,13 +1,15 @@
 "use client";
 /**
- * The browse list — configured grid 87 ("SO - MAIN LIST") behind both faces:
- * the landing page and the F8 popup share one table, one date window and one
- * pager. Orders outlive bills, so the window opens at 90 days (the plan's
- * §10); the grid's SQL has no year token — the dates are the scope.
+ * The F8 popup — the order picker the entry screen opens over itself.
  *
- * Grid 87 projects neither `so_src_doc_type` (backend gap §11.7 — no
- * "from quotation" badge is possible) nor `so_is_deleted` — a deleted order
- * shows only through the CANCELLED status the delete stamps.
+ * Deliberately NOT the landing list: that one is the `CrudMasterPage` shell
+ * (`sale-order-list-view.tsx`), which owns a page header, an icon toolbar and
+ * its own modals — none of which belong inside another modal. This is the same
+ * grid 87 data in the light-weight shape a picker needs: a date window, a
+ * filter box, one table and a pager.
+ *
+ * It paints the same status pills and strikes cancelled rows through, so the
+ * two faces of the list read alike.
  */
 import { useMemo, useState } from "react";
 import { cx } from "@/components/design-system/cx";
@@ -16,8 +18,8 @@ import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import {
   addDays,
   buildPageList,
-  toDisplayDate,
   toDateInput,
+  toDisplayDate,
   todayIso,
   toNumber,
 } from "@/features/sales/quotation/quotation.utils";
@@ -40,15 +42,35 @@ function keyOf(row: SaleOrderListRow): SaleOrderDocKey {
   };
 }
 
-type ListCoreProps = {
-  companyId: string;
-  branchId: string;
-  onPick: SaleOrderListPick;
-  active: boolean;
+const STATUS_CLASS: Record<string, string> = {
+  DRAFT: orderStyles.statusPillDraft,
+  CONFIRMED: orderStyles.statusPillConfirmed,
+  PARTIAL: orderStyles.statusPillPartial,
+  COMPLETED: orderStyles.statusPillCompleted,
+  CLOSED: orderStyles.statusPillCompleted,
+  CANCELLED: orderStyles.statusPillCancelled,
+  EXPIRED: orderStyles.statusPillCancelled,
 };
 
-/** The list itself — filters, table, pager. Both faces render this. */
-function SaleOrderListCore({ companyId, branchId, onPick, active }: ListCoreProps) {
+function isCancelled(row: SaleOrderListRow): boolean {
+  return (row.so_status ?? "").trim().toUpperCase() === "CANCELLED";
+}
+
+export type SaleOrderListModalProps = {
+  isOpen: boolean;
+  companyId: string;
+  branchId: string;
+  onClose: () => void;
+  onPick: SaleOrderListPick;
+};
+
+export function SaleOrderListModal({
+  isOpen,
+  companyId,
+  branchId,
+  onClose,
+  onPick,
+}: SaleOrderListModalProps) {
   const [fromDate, setFromDate] = useState(() => addDays(todayIso(), -SALE_ORDER_LIST_WINDOW_DAYS));
   const [toDate, setToDate] = useState(() => todayIso());
   const [search, setSearch] = useState("");
@@ -56,7 +78,7 @@ function SaleOrderListCore({ companyId, branchId, onPick, active }: ListCoreProp
 
   const { data, isFetching, refetch } = useListSaleOrdersQuery(
     { companyId, branchId, fromDate, toDate, page, limit: PAGE_SIZE },
-    { skip: !active || !companyId || !branchId },
+    { skip: !isOpen || !companyId || !branchId },
   );
 
   const rows = useMemo(() => {
@@ -76,29 +98,36 @@ function SaleOrderListCore({ companyId, branchId, onPick, active }: ListCoreProp
   const total = data?.meta?.total ?? rows.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  const pick = (row: SaleOrderListRow, mode: "browse" | "entry") => {
+    onClose();
+    onPick(keyOf(row), mode);
+  };
+
   return (
-    <>
+    <ModalShell title="Sale Orders" isOpen={isOpen} wide onClose={onClose}>
       <div className={styles.listFilters}>
-        <label className={styles.label} htmlFor="so-list-from">
+        <label className={styles.label} htmlFor="so-pick-from">
           From
           <input
-            id="so-list-from"
+            id="so-pick-from"
             type="date"
             className={styles.input}
             value={fromDate}
+            max={toDate || undefined}
             onChange={(event) => {
               setFromDate(event.target.value);
               setPage(1);
             }}
           />
         </label>
-        <label className={styles.label} htmlFor="so-list-to">
+        <label className={styles.label} htmlFor="so-pick-to">
           To
           <input
-            id="so-list-to"
+            id="so-pick-to"
             type="date"
             className={styles.input}
             value={toDate}
+            min={fromDate || undefined}
             onChange={(event) => {
               setToDate(event.target.value);
               setPage(1);
@@ -108,7 +137,7 @@ function SaleOrderListCore({ companyId, branchId, onPick, active }: ListCoreProp
         <input
           type="search"
           className={styles.input}
-          placeholder="Filter this page…"
+          placeholder="party name, order no or amount"
           value={search}
           aria-label="Filter the listed orders"
           onChange={(event) => setSearch(event.target.value)}
@@ -134,41 +163,61 @@ function SaleOrderListCore({ companyId, branchId, onPick, active }: ListCoreProp
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => (
-              <tr
-                key={row.so_id}
-                className={index % 2 === 0 ? styles.rowOdd : styles.rowEven}
-                onDoubleClick={() => onPick(keyOf(row), "browse")}
-              >
-                <td>{toDisplayDate(toDateInput(row.so_order_date)) || ""}</td>
-                <td>{row.so_order_refno ?? ""}</td>
-                <td>{row.so_order_type ?? ""}</td>
-                <td>{row.cus_name ?? ""}</td>
-                <td>{row.cus_addr3 ?? ""}</td>
-                <td style={{ textAlign: "right" }}>{row.so_tot_items ?? 0}</td>
-                <td style={{ textAlign: "right" }}>{formatCurrency(toNumber(row.so_order_amt))}</td>
-                <td>{row.so_status ?? ""}</td>
-                <td>{row.so_created_by ?? ""}</td>
-                <td className={styles.actionCell}>
-                  <button
-                    type="button"
-                    className={styles.rowButton}
-                    title="Open read-only"
-                    onClick={() => onPick(keyOf(row), "browse")}
-                  >
-                    👁
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.rowButton}
-                    title="Open for editing"
-                    onClick={() => onPick(keyOf(row), "entry")}
-                  >
-                    ✎
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {rows.map((row, index) => {
+              const status = (row.so_status ?? "").trim().toUpperCase();
+              return (
+                <tr
+                  key={row.so_id}
+                  className={cx(
+                    index % 2 === 0 ? styles.rowOdd : styles.rowEven,
+                    isCancelled(row) && orderStyles.cancelledRow,
+                  )}
+                  onDoubleClick={() => pick(row, "browse")}
+                >
+                  <td>{toDisplayDate(toDateInput(row.so_order_date)) || ""}</td>
+                  <td>{row.so_order_refno ?? ""}</td>
+                  <td>{row.so_order_type ?? ""}</td>
+                  <td>{row.cus_name ?? ""}</td>
+                  <td>{row.cus_addr3 ?? ""}</td>
+                  <td style={{ textAlign: "right" }}>{row.so_tot_items ?? 0}</td>
+                  <td style={{ textAlign: "right" }}>
+                    {formatCurrency(toNumber(row.so_order_amt))}
+                  </td>
+                  <td>
+                    {status ? (
+                      <span
+                        className={cx(
+                          orderStyles.statusPill,
+                          STATUS_CLASS[status] ?? orderStyles.statusPillDraft,
+                        )}
+                      >
+                        {status}
+                      </span>
+                    ) : null}
+                  </td>
+                  <td>{row.so_created_by ?? ""}</td>
+                  <td className={styles.actionCell}>
+                    <button
+                      type="button"
+                      className={styles.rowButton}
+                      title="Open read-only"
+                      onClick={() => pick(row, "browse")}
+                    >
+                      👁
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.rowButton}
+                      title="Open for editing"
+                      disabled={isCancelled(row)}
+                      onClick={() => pick(row, "entry")}
+                    >
+                      ✎
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
             {rows.length === 0 ? (
               <tr>
                 <td className={styles.emptyGrid} colSpan={10}>
@@ -197,59 +246,6 @@ function SaleOrderListCore({ companyId, branchId, onPick, active }: ListCoreProp
           )}
         </div>
       ) : null}
-    </>
-  );
-}
-
-export type SaleOrderListModalProps = {
-  isOpen: boolean;
-  companyId: string;
-  branchId: string;
-  onClose: () => void;
-  onPick: SaleOrderListPick;
-};
-
-export function SaleOrderListModal({
-  isOpen,
-  companyId,
-  branchId,
-  onClose,
-  onPick,
-}: SaleOrderListModalProps) {
-  return (
-    <ModalShell title="Sale Orders" isOpen={isOpen} wide onClose={onClose}>
-      <SaleOrderListCore
-        companyId={companyId}
-        branchId={branchId}
-        active={isOpen}
-        onPick={(key, mode) => {
-          onClose();
-          onPick(key, mode);
-        }}
-      />
     </ModalShell>
-  );
-}
-
-export type SaleOrderListViewProps = {
-  companyId: string;
-  branchId: string;
-  onCreate: () => void;
-  onOpen: SaleOrderListPick;
-};
-
-export function SaleOrderListView({ companyId, branchId, onCreate, onOpen }: SaleOrderListViewProps) {
-  return (
-    <div className={styles.page}>
-      <header className={styles.titleBar}>
-        <h1 className={styles.title}>Sale Orders</h1>
-        <div className={styles.titleMeta}>
-          <button type="button" className={cx(styles.button, styles.buttonPrimary)} onClick={onCreate}>
-            + New Order
-          </button>
-        </div>
-      </header>
-      <SaleOrderListCore companyId={companyId} branchId={branchId} active onPick={onOpen} />
-    </div>
   );
 }

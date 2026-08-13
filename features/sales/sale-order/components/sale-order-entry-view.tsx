@@ -75,7 +75,7 @@ import {
   useSaleOrderDraft,
 } from "../use-sale-order-draft";
 import { CreditPanel } from "./credit-panel";
-import { SaleOrderListModal } from "./sale-order-list";
+import { SaleOrderListModal } from "./sale-order-list-modal";
 import { SaleOrderToolbar } from "./sale-order-toolbar";
 import { TenderDialog } from "./tender-dialog";
 import styles from "../page.module.scss";

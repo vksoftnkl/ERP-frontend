@@ -6,9 +6,8 @@
  * URL is worth deep-linking to).
  */
 import { useCallback, useState } from "react";
-import { useBusinessContext } from "@/components/layout/business-context";
 import { SaleOrderEntryView } from "./components/sale-order-entry-view";
-import { SaleOrderListView } from "./components/sale-order-list";
+import { SaleOrderListView } from "./components/sale-order-list-view";
 import type { SaleOrderDocKey } from "./sale-order.types";
 
 type View =
@@ -17,9 +16,6 @@ type View =
 
 export default function SaleOrdersPage() {
   const [view, setView] = useState<View>({ screen: "list" });
-  const { activeCompany, activeBranch } = useBusinessContext();
-  const companyId = activeCompany?.compId ?? activeCompany?.id ?? "";
-  const branchId = activeBranch?.id ?? "";
 
   const onOpen = useCallback((document: SaleOrderDocKey, mode: "browse" | "entry") => {
     setView({ screen: "entry", document, mode });
@@ -32,12 +28,7 @@ export default function SaleOrdersPage() {
   }, []);
 
   return view.screen === "list" ? (
-    <SaleOrderListView
-      companyId={companyId}
-      branchId={branchId}
-      onCreate={onCreate}
-      onOpen={onOpen}
-    />
+    <SaleOrderListView onCreate={onCreate} onOpen={onOpen} />
   ) : (
     <SaleOrderEntryView
       initialDocument={view.document}

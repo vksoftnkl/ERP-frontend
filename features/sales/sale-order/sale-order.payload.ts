@@ -330,7 +330,11 @@ export function buildSavePayload(
     soHasUnload: draft.header.hasUnload,
     soHasFreight: draft.header.hasFreight,
     soHasPromo: draft.header.hasPromo,
+    soHasLoyalty: draft.header.hasLoyalty,
+    // Both are `uuid[]` columns with no nullable form: one id or an empty list,
+    // never null.
     soSalesmanId: draft.header.salesmanId ? [draft.header.salesmanId] : [],
+    soPackedId: draft.header.packedId ? [draft.header.packedId] : [],
     soAgentId: draft.header.agentId,
     soTotItems: totals.totItems,
     soTotWeight: totals.totWeight,
@@ -754,12 +758,17 @@ export function parseLoadedDocument(
       salesmanName: salesmanName ?? "",
       agentId: payload.soAgentId,
       agentName: "",
+      packedId: payload.soPackedId?.[0] ?? null,
+      // The GET resolves salesman names only, so the packer's reads blank until
+      // the field is re-picked — the same documented gap the agent name has.
+      packedName: "",
       posStateCode,
       posStateName: payload.soStateName ?? "",
       hasFreight: payload.soHasFreight === true,
       hasLoad: payload.soHasLoad === true,
       hasUnload: payload.soHasUnload === true,
       hasPromo: payload.soHasPromo === true,
+      hasLoyalty: payload.soHasLoyalty === true,
       priceLevel: clampPriceLevel(payload.soPriceLevel ?? 1),
     },
     terms: {

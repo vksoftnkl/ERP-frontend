@@ -16,7 +16,6 @@
  *  - there is NO `advances[]` array. The server README promises one, the DTO
  *    has none, and `forbidNonWhitelisted` turns it into a 400.
  */
-import type { Line } from "@/domain/pricing";
 import type {
   DraftChargeRow,
   DraftLine as QuotationDraftLine,
@@ -207,9 +206,12 @@ export type SaveSaleOrderDto = {
   soHasUnload?: boolean;
   soHasFreight?: boolean;
   soHasPromo?: boolean;
+  soHasLoyalty?: boolean;
 
   /** `uuid[]` — an array or CSV; `''` clears to `[]`, never null. */
   soSalesmanId?: string[];
+  /** `uuid[]` too — who packed the order. */
+  soPackedId?: string[];
   soAgentId?: string | null;
 
   soTotItems?: number;
@@ -457,8 +459,10 @@ export type SaleOrderPayload = {
   soHasUnload: boolean;
   soHasFreight: boolean;
   soHasPromo: boolean;
+  soHasLoyalty: boolean;
   soUserId: string;
   soSalesmanId: string[] | null;
+  soPackedId: string[] | null;
   soAgentId: string | null;
   soTotItems: number;
   soDeliveredItems: number | null;
@@ -764,12 +768,16 @@ export type SaleOrderHeader = {
   salesmanName: string;
   agentId: string | null;
   agentName: string;
+  /** `so_packed_id` — who packed it. A `uuid[]` column holding one id here. */
+  packedId: string | null;
+  packedName: string;
   posStateCode: string;
   posStateName: string;
   hasFreight: boolean;
   hasLoad: boolean;
   hasUnload: boolean;
   hasPromo: boolean;
+  hasLoyalty: boolean;
   priceLevel: number;
 };
 

@@ -59,12 +59,15 @@ export function emptyOrderHeader(orderDate: string): SaleOrderHeader {
     salesmanName: "",
     agentId: null,
     agentName: "",
+    packedId: null,
+    packedName: "",
     posStateCode: DEFAULT_POS_STATE_CODE,
     posStateName: DEFAULT_POS_STATE_NAME,
     hasFreight: false,
     hasLoad: false,
     hasUnload: false,
     hasPromo: false,
+    hasLoyalty: false,
     priceLevel: 1,
   };
 }

@@ -160,6 +160,8 @@ export type SaleOrderDraftApi = {
   /** The credit question answered yes: remember it and go again. */
   confirmCreditAndSave: (context?: OrderValidationContext) => Promise<SaveOutcome>;
   loadDocument: (key: SaleOrderDocKey) => Promise<SaleOrderDraft | null>;
+  /** F11 — open the most recent order in this company / branch. */
+  loadLastOrder: () => Promise<SaleOrderDraft | null>;
   importQuotation: (key: QuotationDocKey) => Promise<boolean>;
   deleteDocument: () => Promise<boolean>;
   clear: () => void;
@@ -730,6 +732,50 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
     [companyStateCode, dispatch, refreshPartyCredit],
   );
 
+  /**
+   * F11 — the most recent order in this scope. Grid 87 already sorts by order
+   * date then slno descending, so "the last one" is its first row; the dates
+   * travel empty so the window never hides it.
+   */
+  const loadLastOrder = useCallback(async (): Promise<SaleOrderDraft | null> => {
+    if (!draftRef.current.companyId || !draftRef.current.branchId) {
+      toast.warn("The company and branch are still loading — try again in a moment.");
+      return null;
+    }
+    setBusy("loading");
+    try {
+      const page = await dispatch(
+        saleOrderApi.endpoints.listSaleOrders.initiate(
+          {
+            companyId: draftRef.current.companyId,
+            branchId: draftRef.current.branchId,
+            fromDate: "",
+            toDate: "",
+            page: 1,
+            limit: 1,
+          },
+          { subscribe: false, forceRefetch: true },
+        ),
+      ).unwrap();
+      const row = page.items?.[0];
+      if (!row) {
+        toast.info("There are no orders in this branch yet.");
+        return null;
+      }
+      return await loadDocument({
+        soId: row.so_id,
+        soCompanyId: row.so_company_id,
+        soBranchId: row.so_branch_id,
+        soAccYear: row.so_acc_year,
+      });
+    } catch (error) {
+      toast.error(errorMessage(error));
+      return null;
+    } finally {
+      setBusy("idle");
+    }
+  }, [dispatch, loadDocument]);
+
   /** Ctrl+F3 — a quotation becomes a fresh order draft with its source stamped. */
   const importQuotation = useCallback(
     async (key: QuotationDocKey): Promise<boolean> => {
@@ -858,6 +904,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
     save,
     confirmCreditAndSave,
     loadDocument,
+    loadLastOrder,
     importQuotation,
     deleteDocument,
     clear,

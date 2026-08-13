@@ -13,7 +13,7 @@
  * date labelled "Expiry". All arithmetic is `computeTenders`; this component
  * computes nothing itself.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { cx } from "@/components/design-system/cx";
 import { formatCurrency } from "@/domain/pricing";
@@ -93,13 +93,39 @@ function buildRows(
   return merged;
 }
 
+/**
+ * The dialog. The body is a separate component mounted only while open and
+ * keyed on what its rows are built from, so opening it BUILDS the rows in a
+ * `useState` initializer rather than syncing them in afterwards — one render,
+ * no effect, and reopening after the masters or the document date moved
+ * genuinely rebuilds instead of showing the previous session's list.
+ */
 export function TenderDialog(props: TenderDialogProps) {
+  const { isOpen, purpose, documentDate, documentRefno, masters, onClose } = props;
+  if (!isOpen) {
+    return null;
+  }
+  return (
+    <TenderDialogBody
+      {...props}
+      key={`${purpose}|${documentDate}|${masters.length}`}
+      title={
+        purpose === "advance"
+          ? `Advance — ${documentRefno || "new order"}`
+          : `Settle — ${documentRefno || "bill"}`
+      }
+      onClose={onClose}
+    />
+  );
+}
+
+function TenderDialogBody(props: TenderDialogProps & { title: string }) {
   const {
     isOpen,
     purpose,
     documentAmount,
     documentDate,
-    documentRefno,
+    title,
     existingRows,
     masters,
     masterError,
@@ -108,19 +134,10 @@ export function TenderDialog(props: TenderDialogProps) {
     onApply,
   } = props;
 
-  const [rows, setRows] = useState<TenderDraftRow[]>([]);
-  const [activeKey, setActiveKey] = useState<string | null>(null);
-
-  // Rebuilt on every open: the masters, the document date and the draft's rows
-  // may all have moved since the last time.
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    const built = buildRows(masters, existingRows, documentDate, purpose);
-    setRows(built);
-    setActiveKey(built[0]?.key ?? null);
-  }, [isOpen, masters, existingRows, documentDate, purpose]);
+  const [rows, setRows] = useState<TenderDraftRow[]>(() =>
+    buildRows(masters, existingRows, documentDate, purpose),
+  );
+  const [activeKey, setActiveKey] = useState<string | null>(() => rows[0]?.key ?? null);
 
   const computation = useMemo(
     () => computeTenders(rows.map(toArithRow), documentAmount),
@@ -189,7 +206,7 @@ export function TenderDialog(props: TenderDialogProps) {
 
   return (
     <ModalShell
-      title={purpose === "advance" ? `Advance — ${documentRefno || "new order"}` : `Settle — ${documentRefno || "bill"}`}
+      title={title}
       isOpen={isOpen}
       wide
       onClose={onClose}

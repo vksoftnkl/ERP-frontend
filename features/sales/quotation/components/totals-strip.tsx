@@ -25,8 +25,19 @@ import { cx } from "@/components/design-system/cx";
 import { formatCurrency, formatPerc, type DocumentTotals } from "@/domain/pricing";
 import styles from "../page.module.scss";
 
+/**
+ * A voucher's own money line, appended under one of the three totals columns.
+ * The sale order's Advance / Refund / Balance Due live here rather than in a
+ * strip of their own: they are totals, and the legacy layout reads them in the
+ * same grid as the rest.
+ */
+export type TotalsExtraCell = { label: string; value: string };
+
 export type TotalsStripProps = {
   totals: DocumentTotals;
+  /** Appended to the first / second totals column, in order. */
+  extraColumnOne?: TotalsExtraCell[];
+  extraColumnTwo?: TotalsExtraCell[];
   /** True while a loaded document is still painting its stored figures. */
   stored: boolean;
 };
@@ -54,7 +65,7 @@ function Cell({
   );
 }
 
-export function TotalsStrip({ totals, stored }: TotalsStripProps) {
+export function TotalsStrip({ totals, extraColumnOne, extraColumnTwo, stored }: TotalsStripProps) {
   return (
     <div className={styles.totalsPanel} aria-label={stored ? "Saved totals" : "Totals"}>
       <div className={styles.totalsPrimary}>
@@ -63,11 +74,17 @@ export function TotalsStrip({ totals, stored }: TotalsStripProps) {
           <Cell label="Gross Amount" value={formatCurrency(totals.grossAmt, 2, true)} />
           <Cell label="Scheme Discount" value={formatCurrency(totals.schDisc, 2, true)} />
           <Cell label="Round Off" value={formatCurrency(totals.roundOff, 2, true)} />
+          {(extraColumnOne ?? []).map((cell) => (
+            <Cell key={cell.label} label={cell.label} value={cell.value} />
+          ))}
         </dl>
         <dl className={styles.totalsCol}>
           <Cell label="Total Bags" value={formatCurrency(totals.totQty, 3, true)} />
           <Cell label="Item Discount" value={formatCurrency(totals.itemDisc, 2, true)} />
           <Cell label="Taxable Amount" value={formatCurrency(totals.docTaxable, 2, true)} />
+          {(extraColumnTwo ?? []).map((cell) => (
+            <Cell key={cell.label} label={cell.label} value={cell.value} />
+          ))}
         </dl>
         <dl className={styles.totalsCol}>
           <Cell label="Total Weight" value={formatCurrency(totals.totWeight, 3, true)} />
