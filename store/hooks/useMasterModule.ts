@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   pageChanged,
-  pageSizeChanged,
   searchChanged,
   selectMasterModule,
   totalEntriesUpdated,
@@ -38,8 +37,13 @@ function deriveModuleKey(createUrl: string): string {
 }
 /**
  * Drop-in replacement for `useMasterCrud` that uses RTK Query for HTTP
- * operations and persists pagination/search state in Redux so they survive
+ * operations and persists page/search state in Redux so they survive
  * navigation between pages.
+ *
+ * The page size is deliberately NOT in Redux: the table derives it from the
+ * viewport on every resize (see `useAutoFitPageSize`), so it is a measurement
+ * of the current layout rather than user state worth carrying across pages.
+ * It lives in local state and is re-measured on each mount.
  *
  * Return type is identical to `useMasterCrud` so `CrudMasterPage` requires
  * only a single import-line change.
@@ -57,7 +61,7 @@ export function useMasterModule({
   const moduleKey = deriveModuleKey(apiEndpoints.create);
   const moduleState = useAppSelector((s) => selectMasterModule(s, moduleKey));
   const currentPage = moduleState.currentPage;
-  const pageSize = moduleState.pageSize;
+  const [pageSize, setPageSizeState] = useState(defaultPageSize);
   const searchTerm = moduleState.searchTerm;
   const totalEntries = moduleState.totalEntries;
   // RTK Query hooks
@@ -106,7 +110,6 @@ export function useMasterModule({
           moduleKey,
           total: normalized.totalEntries,
           page: normalized.currentPage ?? undefined,
-          pageSize: normalized.pageSize ?? undefined,
         }),
       );
       return payload;
@@ -160,7 +163,10 @@ export function useMasterModule({
       reload,
       searchTerm,
       setCurrentPage: (page: number) => dispatch(pageChanged({ moduleKey, page })),
-      setPageSize: (size: number) => dispatch(pageSizeChanged({ moduleKey, size })),
+      setPageSize: (size: number) => {
+        setPageSizeState(size);
+        dispatch(pageChanged({ moduleKey, page: defaultPage }));
+      },
       setSearchTerm: (term: string) =>
         dispatch(searchChanged({ moduleKey, term })),
       setSort: (by: string | undefined, dir?: "asc" | "desc") => {
