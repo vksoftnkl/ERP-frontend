@@ -12,6 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, {
+  configColumnWidthFromPx,
   type ReusableTableBodyContextMenuPayload,
   type ReusableTableColumn,
   type ReusableTableColumnResizeEndPayload,
@@ -2323,7 +2324,7 @@ export default function CrudMasterPage({
   );
   const { run: saveColumnWidthApi } = useApi<unknown, Record<string, unknown>>(
     GRID_COLUMN_WIDTH_ENDPOINT,
-    { method: "PUT", toast: { success: false } },
+    { method: "PUT", toast: { success: false, error: false } },
   );
   const { run: saveFilterSettingsApi } = useApi<unknown, Record<string, unknown>>(
     GRID_FILTER_SETTINGS_ENDPOINT,
@@ -3692,48 +3693,57 @@ export default function CrudMasterPage({
       searchTerm,
     ],
   );
-  const pendingColumnWidthsRef = useRef<Record<string, number>>({});
+  // Column resize follows the opening-stock grid: the table updates the width
+  // live while dragging and the released width is persisted straight away —
+  // no explicit "save" step. Saves run through a queue so two quick drags land
+  // in order, and a failed save leaves the on-screen width alone.
+  const columnWidthSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const persistGridColumnWidth = useCallback(
+    async (serialId: string, configWidth: number) => {
+      try {
+        await saveColumnWidthApi({
+          body: { columns: [{ grid_column_id: serialId, grid_column_width: configWidth }] },
+        });
+        void refetchGridColumns();
+      } catch {
+        // Keep the local resize even if persistence fails.
+      }
+    },
+    [refetchGridColumns, saveColumnWidthApi],
+  );
+  const enqueueGridColumnWidthSave = useCallback(
+    (serialId: string, configWidth: number) => {
+      const saveTask = columnWidthSaveQueueRef.current
+        .catch(() => undefined)
+        .then(() => persistGridColumnWidth(serialId, configWidth));
+      columnWidthSaveQueueRef.current = saveTask;
+      return saveTask;
+    },
+    [persistGridColumnWidth],
+  );
   const handleGridColumnResizeEnd = useCallback(
     (payload: ReusableTableColumnResizeEndPayload<MasterTableRow>) => {
-      if (gridId === null || payload.tableWidthPx <= 0) {
+      if (gridId === null || payload.widthPx <= 0) {
         return;
       }
       const gridColumn = resolveGridColumnForTableColumn(payload.column, gridColumns);
       if (!gridColumn?.serialId) {
         return;
       }
-      const widthPercent = Number(((payload.widthPx * 100) / payload.tableWidthPx).toFixed(4));
-      if (!Number.isFinite(widthPercent) || widthPercent <= 0) {
+      // Saved in the unit grid_column_width is read back in, so the column
+      // reopens at exactly the width it was dragged to.
+      const configWidth = configColumnWidthFromPx(payload.widthPx);
+      if (!Number.isFinite(configWidth) || configWidth <= 0) {
         return;
       }
-      pendingColumnWidthsRef.current = {
-        ...pendingColumnWidthsRef.current,
-        [gridColumn.serialId]: widthPercent,
-      };
+      const currentWidth = toNullableNumberValue(gridColumn.width);
+      if (currentWidth !== null && Math.abs(currentWidth - configWidth) < 0.01) {
+        return;
+      }
+      void enqueueGridColumnWidthSave(gridColumn.serialId, configWidth);
     },
-    [gridColumns, gridId],
+    [enqueueGridColumnWidthSave, gridColumns, gridId],
   );
-  const saveColumnWidths = useCallback(async () => {
-    const pending = pendingColumnWidthsRef.current;
-    if (gridId === null || Object.keys(pending).length === 0) {
-      return;
-    }
-    const columns = Object.entries(pending).map(([serialId, widthPercent]) => ({
-      grid_column_id: serialId,
-      grid_column_width: widthPercent,
-    }));
-    try {
-      await saveColumnWidthApi({ body: { columns } });
-      pendingColumnWidthsRef.current = {};
-      void refetchGridColumns();
-    } catch {
-      // useApi handles the visible error toast.
-    }
-  }, [
-    gridId,
-    refetchGridColumns,
-    saveColumnWidthApi,
-  ]);
   const gridSettingsContextMenu =
     gridSettingsContextMenuPosition && typeof document !== "undefined"
       ? createPortal(
@@ -3756,16 +3766,6 @@ export default function CrudMasterPage({
               onClick={() => openGridSettingsModalFromContextMenu("visibility")}
             >
               column visibility setting
-            </button>
-            <button
-              type="button"
-              className={styles.masterSearchSettingsItem}
-              onClick={() => {
-                setGridSettingsContextMenuPosition(null);
-                void saveColumnWidths();
-              }}
-            >
-              save column width
             </button>
             <button
               type="button"

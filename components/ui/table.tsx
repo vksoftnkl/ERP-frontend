@@ -292,6 +292,15 @@ function resolveColumnWidth<T extends Record<string, unknown>>(
   }
   return { width: normalizedWidth };
 }
+/**
+ * The inverse of the `N%` → pixels conversion above: a dragged pixel width back
+ * into the unit a grid config stores its widths in. Saving raw pixels would
+ * read back `PERCENT_COLUMN_WIDTH_PIXEL_FACTOR` times wider on the next load.
+ */
+export function configColumnWidthFromPx(widthPx: number): number {
+  const safeWidthPx = Math.max(MIN_DATA_COLUMN_WIDTH, Math.round(widthPx));
+  return Math.round((safeWidthPx / PERCENT_COLUMN_WIDTH_PIXEL_FACTOR) * 100) / 100;
+}
 function resolveColumnPixelWidth<T extends Record<string, unknown>>(
   column: ReusableTableColumn<T>,
 ): number {
