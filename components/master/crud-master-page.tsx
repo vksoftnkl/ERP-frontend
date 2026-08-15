@@ -2322,9 +2322,15 @@ export default function CrudMasterPage({
       },
     },
   );
+  // Two handles on the same endpoint: the drag saves silently on release, the
+  // context-menu item confirms out loud so the operator can see it landed.
   const { run: saveColumnWidthApi } = useApi<unknown, Record<string, unknown>>(
     GRID_COLUMN_WIDTH_ENDPOINT,
     { method: "PUT", toast: { success: false, error: false } },
+  );
+  const { run: saveColumnWidthsApi } = useApi<unknown, Record<string, unknown>>(
+    GRID_COLUMN_WIDTH_ENDPOINT,
+    { method: "PUT", toast: { successMessage: "Column width saved." } },
   );
   const { run: saveFilterSettingsApi } = useApi<unknown, Record<string, unknown>>(
     GRID_FILTER_SETTINGS_ENDPOINT,
@@ -3694,10 +3700,14 @@ export default function CrudMasterPage({
     ],
   );
   // Column resize follows the opening-stock grid: the table updates the width
-  // live while dragging and the released width is persisted straight away —
-  // no explicit "save" step. Saves run through a queue so two quick drags land
-  // in order, and a failed save leaves the on-screen width alone.
+  // live while dragging and the released width is persisted straight away.
+  // Saves run through a queue so two quick drags land in order, and a failed
+  // save leaves the on-screen width alone. Every dragged width is also kept
+  // here so the "save column width" context-menu item can re-send the whole
+  // set — the operator's way to force (and see) a save when the silent one
+  // did not stick.
   const columnWidthSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const resizedColumnWidthsRef = useRef<Record<string, number>>({});
   const persistGridColumnWidth = useCallback(
     async (serialId: string, configWidth: number) => {
       try {
@@ -3736,6 +3746,10 @@ export default function CrudMasterPage({
       if (!Number.isFinite(configWidth) || configWidth <= 0) {
         return;
       }
+      resizedColumnWidthsRef.current = {
+        ...resizedColumnWidthsRef.current,
+        [gridColumn.serialId]: configWidth,
+      };
       const currentWidth = toNullableNumberValue(gridColumn.width);
       if (currentWidth !== null && Math.abs(currentWidth - configWidth) < 0.01) {
         return;
@@ -3744,6 +3758,31 @@ export default function CrudMasterPage({
     },
     [enqueueGridColumnWidthSave, gridColumns, gridId],
   );
+  const saveColumnWidths = useCallback(async () => {
+    const columns = Object.entries(resizedColumnWidthsRef.current).map(
+      ([serialId, configWidth]) => ({
+        grid_column_id: serialId,
+        grid_column_width: configWidth,
+      }),
+    );
+    if (gridId === null || columns.length === 0) {
+      return;
+    }
+    try {
+      // Behind whatever the drag already queued, so the explicit save is the
+      // last write and its toast reflects the final state.
+      const saveTask = columnWidthSaveQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          await saveColumnWidthsApi({ body: { columns } });
+          void refetchGridColumns();
+        });
+      columnWidthSaveQueueRef.current = saveTask.catch(() => undefined);
+      await saveTask;
+    } catch {
+      // useApi handles the visible error toast.
+    }
+  }, [gridId, refetchGridColumns, saveColumnWidthsApi]);
   const gridSettingsContextMenu =
     gridSettingsContextMenuPosition && typeof document !== "undefined"
       ? createPortal(
@@ -3766,6 +3805,16 @@ export default function CrudMasterPage({
               onClick={() => openGridSettingsModalFromContextMenu("visibility")}
             >
               column visibility setting
+            </button>
+            <button
+              type="button"
+              className={styles.masterSearchSettingsItem}
+              onClick={() => {
+                setGridSettingsContextMenuPosition(null);
+                void saveColumnWidths();
+              }}
+            >
+              save column width
             </button>
             <button
               type="button"

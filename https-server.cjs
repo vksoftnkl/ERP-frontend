@@ -10,21 +10,17 @@ if (!Number.isFinite(port) || port <= 0) {
   throw new Error(`Invalid PORT value: ${process.env.PORT}`);
 }
 
-const certPath = resolve(
-  process.cwd(),
-  process.env.HTTPS_CERT_PATH || "../ERP server/certs/server.crt",
-);
-const keyPath = resolve(
-  process.cwd(),
-  process.env.HTTPS_KEY_PATH || "../ERP server/certs/server.key",
-);
+const certPath = resolve(process.cwd(), process.env.HTTPS_CERT_PATH || "certs/localhost.crt");
+const keyPath = resolve(process.cwd(), process.env.HTTPS_KEY_PATH || "certs/localhost.key");
+
+const missingCertHint = "Run `npm run cert:local` to generate one.";
 
 if (!existsSync(certPath)) {
-  throw new Error(`HTTPS certificate not found at: ${certPath}`);
+  throw new Error(`HTTPS certificate not found at: ${certPath}. ${missingCertHint}`);
 }
 
 if (!existsSync(keyPath)) {
-  throw new Error(`HTTPS key not found at: ${keyPath}`);
+  throw new Error(`HTTPS key not found at: ${keyPath}. ${missingCertHint}`);
 }
 
 const httpsOptions = {
