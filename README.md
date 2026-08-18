@@ -53,10 +53,21 @@ npm run build
 npm run start
 ```
 
-`npm run start` serves the client over HTTPS using cert/key files.
-Default cert paths:
-- `../ERP server/certs/server.crt`
-- `../ERP server/certs/server.key`
+`npm run start` serves plain HTTP on `$PORT` (default `3000`), building first if no
+production build exists. For local HTTPS use `npm run start:local-https` instead.
+
+## Deploying to CloudJiffy (Jelastic Node.js layer)
+
+- The app must serve **plain HTTP on port 3000** — TLS terminates at the platform
+  NGINX balancer, and 3000 is the only application port the Jelastic Node.js layer
+  whitelists (binding 8080 leaves the app healthy but unreachable: the balancer
+  answers 502). `npm run start` already does both.
+- `.env` is not committed, so `NEXT_PUBLIC_API_BASE` **must be set as an environment
+  variable on the CloudJiffy node before the build runs** — it is baked into the
+  client bundle at build time. Point it at the deployed API's public URL
+  (e.g. `https://<backend-env>.cloudjiffy.net/api/v1`), never at a localhost address.
+- The deployed API must allowlist this frontend's origin in its `CORS_ORIGINS`
+  (see `ecosystem.config.js` in the ERP server repo).
 
 ## Environment Variables
 
