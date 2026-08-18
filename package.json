@@ -7,7 +7,7 @@
     "dev:http": "next dev --turbopack",
     "dev:webpack": "next dev --webpack --experimental-https --experimental-https-key certs/localhost.key --experimental-https-cert certs/localhost.crt",
     "build": "next build",
-    "start": "node https-server.cjs",
+    "start": "next start -H 0.0.0.0 -p ${PORT:-8080}",
     "start:http": "next start",
     "start:https": "node https-server.cjs",
     "cert:local": "node scripts/generate-local-cert.js",
@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=344",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "start:local-https": "node https-server.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
