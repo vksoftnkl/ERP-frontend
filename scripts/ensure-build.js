@@ -87,5 +87,17 @@ if (!reason) {
 }
 
 console.log(`[ensure-build] rebuilding: ${reason}`);
-execFileSync("npx", ["--no-install", "next", "build"], { cwd: root, stdio: "inherit" });
+try {
+  execFileSync("npx", ["--no-install", "next", "build"], { cwd: root, stdio: "inherit" });
+} catch (error) {
+  // A failed rebuild must not take the site down: if the previous bundle is
+  // still on disk, serve it and shout in the log. Only a node with nothing to
+  // serve fails the unit, because there `next start` would crash anyway.
+  if (!fs.existsSync(buildIdPath)) throw error;
+  console.error(
+    "[ensure-build] BUILD FAILED -- starting the PREVIOUS build instead. " +
+      "The site is live but STALE until this is fixed.",
+  );
+  process.exit(0);
+}
 fs.writeFileSync(fingerprintPath, envFingerprint());

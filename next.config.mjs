@@ -7,6 +7,11 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ["react-icons"],
   },
+  // Test files and vitest.config.ts are excluded there, so a production install
+  // (no devDependencies) can still typecheck and build.
+  typescript: {
+    tsconfigPath: "tsconfig.build.json",
+  },
 };
 
 export default nextConfig;

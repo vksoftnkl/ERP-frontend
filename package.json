@@ -21,13 +21,18 @@
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@reduxjs/toolkit": "^2.11.2",
+    "@tailwindcss/postcss": "^4.3.3",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.18",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
     "axios": "^1.13.5",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "decimal.js-light": "2.5.1",
     "next": "latest",
+    "postcss": "^8.5.26",
     "react": "latest",
     "react-dom": "latest",
     "react-hook-form": "^7.71.1",
@@ -36,20 +41,15 @@
     "react-toastify": "^11.0.5",
     "recharts": "^3.7.0",
     "redux-saga": "^1.5.0",
+    "sass": "^1.102.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "latest",
     "zod": "^4.3.6",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.1.6",
-    "postcss": "^8.5.26",
-    "sass": "^1.102.0",
-    "tailwindcss": "^4.3.3",
-    "typescript": "latest",
     "vitest": "4.1.10"
   }
 }

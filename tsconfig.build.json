@@ -1,0 +1,17 @@
+{
+  // `next build` typechecks every file the tsconfig includes, not just the ones
+  // reachable from the app graph -- so vitest.config.ts and the *.test.ts files
+  // pulled `vitest/config` into the production build and failed it on a
+  // dependency the server has no reason to install. The build gets this narrowed
+  // config (next.config.mjs -> typescript.tsconfigPath); `npm run typecheck`
+  // still uses tsconfig.json and keeps covering the tests.
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "vitest.config.ts",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
+  ]
+}
