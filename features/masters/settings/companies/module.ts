@@ -86,6 +86,19 @@ const STATE_DROPDOWN_CONFIG = {
   labelKeys: ["state_name", "stateName"] as const,
   defaultOption: DEFAULT_STATE_OPTION,
 } as const;
+const DEFAULT_APP_THEME_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Select Stylesheet",
+};
+// Stylesheet is a FK to public.app_theme_master (thm_id), NOT a colour value: the server
+// DTO types compStylesheetId as an integer. Options come from configured dropdown 27
+// (APP THEMES -> thm_id/thm_name), lazily loaded like the State field.
+const APP_THEME_DROPDOWN_CONFIG = {
+  dropdownId: "27",
+  idKeys: ["thm_id", "thmId"] as const,
+  labelKeys: ["thm_name", "thmName"] as const,
+  defaultOption: DEFAULT_APP_THEME_OPTION,
+} as const;
 const DEFAULT_BANK_LEDGER_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Bank Ledger",
@@ -464,11 +477,15 @@ function buildCompanyFormFields({
   bankOptions,
   stateOptions,
   stateHandlers,
+  appThemeOptions,
+  appThemeHandlers,
   onCompanyGstinValueChange,
 }: {
   bankOptions: ERPDynamicSelectOption[];
   stateOptions: ERPDynamicSelectOption[];
   stateHandlers: LazyDropdownHandlers;
+  appThemeOptions: ERPDynamicSelectOption[];
+  appThemeHandlers: LazyDropdownHandlers;
   onCompanyGstinValueChange: ERPDynamicFieldValueChangeHandler;
 }): ERPDynamicModalField[] {
   return [
@@ -777,8 +794,14 @@ function buildCompanyFormFields({
     {
       name: "compStylesheetId",
       label: "Stylesheet",
-      type: "color",
+      type: "select",
+      searchable: true,
+      serverSearch: true,
       required: true,
+      options: appThemeOptions,
+      onSearchOpenChange: appThemeHandlers.onSearchOpenChange,
+      onSearchQueryChange: appThemeHandlers.onSearchQueryChange,
+      onValueChange: appThemeHandlers.onValueChange,
       validation: {
         requiredMessage: "Stylesheet is required.",
       },
@@ -939,6 +962,8 @@ export function useCompaniesModule() {
   const { getAll: getStateLookup } = useApi<unknown>(STATE_LOOKUP_ENDPOINT);
   // The State select itself is a lazy server-side dropdown (configured dropdown 9).
   const state = useLazyConfiguredDropdown(STATE_DROPDOWN_CONFIG);
+  // Stylesheet is a lazy server-side dropdown too (configured dropdown 27).
+  const appTheme = useLazyConfiguredDropdown(APP_THEME_DROPDOWN_CONFIG);
   const [bankOptions, setBankOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_BANK_LEDGER_OPTION,
   ]);
@@ -1067,9 +1092,18 @@ export function useCompaniesModule() {
         bankOptions,
         stateOptions: state.options,
         stateHandlers: state.handlers,
+        appThemeOptions: appTheme.options,
+        appThemeHandlers: appTheme.handlers,
         onCompanyGstinValueChange: handleCompanyGstinValueChange,
       }),
-    [bankOptions, handleCompanyGstinValueChange, state.options, state.handlers],
+    [
+      bankOptions,
+      handleCompanyGstinValueChange,
+      state.options,
+      state.handlers,
+      appTheme.options,
+      appTheme.handlers,
+    ],
   );
   return useMemo(
     () =>
@@ -1116,6 +1150,7 @@ export function useCompaniesModule() {
           // selection from a previously edited company lingers (it reloads on open).
           if (open && variantKey === "master-create") {
             state.seedSelected("", "");
+            appTheme.seedSelected("", "");
           }
         },
         mapFormValues: ({ source, defaults }) => {
@@ -1130,6 +1165,16 @@ export function useCompaniesModule() {
             ] ||
             "";
           state.seedSelected(stateName, stateName);
+          // Seed the lazy Stylesheet dropdown from the saved theme id; /company-masters/get
+          // returns the resolved name alongside it so the trigger has a label to show.
+          const appThemeId = toDisplayValue(
+            getCompanyFieldValue(rowSource, "compStylesheetId"),
+          );
+          appTheme.seedSelected(
+            appThemeId,
+            toDisplayValue(getCompanyFieldValue(rowSource, "compStylesheetName")) ||
+              appThemeId,
+          );
           return mapCompanyFormValues(source, defaults, stateNameByCode);
         },
         buildRequestPayload: ({ values, shouldUpdate, editingItemId }) => {
@@ -1203,7 +1248,7 @@ export function useCompaniesModule() {
             compEinvoiceInclEway: isEinvoiceApplicable
               ? (values.compEinvoiceInclEway ?? "false") === "true"
               : false,
-            compStylesheetId: toNullableString(values.compStylesheetId ?? ""),
+            compStylesheetId: toNullableInteger(values.compStylesheetId ?? ""),
             compBankId: toNullableString(values.compBankId ?? ""),
             compPriceFixing: toNullableString(values.compPriceFixing ?? ""),
             compPrefixCode: toNullableString(values.compPrefixCode ?? ""),
@@ -1225,6 +1270,12 @@ export function useCompaniesModule() {
           return payload;
         },
       }),
-    [companyFormFields, stateCodeByName, stateNameByCode, state.seedSelected],
+    [
+      companyFormFields,
+      stateCodeByName,
+      stateNameByCode,
+      state.seedSelected,
+      appTheme.seedSelected,
+    ],
   );
 }
