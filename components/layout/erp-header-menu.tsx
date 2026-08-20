@@ -77,6 +77,31 @@ function focusParentMenuButton(button: HTMLButtonElement): boolean {
   return parentButton !== null;
 }
 
+function getRootMenuItemElement(element: HTMLElement): HTMLLIElement | null {
+  let current = getMenuItemElement(element);
+  let root: HTMLLIElement | null = null;
+  while (current) {
+    root = current;
+    current = current.parentElement?.closest(`li.${styles.menuItem}`) ?? null;
+  }
+  return root;
+}
+
+// Submenus open on :hover, so blurring alone leaves them open under the cursor
+// after a navigation click. Flag the root menu item until the pointer leaves it.
+function suppressHoverUntilPointerLeaves(button: HTMLButtonElement): void {
+  const root = getRootMenuItemElement(button);
+  if (!root || root.hasAttribute("data-menu-suppressed")) return;
+  root.setAttribute("data-menu-suppressed", "true");
+  const release = () => {
+    root.removeAttribute("data-menu-suppressed");
+    root.removeEventListener("pointerleave", release);
+    document.removeEventListener("keydown", release, true);
+  };
+  root.addEventListener("pointerleave", release);
+  document.addEventListener("keydown", release, true);
+}
+
 export function MenuLink({
   item,
   className,
@@ -92,17 +117,20 @@ export function MenuLink({
     (event: React.MouseEvent<HTMLButtonElement>) => {
       item.onClick?.();
       if (item.href && item.href !== "#") {
+        suppressHoverUntilPointerLeaves(event.currentTarget);
         event.currentTarget.blur();
         onMenuClose();
         onNavigate(item.href);
         return;
       }
       if (item.onClick && !hasSubmenu) {
+        suppressHoverUntilPointerLeaves(event.currentTarget);
         event.currentTarget.blur();
         onMenuClose();
         return;
       }
       if (!item.onClick && !hasSubmenu) {
+        suppressHoverUntilPointerLeaves(event.currentTarget);
         event.currentTarget.blur();
         onMenuClose();
         window.alert(`Navigating to ${item.label}`);

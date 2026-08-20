@@ -259,6 +259,15 @@
   transform: translate(0, 0);
 }
 
+/* Set on the root menu item after a submenu click so the menu closes even
+   while the pointer is still hovering it; cleared on pointerleave. */
+li.menuItem[data-menu-suppressed="true"] .submenuList {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate(var(--submenu-shift-x), var(--submenu-shift-y));
+}
+
 .submenuLink {
   width: 100%;
   min-height: 34px;

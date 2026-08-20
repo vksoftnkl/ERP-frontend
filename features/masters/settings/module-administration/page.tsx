@@ -341,7 +341,7 @@ export default function ModuleAdministrationPage() {
     <div style={S.page}>
       <div style={S.heading}>Module Administration</div>
       <div style={S.subtext}>
-        Control which menu items are visible across the application.
+        Control which menusss items are visible across the application.
       </div>
       <div style={S.card}>
         {/* Header */}
