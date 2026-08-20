@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./widget-visibility-tree.module.scss";
 
 /** One field leaf in the visibility tree. */
@@ -55,6 +55,42 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
+/**
+ * The on/off slider. `partial` drives the native `indeterminate` flag (a section
+ * that has only some of its fields on), which cannot be expressed as an
+ * attribute and has to be written to the DOM node.
+ */
+function Switch({
+  checked,
+  partial = false,
+  disabled,
+  onChange,
+}: {
+  checked: boolean;
+  partial?: boolean;
+  disabled: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.indeterminate = partial;
+    }
+  }, [partial]);
+  return (
+    <span className={`${styles.switch} ${partial ? styles.switchPartial : ""}`}>
+      <input
+        ref={inputRef}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className={styles.slider} />
+    </span>
+  );
+}
+
 export default function WidgetVisibilityTree({
   sections,
   loading,
@@ -78,6 +114,38 @@ export default function WidgetVisibilityTree({
       return next;
     });
   }, []);
+
+  // Section and field toggles are kept consistent with each other, so an operator
+  // never has to switch the section on first to make its fields count:
+  //   - toggling a section carries every one of its fields with it;
+  //   - switching a field on switches its section on;
+  //   - switching the last remaining field off switches the section off.
+  // Both callbacks are plain state setters on the hosting screen (section and field
+  // visibility live in separate maps and every one of them updates functionally), so
+  // fanning several calls out of one change event accumulates correctly.
+  const handleSectionToggle = useCallback(
+    (section: WidgetTreeSectionView, checked: boolean) => {
+      onToggleSection(section.sectionId, checked);
+      for (const field of section.fields) {
+        if (field.checked !== checked) {
+          onToggleField(field.fieldName, checked);
+        }
+      }
+    },
+    [onToggleField, onToggleSection],
+  );
+
+  const handleFieldToggle = useCallback(
+    (section: WidgetTreeSectionView, field: WidgetTreeFieldView, checked: boolean) => {
+      onToggleField(field.fieldName, checked);
+      const sectionStaysOn =
+        checked || section.fields.some((other) => other.fieldId !== field.fieldId && other.checked);
+      if (section.visible !== sectionStaysOn) {
+        onToggleSection(section.sectionId, sectionStaysOn);
+      }
+    },
+    [onToggleField, onToggleSection],
+  );
 
   // Visible/total across every field — drives the footer count and progress bar.
   const stats = useMemo(() => {
@@ -173,17 +241,16 @@ export default function WidgetVisibilityTree({
                     <Chevron open={isExpanded} />
                   </button>
                   <label className={styles.switchLabel}>
-                    <span className={styles.switch}>
-                      <input
-                        type="checkbox"
-                        checked={section.visible}
-                        disabled={disabled}
-                        onChange={(event) =>
-                          onToggleSection(section.sectionId, event.target.checked)
-                        }
-                      />
-                      <span className={styles.slider} />
-                    </span>
+                    <Switch
+                      checked={section.visible}
+                      partial={
+                        section.visible &&
+                        visibleCount > 0 &&
+                        visibleCount < section.fields.length
+                      }
+                      disabled={disabled}
+                      onChange={(checked) => handleSectionToggle(section, checked)}
+                    />
                     <span className={styles.sectionLabel}>{section.label}</span>
                   </label>
                   {section.fields.length > 0 ? (
@@ -204,17 +271,11 @@ export default function WidgetVisibilityTree({
                     >
                       <div className={`${styles.widgetCell} ${styles.indent}`}>
                         <label className={styles.switchLabel}>
-                          <span className={styles.switch}>
-                            <input
-                              type="checkbox"
-                              checked={field.checked}
-                              disabled={disabled}
-                              onChange={(event) =>
-                                onToggleField(field.fieldName, event.target.checked)
-                              }
-                            />
-                            <span className={styles.slider} />
-                          </span>
+                          <Switch
+                            checked={field.checked}
+                            disabled={disabled}
+                            onChange={(checked) => handleFieldToggle(section, field, checked)}
+                          />
                           <span className={styles.fieldLabel}>{field.label}</span>
                         </label>
                         {!field.controllable ? (

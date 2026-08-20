@@ -230,6 +230,16 @@ $cols: minmax(0, 1fr) 220px;
   }
 }
 
+// A section whose fields are only partly on: the knob rests mid-track so "some"
+// reads apart from both "all" and "none".
+.switchPartial input:checked + .slider {
+  background: #7fb4de;
+
+  &::before {
+    transform: translateX(6px);
+  }
+}
+
 .switch input:focus-visible + .slider {
   box-shadow: 0 0 0 2px rgba(15, 116, 201, 0.4);
 }
