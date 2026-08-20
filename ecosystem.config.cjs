@@ -23,7 +23,9 @@ module.exports = {
       instances: 1,
       exec_mode: "fork",
       interpreter: "none",
-      env: { NODE_ENV: "production", PORT: 3000 },
+      // PORT is overridable so a staging node or a local rehearsal can use another
+      // port; the platform only routes 3000, so that stays the default.
+      env: { NODE_ENV: "production", PORT: Number(process.env.PORT) || 3000 },
       // `next build` peaks around 1 GB, and it runs inside this process tree via
       // the start script -- a 1 GB ceiling would kill the build mid-flight and
       // loop forever. The platform already grants a 2560 MB heap.

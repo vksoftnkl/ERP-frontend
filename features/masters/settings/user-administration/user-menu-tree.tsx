@@ -70,6 +70,16 @@ function collectAllIds(nodes: MenuNode[]): number[] {
 function collectNodeAndDescendantIds(node: MenuNode): number[] {
   return collectAllIds([node]);
 }
+function collectParentIds(nodes: MenuNode[]): number[] {
+  const ids: number[] = [];
+  for (const node of nodes) {
+    if (node.children?.length) {
+      ids.push(node.menuId);
+      ids.push(...collectParentIds(node.children));
+    }
+  }
+  return ids;
+}
 export function parseMenuPermissions(raw: string): MenuPermission[] {
   try {
     const arr = JSON.parse(raw || "[]");
@@ -101,7 +111,9 @@ const S = {
   headerMenuCell: {
     display: "flex",
     alignItems: "center",
-    gap: "0.5rem",
+    flexWrap: "wrap" as const,
+    gap: "0.35rem",
+    minWidth: 0,
   } satisfies CSSProperties,
   headerPermCell: {
     textAlign: "center" as const,
@@ -114,6 +126,8 @@ const S = {
     cursor: "pointer",
     background: "white",
     color: "#374151",
+    whiteSpace: "nowrap" as const,
+    flexShrink: 0,
   } satisfies CSSProperties,
   scrollArea: {
     maxHeight: "24rem",
@@ -158,6 +172,8 @@ const S = {
     whiteSpace: "nowrap" as const,
     fontWeight: hasChildren ? 600 : 400,
     color: isSeparator ? "#9ca3af" : undefined,
+    cursor: hasChildren ? "pointer" : undefined,
+    userSelect: hasChildren ? ("none" as const) : undefined,
   }),
   empty: {
     padding: "1.5rem",
@@ -220,6 +236,9 @@ function MenuRow({
           <span
             title={node.menuName}
             style={S.menuName(node.menuSeparator, hasChildren)}
+            onClick={
+              hasChildren ? () => onToggleCollapsed(node.menuId) : undefined
+            }
           >
             {node.menuName}
           </span>
@@ -320,6 +339,12 @@ export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
       return next;
     });
   }, []);
+  const handleExpandAll = useCallback(() => {
+    setCollapsed(new Set());
+  }, []);
+  const handleCollapseAll = useCallback(() => {
+    setCollapsed(new Set(collectParentIds(menus)));
+  }, [menus]);
   const handleSelectAll = useCallback(() => {
     const all = collectAllIds(menus);
     const map = new Map(
@@ -378,6 +403,22 @@ export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
             disabled={disabled}
           >
             None
+          </button>
+          <button
+            type="button"
+            style={S.actionBtn}
+            onClick={handleExpandAll}
+            title="Expand all menus"
+          >
+            ⊞ Expand
+          </button>
+          <button
+            type="button"
+            style={S.actionBtn}
+            onClick={handleCollapseAll}
+            title="Collapse all menus"
+          >
+            ⊟ Collapse
           </button>
           <span style={{ fontWeight: 400, color: "#6b7280", marginLeft: "0.25rem" }}>
             {assignedCount}/{totalCount}

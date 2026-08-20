@@ -1,10 +1,12 @@
-name: CI
+name: CI / CD
 
 on:
   push:
     branches: [ main, master, dev ]
   pull_request:
     branches: [ main, master, dev ]
+  # Lets you redeploy the current dev tip from the Actions tab without a push.
+  workflow_dispatch:
 
 jobs:
   build:
@@ -45,3 +47,68 @@ jobs:
       - name: Build (webpack)
         if: ${{ !cancelled() }}
         run: npm run build -- --webpack
+
+  # Pushing to dev deploys to CloudJiffy, but only behind a green `build` job --
+  # the node installs production-only deps, so a broken build here is a broken
+  # build there.
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    # Never let two deploys interleave on one node; queue instead of cancelling,
+    # because cancelling mid-`npm ci` leaves node_modules half-written.
+    concurrency:
+      group: deploy-cloudjiffy-front
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://vknexttimber-front.cloudjiffy.net/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The script is piped over stdin rather than run from the node's checkout,
+      # so the deploy logic that runs is the one from THIS commit -- the node has
+      # not pulled yet at that point.
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.CLOUDJIFFY_SSH_KEY }}
+          SSH_TARGET: ${{ secrets.CLOUDJIFFY_SSH_TARGET }}
+          SSH_PORT: ${{ vars.CLOUDJIFFY_SSH_PORT || '3022' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_KEY:-}" ] || [ -z "${SSH_TARGET:-}" ]; then
+            echo "Missing CLOUDJIFFY_SSH_KEY / CLOUDJIFFY_SSH_TARGET secrets." >&2
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Pin the gate's host key for this run instead of disabling the check.
+          host="${SSH_TARGET##*@}"
+          ssh-keyscan -p "$SSH_PORT" -H "$host" >> ~/.ssh/known_hosts 2>/dev/null
+          if [ ! -s ~/.ssh/known_hosts ]; then
+            echo "ssh-keyscan got nothing from ${host}:${SSH_PORT} -- wrong host or port?" >&2
+            exit 1
+          fi
+
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" \
+              -o IdentitiesOnly=yes \
+              -o ConnectTimeout=20 \
+              -o ServerAliveInterval=30 \
+              "$SSH_TARGET" \
+              "DEPLOY_BRANCH=dev bash -s" < scripts/deploy-on-node.sh
+
+      - name: Verify the public URL
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 20); do
+            code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' https://vknexttimber-front.cloudjiffy.net/ || true)"
+            echo "balancer: $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 5
+          done
+          echo "Site did not return 200 through the balancer." >&2
+          exit 1
