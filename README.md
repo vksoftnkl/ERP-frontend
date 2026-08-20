@@ -68,6 +68,24 @@ production build exists. For local HTTPS use `npm run start:local-https` instead
   (e.g. `https://<backend-env>.cloudjiffy.net/api/v1`), never at a localhost address.
 - The deployed API must allowlist this frontend's origin in its `CORS_ORIGINS`
   (see `ecosystem.config.js` in the ERP server repo).
+- The node is launched by PM2 through `ecosystem.config.cjs`. Set
+  **`PROCESS_MANAGER_FILE=ecosystem.config.cjs`** in the node's environment
+  variables: without it `/usr/local/sbin/nodejs start` falls back to hunting for a
+  `server.js`/`app.js`/`index.js` in the app root, finds none (this is a Next.js
+  app), and the `nodejs.service` unit fails in milliseconds with no app running.
+- `ecosystem.config.cjs` must run **`npm start`**, never
+  `node_modules/next/dist/bin/next start`. Only `npm start` runs
+  `scripts/ensure-build.js`, which is what turns a pulled commit into a served
+  bundle. Pointing PM2 at the Next binary directly means a `git pull` lands new
+  code on disk that the browser never sees -- and a hard failure (exit 1, 502 at
+  the balancer) whenever `.next/BUILD_ID` is absent.
+- Confirm a real build exists after deploying: `.next` should be tens of MB and
+  contain `BUILD_ID`. A `.next` of a few hundred KB means there is no build.
+- `max_memory_restart` must stay above ~1.5G. `next build` peaks near 1 GB and
+  runs inside the PM2 process tree, so a 1G ceiling kills it mid-build in a loop.
+- A `.env.production` on the node does **not** override a `NEXT_PUBLIC_*` variable
+  already set in the platform environment -- Next.js leaves existing `process.env`
+  values alone. If the two disagree, the dashboard variable is what gets baked in.
 
 ## Environment Variables
 

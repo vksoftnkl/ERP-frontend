@@ -21,6 +21,7 @@ pnpm-debug.log*
 # local env files (production API base comes from the deploy platform's env vars)
 .env
 .env*.local
+.env.production
 
 # vercel
 .vercel
