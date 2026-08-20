@@ -12,6 +12,11 @@ const nextConfig = {
   typescript: {
     tsconfigPath: "tsconfig.build.json",
   },
+  // A deploy builds into a scratch directory and then swaps it into place, so
+  // `next build` never rewrites the `.next` the running server is serving from
+  // (doing that 502s the live site for the whole build). Unset in dev and in
+  // local builds, where this is just ".next".
+  distDir: process.env.NEXT_DIST_DIR || ".next",
 };
 
 export default nextConfig;

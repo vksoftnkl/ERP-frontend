@@ -87,6 +87,44 @@ production build exists. For local HTTPS use `npm run start:local-https` instead
   already set in the platform environment -- Next.js leaves existing `process.env`
   values alone. If the two disagree, the dashboard variable is what gets baked in.
 
+## Continuous deployment
+
+`.github/workflows/ci.yml` deploys to CloudJiffy on every push to `dev`, and only
+behind a green `build` job -- the node installs production-only deps, so a build
+that fails in CI fails there too.
+
+Two repository secrets are required (Settings -> Secrets and variables -> Actions):
+
+| secret | value |
+| --- | --- |
+| `CLOUDJIFFY_SSH_KEY` | private key whose public half is registered in your CloudJiffy account (Settings -> SSH Keys -> Public) |
+| `CLOUDJIFFY_SSH_TARGET` | the node's gate connection string, `<uid>@gate.cloudjiffy.net` (Dashboard -> node -> Web SSH -> "SSH access") |
+
+Optional repository *variable* `CLOUDJIFFY_SSH_PORT` overrides the default `3022`.
+
+The deploy pipes `scripts/deploy-on-node.sh` over SSH -- so the deploy logic that
+runs is the one from the pushed commit, not whatever the node last pulled. On the
+node it does:
+
+1. `git reset --hard origin/dev`
+2. `npm ci --omit=dev`, but only when `package.json`/`package-lock.json` moved
+3. refuses to continue if `NEXT_PUBLIC_API_BASE` is set nowhere -- otherwise the
+   bundle silently bakes in the localhost fallback
+4. builds into `.next-build` via `NEXT_DIST_DIR`, with `ensure-build.js --strict`
+   so a failed build fails the run instead of quietly serving the old bundle
+5. renames `.next-build` into place (previous build kept at `.next.previous`)
+6. `pm2 reload` + `pm2 save`, then polls `localhost:3000` until it answers 200
+
+Building to the side and swapping is what keeps the deploy quiet: building
+straight into `.next` rewrites the directory the running server reads from and
+502s the live site for the whole build (~17s measured). With the swap, a measured
+redeploy dropped 3 of 721 requests -- about 0.3s. A failed build touches nothing:
+the swap and the reload never run, and the old bundle keeps serving.
+
+To roll back, `mv .next .next.failed && mv .next.previous .next && pm2 reload ecosystem.config.cjs`.
+
+To deploy by hand: `ssh -p 3022 <uid>@gate.cloudjiffy.net 'bash -s' < scripts/deploy-on-node.sh`.
+
 ## Environment Variables
 
 Use `.env.local` for local config.

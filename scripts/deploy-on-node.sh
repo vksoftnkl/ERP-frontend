@@ -11,6 +11,18 @@
 # boot) would 502 the site for the entire build.
 set -euo pipefail
 
+# The `git reset --hard` below can rewrite THIS file, and bash reads a script
+# incrementally -- so running it in place risks executing a half-swapped file.
+# Over the CI pipe (`bash -s`) there is no file to clobber; when someone runs it
+# by hand from the checkout, re-exec from a private copy first. The copy deletes
+# itself immediately: on Linux the open fd keeps it readable to the end.
+if [ "${DEPLOY_REEXEC:-}" != "1" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+  _copy="$(mktemp)"
+  cat "${BASH_SOURCE[0]}" > "$_copy"
+  DEPLOY_REEXEC=1 exec bash "$_copy" "$@"
+fi
+[ "${DEPLOY_REEXEC:-}" = "1" ] && [ -f "$0" ] && rm -f "$0"
+
 BRANCH="${DEPLOY_BRANCH:-dev}"
 ROOT="${ROOT_DIR:-$HOME/ROOT}"
 APP_PORT="${PORT:-3000}"
@@ -68,9 +80,29 @@ echo "::deploy:: API base ${NEXT_PUBLIC_API_BASE:-<from .env.production>}"
 # Peak is ~1 GB; the platform grants a 2560 MB heap but a bare SSH shell may not
 # inherit NODE_OPTIONS, so set a floor when it is absent.
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=2048}"
-echo "::deploy:: building (old bundle still serving)"
-npx --no-install next build
-test -f .next/BUILD_ID || { echo "::deploy:: build produced no BUILD_ID" >&2; exit 1; }
+echo "::deploy:: building into .next-build (live site still serving .next)"
+# Two things matter here.
+#
+# 1. NEXT_DIST_DIR: building straight into `.next` rewrites the directory the
+#    running server reads from, which 502s the live site for the entire build
+#    (~17s measured). Build to the side, swap at the end.
+# 2. ensure-build.js, not `next build` directly -- it also writes
+#    deploy-fingerprint. Without that file the app's own ensure-build run at
+#    startup sees a fingerprint mismatch and rebuilds a SECOND time inside PM2.
+#
+# `--strict` makes a failed build fail the pipeline instead of quietly serving
+# the previous bundle.
+rm -rf .next-build
+NEXT_DIST_DIR=.next-build node scripts/ensure-build.js --strict
+test -f .next-build/BUILD_ID || { echo "::deploy:: build produced no BUILD_ID" >&2; exit 1; }
+
+# Swap: two renames on one filesystem, so the window where `.next` is missing is
+# sub-millisecond and the app is restarted immediately after anyway. The previous
+# build is kept for one generation to roll back to.
+rm -rf .next.previous
+[ -d .next ] && mv .next .next.previous
+mv .next-build .next
+echo "::deploy:: swapped in the new build (previous kept at .next.previous)"
 
 # ---------------------------------------------------------------- swap
 # BUILD_ID is now newer than every source file, so ensure-build.js no-ops and

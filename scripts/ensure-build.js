@@ -20,9 +20,13 @@ const { createHash } = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const strict = process.argv.includes("--strict");
 const root = path.resolve(__dirname, "..");
-const buildIdPath = path.join(root, ".next", "BUILD_ID");
-const fingerprintPath = path.join(root, ".next", "deploy-fingerprint");
+// Mirrors next.config.mjs: a deploy points this at a scratch dir it later swaps
+// into place, so the build markers must live beside that build, not in `.next`.
+const distDir = process.env.NEXT_DIST_DIR || ".next";
+const buildIdPath = path.join(root, distDir, "BUILD_ID");
+const fingerprintPath = path.join(root, distDir, "deploy-fingerprint");
 
 // Source roots plus the build-shaping files at the repo root.
 const SOURCE_DIRS = [
@@ -93,7 +97,11 @@ try {
   // A failed rebuild must not take the site down: if the previous bundle is
   // still on disk, serve it and shout in the log. Only a node with nothing to
   // serve fails the unit, because there `next start` would crash anyway.
-  if (!fs.existsSync(buildIdPath)) throw error;
+  //
+  // `--strict` opts out of that fallback. The deploy pipeline passes it because
+  // a CI run that "succeeds" by silently shipping the previous bundle is worse
+  // than a red build -- there, failing loud is the whole point.
+  if (strict || !fs.existsSync(buildIdPath)) throw error;
   console.error(
     "[ensure-build] BUILD FAILED -- starting the PREVIOUS build instead. " +
       "The site is live but STALE until this is fixed.",
