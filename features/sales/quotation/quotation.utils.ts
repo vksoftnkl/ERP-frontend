@@ -58,6 +58,69 @@ export function toNullableText(value: string | null | undefined, maxLength?: num
   return maxLength ? trimmed.slice(0, maxLength) : trimmed;
 }
 // ---------------------------------------------------------------------------
+// Size / CFT
+// ---------------------------------------------------------------------------
+/**
+ * Cubic feet from the dimensions an operator types into the Size cell.
+ *
+ * The trade is quoted in CFT and the operator keys the timber's dimensions as a
+ * product — `"45*2*2*6"` is length 45 **feet**, width 2 **inches**, thickness 2
+ * **inches**, 6 pieces. Feet × inch × inch is 144 times a cubic foot (12 × 12),
+ * so the CFT is the product over 144: `(45*2*2*6) / 144 = 7.5`.
+ *
+ * A single factor with no `*` is taken as an already-computed CFT and passed
+ * through untouched. That is what keeps a save/reload/re-save stable: the wire
+ * carries the computed number, so a reloaded quotation types back in as `"7.5"`,
+ * and dividing that by 144 a second time would quietly shrink the line to 0.052
+ * every time it was opened and saved again.
+ *
+ * Returns `null` for anything that is not a run of positive numbers — an empty
+ * cell, a stray letter, a trailing `*` — rather than a partial product.
+ */
+export const CFT_DIVISOR = 144;
+export function cubicFeetFromSize(value: string | null | undefined): number | null {
+  const text = (value ?? "").trim();
+  if (!text) {
+    return null;
+  }
+  const factors = text.split("*").map((part) => part.trim());
+  const numbers: number[] = [];
+  for (const factor of factors) {
+    // `Number("")` is 0 and `Number(" 1 ")` is 1, so an empty or blank factor
+    // has to be rejected before parsing rather than after.
+    if (!factor) {
+      return null;
+    }
+    const parsed = Number(factor);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return null;
+    }
+    numbers.push(parsed);
+  }
+  const product = numbers.reduce((total, factor) => total * factor, 1);
+  const cft = numbers.length === 1 ? product : product / CFT_DIVISOR;
+  // Three decimals, the precision the grid gives every other quantity. Rounded
+  // through a string so 0.1 * 3 style float dust never reaches the wire.
+  return Number(cft.toFixed(3));
+}
+/**
+ * What the size number is measured in, for `sqi_size_uom` / `soi_size_uom`. Sent
+ * only alongside a size — a unit on its own says nothing.
+ */
+export const SIZE_UOM = "CFT";
+/**
+ * The Size cell's value as the wire wants it: the computed CFT as text, since
+ * `sqi_size` is a varchar. `null` when the cell is empty or unparseable — the
+ * server would take the raw text, but a half-typed `"45*"` is not a size.
+ *
+ * Never the empty string: `ck_sqi_size` / `ck_soi_size` allow NULL but reject a
+ * blank, and the sale order service 400s on one explicitly.
+ */
+export function sizeCftText(value: string | null | undefined): string | null {
+  const cft = cubicFeetFromSize(value);
+  return cft === null ? null : String(cft);
+}
+// ---------------------------------------------------------------------------
 // Dates
 // ---------------------------------------------------------------------------
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -231,7 +294,9 @@ export function totalColumnWidth<TMeaning>(
  * owns which columns this deployment shows. If the layout could not be fetched
  * at all, the caller falls back to `defaultColumns`.
  */
-function resolveColumns<TMeaning extends { key: string; token: string; kind: GridCellKind }>(
+function resolveColumns<
+  TMeaning extends { key: string; token: string; kind: GridCellKind; aliases?: string[] },
+>(
   rows: UiTableColumnRow[] | undefined,
   meanings: TMeaning[],
   unit: ColumnWidthUnit,
@@ -240,6 +305,17 @@ function resolveColumns<TMeaning extends { key: string; token: string; kind: Gri
     return [];
   }
   const byKey = new Map(meanings.map((meaning) => [meaning.key, meaning]));
+  // A meaning's alternate names, for layouts that label the column differently —
+  // a name no meaning answers to drops the column off the grid entirely. A real
+  // token always outranks an alias, so declaration order cannot shadow one.
+  for (const meaning of meanings) {
+    for (const alias of meaning.aliases ?? []) {
+      const aliasKey = normalizeColumnToken(alias);
+      if (aliasKey && !byKey.has(aliasKey)) {
+        byKey.set(aliasKey, meaning);
+      }
+    }
+  }
   const resolved: ResolvedColumn<TMeaning>[] = [];
   // Two configured rows can land on one meaning — the serial column answers to
   // several names — and two columns sharing a key would be two React children

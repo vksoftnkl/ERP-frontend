@@ -13,12 +13,14 @@ import {
   accountingYearOf,
   addDays,
   buildPageList,
+  cubicFeetFromSize,
   daysBetween,
   fromDisplayDate,
   isRealDate,
   parseCell,
   resolveChargeColumns,
   resolveItemColumns,
+  sizeCftText,
   toDateInput,
   toDisplayDate,
   toNullableNumber,
@@ -92,6 +94,30 @@ describe("resolveItemColumns", () => {
     ]);
     expect(columns.map((column) => column.key)).toEqual(["slno", "description", "aliasname"]);
     expect(columns[2].visible).toBe(false);
+  });
+
+  it("resolves the size column under both names ui table 23 gives it", () => {
+    // Grid 23 carries the same free-text field twice: "Size" at 5 (where grids
+    // 18 and 24 also put it) and "ItemSize" at 90. Before the alias, only the
+    // trailing one matched and the column an operator expects after Description
+    // was missing from the grid entirely.
+    const columns = resolveItemColumns([
+      layoutRow(4, "Description"),
+      layoutRow(5, "Size"),
+      layoutRow(90, "ItemSize"),
+    ]);
+    expect(columns.map((column) => column.key)).toEqual(["slno", "description", "size"]);
+    // The lower column number wins; the duplicate is dropped, not rendered blank.
+    expect(columns[2].header).toBe("Size");
+    expect(columns[2].write).toBe("itemSize");
+    expect(columns[2].read).toBe("itemSize");
+  });
+
+  it("resolves the size column on a layout that only carries the alias", () => {
+    const columns = resolveItemColumns([layoutRow(90, "ItemSize")]);
+    expect(columns.map((column) => column.key)).toEqual(["slno", "size"]);
+    expect(columns[1].header).toBe("ItemSize");
+    expect(columns[1].write).toBe("itemSize");
   });
 
   it("matches on the name with punctuation and case stripped", () => {
@@ -284,5 +310,44 @@ describe("buildPageList", () => {
   it("never drops below page 1 even when currentPage is out of range", () => {
     expect(buildPageList(1, 1)).toEqual([1]);
     expect(buildPageList(0, 1)).toEqual([1]);
+  });
+});
+
+describe("cubicFeetFromSize", () => {
+  it("divides length(ft) x width(in) x thickness(in) x pieces by 144", () => {
+    // The worked example: 45ft x 2in x 2in x 6 pieces = 1080 / 144 = 7.5 CFT.
+    expect(cubicFeetFromSize("45*2*2*6")).toBe(7.5);
+    expect(cubicFeetFromSize("12*6*2*10")).toBe(10);
+  });
+
+  it("tolerates the spacing an operator types around the stars", () => {
+    expect(cubicFeetFromSize(" 45 * 2 * 2 * 6 ")).toBe(7.5);
+  });
+
+  it("takes a lone number as an already-computed CFT, not a dimension", () => {
+    // This is the round trip: the wire carries "7.5", it loads back into the
+    // cell, and re-saving must not divide it by 144 a second time.
+    expect(cubicFeetFromSize("7.5")).toBe(7.5);
+    expect(cubicFeetFromSize(cubicFeetFromSize("45*2*2*6")?.toString() ?? "")).toBe(7.5);
+  });
+
+  it("rounds to three decimals rather than sending float dust", () => {
+    // 1/144 = 0.0069444...
+    expect(cubicFeetFromSize("1*1*1*1")).toBe(0.007);
+    expect(cubicFeetFromSize("10*3*2.5*4")).toBe(2.083);
+  });
+
+  it("returns null for anything that is not a run of positive numbers", () => {
+    for (const bad of ["", "   ", "45*", "*6", "45**6", "45*abc", "45*0*2", "-45*2*2*6", "abc"]) {
+      expect(cubicFeetFromSize(bad)).toBeNull();
+    }
+    expect(cubicFeetFromSize(null)).toBeNull();
+    expect(cubicFeetFromSize(undefined)).toBeNull();
+  });
+
+  it("renders the wire text through sizeCftText", () => {
+    expect(sizeCftText("45*2*2*6")).toBe("7.5");
+    expect(sizeCftText("45*")).toBeNull();
+    expect(sizeCftText("")).toBeNull();
   });
 });

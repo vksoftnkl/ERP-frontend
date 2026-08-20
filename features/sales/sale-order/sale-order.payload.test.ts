@@ -140,6 +140,23 @@ describe("buildSavePayload", () => {
     }
   });
 
+  it("sends the size column as the CFT the typed dimensions work out to", () => {
+    // Same arithmetic as the quotation grid: 45ft x 2in x 2in x 6 = 1080 / 144.
+    const draft = draftWithLine();
+    draft.lines = [{ ...draft.lines[0], itemSize: "45*2*2*6" }];
+    const item = buildSavePayload(draft, pricingOf(draft), ACTOR).items?.[0];
+    expect(item?.soiSize).toBe("7.5");
+    expect(item?.soiSizeUom).toBe("CFT");
+  });
+
+  it("sends no size at all rather than the blank ck_soi_size rejects", () => {
+    const draft = draftWithLine();
+    draft.lines = [{ ...draft.lines[0], itemSize: "   " }];
+    const item = buildSavePayload(draft, pricingOf(draft), ACTOR).items?.[0];
+    expect(item?.soiSize).toBeNull();
+    expect(item?.soiSizeUom).toBeNull();
+  });
+
   it("sends the two uuid[] people columns as lists, never null", () => {
     const draft = draftWithLine();
     draft.header = {
@@ -500,7 +517,8 @@ describe("source trail and the customer lock", () => {
         sqiSchemeId: null,
         sqiSchemeName: null,
         sqiRemarks: null,
-        sqiItemSize: null,
+        sqiSize: null,
+        sqiSizeUom: null,
         sqiItemName: "Widget",
         sqiUnitName: "NOS",
       },

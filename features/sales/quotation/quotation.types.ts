@@ -125,7 +125,10 @@ export type SaveQuotationItemDto = {
   sqiSchemeId?: string | null;
   sqiSchemeName?: string | null;
   sqiRemarks?: string | null;
-  sqiItemSize?: string | null;
+  /** `sqi_size`, varchar(50) — the line's CFT. See `sizeCftText`. */
+  sqiSize?: string | null;
+  /** `sqi_size_uom`, varchar(20) — `"CFT"` whenever a size is sent. */
+  sqiSizeUom?: string | null;
 };
 
 export type SaveQuotationChargeDto = {
@@ -333,7 +336,8 @@ export type QuotationItemPayload = {
   sqiSchemeId: string | null;
   sqiSchemeName: string | null;
   sqiRemarks: string | null;
-  sqiItemSize: string | null;
+  sqiSize: string | null;
+  sqiSizeUom: string | null;
   /** Joined display names — populated on GET only, `null` on the save response. */
   sqiItemName: string | null;
   sqiUnitName: string | null;

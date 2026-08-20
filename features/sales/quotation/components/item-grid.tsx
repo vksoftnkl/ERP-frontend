@@ -22,12 +22,32 @@ import {
   type ItemColumnMeaning,
 } from "../quotation.constants";
 import type { DraftLine, ItemUnitOption } from "../quotation.types";
-import { isFrozenColumn, totalColumnWidth, type ResolvedItemColumn } from "../quotation.utils";
+import {
+  cubicFeetFromSize,
+  isFrozenColumn,
+  sizeCftText,
+  totalColumnWidth,
+  type ResolvedItemColumn,
+} from "../quotation.utils";
 import { GridCell } from "./grid-cell";
 import { focusCell, focusLastCellAfterRender, moveCellFocus } from "./grid-focus";
 import styles from "../page.module.scss";
 
 export const ITEM_GRID_NAME = "items";
+
+/**
+ * The Size cell's hover text: `"7.5 CFT"` once the dimensions have collapsed to
+ * their result, and `"45*2*2*6 = 7.5 CFT"` in the moment before they do. Nothing
+ * at all while the cell holds something that is not a size.
+ */
+function sizeCellTitle(value: unknown): string | undefined {
+  const text = typeof value === "string" ? value.trim() : "";
+  const cft = cubicFeetFromSize(text);
+  if (cft === null) {
+    return undefined;
+  }
+  return text === String(cft) ? `${cft} CFT` : `${text} = ${cft} CFT`;
+}
 
 /** The sticky remove-row column. */
 const ROW_ACTION_PX = 30;
@@ -256,6 +276,12 @@ export function ItemGrid(props: ItemGridProps) {
                         }
                         align={column.align}
                         precision={column.precision}
+                        // The Size cell holds the dimensions the operator typed;
+                        // the CFT they work out to is what the save sends, so it
+                        // is shown on hover rather than left to be guessed at.
+                        title={
+                          column.write === "itemSize" ? sizeCellTitle(value) : undefined
+                        }
                         editable={cellEditable}
                         invalid={invalid}
                         options={options}
@@ -283,6 +309,16 @@ export function ItemGrid(props: ItemGridProps) {
                           }
                           if (column.write === "barcode") {
                             onSetField(line.key, "barcode", raw);
+                            return;
+                          }
+                          if (column.write === "itemSize") {
+                            // The dimensions collapse to their CFT the moment the
+                            // cell is committed: `"45*2*2*6"` becomes `"7.5"`, the
+                            // number the operator quotes on and the save sends.
+                            // Text that does not work out to a size is left as
+                            // keyed, so a half-typed cell can be corrected rather
+                            // than wiped out from under the operator.
+                            onSetField(line.key, "itemSize", sizeCftText(raw) ?? raw);
                             return;
                           }
                           onSetField(line.key, column.write, raw);

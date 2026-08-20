@@ -45,6 +45,8 @@ export type SaveSaleOrderItemDto = {
   soiHsnCode?: string | null;
   soiEanCode?: string | null;
   soiSize?: string | null;
+  /** `soi_size_uom`, varchar(20) — `"CFT"` whenever a size is sent. */
+  soiSizeUom?: string | null;
   soiGodownId?: string | null;
   soiIsTaxIncl?: boolean;
   soiIsPromo?: boolean;
@@ -287,6 +289,7 @@ export type SaleOrderItemPayload = {
   soiHsnCode: string | null;
   soiEanCode: string | null;
   soiSize: string | null;
+  soiSizeUom: string | null;
   soiGodownId: string | null;
   soiIsTaxIncl: boolean;
   soiIsPromo: boolean;

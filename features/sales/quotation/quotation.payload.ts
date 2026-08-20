@@ -40,6 +40,8 @@ import type {
 import {
   asEnum,
   nextRowKey,
+  SIZE_UOM,
+  sizeCftText,
   toDateInput,
   toNullableNumber,
   toNullableText,
@@ -82,6 +84,7 @@ function dateOrNull(value: string): string | null {
   return trimmed ? trimmed : null;
 }
 function itemDto(line: DraftLine, priced: PricedLine, index: number): SaveQuotationItemDto {
+  const sizeCft = sizeCftText(line.itemSize);
   return {
     // Present → update that line; absent → insert. An active line missing from
     // the array is soft deleted server-side, which is exactly what removing a
@@ -164,7 +167,11 @@ function itemDto(line: DraftLine, priced: PricedLine, index: number): SaveQuotat
     sqiSchemeId: line.schemeId,
     sqiSchemeName: toNullableText(line.schemeName, 150),
     sqiRemarks: toNullableText(line.remarks, 250),
-    sqiItemSize: toNullableText(line.itemSize, 50),
+    // The operator keys dimensions (`"45*2*2*6"`); the wire carries the CFT they
+    // work out to. `sqiSize` — never `sqiItemSize`, which the item DTO rejects
+    // outright under `forbidNonWhitelisted` and 400s the whole save.
+    sqiSize: sizeCft,
+    sqiSizeUom: sizeCft === null ? null : SIZE_UOM,
   };
 }
 /**
@@ -399,7 +406,7 @@ function lineFromPayload(item: NonNullable<QuotationPayload["items"]>[number]): 
     schemeName: item.sqiSchemeName,
     schemeFlag: Boolean(item.sqiSchemeId),
     remarks: item.sqiRemarks,
-    itemSize: item.sqiItemSize,
+    itemSize: item.sqiSize,
   });
 }
 /** Exported for the Sale Order screen — same table, same wire, same parse. */

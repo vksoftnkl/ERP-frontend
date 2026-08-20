@@ -36,6 +36,8 @@ export type GridCellProps = {
   invalid?: boolean;
   /** Painted after the value, never stored in it (the charge grid's rate units). */
   suffix?: string;
+  /** Hover text. Defaults to the raw value — the Size cell shows its CFT here. */
+  title?: string;
   options?: GridCellOption[];
   placeholder?: string;
   /** Identifies the cell for the Enter-to-next-cell walker. */
@@ -96,6 +98,7 @@ export function GridCell(props: GridCellProps) {
     editable,
     invalid,
     suffix,
+    title,
     options,
     placeholder,
     gridName,
@@ -258,7 +261,7 @@ export function GridCell(props: GridCellProps) {
       value={shown}
       disabled={!editable}
       placeholder={placeholder}
-      title={typeof value === "string" ? value : undefined}
+      title={title ?? (typeof value === "string" ? value : undefined)}
       onFocus={(event) => {
         if (!editable) {
           return;

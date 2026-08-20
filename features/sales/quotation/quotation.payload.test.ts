@@ -99,6 +99,113 @@ function payloadOf(draft: QuotationDraft): SaveQuotationDto {
 }
 
 /** Exactly the keys `SaveQuotationDto` declares. Anything else is a 400. */
+/**
+ * Every property `SaveQuotationItemDto` declares. The item DTO is validated
+ * with `forbidNonWhitelisted`, so one property it does not know 400s the whole
+ * save — which is exactly what a stray `sqiItemSize` did until the size column
+ * was moved onto the real `sqiSize` field.
+ */
+const ALLOWED_ITEM_KEYS = new Set<string>([
+  "sqiAccYear",
+  "sqiAcessAmt",
+  "sqiAcessPerc",
+  "sqiAcessPerUnit",
+  "sqiActPrice",
+  "sqiAddlDisc1Amt",
+  "sqiAddlDisc1Perc",
+  "sqiAddlDisc2Amt",
+  "sqiAddlDisc2Perc",
+  "sqiAvailableStock",
+  "sqiBatchDate",
+  "sqiBatchNo",
+  "sqiBillQty",
+  "sqiBillSchAmt",
+  "sqiBillSchPerc",
+  "sqiBillSchQty",
+  "sqiBranchId",
+  "sqiCaseQty",
+  "sqiCashDiscAmt",
+  "sqiCashDiscPerc",
+  "sqiCessAmt",
+  "sqiCessPerc",
+  "sqiCessPerUnit",
+  "sqiCgstAmt",
+  "sqiCgstPerc",
+  "sqiChrgAfterTax",
+  "sqiChrgBeforeTax",
+  "sqiCompanyId",
+  "sqiCostPreTax",
+  "sqiCostPrice",
+  "sqiCreatedBy",
+  "sqiEanCode",
+  "sqiExpiryDate",
+  "sqiFreeType",
+  "sqiFreightAmt",
+  "sqiFreightQty",
+  "sqiGrossAmt",
+  "sqiHasFreight",
+  "sqiHsnCode",
+  "sqiId",
+  "sqiIgstAmt",
+  "sqiIgstPerc",
+  "sqiIsFree",
+  "sqiIsPromo",
+  "sqiIsService",
+  "sqiIsTaxIncl",
+  "sqiItemDiscAmt",
+  "sqiItemDiscPerc",
+  "sqiItemDiscQty",
+  "sqiItemId",
+  "sqiItemProfit",
+  "sqiItemUnitId",
+  "sqiLengthQty",
+  "sqiLineNo",
+  "sqiLoadAmt",
+  "sqiLoadQty",
+  "sqiMaxPrice",
+  "sqiMinPrice",
+  "sqiModifiedBy",
+  "sqiMrpSavings",
+  "sqiMrpSavingsPerc",
+  "sqiNetAmt",
+  "sqiNetGross",
+  "sqiNetQty",
+  "sqiPriceLevel",
+  "sqiProfitPreTax",
+  "sqiQuoteId",
+  "sqiQuotePreTax",
+  "sqiQuotePrice",
+  "sqiRate",
+  "sqiRateDiff",
+  "sqiRatePreTax",
+  "sqiRemarks",
+  "sqiRoundOff",
+  "sqiSchDiscAmt",
+  "sqiSchDiscPerc",
+  "sqiSchDiscQty",
+  "sqiSchemeId",
+  "sqiSchemeName",
+  "sqiSgstAmt",
+  "sqiSgstPerc",
+  "sqiSize",
+  "sqiSizeUom",
+  "sqiSplDiscAmt",
+  "sqiSplDiscPerc",
+  "sqiSplDiscQty",
+  "sqiSrcDocRefno",
+  "sqiSrcDocType",
+  "sqiSrcItemId",
+  "sqiSrcItemQty",
+  "sqiSrcUnitId",
+  "sqiTaxableAmt",
+  "sqiTaxAmt",
+  "sqiTaxPerc",
+  "sqiTenantId",
+  "sqiToBaseFactor",
+  "sqiUnloadAmt",
+  "sqiUnloadQty",
+  "sqiWeightQty",
+]);
 const ALLOWED_HEADER_KEYS = new Set<string>([
   "sqId",
   "sqCompanyId",
@@ -221,6 +328,29 @@ describe("buildSavePayload", () => {
     const payload = payloadOf(baseDraft()) as Record<string, unknown>;
     const stray = Object.keys(payload).filter((key) => !ALLOWED_HEADER_KEYS.has(key));
     expect(stray).toEqual([]);
+  });
+
+  it("declares no LINE property the DTO would reject", () => {
+    // The header had this guard; the lines did not, and `sqiItemSize` — a field
+    // no DTO has ever carried — rode along on every save until it did.
+    const line = (payloadOf(baseDraft()).items?.[0] ?? {}) as Record<string, unknown>;
+    expect(Object.keys(line).length).toBeGreaterThan(0);
+    expect(Object.keys(line).filter((key) => !ALLOWED_ITEM_KEYS.has(key))).toEqual([]);
+  });
+
+  it("sends the size column as the CFT the typed dimensions work out to", () => {
+    const draft = baseDraft();
+    const payload = payloadOf({
+      ...draft,
+      lines: [{ ...draft.lines[0], itemSize: "45*2*2*6" }],
+    });
+    expect(payload.items?.[0].sqiSize).toBe("7.5");
+    expect(payload.items?.[0].sqiSizeUom).toBe("CFT");
+
+    // An empty cell sends null, not "" — `ck_sqi_size` rejects a blank — and no
+    // unit either, since a unit with nothing to measure says nothing.
+    expect(payloadOf(draft).items?.[0].sqiSize).toBeNull();
+    expect(payloadOf(draft).items?.[0].sqiSizeUom).toBeNull();
   });
 
   it("never sends null for a boolean — it reaches a NOT NULL column as a 500", () => {

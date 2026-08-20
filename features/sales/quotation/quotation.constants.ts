@@ -418,6 +418,13 @@ export type ItemColumnMeaning = {
   precision?: number;
   /** Only editable while this predicate holds (beyond the screen-wide gate). */
   editableWhen?: "batchConfig" | "hasFreight" | "editPrice";
+  /**
+   * Further verbatim `ui_tbl_clm_name`s that mean this same column, for layouts
+   * that name it differently. Normalised by the resolver, like `token` is; a
+   * layout carrying both a token and an alias row keeps the lower column number
+   * and drops the other as a duplicate.
+   */
+  aliases?: string[];
 };
 function itemColumn(
   token: string,
@@ -444,6 +451,15 @@ export const ITEM_COLUMN_MEANINGS: ItemColumnMeaning[] = [
   itemColumn("Barcode", "text", "left", { write: "barcode", read: "barcode" }),
   itemColumn("Code", "text", "left", { read: "itemCode" }),
   itemColumn("Description", "itemLookup", "left", { read: "itemName" }),
+  // Grids 18, 23 and 24 all carry the item's free-text size here, named "Size".
+  // Grid 23 additionally carries a second row for the same field named
+  // "ItemSize" (column 90), which resolves to this meaning through the alias and
+  // is then dropped as a duplicate — the lower column number wins.
+  itemColumn("Size", "text", "left", {
+    write: "itemSize",
+    read: "itemSize",
+    aliases: ["ItemSize"],
+  }),
   itemColumn("AliasName", "text", "left", { read: "aliasName" }),
   itemColumn("Hsn", "text", "left", { read: "hsnCode" }),
   itemColumn("BatchNo", "text", "left", {
@@ -553,7 +569,6 @@ export const ITEM_COLUMN_MEANINGS: ItemColumnMeaning[] = [
   itemColumn("IsInclusiveTax", "check", "center", { read: "isInclusiveTax" }),
   itemColumn("NetB.Tax", "rate", "right", { read: "netPriceBeforeTax", precision: 4 }),
   itemColumn("Diff", "currency", "right", { read: "rateDiff" }),
-  itemColumn("ItemSize", "text", "left", { write: "itemSize", read: "itemSize" }),
 ];
 export type ChargeColumnMeaning = {
   token: string;

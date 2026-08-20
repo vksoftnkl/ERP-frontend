@@ -26,6 +26,8 @@ import type {
 import { parseLoadedDocument as parseLoadedQuotation } from "@/features/sales/quotation/quotation.payload";
 import {
   asEnum,
+  SIZE_UOM,
+  sizeCftText,
   toDateInput,
   toNullableNumber,
   toNullableText,
@@ -90,6 +92,7 @@ export function buildSaveItemPayload(
   priced: PricedLine,
   index: number,
 ): SaveSaleOrderItemDto {
+  const sizeCft = sizeCftText(line.itemSize);
   return {
     ...(line.soiId ? { soiId: line.soiId } : {}),
     soiLineNo: index + 1,
@@ -104,7 +107,10 @@ export function buildSaveItemPayload(
     soiToBaseFactor: line.toBaseFactor,
     soiHsnCode: toNullableText(line.hsnCode, 8),
     soiEanCode: toNullableText(line.barcode, 100),
-    soiSize: toNullableText(line.itemSize, 50),
+    // Same Size cell, same CFT arithmetic as the quotation grid — the operator
+    // keys dimensions and the wire carries what they work out to.
+    soiSize: sizeCft,
+    soiSizeUom: sizeCft === null ? null : SIZE_UOM,
     soiGodownId: line.godownId,
     soiIsTaxIncl: line.isInclusiveTax,
     soiIsPromo: line.isPromo,
