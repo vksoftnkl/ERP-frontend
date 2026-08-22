@@ -25,7 +25,6 @@ import type { DraftLine, ItemUnitOption } from "../quotation.types";
 import {
   cubicFeetFromSize,
   isFrozenColumn,
-  sizeCftText,
   totalColumnWidth,
   type ResolvedItemColumn,
 } from "../quotation.utils";
@@ -36,9 +35,9 @@ import styles from "../page.module.scss";
 export const ITEM_GRID_NAME = "items";
 
 /**
- * The Size cell's hover text: `"7.5 CFT"` once the dimensions have collapsed to
- * their result, and `"45*2*2*6 = 7.5 CFT"` in the moment before they do. Nothing
- * at all while the cell holds something that is not a size.
+ * The Size cell's hover text — `"45*2*2*6 = 7.5 CFT"`, the Bill Qty the keyed
+ * dimensions produced, or plain `"7.5 CFT"` when a bare CFT was keyed. Nothing at
+ * all while the cell holds something that is not a size.
  */
 function sizeCellTitle(value: unknown): string | undefined {
   const text = typeof value === "string" ? value.trim() : "";
@@ -312,13 +311,18 @@ export function ItemGrid(props: ItemGridProps) {
                             return;
                           }
                           if (column.write === "itemSize") {
-                            // The dimensions collapse to their CFT the moment the
-                            // cell is committed: `"45*2*2*6"` becomes `"7.5"`, the
-                            // number the operator quotes on and the save sends.
-                            // Text that does not work out to a size is left as
-                            // keyed, so a half-typed cell can be corrected rather
-                            // than wiped out from under the operator.
-                            onSetField(line.key, "itemSize", sizeCftText(raw) ?? raw);
+                            // The cell keeps the dimensions exactly as keyed —
+                            // `sqi_size` / `soi_size` store them verbatim so a
+                            // reprint shows the size the customer was quoted. What
+                            // they work out to lands in Bill Qty instead: that CFT
+                            // is the quantity the line is priced on. Text that is
+                            // not a size leaves the quantity alone rather than
+                            // zeroing a line still being typed into.
+                            onSetField(line.key, "itemSize", raw);
+                            const cft = cubicFeetFromSize(raw);
+                            if (cft !== null) {
+                              onSetField(line.key, "billQty", String(cft));
+                            }
                             return;
                           }
                           onSetField(line.key, column.write, raw);

@@ -68,14 +68,15 @@ export function toNullableText(value: string | null | undefined, maxLength?: num
  * **inches**, 6 pieces. Feet × inch × inch is 144 times a cubic foot (12 × 12),
  * so the CFT is the product over 144: `(45*2*2*6) / 144 = 7.5`.
  *
+ * The result is what the grid writes into Bill Qty; the Size cell itself keeps
+ * the dimensions verbatim, so nothing here is ever fed its own output back.
  * A single factor with no `*` is taken as an already-computed CFT and passed
- * through untouched. That is what keeps a save/reload/re-save stable: the wire
- * carries the computed number, so a reloaded quotation types back in as `"7.5"`,
- * and dividing that by 144 a second time would quietly shrink the line to 0.052
- * every time it was opened and saved again.
+ * through untouched — keying `"7.5"` means 7.5 CFT, not 7.5 divided by 144.
  *
- * Returns `null` for anything that is not a run of positive numbers — an empty
- * cell, a stray letter, a trailing `*` — rather than a partial product.
+ * A trailing star is how the dimensions read on the way to the next factor, so
+ * `"8*8*8*8*"` is the same size as `"8*8*8*8"`. Anything else that is not a run
+ * of positive numbers — an empty cell, a stray letter, a gap between two stars —
+ * returns `null` rather than a partial product.
  */
 export const CFT_DIVISOR = 144;
 export function cubicFeetFromSize(value: string | null | undefined): number | null {
@@ -83,7 +84,9 @@ export function cubicFeetFromSize(value: string | null | undefined): number | nu
   if (!text) {
     return null;
   }
-  const factors = text.split("*").map((part) => part.trim());
+  // A trailing star is mid-keying, not a missing factor: drop it before the
+  // split so `"8*8*8*8*"` is the size it plainly means.
+  const factors = text.replace(/\*+$/, "").split("*").map((part) => part.trim());
   const numbers: number[] = [];
   for (const factor of factors) {
     // `Number("")` is 0 and `Number(" 1 ")` is 1, so an empty or blank factor
@@ -104,22 +107,11 @@ export function cubicFeetFromSize(value: string | null | undefined): number | nu
   return Number(cft.toFixed(3));
 }
 /**
- * What the size number is measured in, for `sqi_size_uom` / `soi_size_uom`. Sent
- * only alongside a size — a unit on its own says nothing.
+ * What the size works out to, for `sqi_size_uom` / `soi_size_uom` — the unit of
+ * the Bill Qty the dimensions produced. Sent only alongside a size, since a unit
+ * on its own says nothing.
  */
 export const SIZE_UOM = "CFT";
-/**
- * The Size cell's value as the wire wants it: the computed CFT as text, since
- * `sqi_size` is a varchar. `null` when the cell is empty or unparseable — the
- * server would take the raw text, but a half-typed `"45*"` is not a size.
- *
- * Never the empty string: `ck_sqi_size` / `ck_soi_size` allow NULL but reject a
- * blank, and the sale order service 400s on one explicitly.
- */
-export function sizeCftText(value: string | null | undefined): string | null {
-  const cft = cubicFeetFromSize(value);
-  return cft === null ? null : String(cft);
-}
 // ---------------------------------------------------------------------------
 // Dates
 // ---------------------------------------------------------------------------

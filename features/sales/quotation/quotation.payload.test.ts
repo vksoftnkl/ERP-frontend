@@ -338,13 +338,16 @@ describe("buildSavePayload", () => {
     expect(Object.keys(line).filter((key) => !ALLOWED_ITEM_KEYS.has(key))).toEqual([]);
   });
 
-  it("sends the size column as the CFT the typed dimensions work out to", () => {
+  it("sends the size column as the dimensions were typed, never as the CFT", () => {
+    // The CFT the dimensions work out to rides on sqiBillQty, which the grid
+    // wrote when the Size cell was committed; sqi_size keeps them verbatim so a
+    // reprint shows the size the customer was quoted.
     const draft = baseDraft();
     const payload = payloadOf({
       ...draft,
       lines: [{ ...draft.lines[0], itemSize: "45*2*2*6" }],
     });
-    expect(payload.items?.[0].sqiSize).toBe("7.5");
+    expect(payload.items?.[0].sqiSize).toBe("45*2*2*6");
     expect(payload.items?.[0].sqiSizeUom).toBe("CFT");
 
     // An empty cell sends null, not "" — `ck_sqi_size` rejects a blank — and no

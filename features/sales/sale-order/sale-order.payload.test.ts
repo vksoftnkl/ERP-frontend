@@ -140,12 +140,13 @@ describe("buildSavePayload", () => {
     }
   });
 
-  it("sends the size column as the CFT the typed dimensions work out to", () => {
-    // Same arithmetic as the quotation grid: 45ft x 2in x 2in x 6 = 1080 / 144.
+  it("sends the size column as the dimensions were typed, never as the CFT", () => {
+    // Same as the quotation grid: the dimensions travel verbatim and the CFT
+    // they work out to travels as soiBillQty.
     const draft = draftWithLine();
     draft.lines = [{ ...draft.lines[0], itemSize: "45*2*2*6" }];
     const item = buildSavePayload(draft, pricingOf(draft), ACTOR).items?.[0];
-    expect(item?.soiSize).toBe("7.5");
+    expect(item?.soiSize).toBe("45*2*2*6");
     expect(item?.soiSizeUom).toBe("CFT");
   });
 

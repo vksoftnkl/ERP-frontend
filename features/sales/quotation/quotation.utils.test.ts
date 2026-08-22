@@ -20,7 +20,6 @@ import {
   parseCell,
   resolveChargeColumns,
   resolveItemColumns,
-  sizeCftText,
   toDateInput,
   toDisplayDate,
   toNullableNumber,
@@ -325,10 +324,17 @@ describe("cubicFeetFromSize", () => {
   });
 
   it("takes a lone number as an already-computed CFT, not a dimension", () => {
-    // This is the round trip: the wire carries "7.5", it loads back into the
-    // cell, and re-saving must not divide it by 144 a second time.
+    // Keying "7.5" into the Size cell means 7.5 CFT of Bill Qty, not 7.5 / 144.
     expect(cubicFeetFromSize("7.5")).toBe(7.5);
     expect(cubicFeetFromSize(cubicFeetFromSize("45*2*2*6")?.toString() ?? "")).toBe(7.5);
+  });
+
+  it("reads a trailing star as mid-keying rather than a missing factor", () => {
+    // "8*8*8*8*" is what the cell holds when the operator tabs away after the
+    // star: 4096 / 144, the same size as "8*8*8*8".
+    expect(cubicFeetFromSize("8*8*8*8*")).toBe(28.444);
+    expect(cubicFeetFromSize("8*8*8*8")).toBe(28.444);
+    expect(cubicFeetFromSize("45*2*2*6**")).toBe(7.5);
   });
 
   it("rounds to three decimals rather than sending float dust", () => {
@@ -338,16 +344,11 @@ describe("cubicFeetFromSize", () => {
   });
 
   it("returns null for anything that is not a run of positive numbers", () => {
-    for (const bad of ["", "   ", "45*", "*6", "45**6", "45*abc", "45*0*2", "-45*2*2*6", "abc"]) {
+    for (const bad of ["", "   ", "*", "*6", "45**6", "45*abc", "45*0*2", "-45*2*2*6", "abc"]) {
       expect(cubicFeetFromSize(bad)).toBeNull();
     }
     expect(cubicFeetFromSize(null)).toBeNull();
     expect(cubicFeetFromSize(undefined)).toBeNull();
   });
 
-  it("renders the wire text through sizeCftText", () => {
-    expect(sizeCftText("45*2*2*6")).toBe("7.5");
-    expect(sizeCftText("45*")).toBeNull();
-    expect(sizeCftText("")).toBeNull();
-  });
 });
