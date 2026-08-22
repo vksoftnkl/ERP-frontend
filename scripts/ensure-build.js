@@ -90,7 +90,26 @@ if (!reason) {
   process.exit(0);
 }
 
+// Next writes one route-type stub per page into `<distDir>/types`, and
+// tsconfig.json type-checks `.next/types` whatever distDir the build actually
+// uses (a deploy points NEXT_DIST_DIR at a scratch dir). Stubs left behind by an
+// earlier build therefore keep validating routes that have since moved or been
+// deleted -- `Cannot find module '../../app/(marketing)/page.js'` fails a build
+// whose sources are perfectly fine. They are regenerated from the live route
+// tree on every build, and `next start` never reads them, so clearing them first
+// costs nothing.
+function clearGeneratedRouteTypes() {
+  for (const target of new Set([
+    path.join(root, distDir, "types"),
+    path.join(root, ".next", "types"),
+    path.join(root, ".next", "dev", "types"),
+  ])) {
+    fs.rmSync(target, { recursive: true, force: true });
+  }
+}
+
 console.log(`[ensure-build] rebuilding: ${reason}`);
+clearGeneratedRouteTypes();
 try {
   execFileSync("npx", ["--no-install", "next", "build"], { cwd: root, stdio: "inherit" });
 } catch (error) {
