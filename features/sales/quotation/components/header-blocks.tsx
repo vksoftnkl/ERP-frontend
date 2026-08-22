@@ -431,7 +431,9 @@ export function TermsBlock({
   }
   return (
     <GroupBox title="Terms" onContextMenu={onContextMenu}>
-      <div className={`${styles.fieldGrid} ${styles.fieldGridWide}`}>
+      {/* One field per row: the two textareas are the point of this panel and a
+          second column halves the width they get. */}
+      <div className={styles.fieldGrid}>
         {fields.isVisible("remarks") ? (
           <Field label={fields.labelFor("remarks")} htmlFor="quotation-remarks">
             <textarea

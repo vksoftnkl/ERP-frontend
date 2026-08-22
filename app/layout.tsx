@@ -7,6 +7,7 @@ import { BusinessContextProvider } from "@/components/layout/business-context";
 import GlobalErpHeader from "@/components/layout/global-erp-header";
 import GlobalRouteGuard from "@/components/auth/global-route-guard";
 import GlobalLoader from "@/components/feedback/global-loader";
+import GlobalUppercaseInput from "@/components/feedback/global-uppercase-input";
 import GlobalToasterWrapper from "@/components/feedback/global-toaster-wrapper";
 import ErrorBoundary from "@/components/feedback/error-boundary";
 import RegionErrorBoundary from "@/components/feedback/region-error-boundary";
@@ -55,6 +56,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: removeExtensionInjectedNodesScript }} />
         <Providers>
           <GlobalLoader />
+          <GlobalUppercaseInput />
           {/* Guards the shell itself. `app/error.tsx` only wraps the page below
               this layout, so without this a throw in the header or the
               business-context provider would escalate to global-error.tsx and

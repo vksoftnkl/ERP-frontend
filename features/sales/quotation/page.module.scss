@@ -168,9 +168,6 @@
   gap: 0.25rem 0.4rem;
   align-items: center;
 }
-.fieldGridWide {
-  grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr) minmax(4.5rem, auto) minmax(0, 1fr);
-}
 .label {
   color: var(--text-main, #222222);
   font-size: 0.72rem;

@@ -2,12 +2,15 @@
 /**
  * Quotations — the route.
  *
- * The menu lands on the list, which IS a master page: it is the shared
- * `CrudMasterPage` shell, so the header, toolbar, configured-column table, row
- * actions, delete confirmation, pagination, audit history and grid-settings
- * context menu are the same ones every other master screen has. Create and Edit
- * hand off to the voucher form in place of the shell's modal; leaving the form
- * comes back here.
+ * The menu lands on the entry form with a fresh quotation, the way the legacy
+ * screen opens: raising a quotation is what an operator comes here to do, and
+ * the list is one click away (the form's "‹ Quotations" link, or F8's popup).
+ *
+ * That list IS a master page: it is the shared `CrudMasterPage` shell, so the
+ * header, toolbar, configured-column table, row actions, delete confirmation,
+ * pagination, audit history and grid-settings context menu are the same ones
+ * every other master screen has. Create and Edit hand off to the voucher form in
+ * place of the shell's modal; leaving the form comes back to it.
  *
  * The two views share one route rather than being two, because the form is a
  * single long-lived draft: a URL change would remount it, and there is nothing in
@@ -22,7 +25,7 @@ type View =
   | { screen: "list" }
   | { screen: "entry"; document?: QuotationDocKey; mode: "browse" | "entry" };
 export default function QuotationsPage() {
-  const [view, setView] = useState<View>({ screen: "list" });
+  const [view, setView] = useState<View>({ screen: "entry", mode: "entry" });
   const onOpen = useCallback((document: QuotationDocKey, mode: "browse" | "entry") => {
     setView({ screen: "entry", document, mode });
   }, []);
