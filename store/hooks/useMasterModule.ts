@@ -20,13 +20,19 @@ type UseMasterModuleArgs = {
   apiEndpoints: CrudMasterApiEndpoints;
   listArrayKeys?: readonly string[];
   getByIdMethod?: ApiMethod;
+  /**
+   * Builds the list query string. Returning `null` means "this list cannot be
+   * requested yet" (e.g. a configured grid whose SQL needs a filter the user has
+   * not chosen): the fetch is skipped entirely, rows are cleared and the total
+   * resets, so no half-bound request is sent.
+   */
   buildListQuery?: (params: {
     searchTerm: string;
     currentPage: number;
     pageSize: number;
     sortBy?: string;
     sortDir?: "asc" | "desc";
-  }) => Record<string, string>;
+  }) => Record<string, string> | null;
   debounceMs?: number;
   defaultPage?: number;
   defaultPageSize?: number;
@@ -62,6 +68,8 @@ export function useMasterModule({
   const moduleState = useAppSelector((s) => selectMasterModule(s, moduleKey));
   const currentPage = moduleState.currentPage;
   const [pageSize, setPageSizeState] = useState(defaultPageSize);
+  // True while buildListQuery declines to produce a query (see loadRecords).
+  const [listSkipped, setListSkipped] = useState(false);
   const searchTerm = moduleState.searchTerm;
   const totalEntries = moduleState.totalEntries;
   // RTK Query hooks
@@ -81,20 +89,30 @@ export function useMasterModule({
       const safeLimit = Math.max(1, limit);
       const sortBy = sortByRef.current;
       const sortDir = sortDirRef.current;
-      const query =
-        buildListQuery?.({
-          searchTerm: normalizedTerm,
-          currentPage: safePage,
-          pageSize: safeLimit,
-          sortBy,
-          sortDir,
-        }) ?? {
-          page: String(safePage),
-          limit: String(safeLimit),
-          ...(normalizedTerm ? { search: normalizedTerm } : {}),
-          ...(sortBy ? { sort_by: sortBy } : {}),
-          ...(sortBy && sortDir ? { sort_dir: sortDir } : {}),
-        };
+      const query = buildListQuery
+        ? buildListQuery({
+            searchTerm: normalizedTerm,
+            currentPage: safePage,
+            pageSize: safeLimit,
+            sortBy,
+            sortDir,
+          })
+        : {
+            page: String(safePage),
+            limit: String(safeLimit),
+            ...(normalizedTerm ? { search: normalizedTerm } : {}),
+            ...(sortBy ? { sort_by: sortBy } : {}),
+            ...(sortBy && sortDir ? { sort_dir: sortDir } : {}),
+          };
+      // `null` = the caller cannot build a valid request yet. Drop the last
+      // response so stale rows from an earlier filter do not linger under the
+      // new (unsatisfiable) filter state.
+      if (query === null) {
+        setListSkipped(true);
+        dispatch(totalEntriesUpdated({ moduleKey, total: 0, page: safePage }));
+        return undefined;
+      }
+      setListSkipped(false);
       let payload: unknown;
       try {
         payload = await fetchList({
@@ -155,10 +173,10 @@ export function useMasterModule({
   return {
     list: {
       currentPage,
-      data: listResult.data ?? null,
-      error: listResult.isError ? extractMsg(listResult.error) : null,
+      data: listSkipped ? null : listResult.data ?? null,
+      error: listSkipped || !listResult.isError ? null : extractMsg(listResult.error),
       loadRecords,
-      loading: listResult.isLoading || listResult.isFetching,
+      loading: listSkipped ? false : listResult.isLoading || listResult.isFetching,
       pageSize,
       reload,
       searchTerm,

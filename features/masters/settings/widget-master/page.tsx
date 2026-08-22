@@ -319,10 +319,13 @@ export default function WidgetMasterPage() {
   );
   // grid 46's stored SQL filters strictly on its `menuid` and `platform` tokens
   // (`… where section_menu_id=menuid and section_platform=platform`), so both must
-  // be bound on every list request via the `grid_param` query field — an unbound
-  // token is what makes the run 500. The filters supply the values; an empty menu
-  // falls back to "0" so section_menu_id (integer) stays valid and simply matches
-  // nothing, and "All Platforms" sends "" for the same reason.
+  // be bound on every list request via the `grid_param` query field — omitting
+  // either key leaves a bare identifier in the SQL and the run 400s ("column
+  // \"menuid\" does not exist"). Both values come from the toolbar filters, and
+  // until BOTH are picked there is no request worth sending: the tokens are plain
+  // equality with no match-all escape, so a placeholder menuid "0" / platform ""
+  // could only ever return zero rows. Returning null skips the fetch entirely.
+  const hasRequiredFilters = menuIdFilter.trim() !== "" && platformFilter !== "all";
   const buildListQuery = useCallback(
     ({
       searchTerm,
@@ -332,17 +335,32 @@ export default function WidgetMasterPage() {
       searchTerm: string;
       currentPage: number;
       pageSize: number;
-    }): Record<string, string> => ({
-      page: String(currentPage),
-      limit: String(pageSize),
-      ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({
-        menuid: menuIdFilter.trim() || "0",
-        platform: platformFilter === "all" ? "" : platformFilter,
-      }),
-    }),
+    }): Record<string, string> | null => {
+      const menuid = menuIdFilter.trim();
+      if (menuid === "" || platformFilter === "all") {
+        return null;
+      }
+      return {
+        page: String(currentPage),
+        limit: String(pageSize),
+        ...(searchTerm ? { search: searchTerm } : {}),
+        grid_param: JSON.stringify({ menuid, platform: platformFilter }),
+      };
+    },
     [menuIdFilter, platformFilter],
   );
+  // Explains the empty table while the filters are incomplete, so it does not
+  // read as "this menu has no sections".
+  const listEmptyText = useMemo(() => {
+    if (hasRequiredFilters) {
+      return undefined;
+    }
+    const missing = [
+      ...(platformFilter === "all" ? ["a platform"] : []),
+      ...(menuIdFilter.trim() === "" ? ["a menu"] : []),
+    ];
+    return `Select ${missing.join(" and ")} to list sections.`;
+  }, [hasRequiredFilters, menuIdFilter, platformFilter]);
   const filterSummary = useMemo(() => {
     const platformLabel =
       FILTER_PLATFORM_OPTIONS.find((option) => option.value === platformFilter)?.label ??
@@ -423,6 +441,7 @@ export default function WidgetMasterPage() {
       entityLabelPlural="sections"
       apiEndpoints={API_ENDPOINTS}
       buildListQuery={buildListQuery}
+      listEmptyText={listEmptyText}
       listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}

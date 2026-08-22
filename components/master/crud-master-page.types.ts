@@ -222,13 +222,23 @@ export type CrudMasterPageProps = {
   uiTableId?: string | number;
   useConfiguredGridColumnsOnly?: boolean;
   getByIdMethod?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  /**
+   * Builds the list request's query params. Return `null` to skip the request
+   * altogether — for a configured grid whose SQL binds filter tokens the user
+   * has not picked yet, sending a placeholder value is worse than sending
+   * nothing (the run either 400s on an unbound token or quietly returns rows
+   * for a filter nobody chose). While `null` is returned the table stays empty
+   * and no request is made; see `listEmptyText` for the message to show.
+   */
   buildListQuery?: (params: {
     searchTerm: string;
     currentPage: number;
     pageSize: number;
     sortBy?: string;
     sortDir?: "asc" | "desc";
-  }) => Record<string, string>;
+  }) => Record<string, string> | null;
+  /** Overrides the table's empty message ("No {entityLabel} data found"). */
+  listEmptyText?: string;
   listStateResetKey?: string | number | null;
   /** Overrides the search box's placeholder ("Search by {entityLabel} name..."). */
   searchPlaceholder?: string;

@@ -18,10 +18,6 @@ import { formatCurrency, money } from "@/domain/pricing";
 import { ChargeGrid } from "@/features/sales/quotation/components/charge-grid";
 import { ChargePickerModal } from "@/features/sales/quotation/components/charge-picker-modal";
 import { useGridSettings } from "@/features/sales/quotation/components/grid-settings";
-import {
-  GridSplitter,
-  useChargesPaneSplit,
-} from "@/features/sales/quotation/components/grid-splitter";
 import { ItemGrid } from "@/features/sales/quotation/components/item-grid";
 import {
   ItemPickerModal,
@@ -153,9 +149,6 @@ export function SaleOrderEntryView({
   const [pendingGuard, setPendingGuard] = useState<PendingGuard>(null);
   const [invalidCells, setInvalidCells] = useState<Record<string, true>>({});
 
-  const gridsRowRef = useRef<HTMLDivElement | null>(null);
-  const bottomRowRef = useRef<HTMLDivElement | null>(null);
-  const gridSplit = useChargesPaneSplit(gridsRowRef, bottomRowRef);
   const itemResize = useColumnResize(
     itemColumns,
     SALE_ORDER_ITEM_GRID_UI_TABLE_ID,
@@ -713,10 +706,7 @@ export function SaleOrderEntryView({
         </div>
       ) : null}
 
-      <div
-        ref={gridsRowRef}
-        className={cx(quotationStyles.gridsRow, gridSplit.dragging && quotationStyles.gridsRowDragging)}
-      >
+      <div className={quotationStyles.gridsRow}>
         <section
           className={`${quotationStyles.gridShell} ${quotationStyles.itemGridShell}`}
           onContextMenu={itemSettings.onContextMenu}
@@ -756,16 +746,7 @@ export function SaleOrderEntryView({
           />
         </section>
 
-        <GridSplitter split={gridSplit} />
-
-        <div
-          ref={bottomRowRef}
-          className={cx(
-            quotationStyles.bottomRow,
-            gridSplit.height === null && quotationStyles.bottomRowAuto,
-          )}
-          style={gridSplit.height === null ? undefined : { height: gridSplit.height }}
-        >
+        <div className={quotationStyles.bottomRow}>
           <section
             className={cx(quotationStyles.gridShell, quotationStyles.chargeGridShell)}
             onContextMenu={chargeSettings.onContextMenu}

@@ -14,6 +14,27 @@ import type {
   ERPDynamicSearchShortcutPayload,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
+import { ERPDynamicModalForm } from "@/components/design-system/ui/dynamic-modal-form";
+import WidgetVisibilityTree, {
+  type WidgetTreeSectionView,
+} from "@/features/masters/shared/widget-visibility-tree";
+import { useVisibleSettingsContextMenu } from "@/features/masters/shared/use-visible-settings-context-menu";
+import {
+  buildControllableFieldNames,
+  type ResolvedFieldConfig,
+  type WidgetMasterSectionConfig,
+  type WidgetMastersResponse,
+} from "@/features/masters/shared/widget-config";
+import {
+  applySupplierWidgetConfig,
+  buildSupplierWidgetFieldConfig,
+  WIDGET_CONFIG_ENDPOINT,
+  WIDGET_CONFIG_TREE_ENDPOINT,
+  WIDGET_FIELD_NAME_BY_FORM_FIELD,
+  WIDGET_SECTION_MENU_ID,
+  WIDGET_SECTION_PLATFORM,
+  WIDGET_VISIBILITY_ENDPOINT,
+} from "./widget-config";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
   toUpper,
@@ -85,6 +106,11 @@ import {
   buildLedgerBankAccountPayload,
   type LedgerBankAccountFormRow,
 } from "@/features/masters/accounts/account-ledger/bank-accounts";
+// Lowercased backend fieldNames that actually bind to a field on this form; the
+// popup marks everything else "not on form".
+const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(
+  WIDGET_FIELD_NAME_BY_FORM_FIELD,
+);
 export default function SuppliersMasterPage() {
   const stateModalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const supplierGroupModalControllerRef =
@@ -782,21 +808,271 @@ export default function SuppliersMasterPage() {
       handleSetDefaultBankAccount,
     ],
   );
+  // ── Widget-masters config (menu 22) ────────────────────────────
+  // The modal's fields are shown/hidden (and optionally re-labelled) from the
+  // backend config; a right-click inside the open modal edits it in a popup tree.
+  const { getAll: getWidgetConfig } = useApi<WidgetMastersResponse>(WIDGET_CONFIG_ENDPOINT, {
+    toast: { error: false },
+  });
+  const [widgetFieldConfig, setWidgetFieldConfig] = useState<Map<string, ResolvedFieldConfig>>(
+    () => new Map(),
+  );
+  useEffect(() => {
+    let cancelled = false;
+    const loadConfig = async () => {
+      try {
+        const payload = await getWidgetConfig({
+          sectionMenuId: String(WIDGET_SECTION_MENU_ID),
+          sectionPlatform: WIDGET_SECTION_PLATFORM,
+        });
+        if (cancelled) {
+          return;
+        }
+        setWidgetFieldConfig(buildSupplierWidgetFieldConfig(payload?.data));
+      } catch {
+        // Config is an enhancement — on failure the form keeps its hardcoded fields.
+        if (!cancelled) {
+          setWidgetFieldConfig(new Map());
+        }
+      }
+    };
+    void loadConfig();
+    return () => {
+      cancelled = true;
+    };
+  }, [getWidgetConfig]);
+  // Right-click config tree popup over the create/update modal.
+  const { getAll: getWidgetConfigTree } = useApi<WidgetMastersResponse>(
+    WIDGET_CONFIG_TREE_ENDPOINT,
+    { toast: { error: false } },
+  );
+  const { run: saveVisibility, loading: savingVisibility } = useApi(WIDGET_VISIBILITY_ENDPOINT, {
+    method: "PATCH",
+  });
+  const [configSections, setConfigSections] = useState<WidgetMasterSectionConfig[]>([]);
+  // Section-level visibility overrides keyed by sectionId; falls back to the
+  // fetched sectionVisibility until the user toggles a section.
+  const [sectionVisibility, setSectionVisibility] = useState<Map<number, boolean>>(
+    () => new Map(),
+  );
+  // Edited secondary text keyed by fieldId; falls back to the fetched value.
+  const [secondaryTextById, setSecondaryTextById] = useState<Map<number, string>>(
+    () => new Map(),
+  );
+  const [treeLoading, setTreeLoading] = useState(false);
+  const [treeError, setTreeError] = useState<string | null>(null);
+  const [visibilityModalOpen, setVisibilityModalOpen] = useState(false);
+  const treeLoadedRef = useRef(false);
+  const visibilityControllerRef = useRef<ERPDynamicModalController | null>(null);
+  // Fetched lazily the first time the popup is opened, then cached.
+  const loadConfigTree = useCallback(async () => {
+    if (treeLoadedRef.current) {
+      return;
+    }
+    treeLoadedRef.current = true;
+    setTreeLoading(true);
+    setTreeError(null);
+    try {
+      const payload = await getWidgetConfigTree({ menu_id: String(WIDGET_SECTION_MENU_ID) });
+      setConfigSections(Array.isArray(payload?.data) ? payload.data : []);
+    } catch {
+      treeLoadedRef.current = false;
+      setTreeError("Unable to load field configuration.");
+    } finally {
+      setTreeLoading(false);
+    }
+  }, [getWidgetConfigTree]);
+  // Right-clicking inside the open create/update modal opens the Visible Settings
+  // modal on top via its controller; right-clicks elsewhere keep the browser's
+  // native context menu.
+  useVisibleSettingsContextMenu({
+    loadConfigTree,
+    openVisibilitySettings: () => visibilityControllerRef.current?.openModal("visibility"),
+  });
+  const handleToggleField = useCallback((backendName: string, checked: boolean) => {
+    const key = backendName.toLowerCase();
+    setWidgetFieldConfig((prev) => {
+      const next = new Map(prev);
+      const existing = next.get(key);
+      next.set(
+        key,
+        existing
+          ? { ...existing, visible: checked }
+          : { label: "", secondaryText: "", order: Number.MAX_SAFE_INTEGER, visible: checked },
+      );
+      return next;
+    });
+  }, []);
+  const handleToggleSection = useCallback((sectionId: number, checked: boolean) => {
+    setSectionVisibility((prev) => {
+      const next = new Map(prev);
+      next.set(sectionId, checked);
+      return next;
+    });
+  }, []);
+  const handleChangeSecondaryText = useCallback(
+    (fieldId: number, value: string) => {
+      setSecondaryTextById((prev) => {
+        const next = new Map(prev);
+        next.set(fieldId, value);
+        return next;
+      });
+      // Mirror the edit into the live form config (keyed by backend fieldName) so
+      // the matching input's label updates immediately, like the toggles do.
+      const fieldName = configSections
+        .flatMap((section) => (Array.isArray(section.fields) ? section.fields : []))
+        .find((field) => field.fieldId === fieldId)?.fieldName;
+      const key = (fieldName ?? "").trim().toLowerCase();
+      if (!key) {
+        return;
+      }
+      setWidgetFieldConfig((prev) => {
+        const existing = prev.get(key);
+        if (!existing) {
+          return prev;
+        }
+        const next = new Map(prev);
+        next.set(key, { ...existing, secondaryText: value.trim() });
+        return next;
+      });
+    },
+    [configSections],
+  );
+  // Build the tree view from the /config payload, deriving each checkbox from the
+  // live form config so the popup and the rendered form stay in sync.
+  const treeSections = useMemo<WidgetTreeSectionView[]>(
+    () =>
+      configSections.map((section) => ({
+        sectionId: section.sectionId,
+        label: section.sectionGuiName?.trim() || section.sectionName || "Section",
+        visible: sectionVisibility.get(section.sectionId) ?? section.sectionVisibility !== false,
+        fields: (Array.isArray(section.fields) ? section.fields : []).map((field) => {
+          const key = (field.fieldName ?? "").trim().toLowerCase();
+          const configEntry = widgetFieldConfig.get(key);
+          return {
+            fieldId: field.fieldId,
+            fieldName: field.fieldName,
+            label: (field.fieldGuiName ?? "").trim() || field.fieldName,
+            secondaryText: secondaryTextById.get(field.fieldId) ?? (field.fieldSecondaryText ?? ""),
+            checked: configEntry ? configEntry.visible : field.fieldVisibility !== false,
+            controllable: WIDGET_CONTROLLABLE_FIELD_NAMES.has(key),
+          };
+        }),
+      })),
+    [configSections, sectionVisibility, secondaryTextById, widgetFieldConfig],
+  );
+  // PATCH the current section/field visibility for every configured field back in
+  // the documented { data: [{ sectionId, sectionGuiName, sectionVisibility,
+  // fields: [{ fieldId, fieldSecondaryText, fieldVisibility }] }] } shape. Throws on
+  // failure so the hosting modal stays open (useApi toasts the error). sectionGuiName
+  // and fieldSecondaryText are coerced to non-null strings — the server DTO requires
+  // a string and rejects the null an unset config value carries.
+  const handleVisibilitySubmit = useCallback(async () => {
+    const payload = {
+      data: configSections.map((section) => ({
+        sectionId: section.sectionId,
+        sectionGuiName: section.sectionGuiName?.trim() || section.sectionName || "Section",
+        sectionVisibility:
+          sectionVisibility.get(section.sectionId) ?? section.sectionVisibility !== false,
+        fields: (Array.isArray(section.fields) ? section.fields : []).map((field) => {
+          const key = (field.fieldName ?? "").trim().toLowerCase();
+          const configEntry = widgetFieldConfig.get(key);
+          return {
+            fieldId: field.fieldId,
+            fieldSecondaryText: secondaryTextById.get(field.fieldId) ?? field.fieldSecondaryText ?? "",
+            fieldVisibility: configEntry ? configEntry.visible : field.fieldVisibility !== false,
+          };
+        }),
+      })),
+    };
+    await saveVisibility({ body: payload });
+  }, [configSections, sectionVisibility, secondaryTextById, widgetFieldConfig, saveVisibility]);
+  // While the Visible Settings modal is open, intercept Escape/F5 in the capture
+  // phase so they act on it alone — without this, the underlying create/update
+  // modal's window-level Escape would also fire and close both. F5 mirrors the
+  // legacy "Save (F5)" shortcut.
+  useEffect(() => {
+    if (!visibilityModalOpen) {
+      return;
+    }
+    const handleKeyDownCapture = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        visibilityControllerRef.current?.closeModal();
+      } else if (event.key === "F5") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (!savingVisibility) {
+          void handleVisibilitySubmit()
+            .then(() => visibilityControllerRef.current?.closeModal())
+            .catch(() => {
+              // Error toast handled by useApi; keep the modal open to retry.
+            });
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDownCapture, true);
+    return () => window.removeEventListener("keydown", handleKeyDownCapture, true);
+  }, [visibilityModalOpen, savingVisibility, handleVisibilitySubmit]);
+  // The Visible Settings modal hosts the whole tree as a single custom field so it
+  // reuses the standard ERP modal chrome (header, backdrop, Save/Cancel footer).
+  const visibilityVariant = useMemo<ERPDynamicModalVariant>(
+    () => ({
+      key: "visibility",
+      cardTitle: "Visible Settings",
+      cardDescription: "",
+      cardButtonLabel: "Open",
+      modalTitle: "Visible Settings",
+      submitLabel: "Save (F5)",
+      fields: [
+        {
+          name: "visibilityTree",
+          label: "",
+          type: "custom",
+          colSpan: 2,
+          render: () => (
+            <WidgetVisibilityTree
+              sections={treeSections}
+              loading={treeLoading}
+              error={treeError}
+              disabled={savingVisibility}
+              onToggleSection={handleToggleSection}
+              onToggleField={handleToggleField}
+              onChangeSecondaryText={handleChangeSecondaryText}
+            />
+          ),
+        },
+      ],
+    }),
+    [
+      treeSections,
+      treeLoading,
+      treeError,
+      savingVisibility,
+      handleToggleSection,
+      handleToggleField,
+      handleChangeSecondaryText,
+    ],
+  );
   // Build Form Fields
   const supplierFormFields = useMemo<ERPDynamicModalField[]>(
     () =>
-      buildSupplierFormFields(
-        supplierGroupOptions,
-        companyOptions,
-        branchOptions,
-        stateOptions,
-        lazyDropdownHandlers,
-        handleSupplierGroupCreateShortcut,
-        handleSupplierGroupEditShortcut,
-        handleStateCreateShortcut,
-        handleStateEditShortcut,
-        handleSupplierGstinValueChange,
-        bankAccountsField,
+      applySupplierWidgetConfig(
+        buildSupplierFormFields(
+          supplierGroupOptions,
+          companyOptions,
+          branchOptions,
+          stateOptions,
+          lazyDropdownHandlers,
+          handleSupplierGroupCreateShortcut,
+          handleSupplierGroupEditShortcut,
+          handleStateCreateShortcut,
+          handleStateEditShortcut,
+          handleSupplierGstinValueChange,
+          bankAccountsField,
+        ),
+        widgetFieldConfig,
       ),
     [
       bankAccountsField,
@@ -810,6 +1086,7 @@ export default function SuppliersMasterPage() {
       handleSupplierGroupEditShortcut,
       stateOptions,
       supplierGroupOptions,
+      widgetFieldConfig,
     ],
   );
   return (
@@ -937,6 +1214,19 @@ export default function SuppliersMasterPage() {
         controllerRef={supplierGroupModalControllerRef}
         onSubmit={handleSupplierGroupModalSubmit}
         onCancel={handleSupplierGroupModalCancel}
+      />
+      <ERPDynamicModalForm
+        title="Visible Settings"
+        variants={[visibilityVariant]}
+        showDefaultCards={false}
+        hideSectionHeader
+        resetOnSubmit={false}
+        panelStyle={{ width: "min(680px, calc(100vw - 2rem))", maxHeight: "min(82vh, 620px)" }}
+        onControllerReady={(controller) => {
+          visibilityControllerRef.current = controller;
+        }}
+        onOpenChange={(open) => setVisibilityModalOpen(open)}
+        onSubmit={() => handleVisibilitySubmit()}
       />
     </>
   );

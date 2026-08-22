@@ -132,16 +132,14 @@
   border-radius: var(--erp-radius, 4px);
   background: var(--card-bg, #ffffff);
 }
-/* Charges, Terms and Totals side by side under the items grid. The splitter
-   above owns the row's height; each panel scrolls inside its own share. */
+/* Charges, Terms and Totals side by side under the items grid. The row is as
+   tall as its tallest panel wants to be, capped; each panel scrolls inside its
+   own share and the items grid above takes whatever is left. */
 .bottomRow {
   display: flex;
   flex: 0 0 auto;
   gap: 0.5rem;
   min-height: 0;
-}
-/* Unpinned, the row is as tall as its tallest panel wants to be, capped. */
-.bottomRowAuto {
   max-height: 13rem;
 }
 .bottomRow > * {
@@ -407,42 +405,6 @@
 /* Its height comes from the bottom row it sits in, not from its own content. */
 .chargeGridShell {
   flex: 0 0 auto;
-}
-/* ------------------------------------------------------------- pane splitter */
-/* While a drag is live the pointer is captured by the handle, so the cursor and
-   the text-selection lock have to sit on the whole row. */
-.gridsRowDragging {
-  cursor: row-resize;
-  user-select: none;
-}
-.paneSplitter {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  /* Negative margins eat the row's own gap, so the handle reads as a divider
-     between the panes rather than a third band. */
-  height: 0.6rem;
-  margin: -0.3rem 0;
-  cursor: row-resize;
-  /* Without this the browser scrolls the pane instead of dragging on touch. */
-  touch-action: none;
-}
-.paneSplitterGrip {
-  width: 3.25rem;
-  height: 0.2rem;
-  border-radius: 999px;
-  background: var(--border, #c9c9c9);
-  transition: background-color 0.12s ease, width 0.12s ease;
-}
-.paneSplitter:hover .paneSplitterGrip,
-.paneSplitter:focus-visible .paneSplitterGrip,
-.paneSplitterActive .paneSplitterGrip {
-  width: 4.5rem;
-  background: var(--primary, #7b1515);
-}
-.paneSplitter:focus-visible {
-  outline: none;
 }
 .gridHead {
   display: flex;

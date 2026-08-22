@@ -2288,6 +2288,7 @@ export default function CrudMasterPage({
   useConfiguredGridColumnsOnly = false,
   getByIdMethod,
   buildListQuery,
+  listEmptyText,
   listStateResetKey,
   searchPlaceholder,
   buildDeleteRequest,
@@ -3605,6 +3606,36 @@ export default function CrudMasterPage({
   /** The selected row is readable but not writable — Edit goes inactive on it. */
   const editDisabledForSelection = Boolean(selectedRow && isRowEditDisabled?.(selectedRow));
 
+  useEffect(() => {
+    if (hideListPage) {
+      return;
+    }
+    const handleEditShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+      if (event.key.toLowerCase() !== "a") {
+        return;
+      }
+      if (!selectedRow || editDisabledForSelection || saveLoading || detailsLoading) {
+        return;
+      }
+      event.preventDefault();
+      handleToolbarEdit();
+    };
+    window.addEventListener("keydown", handleEditShortcut);
+    return () => {
+      window.removeEventListener("keydown", handleEditShortcut);
+    };
+  }, [
+    detailsLoading,
+    editDisabledForSelection,
+    handleToolbarEdit,
+    hideListPage,
+    saveLoading,
+    selectedRow,
+  ]);
+
   const handleToolbarDelete = useCallback(() => {
     if (selectedRow) {
       handleDeleteRow(selectedRow);
@@ -3876,7 +3907,7 @@ export default function CrudMasterPage({
                     title={
                       editDisabledForSelection
                         ? rowEditDisabledReason ?? "This row cannot be edited"
-                        : "Edit selected row"
+                        : "Edit selected row (Alt+A)"
                     }
                   >
                     <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
@@ -4108,7 +4139,7 @@ export default function CrudMasterPage({
                   emptyText={
                     loading
                       ? `Loading ${entityLabel} data...`
-                      : `No ${entityLabel} data found`
+                      : listEmptyText ?? `No ${entityLabel} data found`
                   }
                 />
                 </div>
