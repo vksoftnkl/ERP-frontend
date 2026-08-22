@@ -12,6 +12,7 @@ import {
   useState,
   type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 import { cx } from "@/components/design-system/cx";
@@ -23,13 +24,16 @@ export function GroupBox({
   title,
   children,
   className,
+  onContextMenu,
 }: {
   title: string;
   children: ReactNode;
   className?: string;
+  /** For a panel that carries its own right-click configuration. */
+  onContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void;
 }) {
   return (
-    <fieldset className={cx(styles.group, className)}>
+    <fieldset className={cx(styles.group, className)} onContextMenu={onContextMenu}>
       <legend className={styles.groupTitle}>{title}</legend>
       {children}
     </fieldset>

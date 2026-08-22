@@ -5,17 +5,20 @@
  *
  * The same backend config the master screens use (`fixed.form_section` /
  * `fixed.form_field`, here menu 14 "Quotation" on the Web platform): which of
- * the header fields this deployment shows, and what it calls them.
+ * the header AND Terms fields this deployment shows, and what it calls them.
+ * Each panel has its own section, so a site can drop the whole Terms block by
+ * turning its section off.
  *
- * Visibility and labels only, never order. The three header blocks are a
+ * Visibility and labels only, never order. The header blocks are a
  * hand-laid-out layout the legacy screen shares, so a configured position has
  * nothing meaningful to move here — the master pages call this same choice
- * `visibility-only`. Nothing else on the screen is configured from it: both
- * grids take their columns from `fixed.ui_table_columns` (their own right-click
- * "Admin settings"), and the Terms block has no configured rows.
+ * `visibility-only`. The two grids are not configured from it at all: they take
+ * their columns from `fixed.ui_table_columns` (their own right-click "Admin
+ * settings").
  *
  * Right-click is already spoken for on the two grids, so this one is scoped to
- * the header panel and the two never compete for the same click.
+ * the header panel and the Terms block, and the two never compete for the same
+ * click.
  */
 import {
   useCallback,
@@ -40,7 +43,9 @@ import {
 } from "@/store/api/quotationApi";
 import {
   QUOTATION_HEADER_FIELD_NAMES,
+  QUOTATION_TERMS_FIELD_NAMES,
   type QuotationHeaderFieldKey,
+  type QuotationTermsFieldKey,
 } from "../quotation.constants";
 import { ModalShell } from "./modal-shell";
 import styles from "../page.module.scss";
@@ -52,7 +57,11 @@ const NO_SECTIONS: WidgetMasterSectionConfig[] = [];
  * are shown in the dialog read-only ("not on form"), rather than offering a
  * checkbox that would toggle nothing.
  */
-const CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(QUOTATION_HEADER_FIELD_NAMES);
+const CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames({
+  ...QUOTATION_HEADER_FIELD_NAMES,
+  ...QUOTATION_TERMS_FIELD_NAMES,
+});
+const TERMS_FIELD_KEYS = Object.keys(QUOTATION_TERMS_FIELD_NAMES) as QuotationTermsFieldKey[];
 
 /** What the header blocks read to decide whether — and how — to render a field. */
 export type HeaderFieldConfig = {
@@ -62,7 +71,17 @@ export type HeaderFieldConfig = {
   labelFor: (key: QuotationHeaderFieldKey) => string;
 };
 
+/** The same, for the Terms panel's own section. */
+export type TermsFieldConfig = {
+  isVisible: (key: QuotationTermsFieldKey) => boolean;
+  labelFor: (key: QuotationTermsFieldKey) => string;
+  /** False once every row is hidden: the panel has nothing left to frame. */
+  anyVisible: boolean;
+};
+
 export type VisibleSettings = HeaderFieldConfig & {
+  /** Put this on the Terms panel; it reads the same config. */
+  terms: TermsFieldConfig;
   /** Put this on the header panel; it opens the dialog. */
   onContextMenu: (event: ReactMouseEvent<HTMLElement>) => void;
   /** True while the dialog is up, so the screen's function keys stand down. */
@@ -89,8 +108,8 @@ export function useVisibleSettings(): VisibleSettings {
 
   // The config as the form should read it: what the server sent, with the
   // pending edits laid over it. A field of a hidden section is hidden too —
-  // this screen's one section is the whole header, and a toggle that changed
-  // nothing on screen would just look broken.
+  // each section here IS a panel (the header, the Terms block), so turning one
+  // off is how a site drops that panel whole.
   const resolved = useMemo(() => {
     const config = buildWidgetFieldConfigFromSections(sections);
     for (const section of sections) {
@@ -113,21 +132,37 @@ export function useVisibleSettings(): VisibleSettings {
   }, [fieldVisible, sections, sectionVisible, secondaryText]);
 
   // A field the config says nothing about keeps its shipped label and stays on,
-  // so an empty or failed fetch leaves the header exactly as authored.
-  const isVisible = useCallback(
-    (key: QuotationHeaderFieldKey) =>
-      resolved.get(QUOTATION_HEADER_FIELD_NAMES[key].toLowerCase())?.visible ?? true,
+  // so an empty or failed fetch leaves the screen exactly as authored.
+  const visibleByName = useCallback(
+    (shipped: string) => resolved.get(shipped.toLowerCase())?.visible ?? true,
     [resolved],
   );
-  const labelFor = useCallback(
-    (key: QuotationHeaderFieldKey) => {
-      const shipped = QUOTATION_HEADER_FIELD_NAMES[key];
+  const labelByName = useCallback(
+    (shipped: string) => {
       const entry = resolved.get(shipped.toLowerCase());
       // Secondary text is the operator's own re-label, so it outranks the
       // config's GUI name the way it does on the master forms.
       return (entry?.secondaryText ?? "").trim() || entry?.label || shipped;
     },
     [resolved],
+  );
+  const isVisible = useCallback(
+    (key: QuotationHeaderFieldKey) => visibleByName(QUOTATION_HEADER_FIELD_NAMES[key]),
+    [visibleByName],
+  );
+  const labelFor = useCallback(
+    (key: QuotationHeaderFieldKey) => labelByName(QUOTATION_HEADER_FIELD_NAMES[key]),
+    [labelByName],
+  );
+  const terms = useMemo<TermsFieldConfig>(
+    () => ({
+      isVisible: (key) => visibleByName(QUOTATION_TERMS_FIELD_NAMES[key]),
+      labelFor: (key) => labelByName(QUOTATION_TERMS_FIELD_NAMES[key]),
+      anyVisible: TERMS_FIELD_KEYS.some((key) =>
+        visibleByName(QUOTATION_TERMS_FIELD_NAMES[key]),
+      ),
+    }),
+    [labelByName, visibleByName],
   );
 
   const treeSections = useMemo<WidgetTreeSectionView[]>(
@@ -257,5 +292,5 @@ export function useVisibleSettings(): VisibleSettings {
     </ModalShell>
   );
 
-  return { isVisible, labelFor, onContextMenu, isOpen: open, overlays: dialog };
+  return { isVisible, labelFor, terms, onContextMenu, isOpen: open, overlays: dialog };
 }

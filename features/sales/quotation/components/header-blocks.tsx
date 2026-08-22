@@ -14,15 +14,19 @@
  *
  * Every field in those three columns is gated on `fields` (see
  * `visible-settings.tsx`): the deployment's widget config decides which of them
- * this site shows and what it calls them. Terms is not configured, so it
- * renders as authored.
+ * this site shows and what it calls them. Terms reads the same config through
+ * its own section — a screen that passes no config (the sale order) gets the
+ * block exactly as authored.
  */
+import type { MouseEvent as ReactMouseEvent } from "react";
 import {
   AREA_DROPDOWN_ID,
   CUSTOMER_DROPDOWN_ID,
   POS_DROPDOWN_ID,
   SALESMAN_DROPDOWN_ID,
   AGENT_DROPDOWN_ID,
+  QUOTATION_TERMS_FIELD_NAMES,
+  type QuotationTermsFieldKey,
 } from "../quotation.constants";
 import type {
   CustomerSnapshot,
@@ -41,7 +45,7 @@ import {
   SelectField,
   TextField,
 } from "./fields";
-import type { HeaderFieldConfig } from "./visible-settings";
+import type { HeaderFieldConfig, TermsFieldConfig } from "./visible-settings";
 import styles from "../page.module.scss";
 
 /**
@@ -394,57 +398,89 @@ export function SalesInfoBlock({
   );
 }
 
+/** The configured name of each Terms row doubles as its shipped label. */
+const TERMS_SHIPPED_LABELS: Record<QuotationTermsFieldKey, string> =
+  QUOTATION_TERMS_FIELD_NAMES;
+/** Unconfigured: every row on, labelled as this file writes it. */
+const TERMS_AS_AUTHORED: TermsFieldConfig = {
+  isVisible: () => true,
+  labelFor: (key) => TERMS_SHIPPED_LABELS[key],
+  anyVisible: true,
+};
+
 export type TermsBlockProps = {
   terms: QuotationTerms;
   disabled: boolean;
   onSetTerms: (field: keyof QuotationTerms, value: string) => void;
+  /** Omitted by screens that do not configure this block. */
+  fields?: TermsFieldConfig;
+  /** Opens Visible Settings, the way the header panel's right-click does. */
+  onContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void;
 };
 
-export function TermsBlock({ terms, disabled, onSetTerms }: TermsBlockProps) {
+export function TermsBlock({
+  terms,
+  disabled,
+  onSetTerms,
+  fields = TERMS_AS_AUTHORED,
+  onContextMenu,
+}: TermsBlockProps) {
+  // Hiding every row hides the panel: an empty frame is not what "off" means.
+  if (!fields.anyVisible) {
+    return null;
+  }
   return (
-    <GroupBox title="Terms">
+    <GroupBox title="Terms" onContextMenu={onContextMenu}>
       <div className={`${styles.fieldGrid} ${styles.fieldGridWide}`}>
-        <Field label="Remarks" htmlFor="quotation-remarks">
-          <textarea
-            id="quotation-remarks"
-            className={styles.textarea}
-            value={terms.remarks}
-            disabled={disabled}
-            maxLength={500}
-            onChange={(event) => onSetTerms("remarks", event.target.value)}
-          />
-        </Field>
-        <Field label="Payment Terms" htmlFor="quotation-payment-terms">
-          <input
-            id="quotation-payment-terms"
-            className={styles.input}
-            value={terms.paymentTerms}
-            disabled={disabled}
-            maxLength={250}
-            autoComplete="off"
-            onChange={(event) => onSetTerms("paymentTerms", event.target.value)}
-          />
-        </Field>
-        <Field label="Delivery Terms" htmlFor="quotation-delivery-terms">
-          <input
-            id="quotation-delivery-terms"
-            className={styles.input}
-            value={terms.deliveryTerms}
-            disabled={disabled}
-            maxLength={250}
-            autoComplete="off"
-            onChange={(event) => onSetTerms("deliveryTerms", event.target.value)}
-          />
-        </Field>
-        <Field label="Other Terms" htmlFor="quotation-tc">
-          <textarea
-            id="quotation-tc"
-            className={styles.textarea}
-            value={terms.termsConditions}
-            disabled={disabled}
-            onChange={(event) => onSetTerms("termsConditions", event.target.value)}
-          />
-        </Field>
+        {fields.isVisible("remarks") ? (
+          <Field label={fields.labelFor("remarks")} htmlFor="quotation-remarks">
+            <textarea
+              id="quotation-remarks"
+              className={styles.textarea}
+              value={terms.remarks}
+              disabled={disabled}
+              maxLength={500}
+              onChange={(event) => onSetTerms("remarks", event.target.value)}
+            />
+          </Field>
+        ) : null}
+        {fields.isVisible("paymentTerms") ? (
+          <Field label={fields.labelFor("paymentTerms")} htmlFor="quotation-payment-terms">
+            <input
+              id="quotation-payment-terms"
+              className={styles.input}
+              value={terms.paymentTerms}
+              disabled={disabled}
+              maxLength={250}
+              autoComplete="off"
+              onChange={(event) => onSetTerms("paymentTerms", event.target.value)}
+            />
+          </Field>
+        ) : null}
+        {fields.isVisible("deliveryTerms") ? (
+          <Field label={fields.labelFor("deliveryTerms")} htmlFor="quotation-delivery-terms">
+            <input
+              id="quotation-delivery-terms"
+              className={styles.input}
+              value={terms.deliveryTerms}
+              disabled={disabled}
+              maxLength={250}
+              autoComplete="off"
+              onChange={(event) => onSetTerms("deliveryTerms", event.target.value)}
+            />
+          </Field>
+        ) : null}
+        {fields.isVisible("termsConditions") ? (
+          <Field label={fields.labelFor("termsConditions")} htmlFor="quotation-tc">
+            <textarea
+              id="quotation-tc"
+              className={styles.textarea}
+              value={terms.termsConditions}
+              disabled={disabled}
+              onChange={(event) => onSetTerms("termsConditions", event.target.value)}
+            />
+          </Field>
+        ) : null}
       </div>
     </GroupBox>
   );

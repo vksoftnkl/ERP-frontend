@@ -170,9 +170,9 @@ export const QUOTATION_WIDGET_PLATFORM = "Web";
  * showed, so the same string doubles as the fallback label — a configured
  * `fieldGuiName` / `fieldSecondaryText` overrides it, nothing else does.
  *
- * Only the header is configurable. The two grids take their column layout from
- * `fixed.ui_table_columns` instead (their own right-click "Admin settings"), and
- * the Terms block has no configured rows at all.
+ * The header and the Terms block are what this config reaches; the two grids
+ * take their column layout from `fixed.ui_table_columns` instead (their own
+ * right-click "Admin settings").
  */
 export const QUOTATION_HEADER_FIELD_NAMES = {
   existingCustomer: "Existing Customer",
@@ -198,6 +198,20 @@ export const QUOTATION_HEADER_FIELD_NAMES = {
   priceLevel: "Price Level",
 } as const;
 export type QuotationHeaderFieldKey = keyof typeof QUOTATION_HEADER_FIELD_NAMES;
+/**
+ * The same bridge for the Terms panel, configured under its own section
+ * ("Quotation-terms") of the same menu. Its section carries the panel: hiding
+ * the section hides every row in it, and the panel goes with them.
+ *
+ * The keys are `QuotationTerms`' own, so a row here is the field it names.
+ */
+export const QUOTATION_TERMS_FIELD_NAMES = {
+  remarks: "Remarks",
+  paymentTerms: "Payment Terms",
+  deliveryTerms: "Delivery Terms",
+  termsConditions: "Other Terms",
+} as const;
+export type QuotationTermsFieldKey = keyof typeof QUOTATION_TERMS_FIELD_NAMES;
 // ---------------------------------------------------------------------------
 // Transaction hold (F9 park / F10 recall)
 // ---------------------------------------------------------------------------
