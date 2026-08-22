@@ -736,9 +736,8 @@
 }
 /* ------------------------------------------------------------------ totals */
 /**
- * The primary panel — three totals columns plus the grand total, matching the
- * legacy screen's layout. `.totalsStrip` (below) still does the "More totals"
- * disclosure's own grid.
+ * The panel — three totals columns plus the grand total, matching the legacy
+ * screen's layout.
  */
 .totalsPanel {
   display: flex;
@@ -749,13 +748,23 @@
   border-radius: var(--erp-radius, 4px);
   background: var(--card-bg, #ffffff);
 }
+/* The Bill takes what it needs and the figures take the rest — no fixed share,
+   because the panel's own width is whatever the charges and terms leave it. */
 .totalsPrimary {
-  display: grid;
-  /* Narrow enough that the Bill column still fits beside the three figure
-     columns now that the panel shares a row with charges and terms. */
-  grid-template-columns: repeat(3, minmax(u(7), 1fr)) auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: u(0.2) u(0.7);
-  align-items: end;
+  align-items: flex-end;
+}
+/* Three columns while there is room for three, then two, then one: a figure
+   must never have to squeeze past its own label into the column beside it,
+   which is exactly what a fixed three-column track did at 1366. */
+.totalsFigures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(u(9.5), 1fr));
+  gap: u(0.2) u(0.7);
+  flex: 1 1 u(14);
+  min-width: 0;
 }
 .totalsCol {
   display: flex;
@@ -766,30 +775,28 @@
 }
 .totalsGrand {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   align-items: flex-end;
   justify-content: flex-end;
+  min-width: 0;
   padding-left: u(0.8);
   border-left: 1px solid var(--border-light, #e2e2e2);
+  margin-left: auto;
 }
 .totalsGrandLabel {
   color: var(--text-muted, #666666);
   font-size: u(0.72);
 }
 .totalsGrandValue {
+  overflow: hidden;
+  max-width: 100%;
   color: var(--primary, #7b1515);
   font-size: u(1.3);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
   white-space: nowrap;
-}
-.totalsDetails summary {
-  color: var(--text-muted, #666666);
-  font-size: u(0.7);
-  cursor: pointer;
-}
-.totalsDetails[open] summary {
-  margin-bottom: u(0.3);
 }
 .statsFooter {
   display: flex;
@@ -798,31 +805,34 @@
   margin: 0;
   padding: 0 u(0.1);
 }
-.totalsStrip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(u(8.5), 1fr));
-  gap: u(0.2) u(0.7);
-  margin: 0;
-  padding: u(0.4) u(0.55);
-  border: 1px solid var(--border, #c9c9c9);
-  border-radius: var(--erp-radius, 4px);
-  background: var(--card-bg, #ffffff);
-}
+/* Wrapping is the release valve: when the label and its figure cannot sit on
+   one line the figure drops under it, still right-aligned. `overflow: hidden`
+   is the backstop — whatever happens, a cell paints inside its own box and
+   never over its neighbour. Both halves carry a `title`, so an ellipsis costs
+   the reader a hover, not the number. */
 .totalCell {
   display: flex;
-  gap: u(0.4);
+  overflow: hidden;
+  flex-wrap: wrap;
+  gap: 0 u(0.4);
   justify-content: space-between;
   min-width: 0;
   font-size: u(0.73);
 }
 .totalCell dt {
+  overflow: hidden;
+  min-width: 0;
   color: var(--text-muted, #666666);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .totalCell dd {
-  margin: 0;
+  overflow: hidden;
+  min-width: 0;
+  margin: 0 0 0 auto;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .totalCellStrong dt,
@@ -1236,14 +1246,12 @@
     height: auto;
   }
 
-  .totalsPrimary {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
+  /* Full width and stacked: the Bill reads better under the figures than
+     squeezed beside them. */
   .totalsGrand {
-    grid-column: 1 / -1;
     align-items: flex-start;
     padding-left: 0;
     border-left: 0;
+    margin-left: 0;
   }
 }

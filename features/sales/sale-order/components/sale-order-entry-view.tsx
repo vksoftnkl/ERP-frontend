@@ -782,7 +782,6 @@ export function SaleOrderEntryView({
           <TotalsStrip
             totals={pricing.totals}
             stored={draft.pricing === "stored"}
-            showMoreTotals={false}
             extraColumnOne={[{ label: "Balance Due", value: formatCurrency(balanceDue, 2, true) }]}
             extraColumnTwo={[
               {

@@ -6,11 +6,10 @@
  * The primary block mirrors the legacy screen's three totals columns plus the
  * grand total (Items/Gross/Scheme disc/Round off, "Bags"/Item disc/Taxable,
  * Weight/Special disc/Tax — `sqTotBags` is persisted from `totQty`, see
- * `quotation.payload.ts`, so "Total Bags" and the detailed "Qty" cell below are
- * the same figure under two names). The full CGST/SGST/IGST/Cess and
- * freight/loading/cash-discount breakdown the legacy screen does not surface
- * on this page is real, saved data, so it stays available behind "More
- * totals" rather than being dropped.
+ * `quotation.payload.ts`). The CGST/SGST/IGST/Cess and freight/loading/cash
+ * discount breakdown is still calculated and still saved; it is simply not
+ * shown here, exactly as on the legacy screen, which surfaces it on the printed
+ * document instead of on the entry panel.
  *
  * `TotalsFooterStats` is exported separately: the two stat lines it renders
  * ("Total Profit", "Total Saving") sit outside this box, in the page's own
@@ -38,13 +37,6 @@ export type TotalsStripProps = {
   /** Appended to the first / second totals column, in order. */
   extraColumnOne?: TotalsExtraCell[];
   extraColumnTwo?: TotalsExtraCell[];
-  /**
-   * The "More totals" disclosure. On by default (the quotation wants it); the
-   * sale order turns it off — its panel already carries the order's own money
-   * rows, and the extra fold made the block taller than the space the grids
-   * leave it.
-   */
-  showMoreTotals?: boolean;
   /** True while a loaded document is still painting its stored figures. */
   stored: boolean;
 };
@@ -66,8 +58,9 @@ function Cell({
         variant === "stat" && styles.totalCellStat,
       )}
     >
-      <dt>{label}</dt>
-      <dd>{value || "0.00"}</dd>
+      {/* Titled because a narrow panel may ellipsise either half. */}
+      <dt title={label}>{label}</dt>
+      <dd title={value || "0.00"}>{value || "0.00"}</dd>
     </div>
   );
 }
@@ -76,57 +69,47 @@ export function TotalsStrip({
   totals,
   extraColumnOne,
   extraColumnTwo,
-  showMoreTotals = true,
   stored,
 }: TotalsStripProps) {
   return (
     <div className={styles.totalsPanel} aria-label={stored ? "Saved totals" : "Totals"}>
       <div className={styles.totalsPrimary}>
-        <dl className={styles.totalsCol}>
-          <Cell label="Total Items" value={String(totals.totItems)} />
-          <Cell label="Gross Amount" value={formatCurrency(totals.grossAmt, 2, true)} />
-          <Cell label="Scheme Discount" value={formatCurrency(totals.schDisc, 2, true)} />
-          <Cell label="Round Off" value={formatCurrency(totals.roundOff, 2, true)} />
-          {(extraColumnOne ?? []).map((cell) => (
-            <Cell key={cell.label} label={cell.label} value={cell.value} />
-          ))}
-        </dl>
-        <dl className={styles.totalsCol}>
-          <Cell label="Total Bags" value={formatCurrency(totals.totQty, 3, true)} />
-          <Cell label="Item Discount" value={formatCurrency(totals.itemDisc, 2, true)} />
-          <Cell label="Taxable Amount" value={formatCurrency(totals.docTaxable, 2, true)} />
-          {(extraColumnTwo ?? []).map((cell) => (
-            <Cell key={cell.label} label={cell.label} value={cell.value} />
-          ))}
-        </dl>
-        <dl className={styles.totalsCol}>
-          <Cell label="Total Weight" value={formatCurrency(totals.totWeight, 3, true)} />
-          <Cell label="Special Discount" value={formatCurrency(totals.splDisc, 2, true)} />
-          <Cell label="Tax Amount" value={formatCurrency(totals.docTax, 2, true)} />
-        </dl>
+        {/* The three figure columns re-flow inside this box; the Bill sits
+            beside them and keeps the width it needs. */}
+        <div className={styles.totalsFigures}>
+          <dl className={styles.totalsCol}>
+            <Cell label="Total Items" value={String(totals.totItems)} />
+            <Cell label="Gross Amount" value={formatCurrency(totals.grossAmt, 2, true)} />
+            <Cell label="Scheme Discount" value={formatCurrency(totals.schDisc, 2, true)} />
+            <Cell label="Round Off" value={formatCurrency(totals.roundOff, 2, true)} />
+            {(extraColumnOne ?? []).map((cell) => (
+              <Cell key={cell.label} label={cell.label} value={cell.value} />
+            ))}
+          </dl>
+          <dl className={styles.totalsCol}>
+            <Cell label="Total Bags" value={formatCurrency(totals.totQty, 3, true)} />
+            <Cell label="Item Discount" value={formatCurrency(totals.itemDisc, 2, true)} />
+            <Cell label="Taxable Amount" value={formatCurrency(totals.docTaxable, 2, true)} />
+            {(extraColumnTwo ?? []).map((cell) => (
+              <Cell key={cell.label} label={cell.label} value={cell.value} />
+            ))}
+          </dl>
+          <dl className={styles.totalsCol}>
+            <Cell label="Total Weight" value={formatCurrency(totals.totWeight, 3, true)} />
+            <Cell label="Special Discount" value={formatCurrency(totals.splDisc, 2, true)} />
+            <Cell label="Tax Amount" value={formatCurrency(totals.docTax, 2, true)} />
+          </dl>
+        </div>
         <div className={styles.totalsGrand}>
           <span className={styles.totalsGrandLabel}>Bill</span>
-          <span className={styles.totalsGrandValue}>{formatCurrency(totals.bill, 2, true)}</span>
+          <span
+            className={styles.totalsGrandValue}
+            title={formatCurrency(totals.bill, 2, true)}
+          >
+            {formatCurrency(totals.bill, 2, true)}
+          </span>
         </div>
       </div>
-      {showMoreTotals ? (
-      <details className={styles.totalsDetails}>
-        <summary>More totals</summary>
-        <dl className={styles.totalsStrip}>
-          <Cell label="Qty" value={formatCurrency(totals.totQty, 3, true)} />
-          <Cell label="Bill scheme disc" value={formatCurrency(totals.billSchDisc, 2, true)} />
-          <Cell label="Freight" value={formatCurrency(totals.freightAmt, 2, true)} />
-          <Cell label="Loading" value={formatCurrency(totals.loadAmt, 2, true)} />
-          <Cell label="Unloading" value={formatCurrency(totals.unloadAmt, 2, true)} />
-          <Cell label="Cash disc" value={formatCurrency(totals.cashDiscAmt, 2, true)} />
-          <Cell label="Other" value={formatCurrency(totals.otherAmt, 2, true)} />
-          <Cell label="CGST" value={formatCurrency(totals.docCgst, 2, true)} />
-          <Cell label="SGST" value={formatCurrency(totals.docSgst, 2, true)} />
-          <Cell label="IGST" value={formatCurrency(totals.docIgst, 2, true)} />
-          <Cell label="Cess" value={formatCurrency(totals.docCess, 2, true)} />
-        </dl>
-      </details>
-      ) : null}
     </div>
   );
 }
