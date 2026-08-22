@@ -336,18 +336,6 @@ export function getLedgerValidationError(
       message: "Ledger Name is required.",
     };
   }
-  if (!(values.ledCompanyId ?? "").trim()) {
-    return {
-      fieldName: "ledCompanyId",
-      message: "Company is required.",
-    };
-  }
-  if (!(values.ledBranchId ?? "").trim()) {
-    return {
-      fieldName: "ledBranchId",
-      message: "Branch is required.",
-    };
-  }
   if (!(values.ledGroupId ?? "").trim()) {
     return {
       fieldName: "ledGroupId",

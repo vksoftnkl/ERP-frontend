@@ -132,7 +132,6 @@ export function buildLedgerFormFields(
       label: "Company",
       type: "select",
       searchable: true,
-      required: true,
       options: companyOptions,
     },
     {
@@ -140,7 +139,6 @@ export function buildLedgerFormFields(
       label: "Branch",
       type: "select",
       searchable: true,
-      required: true,
       options: branchOptions,
     },
 

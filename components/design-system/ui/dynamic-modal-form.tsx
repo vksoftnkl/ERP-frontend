@@ -1303,6 +1303,46 @@ export function ERPDynamicModalForm({
     onCancel?.(activeVariant.key);
     closeModal();
   };
+  // Bare Enter walks to the next control instead of submitting. Saving is the
+  // Ctrl/Cmd+Enter chord (handled by the window listener above), so this must
+  // never swallow a modified Enter.
+  const handleFieldEnterAdvance = useCallback(
+    (event: ReactKeyboardEvent<HTMLFormElement>) => {
+      if (
+        event.key !== "Enter" ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.shiftKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      // Controls where Enter already means something native: newlines, clicks.
+      if (
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLButtonElement ||
+        target.isContentEditable ||
+        target.getAttribute("role") === "button" ||
+        (target instanceof HTMLAnchorElement && target.hasAttribute("href"))
+      ) {
+        return;
+      }
+      // Blocks the browser's implicit submission via the footer Save button,
+      // which owns this form through its `form` attribute.
+      event.preventDefault();
+      const container = target.closest<HTMLElement>(FIELD_CONTAINER_SELECTOR);
+      if (!container || container.dataset.erpModalFieldType === "custom") {
+        return;
+      }
+      focusNextFieldControl(target);
+    },
+    [focusNextFieldControl],
+  );
   const handleFieldArrowNavigation = useCallback(
     (event: ReactKeyboardEvent<HTMLFormElement>) => {
       if (
@@ -2252,7 +2292,10 @@ export function ERPDynamicModalForm({
                 id={formId}
                 ref={formRef}
                 onSubmit={handleSubmit}
-                onKeyDown={handleFieldArrowNavigation}
+                onKeyDown={(event) => {
+                  handleFieldEnterAdvance(event);
+                  handleFieldArrowNavigation(event);
+                }}
                 noValidate
                 autoComplete="off"
                 className={styles.formGrid}
