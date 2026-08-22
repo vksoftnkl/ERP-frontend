@@ -2,13 +2,15 @@
 import { type ReactNode, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
+import { HOME_ROUTE } from "@/lib/navigation/routes";
 import { useAppSelector } from "@/store/hooks";
 import {
   selectAuthInitialized,
   selectIsAuthenticated,
 } from "@/store/slices/authSlice";
 
-const PUBLIC_EXACT_ROUTES = new Set(["/login", "/ui-library", "/erp-data-demo"]);
+// `/` is public because it only forwards to login or to the home screen.
+const PUBLIC_EXACT_ROUTES = new Set(["/", "/login", "/ui-library", "/erp-data-demo"]);
 const PUBLIC_PREFIX_ROUTES = ["/login/", "/ui-library/", "/erp-data-demo/"];
 
 function isPublicRoute(pathname: string): boolean {
@@ -24,9 +26,9 @@ function toRelativePath(pathname: string, query: string): string {
 
 function normalizeNextRoute(nextRoute: string | null): string {
   if (!nextRoute || !nextRoute.startsWith("/") || nextRoute.startsWith("//")) {
-    return "/";
+    return HOME_ROUTE;
   }
-  return nextRoute.startsWith("/login") ? "/" : nextRoute;
+  return nextRoute === "/" || nextRoute.startsWith("/login") ? HOME_ROUTE : nextRoute;
 }
 
 export default function GlobalRouteGuard({ children }: { children: ReactNode }) {

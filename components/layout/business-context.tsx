@@ -72,8 +72,9 @@ type BusinessContextValue = {
 
 const BusinessContext = createContext<BusinessContextValue | null>(null);
 
+// `/` is the login-or-home switchboard, so it wears the same bare chrome.
 function isLoginRoute(pathname: string): boolean {
-  return pathname === "/login" || pathname.startsWith("/login/");
+  return pathname === "/" || pathname === "/login" || pathname.startsWith("/login/");
 }
 
 function mapCompanyOptions(companies: CompanyRecord[]): ERPDynamicSelectOption[] {

@@ -25,6 +25,7 @@ import type { DraftLine, ItemUnitOption } from "../quotation.types";
 import {
   cubicFeetFromSize,
   isFrozenColumn,
+  scaledWidth,
   totalColumnWidth,
   type ResolvedItemColumn,
 } from "../quotation.utils";
@@ -183,12 +184,12 @@ export function ItemGrid(props: ItemGridProps) {
 
   return (
     <div className={styles.gridViewport} data-erp-table-viewport="true">
-      <table className={styles.grid} style={{ width: `${tableWidth}px` }}>
+      <table className={styles.grid} style={{ width: scaledWidth(tableWidth) }}>
         <colgroup>
           {visible.map((column) => (
-            <col key={column.key} style={{ width: `${column.widthPx}px` }} />
+            <col key={column.key} style={{ width: scaledWidth(column.widthPx) }} />
           ))}
-          <col style={{ width: `${ROW_ACTION_PX}px` }} />
+          <col style={{ width: scaledWidth(ROW_ACTION_PX) }} />
         </colgroup>
         <thead>
           <tr>

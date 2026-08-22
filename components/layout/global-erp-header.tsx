@@ -4,8 +4,9 @@ import { usePathname } from "next/navigation";
 import ErpHeader from "@/components/layout/erp-header";
 import { useBusinessContext } from "@/components/layout/business-context";
 
+// `/` is the login-or-home switchboard, so it wears the same bare chrome.
 function isLoginRoute(pathname: string): boolean {
-  return pathname === "/login" || pathname.startsWith("/login/");
+  return pathname === "/" || pathname === "/login" || pathname.startsWith("/login/");
 }
 
 export default function GlobalErpHeader() {

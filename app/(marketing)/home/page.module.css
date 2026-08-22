@@ -20,7 +20,7 @@
   overflow: hidden;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.16) 100%),
-    url("../../assets/background.jpg") center / cover no-repeat;
+    url("../../../assets/background.jpg") center / cover no-repeat;
 }
 
 .hero::before,

@@ -19,6 +19,7 @@ import {
 } from "react";
 import { useSaveQuotationColumnWidthsMutation } from "@/store/api/quotationApi";
 import {
+  CONFIG_PX_PER_UNIT,
   configWidthFromPx,
   MIN_RESIZED_COLUMN_PX,
   type ColumnWidthUnit,
@@ -29,7 +30,22 @@ type ResizeState = {
   key: string;
   startX: number;
   startWidth: number;
+  /** Screen pixels per stored width unit, read when the drag starts. */
+  scale: number;
 };
+
+/**
+ * The grids draw their columns in the page's fluid unit, not in the pixels the
+ * layout stores (`scaledWidth`), so a drag of N screen pixels is NOT a change of
+ * N stored pixels. The table's computed font-size IS that unit, which makes it
+ * the conversion factor — read once per drag, since a window resize mid-drag is
+ * not worth the reflow.
+ */
+function unitScaleOf(element: HTMLElement): number {
+  const table = element.closest("table");
+  const fontSize = table ? Number.parseFloat(window.getComputedStyle(table).fontSize) : NaN;
+  return Number.isFinite(fontSize) && fontSize > 0 ? fontSize / CONFIG_PX_PER_UNIT : 1;
+}
 
 export type ColumnResize<TColumn> = {
   /** The configured columns with any local drag applied. */
@@ -90,6 +106,7 @@ export function useColumnResize<TMeaning extends { key: string }>(
         key: columnKey,
         startX: event.clientX,
         startWidth: widths[columnKey] ?? column.widthPx,
+        scale: unitScaleOf(event.currentTarget),
       };
       setResizingKey(columnKey);
       document.body.style.userSelect = "none";
@@ -111,7 +128,7 @@ export function useColumnResize<TMeaning extends { key: string }>(
       }
       const nextWidth = Math.max(
         MIN_RESIZED_COLUMN_PX,
-        resize.startWidth + (event.clientX - resize.startX),
+        resize.startWidth + (event.clientX - resize.startX) / resize.scale,
       );
       setWidths((current) => ({ ...current, [resize.key]: nextWidth }));
     };

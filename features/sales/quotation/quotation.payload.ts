@@ -655,9 +655,12 @@ export function parseLoadedDocument(
       ...emptyCustomer(),
       custId: payload.sqCustId,
       name: payload.sqCustName ?? "",
-      // The GET carries no separate master name — the document stores only its
-      // own copy — so the combobox names the customer as this document has it.
-      masterName: payload.sqCustName ?? "",
+      // Blank on purpose: a document opened to view or edit already names its
+      // customer in the Customer Name field below, and the Existing Customer box
+      // is the picker for LINKING one — it opens ready to search, and fills in
+      // again only if the operator picks a different customer. `custId` above is
+      // what keeps the link; this is only what the box reads back.
+      masterName: "",
       address: payload.sqCustAddr,
       place: payload.sqCustPlace,
       phone: payload.sqCustPhone,

@@ -259,6 +259,22 @@ function widthPxOf(configured: number | null, unit: ColumnWidthUnit): number {
 /** The floor a drag may take a column to — same one the resolver enforces. */
 export const MIN_RESIZED_COLUMN_PX = MIN_COLUMN_PX;
 /**
+ * What one configured pixel was worth when the screen was fixed-size: the
+ * root's 16px. Column widths are still STORED in these units — nothing about
+ * the layout config changes — they are only drawn in the page's fluid unit.
+ */
+export const CONFIG_PX_PER_UNIT = 16;
+/**
+ * A configured width as the grids render it: `em` off the table, whose
+ * font-size `page.module.scss` sets to `--erp-q-u`. So the columns grow and
+ * shrink with the labels, inputs and type around them instead of staying
+ * pinned to a pixel count taken on somebody else's monitor. At the unit's
+ * neutral 16px this is exactly the old pixel width.
+ */
+export function scaledWidth(px: number): string {
+  return `${(px / CONFIG_PX_PER_UNIT).toFixed(4)}em`;
+}
+/**
  * The inverse of `widthPxOf`: a dragged pixel width back into the unit the
  * layout stores. On a `qtPercent` layout, writing raw pixels would be read back
  * multiplied by `PX_PER_CONFIG_UNIT` — an 11× wider column every reload.

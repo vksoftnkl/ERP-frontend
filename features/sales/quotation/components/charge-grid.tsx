@@ -27,7 +27,12 @@ import {
   CHARGE_TYPE_LABELS,
 } from "../quotation.constants";
 import type { DraftChargeRow } from "../quotation.types";
-import { isFrozenColumn, totalColumnWidth, type ResolvedChargeColumn } from "../quotation.utils";
+import {
+  isFrozenColumn,
+  scaledWidth,
+  totalColumnWidth,
+  type ResolvedChargeColumn,
+} from "../quotation.utils";
 import { GridCell } from "./grid-cell";
 import { moveCellFocus } from "./grid-focus";
 import styles from "../page.module.scss";
@@ -93,12 +98,12 @@ export function ChargeGrid(props: ChargeGridProps) {
 
   return (
     <div className={styles.gridViewport}>
-      <table className={styles.grid} style={{ width: `${tableWidth}px` }}>
+      <table className={styles.grid} style={{ width: scaledWidth(tableWidth) }}>
         <colgroup>
           {visible.map((column) => (
-            <col key={column.key} style={{ width: `${column.widthPx}px` }} />
+            <col key={column.key} style={{ width: scaledWidth(column.widthPx) }} />
           ))}
-          <col style={{ width: `${ROW_ACTION_PX}px` }} />
+          <col style={{ width: scaledWidth(ROW_ACTION_PX) }} />
         </colgroup>
         <thead>
           <tr>

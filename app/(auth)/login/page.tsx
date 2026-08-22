@@ -7,6 +7,7 @@ import {
   canUseClientSideRouting,
   normalizeInternalRoute,
 } from "@/lib/navigation/safe-route";
+import { HOME_ROUTE } from "@/lib/navigation/routes";
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useLoginMutation } from "@/store/api/authApi";
 import "./login-global.css";
@@ -28,8 +29,10 @@ type Errors = {
   password?: string;
 };
 function normalizeNextRoute(nextRoute: string | null): string {
-  const normalizedRoute = normalizeInternalRoute(nextRoute, "/");
-  return normalizedRoute.startsWith("/login") ? "/" : normalizedRoute;
+  const normalizedRoute = normalizeInternalRoute(nextRoute, HOME_ROUTE);
+  return normalizedRoute === "/" || normalizedRoute.startsWith("/login")
+    ? HOME_ROUTE
+    : normalizedRoute;
 }
 export default function LoginPage() {
   const router = useRouter();
