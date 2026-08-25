@@ -19,6 +19,7 @@ import {
   parseColumnWidth,
   reorderColumns,
 } from "./stock-utils";
+import { toLayoutPx } from "@/lib/ui-scale";
 
 type UseColumnConfigOptions<TColumn extends { key: string; header: string; width: string }> = {
   tableId: string;
@@ -209,7 +210,9 @@ export function useColumnConfig<TColumn extends { key: string; header: string; w
     const handleMouseMove = (event: MouseEvent) => {
       const activeResize = resizingColumnRef.current;
       if (!activeResize) return;
-      const delta = event.clientX - activeResize.startX;
+      // The pointer moves in visual pixels; the width it drives is a CSS
+      // length under the global UI scale. See lib/ui-scale.ts.
+      const delta = toLayoutPx(event.clientX - activeResize.startX);
       const nextWidth = Math.max(MIN_RESIZABLE_COLUMN_WIDTH, activeResize.startWidth + delta);
       activeResize.currentWidth = nextWidth;
       setColumns((current) =>

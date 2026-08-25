@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useLazyGetItemOptionsQuery } from "@/store/api/lookupsApi";
 import { Z_POPUP } from "@/lib/z-index";
 import styles from "./item-qty-price.module.scss";
+import { layoutRect } from "@/lib/ui-scale";
 type ItemOption = { value: string; label: string };
 type ItemSearchCellProps = {
   placeholder?: string;
@@ -37,7 +38,9 @@ export function ItemSearchCell({ placeholder, selectedLabel, onSelect }: ItemSea
   const updatePlacement = useCallback(() => {
     const input = inputRef.current;
     if (!input) return;
-    const rect = input.getBoundingClientRect();
+    // Layout pixels — the rect is fed straight back in as CSS on a fixed
+    // dropdown inside the globally scaled document. See lib/ui-scale.ts.
+    const rect = layoutRect(input);
     setDropdownStyle({
       position: "fixed",
       left: `${rect.left}px`,

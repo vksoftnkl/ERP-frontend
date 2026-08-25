@@ -732,6 +732,20 @@
  * its body cell.
  */
 .viewportInner {
+  /*
+   * The one place in the application that opts out of the global UI scale.
+   *
+   * Everything else grows and shrinks with the screen, but this is a sheet of
+   * paper: `mmToPx` converts at a fixed 96 DPI, and the pointer maths in
+   * BandBody turns a drag in screen pixels straight back into millimetres. Let
+   * the scale through and a 4mm drag would commit as 4mm / scale, and the
+   * ruler would no longer agree with the platen. Cancelling it here keeps the
+   * canvas true while the designer's own chrome — menus, panels, toolbar —
+   * still scales with the rest of the app. Users size the sheet with the
+   * designer's own zoom control, which is what it is for.
+   */
+  zoom: calc(1 / var(--erp-ui-scale));
+
   display: grid;
   grid-template-columns: var(--pd-ruler) var(--pd-gutter) max-content;
   width: max-content;

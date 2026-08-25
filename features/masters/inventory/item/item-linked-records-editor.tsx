@@ -42,6 +42,7 @@ export {
   parseLinkedRecordRows,
   serializeLinkedRecordRows,
 } from "./item-linked-records-editor.shared";
+import { layoutPointer, layoutViewportSize, toLayoutPx } from "@/lib/ui-scale";
 type LinkedRecordEditorAutoAppendConfig = {
   columnKey: string;
   focusColumnKey?: string;
@@ -565,16 +566,21 @@ export default function ItemLinkedRecordsEditor({
     }
     event.preventDefault();
     event.stopPropagation();
+    // Layout pixels: the pointer and the viewport are visual measurements, but
+    // these land as `left`/`top` on a fixed menu inside the globally scaled
+    // document. See lib/ui-scale.ts.
+    const pointer = layoutPointer(event);
+    const screen = layoutViewportSize();
     setOpenBodyMenuPosition({
       left: clamp(
-        event.clientX,
+        pointer.x,
         HEADER_MENU_VIEWPORT_PADDING,
-        window.innerWidth - HEADER_MENU_ESTIMATED_WIDTH,
+        screen.width - HEADER_MENU_ESTIMATED_WIDTH,
       ),
       top: clamp(
-        event.clientY,
+        pointer.y,
         HEADER_MENU_VIEWPORT_PADDING,
-        window.innerHeight - TABLE_SETTINGS_CONTEXT_MENU_HEIGHT,
+        screen.height - TABLE_SETTINGS_CONTEXT_MENU_HEIGHT,
       ),
     });
   };
@@ -790,16 +796,18 @@ export default function ItemLinkedRecordsEditor({
     event.preventDefault();
     event.stopPropagation();
     const headerCell = event.currentTarget.closest("th");
+    // Layout pixels: the measured start width and the pointer delta both end
+    // up as a stored CSS width under the global UI scale. See lib/ui-scale.ts.
     const startWidth =
       headerCell instanceof HTMLElement
-        ? headerCell.getBoundingClientRect().width
+        ? toLayoutPx(headerCell.getBoundingClientRect().width)
         : MIN_COLUMN_WIDTH_PX;
     const startX = event.clientX;
     let latestWidth = startWidth;
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const nextWidth = Math.max(
         MIN_COLUMN_WIDTH_PX,
-        Math.round(startWidth + moveEvent.clientX - startX),
+        Math.round(startWidth + toLayoutPx(moveEvent.clientX - startX)),
       );
       latestWidth = nextWidth;
       updateColumnLayout((current) => ({

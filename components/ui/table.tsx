@@ -54,6 +54,7 @@ import type {
   RowActionHandler,
   RowKeyResolver,
 } from "./table.types";
+import { layoutRect, layoutViewportSize, toLayoutPx } from "@/lib/ui-scale";
 
 type ActionMenuPlacement = {
   vertical: "down" | "up";
@@ -88,9 +89,14 @@ function resolveActionMenuGeometry(trigger: HTMLElement): {
   placement: ActionMenuPlacement;
   position: ActionMenuPosition;
 } {
-  const viewport = trigger.closest<HTMLElement>('[data-erp-table-viewport="true"]');
-  const bounds = viewport?.getBoundingClientRect() ?? document.documentElement.getBoundingClientRect();
-  const triggerRect = trigger.getBoundingClientRect();
+  // Layout pixels throughout: `left`/`top` below are written onto a fixed,
+  // portaled menu inside the globally scaled document, so a visual-pixel
+  // measurement would be multiplied by the scale a second time. See
+  // lib/ui-scale.ts.
+  const viewportEl = trigger.closest<HTMLElement>('[data-erp-table-viewport="true"]');
+  const bounds = layoutRect(viewportEl ?? document.documentElement);
+  const triggerRect = layoutRect(trigger);
+  const screen = layoutViewportSize();
   const spaceRight = bounds.right - triggerRect.right;
   const spaceLeft = triggerRect.left - bounds.left;
   const horizontal =
@@ -99,7 +105,7 @@ function resolveActionMenuGeometry(trigger: HTMLElement): {
   const spaceAbove = triggerRect.bottom - bounds.top;
   const vertical =
     spaceBelow < ACTION_MENU_ESTIMATED_HEIGHT && spaceAbove > spaceBelow ? "up" : "down";
-  const maxLeft = window.innerWidth - ACTION_MENU_ESTIMATED_WIDTH - ACTION_MENU_VIEWPORT_PADDING;
+  const maxLeft = screen.width - ACTION_MENU_ESTIMATED_WIDTH - ACTION_MENU_VIEWPORT_PADDING;
   const left =
     horizontal === "left"
       ? triggerRect.left - ACTION_MENU_ESTIMATED_WIDTH - ACTION_MENU_GAP
@@ -110,7 +116,7 @@ function resolveActionMenuGeometry(trigger: HTMLElement): {
       : triggerRect.top - 4;
   const maxMenuHeight = Math.min(
     ACTION_MENU_ESTIMATED_HEIGHT,
-    window.innerHeight - ACTION_MENU_VIEWPORT_PADDING * 2,
+    screen.height - ACTION_MENU_VIEWPORT_PADDING * 2,
   );
   return {
     placement: { vertical, horizontal },
@@ -119,7 +125,7 @@ function resolveActionMenuGeometry(trigger: HTMLElement): {
       top: clamp(
         top,
         ACTION_MENU_VIEWPORT_PADDING,
-        window.innerHeight - maxMenuHeight - ACTION_MENU_VIEWPORT_PADDING,
+        screen.height - maxMenuHeight - ACTION_MENU_VIEWPORT_PADDING,
       ),
     },
   };
@@ -1296,7 +1302,10 @@ export function ReusableTable<T extends Record<string, unknown>>({
           return;
         }
         const th = headerRow.children.item(idx) as HTMLElement | null;
-        const w = th ? Math.round(th.getBoundingClientRect().width) : 0;
+        // Layout pixels: the snapshot is re-applied as a CSS width and the
+        // final figure is persisted to the layout settings, both of which are
+        // read back under the global UI scale. See lib/ui-scale.ts.
+        const w = th ? Math.round(toLayoutPx(th.getBoundingClientRect().width)) : 0;
         if (w > 0) {
           widthSnapshot[col.key] = `${w}px`;
           if (col.key === column.key) {
@@ -1311,7 +1320,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
     let latestPrimaryWidth = primaryStartWidth;
 
     const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-      const delta = moveEvent.clientX - startX;
+      const delta = toLayoutPx(moveEvent.clientX - startX);
       latestPrimaryWidth = Math.max(
         MIN_RESIZABLE_COLUMN_WIDTH,
         Math.round(primaryStartWidth + delta),
@@ -1327,7 +1336,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
-      const tableWidth = tableElement?.getBoundingClientRect().width ?? 0;
+      const tableWidth = tableElement ? toLayoutPx(tableElement.getBoundingClientRect().width) : 0;
       onColumnResizeEnd?.({
         column,
         widthPx: latestPrimaryWidth,

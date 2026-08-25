@@ -25,6 +25,7 @@ import {
   type ColumnWidthUnit,
   type ResolvedColumn,
 } from "../quotation.utils";
+import { toLayoutPx } from "@/lib/ui-scale";
 
 type ResizeState = {
   key: string;
@@ -128,7 +129,9 @@ export function useColumnResize<TMeaning extends { key: string }>(
       }
       const nextWidth = Math.max(
         MIN_RESIZED_COLUMN_PX,
-        resize.startWidth + (event.clientX - resize.startX) / resize.scale,
+        // `resize.scale` is read from a computed style, which is in layout
+        // pixels; the pointer delta is in visual ones. See lib/ui-scale.ts.
+        resize.startWidth + toLayoutPx(event.clientX - resize.startX) / resize.scale,
       );
       setWidths((current) => ({ ...current, [resize.key]: nextWidth }));
     };
