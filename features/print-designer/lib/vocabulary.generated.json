@@ -1,0 +1,118 @@
+{
+  "generatedFrom": "ERP server/src/modules/reporting",
+  "schemaVersion": 1,
+  "layoutModes": [
+    "GRAPHIC",
+    "GRID"
+  ],
+  "outputModes": [
+    "PDF",
+    "ESCPOS",
+    "ESCP_DOTMATRIX",
+    "HTML"
+  ],
+  "orientations": [
+    "PORTRAIT",
+    "LANDSCAPE"
+  ],
+  "bandTypes": [
+    "REPORT_HEADER",
+    "PAGE_HEADER",
+    "GROUP_HEADER",
+    "DETAIL",
+    "GROUP_FOOTER",
+    "SUMMARY",
+    "PAGE_FOOTER",
+    "REPORT_FOOTER",
+    "NO_DATA"
+  ],
+  "elementKinds": [
+    "TEXT",
+    "FIELD",
+    "LINE",
+    "RECT",
+    "IMAGE",
+    "BARCODE",
+    "QRCODE",
+    "PAGEBREAK"
+  ],
+  "printOn": [
+    "ALL_PAGES",
+    "FIRST_PAGE",
+    "LAST_PAGE",
+    "NOT_FIRST_PAGE",
+    "NOT_LAST_PAGE"
+  ],
+  "barcodeSymbologies": [
+    "code128",
+    "ean13",
+    "ean8",
+    "upca",
+    "code39",
+    "itf14"
+  ],
+  "aggregateFunctions": [
+    "sum",
+    "count",
+    "avg",
+    "min",
+    "max"
+  ],
+  "aggregateScopes": [
+    "GROUP",
+    "PAGE",
+    "REPORT"
+  ],
+  "transforms": [
+    "fmt",
+    "fmtIntl",
+    "date",
+    "numToWords",
+    "intToWords",
+    "gstSplit",
+    "gstExclusive",
+    "interState",
+    "upper",
+    "lower",
+    "trim",
+    "title",
+    "pad",
+    "padEnd",
+    "padCenter",
+    "truncate",
+    "repeat",
+    "coalesce",
+    "wrap",
+    "mask",
+    "abs",
+    "round",
+    "ceil",
+    "floor",
+    "neg",
+    "default",
+    "length",
+    "join",
+    "first",
+    "last",
+    "sum",
+    "sortBy",
+    "where",
+    "groupIndian",
+    "groupWestern",
+    "bool",
+    "num",
+    "str"
+  ],
+  "paperCodes": [
+    "A4",
+    "A5",
+    "A6",
+    "LETTER",
+    "T58",
+    "T80",
+    "DM80",
+    "DM96",
+    "DM132",
+    "DM137"
+  ]
+}

@@ -1,0 +1,90 @@
+/*
+ * What the print-templates list adds to the shared master-page skin.
+ *
+ * The layout, toolbar and table all come from `CrudMasterPage` and
+ * `state-master/page.module.scss`; only the pieces that screen owns — the
+ * status badges beside a name, the per-row action links and the filter
+ * selects — live here.
+ */
+
+.nameCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  color: #4b5563;
+  white-space: nowrap;
+}
+
+.badgeDefault {
+  border-color: #d8bd57;
+  background: #fbf3d8;
+  color: #7a5f06;
+}
+
+.badgeSystem {
+  border-color: rgba(123, 21, 21, 0.35);
+  background: rgba(123, 21, 21, 0.08);
+  color: var(--primary, #7b1515);
+}
+
+.rowActions {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.linkButton {
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  color: var(--primary, #7b1515);
+  cursor: pointer;
+  font-size: 11px;
+  text-decoration: underline;
+
+  &:disabled {
+    color: #9ca3af;
+    cursor: not-allowed;
+    text-decoration: none;
+  }
+}
+
+/* Sits in the shell's filter row, so it matches the height of its search box. */
+.filterSelect {
+  height: 34px;
+  min-width: 130px;
+  padding: 0 0.5rem;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary, #7b1515);
+  }
+}
+
+.checkSpacer {
+  margin-left: 1rem;
+}
+
+.hiddenInput {
+  display: none;
+}

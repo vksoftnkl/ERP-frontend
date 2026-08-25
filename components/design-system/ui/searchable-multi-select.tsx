@@ -14,6 +14,7 @@ import { cx } from "@/components/design-system/cx";
 import { focusNextInteractiveControl } from "@/components/design-system/ui/focus-next-control";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
+import { layoutRect, layoutViewportSize } from "@/lib/ui-scale";
 export type SearchableMultiSelectProps = {
   id?: string;
   values: readonly string[];
@@ -92,8 +93,10 @@ export function SearchableMultiSelect({
   const updatePlacement = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
+    // Layout pixels: the space is compared against `maxDropdownHeight` and a
+    // per-row height, both of which are CSS lengths under the global UI scale.
+    const rect = layoutRect(trigger);
+    const spaceBelow = layoutViewportSize().height - rect.bottom;
     const spaceAbove = rect.top;
     const preferredHeight = Math.min(
       maxDropdownHeight,

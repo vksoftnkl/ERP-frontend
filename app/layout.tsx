@@ -6,10 +6,15 @@ import Providers from "@/store/provider";
 import { BusinessContextProvider } from "@/components/layout/business-context";
 import GlobalErpHeader from "@/components/layout/global-erp-header";
 import GlobalRouteGuard from "@/components/auth/global-route-guard";
+import MenuAccessGuard from "@/components/auth/menu-access-guard";
 import GlobalLoader from "@/components/feedback/global-loader";
-import GlobalUppercaseInput from "@/components/feedback/global-uppercase-input";
+// TEMPORARILY DISABLED: global auto-uppercase is off for now. Restore by
+// un-commenting this import and the <GlobalUppercaseInput /> mount below.
+// import GlobalUppercaseInput from "@/components/feedback/global-uppercase-input";
 import GlobalToasterWrapper from "@/components/feedback/global-toaster-wrapper";
 import ErrorBoundary from "@/components/feedback/error-boundary";
+import UiScaleController from "@/components/layout/ui-scale-controller";
+import { uiScaleBootstrapScript } from "@/lib/ui-scale";
 import RegionErrorBoundary from "@/components/feedback/region-error-boundary";
 export const metadata: Metadata = {
   title: "ERP Client | Operations Platform",
@@ -46,8 +51,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Sizes the whole interface to the screen before anything is
+            painted. Must stay first in <head> and must stay blocking:
+            deferring it would show one frame of unscaled UI. */}
+        <script dangerouslySetInnerHTML={{ __html: uiScaleBootstrapScript() }} />
         {enableFigmaCapture ? (
           <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async />
         ) : null}
@@ -55,8 +64,9 @@ export default function RootLayout({
       <body suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: removeExtensionInjectedNodesScript }} />
         <Providers>
+          <UiScaleController />
           <GlobalLoader />
-          <GlobalUppercaseInput />
+          {/* TEMPORARILY DISABLED: <GlobalUppercaseInput /> */}
           {/* Guards the shell itself. `app/error.tsx` only wraps the page below
               this layout, so without this a throw in the header or the
               business-context provider would escalate to global-error.tsx and
@@ -72,7 +82,12 @@ export default function RootLayout({
                   <RegionErrorBoundary title="The navigation bar failed to load">
                     <GlobalErpHeader />
                   </RegionErrorBoundary>
-                  <div className="erp-app-content">{children}</div>
+                  <div className="erp-app-content">
+                    {/* Menu permissions gate the route itself: a screen the
+                        user's menu does not carry is refused here rather than
+                        rendered and then argued with by the API. */}
+                    <MenuAccessGuard>{children}</MenuAccessGuard>
+                  </div>
                 </div>
               </BusinessContextProvider>
             </GlobalRouteGuard>

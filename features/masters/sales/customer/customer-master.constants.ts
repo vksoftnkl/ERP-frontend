@@ -164,16 +164,16 @@ export const DEFAULT_PRICE_LEVEL_OPTION: ERPDynamicSelectOption = {
   label: "Select Price Level",
 };
 export const AREA_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(42vw, 42rem)",
-  maxHeight: "75vh",
+  width: "min(calc(42vw/var(--erp-ui-scale)), 42rem)",
+  maxHeight: "calc(75vh/var(--erp-ui-scale))",
 };
 export const STATE_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(34vw, 34rem)",
-  maxHeight: "75vh",
+  width: "min(calc(34vw/var(--erp-ui-scale)), 34rem)",
+  maxHeight: "calc(75vh/var(--erp-ui-scale))",
 };
 export const GROUP_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(42vw, 42rem)",
-  maxHeight: "75vh",
+  width: "min(calc(42vw/var(--erp-ui-scale)), 42rem)",
+  maxHeight: "calc(75vh/var(--erp-ui-scale))",
 };
 export const GST_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "REGULAR", label: "Regular" },
@@ -381,13 +381,13 @@ export const GROUP_MODAL_INITIAL_VALUES: Record<string, string> = {
 export const CUSTOMER_MODAL_PANEL_STYLE: CSSProperties = {
   // Measured across every tab: labels/placeholders start clipping below 50rem,
   // so this keeps headroom for longer labels arriving from widget config.
-  width: "min(94vw, 72rem)",
+  width: "min(calc(94vw/var(--erp-ui-scale)), 72rem)",
   // The tallest tab is now Identity (primary + Address + Contact + Credit && Terms +
   // Attributes), so the panel is sized taller to show most of it before scrolling.
   // Fixed to the tallest tab rather than the open one, so it does not resize as you
   // switch tabs; capped to the viewport so it never overflows on short screens.
-  height: "min(88vh, 760px)",
-  maxHeight: "88vh",
+  height: "min(calc(88vh/var(--erp-ui-scale)), 760px)",
+  maxHeight: "calc(88vh/var(--erp-ui-scale))",
 };
 export const CUSTOMER_PHONE_PATTERN = "^[0-9+()\\-\\s]{0,20}$";
 export const CUSTOMER_BASIC_VALIDATIONS: Record<string, ERPDynamicFieldValidation> = {

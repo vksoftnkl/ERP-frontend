@@ -21,7 +21,7 @@ export const UI_TABLE_MASTERS_ENDPOINT = "/ui-table-masters/get";
 /** PUT, `{ columns: [{ uiTblClmId, uiTblClmColumnWidth }] }` — dragged columns. */
 export const UI_TABLE_COLUMN_WIDTH_ENDPOINT = "/ui-table-masters/column-width";
 /** PUT, `{ columns: [{ uiTblClmId, uiTblClmColumnVisibility }] }` — admin settings. */
-export const UI_TABLE_VISIBILITY_ENDPOINT = "/ui-table-masters/visibility-settings";
+export const UI_TABLE_VISIBILITY_ENDPOINT = "/ui-table-masters/layout-settings";
 export const CONFIGURED_GRID_RUN_ENDPOINT = "/configured-grid-sql/run";
 export const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
 export const CHARGES_GET_ENDPOINT = "/charges/get";

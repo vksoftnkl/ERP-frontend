@@ -11,12 +11,30 @@ export type ErpHeaderIconKey =
   | "settings"
   | "transport";
 
+/**
+ * Per-menu rights as `/menu-masters/usermenu` reports them for the signed-in
+ * user. The server already drops menus the user cannot see, so an item that
+ * reaches the client is viewable; the remaining flags decide which toolbar
+ * actions that screen may perform.
+ */
+export type ErpMenuPermissionFlags = {
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  canPrint: boolean;
+  canExport: boolean;
+  isVisible: boolean;
+};
+
 export type ErpHeaderItem = {
   label: string;
   href?: string;
   iconKey?: ErpHeaderIconKey;
   onClick?: () => void;
   menuSeparator?: boolean;
+  /** `fixed.menu_master.menu_id` — the key permissions are granted against. */
+  menuId?: number;
+  permissions?: ErpMenuPermissionFlags;
   children?: ErpHeaderItem[];
 };
 

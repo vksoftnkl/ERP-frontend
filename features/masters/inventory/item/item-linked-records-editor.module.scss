@@ -169,11 +169,11 @@
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
 }
 .adminSettingsPanel {
-  width: min(54rem, calc(100vw - 2.4rem));
-  max-height: min(88vh, 42rem);
+  width: min(54rem, calc(calc(100vw / var(--erp-ui-scale)) - 2.4rem));
+  max-height: min(calc(88vh / var(--erp-ui-scale)), 42rem);
 }
 .adminSettingsScrollArea {
-  max-height: calc(88vh - 148px);
+  max-height: calc(calc(88vh / var(--erp-ui-scale)) - 148px);
 }
 .adminSettingsTableWrap {
   min-height: 18rem;

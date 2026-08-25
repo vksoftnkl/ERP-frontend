@@ -174,6 +174,11 @@ export const baseApi = createApi({
     "TransactionHold",
     // Screen field config (fixed.form_section / form_field), keyed by menu id
     "WidgetConfig",
+    // Print designer (reports/templates)
+    "PrintTemplate",
+    "PrintTemplateRevision",
+    "PrintTemplateVocabulary",
+    "PrintDatasetCatalogue",
   ],
   endpoints: () => ({}),
 });

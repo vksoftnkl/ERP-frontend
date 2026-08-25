@@ -444,7 +444,7 @@
      whole modal at once, instead of !important-ing each control back down. */
   --erp-radius: 2px;
 
-  width: min(460px, 94vw);
+  width: min(460px, calc(94vw / var(--erp-ui-scale)));
   border: 1px solid #999;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
   font-family: var(--erp-ms-font);
@@ -754,7 +754,7 @@
   --erp-radius: 2px;
 
   display: block;
-  width: min(430px, 94vw);
+  width: min(430px, calc(94vw / var(--erp-ui-scale)));
   padding: 0;
   border: 1px solid #999;
   border-radius: 2px;

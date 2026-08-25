@@ -39,6 +39,7 @@ import {
   selectRecentPages,
 } from "@/store/slices/authSlice";
 import { MenuTree } from "./erp-header-menu";
+import UiScaleControl from "./ui-scale-control";
 export type { ErpHeaderItem, ErpHeaderProps } from "./types";
 // ─── Utility functions ────────────────────────────────────────────────────────
 function formatDateLabel(date: Date): string {
@@ -518,6 +519,7 @@ function HeaderRight({
       >
         {goLabel}
       </button>
+      <UiScaleControl />
       <UserMenuDropdown logoutLabel={logoutLabel} onLogout={onLogout} />
     </div>
   );

@@ -38,13 +38,13 @@ const UUID_PATTERN = "^[0-9a-fA-F-]{36}$";
 const EMPLOYEE_MODAL_PANEL_STYLE: CSSProperties = {
   // 62rem left the controls ~163px wide once the labels moved beside them
   // (3 columns × a 130px label column), which truncated the select placeholders.
-  width: "min(92vw, 76rem)",
+  width: "min(calc(92vw/var(--erp-ui-scale)), 76rem)",
   // The tallest tab (Primary Details / Contact & Address) needs ~310px of
   // chrome + fields; 75vh was ~675px, so most of the panel was empty. Sized to
   // the tallest tab rather than to the content of whichever tab is open, so the
   // modal does not resize as you move between them.
-  height: "min(80vh, 400px)",
-  maxHeight: "80vh",
+  height: "min(calc(80vh/var(--erp-ui-scale)), 400px)",
+  maxHeight: "calc(80vh/var(--erp-ui-scale))",
 };
 const FILE_CONSTRAINTS = {
   MAX_UPLOAD_IMAGE_BYTES: 5 * 1024 * 1024,

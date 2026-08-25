@@ -453,7 +453,7 @@ export default function WidgetMasterPage() {
       createModalTitle="Widget Section Entry"
       editModalTitle="Edit Widget Section Entry"
       // Widen the modal (default is 64rem) so the Fields editor table has room.
-      modalPanelStyle={{ width: "min(80rem, calc(100vw - 2.4rem))" }}
+      modalPanelStyle={{ width: "min(80rem, calc(calc(100vw/var(--erp-ui-scale)) - 2.4rem))" }}
       customFields={widgetFormFields}
       createInitialValues={createInitialValues}
       gridTableName={GRID_TABLE_NAME}

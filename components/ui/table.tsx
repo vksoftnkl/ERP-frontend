@@ -67,7 +67,7 @@ const ACTION_MENU_ESTIMATED_WIDTH = 190;
 const ACTION_MENU_ESTIMATED_HEIGHT = 260;
 const ACTION_MENU_GAP = 8;
 const ACTION_MENU_VIEWPORT_PADDING = 8;
-const DEFAULT_TABLE_MAX_HEIGHT = "calc(100dvh - 250px)";
+const DEFAULT_TABLE_MAX_HEIGHT = "calc(calc(100dvh/var(--erp-ui-scale)) - 250px)";
 const SERIAL_NUMBER_COLUMN_WIDTH = "48px";
 const FIXED_ACTIONS_COLUMN_WIDTH = "200px";
 const MIN_DATA_COLUMN_WIDTH = 100;
@@ -1446,8 +1446,8 @@ export function ReusableTable<T extends Record<string, unknown>>({
       onContextMenu={onWrapperContextMenu}
       style={
         {
-          "--erp-table-shell-height": fullViewHeight ? "100vh" : "100%",
-          "--erp-table-shell-min-height": fullViewHeight ? "100vh" : "0px",
+          "--erp-table-shell-height": fullViewHeight ? "calc(100vh/var(--erp-ui-scale))" : "100%",
+          "--erp-table-shell-min-height": fullViewHeight ? "calc(100vh/var(--erp-ui-scale))" : "0px",
         } as CSSProperties
       }
     >

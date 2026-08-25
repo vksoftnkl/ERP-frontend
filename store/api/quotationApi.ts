@@ -362,10 +362,26 @@ export const quotationApi = baseApi.injectEndpoints({
         }
       },
     }),
-    /** Which columns the grid shows — the screen's "Admin settings" dialog. */
-    saveQuotationColumnVisibility: builder.mutation<
+    /**
+     * The layout the screen's "Admin settings" dialog owns: which columns the
+     * grid shows, in what order, and the two flags the layout carries.
+     *
+     * Only the fields that changed are sent — the route writes a column's field
+     * only when the body names it, so an omitted `uiTblClmColumnWidth` leaves a
+     * saved width alone rather than nulling it.
+     */
+    saveQuotationColumnLayout: builder.mutation<
       { updated: number },
-      { uiTableId: string; columns: Array<{ columnId: string; visible: boolean }> }
+      {
+        uiTableId: string;
+        columns: Array<{
+          columnId: string;
+          visible?: boolean;
+          focus?: boolean;
+          necessity?: boolean;
+          position?: number;
+        }>;
+      }
     >({
       query: ({ columns }) => ({
         url: UI_TABLE_VISIBILITY_ENDPOINT,
@@ -373,7 +389,16 @@ export const quotationApi = baseApi.injectEndpoints({
         body: {
           columns: columns.map((column) => ({
             uiTblClmId: column.columnId,
-            uiTblClmColumnVisibility: column.visible,
+            ...(column.visible === undefined
+              ? {}
+              : { uiTblClmColumnVisibility: column.visible }),
+            ...(column.focus === undefined ? {} : { uiTblClmColumnFocus: column.focus }),
+            ...(column.necessity === undefined
+              ? {}
+              : { uiTblClmColumnNecessity: column.necessity }),
+            ...(column.position === undefined
+              ? {}
+              : { uiTblClmColumnPosition: column.position }),
           })),
         },
       }),
@@ -383,8 +408,20 @@ export const quotationApi = baseApi.injectEndpoints({
           quotationApi.util.updateQueryData("getQuotationGridLayout", { uiTableId }, (rows) => {
             for (const column of columns) {
               const row = rows.find((candidate) => candidate.uiTblClmId === column.columnId);
-              if (row) {
+              if (!row) {
+                continue;
+              }
+              if (column.visible !== undefined) {
                 row.uiTblClmColumnVisibility = column.visible;
+              }
+              if (column.focus !== undefined) {
+                row.uiTblClmColumnFocus = column.focus;
+              }
+              if (column.necessity !== undefined) {
+                row.uiTblClmColumnNecessity = column.necessity;
+              }
+              if (column.position !== undefined) {
+                row.uiTblClmColumnPosition = column.position;
               }
             }
           }),
@@ -631,7 +668,7 @@ export const {
   useLazyListQuotationsQuery,
   useGetQuotationGridLayoutQuery,
   useSaveQuotationColumnWidthsMutation,
-  useSaveQuotationColumnVisibilityMutation,
+  useSaveQuotationColumnLayoutMutation,
   useGetQuotationWidgetConfigQuery,
   useSaveQuotationWidgetVisibilityMutation,
   useSearchPickerItemsQuery,

@@ -1,6 +1,8 @@
 import type { ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
 import {
   applyWidgetFieldConfig,
+  buildWidgetFieldConfigFromSections,
+  pruneEmptyGroups,
   type ResolvedFieldConfig,
   type WidgetMasterSectionConfig,
 } from "@/features/masters/shared/widget-config";
@@ -76,76 +78,7 @@ export const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
 export function buildSupplierWidgetFieldConfig(
   sections: WidgetMasterSectionConfig[] | null | undefined,
 ): Map<string, ResolvedFieldConfig> {
-  const config = new Map<string, ResolvedFieldConfig>();
-  const orderedSections = [...(Array.isArray(sections) ? sections : [])].sort(
-    (a, b) => (a.sectionPosition ?? 0) - (b.sectionPosition ?? 0),
-  );
-  let order = 0;
-  for (const section of orderedSections) {
-    const sectionVisible = section?.sectionVisibility !== false;
-    const fields = Array.isArray(section?.fields) ? section.fields : [];
-    const orderedFields = [...fields].sort(
-      (a, b) => (a.fieldPosition ?? 0) - (b.fieldPosition ?? 0),
-    );
-    for (const field of orderedFields) {
-      const key = (field?.fieldName ?? "").trim().toLowerCase();
-      if (!key) {
-        continue;
-      }
-      config.set(key, {
-        label: (field.fieldGuiName ?? "").trim(),
-        secondaryText: (field.fieldSecondaryText ?? "").trim(),
-        order,
-        visible: sectionVisible && field.fieldVisibility !== false,
-      });
-      order += 1;
-    }
-  }
-  return config;
-}
-
-// Drop a heading/subheading left with nothing under it. Hiding every field of a
-// tab (or of one group inside a tab) would otherwise leave an empty tab in the
-// modal's tab strip; a "custom" field counts as content, so the Bank Details
-// group survives — its grid is not part of the config and cannot be hidden.
-function pruneEmptyGroups(fields: ERPDynamicModalField[]): ERPDynamicModalField[] {
-  const keep = fields.map(() => true);
-  let headingIndex = -1;
-  let subheadingIndex = -1;
-  let headingHasContent = false;
-  let subheadingHasContent = false;
-  const closeSubheading = () => {
-    if (subheadingIndex >= 0 && !subheadingHasContent) {
-      keep[subheadingIndex] = false;
-    }
-    subheadingIndex = -1;
-    subheadingHasContent = false;
-  };
-  const closeHeading = () => {
-    if (headingIndex >= 0 && !headingHasContent) {
-      keep[headingIndex] = false;
-    }
-    headingIndex = -1;
-    headingHasContent = false;
-  };
-  fields.forEach((field, index) => {
-    if (field.type === "heading") {
-      closeSubheading();
-      closeHeading();
-      headingIndex = index;
-      return;
-    }
-    if (field.type === "subheading") {
-      closeSubheading();
-      subheadingIndex = index;
-      return;
-    }
-    headingHasContent = true;
-    subheadingHasContent = true;
-  });
-  closeSubheading();
-  closeHeading();
-  return fields.filter((_, index) => keep[index]);
+  return buildWidgetFieldConfigFromSections(sections, { foldSectionVisibility: true });
 }
 
 // The tabs, groups, order, and labels of this screen are authored in

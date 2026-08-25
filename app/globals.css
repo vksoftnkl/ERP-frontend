@@ -29,6 +29,38 @@
   --app-text: var(--text-main);
   --erp-font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
 
+  /* ── Global UI scale ──────────────────────────────────────────────────
+     One factor that resizes the entire application — text, headings,
+     inputs, dropdowns, tables, toolbars, borders, spacing and the column
+     widths that arrive from the database as raw pixels.
+
+     It is written to this element by a blocking script in <head> before the
+     first paint and then maintained by <UiScaleController>; the value here
+     is only the fallback for a browser with scripting off. The scale is
+     derived from the viewport against a 1536x864 reference — see
+     lib/ui-scale.ts, which is also where the reference, the floor/ceiling
+     and the growth damping live.
+
+     Applied as `zoom` rather than a root font-size because the codebase is
+     overwhelmingly px-based: `zoom` re-runs layout at the new size and
+     multiplies every length in the subtree, which a font-size change cannot
+     reach. It is on <html> so portaled overlays and fixed layers scale too.
+
+     TWO RULES follow from that, and both matter:
+
+       1. Viewport units keep meaning the *unscaled* viewport, so every
+          vw/vh/dvh in this codebase is written as
+              calc(<n>vh / var(--erp-ui-scale))
+          Add a new one and it must be divided too, or it will overflow the
+          screen at any scale above 1.
+
+       2. Anything measured in JavaScript (getBoundingClientRect, clientX,
+          window.innerHeight) is in *visual* pixels, while a CSS length
+          written back into the document is a *layout* pixel. Convert with
+          toLayoutPx / layoutRect / layoutViewportSize from lib/ui-scale.ts
+          before positioning a portal or storing a width. */
+  --erp-ui-scale: 1;
+
   /* ── Overlay stacking scale ────────────────────────────────────────────
      Every layer that escapes the page flow — anything portaled to <body> or
      `position: fixed` — ends up in the SAME root stacking context, so its
@@ -84,6 +116,13 @@
 *::after {
   box-sizing: border-box;
   font-family: inherit;
+}
+
+/* Supported by Chrome/Edge, Safari, and Firefox 126+. An older browser simply
+   ignores it and renders at the pre-scale sizes, which is the current design —
+   the feature degrades to exactly what shipped before it. */
+html {
+  zoom: var(--erp-ui-scale);
 }
 
 html,
@@ -142,8 +181,8 @@ textarea {
 }
 
 .erp-app-shell {
-  height: 100vh;
-  height: 100dvh;
+  height: calc(100vh / var(--erp-ui-scale));
+  height: calc(100dvh / var(--erp-ui-scale));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -314,6 +353,15 @@ textarea {
 
 .erp-error-state__actions .ui-btn {
   text-decoration: none;
+}
+
+/* Access-denied variant of the same panel: a permission gate is not a fault,
+   so the badge drops the danger red for the neutral muted tone. */
+.erp-error-state--access .erp-error-state__badge {
+  background: var(--header-bg);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-weight: 600;
 }
 
 .erp-error-state__details {

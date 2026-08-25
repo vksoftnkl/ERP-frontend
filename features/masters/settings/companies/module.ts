@@ -164,15 +164,15 @@ const APPLICABILITY_CHECKBOX_FIELD_STYLE: CSSProperties = {
   marginBlock: "0.5rem",
 };
 const COMPANY_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(92vw, 70rem)",
+  width: "min(calc(92vw/var(--erp-ui-scale)), 70rem)",
   // Fixed height, sized to the tallest tab rather than to whichever tab is open,
   // so the panel does not resize as you move between them (content-sized, the
   // four tabs measured 612 / 714 / 604 / 270px). 720px clears the tallest one
   // ("Tax and Compliance") with the header and footer; shorter tabs leave an
   // empty band above the footer, which is the cost of a stable panel. The vh
   // term keeps it inside short viewports, where the body scrolls instead.
-  height: "min(86vh, 720px)",
-  maxHeight: "86vh",
+  height: "min(calc(86vh/var(--erp-ui-scale)), 720px)",
+  maxHeight: "calc(86vh/var(--erp-ui-scale))",
 };
 const COMPANY_STANDARD_FIELD_NAMES = [
   "compName",

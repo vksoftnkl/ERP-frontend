@@ -1,6 +1,6 @@
 @layer components {
   .l-shell {
-    min-height: 100vh;
+    min-height: calc(100vh / var(--erp-ui-scale));
     background: var(--ds-bg);
     color: var(--ds-text);
   }

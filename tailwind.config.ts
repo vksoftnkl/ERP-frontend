@@ -28,10 +28,10 @@ const config: Config = {
         'shell-offset': '132px',
       },
       minHeight: {
-        'shell-offset': 'calc(100dvh - 132px)',
+        'shell-offset': 'calc(calc(100dvh/var(--erp-ui-scale)) - 132px)',
       },
       height: {
-        'shell-offset': 'calc(100dvh - 132px)',
+        'shell-offset': 'calc(calc(100dvh/var(--erp-ui-scale)) - 132px)',
       },
       boxShadow: {
         'erp-panel': '0 18px 50px rgba(15, 23, 42, 0.08)',

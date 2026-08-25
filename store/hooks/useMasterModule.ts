@@ -33,6 +33,14 @@ type UseMasterModuleArgs = {
     sortBy?: string;
     sortDir?: "asc" | "desc";
   }) => Record<string, string> | null;
+  /**
+   * The built query does not depend on the page, the page size or the search
+   * term — the endpoint returns the whole collection and the caller slices it
+   * (see `CrudMasterPage`'s `clientSideList`). Paging and typing then re-request
+   * nothing: without this the auto-load below would fire an identical request
+   * for every keystroke and every step of the table's page-size auto-fit.
+   */
+  listRefetchIgnoresPaging?: boolean;
   debounceMs?: number;
   defaultPage?: number;
   defaultPageSize?: number;
@@ -59,6 +67,7 @@ export function useMasterModule({
   listArrayKeys,
   getByIdMethod = "GET",
   buildListQuery,
+  listRefetchIgnoresPaging = false,
   debounceMs = 300,
   defaultPage = 1,
   defaultPageSize = 20,
@@ -147,17 +156,28 @@ export function useMasterModule({
   );
   // Debounced auto-load whenever pagination/search state changes
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The load reads these through refs so the effect below can be woken by
+  // something other than the value it passes on — which is the whole point of
+  // `listRefetchIgnoresPaging`.
+  const listStateRef = useRef({ searchTerm, currentPage, pageSize });
+  useEffect(() => {
+    listStateRef.current = { searchTerm, currentPage, pageSize };
+  }, [currentPage, pageSize, searchTerm]);
+  const pagingKey = listRefetchIgnoresPaging
+    ? ""
+    : `${searchTerm}|${currentPage}|${pageSize}`;
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       initialLoadRef.current = true;
-      void loadRecords(searchTerm, currentPage, pageSize);
+      const state = listStateRef.current;
+      void loadRecords(state.searchTerm, state.currentPage, state.pageSize);
     }, initialLoadRef.current ? debounceMs : 0);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [currentPage, debounceMs, loadRecords, pageSize, searchTerm]);
+  }, [debounceMs, loadRecords, pagingKey]);
   // ── Error helpers ─────────────────────────────────────────────────────────
   const [detailLocalError, setDetailLocalError] = useState<string | null>(null);
   const [saveLocalError, setSaveLocalError] = useState<string | null>(null);

@@ -136,8 +136,8 @@ const DEFAULT_STATE_OPTION: ERPDynamicSelectOption = {
   label: "Select State",
 };
 const CITY_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(42vw, 42rem)",
-  maxHeight: "75vh",
+  width: "min(calc(42vw/var(--erp-ui-scale)), 42rem)",
+  maxHeight: "calc(75vh/var(--erp-ui-scale))",
 };
 const AREA_INITIAL_FORM_VALUES = {
   masterName: "",
@@ -1028,7 +1028,7 @@ export default function AreaMasterPage() {
         showDefaultCards={false}
         hideSectionHeader
         resetOnSubmit={false}
-        panelStyle={{ width: "min(680px, calc(100vw - 2rem))", maxHeight: "min(82vh, 620px)" }}
+        panelStyle={{ width: "min(680px, calc(calc(100vw/var(--erp-ui-scale)) - 2rem))", maxHeight: "min(calc(82vh/var(--erp-ui-scale)), 620px)" }}
         onControllerReady={(controller) => {
           visibilityControllerRef.current = controller;
         }}

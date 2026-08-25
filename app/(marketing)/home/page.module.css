@@ -1,12 +1,12 @@
 .page {
-  min-height: 100vh;
+  min-height: calc(100vh / var(--erp-ui-scale));
   background: #d8d8d8;
   color: #111;
   font-family: var(--erp-font-family);
 }
 
 .board {
-  min-height: 100vh;
+  min-height: calc(100vh / var(--erp-ui-scale));
   border: 1px solid #8b8b8b;
   background: #f8f8f8;
   display: flex;
@@ -20,7 +20,7 @@
   overflow: hidden;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.16) 100%),
-    url("../../../assets/background.jpg") center / cover no-repeat;
+    url("../../../assets/timber-shop.jpg") center / cover no-repeat;
 }
 
 .hero::before,
@@ -56,7 +56,7 @@
   width: min(95%, 1320px);
   text-align: center;
   color: #0d79c4;
-  font-size: clamp(0.88rem, 1.85vw, 2rem);
+  font-size: clamp(0.88rem, calc(1.85vw / var(--erp-ui-scale)), 2rem);
   letter-spacing: 0.27em;
   font-weight: 700;
   text-transform: uppercase;

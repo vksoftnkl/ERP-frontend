@@ -917,7 +917,7 @@ export default function ERPAdvancedFixed() {
         >
           <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
           <section
-            className="animate-slideUp relative max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-[4px] border border-slate-200 bg-white shadow-2xl"
+            className="animate-slideUp relative max-h-[calc(90vh/var(--erp-ui-scale))] w-full max-w-2xl overflow-hidden rounded-[4px] border border-slate-200 bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <header className="border-b border-slate-200 bg-slate-50 px-6 py-4">
@@ -940,7 +940,7 @@ export default function ERPAdvancedFixed() {
               </div>
             </header>
 
-            <div className="max-h-[calc(90vh-160px)] overflow-y-auto p-6">
+            <div className="max-h-[calc(calc(90vh/var(--erp-ui-scale))-160px)] overflow-y-auto p-6">
               <form
                 id="erp-advanced-form"
                 onSubmit={handleSubmit}

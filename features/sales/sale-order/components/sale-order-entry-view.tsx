@@ -70,6 +70,7 @@ import {
   SALES_ITEM_COLUMN_WIDTH_UNIT,
   useSaleOrderDraft,
 } from "../use-sale-order-draft";
+import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { OrderIconToolbar } from "./order-icon-toolbar";
 import { SaleOrderListModal } from "./sale-order-list-modal";
 import { SaleOrderToolbar } from "./sale-order-toolbar";
@@ -133,8 +134,16 @@ export function SaleOrderEntryView({
     unitOptionsFor,
   } = api;
 
-  const editable = draft.mode === "entry" && !draft.isDeleted;
-  const canAlter = Boolean(draft.docId) && !draft.isDeleted;
+  // Menu permissions for this screen (Settings → User Administration). They are
+  // folded into the two flags the whole view already reads, so the grids, the
+  // header blocks, both toolbars and the F-key shortcuts inherit the limit
+  // instead of each re-deriving it. A document that exists is edited on save; a
+  // blank one is created — so Save answers to a different flag in each mode.
+  const { permissions: menuPermissions } = usePagePermissions();
+  const canSaveDoc = draft.docId ? menuPermissions.canEdit : menuPermissions.canCreate;
+  const editable = draft.mode === "entry" && !draft.isDeleted && canSaveDoc;
+  const canAlter = Boolean(draft.docId) && !draft.isDeleted && menuPermissions.canDelete;
+  const canCopyDoc = Boolean(draft.docId) && menuPermissions.canCreate;
 
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
   const [itemPickerRow, setItemPickerRow] = useState<string | null>(null);
@@ -299,6 +308,10 @@ export function SaleOrderEntryView({
   // ----------------------------------------------------------------- actions
   const runSave = useCallback(
     async (print: boolean) => {
+      if (!canSaveDoc) {
+        toast.error("You do not have permission to save orders on this screen.");
+        return;
+      }
       const violation = api.validate();
       setInvalidCells(
         violation?.lineKey ? { [`${violation.lineKey}:${violation.field}`]: true } : {},
@@ -318,7 +331,7 @@ export function SaleOrderEntryView({
       setActiveRowKey(null);
       setInvalidCells({});
     },
-    [api],
+    [api, canSaveDoc],
   );
 
   const onCreditConfirmed = useCallback(async () => {
@@ -494,7 +507,7 @@ export function SaleOrderEntryView({
           }
           break;
         case "F2":
-          if (draft.mode === "browse" && !draft.isDeleted) {
+          if (draft.mode === "browse" && !draft.isDeleted && menuPermissions.canEdit) {
             event.preventDefault();
             shortcutsRef.current.requestEdit();
           }
@@ -511,7 +524,7 @@ export function SaleOrderEntryView({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [canAlter, draft.isDeleted, draft.mode]);
+  }, [canAlter, draft.isDeleted, draft.mode, menuPermissions.canEdit]);
 
   useEffect(() => {
     if (!draft.isDirty) {
@@ -613,7 +626,7 @@ export function SaleOrderEntryView({
         editable={editable}
         canTender={editable}
         canDelete={canAlter}
-        canCopy={Boolean(draft.docId)}
+        canCopy={canCopyDoc}
         onOpenTender={openTender}
         onImportQuotation={() => guardedRun("import")}
         onShowList={() => guardedRun("list")}
@@ -799,9 +812,9 @@ export function SaleOrderEntryView({
       <SaleOrderToolbar
         mode={draft.mode}
         busy={busy}
-        canEdit={!draft.isDeleted}
+        canEdit={!draft.isDeleted && menuPermissions.canEdit}
         canDelete={canAlter}
-        canCopyAsNew={Boolean(draft.docId)}
+        canCopyAsNew={canCopyDoc}
         canTender={editable}
         onOpenTender={openTender}
         onSaveAndPrint={() => void runSave(true)}

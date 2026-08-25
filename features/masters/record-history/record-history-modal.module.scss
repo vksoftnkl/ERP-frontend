@@ -65,8 +65,8 @@
   will-change: transform, opacity;
   display: flex;
   flex-direction: column;
-  width: min(860px, 96vw);
-  height: min(600px, 90vh);
+  width: min(860px, calc(96vw / var(--erp-ui-scale)));
+  height: min(600px, calc(90vh / var(--erp-ui-scale)));
   border: 1px solid #999;
   background: var(--paper);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);

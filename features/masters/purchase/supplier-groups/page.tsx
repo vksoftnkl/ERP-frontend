@@ -499,7 +499,7 @@ export default function SupplierGroupsPage() {
       showDefaultCards={false}
       hideSectionHeader
       resetOnSubmit={false}
-      panelStyle={{ width: "min(680px, calc(100vw - 2rem))", maxHeight: "min(82vh, 620px)" }}
+      panelStyle={{ width: "min(680px, calc(calc(100vw/var(--erp-ui-scale)) - 2rem))", maxHeight: "min(calc(82vh/var(--erp-ui-scale)), 620px)" }}
       onControllerReady={(controller) => {
         visibilityControllerRef.current = controller;
       }}

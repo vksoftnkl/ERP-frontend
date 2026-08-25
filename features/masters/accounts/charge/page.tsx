@@ -314,7 +314,7 @@ export default function ChargeMasterPage() {
       editModalTitle="Edit Charge Entry"
       modalFormGridColumns={2}
       modalFormDenseGrid={false}
-      modalPanelStyle={{ width: "min(46rem, calc(100vw - 2rem))" }}
+      modalPanelStyle={{ width: "min(46rem, calc(calc(100vw/var(--erp-ui-scale)) - 2rem))" }}
       customFields={formFields}
       createInitialValues={CHARGE_INITIAL_FORM_VALUES}
       mapFormValues={({ source }) => {

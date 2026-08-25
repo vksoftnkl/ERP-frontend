@@ -136,13 +136,13 @@
   outline: 0;
 }
 .columnSettingsDialog {
-  width: min(54rem, calc(100vw - 2.4rem));
-  max-height: min(88vh, 42rem);
+  width: min(54rem, calc(calc(100vw / var(--erp-ui-scale)) - 2.4rem));
+  max-height: min(calc(88vh / var(--erp-ui-scale)), 42rem);
 }
 .columnSettingsBody {
   flex: 1;
   min-height: 0;
-  max-height: calc(88vh - 148px);
+  max-height: calc(calc(88vh / var(--erp-ui-scale)) - 148px);
   overflow: auto;
   background: #ffffff;
   padding: 0;
@@ -513,7 +513,7 @@
 }
 .summaryValue {
   color: #14283c;
-  font-size: clamp(1.4rem, 2.4vw, 1.85rem);
+  font-size: clamp(1.4rem, calc(2.4vw / var(--erp-ui-scale)), 1.85rem);
   font-weight: 800;
   letter-spacing: -0.03em;
   line-height: 1.1;
@@ -954,7 +954,7 @@
   // grow to the right of its trigger instead of clamping to the cell.
   right: auto;
   min-width: 24rem;
-  max-width: min(34rem, 92vw);
+  max-width: min(34rem, calc(92vw / var(--erp-ui-scale)));
 }
 // Docked variant: pins the open menu to the bottom-right of the viewport
 // (legacy ERP item-picker placement) instead of dropping below its cell.
@@ -1139,8 +1139,8 @@
   position: relative;
   z-index: 1;
   will-change: transform, opacity;
-  width: min(96vw, 92rem);
-  height: min(92vh, 56rem);
+  width: min(calc(96vw / var(--erp-ui-scale)), 92rem);
+  height: min(calc(92vh / var(--erp-ui-scale)), 56rem);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1212,9 +1212,9 @@
   z-index: 1;
   // Pre-promoted for the same reason as .inlineMasterPanel above.
   will-change: transform, opacity;
-  width: min(1280px, calc(100vw - 2rem));
-  height: min(760px, calc(100dvh - 2rem));
-  max-height: calc(100dvh - 2rem);
+  width: min(1280px, calc(calc(100vw / var(--erp-ui-scale)) - 2rem));
+  height: min(760px, calc(calc(100dvh / var(--erp-ui-scale)) - 2rem));
+  max-height: calc(calc(100dvh / var(--erp-ui-scale)) - 2rem);
   display: flex;
   flex-direction: column;
   border: 1px solid #999999;
@@ -1591,8 +1591,8 @@
 .auditNotesModalPanel {
   position: relative;
   z-index: 1;
-  width: min(580px, calc(100vw - 2rem));
-  max-height: calc(100dvh - 2rem);
+  width: min(580px, calc(calc(100vw / var(--erp-ui-scale)) - 2rem));
+  max-height: calc(calc(100dvh / var(--erp-ui-scale)) - 2rem);
   display: flex;
   flex-direction: column;
   border: 1px solid #999999;
@@ -1699,13 +1699,13 @@
     min-width: 100%;
   }
   .stockBrowserModalPanel {
-    width: min(100vw - 1rem, 100%);
-    height: min(760px, calc(100dvh - 1rem));
-    max-height: calc(100dvh - 1rem);
+    width: min(calc(100vw / var(--erp-ui-scale)) - 1rem, 100%);
+    height: min(760px, calc(calc(100dvh / var(--erp-ui-scale)) - 1rem));
+    max-height: calc(calc(100dvh / var(--erp-ui-scale)) - 1rem);
   }
   .auditNotesModalPanel {
-    width: min(100vw - 1rem, 100%);
-    max-height: calc(100dvh - 1rem);
+    width: min(calc(100vw / var(--erp-ui-scale)) - 1rem, 100%);
+    max-height: calc(calc(100dvh / var(--erp-ui-scale)) - 1rem);
   }
   .stockBrowserModalHeader,
   .stockBrowserModalBody,

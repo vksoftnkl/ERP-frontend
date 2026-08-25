@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { suggestTamilWords } from "@/lib/utils/tamil-transliteration";
 import styles from "./global-tamil-input-assist.module.css";
+import { layoutRect, layoutViewportSize } from "@/lib/ui-scale";
 
 type SupportedInputTarget = HTMLInputElement | HTMLTextAreaElement;
 type SuggestionPlacement = "top" | "bottom";
@@ -119,17 +120,20 @@ function extractRomanWordContext(target: SupportedInputTarget) {
 }
 
 function computePopupPosition(target: SupportedInputTarget) {
-  const rect = target.getBoundingClientRect();
+  // Layout pixels: the result is written back as `left`/`top`/`width` on a
+  // fixed panel inside the globally scaled document. See lib/ui-scale.ts.
+  const rect = layoutRect(target);
+  const viewport = layoutViewportSize();
   const width = Math.min(
     POPUP_MAX_WIDTH,
     Math.max(POPUP_MIN_WIDTH, Math.round(rect.width)),
   );
-  const availableBelow = window.innerHeight - rect.bottom;
+  const availableBelow = viewport.height - rect.bottom;
   const placement: SuggestionPlacement =
     availableBelow < POPUP_HEIGHT_GUESS && rect.top > POPUP_HEIGHT_GUESS
       ? "top"
       : "bottom";
-  const maxLeft = window.innerWidth - width - VIEWPORT_PADDING;
+  const maxLeft = viewport.width - width - VIEWPORT_PADDING;
   const left = Math.min(
     Math.max(rect.left, VIEWPORT_PADDING),
     Math.max(VIEWPORT_PADDING, maxLeft),

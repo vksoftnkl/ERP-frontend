@@ -69,9 +69,17 @@ describe("resolveItemColumns", () => {
     expect(columns[0].widthPx).toBe(34);
   });
 
-  it("orders by column number, never by position", () => {
-    // Live data has position 58 twice and 62 unused, so position ordering is
-    // non-deterministic between two columns.
+  it("orders by position, so the settings dialog's reorder takes effect", () => {
+    const columns = resolveItemColumns([
+      layoutRow(22, "Rate", { uiTblClmColumnPosition: 59 }),
+      layoutRow(59, "Total", { uiTblClmColumnPosition: 22 }),
+    ]);
+    expect(columns.map((column) => column.key)).toEqual(["slno", "total", "rate"]);
+  });
+
+  it("breaks a duplicate position by column number", () => {
+    // Live layouts ship duplicate positions (grid 24 has two), which would
+    // otherwise leave those two columns' order undecided.
     const columns = resolveItemColumns([
       layoutRow(59, "Total", { uiTblClmColumnPosition: 58 }),
       layoutRow(58, "ChrgAfterTax", { uiTblClmColumnPosition: 58 }),
@@ -83,6 +91,18 @@ describe("resolveItemColumns", () => {
       "chrgaftertax",
       "total",
     ]);
+  });
+
+  it("carries the layout's focus and necessity flags through to the settings dialog", () => {
+    const [, rate] = resolveItemColumns([
+      layoutRow(22, "Rate", {
+        uiTblClmColumnFocus: true,
+        uiTblClmColumnNecessity: true,
+      }),
+    ]);
+    expect(rate.focus).toBe(true);
+    expect(rate.necessity).toBe(true);
+    expect(rate.position).toBe(22);
   });
 
   it("honours the configured visibility and drops a column it has no meaning for", () => {

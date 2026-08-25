@@ -109,9 +109,9 @@ const USER_BOOLEAN_FIELD_NAMES = [
 ] as const;
 // ── Modal style ───────────────────────────────────────────────────────────────
 const USER_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(92vw, 60rem)",
-  height: "61vh",
-  maxHeight: "61vh",
+  width: "min(calc(92vw/var(--erp-ui-scale)), 60rem)",
+  height: "calc(61vh/var(--erp-ui-scale))",
+  maxHeight: "calc(61vh/var(--erp-ui-scale))",
 };
 const CHECKBOX_FIELD_STYLE: CSSProperties = { paddingBlock: "0.45rem" };
 const USER_FORM_MODE_FIELD = "__userFormMode";

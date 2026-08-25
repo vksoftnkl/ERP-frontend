@@ -70,7 +70,7 @@ body {
   color: var(--text);
   background: #f2f4f7;
   -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
+  min-height: calc(100vh / var(--erp-ui-scale));
   display: flex;
   flex-direction: column;
 }

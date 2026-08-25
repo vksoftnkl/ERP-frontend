@@ -11,6 +11,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { layoutRect, layoutViewportSize } from "@/lib/ui-scale";
 import { cx } from "@/components/design-system/cx";
 import { focusNextInteractiveControl } from "@/components/design-system/ui/focus-next-control";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
@@ -88,22 +89,27 @@ export function SearchableSelect({
   const updatePlacement = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
+    // Measured in layout pixels rather than the visual pixels the DOM reports:
+    // every number here is written straight back out as a CSS length, and the
+    // document is under the global UI scale, which would multiply it a second
+    // time. See lib/ui-scale.ts.
+    const rect = layoutRect(trigger);
+    const viewport = layoutViewportSize();
+    const spaceBelow = viewport.height - rect.bottom;
     const spaceAbove = rect.top;
     const preferredHeight = Math.min(maxDropdownHeight, Math.max(180, filteredOptions.length * 36 + 56));
     const nextPlacement = spaceBelow < preferredHeight && spaceAbove > spaceBelow ? "up" : "down";
     const availableHeight =
       nextPlacement === "up"
         ? spaceAbove - DROPDOWN_VIEWPORT_PADDING - 4
-        : window.innerHeight - rect.bottom - DROPDOWN_VIEWPORT_PADDING - 4;
+        : viewport.height - rect.bottom - DROPDOWN_VIEWPORT_PADDING - 4;
     const dropdownWidth = Math.min(
       rect.width,
-      Math.max(0, window.innerWidth - DROPDOWN_VIEWPORT_PADDING * 2),
+      Math.max(0, viewport.width - DROPDOWN_VIEWPORT_PADDING * 2),
     );
     const dropdownLeft = Math.max(
       DROPDOWN_VIEWPORT_PADDING,
-      Math.min(rect.left, window.innerWidth - dropdownWidth - DROPDOWN_VIEWPORT_PADDING),
+      Math.min(rect.left, viewport.width - dropdownWidth - DROPDOWN_VIEWPORT_PADDING),
     );
     setPlacement(nextPlacement);
     setDropdownStyle({
@@ -116,7 +122,7 @@ export function SearchableSelect({
       ...(nextPlacement === "up"
         ? {
             top: "auto",
-            bottom: `${window.innerHeight - rect.top + 4}px`,
+            bottom: `${viewport.height - rect.top + 4}px`,
           }
         : {
             top: `${rect.bottom + 4}px`,

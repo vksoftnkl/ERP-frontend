@@ -567,9 +567,9 @@ export const ITEM_INITIAL_FORM_VALUES: Record<string, string> = {
   ...ITEM_PRICE_INITIAL_FORM_VALUES,
 };
 export const ITEM_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(84vw, 88rem)",
-  height: "80vh",
-  maxHeight: "80vh",
+  width: "min(calc(84vw/var(--erp-ui-scale)), 88rem)",
+  height: "calc(80vh/var(--erp-ui-scale))",
+  maxHeight: "calc(80vh/var(--erp-ui-scale))",
 };
 export type UiTableColumnLayoutItem = {
   uiTblClmId?: string;

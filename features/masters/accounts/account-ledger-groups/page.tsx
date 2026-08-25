@@ -504,7 +504,7 @@ export default function AccountLedgerGroupsMasterPage() {
       createModalTitle="Group Entry"
       editModalTitle="Edit Group Entry"
       formDescription="Create and update account groups."
-      modalPanelStyle={{ width: "min(40rem, calc(100vw - 2.4rem))" }}
+      modalPanelStyle={{ width: "min(40rem, calc(calc(100vw/var(--erp-ui-scale)) - 2.4rem))" }}
       customFields={accountGroupFormFields}
       createInitialValues={ACCOUNT_GROUP_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {
@@ -552,7 +552,7 @@ export default function AccountLedgerGroupsMasterPage() {
       showDefaultCards={false}
       hideSectionHeader
       resetOnSubmit={false}
-      panelStyle={{ width: "min(680px, calc(100vw - 2rem))", maxHeight: "min(82vh, 620px)" }}
+      panelStyle={{ width: "min(680px, calc(calc(100vw/var(--erp-ui-scale)) - 2rem))", maxHeight: "min(calc(82vh/var(--erp-ui-scale)), 620px)" }}
       onControllerReady={(controller) => {
         visibilityControllerRef.current = controller;
       }}

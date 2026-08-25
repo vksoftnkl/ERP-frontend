@@ -696,7 +696,7 @@ export default function UnitMasterPage() {
       formDescription="Create and update units."
       createModalTitle="Unit Entry"
       editModalTitle="Edit Unit Entry"
-      modalPanelStyle={{ width: "min(52rem, calc(100vw - 2rem))", maxHeight: "min(82vh, 42rem)" }}
+      modalPanelStyle={{ width: "min(52rem, calc(calc(100vw/var(--erp-ui-scale)) - 2rem))", maxHeight: "min(calc(82vh/var(--erp-ui-scale)), 42rem)" }}
       customFields={unitFormFields}
       createInitialValues={UNIT_INITIAL_FORM_VALUES}
       mapFormValues={({ source, defaults }) => {
@@ -769,7 +769,7 @@ export default function UnitMasterPage() {
       showDefaultCards={false}
       hideSectionHeader
       resetOnSubmit={false}
-      panelStyle={{ width: "min(680px, calc(100vw - 2rem))", maxHeight: "min(82vh, 620px)" }}
+      panelStyle={{ width: "min(680px, calc(calc(100vw/var(--erp-ui-scale)) - 2rem))", maxHeight: "min(calc(82vh/var(--erp-ui-scale)), 620px)" }}
       onControllerReady={(controller) => {
         visibilityControllerRef.current = controller;
       }}

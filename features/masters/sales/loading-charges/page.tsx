@@ -241,7 +241,7 @@ export default function LoadingChargesMasterPage() {
       createModalTitle="Loading Charge Entry"
       editModalTitle="Edit Loading Charge Entry"
       modalFormGridColumns={1}
-      modalPanelStyle={{ width: "min(30rem, calc(100vw - 2rem))" }}
+      modalPanelStyle={{ width: "min(30rem, calc(calc(100vw/var(--erp-ui-scale)) - 2rem))" }}
       customFields={formFields}
       createInitialValues={LOADING_INITIAL_FORM_VALUES}
       mapFormValues={({ source }) => {

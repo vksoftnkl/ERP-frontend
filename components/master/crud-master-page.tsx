@@ -21,6 +21,7 @@ import ReusableTable, {
 import { resolveRecordHistoryDisplayName } from "@/features/masters/reports/audit-logs/record-history-route";
 import { RecordHistoryModal } from "@/features/masters/record-history/page";
 import { useApi } from "@/hooks/useApi";
+import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { useMasterModule } from "@/store/hooks/useMasterModule";
 import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
 import { getApiErrorMessage } from "@/store/api/baseApi";
@@ -70,6 +71,7 @@ import type {
   MasterTableRow,
   PaginationInfo,
 } from "./crud-master-page.types";
+import { layoutPointer, layoutViewportSize } from "@/lib/ui-scale";
 const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
@@ -103,6 +105,14 @@ const UI_TABLE_COLUMN_WIDTH_KEYS = ["uiTblClmColumnWidth", "width", "columnWidth
 const UI_TABLE_COLUMN_VISIBLE_KEYS = ["uiTblClmColumnVisibility", "visible", "isVisible"] as const;
 const UI_TABLE_COLUMN_FOCUS_KEYS = ["uiTblClmColumnFocus", "focus", "sortable"] as const;
 const UI_TABLE_COLUMN_ACTIVE_KEYS = ["uiTblClmIsActive", "isActive", "active"] as const;
+/** Tooltips for actions the user's menu permissions withhold. */
+const NO_PERMISSION_TITLES = {
+  create: "You do not have permission to add records on this screen",
+  edit: "You do not have permission to edit records on this screen",
+  delete: "You do not have permission to delete records on this screen",
+  export: "You do not have permission to export this screen",
+} as const;
+
 const UI_TABLE_COLUMN_DELETED_KEYS = ["uiTblClmIsDeleted", "isDeleted", "deleted"] as const;
 const DEFAULT_ARRAY_KEYS = [
   "data",
@@ -378,6 +388,31 @@ function extractPaginationInfo(payload: unknown): PaginationInfo {
     currentPage: findPaginationNumber(candidates, CURRENT_PAGE_KEYS, false),
     pageSize: findPaginationNumber(candidates, PAGE_SIZE_KEYS, false),
   };
+}
+/**
+ * Does this row contain the search term anywhere a user could see it?
+ *
+ * Only for `clientSideList`, whose endpoint cannot search for us. It reads the
+ * raw record rather than the mapped `master*` fields because such a page draws
+ * its columns from the record's own keys, so a term the operator can see in the
+ * table has to match wherever it actually lives. Booleans are skipped: matching
+ * them would make "true" a hit on every row that has any flag set.
+ */
+function masterRowMatchesSearchTerm(row: MasterTableRow, term: string): boolean {
+  const candidates: unknown[] = [
+    ...Object.values(row.__source ?? {}),
+    row.masterName,
+    row.masterCode,
+    row.masterAlias,
+    row.masterShort,
+    row.masterDescription,
+  ];
+  return candidates.some((value) => {
+    if (typeof value !== "string" && typeof value !== "number") {
+      return false;
+    }
+    return String(value).toLowerCase().includes(term);
+  });
 }
 function buildMasterRows(
   payload: unknown,
@@ -2253,11 +2288,16 @@ export default function CrudMasterPage({
   onEditAction,
   isRowEditDisabled,
   rowEditDisabledReason,
+  isRowDeleteDisabled,
+  rowDeleteDisabledReason,
   onViewAction,
   useResponseTableColumns,
   responseTableColumnExcludeKeys,
   toolbarContent,
   toolbarActions,
+  permissionMenuId,
+  permissionHref,
+  disablePermissionGating,
   listResponseStyleColumns,
   listResponseStyleArrayKey,
   nameFieldLabel,
@@ -2288,6 +2328,7 @@ export default function CrudMasterPage({
   useConfiguredGridColumnsOnly = false,
   getByIdMethod,
   buildListQuery,
+  clientSideList,
   listEmptyText,
   listStateResetKey,
   searchPlaceholder,
@@ -2378,6 +2419,7 @@ export default function CrudMasterPage({
     listArrayKeys: lookupKeys.array ?? DEFAULT_ARRAY_KEYS,
     getByIdMethod: getByIdMethod ?? "GET",
     buildListQuery,
+    listRefetchIgnoresPaging: clientSideList,
     debounceMs: DEBOUNCE_MS,
     defaultPage: DEFAULT_PAGE,
     defaultPageSize: DEFAULT_PAGE_SIZE,
@@ -2495,10 +2537,34 @@ export default function CrudMasterPage({
     return normalized || title;
   }, [gridDisplayName, title]);
   const serialOffset = Math.max(0, (currentPage - 1) * pageSize);
-  const rows = useMemo(
-    () => buildMasterRows(data, serialOffset, lookupKeys),
-    [data, lookupKeys, serialOffset],
+  /**
+   * Every row the last response carried. For a paginated list that IS the page,
+   * so the serial numbers start at the page's offset; a `clientSideList` gets
+   * the whole collection instead and is numbered below, after slicing.
+   */
+  const fetchedRows = useMemo(
+    () => buildMasterRows(data, clientSideList ? 0 : serialOffset, lookupKeys),
+    [clientSideList, data, lookupKeys, serialOffset],
   );
+  const clientFilteredRows = useMemo(() => {
+    if (!clientSideList) {
+      return fetchedRows;
+    }
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) {
+      return fetchedRows;
+    }
+    return fetchedRows.filter((row) => masterRowMatchesSearchTerm(row, term));
+  }, [clientSideList, fetchedRows, searchTerm]);
+  const rows = useMemo(() => {
+    if (!clientSideList) {
+      return fetchedRows;
+    }
+    const start = Math.max(0, (currentPage - 1) * pageSize);
+    return clientFilteredRows
+      .slice(start, start + pageSize)
+      .map((row, index) => ({ ...row, serialNo: start + index + 1 }));
+  }, [clientFilteredRows, clientSideList, currentPage, fetchedRows, pageSize]);
   const fallbackColumns = useMemo(
     () =>
       buildMasterFallbackColumns(
@@ -2683,7 +2749,11 @@ export default function CrudMasterPage({
       return active === "false" || active === "0" || active === "inactive" || active === "no" || active === "n";
     });
   }, [baseRenderedRows, showOnlyInactive]);
-  const renderedTotalEntries = shouldHideRowsForDisabledGridFilters ? 0 : totalEntries;
+  const renderedTotalEntries = shouldHideRowsForDisabledGridFilters
+    ? 0
+    : clientSideList
+      ? clientFilteredRows.length
+      : totalEntries;
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(
     null,
   );
@@ -2691,6 +2761,19 @@ export default function CrudMasterPage({
   const [editingItemId, setEditingItemId] = useState<string | number | null>(
     null,
   );
+  // Menu permissions for this screen (User Administration → menu rights). The
+  // route resolves to its menu on its own; a page mounted on a route the menu
+  // catalogue does not list can name its menu with `permissionMenuId`.
+  const { permissions: menuPermissions } = usePagePermissions({
+    menuId: permissionMenuId,
+    href: permissionHref,
+    disabled: disablePermissionGating,
+  });
+  const canCreateRecords = menuPermissions.canCreate;
+  const canEditRecords = menuPermissions.canEdit;
+  const canDeleteRecords = menuPermissions.canDelete;
+  const canExportRecords = menuPermissions.canExport;
+
   const [pendingDeleteRow, setPendingDeleteRow] =
     useState<MasterTableRow | null>(null);
   const [gridSettingsContextMenuPosition, setGridSettingsContextMenuPosition] =
@@ -2751,14 +2834,14 @@ export default function CrudMasterPage({
       event.stopPropagation();
       setGridSettingsContextMenuPosition({
         left: clampContextMenuPosition(
-          event.clientX,
+          layoutPointer(event).x,
           GRID_SETTINGS_CONTEXT_MENU_PADDING,
-          window.innerWidth - GRID_SETTINGS_CONTEXT_MENU_WIDTH,
+          layoutViewportSize().width - GRID_SETTINGS_CONTEXT_MENU_WIDTH,
         ),
         top: clampContextMenuPosition(
-          event.clientY,
+          layoutPointer(event).y,
           GRID_SETTINGS_CONTEXT_MENU_PADDING,
-          window.innerHeight - GRID_SETTINGS_CONTEXT_MENU_HEIGHT,
+          layoutViewportSize().height - GRID_SETTINGS_CONTEXT_MENU_HEIGHT,
         ),
       });
     },
@@ -2923,12 +3006,17 @@ export default function CrudMasterPage({
     });
   }, [createInitialValues, resetDetailsState, resetSaveState]);
   const handleCreateAction = useCallback(() => {
+    // Guards every entrance, not just the button: the Alt+C shortcut and the
+    // controller handed to host pages come through here too.
+    if (!canCreateRecords) {
+      return;
+    }
     if (onCreateAction) {
       onCreateAction();
       return;
     }
     openCreateModal();
-  }, [onCreateAction, openCreateModal]);
+  }, [canCreateRecords, onCreateAction, openCreateModal]);
   useEffect(() => {
     if (hideListPage) {
       return;
@@ -3440,7 +3528,7 @@ export default function CrudMasterPage({
       // The toolbar button is already inactive for such a row; this is the guard
       // that makes the rule hold for every other way in (double-click, a future
       // shortcut) rather than only for the one that is currently wired.
-      if (isRowEditDisabled?.(row)) {
+      if (!canEditRecords || isRowEditDisabled?.(row)) {
         return;
       }
       if (onEditAction) {
@@ -3449,7 +3537,7 @@ export default function CrudMasterPage({
       }
       openUpdateModalForRow(row);
     },
-    [isRowEditDisabled, onEditAction, openUpdateModalForRow],
+    [canEditRecords, isRowEditDisabled, onEditAction, openUpdateModalForRow],
   );
   const handleRowView = useCallback(
     (row: MasterTableRow) => {
@@ -3465,9 +3553,12 @@ export default function CrudMasterPage({
   const handleRowDelete = useCallback(
     (row: MasterTableRow) => {
       setSelectedRowId(row.__rowId);
+      if (!canDeleteRecords) {
+        return;
+      }
       handleDeleteRow(row);
     },
-    [handleDeleteRow],
+    [canDeleteRecords, handleDeleteRow],
   );
   const handleRowLogs = useCallback(
     (row: MasterTableRow) => {
@@ -3590,8 +3681,11 @@ export default function CrudMasterPage({
     listTitleOverride ??
     (gridDisplayName ? `${gridDisplayName} List` : listTitle ?? `${title} List`);
   const handleDownloadRows = useCallback(() => {
+    if (!canExportRecords) {
+      return;
+    }
     downloadMasterRowsCsv(listHeading, renderedColumns, renderedRows);
-  }, [listHeading, renderedColumns, renderedRows]);
+  }, [canExportRecords, listHeading, renderedColumns, renderedRows]);
 
   const handleRefresh = useCallback(() => {
     void loadRecords(searchTerm, currentPage, pageSize);
@@ -3604,7 +3698,9 @@ export default function CrudMasterPage({
   }, [selectedRow, handleRowUpdate]);
 
   /** The selected row is readable but not writable — Edit goes inactive on it. */
-  const editDisabledForSelection = Boolean(selectedRow && isRowEditDisabled?.(selectedRow));
+  const editDisabledForSelection = Boolean(
+    !canEditRecords || (selectedRow && isRowEditDisabled?.(selectedRow)),
+  );
 
   useEffect(() => {
     if (hideListPage) {
@@ -3636,11 +3732,19 @@ export default function CrudMasterPage({
     selectedRow,
   ]);
 
+  /** The selected row exists but cannot be removed — Delete goes inactive on it. */
+  const deleteDisabledForSelection = Boolean(
+    !canDeleteRecords || (selectedRow && isRowDeleteDisabled?.(selectedRow)),
+  );
+
   const handleToolbarDelete = useCallback(() => {
-    if (selectedRow) {
+    if (!canDeleteRecords) {
+      return;
+    }
+    if (selectedRow && !isRowDeleteDisabled?.(selectedRow)) {
       handleDeleteRow(selectedRow);
     }
-  }, [selectedRow, handleDeleteRow]);
+  }, [canDeleteRecords, selectedRow, handleDeleteRow, isRowDeleteDisabled]);
 
   const handleToolbarLogs = useCallback(() => {
     if (selectedRow) {
@@ -3889,8 +3993,12 @@ export default function CrudMasterPage({
                     type="button"
                     className={`${styles.iconBtn} ${styles.iconBtnAdd} erp-ms-tbtn erp-ms-tbtn--primary`}
                     onClick={handleCreateAction}
-                    disabled={saveLoading || detailsLoading}
-                    title={createLabel ?? "Add"}
+                    disabled={!canCreateRecords || saveLoading || detailsLoading}
+                    title={
+                      canCreateRecords
+                        ? createLabel ?? "Add"
+                        : NO_PERMISSION_TITLES.create
+                    }
                   >
                     <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
                       <ErpActionIcon name="add" />
@@ -3905,9 +4013,11 @@ export default function CrudMasterPage({
                       !selectedRow || editDisabledForSelection || saveLoading || detailsLoading
                     }
                     title={
-                      editDisabledForSelection
-                        ? rowEditDisabledReason ?? "This row cannot be edited"
-                        : "Edit selected row (Alt+A)"
+                      !canEditRecords
+                        ? NO_PERMISSION_TITLES.edit
+                        : editDisabledForSelection
+                          ? rowEditDisabledReason ?? "This row cannot be edited"
+                          : "Edit selected row (Alt+A)"
                     }
                   >
                     <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
@@ -3919,8 +4029,20 @@ export default function CrudMasterPage({
                     type="button"
                     className={`${styles.iconBtn} ${styles.iconBtnDelete} erp-ms-tbtn`}
                     onClick={handleToolbarDelete}
-                    disabled={!selectedRow || deleteLoading || saveLoading || detailsLoading}
-                    title="Delete selected row"
+                    disabled={
+                      !selectedRow ||
+                      deleteDisabledForSelection ||
+                      deleteLoading ||
+                      saveLoading ||
+                      detailsLoading
+                    }
+                    title={
+                      !canDeleteRecords
+                        ? NO_PERMISSION_TITLES.delete
+                        : deleteDisabledForSelection
+                          ? rowDeleteDisabledReason ?? "This row cannot be deleted"
+                          : "Delete selected row"
+                    }
                   >
                     <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
                       <ErpActionIcon name="delete" />
@@ -3956,8 +4078,12 @@ export default function CrudMasterPage({
                     type="button"
                     className={`${styles.iconBtn} ${styles.iconBtnExcel} erp-ms-tbtn`}
                     onClick={handleDownloadRows}
-                    disabled={renderedRows.length === 0}
-                    title={`Export ${listHeading} as CSV`}
+                    disabled={!canExportRecords || renderedRows.length === 0}
+                    title={
+                      canExportRecords
+                        ? `Export ${listHeading} as CSV`
+                        : NO_PERMISSION_TITLES.export
+                    }
                   >
                     <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
                       <ErpActionIcon name="excel" />

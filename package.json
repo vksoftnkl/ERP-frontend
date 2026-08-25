@@ -11,6 +11,7 @@
     "start:http": "next start",
     "start:https": "node https-server.cjs",
     "cert:local": "node scripts/generate-local-cert.js",
+    "gen:print-vocab": "node scripts/gen-print-vocab.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

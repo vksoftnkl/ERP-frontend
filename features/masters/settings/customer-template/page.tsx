@@ -183,9 +183,9 @@ const TEMPLATE_EXTRA_FIELD_NAMES = Object.keys(INITIAL_FORM_VALUES).filter(
   (name) => name !== "company" && name !== "area" && name !== "customerGroup",
 );
 const CUSTOMER_TEMPLATE_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(72vw, 72rem)",
-  height: "80vh",
-  maxHeight: "80vh",
+  width: "min(calc(72vw/var(--erp-ui-scale)), 72rem)",
+  height: "calc(80vh/var(--erp-ui-scale))",
+  maxHeight: "calc(80vh/var(--erp-ui-scale))",
 };
 // Parse the configValue JSON into the saved picks. Returns null when there's nothing
 // usable (no row yet / bad JSON) so the caller leaves the form at its defaults.

@@ -1,0 +1,360 @@
+/**
+ * The template definition contract — schemaVersion 1.
+ *
+ * A hand-maintained mirror of the server's zod schema at
+ * `ERP server/src/modules/reporting/templates/dto/template-definition.schema.ts`.
+ * These are the schema's OUTPUT types (defaults applied), because that is what
+ * `GET /reports/templates/:id` returns: the service parses and migrates before
+ * responding, so every defaulted field arrives populated. Modelling the input
+ * type instead would litter the canvas with `?? "left"` fallbacks.
+ *
+ * Drift protection is runtime, not compile time: `lib/vocabulary.ts` reconciles
+ * these unions against `GET /reports/templates/schema` and warns in
+ * development when the server knows a band type or transform this build does
+ * not. `npm run gen:print-vocab` regenerates the vocabulary from the sibling
+ * server checkout when one is present.
+ */
+
+export const SCHEMA_VERSION = 1;
+
+export type LayoutMode = "GRAPHIC" | "GRID";
+export type OutputMode = "PDF" | "ESCPOS" | "ESCP_DOTMATRIX" | "HTML";
+export type Orientation = "PORTRAIT" | "LANDSCAPE";
+
+export type BandType =
+  | "REPORT_HEADER"
+  | "PAGE_HEADER"
+  | "GROUP_HEADER"
+  | "DETAIL"
+  | "GROUP_FOOTER"
+  | "SUMMARY"
+  | "PAGE_FOOTER"
+  | "REPORT_FOOTER"
+  | "NO_DATA";
+
+export type ElementKind =
+  | "TEXT"
+  | "FIELD"
+  | "LINE"
+  | "RECT"
+  | "IMAGE"
+  | "BARCODE"
+  | "QRCODE"
+  | "PAGEBREAK";
+
+export type PrintOn =
+  | "ALL_PAGES"
+  | "FIRST_PAGE"
+  | "LAST_PAGE"
+  | "NOT_FIRST_PAGE"
+  | "NOT_LAST_PAGE";
+
+export type HorizontalAlign = "left" | "center" | "right";
+export type VerticalAlign = "top" | "middle" | "bottom";
+export type ImageFit = "CONTAIN" | "COVER" | "STRETCH";
+export type Cardinality = "one" | "many";
+export type AggregateFunction = "sum" | "count" | "avg" | "min" | "max";
+export type AggregateScope = "GROUP" | "PAGE" | "REPORT";
+export type BarcodeSymbology = "code128" | "ean13" | "ean8" | "upca" | "code39" | "itf14";
+export type QrErrorCorrection = "L" | "M" | "Q" | "H";
+
+export type Margins = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
+export type PaperSpec = {
+  code: string;
+  widthMm: number;
+  /** null = continuous stationery (thermal roll, fanfold). */
+  heightMm: number | null;
+  orientation: Orientation;
+  margins: Margins;
+  /** GRID mode only: printable character columns. */
+  columns?: number;
+  /** GRID mode only: lines per page. */
+  rows?: number;
+};
+
+export type DatasetBinding = {
+  name: string;
+  /** A registered provider token, e.g. `sales.invoice.lines`. Never SQL. */
+  provider: string;
+  cardinality: Cardinality;
+  params?: Record<string, unknown>;
+};
+
+export type FontSpec = {
+  family: string;
+  /** Points. */
+  size: number;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+};
+
+export type StyleSpec = {
+  color?: string;
+  fill?: string;
+  stroke?: string;
+  strokeWidthPt?: number;
+  /** Millimetres inside the element box. */
+  padding?: number;
+};
+
+type ElementBase = {
+  id: string;
+  /** GRAPHIC: millimetres from the band's top-left. */
+  x: number;
+  y: number;
+  w?: number;
+  h?: number;
+  /** GRID: character cell position and width. */
+  col?: number;
+  row?: number;
+  cols?: number;
+  /** Expression; the element is skipped when it evaluates falsy. */
+  visible?: string;
+  style?: StyleSpec;
+  /** Draw order within the band; higher paints later. */
+  z: number;
+};
+
+type TextLikeBase = ElementBase & {
+  value: string;
+  font?: Partial<FontSpec>;
+  align: HorizontalAlign;
+  vAlign: VerticalAlign;
+  wrap: boolean;
+  ellipsis: boolean;
+  blankWhenZero: boolean;
+};
+
+export type TextElement = TextLikeBase & { kind: "TEXT" };
+
+export type FieldAggregate = {
+  fn: AggregateFunction;
+  scope: AggregateScope;
+  dataset?: string;
+  /** The RAW numeric expression to accumulate; defaults to `value`. */
+  over?: string;
+};
+
+export type FieldElement = TextLikeBase & {
+  kind: "FIELD";
+  aggregate?: FieldAggregate;
+};
+
+export type LineElement = ElementBase & {
+  kind: "LINE";
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  widthPt: number;
+  /** GRID mode: the character to repeat. */
+  gridChar: string;
+};
+
+export type RectElement = ElementBase & {
+  kind: "RECT";
+  w: number;
+  h: number;
+  radiusMm: number;
+};
+
+export type ImageElement = ElementBase & {
+  kind: "IMAGE";
+  w: number;
+  h: number;
+  source: string;
+  fit: ImageFit;
+};
+
+export type BarcodeElement = ElementBase & {
+  kind: "BARCODE";
+  w: number;
+  h: number;
+  symbology: BarcodeSymbology;
+  value: string;
+  showText: boolean;
+};
+
+export type QrcodeElement = ElementBase & {
+  kind: "QRCODE";
+  /** QR is square; `size` wins over w/h. */
+  size: number;
+  value: string;
+  errorCorrection: QrErrorCorrection;
+};
+
+export type PagebreakElement = ElementBase & {
+  kind: "PAGEBREAK";
+  when?: string;
+};
+
+export type ReportElement =
+  | TextElement
+  | FieldElement
+  | LineElement
+  | RectElement
+  | ImageElement
+  | BarcodeElement
+  | QrcodeElement
+  | PagebreakElement;
+
+export type TextLikeElement = TextElement | FieldElement;
+
+export const isTextLike = (element: ReportElement): element is TextLikeElement =>
+  element.kind === "TEXT" || element.kind === "FIELD";
+
+/** Elements whose geometry is a box the designer can resize on both axes. */
+export type BoxElement = RectElement | ImageElement | BarcodeElement | TextLikeElement;
+
+export const isBoxLike = (element: ReportElement): element is BoxElement =>
+  element.kind === "TEXT" ||
+  element.kind === "FIELD" ||
+  element.kind === "RECT" ||
+  element.kind === "IMAGE" ||
+  element.kind === "BARCODE";
+
+export type Band = {
+  type: BandType;
+  /** Millimetres in GRAPHIC mode. */
+  heightMm: number;
+  /** Character lines in GRID mode. */
+  heightRows?: number;
+  dataset?: string;
+  groupBy?: string;
+  groupLevel: number;
+  printOn: PrintOn;
+  autoGrow: boolean;
+  keepTogether: boolean;
+  keepWithNext: boolean;
+  keepWithLastDetail: boolean;
+  visible?: string;
+  spacingRows: number;
+  elements: ReportElement[];
+};
+
+export type TemplateDefinition = {
+  schemaVersion: number;
+  layoutMode: LayoutMode;
+  /** Free-form designer metadata; the engine ignores it entirely. */
+  meta?: Record<string, unknown>;
+  paper: PaperSpec;
+  datasets: DatasetBinding[];
+  bands: Band[];
+};
+
+// ─── API payloads ────────────────────────────────────────────────────────────
+
+export type TemplateSummaryPayload = {
+  ptId: string;
+  ptCompanyId: string | null;
+  ptBranchId: string | null;
+  ptDocType: string;
+  ptOutputMode: string;
+  ptPaperCode: string;
+  ptName: string;
+  ptVersion: number;
+  ptParentId: string | null;
+  ptSchemaVer: number;
+  ptIsDefault: boolean;
+  ptIsActive: boolean;
+  /** True when ptCompanyId is null — a shipped design that must be cloned to edit. */
+  isSystemTemplate: boolean;
+  ptCreatedOn: string;
+  ptCreatedBy: string | null;
+  ptModifiedOn: string | null;
+  ptModifiedBy: string | null;
+};
+
+export type TemplatePayload = TemplateSummaryPayload & {
+  definition: TemplateDefinition;
+  definitionMigrated: boolean;
+};
+
+export type TemplateRevisionPayload = {
+  ptrId: string;
+  ptrTemplateId: string;
+  ptrVersion: number;
+  ptrSchemaVer: number;
+  ptrNote: string | null;
+  ptrCreatedOn: string;
+  ptrCreatedBy: string | null;
+};
+
+export type TemplateExportPayload = {
+  kind: "vknex.print-template";
+  exportVersion: 1;
+  exportedAt: string;
+  name: string;
+  docType: string;
+  outputMode: string;
+  paperCode: string;
+  schemaVersion: number;
+  definition: TemplateDefinition;
+};
+
+export type FieldType =
+  | "string"
+  | "number"
+  | "integer"
+  | "boolean"
+  | "date"
+  | "datetime"
+  | "object";
+
+export type FieldMeta = {
+  name: string;
+  type: FieldType;
+  label: string;
+  /** Suggested format pattern, e.g. '#,##0.00'. Advisory only. */
+  format?: string;
+  complexScript?: boolean;
+  description?: string;
+};
+
+/** One entry of `GET /reports/templates/datasets/catalogue`. */
+export type ProviderDescriptor = {
+  token: string;
+  label: string;
+  cardinality: Cardinality;
+  /** Document types this provider is meaningful for. Empty = any. */
+  docTypes: string[];
+  fields: FieldMeta[];
+};
+
+/** `GET /reports/templates/schema` — the designer's palette vocabulary. */
+export type TemplateSchemaVocabulary = {
+  schemaVersion: number;
+  layoutModes: LayoutMode[];
+  outputModes: OutputMode[];
+  bandTypes: BandType[];
+  elementKinds: ElementKind[];
+  papers: PaperPreset[];
+  transforms: string[];
+  rootIdentifiers: string[];
+  gallery: Array<{
+    key: string;
+    name: string;
+    docType: string;
+    outputMode: string;
+    paperCode: string;
+  }>;
+};
+
+export type PaperPreset = {
+  code: string;
+  label: string;
+  widthMm: number;
+  /** null = continuous stationery. */
+  heightMm: number | null;
+  layoutMode: LayoutMode;
+  columns?: number;
+  rows?: number;
+  cpi?: number;
+};

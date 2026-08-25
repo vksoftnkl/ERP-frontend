@@ -1,11 +1,11 @@
 .page {
-  --grid-designer-page-height: calc(100dvh - 250px);
+  --grid-designer-page-height: calc(calc(100dvh / var(--erp-ui-scale)) - 250px);
   height: var(--grid-designer-page-height);
   min-height: var(--grid-designer-page-height);
   overflow: hidden;
   overscroll-behavior: contain;
   background: #eff4f7;
-  padding: clamp(8px, 1.4vw, 14px);
+  padding: clamp(8px, calc(1.4vw / var(--erp-ui-scale)), 14px);
 }
 
 .workspace {

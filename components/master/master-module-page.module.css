@@ -1,12 +1,12 @@
 .page {
-  min-height: 100vh;
+  min-height: calc(100vh / var(--erp-ui-scale));
   background: #d8d8d8;
   color: #111;
   font-family: var(--erp-font-family);
 }
 
 .board {
-  min-height: 100vh;
+  min-height: calc(100vh / var(--erp-ui-scale));
   border: 1px solid #8b8b8b;
   background: #f8f8f8;
   display: flex;

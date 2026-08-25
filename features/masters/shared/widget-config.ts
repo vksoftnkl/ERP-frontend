@@ -61,6 +61,7 @@ export function buildWidgetFieldConfig(
 // the config through RTK Query and unwrap `data` in their `transformResponse`.
 export function buildWidgetFieldConfigFromSections(
   sections: WidgetMasterSectionConfig[] | null | undefined,
+  options?: { foldSectionVisibility?: boolean },
 ): Map<string, ResolvedFieldConfig> {
   const config = new Map<string, ResolvedFieldConfig>();
   const orderedSections = [...(Array.isArray(sections) ? sections : [])].sort(
@@ -68,6 +69,12 @@ export function buildWidgetFieldConfigFromSections(
   );
   let order = 0;
   for (const section of orderedSections) {
+    // `foldSectionVisibility`: a section switched off hides every field under it,
+    // matching how the Visible Settings popup's section switch behaves (it cascades
+    // to its fields), so a persisted section-off state reloads the same way instead
+    // of coming back with all of that section's fields visible.
+    const sectionHidden =
+      options?.foldSectionVisibility === true && section?.sectionVisibility === false;
     const fields = Array.isArray(section?.fields) ? section.fields : [];
     const orderedFields = [...fields].sort(
       (a, b) => (a.fieldPosition ?? 0) - (b.fieldPosition ?? 0),
@@ -81,7 +88,7 @@ export function buildWidgetFieldConfigFromSections(
         label: (field.fieldGuiName ?? "").trim(),
         secondaryText: (field.fieldSecondaryText ?? "").trim(),
         order,
-        visible: field.fieldVisibility !== false,
+        visible: !sectionHidden && field.fieldVisibility !== false,
       });
       order += 1;
     }
@@ -160,6 +167,49 @@ export function applyWidgetFieldConfig(
     (a, b) => a.order - b.order || a.index - b.index,
   );
   return [...ordered.map((entry) => entry.field), ...trailing];
+}
+// Drop a heading/subheading left with nothing under it. On screens whose headings
+// are the modal's TABS, hiding every field of a tab would otherwise leave an empty
+// tab in the strip (and an empty group inside a tab). A "custom" field counts as
+// content — what it renders lives outside the config and cannot be hidden from it.
+export function pruneEmptyGroups(fields: ERPDynamicModalField[]): ERPDynamicModalField[] {
+  const keep = fields.map(() => true);
+  let headingIndex = -1;
+  let subheadingIndex = -1;
+  let headingHasContent = false;
+  let subheadingHasContent = false;
+  const closeSubheading = () => {
+    if (subheadingIndex >= 0 && !subheadingHasContent) {
+      keep[subheadingIndex] = false;
+    }
+    subheadingIndex = -1;
+    subheadingHasContent = false;
+  };
+  const closeHeading = () => {
+    if (headingIndex >= 0 && !headingHasContent) {
+      keep[headingIndex] = false;
+    }
+    headingIndex = -1;
+    headingHasContent = false;
+  };
+  fields.forEach((field, index) => {
+    if (field.type === "heading") {
+      closeSubheading();
+      closeHeading();
+      headingIndex = index;
+      return;
+    }
+    if (field.type === "subheading") {
+      closeSubheading();
+      subheadingIndex = index;
+      return;
+    }
+    headingHasContent = true;
+    subheadingHasContent = true;
+  });
+  closeSubheading();
+  closeHeading();
+  return fields.filter((_, index) => keep[index]);
 }
 /** Lowercased backend fieldNames that map to a real form field on this screen. */
 export function buildControllableFieldNames(

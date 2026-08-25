@@ -1,0 +1,1679 @@
+/*
+ * Print designer skin — the desktop report-designer idiom (QtRPT / Qt Designer).
+ *
+ * This is deliberately NOT the rest of the app's look. A banded report designer
+ * is a tool, and the tool people already know is the Qt one on their desktop:
+ * a menu bar over icon toolbars, docked panels with title bars, band captions in
+ * a gutter beside the page, a two-column property grid, and a status bar. Users
+ * arriving from the desktop app should not have to learn where anything is.
+ *
+ * Consequences of that choice, so nobody "fixes" them later:
+ *   - 11px UI text and 20px rows. Desktop density, not web density.
+ *   - Square corners and 1px hairlines. `--erp-radius` is deliberately unused.
+ *   - A dark grey canvas backdrop, because a white page needs something to be
+ *     a page against.
+ *
+ * Overlays portaled to <body> get `.overlayTokens`: a portaled node loses the
+ * custom properties scoped to `.page` (see components/ui/modal-portal.tsx).
+ */
+
+@mixin designer-tokens {
+  /* Chrome — the Qt "Fusion" greys. */
+  --pd-chrome: #f0f0f0;
+  --pd-chrome-dark: #e4e4e4;
+  --pd-chrome-sunken: #fafafa;
+  --pd-border: #a0a0a0;
+  --pd-border-light: #c8c8c8;
+  --pd-groove: #d4d4d4;
+  --pd-desktop: #6e7377;
+
+  /* Ink. */
+  --pd-text: #1b1b1b;
+  --pd-text-muted: #5f5f5f;
+  --pd-text-disabled: #9a9a9a;
+
+  /* Selection: the app's maroon, used the way a desktop tool uses blue. */
+  --pd-select: #8b1d1d;
+  --pd-select-soft: rgba(139, 29, 29, 0.14);
+  --pd-brass: #c9a227;
+
+  --pd-panel: #ffffff;
+  --pd-band-caption: #e8e8e8;
+  --pd-band-caption-selected: #f3e2e2;
+
+  --pd-ui-font: "Segoe UI", Tahoma, "DejaVu Sans", sans-serif;
+  --pd-mono: "IBM Plex Mono", "DejaVu Sans Mono", Consolas, monospace;
+
+  --pd-row-h: 20px;
+  --pd-ruler: 18px;
+  /* Wide enough for the longest band name ('Report header') plus its size. */
+  --pd-gutter: 148px;
+}
+
+.page {
+  @include designer-tokens;
+
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--pd-chrome);
+  color: var(--pd-text);
+  font-family: var(--pd-ui-font);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.overlayTokens {
+  @include designer-tokens;
+
+  font-family: var(--pd-ui-font);
+  font-size: 11px;
+}
+
+/* ── Menu bar ────────────────────────────────────────────────────────── */
+
+.menuBar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 22px;
+  padding: 0 2px;
+  background: var(--pd-chrome);
+  border-bottom: 1px solid var(--pd-border-light);
+  user-select: none;
+}
+
+.menuTitle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: default;
+
+  &:hover {
+    background: var(--pd-chrome-dark);
+  }
+}
+
+.menuTitleOpen {
+  background: var(--pd-select);
+  color: #fff;
+
+  &:hover {
+    background: var(--pd-select);
+  }
+}
+
+.menuDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 210px;
+  padding: 2px;
+  background: var(--pd-chrome-sunken);
+  border: 1px solid var(--pd-border);
+  box-shadow: 2px 3px 8px rgba(0, 0, 0, 0.25);
+  z-index: 40;
+}
+
+.menuAnchor {
+  position: relative;
+  display: flex;
+}
+
+.menuOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 8px 3px 22px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+  white-space: nowrap;
+
+  &:hover:not(:disabled) {
+    background: var(--pd-select);
+    color: #fff;
+  }
+
+  &:disabled {
+    color: var(--pd-text-disabled);
+  }
+}
+
+.menuOptionChecked::before {
+  content: "✓";
+  position: absolute;
+  left: 8px;
+}
+
+.menuShortcut {
+  margin-left: auto;
+  padding-left: 24px;
+  color: var(--pd-text-muted);
+  font-family: var(--pd-mono);
+  font-size: 10px;
+}
+
+.menuOption:hover:not(:disabled) .menuShortcut {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.menuSeparator {
+  height: 1px;
+  margin: 2px 4px;
+  background: var(--pd-groove);
+}
+
+/* ── Toolbars ────────────────────────────────────────────────────────── */
+
+.toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  height: 28px;
+  padding: 0 4px;
+  background: var(--pd-chrome);
+  border-bottom: 1px solid var(--pd-border-light);
+  overflow-x: auto;
+  overflow-y: hidden;
+  user-select: none;
+}
+
+.toolbarLast {
+  border-bottom: 1px solid var(--pd-border);
+}
+
+/*
+ * The tool strip, sized larger than the shared `.toolbar` chrome.
+ *
+ * `.toolbar` also dresses the top bar, the property-panel toggles and the
+ * expression editor, where the controls sit beside text and must not tower over
+ * it. This strip is different: it is the one row a user aims a mouse at all day,
+ * and at the 12px chrome size its glyphs were hard to tell apart. The larger
+ * sizing is therefore scoped here rather than raised on `.toolbar` itself.
+ *
+ * Word buttons (grid / snap / {{ }}) opt out through `.toolIconText` — blowing a
+ * four-letter word up to icon size only makes the strip wider without making it
+ * clearer.
+ */
+.toolStrip {
+  height: 36px;
+  gap: 2px;
+  padding: 0 6px;
+
+  .toolButton {
+    min-width: 30px;
+    height: 30px;
+    padding: 0 6px;
+  }
+
+  .toolIcon {
+    font-size: 17px;
+  }
+
+  .toolIconText {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .toolDivider {
+    height: 24px;
+    margin: 0 6px;
+  }
+
+  .toolSelect {
+    height: 24px;
+  }
+}
+
+.toolGroup {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.toolDivider {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--pd-groove);
+  border-right: 1px solid #fff;
+}
+
+.toolButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--pd-text);
+  font: inherit;
+  cursor: default;
+
+  &:hover:not(:disabled) {
+    border-color: var(--pd-border-light);
+    background: linear-gradient(#ffffff, #e6e6e6);
+  }
+
+  &:active:not(:disabled) {
+    border-color: var(--pd-border);
+    background: #dcdcdc;
+  }
+
+  &:disabled {
+    color: var(--pd-text-disabled);
+  }
+}
+
+.toolButtonActive {
+  border-color: var(--pd-border);
+  background: var(--pd-select-soft);
+
+  &:hover:not(:disabled) {
+    background: var(--pd-select-soft);
+  }
+}
+
+.toolIcon {
+  font-family: var(--pd-mono);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.toolSelect {
+  height: 20px;
+  min-width: 56px;
+  border: 1px solid var(--pd-border-light);
+  background: #fff;
+  font: inherit;
+  color: inherit;
+  padding: 0 2px;
+}
+
+.toolLabel {
+  padding: 0 4px 0 2px;
+  color: var(--pd-text-muted);
+}
+
+.titleBlock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.nameInput {
+  height: 20px;
+  min-width: 170px;
+  max-width: 280px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+
+  &:hover {
+    border-color: var(--pd-border-light);
+    background: #fff;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--pd-select);
+    background: #fff;
+  }
+}
+
+.metaLine {
+  color: var(--pd-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spacer {
+  flex: 1 1 auto;
+  min-width: 6px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 15px;
+  padding: 0 4px;
+  border: 1px solid var(--pd-border-light);
+  background: var(--pd-chrome-dark);
+  color: var(--pd-text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.badgeDefault {
+  border-color: #bfa23f;
+  background: #fbf3d8;
+  color: #6f5505;
+}
+
+.badgeSystem {
+  border-color: #b58585;
+  background: #f6e9e9;
+  color: var(--pd-select);
+}
+
+.badgeDirty {
+  border-color: #b58585;
+  color: var(--pd-select);
+}
+
+/* ── Buttons (dialogs, list page chrome) ─────────────────────────────── */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 72px;
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid var(--pd-border);
+  background: linear-gradient(#fdfdfd, #e8e8e8);
+  color: var(--pd-text);
+  font: inherit;
+  cursor: default;
+
+  &:hover:not(:disabled) {
+    background: linear-gradient(#ffffff, #dcdcdc);
+  }
+
+  &:active:not(:disabled) {
+    background: #d4d4d4;
+  }
+
+  &:disabled {
+    color: var(--pd-text-disabled);
+    background: var(--pd-chrome-dark);
+  }
+}
+
+.buttonPrimary {
+  border-color: #6d1616;
+  background: linear-gradient(#a02525, #7c1717);
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background: linear-gradient(#ac2a2a, #8b1d1d);
+  }
+
+  &:disabled {
+    border-color: var(--pd-border);
+    background: var(--pd-chrome-dark);
+    color: var(--pd-text-disabled);
+  }
+}
+
+.buttonDanger {
+  color: var(--pd-select);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  color: inherit;
+  text-decoration: none;
+
+  &:hover {
+    border-color: var(--pd-border-light);
+    background: linear-gradient(#ffffff, #e6e6e6);
+  }
+}
+
+/* ── Body: docks and canvas ──────────────────────────────────────────── */
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr) 268px;
+  background: var(--pd-chrome);
+}
+
+.bodyNoLeft {
+  grid-template-columns: 0 minmax(0, 1fr) 268px;
+}
+
+.bodyNoRight {
+  grid-template-columns: 230px minmax(0, 1fr) 0;
+}
+
+.bodyNoSides {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
+}
+
+.sidePanel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--pd-chrome);
+  overflow: hidden;
+}
+
+.sidePanelLeft {
+  border-right: 1px solid var(--pd-border);
+}
+
+.sidePanelRight {
+  border-left: 1px solid var(--pd-border);
+}
+
+.sidePanelHidden {
+  display: none;
+}
+
+/* Dock title bar — the small caps strip every Qt dock widget carries. */
+.panelHead {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 6px;
+  background: linear-gradient(#f6f6f6, #e2e2e2);
+  border-bottom: 1px solid var(--pd-border-light);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pd-text-muted);
+}
+
+.panelScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: var(--pd-panel);
+}
+
+/* Dock tabs (Report | Data), drawn as Qt tab bars. */
+.dockTabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  padding: 3px 4px 0;
+  background: var(--pd-chrome);
+  border-bottom: 1px solid var(--pd-border);
+}
+
+.dockTab {
+  padding: 3px 10px;
+  border: 1px solid var(--pd-border-light);
+  border-bottom: 0;
+  background: var(--pd-chrome-dark);
+  color: var(--pd-text-muted);
+  font: inherit;
+  cursor: default;
+
+  &:hover {
+    background: #ededed;
+  }
+}
+
+.dockTabActive {
+  background: var(--pd-panel);
+  color: var(--pd-text);
+  font-weight: 600;
+  margin-bottom: -1px;
+  padding-bottom: 4px;
+}
+
+/* ── Report tree ─────────────────────────────────────────────────────── */
+
+.tree {
+  padding: 2px 0;
+  background: var(--pd-panel);
+}
+
+.treeRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: var(--pd-row-h);
+  padding: 0 6px 0 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: default;
+
+  &:hover {
+    background: var(--pd-chrome-dark);
+  }
+}
+
+.treeRowSelected {
+  background: var(--pd-select);
+  color: #fff;
+
+  &:hover {
+    background: var(--pd-select);
+  }
+}
+
+.treeRowChild {
+  padding-left: 22px;
+}
+
+.treeTwisty {
+  width: 12px;
+  text-align: center;
+  color: var(--pd-text-muted);
+}
+
+.treeRowSelected .treeTwisty,
+.treeRowSelected .treeMeta,
+.treeRowSelected .treeFieldType {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.treeIcon {
+  width: 14px;
+  font-family: var(--pd-mono);
+  font-size: 10px;
+  color: var(--pd-text-muted);
+  text-align: center;
+}
+
+.treeRowSelected .treeIcon {
+  color: #fff;
+}
+
+.treeMeta {
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--pd-text-muted);
+  font-size: 10px;
+}
+
+.treeGroup {
+  border-bottom: 1px solid var(--pd-border-light);
+}
+
+.treeGroupHead {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  height: var(--pd-row-h);
+  padding: 0 6px;
+  border: 0;
+  background: linear-gradient(#f6f6f6, #e6e6e6);
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.treeGroupMeta {
+  margin-left: auto;
+  color: var(--pd-text-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.treeField {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  height: var(--pd-row-h);
+  padding: 0 6px 0 22px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: grab;
+
+  &:hover {
+    background: var(--pd-chrome-dark);
+  }
+}
+
+.treeFieldType {
+  margin-left: auto;
+  font-family: var(--pd-mono);
+  font-size: 9px;
+  color: var(--pd-text-muted);
+}
+
+.treeEmpty {
+  padding: 8px 8px 10px;
+  color: var(--pd-text-muted);
+}
+
+.searchRow {
+  padding: 4px;
+  background: var(--pd-chrome);
+  border-bottom: 1px solid var(--pd-border-light);
+}
+
+.searchInput {
+  width: 100%;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--pd-border-light);
+  background: #fff;
+  font: inherit;
+}
+
+.bindRow {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  padding: 4px;
+  background: var(--pd-chrome);
+  border-bottom: 1px solid var(--pd-border-light);
+}
+
+/* ── Canvas ──────────────────────────────────────────────────────────── */
+
+.canvasWrap {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--pd-desktop);
+  border: 1px solid var(--pd-border);
+  border-top: 0;
+  border-bottom: 0;
+}
+
+.viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 20px 40px 0;
+}
+
+/*
+ * One grid for the whole sheet: ruler | band caption gutter | page.
+ *
+ * The three columns share the same rows, which is what keeps a band's caption,
+ * its ruler segment and its body on exactly the same line — the alignment a
+ * banded designer lives or dies by. Rows are `auto`: a band's height comes from
+ * its body cell.
+ */
+.viewportInner {
+  display: grid;
+  grid-template-columns: var(--pd-ruler) var(--pd-gutter) max-content;
+  width: max-content;
+  align-items: stretch;
+}
+
+.rulerCorner {
+  grid-column: 1 / 3;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: var(--pd-ruler);
+  background: var(--pd-chrome);
+  border-right: 1px solid var(--pd-border);
+  border-bottom: 1px solid var(--pd-border);
+}
+
+.rulerH {
+  grid-column: 3;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: var(--pd-ruler);
+  background: var(--pd-chrome);
+  border-bottom: 1px solid var(--pd-border);
+  overflow: hidden;
+}
+
+.rulerV {
+  grid-column: 1;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--pd-chrome);
+  border-right: 1px solid var(--pd-border);
+  overflow: hidden;
+}
+
+/* The ruled area is absolute so the cell never forces the row taller than the
+   band body — the row's height must come from the page, not from its label. */
+.rulerVInner {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.rulerTick {
+  position: absolute;
+  background: #8b8b8b;
+}
+
+.rulerLabel {
+  position: absolute;
+  font-family: var(--pd-mono);
+  font-size: 8px;
+  line-height: 1;
+  color: var(--pd-text-muted);
+  user-select: none;
+}
+
+/* The page itself: one white rectangle behind every band row. */
+.sheet {
+  grid-column: 3;
+  grid-row: 2 / -1;
+  position: relative;
+  z-index: 0;
+  background: #fff;
+  box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.35);
+}
+
+.sheetOverflow {
+  outline: 1px dashed var(--pd-select);
+  outline-offset: -1px;
+}
+
+.marginGuide {
+  position: absolute;
+  pointer-events: none;
+  border-left: 1px dashed rgba(139, 29, 29, 0.45);
+  border-right: 1px dashed rgba(139, 29, 29, 0.45);
+}
+
+/*
+ * Band caption gutter — the classic banded-designer label column.
+ *
+ * Sticky so the captions stay put while a wide page scrolls sideways, and its
+ * content is absolutely positioned so a tall caption cannot stretch a 5mm band
+ * into 40 pixels. A thin band clips its caption, exactly as it does in every
+ * desktop report designer; the tree and the status bar carry the full detail.
+ */
+.bandCaption {
+  grid-column: 2;
+  position: sticky;
+  left: var(--pd-ruler);
+  z-index: 2;
+  min-height: 0;
+  background: var(--pd-band-caption);
+  border-right: 1px solid var(--pd-border);
+  border-bottom: 1px solid var(--pd-border-light);
+  cursor: default;
+  overflow: hidden;
+}
+
+.bandCaptionInner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 5px;
+  overflow: hidden;
+}
+
+.bandCaptionSelected {
+  background: var(--pd-band-caption-selected);
+  box-shadow: inset 3px 0 0 var(--pd-select);
+}
+
+.bandCaptionTop {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bandCaptionName {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bandCaptionSize {
+  color: var(--pd-text-muted);
+  font-family: var(--pd-mono);
+  font-size: 9px;
+}
+
+.bandCaptionFlags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.bandFlag {
+  padding: 0 3px;
+  border: 1px solid var(--pd-border-light);
+  background: #fff;
+  color: var(--pd-text-muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.bandCollapse {
+  width: 12px;
+  border: 0;
+  background: none;
+  color: var(--pd-text-muted);
+  font: inherit;
+  cursor: default;
+  padding: 0;
+}
+
+/* A band's drawing area, sitting on the sheet. */
+.bandBody {
+  grid-column: 3;
+  position: relative;
+  z-index: 1;
+  /* A zero-height band still needs to be visible and clickable. */
+  min-height: 3px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--pd-border-light);
+}
+
+.bandBodyDrop {
+  outline: 1px solid var(--pd-brass);
+  outline-offset: -1px;
+}
+
+.bandResizer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 5px;
+  cursor: ns-resize;
+  z-index: 4;
+}
+
+.bandResizerActive {
+  background: var(--pd-select-soft);
+}
+
+.autoGrowMark {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  color: var(--pd-text-muted);
+  font-size: 9px;
+  pointer-events: none;
+}
+
+.sheetFootCaption {
+  grid-column: 2;
+  position: sticky;
+  left: var(--pd-ruler);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  padding: 3px 5px;
+  background: var(--pd-band-caption);
+  border-right: 1px solid var(--pd-border);
+  color: var(--pd-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  overflow: hidden;
+}
+
+.sheetFoot {
+  grid-column: 3;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 18px;
+  padding: 0 5px;
+  color: var(--pd-text-muted);
+  font-size: 10px;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+/* ── Elements on the canvas ──────────────────────────────────────────── */
+
+.element {
+  position: absolute;
+  overflow: hidden;
+  box-sizing: border-box;
+  white-space: pre;
+  cursor: move;
+}
+
+.elementWrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.elementSelected {
+  outline: 1px solid var(--pd-select);
+}
+
+.elementPlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #909090;
+  background: rgba(140, 140, 140, 0.1);
+  color: var(--pd-text-muted);
+  font-size: 9px;
+  text-align: center;
+}
+
+.elementPagebreak {
+  border-top: 2px dashed var(--pd-select);
+  background: rgba(139, 29, 29, 0.06);
+  color: var(--pd-select);
+  font-size: 9px;
+  text-align: center;
+}
+
+.elementHidden {
+  opacity: 0.55;
+}
+
+.selectionBox {
+  position: absolute;
+  border: 1px solid var(--pd-select);
+  pointer-events: none;
+  z-index: 6;
+}
+
+.selectionHandle {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  background: #fff;
+  border: 1px solid var(--pd-select);
+  pointer-events: auto;
+  z-index: 7;
+}
+
+.marqueeBox {
+  position: absolute;
+  border: 1px dotted var(--pd-select);
+  background: var(--pd-select-soft);
+  pointer-events: none;
+  z-index: 6;
+}
+
+.guideLine {
+  position: absolute;
+  background: var(--pd-select);
+  pointer-events: none;
+  z-index: 8;
+}
+
+/* ── Property grid ───────────────────────────────────────────────────── */
+
+.propGrid {
+  background: var(--pd-panel);
+}
+
+/* Group header row — Qt Designer's collapsible property category. */
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  height: var(--pd-row-h);
+  padding: 0 6px;
+  border: 0;
+  border-bottom: 1px solid var(--pd-border-light);
+  background: linear-gradient(#f2f2f2, #e2e2e2);
+  font: inherit;
+  font-weight: 700;
+  color: var(--pd-text);
+  text-align: left;
+  cursor: default;
+}
+
+.section {
+  border-bottom: 0;
+}
+
+.sectionBody {
+  display: block;
+}
+
+/* One property: name cell | value cell. */
+.propRow {
+  display: grid;
+  grid-template-columns: 44% minmax(0, 56%);
+  align-items: stretch;
+  min-height: var(--pd-row-h);
+  border-bottom: 1px solid #ececec;
+}
+
+.propRow:nth-child(even) {
+  background: #fafafa;
+}
+
+.propName {
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  border-right: 1px solid var(--pd-border-light);
+  color: var(--pd-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.propValue {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+/* A value that needs the full width (an expression box, a button strip). */
+.propRowWide {
+  display: block;
+  padding: 3px 6px 5px;
+}
+
+.propRowWide .propName {
+  border-right: 0;
+  padding: 0 0 2px;
+  color: var(--pd-text-muted);
+  font-size: 10px;
+}
+
+.fieldGrid {
+  display: contents;
+}
+
+.fieldRow {
+  display: contents;
+}
+
+.fieldLabel {
+  color: var(--pd-text-muted);
+  font-size: 10px;
+}
+
+.input {
+  width: 100%;
+  height: 18px;
+  min-width: 0;
+  padding: 0 3px;
+  border: 1px solid transparent;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+
+  &:hover {
+    border-color: var(--pd-border-light);
+    background: #fff;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--pd-select);
+    background: #fff;
+  }
+}
+
+.propRowWide .input {
+  border-color: var(--pd-border-light);
+  background: #fff;
+}
+
+.inputMono {
+  font-family: var(--pd-mono);
+  font-size: 10px;
+}
+
+.mixed {
+  border-style: dashed;
+  border-color: var(--pd-border-light);
+  color: var(--pd-text-muted);
+}
+
+.textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 3px 4px;
+  border: 1px solid var(--pd-border-light);
+  background: #fff;
+  font-family: var(--pd-mono);
+  font-size: 10px;
+  color: inherit;
+  resize: vertical;
+
+  &:focus {
+    outline: none;
+    border-color: var(--pd-select);
+  }
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.toggleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.expressionRow {
+  display: flex;
+  gap: 3px;
+  align-items: flex-start;
+}
+
+.fxButton {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--pd-border);
+  background: linear-gradient(#fdfdfd, #e8e8e8);
+  font-family: var(--pd-mono);
+  font-style: italic;
+  font-size: 10px;
+  cursor: default;
+
+  &:hover {
+    background: linear-gradient(#ffffff, #dcdcdc);
+  }
+}
+
+.colorRow {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+}
+
+.colorSwatch {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--pd-border-light);
+  background: #fff;
+}
+
+.emptyPanel {
+  padding: 8px;
+  color: var(--pd-text-muted);
+  line-height: 1.5;
+}
+
+.issueLine {
+  padding: 3px 6px;
+  color: var(--pd-select);
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────── */
+
+.statusBar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 22px;
+  padding: 2px 4px;
+  background: var(--pd-chrome);
+  border-top: 1px solid var(--pd-border);
+  color: var(--pd-text-muted);
+  user-select: none;
+}
+
+.statusCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.statusCellSunken {
+  border-color: var(--pd-border-light) #fff #fff var(--pd-border-light);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.statusStrong {
+  color: var(--pd-text);
+}
+
+.statusButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: default;
+
+  &:hover {
+    border-color: var(--pd-border-light);
+    background: linear-gradient(#ffffff, #e6e6e6);
+  }
+}
+
+.problemsError {
+  color: var(--pd-select);
+  font-weight: 700;
+}
+
+.problemsWarn {
+  color: #8a6100;
+}
+
+/* ── Problems popup ──────────────────────────────────────────────────── */
+
+.problemsWrap {
+  position: relative;
+  display: flex;
+}
+
+.problemsPanel {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 0;
+  width: 460px;
+  max-width: calc(70vw / var(--erp-ui-scale));
+  background: var(--pd-chrome-sunken);
+  border: 1px solid var(--pd-border);
+  box-shadow: 2px 3px 10px rgba(0, 0, 0, 0.3);
+  z-index: 30;
+}
+
+.problemList {
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  overflow: auto;
+  background: #fff;
+}
+
+.problemRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 6px;
+  border: 0;
+  border-bottom: 1px solid #ececec;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+
+  &:hover {
+    background: var(--pd-chrome-dark);
+  }
+}
+
+.problemDot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.problemDotError {
+  background: var(--pd-select);
+}
+
+.problemDotWarning {
+  background: var(--pd-brass);
+}
+
+.menuWrap {
+  position: relative;
+  display: flex;
+}
+
+.menuPanel {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  min-width: 190px;
+  padding: 2px;
+  background: var(--pd-chrome-sunken);
+  border: 1px solid var(--pd-border);
+  box-shadow: 2px 3px 8px rgba(0, 0, 0, 0.25);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  padding: 3px 8px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+
+  &:hover:not(:disabled) {
+    background: var(--pd-select);
+    color: #fff;
+  }
+
+  &:disabled {
+    color: var(--pd-text-disabled);
+  }
+}
+
+/* ── Overlays ────────────────────────────────────────────────────────── */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 24, 28, 0.35);
+  z-index: var(--erp-z-modal);
+}
+
+.dialogLayer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--erp-z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  pointer-events: none;
+}
+
+.dialog {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  min-width: 0;
+  background: var(--pd-chrome);
+  border: 1px solid var(--pd-border);
+  box-shadow: 4px 6px 24px rgba(0, 0, 0, 0.4);
+  will-change: transform;
+}
+
+.dialogWide {
+  width: min(1000px, 100%);
+  height: min(calc(90vh / var(--erp-ui-scale)), 900px);
+}
+
+.dialogMedium {
+  width: min(620px, 100%);
+}
+
+.dialogNarrow {
+  width: min(440px, 100%);
+}
+
+/* Dialog title bar, in the desktop idiom. */
+.dialogHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 6px;
+  background: linear-gradient(#8b1d1d, #6d1616);
+  color: #fff;
+  font-weight: 600;
+}
+
+.dialogHead .button {
+  height: 18px;
+  min-width: 56px;
+}
+
+.dialogBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--pd-chrome);
+}
+
+.dialogFoot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--pd-chrome);
+  border-top: 1px solid var(--pd-border-light);
+}
+
+.previewFrame {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  border: 1px solid var(--pd-border);
+  background: var(--pd-desktop);
+}
+
+.rawBytes {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--pd-border);
+  background: #1c2126;
+  color: #d7e3ee;
+  font-family: var(--pd-mono);
+  font-size: 10px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.drawer {
+  pointer-events: auto;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--pd-chrome);
+  border-left: 1px solid var(--pd-border);
+  box-shadow: -8px 0 28px rgba(0, 0, 0, 0.3);
+  will-change: transform;
+}
+
+.listRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--pd-border-light);
+  background: #fff;
+}
+
+.listRowMain {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.listRowMeta {
+  color: var(--pd-text-muted);
+  font-size: 10px;
+}
+
+.completionList {
+  max-height: 170px;
+  overflow: auto;
+  border: 1px solid var(--pd-border-light);
+  background: #fff;
+}
+
+.completionItem {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 6px;
+  border: 0;
+  background: none;
+  font-family: var(--pd-mono);
+  font-size: 10px;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+
+  &:hover {
+    background: var(--pd-chrome-dark);
+  }
+}
+
+.completionItemActive {
+  background: var(--pd-select);
+  color: #fff;
+}
+
+.completionDetail {
+  margin-left: auto;
+  color: var(--pd-text-muted);
+  font-size: 9px;
+}
+
+.completionItemActive .completionDetail {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.helpGrid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+}
+
+.helpKey {
+  font-family: var(--pd-mono);
+  color: var(--pd-select);
+  white-space: nowrap;
+}
+
+.transformList {
+  max-height: 150px;
+  overflow: auto;
+  border: 1px solid var(--pd-border-light);
+  background: #fff;
+}
+
+.transformRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 6px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+
+  &:hover {
+    background: var(--pd-chrome-dark);
+  }
+}
+
+.transformName {
+  font-family: var(--pd-mono);
+  font-size: 10px;
+  color: var(--pd-select);
+  white-space: nowrap;
+}
+
+/* ── States ──────────────────────────────────────────────────────────── */
+
+.centerState {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: var(--pd-text-muted);
+}
+
+.narrowNotice {
+  display: none;
+}
+
+/*
+ * The designer is desktop-only by design: three docks and a millimetre canvas
+ * do not survive a phone. Below 1280px say so rather than shipping a broken
+ * layout the user has to guess their way around.
+ */
+@media (max-width: 1279px) {
+  .body,
+  .toolbar,
+  .menuBar,
+  .statusBar {
+    display: none;
+  }
+
+  .narrowNotice {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 32px;
+    text-align: center;
+    color: var(--pd-text-muted);
+  }
+}

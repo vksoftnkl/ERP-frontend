@@ -254,7 +254,7 @@ export default function FreightChargesMasterPage() {
       createModalTitle="Freight Charge Entry"
       editModalTitle="Edit Freight Charge Entry"
       modalFormGridColumns={1}
-      modalPanelStyle={{ width: "min(30rem, calc(100vw - 2rem))" }}
+      modalPanelStyle={{ width: "min(30rem, calc(calc(100vw/var(--erp-ui-scale)) - 2rem))" }}
       customFields={formFields}
       createInitialValues={FREIGHT_INITIAL_FORM_VALUES}
       mapFormValues={({ source }) => {

@@ -11,6 +11,7 @@ import {
   type LinkedRecordOption,
   type SearchSelectOverlayPosition,
 } from "./item-linked-records-editor.shared";
+import { layoutRect, layoutViewportSize } from "@/lib/ui-scale";
 type UseItemLinkedRecordsSearchSelectParams = {
   cellRefs: MutableRefObject<Map<string, LinkedRecordCellElement>>;
 };
@@ -27,10 +28,13 @@ function removeStateEntry<TValue>(
   return nextState;
 }
 function resolveOverlayPosition(trigger: HTMLElement): SearchSelectOverlayPosition {
-  const triggerRect = trigger.getBoundingClientRect();
+  // Layout pixels: every figure below becomes a CSS length on the portaled
+  // overlay, inside the globally scaled document. See lib/ui-scale.ts.
+  const triggerRect = layoutRect(trigger);
+  const viewport = layoutViewportSize();
   const maxWidth = Math.max(
     0,
-    window.innerWidth - SEARCH_SELECT_VIEWPORT_PADDING * 2,
+    viewport.width - SEARCH_SELECT_VIEWPORT_PADDING * 2,
   );
   const width = Math.min(
     Math.max(triggerRect.width, SEARCH_SELECT_MIN_OVERLAY_WIDTH),
@@ -38,10 +42,10 @@ function resolveOverlayPosition(trigger: HTMLElement): SearchSelectOverlayPositi
   );
   const left = Math.min(
     Math.max(SEARCH_SELECT_VIEWPORT_PADDING, triggerRect.left),
-    window.innerWidth - SEARCH_SELECT_VIEWPORT_PADDING - width,
+    viewport.width - SEARCH_SELECT_VIEWPORT_PADDING - width,
   );
   const availableSpaceBelow =
-    window.innerHeight -
+    viewport.height -
     triggerRect.bottom -
     SEARCH_SELECT_VIEWPORT_PADDING -
     SEARCH_SELECT_OFFSET;
@@ -63,7 +67,7 @@ function resolveOverlayPosition(trigger: HTMLElement): SearchSelectOverlayPositi
     )}px`,
     ...(shouldOpenUpward
       ? {
-          bottom: window.innerHeight - triggerRect.top + SEARCH_SELECT_OFFSET,
+          bottom: viewport.height - triggerRect.top + SEARCH_SELECT_OFFSET,
         }
       : {
           top: triggerRect.bottom + SEARCH_SELECT_OFFSET,

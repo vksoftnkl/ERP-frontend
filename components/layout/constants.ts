@@ -9,7 +9,12 @@ import {
   FiShoppingCart,
   FiTruck,
 } from "react-icons/fi";
-import type { ErpHeaderIconKey, ErpHeaderItem, ERPMenuObject } from "./types";
+import type {
+  ErpHeaderIconKey,
+  ErpHeaderItem,
+  ErpMenuPermissionFlags,
+  ERPMenuObject,
+} from "./types";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 export const ERP_HEADER_ICON_COMPONENTS: Record<ErpHeaderIconKey, IconType> = {
   sales: FiShoppingBag,
@@ -214,6 +219,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       {
         label:"Configuration",
         children:[
+          // The DB menu (fixed.menu_master 62) carries the label; this is where
+          // it picks up its route — see applyMenuMasterLabels below.
+          {label:"Printing Configuration",href:"/settings/print-templates"},
           {label:"Price Level Configuration",href:"/master/price-level-configuration"},
           {label:"Charge Master",href:"/master/charge-master"}
         ]
@@ -301,6 +309,7 @@ export type MenuMasterItem = {
   menuId?: number;
   menuName: string;
   menuSeparator?: boolean;
+  permissions?: ErpMenuPermissionFlags;
   children?: MenuMasterItem[];
 };
 type MenuMasterResponse = {
@@ -352,6 +361,36 @@ function normalizeMenuLabel(label: string): string {
     .replace(/^\d+\s+/, "")
     .trim();
 }
+/**
+ * Reads the `permissions` block of one `/menu-masters/usermenu` node. A flag the
+ * payload omits counts as NOT granted: a menu row that reached the client is
+ * readable, but nothing beyond reading is assumed from a missing field.
+ */
+function toMenuPermissionFlags(value: unknown): ErpMenuPermissionFlags | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const read = (...keys: string[]): boolean => {
+    for (const key of keys) {
+      const flag = toBooleanFlag(value[key]);
+      if (flag !== undefined) {
+        return flag;
+      }
+    }
+    return false;
+  };
+  return {
+    canCreate: read("canCreate", "can_create"),
+    canEdit: read("canEdit", "can_edit"),
+    canDelete: read("canDelete", "can_delete"),
+    canPrint: read("canPrint", "can_print"),
+    canExport: read("canExport", "can_export"),
+    // Visibility is the one flag that defaults to granted — the server only
+    // returns menus the user may open, so an absent field is not a denial.
+    isVisible: toBooleanFlag(value.isVisible) ?? toBooleanFlag(value.is_visible) ?? true,
+  };
+}
+
 function toMenuMasterItem(value: unknown): MenuMasterItem | null {
   if (!isRecord(value)) {
     return null;
@@ -377,6 +416,10 @@ function toMenuMasterItem(value: unknown): MenuMasterItem | null {
     toBooleanFlag(value.menu_seperator);
   if (separator === true) {
     item.menuSeparator = true;
+  }
+  const permissions = toMenuPermissionFlags(value.permissions);
+  if (permissions) {
+    item.permissions = permissions;
   }
   if (children.length > 0) {
     item.children = children;
@@ -463,6 +506,9 @@ function toHeaderItemsFromApi(
       if (!normalized) {
         return null;
       }
+      if (apiItem.permissions?.isVisible === false) {
+        return null;
+      }
       const nextPath = [...path, normalized];
       const pathKey = nextPath.join(" > ");
       const presentation =
@@ -482,6 +528,12 @@ function toHeaderItemsFromApi(
       }
       if (apiItem.menuSeparator) {
         nextItem.menuSeparator = true;
+      }
+      if (typeof apiItem.menuId === "number") {
+        nextItem.menuId = apiItem.menuId;
+      }
+      if (apiItem.permissions) {
+        nextItem.permissions = apiItem.permissions;
       }
       if (children.length > 0) {
         nextItem.children = children;

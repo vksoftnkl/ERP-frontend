@@ -826,7 +826,7 @@ function RecordHistoryViewer({
             <section
               className={cx(
                 PANEL_CLASS,
-                "relative z-[1] flex h-[calc(100vh-2rem)] w-full max-w-[min(1180px,92vw)] min-h-0 flex-col overflow-hidden bg-white p-2 will-change-transform",
+                "relative z-[1] flex h-[calc(calc(100vh/var(--erp-ui-scale))-2rem)] w-full max-w-[min(1180px,calc(92vw/var(--erp-ui-scale)))] min-h-0 flex-col overflow-hidden bg-white p-2 will-change-transform",
               )}
             >
               <header className="flex shrink-0 flex-col gap-3 p-2 min-[781px]:flex-row min-[781px]:items-start min-[781px]:justify-between">
@@ -1024,8 +1024,8 @@ function RecordHistoryViewer({
     </>
   );
   return (
-    <main className="min-h-[calc(100vh-72px)] bg-gradient-to-b from-[#f7f7f8] to-[#f1f2f4] text-slate-800">
-      <div className="flex min-h-[calc(100vh-72px)] flex-col gap-3 p-3 max-[780px]:gap-2.5 max-[780px]:p-2.5">
+    <main className="min-h-[calc(calc(100vh/var(--erp-ui-scale))-72px)] bg-gradient-to-b from-[#f7f7f8] to-[#f1f2f4] text-slate-800">
+      <div className="flex min-h-[calc(calc(100vh/var(--erp-ui-scale))-72px)] flex-col gap-3 p-3 max-[780px]:gap-2.5 max-[780px]:p-2.5">
         <header className="flex flex-col gap-2 min-[781px]:flex-row min-[781px]:items-start min-[781px]:justify-between">
           <div className="grid gap-2">
             <div className="flex items-start gap-2.5">

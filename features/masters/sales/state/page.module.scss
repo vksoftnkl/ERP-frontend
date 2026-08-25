@@ -22,8 +22,8 @@
      re-scoping the variable rather than by fighting that !important. */
   --erp-radius: 2px;
 
-  height: 100dvh;
-  min-height: 100vh;
+  height: calc(100dvh / var(--erp-ui-scale));
+  min-height: calc(100vh / var(--erp-ui-scale));
   overflow: hidden;
   background: var(--paper);
   color: var(--ink);
@@ -471,8 +471,8 @@
   }
 }
 .gridSettingsDialog {
-  width: min(32rem, calc(100vw - 2.4rem));
-  max-height: min(80vh, 34rem);
+  width: min(32rem, calc(calc(100vw / var(--erp-ui-scale)) - 2.4rem));
+  max-height: min(calc(80vh / var(--erp-ui-scale)), 34rem);
 }
 .gridSettingsBody {
   flex: 1;

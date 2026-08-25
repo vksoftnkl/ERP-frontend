@@ -108,8 +108,8 @@ const TAX_INITIAL_FORM_VALUES: Record<string, string> = {
   tax_is_active: "true",
 };
 const TAX_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(68vw, 72rem)",
-  maxHeight: "78vh",
+  width: "min(calc(68vw/var(--erp-ui-scale)), 72rem)",
+  maxHeight: "calc(78vh/var(--erp-ui-scale))",
 };
 const TAX_TEXT_FIELD_NAMES = [
   "tax_name",

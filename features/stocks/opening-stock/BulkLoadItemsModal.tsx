@@ -209,7 +209,7 @@ export function BulkLoadItemsModal({
         />
         <section
           className={`${dynamicModalStyles.panel} ${dynamicModalStyles.bulkLoadScope}`}
-          style={{ width: "min(500px, calc(100vw - 2rem))", maxHeight: "min(92vh, 560px)" }}
+          style={{ width: "min(500px, calc(calc(100vw/var(--erp-ui-scale)) - 2rem))", maxHeight: "min(calc(92vh/var(--erp-ui-scale)), 560px)" }}
           role="dialog"
           aria-modal="true"
           aria-label="Bulk Load Items"

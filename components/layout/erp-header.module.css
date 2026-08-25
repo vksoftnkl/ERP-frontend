@@ -16,25 +16,25 @@
      `clamp(min, calc(min + span * (100vw - 1024px) / 576), max)`, i.e. it holds
      `min` at <=1024px, `max` at >=1600px, and interpolates in between. Below
      1024px the floors hold and the header is allowed to wrap again. */
-  --hdr-menu-font: clamp(11px, calc(11px + 2 * (100vw - 1024px) / 576), 13px);
-  --hdr-menu-pad-y: clamp(4px, calc(4px + 3 * (100vw - 1024px) / 576), 7px);
-  --hdr-menu-pad-x: clamp(5px, calc(5px + 2 * (100vw - 1024px) / 576), 7px);
-  --hdr-menu-min-h: clamp(24px, calc(24px + 6 * (100vw - 1024px) / 576), 30px);
-  --hdr-menu-gap: clamp(1px, calc(1px + 2 * (100vw - 1024px) / 576), 3px);
-  --hdr-menu-label-gap: clamp(4px, calc(4px + 2 * (100vw - 1024px) / 576), 6px);
-  --hdr-menu-arrow-gap: clamp(2px, calc(2px + 5 * (100vw - 1024px) / 576), 7px);
-  --hdr-menu-icon: clamp(13px, calc(13px + 2 * (100vw - 1024px) / 576), 15px);
-  --hdr-menu-arrow: clamp(10px, calc(10px + 6 * (100vw - 1024px) / 576), 16px);
+  --hdr-menu-font: clamp(11px, calc(11px + 2 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 13px);
+  --hdr-menu-pad-y: clamp(4px, calc(4px + 3 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 7px);
+  --hdr-menu-pad-x: clamp(5px, calc(5px + 2 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 7px);
+  --hdr-menu-min-h: clamp(24px, calc(24px + 6 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 30px);
+  --hdr-menu-gap: clamp(1px, calc(1px + 2 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 3px);
+  --hdr-menu-label-gap: clamp(4px, calc(4px + 2 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 6px);
+  --hdr-menu-arrow-gap: clamp(2px, calc(2px + 5 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 7px);
+  --hdr-menu-icon: clamp(13px, calc(13px + 2 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 15px);
+  --hdr-menu-arrow: clamp(10px, calc(10px + 6 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 16px);
 
-  --hdr-ctl-font: clamp(11px, calc(11px + 2 * (100vw - 1024px) / 576), 13px);
-  --hdr-ctl-gap: clamp(4px, calc(4px + 3 * (100vw - 1024px) / 576), 7px);
-  --hdr-ctl-icon-pad: clamp(2px, calc(2px + 2 * (100vw - 1024px) / 576), 4px);
-  --hdr-ctl-icon-size: clamp(16px, calc(16px + 2 * (100vw - 1024px) / 576), 18px);
-  --hdr-select-gap: clamp(4px, calc(4px + 2 * (100vw - 1024px) / 576), 6px);
-  --hdr-select-company: clamp(112px, calc(112px + 60 * (100vw - 1024px) / 576), 172px);
-  --hdr-select-branch: clamp(112px, calc(112px + 60 * (100vw - 1024px) / 576), 172px);
-  --hdr-select-fy: clamp(80px, calc(80px + 52 * (100vw - 1024px) / 576), 132px);
-  --hdr-go-min: clamp(32px, calc(32px + 16 * (100vw - 1024px) / 576), 48px);
+  --hdr-ctl-font: clamp(11px, calc(11px + 2 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 13px);
+  --hdr-ctl-gap: clamp(4px, calc(4px + 3 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 7px);
+  --hdr-ctl-icon-pad: clamp(2px, calc(2px + 2 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 4px);
+  --hdr-ctl-icon-size: clamp(16px, calc(16px + 2 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 18px);
+  --hdr-select-gap: clamp(4px, calc(4px + 2 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 6px);
+  --hdr-select-company: clamp(112px, calc(112px + 60 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 172px);
+  --hdr-select-branch: clamp(112px, calc(112px + 60 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 172px);
+  --hdr-select-fy: clamp(80px, calc(80px + 52 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 132px);
+  --hdr-go-min: clamp(32px, calc(32px + 16 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 48px);
 
   background: linear-gradient(180deg, #8b1d1d 0%, #711010 100%);
   color: #fff;
@@ -221,7 +221,7 @@
   margin: 0;
   padding: 6px;
   min-width: 232px;
-  max-width: min(340px, calc(100vw - 24px));
+  max-width: min(340px, calc(calc(100vw / var(--erp-ui-scale)) - 24px));
   overflow: visible;
   list-style: none;
   background: #fff;
@@ -376,6 +376,14 @@ li.menuItem[data-menu-suppressed="true"] .submenuList {
 }
 
 .fiscalYearContextSelect {
+  width: var(--hdr-select-fy);
+  min-width: 0;
+  max-width: var(--hdr-select-fy);
+  flex: 0 1 var(--hdr-select-fy);
+}
+
+.uiScaleSelect {
+  /* Narrower than the context selects: the widest label is "Size: Auto". */
   width: var(--hdr-select-fy);
   min-width: 0;
   max-width: var(--hdr-select-fy);

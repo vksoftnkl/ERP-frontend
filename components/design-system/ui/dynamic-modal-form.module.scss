@@ -59,8 +59,8 @@
   position: relative;
   z-index: 1;
   display: flex;
-  width: min(64rem, calc(100vw - 2.4rem));
-  max-height: min(88vh, 56rem);
+  width: min(64rem, calc(calc(100vw / var(--erp-ui-scale)) - 2.4rem));
+  max-height: min(calc(88vh / var(--erp-ui-scale)), 56rem);
   flex-direction: column;
   overflow: hidden;
   border-radius: var(--erp-modal-panel-radius);
@@ -160,7 +160,7 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  max-height: calc(88vh - 148px);
+  max-height: calc(calc(88vh / var(--erp-ui-scale)) - 148px);
   background: #fff;
 }
 .scrollArea::-webkit-scrollbar {
@@ -1103,7 +1103,7 @@
   }
   .panel {
     width: 100%;
-    max-height: 92vh;
+    max-height: calc(92vh / var(--erp-ui-scale));
   }
   .header {
     padding: 1rem;
@@ -1126,7 +1126,7 @@
     font-size: 0.82rem;
   }
   .scrollArea {
-    max-height: calc(92vh - 126px);
+    max-height: calc(calc(92vh / var(--erp-ui-scale)) - 126px);
   }
   .formGrid {
     padding: 1rem;

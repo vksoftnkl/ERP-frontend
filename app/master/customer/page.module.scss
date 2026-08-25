@@ -10,8 +10,8 @@
   --brand-red: #730000;
   --brand-red-dark: #5f0000;
   --focus-blue: #217bc0;
-  min-height: 100vh;
-  height: 100dvh;
+  min-height: calc(100vh / var(--erp-ui-scale));
+  height: calc(100dvh / var(--erp-ui-scale));
   overflow: hidden;
   background: radial-gradient(circle at 18% 10%, #ececee 0, transparent 28%),
     var(--bg-page);

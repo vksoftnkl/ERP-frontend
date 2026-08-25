@@ -10,8 +10,8 @@
   --brand-red: #730000;
   --brand-red-dark: #5f0000;
   --focus-blue: #217bc0;
-  min-height: 100vh;
-  height: 100dvh;
+  min-height: calc(100vh / var(--erp-ui-scale));
+  height: calc(100dvh / var(--erp-ui-scale));
   overflow: hidden;
   background: radial-gradient(circle at 18% 10%, #ececee 0, transparent 28%),
     var(--bg-page);
@@ -302,7 +302,7 @@
   display: flex;
   flex-direction: column;
   width: min(1160px, 100%);
-  max-height: 92vh;
+  max-height: calc(92vh / var(--erp-ui-scale));
   overflow: hidden;
   border-radius: var(--erp-radius);
   border: 1px solid #d8dfe7;
@@ -373,7 +373,7 @@
   flex-direction: column;
   gap: 0.75rem;
   overflow-y: auto;
-  max-height: calc(92vh - 118px);
+  max-height: calc(calc(92vh / var(--erp-ui-scale)) - 118px);
   background: #fff;
 }
 .formLayout {
@@ -724,7 +724,7 @@
   }
   .createModal {
     width: 100%;
-    max-height: 92vh;
+    max-height: calc(92vh / var(--erp-ui-scale));
   }
   .modalHeader {
     padding: 0.8rem 1rem;

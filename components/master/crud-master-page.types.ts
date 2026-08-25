@@ -177,6 +177,15 @@ export type CrudMasterPageProps = {
   isRowEditDisabled?: (row: MasterTableRow) => boolean;
   rowEditDisabledReason?: string;
   /**
+   * Rows this page refuses to delete — the mirror of `isRowEditDisabled` on the
+   * write side that removes rather than edits. While such a row is selected the
+   * toolbar's Delete button is inactive and the confirmation never opens, so a
+   * record the server would refuse (a shipped print template, say) is refused
+   * here instead of through an error box.
+   */
+  isRowDeleteDisabled?: (row: MasterTableRow) => boolean;
+  rowDeleteDisabledReason?: string;
+  /**
    * Open a row for READING — Ctrl+Enter on the selection, and double-click.
    * Supplied by pages whose record does not fit the shell's view modal (a
    * voucher opens its own screen); without it both gestures fall back to that
@@ -191,6 +200,16 @@ export type CrudMasterPageProps = {
   // Add/Edit/Delete/...). Lets a page add navigation/actions without forking
   // the shared toolbar.
   toolbarActions?: ReactNode;
+  /**
+   * Menu permissions (Settings → User Administration) gate this screen's Add /
+   * Edit / Delete / Export buttons. By default the shell resolves the current
+   * route against the signed-in user's menu; set `permissionMenuId` (or
+   * `permissionHref`) when the page lives on a route the menu does not name,
+   * and `disablePermissionGating` for a screen no menu governs.
+   */
+  permissionMenuId?: number;
+  permissionHref?: string;
+  disablePermissionGating?: boolean;
   listResponseStyleColumns?: CrudMasterListResponseStyleColumn[];
   listResponseStyleArrayKey?: string;
   nameFieldLabel?: string;
@@ -237,6 +256,15 @@ export type CrudMasterPageProps = {
     sortBy?: string;
     sortDir?: "asc" | "desc";
   }) => Record<string, string> | null;
+  /**
+   * The list endpoint answers with the whole collection at once and understands
+   * neither `search` nor `page`/`limit` — a small resource API such as
+   * `/reports/templates`, whose query DTO rejects any parameter it does not
+   * declare. With this set the shell filters and paginates the fetched rows
+   * itself, so the toolbar's search box and the pager keep meaning what they
+   * say; without it both would be inert controls over a single unsliced page.
+   */
+  clientSideList?: boolean;
   /** Overrides the table's empty message ("No {entityLabel} data found"). */
   listEmptyText?: string;
   listStateResetKey?: string | number | null;

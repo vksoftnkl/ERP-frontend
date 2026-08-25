@@ -126,6 +126,7 @@ import {
   focusLedgerFieldControl,
 } from "./form-navigation";
 import { Z_MODAL_NESTED } from "@/lib/z-index";
+import { layoutPointer, layoutViewportSize } from "@/lib/ui-scale";
 const GRID_SETTINGS_CONTEXT_MENU_WIDTH = 190;
 const GRID_SETTINGS_CONTEXT_MENU_HEIGHT = 130;
 const GRID_SETTINGS_CONTEXT_MENU_PADDING = 8;
@@ -2025,14 +2026,14 @@ export default function AccountLedgerMasterPage() {
       event.stopPropagation();
       setGridSettingsContextMenuPosition({
         left: clampContextMenuPosition(
-          event.clientX,
+          layoutPointer(event).x,
           GRID_SETTINGS_CONTEXT_MENU_PADDING,
-          window.innerWidth - GRID_SETTINGS_CONTEXT_MENU_WIDTH,
+          layoutViewportSize().width - GRID_SETTINGS_CONTEXT_MENU_WIDTH,
         ),
         top: clampContextMenuPosition(
-          event.clientY,
+          layoutPointer(event).y,
           GRID_SETTINGS_CONTEXT_MENU_PADDING,
-          window.innerHeight - GRID_SETTINGS_CONTEXT_MENU_HEIGHT,
+          layoutViewportSize().height - GRID_SETTINGS_CONTEXT_MENU_HEIGHT,
         ),
       });
     },
@@ -2242,9 +2243,9 @@ export default function AccountLedgerMasterPage() {
     "--erp-modal-surface": "#ffffff",
   } as CSSProperties;
   const modalPanelStyle = {
-    width: "min(62vw,62rem)",
-    height: "75vh",
-    maxHeight: "75vh",
+    width: "min(calc(62vw/var(--erp-ui-scale)),62rem)",
+    height: "calc(75vh/var(--erp-ui-scale))",
+    maxHeight: "calc(75vh/var(--erp-ui-scale))",
   } as CSSProperties;
   const modalFormId = "account-ledger-master-form";
   return (

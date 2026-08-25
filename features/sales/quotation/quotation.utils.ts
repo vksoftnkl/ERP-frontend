@@ -240,6 +240,10 @@ export type ResolvedColumn<TMeaning> = TMeaning & {
   widthPx: number;
   visible: boolean;
   focus: boolean;
+  /** Layout config only — nothing on the entry screens reads it yet. */
+  necessity: boolean;
+  /** `ui_tbl_clm_column_position`, what the grid is ordered by. */
+  position: number;
   columnNumber: number;
   /** `ui_tbl_clm_id`, the handle a resize is saved against. Null on fallback. */
   columnId: string | null;
@@ -293,9 +297,10 @@ export function totalColumnWidth<TMeaning>(
 /**
  * Join the server's layout rows to the local column meanings.
  *
- * Sorted by `uiTblClmNo`, never by `uiTblClmColumnPosition`: the live data has a
- * duplicate position (58) and a hole (62), so position ordering is
- * non-deterministic between two columns.
+ * Sorted by `uiTblClmColumnPosition`, which the grid's "Admin settings" dialog
+ * rewrites when an operator reorders the columns, with `uiTblClmNo` as the
+ * tie-break — the live data can carry a duplicate position, and without a
+ * second key the order between those two columns would be non-deterministic.
  *
  * A configured row with no local meaning is dropped (it would render an empty
  * column); a meaning with no configured row is dropped too, since the server
@@ -352,11 +357,16 @@ function resolveColumns<
       widthPx: widthPxOf(row.uiTblClmColumnWidth, unit),
       visible: row.uiTblClmColumnVisibility !== false,
       focus: row.uiTblClmColumnFocus === true,
+      necessity: row.uiTblClmColumnNecessity === true,
+      position: row.uiTblClmColumnPosition ?? 0,
       columnNumber: Number.parseInt(row.uiTblClmNo ?? "0", 10) || 0,
       columnId: row.uiTblClmId ?? null,
     });
   }
-  return resolved.sort((left, right) => left.columnNumber - right.columnNumber);
+  return resolved.sort(
+    (left, right) =>
+      left.position - right.position || left.columnNumber - right.columnNumber,
+  );
 }
 /** Fallback layout: every local meaning, in declaration order, all visible. */
 function fallbackColumns<TMeaning extends { key: string; token: string }>(
@@ -368,6 +378,8 @@ function fallbackColumns<TMeaning extends { key: string; token: string }>(
     widthPx: DEFAULT_COLUMN_PX,
     visible: true,
     focus: false,
+    necessity: false,
+    position: index,
     columnNumber: index,
     columnId: null,
   }));
@@ -407,7 +419,9 @@ function withSerialColumn<TMeaning extends { key: string; token: string; kind: G
       widthPx: SERIAL_COLUMN_PX,
       visible: true,
       focus: false,
+      necessity: false,
       // Below every configured number, so a re-sort keeps it first.
+      position: -1,
       columnNumber: -1,
       columnId: null,
     },

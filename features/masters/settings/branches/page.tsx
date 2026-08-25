@@ -150,9 +150,9 @@ const STATE_LOOKUP_ARRAY_KEYS = ["items", "data", "results", "rows", "list"] as 
 const STATE_LOOKUP_NAME_KEYS = ["stateName", "state_name", "name", "label"] as const;
 const STATE_LOOKUP_CODE_KEYS = ["id", "value", "stateCode", "state_code", "code"] as const;
 const BRANCH_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(92vw, 60rem)",
-  height: "76vh",
-  maxHeight: "76vh",
+  width: "min(calc(92vw/var(--erp-ui-scale)), 60rem)",
+  height: "calc(76vh/var(--erp-ui-scale))",
+  maxHeight: "calc(76vh/var(--erp-ui-scale))",
 };
 const STATUS_CHECKBOX_FIELD_STYLE: CSSProperties = {
   paddingBlock: "0.45rem",

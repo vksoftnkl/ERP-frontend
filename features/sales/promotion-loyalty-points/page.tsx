@@ -1499,9 +1499,9 @@ export default function PromotionLoyaltyPointsPage() {
     "--erp-modal-surface": "#ffffff",
   } as CSSProperties;
   const editorPanelStyle = {
-    width: "min(1280px, calc(100vw - 24px))",
-    height: "min(860px, calc(100dvh - 24px))",
-    maxHeight: "calc(100dvh - 24px)",
+    width: "min(1280px, calc(calc(100vw/var(--erp-ui-scale)) - 24px))",
+    height: "min(860px, calc(calc(100dvh/var(--erp-ui-scale)) - 24px))",
+    maxHeight: "calc(calc(100dvh/var(--erp-ui-scale)) - 24px)",
   } as CSSProperties;
   const editorFooterStyle = {
     alignItems: "center",

@@ -14,7 +14,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["domain/**/*.test.ts", "features/**/*.test.ts"],
+    include: ["domain/**/*.test.ts", "features/**/*.test.ts", "lib/**/*.test.ts"],
     reporters: ["default"],
   },
 });

@@ -16,7 +16,7 @@ $cols: minmax(0, 1fr) 220px;
 }
 
 .tableScroll {
-  max-height: min(52vh, 420px);
+  max-height: min(calc(52vh / var(--erp-ui-scale)), 420px);
   overflow: auto;
 }
 

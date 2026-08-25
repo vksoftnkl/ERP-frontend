@@ -18,21 +18,21 @@ export const GRID_TABLE_NAME = "suppliers";
 export const SUPPLIER_MODAL_PANEL_STYLE: CSSProperties = {
   // 2 label/control pairs per row × a 130px label column, as in the legacy
   // Supplier Entry screen, which is ~72rem wide at that density.
-  width: "min(94vw, 72rem)",
+  width: "min(calc(94vw/var(--erp-ui-scale)), 72rem)",
   // Both dimensions are pinned so the panel keeps one fixed size for every tab
   // instead of resizing as you switch between them: the height is sized to the
   // tallest tab (Identity), and each tab's body scrolls inside it. Capped to the
   // viewport so it never overflows on short screens.
-  height: "min(90vh, 780px)",
-  maxHeight: "90vh",
+  height: "min(calc(90vh/var(--erp-ui-scale)), 780px)",
+  maxHeight: "calc(90vh/var(--erp-ui-scale))",
 };
 export const STATE_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(34vw, 34rem)",
-  maxHeight: "75vh",
+  width: "min(calc(34vw/var(--erp-ui-scale)), 34rem)",
+  maxHeight: "calc(75vh/var(--erp-ui-scale))",
 };
 export const SUPPLIER_GROUP_MODAL_PANEL_STYLE: CSSProperties = {
-  width: "min(42vw, 42rem)",
-  maxHeight: "75vh",
+  width: "min(calc(42vw/var(--erp-ui-scale)), 42rem)",
+  maxHeight: "calc(75vh/var(--erp-ui-scale))",
 };
 // Related Master Endpoints
 export const SUPPLIER_GROUP_LOOKUP_ENDPOINT =

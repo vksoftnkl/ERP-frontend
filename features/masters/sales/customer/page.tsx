@@ -23,13 +23,20 @@ import WidgetVisibilityTree, {
 } from "@/features/masters/shared/widget-visibility-tree";
 import { useVisibleSettingsContextMenu } from "@/features/masters/shared/use-visible-settings-context-menu";
 import {
-  applyWidgetFieldConfig,
-  buildControllableFieldNames,
-  buildWidgetFieldConfig,
   type ResolvedFieldConfig,
   type WidgetMasterSectionConfig,
   type WidgetMastersResponse,
 } from "@/features/masters/shared/widget-config";
+import {
+  applyCustomerWidgetConfig,
+  buildCustomerWidgetFieldConfig,
+  WIDGET_CONFIG_ENDPOINT,
+  WIDGET_CONFIG_TREE_ENDPOINT,
+  WIDGET_CONTROLLABLE_FIELD_NAMES,
+  WIDGET_SECTION_MENU_ID,
+  WIDGET_SECTION_PLATFORM,
+  WIDGET_VISIBILITY_ENDPOINT,
+} from "./widget-config";
 import styles from "@/app/master/state-master/page.module.scss";
 // Dense "Simple ERP" skin for this page's modals only (the list keeps the
 // shared master look). The panels render outside this page's DOM subtree, so
@@ -127,95 +134,6 @@ import {
   parseCustomerTemplateConfig,
   EMPTY_CUSTOMER_TEMPLATE_DEFAULTS,
 } from "./customer-dropdowns";
-// The customer form fields below are re-labelled, re-ordered, and shown/hidden
-// from the backend widget-masters config (fixed.form_section / form_field) for
-// this screen's menu id (10). Only those three properties come from the API —
-// validation, state shape, and submit logic stay defined locally.
-const WIDGET_CONFIG_ENDPOINT = "/widget-masters/get";
-const WIDGET_SECTION_MENU_ID = 10;
-// Matches the section_platform stored for this menu (case-sensitive equality on
-// the server), so the config actually resolves rather than silently no-opping.
-const WIDGET_SECTION_PLATFORM = "Web";
-// Bridge each hardcoded form field `name` (camelCase aliases used by form state
-// and the submit payload) to the backend `fieldName` it is configured under
-// (comp_*/cus_* column-style keys, matched case-insensitively). Form fields with
-// no mapping — or no matching response entry — keep their hardcoded label and
-// render after all configured fields.
-const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
-  cusCompanyId: "comp_name",
-  cusAreaId: "comp_area",
-  cusDefaultSalesman: "comp_salesman",
-  cusBranchId: "comp_branch",
-  cusGroupId: "comp_cus_group",
-  cusCollectionDays: "comp_collection_days",
-  cusName: "cus_name",
-  cusCity: "cus_city",
-  cusPhone1: "cus_phone",
-  cusPhone2: "cus_phone2",
-  cusCode: "cus_code",
-  cusDistrict: "cus_district",
-  cusShort: "cus_short",
-  cusStateCode: "cus_state",
-  cusPin: "cus_pin",
-  cusWhatsappNo: "cus_whatsapp",
-  cusAddr1: "cus_address1",
-  cusLandmark: "cus_landmark",
-  cusTel: "cus_tel",
-  cusEmail: "cus_email",
-  cusAddr2: "cus_address",
-  cusTransportName: "cus_transport",
-  cusSortOrder: "cus_sort",
-  cusAddr3: "cus_address3",
-  cusPriceLevelId: "cus_price_level",
-  cusCreditDays: "cus_credit_days",
-  cusCreditAmtLimit: "cus_credit_amount_limit",
-  cusDebitBalance: "cus_debit_balance",
-  cusCreditBillLimit: "cus_credit_bill_limit",
-  cusDebitGraceDays: "cus_debit_grace_days",
-  cusGstType: "cus_gst_type",
-  cusPanNo: "cus_pan_no",
-  cusEcommerceGstin: "cus_ecommerce_gstin",
-  cusGstNo: "cus_gst_no",
-  cusAadharNo: "cus_aadhar_no",
-  cusDistanceKm: "cus_distance",
-  cusRegionName: "cus_region_name",
-  cusRegionAddr1: "cus_region_addr1",
-  cusRegionAddr2: "cus_region_addr2",
-  cusRegionAddr3: "cus_region_addr3",
-  cusRegionCity: "cus_region_city",
-  cusRegionDistrict: "cus_region_district",
-  cusRegionStateName: "cus_region_state",
-  cusRegionCountry: "cus_region_country",
-  cusDiscPerc: "cus_discount",
-  // "cus_birt_date" matches the (misspelled) seeded field_name in fixed.form_field.
-  cusBirthDate: "cus_birt_date",
-  cusMarriageDate: "cus_anniversary_date",
-  cusEnableSms: "cus_enable_sms",
-  cusOverdueSms: "cus_overdue_sms",
-  cusOverdueBilling: "cus_overdue_billing",
-  cusAllowPromotion: "cus_allow_promotion",
-  cusAllowLoyalty: "cus_allow_loyalty",
-  cusAllowDiscount: "cus_allow_discount",
-  cusTcsApplicable: "cus_tcs_allowable",
-  cusItcollExempted: "cus_it_collection_exempted",
-  cusFreightCharge: "cus_freight_charge",
-  cusLoadingCharge: "cus_loading_charge",
-  cusUnloadingCharge: "cus_unloading_charge",
-  cusIsActive: "cus_active",
-  cusNotes: "cus_notes",
-  cusContactPerson: "cus_contact_person",
-  cusCountry: "cus_country",
-  cusCreditAllowed: "cus_credit_allowed",
-};
-// Right-clicking inside the open create/update modal opens a tree popup of this
-// menu's configured sections/fields (GET /widget-masters/config?menu_id=…).
-// Ticking a field toggles its live visibility in the form via the same config map.
-const WIDGET_CONFIG_TREE_ENDPOINT = "/widget-masters/config";
-// Persists the tree's section/field visibility back to the server (PATCH).
-const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
-// Backend fieldNames (lowercased) that map to a real form field, so their popup
-// checkbox can actually show/hide something. Others render read-only ("not on form").
-const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
 function withCustomerBasicValidation(field: ERPDynamicModalField): ERPDynamicModalField {
   const basicValidation = CUSTOMER_BASIC_VALIDATIONS[field.name];
   if (!basicValidation) {
@@ -1584,28 +1502,33 @@ export default function CustomerPage() {
   const [widgetFieldConfig, setWidgetFieldConfig] = useState<Map<string, ResolvedFieldConfig>>(
     () => new Map(),
   );
+  // Read this menu's (10) stored field config. Returns null when the request
+  // fails so callers can keep whatever config is already applied; re-used to
+  // re-fetch after the Visible Settings popup saves.
+  const fetchWidgetFieldConfig = useCallback(async () => {
+    try {
+      const payload = await getWidgetConfig({
+        sectionMenuId: String(WIDGET_SECTION_MENU_ID),
+        sectionPlatform: WIDGET_SECTION_PLATFORM,
+      });
+      return buildCustomerWidgetFieldConfig(payload ?? null);
+    } catch {
+      return null;
+    }
+  }, [getWidgetConfig]);
   useEffect(() => {
     let mounted = true;
     void (async () => {
-      try {
-        const payload = await getWidgetConfig({
-          sectionMenuId: String(WIDGET_SECTION_MENU_ID),
-          sectionPlatform: WIDGET_SECTION_PLATFORM,
-        });
-        if (!mounted) {
-          return;
-        }
-        setWidgetFieldConfig(buildWidgetFieldConfig(payload ?? null));
-      } catch {
-        if (mounted) {
-          setWidgetFieldConfig(new Map());
-        }
+      const config = await fetchWidgetFieldConfig();
+      if (!mounted) {
+        return;
       }
+      setWidgetFieldConfig(config ?? new Map());
     })();
     return () => {
       mounted = false;
     };
-  }, [getWidgetConfig]);
+  }, [fetchWidgetFieldConfig]);
   // Push freshly built options into both the matching state setter and the mirror ref.
   const applyDropdownOptions = useCallback(
     (fieldName: string, options: ERPDynamicSelectOption[]) => {
@@ -2447,7 +2370,7 @@ export default function CustomerPage() {
     );
   const customerFormFields = useMemo(
     () =>
-      applyWidgetFieldConfig(
+      applyCustomerWidgetConfig(
         buildCustomerFormFields(
           stateOptions,
           regionStateOptions,
@@ -2465,11 +2388,10 @@ export default function CustomerPage() {
           handleGroupEditShortcut,
           handleCustomerGstinValueChange,
         ),
-        widgetFieldConfig,
-        WIDGET_FIELD_NAME_BY_FORM_FIELD,
         // This screen's tabs/subheadings/order/labels are authored in
-        // buildCustomerFormFields; the widget config only shows/hides fields here.
-        { mode: "visibility-only" },
+        // buildCustomerFormFields; the widget config only shows/hides fields here
+        // (and drops a tab or group the config has emptied out).
+        widgetFieldConfig,
       ),
     [
       areaOptions,
@@ -2555,9 +2477,11 @@ export default function CustomerPage() {
   const treeLoadedRef = useRef(false);
   const visibilityControllerRef = useRef<ERPDynamicModalController | null>(null);
 
-  // Fetched lazily the first time the popup is opened, then cached.
-  const loadConfigTree = useCallback(async () => {
-    if (treeLoadedRef.current) {
+  // Fetched lazily the first time the popup is opened, then cached. Pass
+  // `{ force: true }` to bypass the cache and re-read the menu's config (used
+  // after a save, so the tree shows what the server actually stored).
+  const loadConfigTree = useCallback(async (options?: { force?: boolean }) => {
+    if (treeLoadedRef.current && !options?.force) {
       return;
     }
     treeLoadedRef.current = true;
@@ -2685,7 +2609,26 @@ export default function CustomerPage() {
       })),
     };
     await saveVisibility({ body: payload });
-  }, [configSections, sectionVisibility, secondaryTextById, widgetFieldConfig, saveVisibility]);
+    // Re-fetch the persisted config for menu 10 (both the form config and the
+    // popup tree) so the next render reflects the server's state instead of the
+    // local optimistic edits. A failed re-fetch keeps the local maps as they
+    // are — the save already succeeded, so they still match the server.
+    const refreshed = await fetchWidgetFieldConfig();
+    await loadConfigTree({ force: true });
+    if (refreshed) {
+      setWidgetFieldConfig(refreshed);
+      setSectionVisibility(new Map());
+      setSecondaryTextById(new Map());
+    }
+  }, [
+    configSections,
+    sectionVisibility,
+    secondaryTextById,
+    widgetFieldConfig,
+    saveVisibility,
+    fetchWidgetFieldConfig,
+    loadConfigTree,
+  ]);
 
   // While the Visible Settings modal is open, intercept Escape/F5 in the capture
   // phase so they act on it alone — without this, the underlying create/update
@@ -3060,7 +3003,7 @@ export default function CustomerPage() {
         showDefaultCards={false}
         hideSectionHeader
         resetOnSubmit={false}
-        panelStyle={{ width: "min(680px, calc(100vw - 2rem))", maxHeight: "min(82vh, 620px)" }}
+        panelStyle={{ width: "min(680px, calc(calc(100vw/var(--erp-ui-scale)) - 2rem))", maxHeight: "min(calc(82vh/var(--erp-ui-scale)), 620px)" }}
         onControllerReady={(controller) => {
           visibilityControllerRef.current = controller;
         }}

@@ -179,6 +179,7 @@ import {
   TABLE_SETTINGS_CONTEXT_MENU_PADDING,
 } from "./opening-stock.column-settings";
 import { Z_MODAL_NESTED } from "@/lib/z-index";
+import { layoutPointer, layoutViewportSize, toLayoutPx } from "@/lib/ui-scale";
 function renderValidationToastContent(
   issues: Array<{ rowId: number; fieldKey: string; message: string }>,
 ) {
@@ -697,14 +698,14 @@ export default function OpeningStockPage() {
       setOpenLookupCell(null);
       setTableSettingsContextMenuPosition({
         left: clampContextMenuPosition(
-          event.clientX,
+          layoutPointer(event).x,
           TABLE_SETTINGS_CONTEXT_MENU_PADDING,
-          window.innerWidth - TABLE_SETTINGS_CONTEXT_MENU_WIDTH,
+          layoutViewportSize().width - TABLE_SETTINGS_CONTEXT_MENU_WIDTH,
         ),
         top: clampContextMenuPosition(
-          event.clientY,
+          layoutPointer(event).y,
           TABLE_SETTINGS_CONTEXT_MENU_PADDING,
-          window.innerHeight - TABLE_SETTINGS_CONTEXT_MENU_HEIGHT,
+          layoutViewportSize().height - TABLE_SETTINGS_CONTEXT_MENU_HEIGHT,
         ),
       });
     },
@@ -2173,7 +2174,9 @@ export default function OpeningStockPage() {
         return;
       }
 
-      const delta = event.clientX - activeResize.startX;
+      // The pointer moves in visual pixels; the width it drives is a CSS
+      // length under the global UI scale. See lib/ui-scale.ts.
+      const delta = toLayoutPx(event.clientX - activeResize.startX);
       const nextWidth = Math.max(MIN_RESIZABLE_COLUMN_WIDTH, activeResize.startWidth + delta);
       activeResize.currentWidth = nextWidth;
 

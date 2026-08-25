@@ -265,9 +265,7 @@ export default function WidgetVisibilityTree({
                 ? section.fields.map((field) => (
                     <div
                       key={field.fieldId}
-                      className={`${styles.row} ${styles.fieldRow} ${
-                        field.checked ? "" : styles.rowOff
-                      }`}
+                      className={`${styles.row} ${field.checked ? "" : styles.rowOff}`}
                     >
                       <div className={`${styles.widgetCell} ${styles.indent}`}>
                         <label className={styles.switchLabel}>
