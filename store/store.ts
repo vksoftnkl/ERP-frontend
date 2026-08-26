@@ -2,6 +2,7 @@ import { combineReducers, configureStore } from "@reduxjs/toolkit";
 import createSagaMiddleware from "redux-saga";
 import { baseApi } from "@/store/api/baseApi";
 import authReducer, { type AuthState } from "@/store/slices/authSlice";
+import appSettingsReducer from "@/store/slices/appSettingsSlice";
 import gridColumnsReducer, {
   type GridColumnsState,
 } from "@/store/slices/gridColumnsSlice";
@@ -16,6 +17,7 @@ import printDesignerReducer from "@/features/print-designer/store/designerSlice"
 export const REDUX_SESSION_STORAGE_KEY = "erp_client_redux_state";
 const rootReducer = combineReducers({
   auth: authReducer,
+  appSettings: appSettingsReducer,
   [baseApi.reducerPath]: baseApi.reducer,
   gridColumns: gridColumnsReducer,
   globalLoader: globalLoaderReducer,

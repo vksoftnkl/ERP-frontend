@@ -1,0 +1,623 @@
+/**
+ * The screen sizes itself to `.erp-app-content`, which already gives every page
+ * the space between the header and the footer — so the shell is `height: 100%`,
+ * never `100dvh`. A viewport unit here would measure the *unscaled* viewport
+ * (the app scales with `zoom` on <html>) and push the footer off the screen.
+ *
+ * The Qt screen's striped-row stylesheet needed `QWidget#settingRow` scoping,
+ * because an unscoped Qt stylesheet propagates into children and erased every
+ * checkbox indicator. CSS has none of that problem; the rows are just styled.
+ */
+.page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--page-bg);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.headerText {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.subtitle {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  max-width: 70ch;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dirtyCount {
+  font-size: 0.82rem;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.primaryButton,
+.secondaryButton {
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: var(--erp-radius);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.primaryButton {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background: var(--primary-hover);
+  }
+}
+
+.secondaryButton {
+  background: var(--card-bg);
+  border-color: var(--border);
+  color: var(--text-soft);
+
+  &:hover:not(:disabled) {
+    background: var(--row-hover);
+  }
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Scope bar ─────────────────────────────────────────────────────────── */
+
+.scopeBar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+}
+
+.scopeFields,
+.scopeFilters {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.scopeField {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 180px;
+}
+
+.scopeFieldLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.scopeSelect,
+.scopeSearch {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: #fff;
+  font-size: 0.85rem;
+  color: var(--text-main);
+
+  &:disabled {
+    background: var(--header-bg);
+    color: var(--text-muted);
+  }
+}
+
+.scopeSearch {
+  min-width: 220px;
+}
+
+.scopeToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.scopeChip {
+  align-self: flex-end;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: var(--erp-radius);
+  border: 1px solid #b9cbe4;
+  background: #eaf2ff;
+  color: #1d4076;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.scopeChipBRANCH {
+  border-color: #bcd9c6;
+  background: #eefaf1;
+  color: #1c6338;
+}
+
+.scopeChipDEVICE {
+  border-color: #dfc9a5;
+  background: #fdf5e7;
+  color: #7a5312;
+}
+
+.scopeWarning {
+  flex: 1 0 100%;
+  margin: 0;
+  font-size: 0.8rem;
+  color: #8a5a12;
+}
+
+.foreignScopeNote,
+.errorPanel {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--erp-radius);
+  font-size: 0.82rem;
+}
+
+.foreignScopeNote {
+  border: 1px solid #dfc9a5;
+  background: #fdf5e7;
+  color: #7a5312;
+}
+
+.errorPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--danger-light);
+  background: #fff5f5;
+  color: #8a2424;
+}
+
+/* ── Two panes ─────────────────────────────────────────────────────────── */
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.sidebar,
+.content {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+}
+
+.sidebar {
+  padding: 8px;
+}
+
+.content {
+  padding: 12px;
+}
+
+.contentEmpty,
+.treeEmpty {
+  margin: 0;
+  padding: 16px 8px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.treeModule {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.treeModuleHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.treeGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--erp-radius);
+  background: transparent;
+  font-size: 0.86rem;
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--row-hover);
+  }
+}
+
+.treeGroupActive {
+  background: var(--row-selected);
+  border-color: #b9cbe4;
+  font-weight: 600;
+}
+
+.treeGroupName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeCount {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.treeChanged {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ── Group card ────────────────────────────────────────────────────────── */
+
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.groupHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.groupModule {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.groupCount {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.groupRows {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── One setting ───────────────────────────────────────────────────────── */
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px) minmax(150px, auto);
+  align-items: start;
+  gap: 12px;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border-light);
+
+  &:nth-child(even) {
+    background: #fafcff;
+  }
+}
+
+.rowDirty {
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.rowText {
+  min-width: 0;
+}
+
+.rowLabelLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rowLabel {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.dirtyDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.reloginTag {
+  padding: 1px 6px;
+  border-radius: 9px;
+  border: 1px solid #dfc9a5;
+  background: #fdf5e7;
+  color: #7a5312;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.rowDescription {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-soft);
+  max-width: 70ch;
+}
+
+.rowKey {
+  display: inline-block;
+  margin-top: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.rowReadOnly {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: #7a5312;
+}
+
+.rowError {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #8a2424;
+}
+
+.rowControl {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.control {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: #fff;
+  font-size: 0.85rem;
+  color: var(--text-main);
+
+  &:disabled {
+    background: var(--header-bg);
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+}
+
+.controlNumber {
+  max-width: 140px;
+}
+
+.controlMono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+}
+
+.controlJson {
+  min-height: 64px;
+  padding: 6px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  resize: vertical;
+}
+
+.controlInvalid {
+  border-color: var(--danger);
+  background: #fff7f7;
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+
+  // Hidden but still the real control: it keeps the checkbox semantics, the
+  // keyboard and the label association, while the track and thumb draw it.
+  // `position: relative` above pins it inside its own label — absolutely
+  // positioned against a distant ancestor it would sit over unrelated rows.
+  input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
+
+  input:disabled ~ .switchTrack {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  input:checked ~ .switchTrack {
+    background: var(--primary);
+    border-color: var(--primary);
+  }
+
+  input:checked ~ .switchTrack .switchThumb {
+    transform: translateX(16px);
+  }
+
+  input:focus-visible ~ .switchTrack {
+    outline: 2px solid #1d4076;
+    outline-offset: 2px;
+  }
+}
+
+.switchTrack {
+  position: relative;
+  width: 38px;
+  height: 20px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #dfe6ef;
+  transition: background 0.15s ease;
+}
+
+.switchThumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.3);
+  transition: transform 0.15s ease;
+}
+
+.switchText {
+  font-size: 0.82rem;
+  color: var(--text-soft);
+}
+
+.sourceBadge {
+  padding: 2px 8px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--header-bg);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sourceBadgeSet {
+  border-color: #a8e0bb;
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.resetButton {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: #fff;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: var(--danger-light);
+    color: #8a2424;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+@media (max-width: 1100px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rowMeta {
+    justify-content: flex-start;
+  }
+}

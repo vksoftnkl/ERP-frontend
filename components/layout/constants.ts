@@ -222,6 +222,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
           // The DB menu (fixed.menu_master 62) carries the label; this is where
           // it picks up its route — see applyMenuMasterLabels below.
           {label:"Printing Configuration",href:"/settings/print-templates"},
+          // fixed.menu_master 246 ("app settings", under Configuration) carries
+          // the label; this is where it picks up its route.
+          {label:"App Settings",href:"/settings/app-settings"},
           {label:"Price Level Configuration",href:"/master/price-level-configuration"},
           {label:"Charge Master",href:"/master/charge-master"}
         ]

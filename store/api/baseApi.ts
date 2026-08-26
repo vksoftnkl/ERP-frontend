@@ -174,6 +174,8 @@ export const baseApi = createApi({
     "TransactionHold",
     // Screen field config (fixed.form_section / form_field), keyed by menu id
     "WidgetConfig",
+    // Application settings (app_setting_def catalog + its overrides)
+    "AppSettings",
     // Print designer (reports/templates)
     "PrintTemplate",
     "PrintTemplateRevision",

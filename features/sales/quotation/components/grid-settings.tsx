@@ -21,6 +21,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
@@ -99,6 +100,38 @@ function positionsFor(ordered: GridSettingsColumn[]): number[] {
   return positions;
 }
 
+/**
+ * The drafted order with the row at `from` lifted out and dropped at `to`.
+ *
+ * Returns null when the move is not one the layout can hold. A row with no
+ * `ui_tbl_clm_id` — the injected serial column, and every row of the local
+ * fallback — has no position to save against, so it can neither be dragged nor
+ * be shoved out of its slot by a row that lands on top of it; the second check
+ * catches that second case, which the splice would otherwise do silently.
+ */
+function reordered(
+  order: string[],
+  from: number,
+  to: number,
+  isPinned: (key: string) => boolean,
+): string[] | null {
+  if (from < 0 || to < 0 || from >= order.length || to >= order.length || from === to) {
+    return null;
+  }
+  if (isPinned(order[from])) {
+    return null;
+  }
+  const next = [...order];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  for (let index = 0; index < order.length; index += 1) {
+    if (isPinned(order[index]) && next[index] !== order[index]) {
+      return null;
+    }
+  }
+  return next;
+}
+
 export type UseGridSettingsOptions = {
   /** The grid's name, for the dialog title. */
   label: string;
@@ -131,6 +164,9 @@ export function useGridSettings({
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [draft, setDraft] = useState<SettingsDraft>(EMPTY_DRAFT);
+  /** The row being dragged, and the gap the pointer is currently over. */
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [dropGap, setDropGap] = useState<{ key: string; after: boolean } | null>(null);
   const [saveLayout, saveLayoutState] = useSaveQuotationColumnLayoutMutation();
 
   const onContextMenu = useCallback((event: ReactMouseEvent<HTMLElement>) => {
@@ -179,6 +215,8 @@ export function useGridSettings({
 
   const openSettings = useCallback(() => {
     setDraft(draftOf(columns));
+    setDragKey(null);
+    setDropGap(null);
     setSettingsOpen(true);
     setMenuPosition(null);
   }, [columns]);
@@ -187,6 +225,8 @@ export function useGridSettings({
     if (saveLayoutState.isLoading) {
       return;
     }
+    setDragKey(null);
+    setDropGap(null);
     setSettingsOpen(false);
   }, [saveLayoutState.isLoading]);
 
@@ -206,27 +246,87 @@ export function useGridSettings({
    * column and the whole local fallback carry no `ui_tbl_clm_id`, so there is
    * nothing to save a position against and they stay where they are.
    */
+  const isPinned = useCallback(
+    (key: string) => byKey.get(key)?.columnId == null,
+    [byKey],
+  );
+
+  /**
+   * Drops `key` into the gap on one side of `targetKey`. The gap is named by
+   * the row beside it rather than by an index so the drag and the draft cannot
+   * disagree: the dialog renders the keys the layout still has, which is not
+   * necessarily every key the drafted order holds.
+   */
+  const moveColumnBeside = useCallback(
+    (key: string, targetKey: string, after: boolean) => {
+      setDraft((current) => {
+        const from = current.order.indexOf(key);
+        const target = current.order.indexOf(targetKey);
+        if (from === -1 || target === -1) {
+          return current;
+        }
+        // The gap is an insertion point; lifting the dragged row closes it by one.
+        const to = after ? target + (from < target ? 0 : 1) : target - (from < target ? 1 : 0);
+        const next = reordered(current.order, from, to, isPinned);
+        return next === null ? current : { ...current, order: next };
+      });
+    },
+    [isPinned],
+  );
+
   const moveColumn = useCallback(
     (key: string, delta: -1 | 1) => {
       setDraft((current) => {
         const from = current.order.indexOf(key);
-        const to = from + delta;
-        if (from === -1 || to < 0 || to >= current.order.length) {
-          return current;
-        }
-        // Swapping past a row with no configured id would hand that row's slot
-        // to a column that can be saved and strand the pinned one — the
-        // injected serial column stays first.
-        if (byKey.get(current.order[to])?.columnId == null) {
-          return current;
-        }
-        const order = [...current.order];
-        [order[from], order[to]] = [order[to], order[from]];
-        return { ...current, order };
+        const next = reordered(current.order, from, from + delta, isPinned);
+        return next === null ? current : { ...current, order: next };
       });
     },
-    [byKey],
+    [isPinned],
   );
+
+  const endDrag = useCallback(() => {
+    setDragKey(null);
+    setDropGap(null);
+  }, []);
+
+  /**
+   * Which gap the drop lands in comes from the pointer against the hovered
+   * row's midpoint, so a drag can reach both ends of the list. `clientY` and
+   * the rect are both visual pixels under the global zoom, so comparing the
+   * two needs no conversion.
+   */
+  const onRowDragOver = useCallback(
+    (event: ReactDragEvent<HTMLTableRowElement>, targetKey: string, index: number) => {
+      if (dragKey === null) {
+        return;
+      }
+      const rect = event.currentTarget.getBoundingClientRect();
+      const after = event.clientY > rect.top + rect.height / 2;
+      // A gap the layout would refuse — the one above the pinned serial column
+      // — is marked undroppable rather than accepted and then quietly dropped.
+      const neighbour = draftedColumns[after ? index + 1 : index - 1];
+      const droppable = !isPinned(targetKey) || !(neighbour === undefined || isPinned(neighbour.key));
+      event.preventDefault();
+      event.dataTransfer.dropEffect = droppable ? "move" : "none";
+      setDropGap((current) => {
+        if (!droppable) {
+          return current === null ? current : null;
+        }
+        return current !== null && current.key === targetKey && current.after === after
+          ? current
+          : { key: targetKey, after };
+      });
+    },
+    [dragKey, draftedColumns, isPinned],
+  );
+
+  const commitDrop = useCallback(() => {
+    if (dragKey !== null && dropGap !== null) {
+      moveColumnBeside(dragKey, dropGap.key, dropGap.after);
+    }
+    endDrag();
+  }, [dragKey, dropGap, endDrag, moveColumnBeside]);
 
   const setFlag = useCallback(
     (key: string, flag: keyof SettingsDraftEntry, value: boolean) => {
@@ -339,8 +439,8 @@ export function useGridSettings({
       footer={
         <>
           <span className={styles.settingsNote}>
-            Applies to this grid for every user. Focus and Necessity are stored
-            with the layout only.
+            Applies to this grid for every user. Drag a row — or use ▲▼ — to
+            reposition it. Focus and Necessity are stored with the layout only.
           </span>
           <span className={styles.settingsFooterActions}>
           <button
@@ -389,6 +489,7 @@ export function useGridSettings({
         <table className={styles.settingsTable}>
           <thead>
             <tr>
+              <th scope="col" aria-label="Reorder" />
               <th scope="col">#</th>
               <th scope="col">Column name</th>
               <th scope="col">Order</th>
@@ -410,8 +511,45 @@ export function useGridSettings({
               };
               // No configured row means no position to save one against.
               const pinned = saveLayoutState.isLoading || column.columnId === null;
+              const overGap = dropGap !== null && dropGap.key === column.key;
               return (
-                <tr key={column.key}>
+                <tr
+                  key={column.key}
+                  draggable={!pinned}
+                  className={cx(
+                    !pinned && styles.settingsRowDraggable,
+                    dragKey === column.key && styles.settingsRowDragging,
+                    overGap && dragKey !== column.key
+                      ? dropGap.after
+                        ? styles.settingsRowDropAfter
+                        : styles.settingsRowDropBefore
+                      : undefined,
+                  )}
+                  onDragStart={(event) => {
+                    // A drag begun on a checkbox is a mis-grab, not a move.
+                    if ((event.target as HTMLElement).closest("input") !== null) {
+                      event.preventDefault();
+                      return;
+                    }
+                    event.dataTransfer.effectAllowed = "move";
+                    // Firefox refuses to start a drag with an empty payload.
+                    event.dataTransfer.setData("text/plain", column.key);
+                    setDragKey(column.key);
+                  }}
+                  onDragOver={(event) => onRowDragOver(event, column.key, index)}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    commitDrop();
+                  }}
+                  onDragEnd={endDrag}
+                >
+                  <td
+                    className={styles.settingsTableHandle}
+                    aria-hidden="true"
+                    title={pinned ? undefined : "Drag to reposition"}
+                  >
+                    {pinned ? "" : "⠿"}
+                  </td>
                   <td className={styles.settingsTableNumber}>{index + 1}</td>
                   <td>{column.header}</td>
                   <td className={styles.settingsTableOrder}>
