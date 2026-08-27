@@ -35,6 +35,10 @@ export default function StoreBootstrap() {
           userId: persistedState?.auth?.userId ?? getAuthUserId(),
           recentPages: persistedState?.auth?.recentPages,
           businessContext: persistedState?.auth?.businessContext,
+          // Carries the counter (`deviceId`). Without it a reload resolves the
+          // session's settings with no DEVICE layer, so an override pinned to a
+          // till would silently stop applying until the next sign-in.
+          userInfo: persistedState?.auth?.userInfo,
         }),
       );
     });

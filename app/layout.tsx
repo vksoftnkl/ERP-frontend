@@ -8,9 +8,8 @@ import GlobalErpHeader from "@/components/layout/global-erp-header";
 import GlobalRouteGuard from "@/components/auth/global-route-guard";
 import MenuAccessGuard from "@/components/auth/menu-access-guard";
 import GlobalLoader from "@/components/feedback/global-loader";
-// TEMPORARILY DISABLED: global auto-uppercase is off for now. Restore by
-// un-commenting this import and the <GlobalUppercaseInput /> mount below.
-// import GlobalUppercaseInput from "@/components/feedback/global-uppercase-input";
+import GlobalTextCapitalization from "@/components/feedback/global-text-capitalization";
+import SessionAppSettings from "@/components/layout/session-app-settings";
 import GlobalToasterWrapper from "@/components/feedback/global-toaster-wrapper";
 import ErrorBoundary from "@/components/feedback/error-boundary";
 import UiScaleController from "@/components/layout/ui-scale-controller";
@@ -66,7 +65,12 @@ export default function RootLayout({
         <Providers>
           <UiScaleController />
           <GlobalLoader />
-          {/* TEMPORARILY DISABLED: <GlobalUppercaseInput /> */}
+          {/* The settings this session resolved to, and the one that rewrites
+              what is typed into every name field. Both sit above the routes:
+              the mode must be the same in the first field touched after a
+              sign-in as in the last. */}
+          <SessionAppSettings />
+          <GlobalTextCapitalization />
           {/* Guards the shell itself. `app/error.tsx` only wraps the page below
               this layout, so without this a throw in the header or the
               business-context provider would escalate to global-error.tsx and
