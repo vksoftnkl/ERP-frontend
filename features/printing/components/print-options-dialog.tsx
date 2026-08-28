@@ -9,14 +9,17 @@
  * five buttons for years and the muscle memory is worth more than a tidier
  * design. What each one means, though, is now the printing module's:
  *
- *   Print    render through the assignment ladder and log it — real paper
- *   Preview  the ladder's WINNER, rendered against this document
- *   Format   pick which configured design to render
+ *   Print    the ladder's WINNER, with the print dialog opened on it
+ *   Preview  the same design and the same document, without the print dialog
+ *   Format   pick which design to render
  *   Pdf      the first configured design, no question asked
- *   Cancel   nothing happens, and nothing is logged
+ *   Cancel   nothing happens
  *
- * Only Print writes. The other three are readings of the same document through
- * a design, so they all end in the SAME popup and differ only by a template id.
+ * All four render the same way, through `/print-render/preview`, and end in the
+ * SAME popup. They differ by which template they pick and, for Print, by
+ * whether the browser's print dialog opens on top. NONE of them writes to
+ * `print_log` — see `onPrint` for what that costs and how to put it back.
+ *
  * Nothing navigates: the operator stays on the list they were working, and the
  * paper appears over it. Sending a till operator to the designer's canvas route
  * to look at one page would hand them a 1,000-element editor as a viewer.
@@ -59,7 +62,6 @@ import {
   templateFormatOptions,
 } from "@/features/printing/domain/printOptions";
 import { purposeLabel } from "@/features/printing/domain/purposes";
-import { useDocumentPrint } from "@/features/printing/hooks/useDocumentPrint";
 import DocumentPreviewDialog from "@/features/printing/components/document-preview-dialog";
 import styles from "@/features/printing/printing.module.scss";
 
@@ -109,6 +111,8 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
   const [previewing, setPreviewing] = useState<{
     ptlId: string;
     ptvId: string | null;
+    /** Print asked for paper, not just a look. */
+    autoPrint: boolean;
   } | null>(null);
 
   const { data: purposes, isLoading: purposesLoading } =
@@ -117,8 +121,6 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
       { skip: !open },
     );
   const purpose = findPurposeByCode(purposes, purposeCode);
-
-  const { print, isPrinting } = useDocumentPrint({ companyId, purposeCode });
 
   /*
    * The ladder's winner, for Preview — asked TWICE, on purpose.
@@ -229,17 +231,32 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
   const heading =
     documentLabel ?? (purpose ? purposeLabel(purpose) : purposeCode);
 
-  /** All three preview paths end here: one design, this document, rendered on open. */
-  const showPreview = (ptlId: string, ptvId?: string | null): void => {
-    setPreviewing({ ptlId, ptvId: ptvId ?? null });
+  /** Every button ends here: one design, this document, rendered on open. */
+  const showPreview = (
+    ptlId: string,
+    ptvId?: string | null,
+    autoPrint = false,
+  ): void => {
+    setPreviewing({ ptlId, ptvId: ptvId ?? null, autoPrint });
   };
 
-  const onPreview = (): void => {
+  /**
+   * Which design Preview and Print both show.
+   *
+   * They ask the same question and must not answer it differently — an operator
+   * who checks the paper and then prints it has to get the paper they checked.
+   * So the resolution lives here once, and the two buttons differ by a single
+   * boolean: whether the print dialog opens on top of it.
+   */
+  const resolveForViewing = (): {
+    ptlId: string;
+    ptvId: string | null;
+  } | null => {
     if (previewResolution.isFetching || printResolution.isFetching) {
       toast.info("Still working out which design this counter uses…");
-      return;
+      return null;
     }
-    // A design assigned for PREVIEW is what this button means; the printing
+    // A design assigned for PREVIEW is what these buttons mean; the printing
     // design is the fallback for an installation that assigned only one.
     const winner = previewResolution.data ?? printResolution.data;
     if (!winner) {
@@ -251,12 +268,42 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
         getApiErrorMessage(printResolution.error as never) ??
           "Nothing is assigned to print this document at this counter.",
       );
-      return;
+      return null;
     }
-    // `publishedRevId` is null until something is published. The canvas then
-    // opens the newest revision, and a DRAFT is previewable — which is the only
+    // `publishedRevId` is null until something is published. The popup then
+    // takes the newest revision, and a DRAFT is renderable — which is the only
     // way a design still being drawn can be looked at against real data.
-    showPreview(winner.ptaTemplateId, winner.publishedRevId);
+    return {
+      ptlId: winner.ptaTemplateId,
+      ptvId: winner.publishedRevId ?? null,
+    };
+  };
+
+  const onPreview = (): void => {
+    const design = resolveForViewing();
+    if (design) showPreview(design.ptlId, design.ptvId);
+  };
+
+  /**
+   * Print — the same document Preview shows, with the print dialog on top.
+   *
+   * -- IT NO LONGER WRITES TO `print_log` -----------------------------------
+   *
+   * It used to go through `POST /print-render/print`, which resolves the
+   * ladder, renders every copy the purpose calls for, and appends one
+   * `print_log` row per copy. It now renders through `/print-render/preview`
+   * like the other three buttons, so nothing is logged and the copy count and
+   * copy labels (ORIGINAL / DUPLICATE / TRIPLICATE) are not applied — one copy
+   * of the paper, and no record that it came out.
+   *
+   * That is a deliberate instruction, not an oversight, and it is reversible:
+   * `useDocumentPrint` still exists and the entry screen's Save & print (F6)
+   * still uses it. Restoring the logging here is swapping this back for that
+   * hook.
+   */
+  const onPrint = (): void => {
+    const design = resolveForViewing();
+    if (design) showPreview(design.ptlId, design.ptvId, true);
   };
 
   const onPdf = (): void => {
@@ -281,15 +328,6 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
     showPreview(chosen.ptlId);
   };
 
-  const onPrint = async (): Promise<void> => {
-    // The only button that writes. `useDocumentPrint` owns the ladder, the
-    // print log and getting the bytes to a printer; a refusal is its own toast.
-    const printed = await print(target);
-    if (printed) {
-      onClose();
-    }
-  };
-
   if (previewing) {
     /*
      * The popup REPLACES this dialog rather than stacking on it: two modals
@@ -302,6 +340,7 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
         onClose={onClose}
         ptlId={previewing.ptlId}
         ptvId={previewing.ptvId}
+        autoPrint={previewing.autoPrint}
         docId={target.docId}
         accYear={target.accYear}
         branchId={target.branchId ?? branchId}
@@ -344,10 +383,10 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
                 <button
                   type="button"
                   className={styles.btnPrimary}
-                  disabled={!purpose || isPrinting}
-                  onClick={() => void onPrint()}
+                  disabled={!purpose}
+                  onClick={onPrint}
                 >
-                  {isPrinting ? "Printing…" : "Print"}
+                  Print
                 </button>
                 <button
                   type="button"

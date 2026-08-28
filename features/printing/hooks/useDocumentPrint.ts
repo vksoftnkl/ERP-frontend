@@ -14,19 +14,12 @@
  *   3. Getting bytes in front of a printer, which is the part below that looks
  *      like it should be one line and is not.
  *
- * -- WHY AN IFRAME AND NOT `window.open` -----------------------------------
+ * -- GETTING THE BYTES TO A PRINTER IS NOT THIS HOOK'S JOB -----------------
  *
- * A render is a round trip, so the object URL exists only inside an async
- * callback — by then the click's user-activation is spent and every popup
- * blocker treats `window.open` as unsolicited. A same-origin blob in a hidden
- * iframe needs no activation, and `contentWindow.print()` opens the operating
- * system's print dialog on the PDF directly, which is what the legacy screen's
- * button did.
- *
- * The URL and the frame therefore CANNOT be cleaned up when the call returns:
- * the dialog is still reading them. They live until the next print replaces
- * them, or the screen unmounts — which is also why this is a hook with a ref
- * and not a free function.
+ * `print-delivery.ts` owns that, at module scope, and it explains at length why
+ * it has to: the print dialog keeps reading the document for as long as the
+ * operator takes to choose a printer, so a React tree that owned the frame
+ * would revoke the blob mid-print on unmount and print a blank page.
  *
  * -- A RAW PRINTER STREAM HAS NOWHERE TO GO --------------------------------
  *
@@ -36,7 +29,7 @@
  * window full of control codes and letting them think it failed silently.
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback } from "react";
 import { toast } from "react-toastify";
 import { usePrintDocumentMutation } from "@/features/printing/api/render";
 import { useGetPrintPurposeOptionsQuery } from "@/features/printing/api/purposes";
@@ -46,11 +39,10 @@ import {
   purposeNotConfigured,
   type DocumentPrintTarget,
 } from "@/features/printing/domain/documentPrint";
+import { sendToPrinter } from "@/features/printing/print-delivery";
 import { getApiErrorMessage } from "@/store/api";
 import { useAppSelector } from "@/store/hooks";
 import { selectUserInfo } from "@/store/slices/authSlice";
-
-type Delivery = { frame: HTMLIFrameElement; objectUrl: string };
 
 export type UseDocumentPrintOptions = {
   /** Scopes the purpose catalogue: the shipped rows plus this company's own. */
@@ -73,73 +65,24 @@ export type UseDocumentPrintResult = {
   isReady: boolean;
 };
 
-export function useDocumentPrint(options: UseDocumentPrintOptions): UseDocumentPrintResult {
+export function useDocumentPrint(
+  options: UseDocumentPrintOptions,
+): UseDocumentPrintResult {
   const { companyId, purposeCode } = options;
 
-  const { data: purposes, isLoading: purposesLoading } = useGetPrintPurposeOptionsQuery({
-    companyId: companyId?.trim() ? companyId : null,
-  });
+  const { data: purposes, isLoading: purposesLoading } =
+    useGetPrintPurposeOptionsQuery({
+      companyId: companyId?.trim() ? companyId : null,
+    });
   /*
    * The counter this session signed in as — the login response's `device_id`,
    * which IS a `fixed.device_master` row. Supplied here rather than by every
    * caller so no screen has to know which of this client's two device ids is
    * the real one; a caller may still override it on the target.
    */
-  const sessionDeviceId = useAppSelector(selectUserInfo)?.deviceId?.trim() || undefined;
+  const sessionDeviceId =
+    useAppSelector(selectUserInfo)?.deviceId?.trim() || undefined;
   const [printDocument, { isLoading: isPrinting }] = usePrintDocumentMutation();
-
-  const delivery = useRef<Delivery | null>(null);
-
-  const release = useCallback(() => {
-    const current = delivery.current;
-    if (!current) return;
-    delivery.current = null;
-    current.frame.remove();
-    URL.revokeObjectURL(current.objectUrl);
-  }, []);
-
-  // The last render is still held when the screen goes away — a blob URL that
-  // outlives its document is a leak the tab keeps until it is closed.
-  useEffect(() => release, [release]);
-
-  const deliver = useCallback(
-    (objectUrl: string) => {
-      // Only now: the previous dialog has had its bytes, and this is the first
-      // moment it is safe to take them back.
-      release();
-
-      const frame = document.createElement("iframe");
-      // Off-screen rather than `display: none` — a display-none iframe does not
-      // lay out in every browser, and a PDF viewer that never laid out has
-      // nothing to print.
-      frame.setAttribute("aria-hidden", "true");
-      frame.style.position = "fixed";
-      frame.style.width = "1px";
-      frame.style.height = "1px";
-      frame.style.right = "0";
-      frame.style.bottom = "0";
-      frame.style.opacity = "0";
-      frame.style.border = "0";
-      frame.style.pointerEvents = "none";
-
-      frame.onload = () => {
-        try {
-          frame.contentWindow?.focus();
-          frame.contentWindow?.print();
-        } catch {
-          // Some builds refuse `print()` on a plugin-rendered PDF. The bytes are
-          // good either way, so fall back to handing the operator the document
-          // rather than reporting a failure that did not happen.
-          window.open(objectUrl, "_blank", "noopener");
-        }
-      };
-
-      delivery.current = { frame, objectUrl };
-      frame.src = objectUrl;
-      document.body.appendChild(frame);
-    },
-    [release],
-  );
 
   const print = useCallback(
     async (target: DocumentPrintTarget): Promise<boolean> => {
@@ -163,7 +106,11 @@ export function useDocumentPrint(options: UseDocumentPrintOptions): UseDocumentP
       } catch (error) {
         // The two throws in the builder are both sentences meant for an
         // operator: no saved document, or no accounting year on it.
-        toast.error(error instanceof Error ? error.message : "This document cannot be printed.");
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "This document cannot be printed.",
+        );
         return false;
       }
 
@@ -171,7 +118,7 @@ export function useDocumentPrint(options: UseDocumentPrintOptions): UseDocumentP
         const result = await printDocument(request).unwrap();
 
         if (result.objectUrl) {
-          deliver(result.objectUrl);
+          sendToPrinter(result.objectUrl);
           return true;
         }
 
@@ -188,11 +135,14 @@ export function useDocumentPrint(options: UseDocumentPrintOptions): UseDocumentP
         // purpose — nothing assigned, or an assigned template with no published
         // revision. The server says which, in a sentence naming what to go and
         // do, so it is passed through rather than replaced.
-        toast.error(getApiErrorMessage(error as never) ?? "The document could not be printed.");
+        toast.error(
+          getApiErrorMessage(error as never) ??
+            "The document could not be printed.",
+        );
         return false;
       }
     },
-    [deliver, printDocument, purposeCode, purposes, purposesLoading, sessionDeviceId],
+    [printDocument, purposeCode, purposes, purposesLoading, sessionDeviceId],
   );
 
   return { print, isPrinting, isReady: !purposesLoading };

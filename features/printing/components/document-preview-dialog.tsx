@@ -45,6 +45,7 @@ import {
   buildDocumentPreviewRequest,
   revisionForPreview,
 } from "@/features/printing/domain/printOptions";
+import { sendToPrinter } from "@/features/printing/print-delivery";
 import styles from "@/features/printing/printing.module.scss";
 
 export type DocumentPreviewDialogProps = {
@@ -59,6 +60,19 @@ export type DocumentPreviewDialogProps = {
   deviceId?: string | null;
   /** What the header calls this — "Quotation quo00034". */
   title: string;
+  /**
+   * Open the browser's print dialog as soon as the paper is on screen.
+   *
+   * Set by the Print button, which is Preview plus one act: the operator has
+   * already said they want it printed, so making them press Print a second time
+   * inside the popup would be asking the same question twice.
+   *
+   * The popup then CLOSES ITSELF. The print dialog is the thing to look at, and
+   * a preview sitting behind it is a second window the operator has to dismiss
+   * for no reason. The document survives that close because `sendToPrinter`
+   * owns it at module scope — see `print-delivery.ts` for why it has to.
+   */
+  autoPrint?: boolean;
 };
 
 type RefusalDetail = { field: string; message: string };
@@ -80,13 +94,28 @@ function refusalDetails(thrown: unknown): RefusalDetail[] {
 }
 
 export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
-  const { onClose, ptlId, ptvId, docId, accYear, branchId, deviceId, title } =
-    props;
+  const {
+    onClose,
+    ptlId,
+    ptvId,
+    docId,
+    accYear,
+    branchId,
+    deviceId,
+    title,
+    autoPrint,
+  } = props;
 
   // `/print-template/get` — the revisions live on the template, and which one
   // to render is not something a print button can know.
   const template = useGetPrintingTemplateQuery(ptlId, { skip: !ptlId });
   const [renderPreview] = useRenderPrintPreviewMutation();
+
+  /*
+   * Once a document is handed to the printer its blob belongs to
+   * `print-delivery`, and this dialog must not revoke it on the way out.
+   */
+  const handedOver = useRef(false);
 
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [rawText, setRawText] = useState<string | null>(null);
@@ -168,9 +197,12 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
   }, [run, versionId]);
 
   // The blob outlives this component unless it is revoked; the viewer is gone
-  // by then, so nothing can be reading it.
+  // by then, so nothing can be reading it — UNLESS it was handed to the
+  // printer, whose dialog is still reading it and whose bytes are no longer
+  // ours to take back.
   useEffect(
     () => () => {
+      if (handedOver.current) return;
       setObjectUrl((current) => {
         if (current) URL.revokeObjectURL(current);
         return null;
@@ -179,21 +211,34 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
     [],
   );
 
-  /** Send the page that is already rendered to a printer. */
-  const printIt = (): void => {
+  /**
+   * Hand the rendered page to the printer and step out of the way.
+   *
+   * The document goes to `print-delivery`'s own frame rather than being printed
+   * from the one on screen, which is what lets this dialog close while the
+   * print dialog is still open on it.
+   */
+  const printIt = useCallback((): void => {
     if (!objectUrl) return;
-    const frame = document.querySelector<HTMLIFrameElement>(
-      "[data-print-preview-frame]",
-    );
-    try {
-      frame?.contentWindow?.focus();
-      frame?.contentWindow?.print();
-    } catch {
-      // Some builds refuse `print()` on a plugin-rendered PDF; the bytes are
-      // good either way, so hand the operator the document instead.
-      window.open(objectUrl, "_blank", "noopener");
-    }
-  };
+    handedOver.current = true;
+    sendToPrinter(objectUrl);
+    onClose();
+  }, [objectUrl, onClose]);
+
+  /*
+   * Print asked for paper, so the moment there is paper it goes to the printer.
+   *
+   * Keyed on the object URL rather than a bare flag, so Re-render prints the
+   * new document instead of being suppressed as already-done — and so a second
+   * effect pass over one render cannot print twice.
+   */
+  const autoPrintedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoPrint || !objectUrl || autoPrintedFor.current === objectUrl)
+      return;
+    autoPrintedFor.current = objectUrl;
+    printIt();
+  }, [autoPrint, objectUrl, printIt]);
 
   const templateError = template.error
     ? (getApiErrorMessage(template.error as never) ??
@@ -267,7 +312,6 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
               </div>
             ) : objectUrl ? (
               <iframe
-                data-print-preview-frame=""
                 src={objectUrl}
                 title={`Print preview — ${title}`}
                 style={{ width: "100%", height: "100%", border: 0 }}
