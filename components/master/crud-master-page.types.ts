@@ -186,6 +186,29 @@ export type CrudMasterPageProps = {
   isRowDeleteDisabled?: (row: MasterTableRow) => boolean;
   rowDeleteDisabledReason?: string;
   /**
+   * Print the selected row.
+   *
+   * OPT-IN, and the toolbar's Print button stays inactive without it — which is
+   * every master page, because most of them list records that are not documents
+   * and have nothing to send to a printer. A page that IS a document register
+   * (quotations, orders, invoices) supplies this and gets the button.
+   *
+   * The shell owns only the button: the gate on `canPrint`, the busy label and
+   * the "nothing selected" state. WHAT gets printed — which purpose, which
+   * template, which copies — is the page's, because it is the printing module's
+   * question and not this shell's.
+   */
+  onPrintAction?: (row: MasterTableRow) => void | Promise<void>;
+  /**
+   * Rows this page refuses to print — the read-side mirror of
+   * `isRowEditDisabled`, for a record that is listed but has no paper (a
+   * soft-deleted voucher). Optional `reason` becomes the button's tooltip.
+   */
+  isRowPrintDisabled?: (row: MasterTableRow) => boolean;
+  rowPrintDisabledReason?: string;
+  /** A render is in flight — the button says so and will not fire twice. */
+  printBusy?: boolean;
+  /**
    * Open a row for READING — Ctrl+Enter on the selection, and double-click.
    * Supplied by pages whose record does not fit the shell's view modal (a
    * voucher opens its own screen); without it both gestures fall back to that

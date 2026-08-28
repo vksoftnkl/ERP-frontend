@@ -26,6 +26,7 @@ import {
   selectTemplateId,
 } from "@/features/print-designer/store/selectors";
 import { useTemplateSave } from "@/features/print-designer/hooks/useTemplateSave";
+import { useCanvasHost } from "@/features/print-designer/host/canvas-host";
 import { useTemplateActions } from "@/features/print-designer/hooks/useTemplateActions";
 import { PRINT_TEMPLATES_ROUTE } from "@/features/print-designer/routes";
 import styles from "@/features/print-designer/components/designer.module.scss";
@@ -51,6 +52,13 @@ export function DesignerTopBar({
 
   const { save, saving, canSave } = useTemplateSave();
   const { publish, publishing, clone, cloning, exportJson } = useTemplateActions();
+  /*
+   * A hosted canvas has no `/reports/templates` row behind it, so Preview,
+   * Publish, Clone and Version history have nothing to act on -- their endpoints
+   * are 404 in any case. The host owns those decisions; here they go away rather
+   * than sitting there failing.
+   */
+  const host = useCanvasHost();
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -61,10 +69,22 @@ export function DesignerTopBar({
 
   return (
     <div className={styles.toolbar}>
-      <Link href={PRINT_TEMPLATES_ROUTE} className={styles.backLink} title="Back to the list">
-        <span className={styles.toolIcon}>◀</span>
-        <span>Templates</span>
-      </Link>
+      {host ? (
+        <button
+          type="button"
+          className={styles.backLink}
+          title="Back to the design"
+          onClick={host.onClose}
+        >
+          <span className={styles.toolIcon}>◀</span>
+          <span>Close</span>
+        </button>
+      ) : (
+        <Link href={PRINT_TEMPLATES_ROUTE} className={styles.backLink} title="Back to the list">
+          <span className={styles.toolIcon}>◀</span>
+          <span>Templates</span>
+        </Link>
+      )}
 
       <div className={styles.toolDivider} />
 
@@ -73,24 +93,36 @@ export function DesignerTopBar({
           className={styles.nameInput}
           value={meta.name}
           placeholder="Untitled template"
+          readOnly={Boolean(host)}
+          title={host ? "The name lives on the Template tab" : undefined}
           onChange={(event) => dispatch(nameChanged(event.target.value))}
           aria-label="Template name"
         />
-        <span className={styles.metaLine}>{lastSaved}</span>
+        <span className={styles.metaLine}>{host ? host.label : lastSaved}</span>
       </div>
 
-      {meta.isDefault ? (
+      {host?.readOnly ? (
+        <span className={`${styles.badge} ${styles.badgeSystem}`} title={host.readOnlyReason}>
+          read only
+        </span>
+      ) : null}
+      {!host && meta.isDefault ? (
         <span className={`${styles.badge} ${styles.badgeDefault}`}>default</span>
       ) : null}
-      {meta.isSystemTemplate ? (
+      {!host && meta.isSystemTemplate ? (
         <span className={`${styles.badge} ${styles.badgeSystem}`}>system</span>
       ) : null}
       {dirty ? <span className={`${styles.badge} ${styles.badgeDirty}`}>modified</span> : null}
-      {status === "DRAFT" ? <span className={styles.badge}>draft</span> : null}
+      {/*
+        The store's status is always DRAFT for a hosted canvas — `draftStarted`
+        seeds it — which would sit a "draft" pill beside a PUBLISHED revision.
+        The host's own label carries the real status.
+      */}
+      {!host && status === "DRAFT" ? <span className={styles.badge}>draft</span> : null}
 
       <span className={styles.spacer} />
 
-      {meta.isSystemTemplate ? (
+      {!host && meta.isSystemTemplate ? (
         <button
           type="button"
           className={`${styles.button} ${styles.buttonPrimary}`}
@@ -115,18 +147,28 @@ export function DesignerTopBar({
         </button>
       )}
 
-      <button type="button" className={styles.button} title="Ctrl+P" onClick={onPreview}>
-        Preview
-      </button>
+      {/*
+        Preview is back for a hosted canvas, and only where the host can render:
+        the endpoint takes a revision id, and a design that has never been saved
+        has none. Publish stays gone — the printing module publishes from its
+        own Version rail, where the pointer actually lives.
+      */}
+      {host?.preview ? (
+        <button type="button" className={styles.button} title="Ctrl+P" onClick={onPreview}>
+          Preview
+        </button>
+      ) : null}
 
-      <button
-        type="button"
-        className={styles.button}
-        disabled={publishing || !templateId || meta.isSystemTemplate}
-        onClick={() => void publish()}
-      >
-        Publish
-      </button>
+      {host ? null : (
+        <button
+          type="button"
+          className={styles.button}
+          disabled={publishing || !templateId || meta.isSystemTemplate}
+          onClick={() => void publish()}
+        >
+          Publish
+        </button>
+      )}
 
       <div className={styles.menuWrap}>
         <button

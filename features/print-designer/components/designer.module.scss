@@ -1262,6 +1262,28 @@
   color: var(--pd-select);
 }
 
+/*
+ * The field-level detail behind a refused render.
+ *
+ * Each row names a PLACE in the design — `bands.3.elements.7.value` is a box on
+ * the canvas — so the path is set in the mono face and the sentence is not.
+ */
+.issueList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  margin: 0;
+  padding: 0 0 4px;
+  overflow: auto;
+  list-style: none;
+
+  code {
+    font-family: var(--pd-font-mono, ui-monospace, monospace);
+    font-size: 11px;
+  }
+}
+
 /* ── Status bar ──────────────────────────────────────────────────────── */
 
 .statusBar {

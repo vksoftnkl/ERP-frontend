@@ -5,10 +5,15 @@
  * fast path was "author JSON, POST it, iterate by PUT" — so this file adds no
  * server surface, only a typed client for it.
  *
- * Two endpoint URLs differ from the obvious guess and are worth stating: the
- * dataset catalogue is mounted UNDER templates (`/reports/templates/datasets/
- * catalogue`) because it is only ever consumed alongside one, and preview lives
- * on the print controller (`/reports/preview`), not the template controller.
+ * The dataset catalogue is mounted UNDER templates (`/reports/templates/
+ * datasets/catalogue`) rather than at `/reports/datasets`, because it is only
+ * ever consumed alongside one.
+ *
+ * PREVIEW IS NOT HERE ANY MORE. It was `POST /reports/preview`, which took a
+ * definition and rendered it. That endpoint is gone with the rest of
+ * `/reports/*`, and its replacement is not a like-for-like move: the renderer
+ * in `features/printing/api/render.ts` takes a saved REVISION id, so it can
+ * only be called by a host that has one. See `host/canvas-host`.
  */
 
 import { baseApi } from "@/store/api/baseApi";
@@ -24,7 +29,6 @@ import type {
 } from "@/features/print-designer/types/template-definition";
 
 const TEMPLATES_ENDPOINT = "/reports/templates";
-const PREVIEW_ENDPOINT = "/reports/preview";
 
 /**
  * The list page runs on the shared `CrudMasterPage` shell, which fetches rows
@@ -78,46 +82,6 @@ export type ImportTemplateBody = {
   ptName?: string;
   ptCompanyId?: string;
   ptBranchId?: string;
-};
-
-export type PreviewRequest = {
-  definition: TemplateDefinition;
-  /** Omitted lets the server derive it: GRID -> ESCPOS, otherwise PDF. */
-  mode?: string;
-  useSampleData?: boolean;
-  /** Render a real document instead of sample data. */
-  docId?: string;
-  accYear?: string;
-  branchId?: string;
-  printerProfile?: string;
-  params?: Record<string, unknown>;
-};
-
-/**
- * A rendered preview, in a form Redux can hold.
- *
- * Deliberately NOT the Blob. A mutation's result travels through a dispatched
- * action and is kept in the store while the hook is mounted, and a Blob is
- * neither serialisable nor comparable — RTK's dev-time serialisability check
- * flags it, and any future state persistence would silently drop it. So the
- * response handler consumes the blob at the fetch boundary and passes on only
- * strings and numbers: an object URL for a PDF, decoded text for the raw
- * printer modes.
- *
- * The object URL's lifetime therefore belongs to the caller: whoever receives
- * one must revoke it when it is replaced or when the component unmounts. See
- * PreviewDialog's `replaceObjectUrl`.
- */
-export type PreviewResult = {
-  /** Set for PDF output; the caller owns revoking it. */
-  objectUrl: string | null;
-  /** Set for the raw printer modes, which have no viewer. */
-  text: string | null;
-  contentType: string;
-  /** From `X-Report-Page-Count`; the engine is the only thing that knows. */
-  pageCount: number | null;
-  renderMs: number | null;
-  byteLength: number;
 };
 
 /** Unwrap the module's `{ success, message, data }` envelope. */
@@ -249,61 +213,6 @@ export const printTemplateApi = baseApi.injectEndpoints({
       invalidatesTags: TEMPLATE_LIST_TAGS,
     }),
 
-    /**
-     * Render the in-memory definition through the real engine.
-     *
-     * `responseHandler` must return the blob itself — the default JSON handler
-     * would corrupt a PDF — and `keepUnusedDataFor: 0` keeps rendered documents
-     * out of the RTK cache, where they would pin megabytes per preview and
-     * could serve yesterday's render after an edit.
-     *
-     * `pageCount` and `renderMs` come from response headers, and the API sends
-     * no `Access-Control-Expose-Headers`. They therefore read as null whenever
-     * the client is served from a different origin than the API — which is the
-     * local dev setup (client :3000, API :3011) but NOT production, where nginx
-     * puts both behind one origin. Both are diagnostics; the PDF itself is the
-     * response body and is always readable.
-     */
-    renderPrintPreview: builder.mutation<PreviewResult, PreviewRequest>({
-      query: (body) => ({
-        url: PREVIEW_ENDPOINT,
-        method: "POST",
-        body,
-        responseHandler: async (response) => {
-          const blob = await response.blob();
-          const contentType = response.headers.get("Content-Type") ?? blob.type;
-          const isPdf = contentType.includes("pdf");
-          /*
-           * A MISSING header is null, not zero.
-           *
-           * `Number(null)` is 0, which would have the dialog cheerfully report
-           * "0ms" for a render whose timing it simply could not read — and it
-           * cannot read it whenever the page and the API are on different
-           * origins, because the API sends no `Access-Control-Expose-Headers`.
-           * Null is the honest answer, and the dialog hides the badge for it.
-           */
-          const readNumber = (name: string): number | null => {
-            const raw = response.headers.get(name);
-            if (raw === null || raw.trim() === "") {
-              return null;
-            }
-            const value = Number(raw);
-            return Number.isFinite(value) ? value : null;
-          };
-          const pageCount = readNumber("X-Report-Page-Count");
-
-          return {
-            // Consume the blob here so nothing non-serialisable reaches the store.
-            objectUrl: isPdf ? URL.createObjectURL(blob) : null,
-            text: isPdf ? null : await blob.text(),
-            contentType,
-            pageCount: pageCount !== null && pageCount > 0 ? pageCount : null,
-            renderMs: readNumber("X-Report-Render-Ms"),
-            byteLength: blob.size,
-          } satisfies PreviewResult;
-        },
-      }),
-    }),
   }),
 });
 
@@ -321,5 +230,4 @@ export const {
   useRollbackPrintTemplateMutation,
   useLazyExportPrintTemplateQuery,
   useImportPrintTemplateMutation,
-  useRenderPrintPreviewMutation,
 } = printTemplateApi;

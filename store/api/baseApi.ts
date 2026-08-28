@@ -181,6 +181,14 @@ export const baseApi = createApi({
     "PrintTemplateRevision",
     "PrintTemplateVocabulary",
     "PrintDatasetCatalogue",
+    // The 17_printing engine (print-templates / print-template-assignments).
+    // Distinct tags from the four above on purpose: that is the /reports
+    // designer over a different set of tables, and invalidating one must not
+    // refetch the other.
+    "PrintingTemplate",
+    "PrintingAssignment",
+    // print_purpose, read through configured dropdown 47.
+    "PrintingPurpose",
   ],
   endpoints: () => ({}),
 });

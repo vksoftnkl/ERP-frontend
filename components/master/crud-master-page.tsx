@@ -111,6 +111,7 @@ const NO_PERMISSION_TITLES = {
   edit: "You do not have permission to edit records on this screen",
   delete: "You do not have permission to delete records on this screen",
   export: "You do not have permission to export this screen",
+  print: "You do not have permission to print on this screen",
 } as const;
 
 const UI_TABLE_COLUMN_DELETED_KEYS = ["uiTblClmIsDeleted", "isDeleted", "deleted"] as const;
@@ -2286,6 +2287,10 @@ export default function CrudMasterPage({
   rowClassName,
   onCreateAction,
   onEditAction,
+  onPrintAction,
+  isRowPrintDisabled,
+  rowPrintDisabledReason,
+  printBusy,
   isRowEditDisabled,
   rowEditDisabledReason,
   isRowDeleteDisabled,
@@ -2773,6 +2778,7 @@ export default function CrudMasterPage({
   const canEditRecords = menuPermissions.canEdit;
   const canDeleteRecords = menuPermissions.canDelete;
   const canExportRecords = menuPermissions.canExport;
+  const canPrintRecords = menuPermissions.canPrint;
 
   const [pendingDeleteRow, setPendingDeleteRow] =
     useState<MasterTableRow | null>(null);
@@ -3746,6 +3752,30 @@ export default function CrudMasterPage({
     }
   }, [canDeleteRecords, selectedRow, handleDeleteRow, isRowDeleteDisabled]);
 
+  /*
+   * Print is OPT-IN — `onPrintAction` is absent on every master that lists
+   * something which is not a document, and the button stays inactive there
+   * rather than being a live control that does nothing.
+   *
+   * The row is passed through untouched: the shell knows a row was selected,
+   * and the PAGE knows what printing one means.
+   */
+  const printDisabledForSelection = Boolean(
+    !onPrintAction ||
+      !canPrintRecords ||
+      !selectedRow ||
+      printBusy ||
+      (selectedRow && isRowPrintDisabled?.(selectedRow)),
+  );
+  const handleToolbarPrint = useCallback(() => {
+    if (!onPrintAction || !selectedRow || isRowPrintDisabled?.(selectedRow)) {
+      return;
+    }
+    // Guarded here as well as on the button, so the rule holds for every other
+    // way in rather than only for the one that is currently wired.
+    void onPrintAction(selectedRow);
+  }, [isRowPrintDisabled, onPrintAction, selectedRow]);
+
   const handleToolbarLogs = useCallback(() => {
     if (selectedRow) {
       handleRowLogs(selectedRow);
@@ -4093,13 +4123,24 @@ export default function CrudMasterPage({
                   <button
                     type="button"
                     className={`${styles.iconBtn} ${styles.iconBtnPrint} erp-ms-tbtn`}
-                    title="Print"
-                    disabled
+                    onClick={handleToolbarPrint}
+                    disabled={printDisabledForSelection}
+                    title={
+                      !onPrintAction
+                        ? "Printing is not set up for this screen"
+                        : !canPrintRecords
+                          ? NO_PERMISSION_TITLES.print
+                          : selectedRow && isRowPrintDisabled?.(selectedRow)
+                            ? (rowPrintDisabledReason ?? "This record cannot be printed")
+                            : selectedRow
+                              ? `Print the selected ${entityLabel}`
+                              : `Select a ${entityLabel} to print`
+                    }
                   >
                     <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
                       <ErpActionIcon name="print" />
                     </span>
-                    <span>Print</span>
+                    <span>{printBusy ? "Printing…" : "Print"}</span>
                   </button>
                   {auditHistory ? (
                     <>

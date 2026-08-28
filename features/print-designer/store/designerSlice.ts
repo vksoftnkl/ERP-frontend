@@ -390,7 +390,21 @@ const designerSlice = createSlice({
     /** The paper wizard produced a definition that has never been saved. */
     draftStarted(
       state,
-      action: PayloadAction<{ meta: Partial<DesignerMeta>; definition: TemplateDefinition }>,
+      action: PayloadAction<{
+        meta: Partial<DesignerMeta>;
+        definition: TemplateDefinition;
+        /**
+         * Whether the seeded design counts as unsaved work.
+         *
+         * True for a genuinely NEW template — nothing has been written yet, so
+         * the guard should stop a careless close. FALSE when a host seeds an
+         * existing revision it has just loaded: nothing has been modified, and
+         * saying so would flag every freshly-opened design as dirty and make the
+         * unsaved-changes guard cry wolf. Defaults to true, which is what the
+         * standalone /new route means.
+         */
+        dirty?: boolean;
+      }>,
     ) {
       state.status = "DRAFT";
       state.templateId = null;
@@ -399,7 +413,7 @@ const designerSlice = createSlice({
       state.selection = freshSelection();
       state.interaction = freshInteraction();
       state.history = emptyHistory();
-      state.dirty = true;
+      state.dirty = action.payload.dirty ?? true;
       state.lastSavedAt = null;
     },
 

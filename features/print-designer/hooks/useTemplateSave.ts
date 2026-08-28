@@ -27,10 +27,16 @@ import {
   selectTemplateId,
 } from "@/features/print-designer/store/selectors";
 import { printDesignerRoute } from "@/features/print-designer/routes";
+import { useCanvasHost } from "@/features/print-designer/host/canvas-host";
 
 export function useTemplateSave() {
   const dispatch = useAppDispatch();
   const router = useRouter();
+  /**
+   * When a host is mounted the design does not live in `/reports/templates` --
+   * which does not exist -- and saving is the host's job. See `host/canvas-host`.
+   */
+  const host = useCanvasHost();
 
   const meta = useAppSelector(selectMeta);
   const definition = useAppSelector(selectDefinition);
@@ -42,6 +48,24 @@ export function useTemplateSave() {
   const [updateTemplate, { isLoading: updating }] = useUpdatePrintTemplateMutation();
 
   const save = useCallback(async () => {
+    if (host) {
+      if (host.readOnly) {
+        toast.info(host.readOnlyReason ?? "This design is read-only.");
+        return;
+      }
+      if (counts.errors > 0) {
+        toast.error("Fix the problems first — the server would reject this definition.");
+        return;
+      }
+      try {
+        await host.onSave(definition);
+      } catch {
+        // The host reports its own failure; leaving the draft dirty is the
+        // point, so nothing is lost when a save is refused.
+      }
+      return;
+    }
+
     if (meta.isSystemTemplate) {
       toast.info("System templates are read-only. Clone it to make changes.");
       return;
@@ -85,6 +109,7 @@ export function useTemplateSave() {
     createTemplate,
     definition,
     dispatch,
+    host,
     meta.docType,
     meta.isSystemTemplate,
     meta.name,
@@ -95,5 +120,10 @@ export function useTemplateSave() {
     updateTemplate,
   ]);
 
-  return { save, saving: creating || updating, canSave };
+  return {
+    save,
+    saving: creating || updating,
+    // A hosted read-only design is inspectable but not writable.
+    canSave: host ? canSave && !host.readOnly : canSave,
+  };
 }

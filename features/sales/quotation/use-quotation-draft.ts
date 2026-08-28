@@ -93,6 +93,7 @@ import type {
   ItemUnitOption,
   QuotationDocKey,
   QuotationDraft,
+  SavedQuotationRef,
   TransactionHoldLockScope,
   TransactionHoldPayload,
   Violation,
@@ -177,7 +178,8 @@ export type QuotationDraftApi = {
   setLineUnit: (lineKey: string, itemUnitId: string) => Promise<void>;
   resolveBarcode: (lineKey: string, barcode: string) => Promise<boolean>;
   applyPriceLevel: (priceLevel: number, scope: PriceLevelScope, lineKeys: string[]) => Promise<void>;
-  save: (context?: ValidationContext) => Promise<boolean>;
+  /** The saved document's key, or `null` when nothing was committed. */
+  save: (context?: ValidationContext) => Promise<SavedQuotationRef | null>;
   /** Park the cart in `transaction_hold` and clear the form. */
   hold: () => Promise<boolean>;
   /**
@@ -670,18 +672,18 @@ export function useQuotationDraft(): QuotationDraftApi {
       }),
     [draft, pricing],
   );
-  const save = useCallback(async (context: ValidationContext = {}): Promise<boolean> => {
+  const save = useCallback(async (context: ValidationContext = {}): Promise<SavedQuotationRef | null> => {
     if (inFlight.current) {
-      return false;
+      return null;
     }
     const violation = validate(context);
     if (violation) {
       toast.error(violation.message);
-      return false;
+      return null;
     }
     if (!actor.userId) {
       toast.error("Your session has no user id — sign in again before saving.");
-      return false;
+      return null;
     }
     inFlight.current = true;
     setBusy("saving");
@@ -741,10 +743,18 @@ export function useQuotationDraft(): QuotationDraftApi {
         }
         dispatch(holdSet({ holdId: null, holdNo: "" }));
       }
-      return true;
+      // The key rather than a flag: `clear()` is the caller's very next act on
+      // a successful save, and after it the form no longer knows what it wrote.
+      return {
+        sqId: saved.sqId,
+        sqCompanyId: saved.sqCompanyId,
+        sqBranchId: saved.sqBranchId,
+        sqAccYear: saved.sqAccYear,
+        quoteRefno: saved.sqQuoteRefno ?? null,
+      };
     } catch (error) {
       toast.error(errorMessage(error));
-      return false;
+      return null;
     } finally {
       inFlight.current = false;
       setBusy("idle");

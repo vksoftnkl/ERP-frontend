@@ -52,6 +52,7 @@ import {
   selectView,
 } from "@/features/print-designer/store/selectors";
 import { useTemplateSave } from "@/features/print-designer/hooks/useTemplateSave";
+import { useCanvasHost } from "@/features/print-designer/host/canvas-host";
 import { useTemplateActions } from "@/features/print-designer/hooks/useTemplateActions";
 import { PRINT_TEMPLATES_ROUTE } from "@/features/print-designer/routes";
 import styles from "@/features/print-designer/components/designer.module.scss";
@@ -109,6 +110,10 @@ export function DesignerMenuBar({
   const history = useAppSelector(selectHistoryState);
 
   const { save, canSave } = useTemplateSave();
+  // Version history is a `/reports/*` feature a hosted canvas does not have —
+  // its host owns the history. Preview is a host CAPABILITY: present when the
+  // host can name the revision the renderer needs. See `host/canvas-host`.
+  const host = useCanvasHost();
   const { publish, clone, exportJson, templateId } = useTemplateActions();
 
   const [open, setOpen] = useState<MenuName | null>(null);
@@ -156,7 +161,9 @@ export function DesignerMenuBar({
           disabled={!canSave}
           onSelect={run(() => void save())}
         />
-        <MenuOption label="Preview…" shortcut="Ctrl+P" onSelect={run(onPreview)} />
+        {host?.preview ? (
+          <MenuOption label="Preview…" shortcut="Ctrl+P" onSelect={run(onPreview)} />
+        ) : null}
         <Separator />
         <MenuOption
           label="Publish as default…"
@@ -180,7 +187,10 @@ export function DesignerMenuBar({
           onSelect={run(onOpenRevisions)}
         />
         <Separator />
-        <MenuOption label="Close" onSelect={run(() => router.push(PRINT_TEMPLATES_ROUTE))} />
+        <MenuOption
+          label="Close"
+          onSelect={run(() => (host ? host.onClose() : router.push(PRINT_TEMPLATES_ROUTE)))}
+        />
       </>
     ),
 

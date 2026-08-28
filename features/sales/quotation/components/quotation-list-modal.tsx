@@ -30,6 +30,9 @@ import { FiEdit3, FiLayout, FiPrinter, FiRefreshCw } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { cx } from "@/components/design-system/cx";
 import { useListQuotationsQuery } from "@/store/api/quotationApi";
+import { useDocumentPrint } from "@/features/printing/hooks/useDocumentPrint";
+import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
+import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import type { QuotationDocKey, QuotationListRow } from "../quotation.types";
 import { addDays, buildPageList, toDateInput, todayIso, toNumber } from "../quotation.utils";
 import { ModalShell } from "./modal-shell";
@@ -206,6 +209,42 @@ export function QuotationListModal(props: QuotationListModalProps) {
   const activeRow = visibleRows[activeIndex];
   const activeRowDeleted = activeRow ? isDeleted(activeRow.sq_is_deleted) : false;
 
+  const { permissions } = usePagePermissions();
+  const { print, isPrinting } = useDocumentPrint({
+    companyId,
+    purposeCode: PURPOSE_CODE.SALE_QUOTATION,
+  });
+
+  /*
+   * Print the HIGHLIGHTED row, not the one the form has open — this dialog's
+   * whole point is reaching another quotation without loading it, and printing
+   * one is the commonest reason to want that.
+   *
+   * The row's OWN scope is sent, not the form's. They agree today (the tenant
+   * filter above drops anything that does not), but the row is what is being
+   * printed and the accounting year decides which partition the renderer reads.
+   *
+   * `isReprint` is deliberately NOT set. A reprint is a claim that this paper
+   * came out once already, and nothing here knows that: `print_log` is the
+   * record and this dialog does not read it. Every print logs a row either way,
+   * so the history stays true; guessing REPRINT would put a wrong word in it.
+   */
+  const printActiveRow = async (): Promise<void> => {
+    if (!activeRow) return;
+    if (!permissions.canPrint) {
+      toast.error("You do not have permission to print on this screen.");
+      return;
+    }
+    await print({
+      docId: activeRow.sq_id,
+      accYear: activeRow.sq_acc_year,
+      branchId: activeRow.sq_branch_id,
+      filename: activeRow.sq_quote_refno
+        ? `quotation-${activeRow.sq_quote_refno}`
+        : `quotation-${activeRow.sq_id}`,
+    });
+  };
+
   return (
     <ModalShell
       title="Select quotation to alter"
@@ -310,10 +349,16 @@ export function QuotationListModal(props: QuotationListModalProps) {
         <button
           type="button"
           className={styles.toolButton}
-          onClick={() => toast.info("Printing is not available yet — the server has no print endpoint.")}
+          disabled={!activeRow || activeRowDeleted || isPrinting}
+          title={
+            activeRowDeleted
+              ? "This quotation is deleted and cannot be printed"
+              : "Print the highlighted quotation"
+          }
+          onClick={() => void printActiveRow()}
         >
           <FiPrinter aria-hidden="true" />
-          Print
+          {isPrinting ? "Printing…" : "Print"}
         </button>
         <button
           type="button"

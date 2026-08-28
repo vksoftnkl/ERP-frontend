@@ -20,7 +20,12 @@ import {
   useGetPrintTemplateQuery,
   useGetPrintTemplateSchemaQuery,
 } from "@/features/print-designer/api/printTemplateApi";
-import type { TemplateDefinition, TemplatePayload } from "@/features/print-designer/types/template-definition";
+import type {
+  ProviderDescriptor,
+  TemplateDefinition,
+  TemplatePayload,
+} from "@/features/print-designer/types/template-definition";
+import { useCanvasHost } from "@/features/print-designer/host/canvas-host";
 import { reconcileVocabulary } from "@/features/print-designer/lib/vocabulary";
 import {
   NUDGE_COARSE_MM,
@@ -79,10 +84,26 @@ export type DesignerShellProps =
       mode: "NEW";
       draft: { name: string; docType: string; outputMode: string; paperCode: string };
       definition: TemplateDefinition;
+    }
+  /**
+   * Opened by a HOST that owns the storage -- today the printing module, whose
+   * `print_template_version` holds the body. Nothing is fetched: the definition
+   * and the dataset list are handed in, because the `/reports/*` routes this
+   * designer was written against do not exist. See `host/canvas-host`.
+   */
+  | {
+      mode: "EMBEDDED";
+      draft: { name: string; docType: string; outputMode: string; paperCode: string };
+      definition: TemplateDefinition;
+      /** Stands in for `GET /reports/templates/datasets/catalogue`. */
+      datasets: ProviderDescriptor[];
+      /** Bumped by the host to re-seed the canvas after it reloads a revision. */
+      seedKey: string;
     };
 
 export function DesignerShell(props: DesignerShellProps) {
   const dispatch = useAppDispatch();
+  const host = useCanvasHost();
 
   const status = useAppSelector(selectStatus);
   const meta = useAppSelector(selectMeta);
@@ -108,9 +129,15 @@ export function DesignerShell(props: DesignerShellProps) {
     error: templateError,
   } = useGetPrintTemplateQuery(templateId ?? "", { skip: !templateId });
 
-  const { data: vocabulary } = useGetPrintTemplateSchemaQuery();
+  /*
+   * Both of these are skipped when the canvas is hosted. The endpoints answer
+   * 404, and everything they would supply is either a local constant
+   * (`lib/vocabulary.ts`) or handed in by the host (`props.datasets`).
+   */
+  const { data: vocabulary } = useGetPrintTemplateSchemaQuery(undefined, { skip: Boolean(host) });
   const { data: providers } = useGetPrintDatasetsQuery(
     props.mode === "EDIT" ? (template?.ptDocType ?? undefined) : props.draft.docType,
+    { skip: Boolean(host) },
   );
 
   // ── Loading ─────────────────────────────────────────────────────────
@@ -120,8 +147,9 @@ export function DesignerShell(props: DesignerShellProps) {
     }
   }, [dispatch, template]);
 
+  const seedKey = props.mode === "EMBEDDED" ? props.seedKey : props.mode;
   useEffect(() => {
-    if (props.mode !== "NEW") {
+    if (props.mode === "EDIT") {
       return;
     }
     dispatch(
@@ -134,18 +162,27 @@ export function DesignerShell(props: DesignerShellProps) {
           version: 0,
         },
         definition: props.definition,
+        // A hosted revision arrives already stored; only a brand new template
+        // starts life as unsaved work.
+        dirty: props.mode === "NEW",
       }),
     );
-    // A draft is seeded once; re-seeding on every render would discard the
-    // user's work on the next state change.
+    // Seeded once per revision, never on every render -- re-seeding would
+    // discard the operator's work on the next state change. `seedKey` is what
+    // the host changes when it genuinely wants a different revision loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispatch, props.mode]);
+  }, [dispatch, props.mode, seedKey]);
 
+  const hostedDatasets = props.mode === "EMBEDDED" ? props.datasets : null;
   useEffect(() => {
+    if (hostedDatasets) {
+      dispatch(datasetsLoaded(hostedDatasets));
+      return;
+    }
     if (providers) {
       dispatch(datasetsLoaded(providers));
     }
-  }, [dispatch, providers]);
+  }, [dispatch, hostedDatasets, providers]);
 
   useEffect(() => {
     if (!vocabulary) {
@@ -183,7 +220,11 @@ export function DesignerShell(props: DesignerShellProps) {
       }
       if (modifier && event.key.toLowerCase() === "p") {
         event.preventDefault();
-        setPreviewOpen(true);
+        // Rendering is server-side, and it takes a REVISION id the canvas
+        // does not know — only a host does. No host, no preview: the legacy
+        // `POST /reports/preview` this used to fall back to is 404 with the
+        // rest of `/reports/*`. See `host/canvas-host`.
+        if (host?.preview) setPreviewOpen(true);
         return;
       }
 
@@ -296,6 +337,7 @@ export function DesignerShell(props: DesignerShellProps) {
       view.showExpressions,
       view.showGrid,
       view.snapEnabled,
+      host,
     ],
   );
 
@@ -415,15 +457,29 @@ export function DesignerShell(props: DesignerShellProps) {
         </p>
       </div>
 
-      <PreviewDialog open={previewOpen} onClose={() => setPreviewOpen(false)} />
+      {/*
+        PREVIEW renders through the HOST, and only through the host: the server's
+        renderer takes a revision id, which is the one thing a bare canvas has
+        no way to name. So the dialog is mounted for a host that can render and
+        for nothing else — there is no `/reports/preview` to fall back to.
 
-      <RevisionsDrawer
-        open={revisionsOpen}
-        templateId={templateId}
-        currentVersion={meta.version}
-        onClose={() => setRevisionsOpen(false)}
-        onRestored={(restored: TemplatePayload) => dispatch(templateSaved(restored))}
-      />
+        REVISIONS stays a `/reports/*` client, and a hosted canvas has no row
+        there — the host owns the revision history, and shows it in its own
+        rail.
+      */}
+      {host?.preview ? (
+        <PreviewDialog open={previewOpen} onClose={() => setPreviewOpen(false)} />
+      ) : null}
+
+      {host ? null : (
+        <RevisionsDrawer
+          open={revisionsOpen}
+          templateId={templateId}
+          currentVersion={meta.version}
+          onClose={() => setRevisionsOpen(false)}
+          onRestored={(restored: TemplatePayload) => dispatch(templateSaved(restored))}
+        />
+      )}
 
       <ShortcutSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>

@@ -470,6 +470,16 @@ export type QuotationDocKey = {
   sqAccYear: string;
 };
 
+/**
+ * What a committed save hands back.
+ *
+ * The KEY, because the caller's next act may be to print the document, and by
+ * then the form has been cleared — a save that answered only `true` would leave
+ * "Save & print" with nothing to name. The reference number rides along for the
+ * filename; it is the only thing an operator would recognise the file by.
+ */
+export type SavedQuotationRef = QuotationDocKey & { quoteRefno: string | null };
+
 // ---------------------------------------------------------------------------
 // Lookup payloads
 // ---------------------------------------------------------------------------

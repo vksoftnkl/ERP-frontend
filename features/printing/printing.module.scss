@@ -1,0 +1,909 @@
+/**
+ * One stylesheet for the whole printing module, following `printing_ui_mockup`.
+ *
+ * The mockup's grammar, which every screen here repeats:
+ *
+ *   title + subtitle        what the screen is, and whose data it shows
+ *   tab strip               one tab on a list screen, three on the Designer
+ *   section head            a bold name, the TABLE it edits in mono, and --
+ *   payload slice           right-aligned -- the part of the request body it
+ *                           fills. That pairing is the whole point: three tabs
+ *                           over ONE save only reads as one thing if every
+ *                           section says which slice of the body it is.
+ *   toolbar                 actions left, search right
+ *   table                   dense, small caps headers, a ghost "add a row" line
+ *   notes                   tinted boxes: amber warns, red refuses, blue
+ *                           explains a design decision, green is a fact
+ *   footer bar              Close, then the primary action
+ *
+ * `.erp-app-content` already gives every page the space between the header and
+ * the footer, so the shell is `height: 100%` and never `100dvh`. A viewport unit
+ * would measure the UNSCALED viewport -- the app scales with `zoom` on <html> --
+ * and push the real footer off the screen.
+ */
+
+/* -- shell --------------------------------------------------------------- */
+
+.page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--page-bg);
+  overflow: hidden;
+}
+
+.head {
+  padding: 12px 16px 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+
+/** "Acme Foods · every design this company can print with" */
+.subtitle {
+  margin: 3px 0 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.subtitleSep {
+  margin: 0 6px;
+  opacity: 0.55;
+}
+
+.tabStrip {
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+  margin-top: 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+}
+
+.tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 6px 1px 7px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text-main);
+  }
+}
+
+.tabActive {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/** Close, then the primary action. Sticky, so a long Designer keeps it in reach. */
+.footerBar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--card-bg);
+}
+
+.footerNote {
+  margin-right: auto;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* -- sections ------------------------------------------------------------ */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+/** The table this section edits. Mono and coloured, so it reads as an identifier. */
+.sectionTable {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #9a2c2c;
+}
+
+.sectionQualifier {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+/** The slice of the request body this section fills — right-aligned, always. */
+.sectionSlice {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.sectionNote {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  max-width: 110ch;
+}
+
+/* -- chips --------------------------------------------------------------- */
+
+.chipRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--header-bg);
+  color: var(--text-soft);
+  font-size: 0.71rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chipAmber {
+  border-color: #dfc9a5;
+  background: #fdf5e7;
+  color: #7a5312;
+}
+
+.chipGreen {
+  border-color: #bcd9c6;
+  background: #eefaf1;
+  color: #1c6338;
+}
+
+.chipBlue {
+  border-color: #b9cbe4;
+  background: #eaf2ff;
+  color: #1d4076;
+}
+
+.chipRed {
+  border-color: #e0b4b4;
+  background: #fdeceb;
+  color: #9a2c2c;
+}
+
+.chipMono {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-weight: 500;
+}
+
+a.chip:hover {
+  background: var(--row-hover);
+  text-decoration: none;
+}
+
+/* -- notes --------------------------------------------------------------- */
+
+.note {
+  margin: 0;
+  padding: 7px 11px;
+  border-radius: var(--erp-radius);
+  border: 1px solid var(--border);
+  background: var(--header-bg);
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.noteAmber {
+  border-color: #dfc9a5;
+  background: #fdf5e7;
+  color: #6d4a10;
+}
+
+.noteRed {
+  border-color: #e0b4b4;
+  background: #fdeceb;
+  color: #8c2f2f;
+}
+
+.noteBlue {
+  border-color: #b9cbe4;
+  background: #eaf2ff;
+  color: #1d4076;
+}
+
+.noteGreen {
+  border-color: #bcd9c6;
+  background: #eefaf1;
+  color: #1c6338;
+}
+
+.notePlain {
+  border-color: transparent;
+  background: none;
+  padding-left: 0;
+  padding-right: 0;
+  color: var(--text-muted);
+}
+
+.noteRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* -- buttons ------------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.toolbarRight {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn,
+.btnPrimary,
+.btnGreen {
+  min-height: 29px;
+  padding: 0 12px;
+  border-radius: var(--erp-radius);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-soft);
+  white-space: nowrap;
+
+  &:hover:not(:disabled) {
+    background: var(--row-hover);
+  }
+}
+
+.btnPrimary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background: var(--primary-hover);
+  }
+}
+
+.btnGreen {
+  background: #eefaf1;
+  border-color: #bcd9c6;
+  color: #1c6338;
+
+  &:hover:not(:disabled) {
+    background: #ddf3e4;
+  }
+}
+
+.btn:disabled,
+.btnPrimary:disabled,
+.btnGreen:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--primary);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+
+  &:disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+}
+
+/* -- fields -------------------------------------------------------------- */
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 8px 20px;
+}
+
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 8px 20px;
+}
+
+/**
+ * A selector in a TOOLBAR, not in a form: the label hugs the control instead of
+ * sitting in a 110px column, so a row of four does not stretch across the page.
+ */
+.fieldInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.fieldInline > select,
+.fieldInline > input {
+  width: auto;
+  min-width: 130px;
+  max-width: 230px;
+}
+
+/** Label left, control right — the mockup's form row. */
+.field {
+  display: grid;
+  /* 96px fits "Revision note" and still leaves a select room for JSON_BANDS. */
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.fieldLabel {
+  font-size: 0.76rem;
+  color: var(--text-soft);
+}
+
+.input,
+.select {
+  min-height: 29px;
+  width: 100%;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: #fff;
+  font-size: 0.8rem;
+  font-family: inherit;
+  color: var(--text-main);
+
+  &:disabled {
+    background: var(--header-bg);
+    color: var(--text-muted);
+  }
+}
+
+.search {
+  min-width: 260px;
+}
+
+/** The four margin boxes, which read as one control. */
+.marginGroup {
+  display: flex;
+  gap: 4px;
+}
+
+.marginBox {
+  width: 38px;
+  min-width: 0;
+  padding: 0 3px;
+  text-align: center;
+}
+
+/** A field that needs the whole row of a grid — the four margin boxes do. */
+.fieldSpan {
+  grid-column: 1 / -1;
+}
+
+.checkRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8rem;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.mono {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+/* -- tables -------------------------------------------------------------- */
+
+.tableWrap {
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: var(--card-bg);
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.79rem;
+}
+
+.table th {
+  text-align: left;
+  padding: 6px 9px;
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.69rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 5px 9px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.rowClickable {
+  cursor: pointer;
+
+  &:hover > td {
+    background: var(--row-hover);
+  }
+}
+
+.rowSelected > td {
+  background: #eaf2ff;
+}
+
+/** A design with no published revision. Loud here, or discovered at a till. */
+.rowWarning > td {
+  background: #fdf5e7;
+}
+
+.rowPublished > td {
+  background: #f4fbf6;
+}
+
+/** The "add a row…" line the mockup ends each editable grid with. */
+.ghostRow > td {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-style: italic;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--row-hover);
+  }
+}
+
+.cellInput,
+.cellSelect {
+  width: 100%;
+  min-height: 25px;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  font-size: 0.79rem;
+  font-family: inherit;
+  color: var(--text-main);
+
+  &:hover:not(:disabled) {
+    border-color: var(--border);
+    background: #fff;
+  }
+
+  &:focus {
+    border-color: var(--primary);
+    background: #fff;
+    outline: none;
+  }
+
+  &:disabled {
+    color: var(--text-soft);
+  }
+}
+
+.cellSelect {
+  appearance: auto;
+}
+
+.cellNum {
+  width: 62px;
+  text-align: right;
+}
+
+.cellTiny {
+  width: 54px;
+}
+
+.cellSmall {
+  width: 96px;
+}
+
+.colNum {
+  width: 52px;
+}
+
+.colTiny {
+  width: 66px;
+}
+
+/** Wide enough for the longest member of the vocabulary, not for a number. */
+.colPick {
+  width: 122px;
+}
+
+.colSmall {
+  width: 110px;
+}
+
+.truncate {
+  display: block;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* -- status pills -------------------------------------------------------- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--header-bg);
+  color: var(--text-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.pillPublished {
+  border-color: #bcd9c6;
+  background: #eefaf1;
+  color: #1c6338;
+}
+
+.pillDraft {
+  border-color: #dfc9a5;
+  background: #fdf5e7;
+  color: #7a5312;
+}
+
+.pillNone {
+  border-color: #e0b4b4;
+  background: #fdeceb;
+  color: #9a2c2c;
+}
+
+/* -- editors ------------------------------------------------------------- */
+
+.textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: #fff;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--text-main);
+  resize: vertical;
+
+  &:disabled {
+    background: var(--header-bg);
+    color: var(--text-soft);
+  }
+}
+
+.textareaTall {
+  min-height: 380px;
+}
+
+.splitRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 12px 20px;
+  align-items: start;
+}
+
+.findingList {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 0.74rem;
+  color: #8c2f2f;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.findingRule {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.cellFinding {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.7rem;
+  color: #8c2f2f;
+}
+
+/* -- assignments matrix -------------------------------------------------- */
+
+.effective {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.effectiveWinner {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.effectiveFrom {
+  font-size: 0.71rem;
+  color: var(--text-muted);
+}
+
+/** A purpose with nothing configured is a till that prints nothing. */
+.effectiveNone {
+  color: #9a2c2c;
+  font-weight: 700;
+}
+
+.cellEmpty {
+  color: var(--text-muted);
+}
+
+/* -- assignment editor ---------------------------------------------------- */
+
+/**
+ * Three elements, not one. The scrim lives on `.backdrop` and never on
+ * `.overlay`: a scrim painted on the same layer as an un-promoted panel
+ * composites over it as a dark ghost on GPU Chromium. See
+ * `components/ui/modal-portal.tsx` and the delete-confirm modal, which this
+ * mirrors deliberately.
+ *
+ * Every token used inside is `:root`-scoped (`app/globals.css`), so portaling
+ * out of `.page` costs nothing.
+ */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--erp-z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgb(0 0 0 / 42%);
+  cursor: pointer;
+}
+
+.modal {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 760px);
+  max-height: min(88vh, 780px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: var(--card-bg, #fff);
+  box-shadow: 0 18px 44px rgb(15 18 40 / 24%);
+  /* Promoted before the first paint rather than by the animation mid-flight. */
+  will-change: transform, opacity;
+  animation: printingModalIn 0.2s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+}
+
+@keyframes printingModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.modalHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.modalBody {
+  padding: 12px 16px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modalFoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--header-bg);
+  border-radius: 0 0 var(--erp-radius) var(--erp-radius);
+}
+
+.formSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/** The section name, then the columns it fills — the mockup's pairing. */
+.formSectionTitle {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-soft);
+
+  > span {
+    margin-left: 8px;
+    font-size: 0.68rem;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-muted);
+  }
+}
+
+/** A form label column wide enough for "Output mode" and "Queue name". */
+.fieldWide {
+  grid-template-columns: 108px minmax(0, 1fr);
+}
+
+.fieldError {
+  margin: 0;
+  font-size: 0.74rem;
+  color: #8c2f2f;
+}
+
+/* -- matrix cell actions -------------------------------------------------- */
+
+.cellActions {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.cellEdit {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+
+  &:hover {
+    color: var(--primary);
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    opacity: 1;
+  }
+}
+
+/* Revealed on the row, so a full matrix is not a wall of controls. */
+.table tbody tr:hover .cellEdit {
+  opacity: 1;
+}
+
+/** An empty rung is a choice nobody has made — clicking it makes one. */
+.cellSet {
+  border: 1px dashed var(--border);
+  border-radius: var(--erp-radius);
+  background: none;
+  padding: 1px 7px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  cursor: pointer;
+
+  &:hover {
+    border-style: solid;
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+}

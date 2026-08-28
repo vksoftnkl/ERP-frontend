@@ -221,12 +221,32 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         children:[
           // The DB menu (fixed.menu_master 62) carries the label; this is where
           // it picks up its route — see applyMenuMasterLabels below.
-          {label:"Printing Configuration",href:"/settings/print-templates"},
+          //
+          // It used to point at /settings/print-templates, the print-designer's
+          // own list. That screen is a `/reports/*` client and the server has no
+          // reporting module at all, so every one of its calls answered 404 —
+          // the list, the designer it opened, and that designer's Preview
+          // (`POST /reports/preview`). It now points at the 17_printing engine,
+          // which is the same job over tables that exist.
+          //
+          // REPOINTING rather than adding a row is what keeps the permission
+          // gate happy: menu 62 is already seeded and already granted, so the
+          // route stays governed by a grant users have. A NEW label here would
+          // need a fixed.menu_master row first — see features/printing/routes.ts.
+          {label:"Printing Configuration",href:"/settings/printing/templates"},
+          {label:"Printing Assignments",href:"/settings/printing/assignments"},
           // fixed.menu_master 246 ("app settings", under Configuration) carries
           // the label; this is where it picks up its route.
           {label:"App Settings",href:"/settings/app-settings"},
           {label:"Price Level Configuration",href:"/master/price-level-configuration"},
-          {label:"Charge Master",href:"/master/charge-master"}
+          {label:"Charge Master",href:"/master/charge-master"},
+          // /settings/printing/assignments is DELIBERATELY still unbound.
+          // Binding an href makes the route GOVERNED — the permission gate then
+          // denies anyone whose usermenu lacks it — and fixed.menu_master has no
+          // row for it, so binding it today would lock every user, admins
+          // included, out of a screen that otherwise works. It is reached from a
+          // design's "used by" chip until a row is seeded; see
+          // features/printing/routes.ts for the row and the line to add.
         ]
       },
       {label:"User Administration",href:"/master/user-administration"},
