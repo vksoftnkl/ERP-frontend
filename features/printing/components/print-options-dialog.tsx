@@ -60,6 +60,7 @@ import {
 import {
   firstAssignment,
   templateFormatOptions,
+  type FormatOption,
 } from "@/features/printing/domain/printOptions";
 import { purposeLabel } from "@/features/printing/domain/purposes";
 import DocumentPreviewDialog from "@/features/printing/components/document-preview-dialog";
@@ -104,9 +105,26 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
    */
   const deviceId = userInfo?.deviceId?.trim() || undefined;
 
-  /** Which step: the five buttons, the format list, or the rendered paper. */
+  /** Which step: the five buttons, or the format list. */
   const [step, setStep] = useState<"ask" | "format">("ask");
+  /** The dropdown's working value, before OK confirms it. */
   const [chosenPtlId, setChosenPtlId] = useState<string>("");
+  /*
+   * The design the operator CHOSE, once OK has confirmed it.
+   *
+   * Format picks a design; it does not print one. Choosing a format and being
+   * shown paper in the same gesture makes it impossible to say "print it on
+   * this" — the operator would have to go back through the chooser for every
+   * one of Print, Preview and Pdf. So OK comes back to the buttons, and this is
+   * what they then act on.
+   *
+   * Null means "whatever this counter is configured to use", which is what the
+   * buttons did before a format was ever chosen and what they go back to when
+   * the dialog is reopened.
+   */
+  const [selectedFormat, setSelectedFormat] = useState<FormatOption | null>(
+    null,
+  );
   /** The design the popup is showing, once one of the three has picked it. */
   const [previewing, setPreviewing] = useState<{
     ptlId: string;
@@ -212,17 +230,20 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
     if (open) {
       setStep("ask");
       setChosenPtlId("");
+      setSelectedFormat(null);
       setPreviewing(null);
     }
   }, [open]);
 
   // Something is always selected when the list opens, so OK is never a dead
   // button waiting for a choice the operator did not know they had to make.
+  // Reopening the chooser lands on the format already in force, not on the top
+  // of the list — otherwise OK would silently change the choice.
   useEffect(() => {
     if (step === "format" && !chosenPtlId && options[0]) {
-      setChosenPtlId(options[0].ptlId);
+      setChosenPtlId(selectedFormat?.ptlId ?? options[0].ptlId);
     }
-  }, [chosenPtlId, options, step]);
+  }, [chosenPtlId, options, selectedFormat, step]);
 
   if (!open) {
     return null;
@@ -279,8 +300,20 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
     };
   };
 
+  /**
+   * The design the action buttons act on.
+   *
+   * A chosen format wins over the ladder — that is the entire point of having
+   * chosen one. No revision is named with it, so the popup takes the design's
+   * published revision, else its newest.
+   */
+  const designForAction = (): { ptlId: string; ptvId: string | null } | null =>
+    selectedFormat
+      ? { ptlId: selectedFormat.ptlId, ptvId: null }
+      : resolveForViewing();
+
   const onPreview = (): void => {
-    const design = resolveForViewing();
+    const design = designForAction();
     if (design) showPreview(design.ptlId, design.ptvId);
   };
 
@@ -302,11 +335,17 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
    * hook.
    */
   const onPrint = (): void => {
-    const design = resolveForViewing();
+    const design = designForAction();
     if (design) showPreview(design.ptlId, design.ptvId, true);
   };
 
   const onPdf = (): void => {
+    // A chosen format wins here too; without one this is "the usual design,
+    // without asking" — the first assignment.
+    if (selectedFormat) {
+      showPreview(selectedFormat.ptlId);
+      return;
+    }
     const first = firstAssignment(
       assignmentList.data?.items,
       purpose?.ppoId ?? "",
@@ -318,14 +357,22 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
     showPreview(first.ptaTemplateId);
   };
 
+  /**
+   * OK on the chooser goes BACK to the buttons, not to paper.
+   *
+   * Choosing a format answers "on what", and Print / Preview / Pdf answer "and
+   * then what" — two questions, asked in that order. Rendering here would
+   * answer the second one on the operator's behalf, and pick the wrong answer
+   * for anyone who came to Format in order to PRINT on something else.
+   */
   const onFormatConfirm = (): void => {
     const chosen = options.find((option) => option.ptlId === chosenPtlId);
     if (!chosen) {
       toast.error("Choose a format first.");
       return;
     }
-    // No revision named: the popup takes the published one, else the newest.
-    showPreview(chosen.ptlId);
+    setSelectedFormat(chosen);
+    setStep("ask");
   };
 
   if (previewing) {
@@ -378,6 +425,22 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
                     {purposeNotConfigured(purposeCode)}
                   </p>
                 )}
+                {/* What the buttons will act on. Shown only once a format has
+                    been chosen: before that they use whatever this counter is
+                    configured for, and naming that would be stating the
+                    default as though it were a decision. */}
+                {selectedFormat ? (
+                  <p className={styles.muted} style={{ margin: 0 }}>
+                    Format: <strong>{selectedFormat.label}</strong>{" "}
+                    <button
+                      type="button"
+                      className={styles.link}
+                      onClick={() => setSelectedFormat(null)}
+                    >
+                      use the default
+                    </button>
+                  </p>
+                ) : null}
               </div>
               <footer className={styles.modalFoot}>
                 <button
@@ -405,7 +468,11 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
                       ? "No design has been drawn for this document yet"
                       : "Choose which design to print on"
                   }
-                  onClick={() => setStep("format")}
+                  onClick={() => {
+                    // Land on the format in force, not the top of the list.
+                    setChosenPtlId(selectedFormat?.ptlId ?? "");
+                    setStep("format");
+                  }}
                 >
                   Format
                 </button>
@@ -415,11 +482,13 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
                 <button
                   type="button"
                   className={styles.btn}
-                  disabled={!purpose || !hasAssignment}
+                  disabled={!purpose || !(selectedFormat || hasAssignment)}
                   title={
-                    hasAssignment
-                      ? "Print the design configured for this counter"
-                      : "No design is assigned to this counter yet"
+                    selectedFormat
+                      ? `Open ${selectedFormat.label}`
+                      : hasAssignment
+                        ? "Print the design configured for this counter"
+                        : "No design is assigned to this counter yet"
                   }
                   onClick={onPdf}
                 >
