@@ -60,12 +60,29 @@ export function purposeNotConfigured(code: string): string {
   );
 }
 
+/**
+ * The document, and nothing about who is printing it.
+ *
+ * There is no company, no branch and no counter here, and there is deliberately
+ * nowhere to put one: all three are claims on the access token, and the last two
+ * are the rungs the assignment ladder resolves by, so a screen able to name them
+ * would be a screen choosing its own design. The counter is the one that used to
+ * bite — this client holds two ids called "device" and only `userInfo.deviceId`
+ * is a real `fixed.device_master` row, so sending the other resolved nothing and
+ * then failed `fk_plg_device` after the paper had already been rendered.
+ */
 export type DocumentPrintTarget = {
   /** The document. */
   docId: string;
-  /** The DOCUMENT's accounting year, not today's — a reprint of last year's paper. */
-  accYear: string;
-  branchId?: string | null;
+  /**
+   * The DOCUMENT's accounting year, where it may not be the current one — a
+   * reprint of last year's paper reads last year's partition.
+   *
+   * Optional, and left out for anything printed in the year it was raised: the
+   * server binds the company's own `fiscal_years.fy_is_current`, which is a
+   * better answer than a screen restating what it read out of the same session.
+   */
+  accYear?: string;
   /** Recorded on the print log's source quad; each defaults to the purpose's own. */
   srcModule?: string;
   srcDocType?: string;
@@ -74,26 +91,14 @@ export type DocumentPrintTarget = {
   /** Filename stem for the download, without extension. */
   filename?: string;
   params?: Record<string, unknown>;
-  /**
-   * The COUNTER — a real `fixed.device_master` row, and the narrowest rung of
-   * the assignment ladder.
-   *
-   * It is the id the LOGIN RESPONSE carries (`userInfo.deviceId`), never
-   * `getOrCreateClientDeviceId()`: that one is a localStorage `randomUUID`
-   * minted for the transaction-hold lock and names no device row, so sending it
-   * would resolve nothing and then fail `fk_plg_device` after the paper had
-   * been rendered. Omitted when the session has none, which resolves the ladder
-   * from the branch up.
-   */
-  deviceId?: string | null;
 };
 
 /**
  * The request, with blanks omitted rather than sent empty.
  *
- * `branchId: ""` would reach the server as a uuid that fails validation, while
- * an absent branch is a legitimate render — it simply resolves the ladder one
- * rung wider. Same reasoning as `buildPreviewRequest`, and the same rule.
+ * `accYear: ""` would fail the server's shape check, while an absent one is a
+ * legitimate print — the current fiscal year is bound in its place. Same
+ * reasoning as `buildPreviewRequest`, and the same rule.
  */
 export function buildDocumentPrintRequest(
   purposeId: string,
@@ -110,14 +115,7 @@ export function buildDocumentPrintRequest(
   if (!docId) {
     throw new Error("There is no saved document to print yet.");
   }
-  if (!accYear) {
-    throw new Error(
-      "This document carries no accounting year, and the renderer needs it to find the rows.",
-    );
-  }
 
-  const branchId = trimmed(target.branchId);
-  const deviceId = trimmed(target.deviceId);
   const srcModule = trimmed(target.srcModule);
   const srcDocType = trimmed(target.srcDocType);
   const filename = trimmed(target.filename);
@@ -125,9 +123,9 @@ export function buildDocumentPrintRequest(
   return {
     purposeId,
     docId,
-    accYear,
-    ...(branchId ? { branchId } : {}),
-    ...(deviceId ? { deviceId } : {}),
+    // Only when the document actually carries one. Blank means "the year this
+    // session is working in", which the server answers better than this can.
+    ...(accYear ? { accYear } : {}),
     ...(srcModule ? { srcModule } : {}),
     ...(srcDocType ? { srcDocType } : {}),
     ...(filename ? { filename } : {}),

@@ -9,8 +9,11 @@
  *
  *   1. Turning a purpose CODE into the id the renderer is addressed by. See
  *      `domain/documentPrint.ts` for why the id is never written down.
- *   2. The request itself, and the fact that the company and the counter are
- *      NOT part of it (`api/render.ts` has both reasons).
+ *   2. The request itself, and the fact that the company, the branch and the
+ *      counter are NOT part of it (`api/render.ts` has the reasons). The
+ *      counter used to be supplied here, out of the login response, so that no
+ *      screen had to know which of this client's two device ids was the real
+ *      one; the access token carries it now and nothing sends it at all.
  *   3. Getting bytes in front of a printer, which is the part below that looks
  *      like it should be one line and is not.
  *
@@ -41,8 +44,6 @@ import {
 } from "@/features/printing/domain/documentPrint";
 import { sendToPrinter } from "@/features/printing/print-delivery";
 import { getApiErrorMessage } from "@/store/api";
-import { useAppSelector } from "@/store/hooks";
-import { selectUserInfo } from "@/store/slices/authSlice";
 
 export type UseDocumentPrintOptions = {
   /** Scopes the purpose catalogue: the shipped rows plus this company's own. */
@@ -74,14 +75,6 @@ export function useDocumentPrint(
     useGetPrintPurposeOptionsQuery({
       companyId: companyId?.trim() ? companyId : null,
     });
-  /*
-   * The counter this session signed in as — the login response's `device_id`,
-   * which IS a `fixed.device_master` row. Supplied here rather than by every
-   * caller so no screen has to know which of this client's two device ids is
-   * the real one; a caller may still override it on the target.
-   */
-  const sessionDeviceId =
-    useAppSelector(selectUserInfo)?.deviceId?.trim() || undefined;
   const [printDocument, { isLoading: isPrinting }] = usePrintDocumentMutation();
 
   const print = useCallback(
@@ -98,14 +91,10 @@ export function useDocumentPrint(
 
       let request;
       try {
-        request = buildDocumentPrintRequest(purpose.ppoId, {
-          deviceId: sessionDeviceId,
-          // After the default, so a caller that names a counter wins.
-          ...target,
-        });
+        request = buildDocumentPrintRequest(purpose.ppoId, target);
       } catch (error) {
-        // The two throws in the builder are both sentences meant for an
-        // operator: no saved document, or no accounting year on it.
+        // The one throw in the builder is a sentence meant for an operator:
+        // there is no saved document to print.
         toast.error(
           error instanceof Error
             ? error.message
@@ -142,7 +131,7 @@ export function useDocumentPrint(
         return false;
       }
     },
-    [printDocument, purposeCode, purposes, purposesLoading, sessionDeviceId],
+    [printDocument, purposeCode, purposes, purposesLoading],
   );
 
   return { print, isPrinting, isReady: !purposesLoading };

@@ -30,7 +30,7 @@ import { FiEdit3, FiLayout, FiPrinter, FiRefreshCw } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { cx } from "@/components/design-system/cx";
 import { useListQuotationsQuery } from "@/store/api/quotationApi";
-import { useDocumentPrint } from "@/features/printing/hooks/useDocumentPrint";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
 import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import type { QuotationDocKey, QuotationListRow } from "../quotation.types";
@@ -101,6 +101,17 @@ export function QuotationListModal(props: QuotationListModalProps) {
   const [period, setPeriod] = useState<Period>("all");
   const [localPage, setLocalPage] = useState(1);
   const [activeIndex, setActiveIndex] = useState(0);
+  /**
+   * The row the Print button is showing the print dialog for.
+   *
+   * The ROW itself, not a flag: the highlight moves with the arrow keys while
+   * the dialog is open, so a dialog reading `activeRow` would retarget itself
+   * under the operator. Its own accounting year travels with it, because that
+   * year decides which partition the renderer reads and a quotation raised last
+   * year is not in this one. Company, branch and counter do not: the server
+   * takes all three from the access token.
+   */
+  const [printRow, setPrintRow] = useState<QuotationListRow | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -111,6 +122,10 @@ export function QuotationListModal(props: QuotationListModalProps) {
       setPeriod("all");
       setLocalPage(1);
       setActiveIndex(0);
+      // Closing the list unmounts the print dialog with the panel but leaves
+      // this component (and so this state) alive; without the reset, reopening
+      // F8 would come up with the previous row's print dialog already on it.
+      setPrintRow(null);
     }
   }, [isOpen]);
 
@@ -210,39 +225,33 @@ export function QuotationListModal(props: QuotationListModalProps) {
   const activeRowDeleted = activeRow ? isDeleted(activeRow.sq_is_deleted) : false;
 
   const { permissions } = usePagePermissions();
-  const { print, isPrinting } = useDocumentPrint({
-    companyId,
-    purposeCode: PURPOSE_CODE.SALE_QUOTATION,
-  });
 
   /*
    * Print the HIGHLIGHTED row, not the one the form has open — this dialog's
    * whole point is reaching another quotation without loading it, and printing
    * one is the commonest reason to want that.
    *
-   * The row's OWN scope is sent, not the form's. They agree today (the tenant
-   * filter above drops anything that does not), but the row is what is being
-   * printed and the accounting year decides which partition the renderer reads.
+   * The row's own ACCOUNTING YEAR goes with it and nothing else does. Company,
+   * branch and counter are claims on the access token now, so a screen naming
+   * them would only be restating a default it read out of the same session —
+   * and would be free to restate it wrong.
    *
-   * `isReprint` is deliberately NOT set. A reprint is a claim that this paper
-   * came out once already, and nothing here knows that: `print_log` is the
-   * record and this dialog does not read it. Every print logs a row either way,
-   * so the history stays true; guessing REPRINT would put a wrong word in it.
+   * Opens the same five-button dialog the Quotation List page and the entry
+   * screen's Save & print (F6) open — Print, Preview, Format, Pdf, Cancel —
+   * rather than sending paper on the spot, so the three ways into a quotation's
+   * paper ask the same question.
+   *
+   * Nothing here writes to `print_log`: that dialog renders through
+   * `/print-render/preview` for all four buttons. See its header comment for
+   * what that costs and how to put the logging back.
    */
-  const printActiveRow = async (): Promise<void> => {
+  const printActiveRow = (): void => {
     if (!activeRow) return;
     if (!permissions.canPrint) {
       toast.error("You do not have permission to print on this screen.");
       return;
     }
-    await print({
-      docId: activeRow.sq_id,
-      accYear: activeRow.sq_acc_year,
-      branchId: activeRow.sq_branch_id,
-      filename: activeRow.sq_quote_refno
-        ? `quotation-${activeRow.sq_quote_refno}`
-        : `quotation-${activeRow.sq_id}`,
-    });
+    setPrintRow(activeRow);
   };
 
   return (
@@ -349,16 +358,16 @@ export function QuotationListModal(props: QuotationListModalProps) {
         <button
           type="button"
           className={styles.toolButton}
-          disabled={!activeRow || activeRowDeleted || isPrinting}
+          disabled={!activeRow || activeRowDeleted}
           title={
             activeRowDeleted
               ? "This quotation is deleted and cannot be printed"
               : "Print the highlighted quotation"
           }
-          onClick={() => void printActiveRow()}
+          onClick={printActiveRow}
         >
           <FiPrinter aria-hidden="true" />
-          {isPrinting ? "Printing…" : "Print"}
+          Print
         </button>
         <button
           type="button"
@@ -469,7 +478,7 @@ export function QuotationListModal(props: QuotationListModalProps) {
                   data-selected={index === activeIndex ? "true" : undefined}
                   data-deleted={deleted ? "true" : undefined}
                   onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => choose(row)}
+                  onDoubleClick={() => choose(row)}
                 >
                   <td>{toDateInput(row.sq_quote_date)}</td>
                   <td>{row.sq_quote_refno ?? "—"}</td>
@@ -496,6 +505,21 @@ export function QuotationListModal(props: QuotationListModalProps) {
           </tbody>
         </table>
       </div>
+      {printRow ? (
+        <PrintOptionsDialog
+          open
+          onClose={() => setPrintRow(null)}
+          purposeCode={PURPOSE_CODE.SALE_QUOTATION}
+          documentLabel={
+            printRow.sq_quote_refno ? `Quotation ${printRow.sq_quote_refno}` : "Quotation"
+          }
+          target={{
+            docId: printRow.sq_id,
+            accYear: printRow.sq_acc_year,
+            filename: `quotation-${printRow.sq_quote_refno || printRow.sq_id}`,
+          }}
+        />
+      ) : null}
     </ModalShell>
   );
 }

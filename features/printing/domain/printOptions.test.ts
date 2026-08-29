@@ -206,20 +206,20 @@ describe("buildDocumentPreviewRequest", () => {
     ).not.toHaveProperty("body");
   });
 
-  it("never sends a company — the server takes it from the session", () => {
-    expect(buildDocumentPreviewRequest(base)).not.toHaveProperty("companyId");
-  });
-
-  it("omits blanks rather than sending them empty", () => {
+  it("never sends a company, a branch or a counter — the token carries all three", () => {
     const request = buildDocumentPreviewRequest({
       ...base,
-      accYear: "  ",
-      branchId: "",
-      deviceId: null,
-    });
-    expect(request).not.toHaveProperty("accYear");
+      accYear: "2026-2027",
+    }) as Record<string, unknown>;
+    expect(request).not.toHaveProperty("companyId");
     expect(request).not.toHaveProperty("branchId");
     expect(request).not.toHaveProperty("deviceId");
+  });
+
+  it("omits a blank year rather than sending it empty", () => {
+    // Absent means "the year this session is working in", which the server binds
+    // from the company's own fy_is_current.
+    expect(buildDocumentPreviewRequest({ ...base, accYear: "  " })).not.toHaveProperty("accYear");
   });
 
   it("refuses a document that has not been saved", () => {

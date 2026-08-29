@@ -12,6 +12,12 @@
  * preview endpoint a cross-tenant read with a friendly name. There is no field
  * for it here on purpose.
  *
+ * NOR ARE THE BRANCH AND THE COUNTER. Same reason, one step further: both are
+ * claims on the access token, signed at login from the `fixed.device_master`
+ * row the login matched, and both are rungs of the assignment ladder. A caller
+ * able to name them is a caller choosing which design it wins. The fields are
+ * gone rather than optional, so there is nowhere to put one back by accident.
+ *
  * THE BODY GOES ONLY WHEN THE REVISION IS EDITABLE. A published revision is
  * frozen so that `print_log.plg_version_id` can point at it truthfully, and the
  * server refuses an unsaved body against one. Rather than send a request that
@@ -38,9 +44,14 @@ export type PreviewRequestInput = {
   /** The canvas's current design. */
   definition: TemplateDefinition;
   docId?: string;
+  /**
+   * The DOCUMENT's own accounting year, where the canvas was given one.
+   *
+   * Not the session's — that is the server's to know, from the company's
+   * `fy_is_current`, and a screen that sent it would only be restating a
+   * default it had read out of the same session the server is already in.
+   */
   accYear?: string;
-  branchId?: string;
-  deviceId?: string;
   /** Omitted lets the engine decide: GRAPHIC → PDF, GRID → ESCPOS. */
   outputMode?: string;
   /**
@@ -69,8 +80,6 @@ export function buildPreviewRequest(input: PreviewRequestInput): RenderPreviewRe
 
   const docId = trimmed(input.docId);
   const accYear = trimmed(input.accYear);
-  const branchId = trimmed(input.branchId);
-  const deviceId = trimmed(input.deviceId);
   const outputMode = trimmed(input.outputMode);
 
   // `bodyFromDefinition` is typed as PtvBodyInput, which allows the raw string
@@ -90,8 +99,6 @@ export function buildPreviewRequest(input: PreviewRequestInput): RenderPreviewRe
     ...(jsonBody ? { body: jsonBody } : {}),
     ...(docId ? { docId } : {}),
     ...(accYear ? { accYear } : {}),
-    ...(branchId ? { branchId } : {}),
-    ...(deviceId ? { deviceId } : {}),
     ...(outputMode ? { outputMode } : {}),
     // An empty object is omitted rather than sent: a revision that asks nothing
     // should produce a request that says nothing about parameters.

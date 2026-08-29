@@ -80,7 +80,17 @@ export type AssignmentListQuery = {
  * genuinely is a different artifact from an A4 tax invoice.
  */
 export type ResolveQuery = {
-  companyId: string;
+  /**
+   * Which scope is asking. All three are OPTIONAL and default, server-side, to
+   * the session's own — a print button asking "what would I print" should not
+   * have to describe itself, and company, branch and counter are all claims on
+   * the access token.
+   *
+   * The Assignments screen still names them, because its question is the other
+   * one: "what would a DIFFERENT counter print". That is what an effective-design
+   * matrix is for, and it is the only caller with a reason to say.
+   */
+  companyId?: string;
   branchId?: string | null;
   deviceId?: string | null;
   purposeId: string;

@@ -53,33 +53,34 @@ describe("buildDocumentPrintRequest", () => {
     });
   });
 
-  it("never sends a company or a counter", () => {
-    // The company comes from the session — a caller-supplied one would make the
-    // renderer a cross-tenant read. The counter is a `device_master` row, and
-    // this client's device id is a localStorage uuid that names none.
+  it("never sends a company, a branch or a counter", () => {
+    // All three come from the access token. A caller-supplied company would make
+    // the renderer a cross-tenant read; a caller-supplied branch or counter
+    // would be a screen picking which rung of the assignment ladder it wins on.
     const request = buildDocumentPrintRequest("01a041fa-quote", target) as Record<string, unknown>;
     expect(request).not.toHaveProperty("companyId");
+    expect(request).not.toHaveProperty("branchId");
     expect(request).not.toHaveProperty("deviceId");
   });
 
   it("omits blanks rather than sending them empty", () => {
-    // `branchId: ""` reaches the server as a uuid that fails validation; an
-    // absent branch simply resolves the ladder one rung wider.
+    // `accYear: ""` fails the server's shape check; an absent one means "the
+    // year this session is working in", which the server binds itself.
     const request = buildDocumentPrintRequest("01a041fa-quote", {
       ...target,
-      branchId: "   ",
+      accYear: "   ",
       srcDocType: "",
       filename: "",
     });
-    expect(request).not.toHaveProperty("branchId");
+    expect(request).not.toHaveProperty("accYear");
     expect(request).not.toHaveProperty("srcDocType");
     expect(request).not.toHaveProperty("filename");
   });
 
   it("trims what it does send", () => {
     expect(
-      buildDocumentPrintRequest("01a041fa-quote", { ...target, branchId: " 01a0-branch " }),
-    ).toMatchObject({ branchId: "01a0-branch" });
+      buildDocumentPrintRequest("01a041fa-quote", { ...target, accYear: " 2026-2027 " }),
+    ).toMatchObject({ accYear: "2026-2027" });
   });
 
   it("omits isReprint unless it is true", () => {
@@ -113,11 +114,13 @@ describe("buildDocumentPrintRequest", () => {
     );
   });
 
-  it("refuses a document with no accounting year", () => {
-    // The renderer binds :acc_year to reach the right partition; without one it
-    // would read the wrong year's rows or none at all.
-    expect(() => buildDocumentPrintRequest("01a041fa-quote", { ...target, accYear: " " })).toThrow(
-      /accounting year/i,
-    );
+  it("prints without an accounting year, leaving the server to bind the current one", () => {
+    // It used to refuse. The renderer binds the company's own fy_is_current when
+    // the body names no year, so a screen printing what it just saved has
+    // nothing to say — only a reprint of an older document names its own.
+    expect(buildDocumentPrintRequest("01a041fa-quote", { docId: "01a0-doc" })).toEqual({
+      purposeId: "01a041fa-quote",
+      docId: "01a0-doc",
+    });
   });
 });

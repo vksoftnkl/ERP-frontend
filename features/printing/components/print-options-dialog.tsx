@@ -37,6 +37,19 @@
  * Company, branch and counter come from the session; the purpose comes from the
  * screen as a CODE. Nothing here takes an id from a caller, because every id
  * this dialog needs is either resolved or configured.
+ *
+ * That is now true of the WIRE too, not just of this component's props. The
+ * render and resolve endpoints take company, branch, counter and accounting
+ * year from the access token and the company's current fiscal year, so this
+ * dialog sends none of them: a screen that stated the defaults would only be
+ * restating, out of the same session, what the server already knows — and would
+ * be free to state them wrong. The one thing still worth sending is a
+ * DOCUMENT's own accounting year, and only where it may differ from the current
+ * one: a reprint of last year's paper lives in last year's partition.
+ *
+ * The company IS still read here, from the business context, for the three
+ * catalogue reads — purposes, designs, assignments. Those are pick lists being
+ * narrowed for a human, not scope being claimed for a render.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -45,7 +58,7 @@ import { toast } from "react-toastify";
 import ModalPortal from "@/components/ui/modal-portal";
 import { getApiErrorMessage } from "@/store/api";
 import { useAppSelector } from "@/store/hooks";
-import { selectUserInfo } from "@/store/slices/authSlice";
+import { selectBusinessContext } from "@/store/slices/authSlice";
 import {
   useListPrintingAssignmentsQuery,
   useResolvePrintingAssignmentQuery,
@@ -71,8 +84,6 @@ export type PrintOptionsDialogProps = {
   onClose: () => void;
   /** `PURPOSE_CODE.SALE_QUOTATION` and friends — never an id. */
   purposeCode: string;
-  companyId: string;
-  branchId?: string | null;
   /** The document, and what to call the file. */
   target: DocumentPrintTarget;
   /** Overrides the "Godown Delivery Chit" in the question. Defaults to the purpose's name. */
@@ -85,25 +96,19 @@ const ASSIGNMENT_LIMIT = 100;
 const TEMPLATE_LIMIT = 100;
 
 export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
-  const {
-    open,
-    onClose,
-    purposeCode,
-    companyId,
-    branchId,
-    target,
-    documentLabel,
-  } = props;
+  const { open, onClose, purposeCode, target, documentLabel } = props;
 
-  const userInfo = useAppSelector(selectUserInfo);
   /*
-   * The COUNTER, and a real `fixed.device_master` row — the id the login
-   * response carries, not `getOrCreateClientDeviceId()`, which is a localStorage
-   * uuid minted for the transaction-hold lock and names no device anywhere.
-   * Getting these two confused resolves the ladder one rung too wide and, on a
-   * print, fails `fk_plg_device` after the paper has already been rendered.
+   * The company the CATALOGUES are narrowed to, and nothing else.
+   *
+   * Not sent to `/resolve` and not sent to a render: both take the company from
+   * the access token, and the two can legitimately differ — the header picker is
+   * client state that auto-selects the first company, while the server always
+   * acts as the token's. What this narrows is which purposes, designs and
+   * assignments are offered to a human, where showing another tenant's list
+   * would be the actual fault.
    */
-  const deviceId = userInfo?.deviceId?.trim() || undefined;
+  const companyId = useAppSelector(selectBusinessContext)?.companyId?.trim() ?? "";
 
   /** Which step: the five buttons, or the format list. */
   const [step, setStep] = useState<"ask" | "format">("ask");
@@ -134,10 +139,7 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
   } | null>(null);
 
   const { data: purposes, isLoading: purposesLoading } =
-    useGetPrintPurposeOptionsQuery(
-      { companyId: companyId.trim() ? companyId : null },
-      { skip: !open },
-    );
+    useGetPrintPurposeOptionsQuery({ companyId: companyId || null }, { skip: !open });
   const purpose = findPurposeByCode(purposes, purposeCode);
 
   /*
@@ -159,13 +161,12 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
    * Both run together rather than in sequence — they are two cheap indexed GETs
    * and chaining them would put a round trip between the click and the paper.
    * A 404 from both is a real answer: nothing is configured for this counter.
+   *
+   * WHICH counter is not stated. Company, branch and device are optional on
+   * `/resolve` and default to the session's own, so the purpose and the output
+   * mode are the whole question this asks.
    */
-  const resolveArgs = {
-    companyId,
-    purposeId: purpose?.ppoId ?? "",
-    ...(branchId?.trim() ? { branchId } : {}),
-    ...(deviceId ? { deviceId } : {}),
-  };
+  const resolveArgs = { purposeId: purpose?.ppoId ?? "" };
   const skipResolve = { skip: !open || !purpose };
   const previewResolution = useResolvePrintingAssignmentQuery(
     { ...resolveArgs, outputMode: "PREVIEW" },
@@ -179,7 +180,7 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
   /** Everything configured for this purpose — what Pdf takes the first of. */
   const assignmentList = useListPrintingAssignmentsQuery(
     {
-      ptaCompanyId: companyId,
+      ...(companyId ? { ptaCompanyId: companyId } : {}),
       includeGlobal: true,
       ptaPurposeId: purpose?.ppoId ?? "",
       limit: ASSIGNMENT_LIMIT,
@@ -210,7 +211,7 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
     {
       ptlPurposeId: purpose?.ppoId ?? "",
       limit: TEMPLATE_LIMIT,
-      ...(companyId.trim() ? { ptlCompanyId: companyId } : {}),
+      ...(companyId ? { ptlCompanyId: companyId } : {}),
     },
     { skip: !open || !purpose },
   );
@@ -330,9 +331,10 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
    * of the paper, and no record that it came out.
    *
    * That is a deliberate instruction, not an oversight, and it is reversible:
-   * `useDocumentPrint` still exists and the entry screen's Save & print (F6)
-   * still uses it. Restoring the logging here is swapping this back for that
-   * hook.
+   * `useDocumentPrint` still exists, unchanged and fully wired, though no screen
+   * calls it any more — every way into a quotation's paper (the list page, the
+   * entry screen's Save & print, and its F8 picker) now comes through here.
+   * Restoring the logging is swapping this back for that hook.
    */
   const onPrint = (): void => {
     const design = designForAction();
@@ -390,8 +392,6 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
         autoPrint={previewing.autoPrint}
         docId={target.docId}
         accYear={target.accYear}
-        branchId={target.branchId ?? branchId}
-        deviceId={deviceId}
         title={heading}
       />
     );

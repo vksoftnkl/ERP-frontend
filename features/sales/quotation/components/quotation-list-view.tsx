@@ -286,13 +286,13 @@ export function QuotationListView({
           open
           onClose={() => setPrintTarget(null)}
           purposeCode={PURPOSE_CODE.SALE_QUOTATION}
-          companyId={printTarget.sqCompanyId || companyId}
-          branchId={printTarget.sqBranchId}
           documentLabel={printRefno ? `Quotation ${printRefno}` : "Quotation"}
+          // The row's own accounting year, and nothing else about scope: company,
+          // branch and counter are claims on the access token, and the server
+          // takes them from there.
           target={{
             docId: printTarget.sqId,
             accYear: printTarget.sqAccYear,
-            branchId: printTarget.sqBranchId,
             filename: `quotation-${printRefno || printTarget.sqId}`,
           }}
         />

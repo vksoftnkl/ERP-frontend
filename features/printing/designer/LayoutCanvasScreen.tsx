@@ -65,15 +65,16 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
   const { draft, editable, workingStored } = designer;
   const [saveTemplate] = useSavePrintingTemplateMutation();
   const [renderPreview] = useRenderPrintPreviewMutation();
-  // The branch and accounting year the operator is signed in to. The company is
-  // NOT sent — the server takes it from the session, because a render reads a
-  // company's documents and a caller-supplied company would make the endpoint a
-  // cross-tenant read with a friendly name.
-  const { activeBranch, activeFiscalYear } = useBusinessContext();
-  // Read out here rather than inside the memo: the React Compiler infers a
-  // dependency on `activeBranch` itself from a `activeBranch?.id` read, and a
-  // dependency list that disagrees with what it infers turns the memo off.
-  const branchId = activeBranch?.id;
+  /*
+   * The accounting year to PREFILL the canvas's preview form with.
+   *
+   * A prefill, not a scope claim: a designer testing a layout wants to say which
+   * year they are rendering against, and the year they are signed in to is the
+   * obvious first answer. Nothing about who is printing is sent — company,
+   * branch and counter all come from the access token, and a caller-supplied one
+   * would make the endpoint a cross-tenant read with a friendly name.
+   */
+  const { activeFiscalYear } = useBusinessContext();
   const sessionAccYear = activeFiscalYear?.name?.trim();
   /** Bumped after a save so the canvas re-seeds from what the server stored. */
   const [generation, setGeneration] = useState(0);
@@ -155,9 +156,9 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
         type: parameter.type,
         required: parameter.required === true,
       })),
-      // Every rule about WHAT to send — no company ever, a body only while the
-      // revision is editable, blanks omitted rather than sent empty — is in
-      // `buildPreviewRequest`, where it can be tested.
+      // Every rule about WHAT to send — no company, branch or counter ever, a
+      // body only while the revision is editable, blanks omitted rather than
+      // sent empty — is in `buildPreviewRequest`, where it can be tested.
       render: async (request: CanvasPreviewRequest) =>
         renderPreview(
           buildPreviewRequest({
@@ -167,13 +168,11 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
             docId: request.docId,
             accYear: request.accYear,
             params: request.params,
-            branchId,
             outputMode: request.outputMode,
           }),
         ).unwrap(),
     };
   }, [
-    branchId,
     editable,
     renderPreview,
     sessionAccYear,

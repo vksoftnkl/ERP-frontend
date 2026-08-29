@@ -57,31 +57,31 @@ describe("buildPreviewRequest", () => {
       ...base,
       docId: "   ",
       accYear: "",
-      branchId: undefined,
       outputMode: "  ",
     });
 
     expect(request).not.toHaveProperty("docId");
     expect(request).not.toHaveProperty("accYear");
-    expect(request).not.toHaveProperty("branchId");
     expect(request).not.toHaveProperty("outputMode");
   });
 
-  it("passes the document quad through, trimmed", () => {
+  it("has nowhere to put a branch or a counter — the token carries both", () => {
+    const request = buildPreviewRequest({ ...base, docId: "019f-bill" }) as Record<string, unknown>;
+    expect(request).not.toHaveProperty("branchId");
+    expect(request).not.toHaveProperty("deviceId");
+  });
+
+  it("passes the document and its year through, trimmed", () => {
     const request = buildPreviewRequest({
       ...base,
       docId: " 019f-bill ",
       accYear: " 2026-2027 ",
-      branchId: "019c-branch",
-      deviceId: "019c-counter",
       outputMode: "ESCPOS",
     });
 
     expect(request).toMatchObject({
       docId: "019f-bill",
       accYear: "2026-2027",
-      branchId: "019c-branch",
-      deviceId: "019c-counter",
       outputMode: "ESCPOS",
     });
   });

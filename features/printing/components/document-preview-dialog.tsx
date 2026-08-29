@@ -55,9 +55,12 @@ export type DocumentPreviewDialogProps = {
   /** A specific revision, or null to take the published one (else the newest). */
   ptvId?: string | null;
   docId: string;
+  /**
+   * The DOCUMENT's own accounting year, where it may differ from the year the
+   * session is working in. Left out for everything else: the server binds the
+   * company's current fiscal year, so nothing here restates it.
+   */
   accYear?: string | null;
-  branchId?: string | null;
-  deviceId?: string | null;
   /** What the header calls this — "Quotation quo00034". */
   title: string;
   /**
@@ -100,8 +103,6 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
     ptvId,
     docId,
     accYear,
-    branchId,
-    deviceId,
     title,
     autoPrint,
   } = props;
@@ -150,8 +151,6 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
           versionId,
           docId,
           accYear,
-          branchId,
-          deviceId,
         }),
       ).unwrap();
 
@@ -171,8 +170,6 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
     }
   }, [
     accYear,
-    branchId,
-    deviceId,
     docId,
     renderPreview,
     replaceObjectUrl,

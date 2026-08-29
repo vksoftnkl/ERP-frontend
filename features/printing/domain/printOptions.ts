@@ -170,11 +170,14 @@ export type DocumentPreviewInput = {
   versionId: string;
   /** Binds :doc_id. */
   docId: string;
-  /** The DOCUMENT's accounting year, so the render reads the right partition. */
+  /**
+   * The DOCUMENT's accounting year, so the render reads the right partition.
+   *
+   * Only where the document carries one that may not be the year the session is
+   * working in — a quotation raised last year. Left out, the server binds the
+   * company's current fiscal year, which is right for everything else.
+   */
   accYear?: string | null;
-  branchId?: string | null;
-  /** The counter — a real `fixed.device_master` row, or nothing. */
-  deviceId?: string | null;
   /** Answers to this revision's own prompts, by prompt name. */
   params?: Record<string, string>;
 };
@@ -195,7 +198,10 @@ export type DocumentPreviewInput = {
  *
  * The company is absent for the reason it is absent everywhere in this module:
  * the server takes it from the session, and a caller-supplied one would make
- * the endpoint a cross-tenant read with a friendly name.
+ * the endpoint a cross-tenant read with a friendly name. The branch and the
+ * counter are absent for the same reason — both are claims on the access token,
+ * and both are rungs of the assignment ladder, so a print button that named one
+ * would be choosing its own design.
  */
 export function buildDocumentPreviewRequest(
   input: DocumentPreviewInput,
@@ -211,15 +217,11 @@ export function buildDocumentPreviewRequest(
   }
 
   const accYear = trimmed(input.accYear);
-  const branchId = trimmed(input.branchId);
-  const deviceId = trimmed(input.deviceId);
 
   return {
     versionId: input.versionId,
     docId,
     ...(accYear ? { accYear } : {}),
-    ...(branchId ? { branchId } : {}),
-    ...(deviceId ? { deviceId } : {}),
     ...(input.params && Object.keys(input.params).length > 0
       ? { params: input.params }
       : {}),

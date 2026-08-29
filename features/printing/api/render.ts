@@ -37,7 +37,14 @@ import type { ApiSuccessResponse } from "@/utils/types";
 
 const BASE = "/print-render";
 
-/** What the dialog asks for. Company is NOT here: the server takes it from the session. */
+/**
+ * What the dialog asks for.
+ *
+ * Company, branch and counter are NOT here: the server takes all three from the
+ * session, where they are claims on the access token. A caller that could name
+ * one would be choosing its own scope, and the two that matter — branch and
+ * counter — are the rungs the assignment ladder resolves by.
+ */
 export type RenderPreviewRequest = {
   /** The revision to render — print_template_version.ptv_id. */
   versionId: string;
@@ -48,10 +55,15 @@ export type RenderPreviewRequest = {
   body?: Record<string, unknown>;
   /** Binds :doc_id. Required by any dataset that reads a document. */
   docId?: string;
-  /** The DOCUMENT's accounting year — binds :acc_year. */
+  /**
+   * The DOCUMENT's own accounting year — binds :acc_year.
+   *
+   * Sent only where the document carries one and it may differ from the year
+   * the session is working in: a reprint of last year's paper lives in last
+   * year's partition. Left out otherwise, and the server binds the company's
+   * current fiscal year rather than making every screen state it.
+   */
   accYear?: string;
-  branchId?: string;
-  deviceId?: string;
   /** Answers to the revision's own prompts (ptvParams), by prompt name. */
   params?: Record<string, unknown>;
   /** Normally omitted: a GRAPHIC design renders as PDF, a GRID one as ESCPOS. */
@@ -90,25 +102,32 @@ export type RenderPreviewResult = {
 /**
  * What `POST /print-render/print` needs to know.
  *
- * Company is absent for the same reason it is absent above: the server takes it
- * from the session, and a caller-supplied one would make this a cross-tenant
- * read with a friendly name. `deviceId` is absent for the reason given on the
- * endpoint.
+ * Company, branch and counter are all absent for the same reason: the server
+ * takes them from the session. A caller-supplied company would make this a
+ * cross-tenant read with a friendly name, and a caller-supplied branch or
+ * counter would be a caller choosing which rung of the assignment ladder it
+ * wins on — which is the one thing this endpoint exists to decide by data.
+ *
+ * The counter in particular is worth not having: this client holds two ids
+ * called "device" and only `userInfo.deviceId` is a real
+ * `fixed.device_master` row. Sending the other one used to resolve nothing and
+ * then fail `fk_plg_device` AFTER the paper had been rendered. Nothing sends
+ * either now, and the token's own claim is used.
  */
 export type PrintDocumentRequest = {
   /** WHAT is being printed OF the document — `print_purpose.ppo_id`. */
   purposeId: string;
   /** The document. Binds :doc_id. */
   docId: string;
-  /** The DOCUMENT's accounting year — the partition it lives in, `2026-2027`. */
-  accYear: string;
-  /** Binds :branch_id and narrows the ladder. */
-  branchId?: string;
   /**
-   * The COUNTER — `fixed.device_master.dev_id`, and the narrowest rung of the
-   * ladder. See the endpoint's note for which id this is and which it is not.
+   * The DOCUMENT's accounting year — the partition it lives in, `2026-2027`.
+   *
+   * Optional: omitted, the server binds the company's current fiscal year, which
+   * is right for everything printed in the year it was raised. It is worth
+   * naming only where the row already carries a year that may not be the
+   * current one — a reprint of last year's paper.
    */
-  deviceId?: string;
+  accYear?: string;
   /** Recorded on the print log's source quad; each defaults to the purpose's own. */
   srcModule?: string;
   srcDocType?: string;
@@ -249,22 +268,23 @@ export const printRenderApi = baseApi.injectEndpoints({
      * (the purpose), and nothing about how. Counter, branch, company and
      * every-company are resolved server-side, in that order.
      *
-     * -- `deviceId` IS A COUNTER, AND THERE ARE TWO OF THEM ----------------
+     * -- NOR DOES IT CARRY A COUNTER ANY MORE ------------------------------
      *
      * `plg_device_id` carries `fk_plg_device` into `fixed.device_master`, so
-     * only a REGISTERED counter may be named. This client holds two ids and
-     * only one of them is that:
+     * only a REGISTERED counter may be named — and this client holds two ids
+     * called "device", of which exactly one is that:
      *
      *   `userInfo.deviceId`            the login response's `device_id` — a
-     *                                  real `dev_id` row. THIS ONE.
+     *                                  real `dev_id` row.
      *   `getOrCreateClientDeviceId()`  a localStorage `crypto.randomUUID`
      *                                  minted for the transaction-hold lock,
-     *                                  matching no row anywhere. NEVER THIS ONE.
+     *                                  matching no row anywhere.
      *
-     * Sending the wrong one resolves no counter rung and then fails the print
-     * log's foreign key AFTER the paper has been rendered. Sending none at all
-     * resolves the ladder from the branch up, which is the honest reading of a
-     * session that was never registered as a counter.
+     * Sending the second resolved no counter rung and then failed the print
+     * log's foreign key AFTER the paper had been rendered. That trap is now
+     * closed by not having the field: the counter is a claim on the access
+     * token, signed at login from the device row the login itself matched, and
+     * a session that matched none resolves the ladder from the branch up.
      *
      * -- A REFUSAL IS OFTEN CONFIGURATION, NOT A FAULT ---------------------
      *
