@@ -85,65 +85,71 @@ export const ITEM_MASTER_WIDGET_QUERY = {
 // is configured under on menu 29's "Web" sections (fixed.form_field, matched
 // case-insensitively). This is what lets the widget-masters config re-label,
 // re-order, and show/hide the item form fields — a field with no entry here is
-// left untouched. Covers the "Core Details" (55), "Reference Links" (56), "Ean
-// table" (57, the Rules & Status checkboxes) and "Inventory& notes" (58)
-// sections. Keep the values in sync with fixed.form_field.field_name (verify with
-// a SQL diff; provisioned by ERP server prisma/seed/Item_Master_Widget_Config_Menu29.sql).
+// left untouched, and its Visible Settings row renders read-only ("not on form").
+//
+// Menu 29's config was re-authored in the widget-master admin UI (Web sections
+// 69 Item Master-Core / 70 Item Master-Ean Table / 71 Item Master-Inventory&Notes),
+// so each field_name IS its label — exactly like menu 10 (Customer) and 22
+// (Supplier). The column-style item_* keys this map used to hold came from the
+// original seed (ERP server prisma/seed/Item_Master_Widget_Config_Menu29.sql,
+// sections 55–58) and no longer exist in fixed.form_field, so every entry bound
+// nothing: the whole tree read "not on form" and no toggle reached the form.
+// Keep the values in sync with fixed.form_field.field_name (verify with a SQL diff).
 export const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
-  // Section 55 — Core Details (item_sku is intentionally unmapped: no config row)
-  item_name_en: "item_name",
-  item_name_ta: "item_local",
-  item_alias: "item_alias",
-  item_code: "item_code",
-  item_default_barcode: "item_barcode",
-  item_batch_config: "item_batch_config",
-  item_hsn_code: "item_hsn",
-  item_default_tax_id: "item_default_tax",
-  item_is_active: "item_is_active",
-  // Section 56 — Reference Links
-  item_company_id: "item_company",
-  item_branch_id: "item_branch",
-  item_group_id: "item_group",
-  item_brand_id: "Item_Brand",
-  item_section_id: "Item_Section",
-  item_category_id: "Item_category",
-  item_supplier_id: "item_default_supplier",
-  item_cust_group: "Item_customer_group",
-  // Section 57 — Ean table (the Rules & Status checkboxes + expiry number fields).
-  // Config field_names were normalized to these binding keys, so all identity.
-  item_retail_item: "item_retail_item",
-  item_allow_sales: "item_allow_sales",
-  item_allow_loading: "item_allow_loading",
-  item_damagable_product: "item_damagable_product",
-  item_allow_neg_stock: "item_allow_neg_stock",
-  item_allow_promo: "item_allow_promo",
-  item_price_list: "item_price_list",
-  item_allow_sales_return: "item_allow_sales_return",
-  item_allow_freight: "item_allow_freight",
-  item_is_kit: "item_is_kit",
-  item_allow_negative_so: "item_allow_negative_so",
-  item_allow_loyalty: "item_allow_loyalty",
-  item_is_batch_based: "item_is_batch_based",
-  item_allow_purchase: "item_allow_purchase",
-  item_auto_break: "item_auto_break",
-  item_is_demand: "item_is_demand",
-  item_has_offer: "item_has_offer",
-  item_barcode_sticker: "item_barcode_sticker",
-  item_is_service: "item_is_service",
-  item_allow_po: "item_allow_po",
-  item_auto_make: "item_auto_make",
-  item_is_expiry_item: "item_is_expiry_item",
-  item_random_stock: "item_random_stock",
-  item_allow_so: "item_allow_so",
-  item_weigh_scale: "item_weigh_scale",
-  item_expiry_days: "item_expiry_days",
-  item_intimate_before_days: "item_intimate_before_days",
-  // Section 58 — Inventory& notes
-  item_sort_order: "item_sort_order",
-  item_storage_location: "item_storage_location",
-  item_image_url: "item_image_url",
-  item_photo_file: "item_photo_file",
-  item_notes: "item_notes",
+  // Section 69 — Item Master-Core (the form's Core Details + Reference Links)
+  item_name_en: "Item Name",
+  item_sku: "Sku",
+  item_name_ta: "Item Name (Local)",
+  item_code: "Item Code",
+  item_alias: "Alias",
+  item_default_barcode: "Default Barcode",
+  item_batch_config: "Batch Config",
+  item_hsn_code: "Hsn Code",
+  item_default_tax_id: "Default Tax",
+  item_sort_order: "Sort Order",
+  item_is_active: "Is Active",
+  item_company_id: "Company",
+  item_branch_id: "Branch",
+  item_group_id: "Item Group",
+  item_category_id: "Item Category",
+  item_section_id: "Item Section",
+  item_brand_id: "Item Brand",
+  item_supplier_id: "Default Supplier",
+  item_cust_group: "Item Customer Group",
+  // Section 70 — Item Master-Ean Table (the Rules & Status checkboxes + the two
+  // expiry number fields)
+  item_retail_item: "Retail Item",
+  item_allow_sales: "Allow Sales",
+  item_allow_loading: "Allow Loading",
+  item_damagable_product: "Damagable Product",
+  item_allow_neg_stock: "Allow Negative Stock",
+  item_allow_promo: "Allow Promo",
+  item_price_list: "Price List",
+  item_allow_sales_return: "Allow Sales Return",
+  item_allow_freight: "Allow Freight",
+  item_is_kit: "Is Kit",
+  item_allow_negative_so: "Allow Negative So",
+  item_allow_loyalty: "Allow Loyalty",
+  item_is_batch_based: "Batch Based",
+  item_allow_purchase: "Allow Purchase",
+  item_auto_break: "Auto Break",
+  item_is_demand: "Is Demand",
+  item_has_offer: "Has Offer",
+  item_barcode_sticker: "Barcode Sticker",
+  item_is_service: "Service Item",
+  item_allow_po: "Allow Po",
+  item_auto_make: "Auto Make",
+  item_is_expiry_item: "Expiry Item",
+  item_random_stock: "Random Stock",
+  item_allow_so: "Allow So",
+  item_weigh_scale: "Weigh Scale",
+  item_expiry_days: "Expiry Days",
+  item_intimate_before_days: "Intimate Before Days",
+  // Section 71 — Item Master-Inventory&Notes
+  item_storage_location: "Storage Location",
+  item_image_url: "Image Url",
+  item_photo_file: "Photo File",
+  item_notes: "Notes",
 };
 export const LOOKUP_QUERY_ITEM_TAXES = {
   module: "itemTaxes",
