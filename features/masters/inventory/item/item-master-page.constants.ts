@@ -81,75 +81,115 @@ export const ITEM_MASTER_WIDGET_QUERY = {
   sectionMenuId: ITEM_MASTER_WIDGET_SECTION_MENU_ID,
   sectionPlatform: ITEM_MASTER_WIDGET_TYPE,
 } as const;
-// Bridges each hardcoded item form field `name` to the backend `field_name` it
-// is configured under on menu 29's "Web" sections (fixed.form_field, matched
-// case-insensitively). This is what lets the widget-masters config re-label,
-// re-order, and show/hide the item form fields — a field with no entry here is
-// left untouched, and its Visible Settings row renders read-only ("not on form").
+// The `name` of each tab heading field in the item form (`type: "heading"`, which
+// the modal renders as its tabs). Kept here because the Visible Settings popup has
+// to be able to name a whole tab — see ITEM_FORM_FIELD_NAMES_BY_TAB_HEADING.
+export const ITEM_CORE_TAB_HEADING_FIELD_NAME = "itemHeadingCore";
+export const ITEM_EAN_TABLE_TAB_HEADING_FIELD_NAME = "itemHeadingEanTable";
+export const ITEM_INVENTORY_TAB_HEADING_FIELD_NAME = "itemHeadingInventory";
+// Bridges each hardcoded item form field `name` to the backend `field_name` it is
+// configured under on menu 29's "Web" sections (fixed.form_field). This is what lets
+// the widget-masters config re-label, re-order, and show/hide the item form fields —
+// a field that binds nothing is left untouched, and it is omitted from the Visible
+// Settings popup.
 //
-// Menu 29's config was re-authored in the widget-master admin UI (Web sections
-// 69 Item Master-Core / 70 Item Master-Ean Table / 71 Item Master-Inventory&Notes),
-// so each field_name IS its label — exactly like menu 10 (Customer) and 22
-// (Supplier). The column-style item_* keys this map used to hold came from the
-// original seed (ERP server prisma/seed/Item_Master_Widget_Config_Menu29.sql,
-// sections 55–58) and no longer exist in fixed.form_field, so every entry bound
-// nothing: the whole tree read "not on form" and no toggle reached the form.
-// Keep the values in sync with fixed.form_field.field_name (verify with a SQL diff).
-export const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
-  // Section 69 — Item Master-Core (the form's Core Details + Reference Links)
-  item_name_en: "Item Name",
-  item_sku: "Sku",
-  item_name_ta: "Item Name (Local)",
-  item_code: "Item Code",
-  item_alias: "Alias",
-  item_default_barcode: "Default Barcode",
-  item_batch_config: "Batch Config",
-  item_hsn_code: "Hsn Code",
-  item_default_tax_id: "Default Tax",
-  item_sort_order: "Sort Order",
-  item_is_active: "Is Active",
-  item_company_id: "Company",
-  item_branch_id: "Branch",
-  item_group_id: "Item Group",
-  item_category_id: "Item Category",
-  item_section_id: "Item Section",
-  item_brand_id: "Item Brand",
-  item_supplier_id: "Default Supplier",
-  item_cust_group: "Item Customer Group",
-  // Section 70 — Item Master-Ean Table (the Rules & Status checkboxes + the two
-  // expiry number fields)
-  item_retail_item: "Retail Item",
-  item_allow_sales: "Allow Sales",
-  item_allow_loading: "Allow Loading",
-  item_damagable_product: "Damagable Product",
-  item_allow_neg_stock: "Allow Negative Stock",
-  item_allow_promo: "Allow Promo",
-  item_price_list: "Price List",
-  item_allow_sales_return: "Allow Sales Return",
-  item_allow_freight: "Allow Freight",
-  item_is_kit: "Is Kit",
-  item_allow_negative_so: "Allow Negative So",
-  item_allow_loyalty: "Allow Loyalty",
-  item_is_batch_based: "Batch Based",
-  item_allow_purchase: "Allow Purchase",
-  item_auto_break: "Auto Break",
-  item_is_demand: "Is Demand",
-  item_has_offer: "Has Offer",
-  item_barcode_sticker: "Barcode Sticker",
-  item_is_service: "Service Item",
-  item_allow_po: "Allow Po",
-  item_auto_make: "Auto Make",
-  item_is_expiry_item: "Expiry Item",
-  item_random_stock: "Random Stock",
-  item_allow_so: "Allow So",
-  item_weigh_scale: "Weigh Scale",
-  item_expiry_days: "Expiry Days",
-  item_intimate_before_days: "Intimate Before Days",
-  // Section 71 — Item Master-Inventory&Notes
-  item_storage_location: "Storage Location",
-  item_image_url: "Image Url",
-  item_photo_file: "Photo File",
-  item_notes: "Notes",
+// Each entry lists EVERY name the field has been configured under, because menu 29 is
+// named differently from database to database and both spellings are live somewhere:
+//
+//   1. the label ("Item Name", "Allow Sales") — what the widget-master ADMIN UI writes.
+//      This DB's menu 29 was re-authored there as Web sections 69 "Item Master-Core" /
+//      70 "Item Master-Ean Table" / 71 "Item Master-Inventory&Notes" (50 fields, 1:1
+//      with the form), and it is what prisma/seed/Form_Section.sql + Form_Field.sql
+//      now export, so it is a new deployment's config too.
+//   2. the form's binding key ("item_name", "item_allow_sales") — what the older
+//      prisma/seed/Item_Master_Widget_Config_Menu29.sql provisions (sections 55–58).
+//      Still what a site that ran that seed has.
+//   3. a few label-derived spellings an early admin-UI pass produced that the old seed
+//      normalized away ("item_Retail Item", "item_weigh-scale", "item_image_URL") — a
+//      site that got the first without the second still has them.
+//
+// resolveWidgetFieldNameMap picks, per field, whichever of these the fetched config
+// actually contains, so the same build binds on any of them. Hardcoding one spelling
+// does not: it binds nothing on a site running another (which is exactly how this
+// broke) — the Visible Settings popup then comes up empty, since it lists only fields
+// that bind. Add to a list rather than replacing an entry.
+//
+// Split per tab so ITEM_FORM_FIELD_NAMES_BY_TAB_HEADING below can be derived from the
+// same lists instead of repeating all 50 field names.
+// Tab "Core Details" — the form's Core Details + Reference Links (the legacy
+// config split these across sections 55 "Core Details" and 56 "Reference Links")
+const CORE_TAB_WIDGET_FIELD_NAME_ALIASES: Record<string, readonly string[]> = {
+  item_name_en:         ["Item Name", "item_name"],
+  item_sku:             ["Sku"],
+  item_name_ta:         ["Item Name (Local)", "item_local"],
+  item_code:            ["Item Code", "item_code"],
+  item_alias:           ["Alias", "item_alias"],
+  item_default_barcode: ["Default Barcode", "item_barcode"],
+  item_batch_config:    ["Batch Config", "item_batch_config"],
+  item_hsn_code:        ["Hsn Code", "item_hsn"],
+  item_default_tax_id:  ["Default Tax", "item_default_tax"],
+  item_sort_order:      ["Sort Order", "item_sort_order"],
+  item_is_active:       ["Is Active", "item_is_active"],
+  item_company_id:      ["Company", "item_company"],
+  item_branch_id:       ["Branch", "item_branch"],
+  item_group_id:        ["Item Group", "item_group"],
+  item_category_id:     ["Item Category", "Item_category"],
+  item_section_id:      ["Item Section", "Item_Section"],
+  item_brand_id:        ["Item Brand", "Item_Brand"],
+  item_supplier_id:     ["Default Supplier", "item_default_supplier"],
+  item_cust_group:      ["Item Customer Group", "Item_customer_group"],
+};
+// Tab "Ean Table" — the Rules & Status checkboxes + the two expiry number fields
+const EAN_TABLE_TAB_WIDGET_FIELD_NAME_ALIASES: Record<string, readonly string[]> = {
+  item_retail_item:          ["Retail Item", "item_retail_item", "item_Retail Item"],
+  item_allow_sales:          ["Allow Sales", "item_allow_sales"],
+  item_allow_loading:        ["Allow Loading", "item_allow_loading"],
+  item_damagable_product:    ["Damagable Product", "item_damagable_product"],
+  item_allow_neg_stock:      ["Allow Negative Stock", "item_allow_neg_stock", "item_allow_negative_stock"],
+  item_allow_promo:          ["Allow Promo", "item_allow_promo"],
+  item_price_list:           ["Price List", "item_price_list"],
+  item_allow_sales_return:   ["Allow Sales Return", "item_allow_sales_return"],
+  item_allow_freight:        ["Allow Freight", "item_allow_freight"],
+  item_is_kit:               ["Is Kit", "item_is_kit"],
+  item_allow_negative_so:    ["Allow Negative So", "item_allow_negative_so"],
+  item_allow_loyalty:        ["Allow Loyalty", "item_allow_loyalty"],
+  item_is_batch_based:       ["Batch Based", "item_is_batch_based", "item_batch_based"],
+  item_allow_purchase:       ["Allow Purchase", "item_allow_purchase"],
+  item_auto_break:           ["Auto Break", "item_auto_break"],
+  item_is_demand:            ["Is Demand", "item_is_demand"],
+  item_has_offer:            ["Has Offer", "item_has_offer"],
+  item_barcode_sticker:      ["Barcode Sticker", "item_barcode_sticker"],
+  item_is_service:           ["Service Item", "item_is_service", "item_service_item"],
+  item_allow_po:             ["Allow Po", "item_allow_po"],
+  item_auto_make:            ["Auto Make", "item_auto_make"],
+  item_is_expiry_item:       ["Expiry Item", "item_is_expiry_item", "item_expiry_item"],
+  item_random_stock:         ["Random Stock", "item_random_stock"],
+  item_allow_so:             ["Allow So", "item_allow_so"],
+  item_weigh_scale:          ["Weigh Scale", "item_weigh_scale", "item_weigh-scale"],
+  item_expiry_days:          ["Expiry Days", "item_expiry_days"],
+  item_intimate_before_days: ["Intimate Before Days", "item_intimate_before_days"],
+};
+// Tab "Inventory&Notes"
+const INVENTORY_TAB_WIDGET_FIELD_NAME_ALIASES: Record<string, readonly string[]> = {
+  item_storage_location: ["Storage Location", "item_storage_location"],
+  item_image_url:        ["Image Url", "item_image_url", "item_image_URL"],
+  item_photo_file:       ["Photo File", "item_photo_file"],
+  item_notes:            ["Notes", "item_notes"],
+};
+export const WIDGET_FIELD_NAME_ALIASES: Record<string, readonly string[]> = {
+  ...CORE_TAB_WIDGET_FIELD_NAME_ALIASES,
+  ...EAN_TABLE_TAB_WIDGET_FIELD_NAME_ALIASES,
+  ...INVENTORY_TAB_WIDGET_FIELD_NAME_ALIASES,
+};
+// Which form fields render under each tab. Visible Settings lists SECTIONS, not
+// tabs, so a section is attributed to a tab by looking at where the fields it
+// configures actually render — that keeps working whether the deployment's menu 29
+// carries one section per tab (69/70/71) or the legacy split (55–58), and needs no
+// section-name aliases of its own.
+export const ITEM_FORM_FIELD_NAMES_BY_TAB_HEADING: Record<string, readonly string[]> = {
+  [ITEM_CORE_TAB_HEADING_FIELD_NAME]: Object.keys(CORE_TAB_WIDGET_FIELD_NAME_ALIASES),
+  [ITEM_EAN_TABLE_TAB_HEADING_FIELD_NAME]: Object.keys(EAN_TABLE_TAB_WIDGET_FIELD_NAME_ALIASES),
+  [ITEM_INVENTORY_TAB_HEADING_FIELD_NAME]: Object.keys(INVENTORY_TAB_WIDGET_FIELD_NAME_ALIASES),
 };
 export const LOOKUP_QUERY_ITEM_TAXES = {
   module: "itemTaxes",

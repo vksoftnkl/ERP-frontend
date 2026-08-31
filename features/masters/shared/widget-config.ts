@@ -211,6 +211,41 @@ export function pruneEmptyGroups(fields: ERPDynamicModalField[]): ERPDynamicModa
   closeHeading();
   return fields.filter((_, index) => keep[index]);
 }
+/**
+ * Picks, for each form field, the backend `field_name` that this deployment's
+ * config actually uses.
+ *
+ * Why aliases: the same screen's `fixed.form_field` rows are named differently
+ * from database to database. A menu seeded from `prisma/seed` carries the form's
+ * binding keys (`item_allow_sales`); a menu re-authored in the widget-master
+ * admin UI carries the LABEL instead (`Allow Sales`). A map hardcoded to either
+ * one binds nothing on a site running the other — the whole popup then comes up
+ * empty ("No fields configured.") because nothing is controllable, and "fix the
+ * map" just moves the breakage to the other environment.
+ *
+ * So each form field declares every name it has ever been configured under, and
+ * the winner is chosen from the names the server returned. A form field whose
+ * aliases are all absent falls back to its first alias, which simply stays
+ * unmatched — the same harmless no-op as an unbridged field.
+ */
+export function resolveWidgetFieldNameMap(
+  aliasesByFormField: Record<string, readonly string[]>,
+  configuredFieldNames: Iterable<string>,
+): Record<string, string> {
+  const available = new Set<string>();
+  for (const name of configuredFieldNames) {
+    available.add((name ?? "").trim().toLowerCase());
+  }
+  const resolved: Record<string, string> = {};
+  for (const [formField, aliases] of Object.entries(aliasesByFormField)) {
+    if (aliases.length === 0) {
+      continue;
+    }
+    resolved[formField] =
+      aliases.find((alias) => available.has(alias.trim().toLowerCase())) ?? aliases[0];
+  }
+  return resolved;
+}
 /** Lowercased backend fieldNames that map to a real form field on this screen. */
 export function buildControllableFieldNames(
   fieldNameByFormField: Record<string, string>,

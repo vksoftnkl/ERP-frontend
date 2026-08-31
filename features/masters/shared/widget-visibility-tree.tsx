@@ -11,7 +11,8 @@ export type WidgetTreeFieldView = {
   secondaryText: string;
   /** fieldVisibility — drives whether the matching form field is rendered. */
   checked: boolean;
-  /** True when this backend field maps to an actual form field on this screen. */
+  /** True when this backend field maps to an actual form field on this screen.
+   *  Fields that do not are not listed at all — their toggle would change nothing. */
   controllable: boolean;
 };
 /** A section node with its nested field leaves. */
@@ -92,7 +93,7 @@ function Switch({
 }
 
 export default function WidgetVisibilityTree({
-  sections,
+  sections: allSections,
   loading,
   error,
   disabled,
@@ -102,6 +103,23 @@ export default function WidgetVisibilityTree({
 }: WidgetVisibilityTreeProps) {
   // Sections are expanded unless their id is collapsed here.
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
+
+  // Only widgets that can actually change this screen are listed. A backend field
+  // with no matching form field is inert — its toggle would write a config value
+  // nothing reads — so it is dropped here, along with any section left with nothing
+  // controllable. Filtering at the top also keeps the section counts, the section
+  // toggle's fan-out and the footer total honest, since everything below reads this
+  // list rather than the raw prop.
+  const sections = useMemo(
+    () =>
+      allSections
+        .map((section) => ({
+          ...section,
+          fields: section.fields.filter((field) => field.controllable),
+        }))
+        .filter((section) => section.fields.length > 0),
+    [allSections],
+  );
 
   const toggleCollapsed = useCallback((sectionId: number) => {
     setCollapsed((prev) => {
@@ -276,9 +294,6 @@ export default function WidgetVisibilityTree({
                           />
                           <span className={styles.fieldLabel}>{field.label}</span>
                         </label>
-                        {!field.controllable ? (
-                          <span className={styles.fieldHint}>not on form</span>
-                        ) : null}
                       </div>
                       <div className={styles.secondaryCell}>
                         <input

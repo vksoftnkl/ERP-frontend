@@ -72,7 +72,7 @@ const WIDGET_CONFIG_TREE_ENDPOINT = "/widget-masters/config";
 // Persists the tree's section/field visibility back to the server (PATCH).
 const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 // Backend fieldNames (lowercased) that map to a real form field, so their popup
-// checkbox can actually show/hide something. Others render read-only ("not on form").
+// checkbox can actually show/hide something. Others are left out of the popup.
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
 const LOOKUP_KEYS = {
   id: ["ctmId", "ctm_id", "city_id", "cityId", "id", "_id"],

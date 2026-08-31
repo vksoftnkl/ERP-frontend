@@ -54,8 +54,8 @@ import styles from "../page.module.scss";
 const NO_SECTIONS: WidgetMasterSectionConfig[] = [];
 /**
  * The configured field names that map to a real field on this screen. The rest
- * are shown in the dialog read-only ("not on form"), rather than offering a
- * checkbox that would toggle nothing.
+ * are left out of the dialog, rather than offering a checkbox that would toggle
+ * nothing.
  */
 const CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames({
   ...QUOTATION_HEADER_FIELD_NAMES,

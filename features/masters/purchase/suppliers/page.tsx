@@ -107,7 +107,7 @@ import {
   type LedgerBankAccountFormRow,
 } from "@/features/masters/accounts/account-ledger/bank-accounts";
 // Lowercased backend fieldNames that actually bind to a field on this form; the
-// popup marks everything else "not on form".
+// popup lists only these.
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(
   WIDGET_FIELD_NAME_BY_FORM_FIELD,
 );

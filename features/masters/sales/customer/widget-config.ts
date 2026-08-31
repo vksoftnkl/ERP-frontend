@@ -28,7 +28,7 @@ export const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 // (Web sections 66 Customer-identify / 67 customer-notes / 68 Customers-Region
 // details), so each field_name IS its label — the earlier comp_*/cus_* column-style
 // names it replaced no longer exist, and a stale key here binds nothing, leaving
-// the popup's checkbox read-only ("not on form").
+// the field out of the popup entirely.
 //
 // The Region Details tab repeats Address 1/2/3, City, District, State and Country
 // from Identity, and this map is keyed by field_name alone, so section 68's names
@@ -104,7 +104,7 @@ export const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
 };
 
 // Backend fieldNames (lowercased) that map to a real form field, so their popup
-// checkbox can actually show/hide something. Others render read-only ("not on form").
+// checkbox can actually show/hide something. Others are left out of the popup.
 export const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(
   WIDGET_FIELD_NAME_BY_FORM_FIELD,
 );

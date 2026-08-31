@@ -11,6 +11,7 @@ import {
 import {
   buildControllableFieldNames,
   buildWidgetFieldConfig,
+  resolveWidgetFieldNameMap,
   type ResolvedFieldConfig,
   type WidgetMasterSectionConfig,
   type WidgetMastersResponse,
@@ -170,17 +171,15 @@ import {
   ITEM_UNIT_CONVERSION_CONTENT_FIELD_NAMES,
   ITEM_REORDER_CONTENT_FIELD_NAMES,
   ITEM_EAN_CONTENT_FIELD_NAMES,
-  WIDGET_FIELD_NAME_BY_FORM_FIELD,
+  WIDGET_FIELD_NAME_ALIASES,
+  ITEM_FORM_FIELD_NAMES_BY_TAB_HEADING,
+  ITEM_CORE_TAB_HEADING_FIELD_NAME,
+  ITEM_EAN_TABLE_TAB_HEADING_FIELD_NAME,
+  ITEM_INVENTORY_TAB_HEADING_FIELD_NAME,
   type SaveUiTableColumnLayoutRequest,
   type UiTableColumnLayoutItem,
   normalizeItemBatchConfigValue,
 } from "./item-master-page.constants";
-// Backend fieldNames (lowercased) that map to a real item form field, so their
-// popup checkbox can actually show/hide something. Fields with no bridge entry
-// render read-only in the tree ("not on form").
-const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(
-  WIDGET_FIELD_NAME_BY_FORM_FIELD,
-);
 // Company is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
 // 8=company comp_id/comp_name). Loaded on open + on debounced server-side search via
 // /dropdown-details/run; nothing fetched up front.
@@ -3053,8 +3052,9 @@ function reorderConfiguredItems<T>(
 // and only within their own form section. A configured field whose visibility
 // is false is dropped; a field's fieldSecondaryText, when set, wins over
 // fieldGuiName as its rendered label. An empty config map is a no-op, so a
-// failed/empty fetch leaves the form on its hardcoded labels and order.
-function applyItemWidgetFieldConfig(
+// failed/empty fetch leaves the form on its hardcoded labels and order. Group
+// titles left labelling nothing are then dropped — see dropEmptyItemFormGroups.
+export function applyItemWidgetFieldConfig(
   fields: ERPDynamicModalField[],
   config: Map<string, ResolvedFieldConfig>,
   fieldNameByFormField: Record<string, string>,
@@ -3091,7 +3091,126 @@ function applyItemWidgetFieldConfig(
       fields: reorderConfiguredItems(resolvedFields),
     };
   });
-  return flattenItemFormSections(nextSections);
+  return flattenItemFormSections(dropEmptyItemFormGroups(nextSections));
+}
+// A banded in-tab group title ("Reference Links", "Rules & Status") is a plain
+// `custom` field, so nothing upstream notices once every field under it has been
+// hidden from Visible Settings and it is left titling an empty stretch of the
+// form. Drop such a title along with its group.
+//
+// A TAB heading is only dropped once its whole tab is empty — no fields of its
+// own AND no surviving group under it — which, after the pass above, is exactly
+// "the next section starts another tab (or there is no next section)". Dropping
+// it on its own empty first group instead would take the tab away while its
+// remaining groups still rendered, orphaning them under the previous tab.
+function dropEmptyItemFormGroups(sections: ItemFormSection[]): ItemFormSection[] {
+  const withTitledGroups = sections.filter(
+    (section) =>
+      section.fields.length > 0 ||
+      !section.heading ||
+      !isItemInlineSectionHeadingField(section.heading),
+  );
+  const isTabHeadingSection = (section: ItemFormSection | undefined) =>
+    section !== undefined && (section.heading?.type ?? "") === "heading";
+  return withTitledGroups.filter(
+    (section, index) =>
+      section.fields.length > 0 ||
+      !isTabHeadingSection(section) ||
+      (index + 1 < withTitledGroups.length &&
+        !isTabHeadingSection(withTitledGroups[index + 1])),
+  );
+}
+// Which tab (heading field `name`) each configured section feeds, and which of
+// those tabs are switched off. Visible Settings lists SECTIONS, so a section is
+// attributed to the tab holding most of the form fields it configures: menu 29 is
+// one section per tab on a current deployment (69/70/71), but the legacy seed
+// splits a tab across several sections (55 "Core Details" + 56 "Reference Links"
+// both feed the Core Details tab), so a tab only goes away once EVERY section
+// feeding it is off. Sections that configure nothing on this form are ignored.
+export function resolveHiddenItemTabHeadings(
+  sections: WidgetMasterSectionConfig[],
+  sectionVisibilityOverrides: ReadonlyMap<number, boolean>,
+): Set<string> {
+  if (sections.length === 0) {
+    return new Set();
+  }
+  // Resolved against the names THESE sections actually carry, not a hardcoded
+  // spelling — see WIDGET_FIELD_NAME_ALIASES.
+  const fieldNameByFormField = resolveWidgetFieldNameMap(
+    WIDGET_FIELD_NAME_ALIASES,
+    sections.flatMap((section) =>
+      (Array.isArray(section.fields) ? section.fields : []).map((field) => field.fieldName ?? ""),
+    ),
+  );
+  const headingByBackendName = new Map<string, string>();
+  for (const [heading, formFieldNames] of Object.entries(ITEM_FORM_FIELD_NAMES_BY_TAB_HEADING)) {
+    for (const formFieldName of formFieldNames) {
+      const backendName = fieldNameByFormField[formFieldName];
+      if (backendName) {
+        headingByBackendName.set(backendName.trim().toLowerCase(), heading);
+      }
+    }
+  }
+  const sectionCountsByHeading = new Map<string, { total: number; hidden: number }>();
+  for (const section of sections) {
+    const fieldsByHeading = new Map<string, number>();
+    for (const field of Array.isArray(section.fields) ? section.fields : []) {
+      const heading = headingByBackendName.get((field.fieldName ?? "").trim().toLowerCase());
+      if (heading) {
+        fieldsByHeading.set(heading, (fieldsByHeading.get(heading) ?? 0) + 1);
+      }
+    }
+    let sectionHeading = "";
+    let bestCount = 0;
+    for (const [heading, count] of fieldsByHeading) {
+      if (count > bestCount) {
+        sectionHeading = heading;
+        bestCount = count;
+      }
+    }
+    if (!sectionHeading) {
+      continue;
+    }
+    const visible =
+      sectionVisibilityOverrides.get(section.sectionId) ?? section.sectionVisibility !== false;
+    const counts = sectionCountsByHeading.get(sectionHeading) ?? { total: 0, hidden: 0 };
+    counts.total += 1;
+    if (!visible) {
+      counts.hidden += 1;
+    }
+    sectionCountsByHeading.set(sectionHeading, counts);
+  }
+  const hidden = new Set<string>();
+  for (const [heading, counts] of sectionCountsByHeading) {
+    if (counts.hidden === counts.total) {
+      hidden.add(heading);
+    }
+  }
+  // Switching every section off hides every tab, leaving the modal with an empty
+  // body and no tab strip. That is what the popup was asked for, so it is not
+  // second-guessed here — the form comes back as soon as a section is switched
+  // on again (right-click inside the modal still opens Visible Settings).
+  return hidden;
+}
+// Drop a hidden tab whole: its heading (which is its entry in the modal's tab
+// strip) plus everything rendered under it, down to the next heading. That takes
+// the linked tables and inline group titles with it too — they carry no widget
+// config of their own, so hiding only the configured fields would leave the tab
+// standing with its tables still in it.
+export function dropHiddenItemFormTabs(
+  fields: ERPDynamicModalField[],
+  hiddenTabHeadings: ReadonlySet<string>,
+): ERPDynamicModalField[] {
+  if (hiddenTabHeadings.size === 0) {
+    return fields;
+  }
+  let dropping = false;
+  return fields.filter((field) => {
+    if ((field.type ?? "text") === "heading") {
+      dropping = hiddenTabHeadings.has(field.name);
+    }
+    return !dropping;
+  });
 }
 type LinkedTableColumnLayoutChangeArgs = {
   tableId: string;
@@ -3505,7 +3624,7 @@ function buildItemFormFields(
     removeDefaultSelectPlaceholders(
       applyItemCheckboxControlStyle([
       {
-        name: "itemHeadingCore",
+        name: ITEM_CORE_TAB_HEADING_FIELD_NAME,
         label: "Core Details",
         type: "heading",
       },
@@ -3897,7 +4016,7 @@ function buildItemFormFields(
         },
       },
       {
-        name: "itemHeadingEanTable",
+        name: ITEM_EAN_TABLE_TAB_HEADING_FIELD_NAME,
         label: "EAN Table",
         type: "heading",
         defaultExpanded: true,
@@ -4050,7 +4169,7 @@ function buildItemFormFields(
         gridRowStart: field.gridRowStart + ITEM_EAN_SECTION_RULES_ROW_OFFSET,
       })),
       {
-        name: "itemHeadingInventory",
+        name: ITEM_INVENTORY_TAB_HEADING_FIELD_NAME,
         label: "Inventory & Notes",
         type: "heading",
       },
@@ -4086,7 +4205,9 @@ function buildItemFormFields(
       ]),
     ),
     widgetFieldConfig,
-    WIDGET_FIELD_NAME_BY_FORM_FIELD,
+    // Resolved against the names THIS deployment's config actually returned, not a
+    // hardcoded spelling — see WIDGET_FIELD_NAME_ALIASES.
+    resolveWidgetFieldNameMap(WIDGET_FIELD_NAME_ALIASES, widgetFieldConfig.keys()),
   );
 }
 // POST /items/create, GET /items/get and DELETE /items/delete now return the
@@ -4387,6 +4508,12 @@ export default function ItemMasterPageContent({
   const [widgetFieldConfig, setWidgetFieldConfig] = useState<
     Map<string, ResolvedFieldConfig>
   >(() => new Map());
+  // The same config as `widgetFieldConfig`, unflattened: section visibility is a
+  // per-section flag the field map cannot carry, and it is what decides whether a
+  // whole tab renders. The Visible Settings popup fetches its own copy lazily
+  // (`configSections`); this one is here so a section already saved as hidden
+  // takes its tab away on the FIRST render, without the popup being opened.
+  const [widgetSections, setWidgetSections] = useState<WidgetMasterSectionConfig[]>([]);
   const itemTaxRecordsById = useMemo(
     () =>
       new Map(
@@ -4576,6 +4703,12 @@ export default function ItemMasterPageContent({
         itemMasterWidgetsPayload.status === "fulfilled"
           ? buildWidgetFieldConfig(itemMasterWidgetsPayload.value as WidgetMastersResponse)
           : new Map(),
+      );
+      setWidgetSections(
+        itemMasterWidgetsPayload.status === "fulfilled" &&
+          Array.isArray((itemMasterWidgetsPayload.value as WidgetMastersResponse)?.data)
+          ? (itemMasterWidgetsPayload.value as WidgetMastersResponse).data
+          : [],
       );
       setPriceLevelRecords(
         priceLevelsPayload.status === "fulfilled"
@@ -5212,6 +5345,24 @@ export default function ItemMasterPageContent({
       return next;
     });
   }, []);
+  // Backend fieldNames (lowercased) that map to a real item form field, so their popup
+  // switch can actually show/hide something — resolved against the names THIS
+  // deployment's config returned (see WIDGET_FIELD_NAME_ALIASES). A field that still
+  // binds nothing renders read-only in the tree ("not on form").
+  const controllableFieldNames = useMemo(
+    () =>
+      buildControllableFieldNames(
+        resolveWidgetFieldNameMap(
+          WIDGET_FIELD_NAME_ALIASES,
+          configSections.flatMap((section) =>
+            (Array.isArray(section.fields) ? section.fields : []).map(
+              (field) => field.fieldName ?? "",
+            ),
+          ),
+        ),
+      ),
+    [configSections],
+  );
   // Build the tree view from the /config payload, deriving each checkbox from the
   // live form visibility map so the popup and the rendered form stay in sync.
   const treeSections = useMemo<WidgetTreeSectionView[]>(
@@ -5231,11 +5382,28 @@ export default function ItemMasterPageContent({
             secondaryText:
               secondaryTextById.get(field.fieldId) ?? (field.fieldSecondaryText ?? ""),
             checked: configEntry ? configEntry.visible : field.fieldVisibility !== false,
-            controllable: WIDGET_CONTROLLABLE_FIELD_NAMES.has(key),
+            controllable: controllableFieldNames.has(key),
           };
         }),
       })),
-    [configSections, sectionVisibility, secondaryTextById, widgetFieldConfig],
+    [configSections, controllableFieldNames, sectionVisibility, secondaryTextById, widgetFieldConfig],
+  );
+  // Switching a section off in Visible Settings takes its whole tab with it — the
+  // heading, its fields, the linked tables under it, and its entry in the tab
+  // strip. The popup's own tree wins once it has been opened (it holds the live,
+  // unsaved toggles); until then the config fetched on mount supplies the saved
+  // section visibility.
+  const hiddenTabHeadings = useMemo(
+    () =>
+      resolveHiddenItemTabHeadings(
+        configSections.length > 0 ? configSections : widgetSections,
+        sectionVisibility,
+      ),
+    [configSections, sectionVisibility, widgetSections],
+  );
+  const visibleItemFormFields = useMemo(
+    () => dropHiddenItemFormTabs(itemFormFields, hiddenTabHeadings),
+    [hiddenTabHeadings, itemFormFields],
   );
   // PATCH the current section/field visibility + secondary text back to the server
   // in the documented { data: [{ sectionId, sectionGuiName, sectionVisibility,
@@ -5369,7 +5537,7 @@ export default function ItemMasterPageContent({
       nameFieldPlaceholder="Sugar 1kg"
       formTitle="Item Form"
       formDescription="Create and update items."
-      customFields={itemFormFields}
+      customFields={visibleItemFormFields}
       createInitialValues={ITEM_INITIAL_FORM_VALUES}
       modalPanelStyle={ITEM_MODAL_PANEL_STYLE}
       modalFormGridColumns={3}
