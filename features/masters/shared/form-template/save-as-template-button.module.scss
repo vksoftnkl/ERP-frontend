@@ -1,0 +1,27 @@
+// Footer, far left: an occasional action must not sit under the thumb of the
+// one used forty times a day, so Cancel/Save keep the right.
+.templateButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: var(--erp-radius);
+  border: 1px solid #cbd5f5;
+  background: #fff;
+  color: #1e293b;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.templateButton:hover:not(:disabled) {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.templateButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

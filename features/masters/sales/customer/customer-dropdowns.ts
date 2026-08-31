@@ -1,6 +1,11 @@
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/value-mappers";
+import {
+  applyFormDefaults,
+  EMPTY_FORM_DEFAULTS,
+} from "@/features/masters/shared/apply-form-defaults";
+import { CUSTOMER_TEMPLATE_FIELD_SPECS } from "./template/field-specs";
 
 // Configured-dropdown endpoint (fixed.dropdown_details). Mirrors configured-grid-sql/run:
 // GET ?dropdown_id=<n>&page=1&limit=20&search=<q> -> { data: { items, meta } }.
@@ -116,24 +121,25 @@ export function withPinnedOption(
   return [...options, pinned];
 }
 
-// A single Company/Area/Customer-Group default resolved from the customer_template
-// config. `id` becomes the select's value (a real id when the config supplies one,
-// otherwise the plain string itself) and `label` the text shown on the trigger.
+// A single Company/Area/Customer-Group default resolved from the customer form
+// defaults. `id` becomes the select's value and `label` the text shown on the
+// trigger — the saved JSON carries both (`cusAreaId` + `cusAreaName`), because a
+// lazy dropdown has no options loaded yet when the create form opens.
 export type CustomerTemplateDefault = {
   id: string;
   label: string;
 };
 
-// State-select seed: value = code, label = "Name (CODE)". null when the config omits
+// State-select seed: value = code, label = "Name (CODE)". null when the defaults omit
 // cusStateCode.
 export type CustomerTemplateStateDefault = {
   code: string;
   name: string;
 };
 
-// Everything the customer_template config supplies for the create form:
+// Everything the `masters.customer_form_defaults` setting supplies for the create form:
 // - company/area/group: the three lazily-loaded dropdowns (seeded with a pinned
-//   option so their label shows); any the config omits stay null.
+//   option so their label shows); any the setting omits stay null.
 // - state: the lazy State select seed (kept apart because its label/value differ).
 // - fieldValues: every other primitive `cus*` field, keyed by form-field name and
 //   coerced to the string shape the modal stores, overlaid onto the blank create
@@ -154,130 +160,63 @@ export const EMPTY_CUSTOMER_TEMPLATE_DEFAULTS: CustomerTemplateDefaults = {
   fieldValues: {},
 };
 
-// Config keys that drive the three seeded dropdowns or the State select — excluded
-// from the generic field overlay so raw ids/labels/codes don't leak in twice.
-const TEMPLATE_HANDLED_KEYS = new Set<string>([
-  "company",
-  "companyId",
-  "cusCompanyId",
-  "area",
-  "areaId",
-  "cusAreaId",
-  "customerGroup",
-  "customer_group",
-  "group",
-  "groupId",
-  "cusGroupId",
-  "cusStateName",
-  "stateName",
-  "state_name",
-]);
+// Two fallbacks the Qt screen applied and this one keeps, both CONDITIONAL: a
+// template that says nothing about country or state starts new customers on
+// India / Tamil Nadu, and a template that sets its own is never overwritten.
+// They apply to a template, not to a blank form — no template at all still opens
+// the form on its own initial values.
+const TEMPLATE_COUNTRY_FALLBACK = "India";
+const TEMPLATE_STATE_FALLBACK: CustomerTemplateStateDefault = { code: "33", name: "Tamil Nadu" };
 
-function extractTemplateState(
-  source: Record<string, unknown>,
-): CustomerTemplateStateDefault | null {
-  const code = toDisplayValue(
-    getFirstDefinedValue(source, ["cusStateCode", "stateCode", "state_code"]),
-  )
-    .trim()
-    .toUpperCase();
-  if (!code) {
-    return null;
-  }
-  const name = toDisplayValue(
-    getFirstDefinedValue(source, ["cusStateName", "stateName", "state_name"]),
-  );
-  return { code, name };
-}
-
-// Copy every primitive config entry (string/number/boolean, coerced to string) keyed
-// by its form-field name, skipping the dropdown/state keys handled separately and any
-// nested objects/arrays. Empty strings are kept so a template can blank a field.
-function collectTemplateFieldValues(
-  source: Record<string, unknown>,
-): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const [key, raw] of Object.entries(source)) {
-    if (TEMPLATE_HANDLED_KEYS.has(key)) {
-      continue;
-    }
-    if (raw === undefined || raw === null || typeof raw === "object") {
-      continue;
-    }
-    values[key] = toDisplayValue(raw);
-  }
-  return values;
-}
-
-// Normalize one config entry. It can be an object ({ id/value, name/label } — e.g.
-// company) or a bare string (e.g. area "arafd", customerGroup "vary"); a string is
-// used as both the option value and its label.
-function normalizeTemplateDefault(raw: unknown): CustomerTemplateDefault | null {
-  if (raw === undefined || raw === null) {
-    return null;
-  }
-  if (typeof raw === "object" && !Array.isArray(raw)) {
-    const source = raw as Record<string, unknown>;
-    const id = toDisplayValue(getFirstDefinedValue(source, ["id", "value", "code", "_id"]));
-    const label = toDisplayValue(getFirstDefinedValue(source, ["name", "label", "title"]));
-    const resolvedId = id || label;
-    if (!resolvedId) {
-      return null;
-    }
-    return { id: resolvedId, label: label || resolvedId };
-  }
-  const value = toDisplayValue(raw);
-  return value ? { id: value, label: value } : null;
-}
-
-// Read the customer_template config payload (GET /configs/get?configId=1) into the
-// three dropdown defaults. `data.configValue` is a JSON *string* holding the company/
-// area/customerGroup selections; a missing/blank/malformed value yields empty defaults
-// so the create form simply renders without seeded selections.
-export function parseCustomerTemplateConfig(payload: unknown): CustomerTemplateDefaults {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+/**
+ * Read the `masters.customer_form_defaults` value — the raw TEXT of the setting, a
+ * JSON object keyed by the customer form's own field names — into the create form's
+ * seeds.
+ *
+ * The generic `applyFormDefaults` does the reading (partial apply, per-spec coercion,
+ * unknown keys ignored, malformed input → nothing); what is customer-specific stays
+ * here: the three seeded dropdowns and the State select are lifted out for the page
+ * that pins their options, and the two quirks below.
+ */
+export function parseCustomerFormDefaults(
+  value: string | null | undefined,
+): CustomerTemplateDefaults {
+  const applied = applyFormDefaults(value, CUSTOMER_TEMPLATE_FIELD_SPECS);
+  // Identity, not emptiness: an unreadable value is no template at all, while a
+  // template that happens to be `{}` is one that says nothing — and a template that
+  // says nothing still gets the country/state fallbacks below.
+  if (applied === EMPTY_FORM_DEFAULTS) {
     return EMPTY_CUSTOMER_TEMPLATE_DEFAULTS;
   }
-  const root = payload as Record<string, unknown>;
-  const data =
-    root.data && typeof root.data === "object" && !Array.isArray(root.data)
-      ? (root.data as Record<string, unknown>)
-      : root;
-  const rawConfigValue = data.configValue ?? data.config_value;
-  let configValue: unknown = rawConfigValue;
-  if (typeof rawConfigValue === "string") {
-    const trimmed = rawConfigValue.trim();
-    if (!trimmed) {
-      return EMPTY_CUSTOMER_TEMPLATE_DEFAULTS;
-    }
-    try {
-      configValue = JSON.parse(trimmed);
-    } catch {
-      return EMPTY_CUSTOMER_TEMPLATE_DEFAULTS;
-    }
+  const fieldValues = { ...applied.values };
+  // The select's option values are the enum (REGULAR / COMPOSITION / UNREGISTERED) but
+  // the value is saved by whichever client wrote it, and the POS writes the LABEL
+  // ("Unregistered"). Upper-casing is the whole difference, and without it the GST Type
+  // field silently comes up blank.
+  if (fieldValues.cusGstType) {
+    fieldValues.cusGstType = fieldValues.cusGstType.toUpperCase();
   }
-  if (!configValue || typeof configValue !== "object" || Array.isArray(configValue)) {
-    return EMPTY_CUSTOMER_TEMPLATE_DEFAULTS;
+  const stateSeed = applied.seeds.cusStateCode;
+  const state: CustomerTemplateStateDefault = stateSeed
+    ? {
+        code: stateSeed.id.toUpperCase(),
+        // `applyFormDefaults` falls a missing label back to the id; for the State seed
+        // that would render as "33 (33)", so an absent name stays absent.
+        name: stateSeed.label === stateSeed.id ? "" : stateSeed.label,
+      }
+    : TEMPLATE_STATE_FALLBACK;
+  if (!fieldValues.cusStateCode) {
+    fieldValues.cusStateCode = state.code;
   }
-  const source = configValue as Record<string, unknown>;
+  if (!fieldValues.cusCountry) {
+    fieldValues.cusCountry = TEMPLATE_COUNTRY_FALLBACK;
+  }
   return {
-    company: normalizeTemplateDefault(
-      getFirstDefinedValue(source, ["company", "cusCompanyId", "companyId"]),
-    ),
-    area: normalizeTemplateDefault(
-      getFirstDefinedValue(source, ["area", "cusAreaId", "areaId"]),
-    ),
-    group: normalizeTemplateDefault(
-      getFirstDefinedValue(source, [
-        "customerGroup",
-        "customer_group",
-        "group",
-        "cusGroupId",
-        "groupId",
-      ]),
-    ),
-    state: extractTemplateState(source),
-    fieldValues: collectTemplateFieldValues(source),
+    company: applied.seeds.cusCompanyId ?? null,
+    area: applied.seeds.cusAreaId ?? null,
+    group: applied.seeds.cusGroupId ?? null,
+    state,
+    fieldValues,
   };
 }
 

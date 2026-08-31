@@ -1,0 +1,116 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  // Confirm tier: this prompt interrupts the entry modal it was fired from,
+  // including any portaled dropdown still on screen.
+  z-index: var(--erp-z-confirm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  // One isolated GPU layer, so the promoted panel underneath cannot bleed ghost
+  // tiles over this one (same fix as dynamic-modal-form's .overlay).
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgb(0 0 0 / 42%);
+  cursor: pointer;
+}
+
+.modal {
+  position: relative;
+  width: min(100%, 460px);
+  border-radius: var(--erp-radius);
+  border: 1px solid #e4e5ea;
+  background: #fff;
+  box-shadow: 0 18px 44px rgb(15 18 40 / 24%);
+  padding: 22px;
+  display: grid;
+  gap: 12px;
+  // Pre-promoted rather than promoted mid-animation: see delete-confirm-modal.
+  will-change: transform, opacity;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.message {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: #334155;
+}
+
+.note {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.summary {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--erp-radius);
+  background: #f1f5f9;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: #334155;
+  word-break: break-word;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.cancelButton,
+.scopeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: var(--erp-radius);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cancelButton {
+  border: 1px solid #cbd5f5;
+  background: #fff;
+  color: #334155;
+  margin-right: auto;
+}
+
+.scopeButton {
+  border: 1px solid transparent;
+  background: var(--erp-primary, #8b1d24);
+  color: #fff;
+}
+
+.scopeButtonSecondary {
+  border-color: #cbd5f5;
+  background: #fff;
+  color: #1e293b;
+}
+
+.cancelButton:disabled,
+.scopeButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

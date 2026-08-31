@@ -1011,6 +1011,15 @@
   line-height: 1;
   margin: 0 0.12rem;
 }
+.footerLeading {
+  // The footer is space-between and .footerActions carries margin-left:auto, so
+  // this sits hard left with Cancel/Save still hard right.
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 1 auto;
+  min-width: 0;
+}
 .footerActions {
   display: flex;
   align-items: center;

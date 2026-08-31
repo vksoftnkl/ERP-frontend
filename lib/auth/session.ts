@@ -387,4 +387,15 @@ export function getOrCreateClientDeviceId(): string | null {
 }
 export function isAuthenticated(): boolean {
   return Boolean(getAuthSession()?.trim());
+}/**
+ * The one role allowed to author a master's default template (the
+ * `masters.*_form_defaults` settings). Kept here rather than compared inline so
+ * the several screens that ask the same question move together.
+ *
+ * This is a UI convenience only: `/app-setting-values/create` is not authorized
+ * server-side, so hiding the button hides the button and nothing else.
+ */
+export const TEMPLATE_EDITOR_USER_TYPE = "SUPER ADMIN";
+export function canEditTemplates(userInfo: UserInfo | null | undefined): boolean {
+  return (userInfo?.userType ?? "").trim().toUpperCase() === TEMPLATE_EDITOR_USER_TYPE;
 }

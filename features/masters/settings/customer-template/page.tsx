@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { toast } from "react-toastify";
 import {
   ERPDynamicModalForm,
   type ERPDynamicModalController,
@@ -15,67 +16,44 @@ import {
   buildLookupOptions,
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/features/masters/shared/normalizers";
+import {
+  buildSessionScopeOverride,
+  CUSTOMER_FORM_DEFAULTS_SETTING_KEY,
+  describeSessionScope,
+  findEffectiveSettingValue,
+  parseSettingObject,
+  useSessionSettingContext,
+  useSessionSettingQuery,
+} from "@/features/masters/shared/form-defaults-setting";
+import {
+  parseCustomerFormDefaults,
+  type CustomerTemplateDefaults,
+} from "@/features/masters/sales/customer/customer-dropdowns";
+import {
+  useGetEffectiveSettingsQuery,
+  useSaveAppSettingsMutation,
+} from "@/store/api/appSettingsApi";
+import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useApi } from "@/hooks/useApi";
-// The chosen customer-template defaults are persisted to the settings config key/value
-// store, keyed by a single fixed configId:
-//  - GET  /configs/get?configId=1  -> read the saved template to prefill the popup
-//  - POST /configs/create          -> create-or-update by configId (server decides)
-// The whole template is one row. configValue is a JSON blob of every field below.
-// For backward compatibility the three original picks keep their exact shapes/keys so
-// the customer master create form keeps reading them (parseCustomerTemplateConfig):
-//  - company keeps { id, name } (comp_id is the real key; name is for the prefill label)
-//  - area / customerGroup store the exact NAME (their dropdown value IS the name).
-// Every other field is stored verbatim as a string (checkboxes as "true"/"false",
-// numbers as strings). cusStateName rides along so the lazy State dropdown can be
-// re-seeded with its label on re-open.
-const CONFIG_SAVE_ENDPOINT = "/configs/create";
-const CONFIG_GET_ENDPOINT = "/configs/get";
-const CUSTOMER_TEMPLATE_CONFIG_ID = 1;
-const CUSTOMER_TEMPLATE_CONFIG_NAME = "customer_template";
+// The customer template — what a new customer starts with — is the
+// `masters.customer_form_defaults` SETTING, read and written through the app-settings
+// catalog:
+//  - GET  /app-setting-values/effective?companyId=&branchId=…  -> the value in force
+//  - POST /app-setting-values/create  { data: [ … ] }          -> upsert on the target
+// Both follow the session, and the write lands on the deepest layer it names (branch,
+// else company, else global) — see form-defaults-setting.ts for why they must agree.
+//
+// The value is TEXT holding a JSON object keyed by the CUSTOMER FORM's own field names,
+// typed as they are used (booleans as booleans, numbers as numbers), with a `*Name`
+// companion beside each id so a lazy dropdown can show its label before it has loaded:
+//   { "cusAreaId": "019f…", "cusAreaName": "MUSIRI", "cusCreditDays": 35, … }
+// That shape is not this screen's invention — it is what already sits in the setting,
+// written by the POS — so anything this screen does not render is carried through a
+// save untouched rather than dropped.
 // Price Level is the one non-configured dropdown; it loads eagerly from the shared
 // master-lookup endpoint (same source the customer master uses).
 const PRICE_LEVEL_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const PRICE_LEVEL_LOOKUP_QUERY = { module: "priceLevels" } as const;
-type ConfigGetResponse = {
-  data?: { configValue?: string | null } | null;
-};
-type SavedEntry = { id: string; name: string };
-// company round-trips by id (+ label); area/customerGroup round-trip by their name; the
-// remaining fields round-trip as plain strings held in `extras` (keyed by field name).
-type SavedTemplate = {
-  company: SavedEntry;
-  area: string;
-  customerGroup: string;
-  cusStateName: string;
-  extras: Record<string, string>;
-};
-// Company is stored as { id, name }; tolerate a bare id string too (older rows).
-function readSavedEntry(raw: unknown): SavedEntry {
-  if (raw && typeof raw === "object") {
-    const record = raw as Record<string, unknown>;
-    return {
-      id: record.id == null ? "" : String(record.id),
-      name: record.name == null ? "" : String(record.name),
-    };
-  }
-  return { id: raw == null ? "" : String(raw), name: "" };
-}
-// Area/customer group are stored as the plain name string; tolerate an { id, name }
-// object too (reads its name) in case an older row was written that way.
-function readSavedName(raw: unknown): string {
-  if (raw && typeof raw === "object") {
-    const record = raw as Record<string, unknown>;
-    return record.name == null ? "" : String(record.name);
-  }
-  return raw == null ? "" : String(raw);
-}
-// Plain string/number/checkbox fields: keep the saved value, else fall back to default.
-function readSavedString(raw: unknown, fallback: string): string {
-  if (raw === undefined || raw === null || typeof raw === "object") {
-    return fallback;
-  }
-  return String(raw);
-}
 // Resolve the label the user sees for a selected value so it can be persisted alongside
 // the id (options always contain the picked/seeded option).
 function resolveOptionLabel(options: ERPDynamicSelectOption[], value: string): string {
@@ -86,10 +64,8 @@ function resolveOptionLabel(options: ERPDynamicSelectOption[], value: string): s
 // are lazy, server-side searchable configured dropdowns (fixed.dropdown_details, fetched
 // via /dropdown-details/run on open + on debounced search). The dropdown ids mirror the
 // customer master: 8 = company (comp_id/comp_name), 10 = area (arm_id/arm_name),
-// 28 = customer group (cgr_id/cgr_name), 9 = state (state_code/state_name).
-// Company/State option value is its id/code; area and customer group use their NAME as
-// the option value (idKeys point at the name column) so the picked value is the exact
-// name we persist. Price Level loads eagerly from the master-lookup endpoint.
+// 28 = customer group (cgr_id/cgr_name), 9 = state (state_code/state_name). Every one of
+// them is keyed by ID, like the customer form itself — the label is saved beside it.
 const COMPANY_DROPDOWN_CONFIG = {
   dropdownId: "8",
   idKeys: ["comp_id", "compId"] as const,
@@ -98,13 +74,13 @@ const COMPANY_DROPDOWN_CONFIG = {
 } as const;
 const AREA_DROPDOWN_CONFIG = {
   dropdownId: "10",
-  idKeys: ["arm_name", "armName"] as const,
+  idKeys: ["arm_id", "armId"] as const,
   labelKeys: ["arm_name", "armName"] as const,
   defaultOption: { value: "", label: "Select Area" } as ERPDynamicSelectOption,
 } as const;
 const CUSTOMER_GROUP_DROPDOWN_CONFIG = {
   dropdownId: "28",
-  idKeys: ["cgr_name", "cgrName"] as const,
+  idKeys: ["cgr_id", "cgrId"] as const,
   labelKeys: ["cgr_name", "cgrName"] as const,
   defaultOption: { value: "", label: "Select Customer Group" } as ERPDynamicSelectOption,
 } as const;
@@ -129,13 +105,13 @@ const TCS_TDS_OPTIONS: ERPDynamicSelectOption[] = [
   { value: "TCS", label: "TCS" },
   { value: "TDS", label: "TDS" },
 ];
-// Field names mirror the customer master's cus* keys so a future "seed the create form"
-// step can map straight through. Checkboxes default to "false"; numeric fields to "0".
+// Field names ARE the customer master's cus* keys, so a saved template maps straight
+// onto the create form. Checkboxes default to "false"; numeric fields to "0".
 const INITIAL_FORM_VALUES: Record<string, string> = {
-  // Primary Information (round-trip via their own shapes, see notes above).
-  company: "",
-  area: "",
-  customerGroup: "",
+  // Primary Information (saved as an id, with its label beside it).
+  cusCompanyId: "",
+  cusAreaId: "",
+  cusGroupId: "",
   // Basic Information.
   cusGstNo: "",
   cusStateCode: "",
@@ -177,42 +153,44 @@ const INITIAL_FORM_VALUES: Record<string, string> = {
   cusAllowPromotion: "false",
   cusEnableSms: "false",
 };
-// Every persisted field except the three original picks (which have bespoke shapes).
-// cusStateName is not a form field — it is derived on save and stored for re-seeding.
-const TEMPLATE_EXTRA_FIELD_NAMES = Object.keys(INITIAL_FORM_VALUES).filter(
-  (name) => name !== "company" && name !== "area" && name !== "customerGroup",
-);
+const TEMPLATE_FIELD_NAMES = Object.keys(INITIAL_FORM_VALUES);
+// The modal holds every value as a string; the setting stores each one as the JSON type
+// the field actually is, because the POS reads it back as that type.
+const TEMPLATE_BOOLEAN_FIELDS = new Set([
+  "cusCreditAllowed",
+  "cusItcollExempted",
+  "cusOverdueBilling",
+  "cusAllowDiscount",
+  "cusLoadingCharge",
+  "cusUnloadingCharge",
+  "cusFreightCharge",
+  "cusAllowLoyalty",
+  "cusAllowPromotion",
+  "cusEnableSms",
+]);
+const TEMPLATE_NUMBER_FIELDS = new Set([
+  "cusDistanceKm",
+  "cusCreditDays",
+  "cusCreditAmtLimit",
+  "cusCreditBillLimit",
+  "cusSortOrder",
+  "cusDiscPerc",
+]);
+function toSettingValue(name: string, raw: string): unknown {
+  if (TEMPLATE_BOOLEAN_FIELDS.has(name)) {
+    return raw === "true";
+  }
+  if (TEMPLATE_NUMBER_FIELDS.has(name)) {
+    const numeric = Number(raw);
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
+  return raw;
+}
 const CUSTOMER_TEMPLATE_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(calc(72vw/var(--erp-ui-scale)), 72rem)",
   height: "calc(80vh/var(--erp-ui-scale))",
   maxHeight: "calc(80vh/var(--erp-ui-scale))",
 };
-// Parse the configValue JSON into the saved picks. Returns null when there's nothing
-// usable (no row yet / bad JSON) so the caller leaves the form at its defaults.
-function parseSavedTemplate(configValue: string | null | undefined): SavedTemplate | null {
-  if (!configValue) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(configValue) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-    const extras: Record<string, string> = {};
-    for (const name of TEMPLATE_EXTRA_FIELD_NAMES) {
-      extras[name] = readSavedString(parsed[name], INITIAL_FORM_VALUES[name]);
-    }
-    return {
-      company: readSavedEntry(parsed.company),
-      area: readSavedName(parsed.area),
-      customerGroup: readSavedName(parsed.customerGroup),
-      cusStateName: readSavedString(parsed.cusStateName, ""),
-      extras,
-    };
-  } catch {
-    return null;
-  }
-}
 // Each lazy field is wired to its own handler set so opening/typing fetches (and
 // re-fetches) that dropdown independently.
 function buildCustomerTemplateFields(
@@ -230,7 +208,7 @@ function buildCustomerTemplateFields(
     // ---- Primary Information ---------------------------------------------------
     { name: "primaryHeading", label: "Primary Information", type: "heading" },
     {
-      name: "company",
+      name: "cusCompanyId",
       label: "Company",
       type: "select",
       searchable: true,
@@ -243,7 +221,7 @@ function buildCustomerTemplateFields(
       validation: { requiredMessage: "Company is required." },
     },
     {
-      name: "area",
+      name: "cusAreaId",
       label: "Area",
       type: "select",
       searchable: true,
@@ -257,7 +235,7 @@ function buildCustomerTemplateFields(
     },
     {
       // The image labels this "Customer Type"; it is the Customer Group master (cgr).
-      name: "customerGroup",
+      name: "cusGroupId",
       label: "Customer Group",
       type: "select",
       searchable: true,
@@ -446,54 +424,84 @@ export default function CustomerTemplatePage() {
       mounted = false;
     };
   }, [getPriceLevelLookup]);
-  // Persists the selected template to the config key/value store. useApi surfaces
-  // success/error toasts; a thrown error keeps the modal open (see onSubmit).
-  const { run: saveTemplate } = useApi<unknown, Record<string, unknown>>(CONFIG_SAVE_ENDPOINT, {
-    method: "POST",
-  });
-  // Reads the saved template to prefill the popup. Errors are silenced: a missing row
-  // (first-time / 404) just means the default form, and saving will create it.
-  const { run: getTemplate } = useApi<ConfigGetResponse>(CONFIG_GET_ENDPOINT, {
-    toast: { error: false },
-  });
+  // The saved template, as it stands for this session. A standing subscription rather
+  // than a fetch on open: an RTK Query lazy trigger fired from a mount effect (which is
+  // what the popup's auto-open amounts to) resolves undefined without touching the
+  // network. Nothing is toasted on a failed read — the popup simply opens on its blanks.
+  const session = useSessionSettingContext();
+  const scope = useSessionSettingQuery(session);
+  const { data: effectiveSettings } = useGetEffectiveSettingsQuery(scope);
+  const [saveSettings] = useSaveAppSettingsMutation();
+  const savedText = useMemo(
+    () => findEffectiveSettingValue(effectiveSettings, CUSTOMER_FORM_DEFAULTS_SETTING_KEY),
+    [effectiveSettings],
+  );
+  const savedDefaults = useMemo<CustomerTemplateDefaults>(
+    () => parseCustomerFormDefaults(savedText),
+    [savedText],
+  );
+  // The saved JSON as written, so a save carries through the keys this screen does not
+  // render (the POS writes cusCountry, cusIsActive, cusCollectionDays and others).
+  // Held in a ref because only the submit reads it.
+  const savedRawRef = useRef<Record<string, unknown> | null>(null);
+  useEffect(() => {
+    savedRawRef.current = parseSettingObject(savedText);
+  }, [savedText]);
   // Auto-open the popup the first time the page mounts so landing here from the menu
   // shows the dialog straight away. Guarded so closing it doesn't re-trigger.
   const hasAutoOpenedRef = useRef(false);
   // Held so the prefill can push saved values into the already-open form.
   const controllerRef = useRef<ERPDynamicModalController | null>(null);
   // Guards the re-entrant openModal below: openModal fires onOpenChange again, which
-  // would otherwise re-trigger the prefill fetch in a loop.
+  // would otherwise loop.
   const isPrefillingRef = useRef(false);
+  const [isOpen, setIsOpen] = useState(false);
+  // The prefill runs once per opening. Re-running it whenever the read refreshes would
+  // overwrite whatever the operator had already typed.
+  const hasPrefilledRef = useRef(false);
 
-  // On every open, GET the saved template and prefill every field. Company round-trips
-  // by id; area/customer group/state round-trip by their name; the rest are plain
-  // strings. No saved row -> leave the form at its defaults.
-  const prefillFromSavedTemplate = useCallback(async () => {
-    let response: ConfigGetResponse | undefined;
-    try {
-      response = await getTemplate({ query: { configId: String(CUSTOMER_TEMPLATE_CONFIG_ID) } });
-    } catch {
+  // Push the saved template into the open popup: every field by its own name, the four
+  // lazy dropdowns seeded with their saved label so the trigger reads properly before
+  // the list has loaded. Fields the setting omits fall back to the blank defaults.
+  const prefillFromSavedTemplate = useCallback(
+    (saved: CustomerTemplateDefaults) => {
+      company.seedSelected(saved.company?.id ?? "", saved.company?.label ?? "");
+      area.seedSelected(saved.area?.id ?? "", saved.area?.label ?? "");
+      group.seedSelected(saved.group?.id ?? "", saved.group?.label ?? "");
+      state.seedSelected(saved.state?.code ?? "", saved.state?.name ?? "");
+      isPrefillingRef.current = true;
+      controllerRef.current?.openModal("customerTemplate", {
+        values: {
+          ...INITIAL_FORM_VALUES,
+          ...saved.fieldValues,
+          cusCompanyId: saved.company?.id ?? "",
+          cusAreaId: saved.area?.id ?? "",
+          cusGroupId: saved.group?.id ?? "",
+        },
+      });
+      isPrefillingRef.current = false;
+    },
+    [company.seedSelected, area.seedSelected, group.seedSelected, state.seedSelected],
+  );
+  // The session's scope hydrates in stages — company first, branch once the header has
+  // resolved it — so the first read to land can be from a SHALLOWER layer than the one
+  // this session ends up in (a company row where a branch row exists). When the scope
+  // changes the answer changes, so arm the prefill again: this effect is declared
+  // before the prefill below so the re-arm always happens first in the same commit.
+  useEffect(() => {
+    hasPrefilledRef.current = false;
+  }, [scope]);
+  // Prefill as soon as the popup is open AND the read has landed — in either order, so
+  // opening before the catalog arrives still fills the form when it does.
+  useEffect(() => {
+    if (!isOpen || hasPrefilledRef.current || effectiveSettings === undefined) {
       return;
     }
-    const saved = parseSavedTemplate(response?.data?.configValue);
-    if (!saved) {
-      return;
-    }
-    company.seedSelected(saved.company.id, saved.company.name);
-    area.seedSelected(saved.area, saved.area);
-    group.seedSelected(saved.customerGroup, saved.customerGroup);
-    state.seedSelected(saved.extras.cusStateCode ?? "", saved.cusStateName);
-    isPrefillingRef.current = true;
-    controllerRef.current?.openModal("customerTemplate", {
-      values: {
-        company: saved.company.id,
-        area: saved.area,
-        customerGroup: saved.customerGroup,
-        ...saved.extras,
-      },
-    });
-    isPrefillingRef.current = false;
-  }, [getTemplate, company.seedSelected, area.seedSelected, group.seedSelected, state.seedSelected]);
+    hasPrefilledRef.current = true;
+    prefillFromSavedTemplate(savedDefaults);
+  }, [isOpen, scope, effectiveSettings, savedDefaults, prefillFromSavedTemplate]);
+
+  const scopeLabel = describeSessionScope(session);
   const variant = useMemo<ERPDynamicModalVariant>(
     () => ({
       key: "customerTemplate",
@@ -501,7 +509,7 @@ export default function CustomerTemplatePage() {
       cardDescription: "Set the default values applied to new customers.",
       cardButtonLabel: "Open Template",
       modalTitle: "Customer Template",
-      modalDescription: "Configure the default field values for new customers.",
+      modalDescription: `Configure the default field values for new customers. Saved for ${scopeLabel}.`,
       submitLabel: "Save Template",
       accent: "primary",
       fields: buildCustomerTemplateFields(
@@ -526,6 +534,7 @@ export default function CustomerTemplatePage() {
       state.options,
       state.handlers,
       priceLevelOptions,
+      scopeLabel,
     ],
   );
   return (
@@ -544,36 +553,51 @@ export default function CustomerTemplatePage() {
         }
       }}
       onOpenChange={(open, variantKey) => {
-        // Prefill from the saved config each time the popup opens (card button or the
-        // mount auto-open). Skip the re-entrant open the prefill itself triggers.
-        if (!open || variantKey !== "customerTemplate" || isPrefillingRef.current) {
+        // Skip the re-entrant open the prefill itself triggers; a real close arms the
+        // next opening's prefill. A close carries the variant key too, but it is typed
+        // nullable, so only the OPEN side is keyed on it.
+        if (isPrefillingRef.current || (open && variantKey !== "customerTemplate")) {
           return;
         }
-        void prefillFromSavedTemplate();
+        if (!open) {
+          hasPrefilledRef.current = false;
+        }
+        setIsOpen(open);
       }}
       onSubmit={async ({ values }) => {
-        // Save the whole template as one config row. company keeps { id, name }; area/
-        // customerGroup keep their NAME; cusStateName is derived so the State field can
-        // be re-seeded; every other field is stored verbatim. The server create-or-
-        // updates by configId; awaited so a failed POST throws -> modal stays open.
-        const extras: Record<string, string> = {};
-        for (const name of TEMPLATE_EXTRA_FIELD_NAMES) {
-          extras[name] = values[name] ?? INITIAL_FORM_VALUES[name] ?? "";
+        // One setting value: whatever was stored, with every field this screen renders
+        // written over it in the JSON type that field is, and the label saved beside
+        // each id. The override goes to the deepest layer this session names and the
+        // server upserts it, so Save is create and update alike. Awaited and re-thrown
+        // so a refused write keeps the popup open with the values still in it.
+        const settingValue: Record<string, unknown> = { ...(savedRawRef.current ?? {}) };
+        for (const name of TEMPLATE_FIELD_NAMES) {
+          settingValue[name] = toSettingValue(name, values[name] ?? INITIAL_FORM_VALUES[name] ?? "");
         }
-        const stateCode = values.cusStateCode ?? "";
-        await saveTemplate({
-          body: {
-            configId: CUSTOMER_TEMPLATE_CONFIG_ID,
-            configName: CUSTOMER_TEMPLATE_CONFIG_NAME,
-            configValue: JSON.stringify({
-              company: { id: values.company, name: resolveOptionLabel(company.options, values.company) },
-              area: values.area,
-              customerGroup: values.customerGroup,
-              cusStateName: stateCode ? resolveOptionLabel(state.options, stateCode) : "",
-              ...extras,
-            }),
-          },
-        });
+        settingValue.cusCompanyName = resolveOptionLabel(company.options, values.cusCompanyId ?? "");
+        settingValue.cusAreaName = resolveOptionLabel(area.options, values.cusAreaId ?? "");
+        settingValue.cusGroupName = resolveOptionLabel(group.options, values.cusGroupId ?? "");
+        settingValue.cusStateName = resolveOptionLabel(state.options, values.cusStateCode ?? "");
+        settingValue.cusPriceLevelName = resolveOptionLabel(
+          priceLevelOptions,
+          values.cusPriceLevelId ?? "",
+        );
+        try {
+          await saveSettings([
+            buildSessionScopeOverride(
+              CUSTOMER_FORM_DEFAULTS_SETTING_KEY,
+              JSON.stringify(settingValue),
+              session,
+            ),
+          ]).unwrap();
+        } catch (error) {
+          toast.error(getApiErrorMessage(error as never) ?? "Could not save the customer template.");
+          throw error;
+        }
+        // No local patch of what was just written: the save invalidates the
+        // "AppSettings" tag, so the standing read comes back from the server, which is
+        // the only thing that knows which layer now holds the value.
+        toast.success(`Customer template saved for ${scopeLabel}.`);
       }}
     />
   );

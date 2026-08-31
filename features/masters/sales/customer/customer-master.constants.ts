@@ -12,10 +12,6 @@ export const API_ENDPOINTS = {
   delete: "/customers/delete",
 } as const;
 export const GRID_TABLE_NAME = "customers";
-// Seeds the *create* customer form's Company/Area/Customer Group dropdowns with the
-// defaults saved in the customer_template config (GET /configs/get?configId=1).
-export const CUSTOMER_TEMPLATE_CONFIG_ENDPOINT = "/configs/get";
-export const CUSTOMER_TEMPLATE_CONFIG_ID = "1";
 export const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 export const STATE_GET_ENDPOINT = "/state-code-masters/get";
 export const STATE_UPSERT_ENDPOINT = "/state-code-masters/create";

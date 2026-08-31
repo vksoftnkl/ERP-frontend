@@ -212,6 +212,14 @@ export type ERPDynamicModalFormProps = {
     variantKey: string,
   ) => void;
   onControllerReady?: (controller: ERPDynamicModalController) => void;
+  /** Rendered at the FAR LEFT of the modal footer, with Cancel/Save keeping the
+   *  right — for the occasional action that must be visible but must not sit
+   *  under the thumb of the button used forty times a day. Called with the form
+   *  as it stands, so the action can act on the values without a controller. */
+  footerLeadingActions?: (context: {
+    variantKey: string;
+    values: Record<string, string>;
+  }) => ReactNode;
   showDefaultCards?: boolean;
   hideSectionHeader?: boolean;
   submitError?: string | null;

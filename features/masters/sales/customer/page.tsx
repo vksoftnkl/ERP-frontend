@@ -117,8 +117,6 @@ import {
   GROUP_MODAL_INITIAL_VALUES,
   CUSTOMER_MODAL_PANEL_STYLE,
   CUSTOMER_BASIC_VALIDATIONS,
-  CUSTOMER_TEMPLATE_CONFIG_ENDPOINT,
-  CUSTOMER_TEMPLATE_CONFIG_ID,
 } from "./customer-master.constants";
 import {
   DROPDOWN_RUN_ENDPOINT,
@@ -131,9 +129,21 @@ import {
   buildDropdownOptions,
   buildStateDropdownData,
   withPinnedOption,
-  parseCustomerTemplateConfig,
-  EMPTY_CUSTOMER_TEMPLATE_DEFAULTS,
+  parseCustomerFormDefaults,
 } from "./customer-dropdowns";
+import SaveAsTemplateButton from "@/features/masters/shared/form-template/save-as-template-button";
+import { CUSTOMER_TEMPLATE_EXCLUDED } from "./template/excluded";
+import {
+  CUSTOMER_TEMPLATE_FIELD_SPECS,
+  CUSTOMER_TEMPLATE_SUMMARY_FIELDS,
+} from "./template/field-specs";
+import { useGetEffectiveSettingsQuery } from "@/store/api/appSettingsApi";
+import {
+  CUSTOMER_FORM_DEFAULTS_SETTING_KEY,
+  findEffectiveSettingValue,
+  useSessionSettingContext,
+  useSessionSettingQuery,
+} from "@/features/masters/shared/form-defaults-setting";
 function withCustomerBasicValidation(field: ERPDynamicModalField): ERPDynamicModalField {
   const basicValidation = CUSTOMER_BASIC_VALIDATIONS[field.name];
   if (!basicValidation) {
@@ -1404,12 +1414,6 @@ export default function CustomerPage() {
     method: "POST",
   });
   const { getAll: getPriceLevelLookup } = useApi<unknown>(PRICE_LEVEL_LOOKUP_ENDPOINT);
-  // Customer_template config: seeds the create form's Company/Area/Customer Group
-  // defaults. A failed fetch just leaves those dropdowns blank, so don't toast errors.
-  const { getAll: getCustomerTemplateConfig } = useApi<unknown>(
-    CUSTOMER_TEMPLATE_CONFIG_ENDPOINT,
-    { toast: { error: false } },
-  );
   const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [regionStateOptions, setRegionStateOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [areaOptions, setAreaOptions] = useState<ERPDynamicSelectOption[]>([]);
@@ -1418,9 +1422,6 @@ export default function CustomerPage() {
   const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [priceLevelOptions, setPriceLevelOptions] = useState<ERPDynamicSelectOption[]>([]);
-  const [templateDefaults, setTemplateDefaults] = useState<CustomerTemplateDefaults>(
-    EMPTY_CUSTOMER_TEMPLATE_DEFAULTS,
-  );
   const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
   const [editingStateCode, setEditingStateCode] = useState<string | null>(null);
@@ -1470,30 +1471,20 @@ export default function CustomerPage() {
       mounted = false;
     };
   }, [getCityLookup, getPriceLevelLookup]);
-  // Fetch the customer_template config once so the create form can default its
-  // Company/Area/Customer Group dropdowns. A failed/malformed fetch keeps the empty
-  // defaults, so the form still opens normally with blank dropdowns.
-  useEffect(() => {
-    let mounted = true;
-    void (async () => {
-      try {
-        const payload = await getCustomerTemplateConfig({
-          configId: CUSTOMER_TEMPLATE_CONFIG_ID,
-        });
-        if (!mounted) {
-          return;
-        }
-        setTemplateDefaults(parseCustomerTemplateConfig(payload));
-      } catch {
-        if (mounted) {
-          setTemplateDefaults(EMPTY_CUSTOMER_TEMPLATE_DEFAULTS);
-        }
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [getCustomerTemplateConfig]);
+  // What a new customer starts with: the `masters.customer_form_defaults` setting,
+  // read for THIS session so the branch override beats the company row the way the
+  // Customer Template screen showed it. A failed read leaves the create form on its
+  // blank values, which is why nothing here toasts.
+  const settingSession = useSessionSettingContext();
+  const settingScope = useSessionSettingQuery(settingSession);
+  const { data: effectiveSettings } = useGetEffectiveSettingsQuery(settingScope);
+  const templateDefaults = useMemo<CustomerTemplateDefaults>(
+    () =>
+      parseCustomerFormDefaults(
+        findEffectiveSettingValue(effectiveSettings, CUSTOMER_FORM_DEFAULTS_SETTING_KEY),
+      ),
+    [effectiveSettings],
+  );
   // Silent progressive enhancement: a failed config fetch leaves the form on its
   // hardcoded labels/order (empty map), so don't nag the user with an error toast.
   const { getAll: getWidgetConfig } = useApi<WidgetMastersResponse>(WIDGET_CONFIG_ENDPOINT, {
@@ -1775,12 +1766,12 @@ export default function CustomerPage() {
     applyDropdownOptions("cusStateCode", [blank]);
     applyDropdownOptions("cusRegionStateName", [blank]);
   }, [applyDropdownOptions]);
-  // Seed the create form's lazy dropdowns from the customer_template config: the
+  // Seed the create form's lazy dropdowns from the customer form defaults: the
   // Company/Area/Customer Group selections and the State select. Each is pinned (so its
   // label survives a later lazy fetch) and shown as the only extra option beside the
   // field's blank/All head, mirroring how a saved record's selection is seeded on edit.
   // The State seed also feeds stateNameByCode/stateCodeByName so the submit payload can
-  // resolve cusStateName without the user opening the field. Fields the config omits
+  // resolve cusStateName without the user opening the field. Fields the setting omits
   // keep whatever resetDropdownSelections left them at.
   const seedTemplateDropdownDefaults = useCallback(() => {
     const blank: ERPDynamicSelectOption = { value: "", label: "" };
@@ -1813,6 +1804,54 @@ export default function CustomerPage() {
       }
     }
   }, [applyDropdownOptions, templateDefaults]);
+  // "Save as Default Template" needs the DISPLAY half of every id on the form —
+  // the document stores `cusAreaId` and `cusAreaName` together so the next Add
+  // can render a label before the lazy dropdown has loaded anything. The pinned
+  // option is preferred over the option list: it is the selection, and it
+  // survives a fetch that replaced the list.
+  const resolveTemplateLabels = useCallback(
+    (values: Record<string, string>): Record<string, string> => {
+      const labelFor = (fieldName: string) => {
+        const value = (values[fieldName] ?? "").trim();
+        if (!value) {
+          return "";
+        }
+        const pinned = pinnedDropdownOptionRef.current[fieldName];
+        if (pinned?.value === value) {
+          return pinned.label;
+        }
+        return (
+          dropdownOptionsRef.current[fieldName]?.find((option) => option.value === value)?.label ??
+          ""
+        );
+      };
+      const stateCode = (values.cusStateCode ?? "").trim();
+      return {
+        cusCompanyId: labelFor("cusCompanyId"),
+        cusBranchId: labelFor("cusBranchId"),
+        cusAreaId: labelFor("cusAreaId"),
+        cusGroupId: labelFor("cusGroupId"),
+        // The option label reads "Tamil Nadu (33)"; the document wants the name.
+        cusStateCode: stateCode ? (stateNameByCode[stateCode] ?? "") : "",
+        cusPriceLevelId:
+          priceLevelOptions.find((option) => option.value === (values.cusPriceLevelId ?? ""))
+            ?.label ?? "",
+      };
+    },
+    [priceLevelOptions, stateNameByCode],
+  );
+  // "All companies"/"All branches" are the form's own sentinels, not ids (the
+  // submit turns them into null), so a template must not carry them.
+  const toTemplateValues = useCallback((values: Record<string, string>) => {
+    const templateValues = { ...values };
+    if (templateValues.cusCompanyId === ALL_COMPANY_OPTION_VALUE) {
+      templateValues.cusCompanyId = "";
+    }
+    if (templateValues.cusBranchId === ALL_BRANCH_OPTION_VALUE) {
+      templateValues.cusBranchId = "";
+    }
+    return templateValues;
+  }, []);
   // Clear any pending dropdown search debounces on unmount.
   useEffect(() => {
     return () => {
@@ -2412,8 +2451,8 @@ export default function CustomerPage() {
       widgetFieldConfig,
     ],
   );
-  // Create-modal initial values: the blank base, then the whole customer_template
-  // config overlaid — every primitive cus* field (fieldValues) plus the three dropdown
+  // Create-modal initial values: the blank base, then the whole saved template
+  // overlaid — every primitive cus* field (fieldValues) plus the three dropdown
   // ids. cusStateCode arrives via fieldValues; the dropdown/state option labels are
   // seeded separately (seedTemplateDropdownDefaults) when the create modal opens.
   const customerCreateInitialValues = useMemo<Record<string, string>>(() => {
@@ -2762,10 +2801,30 @@ export default function CustomerPage() {
         modalHideFieldErrorText
         modalFocusFirstInvalidFieldOnValidationError
         modalEnableArrowKeyFieldNavigation
+        modalFooterLeadingActions={({ variantKey, values }) => {
+          const templateValues = toTemplateValues(values);
+          return (
+            <SaveAsTemplateButton
+              settingKey={CUSTOMER_FORM_DEFAULTS_SETTING_KEY}
+              templateLabel="Customer template"
+              entityLabelPlural="customers"
+              specs={CUSTOMER_TEMPLATE_FIELD_SPECS}
+              excluded={CUSTOMER_TEMPLATE_EXCLUDED}
+              summaryFields={CUSTOMER_TEMPLATE_SUMMARY_FIELDS}
+              values={templateValues}
+              labels={resolveTemplateLabels(templateValues)}
+              sourceRecordName={
+                variantKey === "master-update"
+                  ? (values.cusName ?? "").trim() || "this customer"
+                  : null
+              }
+            />
+          );
+        }}
         onModalOpenChange={(open, variantKey) => {
           // Clear the lazy dropdowns when the create modal opens so no stale list
           // from a previously edited record lingers (they reload on open), then seed
-          // the Company/Area/Customer Group defaults from the customer_template config.
+          // the Company/Area/Customer Group defaults from the saved customer template.
           if (open && variantKey === "master-create") {
             resetDropdownSelections();
             seedTemplateDropdownDefaults();

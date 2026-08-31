@@ -2324,6 +2324,7 @@ export default function CrudMasterPage({
   modalHideFieldErrorText,
   modalFocusFirstInvalidFieldOnValidationError,
   modalEnableArrowKeyFieldNavigation,
+  modalFooterLeadingActions,
   auditHistory,
   enableGridSettingsContextMenu = true,
   gridDetailId,
@@ -4452,6 +4453,7 @@ export default function CrudMasterPage({
           modalFocusFirstInvalidFieldOnValidationError
         }
         enableArrowKeyFieldNavigation={modalEnableArrowKeyFieldNavigation}
+        footerLeadingActions={modalFooterLeadingActions}
         onControllerReady={(controller) => {
           modalControllerRef.current = controller;
         }}

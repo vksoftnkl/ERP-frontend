@@ -99,6 +99,7 @@ export function ERPDynamicModalForm({
   validateOnChange = true,
   onValidationError,
   onControllerReady,
+  footerLeadingActions,
   showDefaultCards = true,
   hideSectionHeader = false,
   submitError,
@@ -2383,6 +2384,11 @@ export function ERPDynamicModalForm({
               </form>
             </div>
             <footer className={cx(styles.footer, "erp-ms-modal-footer")}>
+              {footerLeadingActions ? (
+                <div className={cx(styles.footerLeading, "erp-ms-modal-footer-leading")}>
+                  {footerLeadingActions({ variantKey: activeVariant.key, values: formData })}
+                </div>
+              ) : null}
               {submitError ? (
                 <p className={styles.submitError} role="alert">
                   {submitError}

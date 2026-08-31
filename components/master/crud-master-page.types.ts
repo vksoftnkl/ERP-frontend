@@ -256,6 +256,13 @@ export type CrudMasterPageProps = {
   modalHideFieldErrorText?: boolean;
   modalFocusFirstInvalidFieldOnValidationError?: boolean;
   modalEnableArrowKeyFieldNavigation?: boolean;
+  /** Rendered at the far left of the create/update modal footer, called with
+   *  the form as it stands. For a per-master action that acts on the draft
+   *  without saving it (Customer's "Save as Default Template"). */
+  modalFooterLeadingActions?: (context: {
+    variantKey: string;
+    values: Record<string, string>;
+  }) => ReactNode;
   auditHistory?: CrudMasterAuditHistoryConfig;
   enableGridSettingsContextMenu?: boolean;
   gridDetailId?: number;

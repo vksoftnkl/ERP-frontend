@@ -20,6 +20,23 @@ import WidgetVisibilityTree, {
   type WidgetTreeSectionView,
 } from "@/features/masters/shared/widget-visibility-tree";
 import { useVisibleSettingsContextMenu } from "@/features/masters/shared/use-visible-settings-context-menu";
+import { applyFormDefaults } from "@/features/masters/shared/apply-form-defaults";
+import {
+  findEffectiveSettingValue,
+  ITEM_FORM_DEFAULTS_SETTING_KEY,
+  useSessionSettingContext,
+  useSessionSettingQuery,
+} from "@/features/masters/shared/form-defaults-setting";
+import SaveAsTemplateButton from "@/features/masters/shared/form-template/save-as-template-button";
+import { useGetEffectiveSettingsQuery } from "@/store/api/appSettingsApi";
+import {
+  ITEM_TEMPLATE_EXCLUDED,
+  ITEM_TEMPLATE_EXCLUDED_PREFIXES,
+} from "./template/excluded";
+import {
+  ITEM_TEMPLATE_FIELD_SPECS,
+  ITEM_TEMPLATE_SUMMARY_FIELDS,
+} from "./template/field-specs";
 import {
   ERPDynamicModalForm,
   type ERPDynamicCustomFieldRenderProps,
@@ -4484,6 +4501,62 @@ export default function ItemMasterPageContent({
   const customerGroup = useLazyConfiguredDropdown(CUSTOMER_GROUP_DROPDOWN_CONFIG);
   const supplier = useLazyConfiguredDropdown(SUPPLIER_DROPDOWN_CONFIG);
   const tax = useLazyConfiguredDropdown(TAX_DROPDOWN_CONFIG);
+  // What a new item starts with: the `masters.item_form_defaults` setting, read for
+  // THIS session so a branch override beats the company row. A standing
+  // subscription, not a fetch on open — an RTK Query lazy trigger fired from a
+  // mount effect resolves undefined without touching the network. A failed read
+  // leaves the create form on its blank values, so nothing here toasts.
+  const settingSession = useSessionSettingContext();
+  const settingScope = useSessionSettingQuery(settingSession);
+  const { data: effectiveSettings } = useGetEffectiveSettingsQuery(settingScope);
+  const itemTemplate = useMemo(
+    () =>
+      applyFormDefaults(
+        findEffectiveSettingValue(effectiveSettings, ITEM_FORM_DEFAULTS_SETTING_KEY),
+        ITEM_TEMPLATE_FIELD_SPECS,
+      ),
+    [effectiveSettings],
+  );
+  const itemCreateInitialValues = useMemo(
+    () => ({ ...ITEM_INITIAL_FORM_VALUES, ...itemTemplate.values }),
+    [itemTemplate],
+  );
+  // "Save as Default Template" stores each lazy dropdown's id WITH its display
+  // text, so the next Add can render a label before the list has loaded. Only
+  // the lazy fields need this: branch, base unit and HSN load eagerly and
+  // resolve their own labels from the id.
+  const resolveTemplateLabels = useCallback(
+    (values: Record<string, string>): Record<string, string> => {
+      const optionsByField: Record<string, ERPDynamicSelectOption[]> = {
+        item_company_id: company.options,
+        item_group_id: group.options,
+        item_category_id: category.options,
+        item_section_id: section.options,
+        item_brand_id: brand.options,
+        item_cust_group: customerGroup.options,
+        item_supplier_id: supplier.options,
+        item_default_tax_id: tax.options,
+      };
+      const labels: Record<string, string> = {};
+      for (const [fieldName, options] of Object.entries(optionsByField)) {
+        const value = (values[fieldName] ?? "").trim();
+        labels[fieldName] = value
+          ? (options.find((option) => option.value === value)?.label ?? "")
+          : "";
+      }
+      return labels;
+    },
+    [
+      company.options,
+      group.options,
+      category.options,
+      section.options,
+      brand.options,
+      customerGroup.options,
+      supplier.options,
+      tax.options,
+    ],
+  );
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [priceRowCompanyOptions, setPriceRowCompanyOptions] = useState<
     ERPDynamicSelectOption[]
@@ -5538,7 +5611,7 @@ export default function ItemMasterPageContent({
       formTitle="Item Form"
       formDescription="Create and update items."
       customFields={visibleItemFormFields}
-      createInitialValues={ITEM_INITIAL_FORM_VALUES}
+      createInitialValues={itemCreateInitialValues}
       modalPanelStyle={ITEM_MODAL_PANEL_STYLE}
       modalFormGridColumns={3}
       // Non-dense flow so an inline section heading (e.g. "Reference Links")
@@ -5669,19 +5742,48 @@ export default function ItemMasterPageContent({
         };
       }}
       onCrudControllerReady={onCrudControllerReady}
+      modalFooterLeadingActions={({ variantKey, values }) => (
+        <SaveAsTemplateButton
+          settingKey={ITEM_FORM_DEFAULTS_SETTING_KEY}
+          templateLabel="Item template"
+          entityLabelPlural="items"
+          specs={ITEM_TEMPLATE_FIELD_SPECS}
+          excluded={ITEM_TEMPLATE_EXCLUDED}
+          excludedPrefixes={ITEM_TEMPLATE_EXCLUDED_PREFIXES}
+          summaryFields={ITEM_TEMPLATE_SUMMARY_FIELDS}
+          values={values}
+          labels={resolveTemplateLabels(values)}
+          sourceRecordName={
+            variantKey === "master-update"
+              ? (values.item_name_en ?? "").trim() || "this item"
+              : null
+          }
+        />
+      )}
       onModalOpenChange={(open, variantKey) => {
         // Clear the lazy Company/Item Group/Category/Brand/Section/Customer Group/
         // Supplier/Default Tax dropdowns when the create modal opens so no stale
         // selection from a previously edited item lingers (they reload on open).
         if (open && variantKey === "master-create") {
-          company.seedSelected("", "");
-          group.seedSelected("", "");
-          category.seedSelected("", "");
-          brand.seedSelected("", "");
-          section.seedSelected("", "");
-          customerGroup.seedSelected("", "");
-          supplier.seedSelected("", "");
-          tax.seedSelected("", "");
+          // Seeded from the item template where it has a pick, cleared where it
+          // does not — either way no stale selection from a previously edited
+          // item lingers (they reload on open). The template carries each id
+          // WITH its label because none of these lists is loaded yet.
+          const seedFromTemplate = (
+            fieldName: string,
+            dropdown: { seedSelected: (id: string, name: string) => void },
+          ) => {
+            const seed = itemTemplate.seeds[fieldName];
+            dropdown.seedSelected(seed?.id ?? "", seed?.label ?? "");
+          };
+          seedFromTemplate("item_company_id", company);
+          seedFromTemplate("item_group_id", group);
+          seedFromTemplate("item_category_id", category);
+          seedFromTemplate("item_brand_id", brand);
+          seedFromTemplate("item_section_id", section);
+          seedFromTemplate("item_cust_group", customerGroup);
+          seedFromTemplate("item_supplier_id", supplier);
+          seedFromTemplate("item_default_tax_id", tax);
         }
         onModalOpenChange?.(open, variantKey);
       }}
