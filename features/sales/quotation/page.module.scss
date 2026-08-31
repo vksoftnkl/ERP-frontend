@@ -1231,8 +1231,24 @@
   background: var(--row-hover, #f0e7e7);
 }
 
-.listTable tbody tr[data-selected="true"] {
-  background: var(--row-selected, #f6ecec);
+/**
+ * The list cursor — the row Enter acts on.
+ *
+ * It has to read as a cursor rather than as a tint: these dialogs are driven
+ * with ↑↓ and Enter, and the previous `--row-selected` wash was a shade off the
+ * hover colour, so the operator could not tell which row was actually armed. It
+ * outranks `:hover` on purpose — the pointer resting somewhere else must not
+ * look like the selection — and the accent bar is painted on the first cell
+ * because a `box-shadow` on a `tr` is unreliable across browsers.
+ */
+.listTable tbody tr[data-selected="true"] > td,
+.listTable tbody tr[data-selected="true"]:hover > td {
+  background: var(--row-selected-strong, #ecd8d8);
+  font-weight: 600;
+}
+
+.listTable tbody tr[data-selected="true"] > td:first-child {
+  box-shadow: inset 3px 0 0 0 var(--primary, #7b1515);
 }
 
 .listTable tbody tr[data-deleted="true"] {

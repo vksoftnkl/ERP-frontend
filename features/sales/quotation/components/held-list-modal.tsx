@@ -4,43 +4,56 @@
  *
  * Two filters run, and both are load-bearing:
  *
- *  - **on the wire**, the tenant scope. Sending it is also what keeps the
- *    request off the configured-grid path: the module answers from its own
- *    Prisma query only when a structured filter is present, and the stored grid
- *    SQL knows none of these, so a search-only request would list every
- *    company's holds. `thDocType` is deliberately NOT sent — carts parked before
- *    the server's enum grew `QUOTATION` carry `SALE_ORDER`, and filtering on
- *    either one alone would hide half of them. Neither is `thStatus`: the list
- *    shows both free and in-use carts (see below), and the filter takes one
+ *  - **on the wire**, the tenant scope, the document type and `txhKind=HOLD`.
+ *    Sending them is also what keeps the request off the configured-grid path:
+ *    the module answers from its own Prisma query only when a structured filter
+ *    is present, and the stored grid SQL knows none of these, so a search-only
+ *    request would list every company's holds. The kind matters as much as the
+ *    scope — `txn_hold` is shared with the till, and AUTOSAVE snapshots and
+ *    TEMPLATEs live in the same table. `txhStatus` is deliberately NOT sent: the
+ *    list shows both free and in-use carts (see below), and the filter takes one
  *    value.
- *  - **client-side**, `isQuotationHold` — the `th_ui_state` stamp, which is the
- *    real test of "this screen wrote it" and is blind to the document type. A
- *    row it did not write cannot be redrawn here, so it is left out rather than
- *    offered and then refused. Then `HOLD_LIVE_STATUSES`, which drops the
- *    converted, cancelled and expired rows the unfiltered query brings back.
+ *  - **client-side**, `isQuotationHold` — the `txh_payload` stamp, which is the
+ *    real test of "this screen wrote it". A row it did not write cannot be
+ *    redrawn here, so it is left out rather than offered and then refused. Then
+ *    `HOLD_LIVE_STATUSES`, which drops the converted, cancelled, expired and
+ *    abandoned rows the unfiltered query brings back.
  *
  * **In-use rows are listed, not hidden.** A cart another device has open shows
  * greyed with who holds it, because hiding it would leave an operator staring at
  * a cart that has simply vanished. Resume refuses it — the server would answer
- * 409 anyway — and offers **Take over** instead: nothing times a lock out, so a
- * till that died holding a cart would otherwise strand it for good.
+ * 409 anyway — and offers **Take over** instead. A lease does lapse on its own,
+ * so a till that died mid-edit strands its cart only until then; take-over is
+ * for the floor that needs it back sooner.
  *
  * Discard is a soft delete, and it is offered because a hold nobody is coming
- * back for otherwise sits in this list forever — nothing expires it.
+ * back for otherwise sits in this list forever until its own expiry, if it was
+ * given one.
+ *
+ * Resuming is a SINGLE gesture short of opening: a click (or ↑↓) moves the
+ * highlight, Enter or a double-click resumes. Resuming replaces whatever is on
+ * the form and takes the cart's lease, so it is not something a stray click on a
+ * list should do. `useListKeyboardNav` is what keeps ↑↓ and Enter working once
+ * the pointer has taken focus off the search box.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiCheckCircle, FiRefreshCw, FiTrash2, FiUnlock } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { cx } from "@/components/design-system/cx";
 import {
-  useDeleteTransactionHoldMutation,
-  useListTransactionHoldsQuery,
+  useDeleteTxnHoldMutation,
+  useListTxnHoldsQuery,
 } from "@/store/api/quotationApi";
-import { HOLD_LIVE_STATUSES } from "../quotation.constants";
+import {
+  HOLD_LIVE_STATUSES,
+  QUOTATION_HOLD_DOC_TYPE,
+  QUOTATION_HOLD_KIND,
+} from "../quotation.constants";
 import { holdAccYearOf, holdHolderLabel, isHoldInUse, isQuotationHold } from "../quotation.hold";
-import type { TransactionHoldPayload } from "../quotation.types";
+import type { TxnHoldPayload } from "../quotation.types";
 import { toNumber } from "../quotation.utils";
 import { ModalShell } from "./modal-shell";
+import { useListKeyboardNav } from "./use-list-keyboard-nav";
 import styles from "../page.module.scss";
 export type HeldListModalProps = {
   isOpen: boolean;
@@ -49,13 +62,13 @@ export type HeldListModalProps = {
   branchId: string;
   accYear: string;
   onClose: () => void;
-  onPick: (thId: string) => void;
+  onPick: (txhId: string) => void;
   /** Frees a cart another device holds. Resolves `false` when the server refused. */
-  onTakeOver: (hold: TransactionHoldPayload) => Promise<boolean>;
+  onTakeOver: (hold: TxnHoldPayload) => Promise<boolean>;
 };
 /** The server's own cap; asking for more is a 400. */
 const FETCH_LIMIT = 100;
-/** `th_hold_date` is a full ISO timestamp — a parked cart is minutes old, not days. */
+/** `txh_hold_on` is a full ISO timestamp — a parked cart is minutes old, not days. */
 function heldAt(value: string | null): string {
   if (!value) {
     return "";
@@ -74,7 +87,7 @@ export function HeldListModal(props: HeldListModalProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [discarding, setDiscarding] = useState<string | null>(null);
   const [takingOver, setTakingOver] = useState<string | null>(null);
-  const [deleteHold] = useDeleteTransactionHoldMutation();
+  const [deleteHold] = useDeleteTxnHoldMutation();
   useEffect(() => {
     if (isOpen) {
       setSearch("");
@@ -82,11 +95,15 @@ export function HeldListModal(props: HeldListModalProps) {
     }
   }, [isOpen]);
   const holdAccYear = holdAccYearOf(accYear);
-  const { data, isFetching, refetch } = useListTransactionHoldsQuery(
+  const { data, isFetching, refetch } = useListTxnHoldsQuery(
     {
-      thCompanyId: companyId,
-      thBranchId: branchId,
-      ...(holdAccYear === null ? {} : { thAccYear: holdAccYear }),
+      txhCompanyId: companyId,
+      txhBranchId: branchId,
+      // Worth sending on every query beyond narrowing the list: it is the
+      // partition key, so it prunes the scan to one year.
+      ...(holdAccYear === null ? {} : { txhAccYear: holdAccYear }),
+      txhKind: QUOTATION_HOLD_KIND,
+      txhDocType: QUOTATION_HOLD_DOC_TYPE,
       page: 1,
       limit: FETCH_LIMIT,
     },
@@ -97,13 +114,13 @@ export function HeldListModal(props: HeldListModalProps) {
   const rows = useMemo(() => {
     const all = (data?.items ?? [])
       .filter(isQuotationHold)
-      .filter((row) => (HOLD_LIVE_STATUSES as readonly string[]).includes(row.thStatus));
+      .filter((row) => (HOLD_LIVE_STATUSES as readonly string[]).includes(row.txhStatus));
     const needle = search.trim().toLowerCase();
     if (!needle) {
       return all;
     }
     return all.filter((row) =>
-      [row.thHoldNo, row.thCustomerName, row.thRemarks, String(toNumber(row.thTotalAmount))]
+      [row.txhHoldNo, row.txhPartyName, row.txhRemarks, String(toNumber(row.txhNetAmount))]
         .filter(Boolean)
         .some((field) => String(field).toLowerCase().includes(needle)),
     );
@@ -111,20 +128,22 @@ export function HeldListModal(props: HeldListModalProps) {
   useEffect(() => {
     setActiveIndex(0);
   }, [rows.length]);
-  const choose = (row: TransactionHoldPayload) => {
+  const choose = useCallback((row: TxnHoldPayload) => {
     // The server would refuse this with a 409 anyway; saying so here costs a
-    // round trip less and points at the way through.
+    // round trip less and points at the way through. A LAPSED lease is not in
+    // use — the server hands that cart to the next device that asks — so this
+    // does not stand in the way of one.
     if (isHoldInUse(row)) {
       toast.info(
-        `Hold ${row.thHoldNo} is open on ${holdHolderLabel(row)}. ` +
+        `Hold ${row.txhHoldNo} is open on ${holdHolderLabel(row)}. ` +
           "Use Take over if that device is not coming back.",
       );
       return;
     }
-    onPick(row.thId);
-  };
-  const takeOver = async (row: TransactionHoldPayload) => {
-    setTakingOver(row.thId);
+    onPick(row.txhId);
+  }, [onPick]);
+  const takeOver = async (row: TxnHoldPayload) => {
+    setTakingOver(row.txhId);
     try {
       if (await onTakeOver(row)) {
         // The row is free now, not open: the operator still has to resume it,
@@ -135,18 +154,30 @@ export function HeldListModal(props: HeldListModalProps) {
       setTakingOver(null);
     }
   };
-  const discard = async (row: TransactionHoldPayload) => {
-    setDiscarding(row.thId);
+  const discard = async (row: TxnHoldPayload) => {
+    setDiscarding(row.txhId);
     try {
-      await deleteHold(row.thId).unwrap();
-      toast.success(`Hold ${row.thHoldNo} discarded.`);
+      await deleteHold({ txhId: row.txhId, txhAccYear: row.txhAccYear }).unwrap();
+      toast.success(`Hold ${row.txhHoldNo} discarded.`);
     } catch {
-      toast.error(`Hold ${row.thHoldNo} could not be discarded.`);
+      toast.error(`Hold ${row.txhHoldNo} could not be discarded.`);
     } finally {
       setDiscarding(null);
     }
   };
   const activeRow = rows[activeIndex];
+  // ↑↓ / Enter for as long as the dialog is open, wherever focus has ended up.
+  const { viewportRef } = useListKeyboardNav({
+    isOpen,
+    rowCount: rows.length,
+    activeIndex,
+    setActiveIndex,
+    onEnter: () => {
+      if (activeRow) {
+        choose(activeRow);
+      }
+    },
+  });
   return (
     <ModalShell
       title="Held quotations"
@@ -155,8 +186,8 @@ export function HeldListModal(props: HeldListModalProps) {
       onClose={onClose}
       footer={
         <span className={styles.modalNote}>
-          ↑↓ move · Enter resume · Esc cancel · a cart in use is locked to another device until it
-          releases it or you take it over
+          ↑↓ move · click highlights · Enter or double-click resumes · Esc cancel · a cart in use is
+          leased to another device until it releases it, the lease lapses, or you take it over
         </span>
       }
     >
@@ -210,24 +241,10 @@ export function HeldListModal(props: HeldListModalProps) {
             autoFocus
             autoComplete="off"
             onChange={(event) => setSearch(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setActiveIndex((index) => Math.min(index + 1, Math.max(rows.length - 1, 0)));
-              }
-              if (event.key === "ArrowUp") {
-                event.preventDefault();
-                setActiveIndex((index) => Math.max(index - 1, 0));
-              }
-              if (event.key === "Enter" && rows[activeIndex]) {
-                event.preventDefault();
-                choose(rows[activeIndex]);
-              }
-            }}
           />
         </label>
       </div>
-      <div className={styles.listViewport}>
+      <div className={styles.listViewport} ref={viewportRef}>
         <table className={styles.listTable}>
           <thead>
             <tr>
@@ -246,24 +263,28 @@ export function HeldListModal(props: HeldListModalProps) {
               const inUse = isHoldInUse(row);
               return (
                 <tr
-                  key={row.thId}
+                  key={row.txhId}
                   data-selected={index === activeIndex ? "true" : undefined}
                   // Greyed rather than removed: a cart that simply vanished from
                   // the list reads as lost, not as busy.
                   data-disabled={inUse ? "true" : undefined}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => choose(row)}
+                  // Click, arrow keys and the search filter move the
+                  // highlight — hovering does NOT. It is what Enter and Resume
+                  // act on, so a row the pointer crossed on its way to a button
+                  // must not quietly become the row that opens.
+                  onClick={() => setActiveIndex(index)}
+                  onDoubleClick={() => choose(row)}
                 >
-                  <td>{heldAt(row.thHoldDate)}</td>
-                  <td>{row.thHoldNo}</td>
-                  <td>{row.thCustomerName ?? ""}</td>
-                  <td className={styles.alignRight}>{row.thItemCount ?? 0}</td>
-                  <td className={styles.alignRight}>{toNumber(row.thTotalQty).toFixed(3)}</td>
-                  <td className={styles.alignRight}>{toNumber(row.thTotalAmount).toFixed(2)}</td>
+                  <td>{heldAt(row.txhHoldOn)}</td>
+                  <td>{row.txhHoldNo}</td>
+                  <td>{row.txhPartyName ?? ""}</td>
+                  <td className={styles.alignRight}>{row.txhItemCount ?? 0}</td>
+                  <td className={styles.alignRight}>{toNumber(row.txhTotalQty).toFixed(3)}</td>
+                  <td className={styles.alignRight}>{toNumber(row.txhNetAmount).toFixed(2)}</td>
                   <td>
                     {inUse ? (
                       <span className={styles.holdInUse}>
-                        {takingOver === row.thId
+                        {takingOver === row.txhId
                           ? "Freeing…"
                           : `In use — ${holdHolderLabel(row)}`}
                       </span>
@@ -271,7 +292,7 @@ export function HeldListModal(props: HeldListModalProps) {
                       "Free"
                     )}
                   </td>
-                  <td>{row.thRemarks ?? ""}</td>
+                  <td>{row.txhRemarks ?? ""}</td>
                 </tr>
               );
             })}

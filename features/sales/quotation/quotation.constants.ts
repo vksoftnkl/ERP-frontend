@@ -43,31 +43,43 @@ export const WIDGET_MASTERS_GET_ENDPOINT = "/widget-masters/get";
  */
 export const WIDGET_MASTERS_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 /**
- * Hold / Pick held — `public.transaction_hold`. One route creates AND updates
- * (`thId`'s presence selects which), exactly like `/quotations/create`.
+ * Hold / Pick held — `public.txn_hold`.
+ *
+ * The table the till was rebuilt around, and the successor to the old
+ * `transaction_hold`: every column is `txh_*`, the routes moved to `/txn-holds`
+ * with it, and the screen state now travels in `txh_payload` (the module stores
+ * and returns it verbatim) rather than in `th_ui_state`.
+ *
+ * One route creates AND updates (`txhId`'s presence selects which), exactly like
+ * `/quotations/create`.
  */
-export const TRANSACTION_HOLD_SAVE_ENDPOINT = "/transaction-holds/create";
-export const TRANSACTION_HOLD_LIST_ENDPOINT = "/transaction-holds/list";
-export const TRANSACTION_HOLD_GET_ENDPOINT = "/transaction-holds/get";
-export const TRANSACTION_HOLD_DELETE_ENDPOINT = "/transaction-holds/delete";
+export const TXN_HOLD_SAVE_ENDPOINT = "/txn-holds/create";
+export const TXN_HOLD_LIST_ENDPOINT = "/txn-holds/list";
+export const TXN_HOLD_GET_ENDPOINT = "/txn-holds/get";
+export const TXN_HOLD_DELETE_ENDPOINT = "/txn-holds/delete";
 /**
- * The edit lock — `HELD → LOCKED → CONVERTED`, with `release` (and the
+ * The edit lease — `HELD → LOCKED → CONVERTED`, with `release` (and the
  * `force-release` escape hatch) going back to `HELD`.
  *
  * These are NOT the save route with a different status: each is one conditional
  * UPDATE server-side, with the status it moves *from* — and, on release and
- * convert, `th_locked_by = this device` — inside the WHERE clause. That is what
- * makes two tills resuming one cart serialize on the row instead of both
- * winning, and what stops one till spending a lock another one holds.
+ * convert, `txh_locked_device_id = this device` — inside the WHERE clause. That
+ * is what makes two tills resuming one cart serialize on the row instead of both
+ * winning, and what stops one till spending a lease another one holds.
  *
- * The lock holder is the DEVICE, named by the `X-Device-Id` header (never a
- * body field, so there is no second, disagreeing source of truth). See
- * `HOLD_DEVICE_ID_HEADER`.
+ * A lease also EXPIRES (`txh_lock_expires_on`), so a browser that died mid-edit
+ * strands its cart only until the lease lapses; take-over is the way through
+ * before that.
+ *
+ * The lease holder is the DEVICE, named by the `X-Device-Id` header (never a
+ * body field, so there is no second, disagreeing source of truth). It is a
+ * `fixed.device_master.dev_id` and a real foreign key — the browser's own local
+ * uuid is not one. See `HOLD_DEVICE_ID_HEADER`.
  */
-export const transactionHoldLockEndpoint = (
-  thId: string,
+export const txnHoldLockEndpoint = (
+  txhId: string,
   action: "resume" | "release" | "force-release" | "convert",
-): string => `/transaction-holds/${thId}/${action}`;
+): string => `/txn-holds/${txhId}/${action}`;
 export const HOLD_DEVICE_ID_HEADER = "X-Device-Id";
 /**
  * `fixed.ui_tables.ui_tbl_id` for the item grid — 23 ("Quotation-item", 90
@@ -216,70 +228,91 @@ export type QuotationTermsFieldKey = keyof typeof QUOTATION_TERMS_FIELD_NAMES;
 // Transaction hold (F9 park / F10 recall)
 // ---------------------------------------------------------------------------
 /**
- * `th_doc_type` for a parked quotation.
+ * `txh_doc_type` for a parked quotation.
  *
- * This screen shipped before the server's `TransactionHoldDocType` had a
- * `QUOTATION` member and parked its carts under `SALE_ORDER` — the closest
- * document the till-shaped enum offered. The member exists now, but **rows
- * written before it keep the old type**, so anything that goes looking for
- * parked quotations has to accept both. The picker does not filter on the
- * document type at all for exactly this reason: `isQuotationHold` reads the
- * `th_ui_state` stamp, which is the real test of "this screen wrote it" and is
- * blind to which type the row carries.
- *
- * `ux_th_hold_no` is scoped per document type, so quotation holds now get their
- * own number space rather than sharing the sale-order one.
+ * `ux_txh_hold_no` is scoped per document type, so quotation holds have their
+ * own number space rather than sharing anyone else's.
  */
 export const QUOTATION_HOLD_DOC_TYPE = "QUOTATION";
-/** What this screen parked carts under before `QUOTATION` existed. */
-export const LEGACY_QUOTATION_HOLD_DOC_TYPE = "SALE_ORDER";
-/** `ck_th_device_type` — the hardware the hold was taken on. */
-export const HOLD_DEVICE_TYPES = ["DESKTOP", "WEB", "MOBILE"] as const;
-export type HoldDeviceType = (typeof HOLD_DEVICE_TYPES)[number];
-/** This client is a browser; the session's own value only narrows it further. */
-export const DEFAULT_HOLD_DEVICE_TYPE: HoldDeviceType = "WEB";
 /**
- * `ck_th_status`. `CONVERTED` / `CANCELLED` / `EXPIRED` are terminal — the
- * server refuses to move a hold out of them, so nothing here ever tries.
+ * `txh_src_module` — the module the parked screen belongs to, sharing its
+ * vocabulary with `txn_status_log.tsl_src_module` so one join reads a hold's
+ * whole trail. Required on create.
+ */
+export const QUOTATION_HOLD_SRC_MODULE = "SALES";
+/**
+ * `txh_kind`. `HOLD` is the operator-facing pick list; `AUTOSAVE` is a screen's
+ * crash-recovery snapshot (upserted in place, invisible to the picker) and
+ * `TEMPLATE` a starting point that is copied on resume rather than consumed.
+ * This screen only ever writes `HOLD`.
+ */
+export const QUOTATION_HOLD_KIND = "HOLD";
+/**
+ * `ck_txh_party_type` — which master `txh_party_id` points into. The reference
+ * is polymorphic (there is no FK), so the type travels with the id, and a
+ * walk-in is a `CUSTOMER` with a name and no id at all.
+ */
+export const QUOTATION_HOLD_PARTY_TYPE = "CUSTOMER";
+/**
+ * `ck_txh_status`. `CONVERTED` / `EXPIRED` / `CANCELLED` / `ABANDONED` are
+ * terminal — the server refuses to move a hold out of them, so nothing here ever
+ * tries.
  */
 export const HOLD_STATUSES = [
   "HELD",
   "LOCKED",
   "RESUMED",
   "CONVERTED",
-  "CANCELLED",
   "EXPIRED",
+  "CANCELLED",
+  "ABANDONED",
 ] as const;
 export type HoldStatus = (typeof HOLD_STATUSES)[number];
 /**
  * The statuses a parked cart can still be picked up from, which is what the
  * held list shows.
  *
- * `HELD` is free and `LOCKED` is open on a device — the lock endpoints move a
- * hold between exactly those two. `RESUMED` is neither: it is what this screen
- * wrote to mean "in use" BEFORE the lock existed, so pre-upgrade rows carry it
- * and are shown (and offered a take-over) rather than left invisible.
+ * `HELD` is free and `LOCKED` is leased to a device — the lock endpoints move a
+ * hold between exactly those two. `RESUMED` is neither: it is what a client that
+ * drove the status through the CRUD route leaves behind, and the server treats
+ * it as in use, so it is shown (and offered a take-over) rather than hidden.
  */
 export const HOLD_LIVE_STATUSES = ["HELD", "LOCKED", "RESUMED"] as const;
-/** In use by somebody — `LOCKED` by this lock, `RESUMED` by the one before it. */
+/** In use by somebody — `LOCKED` by the lease, `RESUMED` by the CRUD route. */
 export const HOLD_IN_USE_STATUSES = ["LOCKED", "RESUMED"] as const;
 /**
- * What `th_ui_state` holds, and how a reader knows it is ours. The server
- * stores and returns the object verbatim and never reads into it, so this
- * envelope is the only contract there is — hence a `kind` and a `version` on
- * every write, checked on every read.
+ * What `txh_payload` holds, and how a reader knows it is ours. The server stores
+ * and returns the object verbatim and never reads into it, so this envelope is
+ * the only contract there is — hence a `kind` and a `version` on every write,
+ * checked on every read.
  */
 export const HOLD_UI_STATE_KIND = "erp.sales.quotation.hold";
 export const HOLD_UI_STATE_VERSION = 1;
 export const HOLD_UI_STATE_SCREEN = "QUOTATION";
 /**
- * `th_hold_no` is required on create, is NOT generated server-side, and is
+ * `txh_hold_no` is required on create, is NOT generated server-side, and is
  * unique per company / branch / year / document type. The till it was designed
  * for owns a counter; this screen has none, so the number is minted from the
- * clock plus a random tail — see `nextHoldNo`. `varchar(30)`.
+ * clock plus a random tail — see `nextHoldNo`. `varchar(30)`, stored
+ * upper-cased and trimmed (`ck_txh_hold_no_shape`).
  */
 export const HOLD_NO_PREFIX = "QH";
 export const HOLD_NO_MAX_LENGTH = 30;
+/**
+ * `txh_hold_slno` — the raw per-device counter behind the printed number, so an
+ * offline till can number a hold with no server round trip. Required on create,
+ * `>= 1`, and unique per company / branch / year / document type / DEVICE
+ * (`ux_txh_device_slno`). This browser keeps it in `localStorage`; see
+ * `nextHoldSlno`.
+ */
+export const HOLD_SLNO_STORAGE_PREFIX = "erp_quotation_hold_slno";
+/**
+ * `txh_acc_year` is `char(9)` — the partition key, written exactly as the fiscal
+ * year names itself (`2026-2027`). It is half the primary key and immutable once
+ * the row exists, which is why a draft with no resolved year is refused rather
+ * than parked under a guess.
+ */
+export const HOLD_ACC_YEAR_LENGTH = 9;
 /**
  * How long a new quotation is valid for. The screen has no other source for it —
  * there is no company setting — so this is the standard window, counted onto the

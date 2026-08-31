@@ -100,7 +100,7 @@ const quotationSlice = createSlice({
       state.accYear = action.payload.accYear;
     },
     /**
-     * Which `transaction_hold` row this cart is parked as — set when it is held
+     * Which `txn_hold` row this cart is parked as — set when it is held
      * or resumed, cleared when the hold is converted or dropped.
      *
      * Not an operator edit: parking a cart and pulling it back leave the

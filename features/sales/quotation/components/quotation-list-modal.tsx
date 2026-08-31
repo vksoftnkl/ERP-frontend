@@ -24,8 +24,14 @@
  *
  * A row's whole document key is returned (company, branch and year included),
  * which is what lets another branch's quotation load correctly.
+ *
+ * Choosing one is a SINGLE gesture short of opening it: a click (or ↑↓) moves
+ * the highlight and Enter, a double-click or the Select button opens. Opening a
+ * quotation replaces whatever is on the form, so it is not something a stray
+ * click on a list should do. `useListKeyboardNav` is what makes the keys work
+ * once the pointer has taken focus off the search box.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiEdit3, FiLayout, FiPrinter, FiRefreshCw } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { cx } from "@/components/design-system/cx";
@@ -36,6 +42,7 @@ import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import type { QuotationDocKey, QuotationListRow } from "../quotation.types";
 import { addDays, buildPageList, toDateInput, todayIso, toNumber } from "../quotation.utils";
 import { ModalShell } from "./modal-shell";
+import { useListKeyboardNav } from "./use-list-keyboard-nav";
 import styles from "../page.module.scss";
 
 export type QuotationListModalProps = {
@@ -198,18 +205,21 @@ export function QuotationListModal(props: QuotationListModalProps) {
     setActiveIndex(0);
   }, [currentLocalPage, filtered.length]);
 
-  const choose = (row: QuotationListRow) => {
-    if (isDeleted(row.sq_is_deleted)) {
-      toast.info("This quotation is deleted — it can no longer be opened.");
-      return;
-    }
-    onPick({
-      sqId: row.sq_id,
-      sqCompanyId: row.sq_company_id,
-      sqBranchId: row.sq_branch_id,
-      sqAccYear: row.sq_acc_year,
-    });
-  };
+  const choose = useCallback(
+    (row: QuotationListRow) => {
+      if (isDeleted(row.sq_is_deleted)) {
+        toast.info("This quotation is deleted — it can no longer be opened.");
+        return;
+      }
+      onPick({
+        sqId: row.sq_id,
+        sqCompanyId: row.sq_company_id,
+        sqBranchId: row.sq_branch_id,
+        sqAccYear: row.sq_acc_year,
+      });
+    },
+    [onPick],
+  );
 
   const onPeriodChange = (value: Period) => {
     setPeriod(value);
@@ -223,6 +233,21 @@ export function QuotationListModal(props: QuotationListModalProps) {
 
   const activeRow = visibleRows[activeIndex];
   const activeRowDeleted = activeRow ? isDeleted(activeRow.sq_is_deleted) : false;
+
+  // ↑↓ / Enter for as long as the dialog is open, wherever focus has ended up —
+  // and paused while the print dialog is over it, so one Enter is not two.
+  const { viewportRef } = useListKeyboardNav({
+    isOpen,
+    rowCount: visibleRows.length,
+    activeIndex,
+    setActiveIndex,
+    onEnter: () => {
+      if (activeRow) {
+        choose(activeRow);
+      }
+    },
+    paused: printRow !== null,
+  });
 
   const { permissions } = usePagePermissions();
 
@@ -263,7 +288,7 @@ export function QuotationListModal(props: QuotationListModalProps) {
       footer={
         <>
           <span className={styles.modalNote}>
-            ↑↓ move · Enter select · Ctrl+Enter view · Esc cancel
+            ↑↓ move · click highlights · Enter or double-click opens · Esc cancel
             {activeRowDeleted ? (
               <span className={styles.warning}> · Deleted quotation — cannot be opened.</span>
             ) : null}
@@ -389,20 +414,6 @@ export function QuotationListModal(props: QuotationListModalProps) {
             autoFocus
             autoComplete="off"
             onChange={(event) => setSearch(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setActiveIndex((index) => Math.min(index + 1, Math.max(visibleRows.length - 1, 0)));
-              }
-              if (event.key === "ArrowUp") {
-                event.preventDefault();
-                setActiveIndex((index) => Math.max(index - 1, 0));
-              }
-              if (event.key === "Enter" && visibleRows[activeIndex]) {
-                event.preventDefault();
-                choose(visibleRows[activeIndex]);
-              }
-            }}
           />
         </label>
         <label className={styles.filterField}>
@@ -454,7 +465,7 @@ export function QuotationListModal(props: QuotationListModalProps) {
         </p>
       ) : null}
 
-      <div className={styles.listViewport}>
+      <div className={styles.listViewport} ref={viewportRef}>
         <table className={styles.listTable}>
           <thead>
             <tr>
@@ -477,7 +488,11 @@ export function QuotationListModal(props: QuotationListModalProps) {
                   key={row.sq_id}
                   data-selected={index === activeIndex ? "true" : undefined}
                   data-deleted={deleted ? "true" : undefined}
-                  onMouseEnter={() => setActiveIndex(index)}
+                  // Click, arrow keys and the pager move the highlight —
+                  // hovering does NOT. It is what Enter and Select act on, so a
+                  // row the pointer crossed on its way to a button must not
+                  // quietly become the row that opens.
+                  onClick={() => setActiveIndex(index)}
                   onDoubleClick={() => choose(row)}
                 >
                   <td>{toDateInput(row.sq_quote_date)}</td>

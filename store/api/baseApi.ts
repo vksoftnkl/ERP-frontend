@@ -182,7 +182,7 @@ export const baseApi = createApi({
     // Sales transactions
     "Quotation",
     "SaleOrder",
-    "TransactionHold",
+    "TxnHold",
     // Screen field config (fixed.form_section / form_field), keyed by menu id
     "WidgetConfig",
     // Application settings (app_setting_def catalog + its overrides)

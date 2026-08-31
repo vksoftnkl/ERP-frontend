@@ -888,7 +888,7 @@ export type QuotationDraft = {
   isDeleted: boolean;
 
   /**
-   * The `transaction_hold` row this draft is currently parked as, or was pulled
+   * The `txn_hold` row this draft is currently parked as, or was pulled
    * back from — `null` for a draft that has never been held.
    *
    * It is what makes Hold idempotent: holding a resumed cart UPDATES that row
@@ -919,122 +919,155 @@ export type QuotationDraft = {
 };
 
 // ---------------------------------------------------------------------------
-// Transaction hold — the wire shapes of `/transaction-holds/*`
+// Transaction hold — the wire shapes of `/txn-holds/*`
 // ---------------------------------------------------------------------------
 
 /**
- * `POST /transaction-holds/create`. One route for create and update, selected by
- * `thId`'s presence, and the DTO declares every field optional — what a *create*
- * actually requires (`thCompanyId`, `thBranchId`, `thAccYear`, `thHoldNo`,
- * `thDeviceId`, `thDeviceType`) is enforced in the service, not by the decorators,
- * so omitting one is a 400 rather than a type error. `forbidNonWhitelisted` is on:
- * a stray key 400s the whole request.
+ * `POST /txn-holds/create`. One route for create and update, selected by
+ * `txhId`'s presence, and the DTO declares everything but `txhPayload` optional —
+ * what a *create* actually requires (`txhCompanyId`, `txhBranchId`, `txhAccYear`,
+ * `txhSrcModule`, `txhDocType`, `txhHoldNo`, `txhHoldSlno`, `txhDeviceId`,
+ * `txhHeldBy`, `txhPayload`) is enforced in the service, not by the decorators,
+ * so omitting one is a 400 rather than a type error. `forbidNonWhitelisted` is
+ * on: a stray key 400s the whole request.
  *
- * The scope (company / branch / accounting year) is immutable after create, so an
- * update deliberately does not resend it.
+ * The scope (company / branch / accounting year) is immutable after create — the
+ * year is half the primary key and the partition key — so an update deliberately
+ * does not resend it. Neither the lease columns nor the conversion trail are
+ * writable here: the lock endpoints move them as whole blocks.
  */
-export type SaveTransactionHoldDto = {
-  thId?: string;
-  thCompanyId?: string;
-  thBranchId?: string;
-  /** SMALLINT — the fiscal year as its starting year (2026 for 2026-2027). */
-  thAccYear?: number;
-  thHoldNo?: string;
-  thHoldDate?: string;
-  thDocType?: string;
-  thSessionId?: string | null;
-  thUserId?: string | null;
-  thDeviceId?: string;
-  thDeviceType?: string;
-  thCustomerName?: string | null;
-  thItemCount?: number;
-  thTotalQty?: number;
-  /** `ck_th_total_amount` — gross, never negative, even on a return hold. */
-  thTotalAmount?: number;
-  thStatus?: string;
-  thHoldReason?: string | null;
-  thRemarks?: string | null;
-  thResumedBy?: string | null;
-  thResumedAt?: string | null;
-  thResumeCount?: number;
-  thConvertedDocType?: string | null;
-  thConvertedDocId?: string | null;
-  thConvertedNo?: string | null;
-  thConvertedAt?: string | null;
-  thConvertedBy?: string | null;
+export type SaveTxnHoldDto = {
+  txhId?: string;
+  txhCompanyId?: string;
+  txhBranchId?: string;
+  /** `char(9)` — the fiscal year exactly as it names itself (`2026-2027`). */
+  txhAccYear?: string;
+  txhKind?: string;
+  txhSrcModule?: string;
+  txhDocType?: string;
+  txhHoldNo?: string;
+  /** `>= 1`, unique per company / branch / year / doc type / device. */
+  txhHoldSlno?: number;
+  txhHoldOn?: string;
+  /** `fixed.device_master.dev_id` — a real FK, not the browser's local uuid. */
+  txhDeviceId?: string;
+  txhCounterId?: string | null;
+  txhSessionId?: string | null;
+  /** The operator at the screen, as a uuid. */
+  txhHeldBy?: string;
+  txhPartyType?: string | null;
+  txhPartyId?: string | null;
+  txhPartyName?: string | null;
+  txhPartyMobile?: string | null;
+  txhStaffId?: string | null;
+  txhRefLabel?: string | null;
+  txhItemCount?: number;
+  txhTotalQty?: number;
+  /** `ck_txh_amounts` — never negative, even on a deduction-heavy cart. */
+  txhNetAmount?: number;
   /** Stored and handed back verbatim; the server never reads into it. */
-  thUiState?: Record<string, unknown> | null;
+  txhPayload: Record<string, unknown>;
+  txhPayloadVersion?: number;
+  txhStatus?: string;
+  txhHoldReason?: string | null;
+  txhRemarks?: string | null;
+  txhExpiresOn?: string | null;
+  txhIsStockReserved?: boolean;
   /** `varchar(50)`, not a uuid — an actor id, name or login. */
-  thCreatedBy?: string | null;
-  thModifiedBy?: string | null;
+  txhCreatedBy?: string | null;
+  txhModifiedBy?: string | null;
 };
 
-/** One `transaction_hold` row, as `create` / `get` / `list` return it. */
-export type TransactionHoldPayload = {
-  thId: string;
-  thCompanyId: string;
-  thBranchId: string;
-  thAccYear: number;
-  thHoldNo: string;
-  thHoldDate: string;
-  thDocType: string;
-  thCounterId: string | null;
-  thSessionId: string | null;
-  thUserId: string | null;
-  thDeviceId: string;
-  thDeviceType: string;
-  thCustomerName: string | null;
-  thItemCount: number;
+/** One `txn_hold` row, as `create` / `get` / `list` return it. */
+export type TxnHoldPayload = {
+  txhId: string;
+  txhCompanyId: string;
+  txhBranchId: string;
+  txhTenantId: string | null;
+  txhAccYear: string;
+  txhKind: string;
+  txhSrcModule: string;
+  txhDocType: string;
+  txhHoldNo: string;
+  txhHoldSlno: number;
+  txhHoldOn: string;
+  txhDeviceId: string;
+  txhCounterId: string | null;
+  txhSessionId: string | null;
+  txhHeldBy: string;
+  txhPartyType: string | null;
+  txhPartyId: string | null;
+  txhPartyName: string | null;
+  txhPartyMobile: string | null;
+  txhStaffId: string | null;
+  txhRefLabel: string | null;
+  txhItemCount: number;
   /** `numeric` columns arrive as strings, exactly as on the quotation payload. */
-  thTotalQty: WireDecimal;
-  thTotalAmount: WireDecimal;
-  thStatus: string;
-  thHoldReason: string | null;
-  thRemarks: string | null;
-  thExpiresAt: string | null;
-  thLockedBy: string | null;
-  thLockedAt: string | null;
-  thResumedBy: string | null;
-  thResumedAt: string | null;
-  thResumeCount: number;
-  thConvertedDocType: string | null;
-  thConvertedDocId: string | null;
-  thConvertedNo: string | null;
-  thConvertedAt: string | null;
-  thConvertedBy: string | null;
-  thIsStockReserved: boolean;
-  thUiState: unknown;
-  thIsDeleted: boolean;
-  thCreatedBy: string | null;
-  thCreatedAt: string;
-  thModifiedBy: string | null;
-  thModifiedAt: string | null;
+  txhTotalQty: WireDecimal;
+  txhNetAmount: WireDecimal;
+  txhPayload: unknown;
+  txhPayloadVersion: number;
+  txhRevision: number;
+  txhStatus: string;
+  txhHoldReason: string | null;
+  txhRemarks: string | null;
+  txhExpiresOn: string | null;
+  /** The operator holding the lease; `txhLockedDeviceId` is the device. */
+  txhLockedBy: string | null;
+  txhLockedDeviceId: string | null;
+  txhLockedOn: string | null;
+  /** A lease ENDS. Past this instant the next device may resume without a take-over. */
+  txhLockExpiresOn: string | null;
+  txhLockToken: string | null;
+  txhResumedBy: string | null;
+  txhResumedOn: string | null;
+  txhResumeCount: number;
+  txhConvertedDocId: string | null;
+  txhConvertedAccYear: string | null;
+  txhConvertedRefno: string | null;
+  txhConvertedOn: string | null;
+  txhConvertedBy: string | null;
+  txhIsStockReserved: boolean;
+  txhPrintCount: number;
+  txhLastPrintedOn: string | null;
+  txhIsDeleted: boolean;
+  txhSyncDate: string | null;
+  txhCreatedOn: string;
+  txhCreatedBy: string;
+  txhModifiedOn: string | null;
+  txhModifiedBy: string | null;
 };
 
 /**
  * The body every lock transition posts (`/:id/resume`, `/release`,
  * `/force-release`, `/convert`).
  *
- * Both halves are required and both are checked server-side, so a hold can be
- * neither taken nor spent across a company or branch boundary. The device is
- * NOT here — it travels as the `X-Device-Id` header, and `forbidNonWhitelisted`
- * rejects a body that tries to name it (or the status, or `thLockedBy`) anyway.
+ * Company and branch are required and both are checked server-side, so a hold
+ * can be neither taken nor spent across a company or branch boundary. The year
+ * is optional and worth sending anyway: `txn_hold` is partitioned by it, so a
+ * request that names it is answered from one partition instead of every year on
+ * record. The device is NOT here — it travels as the `X-Device-Id` header, and
+ * `forbidNonWhitelisted` rejects a body that tries to name it anyway.
  */
-export type TransactionHoldLockScope = {
-  thCompanyId: string;
-  thBranchId: string;
+export type TxnHoldLockScope = {
+  txhCompanyId: string;
+  txhBranchId: string;
+  txhAccYear?: string;
 };
 
 /**
  * The extra fields `/convert` carries: the document the hold became.
- * `th_converted_doc_id` is polymorphic — no foreign key — so the type travels
- * with the id and neither half is optional.
+ *
+ * There is no converted doc TYPE — a hold becomes the document it was parked as,
+ * so the stored `txh_doc_type` already names the table `txh_converted_doc_id`
+ * points into. The YEAR does travel with the id, because a March hold can become
+ * an April document and `ck_txh_converted_block` wants the whole trail together.
  */
-export type TransactionHoldConversion = {
-  thConvertedDocType: string;
-  thConvertedDocId: string;
-  thConvertedNo?: string | null;
-  thConvertedBy?: string | null;
+export type TxnHoldConversion = {
+  txhConvertedDocId: string;
+  txhConvertedAccYear: string;
+  txhConvertedRefno?: string | null;
+  txhConvertedBy?: string | null;
 };
 
 /** What `validate` returns: the first violation, and where to send the operator. */

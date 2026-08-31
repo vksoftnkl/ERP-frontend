@@ -70,6 +70,54 @@ describe("setAuthSession", () => {
     expect(session.getUserInfo()?.userType).toBe("SUPER ADMIN");
   });
 
+  // The refresh response is not empty — it names the user and NULLS every
+  // device field — so "all-null" is not the only shape that must not overwrite.
+  // `deviceId` is a `fixed.device_master` id and holding a cart needs it, so
+  // losing it fifteen minutes into a session broke F9 and nothing else.
+  it("keeps the device block when a refresh reports only the user", async () => {
+    const session = await loadSession();
+    session.setAuthSession("token-1", "user-1", "refresh-1", {
+      ...SUPER_ADMIN,
+      deviceId: "019e7257-ec4c-79a3-bad6-99faf77c536c",
+      deviceName: "Web Browser",
+      deviceType: "Web",
+    });
+
+    session.setAuthSession(
+      "token-2",
+      "user-1",
+      "refresh-2",
+      session.extractUserInfo({
+        user_name: "vijay",
+        user_type: "SUPER ADMIN",
+        token_type: "Bearer",
+        device_id: null,
+        device_name: null,
+        device_type: null,
+      }),
+    );
+
+    expect(session.getUserInfo()?.deviceId).toBe("019e7257-ec4c-79a3-bad6-99faf77c536c");
+    expect(session.getUserInfo()?.deviceName).toBe("Web Browser");
+    expect(session.getUserInfo()?.userType).toBe("SUPER ADMIN");
+  });
+
+  it("inherits nothing when the block names a different user", async () => {
+    const session = await loadSession();
+    session.setAuthSession("token-1", "user-1", "refresh-1", {
+      ...SUPER_ADMIN,
+      deviceId: "device-of-vijay",
+    });
+
+    session.setAuthSession("token-2", "user-2", "refresh-2", {
+      ...SUPER_ADMIN,
+      userName: "ravi",
+      userType: "USER",
+    });
+
+    expect(session.getUserInfo()?.deviceId).toBeNull();
+  });
+
   it("replaces it when a new sign-in reports one", async () => {
     const session = await loadSession();
     session.setAuthSession("token-1", "user-1", "refresh-1", SUPER_ADMIN);

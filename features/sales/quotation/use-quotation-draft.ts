@@ -27,13 +27,13 @@ import {
 import { API_BASE, extractApiErrorMessage, getAuthHeaderValue } from "@/lib/api/client";
 import {
   quotationApi,
-  useConvertTransactionHoldMutation,
+  useConvertTxnHoldMutation,
   useDeleteQuotationMutation,
-  useForceReleaseTransactionHoldMutation,
-  useLazyGetTransactionHoldQuery,
-  useReleaseTransactionHoldMutation,
-  useResumeTransactionHoldMutation,
-  useSaveTransactionHoldMutation,
+  useForceReleaseTxnHoldMutation,
+  useLazyGetTxnHoldQuery,
+  useReleaseTxnHoldMutation,
+  useResumeTxnHoldMutation,
+  useSaveTxnHoldMutation,
   useGetCompanyStateCodeQuery,
   useGetQuotationGridLayoutQuery,
   useGetPriceLevelsQuery,
@@ -72,7 +72,7 @@ import {
   LOADING_CALC_TYPES,
   PRICE_LEVEL_OPTIONS,
   SESSION_CAPABILITIES,
-  transactionHoldLockEndpoint,
+  txnHoldLockEndpoint,
 } from "./quotation.constants";
 import {
   buildHoldPayload,
@@ -82,6 +82,7 @@ import {
   holdLockMessage,
   holdLockScope,
   nextHoldNo,
+  nextHoldSlno,
   readHoldUiState,
 } from "./quotation.hold";
 import { buildSavePayload, parseLoadedDocument } from "./quotation.payload";
@@ -94,8 +95,8 @@ import type {
   QuotationDocKey,
   QuotationDraft,
   SavedQuotationRef,
-  TransactionHoldLockScope,
-  TransactionHoldPayload,
+  TxnHoldLockScope,
+  TxnHoldPayload,
   Violation,
 } from "./quotation.types";
 import { validateSaveInputs, type ValidationContext } from "./quotation.validate";
@@ -180,7 +181,7 @@ export type QuotationDraftApi = {
   applyPriceLevel: (priceLevel: number, scope: PriceLevelScope, lineKeys: string[]) => Promise<void>;
   /** The saved document's key, or `null` when nothing was committed. */
   save: (context?: ValidationContext) => Promise<SavedQuotationRef | null>;
-  /** Park the cart in `transaction_hold` and clear the form. */
+  /** Park the cart in `txn_hold` and clear the form. */
   hold: () => Promise<boolean>;
   /**
    * Pull a parked cart back onto the screen, taking its edit lock. `false` when
@@ -191,7 +192,7 @@ export type QuotationDraftApi = {
    * Take a cart off the device holding it, so it can be resumed here. Frees the
    * hold; it does not open it.
    */
-  takeOverHold: (hold: TransactionHoldPayload) => Promise<boolean>;
+  takeOverHold: (hold: TxnHoldPayload) => Promise<boolean>;
   /** The loaded draft, or `null` when the fetch failed. */
   loadDocument: (key: QuotationDocKey) => Promise<QuotationDraft | null>;
   deleteDocument: () => Promise<boolean>;
@@ -222,6 +223,10 @@ function useSaveActor(): SaveActor {
       userName: getUserInfo()?.userName ?? null,
       sessionId: getAuthSessionId(),
       deviceId: getOrCreateClientDeviceId(),
+      // `txn_hold.txh_device_id` is a real FK into `fixed.device_master`, so a
+      // hold names the device the LOGIN registered — never the browser's own
+      // local uuid, which matches no row there.
+      deviceMasterId: getUserInfo()?.deviceId ?? null,
       deviceType: getUserInfo()?.deviceType ?? null,
     }),
     [],
@@ -254,12 +259,12 @@ export function useQuotationDraft(): QuotationDraftApi {
   const [fetchFreightBands] = useLazyGetFreightBandsQuery();
   const [saveQuotation] = useSaveQuotationMutation();
   const [deleteQuotation] = useDeleteQuotationMutation();
-  const [saveHold] = useSaveTransactionHoldMutation();
-  const [fetchHold] = useLazyGetTransactionHoldQuery();
-  const [resumeHoldLock] = useResumeTransactionHoldMutation();
-  const [releaseHoldLock] = useReleaseTransactionHoldMutation();
-  const [forceReleaseHoldLock] = useForceReleaseTransactionHoldMutation();
-  const [convertHoldLock] = useConvertTransactionHoldMutation();
+  const [saveHold] = useSaveTxnHoldMutation();
+  const [fetchHold] = useLazyGetTxnHoldQuery();
+  const [resumeHoldLock] = useResumeTxnHoldMutation();
+  const [releaseHoldLock] = useReleaseTxnHoldMutation();
+  const [forceReleaseHoldLock] = useForceReleaseTxnHoldMutation();
+  const [convertHoldLock] = useConvertTxnHoldMutation();
   const [busy, setBusy] = useState<QuotationBusy>("idle");
   /**
    * `busy` cannot guard re-entry on its own: `setBusy` is asynchronous, so two
@@ -284,9 +289,9 @@ export function useQuotationDraft(): QuotationDraftApi {
    * lock was taken, not whatever the screen is showing by then.
    */
   const lockedHold = useRef<{
-    thId: string;
+    txhId: string;
     holdNo: string;
-    scope: TransactionHoldLockScope;
+    scope: TxnHoldLockScope;
   } | null>(null);
   const [unitOptions, setUnitOptions] = useState<Record<string, ItemUnitOption[]>>({});
   /** The live draft, for effects that must not re-run when it changes. */
@@ -709,10 +714,14 @@ export function useQuotationDraft(): QuotationDraftApi {
       // IS saved by this point, and failing the whole action over the hold row
       // would tell the operator otherwise.
       if (draft.holdId) {
-        // Converting ends the lock by closing the hold, so the release paths
+        // Converting ends the lease by closing the hold, so the release paths
         // must not also fire — a CONVERTED hold is terminal and would refuse.
+        // The scope the lease was taken under is captured first: it is the
+        // ROW's, and it is what the server keys the conditional update on.
+        const lockedScope =
+          lockedHold.current?.txhId === draft.holdId ? lockedHold.current.scope : null;
         lockedHold.current = null;
-        const deviceId = actor.deviceId;
+        const deviceId = actor.deviceMasterId;
         const holdLabel = draft.holdNo || draft.holdId;
         if (!deviceId) {
           // Only the holding DEVICE may close a hold, and this browser can no
@@ -721,16 +730,30 @@ export function useQuotationDraft(): QuotationDraftApi {
           toast.warn(`Saved, but hold ${holdLabel} could not be closed: this browser has no device id.`);
         } else {
           try {
-            // Only the device holding the lock may close a hold onto a document,
-            // and this is that device — it resumed the cart. The scope comes off
-            // the draft here because the hold row is not to hand; both halves are
-            // the ones the cart was parked under, which is what the row carries.
+            // Only the device holding the lease may close a hold onto a
+            // document, and this is that device — it resumed the cart. The
+            // draft's own tenant stands in when the lease was not taken here
+            // (a cart parked and saved without a round trip through the
+            // picker), which is the same scope the row was created under.
             await convertHoldLock({
-              thId: draft.holdId,
+              txhId: draft.holdId,
               deviceId,
-              scope: { thCompanyId: draft.companyId, thBranchId: draft.branchId },
+              scope:
+                lockedScope ?? {
+                  txhCompanyId: draft.companyId,
+                  txhBranchId: draft.branchId,
+                  ...(holdAccYearOf(draft.accYear)
+                    ? { txhAccYear: holdAccYearOf(draft.accYear) as string }
+                    : {}),
+                },
               conversion: holdConversionOf(
-                { sqId: saved.sqId, quoteRefno: saved.sqQuoteRefno ?? null },
+                {
+                  sqId: saved.sqId,
+                  // The DOCUMENT's year, which is not always the hold's: a cart
+                  // parked in March can be saved as an April quotation.
+                  sqAccYear: saved.sqAccYear,
+                  quoteRefno: saved.sqQuoteRefno ?? null,
+                },
                 actor,
               ),
             }).unwrap();
@@ -841,23 +864,23 @@ export function useQuotationDraft(): QuotationDraftApi {
    */
   const releaseLockedHold = useCallback(async (): Promise<void> => {
     const locked = lockedHold.current;
-    if (!locked || !actor.deviceId) {
+    if (!locked || !actor.deviceMasterId) {
       return;
     }
     lockedHold.current = null;
     try {
       await releaseHoldLock({
-        thId: locked.thId,
-        deviceId: actor.deviceId,
+        txhId: locked.txhId,
+        deviceId: actor.deviceMasterId,
         scope: locked.scope,
       }).unwrap();
     } catch {
       // Left LOCKED. Recoverable from the held list, and on this device the
       // resume is re-entrant, so the operator can simply open it again.
     }
-  }, [actor.deviceId, releaseHoldLock]);
+  }, [actor.deviceMasterId, releaseHoldLock]);
   /**
-   * Hold (F9). Parks the cart in `transaction_hold` and clears the form so the
+   * Hold (F9). Parks the cart in `txn_hold` and clears the form so the
    * next customer can be served.
    *
    * Nothing is written to `sale_quotation`: this is the alternative to saving,
@@ -896,8 +919,11 @@ export function useQuotationDraft(): QuotationDraftApi {
       toast.warn("The company, branch or year is still loading — try again in a moment.");
       return false;
     }
-    if (!actor.deviceId) {
-      toast.error("This browser has no device id — holding needs one.");
+    // `txh_device_id` is a foreign key into `fixed.device_master` and the
+    // number series is the DEVICE's, so a hold cannot be parked without the id
+    // the login registered.
+    if (!actor.deviceMasterId) {
+      toast.error("This session has no registered device — sign in again before holding.");
       return false;
     }
 
@@ -905,10 +931,23 @@ export function useQuotationDraft(): QuotationDraftApi {
     setBusy("holding");
     try {
       let holdId = draft.holdId;
+      const slnoScope = {
+        companyId: draft.companyId,
+        branchId: draft.branchId,
+        accYear: draft.accYear,
+      };
       for (let attempt = 0; ; attempt += 1) {
         try {
           const saved = await saveHold(
-            buildHoldPayload(draft, pricing, actor, { holdId, holdNo: nextHoldNo() }),
+            // Both the printed number and the per-device serial behind it are
+            // minted here, and both are re-minted on every pass of this loop —
+            // which is what makes the 409 retry below a retry rather than the
+            // same rejected pair sent twice.
+            buildHoldPayload(draft, pricing, actor, {
+              holdId,
+              holdNo: nextHoldNo(),
+              holdSlno: nextHoldSlno(slnoScope),
+            }),
           ).unwrap();
           // Re-parking a cart this device resumed: the row is still LOCKED to
           // it, and only `/release` can put it back to HELD *and* clear
@@ -917,26 +956,26 @@ export function useQuotationDraft(): QuotationDraftApi {
           // operator would find a free-looking hold nobody can take.
           if (holdId) {
             // Claimed before the request so the draft-change effect below does
-            // not race this one and release the same lock twice.
+            // not race this one and release the same lease twice.
             lockedHold.current = null;
             try {
               await releaseHoldLock({
-                thId: holdId,
-                deviceId: actor.deviceId,
+                txhId: holdId,
+                deviceId: actor.deviceMasterId,
                 scope: holdLockScope(saved),
               }).unwrap();
             } catch (error) {
               // The cart IS parked — only the lock is still on this device, and
               // the picker's take-over clears that. Not worth failing F9 over.
               toast.warn(
-                `Held as ${saved.thHoldNo}, but it is still locked to this device: ` +
-                  holdLockMessage(error, saved.thHoldNo),
+                `Held as ${saved.txhHoldNo}, but it is still locked to this device: ` +
+                  holdLockMessage(error, saved.txhHoldNo),
               );
               clear();
               return true;
             }
           }
-          toast.success(`Held as ${saved.thHoldNo}. Pick held (F10) brings it back.`);
+          toast.success(`Held as ${saved.txhHoldNo}. Pick held (F10) brings it back.`);
           clear();
           return true;
         } catch (error) {
@@ -949,11 +988,11 @@ export function useQuotationDraft(): QuotationDraftApi {
             holdId = null;
             continue;
           }
-          // `th_hold_no` is minted client-side (nothing generates one
-          // server-side) and is unique per company / branch / year / document
-          // type. The random tail makes a clash between two tills improbable
-          // rather than impossible, so one is answered by minting another
-          // instead of by losing the cart.
+          // `txh_hold_no` and `txh_hold_slno` are both minted client-side
+          // (nothing generates either server-side) and both are unique — the
+          // number per company / branch / year / document type, the serial per
+          // device as well. A clash is improbable rather than impossible, so it
+          // is answered by minting another pair instead of by losing the cart.
           if (status === 409 && !holdId && attempt < 2) {
             continue;
           }
@@ -980,23 +1019,23 @@ export function useQuotationDraft(): QuotationDraftApi {
    * one wins. Restoring the cart first and then flagging it would put the same
    * cart on two screens and only afterwards discover the clash.
    *
-   * The cart itself is restored from the hold's own `th_ui_state`, which the
+   * The cart itself is restored from the hold's own `txh_payload`, which the
    * server stores verbatim and never reads into — the resume response carries
    * it, so there is no second fetch. A row this screen did not write cannot be
    * redrawn, and is refused rather than half-drawn; the lock is handed straight
    * back so the refusal costs nobody the cart.
    */
   const resumeHold = useCallback(
-    async (thId: string): Promise<boolean> => {
-      if (!actor.deviceId) {
-        toast.error("This browser has no device id — resuming a held cart needs one.");
+    async (txhId: string): Promise<boolean> => {
+      if (!actor.deviceMasterId) {
+        toast.error("This session has no registered device — resuming a held cart needs one.");
         return false;
       }
       // Opening another cart gives up the one this device is on. Done here
       // rather than left to the draft-change effect: the ref is about to be
-      // overwritten with the new hold, and the old lock would have nothing left
-      // pointing at it — stranded on the server until somebody took it over.
-      if (lockedHold.current && lockedHold.current.thId !== thId) {
+      // overwritten with the new hold, and the old lease would have nothing left
+      // pointing at it — stranded on the server until it lapsed.
+      if (lockedHold.current && lockedHold.current.txhId !== txhId) {
         await releaseLockedHold();
       }
       setBusy("resuming");
@@ -1004,33 +1043,37 @@ export function useQuotationDraft(): QuotationDraftApi {
         // Read first ONLY for the scope: the lock body is keyed on the row's own
         // company / branch (immutable since create), not on whatever tenant the
         // screen happens to be showing.
-        const held = await fetchHold(thId).unwrap();
+        const held = await fetchHold({ txhId }).unwrap();
         const scope = holdLockScope(held);
-        let locked: TransactionHoldPayload;
+        let locked: TxnHoldPayload;
         try {
-          locked = await resumeHoldLock({ thId, deviceId: actor.deviceId, scope }).unwrap();
+          locked = await resumeHoldLock({
+            txhId,
+            deviceId: actor.deviceMasterId,
+            scope,
+          }).unwrap();
         } catch (error) {
           // 409 names the device that has it, 403/404 speak for themselves —
           // all of them mean the cart stays where it is and the screen is
           // untouched.
-          toast.error(holdLockMessage(error, held.thHoldNo));
+          toast.error(holdLockMessage(error, held.txhHoldNo));
           return false;
         }
-        const uiState = readHoldUiState(locked.thUiState);
+        const uiState = readHoldUiState(locked.txhPayload);
         if (!uiState) {
           toast.error(
-            `Hold ${locked.thHoldNo} was not parked from Quotation entry — it cannot be opened here.`,
+            `Hold ${locked.txhHoldNo} was not parked from Quotation entry — it cannot be opened here.`,
           );
-          // Nothing was restored, so nothing is being edited: give the lock back
-          // rather than leaving a cart nobody can reach.
-          void releaseHoldLock({ thId, deviceId: actor.deviceId, scope })
+          // Nothing was restored, so nothing is being edited: give the lease
+          // back rather than leaving a cart nobody can reach.
+          void releaseHoldLock({ txhId, deviceId: actor.deviceMasterId, scope })
             .unwrap()
             .catch(() => undefined);
           return false;
         }
-        lockedHold.current = { thId, holdNo: locked.thHoldNo, scope };
+        lockedHold.current = { txhId, holdNo: locked.txhHoldNo, scope };
         dispatch(draftReplaced(draftFromHold(locked, uiState)));
-        toast.success(`Hold ${locked.thHoldNo} restored — it is locked to this device.`);
+        toast.success(`Hold ${locked.txhHoldNo} restored — it is locked to this device.`);
         return true;
       } catch (error) {
         toast.error(errorMessage(error));
@@ -1039,7 +1082,7 @@ export function useQuotationDraft(): QuotationDraftApi {
         setBusy("idle");
       }
     },
-    [actor.deviceId, fetchHold, releaseHoldLock, releaseLockedHold, resumeHoldLock],
+    [actor.deviceMasterId, fetchHold, releaseHoldLock, releaseLockedHold, resumeHoldLock],
   );
 
 
@@ -1052,7 +1095,7 @@ export function useQuotationDraft(): QuotationDraftApi {
    */
   useEffect(() => {
     const locked = lockedHold.current;
-    if (locked && draft.holdId !== locked.thId) {
+    if (locked && draft.holdId !== locked.txhId) {
       void releaseLockedHold();
     }
   }, [draft.holdId, releaseLockedHold]);
@@ -1070,17 +1113,17 @@ export function useQuotationDraft(): QuotationDraftApi {
   useEffect(() => {
     const releaseOnUnload = () => {
       const locked = lockedHold.current;
-      if (!locked || !actor.deviceId) {
+      if (!locked || !actor.deviceMasterId) {
         return;
       }
       lockedHold.current = null;
       const authorization = getAuthHeaderValue(getAuthSession());
-      void fetch(`${API_BASE}${transactionHoldLockEndpoint(locked.thId, "release")}`, {
+      void fetch(`${API_BASE}${txnHoldLockEndpoint(locked.txhId, "release")}`, {
         method: "POST",
         keepalive: true,
         headers: {
           "Content-Type": "application/json",
-          [HOLD_DEVICE_ID_HEADER]: actor.deviceId,
+          [HOLD_DEVICE_ID_HEADER]: actor.deviceMasterId,
           ...(authorization ? { Authorization: authorization } : {}),
         },
         body: JSON.stringify(locked.scope),
@@ -1088,7 +1131,7 @@ export function useQuotationDraft(): QuotationDraftApi {
     };
     window.addEventListener("pagehide", releaseOnUnload);
     return () => window.removeEventListener("pagehide", releaseOnUnload);
-  }, [actor.deviceId]);
+  }, [actor.deviceMasterId]);
 
   /**
    * Leaving the screen for the list is an ordinary unmount — the document is
@@ -1115,25 +1158,25 @@ export function useQuotationDraft(): QuotationDraftApi {
    * so the caller resumes afterwards like any other free hold.
    */
   const takeOverHold = useCallback(
-    async (hold: TransactionHoldPayload): Promise<boolean> => {
-      if (!actor.deviceId) {
-        toast.error("This browser has no device id — taking over a held cart needs one.");
+    async (hold: TxnHoldPayload): Promise<boolean> => {
+      if (!actor.deviceMasterId) {
+        toast.error("This session has no registered device — taking over a held cart needs one.");
         return false;
       }
       try {
         await forceReleaseHoldLock({
-          thId: hold.thId,
-          deviceId: actor.deviceId,
+          txhId: hold.txhId,
+          deviceId: actor.deviceMasterId,
           scope: holdLockScope(hold),
         }).unwrap();
-        toast.success(`Hold ${hold.thHoldNo} is free again — resume it to continue.`);
+        toast.success(`Hold ${hold.txhHoldNo} is free again — resume it to continue.`);
         return true;
       } catch (error) {
-        toast.error(holdLockMessage(error, hold.thHoldNo));
+        toast.error(holdLockMessage(error, hold.txhHoldNo));
         return false;
       }
     },
-    [actor.deviceId, forceReleaseHoldLock],
+    [actor.deviceMasterId, forceReleaseHoldLock],
   );
 
   /**

@@ -29,11 +29,11 @@ import {
   QUOTATION_GET_ENDPOINT,
   QUOTATION_LIST_GRID_ID,
   QUOTATION_SAVE_ENDPOINT,
-  TRANSACTION_HOLD_DELETE_ENDPOINT,
-  TRANSACTION_HOLD_GET_ENDPOINT,
-  TRANSACTION_HOLD_LIST_ENDPOINT,
-  TRANSACTION_HOLD_SAVE_ENDPOINT,
-  transactionHoldLockEndpoint,
+  TXN_HOLD_DELETE_ENDPOINT,
+  TXN_HOLD_GET_ENDPOINT,
+  TXN_HOLD_LIST_ENDPOINT,
+  TXN_HOLD_SAVE_ENDPOINT,
+  txnHoldLockEndpoint,
   UI_TABLE_COLUMN_WIDTH_ENDPOINT,
   UI_TABLE_MASTERS_ENDPOINT,
   UI_TABLE_VISIBILITY_ENDPOINT,
@@ -56,10 +56,10 @@ import type {
   QuotationListRow,
   QuotationPayload,
   SaveQuotationDto,
-  SaveTransactionHoldDto,
-  TransactionHoldConversion,
-  TransactionHoldLockScope,
-  TransactionHoldPayload,
+  SaveTxnHoldDto,
+  TxnHoldConversion,
+  TxnHoldLockScope,
+  TxnHoldPayload,
   UiTableColumnRow,
 } from "@/features/sales/quotation/quotation.types";
 /** `/configured-grid-sql/run` — a page of rows plus a real total. */
@@ -111,12 +111,13 @@ const NO_TENANT_ID = "00000000-0000-0000-0000-000000000000";
  * conditional update on.
  */
 export type HoldLockArgs = {
-  thId: string;
+  txhId: string;
+  /** `fixed.device_master.dev_id` — the lease is held by a registered device. */
   deviceId: string;
-  scope: TransactionHoldLockScope;
+  scope: TxnHoldLockScope;
 };
 export type HoldConvertArgs = HoldLockArgs & {
-  conversion: TransactionHoldConversion;
+  conversion: TxnHoldConversion;
 };
 export const quotationApi = baseApi.injectEndpoints({
   overrideExisting: true,
@@ -150,13 +151,13 @@ export const quotationApi = baseApi.injectEndpoints({
     }),
     // -- held carts (F9 / F10) --------------------------------------------
     /**
-     * One route for create and update, `thId`'s presence selecting which —
+     * One route for create and update, `txhId`'s presence selecting which —
      * the same contract as `/quotations/create`.
      */
-    saveTransactionHold: builder.mutation<TransactionHoldPayload, SaveTransactionHoldDto>({
-      query: (body) => ({ url: TRANSACTION_HOLD_SAVE_ENDPOINT, method: "POST", body }),
-      transformResponse: (payload: ApiSuccessResponse<TransactionHoldPayload>) => payload.data,
-      invalidatesTags: ["TransactionHold"],
+    saveTxnHold: builder.mutation<TxnHoldPayload, SaveTxnHoldDto>({
+      query: (body) => ({ url: TXN_HOLD_SAVE_ENDPOINT, method: "POST", body }),
+      transformResponse: (payload: ApiSuccessResponse<TxnHoldPayload>) => payload.data,
+      invalidatesTags: ["TxnHold"],
     }),
     /**
      * The held list, newest first, soft-deleted rows already excluded.
@@ -167,22 +168,28 @@ export const quotationApi = baseApi.injectEndpoints({
      * narrowing the list, and keeping it off the configured-grid path whose
      * stored SQL knows none of these filters and would answer with every
      * company's holds.
+     *
+     * `txhKind` matters as much as the scope: `txn_hold` is shared with the
+     * till, and AUTOSAVE snapshots and TEMPLATEs sit in the same table as the
+     * carts an operator parked.
      */
-    listTransactionHolds: builder.query<
-      { items: TransactionHoldPayload[]; total: number },
+    listTxnHolds: builder.query<
+      { items: TxnHoldPayload[]; total: number },
       {
-        thCompanyId: string;
-        thBranchId: string;
-        thAccYear?: number;
-        thDocType?: string;
-        thStatus?: string;
+        txhCompanyId: string;
+        txhBranchId: string;
+        txhAccYear?: string;
+        txhKind?: string;
+        txhSrcModule?: string;
+        txhDocType?: string;
+        txhStatus?: string;
         search?: string;
         page?: number;
         limit?: number;
       }
     >({
       query: ({ page = 1, limit = 100, search, ...filters }) => ({
-        url: TRANSACTION_HOLD_LIST_ENDPOINT,
+        url: TXN_HOLD_LIST_ENDPOINT,
         params: {
           ...filters,
           page,
@@ -191,91 +198,105 @@ export const quotationApi = baseApi.injectEndpoints({
         },
       }),
       transformResponse: (
-        payload: ApiSuccessResponse<TransactionHoldPayload[], { total?: number | null }>,
+        payload: ApiSuccessResponse<TxnHoldPayload[], { total?: number | null }>,
       ) => ({
         items: payload.data ?? [],
         total: payload.meta?.total ?? payload.data?.length ?? 0,
       }),
-      providesTags: ["TransactionHold"],
+      providesTags: ["TxnHold"],
       keepUnusedDataFor: 0,
     }),
     /**
-     * Take the edit lock — `HELD` → `LOCKED`, held by `deviceId`.
+     * Take the edit lease — `HELD` → `LOCKED`, leased to `deviceId` until it
+     * expires.
      *
-     * A 409 means another device has it (the message names which); the same
-     * device asking twice is a no-op that answers 200, so a retried request or a
-     * double-press costs nothing. The response carries `thUiState`, which is the
-     * cart to redraw.
+     * A 409 means another device has it under a LIVE lease (the message names
+     * which); one that has already lapsed is taken over without a force-release.
+     * The same device asking twice is a no-op that answers 200, so a retried
+     * request or a double-press costs nothing. The response carries
+     * `txhPayload`, which is the cart to redraw.
      */
-    resumeTransactionHold: builder.mutation<TransactionHoldPayload, HoldLockArgs>({
-      query: ({ thId, deviceId, scope }) => ({
-        url: transactionHoldLockEndpoint(thId, "resume"),
+    resumeTxnHold: builder.mutation<TxnHoldPayload, HoldLockArgs>({
+      query: ({ txhId, deviceId, scope }) => ({
+        url: txnHoldLockEndpoint(txhId, "resume"),
         method: "POST",
         headers: { [HOLD_DEVICE_ID_HEADER]: deviceId },
         body: scope,
       }),
-      transformResponse: (payload: ApiSuccessResponse<TransactionHoldPayload>) => payload.data,
-      invalidatesTags: ["TransactionHold"],
+      transformResponse: (payload: ApiSuccessResponse<TxnHoldPayload>) => payload.data,
+      invalidatesTags: ["TxnHold"],
     }),
-    /** Give the lock back — `LOCKED` → `HELD`. 403 if this device is not the holder. */
-    releaseTransactionHold: builder.mutation<TransactionHoldPayload, HoldLockArgs>({
-      query: ({ thId, deviceId, scope }) => ({
-        url: transactionHoldLockEndpoint(thId, "release"),
+    /** Give the lease back — `LOCKED` → `HELD`. 403 if this device is not the holder. */
+    releaseTxnHold: builder.mutation<TxnHoldPayload, HoldLockArgs>({
+      query: ({ txhId, deviceId, scope }) => ({
+        url: txnHoldLockEndpoint(txhId, "release"),
         method: "POST",
         headers: { [HOLD_DEVICE_ID_HEADER]: deviceId },
         body: scope,
       }),
-      transformResponse: (payload: ApiSuccessResponse<TransactionHoldPayload>) => payload.data,
-      invalidatesTags: ["TransactionHold"],
+      transformResponse: (payload: ApiSuccessResponse<TxnHoldPayload>) => payload.data,
+      invalidatesTags: ["TxnHold"],
     }),
     /**
-     * Take the lock off whichever device holds it.
+     * Take the lease away from whichever device holds it.
      *
-     * The escape hatch, not an alternative release: nothing times a lock out, so
-     * a browser that died mid-edit would otherwise strand its cart for good.
-     * `deviceId` is this device — the one doing the taking — and the server
-     * records both sides. It also clears the pre-lock `RESUMED` rows, which
-     * nothing else can move.
+     * The escape hatch, not an alternative release: a lease lapses on its own,
+     * but not before its TTL is up, and the floor sometimes needs the cart back
+     * sooner. `deviceId` is this device — the one doing the taking — and the
+     * server's audit entry names both sides. It also clears a `RESUMED` row,
+     * which nothing else can move.
      */
-    forceReleaseTransactionHold: builder.mutation<TransactionHoldPayload, HoldLockArgs>({
-      query: ({ thId, deviceId, scope }) => ({
-        url: transactionHoldLockEndpoint(thId, "force-release"),
+    forceReleaseTxnHold: builder.mutation<TxnHoldPayload, HoldLockArgs>({
+      query: ({ txhId, deviceId, scope }) => ({
+        url: txnHoldLockEndpoint(txhId, "force-release"),
         method: "POST",
         headers: { [HOLD_DEVICE_ID_HEADER]: deviceId },
         body: scope,
       }),
-      transformResponse: (payload: ApiSuccessResponse<TransactionHoldPayload>) => payload.data,
-      invalidatesTags: ["TransactionHold"],
+      transformResponse: (payload: ApiSuccessResponse<TxnHoldPayload>) => payload.data,
+      invalidatesTags: ["TxnHold"],
     }),
     /**
      * Close the hold onto the document it became — `LOCKED` → `CONVERTED`, which
-     * is terminal. Only the holding device may, and afterwards nothing can
-     * resume the cart and bill it twice.
+     * is terminal. Only the device holding the lease may, and afterwards nothing
+     * can resume the cart and bill it twice.
      */
-    convertTransactionHold: builder.mutation<TransactionHoldPayload, HoldConvertArgs>({
-      query: ({ thId, deviceId, scope, conversion }) => ({
-        url: transactionHoldLockEndpoint(thId, "convert"),
+    convertTxnHold: builder.mutation<TxnHoldPayload, HoldConvertArgs>({
+      query: ({ txhId, deviceId, scope, conversion }) => ({
+        url: txnHoldLockEndpoint(txhId, "convert"),
         method: "POST",
         headers: { [HOLD_DEVICE_ID_HEADER]: deviceId },
         body: { ...scope, ...conversion },
       }),
-      transformResponse: (payload: ApiSuccessResponse<TransactionHoldPayload>) => payload.data,
-      invalidatesTags: ["TransactionHold"],
+      transformResponse: (payload: ApiSuccessResponse<TxnHoldPayload>) => payload.data,
+      invalidatesTags: ["TxnHold"],
     }),
-    getTransactionHold: builder.query<TransactionHoldPayload, string>({
-      query: (thId) => ({ url: TRANSACTION_HOLD_GET_ENDPOINT, params: { thId } }),
-      transformResponse: (payload: ApiSuccessResponse<TransactionHoldPayload>) => payload.data,
+    /**
+     * One hold. `txhAccYear` is optional — the table is partitioned by it, so
+     * naming it prunes the lookup to one partition instead of scanning every
+     * year on record.
+     */
+    getTxnHold: builder.query<TxnHoldPayload, { txhId: string; txhAccYear?: string }>({
+      query: ({ txhId, txhAccYear }) => ({
+        url: TXN_HOLD_GET_ENDPOINT,
+        params: { txhId, ...(txhAccYear ? { txhAccYear } : {}) },
+      }),
+      transformResponse: (payload: ApiSuccessResponse<TxnHoldPayload>) => payload.data,
       keepUnusedDataFor: 0,
     }),
-    deleteTransactionHold: builder.mutation<{ thId: string; deleted: boolean }, string>({
-      query: (thId) => ({
-        url: TRANSACTION_HOLD_DELETE_ENDPOINT,
+    /** Soft delete: the row stays, flagged, and frees its hold number and serial. */
+    deleteTxnHold: builder.mutation<
+      { txhId: string; deleted: boolean },
+      { txhId: string; txhAccYear?: string }
+    >({
+      query: ({ txhId, txhAccYear }) => ({
+        url: TXN_HOLD_DELETE_ENDPOINT,
         method: "DELETE",
-        params: { thId },
+        params: { txhId, ...(txhAccYear ? { txhAccYear } : {}) },
       }),
-      transformResponse: (payload: ApiSuccessResponse<{ thId: string; deleted: boolean }>) =>
+      transformResponse: (payload: ApiSuccessResponse<{ txhId: string; deleted: boolean }>) =>
         payload.data,
-      invalidatesTags: ["TransactionHold"],
+      invalidatesTags: ["TxnHold"],
     }),
     // -- the browse list (there is no /quotations/list route; grid 84 is it) --
     listQuotations: builder.query<ConfiguredGridPage<QuotationListRow>, QuotationListQuery>({
@@ -656,14 +677,14 @@ export const {
   useLazyGetQuotationQuery,
   useSaveQuotationMutation,
   useDeleteQuotationMutation,
-  useSaveTransactionHoldMutation,
-  useListTransactionHoldsQuery,
-  useLazyGetTransactionHoldQuery,
-  useDeleteTransactionHoldMutation,
-  useResumeTransactionHoldMutation,
-  useReleaseTransactionHoldMutation,
-  useForceReleaseTransactionHoldMutation,
-  useConvertTransactionHoldMutation,
+  useSaveTxnHoldMutation,
+  useListTxnHoldsQuery,
+  useLazyGetTxnHoldQuery,
+  useDeleteTxnHoldMutation,
+  useResumeTxnHoldMutation,
+  useReleaseTxnHoldMutation,
+  useForceReleaseTxnHoldMutation,
+  useConvertTxnHoldMutation,
   useListQuotationsQuery,
   useLazyListQuotationsQuery,
   useGetQuotationGridLayoutQuery,

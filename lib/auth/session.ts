@@ -244,6 +244,49 @@ function hasUserInfoContent(userInfo: UserInfo | null | undefined): boolean {
       Object.values(userInfo).some((value) => normalizeStoredValue(value as StorageValue)),
   );
 }
+/**
+ * The stored user block updated by whatever the response actually reported —
+ * field by field, not all or nothing.
+ *
+ * The refresh response is PARTIAL: it names the user (`user_name`, `user_type`)
+ * and sends every device field as `null`, because no device is presented on a
+ * refresh and the server carries the real one inside the token instead. Taking
+ * the block wholesale therefore blanked `deviceId` fifteen minutes into every
+ * session — invisibly, until something read it. `txn_hold` reads it: a hold's
+ * `txh_device_id` is a foreign key into `fixed.device_master`, so F9 started
+ * refusing to park carts on a session that had merely lived long enough to
+ * refresh.
+ *
+ * A field the caller has nothing to say about keeps what is stored — EXCEPT
+ * when the block names a different user, which is a different session and
+ * inherits nothing from the last one. Signing out goes through
+ * `clearAuthSession`, which is what actually drops the block.
+ */
+function mergeUserInfo(
+  stored: UserInfo | null,
+  incoming: UserInfo | null | undefined,
+): UserInfo | null {
+  if (!hasUserInfoContent(incoming)) {
+    return stored;
+  }
+  const next = incoming as UserInfo;
+  if (!stored) {
+    return next;
+  }
+  const storedUser = normalizeStoredValue(stored.userName);
+  const nextUser = normalizeStoredValue(next.userName);
+  if (storedUser && nextUser && storedUser !== nextUser) {
+    return next;
+  }
+  const merged = { ...stored } as Record<string, string | null>;
+  for (const [key, value] of Object.entries(next)) {
+    const normalized = normalizeStoredValue(value as StorageValue);
+    if (normalized) {
+      merged[key] = normalized;
+    }
+  }
+  return merged as unknown as UserInfo;
+}
 export function setAuthSession(
   token?: string | null,
   userId?: StorageValue,
@@ -260,10 +303,10 @@ export function setAuthSession(
   }
   const normalizedRefreshToken = normalizeStoredValue(refreshToken);
   const normalizedUserId = normalizeStoredValue(userId);
-  // Keep what is already stored when the caller has nothing to say about the
-  // user (the refresh paths), rather than blanking it. Signing out goes through
-  // clearAuthSession, which is what actually drops it.
-  const normalizedUserInfo = hasUserInfoContent(userInfo) ? (userInfo as UserInfo) : getUserInfo();
+  // Merged per field rather than replaced: the refresh paths report the user
+  // and null every device field, and blanking those is what used to cost a
+  // long-lived session its `deviceId`. See `mergeUserInfo`.
+  const normalizedUserInfo = mergeUserInfo(getUserInfo(), userInfo);
   memoryAuthToken = normalizedToken;
   memoryRefreshToken = normalizedRefreshToken;
   memoryAuthUserId = normalizedUserId;

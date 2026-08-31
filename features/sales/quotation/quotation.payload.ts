@@ -57,7 +57,22 @@ export type SaveActor = {
   /** The login name. Only the audit trail reads it — see `actorLabel`. */
   userName: string | null;
   sessionId: string | null;
+  /**
+   * This browser's own id (`localStorage`), which is what the document columns
+   * want: `sq_device_id` is free text and nothing joins on it.
+   */
   deviceId: string | null;
+  /**
+   * `fixed.device_master.dev_id` — the device the LOGIN registered, from the
+   * session's `device_id`.
+   *
+   * A different thing from `deviceId` and not interchangeable with it:
+   * `txn_hold` has a real foreign key to `device_master` (and leases its carts
+   * by device), so a hold names this one or is refused. Null when the session
+   * never carried one — the screen then refuses to hold rather than inventing a
+   * device.
+   */
+  deviceMasterId?: string | null;
   deviceType: string | null;
 };
 
