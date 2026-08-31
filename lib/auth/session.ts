@@ -229,6 +229,21 @@ export function extractAuthUserId(payload: unknown): string | null {
     nestedResult?.id,
   ]);
 }
+/**
+ * Does this carry anything worth storing?
+ *
+ * A token refresh reports the tokens and nothing else, and a response that
+ * omits the user block parses to an object of nulls. Overwriting with either is
+ * how a signed-in SUPER ADMIN silently stops being one halfway through a
+ * session — the persisted copy is what a reload rehydrates from, so the loss
+ * survives the reload and only a fresh login undoes it.
+ */
+function hasUserInfoContent(userInfo: UserInfo | null | undefined): boolean {
+  return Boolean(
+    userInfo &&
+      Object.values(userInfo).some((value) => normalizeStoredValue(value as StorageValue)),
+  );
+}
 export function setAuthSession(
   token?: string | null,
   userId?: StorageValue,
@@ -245,7 +260,10 @@ export function setAuthSession(
   }
   const normalizedRefreshToken = normalizeStoredValue(refreshToken);
   const normalizedUserId = normalizeStoredValue(userId);
-  const normalizedUserInfo = userInfo ?? null;
+  // Keep what is already stored when the caller has nothing to say about the
+  // user (the refresh paths), rather than blanking it. Signing out goes through
+  // clearAuthSession, which is what actually drops it.
+  const normalizedUserInfo = hasUserInfoContent(userInfo) ? (userInfo as UserInfo) : getUserInfo();
   memoryAuthToken = normalizedToken;
   memoryRefreshToken = normalizedRefreshToken;
   memoryAuthUserId = normalizedUserId;

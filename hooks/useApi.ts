@@ -8,6 +8,7 @@ import {
   extractRefreshToken,
   getAuthSession,
   getRefreshToken,
+  extractUserInfo,
   setAuthSession,
 } from "@/lib/auth/session";
 import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
@@ -223,8 +224,18 @@ async function refreshAuthSession(dispatch: ReturnType<typeof useAppDispatch>): 
       }
       const nextRefreshToken = extractRefreshToken(response.data) ?? refreshToken;
       const userId = extractAuthUserId(response.data);
-      setAuthSession(token, userId, nextRefreshToken);
-      dispatch(authSessionChanged({ token, refreshToken: nextRefreshToken, userId }));
+      // The refresh response reports the user block too; passing it keeps the
+      // stored one current instead of leaving setAuthSession to preserve it.
+      const userInfo = extractUserInfo(response.data);
+      setAuthSession(token, userId, nextRefreshToken, userInfo);
+      dispatch(
+        authSessionChanged({
+          token,
+          refreshToken: nextRefreshToken,
+          userId,
+          ...(userInfo ? { userInfo } : {}),
+        }),
+      );
       return true;
     })
     .catch(() => false)

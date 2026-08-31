@@ -13,6 +13,7 @@ import {
   extractRefreshToken,
   getAuthSession,
   getRefreshToken,
+  extractUserInfo,
   setAuthSession,
 } from "@/lib/auth/session";
 import { authSessionChanged } from "@/store/slices/authSlice";
@@ -82,8 +83,18 @@ async function refreshAuthSession(
     }
     const refreshedRefreshToken = extractRefreshToken(result.data) ?? currentRefreshToken;
     const userId = extractAuthUserId(result.data);
-    setAuthSession(token, userId, refreshedRefreshToken);
-    api.dispatch(authSessionChanged({ token, refreshToken: refreshedRefreshToken, userId }));
+    // The refresh response reports the user block too; passing it keeps the
+    // stored one current instead of leaving setAuthSession to preserve it.
+    const userInfo = extractUserInfo(result.data);
+    setAuthSession(token, userId, refreshedRefreshToken, userInfo);
+    api.dispatch(
+      authSessionChanged({
+        token,
+        refreshToken: refreshedRefreshToken,
+        userId,
+        ...(userInfo ? { userInfo } : {}),
+      }),
+    );
     return { token, refreshToken: refreshedRefreshToken, userId };
   })().finally(() => {
     refreshRequest = null;
