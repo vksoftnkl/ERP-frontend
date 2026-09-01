@@ -438,7 +438,7 @@ export function TermsBlock({
           <Field label={fields.labelFor("remarks")} htmlFor="quotation-remarks">
             <textarea
               id="quotation-remarks"
-              className={styles.textarea}
+              className={styles.input}
               value={terms.remarks}
               disabled={disabled}
               maxLength={500}
@@ -476,7 +476,7 @@ export function TermsBlock({
           <Field label={fields.labelFor("termsConditions")} htmlFor="quotation-tc">
             <textarea
               id="quotation-tc"
-              className={styles.textarea}
+              className={styles.input}
               value={terms.termsConditions}
               disabled={disabled}
               onChange={(event) => onSetTerms("termsConditions", event.target.value)}

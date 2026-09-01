@@ -114,3 +114,37 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+// Shown only when this branch has a template of its own — the one case where
+// "All Branches" would otherwise write a row the operator can never see.
+.shadowWarning {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--erp-radius);
+  border: 1px solid #f3d38a;
+  background: #fdf6e6;
+}
+
+.shadowWarningText {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #7a5312;
+}
+
+.shadowWarningChoice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #573a08;
+  cursor: pointer;
+
+  input {
+    margin-top: 2px;
+    flex: 0 0 auto;
+    cursor: pointer;
+  }
+}

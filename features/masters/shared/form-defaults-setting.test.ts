@@ -4,6 +4,7 @@ import {
   buildSessionScopeOverride,
   CUSTOMER_FORM_DEFAULTS_SETTING_KEY,
   findEffectiveSettingValue,
+  findSessionBranchOverride,
   parseSettingObject,
 } from "./form-defaults-setting";
 import type { EffectiveSetting } from "@/features/settings/app-settings/types";
@@ -98,5 +99,55 @@ describe("parseSettingObject", () => {
     expect(parseSettingObject("not json")).toBeNull();
     expect(parseSettingObject("")).toBeNull();
     expect(parseSettingObject(null)).toBeNull();
+  });
+});
+
+describe("findSessionBranchOverride", () => {
+  const KEY = CUSTOMER_FORM_DEFAULTS_SETTING_KEY;
+  const row = (override: Partial<EffectiveSetting["override"]> | null) =>
+    [{ asdKey: KEY, value: "{}", override }] as unknown as EffectiveSetting[];
+
+  // The whole point: a COMPANY save made from here would be written and then
+  // never read, because this row keeps winning /effective.
+  it("finds this branch's own override", () => {
+    expect(
+      findSessionBranchOverride(
+        row({ asvId: "ovr-1", asvScope: "BRANCH", asvBranchId: BRANCH }),
+        KEY,
+        SESSION,
+      )?.asvId,
+    ).toBe("ovr-1");
+  });
+
+  it("ignores an override that cannot shadow a company save", () => {
+    // Already the company row — nothing to warn about.
+    expect(
+      findSessionBranchOverride(
+        row({ asvId: "ovr-2", asvScope: "COMPANY", asvBranchId: null }),
+        KEY,
+        SESSION,
+      ),
+    ).toBeNull();
+    // Catalog default, no override at all.
+    expect(findSessionBranchOverride(row(null), KEY, SESSION)).toBeNull();
+    // A branch row left in a stale cache entry from a branch just switched away
+    // from is not this session's.
+    expect(
+      findSessionBranchOverride(
+        row({ asvId: "ovr-3", asvScope: "BRANCH", asvBranchId: "another-branch" }),
+        KEY,
+        SESSION,
+      ),
+    ).toBeNull();
+    // A session with no branch cannot be shadowed by one.
+    expect(
+      findSessionBranchOverride(
+        row({ asvId: "ovr-4", asvScope: "BRANCH", asvBranchId: BRANCH }),
+        KEY,
+        { ...SESSION, branchId: null },
+      ),
+    ).toBeNull();
+    expect(findSessionBranchOverride(undefined, KEY, SESSION)).toBeNull();
+    expect(findSessionBranchOverride(row({ asvScope: "BRANCH", asvBranchId: BRANCH }), "other.key", SESSION)).toBeNull();
   });
 });

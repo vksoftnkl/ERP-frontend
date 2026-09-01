@@ -15,6 +15,12 @@ type TemplateScopeModalProps = {
   summary?: string | null;
   /** False disables "This Branch Only" — there is no branch to save it against. */
   canSaveToBranch: boolean;
+  /** True when this branch already has its own template, which outranks a
+   *  company-wide one and would otherwise make "All Branches" look inert. */
+  hasBranchTemplate: boolean;
+  /** Whether that branch template goes away when "All Branches" is chosen. */
+  clearBranchTemplate: boolean;
+  onClearBranchTemplateChange: (next: boolean) => void;
   saving: boolean;
   onChoose: (scope: TemplateScopeChoice) => void;
   onCancel: () => void;
@@ -35,6 +41,9 @@ export default function TemplateScopeModal({
   sourceRecordName,
   summary,
   canSaveToBranch,
+  hasBranchTemplate,
+  clearBranchTemplate,
+  onClearBranchTemplateChange,
   saving,
   onChoose,
   onCancel,
@@ -113,6 +122,28 @@ export default function TemplateScopeModal({
             {`Existing ${entityLabelPlural} are not touched. Where should this template apply?`}
           </p>
           {summary ? <p className={styles.summary}>{summary}</p> : null}
+          {hasBranchTemplate ? (
+            // Said before the choice, not after it: settings layer GLOBAL <
+            // COMPANY < BRANCH, so a company-wide save made from a branch that
+            // has its own template writes a row nothing here will ever read —
+            // which is indistinguishable from a save that failed.
+            <div className={styles.shadowWarning}>
+              <p className={styles.shadowWarningText}>
+                {`This branch already has its own template, and a branch template outranks the company-wide one.`}
+              </p>
+              <label className={styles.shadowWarningChoice}>
+                <input
+                  type="checkbox"
+                  checked={clearBranchTemplate}
+                  disabled={saving}
+                  onChange={(event) => onClearBranchTemplateChange(event.target.checked)}
+                />
+                <span>
+                  {`Remove this branch's own template, so All Branches applies here too.`}
+                </span>
+              </label>
+            </div>
+          ) : null}
           <div className={styles.actions}>
             <button
               type="button"
@@ -140,7 +171,11 @@ export default function TemplateScopeModal({
               className={styles.scopeButton}
               onClick={() => onChoose("COMPANY")}
               disabled={saving}
-              title="Every branch that has no template of its own."
+              title={
+                hasBranchTemplate && clearBranchTemplate
+                  ? "Every branch, including this one — its own template is removed."
+                  : "Every branch that has no template of its own."
+              }
             >
               All Branches
             </button>

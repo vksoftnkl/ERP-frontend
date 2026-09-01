@@ -82,7 +82,12 @@ export default function SaveAsTemplateButton({
 }: SaveAsTemplateButtonProps) {
   const userInfo = useAppSelector(selectUserInfo);
   const [pendingJson, setPendingJson] = useState<string | null>(null);
-  const { save, isSaving, canSaveToBranch } = useSaveFormDefaultsTemplate(
+  // Ticked by default: the button says "All Branches", and leaving this branch's
+  // own row on top of the company one is what "the template did not save" looks
+  // like. Visible and untickable, because the row being dropped is a template
+  // somebody wrote.
+  const [clearBranchTemplate, setClearBranchTemplate] = useState(true);
+  const { save, isSaving, canSaveToBranch, hasBranchTemplate } = useSaveFormDefaultsTemplate(
     settingKey,
     templateLabel,
   );
@@ -100,7 +105,7 @@ export default function SaveAsTemplateButton({
     if (!pendingJson) {
       return;
     }
-    const saved = await save(scope, pendingJson);
+    const saved = await save(scope, pendingJson, { clearBranchTemplate });
     if (saved) {
       setPendingJson(null);
     }
@@ -117,9 +122,10 @@ export default function SaveAsTemplateButton({
         className={styles.templateButton}
         disabled={isSaving}
         title={`New ${entityLabelPlural} at this branch will start with what is on this form. Existing ${entityLabelPlural} are not touched.`}
-        onClick={() =>
-          setPendingJson(buildFormDefaults(values, { specs, excluded, excludedPrefixes, labels }))
-        }
+        onClick={() => {
+          setClearBranchTemplate(true);
+          setPendingJson(buildFormDefaults(values, { specs, excluded, excludedPrefixes, labels }));
+        }}
       >
         Save as Default Template
       </button>
@@ -129,6 +135,9 @@ export default function SaveAsTemplateButton({
         sourceRecordName={sourceRecordName}
         summary={summary}
         canSaveToBranch={canSaveToBranch}
+        hasBranchTemplate={hasBranchTemplate}
+        clearBranchTemplate={clearBranchTemplate}
+        onClearBranchTemplateChange={setClearBranchTemplate}
         saving={isSaving}
         onChoose={(scope) => void handleChoose(scope)}
         onCancel={() => setPendingJson(null)}

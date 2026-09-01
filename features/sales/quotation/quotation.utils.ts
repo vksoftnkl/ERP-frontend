@@ -107,6 +107,17 @@ export function cubicFeetFromSize(value: string | null | undefined): number | nu
   return Number(cft.toFixed(3));
 }
 /**
+ * The Size cell only ever holds dimensions, so only the characters a dimension
+ * is made of are let through: digits, the `*` between two factors, and the
+ * decimal point a factor like `7.5` needs. Letters and everything else are
+ * dropped as they are keyed (a paste is filtered the same way), which keeps the
+ * cell from holding text `cubicFeetFromSize` would refuse and leave Bill Qty
+ * silently stale.
+ */
+export function sanitizeSizeInput(value: string): string {
+  return value.replace(/[^0-9.*]/g, "");
+}
+/**
  * What the size works out to, for `sqi_size_uom` / `soi_size_uom` — the unit of
  * the Bill Qty the dimensions produced. Sent only alongside a size, since a unit
  * on its own says nothing.

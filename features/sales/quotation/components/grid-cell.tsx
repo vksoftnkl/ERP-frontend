@@ -40,6 +40,11 @@ export type GridCellProps = {
   title?: string;
   options?: GridCellOption[];
   placeholder?: string;
+  /**
+   * Filters every keystroke and paste before it reaches the buffer — the Size
+   * cell drops anything that is not part of a dimension.
+   */
+  sanitize?: (raw: string) => string;
   /** Identifies the cell for the Enter-to-next-cell walker. */
   gridName: string;
   rowKey: string;
@@ -101,6 +106,7 @@ export function GridCell(props: GridCellProps) {
     title,
     options,
     placeholder,
+    sanitize,
     gridName,
     rowKey,
     fieldKey,
@@ -272,7 +278,9 @@ export function GridCell(props: GridCellProps) {
         setBuffer(seeded);
         event.currentTarget.select();
       }}
-      onChange={(event) => setBuffer(event.target.value)}
+      onChange={(event) =>
+        setBuffer(sanitize ? sanitize(event.target.value) : event.target.value)
+      }
       onBlur={commitBuffer}
       // A wheel over a focused numeric input would otherwise scroll the value.
       onWheel={(event) => event.currentTarget.blur()}

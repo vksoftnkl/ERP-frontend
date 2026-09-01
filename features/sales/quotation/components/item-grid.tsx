@@ -25,6 +25,7 @@ import type { DraftLine, ItemUnitOption } from "../quotation.types";
 import {
   cubicFeetFromSize,
   isFrozenColumn,
+  sanitizeSizeInput,
   scaledWidth,
   totalColumnWidth,
   type ResolvedItemColumn,
@@ -281,6 +282,11 @@ export function ItemGrid(props: ItemGridProps) {
                         // is shown on hover rather than left to be guessed at.
                         title={
                           column.write === "itemSize" ? sizeCellTitle(value) : undefined
+                        }
+                        // Dimensions only: letters keyed (or pasted) into the
+                        // Size cell never make it into the value.
+                        sanitize={
+                          column.write === "itemSize" ? sanitizeSizeInput : undefined
                         }
                         editable={cellEditable}
                         invalid={invalid}

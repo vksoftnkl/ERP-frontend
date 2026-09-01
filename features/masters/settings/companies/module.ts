@@ -18,7 +18,6 @@ import {
   type LazyDropdownHandlers,
 } from "@/features/masters/shared/use-lazy-configured-dropdown";
 import styles from "@/app/master/state-master/page.module.scss";
-import modalStyles from "./company-modal.module.scss";
 import {
   buildLookupOptions,
   defineMasterModule,
@@ -1134,7 +1133,6 @@ export function useCompaniesModule() {
         customFields: companyFormFields,
         createInitialValues: COMPANY_INITIAL_FORM_VALUES,
         modalPanelStyle: COMPANY_MODAL_PANEL_STYLE,
-        modalPanelClassName: modalStyles.fixedHeightPanel,
          createModalTitle:"Company Entry",
       editModalTitle:"Edit Company Entry",
         modalFormGridColumns: 2,

@@ -14,6 +14,7 @@ import {
   addDays,
   buildPageList,
   cubicFeetFromSize,
+  sanitizeSizeInput,
   daysBetween,
   fromDisplayDate,
   isRealDate,
@@ -371,4 +372,23 @@ describe("cubicFeetFromSize", () => {
     expect(cubicFeetFromSize(undefined)).toBeNull();
   });
 
+});
+
+describe("sanitizeSizeInput", () => {
+  it("keeps the digits, stars and decimal points a dimension is made of", () => {
+    expect(sanitizeSizeInput("45*2*2*6")).toBe("45*2*2*6");
+    expect(sanitizeSizeInput("10*3*2.5*4")).toBe("10*3*2.5*4");
+    expect(sanitizeSizeInput("8*8*8*8*")).toBe("8*8*8*8*");
+  });
+
+  it("drops letters and every other character, keyed or pasted", () => {
+    expect(sanitizeSizeInput("abcd")).toBe("");
+    expect(sanitizeSizeInput("45x2x2")).toBe("4522");
+    expect(sanitizeSizeInput("45 * 2 * 2 * 6 cft")).toBe("45*2*2*6");
+    expect(sanitizeSizeInput("-45*2")).toBe("45*2");
+  });
+
+  it("leaves an empty cell empty", () => {
+    expect(sanitizeSizeInput("")).toBe("");
+  });
 });

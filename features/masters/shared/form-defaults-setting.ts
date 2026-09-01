@@ -7,6 +7,7 @@ import {
   type SessionContext,
 } from "@/features/settings/app-settings/lib/session-scope";
 import type {
+  AppSettingOverride,
   AppSettingScope,
   EffectiveSetting,
   ResolveScopeQuery,
@@ -73,6 +74,35 @@ export function findEffectiveSettingValue(
   const row = rows?.find((setting) => setting.asdKey === key);
   const value = row?.value;
   return value == null || value.trim() === "" ? null : value;
+}
+
+/**
+ * This session's own BRANCH override of one setting, when it has one.
+ *
+ * The layering that makes a branch template useful is the same layering that
+ * makes an "All Branches" save look like it did nothing: the COMPANY row is
+ * written, the read returns the BRANCH row that still sits on top of it, and
+ * the create form goes on starting the way it did before. A caller about to
+ * write COMPANY needs to know that row is there — to say so, and to offer to
+ * take it away — so it is picked out here rather than guessed at.
+ *
+ * Only the row this session would actually be shadowed BY counts: an override
+ * belonging to another branch never reaches this read, but the branch id is
+ * compared anyway so a stale cache entry from a branch just switched away from
+ * cannot be mistaken for the current one.
+ */
+export function findSessionBranchOverride(
+  rows: EffectiveSetting[] | undefined,
+  key: string,
+  session: Pick<SessionContext, "branchId">,
+): AppSettingOverride | null {
+  if (!session.branchId) {
+    return null;
+  }
+  const override = rows?.find((setting) => setting.asdKey === key)?.override;
+  return override && override.asvScope === "BRANCH" && override.asvBranchId === session.branchId
+    ? override
+    : null;
 }
 
 /** The setting text as the JSON object it holds; null when it is not one. */

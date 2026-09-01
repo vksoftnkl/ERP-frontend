@@ -156,11 +156,15 @@
   flex-shrink: 0;
 }
 .scrollArea {
+  // No `max-height` of its own: `flex: 1; min-height: 0` inside the column-flex
+  // `.panel` already caps it at whatever room the panel leaves after the header,
+  // tabs and footer. A hand-computed `88vh - <chrome>px` cap under-shoots
+  // whenever a page pins the panel to an explicit `height` (Customer Entry does),
+  // and the shortfall shows up as dead white space under the footer.
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  max-height: calc(calc(88vh / var(--erp-ui-scale)) - 148px);
   background: #fff;
 }
 .scrollArea::-webkit-scrollbar {
@@ -1133,9 +1137,6 @@
   }
   .headerDescription {
     font-size: 0.82rem;
-  }
-  .scrollArea {
-    max-height: calc(calc(92vh / var(--erp-ui-scale)) - 126px);
   }
   .formGrid {
     padding: 1rem;
