@@ -291,11 +291,14 @@ export function SelectField({
 }
 
 export function CheckField({
+  id,
   label,
   checked,
   disabled,
   onChange,
 }: {
+  /** Names the box for the Enter walk; omitted, it is simply not a stop on it. */
+  id?: string;
   label: string;
   checked: boolean;
   disabled?: boolean;
@@ -304,9 +307,11 @@ export function CheckField({
   return (
     <label className={styles.check} aria-disabled={disabled ? "true" : undefined}>
       <input
+        id={id}
         type="checkbox"
         checked={checked}
         disabled={disabled}
+        data-quotation-focus={id}
         onChange={(event) => onChange(event.target.checked)}
       />
       {label}
@@ -425,6 +430,16 @@ export function DropdownCombo(props: DropdownComboProps) {
    */
   const [query, setQuery] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  /**
+   * Whether the operator has actually engaged the menu — arrowed to a row, or
+   * typed a search. Enter commits only then.
+   *
+   * Focusing opens the menu with the first row highlighted, so without this an
+   * Enter meant for "move to the next field" silently picked that row: walking
+   * the header turned POS State Code from Tamil Nadu into whatever sorts first,
+   * which is the field the whole local-sale GST split hangs off.
+   */
+  const [engaged, setEngaged] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [runDropdown, { data, isFetching }] = useLazyRunDropdownQuery();
 
@@ -473,6 +488,9 @@ export function DropdownCombo(props: DropdownComboProps) {
     onSelect(option.value, option.label);
     setOpen(false);
     setQuery(null);
+    // The pick is made and focus stays here so it can be read back; the next
+    // Enter is the operator moving on, not choosing again.
+    setEngaged(false);
   };
 
   return (
@@ -516,6 +534,7 @@ export function DropdownCombo(props: DropdownComboProps) {
               // box, hiding the very name the operator came back to check.
               setQuery(null);
               setActiveIndex(0);
+              setEngaged(false);
               // Selected rather than cleared, so the first keystroke still
               // replaces the whole thing and searching feels the same as before
               // — the grid cells arrive focused the same way.
@@ -523,10 +542,22 @@ export function DropdownCombo(props: DropdownComboProps) {
               fetchOptions("");
             }
           }}
+          onClick={() => {
+            // Focusing opens the menu, but focus does not fire again when the
+            // box already has it — after Escape closed the menu, a click on the
+            // box was landing on nothing. Clicking a dropdown has to open it.
+            if (disabled || open) {
+              return;
+            }
+            setOpen(true);
+            setActiveIndex(0);
+            fetchOptions(query ?? "");
+          }}
           onChange={(event) => {
             setQuery(event.target.value);
             setActiveIndex(0);
             setOpen(true);
+            setEngaged(true);
           }}
           onKeyDown={(event) => {
             // The box is showing the current selection rather than a search, so
@@ -541,15 +572,20 @@ export function DropdownCombo(props: DropdownComboProps) {
             if (event.key === "ArrowDown") {
               event.preventDefault();
               setOpen(true);
+              setEngaged(true);
               setActiveIndex((index) => Math.min(index + 1, Math.max(options.length - 1, 0)));
               return;
             }
             if (event.key === "ArrowUp") {
               event.preventDefault();
+              setEngaged(true);
               setActiveIndex((index) => Math.max(index - 1, 0));
               return;
             }
-            if (event.key === "Enter" && open && options[activeIndex]) {
+            // Not `open` alone: a menu is open merely because the field has
+            // focus. Enter picks the highlighted row only once the operator has
+            // reached for it, and otherwise falls through to the header walker.
+            if (event.key === "Enter" && open && engaged && options[activeIndex]) {
               event.preventDefault();
               commit(options[activeIndex]);
               return;
@@ -560,6 +596,7 @@ export function DropdownCombo(props: DropdownComboProps) {
               // Abandons the half-typed search rather than leaving it to
               // reappear the next time the menu opens.
               setQuery(null);
+              setEngaged(false);
             }
           }}
         />

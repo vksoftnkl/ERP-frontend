@@ -19,6 +19,7 @@ import type {
 import { elementRect } from "@/features/print-designer/lib/geometry";
 import { lintTemplateString } from "@/features/print-designer/lib/expression";
 import {
+  CROSSTAB_BANDS,
   GROUPED_BANDS,
   ROW_BANDS,
   SINGLETON_BANDS,
@@ -59,6 +60,12 @@ function expressionFields(band: Band): Array<{ label: string; value: string | un
     }
     if (element.kind === "FIELD" && element.aggregate?.over) {
       fields.push({ label: `${element.id} aggregate`, value: element.aggregate.over, elementId: element.id });
+    }
+    if (element.kind === "CROSSTAB") {
+      fields.push({ label: `${element.id} row`, value: element.rowBy, elementId: element.id });
+      fields.push({ label: `${element.id} column`, value: element.columnBy, elementId: element.id });
+      fields.push({ label: `${element.id} measure`, value: element.measure, elementId: element.id });
+      fields.push({ label: `${element.id} corner`, value: element.corner, elementId: element.id });
     }
   }
 
@@ -224,13 +231,100 @@ export function validateDefinition(definition: TemplateDefinition): Problem[] {
         // of overhang produced eight warnings on a template that is correct,
         // and eight warnings nobody can act on is how a problems list gets
         // ignored.
-        if (!band.autoGrow && rect.y + rect.h > band.heightMm + BAND_OVERHANG_TOLERANCE_MM) {
+        // A crosstab is exempt: its real height comes from the data and the
+        // engine grows the band to it whether autoGrow is on or not, so warning
+        // that its placeholder box overhangs would be advice to do nothing.
+        if (
+          element.kind !== "CROSSTAB" &&
+          !band.autoGrow &&
+          rect.y + rect.h > band.heightMm + BAND_OVERHANG_TOLERANCE_MM
+        ) {
           problems.push({
             severity: "warning",
             bandIndex,
             elementId: element.id,
             message: `'${element.id}' extends below the ${band.heightMm}mm band; enable autoGrow or raise the height.`,
           });
+        }
+      }
+
+      if (element.kind === "CROSSTAB") {
+        // Each of these is a save-time refusal on the server. Catching them
+        // here is the difference between a red mark on the field that is wrong
+        // and a 400 that names a JSON path.
+        if (!CROSSTAB_BANDS.includes(band.type)) {
+          const why =
+            band.type === "DETAIL"
+              ? "once per row"
+              : band.type === "GROUP_HEADER" || band.type === "GROUP_FOOTER"
+                ? "once per group"
+                : "on every page";
+          problems.push({
+            severity: "error",
+            bandIndex,
+            elementId: element.id,
+            message: `'${element.id}' cannot sit in a ${band.type.replace(/_/g, " ").toLowerCase()} — the whole table would print ${why}.`,
+          });
+        }
+        if (definition.layoutMode === "GRID") {
+          problems.push({
+            severity: "error",
+            bandIndex,
+            elementId: element.id,
+            message: `'${element.id}' is a graphic-mode element; character-grid stationery cannot size its columns.`,
+          });
+        }
+        if (!element.dataset) {
+          problems.push({
+            severity: "error",
+            bandIndex,
+            elementId: element.id,
+            message: `'${element.id}' has no dataset to pivot.`,
+          });
+        } else if (!datasetNames.has(element.dataset)) {
+          problems.push({
+            severity: "error",
+            bandIndex,
+            elementId: element.id,
+            message: `'${element.id}' pivots unknown dataset '${element.dataset}'.`,
+          });
+        }
+        if (element.rowHeaderWidthMm >= element.w) {
+          problems.push({
+            severity: "error",
+            bandIndex,
+            elementId: element.id,
+            message: `The row-label column on '${element.id}' leaves no width for the data columns.`,
+          });
+        }
+        for (const [label, value] of [
+          ["row", element.rowBy],
+          ["column", element.columnBy],
+          ["measure", element.measure],
+        ] as const) {
+          if (!value.trim()) {
+            problems.push({
+              severity: "error",
+              bandIndex,
+              elementId: element.id,
+              message: `'${element.id}' has no ${label} expression.`,
+            });
+          }
+        }
+        // A fixed column width that the element cannot afford silently loses
+        // columns at render; the engine warns, but by then the report printed.
+        if (element.columnWidthMm > 0) {
+          const slots = Math.floor(
+            (element.w - element.rowHeaderWidthMm) / element.columnWidthMm,
+          );
+          if (slots - (element.showRowTotals ? 1 : 0) < 1) {
+            problems.push({
+              severity: "warning",
+              bandIndex,
+              elementId: element.id,
+              message: `'${element.id}' is ${element.w}mm wide, which fits no data column at ${element.columnWidthMm}mm.`,
+            });
+          }
         }
       }
 

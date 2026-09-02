@@ -151,7 +151,7 @@
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: u(0.5) u(1.1);
   align-items: start;
-  padding: u(0.5) u(0.7) u(0.6);
+  padding: u(0.85) u(1.1) u(0.9);
   border: 1px solid var(--border, #c9c9c9);
   border-radius: var(--erp-radius, 4px);
   background: var(--card-bg, #ffffff);
@@ -173,8 +173,8 @@
   overflow: auto;
 }
 /* Charges scrolls sideways whatever it gets, so the shares are set by what the
-   other two need to show in full: the terms fields, and the totals INCLUDING
-   the Bill figure at their right. */
+   other two need to show in full: the terms fields, and the totals' three
+   figure columns. */
 .bottomRow > .gridShell {
   flex: 1.4 1 0;
   overflow: hidden;
@@ -720,6 +720,28 @@
   margin: 0;
   appearance: none;
 }
+/* The Size cell: four boxes that still have to read as one cell. */
+.cellSizeBoxes {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.cellSizeBox {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: u(0.15) u(0.1);
+  text-align: center;
+}
+.cellSizeBox + .cellSizeBox {
+  border-left: 1px solid var(--border, #e2d9d9);
+}
+/* Four hints in a dense grid have to stay lighter than a keyed value. */
+.cellSizeBox::placeholder {
+  color: var(--text-muted, #9a8f8f);
+  font-size: 0.9em;
+  /* Firefox dims placeholders on its own; the colour above is the control. */
+  opacity: 1;
+}
 .cellSelect {
   width: 100%;
   padding: u(0.1) u(0.2);
@@ -798,13 +820,15 @@
   border-radius: var(--erp-radius, 4px);
   background: var(--card-bg, #ffffff);
 }
-/* The Bill takes what it needs and the figures take the rest — no fixed share,
-   because the panel's own width is whatever the charges and terms leave it. */
+/* The figures on top, the Bill on its own full-width row under them — never a
+   column beside the figures, so the Bill's label and figure read on one line
+   like every other total. */
 .totalsPrimary {
   display: flex;
-  flex-wrap: wrap;
-  gap: u(0.2) u(0.7);
-  align-items: flex-end;
+  flex-direction: column;
+  gap: u(0.3);
+  flex: 1;
+  min-height: 0;
 }
 /* Three columns while there is room for three, then two, then one: a figure
    must never have to squeeze past its own label into the column beside it,
@@ -813,7 +837,9 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(u(9.5), 1fr));
   gap: u(0.2) u(0.7);
-  flex: 1 1 u(14);
+  /* Its own content decides its height; the spare height under it belongs to
+     the Bill's `margin-top: auto`. */
+  flex: 0 0 auto;
   min-width: 0;
 }
 .totalsCol {
@@ -826,13 +852,17 @@
 .totalsGrand {
   display: flex;
   flex: 0 0 auto;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0 u(0.5);
+  align-items: baseline;
+  justify-content: space-between;
   min-width: 0;
-  padding-left: u(0.8);
-  border-left: 1px solid var(--border-light, #e2e2e2);
-  margin-left: auto;
+  padding-top: u(0.25);
+  border-top: 1px solid var(--border-light, #e2e2e2);
+  /* The figures stay at the top of the panel and the Bill drops to the floor:
+     the panel is as tall as the charges grid and the terms beside it, so this
+     row claims the spare height rather than trailing the last figure. */
+  margin-top: auto;
 }
 .totalsGrandLabel {
   color: var(--text-muted, #666666);
@@ -841,6 +871,7 @@
 .totalsGrandValue {
   overflow: hidden;
   max-width: 100%;
+  margin-left: auto;
   color: var(--primary, #7b1515);
   font-size: u(1.3);
   font-weight: 800;
@@ -1310,14 +1341,5 @@
   .bottomRow > * {
     flex: 1 1 100%;
     height: auto;
-  }
-
-  /* Full width and stacked: the Bill reads better under the figures than
-     squeezed beside them. */
-  .totalsGrand {
-    align-items: flex-start;
-    padding-left: 0;
-    border-left: 0;
-    margin-left: 0;
   }
 }

@@ -179,6 +179,7 @@ export function ChargeGrid(props: ChargeGridProps) {
                         rowKey={row.key}
                         fieldKey={String(column.write ?? column.key)}
                         columnIndex={columnIndex}
+                        focusStop={column.focus}
                         placeholder={column.kind === "chargeLookup" ? "Pick a charge…" : undefined}
                         onOpenPicker={() => onOpenChargePicker(row.key)}
                         onCommit={(raw) => {

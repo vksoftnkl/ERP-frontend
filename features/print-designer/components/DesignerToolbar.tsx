@@ -45,6 +45,7 @@ const ELEMENT_ICONS: Record<string, string> = {
   BARCODE: "|||",
   QRCODE: "▦",
   PAGEBREAK: "⤓",
+  CROSSTAB: "⊞",
 };
 
 export function DesignerToolbar() {

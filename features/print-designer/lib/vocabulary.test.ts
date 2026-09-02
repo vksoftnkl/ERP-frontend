@@ -3,6 +3,10 @@ import generated from "@/features/print-designer/lib/vocabulary.generated.json";
 import {
   BAND_TYPES,
   BARCODE_SYMBOLOGIES,
+  CROSSTAB_OVERFLOWS,
+  CROSSTAB_OVERFLOW_LABELS,
+  CROSSTAB_SORTS,
+  CROSSTAB_SORT_LABELS,
   ELEMENT_KINDS,
   LAYOUT_MODES,
   OUTPUT_MODES,
@@ -40,6 +44,18 @@ describe("vocabulary parity with the server schema", () => {
   it("agrees on printOn values and barcode symbologies", () => {
     expect([...PRINT_ON_VALUES].sort()).toEqual([...generated.printOn].sort());
     expect([...BARCODE_SYMBOLOGIES].sort()).toEqual([...generated.barcodeSymbologies].sort());
+  });
+
+  it("agrees on the crosstab sort and overflow vocabularies", () => {
+    expect([...CROSSTAB_SORTS].sort()).toEqual([...generated.crosstabSorts].sort());
+    expect([...CROSSTAB_OVERFLOWS].sort()).toEqual([...generated.crosstabOverflows].sort());
+    // Every value needs a label, or the property panel renders a blank option.
+    for (const sort of CROSSTAB_SORTS) {
+      expect(CROSSTAB_SORT_LABELS[sort]).toBeTruthy();
+    }
+    for (const overflow of CROSSTAB_OVERFLOWS) {
+      expect(CROSSTAB_OVERFLOW_LABELS[overflow]).toBeTruthy();
+    }
   });
 
   it("agrees on the transform list the expression linter enforces", () => {

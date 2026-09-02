@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createElement,
   createStarterDefinition,
   suggestDatasetName,
 } from "@/features/print-designer/lib/defaults";
@@ -102,5 +103,34 @@ describe("createStarterDefinition", () => {
     const title = definition.bands[0].elements[0];
     expect(title).toMatchObject({ col: 0, row: 0, cols: 48 });
     expect(validateDefinition(definition)).toEqual([]);
+  });
+});
+
+describe("a new crosstab", () => {
+  const made = createElement({ kind: "CROSSTAB", id: "ct", xMm: 5, yMm: 2, layoutMode: "GRAPHIC" });
+
+  it("arrives with every property the schema needs, so a save cannot be rejected", () => {
+    expect(made).toMatchObject({
+      kind: "CROSSTAB",
+      w: 120,
+      dataset: "",
+      fn: "sum",
+      overflow: "FOLD",
+      showRowTotals: true,
+      showColumnTotals: true,
+      repeatHeader: true,
+      gridLines: true,
+    });
+  });
+
+  it("orders its columns by the dataset, not by label", () => {
+    // A month axis sorted by label reads Apr, Aug, Dec. The query's ORDER BY is
+    // right far more often than alphabetical is.
+    expect(made).toMatchObject({ columnSort: "FIRST_SEEN", rowSort: "LABEL_ASC" });
+  });
+
+  it("fits inside the printable width of the narrowest common paper", () => {
+    const a5 = findPaperPreset("A5")!;
+    expect(made.w!).toBeLessThanOrEqual(a5.widthMm - 2 * 10);
   });
 });

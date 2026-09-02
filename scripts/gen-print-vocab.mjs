@@ -15,28 +15,18 @@
  * `GET /reports/templates/schema` at runtime and warns in development
  * (see lib/vocabulary.ts, reconcileVocabulary).
  */
-
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-
 const here = dirname(fileURLToPath(import.meta.url));
 const clientRoot = resolve(here, "..");
-
-const SERVER_SCHEMA = resolve(
-  clientRoot,
-  "../ERP server/src/modules/reporting/templates/dto/template-definition.schema.ts",
-);
-const SERVER_UNITS = resolve(
-  clientRoot,
-  "../ERP server/src/modules/reporting/engine/units/units.ts",
-);
-const SERVER_JEXL = resolve(
-  clientRoot,
-  "../ERP server/src/modules/reporting/engine/expression/jexl.factory.ts",
-);
+// The engine moved from `modules/reporting` to `modules/settings/print-render`
+// when the reporting module was folded into settings; these paths followed it.
+const SERVER_ENGINE = resolve(clientRoot, "../ERP server/src/modules/settings/print-render");
+const SERVER_SCHEMA = resolve(SERVER_ENGINE, "definition/template-definition.schema.ts");
+const SERVER_UNITS = resolve(SERVER_ENGINE, "engine/units/units.ts");
+const SERVER_JEXL = resolve(SERVER_ENGINE, "engine/expression/jexl.factory.ts");
 const TARGET = resolve(clientRoot, "features/print-designer/lib/vocabulary.generated.json");
-
 function read(path) {
   try {
     return readFileSync(path, "utf8");
@@ -45,7 +35,6 @@ function read(path) {
     process.exit(1);
   }
 }
-
 /** Pull a `export const NAME = [ ... ] as const` string array out of a source file. */
 function constArray(source, name) {
   const match = new RegExp(`export const ${name} = \\[([\\s\\S]*?)\\] as const`).exec(source);
@@ -55,13 +44,11 @@ function constArray(source, name) {
   }
   return [...match[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1]);
 }
-
 const schemaSource = read(SERVER_SCHEMA);
 const unitsSource = read(SERVER_UNITS);
 const jexlSource = read(SERVER_JEXL);
-
 const vocabulary = {
-  generatedFrom: "ERP server/src/modules/reporting",
+  generatedFrom: "ERP server/src/modules/settings/print-render",
   schemaVersion: Number(/export const SCHEMA_VERSION = (\d+)/.exec(schemaSource)?.[1] ?? 1),
   layoutModes: constArray(schemaSource, "LAYOUT_MODES"),
   outputModes: constArray(schemaSource, "OUTPUT_MODES"),
@@ -72,10 +59,11 @@ const vocabulary = {
   barcodeSymbologies: constArray(schemaSource, "BARCODE_SYMBOLOGIES"),
   aggregateFunctions: constArray(schemaSource, "AGGREGATE_FUNCTIONS"),
   aggregateScopes: constArray(schemaSource, "AGGREGATE_SCOPES"),
+  crosstabSorts: constArray(schemaSource, "CROSSTAB_SORTS"),
+  crosstabOverflows: constArray(schemaSource, "CROSSTAB_OVERFLOWS"),
   transforms: constArray(jexlSource, "TRANSFORM_NAMES"),
   paperCodes: [...unitsSource.matchAll(/code:\s*'([A-Z0-9]+)'/g)].map((entry) => entry[1]),
 };
-
 writeFileSync(TARGET, `${JSON.stringify(vocabulary, null, 2)}\n`, "utf8");
 console.log(`Wrote ${TARGET}`);
 console.log(

@@ -5,7 +5,6 @@
  * writes complete elements rather than relying on the server to fill them in,
  * so what the canvas shows and what a save stores cannot differ.
  */
-
 import type {
   Band,
   BandType,
@@ -22,13 +21,10 @@ import type {
 import { SCHEMA_VERSION } from "@/features/print-designer/types/template-definition";
 import { defaultOutputModeForPaper } from "@/features/print-designer/lib/vocabulary";
 import { DEFAULT_TEXT_H_MM, DEFAULT_TEXT_W_MM } from "@/features/print-designer/lib/geometry";
-
 /** 10mm all round: the margin every Indian pre-printed stationery assumes. */
 export const DEFAULT_MARGINS = { top: 10, right: 10, bottom: 10, left: 10 } as const;
-
 /** Thermal and dot-matrix stationery has no side margin worth the name. */
 export const GRID_MARGINS = { top: 2, right: 2, bottom: 2, left: 2 } as const;
-
 export function paperFromPreset(preset: PaperPreset): PaperSpec {
   const margins = preset.layoutMode === "GRID" ? { ...GRID_MARGINS } : { ...DEFAULT_MARGINS };
   return {
@@ -41,7 +37,6 @@ export function paperFromPreset(preset: PaperPreset): PaperSpec {
     ...(preset.rows === undefined ? {} : { rows: preset.rows }),
   };
 }
-
 export function createBand(type: BandType, layoutMode: LayoutMode): Band {
   const graphicHeights: Partial<Record<BandType, number>> = {
     REPORT_HEADER: 25,
@@ -54,7 +49,6 @@ export function createBand(type: BandType, layoutMode: LayoutMode): Band {
     REPORT_FOOTER: 15,
     NO_DATA: 10,
   };
-
   return {
     type,
     heightMm: layoutMode === "GRID" ? 0 : (graphicHeights[type] ?? 10),
@@ -69,7 +63,6 @@ export function createBand(type: BandType, layoutMode: LayoutMode): Band {
     elements: [],
   };
 }
-
 /**
  * A blank template: page header, detail, page footer.
  *
@@ -92,10 +85,8 @@ export function createEmptyDefinition(preset: PaperPreset): TemplateDefinition {
     bands: [createBand("PAGE_HEADER", layoutMode), createBand("PAGE_FOOTER", layoutMode)],
   };
 }
-
 /** Segment names that say nothing on their own, so the one before it is used. */
 const GENERIC_TOKEN_TAILS = new Set(["profile", "header", "data", "info", "detail", "details"]);
-
 /**
  * A readable dataset name for a provider token.
  *
@@ -108,7 +99,6 @@ export function suggestDatasetName(token: string, taken: ReadonlySet<string>): s
   const tail = segments[segments.length - 1] ?? "data";
   const chosen =
     GENERIC_TOKEN_TAILS.has(tail) && segments.length > 1 ? segments[segments.length - 2] : tail;
-
   const cleaned = chosen.replace(/[^A-Za-z0-9_]/g, "") || "data";
   const base = /^[A-Za-z_]/.test(cleaned) ? cleaned : `d_${cleaned}`;
   if (!taken.has(base)) {
@@ -121,11 +111,9 @@ export function suggestDatasetName(token: string, taken: ReadonlySet<string>): s
   }
   return `${base}_x`;
 }
-
 /** A provider explicitly declared for this document type — not a wildcard one. */
 const claimsDocType = (provider: ProviderDescriptor, docType: string): boolean =>
   provider.docTypes.includes(docType);
-
 /**
  * Which collection a DETAIL band should repeat over by default.
  *
@@ -135,7 +123,6 @@ const claimsDocType = (provider: ProviderDescriptor, docType: string): boolean =
  * how likely they are to be the document's main body.
  */
 const ROW_TOKEN_PREFERENCE = ["lines", "items", "rows", "entries", "transactions"];
-
 function preferredRowProvider(
   providers: readonly ProviderDescriptor[],
   docType: string,
@@ -151,7 +138,6 @@ function preferredRowProvider(
   }
   return candidates[0];
 }
-
 /**
  * A new template that is ready to design: datasets bound, the DETAIL band
  * pointing at them, and something on the page to preview.
@@ -172,13 +158,11 @@ export function createStarterDefinition(options: {
   const { preset, docType, providers } = options;
   const layoutMode = preset.layoutMode;
   const paper = paperFromPreset(preset);
-
   const company = providers.find((provider) => provider.token === "company.profile");
   const header = providers.find(
     (provider) => provider.cardinality === "one" && claimsDocType(provider, docType),
   );
   const rows = preferredRowProvider(providers, docType);
-
   const taken = new Set<string>();
   const datasets: DatasetBinding[] = [];
   const bind = (provider: ProviderDescriptor | undefined): string | undefined => {
@@ -190,18 +174,14 @@ export function createStarterDefinition(options: {
     datasets.push({ name, provider: provider.token, cardinality: provider.cardinality });
     return name;
   };
-
   const companyName = bind(company);
   bind(header);
   const rowsName = bind(rows);
-
   const pageHeader = createBand("PAGE_HEADER", layoutMode);
   const pageFooter = createBand("PAGE_FOOTER", layoutMode);
-
   const isGrid = layoutMode === "GRID";
   const contentWidthMm = paper.widthMm - paper.margins.left - paper.margins.right;
   const columns = paper.columns ?? 48;
-
   /** A centred full-width line of text, in whichever unit the mode uses. */
   const banner = (id: string, value: string, row: number, sizePt: number): ReportElement => {
     const element = createElement({
@@ -226,14 +206,12 @@ export function createStarterDefinition(options: {
       font: { size: sizePt, bold: true },
     };
   };
-
   // The title is the company when one is bound, and the template's own name
   // otherwise — never an expression referencing a dataset that does not exist,
   // which would open the designer on a validation error.
   pageHeader.elements.push(
     banner("title", companyName ? `{{ ${companyName}.name }}` : options.templateName, 0, 12),
   );
-
   if (!isGrid) {
     // `page` is a built-in root, so this is valid in every template.
     const footer = createElement({
@@ -254,7 +232,6 @@ export function createStarterDefinition(options: {
       });
     }
   }
-
   const bands = [pageHeader];
   if (rowsName) {
     const detail = createBand("DETAIL", layoutMode);
@@ -262,7 +239,6 @@ export function createStarterDefinition(options: {
     bands.push(detail);
   }
   bands.push(pageFooter);
-
   return {
     schemaVersion: SCHEMA_VERSION,
     layoutMode,
@@ -271,11 +247,9 @@ export function createStarterDefinition(options: {
     bands,
   };
 }
-
 export function defaultOutputMode(preset: PaperPreset) {
   return defaultOutputModeForPaper(preset);
 }
-
 /**
  * Element ids must be unique across the whole definition — the server enforces
  * it and the designer addresses elements by id for selection and undo. Sequence
@@ -295,7 +269,6 @@ export function nextElementId(
   // Unreachable in practice: 500 elements per band, 60 bands.
   return `${prefix}_${taken.size + 1}`;
 }
-
 export type CreateElementOptions = {
   kind: ElementKind;
   id: string;
@@ -381,6 +354,42 @@ export function createElement(options: CreateElementOptions): ReportElement {
       return { ...base, kind: "QRCODE", size: 25, value: "{{ row.qrPayload }}", errorCorrection: "M" };
     case "PAGEBREAK":
       return { ...base, kind: "PAGEBREAK", w: 20, h: 4 };
+    case "CROSSTAB":
+      return {
+        ...base,
+        kind: "CROSSTAB",
+        // Wide, but inside A5's printable width. A pivot with four months and
+        // a totals column is unreadable in the 40mm a text element gets, so it
+        // has to start wide; 150 would overhang A5 and land the user a brand
+        // new element carrying two margin warnings it did not earn.
+        w: 120,
+        h: 30,
+        dataset: "",
+        rowBy: "{{ row.name }}",
+        columnBy: "{{ row.period }}",
+        measure: "{{ row.amount }}",
+        fn: "sum",
+        format: "#,##0.00",
+        blankWhenZero: true,
+        corner: "",
+        rowHeaderWidthMm: 40,
+        columnWidthMm: 0,
+        headerHeightMm: 6,
+        rowHeightMm: 5,
+        showRowTotals: true,
+        showColumnTotals: true,
+        totalsLabel: "Total",
+        rowSort: "LABEL_ASC",
+        // Not LABEL_ASC: the commonest column axis is a period, and sorting
+        // month names alphabetically gives Apr, Aug, Dec. The query's own
+        // ORDER BY is right far more often than the label order is.
+        columnSort: "FIRST_SEEN",
+        maxColumns: 12,
+        overflow: "FOLD",
+        overflowLabel: "Other",
+        gridLines: true,
+        repeatHeader: true,
+      };
   }
 }
 

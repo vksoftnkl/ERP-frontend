@@ -6,10 +6,12 @@
  *
  * Two structural decisions worth stating:
  *
- *  - **There is no trailing blank row.** `draft.lines` holds only real lines and
- *    the grid renders an explicit "Add row" affordance instead. That deletes the
- *    `rowCount() - 1` off-by-one from the payload builder, the price-level apply,
- *    the freight apply, the validation and the totals loop at once.
+ *  - **The blank trailing row is an invariant of the reducer, not of the grid.**
+ *    `withTrailingBlankRows` keeps one empty line waiting after every pick,
+ *    delete, load and Clear alike, so there is no "add row" button and no
+ *    `rowCount() - 1` off-by-one in the payload builder, the price-level apply,
+ *    the freight apply, the validation or the totals loop. It is also where the
+ *    Enter chain lands after the last priced row's Rate.
  *  - **Nothing derived is written back.** A cell reads the merged view of
  *    `{ draft line, engine output }`; the three discount amount columns read the
  *    engine's computed amount and write the operator's keyed one.
@@ -25,7 +27,6 @@ import type { DraftLine, ItemUnitOption } from "../quotation.types";
 import {
   cubicFeetFromSize,
   isFrozenColumn,
-  sanitizeSizeInput,
   scaledWidth,
   totalColumnWidth,
   type ResolvedItemColumn,
@@ -35,6 +36,20 @@ import { focusCell, focusLastCellAfterRender, moveCellFocus } from "./grid-focus
 import styles from "../page.module.scss";
 
 export const ITEM_GRID_NAME = "items";
+
+/**
+ * The Description cell's `fieldKey`, for the caller that has to name that cell
+ * without a row in hand — the item picker, which resumes the Enter chain from it
+ * once the pick is priced.
+ *
+ * Read off the resolved columns rather than hard-coded: the column carries no
+ * `write`, so its key is its meaning's token, and a layout that hides the column
+ * has no such cell to resume from at all.
+ */
+export function itemLookupFieldKey(columns: ResolvedItemColumn[]): string | null {
+  const column = columns.find((candidate) => candidate.visible && candidate.kind === "itemLookup");
+  return column ? String(column.write ?? column.key) : null;
+}
 
 /**
  * The Size cell's hover text — `"45*2*2*6 = 7.5 CFT"`, the Bill Qty the keyed
@@ -97,6 +112,15 @@ function isColumnEditable(
   // whole priced line — so it must not be gated on having a `write` target.
   if (column.kind === "itemLookup") {
     return true;
+  }
+  // Until the row names an item there is nothing for a Qty or a Rate to belong
+  // to, so the rest of the row stays shut — including on the trailing blank row
+  // that always waits at the bottom of the grid. Barcode is the exception it has
+  // to be: it is the OTHER way a row gets its item, and a scanner types straight
+  // into it (see `focusLastCellAfterRender` below), so gating it would leave a
+  // fresh row with nowhere for a scan to land.
+  if (!line.itemId && column.write !== "barcode") {
+    return false;
   }
   if (!column.write) {
     return false;
@@ -283,11 +307,6 @@ export function ItemGrid(props: ItemGridProps) {
                         title={
                           column.write === "itemSize" ? sizeCellTitle(value) : undefined
                         }
-                        // Dimensions only: letters keyed (or pasted) into the
-                        // Size cell never make it into the value.
-                        sanitize={
-                          column.write === "itemSize" ? sanitizeSizeInput : undefined
-                        }
                         editable={cellEditable}
                         invalid={invalid}
                         options={options}
@@ -295,6 +314,7 @@ export function ItemGrid(props: ItemGridProps) {
                         rowKey={line.key}
                         fieldKey={String(column.write ?? column.key)}
                         columnIndex={columnIndex}
+                        focusStop={column.focus}
                         onOpenPicker={() => onOpenItemPicker(line.key)}
                         onToggle={(checked) => {
                           if (column.write) {

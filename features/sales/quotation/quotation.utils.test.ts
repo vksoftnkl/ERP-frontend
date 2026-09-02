@@ -7,14 +7,24 @@
  * empty grid.
  */
 import { describe, expect, it } from "vitest";
-import { CHARGE_COLUMN_MEANINGS, ITEM_COLUMN_MEANINGS } from "./quotation.constants";
+import {
+  CHARGE_COLUMN_MEANINGS,
+  ITEM_COLUMN_MEANINGS,
+  ITEM_COLUMN_NUMBERS,
+} from "./quotation.constants";
 import type { UiTableColumnRow } from "./quotation.types";
 import {
   accountingYearOf,
   addDays,
   buildPageList,
+  SIZE_FACTOR_COUNT,
+  SIZE_FACTOR_LABELS,
+  SIZE_FACTOR_PLACEHOLDERS,
   cubicFeetFromSize,
+  joinSizeFactors,
+  sanitizeSizeFactorInput,
   sanitizeSizeInput,
+  splitSizeFactors,
   daysBetween,
   fromDisplayDate,
   isRealDate,
@@ -155,6 +165,23 @@ describe("resolveItemColumns", () => {
     ]);
   });
 
+  it("numbers every meaning ui table 23 configures, exactly once", () => {
+    // `ITEM_COLUMN_NUMBERS` is kept beside the meanings rather than on them, so
+    // this is what stops the two drifting: a meaning added without a number
+    // silently loses the rename fallback, and a number typed twice would bind
+    // two columns to one meaning.
+    const numbers = Object.values(ITEM_COLUMN_NUMBERS);
+    expect(new Set(numbers).size).toBe(numbers.length);
+    for (const key of Object.keys(ITEM_COLUMN_NUMBERS)) {
+      expect(ITEM_COLUMN_MEANINGS.some((meaning) => meaning.key === key)).toBe(true);
+    }
+    // Only `AliasName` is unnumbered — ui table 23 does not configure it.
+    const unnumbered = ITEM_COLUMN_MEANINGS.filter(
+      (meaning) => ITEM_COLUMN_NUMBERS[meaning.key] === undefined,
+    );
+    expect(unnumbered.map((meaning) => meaning.token)).toEqual(["AliasName"]);
+  });
+
   it("matches the serial column under whichever name the layout gives it", () => {
     // ui table 23 is named "sl.no" on this deployment and "Id" on others. Before
     // both resolved here, "sl.no" matched nothing and the grid opened on Barcode.
@@ -162,9 +189,44 @@ describe("resolveItemColumns", () => {
       const columns = resolveItemColumns([layoutRow(1, name), layoutRow(2, "Barcode")]);
       expect(columns.map((column) => column.key)).toEqual(["slno", "barcode"]);
       expect(columns[0].kind).toBe("serial");
-      // The heading is the shipped caption, not the configured casing.
-      expect(columns[0].header).toBe("Sl.No");
+      // ui table master owns the heading — the serial column included.
+      expect(columns[0].header).toBe(name);
     }
+  });
+
+  it("paints every heading the layout's own name, not the shipped token", () => {
+    const columns = resolveItemColumns([
+      layoutRow(1, "Row"),
+      layoutRow(4, "Item Description"),
+      layoutRow(15, "Quote Qty"),
+    ]);
+    expect(columns.map((column) => column.header)).toEqual([
+      "Row",
+      "Item Description",
+      "Quote Qty",
+    ]);
+    // Renaming does not change what the cell DOES.
+    expect(columns.map((column) => column.key)).toEqual(["slno", "description", "quoteqty"]);
+  });
+
+  it("keeps a renamed column on the grid, by its ui_tbl_clm_no", () => {
+    // The whole point of `ITEM_COLUMN_NUMBERS`: a deployment that renames
+    // "Quote Qty" (column 15) used to lose the column altogether, because the
+    // name was the only thing the join had.
+    const columns = resolveItemColumns([layoutRow(1, "sl.no"), layoutRow(15, "Bill Qty")]);
+    expect(columns.map((column) => column.key)).toEqual(["slno", "quoteqty"]);
+    expect(columns[1].header).toBe("Bill Qty");
+    // Still writes the same draft field it always did.
+    expect(columns[1].write).toBe("billQty");
+  });
+
+  it("prefers the name over the number, so a reordered layout is not mislabelled", () => {
+    // Column 15's name here is another column's token. The name wins: a layout
+    // whose numbering differs from ours must degrade to dropping columns, never
+    // to labelling them wrongly.
+    const columns = resolveItemColumns([layoutRow(1, "sl.no"), layoutRow(15, "Barcode")]);
+    expect(columns.map((column) => column.key)).toEqual(["slno", "barcode"]);
+    expect(columns[1].write).toBe("barcode");
   });
 
   it("gives a layout with no serial row one of its own, first", () => {
@@ -390,5 +452,84 @@ describe("sanitizeSizeInput", () => {
 
   it("leaves an empty cell empty", () => {
     expect(sanitizeSizeInput("")).toBe("");
+  });
+});
+
+describe("sanitizeSizeFactorInput", () => {
+  it("keeps only what one factor is made of — no star to type", () => {
+    expect(sanitizeSizeFactorInput("45")).toBe("45");
+    expect(sanitizeSizeFactorInput("2.5")).toBe("2.5");
+    expect(sanitizeSizeFactorInput("45*2")).toBe("452");
+    expect(sanitizeSizeFactorInput("45x")).toBe("45");
+    expect(sanitizeSizeFactorInput("-6")).toBe("6");
+    expect(sanitizeSizeFactorInput("")).toBe("");
+  });
+});
+
+describe("the Size cell's per-box text", () => {
+  it("carries one hint and one label per box", () => {
+    // A short list would leave the last box with an `undefined` placeholder.
+    expect(SIZE_FACTOR_PLACEHOLDERS).toHaveLength(SIZE_FACTOR_COUNT);
+    expect(SIZE_FACTOR_LABELS).toHaveLength(SIZE_FACTOR_COUNT);
+  });
+});
+
+describe("splitSizeFactors", () => {
+  it("gives the four boxes a stored size is keyed as", () => {
+    expect(splitSizeFactors("45*2*2*6")).toEqual(["45", "2", "2", "6"]);
+    expect(splitSizeFactors("10*3*2.5*4")).toEqual(["10", "3", "2.5", "4"]);
+  });
+
+  it("pads a short value rather than shifting factors out of their box", () => {
+    // A bare CFT sits alone in the first box, which is exactly what
+    // `cubicFeetFromSize` reads a single factor as.
+    expect(splitSizeFactors("7.5")).toEqual(["7.5", "", "", ""]);
+    expect(splitSizeFactors("45*2")).toEqual(["45", "2", "", ""]);
+  });
+
+  it("drops the trailing star of a half-keyed size", () => {
+    expect(splitSizeFactors("8*8*8*8*")).toEqual(["8", "8", "8", "8"]);
+    expect(splitSizeFactors("45*2*")).toEqual(["45", "2", "", ""]);
+  });
+
+  it("keeps a legacy free-text tail in the last box", () => {
+    // Nothing keyed through the boxes makes five factors, but text saved before
+    // the boxes existed can, and it has to stay editable and unmangled.
+    expect(splitSizeFactors("45*2*2*6*3")).toEqual(["45", "2", "2", "6*3"]);
+  });
+
+  it("gives four blanks for an empty cell", () => {
+    expect(splitSizeFactors("")).toEqual(["", "", "", ""]);
+    expect(splitSizeFactors(null)).toEqual(["", "", "", ""]);
+    expect(splitSizeFactors(undefined)).toEqual(["", "", "", ""]);
+  });
+});
+
+describe("joinSizeFactors", () => {
+  it("puts the stars back in", () => {
+    expect(joinSizeFactors(["45", "2", "2", "6"])).toBe("45*2*2*6");
+  });
+
+  it("drops a blank box instead of leaving an empty factor", () => {
+    // `"45**6"` is text `cubicFeetFromSize` refuses, which would leave Bill Qty
+    // silently stale on a row still being keyed.
+    expect(joinSizeFactors(["45", "", "2", ""])).toBe("45*2");
+    expect(joinSizeFactors(["45", "", "", ""])).toBe("45");
+    expect(joinSizeFactors([" 45 ", "2", "", ""])).toBe("45*2");
+  });
+
+  it("leaves an untouched cell empty", () => {
+    expect(joinSizeFactors(["", "", "", ""])).toBe("");
+  });
+
+  it("round-trips every shape a stored size takes", () => {
+    for (const stored of ["45*2*2*6", "10*3*2.5*4", "7.5", "45*2", "45*2*2*6*3", ""]) {
+      expect(joinSizeFactors(splitSizeFactors(stored))).toBe(stored);
+    }
+  });
+
+  it("feeds cubicFeetFromSize the CFT the boxes were keyed for", () => {
+    expect(cubicFeetFromSize(joinSizeFactors(["45", "2", "2", "6"]))).toBe(7.5);
+    expect(cubicFeetFromSize(joinSizeFactors(["7.5", "", "", ""]))).toBe(7.5);
   });
 });

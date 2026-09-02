@@ -324,6 +324,32 @@ const quotationSlice = createSlice({
         row.amount = 0;
       }
     },
+    /**
+     * Pre-load the charges the master flags `chgAutoApply` — freight, loading
+     * and the standing cash discount — the way the Qt screen opens a new entry.
+     *
+     * Every guard is here rather than at the call site, so the effect that
+     * dispatches this can stay a plain "the masters have arrived" and fire as
+     * often as it likes:
+     *
+     *  - **only a pristine new entry.** A loaded document has its own saved
+     *    charges, and a dirty one has been worked on — seeding either would
+     *    inject rows under the operator.
+     *  - **only once.** Seeding leaves rows carrying a `chgId`, which fails the
+     *    check below; and removing a seeded row dirties the draft, so a charge
+     *    the operator deleted stays deleted instead of reappearing.
+     */
+    autoChargesSeeded(state, action: PayloadAction<ChargeMasterRow[]>) {
+      if (state.mode !== "entry" || !state.isNewEntry || state.docId || state.isDirty) {
+        return;
+      }
+      if (action.payload.length === 0 || state.charges.some((row) => row.chgId)) {
+        return;
+      }
+      // The blank row this drops is put back by `withTrailingBlankRows`, which
+      // runs after every action — the seeded rows have to come before it.
+      state.charges = action.payload.map(chargeRowFromMaster);
+    },
     chargeMasterApplied(
       state,
       action: PayloadAction<{ key: string; master: ChargeMasterRow }>,
@@ -371,6 +397,7 @@ export const {
   chargeRemoved,
   chargeFieldSet,
   chargeMasterApplied,
+  autoChargesSeeded,
 } = quotationSlice.actions;
 /** Actions that do not count as an operator edit. */
 const NON_EDIT_ACTIONS = new Set<string>([
@@ -380,6 +407,11 @@ const NON_EDIT_ACTIONS = new Set<string>([
   holdSet.type,
   companyStateCodeSet.type,
   freightBandsSet.type,
+  // Seeding the auto-apply charges is the screen opening, not the operator
+  // typing: a new quotation that has only been pre-loaded is still pristine, and
+  // dirtying it here would make Clear and the close guard prompt about work
+  // nobody did.
+  autoChargesSeeded.type,
   // A save is not an operator edit: `applySaveResponse` decides the dirty flag
   // itself (clear when the response matches what was sent, still dirty when the
   // operator committed something while it was in flight), and the wrapper below

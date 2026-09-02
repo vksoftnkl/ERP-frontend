@@ -74,8 +74,8 @@ export function TotalsStrip({
   return (
     <div className={styles.totalsPanel} aria-label={stored ? "Saved totals" : "Totals"}>
       <div className={styles.totalsPrimary}>
-        {/* The three figure columns re-flow inside this box; the Bill sits
-            beside them and keeps the width it needs. */}
+        {/* The three figure columns re-flow inside this box; the Bill sits on
+            its own row underneath them, spanning the panel. */}
         <div className={styles.totalsFigures}>
           <dl className={styles.totalsCol}>
             <Cell label="Total Items" value={String(totals.totItems)} />

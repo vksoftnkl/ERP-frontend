@@ -433,6 +433,8 @@ export function isSerialColumnName(normalized: string): boolean {
 export type GridCellKind =
   | "serial"
   | "text"
+  /** The item's dimensions, keyed as four boxes and stored as one `*` product. */
+  | "size"
   | "qty"
   | "currency"
   | "rate"
@@ -482,18 +484,131 @@ function itemColumn(
   return { token, key: normalizeColumnToken(token), kind, align, ...extra };
 }
 /**
- * All 90 configured columns of ui table 23 ("Quotation-item"), in `uiTblClmNo`
- * order — the same order this list declares them in.
+ * All 90 configured columns of ui table 23 ("Quotation-item"), broadly in
+ * `uiTblClmNo` order — `ITEM_COLUMN_NUMBERS` above is the authority on the
+ * numbering, not this list's order, which differs from it in three places:
+ * `AliasName` is declared here but not configured on table 23 at all, and two
+ * pairs are swapped (`StockQty`/`GodownName` 9-10, `NetB.Tax`/`IsInclusiveTax`
+ * 86-88).
  *
- * Sorted by column NUMBER, not position: on ui table 18 (the Qt screen's own
+ * Grouped by column NUMBER, not position: on ui table 18 (the Qt screen's own
  * layout, which these meanings also cover) position 58 is used twice
  * (`ChrgAfterTax` and `Total`) and 62 is unused, so sorting by position makes
  * those two swap non-deterministically.
  */
+/**
+ * `ui_tbl_clm_no` for each meaning of ui table 23, keyed by the meaning's `key`.
+ *
+ * The layout join is by NAME, which is the one thing about a column a deployment
+ * is free to change: rename `Quote Qty` in ui table master and no meaning answers
+ * to the new name, so the column does not just keep its old heading — it drops
+ * off the grid entirely. This is the fallback that catches that. A column number
+ * is assigned once and never moves, so a renamed column still finds its meaning
+ * and then paints whatever heading the layout now carries.
+ *
+ * `AliasName` has no entry: it is a meaning for the other layouts these columns
+ * also cover, and ui table 23 does not configure it. Neither does 90 (`ItemSize`),
+ * which resolves through the `Size` alias and is dropped as its duplicate.
+ *
+ * Kept beside the meanings rather than on them so the list above stays readable;
+ * `quotation.utils.test.ts` asserts the two never drift apart.
+ */
+export const ITEM_COLUMN_NUMBERS: Record<string, number> = {
+  slno: 1,
+  barcode: 2,
+  code: 3,
+  description: 4,
+  size: 5,
+  hsn: 6,
+  batchno: 7,
+  expirydate: 8,
+  stockqty: 9,
+  godownname: 10,
+  uom: 11,
+  tobasefactor: 12,
+  orderqty: 13,
+  caseqty: 14,
+  quoteqty: 15,
+  lengthqty: 16,
+  netqty: 17,
+  sch: 18,
+  isfree: 19,
+  weight: 20,
+  pricelevel: 21,
+  mrp: 22,
+  rate: 23,
+  ratebtax: 24,
+  gross: 25,
+  discperc: 26,
+  discperqty: 27,
+  discamt: 28,
+  spldiscperc: 29,
+  spldiscperqty: 30,
+  spldiscamt: 31,
+  schemename: 32,
+  schperc: 33,
+  schperqty: 34,
+  schamt: 35,
+  billschdiscperc: 36,
+  billschdiscamt: 37,
+  netgross: 38,
+  chrgbeforetax: 39,
+  cashdiscperc: 40,
+  cashdiscamt: 41,
+  taxable: 42,
+  gst: 43,
+  gstamt: 44,
+  cgst: 45,
+  cgstamt: 46,
+  sgst: 47,
+  sgstamt: 48,
+  igst: 49,
+  igstamt: 50,
+  cess: 51,
+  cessuom: 52,
+  cessamt: 53,
+  hasfreight: 54,
+  freightperqty: 55,
+  freightamt: 56,
+  coolyperqty: 57,
+  coolyamt: 58,
+  chrgaftertax: 59,
+  total: 60,
+  netprice: 61,
+  costprice: 62,
+  savingsperc: 63,
+  remarks: 64,
+  decimalcount: 65,
+  batchconfig: 66,
+  allownegative: 67,
+  reorder: 68,
+  actualprice: 69,
+  minprice: 70,
+  costbeforetax: 71,
+  profit: 72,
+  profitbeforetax: 73,
+  loyaltypv: 74,
+  salesmanname: 75,
+  serviceitem: 76,
+  srcdocid: 77,
+  itemid: 78,
+  groupid: 79,
+  brandid: 80,
+  sectionid: 81,
+  categoryid: 82,
+  godownid: 83,
+  unitid: 84,
+  schemeid: 85,
+  netbtax: 86,
+  salesmanid: 87,
+  isinclusivetax: 88,
+  diff: 89,
+};
 export const ITEM_COLUMN_MEANINGS: ItemColumnMeaning[] = [
   // The row number. Named `"sl.no"` on this deployment and `"Id"` on others —
-  // both resolve here through `isSerialColumnName`, and the heading is painted
-  // from this token rather than from whichever of the two the layout carries.
+  // both resolve here through `isSerialColumnName`, and each paints the heading
+  // the layout carries. This token is only what a grid with no layout at all
+  // falls back to.
   itemColumn("Sl.No", "serial", "right"),
   itemColumn("Barcode", "text", "left", { write: "barcode", read: "barcode" }),
   itemColumn("Code", "text", "left", { read: "itemCode" }),
@@ -502,7 +617,7 @@ export const ITEM_COLUMN_MEANINGS: ItemColumnMeaning[] = [
   // Grid 23 additionally carries a second row for the same field named
   // "ItemSize" (column 90), which resolves to this meaning through the alias and
   // is then dropped as a duplicate — the lower column number wins.
-  itemColumn("Size", "text", "left", {
+  itemColumn("Size", "size", "left", {
     write: "itemSize",
     read: "itemSize",
     aliases: ["ItemSize"],
@@ -525,7 +640,7 @@ export const ITEM_COLUMN_MEANINGS: ItemColumnMeaning[] = [
   itemColumn("ToBaseFactor", "qty", "right", { read: "toBaseFactor", precision: 6 }),
   itemColumn("OrderQty", "qty", "right", { write: "orderQty", read: "orderQty", precision: 3 }),
   itemColumn("Case Qty", "qty", "right", { write: "caseQty", read: "caseQty", precision: 3 }),
-  itemColumn("Bill Qty", "qty", "right", { write: "billQty", read: "billQty", precision: 3 }),
+  itemColumn("Quote Qty", "qty", "right", { write: "billQty", read: "billQty", precision: 3 }),
   itemColumn("Length Qty", "qty", "right", { write: "lengthQty", read: "lengthQty", precision: 3 }),
   itemColumn("NetQty", "qty", "right", { read: "netQty", precision: 3 }),
   itemColumn("Sch", "check", "center", { write: "schemeFlag", read: "schemeFlag" }),
@@ -693,6 +808,20 @@ export const DISCOUNT_ALTERNATES: Partial<Record<keyof DraftLine, (keyof DraftLi
 };
 /** Data attributes the Enter-to-next-cell walker reads off each editable cell. */
 export const GRID_FIELD_ATTR = "data-quotation-field";
+/**
+ * What marks a header field. Two readers: `validate` sends the operator to the
+ * field it rejected, and `header-focus.ts` walks them on Enter.
+ */
+export const HEADER_FOCUS_ATTR = "data-quotation-focus";
 export const GRID_ROW_ATTR = "data-quotation-row";
 export const GRID_GRID_ATTR = "data-quotation-grid";
 export const GRID_COLUMN_INDEX_ATTR = "data-quotation-column-index";
+/**
+ * Marks a cell whose column carries `ui_tbl_clm_column_focus` — the layout's own
+ * Enter chain. Grid 23 flags four of its ninety columns (Description, Size,
+ * Quote Qty, Rate) and grid 21 three of its thirty-three (Charge Name, Rate,
+ * Amount): the handful an operator actually keys, which is why Enter stops at
+ * those and runs past the read-outs between them. A layout that flags nothing
+ * (grid 24) falls back to stopping at every editable cell.
+ */
+export const GRID_FOCUS_STOP_ATTR = "data-quotation-focus-stop";

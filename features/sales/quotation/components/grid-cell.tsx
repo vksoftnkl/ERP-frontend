@@ -20,9 +20,19 @@ import type { ColumnAlign, GridCellKind } from "../quotation.constants";
 import {
   GRID_COLUMN_INDEX_ATTR,
   GRID_FIELD_ATTR,
+  GRID_FOCUS_STOP_ATTR,
   GRID_GRID_ATTR,
   GRID_ROW_ATTR,
 } from "../quotation.constants";
+import {
+  SIZE_FACTOR_COUNT,
+  SIZE_FACTOR_LABELS,
+  SIZE_FACTOR_PLACEHOLDERS,
+  joinSizeFactors,
+  sanitizeSizeFactorInput,
+  sanitizeSizeInput,
+  splitSizeFactors,
+} from "../quotation.utils";
 import styles from "../page.module.scss";
 
 export type GridCellOption = { value: string; label: string };
@@ -40,16 +50,17 @@ export type GridCellProps = {
   title?: string;
   options?: GridCellOption[];
   placeholder?: string;
-  /**
-   * Filters every keystroke and paste before it reaches the buffer — the Size
-   * cell drops anything that is not part of a dimension.
-   */
-  sanitize?: (raw: string) => string;
   /** Identifies the cell for the Enter-to-next-cell walker. */
   gridName: string;
   rowKey: string;
   fieldKey: string;
   columnIndex: number;
+  /**
+   * `ui_tbl_clm_column_focus` — whether Enter stops here. See `grid-focus.ts`:
+   * on a layout that flags any column at all, the walk visits only the flagged
+   * ones, so this is what keeps Enter from crawling through sixty read-outs.
+   */
+  focusStop?: boolean;
   onCommit: (raw: string) => void;
   onToggle?: (checked: boolean) => void;
   /** Opens the item / charge picker for a lookup cell. */
@@ -106,11 +117,11 @@ export function GridCell(props: GridCellProps) {
     title,
     options,
     placeholder,
-    sanitize,
     gridName,
     rowKey,
     fieldKey,
     columnIndex,
+    focusStop,
     onCommit,
     onToggle,
     onOpenPicker,
@@ -118,6 +129,8 @@ export function GridCell(props: GridCellProps) {
   } = props;
 
   const [buffer, setBuffer] = useState<string | null>(null);
+  /** The Size cell's own buffer: one entry per box, live only while it has focus. */
+  const [sizeBuffer, setSizeBuffer] = useState<string[] | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   /** The draft value the live buffer was seeded from. */
   const seedRef = useRef<unknown>(undefined);
@@ -155,6 +168,9 @@ export function GridCell(props: GridCellProps) {
     [GRID_ROW_ATTR]: rowKey,
     [GRID_FIELD_ATTR]: fieldKey,
     [GRID_COLUMN_INDEX_ATTR]: columnIndex,
+    // Absent rather than `"false"`: the walker tests for the attribute, and
+    // React drops an `undefined` one entirely.
+    ...(focusStop ? { [GRID_FOCUS_STOP_ATTR]: "true" } : {}),
   };
 
   if (kind === "check") {
@@ -180,6 +196,97 @@ export function GridCell(props: GridCellProps) {
     return (
       <span className={cx(styles.cellText, alignClass)} title={String(value ?? "")}>
         {displayValue(kind, value)}
+      </span>
+    );
+  }
+
+  if (kind === "size") {
+    // Four boxes — length, width, thickness, pieces — instead of one cell the
+    // operator has to key `*` into. The `*` is put back on the way out, so
+    // `sqi_size` / `soi_size` still store the product verbatim and a reprint is
+    // unchanged; it is only never typed and never shown.
+    const stored = typeof value === "string" ? value : "";
+    const factors = sizeBuffer ?? splitSizeFactors(stored);
+    const commitSize = (next: readonly string[]): void => {
+      // Same rule the text cell follows: an untouched buffer is not written
+      // back, so tabbing through the boxes cannot dispatch a no-op edit.
+      const joined = joinSizeFactors(next);
+      if (joined !== stored) {
+        onCommit(joined);
+      }
+    };
+    const editBox = (index: number, raw: string): void => {
+      setSizeBuffer((current) => {
+        const base = current ?? splitSizeFactors(stored);
+        const next = [...base];
+        // Only the last box tolerates a `*`: nothing keyed through the boxes can
+        // produce one, but a size saved as free text before the boxes existed
+        // keeps its extra factors there, and stripping them on the first
+        // keystroke would rewrite the operator's saved value behind their back.
+        next[index] =
+          index === SIZE_FACTOR_COUNT - 1
+            ? sanitizeSizeInput(raw)
+            : sanitizeSizeFactorInput(raw);
+        return next;
+      });
+    };
+    return (
+      <span
+        className={styles.cellSizeBoxes}
+        title={title}
+        onBlur={(event) => {
+          // Blur fires on every hop between the boxes too; only focus leaving
+          // the cell altogether ends the edit.
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            return;
+          }
+          if (sizeBuffer) {
+            commitSize(sizeBuffer);
+          }
+          setSizeBuffer(null);
+        }}
+      >
+        {factors.map((factor, index) => (
+          <input
+            key={SIZE_FACTOR_LABELS[index]}
+            className={cx(
+              styles.cellInput,
+              styles.cellSizeBox,
+              invalid && styles.cellInvalid,
+            )}
+            type="text"
+            inputMode="decimal"
+            value={factor}
+            disabled={!editable}
+            // The per-box hint, not the cell's `placeholder` prop: one string
+            // cannot say what four boxes each mean.
+            placeholder={SIZE_FACTOR_PLACEHOLDERS[index]}
+            title={title ? `${SIZE_FACTOR_LABELS[index]} — ${title}` : SIZE_FACTOR_LABELS[index]}
+            onFocus={(event) => {
+              if (!editable) {
+                return;
+              }
+              setSizeBuffer((current) => current ?? splitSizeFactors(stored));
+              event.currentTarget.select();
+            }}
+            onChange={(event) => editBox(index, event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && sizeBuffer) {
+                event.preventDefault();
+                setSizeBuffer(null);
+                return;
+              }
+              if (event.key === "Enter" && sizeBuffer) {
+                // Commit before the grid's own Enter handler walks focus on —
+                // which lands on the next box, since all four carry the cell's
+                // `data-quotation-*` attributes and the walker reads DOM order.
+                commitSize(sizeBuffer);
+              }
+              onKeyDown?.(event);
+            }}
+            {...dataAttrs}
+          />
+        ))}
       </span>
     );
   }
@@ -230,6 +337,10 @@ export function GridCell(props: GridCellProps) {
         onKeyDown={(event) => {
           if (editable && (event.key === "Enter" || event.key === "F2")) {
             event.preventDefault();
+            // Stopped here, or the grid's own Enter handler walks the chain on
+            // as well and the pick lands against a row whose focus has already
+            // moved off it. Opening the picker IS this cell's Enter.
+            event.stopPropagation();
             onOpenPicker?.();
             return;
           }
@@ -278,9 +389,7 @@ export function GridCell(props: GridCellProps) {
         setBuffer(seeded);
         event.currentTarget.select();
       }}
-      onChange={(event) =>
-        setBuffer(sanitize ? sanitize(event.target.value) : event.target.value)
-      }
+      onChange={(event) => setBuffer(event.target.value)}
       onBlur={commitBuffer}
       // A wheel over a focused numeric input would otherwise scroll the value.
       onWheel={(event) => event.currentTarget.blur()}

@@ -11,8 +11,21 @@
  * for a barcode and a rectangle together.
  */
 
-import type { ReportElement } from "@/features/print-designer/types/template-definition";
-import { BARCODE_SYMBOLOGIES } from "@/features/print-designer/lib/vocabulary";
+import type {
+  CrosstabOverflow,
+  CrosstabSort,
+  ReportElement,
+} from "@/features/print-designer/types/template-definition";
+import { useAppSelector } from "@/store/hooks";
+import { selectDatasetBindings } from "@/features/print-designer/store/selectors";
+import {
+  AGGREGATE_FUNCTIONS,
+  BARCODE_SYMBOLOGIES,
+  CROSSTAB_OVERFLOWS,
+  CROSSTAB_OVERFLOW_LABELS,
+  CROSSTAB_SORTS,
+  CROSSTAB_SORT_LABELS,
+} from "@/features/print-designer/lib/vocabulary";
 import {
   useElementPatch,
   useElementPatchEach,
@@ -85,6 +98,8 @@ export function KindSection({ bandIndex, elements, onEditExpression }: KindSecti
     elements.map((element) => element.id),
   );
   const patchEach = useElementPatchEach(bandIndex, elements);
+  // Read before the mixed-kind bail below, so the hook order never varies.
+  const datasets = useAppSelector(selectDatasetBindings);
 
   const kinds = new Set(elements.map((element) => element.kind));
   if (kinds.size !== 1) {
@@ -418,6 +433,240 @@ export function KindSection({ bandIndex, elements, onEditExpression }: KindSecti
             The signed e-invoice QR payload is large; keep M unless the printer smudges.
           </p>
         </Section>
+      );
+    }
+
+    case "CROSSTAB": {
+      // A crosstab has more properties than every other element put together,
+      // so they are grouped by the question they answer: what to pivot, how the
+      // columns behave, and how it looks. The alternative — one flat list of
+      // twenty rows — is where a user goes to lose the one setting they wanted.
+      const read = <T,>(pick: (element: Extract<ReportElement, { kind: "CROSSTAB" }>) => T) =>
+        sharedValue(elements, (element) =>
+          element.kind === "CROSSTAB" ? pick(element) : (undefined as T),
+        );
+
+      const expressionRow = (
+        label: string,
+        key: "rowBy" | "columnBy" | "measure" | "corner",
+        placeholder: string,
+      ) => {
+        const shared = read((element) => element[key]);
+        const value = isMixed(shared) ? "" : (shared ?? "");
+        return (
+          <ExpressionRow
+            label={label}
+            value={value}
+            placeholder={placeholder}
+            onChange={(next) => patch({ [key]: next }, `Edit ${label}`, `${key}-${bandIndex}`)}
+            onOpen={() =>
+              onEditExpression({
+                title: `${label} expression`,
+                value,
+                onCommit: (next) => patch({ [key]: next }, `Edit ${label}`),
+              })
+            }
+          />
+        );
+      };
+
+      return (
+        <>
+          <Section title="Crosstab">
+            <SelectInput
+              label="Dataset"
+              wide
+              value={read((element) => element.dataset)}
+              options={[
+                { value: "", label: datasets.length ? "Choose a dataset…" : "No datasets defined" },
+                ...datasets
+                  .filter((dataset) => dataset.cardinality === "many")
+                  .map((dataset) => ({ value: dataset.name, label: dataset.name })),
+              ]}
+              onCommit={(value) => patch({ dataset: value }, "Set crosstab dataset")}
+            />
+            {expressionRow("Rows", "rowBy", "{{ row.itemName }}")}
+            {expressionRow("Columns", "columnBy", "{{ date(row.billDate, 'MMM') }}")}
+            {expressionRow("Measure", "measure", "{{ row.netAmount }}")}
+            <SelectInput
+              label="Aggregate"
+              value={read((element) => element.fn)}
+              options={AGGREGATE_FUNCTIONS.map((fn) => ({
+                value: fn,
+                label: fn === "avg" ? "Average" : fn[0].toUpperCase() + fn.slice(1),
+              }))}
+              onCommit={(value) => patch({ fn: value }, "Set crosstab aggregate")}
+            />
+            <p className={styles.listRowMeta}>
+              Every row of the dataset is read once: <code>Rows</code> and <code>Columns</code>{" "}
+              give the labels, <code>Measure</code> the number the cell accumulates.
+            </p>
+          </Section>
+
+          <Section title="Columns and rows">
+            <FieldGrid>
+              <SelectInput
+                label="Column order"
+                value={read((element) => element.columnSort)}
+                options={CROSSTAB_SORTS.map((sort) => ({
+                  value: sort as CrosstabSort,
+                  label: CROSSTAB_SORT_LABELS[sort],
+                }))}
+                onCommit={(value) => patch({ columnSort: value }, "Set column order")}
+              />
+              <SelectInput
+                label="Row order"
+                value={read((element) => element.rowSort)}
+                options={CROSSTAB_SORTS.map((sort) => ({
+                  value: sort as CrosstabSort,
+                  label: CROSSTAB_SORT_LABELS[sort],
+                }))}
+                onCommit={(value) => patch({ rowSort: value }, "Set row order")}
+              />
+              <NumberInput
+                label="Max columns"
+                min={1}
+                step={1}
+                value={read((element) => element.maxColumns)}
+                onCommit={(value) => patch({ maxColumns: Math.round(value) }, "Set max columns")}
+              />
+              <SelectInput
+                label="Columns past that"
+                value={read((element) => element.overflow)}
+                options={CROSSTAB_OVERFLOWS.map((overflow) => ({
+                  value: overflow as CrosstabOverflow,
+                  label: CROSSTAB_OVERFLOW_LABELS[overflow],
+                }))}
+                onCommit={(value) => patch({ overflow: value }, "Set column overflow")}
+              />
+            </FieldGrid>
+            <TextInput
+              label="Folded label"
+              value={read((element) => element.overflowLabel)}
+              placeholder="Other"
+              disabled={read((element) => element.overflow) === "CLIP"}
+              onCommit={(value) => patch({ overflowLabel: value }, "Set folded label")}
+            />
+            <FieldGrid>
+              <NumberInput
+                label="Row labels"
+                suffix="mm"
+                min={0}
+                value={read((element) => element.rowHeaderWidthMm)}
+                onCommit={(value) => patch({ rowHeaderWidthMm: value }, "Set row label width")}
+              />
+              <NumberInput
+                label="Column width"
+                suffix="mm"
+                min={0}
+                value={read((element) => element.columnWidthMm)}
+                onCommit={(value) => patch({ columnWidthMm: value }, "Set column width")}
+              />
+              <NumberInput
+                label="Header height"
+                suffix="mm"
+                min={0}
+                value={read((element) => element.headerHeightMm)}
+                onCommit={(value) => patch({ headerHeightMm: value }, "Set header height")}
+              />
+              <NumberInput
+                label="Row height"
+                suffix="mm"
+                min={1}
+                value={read((element) => element.rowHeightMm)}
+                onCommit={(value) => patch({ rowHeightMm: value }, "Set row height")}
+              />
+            </FieldGrid>
+            <p className={styles.listRowMeta}>
+              Column width 0 shares the element’s width between the columns, so they always
+              fit. A fixed width drops the columns that would run past it.
+            </p>
+          </Section>
+
+          <Section title="Totals and appearance">
+            <CheckboxInput
+              label="Total each row"
+              value={read((element) => element.showRowTotals)}
+              onCommit={(value) => patch({ showRowTotals: value }, "Set row totals")}
+            />
+            <CheckboxInput
+              label="Total each column"
+              value={read((element) => element.showColumnTotals)}
+              onCommit={(value) => patch({ showColumnTotals: value }, "Set column totals")}
+            />
+            <FieldGrid>
+              <TextInput
+                label="Totals label"
+                value={read((element) => element.totalsLabel)}
+                placeholder="Total"
+                onCommit={(value) => patch({ totalsLabel: value }, "Set totals label")}
+              />
+              <TextInput
+                label="Number format"
+                mono
+                value={read((element) => element.format)}
+                placeholder="#,##0.00"
+                onCommit={(value) => patch({ format: value }, "Set crosstab format")}
+              />
+            </FieldGrid>
+            {expressionRow("Corner caption", "corner", "Branch")}
+            <CheckboxInput
+              label="Blank a zero cell"
+              value={read((element) => element.blankWhenZero)}
+              onCommit={(value) => patch({ blankWhenZero: value }, "Set blank when zero")}
+            />
+            <CheckboxInput
+              label="Draw grid lines"
+              value={read((element) => element.gridLines)}
+              onCommit={(value) => patch({ gridLines: value }, "Set grid lines")}
+            />
+            <CheckboxInput
+              label="Repeat the header on each page"
+              value={read((element) => element.repeatHeader)}
+              onCommit={(value) => patch({ repeatHeader: value }, "Set repeat header")}
+            />
+            <ColorInput
+              label="Header fill"
+              value={read((element) => element.headerFill)}
+              onCommit={(value) => patch({ headerFill: value || undefined }, "Set header fill")}
+            />
+            <FieldGrid>
+              <NumberInput
+                label="Font size"
+                suffix="pt"
+                min={4}
+                step={0.5}
+                value={read((element) => element.font?.size ?? 9)}
+                onCommit={(value) =>
+                  patchEach(
+                    (element) =>
+                      element.kind === "CROSSTAB"
+                        ? { font: { ...element.font, size: value } }
+                        : {},
+                    "Set crosstab font size",
+                  )
+                }
+              />
+              <CheckboxInput
+                label="Bold header"
+                value={read((element) => element.headerFont?.bold ?? true)}
+                onCommit={(value) =>
+                  patchEach(
+                    (element) =>
+                      element.kind === "CROSSTAB"
+                        ? { headerFont: { ...element.headerFont, bold: value } }
+                        : {},
+                    "Set crosstab header weight",
+                  )
+                }
+              />
+            </FieldGrid>
+            <p className={styles.listRowMeta}>
+              The height on the Position tab is a minimum — the band grows to whatever the
+              row count needs, and a table taller than the page continues on the next one.
+            </p>
+          </Section>
+        </>
       );
     }
 

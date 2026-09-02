@@ -1020,6 +1020,54 @@
   text-align: center;
 }
 
+/**
+ * The crosstab sketch.
+ *
+ * Deliberately austere: it is a diagram of where the table will be, not a
+ * preview of what it will say. Anything more decorative would invite the user
+ * to believe the column count on screen is the column count that prints.
+ */
+.elementCrosstab {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--pd-page);
+  line-height: 1;
+
+  span {
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    padding: 0 2px;
+    box-sizing: border-box;
+  }
+}
+
+.crosstabHeader,
+.crosstabRow {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(23, 34, 46, 0.35);
+  flex: none;
+}
+
+.crosstabHeader {
+  font-weight: 600;
+}
+
+.crosstabColumnHead {
+  text-align: center;
+}
+
+.crosstabRowHead,
+.crosstabRow span:not(.crosstabRowHead) {
+  color: var(--pd-text-muted);
+}
+
+.crosstabRow span:not(.crosstabRowHead) {
+  text-align: right;
+}
+
 .elementHidden {
   opacity: 0.55;
 }

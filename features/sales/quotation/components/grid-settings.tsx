@@ -12,9 +12,11 @@
  * The dialog edits everything `PUT /ui-table-masters/layout-settings` accepts
  * bar the width, which has its own gesture: visibility, the column order
  * (`uiTblClmColumnPosition`, which the grids now sort on), and the layout's two
- * flags. Reordering and hiding change what the grid draws; `focus` and
- * `necessity` are stored config that no entry screen reads yet — the dialog
- * says so rather than implying a behaviour that is not there.
+ * flags. Reordering and hiding change what the grid draws; `focus` is the Enter
+ * chain the grids walk (`grid-focus.ts`), so clearing every box in that column
+ * does not disable Enter — it falls back to stopping at every editable cell.
+ * `necessity` alone is stored config that no entry screen reads yet, and the
+ * dialog says so rather than implying a behaviour that is not there.
  */
 import {
   useCallback,
@@ -440,14 +442,15 @@ export function useGridSettings({
         <>
           <span className={styles.settingsNote}>
             Applies to this grid for every user. Drag a row — or use ▲▼ — to
-            reposition it. Focus and Necessity are stored with the layout only.
+            reposition it. Focus is where Enter stops while keying a row; clear
+            every box and it stops everywhere. Necessity is stored only.
           </span>
           <span className={styles.settingsFooterActions}>
           <button
             type="button"
             className={styles.button}
             disabled={saveLayoutState.isLoading}
-            title="Show every column, clear both flags and restore the configured order"
+            title="Show every column, clear both flags (Enter then stops everywhere) and restore the configured order"
             onClick={() =>
               setDraft({
                 order: columns.map((column) => column.key),
@@ -494,7 +497,7 @@ export function useGridSettings({
               <th scope="col">Column name</th>
               <th scope="col">Order</th>
               <th scope="col">Visible</th>
-              <th scope="col" title="Stored for the layout; no entry screen reads it yet">
+              <th scope="col" title="Enter stops at this column while keying a row">
                 Focus
               </th>
               <th scope="col" title="Stored for the layout; no entry screen reads it yet">

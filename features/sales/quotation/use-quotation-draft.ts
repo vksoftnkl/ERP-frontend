@@ -49,6 +49,7 @@ import {
 } from "@/store/api/quotationApi";
 import type { ItemPriceQuery } from "@/store/api/quotationApi";
 import {
+  autoChargesSeeded,
   companyStateCodeSet,
   customerApplied,
   draftReplaced,
@@ -340,10 +341,29 @@ export function useQuotationDraft(): QuotationDraftApi {
       dispatch(companyStateCodeSet(companyStateCode));
     }
   }, [companyStateCode]);
-  // A new quotation starts with NO charges. The masters' `chgAutoApply` flag
-  // used to pre-load freight, loading and the standing cash discount here (as
-  // the Qt screen does); the operator now picks what the document needs, on the
-  // charge grid's own blank row.
+  // A new quotation opens with the charges the master flags `chgAutoApply` —
+  // freight, loading and the standing cash discount — as the Qt screen does.
+  // The masters arrive from a query, so this cannot happen when the draft is
+  // built; every guard about *whether* to seed lives in the reducer, which is
+  // why this only has to say "the masters are here".
+  const autoApplyCharges = useMemo(
+    () => chargeMasters.filter((master) => master.chgAutoApply && master.chgIsActive),
+    [chargeMasters],
+  );
+  // Re-derived from the draft rather than run once on the masters: the masters
+  // load exactly once, so an effect keyed only on them would seed the first
+  // quotation of the session and leave every one opened by Clear empty.
+  const needsAutoCharges =
+    draft.mode === "entry" &&
+    draft.isNewEntry &&
+    !draft.docId &&
+    !draft.isDirty &&
+    !draft.charges.some((row) => row.chgId);
+  useEffect(() => {
+    if (needsAutoCharges && autoApplyCharges.length > 0) {
+      dispatch(autoChargesSeeded(autoApplyCharges));
+    }
+  }, [needsAutoCharges, autoApplyCharges]);
 
   // A loaded document's lines were never picked in this session, so their unit
   // lists have not been fetched — without this the Uom dropdown on a reloaded

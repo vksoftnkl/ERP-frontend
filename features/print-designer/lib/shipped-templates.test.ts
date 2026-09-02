@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import a4Invoice from "@/features/print-designer/lib/__fixtures__/gst-invoice-a4.json";
 import t80Receipt from "@/features/print-designer/lib/__fixtures__/thermal-receipt-t80.json";
+import rateMatrix from "@/features/print-designer/lib/__fixtures__/quotation-rate-matrix-a4.json";
 import { validateDefinition } from "@/features/print-designer/lib/validate";
 import { elementRect } from "@/features/print-designer/lib/geometry";
 import { cellOf, columnOverflow, gridMetrics } from "@/features/print-designer/lib/grid";
@@ -22,6 +23,7 @@ import type { TemplateDefinition } from "@/features/print-designer/types/templat
 
 const a4 = a4Invoice as TemplateDefinition;
 const t80 = t80Receipt as TemplateDefinition;
+const matrix = rateMatrix as unknown as TemplateDefinition;
 
 describe("shipped GST A4 invoice", () => {
   it("reports no problems at all", () => {
@@ -85,6 +87,43 @@ describe("shipped 80mm thermal receipt", () => {
           continue;
         }
         expect(columnOverflow(cellOf(element), metrics)).toBe(0);
+      }
+    }
+  });
+});
+
+describe("shipped quotation rate matrix", () => {
+  it("reports no problems at all", () => {
+    expect(validateDefinition(matrix)).toEqual([]);
+  });
+
+  it("puts its crosstab in the SUMMARY band, which is one of the four that may hold one", () => {
+    const band = matrix.bands.find((entry) =>
+      entry.elements.some((element) => element.kind === "CROSSTAB"),
+    );
+    expect(band?.type).toBe("SUMMARY");
+    // Exactly one, because only a lone crosstab in a band gets page-splitting.
+    expect(band?.elements.filter((element) => element.kind === "CROSSTAB")).toHaveLength(1);
+  });
+
+  it("pivots a dataset the template actually declares", () => {
+    const crosstab = matrix.bands
+      .flatMap((band) => band.elements)
+      .find((element) => element.kind === "CROSSTAB");
+    expect(crosstab).toBeDefined();
+    if (crosstab?.kind !== "CROSSTAB") {
+      throw new Error("not a crosstab");
+    }
+    expect(matrix.datasets.map((dataset) => dataset.name)).toContain(crosstab.dataset);
+    // Same dataset the DETAIL band lists, so no second query is needed.
+    expect(crosstab.dataset).toBe("items");
+  });
+
+  it("keeps every element inside the sheet", () => {
+    for (const band of matrix.bands) {
+      for (const element of band.elements) {
+        const rect = elementRect(element);
+        expect(rect.x + rect.w).toBeLessThanOrEqual(matrix.paper.widthMm + 0.01);
       }
     }
   });

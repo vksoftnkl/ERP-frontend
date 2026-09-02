@@ -16,6 +16,7 @@ import reducer, {
   type DesignerState,
 } from "@/features/print-designer/store/designerSlice";
 import { MAX_HISTORY } from "@/features/print-designer/store/history";
+import { validateDefinition } from "@/features/print-designer/lib/validate";
 import type {
   TemplateDefinition,
   TemplatePayload,
@@ -309,5 +310,73 @@ describe("property edits", () => {
       "left",
       "right",
     ]);
+  });
+});
+
+describe("inserting a crosstab", () => {
+  /** The fixture has only a page header and a detail band; neither may hold one. */
+  const withSummary = (datasets = [{ name: "items", provider: "sales.invoice.lines", cardinality: "many" as const }]) => {
+    const base = loaded();
+    return {
+      ...base,
+      definition: {
+        ...base.definition,
+        datasets,
+        bands: [
+          ...base.definition.bands,
+          {
+            type: "SUMMARY" as const,
+            heightMm: 30,
+            groupLevel: 0,
+            printOn: "ALL_PAGES" as const,
+            autoGrow: false,
+            keepTogether: false,
+            keepWithNext: false,
+            keepWithLastDetail: false,
+            spacingRows: 0,
+            elements: [],
+          },
+        ],
+      },
+    } as DesignerState;
+  };
+
+  const summaryIndex = 2;
+
+  it("binds it to the first repeating dataset, because an unbound one breaks the whole template", () => {
+    // `dataset` is a required identifier on the server, so a crosstab left at
+    // "" makes the ENTIRE definition fail to parse — the template stops
+    // rendering and the error names bands.N.elements.M.dataset rather than the
+    // element the user just dropped.
+    const state = reducer(
+      withSummary(),
+      elementAdded({ bandIndex: summaryIndex, kind: "CROSSTAB", xMm: 10, yMm: 2 }),
+    );
+    const added = elementsOf(state, summaryIndex)[0];
+    if (added?.kind !== "CROSSTAB") {
+      throw new Error("not a crosstab");
+    }
+
+    expect(added.dataset).toBe("items");
+    // The whole point: a freshly inserted crosstab is immediately renderable.
+    expect(validateDefinition(state.definition)).toEqual([]);
+  });
+
+  it("leaves the dataset empty when the template has nothing repeating to pivot", () => {
+    // Nothing to bind to is a real state, and the designer's problem list is
+    // what tells the user — silently inventing a dataset name would be worse.
+    const state = reducer(
+      withSummary([]),
+      elementAdded({ bandIndex: summaryIndex, kind: "CROSSTAB", xMm: 10, yMm: 2 }),
+    );
+    const added = elementsOf(state, summaryIndex)[0];
+    if (added?.kind !== "CROSSTAB") {
+      throw new Error("not a crosstab");
+    }
+
+    expect(added.dataset).toBe("");
+    expect(validateDefinition(state.definition).map((problem) => problem.message)).toContain(
+      `'${added.id}' has no dataset to pivot.`,
+    );
   });
 });

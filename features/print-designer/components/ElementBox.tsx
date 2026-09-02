@@ -224,6 +224,70 @@ function ElementBoxComponent({
         </div>
       );
 
+    case "CROSSTAB": {
+      // A SKETCH, not a preview. The real table's column count and height come
+      // from the data, so drawing three sample columns at the declared row
+      // pitch is the most honest thing the canvas can do: it shows where the
+      // table starts, how wide it is and how tall one row is, and says plainly
+      // that the rest is decided at render.
+      const headerPx = Math.max(toPxY(element.headerHeightMm), 6);
+      const rowPx = Math.max(toPxY(element.rowHeightMm), 5);
+      const labelPx = toPxX(Math.min(element.rowHeaderWidthMm, rect.w));
+      const bodyPx = Math.max(0, toPxX(rect.w) - labelPx);
+      const sampleColumns = element.showRowTotals ? 4 : 3;
+      const rowsThatFit = Math.max(1, Math.floor((toPxY(rect.h) - headerPx) / rowPx));
+
+      return (
+        <div
+          {...common}
+          className={`${className} ${styles.elementCrosstab}`}
+          style={{
+            ...frame,
+            border: `1px solid ${staticColour(element.style?.stroke, "#17222e")}`,
+            color: staticColour(element.style?.color, "#17222e"),
+            fontSize: ptToPx(element.font?.size ?? 8, zoom),
+          }}
+        >
+          <div
+            className={styles.crosstabHeader}
+            style={{
+              height: headerPx,
+              background: staticColour(element.headerFill, "rgba(23,34,46,0.08)"),
+            }}
+          >
+            <span style={{ width: labelPx }}>
+              {displayText(element.corner, showExpressions, resolveSample) || "\u00a0"}
+            </span>
+            {Array.from({ length: sampleColumns }, (_unused, index) => (
+              <span
+                key={index}
+                style={{ width: bodyPx / sampleColumns }}
+                className={styles.crosstabColumnHead}
+              >
+                {element.showRowTotals && index === sampleColumns - 1 ? element.totalsLabel : "\u2026"}
+              </span>
+            ))}
+          </div>
+          {Array.from({ length: Math.min(rowsThatFit, 12) }, (_unused, index) => (
+            <div key={index} className={styles.crosstabRow} style={{ height: rowPx }}>
+              <span style={{ width: labelPx }} className={styles.crosstabRowHead}>
+                {index === 0
+                  ? displayText(element.rowBy, showExpressions, resolveSample)
+                  : "\u00a0"}
+              </span>
+              {Array.from({ length: sampleColumns }, (_column, column) => (
+                <span key={column} style={{ width: bodyPx / sampleColumns }}>
+                  {index === 0 && column === 0
+                    ? displayText(element.measure, showExpressions, resolveSample)
+                    : "\u00a0"}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     case "PAGEBREAK":
       return (
         <div

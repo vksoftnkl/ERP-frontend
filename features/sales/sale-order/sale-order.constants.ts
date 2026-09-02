@@ -131,7 +131,7 @@ export const SALES_ITEM_COLUMN_MEANINGS: ItemColumnMeaning[] = [
   col("Code", "text", "left", { read: "itemCode" }),
   col("Description", "itemLookup", "left", { read: "itemName" }),
   // 4 — free text `soi_size`; the quotation grid calls the same field ItemSize.
-  col("Size", "text", "left", { write: "itemSize", read: "itemSize" }),
+  col("Size", "size", "left", { write: "itemSize", read: "itemSize" }),
   col("Hsn", "text", "left", { read: "hsnCode" }),
   col("BatchNo", "text", "left", { write: "batchNo", read: "batchNo", editableWhen: "batchConfig" }),
   col("ExpiryDate", "date", "center", {

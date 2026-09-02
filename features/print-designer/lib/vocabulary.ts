@@ -11,6 +11,8 @@
 
 import type {
   BandType,
+  CrosstabOverflow,
+  CrosstabSort,
   ElementKind,
   LayoutMode,
   OutputMode,
@@ -71,6 +73,7 @@ export const ELEMENT_KINDS: readonly ElementKind[] = [
   "BARCODE",
   "QRCODE",
   "PAGEBREAK",
+  "CROSSTAB",
 ];
 
 export const ELEMENT_LABELS: Readonly<Record<ElementKind, string>> = {
@@ -82,6 +85,7 @@ export const ELEMENT_LABELS: Readonly<Record<ElementKind, string>> = {
   BARCODE: "Barcode",
   QRCODE: "QR code",
   PAGEBREAK: "Page break",
+  CROSSTAB: "Crosstab",
 };
 
 export const PRINT_ON_VALUES: readonly PrintOn[] = [
@@ -91,6 +95,49 @@ export const PRINT_ON_VALUES: readonly PrintOn[] = [
   "NOT_FIRST_PAGE",
   "NOT_LAST_PAGE",
 ];
+
+export const CROSSTAB_SORTS = [
+  "LABEL_ASC",
+  "LABEL_DESC",
+  "VALUE_DESC",
+  "VALUE_ASC",
+  "FIRST_SEEN",
+] as const;
+
+export const CROSSTAB_SORT_LABELS: Readonly<Record<CrosstabSort, string>> = {
+  LABEL_ASC: "Label A → Z",
+  LABEL_DESC: "Label Z → A",
+  VALUE_DESC: "Largest first",
+  VALUE_ASC: "Smallest first",
+  // The only order that preserves the query's own ORDER BY, which is how a
+  // month axis stays chronological instead of sorting Apr, Aug, Dec.
+  FIRST_SEEN: "Dataset order",
+};
+
+export const CROSSTAB_OVERFLOWS = ["FOLD", "CLIP"] as const;
+
+/**
+ * The bands a crosstab may sit in — the ones that appear at most once.
+ *
+ * DETAIL and the group bands repeat, and a crosstab reads its whole dataset
+ * with no group filter, so it would print the same complete table once per row
+ * or once per group. Page furniture redraws on every page. The server refuses
+ * all of them at save time; this is the same list, so the designer says so
+ * first.
+ */
+export const CROSSTAB_BANDS: readonly BandType[] = [
+  "REPORT_HEADER",
+  "SUMMARY",
+  "REPORT_FOOTER",
+  "NO_DATA",
+];
+
+export const CROSSTAB_OVERFLOW_LABELS: Readonly<Record<CrosstabOverflow, string>> = {
+  FOLD: "Fold into one column",
+  CLIP: "Drop them",
+};
+
+export const AGGREGATE_FUNCTIONS = ["sum", "count", "avg", "min", "max"] as const;
 
 export const BARCODE_SYMBOLOGIES = [
   "code128",

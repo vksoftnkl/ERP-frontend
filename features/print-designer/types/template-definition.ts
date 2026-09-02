@@ -40,7 +40,8 @@ export type ElementKind =
   | "IMAGE"
   | "BARCODE"
   | "QRCODE"
-  | "PAGEBREAK";
+  | "PAGEBREAK"
+  | "CROSSTAB";
 
 export type PrintOn =
   | "ALL_PAGES"
@@ -57,6 +58,13 @@ export type AggregateFunction = "sum" | "count" | "avg" | "min" | "max";
 export type AggregateScope = "GROUP" | "PAGE" | "REPORT";
 export type BarcodeSymbology = "code128" | "ean13" | "ean8" | "upca" | "code39" | "itf14";
 export type QrErrorCorrection = "L" | "M" | "Q" | "H";
+export type CrosstabSort =
+  | "LABEL_ASC"
+  | "LABEL_DESC"
+  | "VALUE_DESC"
+  | "VALUE_ASC"
+  | "FIRST_SEEN";
+export type CrosstabOverflow = "FOLD" | "CLIP";
 
 export type Margins = {
   top: number;
@@ -195,6 +203,59 @@ export type PagebreakElement = ElementBase & {
   when?: string;
 };
 
+/**
+ * A whole pivot table in one element.
+ *
+ * Unlike everything else on the canvas, its height and its column count come
+ * from the DATA, not from the designer: `rowBy`, `columnBy` and `measure` are
+ * evaluated once per source row and the engine expands the result into ordinary
+ * text and line primitives at layout time. So the canvas can only ever draw a
+ * placeholder for it — the real shape is not knowable until a render.
+ *
+ * `w` is a budget the engine enforces. Columns that will not fit are folded
+ * into one trailing column or clipped, per `overflow`.
+ */
+export type CrosstabElement = ElementBase & {
+  kind: "CROSSTAB";
+  w: number;
+  /** A MINIMUM; the band grows to the table's real height. */
+  h: number;
+  /** The repeating dataset the pivot reads — not the band's dataset. */
+  dataset: string;
+  /** Expression yielding the row label down the left edge. */
+  rowBy: string;
+  /** Expression yielding the column label across the top. */
+  columnBy: string;
+  /** Expression yielding the number accumulated into each cell. */
+  measure: string;
+  fn: AggregateFunction;
+  /** Number pattern applied to every cell and total. */
+  format: string;
+  blankWhenZero: boolean;
+  /** The top-left cell, above the row labels. */
+  corner: string;
+  rowHeaderWidthMm: number;
+  /** 0 = share the width left after the row header and totals column. */
+  columnWidthMm: number;
+  headerHeightMm: number;
+  rowHeightMm: number;
+  showRowTotals: boolean;
+  showColumnTotals: boolean;
+  totalsLabel: string;
+  rowSort: CrosstabSort;
+  columnSort: CrosstabSort;
+  maxColumns: number;
+  overflow: CrosstabOverflow;
+  overflowLabel: string;
+  font?: Partial<FontSpec>;
+  /** Falls back to `font` with bold on. */
+  headerFont?: Partial<FontSpec>;
+  gridLines: boolean;
+  headerFill?: string;
+  /** Reprint the column header on each page the table spills onto. */
+  repeatHeader: boolean;
+};
+
 export type ReportElement =
   | TextElement
   | FieldElement
@@ -203,7 +264,8 @@ export type ReportElement =
   | ImageElement
   | BarcodeElement
   | QrcodeElement
-  | PagebreakElement;
+  | PagebreakElement
+  | CrosstabElement;
 
 export type TextLikeElement = TextElement | FieldElement;
 
@@ -211,14 +273,20 @@ export const isTextLike = (element: ReportElement): element is TextLikeElement =
   element.kind === "TEXT" || element.kind === "FIELD";
 
 /** Elements whose geometry is a box the designer can resize on both axes. */
-export type BoxElement = RectElement | ImageElement | BarcodeElement | TextLikeElement;
+export type BoxElement =
+  | RectElement
+  | ImageElement
+  | BarcodeElement
+  | CrosstabElement
+  | TextLikeElement;
 
 export const isBoxLike = (element: ReportElement): element is BoxElement =>
   element.kind === "TEXT" ||
   element.kind === "FIELD" ||
   element.kind === "RECT" ||
   element.kind === "IMAGE" ||
-  element.kind === "BARCODE";
+  element.kind === "BARCODE" ||
+  element.kind === "CROSSTAB";
 
 export type Band = {
   type: BandType;

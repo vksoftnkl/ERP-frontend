@@ -6,6 +6,7 @@ import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import {
   CHARGE_COLUMN_MEANINGS,
   ITEM_COLUMN_MEANINGS,
+  ITEM_COLUMN_NUMBERS,
   isSerialColumnName,
   normalizeColumnToken,
   SERIAL_COLUMN_KEY,
@@ -116,6 +117,70 @@ export function cubicFeetFromSize(value: string | null | undefined): number | nu
  */
 export function sanitizeSizeInput(value: string): string {
   return value.replace(/[^0-9.*]/g, "");
+}
+/**
+ * One factor's keystrokes. The Size cell is keyed as four separate boxes, so the
+ * `*` between two factors is never typed — the cell puts it in on the way out.
+ */
+export function sanitizeSizeFactorInput(value: string): string {
+  return value.replace(/[^0-9.]/g, "");
+}
+/** How many boxes the Size cell is keyed as. */
+export const SIZE_FACTOR_COUNT = 4;
+/** What each box means, in order — the hover text the operator gets on it. */
+export const SIZE_FACTOR_LABELS = [
+  "Length (ft)",
+  "Width (in)",
+  "Thickness (in)",
+  "Pieces",
+] as const;
+/**
+ * What an empty box shows. One or three characters, because the four boxes split
+ * a column the layout sizes for a single value — the full `SIZE_FACTOR_LABELS`
+ * wording stays on the hover, where there is room for it.
+ */
+export const SIZE_FACTOR_PLACEHOLDERS = ["L", "W", "T", "Pcs"] as const;
+/**
+ * A stored size into the four boxes the cell is keyed as: `"45*2*2*6"` becomes
+ * `["45", "2", "2", "6"]`, and a shorter value pads with blanks rather than
+ * shifting factors out of the box they belong in — a bare CFT like `"7.5"` sits
+ * alone in the first box, which is exactly what `cubicFeetFromSize` reads it as.
+ *
+ * A value with MORE than four factors keeps its tail in the last box (`"45*2*2*6*3"`
+ * → `[…, "6*3"]`). Nothing keyed through the boxes can produce one, but free text
+ * saved before the boxes existed can, and folding it in is what keeps such a row
+ * editable and byte-identical on the way back out.
+ */
+export function splitSizeFactors(value: string | null | undefined): string[] {
+  const text = (value ?? "").trim();
+  if (!text) {
+    return Array.from({ length: SIZE_FACTOR_COUNT }, () => "");
+  }
+  const parts = text.split("*").map((part) => part.trim());
+  // `"8*8*8*8*"` is mid-keying, not a fifth blank factor — the same trailing star
+  // `cubicFeetFromSize` drops.
+  while (parts.length > 1 && parts[parts.length - 1] === "") {
+    parts.pop();
+  }
+  const factors = parts.slice(0, SIZE_FACTOR_COUNT - 1);
+  const tail = parts.slice(SIZE_FACTOR_COUNT - 1);
+  factors.push(tail.join("*"));
+  while (factors.length < SIZE_FACTOR_COUNT) {
+    factors.push("");
+  }
+  return factors;
+}
+/**
+ * The four boxes back into the one string `sqi_size` / `soi_size` store. Blank
+ * boxes drop out instead of leaving an empty factor: a row keyed only halfway
+ * has to read as `"45*2"`, since `"45**"` is text `cubicFeetFromSize` refuses,
+ * which would leave Bill Qty silently stale.
+ */
+export function joinSizeFactors(factors: readonly string[]): string {
+  return factors
+    .map((factor) => factor.trim())
+    .filter((factor) => factor !== "")
+    .join("*");
 }
 /**
  * What the size works out to, for `sqi_size_uom` / `soi_size_uom` — the unit of
@@ -317,6 +382,13 @@ export function totalColumnWidth<TMeaning>(
  * column); a meaning with no configured row is dropped too, since the server
  * owns which columns this deployment shows. If the layout could not be fetched
  * at all, the caller falls back to `defaultColumns`.
+ *
+ * `columnNumbers` is the rename escape hatch: a deployment that renames a column
+ * in ui table master changes the only thing the name join has to go on, so the
+ * column would vanish. Matched by `uiTblClmNo` afterwards it still finds its
+ * meaning, and then paints the new name. Tried AFTER the name, never before —
+ * a numbering that differs from the shipped map would otherwise mislabel every
+ * column at once, where name matching simply drops the ones it cannot place.
  */
 function resolveColumns<
   TMeaning extends { key: string; token: string; kind: GridCellKind; aliases?: string[] },
@@ -324,6 +396,7 @@ function resolveColumns<
   rows: UiTableColumnRow[] | undefined,
   meanings: TMeaning[],
   unit: ColumnWidthUnit,
+  columnNumbers?: Record<string, number>,
 ): ResolvedColumn<TMeaning>[] {
   if (!rows || rows.length === 0) {
     return [];
@@ -340,6 +413,15 @@ function resolveColumns<
       }
     }
   }
+  // `key -> number` inverted once, so the fallback below is a lookup and not a
+  // scan of the whole map per row.
+  const byNumber = new Map<number, TMeaning>();
+  for (const [key, columnNo] of Object.entries(columnNumbers ?? {})) {
+    const meaning = byKey.get(key);
+    if (meaning) {
+      byNumber.set(columnNo, meaning);
+    }
+  }
   const resolved: ResolvedColumn<TMeaning>[] = [];
   // Two configured rows can land on one meaning — the serial column answers to
   // several names — and two columns sharing a key would be two React children
@@ -353,24 +435,27 @@ function resolveColumns<
     const key = normalized || (row.uiTblClmNo === "0" ? SERIAL_COLUMN_KEY : "");
     // The row number is named per deployment ("sl.no", "Id", "#"), so it is
     // matched by any of those rather than by the one this build happens to ship.
+    const columnNumber = Number.parseInt(row.uiTblClmNo ?? "0", 10) || 0;
     const meaning =
       (key ? byKey.get(key) : undefined) ??
-      (isSerialColumnName(key) ? byKey.get(SERIAL_COLUMN_KEY) : undefined);
+      (isSerialColumnName(key) ? byKey.get(SERIAL_COLUMN_KEY) : undefined) ??
+      byNumber.get(columnNumber);
     if (!meaning || taken.has(meaning.key)) {
       continue;
     }
     taken.add(meaning.key);
     resolved.push({
       ...meaning,
-      // A serial column's configured name is a row-number caption, not a field
-      // label, and comes in every casing there is — it shows the shipped one.
-      header: meaning.kind === "serial" ? meaning.token : rawName || meaning.token,
+      // Whatever the layout calls it, the serial column included: the heading is
+      // ui table master's to set. The token is only for a row that carries no
+      // name at all, and for `fallbackColumns` when there is no layout.
+      header: rawName || meaning.token,
       widthPx: widthPxOf(row.uiTblClmColumnWidth, unit),
       visible: row.uiTblClmColumnVisibility !== false,
       focus: row.uiTblClmColumnFocus === true,
       necessity: row.uiTblClmColumnNecessity === true,
       position: row.uiTblClmColumnPosition ?? 0,
-      columnNumber: Number.parseInt(row.uiTblClmNo ?? "0", 10) || 0,
+      columnNumber,
       columnId: row.uiTblClmId ?? null,
     });
   }
@@ -440,7 +525,12 @@ function withSerialColumn<TMeaning extends { key: string; token: string; kind: G
   ];
 }
 export function resolveItemColumns(rows: UiTableColumnRow[] | undefined): ResolvedItemColumn[] {
-  return resolveItemColumnsWith(rows, ITEM_COLUMN_MEANINGS, ITEM_COLUMN_WIDTH_UNIT);
+  return resolveItemColumnsWith(
+    rows,
+    ITEM_COLUMN_MEANINGS,
+    ITEM_COLUMN_WIDTH_UNIT,
+    ITEM_COLUMN_NUMBERS,
+  );
 }
 
 /**
@@ -452,8 +542,10 @@ export function resolveItemColumnsWith(
   rows: UiTableColumnRow[] | undefined,
   meanings: ItemColumnMeaning[],
   unit: ColumnWidthUnit,
+  /** That layout's `uiTblClmNo` map, when one is shipped for it. */
+  columnNumbers?: Record<string, number>,
 ): ResolvedItemColumn[] {
-  const resolved = resolveColumns(rows, meanings, unit);
+  const resolved = resolveColumns(rows, meanings, unit, columnNumbers);
   return resolved.length > 0 ? withSerialColumn(resolved, meanings) : fallbackColumns(meanings);
 }
 export function resolveChargeColumns(rows: UiTableColumnRow[] | undefined): ResolvedChargeColumn[] {

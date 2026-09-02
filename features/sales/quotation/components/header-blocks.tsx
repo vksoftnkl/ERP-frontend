@@ -354,6 +354,7 @@ export function SalesInfoBlock({
         <div className={styles.checkRow}>
           {fields.isVisible("freight") ? (
             <CheckField
+              id="quotation-freight"
               label={fields.labelFor("freight")}
               checked={header.hasFreight}
               disabled={disabled}
@@ -362,6 +363,7 @@ export function SalesInfoBlock({
           ) : null}
           {fields.isVisible("load") ? (
             <CheckField
+              id="quotation-load"
               label={fields.labelFor("load")}
               checked={header.hasLoad}
               disabled={disabled}
@@ -370,6 +372,7 @@ export function SalesInfoBlock({
           ) : null}
           {fields.isVisible("unload") ? (
             <CheckField
+              id="quotation-unload"
               label={fields.labelFor("unload")}
               checked={header.hasUnload}
               disabled={disabled}
@@ -378,6 +381,7 @@ export function SalesInfoBlock({
           ) : null}
           {fields.isVisible("promo") ? (
             <CheckField
+              id="quotation-promo"
               label={fields.labelFor("promo")}
               checked={header.hasPromo}
               disabled={disabled}
@@ -431,17 +435,18 @@ export function TermsBlock({
   }
   return (
     <GroupBox title="Terms" onContextMenu={onContextMenu}>
-      {/* One field per row: the two textareas are the point of this panel and a
-          second column halves the width they get. */}
+      {/* One field per row: every row here is long free text, and a second
+          column would halve the width it gets. */}
       <div className={styles.fieldGrid}>
         {fields.isVisible("remarks") ? (
           <Field label={fields.labelFor("remarks")} htmlFor="quotation-remarks">
-            <textarea
+            <input
               id="quotation-remarks"
               className={styles.input}
               value={terms.remarks}
               disabled={disabled}
               maxLength={500}
+              autoComplete="off"
               onChange={(event) => onSetTerms("remarks", event.target.value)}
             />
           </Field>
@@ -474,11 +479,12 @@ export function TermsBlock({
         ) : null}
         {fields.isVisible("termsConditions") ? (
           <Field label={fields.labelFor("termsConditions")} htmlFor="quotation-tc">
-            <textarea
+            <input
               id="quotation-tc"
               className={styles.input}
               value={terms.termsConditions}
               disabled={disabled}
+              autoComplete="off"
               onChange={(event) => onSetTerms("termsConditions", event.target.value)}
             />
           </Field>

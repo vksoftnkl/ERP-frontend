@@ -7,7 +7,6 @@
  * persisted or recorded in history. `selection` and `view` are neither
  * persisted nor undoable: a Ctrl+Z that changed the zoom would be a bug.
  */
-
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import { current, isDraft } from "immer";
 import type {
@@ -21,6 +20,7 @@ import type {
   OutputMode,
   PaperSpec,
   ProviderDescriptor,
+  CrosstabElement,
   QrcodeElement,
   ReportElement,
   RectElement,
@@ -68,7 +68,6 @@ import {
 } from "@/features/print-designer/lib/clipboard";
 import { PAPER_PRESETS, findPaperPreset } from "@/features/print-designer/lib/vocabulary";
 import { cellOf, gridMetrics } from "@/features/print-designer/lib/grid";
-
 /**
  * A patch for one element. The union's members are flattened into one optional
  * shape because the property panel edits by field name — `align`, `w`,
@@ -87,11 +86,10 @@ export type ElementPatch = Partial<
     Omit<ImageElement, "kind" | "id"> &
     Omit<BarcodeElement, "kind" | "id"> &
     Omit<QrcodeElement, "kind" | "id"> &
-    Omit<PagebreakElement, "kind" | "id">
+    Omit<PagebreakElement, "kind" | "id"> &
+    Omit<CrosstabElement, "kind" | "id">
 >;
-
 export type BandPatch = Partial<Omit<Band, "elements">>;
-
 export type DesignerMeta = {
   name: string;
   docType: string;
@@ -104,12 +102,10 @@ export type DesignerMeta = {
   branchId: string | null;
   isActive: boolean;
 };
-
 export type Selection = {
   bandIndex: number | null;
   elementIds: string[];
 };
-
 export type DesignerView = {
   zoom: number;
   showGrid: boolean;
@@ -120,9 +116,7 @@ export type DesignerView = {
   leftPanelOpen: boolean;
   rightPanelOpen: boolean;
 };
-
 export type InteractionMode = "IDLE" | "DRAGGING" | "RESIZING" | "MARQUEE" | "PLACING";
-
 export type DesignerInteraction = {
   mode: InteractionMode;
   placingKind: ElementKind | null;
@@ -133,9 +127,7 @@ export type DesignerInteraction = {
   marquee: (Rect & { bandIndex: number }) | null;
   guides: Guide[];
 };
-
 export type DesignerStatus = "EMPTY" | "DRAFT" | "LOADED";
-
 export type DesignerState = {
   status: DesignerStatus;
   /** Null while a brand-new template has not been saved yet. */
@@ -151,9 +143,7 @@ export type DesignerState = {
   dirty: boolean;
   lastSavedAt: string | null;
 };
-
 const A4 = PAPER_PRESETS[0];
-
 const emptyDefinition = (): TemplateDefinition => ({
   schemaVersion: 1,
   layoutMode: "GRAPHIC",
@@ -161,9 +151,7 @@ const emptyDefinition = (): TemplateDefinition => ({
   datasets: [],
   bands: [],
 });
-
 const freshSelection = (): Selection => ({ bandIndex: null, elementIds: [] });
-
 const freshInteraction = (): DesignerInteraction => ({
   mode: "IDLE",
   placingKind: null,
@@ -172,7 +160,6 @@ const freshInteraction = (): DesignerInteraction => ({
   marquee: null,
   guides: [],
 });
-
 const initialState: DesignerState = {
   status: "EMPTY",
   templateId: null,
@@ -206,7 +193,6 @@ const initialState: DesignerState = {
   dirty: false,
   lastSavedAt: null,
 };
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const bandAt = (definition: TemplateDefinition, index: number): Band | undefined =>
@@ -762,6 +748,21 @@ const designerSlice = createSlice({
           col: action.payload.col,
           row: action.payload.row,
         });
+        // A CROSSTAB with no dataset is not merely incomplete — `dataset` is a
+        // required IDENTIFIER on the server, so an unbound one makes the WHOLE
+        // definition fail to parse: the template stops rendering until it is
+        // fixed, and the error names a JSON path rather than the element. Bind
+        // it to the first repeating dataset so inserting one is always safe;
+        // the property panel is where the user changes their mind.
+        if (element.kind === "CROSSTAB" && !element.dataset) {
+          const repeating = definition.datasets.find(
+            (dataset) => dataset.cardinality === "many",
+          );
+          if (repeating) {
+            element.dataset = repeating.name;
+          }
+        }
+
         const bounds = boundsOf(definition, band);
         band.elements.push(withRect(element, clampRectToBand(elementRect(element), bounds)));
         syncGridGeometry(definition, band.elements[band.elements.length - 1]);

@@ -18,7 +18,12 @@ import { formatCurrency, money } from "@/domain/pricing";
 import { ChargeGrid } from "@/features/sales/quotation/components/charge-grid";
 import { ChargePickerModal } from "@/features/sales/quotation/components/charge-picker-modal";
 import { useGridSettings } from "@/features/sales/quotation/components/grid-settings";
-import { ItemGrid } from "@/features/sales/quotation/components/item-grid";
+import {
+  ITEM_GRID_NAME,
+  ItemGrid,
+  itemLookupFieldKey,
+} from "@/features/sales/quotation/components/item-grid";
+import { focusNextStopFrom } from "@/features/sales/quotation/components/grid-focus";
 import {
   ItemPickerModal,
   type ItemPick,
@@ -147,6 +152,8 @@ export function SaleOrderEntryView({
 
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
   const [itemPickerRow, setItemPickerRow] = useState<string | null>(null);
+  /** The row a pick has just been made on — see the focus effect below. */
+  const [pickedItemRow, setPickedItemRow] = useState<string | null>(null);
   const [chargePickerRow, setChargePickerRow] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -278,10 +285,36 @@ export function SaleOrderEntryView({
       if (duplicate) {
         toast.info(`${pick.itemName} is already on this order.`);
       }
+      setPickedItemRow(rowKey);
       void api.pickItem(rowKey, pick.itemId, pick.itemUnitId);
     },
     [api, draft.lines, itemPickerRow],
   );
+
+  /**
+   * Picking an item hands focus back to the grid, on the next stop of the
+   * layout's Enter chain — the same walk the quotation screen makes, since both
+   * screens are the same `ItemGrid`. Grid 24 flags no focus column of its own,
+   * so here that is simply the next editable cell after Description.
+   *
+   * An effect, not a line after the `await`: the cells past Description are
+   * disabled until the row has an item, so the walk has to run on the render
+   * that priced the line.
+   */
+  useEffect(() => {
+    if (!pickedItemRow) {
+      return;
+    }
+    const line = draft.lines.find((row) => row.key === pickedItemRow);
+    if (!line?.itemId) {
+      return;
+    }
+    setPickedItemRow(null);
+    const anchor = itemLookupFieldKey(itemResize.columns);
+    if (anchor) {
+      focusNextStopFrom(ITEM_GRID_NAME, pickedItemRow, anchor);
+    }
+  }, [draft.lines, itemResize.columns, pickedItemRow]);
 
   const onPickCharge = useCallback(
     (master: ChargeMasterRow) => {

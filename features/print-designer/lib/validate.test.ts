@@ -235,3 +235,129 @@ describe("validateDefinition", () => {
     ).toContain("Horizontal margins leave no printable width.");
   });
 });
+
+describe("crosstab rules", () => {
+  const crosstab = (overrides: Record<string, unknown> = {}): ReportElement =>
+    ({
+      kind: "CROSSTAB",
+      id: "ct",
+      x: 10,
+      y: 0,
+      z: 0,
+      w: 120,
+      h: 30,
+      dataset: "items",
+      rowBy: "{{ row.itemName }}",
+      columnBy: "{{ row.hsnCode }}",
+      measure: "{{ row.netAmount }}",
+      fn: "sum",
+      format: "#,##0.00",
+      blankWhenZero: true,
+      corner: "",
+      rowHeaderWidthMm: 40,
+      columnWidthMm: 0,
+      headerHeightMm: 6,
+      rowHeightMm: 5,
+      showRowTotals: true,
+      showColumnTotals: true,
+      totalsLabel: "Total",
+      rowSort: "LABEL_ASC",
+      columnSort: "FIRST_SEEN",
+      maxColumns: 12,
+      overflow: "FOLD",
+      overflowLabel: "Other",
+      gridLines: true,
+      repeatHeader: true,
+      ...overrides,
+    }) as unknown as ReportElement;
+
+  const messages = (element: ReportElement, bandOverrides: Partial<Band> = {}): string[] =>
+    validateDefinition(
+      definition({ bands: [band({ type: "SUMMARY", ...bandOverrides, elements: [element] })] }),
+    ).map((problem) => problem.message);
+
+  it("accepts a fully configured crosstab in a summary band", () => {
+    expect(messages(crosstab())).toEqual([]);
+  });
+
+  it("refuses one with no dataset, and one naming a dataset that does not exist", () => {
+    expect(messages(crosstab({ dataset: "" }))).toContain("'ct' has no dataset to pivot.");
+    expect(messages(crosstab({ dataset: "nope" }))).toContain(
+      "'ct' pivots unknown dataset 'nope'.",
+    );
+  });
+
+  it("refuses a DETAIL band, where it would print in full once per row", () => {
+    expect(messages(crosstab(), { type: "DETAIL", dataset: "items" }).join(" ")).toMatch(
+      /once per row/,
+    );
+  });
+
+  it("refuses a group band, where it would print in full once per group", () => {
+    // A crosstab reads its whole dataset with no group filter, so the same
+    // table would appear under every group heading.
+    expect(
+      messages(crosstab(), {
+        type: "GROUP_FOOTER",
+        dataset: "items",
+        groupBy: "{{ row.hsnCode }}",
+      }).join(" "),
+    ).toMatch(/once per group/);
+  });
+
+  it("refuses page furniture, which redraws on every page", () => {
+    expect(messages(crosstab(), { type: "PAGE_FOOTER" }).join(" ")).toMatch(/on every page/);
+  });
+
+  it("refuses a row-label column that leaves no width for the data", () => {
+    expect(messages(crosstab({ w: 40, rowHeaderWidthMm: 40 })).join(" ")).toMatch(
+      /leaves no width/,
+    );
+  });
+
+  it("refuses an empty row, column or measure expression", () => {
+    expect(messages(crosstab({ rowBy: "  " }))).toContain("'ct' has no row expression.");
+    expect(messages(crosstab({ columnBy: "" }))).toContain("'ct' has no column expression.");
+    expect(messages(crosstab({ measure: "" }))).toContain("'ct' has no measure expression.");
+  });
+
+  it("warns when a fixed column width leaves room for no data column", () => {
+    expect(
+      messages(crosstab({ w: 60, rowHeaderWidthMm: 40, columnWidthMm: 15 })).join(" "),
+    ).toMatch(/fits no data column/);
+  });
+
+  it("does not warn that it overhangs a band it will grow", () => {
+    // The engine sizes the band from the row count, so the placeholder box
+    // sticking out below a 10mm band is not something the user can act on.
+    const problems = messages(crosstab({ y: 8, h: 40 }), { heightMm: 10, autoGrow: false });
+    expect(problems.join(" ")).not.toMatch(/extends below/);
+  });
+
+  it("lints the expressions it carries", () => {
+    expect(messages(crosstab({ measure: "{{ ghost.total }}" })).join(" ")).toMatch(/measure/);
+  });
+
+  it("refuses a crosstab on a character-grid template", () => {
+    const problems = validateDefinition(
+      definition({
+        layoutMode: "GRID",
+        paper: {
+          code: "T80",
+          widthMm: 80,
+          heightMm: null,
+          orientation: "PORTRAIT",
+          margins: { top: 2, right: 2, bottom: 2, left: 2 },
+          columns: 48,
+        },
+        bands: [
+          band({
+            type: "SUMMARY",
+            elements: [crosstab({ col: 0, row: 0, cols: 40 })],
+          }),
+        ],
+      }),
+    ).map((problem) => problem.message);
+    expect(problems.join(" ")).toMatch(/graphic-mode element/);
+  });
+});

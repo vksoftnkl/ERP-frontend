@@ -12,6 +12,8 @@ import { QUOTATION_STATUSES } from "./quotation.constants";
 import { buildSavePayload, parseLoadedDocument } from "./quotation.payload";
 import type { SaveActor } from "./quotation.payload";
 import {
+  autoChargesSeeded,
+  chargeRemoved,
   draftReplaced,
   headerFieldSet,
   lineFieldSet,
@@ -839,6 +841,137 @@ describe("parseLoadedDocument", () => {
     );
     // 27 = 2 × 12 + 3 × 1
     expect(withCases.lines[0].toBaseFactor).toBe(12);
+  });
+});
+
+describe("the auto-apply charges", () => {
+  function chargeMaster(overrides: Partial<ChargeMasterRow>): ChargeMasterRow {
+    return {
+      chgId: "chg-auto",
+      chgName: "FREIGHT CHARGE",
+      chgCode: "FR",
+      chgModule: "S",
+      chgRole: "FREIGHT",
+      chgMethod: "FIXED",
+      chgType: "ADD",
+      chgApplyOn: "FLAT",
+      chgDefaultRate: 250,
+      chgLandingCost: false,
+      chgCostAlloc: null,
+      chgLedgerCode: "led-1",
+      chgLedgerName: "SALES FREIGHT COLLECTION",
+      ledHsnSac: "11021",
+      ledGstRate: 18,
+      ledTaxability: "Taxable",
+      chgTaxApl: false,
+      chgBeforeTax: false,
+      chgSepPost: false,
+      chgManParty: false,
+      chgDispOrder: 0,
+      chgAutoApply: true,
+      chgIsActive: true,
+      ...overrides,
+    };
+  }
+  const FREIGHT = chargeMaster({ chgId: "chg-fr", chgName: "FREIGHT CHARGE" });
+  const LOADING = chargeMaster({
+    chgId: "chg-ld",
+    chgName: "LOADING CHARGE",
+    chgRole: "LOADING",
+    chgDefaultRate: 40,
+  });
+
+  function freshDraft(): QuotationDraft {
+    return quotationReducer(
+      undefined as never,
+      draftReplaced(
+        createDraft({
+          companyId: COMPANY_ID,
+          branchId: BRANCH_ID,
+          accYear: ACC_YEAR,
+          companyStateCode: "33",
+          quoteDate: QUOTE_DATE,
+        }),
+      ),
+    );
+  }
+
+  it("opens a new quotation on the flagged charges, with their default rates", () => {
+    const seeded = quotationReducer(freshDraft(), autoChargesSeeded([FREIGHT, LOADING]));
+    expect(seeded.charges.map((row) => row.chgName)).toEqual([
+      "FREIGHT CHARGE",
+      "LOADING CHARGE",
+      // The grid's own blank row still ends the list.
+      "",
+    ]);
+    expect(seeded.charges[0].rate).toBe(250);
+    expect(seeded.charges[1].rate).toBe(40);
+  });
+
+  it("does not count as an operator edit", () => {
+    // A pre-loaded quotation nobody has touched must not prompt on Clear.
+    const seeded = quotationReducer(freshDraft(), autoChargesSeeded([FREIGHT]));
+    expect(seeded.isDirty).toBe(false);
+    expect(seeded.pricing).toBe("live");
+  });
+
+  it("seeds once, however often the masters arrive", () => {
+    const once = quotationReducer(freshDraft(), autoChargesSeeded([FREIGHT]));
+    const twice = quotationReducer(once, autoChargesSeeded([FREIGHT]));
+    expect(twice.charges.filter((row) => row.chgId)).toHaveLength(1);
+    expect(twice).toBe(once);
+  });
+
+  it("does not bring back a charge the operator removed", () => {
+    const seeded = quotationReducer(freshDraft(), autoChargesSeeded([FREIGHT, LOADING]));
+    const removed = quotationReducer(seeded, chargeRemoved(seeded.charges[0].key));
+    expect(removed.charges.map((row) => row.chgName)).toEqual(["LOADING CHARGE", ""]);
+    // Removing dirtied the draft, which is what keeps the re-dispatch a no-op.
+    expect(removed.isDirty).toBe(true);
+    const reseeded = quotationReducer(removed, autoChargesSeeded([FREIGHT, LOADING]));
+    expect(reseeded.charges.map((row) => row.chgName)).toEqual(["LOADING CHARGE", ""]);
+  });
+
+  it("seeds again on the quotation Clear opens", () => {
+    // The masters load once per session, so the screen re-derives "this draft
+    // still needs seeding" from the draft itself; a Clear has to come back here.
+    const worked = quotationReducer(
+      quotationReducer(freshDraft(), autoChargesSeeded([FREIGHT])),
+      headerFieldSet({ field: "usrRefno", value: "REF-1" }),
+    );
+    expect(worked.isDirty).toBe(true);
+
+    const cleared = quotationReducer(worked, draftReplaced(createDraft({
+      companyId: COMPANY_ID,
+      branchId: BRANCH_ID,
+      accYear: ACC_YEAR,
+      companyStateCode: "33",
+      quoteDate: QUOTE_DATE,
+    })));
+    expect(cleared.charges.filter((row) => row.chgId)).toHaveLength(0);
+
+    const reseeded = quotationReducer(cleared, autoChargesSeeded([FREIGHT, LOADING]));
+    expect(reseeded.charges.map((row) => row.chgName)).toEqual([
+      "FREIGHT CHARGE",
+      "LOADING CHARGE",
+      "",
+    ]);
+  });
+
+  it("leaves a loaded document's own charges alone", () => {
+    const loaded = { ...freshDraft(), isNewEntry: false, docId: "sq-1" };
+    expect(quotationReducer(loaded, autoChargesSeeded([FREIGHT]))).toBe(loaded);
+  });
+
+  it("leaves a draft the operator has already started alone", () => {
+    const started = { ...freshDraft(), isDirty: true };
+    expect(quotationReducer(started, autoChargesSeeded([FREIGHT]))).toBe(started);
+  });
+
+  it("keeps a seeded charge out of the payload until it is priced", () => {
+    const seeded = quotationReducer(freshDraft(), autoChargesSeeded([FREIGHT]));
+    expect(seeded.charges[0].chgId).toBe("chg-fr");
+    expect(seeded.charges[0].amount).toBe(0);
   });
 });
 

@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "ERP server/src/modules/reporting",
+  "generatedFrom": "ERP server/src/modules/settings/print-render",
   "schemaVersion": 1,
   "layoutModes": [
     "GRAPHIC",
@@ -34,7 +34,8 @@
     "IMAGE",
     "BARCODE",
     "QRCODE",
-    "PAGEBREAK"
+    "PAGEBREAK",
+    "CROSSTAB"
   ],
   "printOn": [
     "ALL_PAGES",
@@ -62,6 +63,17 @@
     "GROUP",
     "PAGE",
     "REPORT"
+  ],
+  "crosstabSorts": [
+    "LABEL_ASC",
+    "LABEL_DESC",
+    "VALUE_DESC",
+    "VALUE_ASC",
+    "FIRST_SEEN"
+  ],
+  "crosstabOverflows": [
+    "FOLD",
+    "CLIP"
   ],
   "transforms": [
     "fmt",
