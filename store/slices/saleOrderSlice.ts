@@ -276,9 +276,22 @@ const saleOrderSlice = createSlice({
         row.amount = 0;
       }
     },
+    /**
+     * Give a charge row its identity from the master — one charge, one row.
+     * The engine sums the grid, so the same charge on two rows is added to the
+     * order twice; the invariant is held here, at the only place a row gets a
+     * `chgId`, and the picker's greyed rows are the explanation, not the
+     * enforcement. Same rule as the quotation slice.
+     */
     chargeMasterApplied(state, action: PayloadAction<{ key: string; master: ChargeMasterRow }>) {
       const index = state.charges.findIndex((row) => row.key === action.payload.key);
       if (index < 0) {
+        return;
+      }
+      const duplicate = state.charges.some(
+        (row) => row.key !== action.payload.key && row.chgId === action.payload.master.chgId,
+      );
+      if (duplicate) {
         return;
       }
       const existing = state.charges[index];

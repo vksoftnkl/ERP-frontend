@@ -825,3 +825,10 @@ export const GRID_COLUMN_INDEX_ATTR = "data-quotation-column-index";
  * (grid 24) falls back to stopping at every editable cell.
  */
 export const GRID_FOCUS_STOP_ATTR = "data-quotation-focus-stop";
+/**
+ * Marks one panel of the entry screen for the F1 walk — Header, Items, Charges,
+ * Terms. Read off the DOM like every other walk here, so a panel Visible
+ * Settings hides is simply not in the cycle, and the order is the order the
+ * panels are laid out in.
+ */
+export const SECTION_ATTR = "data-quotation-section";

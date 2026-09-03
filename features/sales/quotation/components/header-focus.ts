@@ -15,9 +15,7 @@
  * within one grid and this walks fields within one panel.
  */
 import { HEADER_FOCUS_ATTR } from "../quotation.constants";
-
 type Focusable = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-
 /**
  * Every field of one header panel, in visual order.
  *
@@ -31,7 +29,6 @@ function fieldsOf(container: HTMLElement): Focusable[] {
     (element) => !element.disabled && !("readOnly" in element && element.readOnly),
   );
 }
-
 /** Move focus one header field forward or back. */
 export function moveHeaderFocus(
   container: HTMLElement,

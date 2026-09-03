@@ -350,12 +350,29 @@ const quotationSlice = createSlice({
       // runs after every action — the seeded rows have to come before it.
       state.charges = action.payload.map(chargeRowFromMaster);
     },
+    /**
+     * Give a charge row its identity from the master.
+     *
+     * **One charge, one row.** The engine sums the grid, so the same charge on
+     * two rows is added to the document twice — there is no rate or apply-on a
+     * second row could legitimately carry that the first cannot. The invariant
+     * is held here, at the only place a row gets a `chgId`, so no caller can
+     * route around it; the picker greys applied charges out and the screen says
+     * why, and this is what makes those two the explanation rather than the
+     * enforcement.
+     */
     chargeMasterApplied(
       state,
       action: PayloadAction<{ key: string; master: ChargeMasterRow }>,
     ) {
       const index = state.charges.findIndex((row) => row.key === action.payload.key);
       if (index < 0) {
+        return;
+      }
+      const duplicate = state.charges.some(
+        (row) => row.key !== action.payload.key && row.chgId === action.payload.master.chgId,
+      );
+      if (duplicate) {
         return;
       }
       const existing = state.charges[index];

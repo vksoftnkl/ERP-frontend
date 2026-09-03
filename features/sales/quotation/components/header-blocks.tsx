@@ -434,7 +434,7 @@ export function TermsBlock({
     return null;
   }
   return (
-    <GroupBox title="Terms" onContextMenu={onContextMenu}>
+    <GroupBox title="Terms" section="Terms" onContextMenu={onContextMenu}>
       {/* One field per row: every row here is long free text, and a second
           column would halve the width it gets. */}
       <div className={styles.fieldGrid}>

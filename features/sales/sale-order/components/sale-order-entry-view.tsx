@@ -152,8 +152,11 @@ export function SaleOrderEntryView({
 
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
   const [itemPickerRow, setItemPickerRow] = useState<string | null>(null);
-  /** The row a pick has just been made on — see the focus effect below. */
-  const [pickedItemRow, setPickedItemRow] = useState<string | null>(null);
+  /**
+   * The row a pick has just been made on — see the focus effect below. A ref,
+   * not state: the render the effect needs is the one the pick itself causes.
+   */
+  const pickedItemRow = useRef<string | null>(null);
   const [chargePickerRow, setChargePickerRow] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -285,7 +288,7 @@ export function SaleOrderEntryView({
       if (duplicate) {
         toast.info(`${pick.itemName} is already on this order.`);
       }
-      setPickedItemRow(rowKey);
+      pickedItemRow.current = rowKey;
       void api.pickItem(rowKey, pick.itemId, pick.itemUnitId);
     },
     [api, draft.lines, itemPickerRow],
@@ -302,30 +305,43 @@ export function SaleOrderEntryView({
    * that priced the line.
    */
   useEffect(() => {
-    if (!pickedItemRow) {
+    const rowKey = pickedItemRow.current;
+    if (!rowKey) {
       return;
     }
-    const line = draft.lines.find((row) => row.key === pickedItemRow);
+    const line = draft.lines.find((row) => row.key === rowKey);
     if (!line?.itemId) {
       return;
     }
-    setPickedItemRow(null);
+    pickedItemRow.current = null;
     const anchor = itemLookupFieldKey(itemResize.columns);
     if (anchor) {
-      focusNextStopFrom(ITEM_GRID_NAME, pickedItemRow, anchor);
+      focusNextStopFrom(ITEM_GRID_NAME, rowKey, anchor);
     }
-  }, [draft.lines, itemResize.columns, pickedItemRow]);
+  }, [draft.lines, itemResize.columns]);
 
   const onPickCharge = useCallback(
     (master: ChargeMasterRow) => {
       const rowKey = chargePickerRow;
-      setChargePickerRow(null);
       if (!rowKey) {
+        setChargePickerRow(null);
         return;
       }
+      // One charge, one row — the reducer refuses a duplicate outright, so
+      // without this the dialog would close on a pick that quietly did nothing.
+      // The picker greys applied charges out; this catches the paths that grey
+      // cannot reach, such as re-pointing a row that already holds a charge.
+      const duplicate = draft.charges.some(
+        (row) => row.key !== rowKey && row.chgId === master.chgId,
+      );
+      if (duplicate) {
+        toast.error(`${master.chgName} is already on this order.`);
+        return;
+      }
+      setChargePickerRow(null);
       dispatch(chargeMasterApplied({ key: rowKey, master }));
     },
-    [chargePickerRow, dispatch],
+    [draft.charges, chargePickerRow, dispatch],
   );
 
   const onRemoveLine = useCallback(

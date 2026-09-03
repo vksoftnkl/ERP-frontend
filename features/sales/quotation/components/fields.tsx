@@ -17,6 +17,7 @@ import {
 } from "react";
 import { cx } from "@/components/design-system/cx";
 import { useLazyRunDropdownQuery } from "@/store/api/quotationApi";
+import { SECTION_ATTR } from "../quotation.constants";
 import { fromDisplayDate, toDisplayDate } from "../quotation.utils";
 import styles from "../page.module.scss";
 
@@ -24,16 +25,23 @@ export function GroupBox({
   title,
   children,
   className,
+  section,
   onContextMenu,
 }: {
   title: string;
   children: ReactNode;
   className?: string;
+  /** Marks this box as one stop of the F1 panel walk (`section-focus.ts`). */
+  section?: string;
   /** For a panel that carries its own right-click configuration. */
   onContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void;
 }) {
   return (
-    <fieldset className={cx(styles.group, className)} onContextMenu={onContextMenu}>
+    <fieldset
+      className={cx(styles.group, className)}
+      {...(section ? { [SECTION_ATTR]: section } : {})}
+      onContextMenu={onContextMenu}
+    >
       <legend className={styles.groupTitle}>{title}</legend>
       {children}
     </fieldset>

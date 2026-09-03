@@ -114,6 +114,31 @@ export function focusCell(gridName: string, rowKey: string, fieldKey: string): b
 }
 
 /**
+ * Enter into the grid from outside it — what the header hand-off needs.
+ *
+ * Price Level is the last field of the header walk (the row renders Customer,
+ * then Sales Info, then Quote Info), so Enter there has nowhere left to go
+ * inside the panel; the next thing keyed on a quotation is the first line's
+ * Description. Takes the FIRST row's cell, the top of the grid, rather than the
+ * trailing blank one: on a loaded document that is the line the operator reads
+ * first, and on a new one the two are the same row.
+ *
+ * Disabled cells are skipped, so browse mode — where the whole grid is shut —
+ * simply declines and leaves focus in the header.
+ */
+export function focusFirstCell(gridName: string, fieldKey: string): boolean {
+  const selector = `[${GRID_GRID_ATTR}="${gridName}"][${GRID_FIELD_ATTR}="${fieldKey}"]`;
+  const target = Array.from(document.querySelectorAll<Focusable>(selector)).find(
+    (cell) => !cell.disabled,
+  );
+  if (!target) {
+    return false;
+  }
+  land(target);
+  return true;
+}
+
+/**
  * Carry on from a named cell rather than from wherever focus happens to be —
  * what the item picker needs on the way out.
  *
