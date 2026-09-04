@@ -39,6 +39,21 @@ import styles from "../page.module.scss";
 
 export const CHARGE_GRID_NAME = "charges";
 
+/**
+ * The `data-quotation-field` key of the charge-name cell, whatever the layout
+ * calls it — the anchor the picker resumes the Enter chain from on its way out.
+ *
+ * Read off the resolved columns rather than hard-coded, for the same reason the
+ * item grid's twin is: the key is the column's `write` target when it has one
+ * and its normalised header otherwise, and the charge lookup writes nothing.
+ */
+export function chargeLookupFieldKey(columns: ResolvedChargeColumn[]): string | null {
+  const column = columns.find(
+    (candidate) => candidate.visible && candidate.kind === "chargeLookup",
+  );
+  return column ? String(column.write ?? column.key) : null;
+}
+
 /** The sticky remove-row column. */
 const ROW_ACTION_PX = 30;
 

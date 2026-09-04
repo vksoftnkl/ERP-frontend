@@ -15,7 +15,11 @@ import { cx } from "@/components/design-system/cx";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import type { PricedLine } from "@/domain/pricing";
 import { formatCurrency, money } from "@/domain/pricing";
-import { ChargeGrid } from "@/features/sales/quotation/components/charge-grid";
+import {
+  CHARGE_GRID_NAME,
+  ChargeGrid,
+  chargeLookupFieldKey,
+} from "@/features/sales/quotation/components/charge-grid";
 import { ChargePickerModal } from "@/features/sales/quotation/components/charge-picker-modal";
 import { useGridSettings } from "@/features/sales/quotation/components/grid-settings";
 import {
@@ -158,6 +162,8 @@ export function SaleOrderEntryView({
    */
   const pickedItemRow = useRef<string | null>(null);
   const [chargePickerRow, setChargePickerRow] = useState<string | null>(null);
+  /** The charge row a pick has just been made on — the twin of `pickedItemRow`. */
+  const pickedChargeRow = useRef<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [tenderOpen, setTenderOpen] = useState(false);
@@ -320,6 +326,29 @@ export function SaleOrderEntryView({
     }
   }, [draft.lines, itemResize.columns]);
 
+  /**
+   * The same hand-off for the charges grid: picking a charge lands on the next
+   * stop of ITS layout's Enter chain — Rate on grid 21, or Amount when the row
+   * is FIXED and the Rate cell comes back disabled. An effect, not a line in
+   * `onPickCharge`, because every cell but the name is read-only until the row
+   * holds a charge.
+   */
+  useEffect(() => {
+    const rowKey = pickedChargeRow.current;
+    if (!rowKey) {
+      return;
+    }
+    const row = draft.charges.find((candidate) => candidate.key === rowKey);
+    if (!row?.chgId) {
+      return;
+    }
+    pickedChargeRow.current = null;
+    const anchor = chargeLookupFieldKey(chargeResize.columns);
+    if (anchor) {
+      focusNextStopFrom(CHARGE_GRID_NAME, rowKey, anchor);
+    }
+  }, [draft.charges, chargeResize.columns]);
+
   const onPickCharge = useCallback(
     (master: ChargeMasterRow) => {
       const rowKey = chargePickerRow;
@@ -339,6 +368,7 @@ export function SaleOrderEntryView({
         return;
       }
       setChargePickerRow(null);
+      pickedChargeRow.current = rowKey;
       dispatch(chargeMasterApplied({ key: rowKey, master }));
     },
     [draft.charges, chargePickerRow, dispatch],
