@@ -13,7 +13,14 @@
  *    from the engine's output; a cell never holds derived state beyond the
  *    keystrokes not yet committed.
  */
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { cx } from "@/components/design-system/cx";
 import { formatCurrency, formatPerc, formatQty } from "@/domain/pricing";
 import type { ColumnAlign, GridCellKind } from "../quotation.constants";
@@ -136,6 +143,11 @@ export function GridCell(props: GridCellProps) {
   const seedRef = useRef<unknown>(undefined);
   /** The text the buffer was seeded with, to tell an edit from a pass-through. */
   const seedTextRef = useRef("");
+  /**
+   * Set by `onFocus`, consumed by the layout effect below: re-select the value
+   * once the seeded buffer has actually been painted.
+   */
+  const selectAfterSeedRef = useRef(false);
 
   useEffect(() => {
     if (buffer === null) {
@@ -159,8 +171,36 @@ export function GridCell(props: GridCellProps) {
     seedRef.current = value;
     const reseeded = isNumericKind(kind) ? rawValue(value) : String(value ?? "");
     seedTextRef.current = reseeded;
+    // Re-select too: this is the Enter walk's own path — focus lands here while
+    // the commit that triggered it is still in flight, so the text the operator
+    // ends up looking at is the one painted by *this* re-seed, not the one
+    // `onFocus` selected.
+    selectAfterSeedRef.current = true;
     setBuffer(reseeded);
   }, [buffer, kind, value]);
+
+  // Focusing a cell seeds the buffer, which swaps the painted text from the
+  // formatted read-out ("1,000.00") to the bare number ("1000"). React writes
+  // that through as a new `value` on the DOM input, and a browser collapses the
+  // selection to the caret whenever an input's value is assigned — so the
+  // `select()` `onFocus` (and `grid-focus`'s `land()`) just made is gone by the
+  // time the operator sees the cell. Re-selecting here, after the commit, is
+  // what actually leaves the value highlighted so the first keystroke replaces
+  // it. Layout effect, not `useEffect`: the selection is painted with the value
+  // rather than a frame later.
+  useLayoutEffect(() => {
+    if (!selectAfterSeedRef.current) {
+      return;
+    }
+    selectAfterSeedRef.current = false;
+    const input = inputRef.current;
+    // Focus can have moved on already (a click straight through to another
+    // cell); selecting then would steal the highlight from where it now is.
+    if (!input || document.activeElement !== input) {
+      return;
+    }
+    input.select();
+  });
 
   const alignClass = align === "right" ? styles.alignRight : align === "center" ? styles.alignCenter : undefined;
   const dataAttrs = {
@@ -388,6 +428,9 @@ export function GridCell(props: GridCellProps) {
         seedTextRef.current = seeded;
         setBuffer(seeded);
         event.currentTarget.select();
+        // The seeded text may differ from what is on screen right now; the
+        // layout effect re-selects once it has been painted.
+        selectAfterSeedRef.current = true;
       }}
       onChange={(event) => setBuffer(event.target.value)}
       onBlur={commitBuffer}
