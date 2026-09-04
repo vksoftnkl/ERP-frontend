@@ -836,6 +836,14 @@ export const GRID_COLUMN_INDEX_ATTR = "data-quotation-column-index";
  */
 export const GRID_FOCUS_STOP_ATTR = "data-quotation-focus-stop";
 /**
+ * Marks the row's lookup cell — the Item / Charge picker. The Enter walk uses it
+ * as the landing spot when it steps into a row whose flagged columns are all
+ * shut, which is exactly what the trailing blank row looks like: nothing on it
+ * is keyable until it names an item, so a chain of flagged columns alone would
+ * dead-end at the bottom of the grid.
+ */
+export const GRID_LOOKUP_ATTR = "data-quotation-lookup";
+/**
  * Marks one panel of the entry screen for the F1 walk — Header, Items, Charges,
  * Terms. Read off the DOM like every other walk here, so a panel Visible
  * Settings hides is simply not in the cycle, and the order is the order the

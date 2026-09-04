@@ -29,6 +29,7 @@ import {
   GRID_FIELD_ATTR,
   GRID_FOCUS_STOP_ATTR,
   GRID_GRID_ATTR,
+  GRID_LOOKUP_ATTR,
   GRID_ROW_ATTR,
 } from "../quotation.constants";
 import {
@@ -359,6 +360,9 @@ export function GridCell(props: GridCellProps) {
 
   if (kind === "itemLookup" || kind === "chargeLookup") {
     const label = String(value ?? "");
+    // Where the Enter walk enters a row whose flagged columns are all disabled —
+    // the blank row that trails the grid, which has nothing else to offer.
+    const lookupAttrs = { [GRID_LOOKUP_ATTR]: "true" };
     return (
       <input
         ref={inputRef}
@@ -368,6 +372,7 @@ export function GridCell(props: GridCellProps) {
         disabled={!editable}
         placeholder={placeholder ?? "Press Enter to pick…"}
         title={label}
+        {...lookupAttrs}
         onFocus={(event) => event.currentTarget.select()}
         onClick={() => {
           if (editable) {

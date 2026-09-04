@@ -17,11 +17,19 @@
  * A layout that flags no column (grid 24, the Sale Order items) keeps the old
  * behaviour of stopping at every editable cell — a chain of nothing would leave
  * Enter dead.
+ *
+ * **The chain is walked a row at a time.** Enter on a row's last stop steps into
+ * the next row, and the row it steps into gets its own landing spot: the blank
+ * row waiting at the bottom of the grid has every flagged column disabled until
+ * it names an item, so the walk lands on its picker cell instead of finding no
+ * flagged cell ahead of it anywhere and leaving focus stuck on the line the
+ * operator has just finished.
  */
 import {
   GRID_FIELD_ATTR,
   GRID_FOCUS_STOP_ATTR,
   GRID_GRID_ATTR,
+  GRID_LOOKUP_ATTR,
   GRID_ROW_ATTR,
 } from "../quotation.constants";
 
@@ -38,19 +46,73 @@ function cellsOf(gridName: string): Focusable[] {
 }
 
 /**
- * The cells Enter may land on, with `from` kept in the list wherever it sits.
+ * The enabled cells of one grid, grouped into rows in DOM order.
+ *
+ * The walk is row-by-row rather than one flat list because a row is where the
+ * chain can run out: the trailing blank row has every flagged column shut until
+ * it names an item, so a flat "next flagged cell" hop off the last row with data
+ * finds nothing at all and Enter dies at the bottom of the grid. Grouping lets
+ * the walk say "this row is done, step into the next one" and pick a landing
+ * spot that row actually has.
+ */
+function rowsOf(gridName: string): Focusable[][] {
+  const rows: Focusable[][] = [];
+  let currentKey: string | null = null;
+  for (const cell of cellsOf(gridName)) {
+    const key = cell.getAttribute(GRID_ROW_ATTR);
+    // A row's cells are contiguous in the DOM, so a change of key opens a row.
+    if (rows.length === 0 || key !== currentKey) {
+      rows.push([]);
+      currentKey = key;
+    }
+    rows[rows.length - 1].push(cell);
+  }
+  return rows;
+}
+
+function flaggedIn(row: readonly Focusable[]): Focusable[] {
+  return row.filter((cell) => cell.hasAttribute(GRID_FOCUS_STOP_ATTR));
+}
+
+/**
+ * The cells Enter may land on inside one row, with `from` kept where it sits.
  *
  * Keeping it is what lets the chain be joined from outside it: click into Mrp —
  * not a flagged column — and Enter still carries on to the next flagged cell
- * below rather than doing nothing because the walk cannot find where it is.
+ * rather than doing nothing because the walk cannot find where it is.
+ *
+ * A row with no flagged cell of its own stops at every editable cell, which is
+ * both the old whole-grid fallback (grid 24 flags nothing) and what the blank
+ * row needs: its flagged columns are all disabled, so the only stops it can
+ * offer are Barcode and the picker.
  */
-function stopsOf(gridName: string, from: Focusable | null): Focusable[] {
-  const all = cellsOf(gridName);
-  const flagged = all.filter((cell) => cell.hasAttribute(GRID_FOCUS_STOP_ATTR));
+function stopsInRow(row: readonly Focusable[], from: Focusable | null): Focusable[] {
+  const flagged = flaggedIn(row);
   if (flagged.length === 0) {
-    return all;
+    return [...row];
   }
-  return all.filter((cell) => cell === from || cell.hasAttribute(GRID_FOCUS_STOP_ATTR));
+  return row.filter((cell) => cell === from || cell.hasAttribute(GRID_FOCUS_STOP_ATTR));
+}
+
+/**
+ * Where the walk lands when it steps INTO a row: the row's first flagged cell,
+ * or — when the layout's flagged columns are all shut, as on the blank row that
+ * always trails the grid — the picker cell, which is the one thing that row is
+ * there for. Falls back to the row's first editable cell (Barcode, on a layout
+ * that hides the picker column).
+ */
+function entryStopOf(row: readonly Focusable[], delta: 1 | -1): Focusable | null {
+  const flagged = flaggedIn(row);
+  if (flagged.length > 0) {
+    return delta === 1 ? flagged[0] : flagged[flagged.length - 1];
+  }
+  if (delta === 1) {
+    const lookup = row.find((cell) => cell.hasAttribute(GRID_LOOKUP_ATTR));
+    if (lookup) {
+      return lookup;
+    }
+  }
+  return (delta === 1 ? row[0] : row[row.length - 1]) ?? null;
 }
 
 /** Land on a cell the way every hand-over on this screen does. */
@@ -63,19 +125,40 @@ function land(target: Focusable): void {
   }
 }
 
-/** Move focus one stop forward or back along the layout's chain. */
+/**
+ * Move focus one stop forward or back along the layout's chain, crossing into
+ * the next row once this row's chain is spent.
+ *
+ * The row hop is the point: the last stop of a line is where the operator is
+ * done with it, and Enter there is how the Qt screen starts the next line. It
+ * cannot be left to "the next flagged cell in the grid" because the row it steps
+ * into is usually the blank one, whose flagged columns are disabled until it has
+ * an item — the walk has to land on that row's picker instead.
+ */
 export function moveCellFocus(gridName: string, from: EventTarget | null, delta: 1 | -1): boolean {
-  const cells = stopsOf(gridName, from as Focusable);
-  const index = cells.indexOf(from as Focusable);
-  if (index < 0) {
+  const cell = from as Focusable | null;
+  if (!cell) {
     return false;
   }
-  const next = cells[index + delta];
-  if (!next) {
+  const rows = rowsOf(gridName);
+  const rowIndex = rows.findIndex((row) => row.includes(cell));
+  if (rowIndex < 0) {
     return false;
   }
-  land(next);
-  return true;
+  const stops = stopsInRow(rows[rowIndex], cell);
+  const next = stops[stops.indexOf(cell) + delta];
+  if (next) {
+    land(next);
+    return true;
+  }
+  for (let index = rowIndex + delta; index >= 0 && index < rows.length; index += delta) {
+    const target = entryStopOf(rows[index], delta);
+    if (target) {
+      land(target);
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
