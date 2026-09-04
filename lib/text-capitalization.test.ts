@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CAPITALIZATION_MODE,
   applyCapitalization,
+  diffEdit,
   parseCapitalizationMode,
+  remapPinnedPositions,
 } from "./text-capitalization";
 
 describe("parseCapitalizationMode", () => {
@@ -65,5 +67,69 @@ describe("applyCapitalization", () => {
     const withEszett = "straße";
     expect(applyCapitalization(withEszett, "UPPER")).toHaveLength(withEszett.length);
     expect(applyCapitalization(withEszett, "UPPER")).toBe("STRAßE");
+  });
+});
+
+describe("applyCapitalization with pinned offsets", () => {
+  it("keeps a hand-cased letter the mode would have flattened", () => {
+    expect(applyCapitalization("mcdonald", "TITLE")).toBe("Mcdonald");
+    expect(applyCapitalization("mcDonald", "TITLE", new Set([2]))).toBe("McDonald");
+  });
+
+  it("lets a capital survive LOWER, and a small letter survive UPPER", () => {
+    expect(applyCapitalization("iPhone case", "LOWER", new Set([1]))).toBe("iPhone case");
+    expect(applyCapitalization("PhD holder", "UPPER", new Set([0, 1]))).toBe("PhD HOLDER");
+  });
+
+  it("ignores pins that fall outside the value", () => {
+    expect(applyCapitalization("acme", "UPPER", new Set([-1, 9]))).toBe("ACME");
+  });
+
+  it("still does nothing in MIXED", () => {
+    expect(applyCapitalization("aBc", "MIXED", new Set([1]))).toBe("aBc");
+  });
+});
+
+describe("diffEdit", () => {
+  it("reads a character typed at the end", () => {
+    expect(diffEdit("hello", "hellow")).toEqual({ start: 5, removed: 0, inserted: 1 });
+  });
+
+  it("reads a character typed in the middle", () => {
+    expect(diffEdit("helo", "hello")).toEqual({ start: 3, removed: 0, inserted: 1 });
+  });
+
+  it("reads a backspace", () => {
+    expect(diffEdit("hello", "hell")).toEqual({ start: 4, removed: 1, inserted: 0 });
+  });
+
+  it("reads typing over a selection", () => {
+    expect(diffEdit("hello world", "hello X")).toEqual({ start: 6, removed: 5, inserted: 1 });
+  });
+
+  it("reads no change as an empty edit", () => {
+    expect(diffEdit("hello", "hello")).toEqual({ start: 5, removed: 0, inserted: 0 });
+  });
+});
+
+describe("remapPinnedPositions", () => {
+  it("leaves pins before the edit where they are", () => {
+    const pinned = remapPinnedPositions(new Set([2]), { start: 6, removed: 0, inserted: 1 });
+    expect([...pinned]).toEqual([2]);
+  });
+
+  it("slides pins after the edit by the change in length", () => {
+    expect([...remapPinnedPositions(new Set([5]), { start: 2, removed: 0, inserted: 1 })]).toEqual([
+      6,
+    ]);
+    expect([...remapPinnedPositions(new Set([5]), { start: 2, removed: 1, inserted: 0 })]).toEqual([
+      4,
+    ]);
+  });
+
+  it("drops a pin whose character was deleted", () => {
+    expect([...remapPinnedPositions(new Set([3]), { start: 2, removed: 4, inserted: 0 })]).toEqual(
+      [],
+    );
   });
 });

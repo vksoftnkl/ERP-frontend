@@ -42,7 +42,7 @@ export const PARTY_CREDIT_ENDPOINT = "/master-lookups/party-credit";
  * mislabel everything past index 91.
  */
 export const SALE_ORDER_ITEM_GRID_UI_TABLE_ID = "24";
-/** The charges grid is the quotation's own ui table 21 — shared, not similar. */
+/** The charges grid is the quotation's own ui table 26 — shared, not similar. */
 export { CHARGE_GRID_UI_TABLE_ID } from "@/features/sales/quotation/quotation.constants";
 /**
  * `fixed.grid_details.grid_id` 87 — "SO - MAIN LIST". Binds `icompany_id`,

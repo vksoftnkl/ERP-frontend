@@ -5,7 +5,9 @@ import { useEffect, useMemo } from "react";
 import {
   NAME_CAPITALIZATION_SETTING_KEY,
   applyCapitalization,
+  diffEdit,
   parseCapitalizationMode,
+  remapPinnedPositions,
   type CapitalizationMode,
 } from "@/lib/text-capitalization";
 import { useAppSelector } from "@/store/hooks";
@@ -111,17 +113,57 @@ function setNativeValue(target: EditableTarget, nextValue: string) {
   Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(target, nextValue);
 }
 
-function rewriteField(eventTarget: EventTarget | null, mode: CapitalizationMode, notify: boolean) {
+/**
+ * Per-field bookkeeping for the Shift override: the value as this listener last
+ * left it, and the offsets the user cased by hand. Keyed weakly, so a field's
+ * pins die with the node that held them.
+ */
+type FieldState = {
+  value: string;
+  pinned: Set<number>;
+};
+
+const fieldStates = new WeakMap<EditableTarget, FieldState>();
+
+function fieldStateOf(target: EditableTarget): FieldState {
+  let state = fieldStates.get(target);
+  if (!state) {
+    state = { value: target.value, pinned: new Set<number>() };
+    fieldStates.set(target, state);
+  }
+  return state;
+}
+
+function rewriteField(
+  eventTarget: EventTarget | null,
+  mode: CapitalizationMode,
+  notify: boolean,
+  shiftTyped: boolean,
+) {
   if (!isCapitalizationTarget(eventTarget)) {
     return;
   }
 
   const currentValue = eventTarget.value;
-  const nextValue = applyCapitalization(currentValue, mode);
+  const state = fieldStateOf(eventTarget);
+
+  // Move the existing pins over whatever the user just did, then pin the
+  // character they held Shift for. Only a single inserted character counts:
+  // a paste or an autofill carries no such intent, and Shift may simply have
+  // been down for the shortcut that triggered it.
+  const edit = diffEdit(state.value, currentValue);
+  const pinned = remapPinnedPositions(state.pinned, edit);
+  if (shiftTyped && edit.inserted === 1) {
+    pinned.add(edit.start);
+  }
+  state.pinned = pinned;
+
+  const nextValue = applyCapitalization(currentValue, mode, pinned);
 
   // Bail on transforms that change the length: the caret offsets restored
   // below would no longer line up with the text on screen.
   if (nextValue === currentValue || nextValue.length !== currentValue.length) {
+    state.value = currentValue;
     return;
   }
 
@@ -130,6 +172,7 @@ function rewriteField(eventTarget: EventTarget | null, mode: CapitalizationMode,
   if (selectionStart !== null && selectionEnd !== null) {
     eventTarget.setSelectionRange(selectionStart, selectionEnd);
   }
+  state.value = nextValue;
 
   if (notify) {
     eventTarget.dispatchEvent(new Event("input", { bubbles: true }));
@@ -151,6 +194,12 @@ function rewriteField(eventTarget: EventTarget | null, mode: CapitalizationMode,
  * time the event reaches React's own handler further down the tree; React sees
  * one ordinary change carrying the transformed value.
  *
+ * Holding Shift over a character overrides the mode for that one character:
+ * the case as typed is pinned and left alone by every later pass over the
+ * field, which is how `McDonald` is entered under TITLE or a lone capital
+ * under LOWER. The pins move with the text as it is edited and go away with
+ * the characters they belong to.
+ *
  * Exempt a field with `autocapitalize="off"`, or a whole region with
  * `data-uppercase="off"` on any ancestor.
  */
@@ -171,11 +220,34 @@ export default function GlobalTextCapitalization() {
     // left untouched until the user commits it.
     let isComposing = false;
 
+    // Set by the keystroke that is about to insert a character, and cleared by
+    // the edit it produces. Anything the user did not type by hand — a paste,
+    // an autofill, an undo — reaches `input` with this already false.
+    let shiftTyped = false;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // `key.length === 1` is the printable-character test: it excludes
+      // "Shift", "Enter", "ArrowLeft" and the rest. The other modifiers rule
+      // out shortcuts such as Ctrl+Shift+V, where Shift means something else.
+      shiftTyped =
+        event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && event.key.length === 1;
+    };
+
+    // Fires while the field still holds the text as it was, which is the only
+    // moment the edit can be read off exactly rather than guessed at.
+    const handleBeforeInput = (event: Event) => {
+      if (isCapitalizationTarget(event.target)) {
+        fieldStateOf(event.target).value = event.target.value;
+      }
+    };
+
     const handleInput = (event: Event) => {
+      const wasShiftTyped = shiftTyped;
+      shiftTyped = false;
       if (isComposing) {
         return;
       }
-      rewriteField(event.target, mode, false);
+      rewriteField(event.target, mode, false, wasShiftTyped);
     };
 
     const handleCompositionStart = () => {
@@ -188,14 +260,18 @@ export default function GlobalTextCapitalization() {
       // `compositionend`, so transform here and tell React about it. When the
       // browser does fire `input` afterwards, the value is already rewritten
       // and `handleInput` is a no-op.
-      rewriteField(event.target, mode, true);
+      rewriteField(event.target, mode, true, false);
     };
 
+    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("beforeinput", handleBeforeInput, true);
     window.addEventListener("input", handleInput, true);
     window.addEventListener("compositionstart", handleCompositionStart, true);
     window.addEventListener("compositionend", handleCompositionEnd, true);
 
     return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("beforeinput", handleBeforeInput, true);
       window.removeEventListener("input", handleInput, true);
       window.removeEventListener("compositionstart", handleCompositionStart, true);
       window.removeEventListener("compositionend", handleCompositionEnd, true);

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The additional-charges grid — ui table 21 ("CHARGES", 33 configured columns).
+ * The additional-charges grid — ui table 26 ("QUOTATION - CHARGES", 33 columns).
  *
  * Everything except Rate, Unit, Amount and Remarks is a snapshot of the charge
  * master or an output of the distribution, so the grid is mostly a read-out. Two
@@ -13,9 +13,10 @@
  *    that is how the engine tells "priced by total" from "priced by rate", so the
  *    two cells can never both be live.
  *
- * The config hides Unit / QtyVal / Weight. That costs nothing: the per-unit and
- * weight methods are measured against the LINES, not against the charge row's own
- * snapshot columns, so a hidden column cannot stop a charge from pricing.
+ * The layout opens with Unit / QtyVal / Weight hidden. That costs nothing: the
+ * per-unit and weight methods are measured against the LINES, not against the
+ * charge row's own snapshot columns, so a hidden column cannot stop a charge from
+ * pricing — and Admin settings can show them again either way.
  */
 import { useMemo, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { cx } from "@/components/design-system/cx";

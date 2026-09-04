@@ -89,8 +89,18 @@ export const HOLD_DEVICE_ID_HEADER = "X-Device-Id";
  * that grid's fractional percents rather than pixels — see `ColumnWidthUnit`.
  */
 export const ITEM_GRID_UI_TABLE_ID = "23";
-/** `fixed.ui_tables.ui_tbl_id` for the additional-charges grid ("CHARGES"). */
-export const CHARGE_GRID_UI_TABLE_ID = "21";
+/**
+ * `fixed.ui_tables.ui_tbl_id` for the additional-charges grid — 26
+ * ("QUOTATION - CHARGES", 33 columns, one per `CHARGE_COLUMN_MEANINGS` entry and
+ * in the same order). Shared by this screen and Sale Order, which re-exports it.
+ *
+ * NOT 21 ("CHARGES") for the same reason the item grid is not 18: that is the Qt
+ * screen's own layout, in that grid's fractional percents rather than pixels, and
+ * it opens on three columns. Pointing the web screens at it also meant every save
+ * from the browser's "Admin settings" rewrote the desktop screen's layout.
+ * Provisioned by the server's `Quotation_Charges_Grid_Web.sql` seed.
+ */
+export const CHARGE_GRID_UI_TABLE_ID = "26";
 /** `fixed.grid_details.grid_id` for the item picker popup ("POPUP - ITEMS"). */
 export const ITEM_PICKER_GRID_ID = "71";
 /**
@@ -411,7 +421,7 @@ export function normalizeColumnToken(value: string): string {
 /**
  * The row-number column both grids open on. It is the one column whose configured
  * name is not a field at all, so deployments rename it freely — item grid 23 is
- * configured as `"sl.no"` here and as `"Id"` elsewhere, charge grid 21 as `"#"` —
+ * configured as `"sl.no"` here and as `"Id"` elsewhere, charge grid 26 as `"#"` —
  * and a name this list misses drops the column off the grid entirely rather than
  * rendering it blank.
  */
@@ -753,7 +763,7 @@ function chargeColumn(
   // column takes the shared sentinel the item grid's own one does.
   return { token, key: normalizeColumnToken(token) || SERIAL_COLUMN_KEY, kind, align, ...extra };
 }
-/** All 33 configured columns of ui table 21, in `uiTblClmNo` order. */
+/** All 33 configured columns of ui table 26, in `uiTblClmNo` order. */
 export const CHARGE_COLUMN_MEANINGS: ChargeColumnMeaning[] = [
   // `"#"` normalises to "" — matched by column number, see `resolveChargeColumns`.
   chargeColumn("#", "serial", "right"),
@@ -819,7 +829,7 @@ export const GRID_COLUMN_INDEX_ATTR = "data-quotation-column-index";
 /**
  * Marks a cell whose column carries `ui_tbl_clm_column_focus` — the layout's own
  * Enter chain. Grid 23 flags four of its ninety columns (Description, Size,
- * Quote Qty, Rate) and grid 21 three of its thirty-three (Charge Name, Rate,
+ * Quote Qty, Rate) and grid 26 three of its thirty-three (Charge Name, Rate,
  * Amount): the handful an operator actually keys, which is why Enter stops at
  * those and runs past the read-outs between them. A layout that flags nothing
  * (grid 24) falls back to stopping at every editable cell.

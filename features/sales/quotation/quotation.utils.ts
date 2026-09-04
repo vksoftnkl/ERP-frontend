@@ -484,7 +484,13 @@ export type ResolvedItemColumn = ResolvedColumn<ItemColumnMeaning>;
 export type ResolvedChargeColumn = ResolvedColumn<ChargeColumnMeaning>;
 /** The unit each grid's layout stores its widths in. */
 export const ITEM_COLUMN_WIDTH_UNIT: ColumnWidthUnit = "px";
-export const CHARGE_COLUMN_WIDTH_UNIT: ColumnWidthUnit = "qtPercent";
+/**
+ * Pixels since the charges grid moved off the Qt screen's table 21 and onto its
+ * own web layout (`CHARGE_GRID_UI_TABLE_ID`), which stores them the way the item
+ * grid's table 23 does. Sale Order's item grid is still the odd one out: table 24
+ * is a desktop layout, so it keeps `qtPercent`.
+ */
+export const CHARGE_COLUMN_WIDTH_UNIT: ColumnWidthUnit = "px";
 /** What a serial column the layout never configured is given to work with. */
 const SERIAL_COLUMN_PX = 48;
 /**
@@ -554,9 +560,9 @@ export function resolveChargeColumns(rows: UiTableColumnRow[] | undefined): Reso
 }
 /**
  * Whether a column is the grid's frozen one: the leftmost visible column, which
- * stays put while the rest scroll sideways. Sl.No on the item grid, Charge Name
- * on the charges grid — the layout hides that grid's own `#` column, and a charge
- * row is identified by its name rather than by a number anyway.
+ * stays put while the rest scroll sideways — Sl.No on the item grid, `#` on the
+ * charges grid. Which column that is comes from the layout, not from here: hide
+ * the serial column in Admin settings and the one after it freezes instead.
  *
  * Anything further right is never frozen: it would park on top of the columns to
  * its left instead of at the grid's edge.

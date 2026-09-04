@@ -328,7 +328,7 @@ export function SaleOrderEntryView({
 
   /**
    * The same hand-off for the charges grid: picking a charge lands on the next
-   * stop of ITS layout's Enter chain — Rate on grid 21, or Amount when the row
+   * stop of ITS layout's Enter chain — Rate on grid 26, or Amount when the row
    * is FIXED and the Rate cell comes back disabled. An effect, not a line in
    * `onPickCharge`, because every cell but the name is read-only until the row
    * holds a charge.

@@ -262,7 +262,7 @@ describe("resolveItemColumns", () => {
 describe("resolveChargeColumns", () => {
   it("matches the serial column by its number — its name '#' normalises to nothing", () => {
     const columns = resolveChargeColumns([
-      layoutRow(0, "#", { uiTblClmColumnWidth: 2.13 }),
+      layoutRow(0, "#", { uiTblClmColumnWidth: 48 }),
       layoutRow(1, "Charge Name"),
     ]);
     expect(columns).toHaveLength(2);
@@ -274,11 +274,14 @@ describe("resolveChargeColumns", () => {
     expect(resolveChargeColumns(undefined)).toHaveLength(CHARGE_COLUMN_MEANINGS.length);
   });
 
-  it("still scales its width — ui table 21 stores the Qt grid's percents", () => {
-    // 9.6 configured units → ~106px, not 9.6px and not "9.6%". The item grid
-    // (ui table 23) stores pixels; these two must not drift into one rule.
-    const columns = resolveChargeColumns([layoutRow(1, "Charge Name")]);
-    expect(columns[0].widthPx).toBe(106);
+  it("reads its widths as pixels — the web layout stores them the item grid's way", () => {
+    // Both this grid (ui table 26) and the item grid (23) are web layouts in
+    // pixels. The Qt tables are the ones that store fractional percents, and
+    // reading one of those as pixels — or these as percents — is an 11× error in
+    // whichever direction; `resolveItemColumnsWith` still takes the unit per grid
+    // because Sale Order's table 24 is one of them.
+    const columns = resolveChargeColumns([layoutRow(1, "Charge Name", { uiTblClmColumnWidth: 220 })]);
+    expect(columns[0].widthPx).toBe(220);
   });
 });
 

@@ -11,6 +11,11 @@
  *  - `UPPER` / `LOWER` — force one case.
  *  - `MIXED` — exactly as typed; the transform never runs at all.
  *
+ * Holding Shift over a character opts that one character out: it is what the
+ * user reaches for when the mode gets a name wrong (`McDonald` under TITLE,
+ * a lone capital under LOWER), so the case they typed is pinned and survives
+ * every later pass over the field. See `applyCapitalization`'s `pinned`.
+ *
  * Tamil is deliberately exempt. Its letters are caseless, so a case fold is at
  * best a no-op, and a word carrying a left-joining vowel sign (ெ, ே, ை — typed
  * after its consonant but drawn before it) has no "first letter" in the visual
@@ -89,15 +94,108 @@ function transformWord(word: string, mode: CapitalizationMode): string {
   return toTitleCase(word);
 }
 
-/** What the field should hold, given what was typed into it and the mode in force. */
-export function applyCapitalization(value: string, mode: CapitalizationMode): string {
+/**
+ * What the field should hold, given what was typed into it and the mode in
+ * force.
+ *
+ * `pinned` holds the code-unit offsets the user cased by hand (they held Shift
+ * over that character); those are copied back from `value` untouched, so a
+ * deliberate `McDonald` survives a TITLE-case pass that would otherwise flatten
+ * it to `Mcdonald`. Every transform here is length-preserving, so the offsets
+ * mean the same thing before and after.
+ */
+export function applyCapitalization(
+  value: string,
+  mode: CapitalizationMode,
+  pinned?: ReadonlySet<number>,
+): string {
   if (mode === "MIXED" || !value) {
     return value;
   }
   // Split on whitespace and keep the separators, so the exemption above can be
   // decided word by word without the join losing the spacing as typed.
-  return value
+  const transformed = value
     .split(/(\s+)/)
     .map((token) => (token.trim() ? transformWord(token, mode) : token))
     .join("");
+
+  if (!pinned?.size || transformed.length !== value.length) {
+    return transformed;
+  }
+
+  const characters = [...transformed];
+  let changed = false;
+  for (const offset of pinned) {
+    if (offset >= 0 && offset < value.length && characters[offset] !== value[offset]) {
+      characters[offset] = value[offset];
+      changed = true;
+    }
+  }
+  return changed ? characters.join("") : transformed;
+}
+
+/**
+ * One contiguous replacement: `removed` characters at `start` became
+ * `inserted` characters. Every ordinary edit — a keystroke, a backspace, a
+ * paste, typing over a selection — is describable this way, and it is all the
+ * pinned offsets need in order to move with the text around them.
+ */
+export type TextEdit = {
+  start: number;
+  removed: number;
+  inserted: number;
+};
+
+/**
+ * The edit that turned `previous` into `next`, read off as the longest shared
+ * prefix and suffix. It is a guess when the two strings differ in more than one
+ * place, but the only consumer is the pin bookkeeping below, where a wrong
+ * guess costs a stale pin rather than corrupted text.
+ */
+export function diffEdit(previous: string, next: string): TextEdit {
+  const shortest = Math.min(previous.length, next.length);
+
+  let start = 0;
+  while (start < shortest && previous[start] === next[start]) {
+    start += 1;
+  }
+
+  let previousEnd = previous.length;
+  let nextEnd = next.length;
+  while (
+    previousEnd > start &&
+    nextEnd > start &&
+    previous[previousEnd - 1] === next[nextEnd - 1]
+  ) {
+    previousEnd -= 1;
+    nextEnd -= 1;
+  }
+
+  return { start, removed: previousEnd - start, inserted: nextEnd - start };
+}
+
+/**
+ * Slides pinned offsets across an edit. Pins before the edit stay put, pins
+ * after it move by the change in length, and pins inside the replaced span are
+ * dropped — the character the user cased by hand is no longer there.
+ */
+export function remapPinnedPositions(
+  pinned: ReadonlySet<number>,
+  edit: TextEdit,
+): Set<number> {
+  const remapped = new Set<number>();
+  if (!pinned.size) {
+    return remapped;
+  }
+
+  const removalEnd = edit.start + edit.removed;
+  const delta = edit.inserted - edit.removed;
+  for (const offset of pinned) {
+    if (offset < edit.start) {
+      remapped.add(offset);
+    } else if (offset >= removalEnd) {
+      remapped.add(offset + delta);
+    }
+  }
+  return remapped;
 }
