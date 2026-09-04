@@ -115,10 +115,6 @@ export const selectSelectionBounds = createSelector(
   (elements): Rect | null => unionRect(elements.map(elementRect)),
 );
 
-export const selectProblems = createSelector([selectDefinition], validateDefinition);
-
-export const selectProblemCounts = createSelector([selectProblems], countBySeverity);
-
 /** Provider descriptor by token, for the dataset tree and sample values. */
 export const selectProvidersByToken = createSelector(
   [selectDatasetCatalogue],
@@ -150,6 +146,33 @@ export const makeSelectBandFields = (bandIndex: number) =>
     }
     return bound.find((entry) => entry.binding.name === band.dataset)?.provider?.fields ?? [];
   });
+
+/**
+ * The columns each bound dataset returns, keyed by the name the template binds
+ * it under -- what `row.*` may legally read inside a band bound to it.
+ *
+ * A binding whose provider is not in the catalogue contributes NOTHING rather
+ * than an empty list: the validator reads an empty list as "no columns known,
+ * do not check", and an absent provider means the designer does not know the
+ * columns, not that there are none.
+ */
+export const selectFieldsByDataset = createSelector([selectBoundDatasets], (bound) =>
+  Object.fromEntries(
+    bound
+      .filter((entry) => entry.provider !== null)
+      .map((entry) => [
+        entry.binding.name,
+        entry.provider!.fields.map((field) => field.name),
+      ]),
+  ),
+);
+
+export const selectProblems = createSelector(
+  [selectDefinition, selectFieldsByDataset],
+  validateDefinition,
+);
+
+export const selectProblemCounts = createSelector([selectProblems], countBySeverity);
 
 export const selectCanSave = createSelector(
   [selectDirty, selectMeta, selectProblemCounts],

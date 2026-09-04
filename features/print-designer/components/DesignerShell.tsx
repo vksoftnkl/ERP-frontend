@@ -97,7 +97,14 @@ export type DesignerShellProps =
       definition: TemplateDefinition;
       /** Stands in for `GET /reports/templates/datasets/catalogue`. */
       datasets: ProviderDescriptor[];
-      /** Bumped by the host to re-seed the canvas after it reloads a revision. */
+      /**
+       * Changed by the host when it wants a DIFFERENT revision loaded.
+       *
+       * Not after a save. Re-seeding on save looks like the obvious way to
+       * clear `dirty`, and it is how the canvas ended up one save behind: the
+       * host's copy of the body is still the pre-save one when the save
+       * resolves. `hostSaved` marks the design clean without replacing it.
+       */
       seedKey: string;
     };
 

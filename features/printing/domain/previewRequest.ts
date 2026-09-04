@@ -10,7 +10,9 @@
  * THE COMPANY IS NEVER SENT. It comes from the authenticated session. A render
  * reads a company's documents, and a caller-supplied company id would make the
  * preview endpoint a cross-tenant read with a friendly name. There is no field
- * for it here on purpose.
+ * for it here on purpose -- and since a revision may now DECLARE `company_id`
+ * as a prompt, the answers are strained through `isServerOwnedParam` too, so
+ * the rule cannot be got round by the back door of `params`.
  *
  * NOR ARE THE BRANCH AND THE COUNTER. Same reason, one step further: both are
  * claims on the access token, signed at login from the `fixed.device_master`
@@ -33,6 +35,7 @@
  */
 
 import { bodyFromDefinition } from "./canvasBridge";
+import { isServerOwnedParam } from "./context";
 import type { RenderPreviewRequest } from "@/features/printing/api/render";
 import type { TemplateDefinition } from "@/features/print-designer/types/template-definition";
 
@@ -82,6 +85,13 @@ export function buildPreviewRequest(input: PreviewRequestInput): RenderPreviewRe
   const accYear = trimmed(input.accYear);
   const outputMode = trimmed(input.outputMode);
 
+  // A declared server-owned prompt is a note about where the value comes from,
+  // never an answer to send: the render endpoint refuses one, so a request
+  // carrying it would fail on a field the operator cannot fix.
+  const params = Object.fromEntries(
+    Object.entries(input.params ?? {}).filter(([name]) => !isServerOwnedParam(name)),
+  );
+
   // `bodyFromDefinition` is typed as PtvBodyInput, which allows the raw string
   // form the text column can hold. The preview endpoint takes a JSON object,
   // and a canvas definition is always one.
@@ -102,6 +112,6 @@ export function buildPreviewRequest(input: PreviewRequestInput): RenderPreviewRe
     ...(outputMode ? { outputMode } : {}),
     // An empty object is omitted rather than sent: a revision that asks nothing
     // should produce a request that says nothing about parameters.
-    ...(input.params && Object.keys(input.params).length > 0 ? { params: input.params } : {}),
+    ...(Object.keys(params).length > 0 ? { params } : {}),
   };
 }

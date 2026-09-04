@@ -4,23 +4,23 @@
  * DATA tab -- where the rows come from, what the operator is asked, and what the
  * render already knows.
  *
- * Four sections, and only two of them send anything:
+ * Three sections, all of which send something:
  *
  *   Datasets   versions[0].datasets[]
  *   Query      the selected row's ptdSql
  *   Prompts    versions[0].ptvParams
- *   Context    NOTHING -- see ContextNote
  *
- * That last one earns its place precisely because it fills no part of the
- * payload: without it, an author with a `:company_id` in a query has no way to
- * know it is already supplied, and declares it as a prompt.
+ * There used to be a fourth -- a read-only note listing the six CONTEXT
+ * parameters, whose whole job was to stop an author declaring one as a prompt.
+ * The refusal it was warning about is gone: `ptv_params` is now the whole
+ * declaration, context or not, so the note had nothing left to protect and the
+ * names it listed are documented on the Prompts grid where they are typed.
  */
 
 import { useState } from "react";
 
 import DatasetGrid from "../components/DatasetGrid";
 import PromptsGrid from "../components/PromptsGrid";
-import ContextNote from "../components/ContextNote";
 import SqlEditor from "../components/SqlEditor";
 import type { DesignerController } from "../useDesigner";
 
@@ -98,8 +98,6 @@ export default function DataTab({ designer }: { designer: DesignerController }) 
         readOnly={!editable}
         onChange={(next) => patchWorking({ ptvParams: next })}
       />
-
-      <ContextNote />
     </>
   );
 }

@@ -236,6 +236,80 @@ describe("validateDefinition", () => {
   });
 });
 
+describe("row fields outside a repeating band", () => {
+  const rowField = (overrides: Partial<ReportElement> = {}): ReportElement =>
+    text("total", {
+      kind: "FIELD",
+      x: 20,
+      value: "{{ row.taxable_amt }}",
+      ...overrides,
+    } as Partial<ReportElement>);
+
+  it("warns that a row field in a summary prints blank", () => {
+    // What a field dragged from the data tree onto the summary band becomes:
+    // the drop writes `row.<field>` wherever it lands, and the summary has no
+    // current row to read it from.
+    const problems = validateDefinition(
+      definition({ bands: [band({ type: "SUMMARY", elements: [rowField()] })] }),
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0].severity).toBe("warning");
+    expect(problems[0].elementId).toBe("total");
+    expect(problems[0].message).toMatch(/reads a row field/);
+    expect(problems[0].message).toMatch(/comes out blank/);
+  });
+
+  it("says nothing about the same field in a band bound to the dataset", () => {
+    expect(
+      messages(
+        definition({
+          bands: [band({ type: "DETAIL", dataset: "items", elements: [rowField()] })],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("leaves an aggregate alone, whose value is re-run with row shadowed by the total", () => {
+    expect(
+      messages(
+        definition({
+          bands: [
+            band({
+              type: "SUMMARY",
+              elements: [
+                rowField({
+                  aggregate: { fn: "sum", scope: "REPORT", dataset: "items", over: "{{ row.taxable_amt }}" },
+                } as Partial<ReportElement>),
+              ],
+            }),
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("still catches a row read in the visibility of an element that aggregates", () => {
+    const problems = validateDefinition(
+      definition({
+        bands: [
+          band({
+            type: "SUMMARY",
+            elements: [
+              rowField({
+                visible: "{{ row.is_free }}",
+                aggregate: { fn: "sum", scope: "REPORT", dataset: "items" },
+              } as Partial<ReportElement>),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(problems.map((problem) => problem.message)).toEqual([
+      expect.stringMatching(/total visibility reads a row field/),
+    ]);
+  });
+});
+
 describe("crosstab rules", () => {
   const crosstab = (overrides: Record<string, unknown> = {}): ReportElement =>
     ({
@@ -321,6 +395,73 @@ describe("crosstab rules", () => {
     expect(messages(crosstab({ measure: "" }))).toContain("'ct' has no measure expression.");
   });
 
+  it("checks every extra level and measure, not only the first of each", () => {
+    // A level the checks never reach is a level whose mistake the designer
+    // first hears about as a 400 naming a JSON path.
+    expect(
+      messages(crosstab({ extraRowBys: [{ expression: "  ", label: "", widthMm: 0 }] })),
+    ).toContain("'ct' has no row level 2 expression.");
+    expect(
+      messages(crosstab({ extraColumnBys: [{ expression: "", label: "", widthMm: 0 }] })),
+    ).toContain("'ct' has no column level 2 expression.");
+    expect(
+      messages(
+        crosstab({
+          extraMeasures: [
+            { expression: "", label: "Qty", fn: "sum", format: "#,##0", blankWhenZero: true },
+          ],
+        }),
+      ),
+    ).toContain("'ct' has no measure 'Qty' expression.");
+  });
+
+  it("warns when a second measure would print with a blank heading", () => {
+    const problems = messages(
+      crosstab({
+        extraMeasures: [
+          { expression: "{{ row.qty }}", label: "", fn: "sum", format: "#,##0", blankWhenZero: true },
+        ],
+      }),
+    );
+    expect(problems.join(" ")).toMatch(/2 measures but 2 of them has no caption/);
+  });
+
+  it("accepts a crosstab nested on all three axes", () => {
+    expect(
+      messages(
+        crosstab({
+          extraRowBys: [{ expression: "{{ row.itemName }}", label: "Item", widthMm: 0 }],
+          extraColumnBys: [{ expression: "{{ row.month }}", label: "", widthMm: 0 }],
+          extraMeasures: [
+            { expression: "{{ row.qty }}", label: "Qty", fn: "sum", format: "#,##0", blankWhenZero: true },
+          ],
+          measureLabel: "Amount",
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("warns about an unknown field in an extra level, the same as in the first", () => {
+    const problems = validateDefinition(
+      definition({
+        bands: [
+          band({
+            type: "SUMMARY",
+            elements: [
+              crosstab({
+                extraColumnBys: [{ expression: "{{ row.nosuchfield }}", label: "", widthMm: 0 }],
+              }),
+            ],
+          }),
+        ],
+      }),
+      { items: ["itemName", "hsnCode", "netAmount"] },
+    );
+    expect(problems.map((problem) => problem.message).join(" ")).toMatch(
+      /column level 2 expression on 'ct' reads 'nosuchfield'/,
+    );
+  });
+
   it("warns when a fixed column width leaves room for no data column", () => {
     expect(
       messages(crosstab({ w: 60, rowHeaderWidthMm: 40, columnWidthMm: 15 })).join(" "),
@@ -332,6 +473,53 @@ describe("crosstab rules", () => {
     // sticking out below a 10mm band is not something the user can act on.
     const problems = messages(crosstab({ y: 8, h: 40 }), { heightMm: 10, autoGrow: false });
     expect(problems.join(" ")).not.toMatch(/extends below/);
+  });
+
+  it("warns when it pivots on fields the dataset does not return", () => {
+    // The empty-table bug, exactly: a crosstab left on its insert-time
+    // placeholders reads three fields that exist nowhere, so every label
+    // evaluates to '' and the whole pivot collapses into one blank cell.
+    const problems = validateDefinition(
+      definition({
+        bands: [
+          band({
+            type: "SUMMARY",
+            elements: [
+              crosstab({
+                rowBy: "{{ row.name }}",
+                columnBy: "{{ row.period }}",
+                measure: "{{ row.amount }}",
+              }),
+            ],
+          }),
+        ],
+      }),
+      { items: ["itemName", "hsnCode", "netAmount"] },
+    );
+    expect(problems.map((problem) => problem.message)).toEqual([
+      "The row expression on 'ct' reads 'name', which 'items' does not return — the table prints empty.",
+      "The column expression on 'ct' reads 'period', which 'items' does not return — the table prints empty.",
+      "The measure expression on 'ct' reads 'amount', which 'items' does not return — the table prints empty.",
+    ]);
+    expect(problems.every((problem) => problem.severity === "warning")).toBe(true);
+  });
+
+  it("says nothing when the fields are real, or when the columns are unknown", () => {
+    const columns = { items: ["itemName", "hsnCode", "netAmount"] };
+    expect(
+      validateDefinition(
+        definition({ bands: [band({ type: "SUMMARY", elements: [crosstab()] })] }),
+        columns,
+      ),
+    ).toEqual([]);
+    // No catalogue entry for the dataset is not evidence that the field is
+    // wrong, so an unparsed query must not turn into three problems.
+    expect(
+      validateDefinition(
+        definition({ bands: [band({ type: "SUMMARY", elements: [crosstab()] })] }),
+        { items: [] },
+      ),
+    ).toEqual([]);
   });
 
   it("lints the expressions it carries", () => {

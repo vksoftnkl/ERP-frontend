@@ -344,6 +344,66 @@ describe("charges", () => {
     expectReconciled(result.totals);
   });
 
+  it("keeps the blank trailing row out of a FLAT spread", () => {
+    // The entry grids always keep one item-less row waiting at the bottom.
+    // Splitting a lump over it would re-price every row above the moment it
+    // appeared — which is what this asserts does not happen.
+    const lump = charge({
+      role: "OTHERS",
+      method: "FIXED",
+      applyOn: "FLAT",
+      beforeTax: true,
+      rate: 100,
+    });
+    const line = exclusiveLine({ itemId: "a" });
+    const blank = emptyLine({ itemId: "", toBaseFactor: 1 });
+
+    const alone = recalcDocument([line], [lump], STANDARD, LOCAL);
+    const withBlank = recalcDocument([line, blank], [lump], STANDARD, LOCAL);
+
+    expect(withBlank.charges[0].shares).toEqual([100, 0]);
+    expect(withBlank.charges[0].amountValue).toBe(100);
+    expect(withBlank.lines[0].total).toBe(alone.lines[0].total);
+    expect(withBlank.totals.amount).toBe(alone.totals.amount);
+    expectReconciled(withBlank.totals);
+  });
+
+  it("carries an after-tax deduction wholly on the priced rows", () => {
+    const cashDisc = charge({
+      role: "CASH_DISC",
+      type: "DEDUCT",
+      method: "FIXED",
+      applyOn: "FLAT",
+      rate: 0,
+      amount: 4,
+    });
+    const line = exclusiveLine({ itemId: "a" });
+    const blank = emptyLine({ itemId: "", toBaseFactor: 1 });
+
+    const withBlank = recalcDocument([line, blank], [cashDisc], STANDARD, LOCAL);
+
+    expect(withBlank.charges[0].shares).toEqual([-4, 0]);
+    expect(withBlank.lines[0].chrgAfterTax).toBe(-4);
+    expectReconciled(withBlank.totals);
+  });
+
+  it("still bills a lump keyed before the first item is picked", () => {
+    // Nothing is chargeable yet, so the blank rows carry it rather than the
+    // charge reading as zero on the totals strip.
+    const lump = charge({
+      role: "OTHERS",
+      method: "FIXED",
+      applyOn: "FLAT",
+      beforeTax: true,
+      rate: 100,
+    });
+    const blank = emptyLine({ itemId: "", toBaseFactor: 1 });
+
+    const result = recalcDocument([blank], [lump], STANDARD, LOCAL);
+
+    expect(result.charges[0].amountValue).toBe(100);
+  });
+
   it("spreads a FIXED lump by VALUE in proportion to each line's net gross", () => {
     const lines = [
       exclusiveLine({ itemId: "a", billQty: 10 }),

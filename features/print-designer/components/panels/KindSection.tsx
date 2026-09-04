@@ -12,6 +12,9 @@
  */
 
 import type {
+  AggregateFunction,
+  CrosstabAxis,
+  CrosstabMeasure,
   CrosstabOverflow,
   CrosstabSort,
   ReportElement,
@@ -470,6 +473,129 @@ export function KindSection({ bandIndex, elements, onEditExpression }: KindSecti
         );
       };
 
+      // The three axis LISTS are edited one element at a time. Level 1 of each
+      // is `rowBy`/`columnBy`/`measure` and stays multi-selectable like every
+      // other property; the extra levels are per-element arrays, and writing
+      // one list over a selection whose crosstabs have different levels would
+      // silently discard the others' work.
+      const single =
+        elements.length === 1 && elements[0].kind === "CROSSTAB" ? elements[0] : null;
+
+      /** One removable extra level of the row or column axis. */
+      const axisLevelRows = (
+        key: "extraRowBys" | "extraColumnBys",
+        levels: readonly CrosstabAxis[],
+        /** Rows print their level in a column of its own, so it needs a caption. */
+        captioned: boolean,
+      ) =>
+        levels.map((axis, index) => {
+          const write = (next: Partial<CrosstabAxis>, label: string, coalesce?: string) =>
+            patch(
+              {
+                [key]: levels.map((entry, at) => (at === index ? { ...entry, ...next } : entry)),
+              },
+              label,
+              coalesce,
+            );
+          return (
+            <div key={`${key}-${index}`} className={styles.axisLevel}>
+              <div className={styles.axisLevelHead}>
+                <span className={styles.listRowMeta}>Level {index + 2}</span>
+                <button
+                  type="button"
+                  className={styles.toolButton}
+                  title="Remove this level"
+                  onClick={() =>
+                    patch(
+                      { [key]: levels.filter((_, at) => at !== index) },
+                      "Remove crosstab level",
+                    )
+                  }
+                >
+                  ✕
+                </button>
+              </div>
+              <ExpressionRow
+                label="Expression"
+                value={axis.expression}
+                placeholder="{{ row.itemName }}"
+                onChange={(next) =>
+                  write({ expression: next }, "Edit crosstab level", `${key}-${index}-${bandIndex}`)
+                }
+                onOpen={() =>
+                  onEditExpression({
+                    title: `Level ${index + 2} expression`,
+                    value: axis.expression,
+                    onCommit: (next) => write({ expression: next }, "Edit crosstab level"),
+                  })
+                }
+              />
+              {captioned ? (
+                <FieldGrid>
+                  <TextInput
+                    label="Heading"
+                    value={axis.label}
+                    onCommit={(value) => write({ label: value }, "Set level heading")}
+                  />
+                  <NumberInput
+                    label="Width"
+                    suffix="mm"
+                    min={0}
+                    value={axis.widthMm}
+                    onCommit={(value) => write({ widthMm: value }, "Set level width")}
+                  />
+                </FieldGrid>
+              ) : null}
+            </div>
+          );
+        });
+
+      /** The settings every measure has, whether it is the first or an extra. */
+      const measureSettings = (
+        measure: { label: string; fn: AggregateFunction; format: string; blankWhenZero: boolean },
+        write: (next: Partial<CrosstabMeasure>, label: string) => void,
+      ) => (
+        <>
+          <FieldGrid>
+            <TextInput
+              label="Caption"
+              value={measure.label}
+              placeholder="Amount"
+              onCommit={(value) => write({ label: value }, "Set measure caption")}
+            />
+            <SelectInput
+              label="Aggregate"
+              value={measure.fn}
+              options={AGGREGATE_FUNCTIONS.map((fn) => ({
+                value: fn,
+                label: fn === "avg" ? "Average" : fn[0].toUpperCase() + fn.slice(1),
+              }))}
+              onCommit={(value) => write({ fn: value }, "Set measure aggregate")}
+            />
+          </FieldGrid>
+          <FieldGrid>
+            <TextInput
+              label="Format"
+              mono
+              value={measure.format}
+              placeholder="#,##0.00"
+              onCommit={(value) => write({ format: value }, "Set measure format")}
+            />
+            <CheckboxInput
+              label="Blank a zero"
+              value={measure.blankWhenZero}
+              onCommit={(value) => write({ blankWhenZero: value }, "Set blank when zero")}
+            />
+          </FieldGrid>
+        </>
+      );
+
+      const addButton = (label: string, onClick: () => void) => (
+        <button type="button" className={styles.axisAdd} onClick={onClick}>
+          + {label}
+        </button>
+      );
+
       return (
         <>
           <Section title="Crosstab">
@@ -486,20 +612,159 @@ export function KindSection({ bandIndex, elements, onEditExpression }: KindSecti
               onCommit={(value) => patch({ dataset: value }, "Set crosstab dataset")}
             />
             {expressionRow("Rows", "rowBy", "{{ row.itemName }}")}
+            {single ? (
+              <>
+                {axisLevelRows("extraRowBys", single.extraRowBys ?? [], true)}
+                {addButton("Add a row level", () =>
+                  patch(
+                    {
+                      extraRowBys: [
+                        ...(single.extraRowBys ?? []),
+                        { expression: "", label: "", widthMm: 0 },
+                      ],
+                    },
+                    "Add crosstab row level",
+                  ),
+                )}
+              </>
+            ) : null}
+
             {expressionRow("Columns", "columnBy", "{{ date(row.billDate, 'MMM') }}")}
+            {single ? (
+              <>
+                {axisLevelRows("extraColumnBys", single.extraColumnBys ?? [], false)}
+                {addButton("Add a column level", () =>
+                  patch(
+                    {
+                      extraColumnBys: [
+                        ...(single.extraColumnBys ?? []),
+                        { expression: "", label: "", widthMm: 0 },
+                      ],
+                    },
+                    "Add crosstab column level",
+                  ),
+                )}
+              </>
+            ) : null}
+
             {expressionRow("Measure", "measure", "{{ row.netAmount }}")}
-            <SelectInput
-              label="Aggregate"
-              value={read((element) => element.fn)}
-              options={AGGREGATE_FUNCTIONS.map((fn) => ({
-                value: fn,
-                label: fn === "avg" ? "Average" : fn[0].toUpperCase() + fn.slice(1),
-              }))}
-              onCommit={(value) => patch({ fn: value }, "Set crosstab aggregate")}
-            />
+            {single
+              ? measureSettings(
+                  {
+                    label: single.measureLabel ?? "",
+                    fn: single.fn,
+                    format: single.format,
+                    blankWhenZero: single.blankWhenZero,
+                  },
+                  // The first measure's settings live on the element itself, so
+                  // that a template written before multiple measures existed
+                  // still parses. The list editor hides that seam.
+                  (next, label) =>
+                    patch(
+                      {
+                        ...(next.label === undefined ? {} : { measureLabel: next.label }),
+                        ...(next.fn === undefined ? {} : { fn: next.fn }),
+                        ...(next.format === undefined ? {} : { format: next.format }),
+                        ...(next.blankWhenZero === undefined
+                          ? {}
+                          : { blankWhenZero: next.blankWhenZero }),
+                      },
+                      label,
+                    ),
+                )
+              : (
+                  <SelectInput
+                    label="Aggregate"
+                    value={read((element) => element.fn)}
+                    options={AGGREGATE_FUNCTIONS.map((fn) => ({
+                      value: fn,
+                      label: fn === "avg" ? "Average" : fn[0].toUpperCase() + fn.slice(1),
+                    }))}
+                    onCommit={(value) => patch({ fn: value }, "Set crosstab aggregate")}
+                  />
+                )}
+            {single
+              ? (single.extraMeasures ?? []).map((measure, index) => {
+                  const write = (next: Partial<CrosstabMeasure>, label: string, coalesce?: string) =>
+                    patch(
+                      {
+                        extraMeasures: (single.extraMeasures ?? []).map((entry, at) =>
+                          at === index ? { ...entry, ...next } : entry,
+                        ),
+                      },
+                      label,
+                      coalesce,
+                    );
+                  return (
+                    <div key={`measure-${index}`} className={styles.axisLevel}>
+                      <div className={styles.axisLevelHead}>
+                        <span className={styles.listRowMeta}>Measure {index + 2}</span>
+                        <button
+                          type="button"
+                          className={styles.toolButton}
+                          title="Remove this measure"
+                          onClick={() =>
+                            patch(
+                              {
+                                extraMeasures: (single.extraMeasures ?? []).filter(
+                                  (_, at) => at !== index,
+                                ),
+                              },
+                              "Remove crosstab measure",
+                            )
+                          }
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <ExpressionRow
+                        label="Expression"
+                        value={measure.expression}
+                        placeholder="{{ row.qty }}"
+                        onChange={(next) =>
+                          write(
+                            { expression: next },
+                            "Edit crosstab measure",
+                            `measure-${index}-${bandIndex}`,
+                          )
+                        }
+                        onOpen={() =>
+                          onEditExpression({
+                            title: `Measure ${index + 2} expression`,
+                            value: measure.expression,
+                            onCommit: (next) => write({ expression: next }, "Edit crosstab measure"),
+                          })
+                        }
+                      />
+                      {measureSettings(measure, (next, label) => write(next, label))}
+                    </div>
+                  );
+                })
+              : null}
+            {single
+              ? addButton("Add a measure", () =>
+                  patch(
+                    {
+                      extraMeasures: [
+                        ...(single.extraMeasures ?? []),
+                        {
+                          expression: "",
+                          label: "",
+                          fn: "sum" as AggregateFunction,
+                          format: single.format,
+                          blankWhenZero: single.blankWhenZero,
+                        },
+                      ],
+                    },
+                    "Add crosstab measure",
+                  ),
+                )
+              : null}
             <p className={styles.listRowMeta}>
               Every row of the dataset is read once: <code>Rows</code> and <code>Columns</code>{" "}
-              give the labels, <code>Measure</code> the number the cell accumulates.
+              give the labels, <code>Measure</code> the number the cell accumulates. Extra row
+              levels print as further label columns, extra column levels as further header rows,
+              and every measure repeats under each column group.
             </p>
           </Section>
 
@@ -601,20 +866,8 @@ export function KindSection({ bandIndex, elements, onEditExpression }: KindSecti
                 placeholder="Total"
                 onCommit={(value) => patch({ totalsLabel: value }, "Set totals label")}
               />
-              <TextInput
-                label="Number format"
-                mono
-                value={read((element) => element.format)}
-                placeholder="#,##0.00"
-                onCommit={(value) => patch({ format: value }, "Set crosstab format")}
-              />
             </FieldGrid>
             {expressionRow("Corner caption", "corner", "Branch")}
-            <CheckboxInput
-              label="Blank a zero cell"
-              value={read((element) => element.blankWhenZero)}
-              onCommit={(value) => patch({ blankWhenZero: value }, "Set blank when zero")}
-            />
             <CheckboxInput
               label="Draw grid lines"
               value={read((element) => element.gridLines)}

@@ -1,5 +1,4 @@
 "use client";
-
 /**
  * The Layout tab's canvas: `features/print-designer` driven by this module.
  *
@@ -30,11 +29,9 @@
  * live design can be inspected and measured; only saving is refused, and the
  * way forward is a new draft, exactly as on the Layout tab.
  */
-
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
-
 import { getApiErrorMessage } from "@/store/api";
 import DesignerShell from "@/features/print-designer/components/DesignerShell";
 import { CanvasHostProvider } from "@/features/print-designer/host/canvas-host";
@@ -46,6 +43,7 @@ import type { TemplateDefinition } from "@/features/print-designer/types/templat
 import { useBusinessContext } from "@/components/layout/business-context";
 import { useRenderPrintPreviewMutation } from "@/features/printing/api/render";
 import { buildPreviewRequest, canPreview } from "@/features/printing/domain/previewRequest";
+import { isServerOwnedParam } from "@/features/printing/domain/context";
 import { useSavePrintingTemplateMutation } from "@/features/printing/api/templates";
 import { buildSavePayload } from "@/features/printing/domain/buildSavePayload";
 import {
@@ -56,7 +54,6 @@ import {
 import { useDesigner } from "./useDesigner";
 import { printingDesignerRoute } from "@/features/printing/routes";
 import styles from "@/features/printing/printing.module.scss";
-
 export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
   const router = useRouter();
   // Which revision the Designer was pointing at when the canvas was opened.
@@ -76,18 +73,12 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
    */
   const { activeFiscalYear } = useBusinessContext();
   const sessionAccYear = activeFiscalYear?.name?.trim();
-  /** Bumped after a save so the canvas re-seeds from what the server stored. */
-  const [generation, setGeneration] = useState(0);
-
   const working = draft.working;
-
   const definition = useMemo(() => toTemplateDefinition(working), [working]);
   const datasets = useMemo(() => toProviderDescriptors(working.datasets), [working.datasets]);
-
   const close = useCallback(() => {
     router.push(printingDesignerRoute(ptlId));
   }, [ptlId, router]);
-
   const onSave = useCallback(
     async (next: TemplateDefinition) => {
       /*
@@ -105,7 +96,27 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
         .unwrap()
         .then(() => {
           toast.success("Layout saved.");
-          setGeneration((current) => current + 1);
+          /*
+           * NOTHING RE-SEEDS THE CANVAS HERE, and that is the fix for "every
+           * change had to be saved twice".
+           *
+           * There used to be a `generation` counter bumped on this line, folded
+           * into `seedKey` so the canvas would re-read the revision. But the
+           * body it re-read is `working.ptvBody`, and that is still the
+           * PRE-SAVE copy when the mutation resolves -- the refetch that
+           * carries the saved one is a separate round trip that lands later,
+           * and by then `seedKey` has stopped changing. So the canvas snapped
+           * back to the state of the PREVIOUS save, the operator's edit
+           * appeared to vanish, and only the second save of the same change
+           * looked like it stuck. A crosstab, which takes a dozen property
+           * edits before it is valid, lost all of them at once.
+           *
+           * The canvas already holds exactly what was written -- it is what we
+           * just sent -- so there is nothing to re-read. `useTemplateSave`
+           * marks it clean, and `seedKey` still changes when the revision's
+           * IDENTITY changes (a save that created a new revision), which is the
+           * only case where the server has something the canvas does not.
+           */
         })
         .catch((thrown) => {
           toast.error(getApiErrorMessage(thrown as never) ?? "Could not save the layout.");
@@ -116,7 +127,6 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
     },
     [draft, saveTemplate, working],
   );
-
   /**
    * Rendering, as the host offers it.
    *
@@ -132,7 +142,6 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
    */
   const previewHost: CanvasPreview | undefined = useMemo(() => {
     const versionId = workingStored?.ptvId;
-
     return {
       ready: canPreview(versionId),
       notReadyReason:
@@ -150,12 +159,18 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
        * prompts Preview shows, and a required one left blank is refused by the
        * server under this same label.
        */
-      prompts: working.ptvParams.map((parameter) => ({
-        name: parameter.name,
-        label: parameter.label?.trim() || parameter.name,
-        type: parameter.type,
-        required: parameter.required === true,
-      })),
+      prompts: working.ptvParams
+        // A SERVER-OWNED name may be declared -- nothing refuses it -- but its
+        // value is the session's, so a box asking for it would collect an
+        // answer the render endpoint then refuses. The row documents the
+        // binding; it does not become a question.
+        .filter((parameter) => !isServerOwnedParam(parameter.name))
+        .map((parameter) => ({
+          name: parameter.name,
+          label: parameter.label?.trim() || parameter.name,
+          type: parameter.type,
+          required: parameter.required === true,
+        })),
       // Every rule about WHAT to send — no company, branch or counter ever, a
       // body only while the revision is editable, blanks omitted rather than
       // sent empty — is in `buildPreviewRequest`, where it can be tested.
@@ -179,7 +194,6 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
     working.ptvParams,
     workingStored?.ptvId,
   ]);
-
   if (designer.isLoading) {
     return (
       <div className={styles.page}>
@@ -189,7 +203,6 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
       </div>
     );
   }
-
   if (designer.readError) {
     return (
       <div className={styles.page}>
@@ -204,11 +217,9 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
       </div>
     );
   }
-
   const revLabel = workingStored
     ? `rev ${workingStored.ptvRevNo} · ${workingStored.ptvStatus}`
     : "unsaved draft";
-
   return (
     <CanvasHostProvider
       host={{
@@ -223,7 +234,7 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
     >
       <DesignerShell
         mode="EMBEDDED"
-        seedKey={`${ptlId}:${working.ptvId ?? "new"}:${generation}`}
+        seedKey={`${ptlId}:${working.ptvId ?? "new"}`}
         draft={{
           name: draft.ptlName,
           // The canvas shows these; the printing module owns them, and they are

@@ -212,9 +212,48 @@ export type PagebreakElement = ElementBase & {
  * text and line primitives at layout time. So the canvas can only ever draw a
  * placeholder for it — the real shape is not knowable until a render.
  *
+ * Each of the three is the first of a LIST: `extraRowBys` adds label columns
+ * down the left edge, `extraColumnBys` adds header rows across the top, and
+ * `extraMeasures` splits every column group into one sub-column per measure.
+ *
  * `w` is a budget the engine enforces. Columns that will not fit are folded
  * into one trailing column or clipped, per `overflow`.
  */
+/**
+ * One level of a crosstab's row or column axis, beyond the first.
+ *
+ * `rowBy`/`columnBy` stay the FIRST level, so a template written before nesting
+ * existed parses unchanged and no stored `ptv_body` needs migrating.
+ */
+export type CrosstabAxis = {
+  /** Expression yielding this level's label. */
+  expression: string;
+  /**
+   * Header caption for the column this level prints in.
+   *
+   * Row axes only: the first row column is captioned by `corner`, and a nested
+   * COLUMN level has no fixed caption — its header cells are the data's labels.
+   */
+  label: string;
+  /** Row axes only. 0 = share whatever `rowHeaderWidthMm` leaves. */
+  widthMm: number;
+};
+
+/**
+ * One value column of a crosstab, beyond the first.
+ *
+ * Each measure keeps its OWN aggregate and number format: a quantity summed as
+ * an integer and a value averaged to two decimals cannot share either.
+ */
+export type CrosstabMeasure = {
+  expression: string;
+  /** Sub-header caption. Printed only when the crosstab has >1 measure. */
+  label: string;
+  fn: AggregateFunction;
+  format: string;
+  blankWhenZero: boolean;
+};
+
 export type CrosstabElement = ElementBase & {
   kind: "CROSSTAB";
   w: number;
@@ -222,16 +261,39 @@ export type CrosstabElement = ElementBase & {
   h: number;
   /** The repeating dataset the pivot reads — not the band's dataset. */
   dataset: string;
-  /** Expression yielding the row label down the left edge. */
+  /** Expression yielding the FIRST row label down the left edge. */
   rowBy: string;
-  /** Expression yielding the column label across the top. */
+  /** Expression yielding the FIRST column label across the top. */
   columnBy: string;
-  /** Expression yielding the number accumulated into each cell. */
+  /** Expression yielding the number the FIRST measure accumulates. */
   measure: string;
   fn: AggregateFunction;
-  /** Number pattern applied to every cell and total. */
+  /** Number pattern applied to the first measure's cells and totals. */
   format: string;
   blankWhenZero: boolean;
+  /**
+   * OPTIONAL, all four of them — and they have to be.
+   *
+   * The designer edits the raw `ptv_body` it was handed, and a template stored
+   * before nesting existed simply does not have these keys. The server's zod
+   * schema defaults them on save; every reader here treats absent as empty
+   * rather than assuming the save has already happened.
+   */
+  /** Sub-header caption for the first measure; printed only when >1 measure. */
+  measureLabel?: string;
+  /**
+   * Row dimensions AFTER `rowBy`, printed as further label columns down the
+   * left edge and grouped left to right: HSN, then description within it.
+   */
+  extraRowBys?: CrosstabAxis[];
+  /**
+   * Column dimensions AFTER `columnBy`, printed as further HEADER ROWS: year
+   * across the top, month underneath it, one leaf column per combination the
+   * data actually contains.
+   */
+  extraColumnBys?: CrosstabAxis[];
+  /** Value columns AFTER `measure`. Every column group repeats all of them. */
+  extraMeasures?: CrosstabMeasure[];
   /** The top-left cell, above the row labels. */
   corner: string;
   rowHeaderWidthMm: number;

@@ -700,6 +700,16 @@ a.chip:hover {
   color: #8c2f2f;
 }
 
+/* Same slot as .cellFinding and deliberately NOT red: a declared context name
+   is a legitimate override, not a mistake, and colouring it as one would read
+   as the refusal this release removed. */
+.cellNote {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
 /* -- assignments matrix -------------------------------------------------- */
 
 .effective {

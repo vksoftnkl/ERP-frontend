@@ -76,7 +76,10 @@ export const PTV_JSON_ENGINE: PtvEngine = "JSON_BANDS";
  * to what the screen should then ask. `plg_params` being one JSONB object per
  * render, not one per dataset, is the corroborating evidence.
  *
- * CONTEXT parameters are never in here. See `domain/context.ts`.
+ * ANY name may be declared, context names included: the six the render knows
+ * about are a DEFAULT for what this array leaves out, not a reserved word list.
+ * See `domain/context.ts` -- and note that `company_id` can be declared but
+ * never answered.
  */
 export type PtvParam = {
   name: string;

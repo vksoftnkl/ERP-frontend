@@ -14,10 +14,15 @@
 
 import type {
   Band,
+  CrosstabElement,
   TemplateDefinition,
 } from "@/features/print-designer/types/template-definition";
 import { elementRect } from "@/features/print-designer/lib/geometry";
-import { lintTemplateString } from "@/features/print-designer/lib/expression";
+import {
+  lintTemplateString,
+  templateFields,
+  templateRoots,
+} from "@/features/print-designer/lib/expression";
 import {
   CROSSTAB_BANDS,
   GROUPED_BANDS,
@@ -40,9 +45,50 @@ export type Problem = {
   scope?: "paper" | "datasets";
 };
 
-/** Every expression-bearing string on a band and its elements, with a label. */
-function expressionFields(band: Band): Array<{ label: string; value: string | undefined; elementId?: string }> {
-  const fields: Array<{ label: string; value: string | undefined; elementId?: string }> = [
+/**
+ * A crosstab's pivot expressions: every row level, every column level and every
+ * measure, each with the label the problems list should name it by.
+ *
+ * One list rather than three literals repeated at three call sites, because
+ * each of those sites checks something different — syntax, emptiness, unknown
+ * fields — and a level that reached only two of them is a level whose mistake
+ * surfaces as a 400 on save instead of a mark on the field.
+ */
+function crosstabExpressions(element: CrosstabElement): [string, string][] {
+  const rows: [string, string][] = [["row", element.rowBy]];
+  (element.extraRowBys ?? []).forEach((axis, index) => {
+    rows.push([`row level ${index + 2}`, axis.expression]);
+  });
+  rows.push(["column", element.columnBy]);
+  (element.extraColumnBys ?? []).forEach((axis, index) => {
+    rows.push([`column level ${index + 2}`, axis.expression]);
+  });
+  rows.push(["measure", element.measure]);
+  (element.extraMeasures ?? []).forEach((measure, index) => {
+    rows.push([measure.label ? `measure '${measure.label}'` : `measure ${index + 2}`, measure.expression]);
+  });
+  return rows;
+}
+
+/**
+ * Every expression-bearing string on a band and its elements, with a label.
+ *
+ * `rowAware` marks the ones that may read `row` in a band that has no dataset.
+ * Two do: a crosstab's pivot expressions, which the engine evaluates against
+ * the rows of the dataset the ELEMENT names, and an aggregate field, whose
+ * value is re-run with `row` shadowed by the total so the same
+ * `{{ row.netAmount|fmt(...) }}` formats the sum. Everything else reads the
+ * band's current row, and a band with no dataset has none.
+ */
+type ExpressionField = {
+  label: string;
+  value: string | undefined;
+  elementId?: string;
+  rowAware?: boolean;
+};
+
+function expressionFields(band: Band): ExpressionField[] {
+  const fields: ExpressionField[] = [
     { label: "band visibility", value: band.visible },
     { label: "band groupBy", value: band.groupBy },
   ];
@@ -50,7 +96,12 @@ function expressionFields(band: Band): Array<{ label: string; value: string | un
   for (const element of band.elements) {
     fields.push({ label: `${element.id} visibility`, value: element.visible, elementId: element.id });
     if (element.kind === "TEXT" || element.kind === "FIELD" || element.kind === "BARCODE" || element.kind === "QRCODE") {
-      fields.push({ label: `${element.id} value`, value: element.value, elementId: element.id });
+      fields.push({
+        label: `${element.id} value`,
+        value: element.value,
+        elementId: element.id,
+        rowAware: element.kind === "FIELD" && element.aggregate !== undefined,
+      });
     }
     if (element.kind === "IMAGE") {
       fields.push({ label: `${element.id} source`, value: element.source, elementId: element.id });
@@ -59,12 +110,25 @@ function expressionFields(band: Band): Array<{ label: string; value: string | un
       fields.push({ label: `${element.id} condition`, value: element.when, elementId: element.id });
     }
     if (element.kind === "FIELD" && element.aggregate?.over) {
-      fields.push({ label: `${element.id} aggregate`, value: element.aggregate.over, elementId: element.id });
+      fields.push({
+        label: `${element.id} aggregate`,
+        value: element.aggregate.over,
+        elementId: element.id,
+        rowAware: true,
+      });
     }
     if (element.kind === "CROSSTAB") {
-      fields.push({ label: `${element.id} row`, value: element.rowBy, elementId: element.id });
-      fields.push({ label: `${element.id} column`, value: element.columnBy, elementId: element.id });
-      fields.push({ label: `${element.id} measure`, value: element.measure, elementId: element.id });
+      // Every level and every measure, not just the first of each: an
+      // expression the syntax check never sees is one the designer only hears
+      // about from a 400 on save.
+      for (const [label, value] of crosstabExpressions(element)) {
+        fields.push({
+          label: `${element.id} ${label}`,
+          value,
+          elementId: element.id,
+          rowAware: true,
+        });
+      }
       fields.push({ label: `${element.id} corner`, value: element.corner, elementId: element.id });
     }
   }
@@ -72,7 +136,21 @@ function expressionFields(band: Band): Array<{ label: string; value: string | un
   return fields;
 }
 
-export function validateDefinition(definition: TemplateDefinition): Problem[] {
+/**
+ * Column names per bound dataset, for the checks that need to know what a
+ * dataset actually returns.
+ *
+ * OPTIONAL, and absent means "do not check": the list is what the catalogue
+ * says, and a dataset the catalogue has no entry for (a provider the server
+ * dropped, a stored query the column reader could not parse) must not be turned
+ * into a page of problems about fields that are really there.
+ */
+export type DatasetFields = Readonly<Record<string, readonly string[]>>;
+
+export function validateDefinition(
+  definition: TemplateDefinition,
+  fieldsByDataset: DatasetFields = {},
+): Problem[] {
   const problems: Problem[] = [];
   const { paper, bands, datasets } = definition;
 
@@ -297,11 +375,7 @@ export function validateDefinition(definition: TemplateDefinition): Problem[] {
             message: `The row-label column on '${element.id}' leaves no width for the data columns.`,
           });
         }
-        for (const [label, value] of [
-          ["row", element.rowBy],
-          ["column", element.columnBy],
-          ["measure", element.measure],
-        ] as const) {
+        for (const [label, value] of crosstabExpressions(element)) {
           if (!value.trim()) {
             problems.push({
               severity: "error",
@@ -311,6 +385,50 @@ export function validateDefinition(definition: TemplateDefinition): Problem[] {
             });
           }
         }
+        // With one measure the column heading is the data's own label and no
+        // caption is needed. With several, the sub-columns under each group
+        // are told apart ONLY by their captions, and the engine prints exactly
+        // what it was given — a blank caption prints blank, on paper, forever.
+        const measures = element.extraMeasures ?? [];
+        if (measures.length > 0) {
+          const unlabelled = [element.measureLabel ?? "", ...measures.map((m) => m.label)].filter(
+            (label) => !label.trim(),
+          ).length;
+          if (unlabelled > 0) {
+            problems.push({
+              severity: "warning",
+              bandIndex,
+              elementId: element.id,
+              message:
+                `'${element.id}' has ${measures.length + 1} measures but ${unlabelled} of them ` +
+                `has no caption — those sub-columns print with a blank heading.`,
+            });
+          }
+        }
+        // A crosstab reading fields its dataset does not return is the one
+        // mistake that produces a plausible-looking table full of nothing: the
+        // labels evaluate to empty strings, so every source row lands in the
+        // same unnamed cell and the paper shows one blank row, one blank column
+        // and a total. Nothing else in the engine says a word about it.
+        const known = element.dataset ? fieldsByDataset[element.dataset] : undefined;
+        if (known && known.length) {
+          const columns = new Set(known);
+          for (const [label, expression] of crosstabExpressions(element)) {
+            for (const field of templateFields(expression, "row")) {
+              if (!columns.has(field)) {
+                problems.push({
+                  severity: "warning",
+                  bandIndex,
+                  elementId: element.id,
+                  message:
+                    `The ${label} expression on '${element.id}' reads '${field}', which ` +
+                    `'${element.dataset}' does not return — the table prints empty.`,
+                });
+              }
+            }
+          }
+        }
+
         // A fixed column width that the element cannot afford silently loses
         // columns at render; the engine warns, but by then the report printed.
         if (element.columnWidthMm > 0) {
@@ -382,6 +500,31 @@ export function validateDefinition(definition: TemplateDefinition): Problem[] {
           bandIndex,
           elementId: field.elementId,
           message: `${field.label}: ${issue.message}`,
+        });
+      }
+
+      // `row` is the band's CURRENT row, and a band with no dataset never has
+      // one -- the engine emits it with the root context, whose `row` is an
+      // empty object. So the expression resolves to nothing and the element
+      // prints blank, with no error anywhere to say why. Dragging a field of a
+      // repeating dataset onto a summary is the way this happens: the drop
+      // writes `row.<field>` wherever it lands.
+      //
+      // A warning rather than an error, by this file's rule: the server saves
+      // it happily, it is the paper that comes out wrong.
+      if (
+        band.dataset === undefined &&
+        !field.rowAware &&
+        templateRoots(field.value).has("row")
+      ) {
+        problems.push({
+          severity: "warning",
+          bandIndex,
+          elementId: field.elementId,
+          message:
+            `${field.label} reads a row field, but ${band.type.replace(/_/g, " ").toLowerCase()} ` +
+            "prints once with no current row, so it comes out blank. Move it to a band bound to " +
+            "that dataset, or total it with an aggregate.",
         });
       }
     }

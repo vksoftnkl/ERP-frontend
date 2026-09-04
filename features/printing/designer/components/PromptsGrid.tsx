@@ -10,13 +10,27 @@
  * screen should then ask. `plg_params` being one JSONB object per RENDER, not
  * one per dataset, is the corroborating evidence.
  *
+ * ANY NAME MAY BE DECLARED, including one of the six context names. That used
+ * to be refused -- at save and at render -- on the grounds that the operator
+ * would be asked for something the server already knows. It is allowed now
+ * because the two are not the same thing: the context value is the DEFAULT for
+ * a name this table leaves out, and a row here says "ask instead". The one
+ * exception is `company_id`, whose value stays the authenticated session's
+ * however it is declared, because a caller able to name the company is a caller
+ * able to print another tenant's documents.
+ *
  * The cross-check against the queries is a LINT. Nothing server-side validates a
  * `ptv_params` element at all -- the only constraint is "must be a JSON array"
  * -- so a prompt no query binds, or a `:name` no prompt declares, saves cleanly
  * and fails at render. Both are reported here and neither blocks a save.
  */
 
-import { isContextParam } from "@/features/printing/domain/context";
+import {
+  CONTEXT_PARAMS,
+  contextParam,
+  hasContextDefault,
+  isServerOwnedParam,
+} from "@/features/printing/domain/context";
 import { extractBoundParams } from "@/features/printing/domain/sqlLint";
 import {
   PARAM_NAME_PATTERN,
@@ -49,8 +63,10 @@ export default function PromptsGrid({
   }
 
   const declared = new Set(params.map((parameter) => parameter.name));
-  // A bound name that is neither context nor declared has nothing to fill it.
-  const undeclared = [...bound].filter((name) => !isContextParam(name) && !declared.has(name));
+  // A bound name with no context default and no row here has nothing to fill
+  // it. A context name needs neither -- the render supplies it -- so declaring
+  // one is an override, never an omission worth reporting.
+  const undeclared = [...bound].filter((name) => !hasContextDefault(name) && !declared.has(name));
 
   const patch = (index: number, next: Partial<PtvParam>) =>
     onChange(
@@ -85,8 +101,9 @@ export default function PromptsGrid({
           <tbody>
             {params.map((parameter, index) => {
               const shapeOk = PARAM_NAME_PATTERN.test(parameter.name);
-              const isContext = isContextParam(parameter.name);
-              const unused = shapeOk && !isContext && bound.size > 0 && !bound.has(parameter.name);
+              const context = shapeOk ? contextParam(parameter.name) : undefined;
+              const serverOwned = shapeOk && isServerOwnedParam(parameter.name);
+              const unused = shapeOk && bound.size > 0 && !bound.has(parameter.name);
 
               return (
                 <tr key={index}>
@@ -104,10 +121,18 @@ export default function PromptsGrid({
                         Lower snake case, starting with a letter.
                       </span>
                     ) : null}
-                    {isContext ? (
+                    {context && !serverOwned ? (
+                      <span className={styles.cellNote}>
+                        {context.what}. The render supplies :{parameter.name} on its own, so
+                        declaring it here is an OVERRIDE — what the operator answers is what the
+                        queries bind, and a blank answer falls back to the render&apos;s own value.
+                      </span>
+                    ) : null}
+                    {serverOwned ? (
                       <span className={styles.cellFinding}>
-                        The render already supplies :{parameter.name} — asking for it would make the
-                        operator type something the server knows.
+                        :{parameter.name} always binds the signed-in company, whatever is answered
+                        here — a render that took it from the caller would read another company&apos;s
+                        documents. Declare it to document the binding, not to change it.
                       </span>
                     ) : null}
                     {unused ? (
@@ -201,7 +226,13 @@ export default function PromptsGrid({
         </Note>
       ) : null}
 
-      <Note>An invoice normally has none of these. They are for reports.</Note>
+      <Note>
+        An invoice normally has none of these. They are for reports — and for the one other thing
+        this table is now for: overriding what the render would otherwise supply on its own.{" "}
+        {CONTEXT_PARAMS.map((parameter) => `:${parameter.name}`).join(", ")} bind without being
+        declared, so a query may use them as they stand; declare one only to have the operator
+        answer it instead.
+      </Note>
     </section>
   );
 }

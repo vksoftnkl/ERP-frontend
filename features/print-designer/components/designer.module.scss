@@ -1633,6 +1633,43 @@
   font-size: 10px;
 }
 
+/*
+ * One extra level of a crosstab's row/column axis, or one extra measure.
+ *
+ * Indented and ruled rather than left flush with the fields above it: a level's
+ * expression, heading and width belong to THAT level, and a flat list of eight
+ * identical-looking inputs is where a user edits the wrong month's caption.
+ */
+.axisLevel {
+  margin: 2px 0 4px 8px;
+  padding: 2px 0 4px 6px;
+  border-left: 2px solid var(--pd-border-light);
+}
+
+.axisLevelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.axisAdd {
+  display: block;
+  margin: 0 0 6px 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--pd-border-light);
+  background: linear-gradient(#ffffff, #f0f0f0);
+  color: var(--pd-text);
+  font: inherit;
+  font-size: 10px;
+  cursor: default;
+
+  &:hover {
+    border-color: var(--pd-border);
+    background: linear-gradient(#ffffff, #e6e6e6);
+  }
+}
+
 .completionList {
   max-height: 170px;
   overflow: auto;

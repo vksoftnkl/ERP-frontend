@@ -52,28 +52,47 @@ function isManualAmount(row: ChargeRow): boolean {
   return dec(row.rate).isZero() && !dec(row.amount).isZero();
 }
 
+/**
+ * A line that carries no item takes no share of any charge — see
+ * `LineBasis.chargeable`. Only the trailing blank row of an entry grid is ever
+ * flagged, and only that flag keeps a FLAT spread from re-pricing the rows above
+ * it as soon as the operator opens a new row.
+ */
+function isChargeable(line: LineBasis): boolean {
+  return line.chargeable !== false;
+}
+
 function weightsFor(basis: LineBasis[], basisValues: Dec[], applyOn: ChargeApplyOn): Dec[] {
-  switch (applyOn) {
-    case "QTY":
-      return basis.map((line) => dec(line.billQty));
-    case "WEIGHT":
-      return basis.map((line) => dec(line.weight));
-    case "VALUE":
-      return basisValues;
-    case "FLAT":
-    default:
-      return basis.map(() => dec(1));
-  }
+  const weights = ((): Dec[] => {
+    switch (applyOn) {
+      case "QTY":
+        return basis.map((line) => dec(line.billQty));
+      case "WEIGHT":
+        return basis.map((line) => dec(line.weight));
+      case "VALUE":
+        return basisValues;
+      case "FLAT":
+      default:
+        return basis.map(() => dec(1));
+    }
+  })();
+  return weights.map((weight, index) => (isChargeable(basis[index]) ? weight : ZERO));
 }
 /**
  * Spread a lump sum across the lines. `applyOn` matters *only* here — for every
  * other method it is not a basis at all.
  *
- * The residue of the division lands on the last line so the shares add back up
- * to the lump exactly. When the chosen basis totals zero (a WEIGHT spread over
- * weightless lines, a VALUE spread over a document that is still all zeros) the
- * spread falls back to equal shares: the Qt code divides by zero there and the
- * charge silently vanishes off the bill, which is worse than an even split.
+ * The residue of the division lands on the last *chargeable* line so the shares
+ * add back up to the lump exactly; the blank trailing row is skipped entirely,
+ * both as a weight and as the place the residue lands. When the chosen basis
+ * totals zero (a WEIGHT spread over weightless lines, a VALUE spread over a
+ * document that is still all zeros) the spread falls back to equal shares: the
+ * Qt code divides by zero there and the charge silently vanishes off the bill,
+ * which is worse than an even split.
+ *
+ * A document with nothing but blank rows has no chargeable line at all; there
+ * the spread falls back to every line, so a charge keyed before the first item
+ * still shows on the bill instead of reading as zero.
  */
 function spreadLump(
   lump: Dec,
@@ -84,23 +103,25 @@ function spreadLump(
   if (basis.length === 0) {
     return [];
   }
+  const targets = basis.map((_line, index) => index).filter((index) => isChargeable(basis[index]));
+  const eligible = targets.length > 0 ? targets : basis.map((_line, index) => index);
   let weights = weightsFor(basis, basisValues, applyOn);
-  let total = sum(weights);
+  let total = sum(eligible.map((index) => weights[index]));
   if (total.isZero()) {
     weights = basis.map(() => dec(1));
-    total = dec(basis.length);
+    total = dec(eligible.length);
   }
-  const shares: Dec[] = [];
+  const shares: Dec[] = basis.map(() => ZERO);
   let allocated = ZERO;
-  for (let index = 0; index < basis.length; index += 1) {
-    if (index === basis.length - 1) {
-      shares.push(lump.minus(allocated));
-      break;
+  eligible.forEach((lineIndex, position) => {
+    if (position === eligible.length - 1) {
+      shares[lineIndex] = lump.minus(allocated);
+      return;
     }
-    const share = dec(money(lump.times(weights[index]).div(total)));
-    shares.push(share);
+    const share = dec(money(lump.times(weights[lineIndex]).div(total)));
+    shares[lineIndex] = share;
     allocated = allocated.plus(share);
-  }
+  });
   return shares;
 }
 /**
@@ -146,10 +167,18 @@ function priceRow(
   // picker warns about a duplicate but does not block it — would otherwise have
   // each of them take the whole per-line freight and bill it twice.
   const override = consumedRoles.has(row.role) ? undefined : options.roleOverrides?.[row.role];
-  const raw =
+  const computed =
     override && override.length === basis.length
       ? override.map((amount) => dec(amount))
       : shareByMethod(row, basis, basisValues);
+  // `spreadLump` already skips the blank rows; the per-line methods and the role
+  // overrides work out to zero on one anyway, so this is the belt to that brace
+  // — no share ever lands on a row that names no item. Unless none of them does:
+  // a document still waiting for its first item keeps the charge on its blank
+  // rows rather than reading as zero.
+  const raw = basis.some(isChargeable)
+    ? computed.map((share, index) => (isChargeable(basis[index]) ? share : ZERO))
+    : computed;
   if (override && override.length === basis.length) {
     consumedRoles.add(row.role);
   }

@@ -371,6 +371,13 @@ export function createElement(options: CreateElementOptions): ReportElement {
         fn: "sum",
         format: "#,##0.00",
         blankWhenZero: true,
+        // The three axes start one deep. A new crosstab that opened with an
+        // empty extra level would fail validation before the user had typed
+        // anything, and "add a level" is one click away in the panel.
+        measureLabel: "",
+        extraRowBys: [],
+        extraColumnBys: [],
+        extraMeasures: [],
         corner: "",
         rowHeaderWidthMm: 40,
         columnWidthMm: 0,

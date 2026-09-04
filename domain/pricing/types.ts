@@ -161,6 +161,14 @@ export type LineBasis = {
   netQty: number;
   /** Total line weight (per-unit weight × bill quantity). */
   weight: number;
+  /**
+   * Whether this line may carry a share of a charge. `false` for the blank
+   * trailing row the entry grids always keep waiting: it names no item, so a
+   * lump-sum charge spread by FLAT would otherwise hand it an equal share and
+   * the priced rows above it would change the moment it appeared. Omitted means
+   * chargeable — a caller that does not have blank rows need not say so.
+   */
+  chargeable?: boolean;
 };
 /** The share of every charge row that landed on one line. */
 export type LineChargeShare = {

@@ -437,6 +437,29 @@ const designerSlice = createSlice({
       state.lastSavedAt = template.ptModifiedOn ?? new Date().toISOString();
     },
 
+    /**
+     * A HOSTED save came back, and the canvas already holds what was written.
+     *
+     * The host owns the storage, so there is no `TemplatePayload` to adopt --
+     * only the fact that the bytes on the canvas are now the bytes on the
+     * server. That is all this records: `definition` is deliberately NOT
+     * touched, because it is the thing that was just saved.
+     *
+     * This exists because the alternative was worse. `dirty` used to be cleared
+     * by the host bumping a seed key and re-seeding the canvas through
+     * `draftStarted`, which re-read the host's PRE-SAVE copy of the body -- the
+     * refetch that carries the saved one has not landed when the save resolves.
+     * The canvas therefore snapped back one save behind, and every edit had to
+     * be made twice before it stuck.
+     *
+     * The history is kept: undo across a save is a normal thing to want, and
+     * anything undone is dirty again by the reducer that undoes it.
+     */
+    hostSaved(state) {
+      state.dirty = false;
+      state.lastSavedAt = new Date().toISOString();
+    },
+
     datasetsLoaded(state, action: PayloadAction<ProviderDescriptor[]>) {
       state.datasets = action.payload;
     },
@@ -1260,6 +1283,7 @@ export const {
   draftStarted,
   designerClosed,
   templateSaved,
+  hostSaved,
   datasetsLoaded,
   vocabularyLoaded,
   setZoom,

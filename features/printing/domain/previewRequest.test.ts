@@ -102,6 +102,30 @@ describe("buildPreviewRequest", () => {
     });
   });
 
+  it("drops an answer to a server-owned prompt, however the revision declares it", () => {
+    // A revision may now put `company_id` in ptv_params — the closed set is
+    // gone — but its VALUE is still the session's, and the render endpoint
+    // refuses an answer to it. Sending one would fail the preview on a field
+    // the operator has no way to correct.
+    const request = buildPreviewRequest({
+      ...base,
+      params: { company_id: "11111111-2222-3333-4444-555555555555", from_date: "2026-04-01" },
+    });
+
+    expect(request.params).toEqual({ from_date: "2026-04-01" });
+  });
+
+  it("keeps an answer to a declared context name that is not server-owned", () => {
+    // :doc_id declared as a prompt is an OVERRIDE — the whole point of being
+    // able to type it into the table.
+    const request = buildPreviewRequest({
+      ...base,
+      params: { doc_id: "99999999-8888-7777-6666-555555555555" },
+    });
+
+    expect(request.params).toEqual({ doc_id: "99999999-8888-7777-6666-555555555555" });
+  });
+
   it("says nothing about parameters when the revision asks nothing", () => {
     // A revision with no prompts must not send `params: {}` — the key's
     // presence is a statement, and the statement would be about nothing.

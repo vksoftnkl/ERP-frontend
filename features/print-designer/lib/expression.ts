@@ -122,6 +122,67 @@ function lintSpanSource(
 }
 
 /**
+ * The ROOT identifiers an expression reads -- `row`, `header`, `agg`, and so on.
+ *
+ * Read exactly the way the linter reads them, and for the same reason: literals
+ * are stripped first so a mask like '#,##0.00' is not code, a token after a `.`
+ * is a property rather than a root, and one before a `(` or after a `|` is a
+ * function. Sharing TOKEN_PATTERN with lintSpanSource is what keeps the two
+ * from disagreeing about what `fmt(row.qty, '#0')` refers to.
+ */
+export function templateRoots(template: string | undefined | null): Set<string> {
+  const roots = new Set<string>();
+  if (typeof template !== "string" || !template.includes("{{")) {
+    return roots;
+  }
+
+  for (const span of expressionSpans(template)) {
+    const code = span.source.replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
+    TOKEN_PATTERN.lastIndex = 0;
+    let match = TOKEN_PATTERN.exec(code);
+    while (match !== null) {
+      const [, dotPrefix, name, callSuffix] = match;
+      const afterPipe = /\|\s*$/.test(code.slice(0, match.index));
+      if (!dotPrefix && !callSuffix && !afterPipe && !RESERVED.has(name) && !/^\d/.test(name)) {
+        roots.add(name);
+      }
+      match = TOKEN_PATTERN.exec(code);
+    }
+  }
+
+  return roots;
+}
+
+/**
+ * The fields an expression reads off one root -- `templateFields(v, "row")`
+ * yields `hsn_code` for `{{ row.hsn_code }}`.
+ *
+ * Only the FIRST segment after the root: `row.a.b` reads field `a`, which is
+ * what a dataset's column list can be checked against. Literals are stripped
+ * first for the same reason as everywhere else here -- a mask like
+ * 'row.qty' inside quotes is text, not a read.
+ */
+export function templateFields(
+  template: string | undefined | null,
+  root: string,
+): Set<string> {
+  const fields = new Set<string>();
+  if (typeof template !== "string" || !template.includes("{{")) {
+    return fields;
+  }
+
+  const pattern = new RegExp(`\\b${root}\\.([A-Za-z_][A-Za-z0-9_]*)`, "g");
+  for (const span of expressionSpans(template)) {
+    const code = span.source.replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
+    for (const match of code.matchAll(pattern)) {
+      fields.add(match[1]);
+    }
+  }
+
+  return fields;
+}
+
+/**
  * Lint one template string. `datasetNames` are the definition's declared
  * datasets, which the server adds to the built-in roots.
  */

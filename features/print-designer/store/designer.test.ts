@@ -3,6 +3,7 @@ import reducer, {
   clipboardPasted,
   elementAdded,
   elementPatched,
+  hostSaved,
   moveCommitted,
   redo,
   selectElement,
@@ -17,6 +18,11 @@ import reducer, {
 } from "@/features/print-designer/store/designerSlice";
 import { MAX_HISTORY } from "@/features/print-designer/store/history";
 import { validateDefinition } from "@/features/print-designer/lib/validate";
+import {
+  selectFieldsByDataset,
+  selectProblems,
+} from "@/features/print-designer/store/selectors";
+import type { RootState } from "@/store";
 import type {
   TemplateDefinition,
   TemplatePayload,
@@ -126,6 +132,43 @@ describe("templateLoaded", () => {
       templateLoaded({ ...payload(), definitionMigrated: true }),
     );
     expect(state.dirty).toBe(true);
+  });
+});
+
+describe("hostSaved", () => {
+  /*
+   * The host owns the storage and has nothing to hand back, so the canvas is
+   * the record of what was written. Replacing the definition here -- which is
+   * what re-seeding through `draftStarted` used to do -- reinstates the host's
+   * pre-save copy and loses the edit that was just saved.
+   */
+  it("marks the design clean WITHOUT touching the definition", () => {
+    let state = reducer(loaded(), selectElement({ bandIndex: 0, elementId: "a" }));
+    state = reducer(
+      state,
+      moveCommitted({ dx: 5, dy: 0, dCol: 0, dRow: 0, label: "Move" }),
+    );
+    expect(state.dirty).toBe(true);
+    const edited = state.definition;
+
+    state = reducer(state, hostSaved());
+
+    expect(state.dirty).toBe(false);
+    expect(state.definition).toBe(edited);
+    expect(state.lastSavedAt).not.toBeNull();
+  });
+
+  it("keeps the history, so undoing across a save works and dirties again", () => {
+    let state = reducer(loaded(), selectElement({ bandIndex: 0, elementId: "a" }));
+    state = reducer(
+      state,
+      moveCommitted({ dx: 5, dy: 0, dCol: 0, dRow: 0, label: "Move" }),
+    );
+    state = reducer(state, hostSaved());
+    state = reducer(state, undo());
+
+    expect(state.dirty).toBe(true);
+    expect(state.definition.bands[0].elements[0].x).toBe(10);
   });
 });
 
@@ -377,6 +420,75 @@ describe("inserting a crosstab", () => {
     expect(added.dataset).toBe("");
     expect(validateDefinition(state.definition).map((problem) => problem.message)).toContain(
       `'${added.id}' has no dataset to pivot.`,
+    );
+  });
+});
+
+describe("problems, as the designer computes them", () => {
+  /*
+   * The wiring test for the catalogue-aware checks: `validateDefinition` can
+   * only report a field the dataset does not return if something hands it the
+   * column list, and that something is the store.
+   */
+  const stateWithCatalogue = (definitionState: DesignerState): RootState =>
+    ({
+      printDesigner: {
+        ...definitionState,
+        datasets: [
+          {
+            token: "sales.invoice.lines",
+            label: "Invoice lines",
+            cardinality: "many" as const,
+            docTypes: [],
+            fields: [
+              { name: "itemName", type: "string" as const, label: "Item" },
+              { name: "hsnCode", type: "string" as const, label: "HSN" },
+              { name: "netAmount", type: "number" as const, label: "Amount" },
+            ],
+          },
+        ],
+      },
+    }) as unknown as RootState;
+
+  it("keys the column lists by the name the template binds, not the provider token", () => {
+    expect(selectFieldsByDataset(stateWithCatalogue(loaded()))).toEqual({
+      items: ["itemName", "hsnCode", "netAmount"],
+    });
+  });
+
+  it("catches a crosstab left on its placeholder fields", () => {
+    const base = loaded();
+    const withCrosstab = {
+      ...base,
+      definition: {
+        ...base.definition,
+        bands: [
+          ...base.definition.bands,
+          {
+            type: "SUMMARY" as const,
+            heightMm: 30,
+            groupLevel: 0,
+            printOn: "ALL_PAGES" as const,
+            autoGrow: false,
+            keepTogether: false,
+            keepWithNext: false,
+            keepWithLastDetail: false,
+            spacingRows: 0,
+            elements: [],
+          },
+        ],
+      },
+    } as DesignerState;
+
+    const state = reducer(
+      withCrosstab,
+      elementAdded({ bandIndex: 2, kind: "CROSSTAB", xMm: 10, yMm: 2 }),
+    );
+
+    const problems = selectProblems(stateWithCatalogue(state));
+    expect(problems).toHaveLength(3);
+    expect(problems.map((problem) => problem.message).join(" ")).toMatch(
+      /reads 'name'.*reads 'period'.*reads 'amount'/,
     );
   });
 });

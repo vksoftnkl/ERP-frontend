@@ -18,7 +18,7 @@ import {
   useCreatePrintTemplateMutation,
   useUpdatePrintTemplateMutation,
 } from "@/features/print-designer/api/printTemplateApi";
-import { templateSaved } from "@/features/print-designer/store/designerSlice";
+import { hostSaved, templateSaved } from "@/features/print-designer/store/designerSlice";
 import {
   selectCanSave,
   selectDefinition,
@@ -59,6 +59,11 @@ export function useTemplateSave() {
       }
       try {
         await host.onSave(definition);
+        // The canvas is now what the host stored, so it is clean -- and it says
+        // so ITSELF rather than waiting to be re-seeded. A host that re-seeded
+        // to clear this would hand back its own pre-save copy of the body, one
+        // save behind whatever is on screen.
+        dispatch(hostSaved());
       } catch {
         // The host reports its own failure; leaving the draft dirty is the
         // point, so nothing is lost when a save is refused.

@@ -125,6 +125,11 @@ export function recalcDocument(
     billQty: line.billQty,
     netQty: goods[index].netQty,
     weight: money(dec(line.weight).times(dec(line.billQty))),
+    // The entry grids always keep one blank row waiting at the bottom. It names
+    // no item, so it takes no share of any charge: without this a lump spread by
+    // FLAT is divided by the blank row too, and every priced row above it
+    // changes the instant the operator opens a new one.
+    chargeable: Boolean(line.itemId),
   }));
 
   // ---- Role overrides -----------------------------------------------------

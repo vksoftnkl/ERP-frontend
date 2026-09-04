@@ -7,6 +7,8 @@ import {
   expressionSpans,
   lintTemplateString,
   readFormatMask,
+  templateFields,
+  templateRoots,
 } from "@/features/print-designer/lib/expression";
 
 describe("expressionSpans", () => {
@@ -61,6 +63,37 @@ describe("lintTemplateString", () => {
 
   it("ignores plain text entirely", () => {
     expect(lintTemplateString("Bill of Supply", [])).toEqual([]);
+  });
+});
+
+describe("templateRoots", () => {
+  it("reads the roots and nothing that only looks like one", () => {
+    // The mask is a literal, `fmt` a function, `upper` a transform and `qty` a
+    // property -- only `row` is a root the engine has to resolve.
+    expect([...templateRoots("{{ fmt(row.qty, '#,##0.00')|upper }}")]).toEqual(["row"]);
+  });
+
+  it("collects every span, and returns nothing for plain text", () => {
+    expect([...templateRoots("{{ header.name }} / {{ row.hsn }}")].sort()).toEqual([
+      "header",
+      "row",
+    ]);
+    expect([...templateRoots("Tax Invoice")]).toEqual([]);
+    expect([...templateRoots(undefined)]).toEqual([]);
+  });
+});
+
+describe("templateFields", () => {
+  it("reads the first segment after the root, and only the named root", () => {
+    expect([...templateFields("{{ fmt(row.taxable_amt, '#,##0.00') }}", "row")]).toEqual([
+      "taxable_amt",
+    ]);
+    expect([...templateFields("{{ header.quote_refno }}", "row")]).toEqual([]);
+    expect([...templateFields("{{ row.address.line1 }}", "row")]).toEqual(["address"]);
+  });
+
+  it("ignores a path that is really a string literal", () => {
+    expect([...templateFields("{{ 'row.qty' }}", "row")]).toEqual([]);
   });
 });
 

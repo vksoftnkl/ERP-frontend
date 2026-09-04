@@ -34,7 +34,6 @@
  * no row in `print_template_dataset`, so it would bind to nothing at render.
  * A divergence always resolves in favour of the version.
  */
-
 import {
   createBand,
   createEmptyDefinition,
@@ -43,6 +42,7 @@ import {
 import {
   BAND_TYPES,
   PAPER_PRESETS,
+  PRINT_ON_VALUES,
   findPaperPreset,
 } from "@/features/print-designer/lib/vocabulary";
 import type {
@@ -53,16 +53,15 @@ import type {
   FieldMeta,
   LayoutMode,
   PaperSpec,
+  PrintOn,
   ProviderDescriptor,
   TemplateDefinition,
 } from "@/features/print-designer/types/template-definition";
 import { SCHEMA_VERSION } from "@/features/print-designer/types/template-definition";
 import type { PtvBodyInput, PtvEngine } from "../types/printing";
 import type { DraftDataset, DraftVersion } from "./draft";
-
 /** The token a SQL dataset is given, since it has no provider code. */
 export const sqlToken = (name: string): string => `sql.${name}`;
-
 /**
  * Which layout the canvas should open in.
  *
@@ -77,7 +76,6 @@ export function layoutModeFor(engine: PtvEngine, columns: number | null): Layout
   }
   return columns === null ? "GRAPHIC" : "GRID";
 }
-
 /** The page, as the canvas models it. */
 export function paperFor(working: DraftVersion): PaperSpec {
   const preset =
@@ -85,7 +83,6 @@ export function paperFor(working: DraftVersion): PaperSpec {
     PAPER_PRESETS.find((entry) => entry.code === "A4") ??
     PAPER_PRESETS[0];
   const base = paperFromPreset(preset);
-
   return {
     ...base,
     // The stored code wins even when no preset matches it: a site's own paper
@@ -105,11 +102,9 @@ export function paperFor(working: DraftVersion): PaperSpec {
     ...(working.ptvColumns !== null ? { columns: working.ptvColumns } : {}),
   };
 }
-
 /** MASTER is read once; DETAIL repeats. */
 const cardinalityOf = (dataset: DraftDataset): Cardinality =>
   dataset.ptdRole === "MASTER" ? "one" : "many";
-
 /** `versions[0].datasets[]`, as the canvas's dataset bindings. */
 export function bindingsFor(datasets: DraftDataset[]): DatasetBinding[] {
   return datasets
@@ -123,7 +118,6 @@ export function bindingsFor(datasets: DraftDataset[]): DatasetBinding[] {
       cardinality: cardinalityOf(dataset),
     }));
 }
-
 /** True when a stored body already holds a canvas definition. */
 export function isTemplateDefinition(value: unknown): value is TemplateDefinition {
   return (
@@ -133,7 +127,6 @@ export function isTemplateDefinition(value: unknown): value is TemplateDefinitio
     Array.isArray((value as { bands?: unknown }).bands)
   );
 }
-
 /**
  * One stored band, made safe to hand to the canvas.
  *
@@ -151,10 +144,8 @@ export function isTemplateDefinition(value: unknown): value is TemplateDefinitio
 function normaliseBand(value: unknown, layoutMode: LayoutMode): Band | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const raw = value as Record<string, unknown>;
-
   const type = raw.type;
   if (typeof type !== "string" || !BAND_TYPES.includes(type as BandType)) return null;
-
   const base = createBand(type as BandType, layoutMode);
   const num = (key: string, fallback: number): number =>
     typeof raw[key] === "number" && Number.isFinite(raw[key]) ? (raw[key] as number) : fallback;
@@ -162,7 +153,6 @@ function normaliseBand(value: unknown, layoutMode: LayoutMode): Band | null {
     typeof raw[key] === "boolean" ? (raw[key] as boolean) : fallback;
   const str = (key: string): string | undefined =>
     typeof raw[key] === "string" && raw[key] ? (raw[key] as string) : undefined;
-
   return {
     ...base,
     heightMm: num("heightMm", base.heightMm),
@@ -173,7 +163,14 @@ function normaliseBand(value: unknown, layoutMode: LayoutMode): Band | null {
     ...(str("groupBy") ? { groupBy: str("groupBy") } : {}),
     ...(str("visible") ? { visible: str("visible") } : {}),
     groupLevel: num("groupLevel", base.groupLevel),
-    printOn: base.printOn,
+    // A STORED value wins here. This used to be `base.printOn` unconditionally,
+    // which quietly reset every "first page only" / "not last page" band to
+    // ALL_PAGES the next time the design was opened -- the setting saved fine
+    // and was thrown away on the way back in. An unrecognised value still falls
+    // back to the default rather than reaching the engine.
+    printOn: PRINT_ON_VALUES.includes(raw.printOn as PrintOn)
+      ? (raw.printOn as PrintOn)
+      : base.printOn,
     autoGrow: bool("autoGrow", base.autoGrow),
     keepTogether: bool("keepTogether", base.keepTogether),
     keepWithNext: bool("keepWithNext", base.keepWithNext),
@@ -187,7 +184,6 @@ function normaliseBand(value: unknown, layoutMode: LayoutMode): Band | null {
       : [],
   };
 }
-
 /**
  * The working revision, as something the canvas can open.
  *
@@ -201,24 +197,20 @@ export function toTemplateDefinition(working: DraftVersion): TemplateDefinition 
   const layoutMode = layoutModeFor(working.ptvEngine, working.ptvColumns);
   const paper = paperFor(working);
   const datasets = bindingsFor(working.datasets);
-
   const stored = working.ptvBody;
   const fallback = createEmptyDefinition(
     findPaperPreset(working.ptvPaperCode) ??
       PAPER_PRESETS.find((entry) => entry.code === "A4") ??
       PAPER_PRESETS[0],
   ).bands;
-
   const salvaged = isTemplateDefinition(stored)
     ? stored.bands
         .map((band) => normaliseBand(band, layoutMode))
         .filter((band): band is Band => band !== null)
     : [];
-
   // Nothing usable in the body opens the starting page/footer pair rather than
   // a blank sheet -- an empty canvas with no bands cannot be built on.
   const bands: Band[] = salvaged.length > 0 ? salvaged : fallback;
-
   return {
     schemaVersion: SCHEMA_VERSION,
     layoutMode,
@@ -228,7 +220,6 @@ export function toTemplateDefinition(working: DraftVersion): TemplateDefinition 
     bands,
   };
 }
-
 /**
  * The canvas's definition, as a body to store.
  *
@@ -241,7 +232,6 @@ export function toTemplateDefinition(working: DraftVersion): TemplateDefinition 
 export function bodyFromDefinition(definition: TemplateDefinition): PtvBodyInput {
   return { ...definition } as unknown as Record<string, unknown>;
 }
-
 /**
  * The columns a stored query returns, read off its SELECT list.
  *
@@ -258,7 +248,6 @@ export function bodyFromDefinition(definition: TemplateDefinition): PtvBodyInput
  */
 export function selectListColumns(sql: string | null | undefined): string[] {
   if (!sql) return [];
-
   // Comments first, then literals -- the same order ptd_sql_norm uses, and for
   // the same reason: a stray quote inside a comment mispairs the scanner.
   const cleaned = sql
@@ -266,10 +255,8 @@ export function selectListColumns(sql: string | null | undefined): string[] {
     .replace(/--.*$/gm, " ")
     .replace(/'(?:[^']|'')*'/g, " ")
     .replace(/::/g, " ");
-
   const match = /\bselect\b(?:\s+distinct(?:\s+on\s*\([^)]*\))?)?([\s\S]*)/i.exec(cleaned);
   if (!match) return [];
-
   // Walk to the FROM that closes the top-level select list.
   const rest = match[1];
   let depth = 0;
@@ -282,8 +269,7 @@ export function selectListColumns(sql: string | null | undefined): string[] {
       end = index;
       break;
     }
-  }
-
+    }
   const list = rest.slice(0, end);
   const items: string[] = [];
   let current = "";
@@ -299,12 +285,10 @@ export function selectListColumns(sql: string | null | undefined): string[] {
     current += char;
   }
   items.push(current);
-
   const columns: string[] = [];
   for (const raw of items) {
     const item = raw.trim().replace(/"/g, "");
     if (!item || item === "*" || item.endsWith(".*")) continue;
-
     const aliased = /\bas\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/i.exec(item);
     let name = aliased?.[1];
     if (!name) {
@@ -318,7 +302,6 @@ export function selectListColumns(sql: string | null | undefined): string[] {
   }
   return columns;
 }
-
 /**
  * The version's datasets, as the canvas's data panel wants them.
  *
@@ -342,7 +325,6 @@ export function toProviderDescriptors(datasets: DraftDataset[]): ProviderDescrip
             description: "Read from the query's SELECT list",
           }))
         : [];
-
       return {
         token: isSql
           ? sqlToken(dataset.ptdName)

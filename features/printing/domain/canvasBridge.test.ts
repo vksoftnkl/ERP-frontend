@@ -172,6 +172,24 @@ describe("opening a revision on the canvas", () => {
       });
     });
 
+    it("keeps a stored printOn, and falls back only on an unknown one", () => {
+      const definition = toTemplateDefinition(
+        version({
+          ptvBody: {
+            bands: [
+              { type: "PAGE_HEADER", printOn: "NOT_FIRST_PAGE" },
+              { type: "PAGE_FOOTER", printOn: "SOMETHING_ELSE" },
+            ],
+          },
+        }),
+      );
+
+      // It saved fine and was thrown away on the way back in, resetting every
+      // band to ALL_PAGES on reopen.
+      expect(definition.bands[0].printOn).toBe("NOT_FIRST_PAGE");
+      expect(definition.bands[1].printOn).toBe("ALL_PAGES");
+    });
+
     it("filters non-object elements out of a band", () => {
       const definition = toTemplateDefinition(
         version({ ptvBody: { bands: [{ type: "DETAIL", elements: [null, "x", { id: "e1" }] }] } }),

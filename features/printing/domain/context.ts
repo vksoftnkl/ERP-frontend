@@ -1,22 +1,22 @@
 /**
- * CONTEXT PARAMETERS -- the closed set a render always knows, and that a
- * template author therefore never declares.
+ * CONTEXT PARAMETERS -- what the render fills in BY DEFAULT, and nothing more.
  *
- * They appear in no table, in no payload, and in no form on any screen. The
- * server holds the registry, holds one fixed type for each, and works out which
- * ones a query uses BY READING THE QUERY -- exactly as
- * `ck_ptd_sql_company_scoped` already greps `ptd_sql_norm` for `:company_id`.
+ * They used to be a CLOSED SET: six names a template author was forbidden to
+ * declare, shown on the Data tab as a read-only note precisely because there
+ * was no row anywhere to edit. That is gone. `ptv_params` is now the whole
+ * declaration -- an author who wants `:doc_id` answered by the operator rather
+ * than taken from the print request puts a row in the prompts table like any
+ * other parameter, and the answer wins.
  *
- * So this list is not a vocabulary the client sends anywhere. It is a
- * READ-ONLY NOTE, rendered beside the SQL editor, whose entire job is to stop
- * an author declaring `:company_id` as a USER prompt -- which would make the
- * render stop and ask the operator for something it already knows.
+ * What survives is a FALLBACK. A query binding `:company_id` on a revision that
+ * declares no such prompt still gets the session's company, so every design
+ * written before this change keeps printing, and a declared prompt left blank
+ * falls back to the same value rather than binding NULL. That is the only
+ * reason this list is still here: the prompts grid uses it to know which
+ * `:name` in a query needs no declaration to resolve.
  *
- * The list is duplicated from `PTV_CONTEXT_PARAMS` in the server's
- * `print-template.constants.ts` because there is no endpoint that exposes it.
- * It is a closed set "forever" by the schema's own account, so the duplication
- * is cheap; if it ever gains a member, `sqlLint`'s prompt cross-check is what
- * will notice, by reporting the new name as an undeclared parameter.
+ * Mirrors `PTV_CONTEXT_PARAMS` and `PTV_SERVER_OWNED_PARAMS` in the server's
+ * `print-template.constants.ts`; there is no endpoint that exposes either.
  */
 
 export type ContextParam = {
@@ -36,7 +36,35 @@ export const CONTEXT_PARAMS: readonly ContextParam[] = [
 
 const CONTEXT_NAMES = new Set(CONTEXT_PARAMS.map((parameter) => parameter.name));
 
-/** True for a name the server supplies, and that must therefore not be a prompt. */
-export function isContextParam(name: string): boolean {
+/**
+ * The names whose VALUE stays the server's, however the revision declares them.
+ *
+ * `company_id` may be put in the prompts table -- nothing refuses it -- but an
+ * ANSWER to it is refused by the render endpoint and the authenticated company
+ * binds regardless. A render reads a company's documents, so a caller able to
+ * name the company is a caller able to read another tenant's data.
+ */
+export const SERVER_OWNED_PARAMS: readonly string[] = ["company_id"];
+
+const SERVER_OWNED_NAMES = new Set(SERVER_OWNED_PARAMS);
+
+/**
+ * True for a name the render supplies when the revision declares no prompt for
+ * it -- so a query may bind it with nothing in `ptv_params` at all.
+ *
+ * Named for what it now MEANS rather than for the old closed set: this is a
+ * DEFAULT, and a row in the prompts table overrides it.
+ */
+export function hasContextDefault(name: string): boolean {
   return CONTEXT_NAMES.has(name.trim().toLowerCase());
+}
+
+/** The description of a context name, for the hint shown beside a declared row. */
+export function contextParam(name: string): ContextParam | undefined {
+  return CONTEXT_PARAMS.find((parameter) => parameter.name === name.trim().toLowerCase());
+}
+
+/** True for a name the operator can never answer, only the server. */
+export function isServerOwnedParam(name: string): boolean {
+  return SERVER_OWNED_NAMES.has(name.trim().toLowerCase());
 }
