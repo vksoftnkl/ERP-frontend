@@ -19,6 +19,7 @@ import type {
   UiTableOption,
   UiTablePayload,
 } from "./type";
+import { useDataRefresh } from "@/lib/data-freshness";
 const UI_TABLE_MASTERS_LIST_ENDPOINT = "/ui-table-masters/get";
 const UI_TABLE_MASTERS_CREATE_ENDPOINT = "/ui-table-masters/create";
 const UI_TABLE_MASTERS_DELETE_ENDPOINT = "/ui-table-masters/delete";
@@ -736,6 +737,11 @@ export default function UiTableDesignerPage({
       setIsTableListLoading(false);
     }
   }, [fetchAllUiTables]);
+  // The table picker lists rows from the ui_table master; keep it in step with what
+  // the database holds while this designer stays open.
+  useDataRefresh(() => {
+    void refreshTableOptions();
+  });
 
   const loadUiTableById = useCallback(
     async (uiTblId: string) => {

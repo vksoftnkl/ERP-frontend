@@ -1033,6 +1033,25 @@
   width: min(u(78), 100%);
 }
 
+/**
+ * A picker keeps ONE size from open to close.
+ *
+ * Left to size itself the panel tracks its body: the list is empty while the
+ * search is in flight, then twenty rows land, then a filter cuts it to three —
+ * and the dialog jumps each time, moving the footer's pager out from under the
+ * pointer between two clicks. A definite height (still capped by the viewport)
+ * lets the list scroll inside a panel that does not move.
+ */
+.modalPanelFixed {
+  height: min(u(32), calc(calc(100dvh / var(--erp-ui-scale)) - #{u(2)}));
+}
+
+/* The list is what absorbs the slack, so its own content-driven bounds go. */
+.modalPanelFixed .listViewport {
+  min-height: 0;
+  max-height: none;
+}
+
 .modalHeader {
   display: flex;
   gap: u(0.6);
@@ -1275,7 +1294,6 @@
 .listTable tbody tr[data-selected="true"] > td,
 .listTable tbody tr[data-selected="true"]:hover > td {
   background: var(--row-selected-strong, #ecd8d8);
-  font-weight: 600;
 }
 
 .listTable tbody tr[data-selected="true"] > td:first-child {

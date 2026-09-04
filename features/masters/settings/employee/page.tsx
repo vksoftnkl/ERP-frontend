@@ -25,6 +25,7 @@ import {
   toUpper,
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
+import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
   list: "/configured-grid-sql/run?grid_id=14",
   getById: "/employee-masters/get",
@@ -719,7 +720,9 @@ export default function EmployeeMasterPage() {
   const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [loanLedgerOptions, setLoanLedgerOptions] = useState<ERPDynamicSelectOption[]>([]);
 
-  useEffect(() => {
+  // Lookup options come from master tables that other users and other screens
+  // change, so they are re-read on every data-refresh signal, not just on mount.
+  const loadLookupOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
       const [
@@ -766,6 +769,10 @@ export default function EmployeeMasterPage() {
     getStateLookup,
     getLoanLedgerLookup,
   ]);
+  useEffect(() => loadLookupOptions(), [loadLookupOptions]);
+  useDataRefresh(() => {
+    loadLookupOptions();
+  });
   const employeeFormFields = useMemo(
     () =>
       buildEmployeeFormFields(

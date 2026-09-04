@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDataRefresh } from "@/lib/data-freshness";
 import type { LookupDefinition, MasterOption } from "./types";
 import { buildLookupOptions } from "./normalizers";
 type LookupLoader = (query?: Record<string, string>) => Promise<unknown>;
@@ -76,6 +77,14 @@ export function useMasterOptions({
     }
     void refresh();
   }, [autoLoad, definitionKey, refresh]);
+  // Options are master data: they change in the database while the form that shows
+  // them stays open. Reload them on the app-wide freshness signals.
+  useDataRefresh(
+    () => {
+      void refresh();
+    },
+    { enabled: autoLoad },
+  );
   return {
     loading,
     options,

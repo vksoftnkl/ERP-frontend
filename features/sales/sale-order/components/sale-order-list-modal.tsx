@@ -104,7 +104,7 @@ export function SaleOrderListModal({
   };
 
   return (
-    <ModalShell title="Sale Orders" isOpen={isOpen} wide onClose={onClose}>
+    <ModalShell title="Sale Orders" isOpen={isOpen} wide fixedHeight onClose={onClose}>
       <div className={styles.listFilters}>
         <label className={styles.label} htmlFor="so-pick-from">
           From

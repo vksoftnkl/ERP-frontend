@@ -127,6 +127,7 @@ import {
 } from "./form-navigation";
 import { Z_MODAL_NESTED } from "@/lib/z-index";
 import { layoutPointer, layoutViewportSize } from "@/lib/ui-scale";
+import { useDataRefresh } from "@/lib/data-freshness";
 const GRID_SETTINGS_CONTEXT_MENU_WIDTH = 190;
 const GRID_SETTINGS_CONTEXT_MENU_HEIGHT = 130;
 const GRID_SETTINGS_CONTEXT_MENU_PADDING = 8;
@@ -621,7 +622,13 @@ function LedgerFieldRenderer({
   );
 }
 export default function AccountLedgerMasterPage() {
-  const { data, error, loading, getAll } = useApi<unknown>(API_ENDPOINTS.list);
+  const {
+    data,
+    error,
+    loading,
+    getAll,
+    refresh: refreshList,
+  } = useApi<unknown>(API_ENDPOINTS.list);
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const { run: saveGridColumnWidth } = useApi<unknown, Record<string, unknown>>(
     GRID_COLUMNS_CREATE_ENDPOINT,
@@ -799,7 +806,9 @@ export default function AccountLedgerMasterPage() {
       ? "Close grid visible columns"
       : "Close grid search columns";
   // Load grid details
-  useEffect(() => {
+  // Grid configuration lives in the database; re-read it on every refresh signal
+  // so a changed grid reaches this screen without a reload.
+  const loadGridDetails = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -819,6 +828,10 @@ export default function AccountLedgerMasterPage() {
       mounted = false;
     };
   }, [getGridDetails]);
+  useEffect(() => loadGridDetails(), [loadGridDetails]);
+  useDataRefresh(() => {
+    loadGridDetails();
+  });
   const effectiveTitle = useMemo(() => {
     const normalized = accountLedgerGridName?.trim();
     return normalized || "Account Ledger";
@@ -1092,6 +1105,21 @@ export default function AccountLedgerMasterPage() {
     if (visibleLedgerFormSections.some((section) => section.key === activeSectionKey)) return;
     setActiveSectionKey(visibleLedgerFormSections[0]?.key ?? "general");
   }, [activeSectionKey, visibleLedgerFormSections]);
+  const applyListTotal = useCallback((payload: unknown) => {
+    const paginationInfo = extractPaginationInfo(payload);
+    const rows = extractRows(payload, [
+      "data",
+      "items",
+      "results",
+      "rows",
+      "list",
+      "accountLedgers",
+      "account_ledgers",
+    ]);
+    const fallbackTotal = rows.length;
+    const resolvedTotal = paginationInfo.totalEntries ?? fallbackTotal;
+    setTotalEntries(Math.max(0, resolvedTotal));
+  }, []);
   // Load records
   const loadRecords = useCallback(
     async (term: string, page: number, limit: number) => {
@@ -1107,19 +1135,7 @@ export default function AccountLedgerMasterPage() {
         query.search = normalizedTerm;
       }
       const payload = await getAll(query);
-      const paginationInfo = extractPaginationInfo(payload);
-      const rows = extractRows(payload, [
-        "data",
-        "items",
-        "results",
-        "rows",
-        "list",
-        "accountLedgers",
-        "account_ledgers",
-      ]);
-      const fallbackTotal = rows.length;
-      const resolvedTotal = paginationInfo.totalEntries ?? fallbackTotal;
-      setTotalEntries(Math.max(0, resolvedTotal));
+      applyListTotal(payload);
       // Only the total is taken from the response. `page`/`limit` are echoed
       // straight back from the request, so feeding them into state adds nothing
       // and actively fights the table's auto-fit sizing: the reply to an
@@ -1128,7 +1144,7 @@ export default function AccountLedgerMasterPage() {
       // given auto-fit size once, so it never re-sends it and the grid stays
       // stuck fetching fewer rows per page than it renders room for.
     },
-    [getAll, wantDelete],
+    [applyListTotal, getAll, wantDelete],
   );
   // Debounced load records
   useEffect(() => {
@@ -1139,6 +1155,16 @@ export default function AccountLedgerMasterPage() {
       window.clearTimeout(timeoutId);
     };
   }, [currentPage, loadRecords, pageSize, searchTerm]);
+  // Re-read the page on screen when the app signals the data behind it may have
+  // moved. Quiet path: no spinner, no toast, the rows just swap in place.
+  useDataRefresh(() => {
+    void (async () => {
+      const payload = await refreshList();
+      if (payload !== undefined) {
+        applyListTotal(payload);
+      }
+    })();
+  });
   // Build rows
   const serialOffset = Math.max(0, (currentPage - 1) * pageSize);
   const rows = useMemo(

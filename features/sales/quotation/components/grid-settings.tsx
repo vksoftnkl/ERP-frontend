@@ -437,6 +437,7 @@ export function useGridSettings({
     <ModalShell
       title={`Table settings — ${label}`}
       isOpen={settingsOpen}
+      fixedHeight
       onClose={closeSettings}
       footer={
         <>

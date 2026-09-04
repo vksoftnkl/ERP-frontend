@@ -24,6 +24,7 @@ import {
 import styles from "@/app/master/state-master/page.module.scss";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/value-mappers";
+import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
   list: "/configured-grid-sql/run?grid_id=25",
   getById: "/account-groups/get",
@@ -199,7 +200,9 @@ export default function AccountLedgerGroupsMasterPage() {
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted account groups. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
-  useEffect(() => {
+  // Lookup options come from master tables that other users and other screens
+  // change, so they are re-read on every data-refresh signal, not just on mount.
+  const loadParentGroupOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -219,7 +222,13 @@ export default function AccountLedgerGroupsMasterPage() {
       mounted = false;
     };
   }, [getParentGroupLookup]);
-  useEffect(() => {
+  useEffect(() => loadParentGroupOptions(), [loadParentGroupOptions]);
+  useDataRefresh(() => {
+    loadParentGroupOptions();
+  });
+  // Field config comes from the database, so it is read on mount and again on
+  // every data-refresh signal instead of only once per page load.
+  const loadWidgetFieldConfig = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -241,6 +250,10 @@ export default function AccountLedgerGroupsMasterPage() {
       mounted = false;
     };
   }, [getWidgetConfig]);
+  useEffect(() => loadWidgetFieldConfig(), [loadWidgetFieldConfig]);
+  useDataRefresh(() => {
+    loadWidgetFieldConfig();
+  });
   const accountGroupFormFields = useMemo(
     () =>
       applyWidgetFieldConfig(

@@ -35,6 +35,7 @@ import {
 } from "@/store/api/appSettingsApi";
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useApi } from "@/hooks/useApi";
+import { useDataRefresh } from "@/lib/data-freshness";
 // The customer template — what a new customer starts with — is the
 // `masters.customer_form_defaults` SETTING, read and written through the app-settings
 // catalog:
@@ -399,7 +400,9 @@ export default function CustomerTemplatePage() {
     toast: { error: false },
   });
   const [priceLevelOptions, setPriceLevelOptions] = useState<ERPDynamicSelectOption[]>([]);
-  useEffect(() => {
+  // Lookup options come from master tables that other users and other screens
+  // change, so they are re-read on every data-refresh signal, not just on mount.
+  const loadPriceLevelOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -424,6 +427,10 @@ export default function CustomerTemplatePage() {
       mounted = false;
     };
   }, [getPriceLevelLookup]);
+  useEffect(() => loadPriceLevelOptions(), [loadPriceLevelOptions]);
+  useDataRefresh(() => {
+    loadPriceLevelOptions();
+  });
   // The saved template, as it stands for this session. A standing subscription rather
   // than a fetch on open: an RTK Query lazy trigger fired from a mount effect (which is
   // what the popup's auto-open amounts to) resolves undefined without touching the

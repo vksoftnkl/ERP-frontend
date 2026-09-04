@@ -201,6 +201,7 @@ import {
 } from "./physical-stock.utils";
 import { Z_MODAL_NESTED } from "@/lib/z-index";
 import { layoutPointer, layoutViewportSize, toLayoutPx } from "@/lib/ui-scale";
+import { useDataRefresh } from "@/lib/data-freshness";
 type TableSettingsContextMenuPosition = Pick<CSSProperties, "left" | "top">;
 type InlineItemMasterRequest = {
   itemId: string;
@@ -554,7 +555,9 @@ export default function PhysicalStockPage() {
       voucherDate,
     ],
   );
-  useEffect(() => {
+  // Column layout lives in the database (ui_table designer); re-read it on every
+  // refresh signal so a layout changed elsewhere lands without a reload.
+  const loadUiColumnConfig = useCallback(() => {
     void (async () => {
       try {
         const payload = await listUiTableColumns(UI_TABLE_COLUMNS_QUERY);
@@ -567,6 +570,10 @@ export default function PhysicalStockPage() {
       }
     })();
   }, [applyPhysicalStockColumnConfigs, listUiTableColumns]);
+  useEffect(() => loadUiColumnConfig(), [loadUiColumnConfig]);
+  useDataRefresh(() => {
+    loadUiColumnConfig();
+  });
   useEffect(() => {
     void loadItemOptions();
   }, [loadItemOptions]);
@@ -576,7 +583,15 @@ export default function PhysicalStockPage() {
   useEffect(() => {
     void loadReasonOptions();
   }, [loadReasonOptions]);
-  useEffect(() => {
+  // Items, godowns and adjustment reasons are master data: an entry left open on
+  // screen should offer what the database holds now, not what it held at mount.
+  useDataRefresh(() => {
+    void loadItemOptions();
+    void loadGodownOptions();
+    void loadReasonOptions();
+  });
+  // Units are master data too; re-read them alongside the other lookups.
+  const loadUnitOptions = useCallback(() => {
     void (async () => {
       try {
         const options = await triggerUnitOptions(undefined, true).unwrap();
@@ -586,6 +601,10 @@ export default function PhysicalStockPage() {
       }
     })();
   }, [triggerUnitOptions]);
+  useEffect(() => loadUnitOptions(), [loadUnitOptions]);
+  useDataRefresh(() => {
+    loadUnitOptions();
+  });
   useEffect(() => {
     if (!openLookupCell) {
       return;
@@ -1715,6 +1734,13 @@ export default function PhysicalStockPage() {
     }
     void loadPhysicalStockList();
   }, [isPhysicalStockListOpen, loadPhysicalStockList]);
+  // While the popup is open its rows should follow the database: documents saved
+  // elsewhere (or in another tab) appear without closing and reopening it.
+  useDataRefresh(() => {
+    if (isPhysicalStockListOpen) {
+      void loadPhysicalStockList();
+    }
+  });
 
   useEffect(() => {
     if (!isPhysicalStockListOpen) {

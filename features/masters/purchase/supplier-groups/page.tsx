@@ -28,6 +28,7 @@ import {
   toSelectBoolean,
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
+import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
  list: "/configured-grid-sql/run?grid_id=18",
   getById: "/supplier-groups/get",
@@ -159,7 +160,9 @@ export default function SupplierGroupsPage() {
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted supplier groups. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
-  useEffect(() => {
+  // Field config comes from the database, so it is read on mount and again on
+  // every data-refresh signal instead of only once per page load.
+  const loadWidgetFieldConfig = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -181,6 +184,10 @@ export default function SupplierGroupsPage() {
       mounted = false;
     };
   }, [getWidgetConfig]);
+  useEffect(() => loadWidgetFieldConfig(), [loadWidgetFieldConfig]);
+  useDataRefresh(() => {
+    loadWidgetFieldConfig();
+  });
 
   const formFields = useMemo(
     () =>

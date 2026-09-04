@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import type {
@@ -20,6 +20,7 @@ import {
   toUpperNullable,
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
+import { useDataRefresh } from "@/lib/data-freshness";
 const GRID_DETAIL_ID = 81;
 const API_ENDPOINTS = {
   list: `/configured-grid-sql/run?grid_id=${GRID_DETAIL_ID}`,
@@ -259,7 +260,9 @@ export default function ChargeMasterPage() {
   const [ledgerOptions, setLedgerOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_LEDGER_OPTION,
   ]);
-  useEffect(() => {
+  // Lookup options come from master tables that other users and other screens
+  // change, so they are re-read on every data-refresh signal, not just on mount.
+  const loadLedgerOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -285,6 +288,10 @@ export default function ChargeMasterPage() {
       mounted = false;
     };
   }, [getLedgerLookup]);
+  useEffect(() => loadLedgerOptions(), [loadLedgerOptions]);
+  useDataRefresh(() => {
+    loadLedgerOptions();
+  });
   const formFields = useMemo(() => buildChargeFormFields(ledgerOptions), [ledgerOptions]);
   return (
     <CrudMasterPage

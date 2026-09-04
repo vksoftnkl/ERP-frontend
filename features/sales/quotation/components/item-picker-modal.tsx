@@ -78,6 +78,7 @@ export function ItemPickerModal(props: ItemPickerModalProps) {
     <ModalShell
       title="Select item"
       isOpen={isOpen}
+      fixedHeight
       onClose={onClose}
       footer={
         <>

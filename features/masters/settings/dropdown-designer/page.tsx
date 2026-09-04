@@ -17,6 +17,7 @@ import type {
   SaveDropdownDetailRequest,
   SortOrder,
 } from "./type";
+import { useDataRefresh } from "@/lib/data-freshness";
 const DROPDOWN_DETAILS_GET_ENDPOINT = "/dropdown-details/get";
 const DROPDOWN_DETAILS_CREATE_ENDPOINT = "/dropdown-details/create";
 const DROPDOWN_DETAILS_DELETE_ENDPOINT = "/dropdown-details/delete";
@@ -437,6 +438,11 @@ export default function DropdownDesignerPage({
       setIsDropdownListLoading(false);
     }
   }, [fetchAllDropdownDetails]);
+  // The dropdown picker lists rows from fixed.dropdown_details; keep it in step with
+  // what the database holds while this designer stays open.
+  useDataRefresh(() => {
+    void refreshDropdownOptions();
+  });
   const loadDropdownById = useCallback(
     async (dropdownId: string) => {
       const normalizedDropdownId = dropdownId.trim();

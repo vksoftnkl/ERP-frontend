@@ -72,6 +72,7 @@ import type {
   PaginationInfo,
 } from "./crud-master-page.types";
 import { layoutPointer, layoutViewportSize } from "@/lib/ui-scale";
+import { useDataRefresh } from "@/lib/data-freshness";
 const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
@@ -2484,6 +2485,11 @@ export default function CrudMasterPage({
   useEffect(() => {
     void loadUiTableColumns();
   }, [loadUiTableColumns]);
+  // Column layout lives in the database (ui_table designer), so pick up edits made
+  // elsewhere without a reload.
+  useDataRefresh(() => {
+    void loadUiTableColumns();
+  });
   const normalizedGridTableNames = useMemo(() => {
     const base = gridTableName?.trim().toLowerCase();
     if (!base) {
@@ -2504,7 +2510,9 @@ export default function CrudMasterPage({
     }
     return getConfiguredModuleGridId(gridTableName);
   }, [gridDetailId, gridTableName]);
-  useEffect(() => {
+  // The grid definition behind this list is configuration in the database; re-read
+  // it on every refresh signal so a changed grid takes effect without a reload.
+  const loadConfiguredGridDetails = useCallback(() => {
     if (configuredGridDetailId === undefined) {
       setGridId(null);
       setGridDisplayName(null);
@@ -2538,6 +2546,10 @@ export default function CrudMasterPage({
       mounted = false;
     };
   }, [configuredGridDetailId, getGridDetailById]);
+  useEffect(() => loadConfiguredGridDetails(), [loadConfiguredGridDetails]);
+  useDataRefresh(() => {
+    loadConfiguredGridDetails();
+  });
   const effectiveTitle = useMemo(() => {
     const normalized = gridDisplayName?.trim();
     return normalized || title;

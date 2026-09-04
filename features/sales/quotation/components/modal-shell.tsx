@@ -18,12 +18,19 @@ export type ModalShellProps = {
   narrow?: boolean;
   /** Wider panel for dialogs with more columns than the default fits — e.g. the quote-list picker's toolbar + filter row + 9-column table. */
   wide?: boolean;
+  /**
+   * Hold one height for the life of the dialog instead of sizing to whatever
+   * the body currently holds. Every picker sets it: rows arrive after the panel
+   * opens, and a content-sized panel grows and shrinks under the pointer as a
+   * search resolves — the footer's pager walking away between two clicks.
+   */
+  fixedHeight?: boolean;
   footer?: ReactNode;
   children: ReactNode;
   onClose: () => void;
 };
 
-export function ModalShell({ title, isOpen, narrow, wide, footer, children, onClose }: ModalShellProps) {
+export function ModalShell({ title, isOpen, narrow, wide, fixedHeight, footer, children, onClose }: ModalShellProps) {
   const panelRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -63,7 +70,12 @@ export function ModalShell({ title, isOpen, narrow, wide, footer, children, onCl
         />
         <section
           ref={panelRef}
-          className={cx(styles.modalPanel, narrow && styles.modalPanelNarrow, wide && styles.modalPanelWide)}
+          className={cx(
+            styles.modalPanel,
+            narrow && styles.modalPanelNarrow,
+            wide && styles.modalPanelWide,
+            fixedHeight && styles.modalPanelFixed,
+          )}
           role="dialog"
           aria-modal="true"
           aria-label={title}

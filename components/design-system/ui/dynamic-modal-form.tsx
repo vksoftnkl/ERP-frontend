@@ -84,6 +84,7 @@ import {
   ModalFooterCancelIcon,
   ModalFooterSubmitIcon,
 } from "./dynamic-modal-form.parts";
+import { requestDataRefresh } from "@/lib/data-freshness";
 
 export function ERPDynamicModalForm({
   title,
@@ -264,6 +265,10 @@ export function ERPDynamicModalForm({
         };
       });
       setIsOpen(true);
+      // The dropdowns in this form are backed by master data loaded when the screen
+      // opened. Ask the screen to re-read it now, so the form offers what the
+      // database holds at the moment it is opened rather than at page load.
+      requestDataRefresh("modal-open");
       onOpenChange?.(true, variantKey);
     },
     [initialValuesByVariant, onOpenChange, replaceFormData, variants],

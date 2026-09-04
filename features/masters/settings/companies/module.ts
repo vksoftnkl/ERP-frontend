@@ -37,6 +37,7 @@ import {
 } from "@/features/masters/shared";
 import { GST_TYPE_OPTIONS } from "@/utils/constant";
 import { validateGstin } from "@/utils/validation";
+import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
    list: "/configured-grid-sql/run?grid_id=12",
   getById: "/company-masters/get",
@@ -971,7 +972,9 @@ export function useCompaniesModule() {
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
   const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
   const gstLookupCacheRef = useRef<Record<string, Record<string, string>>>({});
-  useEffect(() => {
+  // Lookup options come from master tables that other users and other screens
+  // change, so they are re-read on every data-refresh signal, not just on mount.
+  const loadLookupOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
       const [stateLookupResult, bankLedgerLookupResult] = await Promise.allSettled([
@@ -1001,6 +1004,10 @@ export function useCompaniesModule() {
       mounted = false;
     };
   }, [getBankLedgerLookup, getStateLookup]);
+  useEffect(() => loadLookupOptions(), [loadLookupOptions]);
+  useDataRefresh(() => {
+    loadLookupOptions();
+  });
   const handleCompanyGstinValueChange =
     useCallback<ERPDynamicFieldValueChangeHandler>(
       async ({ value }) => {

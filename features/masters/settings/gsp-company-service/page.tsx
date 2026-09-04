@@ -38,6 +38,7 @@ import {
   toUpper,
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
+import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
   list: "/configured-grid-sql/run?grid_id=27",
   getById: "/gsp-company-services/get",
@@ -264,7 +265,9 @@ export default function GspCompanyServiceMasterPage() {
   const [widgetFieldConfig, setWidgetFieldConfig] = useState<Map<string, ResolvedFieldConfig>>(
     () => new Map(),
   );
-  useEffect(() => {
+  // Lookup options come from master tables that other users and other screens
+  // change, so they are re-read on every data-refresh signal, not just on mount.
+  const loadProviderOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -290,7 +293,13 @@ export default function GspCompanyServiceMasterPage() {
       mounted = false;
     };
   }, [getProviderLookup]);
-  useEffect(() => {
+  useEffect(() => loadProviderOptions(), [loadProviderOptions]);
+  useDataRefresh(() => {
+    loadProviderOptions();
+  });
+  // Field config comes from the database, so it is read on mount and again on
+  // every data-refresh signal instead of only once per page load.
+  const loadWidgetFieldConfig = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -312,6 +321,10 @@ export default function GspCompanyServiceMasterPage() {
       mounted = false;
     };
   }, [getWidgetConfig]);
+  useEffect(() => loadWidgetFieldConfig(), [loadWidgetFieldConfig]);
+  useDataRefresh(() => {
+    loadWidgetFieldConfig();
+  });
   const formFields = useMemo(
     () =>
       applyWidgetFieldConfig(

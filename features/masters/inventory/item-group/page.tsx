@@ -37,6 +37,7 @@ import {
   resolveStoredPhotoName,
   resolveStoredPhotoPreview,
 } from "@/features/masters/shared/stored-photo";
+import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
 list: "/configured-grid-sql/run?grid_id=6",
   getById: "/item-groups/get",
@@ -314,7 +315,9 @@ export default function ItemGroupMasterPage() {
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted item groups. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
-  useEffect(() => {
+  // Field config comes from the database, so it is read on mount and again on
+  // every data-refresh signal instead of only once per page load.
+  const loadWidgetFieldConfig = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -336,6 +339,10 @@ export default function ItemGroupMasterPage() {
       mounted = false;
     };
   }, [getWidgetConfig]);
+  useEffect(() => loadWidgetFieldConfig(), [loadWidgetFieldConfig]);
+  useDataRefresh(() => {
+    loadWidgetFieldConfig();
+  });
   // Mirror of the latest options + the pinned selection so the value handler can resolve
   // a picked label and the selection stays visible after a fetch replaces the list.
   const parentOptionsRef = useRef<ERPDynamicSelectOption[]>([DEFAULT_PARENT_OPTION]);

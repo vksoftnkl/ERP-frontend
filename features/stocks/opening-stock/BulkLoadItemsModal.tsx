@@ -1,11 +1,12 @@
 "use client";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { FiX } from "react-icons/fi";
 import { useBusinessContext } from "@/components/layout/business-context";
 import { useApi } from "@/hooks/useApi";
 import { SearchableSelect, type ERPDynamicSelectOption } from "@/components/design-system/ui";
 import ModalPortal from "@/components/ui/modal-portal";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
+import { useDataRefresh } from "@/lib/data-freshness";
 const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const NONE_OPTION: ERPDynamicSelectOption = { value: "", label: "--None--" };
 const LOOKUP_TOAST = { toast: { success: false, error: false } } as const;
@@ -143,7 +144,9 @@ export function BulkLoadItemsModal({
     setItemSectionId("");
     setItemCategoryId("");
   }, [isOpen, defaultCompanyId, defaultBranchId]);
-  useEffect(() => {
+  // The filter dropdowns in this popup are master data; re-read them on every
+  // refresh signal so a category added elsewhere shows up while it is open.
+  const loadFilterLookups = useCallback(() => {
     if (!isOpen) return;
     setIsMasterLoading(true);
     void (async () => {
@@ -169,6 +172,10 @@ export function BulkLoadItemsModal({
       }
     })();
   }, [isOpen, getBranchLookup, getGroupLookup, getBrandLookup, getSectionLookup, getCategoryLookup, getGodownLookup]);
+  useEffect(() => loadFilterLookups(), [loadFilterLookups]);
+  useDataRefresh(() => {
+    loadFilterLookups();
+  });
   useEffect(() => {
     setGodownId("");
   }, [branchId]);

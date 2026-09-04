@@ -180,6 +180,7 @@ import {
 } from "./opening-stock.column-settings";
 import { Z_MODAL_NESTED } from "@/lib/z-index";
 import { layoutPointer, layoutViewportSize, toLayoutPx } from "@/lib/ui-scale";
+import { useDataRefresh } from "@/lib/data-freshness";
 function renderValidationToastContent(
   issues: Array<{ rowId: number; fieldKey: string; message: string }>,
 ) {
@@ -438,7 +439,9 @@ export default function OpeningStockPage() {
     async (): Promise<ERPDynamicSelectOption[]> => triggerTaxOptions(undefined, true).unwrap(),
     [triggerTaxOptions],
   );
-  useEffect(() => {
+  // Column layout lives in the database (ui_table designer); re-read it on every
+  // refresh signal so a layout changed elsewhere lands without a reload.
+  const loadUiColumnConfig = useCallback(() => {
     let cancelled = false;
     const loadUiColumnConfig = async () => {
       try {
@@ -465,12 +468,18 @@ export default function OpeningStockPage() {
       cancelled = true;
     };
   }, [listUiTableColumns]);
+  useEffect(() => loadUiColumnConfig(), [loadUiColumnConfig]);
+  useDataRefresh(() => {
+    loadUiColumnConfig();
+  });
   const resetOpeningStockAuditNotesModal = useCallback(() => {
     setPendingOpeningStockSaveRequest(null);
     setOpeningStockAuditNotes("");
     setOpeningStockAuditNotesError(null);
   }, []);
-  useEffect(() => {
+  // Items, taxes, units and godowns are master data that changes while this entry
+  // screen is open, so re-read them on every refresh signal.
+  const loadEntryLookupOptions = useCallback(() => {
     let cancelled = false;
     void (async () => {
       const [itemsPayload, taxesPayload, unitsPayload, unitDecimalsPayload, godownsPayload] =
@@ -504,6 +513,10 @@ export default function OpeningStockPage() {
       cancelled = true;
     };
   }, [listUnits, loadLookupOptions, loadTaxOptions, loadUnitOptions]);
+  useEffect(() => loadEntryLookupOptions(), [loadEntryLookupOptions]);
+  useDataRefresh(() => {
+    loadEntryLookupOptions();
+  });
   useEffect(() => {
     if (!openLookupCell) {
       return;
@@ -1139,6 +1152,13 @@ export default function OpeningStockPage() {
     }
     void loadOpeningStockList();
   }, [isOpeningStockListOpen, loadOpeningStockList]);
+  // While the popup is open its rows should follow the database: vouchers saved
+  // elsewhere (or in another tab) appear without closing and reopening it.
+  useDataRefresh(() => {
+    if (isOpeningStockListOpen) {
+      void loadOpeningStockList();
+    }
+  });
   useEffect(() => {
     if (!isOpeningStockListOpen) {
       return;

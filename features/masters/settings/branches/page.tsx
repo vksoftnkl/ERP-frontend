@@ -26,6 +26,7 @@ import {
   toUpper,
   toUpperNullable,
 } from "@/app/master/_shared/crud-utils";
+import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
   list: "/configured-grid-sql/run?grid_id=13",
   getById: "/branch-masters/get",
@@ -751,7 +752,9 @@ export default function BranchesMasterPage() {
   );
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
   const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
-  useEffect(() => {
+  // Lookup options come from master tables that other users and other screens
+  // change, so they are re-read on every data-refresh signal, not just on mount.
+  const loadStateOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -773,6 +776,10 @@ export default function BranchesMasterPage() {
       mounted = false;
     };
   }, [getStateLookup]);
+  useEffect(() => loadStateOptions(), [loadStateOptions]);
+  useDataRefresh(() => {
+    loadStateOptions();
+  });
   const branchFormFields = useMemo(
     () =>
       buildBranchFormFields({

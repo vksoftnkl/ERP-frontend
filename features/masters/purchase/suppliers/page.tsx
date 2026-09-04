@@ -106,6 +106,7 @@ import {
   buildLedgerBankAccountPayload,
   type LedgerBankAccountFormRow,
 } from "@/features/masters/accounts/account-ledger/bank-accounts";
+import { useDataRefresh } from "@/lib/data-freshness";
 // Lowercased backend fieldNames that actually bind to a field on this form; the
 // popup lists only these.
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(
@@ -817,7 +818,9 @@ export default function SuppliersMasterPage() {
   const [widgetFieldConfig, setWidgetFieldConfig] = useState<Map<string, ResolvedFieldConfig>>(
     () => new Map(),
   );
-  useEffect(() => {
+  // Field config comes from the database, so it is read on mount and again on
+  // every data-refresh signal instead of only once per page load.
+  const loadWidgetFieldConfig = useCallback(() => {
     let cancelled = false;
     const loadConfig = async () => {
       try {
@@ -841,6 +844,10 @@ export default function SuppliersMasterPage() {
       cancelled = true;
     };
   }, [getWidgetConfig]);
+  useEffect(() => loadWidgetFieldConfig(), [loadWidgetFieldConfig]);
+  useDataRefresh(() => {
+    loadWidgetFieldConfig();
+  });
   // Right-click config tree popup over the create/update modal.
   const { getAll: getWidgetConfigTree } = useApi<WidgetMastersResponse>(
     WIDGET_CONFIG_TREE_ENDPOINT,

@@ -27,6 +27,7 @@ import {
 import styles from "@/app/master/state-master/page.module.scss";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue, toSelectBoolean } from "@/features/masters/shared/value-mappers";
+import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
   list: "/configured-grid-sql/run?grid_id=20",
   getById: "/cities/get",
@@ -334,7 +335,9 @@ export default function CityMasterPage() {
   const [widgetFieldConfig, setWidgetFieldConfig] = useState<Map<string, ResolvedFieldConfig>>(
     () => new Map(),
   );
-  useEffect(() => {
+  // Field config comes from the database, so it is read on mount and again on
+  // every data-refresh signal instead of only once per page load.
+  const loadWidgetFieldConfig = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -356,6 +359,10 @@ export default function CityMasterPage() {
       mounted = false;
     };
   }, [getWidgetConfig]);
+  useEffect(() => loadWidgetFieldConfig(), [loadWidgetFieldConfig]);
+  useDataRefresh(() => {
+    loadWidgetFieldConfig();
+  });
 
   // Re-label/re-order/show-hide the dynamically-built fields (the State select is a
   // lazy server-side dropdown) from the resolved widget config.

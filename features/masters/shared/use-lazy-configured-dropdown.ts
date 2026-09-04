@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useApi } from "@/hooks/useApi";
+import { useDataRefresh } from "@/lib/data-freshness";
 import type {
   ERPDynamicSelectOption,
   ERPDynamicSearchQueryChangeHandler,
@@ -121,6 +122,10 @@ export function useLazyConfiguredDropdown({
   const optionsRef = useRef<ERPDynamicSelectOption[]>([head]);
   const pinnedRef = useRef<ERPDynamicSelectOption | null>(null);
   const timeoutRef = useRef<number | null>(null);
+  // What the field is showing right now, so a refresh signal can re-run the same
+  // query while the list is open instead of waiting for the next open.
+  const openRef = useRef(false);
+  const searchRef = useRef("");
   const applyOptions = useCallback((next: ERPDynamicSelectOption[]) => {
     optionsRef.current = next;
     setOptions(next);
@@ -148,7 +153,9 @@ export function useLazyConfiguredDropdown({
           window.clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
         }
+        openRef.current = open;
         if (open) {
+          searchRef.current = "";
           void fetchOptions("");
         }
       },
@@ -159,6 +166,7 @@ export function useLazyConfiguredDropdown({
         const delay = query.trim() ? debounceMs : 0;
         timeoutRef.current = window.setTimeout(() => {
           timeoutRef.current = null;
+          searchRef.current = query;
           void fetchOptions(query);
         }, delay);
       },
@@ -183,6 +191,13 @@ export function useLazyConfiguredDropdown({
     },
     [applyOptions, head],
   );
+  // Every open already goes to the server, so this only matters for a list that is
+  // open when the data behind it changes (a save in another tab, the tab refocused).
+  useDataRefresh(() => {
+    if (openRef.current) {
+      void fetchOptions(searchRef.current);
+    }
+  });
   useEffect(() => {
     return () => {
       if (timeoutRef.current != null) {

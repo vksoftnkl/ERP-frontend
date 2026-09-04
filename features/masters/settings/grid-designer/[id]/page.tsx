@@ -18,6 +18,7 @@ import type {
   SaveGridDetailRequest,
   SortOrder,
 } from "./type";
+import { useDataRefresh } from "@/lib/data-freshness";
 const GRID_DETAILS_LIST_ENDPOINT = "/grid-details/get";
 const GRID_DETAILS_GET_ENDPOINT = "/grid-details/get";
 const GRID_DETAILS_CREATE_ENDPOINT = "/grid-details/create";
@@ -552,6 +553,11 @@ export default function GridDesignerPage({
       setIsGridListLoading(false);
     }
   }, [fetchAllGridDetails]);
+  // The grid picker lists rows from fixed.grid_details; keep it in step with what
+  // the database holds while this designer stays open.
+  useDataRefresh(() => {
+    void refreshGridOptions();
+  });
   const loadGridById = useCallback(
     async (gridId: string) => {
       const normalizedGridId = gridId.trim();

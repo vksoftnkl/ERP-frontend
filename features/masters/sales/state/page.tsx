@@ -28,6 +28,7 @@ import {
   toSelectBoolean,
   toUpdateId,
 } from "@/features/masters/shared/value-mappers";
+import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
     list: "/configured-grid-sql/run?grid_id=2",
   getById: "/states/get",
@@ -157,7 +158,9 @@ export default function StateMasterPage() {
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted states. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
-  useEffect(() => {
+  // Field config comes from the database, so it is read on mount and again on
+  // every data-refresh signal instead of only once per page load.
+  const loadWidgetFieldConfig = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -179,6 +182,10 @@ export default function StateMasterPage() {
       mounted = false;
     };
   }, [getWidgetConfig]);
+  useEffect(() => loadWidgetFieldConfig(), [loadWidgetFieldConfig]);
+  useDataRefresh(() => {
+    loadWidgetFieldConfig();
+  });
   const formFields = useMemo(
     () => applyWidgetFieldConfig(STATE_FORM_FIELDS, widgetFieldConfig, WIDGET_FIELD_NAME_BY_FORM_FIELD),
     [widgetFieldConfig],

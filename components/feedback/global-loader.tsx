@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useDataRefresh } from "@/lib/data-freshness";
 import { ERP_GLOBAL_NAVIGATION_START_EVENT } from "@/lib/navigation/global-loader";
 import { baseApi } from "@/store/api/baseApi";
 import { useAppSelector } from "@/store/hooks";
@@ -12,6 +13,10 @@ import { selectGlobalLoaderPendingRequests } from "@/store/slices/globalLoaderSl
 const SHOW_DELAY_MS = 120;
 const MIN_VISIBLE_MS = 360;
 const ROUTE_LOADING_TIMEOUT_MS = 8000;
+// Background revalidation (tab refocused, a save in another tab) fires a burst of
+// requests nobody asked for. Showing the bar for those would flash it on every
+// alt-tab, so the loader stays quiet for this long after a refresh signal.
+const BACKGROUND_REFRESH_QUIET_MS = 2000;
 
 type RequestEntry = {
   status?: string;
@@ -78,13 +83,39 @@ export default function GlobalLoader() {
   const [visible, setVisible] = useState(false);
   const visibleSinceRef = useRef(0);
   const routeTimeoutRef = useRef<number | null>(null);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
+  const backgroundTimeoutRef = useRef<number | null>(null);
+
+  useDataRefresh(
+    () => {
+      setBackgroundRefreshing(true);
+      if (backgroundTimeoutRef.current !== null) {
+        window.clearTimeout(backgroundTimeoutRef.current);
+      }
+      backgroundTimeoutRef.current = window.setTimeout(() => {
+        backgroundTimeoutRef.current = null;
+        setBackgroundRefreshing(false);
+      }, BACKGROUND_REFRESH_QUIET_MS);
+    },
+    { minIntervalMs: 0 },
+  );
+
+  useEffect(() => {
+    return () => {
+      if (backgroundTimeoutRef.current !== null) {
+        window.clearTimeout(backgroundTimeoutRef.current);
+        backgroundTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const pending = useMemo(
     () => customPendingRequests + rtkPendingRequests + gridColumnPendingRequests,
     [customPendingRequests, gridColumnPendingRequests, rtkPendingRequests],
   );
 
-  const active = !authInitialized || pending > 0 || routeLoading;
+  const active =
+    !authInitialized || (pending > 0 && !backgroundRefreshing) || routeLoading;
 
   const clearRouteTimeout = useCallback(() => {
     if (routeTimeoutRef.current !== null) {

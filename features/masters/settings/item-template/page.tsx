@@ -48,6 +48,7 @@ import {
 } from "@/store/api/appSettingsApi";
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useApi } from "@/hooks/useApi";
+import { useDataRefresh } from "@/lib/data-freshness";
 // The item template — what a new item starts with — is the
 // `masters.item_form_defaults` SETTING, read and written through the app-settings
 // catalog, exactly like the customer one:
@@ -350,7 +351,9 @@ export default function ItemTemplatePage() {
   const { getAll: getHsnLookup } = useApi<unknown>(LOOKUP_ENDPOINT, { toast: { error: false } });
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [hsnOptions, setHsnOptions] = useState<ERPDynamicSelectOption[]>([]);
-  useEffect(() => {
+  // Lookup options come from master tables that other users and other screens
+  // change, so they are re-read on every data-refresh signal, not just on mount.
+  const loadLookupOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
       const [branches, hsnCodes] = await Promise.allSettled([
@@ -373,6 +376,10 @@ export default function ItemTemplatePage() {
       mounted = false;
     };
   }, [getBranchLookup, getHsnLookup]);
+  useEffect(() => loadLookupOptions(), [loadLookupOptions]);
+  useDataRefresh(() => {
+    loadLookupOptions();
+  });
   // The saved template, as it stands for this session. A standing subscription rather
   // than a fetch on open: an RTK Query lazy trigger fired from a mount effect (which is
   // what the popup's auto-open amounts to) resolves undefined without touching the

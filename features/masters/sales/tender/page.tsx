@@ -37,6 +37,7 @@ import {
   toSelectBoolean,
   toUpdateId,
 } from "@/features/masters/shared/value-mappers";
+import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
   list: "/configured-grid-sql/run?grid_id=44",
   getById: "/tender-masters/get",
@@ -715,7 +716,9 @@ export default function TenderMasterPage() {
   const [bankAccountOptions, setBankAccountOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_BANK_ACCOUNT_OPTION,
   ]);
-  useEffect(() => {
+  // Lookup options come from master tables that other users and other screens
+  // change, so they are re-read on every data-refresh signal, not just on mount.
+  const loadLookupOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -763,6 +766,10 @@ export default function TenderMasterPage() {
     getLedgerLookup,
     getTenderTypeLookup,
   ]);
+  useEffect(() => loadLookupOptions(), [loadLookupOptions]);
+  useDataRefresh(() => {
+    loadLookupOptions();
+  });
 
   // Silent progressive enhancement: a failed config fetch leaves the form on its
   // hardcoded labels/order (empty map), so don't nag the user with an error toast.
@@ -772,7 +779,9 @@ export default function TenderMasterPage() {
   const [widgetFieldConfig, setWidgetFieldConfig] = useState<Map<string, ResolvedFieldConfig>>(
     () => new Map(),
   );
-  useEffect(() => {
+  // Field config comes from the database, so it is read on mount and again on
+  // every data-refresh signal instead of only once per page load.
+  const loadWidgetFieldConfig = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -794,6 +803,10 @@ export default function TenderMasterPage() {
       mounted = false;
     };
   }, [getWidgetConfig]);
+  useEffect(() => loadWidgetFieldConfig(), [loadWidgetFieldConfig]);
+  useDataRefresh(() => {
+    loadWidgetFieldConfig();
+  });
 
   // Drop any field an admin has hidden in the config. "visibility-only" keeps the
   // authored tab/group order and labels — reordering by config would scatter the

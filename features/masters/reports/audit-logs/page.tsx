@@ -5,6 +5,7 @@ import { useApi } from "@/hooks/useApi";
 import ModalPortal from "@/components/ui/modal-portal";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import styles from "./page.module.scss";
+import { useDataRefresh } from "@/lib/data-freshness";
 const AUDIT_LOG_LIST_ENDPOINT = "/audit-logs/list";
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
@@ -482,6 +483,11 @@ export default function AuditLogsPage() {
   useEffect(() => {
     void fetchAuditLogs();
   }, [fetchAuditLogs, refreshKey]);
+  // Audit rows keep arriving while this page sits open; re-read them on every
+  // data-refresh signal instead of waiting for the F5 button.
+  useDataRefresh(() => {
+    void fetchAuditLogs();
+  });
   useEffect(() => {
     if (currentPage > safeTotalPages) {
       setCurrentPage(safeTotalPages);

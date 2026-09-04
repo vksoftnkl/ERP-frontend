@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { useApi } from "@/hooks/useApi";
+import { useDataRefresh } from "@/lib/data-freshness";
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface MenuNode {
   menuId: number;
@@ -288,7 +289,9 @@ export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
     const arr = parseMenuPermissions(value);
     return new Map(arr.map((p) => [p.umMenuId, p]));
   }, [value]);
-  useEffect(() => {
+  // The menu tree is master data - re-read it whenever the app signals that data
+  // may have changed instead of only on mount.
+  const loadMenuTree = useCallback(() => {
     setLoading(true);
     getAll(MENU_QUERY as Record<string, string>)
       .then((res: unknown) => {
@@ -298,6 +301,10 @@ export function UserMenuTree({ value, setValue, disabled }: UserMenuTreeProps) {
       .catch(() => setMenus([]))
       .finally(() => setLoading(false));
   }, [getAll]);
+  useEffect(() => loadMenuTree(), [loadMenuTree]);
+  useDataRefresh(() => {
+    loadMenuTree();
+  });
   const commit = useCallback(
     (map: Map<number, MenuPermission>) => {
       setValue(JSON.stringify([...map.values()]));

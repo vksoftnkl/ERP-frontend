@@ -3,6 +3,7 @@ import { type CSSProperties, useCallback, useEffect, useRef, useState } from "re
 import { useApi } from "@/hooks/useApi";
 import { useAppSelector } from "@/store/hooks";
 import { selectAuthInitialized, selectAuthUserId } from "@/store/slices/authSlice";
+import { useDataRefresh } from "@/lib/data-freshness";
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface MenuNode {
   menuId: number;
@@ -264,7 +265,9 @@ export default function ModuleAdministrationPage() {
     setVisibility(new Map(map));
     setOriginal(new Map(map));
   }, []);
-  useEffect(() => {
+  // The menu tree is master data - re-read it whenever the app signals that data
+  // may have changed instead of only on mount.
+  const loadMenuTree = useCallback(() => {
     if (!authInitialized) {
       return;
     }
@@ -285,6 +288,10 @@ export default function ModuleAdministrationPage() {
       .catch(() => setMenus([]))
       .finally(() => setLoadingMenus(false));
   }, [authInitialized, getAll, initMaps, userId]);
+  useEffect(() => loadMenuTree(), [loadMenuTree]);
+  useDataRefresh(() => {
+    loadMenuTree();
+  });
   const dirtyItems = (() => {
     const items: VisibilityItem[] = [];
     visibility.forEach((value, menuId) => {

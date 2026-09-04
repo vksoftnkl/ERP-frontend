@@ -152,54 +152,69 @@ export function getApiErrorMessage(error?: ApiError | SerializedError | null): s
   }
   return "Request failed.";
 }
+// Every cache tag the app uses. Exported so a "something changed in the database"
+// signal (a save in another tab, a manual refresh) can invalidate the whole cache
+// in one dispatch instead of guessing which tags are affected.
+export const API_TAG_TYPES = [
+  // Existing
+  "Auth",
+  "GridColumns",
+  "ItemLookup",
+  "GodownLookup",
+  "MenuMasters",
+  // Business context
+  "CompanyList",
+  "BranchList",
+  "FiscalYearList",
+  // Generic master list (keyed by list URL)
+  "MasterList",
+  // Per-module lookup caches (invalidated by masters saga on save)
+  "UnitLookup",
+  "TaxLookup",
+  "BranchLookup",
+  "CompanyLookup",
+  "UserLookup",
+  // Stock modules
+  "OpeningStock",
+  "PhysicalStock",
+  // Pricing modules
+  "ItemQtyPrice",
+  // Sales transactions
+  "Quotation",
+  "SaleOrder",
+  "TxnHold",
+  // Screen field config (fixed.form_section / form_field), keyed by menu id
+  "WidgetConfig",
+  // Application settings (app_setting_def catalog + its overrides)
+  "AppSettings",
+  // Print designer (reports/templates)
+  "PrintTemplate",
+  "PrintTemplateRevision",
+  "PrintTemplateVocabulary",
+  "PrintDatasetCatalogue",
+  // The 17_printing engine (print-templates / print-template-assignments).
+  // Distinct tags from the four above on purpose: that is the /reports
+  // designer over a different set of tables, and invalidating one must not
+  // refetch the other.
+  "PrintingTemplate",
+  "PrintingAssignment",
+  // print_purpose, read through configured dropdown 47.
+  "PrintingPurpose",
+] as const;
 export const baseApi = createApi({
   reducerPath: "baseApi",
   baseQuery: baseQueryWithAuthHandling,
-  tagTypes: [
-    // Existing
-    "Auth",
-    "GridColumns",
-    "ItemLookup",
-    "GodownLookup",
-    "MenuMasters",
-    // Business context
-    "CompanyList",
-    "BranchList",
-    "FiscalYearList",
-    // Generic master list (keyed by list URL)
-    "MasterList",
-    // Per-module lookup caches (invalidated by masters saga on save)
-    "UnitLookup",
-    "TaxLookup",
-    "BranchLookup",
-    "CompanyLookup",
-    "UserLookup",
-    // Stock modules
-    "OpeningStock",
-    "PhysicalStock",
-    // Pricing modules
-    "ItemQtyPrice",
-    // Sales transactions
-    "Quotation",
-    "SaleOrder",
-    "TxnHold",
-    // Screen field config (fixed.form_section / form_field), keyed by menu id
-    "WidgetConfig",
-    // Application settings (app_setting_def catalog + its overrides)
-    "AppSettings",
-    // Print designer (reports/templates)
-    "PrintTemplate",
-    "PrintTemplateRevision",
-    "PrintTemplateVocabulary",
-    "PrintDatasetCatalogue",
-    // The 17_printing engine (print-templates / print-template-assignments).
-    // Distinct tags from the four above on purpose: that is the /reports
-    // designer over a different set of tables, and invalidating one must not
-    // refetch the other.
-    "PrintingTemplate",
-    "PrintingAssignment",
-    // print_purpose, read through configured dropdown 47.
-    "PrintingPurpose",
-  ],
+  tagTypes: API_TAG_TYPES,
+  // Freshness defaults for every query in the app. Records can change in the
+  // database at any time (another user, another tab, a direct edit), so a cached
+  // list/lookup is only ever a starting point:
+  //  - a subscriber mounting (a modal opening, a dropdown rendering) revalidates
+  //    when the cached entry is older than this many seconds - cached data still
+  //    paints instantly, the request just refreshes it behind that;
+  //  - the tab regaining focus or the network reconnecting revalidates everything
+  //    currently on screen (needs setupListeners, wired in makeStore).
+  refetchOnMountOrArgChange: 2,
+  refetchOnFocus: true,
+  refetchOnReconnect: true,
   endpoints: () => ({}),
 });

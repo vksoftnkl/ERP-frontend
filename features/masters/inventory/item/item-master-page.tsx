@@ -197,6 +197,7 @@ import {
   type UiTableColumnLayoutItem,
   normalizeItemBatchConfigValue,
 } from "./item-master-page.constants";
+import { useDataRefresh } from "@/lib/data-freshness";
 // Company is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
 // 8=company comp_id/comp_name). Loaded on open + on debounced server-side search via
 // /dropdown-details/run; nothing fetched up front.
@@ -4672,7 +4673,9 @@ export default function ItemMasterPageContent({
       },
       [saveUiTableColumnLayout],
     );
-  useEffect(() => {
+  // Every lookup and table config this screen shows comes from master data that
+  // other users change; re-read them on each refresh signal, not just on mount.
+  const loadItemMasterLookups = useCallback(() => {
     let mounted = true;
     void (async () => {
       const [
@@ -4806,6 +4809,10 @@ export default function ItemMasterPageContent({
     getUnitLookup,
     listItemTaxes,
   ]);
+  useEffect(() => loadItemMasterLookups(), [loadItemMasterLookups]);
+  useDataRefresh(() => {
+    loadItemMasterLookups();
+  });
   // Tier A..D ↔ price level 1..4: short codes for the grid's column headers,
   // and the number of configured levels caps how many tiers get validated.
   const priceLevelShortByTier = useMemo(() => {

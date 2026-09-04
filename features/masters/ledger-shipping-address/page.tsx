@@ -18,6 +18,7 @@ import {
   toUpper,
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
+import { useDataRefresh } from "@/lib/data-freshness";
 const GRID_DETAIL_ID = 60;
 const API_ENDPOINTS = {
   list: `/configured-grid-sql/run?grid_id=${GRID_DETAIL_ID}`,
@@ -356,7 +357,9 @@ export default function LedgerShippingAddressMasterPage() {
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_BRANCH_OPTION,
   ]);
-  useEffect(() => {
+  // Lookup options come from master tables that other users and other screens
+  // change, so they are re-read on every data-refresh signal, not just on mount.
+  const loadLookupOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -402,6 +405,10 @@ export default function LedgerShippingAddressMasterPage() {
       mounted = false;
     };
   }, [getLedgerLookup, getCompanyLookup, getBranchLookup]);
+  useEffect(() => loadLookupOptions(), [loadLookupOptions]);
+  useDataRefresh(() => {
+    loadLookupOptions();
+  });
   const formFields = useMemo(
     () => buildLedgerShippingAddressFields(ledgerOptions, companyOptions, branchOptions),
     [ledgerOptions, companyOptions, branchOptions],

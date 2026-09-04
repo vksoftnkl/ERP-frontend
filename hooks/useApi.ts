@@ -11,6 +11,7 @@ import {
   extractUserInfo,
   setAuthSession,
 } from "@/lib/auth/session";
+import { notifyDataChanged, useDataRefresh } from "@/lib/data-freshness";
 import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import { useAppDispatch } from "@/store/hooks";
 import { authSessionChanged } from "@/store/slices/authSlice";
@@ -30,6 +31,14 @@ type UseApiOptions<TBody> = {
   headers?: Record<string, string>;
   body?: TBody; // optional default body
   toast?: UseApiToastOptions;
+  // Set true on a GET hook whose `data` is what the screen renders: the hook then
+  // repeats its last request in the background whenever the app decides on-screen
+  // data may be stale (tab refocused, network back, something saved here or in
+  // another tab), so what is rendered follows the database without a reload.
+  // Off by default because most callers here read the payload from the returned
+  // promise instead - those refresh through useDataRefresh/useDataRefreshToken,
+  // which re-runs the loader that owns the state.
+  autoRefresh?: boolean;
 };
 type UseApiRunOverride<TBody> = {
   body?: TBody;
@@ -250,11 +259,22 @@ export function useApi<TResp = unknown, TBody = unknown>(
   options: UseApiOptions<TBody> = {}
 ) {
   const dispatch = useAppDispatch();
-  const { method = "GET", headers, body: defaultBody, toast: toastOptions } = options;
+  const {
+    method = "GET",
+    headers,
+    body: defaultBody,
+    toast: toastOptions,
+    autoRefresh = false,
+  } = options;
   const [data, setData] = useState<TResp | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Background revalidation only makes sense for a read that has already run once:
+  // it repeats that exact request and refreshes `data` in place.
+  const canAutoRefresh = autoRefresh && !isMutationMethod(method);
+  const hasLoadedRef = useRef(false);
+  const refreshAbortRef = useRef<AbortController | null>(null);
   const lastRunOverrideRef = useRef<UseApiRunOverride<TBody> | undefined>(undefined);
   const headersRef = useRef(headers);
   const defaultBodyRef = useRef(defaultBody);
@@ -322,6 +342,12 @@ export function useApi<TResp = unknown, TBody = unknown>(
         const resp = await axios.request<TResp>(requestConfig);
         const json = resp.data as TResp;
         setData(json);
+        hasLoadedRef.current = true;
+        if (isMutationMethod(method)) {
+          // Tell the rest of this tab - and every other open tab - to re-read, so a
+          // save here shows up in lists, modals and dropdowns that are already open.
+          notifyDataChanged(getPathname(requestUrl));
+        }
         if (shouldToastSuccess) {
           showSuccessToast(successMessage);
         }
@@ -344,6 +370,10 @@ export function useApi<TResp = unknown, TBody = unknown>(
                 });
                 const json = retryResponse.data as TResp;
                 setData(json);
+                hasLoadedRef.current = true;
+                if (isMutationMethod(method)) {
+                  notifyDataChanged(getPathname(requestUrl));
+                }
                 return json;
               } catch (retryError) {
                 if (isCanceledRequestError(retryError)) {
@@ -389,7 +419,69 @@ export function useApi<TResp = unknown, TBody = unknown>(
     },
     [dispatch, url, method]
   );
+  // Repeat the last read in the background and swap `data` for what the server
+  // returns now. Deliberately quiet: no global loader, no toast, and a failure
+  // leaves whatever is already on screen untouched.
+  const refreshInBackground = useCallback(async (): Promise<TResp | undefined> => {
+    // Callable by hand even when the automatic subscription is off (autoRefresh: false),
+    // so a screen can post-process the payload itself.
+    if (isMutationMethod(method) || !hasLoadedRef.current || abortRef.current) {
+      return undefined;
+    }
+    const lastOverride = lastRunOverrideRef.current;
+    const requestUrl = lastOverride?.url ?? url;
+    const requestHeaders = buildHeaders(requestUrl, headersRef.current);
+    const hasAuthorization = Object.keys(requestHeaders).some(
+      (headerName) => headerName.toLowerCase() === "authorization",
+    );
+    if (!hasAuthorization) {
+      // No session to refresh with - the next user action reports that properly.
+      return undefined;
+    }
+    refreshAbortRef.current?.abort();
+    const controller = new AbortController();
+    refreshAbortRef.current = controller;
+    try {
+      const response = await axios.request<TResp>({
+        url: requestUrl,
+        method,
+        baseURL: API_BASE || undefined,
+        headers: requestHeaders,
+        params: lastOverride?.query,
+        signal: controller.signal,
+      });
+      // A user-triggered run started meanwhile: that one owns the state.
+      if (abortRef.current) {
+        return undefined;
+      }
+      const json = response.data as TResp;
+      setData(json);
+      return json;
+    } catch {
+      // Keep the currently rendered data; this refresh was never asked for.
+      return undefined;
+    } finally {
+      if (refreshAbortRef.current === controller) {
+        refreshAbortRef.current = null;
+      }
+    }
+  }, [method, url]);
+  useDataRefresh(
+    () => {
+      void refreshInBackground();
+    },
+    { enabled: canAutoRefresh },
+  );
+  useEffect(() => {
+    return () => {
+      refreshAbortRef.current?.abort();
+      refreshAbortRef.current = null;
+    };
+  }, []);
   const reset = useCallback(() => {
+    refreshAbortRef.current?.abort();
+    refreshAbortRef.current = null;
+    hasLoadedRef.current = false;
     setData(null);
     setError(null);
     setLoading(false);
@@ -398,5 +490,5 @@ export function useApi<TResp = unknown, TBody = unknown>(
     async (query?: Record<string, string>) => run({ query }),
     [run]
   );
-  return { data, loading, error, run, getAll, reset };
+  return { data, loading, error, run, getAll, reset, refresh: refreshInBackground };
 }

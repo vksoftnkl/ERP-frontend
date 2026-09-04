@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import type {
@@ -18,6 +18,7 @@ import {
   toUpdateId,
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
+import { useDataRefresh } from "@/lib/data-freshness";
 
 const GRID_DETAIL_ID = 74;
 const API_ENDPOINTS = {
@@ -188,7 +189,9 @@ export default function FreightChargesMasterPage() {
     DEFAULT_BRANCH_OPTION,
   ]);
 
-  useEffect(() => {
+  // Lookup options come from master tables that other users and other screens
+  // change, so they are re-read on every data-refresh signal, not just on mount.
+  const loadLookupOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -225,6 +228,10 @@ export default function FreightChargesMasterPage() {
       mounted = false;
     };
   }, [getCompanyLookup, getBranchLookup]);
+  useEffect(() => loadLookupOptions(), [loadLookupOptions]);
+  useDataRefresh(() => {
+    loadLookupOptions();
+  });
 
   const formFields = buildFreightChargeFormFields(companyOptions, branchOptions);
 

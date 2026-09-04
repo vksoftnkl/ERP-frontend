@@ -135,6 +135,7 @@ import { PartyTab } from "./tabs/party-tab";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import styles from "./page.module.scss";
 import { Z_MODAL } from "@/lib/z-index";
+import { useDataRefresh } from "@/lib/data-freshness";
 const DEFAULT_PARTY_SCOPE_TYPE: PartyScopeType = "CUSTOMER_GROUP";
 // `/branch-masters/get` is a fetch-by-id route (it requires a `brId` UUID), not a
 // company-filtered list, so querying it with `compId` only ever returned 400 and
@@ -1056,7 +1057,9 @@ export default function PromotionLoyaltyPointsPage() {
       ignore = true;
     };
   }, [isEditorOpen, loadActiveBranchesForCompany, schemeForm.ls_comp_id]);
-  useEffect(() => {
+  // Every dropdown on this screen is master data that other users change; re-read
+  // them on each refresh signal so the editor is never offering a stale list.
+  const loadSchemeLookups = useCallback(() => {
     const loadLookups = async () => {
       const [
         itemsPayload,
@@ -1169,6 +1172,10 @@ export default function PromotionLoyaltyPointsPage() {
     getBranchLookup, getItemGroupLookup, getItemLookup, getItemSectionLookup, getUnitLookup,
     getItemsList,
   ]);
+  useEffect(() => loadSchemeLookups(), [loadSchemeLookups]);
+  useDataRefresh(() => {
+    loadSchemeLookups();
+  });
   useEffect(() => {
     const uniqueItemIds = Array.from(
       new Set(
@@ -1195,6 +1202,11 @@ export default function PromotionLoyaltyPointsPage() {
   useEffect(() => {
     void reloadSchemes();
   }, [pageCompanyId, branchFilter, deferredSchemeSearch, statusFilter, typeFilter]);
+  // Schemes are edited from other sessions too; re-read the list when the app
+  // signals the data behind it may have moved.
+  useDataRefresh(() => {
+    void reloadSchemes();
+  });
   useEffect(() => {
     if (schemeForm.ls_item_type === "ITEM") {
       return;

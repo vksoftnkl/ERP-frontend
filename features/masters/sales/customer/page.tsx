@@ -144,6 +144,7 @@ import {
   useSessionSettingContext,
   useSessionSettingQuery,
 } from "@/features/masters/shared/form-defaults-setting";
+import { useDataRefresh } from "@/lib/data-freshness";
 function withCustomerBasicValidation(field: ERPDynamicModalField): ERPDynamicModalField {
   const basicValidation = CUSTOMER_BASIC_VALIDATIONS[field.name];
   if (!basicValidation) {
@@ -1438,7 +1439,9 @@ export default function CustomerPage() {
   const pinnedDropdownOptionRef = useRef<Record<string, ERPDynamicSelectOption | null>>({});
   // Only city + price level remain eagerly loaded; the company/branch/area/group/state
   // dropdowns are lazy (loaded on open + debounced search via /dropdown-details/run).
-  useEffect(() => {
+  // Lookup options come from master tables that other users and other screens
+  // change, so they are re-read on every data-refresh signal, not just on mount.
+  const loadLookupOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -1471,6 +1474,10 @@ export default function CustomerPage() {
       mounted = false;
     };
   }, [getCityLookup, getPriceLevelLookup]);
+  useEffect(() => loadLookupOptions(), [loadLookupOptions]);
+  useDataRefresh(() => {
+    loadLookupOptions();
+  });
   // What a new customer starts with: the `masters.customer_form_defaults` setting,
   // read for THIS session so the branch override beats the company row the way the
   // Customer Template screen showed it. A failed read leaves the create form on its
@@ -1507,7 +1514,9 @@ export default function CustomerPage() {
       return null;
     }
   }, [getWidgetConfig]);
-  useEffect(() => {
+  // Field config comes from the database, so it is read on mount and again on
+  // every data-refresh signal instead of only once per page load.
+  const loadWidgetFieldConfig = useCallback(() => {
     let mounted = true;
     void (async () => {
       const config = await fetchWidgetFieldConfig();
@@ -1520,6 +1529,10 @@ export default function CustomerPage() {
       mounted = false;
     };
   }, [fetchWidgetFieldConfig]);
+  useEffect(() => loadWidgetFieldConfig(), [loadWidgetFieldConfig]);
+  useDataRefresh(() => {
+    loadWidgetFieldConfig();
+  });
   // Push freshly built options into both the matching state setter and the mirror ref.
   const applyDropdownOptions = useCallback(
     (fieldName: string, options: ERPDynamicSelectOption[]) => {

@@ -31,6 +31,7 @@ import {
   resolveStoredPhotoName,
   resolveStoredPhotoPreview,
 } from "@/features/masters/shared/stored-photo";
+import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
 list: "/configured-grid-sql/run?grid_id=11",
   getById: "/item-categories/get",
@@ -456,7 +457,9 @@ export default function ItemCategoryMasterPage() {
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted categories. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
-  useEffect(() => {
+  // Field config comes from the database, so it is read on mount and again on
+  // every data-refresh signal instead of only once per page load.
+  const loadWidgetFieldConfig = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -478,6 +481,10 @@ export default function ItemCategoryMasterPage() {
       mounted = false;
     };
   }, [getWidgetConfig]);
+  useEffect(() => loadWidgetFieldConfig(), [loadWidgetFieldConfig]);
+  useDataRefresh(() => {
+    loadWidgetFieldConfig();
+  });
   const applyParentOptions = useCallback((options: ERPDynamicSelectOption[]) => {
     parentOptionsRef.current = options;
     setCategoryOptions(options);

@@ -98,6 +98,7 @@ export function ChargePickerModal(props: ChargePickerModalProps) {
     <ModalShell
       title="Select charge"
       isOpen={isOpen}
+      fixedHeight
       onClose={onClose}
       footer={
         <span className={styles.modalNote}>

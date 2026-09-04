@@ -20,6 +20,7 @@ import { useApi } from "@/hooks/useApi";
 import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 import styles from "./record-history-modal.module.scss";
+import { useDataRefresh } from "@/lib/data-freshness";
 const AUDIT_LOG_LIST_ENDPOINT = "/audit-logs/list";
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
@@ -600,6 +601,11 @@ function RecordHistoryViewer({
   useEffect(() => {
     void fetchRecordHistory();
   }, [fetchRecordHistory, refreshKey]);
+  // New log rows land continuously; re-read them on every data-refresh signal so
+  // the history follows the database while it stays open.
+  useDataRefresh(() => {
+    void fetchRecordHistory();
+  });
   useEffect(() => {
     setCurrentPage(DEFAULT_PAGE);
     setSelectedLog(null);
@@ -1306,6 +1312,11 @@ function RecordHistoryModalContent({
   useEffect(() => {
     void fetchHistory();
   }, [fetchHistory, refreshKey]);
+  // The modal stays open while work continues elsewhere; re-read its rows on every
+  // data-refresh signal so it shows what the database holds now.
+  useDataRefresh(() => {
+    void fetchHistory();
+  });
   useEffect(() => {
     setOpenGroups(new Set());
   }, [page, refreshKey]);

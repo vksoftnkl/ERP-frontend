@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import type {
@@ -17,6 +17,7 @@ import {
   toUpper,
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
+import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
   list: "/ledger-bank-accounts/list",
   getById: "/ledger-bank-accounts/get",
@@ -199,7 +200,9 @@ export default function LedgerBankAccountMasterPage() {
   const [ledgerOptions, setLedgerOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_LEDGER_OPTION,
   ]);
-  useEffect(() => {
+  // Lookup options come from master tables that other users and other screens
+  // change, so they are re-read on every data-refresh signal, not just on mount.
+  const loadLookupOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
       try {
@@ -237,6 +240,10 @@ export default function LedgerBankAccountMasterPage() {
       mounted = false;
     };
   }, [getCompanyLookup, getLedgerLookup]);
+  useEffect(() => loadLookupOptions(), [loadLookupOptions]);
+  useDataRefresh(() => {
+    loadLookupOptions();
+  });
   const formFields = useMemo(
     () => buildLedgerBankAccountFormFields(companyOptions, ledgerOptions),
     [companyOptions, ledgerOptions],

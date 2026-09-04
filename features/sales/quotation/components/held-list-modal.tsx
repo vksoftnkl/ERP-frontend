@@ -183,6 +183,7 @@ export function HeldListModal(props: HeldListModalProps) {
       title="Held quotations"
       isOpen={isOpen}
       wide
+      fixedHeight
       onClose={onClose}
       footer={
         <span className={styles.modalNote}>

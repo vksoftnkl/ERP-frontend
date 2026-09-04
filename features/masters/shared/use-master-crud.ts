@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/hooks/useApi";
+import { useDataRefresh } from "@/lib/data-freshness";
 import type { CrudMasterApiEndpoints } from "@/components/master/crud-master-page";
 import { normalizeListResponse } from "./normalizers";
 type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -32,7 +33,15 @@ export function useMasterCrud({
   defaultPage = 1,
   defaultPageSize = 20,
 }: UseMasterCrudArgs) {
-  const { data, error, loading, getAll } = useApi<unknown>(apiEndpoints.list);
+  // Background refreshing is driven by hand below rather than through `autoRefresh`:
+  // the rows and the paging metadata under them have to be applied together.
+  const {
+    data,
+    error,
+    loading,
+    getAll,
+    refresh: refreshList,
+  } = useApi<unknown>(apiEndpoints.list);
   const {
     run: getById,
     loading: detailsLoading,
@@ -61,22 +70,8 @@ export function useMasterCrud({
   const [currentPage, setCurrentPage] = useState(defaultPage);
   const [pageSize, setPageSize] = useState(defaultPageSize);
   const [totalEntries, setTotalEntries] = useState(0);
-  const loadRecords = useCallback(
-    async (term: string, page: number, limit: number) => {
-      const normalizedTerm = term.trim();
-      const safePage = Math.max(1, page);
-      const safeLimit = Math.max(1, limit);
-      const query =
-        buildListQuery?.({
-          searchTerm: normalizedTerm,
-          currentPage: safePage,
-          pageSize: safeLimit,
-        }) ?? {
-          page: String(safePage),
-          limit: String(safeLimit),
-          ...(normalizedTerm ? { search: normalizedTerm } : {}),
-        };
-      const payload = await getAll(query);
+  const applyListMeta = useCallback(
+    (payload: unknown) => {
       const normalized = normalizeListResponse(payload, listArrayKeys);
       setTotalEntries(normalized.totalEntries);
       if (normalized.currentPage !== null) {
@@ -95,9 +90,29 @@ export function useMasterCrud({
             : toSafePageSize(nextPageSize, defaultPageSize),
         );
       }
+    },
+    [defaultPage, defaultPageSize, listArrayKeys],
+  );
+  const loadRecords = useCallback(
+    async (term: string, page: number, limit: number) => {
+      const normalizedTerm = term.trim();
+      const safePage = Math.max(1, page);
+      const safeLimit = Math.max(1, limit);
+      const query =
+        buildListQuery?.({
+          searchTerm: normalizedTerm,
+          currentPage: safePage,
+          pageSize: safeLimit,
+        }) ?? {
+          page: String(safePage),
+          limit: String(safeLimit),
+          ...(normalizedTerm ? { search: normalizedTerm } : {}),
+        };
+      const payload = await getAll(query);
+      applyListMeta(payload);
       return payload;
     },
-    [buildListQuery, defaultPage, defaultPageSize, getAll, listArrayKeys],
+    [applyListMeta, buildListQuery, getAll],
   );
   const reload = useCallback(() => loadRecords(searchTerm, currentPage, pageSize), [
     currentPage,
@@ -105,6 +120,17 @@ export function useMasterCrud({
     pageSize,
     searchTerm,
   ]);
+  // Re-read the page currently on screen whenever the app says the data behind it
+  // may have moved (tab refocused, network back, a save here or in another tab).
+  // It goes through the quiet path: no spinner, no toast, rows swap in place.
+  useDataRefresh(() => {
+    void (async () => {
+      const payload = await refreshList();
+      if (payload !== undefined) {
+        applyListMeta(payload);
+      }
+    })();
+  });
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       void loadRecords(searchTerm, currentPage, pageSize);

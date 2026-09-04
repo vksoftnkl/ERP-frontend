@@ -284,6 +284,7 @@ export function QuotationListModal(props: QuotationListModalProps) {
       title="Select quotation to alter"
       isOpen={isOpen}
       wide
+      fixedHeight
       onClose={onClose}
       footer={
         <>
