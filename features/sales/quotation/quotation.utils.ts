@@ -141,6 +141,13 @@ export const SIZE_FACTOR_LABELS = [
  */
 export const SIZE_FACTOR_PLACEHOLDERS = ["L", "W", "T", "Pcs"] as const;
 /**
+ * What is drawn BEFORE each box, so the four read as one dimension string:
+ * `L × W   T-Pcs`. The gap ahead of Thickness is the separator too — it splits
+ * the face dimensions from the thickness/pieces pair the operator reads as one
+ * unit — so it carries no glyph, only the space the layout gives it.
+ */
+export const SIZE_FACTOR_SEPARATORS = ["", "×", "", "-"] as const;
+/**
  * A stored size into the four boxes the cell is keyed as: `"45*2*2*6"` becomes
  * `["45", "2", "2", "6"]`, and a shorter value pads with blanks rather than
  * shifting factors out of the box they belong in — a bare CFT like `"7.5"` sits

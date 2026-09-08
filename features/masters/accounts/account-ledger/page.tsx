@@ -21,6 +21,7 @@ import ReusableTable, {
   type ReusableTableColumnResizeEndPayload,
 } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
+import { useMasterListKeyboard } from "@/components/master/use-master-list-keyboard";
 import type {
   ERPDynamicModalField,
   ERPDynamicSelectOption,
@@ -725,6 +726,8 @@ export default function AccountLedgerMasterPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [totalEntries, setTotalEntries] = useState(0);
   const [selectedRowId, setSelectedRowId] = useState<string | number | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const tableContainerRef = useRef<HTMLDivElement | null>(null);
   const [recordHistoryModal, setRecordHistoryModal] = useState<{
     displayName: string | null;
     recordPk: string;
@@ -1874,6 +1877,36 @@ export default function AccountLedgerMasterPage() {
     setCurrentPage(DEFAULT_PAGE);
     setSearchTerm(query);
   }, []);
+  /** A modal, confirm or grid-settings dialog owns the keyboard while it is up. */
+  const listKeyboardSuspended = useCallback(
+    () =>
+      isFormModalOpen ||
+      gridSettingsMode !== null ||
+      pendingDeleteRow !== null ||
+      recordHistoryModal !== null,
+    [gridSettingsMode, isFormModalOpen, pendingDeleteRow, recordHistoryModal],
+  );
+  const handleListRowSelect = useCallback((row: LedgerTableRow) => {
+    setSelectedRowId(row.__rowId);
+  }, []);
+  const handleListRowView = useCallback(
+    (row: LedgerTableRow) => {
+      void openExistingModal(row, "view");
+    },
+    [openExistingModal],
+  );
+  // Search box <-> grid focus chain, row walking, Ctrl+Enter — see the hook.
+  useMasterListKeyboard({
+    rows: renderedRows,
+    selectedRowId,
+    searchInputRef,
+    tableContainerRef,
+    onSelectRow: handleListRowSelect,
+    onSearchTermChange: handleSearchChange,
+    onViewRow: handleListRowView,
+    isSuspended: listKeyboardSuspended,
+    loading,
+  });
   const handleWantDeleteChange = useCallback((checked: boolean) => {
     setCurrentPage(DEFAULT_PAGE);
     setWantDelete(checked);
@@ -2426,6 +2459,7 @@ export default function AccountLedgerMasterPage() {
                       <ErpActionIcon name="search" size={13} />
                     </span>
                     <input
+                      ref={searchInputRef}
                       id="account-ledger-search-input"
                       type="text"
                       className={`${styles.masterSearchInput} erp-ms-search-input`}
@@ -2449,6 +2483,11 @@ export default function AccountLedgerMasterPage() {
                 </div>
               </div>
             </div>
+            <div
+              ref={tableContainerRef}
+              tabIndex={-1}
+              style={{ flex: "1 1 0", minHeight: 0, display: "flex", flexDirection: "column", outline: "none" }}
+            >
             <ReusableTable
               columns={renderedColumns}
               rows={renderedRows}
@@ -2483,6 +2522,7 @@ export default function AccountLedgerMasterPage() {
                   : "No account ledger data found"
               }
             />
+            </div>
           </section>
         </div>
       </div>

@@ -729,11 +729,22 @@
 .cellSizeBox {
   flex: 1 1 0;
   min-width: 0;
-  padding: u(0.15) u(0.1);
+  padding: u(0.15) 0;
   text-align: center;
 }
-.cellSizeBox + .cellSizeBox {
-  border-left: 1px solid var(--border, #e2d9d9);
+/* The `x` / `-` that make the four boxes read as one dimension string, and the
+   blank one that sets Thickness-Pieces apart from the face dimensions. They are
+   drawn text, not borders, so they take their own width out of the column —
+   hence `flex: 0 0 auto` and the minimum the blank one still has to hold. */
+.cellSizeSep {
+  flex: 0 0 auto;
+  min-width: u(0.3);
+  padding: 0 u(0.05);
+  color: var(--text-muted, #9a8f8f);
+  font-size: 0.9em;
+  line-height: 1;
+  text-align: center;
+  user-select: none;
 }
 /* Four hints in a dense grid have to stay lighter than a keyed value. */
 .cellSizeBox::placeholder {

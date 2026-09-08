@@ -20,6 +20,7 @@ import {
   useState,
   type KeyboardEvent,
   type ReactNode,
+  Fragment,
 } from "react";
 import { cx } from "@/components/design-system/cx";
 import { formatCurrency, formatPerc, formatQty } from "@/domain/pricing";
@@ -36,6 +37,7 @@ import {
   SIZE_FACTOR_COUNT,
   SIZE_FACTOR_LABELS,
   SIZE_FACTOR_PLACEHOLDERS,
+  SIZE_FACTOR_SEPARATORS,
   joinSizeFactors,
   sanitizeSizeFactorInput,
   sanitizeSizeInput,
@@ -288,45 +290,51 @@ export function GridCell(props: GridCellProps) {
         }}
       >
         {factors.map((factor, index) => (
-          <input
-            key={SIZE_FACTOR_LABELS[index]}
-            className={cx(
-              styles.cellInput,
-              styles.cellSizeBox,
-              invalid && styles.cellInvalid,
+          <Fragment key={SIZE_FACTOR_LABELS[index]}>
+            {index > 0 && (
+              <span aria-hidden className={styles.cellSizeSep}>
+                {SIZE_FACTOR_SEPARATORS[index]}
+              </span>
             )}
-            type="text"
-            inputMode="decimal"
-            value={factor}
-            disabled={!editable}
-            // The per-box hint, not the cell's `placeholder` prop: one string
-            // cannot say what four boxes each mean.
-            placeholder={SIZE_FACTOR_PLACEHOLDERS[index]}
-            title={title ? `${SIZE_FACTOR_LABELS[index]} — ${title}` : SIZE_FACTOR_LABELS[index]}
-            onFocus={(event) => {
-              if (!editable) {
-                return;
-              }
-              setSizeBuffer((current) => current ?? splitSizeFactors(stored));
-              event.currentTarget.select();
-            }}
-            onChange={(event) => editBox(index, event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" && sizeBuffer) {
-                event.preventDefault();
-                setSizeBuffer(null);
-                return;
-              }
-              if (event.key === "Enter" && sizeBuffer) {
-                // Commit before the grid's own Enter handler walks focus on —
-                // which lands on the next box, since all four carry the cell's
-                // `data-quotation-*` attributes and the walker reads DOM order.
-                commitSize(sizeBuffer);
-              }
-              onKeyDown?.(event);
-            }}
-            {...dataAttrs}
-          />
+            <input
+              className={cx(
+                styles.cellInput,
+                styles.cellSizeBox,
+                invalid && styles.cellInvalid,
+              )}
+              type="text"
+              inputMode="decimal"
+              value={factor}
+              disabled={!editable}
+              // The per-box hint, not the cell's `placeholder` prop: one string
+              // cannot say what four boxes each mean.
+              placeholder={SIZE_FACTOR_PLACEHOLDERS[index]}
+              title={title ? `${SIZE_FACTOR_LABELS[index]} — ${title}` : SIZE_FACTOR_LABELS[index]}
+              onFocus={(event) => {
+                if (!editable) {
+                  return;
+                }
+                setSizeBuffer((current) => current ?? splitSizeFactors(stored));
+                event.currentTarget.select();
+              }}
+              onChange={(event) => editBox(index, event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && sizeBuffer) {
+                  event.preventDefault();
+                  setSizeBuffer(null);
+                  return;
+                }
+                if (event.key === "Enter" && sizeBuffer) {
+                  // Commit before the grid's own Enter handler walks focus on —
+                  // which lands on the next box, since all four carry the cell's
+                  // `data-quotation-*` attributes and the walker reads DOM order.
+                  commitSize(sizeBuffer);
+                }
+                onKeyDown?.(event);
+              }}
+              {...dataAttrs}
+            />
+          </Fragment>
         ))}
       </span>
     );

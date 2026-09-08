@@ -44,6 +44,13 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  /* Query target for the "is there room for the module icons?" rule at the
+     bottom of this file. A container query measures this box in the header's
+     OWN pixels, i.e. after `zoom: var(--erp-ui-scale)` on <html> — which is
+     the width the metrics above are written against. A `@media` query cannot:
+     it only ever sees the raw device viewport. */
+  container-type: inline-size;
+  container-name: erp-header;
 }
 
 .primaryMenu {
@@ -764,7 +771,15 @@ li.menuItem[data-menu-suppressed="true"] .submenuList {
 
   .primaryMenu {
     flex: 0 1 auto;
-    min-width: min(100%, max-content);
+    /* `min(100%, max-content)` was invalid CSS — `max-content` is a sizing
+       KEYWORD and cannot appear inside `min()`, so the browser dropped the
+       whole declaration and the menu kept the `min-width: 0` above it. It then
+       shrank below its own row, the (non-shrinking) items overflowed its box,
+       and the right-hand block painted straight over the tail of the menu:
+       Settings lost its chevron behind the date on every screen narrower than
+       ~1600px. `max-content` on its own is the valid spelling of the same
+       intent, and it makes the selects absorb the pressure as documented. */
+    min-width: max-content;
   }
 
   .primaryMenuList {
@@ -812,9 +827,19 @@ li.menuItem[data-menu-suppressed="true"] .submenuList {
   }
 }
 
-/* Below 1366px the module icons are what push the menu past the line — the
-   labels stay, the decorative icons drop out. */
-@media (min-width: 1024px) and (max-width: 1365px) {
+/* Below 1366px of header room the module icons are what push the menu past the
+   line — the labels stay, the decorative icons drop out.
+
+   This has to be a CONTAINER query, not a media query. The whole app is
+   `zoom`-scaled by `--erp-ui-scale`, so the header's own coordinate space is
+   `100vw / var(--erp-ui-scale)` wide — which is why every metric at the top of
+   this file divides by that factor. `auto` scale targets a 1536px-wide layout,
+   so a 1280- or 1366-wide screen still gives the header ~1520px of room and
+   the icons fit comfortably. A `@media (max-width: 1365px)` rule sees the raw
+   device width instead and hid the icons on exactly those machines — the
+   header menu icons "disappearing" on some screens, and appearing/vanishing
+   as a window was dragged across 1366px. */
+@container erp-header (max-width: 1365px) {
   .primaryMenuItem .menuIcon {
     display: none;
   }

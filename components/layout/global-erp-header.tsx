@@ -3,12 +3,10 @@ import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 import ErpHeader from "@/components/layout/erp-header";
 import { useBusinessContext } from "@/components/layout/business-context";
-
 // `/` is the login-or-home switchboard, so it wears the same bare chrome.
 function isLoginRoute(pathname: string): boolean {
   return pathname === "/" || pathname === "/login" || pathname.startsWith("/login/");
 }
-
 export default function GlobalErpHeader() {
   const pathname = usePathname();
   const hideHeader = !pathname || isLoginRoute(pathname);
@@ -25,7 +23,6 @@ export default function GlobalErpHeader() {
     setSelectedBranchId,
     setSelectedFiscalYearId,
   } = useBusinessContext();
-
   const visibleCompanyOptions = useMemo(
     () => companyOptions.filter((option) => option.value.trim().length > 0),
     [companyOptions],

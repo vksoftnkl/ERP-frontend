@@ -14,7 +14,14 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["domain/**/*.test.ts", "features/**/*.test.ts", "lib/**/*.test.ts"],
+    include: [
+      "domain/**/*.test.ts",
+      "features/**/*.test.ts",
+      "lib/**/*.test.ts",
+      // `.test.ts` only: the dropdown module keeps its pure config/format/query
+      // helpers beside the components that use them, and those stay renderless.
+      "components/**/*.test.ts",
+    ],
     reporters: ["default"],
   },
 });

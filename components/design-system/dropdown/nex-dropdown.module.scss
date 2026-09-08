@@ -1,0 +1,234 @@
+.field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.input {
+  width: 100%;
+  border: 1px solid #c9d5e3;
+  border-radius: 5px;
+  padding: 0.45rem 1.9rem 0.45rem 0.55rem;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  color: #142033;
+  background: #fff;
+  min-height: 2.15rem;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.input:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.inputInvalid {
+  border-color: #dc2626;
+}
+
+.chevron {
+  position: absolute;
+  right: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #5a7084;
+  cursor: pointer;
+}
+
+.chevron:hover:not(:disabled) {
+  background: #eef4fa;
+}
+
+.chevron:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* The popup is portaled to the body and positioned in layout pixels; see
+   dropdown-popup.tsx. */
+.popup {
+  border: 1px solid #c9d5e3;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 18px 32px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.header,
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.34rem 0.56rem;
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+
+.header {
+  border-bottom: 1px solid #e3e8ef;
+  background: #f6f9fc;
+  color: #40566b;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.row {
+  color: #17354b;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: #eef4fa;
+}
+
+.rowActive {
+  background: #dbeafe;
+}
+
+.cell {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cellCenter {
+  text-align: center;
+}
+
+.cellRight {
+  text-align: right;
+}
+
+.notice {
+  padding: 0.56rem 0.58rem;
+  font-size: 0.8rem;
+  color: #5a7084;
+}
+
+.noticeError {
+  color: #b91c1c;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.retry {
+  border: 1px solid #c9d5e3;
+  border-radius: 4px;
+  background: #fff;
+  color: #17354b;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.footer {
+  border-top: 1px solid #e3e8ef;
+  padding: 0.32rem 0.58rem;
+  font-size: 0.72rem;
+  color: #7b8ea1;
+  background: #fbfdff;
+  flex: 0 0 auto;
+}
+
+/* -- multi ---------------------------------------------------------------- */
+
+/* The chips wrap, so the frame grows with them and the chevron anchors to the
+   frame rather than to the (floating) search box — the Qt widget has no chevron
+   on multi for exactly that reason. */
+.fieldMulti {
+  align-items: stretch;
+  border: 1px solid #c9d5e3;
+  border-radius: 5px;
+  background: #fff;
+  padding: 0.2rem 1.9rem 0.2rem 0.25rem;
+  min-height: 2.15rem;
+}
+
+.fieldMulti:focus-within {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.fieldMultiInvalid {
+  border-color: #dc2626;
+}
+
+.tokens {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.token {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 14rem;
+  border: 1px solid #bcc6d0;
+  border-radius: 4px;
+  background: #e6eaee;
+  color: #2f465b;
+  font-size: 0.75rem;
+  line-height: 1.1;
+  padding: 0.2rem 0.25rem 0.2rem 0.42rem;
+}
+
+.tokenText {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tokenRemove {
+  border: 0;
+  background: transparent;
+  color: #5a7084;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+}
+
+.tokenRemove:hover {
+  color: #b91c1c;
+}
+
+.tokenInput {
+  flex: 1 1 6rem;
+  min-width: 6rem;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  color: #142033;
+  padding: 0.25rem 0.2rem;
+}

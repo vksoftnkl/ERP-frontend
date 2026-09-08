@@ -35,6 +35,7 @@ import {
   type ERPDynamicModalVariant,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import ModalPortal from "@/components/ui/modal-portal";
+import { useMasterListKeyboard } from "@/components/master/use-master-list-keyboard";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { MasterIcon } from "@/components/design-system/icons/master-icons";
 import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons";
@@ -2803,15 +2804,8 @@ export default function CrudMasterPage({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
   const previousListStateResetKeyRef = useRef<string | number | null | undefined>(undefined);
-  const renderedRowsRef = useRef<MasterTableRow[]>(renderedRows);
-  const selectedRowIdRef = useRef<string | number | null>(selectedRowId);
   const gridSettingsModeRef = useRef<"filter" | "visibility" | null>(gridSettingsMode);
   const pendingDeleteRowRef = useRef<MasterTableRow | null>(pendingDeleteRow);
-  /** Declared here, filled below: the Ctrl+Enter handler is bound once. */
-  const handleRowViewRef = useRef<((row: MasterTableRow) => void) | null>(null);
-  useEffect(() => {
-    searchInputRef.current?.focus();
-  }, []);
   const gridSettingsColumns = useMemo(
     () =>
       gridColumns
@@ -3617,84 +3611,32 @@ export default function CrudMasterPage({
     [setSort],
   );
 
-  // Keep refs in sync with latest state so event handlers never see stale values
-  useEffect(() => { renderedRowsRef.current = renderedRows; }, [renderedRows]);
-  useEffect(() => { selectedRowIdRef.current = selectedRowId; }, [selectedRowId]);
+  // Keep refs in sync with latest state so the keyboard chain never sees stale values
   useEffect(() => { gridSettingsModeRef.current = gridSettingsMode; }, [gridSettingsMode]);
   useEffect(() => { pendingDeleteRowRef.current = pendingDeleteRow; }, [pendingDeleteRow]);
-  useEffect(() => { handleRowViewRef.current = handleRowView; }, [handleRowView]);
 
-  // Scroll active row into view whenever selection changes
-  useEffect(() => {
-    if (selectedRowId === null || !tableContainerRef.current) return;
-    const activeRow = tableContainerRef.current.querySelector<HTMLElement>('[class*="activeRow"]');
-    activeRow?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [selectedRowId]);
-
-  // Table keyboard: Up/Down = row select, Left/Right = horizontal scroll,
-  // Ctrl+Enter = open the selected row for reading.
-  useEffect(() => {
-    if (hideListPage || typeof document === "undefined") return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const key = event.key;
-      const isArrow =
-        key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight";
-      // Ctrl+Enter (Cmd+Enter on a Mac) — plain Enter is deliberately left
-      // alone, since it submits the search box and activates focused buttons.
-      const isViewChord =
-        key === "Enter" && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
-      if (!isArrow && !isViewChord) return;
-      if (event.defaultPrevented) return;
-      // The arrows are the unmodified ones only; the chord owns its modifier.
-      if (isArrow && (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)) return;
-
-      const target = event.target as HTMLElement;
-      const tag = target.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) return;
-      if (document.querySelector('[role="dialog"]')) return;
-      if (gridSettingsModeRef.current !== null) return;
-      if (pendingDeleteRowRef.current !== null) return;
-
-      const container = tableContainerRef.current;
-      if (!container) return;
-
-      if (isViewChord) {
-        const currentId = selectedRowIdRef.current;
-        if (currentId === null) return;
-        const row = renderedRowsRef.current.find((r) => r.__rowId === currentId);
-        if (!row) return;
-        event.preventDefault();
-        handleRowViewRef.current?.(row);
-        return;
-      }
-
-      if (key === "ArrowDown" || key === "ArrowUp") {
-        event.preventDefault();
-        const rows = renderedRowsRef.current;
-        if (rows.length === 0) return;
-        const currentId = selectedRowIdRef.current;
-        const currentIndex = currentId !== null ? rows.findIndex((r) => r.__rowId === currentId) : -1;
-        const nextIndex =
-          key === "ArrowDown"
-            ? Math.min(currentIndex + 1, rows.length - 1)
-            : Math.max(currentIndex <= 0 ? 0 : currentIndex - 1, 0);
-        const nextRow = rows[nextIndex];
-        if (nextRow) {
-          setSelectedRowId(nextRow.__rowId);
-          setSelectedRow(nextRow);
-        }
-        return;
-      }
-
-      // Left/Right — scroll the table viewport
-      event.preventDefault();
-      const viewport = container.querySelector<HTMLElement>('[data-erp-table-viewport="true"]');
-      if (!viewport) return;
-      viewport.scrollBy({ left: key === "ArrowRight" ? 150 : -150, behavior: "smooth" });
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [hideListPage]);
+  /** A grid-settings modal or a delete confirm owns the keyboard while it is up. */
+  const listKeyboardSuspended = useCallback(
+    () => gridSettingsModeRef.current !== null || pendingDeleteRowRef.current !== null,
+    [],
+  );
+  const handleListRowSelect = useCallback((row: MasterTableRow) => {
+    setSelectedRowId(row.__rowId);
+    setSelectedRow(row);
+  }, []);
+  // Search box ⇄ grid focus chain, row walking, Ctrl+Enter — see the hook.
+  useMasterListKeyboard({
+    enabled: !hideListPage,
+    rows: renderedRows,
+    selectedRowId,
+    searchInputRef,
+    tableContainerRef,
+    onSelectRow: handleListRowSelect,
+    onSearchTermChange: handleSearchChange,
+    onViewRow: handleRowView,
+    isSuspended: listKeyboardSuspended,
+    loading,
+  });
 
   const listHeading =
     listTitleOverride ??
@@ -4279,7 +4221,11 @@ export default function CrudMasterPage({
                     </div>
                   </div>
                 {/* Data Table */}
-                <div ref={tableContainerRef} style={{ flex: "1 1 0", minHeight: 0, display: "flex", flexDirection: "column" }}>
+                <div
+                  ref={tableContainerRef}
+                  tabIndex={-1}
+                  style={{ flex: "1 1 0", minHeight: 0, display: "flex", flexDirection: "column", outline: "none" }}
+                >
                 <ReusableTable
                   columns={renderedColumns}
                   rows={renderedRows}

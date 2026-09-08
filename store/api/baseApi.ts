@@ -200,6 +200,9 @@ export const API_TAG_TYPES = [
   "PrintingAssignment",
   // print_purpose, read through configured dropdown 47.
   "PrintingPurpose",
+  // Rows of a configured dropdown (fixed.dropdown_details). The definitions
+  // themselves are deliberately untagged - see dropdownApi.ts.
+  "DropdownRows",
 ] as const;
 export const baseApi = createApi({
   reducerPath: "baseApi",
