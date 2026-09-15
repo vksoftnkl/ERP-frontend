@@ -1,38 +1,39 @@
 "use client";
 
 /**
- * The order picker the entry screens open over themselves — F8 on the sale order
- * screen, Ctrl+F4 on the sale bill, where it is the import source.
+ * F8 — open another bill without leaving the form.
  *
- * Deliberately NOT the landing list: that one is the `CrudMasterPage` shell
- * (`sale-order-list-view.tsx`), which owns a page header, an icon toolbar and
- * its own modals, none of which belong inside another modal. This is the same
- * grid 87 data in the shape a picker needs — and in the SAME shape the
- * quotation's and the bill's pickers use, because an operator who has learned
- * one sales screen's picker has learned them all.
+ * The same shape as the quotation's picker, deliberately: an operator who has
+ * learned one sales screen's F8 has learned them all. Toolbar, filters, local
+ * pager, keyboard walk and the single-gesture-short-of-opening rule are all its
+ * design, fed grid 86 ("TXN MAIN LIST - BILLS") instead of grid 84.
  *
- * The grid's constraints, each handled rather than papered over:
+ * The same configured grid the register uses, so it inherits the same
+ * constraints, each handled rather than papered over:
  *
  *  - `search=` is not sent on the wire; the box filters the fetched page over
  *    more fields than the grid marks filterable;
- *  - the grid's `WHERE` scopes on company and branch only — there is NO year
- *    token, unlike the bill's grid 86, because an order legitimately outlives
- *    the year it was raised in. So the client-side filter below scopes on those
- *    two and NOT on the year: filtering by year here would hide last year's
- *    order that is still pending, which is exactly the one being looked for;
- *  - `FETCH_LIMIT` rows are the most recent orders (the grid orders by date
- *    descending), not all of them, so the "may be more" note keeps that honest.
+ *  - the grid's own `WHERE` scopes on company, branch and YEAR — grid 86 binds
+ *    `iacc_year` where the sale order's grid 87 does not, which is right:
+ *    `sale_bill` is partitioned by it, so a list spanning years would scan every
+ *    partition;
+ *  - `FETCH_LIMIT` rows are one page of the year's bills rather than all of
+ *    them, so the "may be more" note keeps that honest rather than silently
+ *    truncating.
  *
- * A CANCELLED order is shown, not hidden, and is still selectable — it opens
- * READ-ONLY. `GET /sale-orders/get` filters on `soIsDeleted`, and an order
- * cancelled without being deleted is a perfectly readable document. The bill's
- * import refuses it after the fetch, with a reason, rather than the picker
- * pretending it does not exist.
+ * A CANCELLED bill is shown, not hidden, and unlike the quotation's deleted rows
+ * it is still selectable — it opens READ-ONLY. `GET /bills/get` filters on
+ * `sbIsDeleted`, which cancelling never sets (that route cancels the source
+ * ORDER), so a cancelled bill is a perfectly readable document and refusing to
+ * open it would be hiding history rather than protecting anything.
+ *
+ * A row's whole document key is returned — company, branch and year included —
+ * which is what lets another branch's bill load correctly.
  *
  * Choosing one is a SINGLE gesture short of opening it: a click (or ↑↓) moves
- * the highlight and Enter, a double-click or the Select button opens. Opening an
- * order replaces whatever is on the form, so it is not something a stray click
- * on a list should do.
+ * the highlight and Enter, a double-click or the Select button opens. Opening a
+ * bill replaces whatever is on the form, so it is not something a stray click on
+ * a list should do.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiEdit3, FiLayout, FiPrinter, FiRefreshCw } from "react-icons/fi";
@@ -51,45 +52,39 @@ import { PrintOptionsDialog } from "@/features/printing/components/print-options
 import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import styles from "@/features/sales/quotation/page.module.scss";
-import orderStyles from "../page.module.scss";
-import { useListSaleOrdersQuery, type SaleOrderListRow } from "@/store/api/saleOrderApi";
-import { SALE_ORDER_LIST_WINDOW_DAYS } from "../sale-order.constants";
-import type { SaleOrderDocKey } from "../sale-order.types";
+import { useListBillsQuery, type BillListRow } from "@/store/api/saleBillApi";
+import type { SaleBillDocKey } from "../salebill.types";
 
-export type SaleOrderListPick = (key: SaleOrderDocKey, mode: "browse" | "entry") => void;
+export type BillListPick = (key: SaleBillDocKey, mode: "browse" | "entry") => void;
 
-export type SaleOrderListModalProps = {
+export type BillListModalProps = {
   isOpen: boolean;
+  /** Only rows of this tenant are offered. */
   companyId: string;
   branchId: string;
+  accYear: string;
   onClose: () => void;
-  onPick: SaleOrderListPick;
-  /**
-   * What the dialog is being opened FOR. The sale order screen is picking one to
-   * alter; the bill is picking one to bill, and saying so is the difference
-   * between an operator understanding what Enter is about to do and guessing.
-   */
-  title?: string;
+  onPick: BillListPick;
 };
 
 /**
- * One request, generously sized — there is no server "next page" control here.
- * 100 is the server's own cap (`limit must not be greater than 100`).
+ * One request, generously sized — there is no server "next page" control in this
+ * dialog. 100 is the server's own cap (`limit must not be greater than 100`);
+ * asking for more 400s the request.
  */
 const FETCH_LIMIT = 100;
 /** Rows per page of the LOCAL pager, over the already-fetched, already-filtered set. */
 const LOCAL_PAGE_SIZE = 10;
 
 /**
- * Longer than the bill's presets: orders outlive bills, and the one being looked
- * for is routinely months old — which is also why the window opens at 90 days
- * rather than at 30.
+ * The presets, and they are shorter than the quotation's on purpose: a counter
+ * looks up this morning's bill, not last quarter's. Anything older is a report.
  */
 const PERIOD_OPTIONS = [
+  { value: "today", label: "Today" },
   { value: "7d", label: "Last 7 days" },
   { value: "30d", label: "Last 30 days" },
-  { value: "90d", label: `Last ${SALE_ORDER_LIST_WINDOW_DAYS} days` },
-  { value: "180d", label: "Last 180 days" },
+  { value: "month", label: "This month" },
   { value: "all", label: "All dates" },
   { value: "custom", label: "Custom range" },
 ] as const;
@@ -97,14 +92,14 @@ type Period = (typeof PERIOD_OPTIONS)[number]["value"];
 
 function periodRange(period: Period, today: string): { from: string; to: string } | null {
   switch (period) {
+    case "today":
+      return { from: today, to: today };
     case "7d":
       return { from: addDays(today, -7), to: today };
     case "30d":
       return { from: addDays(today, -30), to: today };
-    case "90d":
-      return { from: addDays(today, -SALE_ORDER_LIST_WINDOW_DAYS), to: today };
-    case "180d":
-      return { from: addDays(today, -180), to: today };
+    case "month":
+      return { from: `${today.slice(0, 7)}-01`, to: today };
     case "all":
       return { from: "", to: "" };
     default:
@@ -112,44 +107,34 @@ function periodRange(period: Period, today: string): { from: string; to: string 
   }
 }
 
-const STATUS_CLASS: Record<string, string> = {
-  DRAFT: orderStyles.statusPillDraft,
-  CONFIRMED: orderStyles.statusPillConfirmed,
-  PARTIAL: orderStyles.statusPillPartial,
-  COMPLETED: orderStyles.statusPillCompleted,
-  CLOSED: orderStyles.statusPillCompleted,
-  CANCELLED: orderStyles.statusPillCancelled,
-  EXPIRED: orderStyles.statusPillCancelled,
-};
-
-function isCancelled(row: SaleOrderListRow): boolean {
-  return (row.so_status ?? "").trim().toUpperCase() === "CANCELLED";
+function isCancelled(row: BillListRow): boolean {
+  return (row.sb_status ?? "").trim().toUpperCase() === "CANCELLED";
 }
 
-function keyOf(row: SaleOrderListRow): SaleOrderDocKey {
+function keyOf(row: BillListRow): SaleBillDocKey {
   return {
-    soId: row.so_id,
-    soCompanyId: row.so_company_id,
-    soBranchId: row.so_branch_id,
-    soAccYear: row.so_acc_year,
+    sbId: row.sb_id,
+    sbCompanyId: row.sb_company_id,
+    sbBranchId: row.sb_branch_id,
+    sbAccYear: row.sb_acc_year,
   };
 }
 
-export function SaleOrderListModal({
+export function BillListModal({
   isOpen,
   companyId,
   branchId,
+  accYear,
   onClose,
   onPick,
-  title = "Select order to alter",
-}: SaleOrderListModalProps) {
+}: BillListModalProps) {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
-  const [fromDate, setFromDate] = useState(() =>
-    addDays(todayIso(), -SALE_ORDER_LIST_WINDOW_DAYS),
-  );
+  // Opens on the last 30 days rather than on everything: the year's whole
+  // register is rarely what an operator reaching for F8 wants.
+  const [fromDate, setFromDate] = useState(() => addDays(todayIso(), -30));
   const [toDate, setToDate] = useState(() => todayIso());
-  const [period, setPeriod] = useState<Period>("90d");
+  const [period, setPeriod] = useState<Period>("30d");
   const [localPage, setLocalPage] = useState(1);
   const [activeIndex, setActiveIndex] = useState(0);
   /**
@@ -157,19 +142,22 @@ export function SaleOrderListModal({
    * the highlight moves with the arrow keys while the dialog is open, so a
    * dialog reading `activeRow` would retarget itself under the operator. Its own
    * accounting year travels with it, because that year decides which partition
-   * the renderer reads.
+   * the renderer reads and last year's bill is not in this one.
    */
-  const [printRow, setPrintRow] = useState<SaleOrderListRow | null>(null);
+  const [printRow, setPrintRow] = useState<BillListRow | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setSearch("");
       setDebounced("");
-      setFromDate(addDays(todayIso(), -SALE_ORDER_LIST_WINDOW_DAYS));
+      setFromDate(addDays(todayIso(), -30));
       setToDate(todayIso());
-      setPeriod("90d");
+      setPeriod("30d");
       setLocalPage(1);
       setActiveIndex(0);
+      // Closing the list unmounts the print dialog with the panel but leaves
+      // this component alive; without the reset, reopening F8 would come up with
+      // the previous row's print dialog already on it.
       setPrintRow(null);
     }
   }, [isOpen]);
@@ -182,34 +170,33 @@ export function SaleOrderListModal({
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  // Dates are NOT sent to the grid: one fetch of the most recent orders is
-  // filtered locally, so moving the window costs no round trip.
-  const { data, isFetching, refetch } = useListSaleOrdersQuery(
-    { page: 1, limit: FETCH_LIMIT, companyId, branchId, fromDate: "", toDate: "" },
-    { skip: !isOpen || !companyId || !branchId },
+  // Dates are NOT sent to the grid: one fetch of the year is filtered locally,
+  // so moving the window costs no round trip and the "may be more" note stays
+  // measured against one known page.
+  const { data, isFetching, refetch } = useListBillsQuery(
+    { page: 1, limit: FETCH_LIMIT, companyId, branchId, accYear, fromDate: "", toDate: "" },
+    { skip: !isOpen || !companyId || !branchId || !accYear },
   );
 
   const filtered = useMemo(() => {
     const all = data?.items ?? [];
     const needle = debounced.trim().toLowerCase();
     return all.filter((row) => {
-      // Company and branch only — NOT the year. Grid 87 has no year token
-      // because an order outlives the year it was raised in, and filtering by
-      // one here would hide the pending order being looked for.
       if (
-        (companyId && row.so_company_id !== companyId) ||
-        (branchId && row.so_branch_id !== branchId)
+        (companyId && row.sb_company_id !== companyId) ||
+        (branchId && row.sb_branch_id !== branchId) ||
+        (accYear && row.sb_acc_year !== accYear)
       ) {
         return false;
       }
       if (needle) {
         const matches = [
-          row.so_order_refno,
+          row.sb_bill_refno,
           row.cus_name,
           row.cus_addr3,
-          row.so_order_type,
-          row.so_status,
-          row.so_order_amt != null ? String(row.so_order_amt) : null,
+          row.sb_bill_type,
+          row.sb_status,
+          row.sb_bill_amt != null ? String(row.sb_bill_amt) : null,
         ]
           .filter(Boolean)
           .some((field) => String(field).toLowerCase().includes(needle));
@@ -217,16 +204,16 @@ export function SaleOrderListModal({
           return false;
         }
       }
-      const orderDate = toDateInput(row.so_order_date);
-      if (fromDate && (!orderDate || orderDate < fromDate)) {
+      const billDate = toDateInput(row.sb_bill_date);
+      if (fromDate && (!billDate || billDate < fromDate)) {
         return false;
       }
-      if (toDate && (!orderDate || orderDate > toDate)) {
+      if (toDate && (!billDate || billDate > toDate)) {
         return false;
       }
       return true;
     });
-  }, [branchId, companyId, data, debounced, fromDate, toDate]);
+  }, [accYear, branchId, companyId, data, debounced, fromDate, toDate]);
 
   const fetched = data?.items.length ?? 0;
   const serverTotal = data?.meta?.total ?? 0;
@@ -245,9 +232,12 @@ export function SaleOrderListModal({
     setActiveIndex(0);
   }, [currentLocalPage, filtered.length]);
 
-  /** A cancelled order opens READ-ONLY rather than being refused. */
+  /**
+   * A cancelled bill opens READ-ONLY rather than being refused: it is a readable
+   * document, and the server would refuse an update to it anyway.
+   */
   const choose = useCallback(
-    (row: SaleOrderListRow) => {
+    (row: BillListRow) => {
       onPick(keyOf(row), isCancelled(row) ? "browse" : "entry");
     },
     [onPick],
@@ -284,9 +274,15 @@ export function SaleOrderListModal({
   const { permissions } = usePagePermissions();
 
   /*
-   * Print the HIGHLIGHTED row, not the one the form has open — reaching another
-   * order without loading it is this dialog's whole point, and on the BILL's
-   * import it is how an operator checks what they are about to bill.
+   * Print the HIGHLIGHTED row, not the one the form has open — this dialog's
+   * whole point is reaching another bill without loading it, and reprinting one
+   * is the commonest reason to want that.
+   *
+   * `SALE_INVOICE` ("Tax Invoice") is the purpose; the server's three sale-bill
+   * providers (`sales.bill.header`, `sales.bill.items`, `sales.bill.tax_summary`)
+   * are what it renders from. An install with no template assigned to that
+   * purpose gets the dialog's own "nothing is set up to print this here"
+   * message, which is a real answer rather than a dead button.
    */
   const printActiveRow = (): void => {
     if (!activeRow) {
@@ -301,7 +297,7 @@ export function SaleOrderListModal({
 
   return (
     <ModalShell
-      title={title}
+      title="Select bill to alter"
       isOpen={isOpen}
       wide
       fixedHeight
@@ -311,10 +307,10 @@ export function SaleOrderListModal({
           <span className={styles.modalNote}>
             ↑↓ move · click highlights · Enter or double-click opens · Esc cancel
             {activeRowCancelled ? (
-              <span className={styles.warning}> · Cancelled order — opens read-only.</span>
+              <span className={styles.warning}> · Cancelled bill — opens read-only.</span>
             ) : null}
           </span>
-          <nav className={styles.pagerBar} aria-label="Sale order list pages">
+          <nav className={styles.pagerBar} aria-label="Bill list pages">
             <span className={styles.pagerInfo}>
               {filtered.length === 0
                 ? "Showing 0 entries"
@@ -391,7 +387,7 @@ export function SaleOrderListModal({
           type="button"
           className={cx(styles.toolButton, styles.toolButtonActive)}
           disabled={!activeRow}
-          title={activeRowCancelled ? "This order is cancelled and opens read-only" : undefined}
+          title={activeRowCancelled ? "This bill is cancelled and opens read-only" : undefined}
           onClick={() => activeRow && choose(activeRow)}
         >
           <FiEdit3 aria-hidden="true" />
@@ -405,7 +401,7 @@ export function SaleOrderListModal({
           type="button"
           className={styles.toolButton}
           disabled={!activeRow}
-          title="Print the highlighted order"
+          title="Print the highlighted bill"
           onClick={printActiveRow}
         >
           <FiPrinter aria-hidden="true" />
@@ -427,7 +423,7 @@ export function SaleOrderListModal({
           <input
             className={styles.input}
             value={search}
-            placeholder="party name, order no, amount…"
+            placeholder="party name, bill no, amount…"
             autoFocus
             autoComplete="off"
             onChange={(event) => setSearch(event.target.value)}
@@ -479,8 +475,8 @@ export function SaleOrderListModal({
 
       {mayBeIncomplete ? (
         <p className={styles.modalNote}>
-          Showing the {fetched} most recent orders — narrow Search or the date range if the one
-          you want is not listed.
+          Showing the {fetched} most recently fetched bills of this year — narrow Search or the
+          date range if the one you want is not listed.
         </p>
       ) : null}
 
@@ -489,8 +485,8 @@ export function SaleOrderListModal({
           <thead>
             <tr>
               <th scope="col">Date</th>
-              <th scope="col">Order No</th>
-              <th scope="col">Type</th>
+              <th scope="col">Bill No</th>
+              <th scope="col">Term</th>
               <th scope="col">Customer</th>
               <th scope="col">Place</th>
               <th scope="col">Items</th>
@@ -502,10 +498,9 @@ export function SaleOrderListModal({
           <tbody>
             {visibleRows.map((row, index) => {
               const cancelled = isCancelled(row);
-              const status = (row.so_status ?? "").trim().toUpperCase();
               return (
                 <tr
-                  key={row.so_id}
+                  key={row.sb_id}
                   data-selected={index === activeIndex ? "true" : undefined}
                   data-deleted={cancelled ? "true" : undefined}
                   // Click, arrow keys and the pager move the highlight —
@@ -515,33 +510,25 @@ export function SaleOrderListModal({
                   onClick={() => setActiveIndex(index)}
                   onDoubleClick={() => choose(row)}
                 >
-                  <td>{toDateInput(row.so_order_date)}</td>
-                  <td>{row.so_order_refno ?? "—"}</td>
-                  <td>{row.so_order_type ?? ""}</td>
+                  <td>{toDateInput(row.sb_bill_date)}</td>
+                  <td>{row.sb_bill_refno ?? "—"}</td>
+                  <td>{row.sb_bill_type ?? ""}</td>
                   <td>{row.cus_name ?? ""}</td>
                   <td>{row.cus_addr3 ?? ""}</td>
-                  <td className={styles.alignRight}>{row.so_tot_items ?? 0}</td>
-                  <td className={styles.alignRight}>{toNumber(row.so_order_amt).toFixed(2)}</td>
+                  <td className={styles.alignRight}>{row.sb_tot_items ?? 0}</td>
+                  <td className={styles.alignRight}>{toNumber(row.sb_bill_amt).toFixed(2)}</td>
                   <td>
-                    {status ? (
-                      <span
-                        className={cx(
-                          orderStyles.statusPill,
-                          STATUS_CLASS[status] ?? orderStyles.statusPillDraft,
-                        )}
-                      >
-                        {status}
-                      </span>
-                    ) : null}
+                    {row.sb_status ?? ""}
+                    {cancelled ? <span className={styles.deletedTag}>Cancelled</span> : null}
                   </td>
-                  <td>{row.so_created_by ?? ""}</td>
+                  <td>{row.sb_created_by ?? ""}</td>
                 </tr>
               );
             })}
             {visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={9} className={styles.emptyGrid}>
-                  {isFetching ? "Loading…" : "No order matches."}
+                  {isFetching ? "Loading…" : "No bill matches."}
                 </td>
               </tr>
             ) : null}
@@ -552,12 +539,12 @@ export function SaleOrderListModal({
         <PrintOptionsDialog
           open
           onClose={() => setPrintRow(null)}
-          purposeCode={PURPOSE_CODE.SALE_ORDER}
-          documentLabel={printRow.so_order_refno ? `Order ${printRow.so_order_refno}` : "Order"}
+          purposeCode={PURPOSE_CODE.SALE_INVOICE}
+          documentLabel={printRow.sb_bill_refno ? `Bill ${printRow.sb_bill_refno}` : "Bill"}
           target={{
-            docId: printRow.so_id,
-            accYear: printRow.so_acc_year,
-            filename: `sale-order-${printRow.so_order_refno || printRow.so_id}`,
+            docId: printRow.sb_id,
+            accYear: printRow.sb_acc_year,
+            filename: `bill-${printRow.sb_bill_refno || printRow.sb_id}`,
           }}
         />
       ) : null}

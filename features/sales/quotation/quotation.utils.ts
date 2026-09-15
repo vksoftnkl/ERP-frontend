@@ -547,9 +547,79 @@ export function resolveItemColumns(rows: UiTableColumnRow[] | undefined): Resolv
 }
 
 /**
+ * A column the screen needs that its layout does not configure.
+ *
+ * The one case that exists today is the sale bill's Size cell: ui table 22 is
+ * the Qt client's own Desktop layout and carries no row for it, so the meaning
+ * has nowhere to land — a meaning whose name no configured row answers to is
+ * dropped, which is what kept §7.4's size → cubic-feet → Bill Qty conversion
+ * unreachable from that grid. Injected, it is reachable without seeding a
+ * column into a layout the desktop screen also renders.
+ *
+ * The injected column carries `columnId: null`, exactly like the serial column
+ * the resolver already injects, so a width drag and a reorder both stay local
+ * rather than trying to save against a `ui_tbl_clm_id` that does not exist.
+ */
+export type InjectedItemColumn = {
+  meaning: ItemColumnMeaning;
+  /** Key of the configured column it sits after. Front of the grid if absent. */
+  afterKey: string;
+  widthPx: number;
+  /**
+   * Whether Enter walks into it — for a cell that drives a quantity, since a
+   * layout that flags a subset of its columns flags none of the injected ones
+   * and the cell would otherwise be unreachable by keyboard.
+   *
+   * Honoured only on a layout that already flags a column of its own: a layout
+   * flagging none stops at every editable cell instead (see `grid-focus.ts`),
+   * and one flagged column there would collapse the whole chain onto it.
+   */
+  focus?: boolean;
+};
+
+/**
+ * The resolved layout with any column it does not configure spliced in.
+ *
+ * Placed by position rather than appended, so a re-sort keeps it beside the
+ * column it belongs next to: half a step past its anchor, the same trick the
+ * serial column's `-1` uses to stay first. A layout that DOES configure the
+ * column is left alone — the server owns the grid wherever it has an opinion.
+ */
+function withInjectedColumns(
+  columns: ResolvedItemColumn[],
+  injected: readonly InjectedItemColumn[],
+): ResolvedItemColumn[] {
+  // Whether the LAYOUT has an Enter chain of its own — read before anything is
+  // injected, so an injected stop can never be the one that creates it.
+  const layoutHasFocusChain = columns.some((column) => column.focus);
+  let result = columns;
+  for (const entry of injected) {
+    if (result.some((column) => column.key === entry.meaning.key)) {
+      continue;
+    }
+    const anchorIndex = result.findIndex((column) => column.key === entry.afterKey);
+    const anchor = anchorIndex >= 0 ? result[anchorIndex] : null;
+    const column: ResolvedItemColumn = {
+      ...entry.meaning,
+      header: entry.meaning.token,
+      widthPx: entry.widthPx,
+      visible: true,
+      focus: (entry.focus ?? false) && layoutHasFocusChain,
+      necessity: false,
+      position: anchor ? anchor.position + 0.5 : -0.5,
+      columnNumber: anchor ? anchor.columnNumber + 0.5 : -0.5,
+      columnId: null,
+    };
+    result = [...result.slice(0, anchorIndex + 1), column, ...result.slice(anchorIndex + 1)];
+  }
+  return result;
+}
+
+/**
  * The same resolution against a caller-supplied meaning list — the Sale Order
  * screen's grid 24 shares this grid machinery with its own 96-column map (and
- * its own width unit: table 24 stores Qt-style percents, not pixels).
+ * its own width unit: table 24 stores Qt-style percents, not pixels), and the
+ * Sale Bill's grid 22 adds a column of its own on top (`injected`).
  */
 export function resolveItemColumnsWith(
   rows: UiTableColumnRow[] | undefined,
@@ -557,9 +627,22 @@ export function resolveItemColumnsWith(
   unit: ColumnWidthUnit,
   /** That layout's `uiTblClmNo` map, when one is shipped for it. */
   columnNumbers?: Record<string, number>,
+  /** Columns this screen adds to whatever the layout configures. */
+  injected?: readonly InjectedItemColumn[],
 ): ResolvedItemColumn[] {
-  const resolved = resolveColumns(rows, meanings, unit, columnNumbers);
-  return resolved.length > 0 ? withSerialColumn(resolved, meanings) : fallbackColumns(meanings);
+  // An injected meaning joins the name match as well, so the day the layout is
+  // seeded a row of its own the configured column wins — its width, its
+  // visibility, its `ui_tbl_clm_id` — and nothing is injected on top of it.
+  const allMeanings =
+    injected && injected.length > 0
+      ? [...meanings, ...injected.map((entry) => entry.meaning)]
+      : meanings;
+  const resolved = resolveColumns(rows, allMeanings, unit, columnNumbers);
+  const withFallback =
+    resolved.length > 0 ? withSerialColumn(resolved, allMeanings) : fallbackColumns(meanings);
+  return injected && injected.length > 0
+    ? withInjectedColumns(withFallback, injected)
+    : withFallback;
 }
 export function resolveChargeColumns(rows: UiTableColumnRow[] | undefined): ResolvedChargeColumn[] {
   const resolved = resolveColumns(rows, CHARGE_COLUMN_MEANINGS, CHARGE_COLUMN_WIDTH_UNIT);

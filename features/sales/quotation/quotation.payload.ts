@@ -423,6 +423,11 @@ function lineFromPayload(item: NonNullable<QuotationPayload["items"]>[number]): 
     schemeFlag: Boolean(item.sqiSchemeId),
     remarks: item.sqiRemarks,
     itemSize: item.sqiSize,
+    // Not stored on the line — the GET stamps every line with the branch's
+    // default godown (see `sqiGodownId`), which is what the GodownName column
+    // shows and what crosses into the order or bill this quote is converted to.
+    godownId: item.sqiGodownId ?? null,
+    godownName: item.sqiGodownName ?? null,
   });
 }
 /** Exported for the Sale Order screen — same table, same wire, same parse. */

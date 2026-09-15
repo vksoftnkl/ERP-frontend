@@ -17,10 +17,10 @@
  * All arithmetic is `domain/arithmetic.ts` and all refusals are
  * `domain/validate.ts`; this component computes nothing and judges nothing.
  */
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "react-toastify";
 import { cx } from "@/components/design-system/cx";
-import { formatCurrency } from "@/domain/pricing";
+import { formatCurrency, money } from "@/domain/pricing";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import { DateField, DropdownCombo, Field } from "@/features/sales/quotation/components/fields";
 import { parseCell } from "@/features/sales/quotation/quotation.utils";
@@ -65,6 +65,24 @@ export type TenderDialogProps = {
   refundAmt: number;
   /** The customer may buy on credit. A cash-only customer is asked once (§8). */
   creditAllowed?: boolean;
+  /**
+   * Credits the customer already holds that are being set off against this
+   * document (the bill screen's §10). Zero on the order, which has none.
+   *
+   * It reduces what the TENDERS have to cover — money already taken is money
+   * already taken — but it is **not a tender**: it never enters `rows`, it is
+   * never sent in `tenders[]`, and the settlement handed back does not include
+   * it. They are different rows in different tables and they post differently;
+   * a screen that merges the two produces a document that balances here and not
+   * in the ledgers.
+   */
+  adjustedAmount?: number;
+  /**
+   * The adjustment panel, mounted INSIDE this dialog (§10's second mount point).
+   * The same component the bill renders outside it, writing the same state — so
+   * whichever the operator reaches for, there is one source of truth.
+   */
+  adjustPanel?: ReactNode;
   onClose: () => void;
   onApply: (tenders: TenderDraftRow[], settlement: SettlementState) => void;
 };
@@ -145,6 +163,8 @@ function TenderDialogBody({
   mastersError,
   refundAmt,
   creditAllowed = true,
+  adjustedAmount = 0,
+  adjustPanel,
   onClose,
   onApply,
 }: TenderDialogProps) {
@@ -171,6 +191,14 @@ function TenderDialogBody({
     ? "unavailable"
     : built.fallback;
 
+  /**
+   * What the TENDERS still have to cover: the document less whatever credits are
+   * already set off against it. Every comparison below is made on this, and the
+   * document's own total stays on screen beside it — an operator settling a
+   * ₹5,000 bill with a ₹2,000 credit note is tendering ₹3,000, and a dialog that
+   * asked for ₹5,000 would refuse a correctly settled bill.
+   */
+  const settleAmount = Math.max(0, money(documentAmount - Math.max(0, adjustedAmount)));
   const computation = useMemo(
     () =>
       computeTenders(
@@ -180,9 +208,9 @@ function TenderDialogBody({
           allowChange: givesChange(row.allowChange, row.typeCode),
           surcharge: { perc: row.surchargePerc, flat: row.surchargeFlat },
         })),
-        documentAmount,
+        settleAmount,
       ),
-    [rows, documentAmount],
+    [rows, settleAmount],
   );
   const pricedByKey = useMemo(
     () => new Map(computation.rows.map((row) => [row.key, row])),
@@ -290,7 +318,7 @@ function TenderDialogBody({
   const apply = () => {
     const violation = validateTenderRows(rows, {
       purpose,
-      documentAmount,
+      documentAmount: settleAmount,
       documentDate,
     });
     if (violation) {
@@ -301,7 +329,7 @@ function TenderDialogBody({
       return;
     }
     // Change that nobody can hand back is refused rather than clamped.
-    if (computation.totals.balance > 0.005 && documentAmount > 0) {
+    if (computation.totals.balance > 0.005 && settleAmount > 0) {
       const canGiveChange = rows.some(
         (row) => row.keyed > 0 && givesChange(row.allowChange, row.typeCode),
       );
@@ -317,7 +345,7 @@ function TenderDialogBody({
       tenderAmt: computation.totals.tendered,
       surchargeAmt: computation.totals.surchargeTotal,
       refundAmt,
-      payStatus: payStatusOf(computation.totals.settled - refundAmt, documentAmount),
+      payStatus: payStatusOf(computation.totals.settled - refundAmt, settleAmount),
     });
   };
 
@@ -505,6 +533,8 @@ function TenderDialogBody({
           </div>
         ) : null}
 
+        {adjustPanel}
+
         <div className={styles.tenderTotals}>
           <span className={styles.tenderTotal}>
             <span className={styles.tenderTotalLabel}>{captions.total}</span>
@@ -516,6 +546,12 @@ function TenderDialogBody({
               {formatCurrency(computation.totals.settled)}
             </span>
           </span>
+          {adjustedAmount > 0 ? (
+            <span className={styles.tenderTotal}>
+              <span className={styles.tenderTotalLabel}>Adjusted</span>
+              <span className={styles.tenderTotalValue}>{formatCurrency(adjustedAmount)}</span>
+            </span>
+          ) : null}
           {computation.totals.surchargeTotal > 0 ? (
             <span className={styles.tenderTotal}>
               <span className={styles.tenderTotalLabel}>Surcharge</span>

@@ -341,6 +341,19 @@ export type QuotationItemPayload = {
   /** Joined display names — populated on GET only, `null` on the save response. */
   sqiItemName: string | null;
   sqiUnitName: string | null;
+  /**
+   * The godown every line of the quotation shows.
+   *
+   * `sale_quotation_item` stores NO godown — a quotation neither moves nor
+   * reserves stock — so the GET stamps each line with the quotation branch's
+   * default (`branch_master.br_default_godown_id`), joined to
+   * `godown_locations.gdl_name`. It answers null for a branch with no default,
+   * or one pointing at a deleted godown, rather than naming a dead location.
+   *
+   * Optional because it is a GET-only join: the save response omits it.
+   */
+  sqiGodownId?: string | null;
+  sqiGodownName?: string | null;
 };
 
 /** Every scalar column of `sale_charge_detail`, as JSON. No `cdLedgerName`. */

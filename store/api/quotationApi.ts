@@ -460,19 +460,28 @@ export const quotationApi = baseApi.injectEndpoints({
      * screens' "Visible Settings", so the shape is theirs: sections, each with
      * its fields, for one menu id and platform.
      */
-    getQuotationWidgetConfig: builder.query<WidgetMasterSectionConfig[], void>({
-      query: () => ({
+    /**
+     * One screen's widget-master config — its `fixed.form_section` rows and the
+     * `fixed.form_field` rows hanging off them.
+     *
+     * Parameterised by menu, not quotation-shaped: every voucher screen with a
+     * right-click "Visible Settings" reads the same two tables, and the sale
+     * bill is the second. The tag is keyed by menu id so one screen's save does
+     * not refetch another's.
+     */
+    getWidgetConfig: builder.query<
+      WidgetMasterSectionConfig[],
+      { menuId: string; platform?: string }
+    >({
+      query: ({ menuId, platform = QUOTATION_WIDGET_PLATFORM }) => ({
         url: WIDGET_MASTERS_GET_ENDPOINT,
         // camelCase here; the sibling `/widget-masters/config` route spells the
         // same two filters `menu_id` / `platform`.
-        params: {
-          sectionMenuId: QUOTATION_WIDGET_MENU_ID,
-          sectionPlatform: QUOTATION_WIDGET_PLATFORM,
-        },
+        params: { sectionMenuId: menuId, sectionPlatform: platform },
       }),
       transformResponse: (payload: ApiSuccessResponse<WidgetMasterSectionConfig[]>) =>
         payload.data ?? [],
-      providesTags: [{ type: "WidgetConfig", id: QUOTATION_WIDGET_MENU_ID }],
+      providesTags: (_result, _error, { menuId }) => [{ type: "WidgetConfig", id: menuId }],
       keepUnusedDataFor: 300,
     }),
     /**
@@ -480,9 +489,11 @@ export const quotationApi = baseApi.injectEndpoints({
      * server updates by `sectionId` / `fieldId` and rolls the batch back if any
      * id is missing, so a partial body would not be a partial save.
      */
-    saveQuotationWidgetVisibility: builder.mutation<
+    saveWidgetVisibility: builder.mutation<
       unknown,
       {
+        /** Which screen's config this is, for the cache tag only. */
+        menuId: string;
         data: Array<{
           sectionId: number;
           sectionGuiName: string;
@@ -495,12 +506,14 @@ export const quotationApi = baseApi.injectEndpoints({
         }>;
       }
     >({
-      query: (body) => ({
+      // `menuId` is this client's own routing key and not part of the contract,
+      // so it is stripped before the body goes out — the route would 400 on it.
+      query: ({ data }) => ({
         url: WIDGET_MASTERS_VISIBILITY_ENDPOINT,
         method: "PATCH",
-        body,
+        body: { data },
       }),
-      invalidatesTags: [{ type: "WidgetConfig", id: QUOTATION_WIDGET_MENU_ID }],
+      invalidatesTags: (_result, _error, { menuId }) => [{ type: "WidgetConfig", id: menuId }],
     }),
     // -- pickers -----------------------------------------------------------
     /**
@@ -690,8 +703,8 @@ export const {
   useGetQuotationGridLayoutQuery,
   useSaveQuotationColumnWidthsMutation,
   useSaveQuotationColumnLayoutMutation,
-  useGetQuotationWidgetConfigQuery,
-  useSaveQuotationWidgetVisibilityMutation,
+  useGetWidgetConfigQuery,
+  useSaveWidgetVisibilityMutation,
   useSearchPickerItemsQuery,
   useLazySearchPickerItemsQuery,
   useGetSalesChargesQuery,

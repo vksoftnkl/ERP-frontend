@@ -65,6 +65,20 @@ export type HeldListModalProps = {
   onPick: (txhId: string) => void;
   /** Frees a cart another device holds. Resolves `false` when the server refused. */
   onTakeOver: (hold: TxnHoldPayload) => Promise<boolean>;
+  /**
+   * Which screen's carts these are. Defaulted to the quotation's because it got
+   * here first; the sale bill passes its own — `txn_hold` is one shared table and
+   * a picker that listed another screen's carts would offer rows it cannot
+   * redraw.
+   *
+   * `recognises` is the real test: the wire filter narrows to a kind and a doc
+   * type, but only the `txh_payload` stamp says which screen actually wrote the
+   * row.
+   */
+  docType?: string;
+  kind?: string;
+  recognises?: (hold: TxnHoldPayload) => boolean;
+  title?: string;
 };
 /** The server's own cap; asking for more is a 400. */
 const FETCH_LIMIT = 100;
@@ -82,7 +96,19 @@ function heldAt(value: string | null): string {
   return `${date} ${time}`;
 }
 export function HeldListModal(props: HeldListModalProps) {
-  const { isOpen, companyId, branchId, accYear, onClose, onPick, onTakeOver } = props;
+  const {
+    isOpen,
+    companyId,
+    branchId,
+    accYear,
+    onClose,
+    onPick,
+    onTakeOver,
+    docType = QUOTATION_HOLD_DOC_TYPE,
+    kind = QUOTATION_HOLD_KIND,
+    recognises = isQuotationHold,
+    title = "Held quotations",
+  } = props;
   const [search, setSearch] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [discarding, setDiscarding] = useState<string | null>(null);
@@ -102,8 +128,8 @@ export function HeldListModal(props: HeldListModalProps) {
       // Worth sending on every query beyond narrowing the list: it is the
       // partition key, so it prunes the scan to one year.
       ...(holdAccYear === null ? {} : { txhAccYear: holdAccYear }),
-      txhKind: QUOTATION_HOLD_KIND,
-      txhDocType: QUOTATION_HOLD_DOC_TYPE,
+      txhKind: kind,
+      txhDocType: docType,
       page: 1,
       limit: FETCH_LIMIT,
     },
@@ -113,7 +139,7 @@ export function HeldListModal(props: HeldListModalProps) {
   );
   const rows = useMemo(() => {
     const all = (data?.items ?? [])
-      .filter(isQuotationHold)
+      .filter(recognises)
       .filter((row) => (HOLD_LIVE_STATUSES as readonly string[]).includes(row.txhStatus));
     const needle = search.trim().toLowerCase();
     if (!needle) {
@@ -180,7 +206,7 @@ export function HeldListModal(props: HeldListModalProps) {
   });
   return (
     <ModalShell
-      title="Held quotations"
+      title={title}
       isOpen={isOpen}
       wide
       fixedHeight

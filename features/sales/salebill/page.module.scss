@@ -1,0 +1,134 @@
+/*
+ * Sale Bill Entry — the styles the bill adds over the quotation screen.
+ *
+ * Everything structural (page shell, header grid, field controls, both grids,
+ * totals, toolbar) is the quotation's own stylesheet, imported by the components
+ * that reuse those classes. The credit panel's paints are the sale order's, for
+ * the same reason its component is: one panel, one look, one set of rules about
+ * when a figure turns red.
+ *
+ * What is here is only what this screen adds.
+ */
+
+/* ----------------------------------------------------------------- title -- */
+/* The legacy screen shouts its name; the shared `.title` is sentence case. */
+.entryTitle {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* ---------------------------------------------------------- header layout -- */
+/*
+ * Four columns: customer · bill · people · credit.
+ *
+ * The customer column is widest because it carries the two state fields side by
+ * side — the customer's own state and the place of supply, which are different
+ * facts and have to be readable as such. The credit column is narrowest: every
+ * cell in it is a read-out.
+ */
+.headerRowFour {
+  grid-template-columns:
+    minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1.05fr)
+    minmax(0, 0.8fr);
+}
+
+@media (max-width: 1400px) {
+  .headerRowFour {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1000px) {
+  .headerRowFour {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ------------------------------------------------------------ source chip -- */
+/*
+ * "FROM SALES_ORDER · SO0042 · 11-09-2026".
+ *
+ * Reads the RAW source document type, so a future DELIVERY_CHALLAN needs no
+ * change here. It is the only place the operator can see that this bill is
+ * consuming another document — which is also why the customer picker is locked
+ * whenever it is showing.
+ */
+.sourceChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: #eef2ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+  white-space: nowrap;
+}
+
+.sourceChipDivider {
+  opacity: 0.5;
+}
+
+/* ------------------------------------------------------- adjustment panel -- */
+/*
+ * §10's panel, rendered in two places: inside the settle dialog and beside the
+ * totals on the bill. Same component, same state, so the styling has to work in
+ * a modal and in the page — hence no fixed height and no own scroll container
+ * beyond the table's.
+ */
+.adjustPanel {
+  border: 1px solid var(--erp-border-color, #d7dce3);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.adjustHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/*
+ * The credit's originating year, beside its reference. Quiet, but never hidden:
+ * acc_bill_balance is partitioned by it and never carried forward, so two
+ * same-numbered documents from different years are different credits.
+ */
+.adjustYear {
+  margin-left: 6px;
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+.adjustFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid var(--erp-border-color, #e2e8f0);
+}
+
+.adjustTotal {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.adjustTotalLabel {
+  opacity: 0.7;
+}
+
+.adjustTotalValue {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

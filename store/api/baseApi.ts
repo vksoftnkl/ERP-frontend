@@ -40,14 +40,11 @@ const rawBaseQuery = fetchBaseQuery({
     return headers;
   },
 });
-
 let refreshRequest: Promise<{ token: string; refreshToken: string | null; userId: string | null } | null> | null = null;
-
 function isAuthRefreshEndpoint(args: string | FetchArgs): boolean {
   const requestUrl = typeof args === "string" ? args : args.url;
   return requestUrl === "/auth/refresh" || requestUrl.endsWith("/auth/refresh");
 }
-
 async function refreshAuthSession(
   api: Parameters<BaseQueryFn<string | FetchArgs, unknown, ApiError>>[1],
   extraOptions: Parameters<BaseQueryFn<string | FetchArgs, unknown, ApiError>>[2],
@@ -55,13 +52,11 @@ async function refreshAuthSession(
   if (refreshRequest) {
     return refreshRequest;
   }
-
   const state = api.getState() as { auth?: { refreshToken?: string | null } };
   const currentRefreshToken = state.auth?.refreshToken ?? getRefreshToken();
   if (!currentRefreshToken) {
     return null;
   }
-
   refreshRequest = (async () => {
     const result = await rawBaseQuery(
       {
@@ -72,11 +67,9 @@ async function refreshAuthSession(
       api,
       extraOptions,
     );
-
     if ("error" in result) {
       return null;
     }
-
     const token = extractAuthToken(result.data);
     if (!token) {
       return null;
@@ -99,10 +92,8 @@ async function refreshAuthSession(
   })().finally(() => {
     refreshRequest = null;
   });
-
   return refreshRequest;
 }
-
 const baseQueryWithAuthHandling: BaseQueryFn<string | FetchArgs, unknown, ApiError> = async (
   args,
   api,
@@ -182,6 +173,12 @@ export const API_TAG_TYPES = [
   // Sales transactions
   "Quotation",
   "SaleOrder",
+  "SaleBill",
+  // A party's unspent credits (accounts.acc_bill_balance). Invalidated by every
+  // bill save, because adjusting a credit is what SPENDS it — a panel still
+  // offering a credit another counter has just consumed is the one stale read
+  // that costs money.
+  "PartyCredit",
   "TxnHold",
   // Screen field config (fixed.form_section / form_field), keyed by menu id
   "WidgetConfig",

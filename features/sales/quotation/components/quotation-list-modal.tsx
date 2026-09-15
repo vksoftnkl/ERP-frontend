@@ -52,7 +52,16 @@ export type QuotationListModalProps = {
   branchId: string;
   accYear: string;
   onClose: () => void;
-  onPick: (key: QuotationDocKey) => void;
+  /**
+   * The picked document's key, and the LIST ROW it came from.
+   *
+   * The row rides along because a caller may need to refuse the pick on
+   * something only the list knows: the sale bill screen checks
+   * `sq_converted_doc_id` before it fetches, so an already-billed quotation is
+   * turned away without anything being painted (its §13). The quotation screen
+   * itself ignores the second argument.
+   */
+  onPick: (key: QuotationDocKey, row: QuotationListRow) => void;
 };
 
 /**
@@ -211,12 +220,15 @@ export function QuotationListModal(props: QuotationListModalProps) {
         toast.info("This quotation is deleted — it can no longer be opened.");
         return;
       }
-      onPick({
-        sqId: row.sq_id,
-        sqCompanyId: row.sq_company_id,
-        sqBranchId: row.sq_branch_id,
-        sqAccYear: row.sq_acc_year,
-      });
+      onPick(
+        {
+          sqId: row.sq_id,
+          sqCompanyId: row.sq_company_id,
+          sqBranchId: row.sq_branch_id,
+          sqAccYear: row.sq_acc_year,
+        },
+        row,
+      );
     },
     [onPick],
   );

@@ -15,6 +15,7 @@ import openingStockReducer from "@/store/slices/openingStockSlice";
 import physicalStockReducer from "@/store/slices/physicalStockSlice";
 import quotationReducer from "@/store/slices/quotationSlice";
 import saleOrderReducer from "@/store/slices/saleOrderSlice";
+import saleBillReducer from "@/store/slices/saleBillSlice";
 import printDesignerReducer from "@/features/print-designer/store/designerSlice";
 export const REDUX_SESSION_STORAGE_KEY = "erp_client_redux_state";
 const rootReducer = combineReducers({
@@ -29,6 +30,7 @@ const rootReducer = combineReducers({
   physicalStock: physicalStockReducer,
   quotation: quotationReducer,
   saleOrder: saleOrderReducer,
+  saleBill: saleBillReducer,
   printDesigner: printDesignerReducer,
 });
 export type RootState = ReturnType<typeof rootReducer>;

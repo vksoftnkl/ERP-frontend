@@ -694,6 +694,10 @@ function loadedPayload(overrides: Partial<QuotationPayload> = {}): QuotationPayl
         sqiRemarks: null,
         sqiItemName: "New Claw",
         sqiUnitName: "Box",
+        // Not a stored column — the GET stamps every line with the quotation
+        // branch's default godown. See `sqiGodownId`.
+        sqiGodownId: "019c9935-79f4-772b-8666-2b46b9fc82cc",
+        sqiGodownName: "namakkal",
       },
       {
         // A soft-deleted line must never reach the draft.
@@ -718,6 +722,27 @@ describe("parseLoadedDocument", () => {
     expect(draft.storedPricing?.totals.bill).toBe(1180);
     expect(draft.storedPricing?.lines[0].total).toBe(1180);
     expect(draft.storedPricing?.lines[0].netPrice).toBe(118);
+  });
+
+  it("paints the branch's default godown onto every line", () => {
+    // `sale_quotation_item` stores no godown — a quotation neither moves nor
+    // reserves stock — so the GET joins the branch default onto each line. It is
+    // what the GodownName column shows, and it is what crosses into the order or
+    // the bill this quote is converted to.
+    const draft = parseLoadedDocument(loadedPayload(), "33");
+    expect(draft.lines[0].godownId).toBe("019c9935-79f4-772b-8666-2b46b9fc82cc");
+    expect(draft.lines[0].godownName).toBe("namakkal");
+  });
+
+  it("leaves the godown null when the branch has no default", () => {
+    // A branch with no default, or one pointing at a deleted godown, answers
+    // null rather than naming a dead location.
+    const payload = loadedPayload();
+    const items = payload.items ?? [];
+    items[0] = { ...items[0], sqiGodownId: null, sqiGodownName: null };
+    const draft = parseLoadedDocument(payload, "33");
+    expect(draft.lines[0].godownId).toBeNull();
+    expect(draft.lines[0].godownName).toBeNull();
   });
 
   it("takes the tenant context from the voucher, not the session", () => {

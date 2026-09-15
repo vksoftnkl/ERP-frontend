@@ -107,7 +107,7 @@ import {
   WIDGET_VISIBILITY_ENDPOINT,
   ITEM_MASTER_WIDGET_SECTION_MENU_ID,
   ITEM_MASTER_WIDGET_TYPE,
-  ITEM_TAX_MASTER_LIST_ENDPOINT,
+  TAX_RATE_MASTER_LIST_ENDPOINT,
   ITEM_REORDER_TABLE_UI_ID,
   ITEM_PRICE_TABLE_UI_ID,
   ITEM_EAN_TABLE_UI_ID,
@@ -124,7 +124,6 @@ import {
   UI_REORDER_TABLE_COLUMNS_QUERY,
   UI_EAN_TABLE_COLUMNS_QUERY,
   ITEM_MASTER_WIDGET_QUERY,
-  ITEM_TAX_LIST_QUERY,
   LOOKUP_QUERY_ITEMS,
   HSN_LOOKUP_QUERY,
   BRANCH_LOOKUP_KEYS,
@@ -275,9 +274,10 @@ const SUPPLIER_DROPDOWN_CONFIG = {
 const SUPPLIER_SOURCE_ID_KEYS = ["item_supplier_id", "itemSupplierId"] as const;
 const SUPPLIER_SOURCE_NAME_KEYS = ["item_supplier_name", "itemSupplierName"] as const;
 // Default Tax is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
-// 36=TAXES tax_id/tax_name from inventory.item_tax_master where active & not deleted). Loaded
-// on open + on debounced server-side search via /dropdown-details/run; nothing fetched up front.
-// The full tax records (GST/CESS percentages) still load eagerly via grid 5 into
+// 36=TAXES tax_id/tax_name from inventory.tax_rate_master where active & not deleted — it was
+// repointed off item_tax_master server-side once the items themselves were). Loaded on open + on
+// debounced server-side search via /dropdown-details/run; nothing fetched up front. The full rate
+// records (rate + both cess figures) still load eagerly via /tax-rates/list into
 // itemTaxRecordsById for the price-with-tax math — this dropdown only supplies the field options.
 const TAX_DROPDOWN_CONFIG = {
   dropdownId: "36",
@@ -401,53 +401,26 @@ function resolveItemPriceTaxContext(
       gstPerc: 0,
     };
   }
-  const purchaseIgst = toItemPriceNumberFromUnknown(
-    getFieldValue(taxRecord, "tax_igst_pur_perc"),
-  );
-  const purchaseCgst = toItemPriceNumberFromUnknown(
-    getFieldValue(taxRecord, "tax_cgst_pur_perc"),
-  );
-  const purchaseSgst = toItemPriceNumberFromUnknown(
-    getFieldValue(taxRecord, "tax_sgst_pur_perc"),
-  );
-  const standardIgst = toItemPriceNumberFromUnknown(
-    getFieldValue(taxRecord, "tax_igst_perc"),
-  );
-  const standardCgst = toItemPriceNumberFromUnknown(
-    getFieldValue(taxRecord, "tax_cgst_perc"),
-  );
-  const standardSgst = toItemPriceNumberFromUnknown(
-    getFieldValue(taxRecord, "tax_sgst_perc"),
-  );
-  // The legacy tax resolve consumed /item-taxes/get's tax_gst_rate_total; the
-  // grid-5 record carries it too when configured, so prefer it and only fall
-  // back to summing the component percentages when it is absent/zero.
-  const gstRateTotal = toItemPriceNumberFromUnknown(
-    getFieldValue(taxRecord, "tax_gst_rate_total"),
-  );
+  const readTaxNumber = (field: string) =>
+    toItemPriceNumberFromUnknown(getFieldValue(taxRecord, field));
+  // tax_rate_master states ONE rate for both directions, so the separate purchase
+  // percentages the retired item_tax_master carried (tax_*_pur_perc) are gone, and
+  // CGST/SGST/IGST are GENERATED from tax_rate_perc. Prefer the stated total and
+  // only fall back to the split for a record that somehow arrives without it.
+  const ratePerc = readTaxNumber("tax_rate_perc");
+  const igstPerc = readTaxNumber("tax_igst_perc");
+  const cgstPerc = readTaxNumber("tax_cgst_perc");
+  const sgstPerc = readTaxNumber("tax_sgst_perc");
   const gstPerc =
-    gstRateTotal > 0
-      ? gstRateTotal
-      : purchaseIgst > 0
-        ? purchaseIgst
-        : purchaseCgst > 0 || purchaseSgst > 0
-          ? purchaseCgst + purchaseSgst
-          : standardIgst > 0
-            ? standardIgst
-            : standardCgst + standardSgst;
-  const purchaseCessPerc = toItemPriceNumberFromUnknown(
-    getFieldValue(taxRecord, "tax_cess_pur_perc"),
-  );
-  const purchaseCessQty = toItemPriceNumberFromUnknown(
-    getFieldValue(taxRecord, "tax_cess_pur_unit"),
-  );
+    ratePerc > 0 ? ratePerc : igstPerc > 0 ? igstPerc : cgstPerc + sgstPerc;
+  // There are two cesses on the new master — compensation cess and the state cess
+  // (tax_acess_*) — and the price grid carries one percentage and one per-unit
+  // amount, so each pair folds into the same accumulator. A basis of NONE forces
+  // its figures to zero (ck_tax_cess_agrees), so summing needs no basis check.
   return {
-    cessPerc:
-      purchaseCessPerc ||
-      toItemPriceNumberFromUnknown(getFieldValue(taxRecord, "tax_cess_perc")),
+    cessPerc: readTaxNumber("tax_cess_perc") + readTaxNumber("tax_acess_perc"),
     cessQty:
-      purchaseCessQty ||
-      toItemPriceNumberFromUnknown(getFieldValue(taxRecord, "tax_cess_unit")),
+      readTaxNumber("tax_cess_per_unit") + readTaxNumber("tax_acess_per_unit"),
     gstPerc,
   };
 }
@@ -4460,7 +4433,7 @@ export default function ItemMasterPageContent({
   onItemSaved,
 }: ItemMasterPageContentProps = {}) {
   const { getAll: getItemLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
-  const { getAll: listItemTaxes } = useApi<unknown>(ITEM_TAX_MASTER_LIST_ENDPOINT);
+  const { getAll: listTaxRates } = useApi<unknown>(TAX_RATE_MASTER_LIST_ENDPOINT);
   // Configured price levels (fixed.price_levels): levels 1-4 relabel the price
   // grid's A-D tier columns with their short codes, and their count caps how
   // many tiers the price-row validation actually checks.
@@ -4683,7 +4656,7 @@ export default function ItemMasterPageContent({
         priceRowCompaniesPayload,
         unitsPayload,
         godownsPayload,
-        itemTaxesPayload,
+        taxRatesPayload,
         hsnPayload,
         itemsPayload,
         uiTableColumnsPayload,
@@ -4696,7 +4669,7 @@ export default function ItemMasterPageContent({
         getPriceRowCompanyLookup(COMPANY_LOOKUP_QUERY),
         getUnitLookup(UNIT_LOOKUP_QUERY),
         getGodownLookup(GODOWN_LOOKUP_QUERY),
-        listItemTaxes(ITEM_TAX_LIST_QUERY),
+        listTaxRates(),
         getHsnLookup(HSN_LOOKUP_QUERY),
         getItemLookup(LOOKUP_QUERY_ITEMS),
         getItemPriceTableColumns(UI_TABLE_COLUMNS_QUERY),
@@ -4737,8 +4710,8 @@ export default function ItemMasterPageContent({
           : [],
       );
       setItemTaxRecords(
-        itemTaxesPayload.status === "fulfilled"
-          ? extractArrayRecords(itemTaxesPayload.value, DEFAULT_LOOKUP_ARRAY_KEYS)
+        taxRatesPayload.status === "fulfilled"
+          ? extractArrayRecords(taxRatesPayload.value, DEFAULT_LOOKUP_ARRAY_KEYS)
           : [],
       );
       setHsnOptions(
@@ -4807,7 +4780,7 @@ export default function ItemMasterPageContent({
     getPriceLevelMasters,
     getPriceRowCompanyLookup,
     getUnitLookup,
-    listItemTaxes,
+    listTaxRates,
   ]);
   useEffect(() => loadItemMasterLookups(), [loadItemMasterLookups]);
   useDataRefresh(() => {
@@ -5672,9 +5645,20 @@ export default function ItemMasterPageContent({
           toDisplayValue(getFirstDefinedValue(rowSource, SUPPLIER_SOURCE_ID_KEYS)),
           toDisplayValue(getFirstDefinedValue(rowSource, SUPPLIER_SOURCE_NAME_KEYS)),
         );
+        // /items/get still resolves item_default_tax_name against the retired
+        // item_tax_master, so it answers null for every tax_rate_master id the
+        // items now carry. The rates are already loaded for the price math, so
+        // take the label from there rather than opening with a blank Default Tax.
+        const seedTaxId = toDisplayValue(
+          getFirstDefinedValue(rowSource, TAX_SOURCE_ID_KEYS),
+        );
+        const seedTaxRecord = seedTaxId ? itemTaxRecordsById.get(seedTaxId) : undefined;
         tax.seedSelected(
-          toDisplayValue(getFirstDefinedValue(rowSource, TAX_SOURCE_ID_KEYS)),
-          toDisplayValue(getFirstDefinedValue(rowSource, TAX_SOURCE_NAME_KEYS)),
+          seedTaxId,
+          toDisplayValue(getFirstDefinedValue(rowSource, TAX_SOURCE_NAME_KEYS)) ||
+            (seedTaxRecord
+              ? toDisplayValue(getFieldValue(seedTaxRecord, "tax_name"))
+              : ""),
         );
         return mapItemFormValues(source, defaults, itemTaxRecordsById);
       }}

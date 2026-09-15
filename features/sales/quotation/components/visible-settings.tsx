@@ -19,6 +19,16 @@
  * Right-click is already spoken for on the two grids, so this one is scoped to
  * the header panel and the Terms block, and the two never compete for the same
  * click.
+ *
+ * ---
+ *
+ * **Two exports, and the generic one came second.** `usePanelVisibleSettings` is
+ * the whole mechanism, parameterised by menu id and by the two field-name maps a
+ * screen bridges its fields through; `useVisibleSettings` is the quotation's own
+ * thin wrapper over it. The sale bill reads the same two tables under menu 12
+ * and wraps it the same way — the same shape as `resolveItemColumnsWith` beside
+ * `resolveItemColumns`, and for the same reason: one implementation of a subtle
+ * rule, two screens that name their own fields.
  */
 import {
   useCallback,
@@ -38,12 +48,14 @@ import {
   type WidgetMasterSectionConfig,
 } from "@/features/masters/shared/widget-config";
 import {
-  useGetQuotationWidgetConfigQuery,
-  useSaveQuotationWidgetVisibilityMutation,
+  useGetWidgetConfigQuery,
+  useSaveWidgetVisibilityMutation,
 } from "@/store/api/quotationApi";
 import {
   QUOTATION_HEADER_FIELD_NAMES,
   QUOTATION_TERMS_FIELD_NAMES,
+  QUOTATION_WIDGET_MENU_ID,
+  QUOTATION_WIDGET_PLATFORM,
   type QuotationHeaderFieldKey,
   type QuotationTermsFieldKey,
 } from "../quotation.constants";
@@ -53,35 +65,33 @@ import styles from "../page.module.scss";
 /** A stable identity for the query's default, so the memos below do not rerun. */
 const NO_SECTIONS: WidgetMasterSectionConfig[] = [];
 /**
- * The configured field names that map to a real field on this screen. The rest
- * are left out of the dialog, rather than offering a checkbox that would toggle
- * nothing.
+ * What the header blocks read to decide whether — and how — to render a field.
+ *
+ * Generic over the SCREEN's own field keys, so a block cannot be handed the
+ * wrong screen's config: `labelFor("quoteNo")` does not typecheck against the
+ * sale bill's map, which has no such field.
  */
-const CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames({
-  ...QUOTATION_HEADER_FIELD_NAMES,
-  ...QUOTATION_TERMS_FIELD_NAMES,
-});
-const TERMS_FIELD_KEYS = Object.keys(QUOTATION_TERMS_FIELD_NAMES) as QuotationTermsFieldKey[];
-
-/** What the header blocks read to decide whether — and how — to render a field. */
-export type HeaderFieldConfig = {
+export type HeaderFieldConfig<TKey extends string> = {
   /** False only when the config explicitly hides the field. */
-  isVisible: (key: QuotationHeaderFieldKey) => boolean;
+  isVisible: (key: TKey) => boolean;
   /** The configured label, falling back to the one the screen ships with. */
-  labelFor: (key: QuotationHeaderFieldKey) => string;
+  labelFor: (key: TKey) => string;
 };
 
 /** The same, for the Terms panel's own section. */
-export type TermsFieldConfig = {
-  isVisible: (key: QuotationTermsFieldKey) => boolean;
-  labelFor: (key: QuotationTermsFieldKey) => string;
+export type TermsFieldConfig<TKey extends string> = {
+  isVisible: (key: TKey) => boolean;
+  labelFor: (key: TKey) => string;
   /** False once every row is hidden: the panel has nothing left to frame. */
   anyVisible: boolean;
 };
 
-export type VisibleSettings = HeaderFieldConfig & {
+export type VisibleSettings<
+  THeaderKey extends string,
+  TTermsKey extends string,
+> = HeaderFieldConfig<THeaderKey> & {
   /** Put this on the Terms panel; it reads the same config. */
-  terms: TermsFieldConfig;
+  terms: TermsFieldConfig<TTermsKey>;
   /** Put this on the header panel; it opens the dialog. */
   onContextMenu: (event: ReactMouseEvent<HTMLElement>) => void;
   /** True while the dialog is up, so the screen's function keys stand down. */
@@ -90,13 +100,57 @@ export type VisibleSettings = HeaderFieldConfig & {
   overlays: ReactNode;
 };
 
-export function useVisibleSettings(): VisibleSettings {
+/** What a screen has to say about itself to get a Visible Settings dialog. */
+export type PanelVisibleSettingsOptions<
+  THeaderKey extends string,
+  TTermsKey extends string,
+> = {
+  /** `fixed.menu_master.menu_id` — which screen's sections these are. */
+  menuId: string;
+  /**
+   * Sections are scoped by platform as well as by menu, and the server checks it
+   * against a case-sensitive enum (Mobile | Desktop | Web).
+   */
+  platform?: string;
+  /**
+   * Each header field's key, bridged to the `fixed.form_field.field_name` it is
+   * configured under (matched case-insensitively). The shipped config names
+   * every field after the label the screen already showed, so the same string
+   * doubles as the fallback label.
+   */
+  headerFieldNames: Readonly<Record<THeaderKey, string>>;
+  /** The same, for the Terms panel's own section. */
+  termsFieldNames: Readonly<Record<TTermsKey, string>>;
+};
+
+export function usePanelVisibleSettings<
+  THeaderKey extends string,
+  TTermsKey extends string,
+>({
+  menuId,
+  platform = QUOTATION_WIDGET_PLATFORM,
+  headerFieldNames,
+  termsFieldNames,
+}: PanelVisibleSettingsOptions<THeaderKey, TTermsKey>): VisibleSettings<THeaderKey, TTermsKey> {
+  /**
+   * The configured field names that map to a real field on this screen. The rest
+   * are left out of the dialog, rather than offering a checkbox that would
+   * toggle nothing.
+   */
+  const controllableFieldNames = useMemo(
+    () => buildControllableFieldNames({ ...headerFieldNames, ...termsFieldNames }),
+    [headerFieldNames, termsFieldNames],
+  );
+  const termsFieldKeys = useMemo(
+    () => Object.keys(termsFieldNames) as TTermsKey[],
+    [termsFieldNames],
+  );
   const {
     data: sections = NO_SECTIONS,
     isLoading,
     isError,
-  } = useGetQuotationWidgetConfigQuery();
-  const [saveVisibility, saveState] = useSaveQuotationWidgetVisibilityMutation();
+  } = useGetWidgetConfigQuery({ menuId, platform });
+  const [saveVisibility, saveState] = useSaveWidgetVisibilityMutation();
   const [open, setOpen] = useState(false);
   // Edits, held here rather than written back into the fetched config: a tick
   // previews on the form immediately, and closing the dialog without saving
@@ -147,22 +201,20 @@ export function useVisibleSettings(): VisibleSettings {
     [resolved],
   );
   const isVisible = useCallback(
-    (key: QuotationHeaderFieldKey) => visibleByName(QUOTATION_HEADER_FIELD_NAMES[key]),
-    [visibleByName],
+    (key: THeaderKey) => visibleByName(headerFieldNames[key]),
+    [headerFieldNames, visibleByName],
   );
   const labelFor = useCallback(
-    (key: QuotationHeaderFieldKey) => labelByName(QUOTATION_HEADER_FIELD_NAMES[key]),
-    [labelByName],
+    (key: THeaderKey) => labelByName(headerFieldNames[key]),
+    [headerFieldNames, labelByName],
   );
-  const terms = useMemo<TermsFieldConfig>(
+  const terms = useMemo<TermsFieldConfig<TTermsKey>>(
     () => ({
-      isVisible: (key) => visibleByName(QUOTATION_TERMS_FIELD_NAMES[key]),
-      labelFor: (key) => labelByName(QUOTATION_TERMS_FIELD_NAMES[key]),
-      anyVisible: TERMS_FIELD_KEYS.some((key) =>
-        visibleByName(QUOTATION_TERMS_FIELD_NAMES[key]),
-      ),
+      isVisible: (key) => visibleByName(termsFieldNames[key]),
+      labelFor: (key) => labelByName(termsFieldNames[key]),
+      anyVisible: termsFieldKeys.some((key) => visibleByName(termsFieldNames[key])),
     }),
-    [labelByName, visibleByName],
+    [labelByName, termsFieldKeys, termsFieldNames, visibleByName],
   );
 
   const treeSections = useMemo<WidgetTreeSectionView[]>(
@@ -182,11 +234,11 @@ export function useVisibleSettings(): VisibleSettings {
             // already reads as off on its own row, and turning it back on must
             // restore the fields that were ticked rather than none of them.
             checked: fieldVisible.get(key) ?? field.fieldVisibility !== false,
-            controllable: CONTROLLABLE_FIELD_NAMES.has(key),
+            controllable: controllableFieldNames.has(key),
           };
         }),
       })),
-    [fieldVisible, sections, sectionVisible, secondaryText],
+    [controllableFieldNames, fieldVisible, sections, sectionVisible, secondaryText],
   );
 
   const onToggleSection = useCallback((sectionId: number, checked: boolean) => {
@@ -225,6 +277,7 @@ export function useVisibleSettings(): VisibleSettings {
   const onSave = useCallback(async () => {
     try {
       await saveVisibility({
+        menuId,
         data: sections.map((section) => ({
           sectionId: section.sectionId,
           sectionGuiName: section.sectionGuiName?.trim() || section.sectionName || "Section",
@@ -247,7 +300,7 @@ export function useVisibleSettings(): VisibleSettings {
     } catch {
       toast.error("Could not save the field settings.");
     }
-  }, [fieldVisible, saveVisibility, sections, sectionVisible, secondaryText]);
+  }, [fieldVisible, menuId, saveVisibility, sections, sectionVisible, secondaryText]);
 
   const dialog = (
     <ModalShell
@@ -293,4 +346,24 @@ export function useVisibleSettings(): VisibleSettings {
   );
 
   return { isVisible, labelFor, terms, onContextMenu, isOpen: open, overlays: dialog };
+}
+
+/**
+ * The Quotation screen's own wrapper: menu 14, and the field names its header
+ * and Terms blocks are bridged through.
+ *
+ * Kept as a named export so nothing that already calls it has to change, and so
+ * the screen's two field maps are named in one place rather than at the call
+ * site.
+ */
+export function useVisibleSettings(): VisibleSettings<
+  QuotationHeaderFieldKey,
+  QuotationTermsFieldKey
+> {
+  return usePanelVisibleSettings({
+    menuId: QUOTATION_WIDGET_MENU_ID,
+    platform: QUOTATION_WIDGET_PLATFORM,
+    headerFieldNames: QUOTATION_HEADER_FIELD_NAMES,
+    termsFieldNames: QUOTATION_TERMS_FIELD_NAMES,
+  });
 }

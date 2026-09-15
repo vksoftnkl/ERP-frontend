@@ -26,6 +26,7 @@ import {
   SALESMAN_DROPDOWN_ID,
   AGENT_DROPDOWN_ID,
   QUOTATION_TERMS_FIELD_NAMES,
+  type QuotationHeaderFieldKey,
   type QuotationTermsFieldKey,
 } from "../quotation.constants";
 import type {
@@ -56,7 +57,7 @@ import styles from "../page.module.scss";
 export type CustomerBlockProps = {
   customer: CustomerSnapshot;
   header: QuotationHeader;
-  fields: HeaderFieldConfig;
+  fields: HeaderFieldConfig<QuotationHeaderFieldKey>;
   disabled: boolean;
   onPickCustomer: (customerId: string, label: string) => void;
   onSetCustomerField: (field: EditableCustomerField, value: string) => void;
@@ -187,7 +188,7 @@ export type QuoteInfoBlockProps = {
   quoteRefno: string;
   /** `inventory.item_price_levels`, level number → its configured name. */
   priceLevelOptions: ReadonlyArray<{ value: string; label: string }>;
-  fields: HeaderFieldConfig;
+  fields: HeaderFieldConfig<QuotationHeaderFieldKey>;
   disabled: boolean;
   onSetHeader: (field: keyof QuotationHeader, value: string | number | boolean) => void;
 };
@@ -264,7 +265,7 @@ export type SalesInfoBlockProps = {
   header: QuotationHeader;
   /** Display name for the header's `areaId`, which is all the voucher stores. */
   beatName: string;
-  fields: HeaderFieldConfig;
+  fields: HeaderFieldConfig<QuotationHeaderFieldKey>;
   disabled: boolean;
   onSetHeader: (field: keyof QuotationHeader, value: string | number | boolean) => void;
   onSetBeat: (areaId: string, areaName: string) => void;
@@ -406,7 +407,7 @@ export function SalesInfoBlock({
 const TERMS_SHIPPED_LABELS: Record<QuotationTermsFieldKey, string> =
   QUOTATION_TERMS_FIELD_NAMES;
 /** Unconfigured: every row on, labelled as this file writes it. */
-const TERMS_AS_AUTHORED: TermsFieldConfig = {
+const TERMS_AS_AUTHORED: TermsFieldConfig<QuotationTermsFieldKey> = {
   isVisible: () => true,
   labelFor: (key) => TERMS_SHIPPED_LABELS[key],
   anyVisible: true,
@@ -417,7 +418,7 @@ export type TermsBlockProps = {
   disabled: boolean;
   onSetTerms: (field: keyof QuotationTerms, value: string) => void;
   /** Omitted by screens that do not configure this block. */
-  fields?: TermsFieldConfig;
+  fields?: TermsFieldConfig<QuotationTermsFieldKey>;
   /** Opens Visible Settings, the way the header panel's right-click does. */
   onContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void;
 };

@@ -28,7 +28,13 @@ export const WIDGET_MASTER_LIST_ENDPOINT = "/widget-masters/get";
 // with a PATCH to /widget-masters/visibility.
 export const WIDGET_CONFIG_TREE_ENDPOINT = "/widget-masters/config";
 export const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
-export const ITEM_TAX_MASTER_LIST_ENDPOINT = "/configured-grid-sql/run?grid_id=5";
+// Every live GST rate, whole. The item screen keeps the full records (not just
+// the dropdown's id/name) because the price grid derives cost-with-tax from the
+// rate and both cess figures; grid 103, the GST Rate master's own list, carries
+// the cess BASES but neither per-unit amount, so it cannot feed that math.
+// `active_only` defaults to true server-side and the DTO rejects unknown params,
+// so this is called with no query at all.
+export const TAX_RATE_MASTER_LIST_ENDPOINT = "/tax-rates/list";
 export const ITEM_REORDER_TABLE_UI_ID = "2";
 export const ITEM_PRICE_TABLE_UI_ID = "3";
 export const ITEM_EAN_TABLE_UI_ID = "4";
@@ -191,16 +197,6 @@ export const ITEM_FORM_FIELD_NAMES_BY_TAB_HEADING: Record<string, readonly strin
   [ITEM_EAN_TABLE_TAB_HEADING_FIELD_NAME]: Object.keys(EAN_TABLE_TAB_WIDGET_FIELD_NAME_ALIASES),
   [ITEM_INVENTORY_TAB_HEADING_FIELD_NAME]: Object.keys(INVENTORY_TAB_WIDGET_FIELD_NAME_ALIASES),
 };
-export const LOOKUP_QUERY_ITEM_TAXES = {
-  module: "itemTaxes",
-} as const;
-export const ITEM_TAX_LIST_QUERY = {
-  page: "1",
-  // grid 5's stored SQL filters on a `wantdelete` placeholder token; bind it to
-  // false so only non-deleted taxes are returned. Without it the unbound token
-  // reaches Postgres as a column reference and the query 500s.
-  grid_param: JSON.stringify({ wantdelete: false }),
-} as const;
 export const LOOKUP_QUERY_ITEMS = {
   module: "items",
 } as const;
@@ -298,11 +294,6 @@ export const DEFAULT_TAX_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "None",
 };
-export const TAX_LOOKUP_KEYS = {
-  arrayKeys: [...DEFAULT_LOOKUP_ARRAY_KEYS, "itemTaxes"],
-  idKeys: ["taxId", "tax_id", "id", "_id", "value"],
-  labelKeys: ["taxName", "tax_name", "name", "label"],
-} as const;
 export const DEFAULT_SUPPLIER_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "None",

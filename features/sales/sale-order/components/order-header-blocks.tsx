@@ -322,6 +322,34 @@ export function OrderSalesInfoBlock({
 }
 
 /**
+ * How a caller may configure the five figures below: which of them this
+ * deployment shows, and what it calls them.
+ *
+ * Optional, and absent means "all five, under the labels shipped here" — which
+ * is what the sale order passes, having no widget-master config of its own. The
+ * sale bill supplies one (menu 12), because a counter that never sells on credit
+ * has five read-outs it does not want the screen width spent on.
+ */
+export type CreditFieldConfig = {
+  isVisible: (label: CreditFieldLabel) => boolean;
+  labelFor: (label: CreditFieldLabel) => string;
+};
+
+/** The five, by the label each is configured under. */
+export type CreditFieldLabel =
+  | "Outstanding"
+  | "Overdue"
+  | "Overdue By"
+  | "Credit Limit"
+  | "Available";
+
+/** The column as authored, for a caller with no config to apply. */
+const CREDIT_AS_AUTHORED: CreditFieldConfig = {
+  isVisible: () => true,
+  labelFor: (label) => label,
+};
+
+/**
  * The credit column. Five read-only figures, in the legacy screen's order, all
  * from the one `party-credit` summary. `isCreditCheckEnabled === false` greys
  * the column and says so — off is an answer, not missing data, and the save
@@ -330,9 +358,11 @@ export function OrderSalesInfoBlock({
 export function OrderCreditBlock({
   credit,
   hasCustomer,
+  fields = CREDIT_AS_AUTHORED,
 }: {
   credit: PartyCreditSummary | null;
   hasCustomer: boolean;
+  fields?: CreditFieldConfig;
 }) {
   const checkOff = credit ? credit.isCreditCheckEnabled === false : false;
   const limitBreached = Boolean(credit && (credit.isAmtLimitExceeded || credit.isBillLimitExceeded));
@@ -342,25 +372,51 @@ export function OrderCreditBlock({
 
   return (
     <div className={cx(styles.fieldGrid, checkOff && orderStyles.creditColumnOff)}>
-      <CreditValue label="Outstanding" value={credit ? money(credit.pendingAmount) : ""} />
-      <CreditValue
-        label="Overdue"
-        value={credit ? money(credit.overdueAmount) : ""}
-        alert={!checkOff && overdue}
-        title={credit?.oldestOverdueDueDate ? `Oldest due ${credit.oldestOverdueDueDate}` : undefined}
-      />
-      <CreditValue
-        label="Overdue By"
-        value={credit ? `${credit.maxOverdueDays} d` : ""}
-        alert={!checkOff && overdue}
-        title={credit?.oldestOverdueDueDate ? `Oldest due ${credit.oldestOverdueDueDate}` : undefined}
-      />
-      <CreditValue label="Credit Limit" value={credit ? money(credit.creditAmtLimit) : ""} />
-      <CreditValue
-        label="Available"
-        value={credit ? money(credit.availableCreditAmount) : ""}
-        alert={!checkOff && limitBreached}
-      />
+      {fields.isVisible("Outstanding") ? (
+        <CreditValue
+          label={fields.labelFor("Outstanding")}
+          value={credit ? money(credit.pendingAmount) : ""}
+        />
+      ) : null}
+      {fields.isVisible("Overdue") ? (
+        <CreditValue
+          label={fields.labelFor("Overdue")}
+          value={credit ? money(credit.overdueAmount) : ""}
+          alert={!checkOff && overdue}
+          title={
+            credit?.oldestOverdueDueDate ? `Oldest due ${credit.oldestOverdueDueDate}` : undefined
+          }
+        />
+      ) : null}
+      {fields.isVisible("Overdue By") ? (
+        <CreditValue
+          label={fields.labelFor("Overdue By")}
+          value={credit ? `${credit.maxOverdueDays} d` : ""}
+          alert={!checkOff && overdue}
+          title={
+            credit?.oldestOverdueDueDate ? `Oldest due ${credit.oldestOverdueDueDate}` : undefined
+          }
+        />
+      ) : null}
+      {fields.isVisible("Credit Limit") ? (
+        <CreditValue
+          label={fields.labelFor("Credit Limit")}
+          value={credit ? money(credit.creditAmtLimit) : ""}
+        />
+      ) : null}
+      {fields.isVisible("Available") ? (
+        <CreditValue
+          label={fields.labelFor("Available")}
+          value={credit ? money(credit.availableCreditAmount) : ""}
+          alert={!checkOff && limitBreached}
+        />
+      ) : null}
+      {/*
+        The two hints are NOT configurable, and deliberately. They do not report
+        a figure — they say why the figures are blank, and a site that has hidden
+        every row still needs to be told that the credit check is off rather than
+        shown an empty column with no explanation.
+      */}
       {checkOff ? (
         <p className={styles.inlineHint}>Credit check is off for this customer.</p>
       ) : !credit && hasCustomer ? (

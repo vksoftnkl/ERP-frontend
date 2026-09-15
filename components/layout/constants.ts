@@ -39,7 +39,10 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       // to the server-driven menu by normalized-label match against THIS
       // list, so the label must match the DB's menu_name exactly.
       { label: "Sales Order", href: "/sales/sale-order" },
-      { label: "Sales Entry", href: "/dashboard" },
+      // Menu 12, "Sales Entry" (Ctrl+S) — the sale bill. The label has to
+      // match `fixed.menu_master.menu_name` exactly: hrefs are attached to the
+      // server-driven menu by normalized-label match against THIS list.
+      { label: "Sales Entry", href: "/sales/sale-bill" },
       { label: "Sales Return" },
       {
         label: "Master",
