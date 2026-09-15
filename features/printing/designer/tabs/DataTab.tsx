@@ -72,20 +72,12 @@ export default function DataTab({ designer }: { designer: DesignerController }) 
           sql={row.ptdSql ?? ""}
           datasetNo={row.ptdDatasetNo}
           datasetName={row.ptdName}
-          requiresCompany={row.ptdRequiresCompany ?? true}
           sqlNorm={storedNorm}
           readOnly={!editable}
           onChange={(next) =>
             setDatasets((current) =>
               current.map((entry, index) =>
                 index === selected ? { ...entry, ptdSql: next } : entry,
-              ),
-            )
-          }
-          onRequiresCompanyChange={(next) =>
-            setDatasets((current) =>
-              current.map((entry, index) =>
-                index === selected ? { ...entry, ptdRequiresCompany: next } : entry,
               ),
             )
           }

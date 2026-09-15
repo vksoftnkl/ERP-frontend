@@ -304,6 +304,13 @@ function billLineFromQuotationItem(
     srcItemQty: toNumber(item.sqiBillQty),
     // A quotation promises nothing about quantity, so there is no cap.
     orderQtyLocked: false,
+    // The quotation GET RESOLVES this from today's godown, company and item
+    // rows rather than reading a stored column, so it is as current as a
+    // re-lookup and crosses like any other field; `null` (no item join) is not
+    // a licence and reads false. `sqiAvailableStock` is a snapshot and does not
+    // cross, which is why the line still arrives unresolved: an item that may
+    // NOT go negative is judged only after its own price lookup has run.
+    allowNegative: item.sqiAllowNegativeStock === true,
     stockGateResolved: false,
   };
 }

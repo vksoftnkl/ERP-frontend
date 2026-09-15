@@ -12,6 +12,7 @@ import type { VoucherPolicy } from "@/domain/pricing";
 import {
   clampPriceLevel,
   createDraftLine as createQuotationDraftLine,
+  duplicateDraftLine as duplicateQuotationDraftLine,
   emptyCustomer,
   resolveLocalSale,
   seedDocumentPolicy,
@@ -169,6 +170,25 @@ export function createOrderDraftLine(
     srcLineNo: null,
     deliveryDate: null,
     ...overrides,
+  };
+}
+
+/**
+ * A copy of an order line, ready to sit under it (Alt+R).
+ *
+ * As on the other two sales screens: the quotation's copy drops the row key and
+ * the ids owned outside the draft, and the order drops the rest of its source
+ * trail so a copied row cannot claim the quotation line the original came from.
+ */
+export function duplicateOrderDraftLine(source: SaleOrderDraftLine): SaleOrderDraftLine {
+  return {
+    ...source,
+    ...duplicateQuotationDraftLine(source),
+    soiId: null,
+    srcDocType: null,
+    srcDocAccYear: null,
+    srcDocRefno: null,
+    srcLineNo: null,
   };
 }
 

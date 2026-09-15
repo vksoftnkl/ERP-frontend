@@ -9,6 +9,7 @@ import { recalcDocument, type DocumentPricing } from "@/domain/pricing";
 import type { SaveActor } from "@/features/sales/quotation/quotation.payload";
 import { applyBillSaveResponse, buildSavePayload, parseLoadedBill } from "./salebill.payload";
 import { createBillDraft, createBillDraftLine } from "./salebill.state";
+import { stockGateOf } from "./salebill.validate";
 import type {
   BillItemPayload,
   BillPayload,
@@ -93,6 +94,19 @@ describe("the bill number is the SERVER's, both halves", () => {
   it("sends sbId only on an update", () => {
     expect(build(draftWith()).sbId).toBeUndefined();
     expect(build(draftWith({ docId: "sb-1" })).sbId).toBe("sb-1");
+  });
+});
+
+describe("a created bill is POSTED", () => {
+  it("posts a new bill whatever status the draft carries", () => {
+    // The screen has no save-as-draft door, so a create always posts — even
+    // from a cart parked back when a new draft opened on DRAFT.
+    expect(build(draftWith()).sbStatus).toBe("POSTED");
+    expect(build(draftWith({ status: "DRAFT" })).sbStatus).toBe("POSTED");
+  });
+
+  it("leaves an existing bill on its own status", () => {
+    expect(build(draftWith({ docId: "sb-1", status: "CANCELLED" })).sbStatus).toBe("CANCELLED");
   });
 });
 
@@ -589,12 +603,36 @@ describe("parseLoadedBill", () => {
   });
 
   it("leaves the stock gate UNRESOLVED on every loaded line", () => {
-    // `allow_negative_stock` is not a column on `sale_bill_item`, and
-    // `sbiAvailableStock` is the stock as it was when the bill was raised. Qt
-    // hard-codes the flag to "Y" here and silently turns the gate OFF for every
-    // reopened line (§7.2); the honest answer is that it cannot be judged.
+    // `sbiAvailableStock` is the stock as it was when the bill was raised, so a
+    // quantity is never judged against it. Qt hard-codes the flag to "Y" here
+    // and silently turns the gate OFF for every reopened line (§7.2).
     expect(loaded.lines[0].stockGateResolved).toBe(false);
-    expect(loaded.lines[0].allowNegative).toBe(false);
+  });
+
+  it("takes the negative-stock FLAG from the GET, which resolves it live", () => {
+    // Not a stored column: the GET answers the same three-way rule
+    // `/master-lookups/item-price` answers with, off today's godown, company and
+    // item rows. That makes it as current as a re-lookup, so a reopened line
+    // that may go negative says so — and passes the gate without one.
+    const allowed = parseLoadedBill(
+      billPayload({ items: [itemPayload({ sbiAllowNegativeStock: true })] }),
+      CONTEXT,
+    );
+    expect(allowed.lines[0].allowNegative).toBe(true);
+    expect(stockGateOf(allowed.lines[0])).toBe("pass");
+  });
+
+  it("reads a MISSING flag as a no, not as a licence", () => {
+    // `null` means the item join was not made — an absence of an answer. An
+    // unresolved line with no flag stays unjudgeable rather than passing.
+    for (const value of [null, undefined]) {
+      const line = parseLoadedBill(
+        billPayload({ items: [itemPayload({ sbiAllowNegativeStock: value })] }),
+        CONTEXT,
+      ).lines[0];
+      expect(line.allowNegative).toBe(false);
+      expect(stockGateOf(line)).toBe("unavailable");
+    }
   });
 
   it("recovers the persisted unit factor rather than back-deriving it", () => {

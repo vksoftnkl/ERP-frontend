@@ -9,7 +9,7 @@
  * the last line with data.
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { moveCellFocus } from "./grid-focus";
+import { focusNextRowAfterRender, moveCellFocus } from "./grid-focus";
 
 type Cell = {
   row: string;
@@ -135,5 +135,55 @@ describe("moveCellFocus", () => {
   it("declines at the very end of the grid", () => {
     gridWithBlankTail(false);
     expect(moveCellFocus("items", elementFor("r2", "itemName"), 1)).toBe(false);
+  });
+});
+
+/**
+ * Alt+R's landing spot. The copy does not exist when the shortcut fires, so the
+ * helper is told the row it was copied FROM and takes the one after it; the
+ * frame it waits for is run straight through here.
+ */
+describe("focusNextRowAfterRender", () => {
+  beforeEach(() => {
+    (globalThis as unknown as { window: unknown }).window = {
+      requestAnimationFrame: (callback: () => void) => {
+        callback();
+        return 0;
+      },
+    };
+  });
+
+  it("lands on the same column of the row beneath", () => {
+    gridWithBlankTail(true);
+    focusNextRowAfterRender("items", "r1", "barcode");
+    expect(focused!.row).toBe("r2");
+    expect(focused!.field).toBe("barcode");
+  });
+
+  it("falls back to the next row's entry stop when that column is disabled there", () => {
+    // The trailing blank row has Qty shut until it names an item.
+    gridWithBlankTail(true);
+    focusNextRowAfterRender("items", "r1", "qty");
+    expect(focused!.row).toBe("r2");
+    expect(focused!.field).toBe("itemName");
+  });
+
+  it("falls back to the entry stop when no column is named at all", () => {
+    gridWithBlankTail(false);
+    focusNextRowAfterRender("items", "r1", null);
+    expect(focused!.row).toBe("r2");
+    expect(focused!.field).toBe("itemName");
+  });
+
+  it("does nothing when the named row is the last one", () => {
+    gridWithBlankTail(true);
+    focusNextRowAfterRender("items", "r2", "barcode");
+    expect(focused).toBeNull();
+  });
+
+  it("does nothing when the named row is not in the grid", () => {
+    gridWithBlankTail(true);
+    focusNextRowAfterRender("items", "gone", "barcode");
+    expect(focused).toBeNull();
   });
 });

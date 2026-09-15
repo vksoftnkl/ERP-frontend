@@ -556,6 +556,7 @@ export function SaleOrderListModal({
           documentLabel={printRow.so_order_refno ? `Order ${printRow.so_order_refno}` : "Order"}
           target={{
             docId: printRow.so_id,
+            companyId: printRow.so_company_id,
             accYear: printRow.so_acc_year,
             filename: `sale-order-${printRow.so_order_refno || printRow.so_id}`,
           }}

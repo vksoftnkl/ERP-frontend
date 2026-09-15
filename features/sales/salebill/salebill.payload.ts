@@ -436,7 +436,13 @@ export function buildSavePayload(
     sbLoadingCalcType: (draft.policy.loadingCalcType || "manual").toLowerCase(),
     sbDiscAlterBase: draft.policy.discountAlterBaseRate,
     sbRoundOffStep: draft.policy.roundOffStep,
-    sbStatus: asEnum(draft.status, BILL_STATUSES, DEFAULT_BILL_STATUS),
+    // A bill is RAISED, never drafted: the screen has no save-as-draft door, so
+    // a create always posts. Only an existing bill carries its own status back
+    // (a POSTED bill re-saved stays posted; a CANCELLED one stays cancelled) —
+    // which also keeps a cart parked before this rule from re-posting as DRAFT.
+    sbStatus: draft.docId
+      ? asEnum(draft.status, BILL_STATUSES, DEFAULT_BILL_STATUS)
+      : DEFAULT_BILL_STATUS,
     sbCreatedBy: actorLabel(actor),
     sbModifiedBy: actorLabel(actor),
     items: lineIndexes.map(({ line, index }, position) =>
@@ -563,16 +569,21 @@ function lineFromPayload(item: BillItemPayload): SaleBillDraftLine {
     srcItemQty: toNullableNumber(item.sbiSrcItemQty),
     orderQtyLocked: Boolean(item.sbiSrcDocId) && item.sbiSrcDocType === "SALES_ORDER",
     orderQty: toNumber(item.sbiSrcItemQty),
-    // `allow_negative_stock` is NOT a column on `sale_bill_item`, so a loaded
-    // line cannot say whether the gate applies, and `sbiAvailableStock` is the
-    // stock AS IT WAS when the bill was raised — a month ago, perhaps.
+    // The two halves of the gate age differently, so they are taken
+    // differently.
     //
-    // This is exactly the incoherence §7.2 refuses to port: Qt hard-codes the
-    // flag to "Y" here and silently turns the gate OFF for every reopened line.
-    // The honest answer is that the gate is UNAVAILABLE until the item lookup is
-    // re-run, so the flag is left false and `validate.ts` asks rather than
-    // guesses.
-    allowNegative: false,
+    // `allow_negative_stock` is not a column on `sale_bill_item` — the GET
+    // RESOLVES it, from the line's godown, the company and the item master as
+    // they stand today, by the same rule `/master-lookups/item-price` answers
+    // with. That makes it as current as a re-lookup would be, so it crosses.
+    // A `null` (the item join was not made) is not a licence, and reads false.
+    //
+    // `sbiAvailableStock`, by contrast, is the stock AS IT WAS when the bill was
+    // raised — a month ago, perhaps — so the line stays UNRESOLVED and the gate
+    // reports itself unavailable rather than judging a quantity against a stale
+    // figure. Qt hard-codes the flag to "Y" here and silently turns the gate OFF
+    // for every reopened line; that half is still not ported.
+    allowNegative: item.sbiAllowNegativeStock === true,
     stockGateResolved: false,
   };
 }

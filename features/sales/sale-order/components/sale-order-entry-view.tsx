@@ -27,7 +27,10 @@ import {
   ItemGrid,
   itemLookupFieldKey,
 } from "@/features/sales/quotation/components/item-grid";
-import { focusNextStopFrom } from "@/features/sales/quotation/components/grid-focus";
+import {
+  focusNextRowAfterRender,
+  focusNextStopFrom,
+} from "@/features/sales/quotation/components/grid-focus";
 import {
   ItemPickerModal,
   type ItemPick,
@@ -65,6 +68,7 @@ import {
   customerFieldSet,
   headerFieldSet,
   lineAdded,
+  lineDuplicated,
   lineFieldSet,
   lineInserted,
   lineRemoved,
@@ -372,6 +376,25 @@ export function SaleOrderEntryView({
       dispatch(chargeMasterApplied({ key: rowKey, master }));
     },
     [draft.charges, chargePickerRow, dispatch],
+  );
+
+  /**
+   * Alt+R — copy the row into a fresh one under it.
+   *
+   * Guarded here as well as in the reducer, because focus is moved on the way
+   * out: a blank row copies to nothing, and stepping into the row below it would
+   * take the operator somewhere they did not ask to go.
+   */
+  const onDuplicateLine = useCallback(
+    (rowKey: string, fieldKey: string | null) => {
+      const source = draft.lines.find((row) => row.key === rowKey);
+      if (!source?.itemId) {
+        return;
+      }
+      dispatch(lineDuplicated(rowKey));
+      focusNextRowAfterRender(ITEM_GRID_NAME, rowKey, fieldKey);
+    },
+    [dispatch, draft.lines],
   );
 
   const onRemoveLine = useCallback(
@@ -807,8 +830,8 @@ export function SaleOrderEntryView({
             <span className={quotationStyles.gridHeadTitle}>Items</span>
             <span className={quotationStyles.gridHeadActions}>
               <span className={quotationStyles.modalNote}>
-                Enter next cell · F4 unit · Ctrl+± row · Ctrl+1..{PRICE_LEVEL_COUNT} price level ·
-                back-orders allowed
+                Enter next cell · F4 unit · Ctrl+± row · Alt+R copy row · Ctrl+1..
+                {PRICE_LEVEL_COUNT} price level · back-orders allowed
               </span>
             </span>
           </div>
@@ -832,6 +855,7 @@ export function SaleOrderEntryView({
             onSetPriceLevel={(rowKey, level) => void api.applyPriceLevel(level, "selected", [rowKey])}
             onAddLine={() => dispatch(lineAdded())}
             onInsertLine={(rowKey) => dispatch(lineInserted(rowKey))}
+            onDuplicateLine={onDuplicateLine}
             onRemoveLine={onRemoveLine}
             onSwitchUnit={(rowKey) => void api.switchUnit(rowKey)}
             onPriceLevelShortcut={onPriceLevelShortcut}

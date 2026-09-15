@@ -24,6 +24,7 @@ import {
   sizeCrossesOn,
 } from "./salebill.import";
 import { createBillDraft } from "./salebill.state";
+import { stockGateOf } from "./salebill.validate";
 import type { AdjustableCredit } from "./salebill.types";
 
 const CONTEXT = {
@@ -253,8 +254,8 @@ describe("importOrder", () => {
 
   it("leaves the stock gate unresolved on every imported line", () => {
     // Qt hard-codes AllowNegative to "Y" on this path, turning the gate silently
-    // OFF (§7.2). The honest answer is that neither the flag nor today's stock
-    // is known until the item lookup is re-run.
+    // OFF (§7.2). Unlike the quotation's, the order payload carries no flag at
+    // all, so neither half is known until the item lookup is re-run.
     const outcome = importOrder(createBillDraft(CONTEXT), orderPayload([orderItem()]));
     expect(outcome.draft.lines[0].stockGateResolved).toBe(false);
   });
@@ -376,6 +377,9 @@ function quotationPayload(): QuotationPayload {
         // quotation branch's default godown.
         sqiGodownId: "019c9935-79f4-772b-8666-2b46b9fc82cc",
         sqiGodownName: "namakkal",
+        // Not a stored column either — the GET resolves it off today's godown,
+        // company and item rows.
+        sqiAllowNegativeStock: true,
       },
     ],
   } as unknown as QuotationPayload;
@@ -429,6 +433,30 @@ describe("importQuotation", () => {
     expect(outcome.draft.lines[0].godownId).toBeNull();
     expect(outcome.note).toContain("the line that has");
     expect(outcome.note).toContain("no godown");
+  });
+
+  it("carries the negative-stock FLAG across — the GET resolves it live", () => {
+    // The one half of the gate that does NOT age: `sqiAllowNegativeStock` is
+    // derived from today's godown, company and item rows by the same rule
+    // `/master-lookups/item-price` answers with, so it crosses like the godown
+    // does. `sqiAvailableStock` is a snapshot and does not, which is why the
+    // line still arrives unresolved — it may pass on the flag, never fail on a
+    // month-old figure.
+    const outcome = importQuotation(createBillDraft(CONTEXT), quotationPayload());
+    expect(outcome.draft.lines[0].allowNegative).toBe(true);
+    expect(outcome.draft.lines[0].stockGateResolved).toBe(false);
+    expect(stockGateOf(outcome.draft.lines[0])).toBe("pass");
+  });
+
+  it("reads a missing flag as a no, not as a licence", () => {
+    // `null` is the absence of an answer (no item join), and Qt's own quotation
+    // import leaves the cell empty; neither is permission to go below zero.
+    const payload = quotationPayload();
+    const items = payload.items ?? [];
+    items[0] = { ...items[0], sqiAllowNegativeStock: null };
+    const outcome = importQuotation(createBillDraft(CONTEXT), payload);
+    expect(outcome.draft.lines[0].allowNegative).toBe(false);
+    expect(stockGateOf(outcome.draft.lines[0])).toBe("unavailable");
   });
 
   it("names the quotation LINE as the source", () => {

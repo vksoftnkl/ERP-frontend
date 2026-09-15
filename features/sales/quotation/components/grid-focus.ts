@@ -182,6 +182,46 @@ export function focusLastCellAfterRender(gridName: string, fieldKey: string): vo
 }
 
 /**
+ * Land in the row that follows a named one, once React has rendered it.
+ *
+ * What Alt+R needs: the copy is inserted by the reducer, so the row does not
+ * exist yet when the shortcut fires and its key is the reducer's to mint. Naming
+ * the row it was copied FROM sidesteps both — a frame later, the row under it IS
+ * the copy.
+ *
+ * It lands on the SAME COLUMN by preference, not on the row's entry stop: the
+ * operator pressed Alt+R from the cell they were working in, and what they
+ * almost always want next is that cell's value on the copy — a different
+ * quantity, a different size. Entering on the row's first stop would put them on
+ * Description, where Enter re-opens the item picker on a row that already has
+ * its item. The entry stop is the fallback for a column the copy does not have
+ * (hidden, or disabled on that row).
+ */
+export function focusNextRowAfterRender(
+  gridName: string,
+  rowKey: string,
+  fieldKey?: string | null,
+): void {
+  window.requestAnimationFrame(() => {
+    const rows = rowsOf(gridName);
+    const index = rows.findIndex((row) =>
+      row.some((cell) => cell.getAttribute(GRID_ROW_ATTR) === rowKey),
+    );
+    const next = index < 0 ? null : rows[index + 1];
+    if (!next) {
+      return;
+    }
+    const sameColumn = fieldKey
+      ? next.find((cell) => cell.getAttribute(GRID_FIELD_ATTR) === fieldKey)
+      : null;
+    const target = sameColumn ?? entryStopOf(next, 1);
+    if (target) {
+      land(target);
+    }
+  });
+}
+
+/**
  * Jump to the same column of another row — what a barcode commit does (straight
  * to the next row's Barcode cell, so a scanner can run without touching the
  * keyboard).

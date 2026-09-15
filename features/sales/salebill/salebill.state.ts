@@ -14,6 +14,7 @@ import type { VoucherPolicy } from "@/domain/pricing";
 import {
   clampPriceLevel,
   createDraftLine as createQuotationDraftLine,
+  duplicateDraftLine as duplicateQuotationDraftLine,
   applyItemPrice as applyQuotationItemPrice,
   emptyCustomer,
   resolveLocalSale,
@@ -211,6 +212,36 @@ export function createBillDraftLine(
 }
 
 /**
+ * A copy of a bill line, ready to sit under it (Alt+R).
+ *
+ * The quotation's copy drops the row key and the ids owned outside the draft;
+ * the bill drops the rest of its source trail for the same reason "copy as new"
+ * does — a copied row that kept `srcDoc*` would make one order line look billed
+ * twice, and `orderQtyLocked` would leave the operator with a quantity cell they
+ * cannot edit on a row no order asked for.
+ *
+ * `stockGateResolved` is carried across deliberately: the copy is the same item
+ * against the same stock figure, taken at the same moment as the original's, so
+ * the gate can judge it exactly as well (or as poorly) as the row it came from.
+ */
+export function duplicateBillDraftLine(source: SaleBillDraftLine): SaleBillDraftLine {
+  return {
+    ...source,
+    ...duplicateQuotationDraftLine(source),
+    sbiId: null,
+    stockId: null,
+    serialNo: null,
+    srcDocType: null,
+    srcDocYear: null,
+    srcDocRefno: null,
+    srcDocLineNo: null,
+    srcItemQty: null,
+    orderQtyLocked: false,
+    source: undefined,
+  };
+}
+
+/**
  * Fill a line from `/master-lookups/item-price`.
  *
  * The quotation's own mapper does the whole job — the bill adds nothing to the
@@ -220,9 +251,12 @@ export function createBillDraftLine(
  * through the lookup is the fix for the Qt screen's three incompatible
  * behaviours: the flag is the item's and the stock figure is today's.
  *
- * Anything that fills a line WITHOUT going through here (a load, an import) must
- * leave `stockGateResolved` false, so the gate reports itself unavailable rather
- * than passing or failing on a month-old snapshot.
+ * A load or an import carries the FLAG across on its own — the quotation and
+ * bill GETs resolve `sqiAllowNegativeStock` / `sbiAllowNegativeStock` from
+ * today's master rows — but not the FIGURE, which is a snapshot. So anything
+ * that fills a line without going through here must still leave
+ * `stockGateResolved` false: the gate may pass such a line on its flag, and
+ * reports itself unavailable rather than failing it on month-old stock.
  */
 export function applyBillItemPrice(
   line: SaleBillDraftLine,

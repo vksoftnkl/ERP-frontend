@@ -543,6 +543,7 @@ export function BillListModal({
           documentLabel={printRow.sb_bill_refno ? `Bill ${printRow.sb_bill_refno}` : "Bill"}
           target={{
             docId: printRow.sb_id,
+            companyId: printRow.sb_company_id,
             accYear: printRow.sb_acc_year,
             filename: `bill-${printRow.sb_bill_refno || printRow.sb_id}`,
           }}

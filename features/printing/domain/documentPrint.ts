@@ -63,17 +63,28 @@ export function purposeNotConfigured(code: string): string {
 /**
  * The document, and nothing about who is printing it.
  *
- * There is no company, no branch and no counter here, and there is deliberately
- * nowhere to put one: all three are claims on the access token, and the last two
- * are the rungs the assignment ladder resolves by, so a screen able to name them
- * would be a screen choosing its own design. The counter is the one that used to
- * bite — this client holds two ids called "device" and only `userInfo.deviceId`
- * is a real `fixed.device_master` row, so sending the other resolved nothing and
- * then failed `fk_plg_device` after the paper had already been rendered.
+ * There is no branch and no counter here, and there is deliberately nowhere to
+ * put one: both are claims on the access token and both are the rungs the
+ * assignment ladder resolves by, so a screen able to name them would be a
+ * screen choosing its own design. The counter is the one that used to bite —
+ * this client holds two ids called "device" and only `userInfo.deviceId` is a
+ * real `fixed.device_master` row, so sending the other resolved nothing and then
+ * failed `fk_plg_device` after the paper had already been rendered.
+ *
+ * The company IS here, and it is the DOCUMENT's — read off the row, never off
+ * the header picker. The token carries the user's home company, the header may
+ * be on another, and every dataset filters on `:company_id`: a bill raised in
+ * the working company printed as blank paper until its own company travelled
+ * with the request.
  */
 export type DocumentPrintTarget = {
   /** The document. */
   docId: string;
+  /**
+   * The document's own company, from the row. Optional only for a caller that
+   * has no row in hand; left out, the server binds the token's company.
+   */
+  companyId?: string;
   /**
    * The DOCUMENT's accounting year, where it may not be the current one — a
    * reprint of last year's paper reads last year's partition.
@@ -110,6 +121,7 @@ export function buildDocumentPrintRequest(
   };
 
   const docId = trimmed(target.docId);
+  const companyId = trimmed(target.companyId);
   const accYear = trimmed(target.accYear);
 
   if (!docId) {
@@ -123,6 +135,9 @@ export function buildDocumentPrintRequest(
   return {
     purposeId,
     docId,
+    // The row's company. Blank means the token's, which is only right while
+    // the header picker and the token agree.
+    ...(companyId ? { companyId } : {}),
     // Only when the document actually carries one. Blank means "the year this
     // session is working in", which the server answers better than this can.
     ...(accYear ? { accYear } : {}),

@@ -206,12 +206,30 @@ describe("buildDocumentPreviewRequest", () => {
     ).not.toHaveProperty("body");
   });
 
-  it("never sends a company, a branch or a counter — the token carries all three", () => {
+  it("sends the document's own company — the token's is the user's home, not the working one", () => {
+    // Every dataset filters on :company_id. The header picker can be on a
+    // company the token does not name, and a bill raised there rendered as
+    // blank paper while the render bound the token's.
+    expect(
+      buildDocumentPreviewRequest({ ...base, companyId: "comp-acme" }),
+    ).toMatchObject({ companyId: "comp-acme" });
+  });
+
+  it("omits a blank company rather than sending it empty", () => {
+    expect(
+      buildDocumentPreviewRequest({ ...base, companyId: "  " }),
+    ).not.toHaveProperty("companyId");
+    expect(
+      buildDocumentPreviewRequest({ ...base, companyId: null }),
+    ).not.toHaveProperty("companyId");
+  });
+
+  it("never sends a branch or a counter — the token carries both", () => {
     const request = buildDocumentPreviewRequest({
       ...base,
+      companyId: "comp-acme",
       accYear: "2026-2027",
     }) as Record<string, unknown>;
-    expect(request).not.toHaveProperty("companyId");
     expect(request).not.toHaveProperty("branchId");
     expect(request).not.toHaveProperty("deviceId");
   });

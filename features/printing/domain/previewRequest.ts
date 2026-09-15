@@ -29,9 +29,18 @@
  * AN UNSAVED REVISION CANNOT BE RENDERED. There is no row to point at. The
  * caller checks `canPreview` before offering the button.
  *
- * BLANKS ARE OMITTED, NOT SENT EMPTY. `docId: ""` would reach the server as a
- * uuid that fails validation; an absent docId is a render with no document,
- * which is a legitimate thing for a report to be.
+ * BLANKS ARE OMITTED, NOT SENT EMPTY. `accYear: ""` would reach the server as a
+ * year that fails validation, where an absent one lets it bind the company's
+ * current fiscal year — a different instruction, and the one a left-alone box
+ * means.
+ *
+ * THERE IS NO DOCUMENT ID. The designer's Preview does not offer one: a design
+ * that reads a document DECLARES `doc_id` in `ptv_params` and is asked for it
+ * like any other prompt, so the answer arrives in `params` under the label the
+ * revision chose. A field here would be a second way to say the same thing,
+ * able to satisfy a render whose declaration is missing. `buildDocumentPreviewRequest`
+ * — the preview behind a document's own print button — is where a doc id is
+ * known rather than typed, and it still sends one.
  */
 
 import { bodyFromDefinition } from "./canvasBridge";
@@ -46,7 +55,6 @@ export type PreviewRequestInput = {
   editable: boolean;
   /** The canvas's current design. */
   definition: TemplateDefinition;
-  docId?: string;
   /**
    * The DOCUMENT's own accounting year, where the canvas was given one.
    *
@@ -81,7 +89,6 @@ export function buildPreviewRequest(input: PreviewRequestInput): RenderPreviewRe
     );
   }
 
-  const docId = trimmed(input.docId);
   const accYear = trimmed(input.accYear);
   const outputMode = trimmed(input.outputMode);
 
@@ -107,7 +114,6 @@ export function buildPreviewRequest(input: PreviewRequestInput): RenderPreviewRe
   return {
     versionId: input.versionId,
     ...(jsonBody ? { body: jsonBody } : {}),
-    ...(docId ? { docId } : {}),
     ...(accYear ? { accYear } : {}),
     ...(outputMode ? { outputMode } : {}),
     // An empty object is omitted rather than sent: a revision that asks nothing

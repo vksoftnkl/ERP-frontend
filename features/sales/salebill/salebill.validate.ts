@@ -77,9 +77,11 @@ function lineViolation(
  *
  *  - **pass** — the item allows negative stock, or there is enough;
  *  - **fail** — it does not and there is not;
- *  - **unavailable** — the flag and the stock figure could not be established
- *    for this line, so the gate has no opinion. That happens on a loaded or
- *    imported line whose item lookup has not been re-run. Qt hard-codes
+ *  - **unavailable** — the stock figure could not be established for this line,
+ *    so the gate has no opinion. That happens on a loaded or imported line whose
+ *    item lookup has not been re-run: such a line carries a current FLAG (the
+ *    GET resolves it) but only a snapshot of the stock, so it can pass on the
+ *    flag and can never fail on the figure. Qt hard-codes
  *    `AllowNegative = "Y"` on its own load path and on the order import (gate
  *    silently OFF) and leaves it empty on the quotation import (gate ON against
  *    a month-old stock snapshot) — three behaviours for one rule. None is

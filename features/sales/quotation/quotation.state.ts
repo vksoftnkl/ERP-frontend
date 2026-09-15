@@ -251,6 +251,32 @@ export function createDraftLine(overrides: Partial<DraftLine> = {}): DraftLine {
 }
 
 /**
+ * A copy of a line, ready to sit under it (Alt+R).
+ *
+ * Everything the operator keyed or the price lookup filled is carried across —
+ * the copy is there to save re-picking the item and re-keying a near-identical
+ * row — but two things are deliberately not:
+ *
+ *  - **`key`**, because a row's key is its identity in the grid, the focus walk
+ *    and every `lineFieldSet`; two rows sharing one would edit as a single row.
+ *  - **`sqiId` and `srcDocId`**, the ids owned by something outside this draft.
+ *    Keeping `sqiId` would make the next save UPDATE the original line instead
+ *    of inserting the copy, and keeping `srcDocId` would leave one source line
+ *    claimed twice — the same reasoning `copyDraftAsNew` applies per line.
+ *
+ * Nothing is repriced: the engine derives from the draft fields, and the copy
+ * carries the same ones, so it computes to the same figures on the next render.
+ */
+export function duplicateDraftLine(source: DraftLine): DraftLine {
+  return {
+    ...source,
+    key: nextRowKey("line"),
+    sqiId: null,
+    srcDocId: null,
+  };
+}
+
+/**
  * Build a charge line's `cd*` snapshot from the master row.
  *
  * The one place a naive copy breaks: `charge_master` has no guard against

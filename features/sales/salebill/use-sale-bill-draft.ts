@@ -1,5 +1,4 @@
 "use client";
-
 /**
  * Sale Bill Entry — the screen's whole conversation with the server, and the one
  * place `recalcDocument` is called.
@@ -66,9 +65,9 @@ import {
   useLazyGetSaleOrderQuery,
 } from "@/store/api/saleOrderApi";
 import {
+  saleBillApi,
   useCancelBillSourceOrdersMutation,
   useCancelOrderLineMutation,
-  useLazyGetBillQuery,
   useLazyGetOpenCreditsQuery,
   useSaveBillMutation,
 } from "@/store/api/saleBillApi";
@@ -102,7 +101,10 @@ import {
 } from "@/lib/auth/session";
 import type { SaveActor } from "@/features/sales/quotation/quotation.payload";
 import { useBusinessContext } from "@/components/layout/business-context";
-import type { QuotationListRow, TxnHoldPayload } from "@/features/sales/quotation/quotation.types";
+import type {
+  QuotationListRow,
+  TxnHoldPayload,
+} from "@/features/sales/quotation/quotation.types";
 import type { SaleOrderDocKey } from "@/features/sales/sale-order/sale-order.types";
 import {
   AUTOSAVE_DEBOUNCE_MS,
@@ -161,7 +163,6 @@ import type {
   SaleBillViolation,
   SavedBillRef,
 } from "./salebill.types";
-
 /**
  * What a save attempt came to.
  *
@@ -176,13 +177,11 @@ export type SaveOutcome =
   | { status: "confirm-needed"; violation: SaleBillViolation }
   | { status: "failed" }
   | { status: "busy" };
-
 export type SaveOptions = {
   context?: BillValidationContext;
   /** The operator answered the gate's question with yes. */
   confirmed?: boolean;
 };
-
 function errorMessage(error: unknown): string {
   if (typeof error === "object" && error !== null) {
     const data = (error as { data?: { message?: string | string[] } }).data;
@@ -196,13 +195,19 @@ function errorMessage(error: unknown): string {
   }
   return "Something went wrong. Please try again.";
 }
-
-const ENGLISH_LANGUAGE_CODES = new Set(["en", "eng", "en-in", "en_in", "english"]);
-function isRegionalLanguage(language: string | null | undefined): boolean | null {
+const ENGLISH_LANGUAGE_CODES = new Set([
+  "en",
+  "eng",
+  "en-in",
+  "en_in",
+  "english",
+]);
+function isRegionalLanguage(
+  language: string | null | undefined,
+): boolean | null {
   const value = (language ?? "").trim().toLowerCase();
   return value ? !ENGLISH_LANGUAGE_CODES.has(value) : null;
 }
-
 /** Both are closed sets server-side and a stray value is a 400. */
 function clampLoadingType(value: string): string {
   const normalized = (value ?? "").trim().toLowerCase();
@@ -212,16 +217,9 @@ function clampFreightType(value: string): string {
   const normalized = (value ?? "").trim().toLowerCase();
   return normalized === "item" ? normalized : "manual";
 }
-
 export type SaleBillBusy =
-  | "idle"
-  | "loading"
-  | "pricing"
-  | "saving"
-  | "holding"
-  | "resuming";
+  "idle" | "loading" | "pricing" | "saving" | "holding" | "resuming";
 export type PriceLevelScope = "selected" | "all";
-
 export type SaleBillDraftApi = {
   draft: SaleBillDraft;
   dispatch: AppDispatch;
@@ -244,13 +242,20 @@ export type SaleBillDraftApi = {
   /** Drops the settlement and the credit standing; the confirmation's "yes". */
   releaseCustomerBoundState: () => void;
   pickCustomer: (customerId: string) => Promise<void>;
-  pickItem: (lineKey: string, itemId: string, itemUnitId?: string) => Promise<void>;
+  pickItem: (
+    lineKey: string,
+    itemId: string,
+    itemUnitId?: string,
+  ) => Promise<void>;
   recoverBaseFactor: (lineKey: string) => Promise<void>;
   switchUnit: (lineKey: string) => Promise<void>;
   setLineUnit: (lineKey: string, itemUnitId: string) => Promise<void>;
   resolveBarcode: (lineKey: string, barcode: string) => Promise<boolean>;
-  applyPriceLevel: (priceLevel: number, scope: PriceLevelScope, lineKeys: string[]) => Promise<void>;
-
+  applyPriceLevel: (
+    priceLevel: number,
+    scope: PriceLevelScope,
+    lineKeys: string[],
+  ) => Promise<void>;
   // ----- the money (§9, §10) -----
   /** Re-read the credits this customer holds. Never cached — see the endpoint. */
   refreshOpenCredits: () => Promise<AdjustableCredit[]>;
@@ -258,8 +263,10 @@ export type SaleBillDraftApi = {
    * Apply the adjustment panel, from either mount point. `false` when the panel
    * would over-adjust — the caller keeps it open.
    */
-  applyAdjustments: (rows: BillAdjustmentRow[], from: "bill" | "tender") => boolean;
-
+  applyAdjustments: (
+    rows: BillAdjustmentRow[],
+    from: "bill" | "tender",
+  ) => boolean;
   // ----- the document (§14, §15, §16) -----
   validate: (context?: BillValidationContext) => SaleBillViolation | null;
   save: (options?: SaveOptions) => Promise<SaveOutcome>;
@@ -269,11 +276,9 @@ export type SaleBillDraftApi = {
   cancelSourceOrders: (remarks: string) => Promise<BillCancelResult | null>;
   /** "Cancel on Order" for ONE line; the row goes only if the server agrees (§8). */
   cancelLineOnOrder: (lineKey: string, reason: string) => Promise<boolean>;
-
   // ----- imports (§13) -----
   importFromQuotation: (row: QuotationListRow) => Promise<boolean>;
   importFromOrder: (key: SaleOrderDocKey) => Promise<boolean>;
-
   // ----- hold and crash recovery (§12) -----
   hold: () => Promise<boolean>;
   resumeHold: (txhId: string) => Promise<boolean>;
@@ -281,12 +286,10 @@ export type SaleBillDraftApi = {
   findRecovery: () => Promise<BillAutosave | null>;
   acceptRecovery: (record: BillAutosave) => void;
   discardRecovery: () => void;
-
   clear: () => void;
   copyAsNew: () => void;
   beginEdit: () => void;
 };
-
 /**
  * The context a new draft is seeded from. `accYear` prefers the stored fiscal
  * year (already 9 characters) and only falls back to deriving it from the
@@ -310,23 +313,25 @@ function useSaveActor(): SaveActor {
     [],
   );
 }
-
 function useDraftContext() {
-  const { activeCompany, activeBranch, activeFiscalYear, loading } = useBusinessContext();
+  const { activeCompany, activeBranch, activeFiscalYear, loading } =
+    useBusinessContext();
   const companyId = activeCompany?.compId ?? activeCompany?.id ?? "";
   const branchId = activeBranch?.id ?? "";
-  const accYear = (activeFiscalYear?.name ?? "").trim() || accountingYearOf(todayIso());
+  const accYear =
+    (activeFiscalYear?.name ?? "").trim() || accountingYearOf(todayIso());
   return { companyId, branchId, accYear, loading };
 }
-
 export function useSaleBillDraft(): SaleBillDraftApi {
   const context = useDraftContext();
   const dispatch = useAppDispatch();
   const draft = useAppSelector(selectSaleBillDraft);
-
-  const { data: companyStateCode = "" } = useGetCompanyStateCodeQuery(context.companyId, {
-    skip: !context.companyId,
-  });
+  const { data: companyStateCode = "" } = useGetCompanyStateCodeQuery(
+    context.companyId,
+    {
+      skip: !context.companyId,
+    },
+  );
   const actor = useSaveActor();
   const { data: capabilities } = useGetUserCapabilitiesQuery(actor.userId, {
     skip: !actor.userId,
@@ -339,7 +344,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   });
   const { data: chargeMasters = [] } = useGetSalesChargesQuery();
   const { data: priceLevelNames = [] } = useGetPriceLevelsQuery();
-
   const [fetchCustomerDetail] = useLazyGetCustomerDetailQuery();
   const [fetchItemPrice] = useLazyGetItemPriceQuery();
   const [fetchNextUnit] = useLazySwitchItemUomQuery();
@@ -349,7 +353,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   const [fetchPartyCredit] = useLazyGetPartyCreditQuery();
   const [runDropdown] = useLazyRunDropdownQuery();
   // --- the bill's own endpoints -------------------------------------------
-  const [fetchBill] = useLazyGetBillQuery();
   const [saveBill] = useSaveBillMutation();
   const [cancelSourceOrdersMutation] = useCancelBillSourceOrdersMutation();
   const [cancelOrderLine] = useCancelOrderLineMutation();
@@ -364,9 +367,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   const [releaseHoldLock] = useReleaseTxnHoldMutation();
   const [forceReleaseHoldLock] = useForceReleaseTxnHoldMutation();
   const [convertHoldLock] = useConvertTxnHoldMutation();
-
   const [busy, setBusy] = useState<SaleBillBusy>("idle");
-
   /**
    * `busy` cannot guard re-entry on its own: `setBusy` is asynchronous, so two
    * F6 presses inside one render both see "idle". The voucher number is
@@ -393,15 +394,16 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     holdNo: string;
     scope: ReturnType<typeof holdLockScope>;
   } | null>(null);
-  const [unitOptions, setUnitOptions] = useState<Record<string, ItemUnitOption[]>>({});
-
+  const [unitOptions, setUnitOptions] = useState<
+    Record<string, ItemUnitOption[]>
+  >({});
   /** The live draft, for effects and callbacks that must not re-run when it changes. */
   const draftRef = useRef(draft);
   draftRef.current = draft;
-
   /** Set below; held in a ref so the unit-prefetch effect has a stable dep list. */
-  const loadUnitOptionsRef = useRef<(itemId: string) => Promise<void>>(async () => {});
-
+  const loadUnitOptionsRef = useRef<(itemId: string) => Promise<void>>(
+    async () => {},
+  );
   // -------------------------------------------------------------------------
   // Context seeding
   // -------------------------------------------------------------------------
@@ -441,7 +443,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       }),
     );
   }, [context.companyId, context.branchId, context.accYear, dispatch]);
-
   /**
    * The company's own state, which is also the DEFAULT place of supply (§5).
    *
@@ -479,11 +480,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       cancelled = true;
     };
   }, [companyStateCode, dispatch, runDropdown]);
-
   // -------------------------------------------------------------------------
   // Grid layout
   // -------------------------------------------------------------------------
-
   const itemColumns = useMemo(
     () =>
       resolveItemColumnsWith(
@@ -497,8 +496,10 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       ),
     [itemLayout],
   );
-  const chargeColumns = useMemo(() => resolveChargeColumns(chargeLayout), [chargeLayout]);
-
+  const chargeColumns = useMemo(
+    () => resolveChargeColumns(chargeLayout),
+    [chargeLayout],
+  );
   // A layout that has grown or shrunk server-side means the local meaning list
   // no longer describes table 22, and every column past the change is mislabelled
   // — a Rate cell painting a discount. Warned rather than thrown: a mislabelled
@@ -517,7 +518,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       );
     }
   }, [itemLayout]);
-
   const priceLevelOptions = useMemo(
     () =>
       priceLevelNames.length > 0
@@ -525,10 +525,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         : PRICE_LEVEL_OPTIONS.map((option) => ({ ...option })),
     [priceLevelNames],
   );
-
   const canEditPrice = capabilities?.editRate ?? SESSION_CAPABILITIES.editPrice;
-  const regional = isRegionalLanguage(capabilities?.language) ?? SESSION_CAPABILITIES.regional;
-
+  const regional =
+    isRegionalLanguage(capabilities?.language) ?? SESSION_CAPABILITIES.regional;
   // -------------------------------------------------------------------------
   // The engine
   // -------------------------------------------------------------------------
@@ -565,7 +564,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     ],
   );
   const pricing =
-    draft.pricing === "stored" && draft.storedPricing ? draft.storedPricing : livePricing;
+    draft.pricing === "stored" && draft.storedPricing
+      ? draft.storedPricing
+      : livePricing;
   /**
    * The same figures, for the callbacks that must not re-bind on every keystroke
    * — Hold and the autosave timer both fire against whatever is on screen when
@@ -573,13 +574,14 @@ export function useSaleBillDraft(): SaleBillDraftApi {
    */
   const pricingRef = useRef(pricing);
   pricingRef.current = pricing;
-
   // -------------------------------------------------------------------------
   // Auto-apply charges (§6)
   // -------------------------------------------------------------------------
-
   const autoApplyCharges = useMemo(
-    () => chargeMasters.filter((master) => master.chgAutoApply && master.chgIsActive),
+    () =>
+      chargeMasters.filter(
+        (master) => master.chgAutoApply && master.chgIsActive,
+      ),
     [chargeMasters],
   );
   // Re-derived from the draft rather than run once on the masters: the masters
@@ -598,11 +600,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       dispatch(autoChargesSeeded(autoApplyCharges));
     }
   }, [needsAutoCharges, autoApplyCharges, dispatch]);
-
   // -------------------------------------------------------------------------
   // Units
   // -------------------------------------------------------------------------
-
   const loadUnitOptions = useCallback(
     async (itemId: string): Promise<void> => {
       if (!itemId || unitOptions[itemId]) {
@@ -619,7 +619,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     [fetchItemUnits, unitOptions],
   );
   loadUnitOptionsRef.current = loadUnitOptions;
-
   // A loaded bill's lines were never picked in this session, so their unit lists
   // have not been fetched — without this the Uom dropdown on a reloaded line
   // offers only the unit it already has.
@@ -632,16 +631,13 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       void loadUnitOptionsRef.current(itemId);
     }
   }, [lineItemIds]);
-
   const unitOptionsFor = useCallback(
     (itemId: string): ItemUnitOption[] => unitOptions[itemId] ?? [],
     [unitOptions],
   );
-
   // -------------------------------------------------------------------------
   // Item pricing
   // -------------------------------------------------------------------------
-
   /** Every `/item-price` call quotes the DOCUMENT's scope, never the session's. */
   const priceQueryFor = useCallback(
     (
@@ -672,7 +668,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       regional,
     ],
   );
-
   /**
    * Price one line from the item master.
    *
@@ -688,7 +683,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       const level = line?.priceLevel ?? draft.header.priceLevel;
       setBusy("pricing");
       try {
-        const lookup = await fetchItemPrice(priceQueryFor(line, itemId, itemUnitId, level)).unwrap();
+        const lookup = await fetchItemPrice(
+          priceQueryFor(line, itemId, itemUnitId, level),
+        ).unwrap();
         dispatch(itemPriceApplied({ key: lineKey, lookup }));
         void loadUnitOptions(itemId);
       } catch (error) {
@@ -697,9 +694,15 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         setBusy("idle");
       }
     },
-    [draft.lines, draft.header.priceLevel, dispatch, fetchItemPrice, loadUnitOptions, priceQueryFor],
+    [
+      draft.lines,
+      draft.header.priceLevel,
+      dispatch,
+      fetchItemPrice,
+      loadUnitOptions,
+      priceQueryFor,
+    ],
   );
-
   /**
    * Recover a loaded line's real unit-conversion factor.
    *
@@ -720,8 +723,20 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         const lookup = await fetchItemPrice(
           priceQueryFor(line, line.itemId, line.itemUnitId, line.priceLevel),
         ).unwrap();
-        dispatch(lineFieldSet({ key: lineKey, field: "toBaseFactor", value: lookup.base_factor || 1 }));
-        dispatch(lineFieldSet({ key: lineKey, field: "toBaseFactorKnown", value: true }));
+        dispatch(
+          lineFieldSet({
+            key: lineKey,
+            field: "toBaseFactor",
+            value: lookup.base_factor || 1,
+          }),
+        );
+        dispatch(
+          lineFieldSet({
+            key: lineKey,
+            field: "toBaseFactorKnown",
+            value: true,
+          }),
+        );
       } catch (error) {
         toast.error(
           `Could not read the unit conversion for ${line.itemName || "this line"}: ${errorMessage(error)}. Re-pick the item before keying a case quantity.`,
@@ -730,7 +745,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [dispatch, fetchItemPrice, priceQueryFor],
   );
-
   const setLineUnit = useCallback(
     async (lineKey: string, itemUnitId: string) => {
       const line = draft.lines.find((row) => row.key === lineKey);
@@ -741,7 +755,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [draft.lines, pickItem],
   );
-
   /**
    * F4. The backend owns the unit cycle: it returns the next `iuc_id` and no
    * price, so nothing is scaled client-side and nothing is written to the line
@@ -755,7 +768,10 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       }
       setBusy("pricing");
       try {
-        const next = await fetchNextUnit({ item_id: line.itemId, iuc_id: line.itemUnitId }).unwrap();
+        const next = await fetchNextUnit({
+          item_id: line.itemId,
+          iuc_id: line.itemUnitId,
+        }).unwrap();
         const lookup = await fetchItemPrice(
           priceQueryFor(line, line.itemId, next.iuc_id, line.priceLevel),
         ).unwrap();
@@ -768,7 +784,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [draft.lines, dispatch, fetchItemPrice, fetchNextUnit, priceQueryFor],
   );
-
   const resolveBarcode = useCallback(
     async (lineKey: string, barcode: string): Promise<boolean> => {
       const trimmed = barcode.trim();
@@ -813,7 +828,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       priceQueryFor,
     ],
   );
-
   /**
    * Ctrl+1..N / the price-level combo. Changing a level is not a local edit:
    * each affected line has to be repriced from the server at the new level, and
@@ -829,12 +843,18 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       const targets =
         scope === "all"
           ? draft.lines.filter((line) => line.itemId).map((line) => line.key)
-          : lineKeys.filter((key) => draft.lines.some((line) => line.key === key && line.itemId));
+          : lineKeys.filter((key) =>
+              draft.lines.some((line) => line.key === key && line.itemId),
+            );
       if (targets.length === 0) {
         return;
       }
       dispatch(
-        linePriceLevelSet({ keys: targets, priceLevel: level, commitDocument: scope === "all" }),
+        linePriceLevelSet({
+          keys: targets,
+          priceLevel: level,
+          commitDocument: scope === "all",
+        }),
       );
       setBusy("pricing");
       try {
@@ -858,17 +878,13 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [canEditPrice, draft.lines, dispatch, fetchItemPrice, priceQueryFor],
   );
-
   // -------------------------------------------------------------------------
   // Customer
   // -------------------------------------------------------------------------
-
   const customerChangeCost = useMemo(() => customerChangeCosts(draft), [draft]);
-
   const releaseCustomerBoundState = useCallback(() => {
     dispatch(customerBoundStateCleared());
   }, [dispatch]);
-
   /**
    * Apply a picked customer, and fetch the two things that hang off them: the
    * freight bands for their distance and their credit standing (§4.2).
@@ -883,7 +899,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         return;
       }
       if (!draft.companyId || !draft.branchId) {
-        toast.warn("The company and branch are still loading — try again in a moment.");
+        toast.warn(
+          "The company and branch are still loading — try again in a moment.",
+        );
         return;
       }
       setBusy("loading");
@@ -895,21 +913,27 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           regional,
         }).unwrap();
         dispatch(customerApplied(detail));
-
         // Freight bands are only worth fetching when the distance actually
         // changed and the policy is not manual.
         const distance = detail.distance_km;
         const distanceChanged = distance !== draft.customer.distanceKm;
-        const manualFreight = draft.policy.freightCalcType.trim().toUpperCase() === "MANUAL";
-        if (distance !== null && distance >= 0 && distanceChanged && !manualFreight) {
+        const manualFreight =
+          draft.policy.freightCalcType.trim().toUpperCase() === "MANUAL";
+        if (
+          distance !== null &&
+          distance >= 0 &&
+          distanceChanged &&
+          !manualFreight
+        ) {
           try {
-            const bands = await fetchFreightBands(Math.trunc(distance)).unwrap();
+            const bands = await fetchFreightBands(
+              Math.trunc(distance),
+            ).unwrap();
             dispatch(freightBandsSet(bands));
           } catch {
             // No band for this distance is an ordinary answer, not an error.
           }
         }
-
         // The credit panel. Two independent limits — an AMOUNT limit and a BILL
         // COUNT limit — and either can be exceeded; whether exceeding one blocks
         // the save is `isCreditCheckEnabled`, a setting, not a verdict this
@@ -945,11 +969,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       regional,
     ],
   );
-
   // -------------------------------------------------------------------------
   // Document lifecycle
   // -------------------------------------------------------------------------
-
   const clear = useCallback(() => {
     dispatch(
       draftReplaced(
@@ -962,12 +984,20 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         }),
       ),
     );
-  }, [companyStateCode, context.accYear, context.branchId, context.companyId, dispatch]);
-
+  }, [
+    companyStateCode,
+    context.accYear,
+    context.branchId,
+    context.companyId,
+    dispatch,
+  ]);
   const copyAsNew = useCallback(() => {
-    dispatch(draftReplaced(copyBillDraftAsNew(draftRef.current, todayIso(), nowStamp())));
+    dispatch(
+      draftReplaced(
+        copyBillDraftAsNew(draftRef.current, todayIso(), nowStamp()),
+      ),
+    );
   }, [dispatch]);
-
   const beginEdit = useCallback(() => {
     if (draft.isDeleted) {
       toast.warn("This bill is cancelled and cannot be edited.");
@@ -975,11 +1005,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     }
     dispatch(modeSet("entry"));
   }, [draft.isDeleted, dispatch]);
-
   // -------------------------------------------------------------------------
   // Adjustments (§10)
   // -------------------------------------------------------------------------
-
   /**
    * The credits this customer holds, for the adjustment panel.
    *
@@ -989,7 +1017,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
    * are never carried forward, so a March advance really does settle an April
    * invoice, and each row reports its own.
    */
-  const refreshOpenCredits = useCallback(async (): Promise<AdjustableCredit[]> => {
+  const refreshOpenCredits = useCallback(async (): Promise<
+    AdjustableCredit[]
+  > => {
     const current = draftRef.current;
     if (!current.customer.custId || !current.companyId) {
       dispatch(openCreditsSet([]));
@@ -1005,16 +1035,23 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     } catch (error) {
       // An empty panel is honest; a stale one is not. The operator is told,
       // because "no credits" and "could not ask" are different facts.
-      toast.warn(`Could not read this customer's credits: ${errorMessage(error)}`);
+      toast.warn(
+        `Could not read this customer's credits: ${errorMessage(error)}`,
+      );
       dispatch(openCreditsSet([]));
       return [];
     }
   }, [dispatch, fetchOpenCredits]);
-
   const applyAdjustments = useCallback(
     (rows: BillAdjustmentRow[], from: "bill" | "tender") => {
-      const candidate: SaleBillDraft = { ...draftRef.current, adjustments: rows };
-      const violation = validateAdjustments(candidate, pricingRef.current.totals.bill);
+      const candidate: SaleBillDraft = {
+        ...draftRef.current,
+        adjustments: rows,
+      };
+      const violation = validateAdjustments(
+        candidate,
+        pricingRef.current.totals.bill,
+      );
       if (violation) {
         toast.error(violation.message);
         return false;
@@ -1024,11 +1061,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [dispatch],
   );
-
   // -------------------------------------------------------------------------
   // Validate and save
   // -------------------------------------------------------------------------
-
   /** Close a parked cart against the document it became. Never fatal. */
   const convertHoldIfAny = useCallback(
     async (docId: string, accYear: string, refno: string | null) => {
@@ -1036,11 +1071,14 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       if (!holdId) {
         return;
       }
-      const scope = lockedHold.current?.txhId === holdId ? lockedHold.current.scope : null;
+      const scope =
+        lockedHold.current?.txhId === holdId ? lockedHold.current.scope : null;
       lockedHold.current = null;
       const deviceId = actor.deviceMasterId;
       if (!deviceId) {
-        toast.warn("Saved, but the hold could not be closed: this browser has no device id.");
+        toast.warn(
+          "Saved, but the hold could not be closed: this browser has no device id.",
+        );
         return;
       }
       try {
@@ -1067,7 +1105,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [actor.deviceMasterId, actor.userId, convertHoldLock, dispatch],
   );
-
   const refreshPartyCredit = useCallback(
     async (target: SaleBillDraft) => {
       if (!target.customer.custId || !target.companyId) {
@@ -1087,8 +1124,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [dispatch, fetchPartyCredit],
   );
-
-
   const validate = useCallback(
     (extra: BillValidationContext = {}) =>
       validateSaveInputs(draft, pricing, {
@@ -1097,7 +1132,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       }),
     [draft, pricing],
   );
-
   /**
    * What a save attempt came to. `confirm-needed` is not a failure: the gate
    * asked a question (the stock position could not be established, the customer
@@ -1116,7 +1150,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           : { status: "invalid", violation };
       }
       if (!actor.userId) {
-        toast.error("Your session has no user id — sign in again before saving.");
+        toast.error(
+          "Your session has no user id — sign in again before saving.",
+        );
         return { status: "failed" };
       }
       // `busy` cannot guard re-entry on its own: `setBusy` is asynchronous, so
@@ -1131,15 +1167,17 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         const payload = buildSavePayload(sentDraft, pricing, actor);
         const saved = await saveBill(payload).unwrap();
         dispatch(saveResponseApplied({ payload: saved, sentDraft }));
-        toast.success(saved.sbBillRefno ? `Bill ${saved.sbBillRefno} saved.` : "Bill saved.");
-
+        toast.success(
+          saved.sbBillRefno
+            ? `Bill ${saved.sbBillRefno} saved.`
+            : "Bill saved.",
+        );
         // The cart that was parked has become a real document, so the hold is
         // closed against it rather than left for someone to resume and bill a
         // second time. Deliberately not fatal: the bill IS saved by this point.
         await convertHoldIfAny(saved.sbId, saved.sbAccYear, saved.sbBillRefno);
         // Crash recovery has nothing left to recover.
         void clearAutosave(actor.deviceId ?? "");
-
         return {
           status: "saved",
           ref: {
@@ -1160,16 +1198,26 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [actor, convertHoldIfAny, draft, dispatch, pricing, saveBill, validate],
   );
-
   // -------------------------------------------------------------------------
   // Load
   // -------------------------------------------------------------------------
-
   const loadDocument = useCallback(
     async (key: SaleBillDocKey): Promise<SaleBillDraft | null> => {
       setBusy("loading");
       try {
-        const payload = await fetchBill(key).unwrap();
+        // Dispatched through `initiate` rather than the lazy-query trigger: this
+        // also runs from a MOUNT effect — the register's double-click / Edit
+        // route into the form with `initialDocument` set — and a lazy trigger
+        // fired before its own subscription exists resolves with `undefined`
+        // without ever reaching the network. That is what left a double-clicked
+        // bill on a blank form while the F8 picker (an event handler, so its
+        // subscription is live) opened the same bill correctly.
+        const payload = await dispatch(
+          saleBillApi.endpoints.getBill.initiate(key, {
+            subscribe: false,
+            forceRefetch: true,
+          }),
+        ).unwrap();
         // Built as a WHOLE draft and derived once — never painted row by row
         // through the pricing engine (§16). `pricing` stays `"stored"`, so the
         // screen shows the figures the bill was saved with until the operator's
@@ -1190,13 +1238,11 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         setBusy("idle");
       }
     },
-    [companyStateCode, dispatch, fetchBill, refreshPartyCredit],
+    [companyStateCode, dispatch, refreshPartyCredit],
   );
-
   // -------------------------------------------------------------------------
   // Cancel (§8, §16)
   // -------------------------------------------------------------------------
-
   /**
    * Cancel the SOURCE ORDER this bill was raised against.
    *
@@ -1226,7 +1272,10 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           remarks: remarks.trim().slice(0, 250),
           username: (actor.userName || actor.userId || "").slice(0, 50),
         }).unwrap();
-        const lines = result.orders.reduce((total, order) => total + order.cancelledLines, 0);
+        const lines = result.orders.reduce(
+          (total, order) => total + order.cancelledLines,
+          0,
+        );
         toast.success(
           lines === 0
             ? "Nothing was left open on the source order — no lines were cancelled."
@@ -1242,7 +1291,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [actor.userId, actor.userName, cancelSourceOrdersMutation],
   );
-
   /**
    * "Cancel on Order" — one line, the selected row's, never the order (§8).
    *
@@ -1271,7 +1319,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           soiCancelReason: reason.trim().slice(0, 250),
         }).unwrap();
         dispatch(lineRemoved(lineKey));
-        toast.success("The order line was cancelled and the row removed from this bill.");
+        toast.success(
+          "The order line was cancelled and the row removed from this bill.",
+        );
         return true;
       } catch (error) {
         toast.error(errorMessage(error));
@@ -1282,11 +1332,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [cancelOrderLine, dispatch],
   );
-
   // -------------------------------------------------------------------------
   // Imports (§13)
   // -------------------------------------------------------------------------
-
   const importFromQuotation = useCallback(
     async (row: QuotationListRow): Promise<boolean> => {
       // The guard the Qt picker does not have: an already-converted quotation is
@@ -1320,7 +1368,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [dispatch, fetchQuotation],
   );
-
   const importFromOrder = useCallback(
     async (key: SaleOrderDocKey): Promise<boolean> => {
       setBusy("loading");
@@ -1368,11 +1415,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [dispatch, fetchOpenCredits, fetchOrder, refreshPartyCredit],
   );
-
   // -------------------------------------------------------------------------
   // Holds (§12)
   // -------------------------------------------------------------------------
-
   /** Park the cart on the SERVER and clear the form. */
   const hold = useCallback(async (): Promise<boolean> => {
     if (holdInFlight.current) {
@@ -1387,11 +1432,15 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       // `txh_device_id` is a real foreign key into `fixed.device_master`, so a
       // hold names the device the LOGIN registered — never the browser's own
       // local uuid, which matches no row there.
-      toast.error("This browser has no registered device, so a cart cannot be held from it.");
+      toast.error(
+        "This browser has no registered device, so a cart cannot be held from it.",
+      );
       return false;
     }
     if (!holdAccYearOf(current.accYear)) {
-      toast.error("This bill has no accounting year, and a hold's scope cannot be corrected later.");
+      toast.error(
+        "This bill has no accounting year, and a hold's scope cannot be corrected later.",
+      );
       return false;
     }
     holdInFlight.current = true;
@@ -1439,12 +1488,13 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       setBusy("idle");
     }
   }, [actor, clear, releaseHoldLock, saveHold]);
-
   /** Pull a parked cart back, taking its edit lease. */
   const resumeHold = useCallback(
     async (txhId: string): Promise<boolean> => {
       if (!actor.deviceMasterId) {
-        toast.error("This browser has no registered device, so a held cart cannot be opened here.");
+        toast.error(
+          "This browser has no registered device, so a held cart cannot be opened here.",
+        );
         return false;
       }
       setBusy("resuming");
@@ -1452,11 +1502,17 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         const hold = await fetchHold({ txhId }).unwrap();
         const state = readBillHoldUiState(hold.txhPayload);
         if (!state) {
-          toast.error("That held cart was parked by another screen and cannot be opened here.");
+          toast.error(
+            "That held cart was parked by another screen and cannot be opened here.",
+          );
           return false;
         }
         const scope = holdLockScope(hold);
-        await resumeHoldLock({ txhId, deviceId: actor.deviceMasterId, scope }).unwrap();
+        await resumeHoldLock({
+          txhId,
+          deviceId: actor.deviceMasterId,
+          scope,
+        }).unwrap();
         lockedHold.current = { txhId, holdNo: hold.txhHoldNo, scope };
         dispatch(draftReplaced(draftFromBillHold(hold, state)));
         return true;
@@ -1469,7 +1525,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [actor.deviceMasterId, dispatch, fetchHold, resumeHoldLock],
   );
-
   /** Take a cart off the device holding it. Frees the hold; does not open it. */
   const takeOverHold = useCallback(
     async (hold: TxnHoldPayload): Promise<boolean> => {
@@ -1491,11 +1546,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [actor.deviceMasterId, forceReleaseHoldLock],
   );
-
   // -------------------------------------------------------------------------
   // Autosave (§12) — crash recovery ONLY, never a second source of truth
   // -------------------------------------------------------------------------
-
   useEffect(() => {
     const deviceId = actor.deviceId ?? "";
     if (!deviceId || draft.mode !== "entry" || !isWorthAutosaving(draft)) {
@@ -1506,11 +1559,15 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [actor.deviceId, draft]);
-
   /** The snapshot this device left behind, if it is worth offering back. */
   const findRecovery = useCallback(async (): Promise<BillAutosave | null> => {
     const deviceId = actor.deviceId ?? "";
-    if (!deviceId || !context.companyId || !context.branchId || !context.accYear) {
+    if (
+      !deviceId ||
+      !context.companyId ||
+      !context.branchId ||
+      !context.accYear
+    ) {
       return null;
     }
     return readAutosave(deviceId, {
@@ -1519,7 +1576,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       accYear: context.accYear,
     });
   }, [actor.deviceId, context.accYear, context.branchId, context.companyId]);
-
   const acceptRecovery = useCallback(
     (record: BillAutosave) => {
       dispatch(draftReplaced(draftFromAutosave(record)));
@@ -1527,11 +1583,9 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [actor.deviceId, dispatch],
   );
-
   const discardRecovery = useCallback(() => {
     void clearAutosave(actor.deviceId ?? "");
   }, [actor.deviceId]);
-
   return {
     draft,
     dispatch,

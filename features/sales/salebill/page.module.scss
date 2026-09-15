@@ -32,13 +32,20 @@
     minmax(0, 0.8fr);
 }
 
-@media (max-width: 1400px) {
+/*
+ * Measured against the page container, not the viewport: the app zooms itself
+ * to the screen, so a 1368-wide laptop lays this header out in ~1500 logical
+ * pixels and keeps all four columns. `@media (max-width: 1400px)` saw the raw
+ * 1368 instead and dropped the credit column onto a second row, costing a band
+ * of vertical space the items grid needed. See `--erp-ui-scale`.
+ */
+@container erp-txn-page (max-width: 1340px) {
   .headerRowFour {
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 
-@media (max-width: 1000px) {
+@container erp-txn-page (max-width: 1000px) {
   .headerRowFour {
     grid-template-columns: minmax(0, 1fr);
   }

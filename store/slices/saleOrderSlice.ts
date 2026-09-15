@@ -32,6 +32,7 @@ import {
   applyOrderSaveResponse,
   createOrderDraft,
   createOrderDraftLine,
+  duplicateOrderDraftLine,
 } from "@/features/sales/sale-order/sale-order.state";
 import type {
   PartyCreditSummary,
@@ -191,6 +192,20 @@ const saleOrderSlice = createSlice({
       }
       state.lines.splice(index, 0, line);
     },
+    /**
+     * Copy a line into a fresh one right under it (Alt+R).
+     *
+     * A blank row is nothing to copy, so it is declined outright rather than
+     * inserting an empty row the operator did not ask for — Ctrl++ is the
+     * shortcut for that.
+     */
+    lineDuplicated(state, action: PayloadAction<string>) {
+      const index = state.lines.findIndex((row) => row.key === action.payload);
+      if (index < 0 || !state.lines[index].itemId) {
+        return;
+      }
+      state.lines.splice(index + 1, 0, duplicateOrderDraftLine(state.lines[index]));
+    },
     lineRemoved(state, action: PayloadAction<string>) {
       state.lines = state.lines.filter((line) => line.key !== action.payload);
     },
@@ -325,6 +340,7 @@ export const {
   tendersReplaced,
   lineAdded,
   lineInserted,
+  lineDuplicated,
   lineRemoved,
   lineFieldSet,
   itemPriceApplied,

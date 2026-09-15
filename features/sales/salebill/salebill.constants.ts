@@ -138,7 +138,7 @@ export const DEFAULT_BILL_TYPE: BillType = "CASH";
 
 export const BILL_STATUSES = ["DRAFT", "POSTED", "CANCELLED"] as const;
 export type BillStatus = (typeof BILL_STATUSES)[number];
-export const DEFAULT_BILL_STATUS: BillStatus = "DRAFT";
+export const DEFAULT_BILL_STATUS: BillStatus = "POSTED";
 
 export const PAY_STATUSES = ["UNPAID", "PARTIAL", "PAID"] as const;
 export const DEFAULT_PAY_STATUS = "UNPAID";

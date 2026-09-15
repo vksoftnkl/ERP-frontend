@@ -99,16 +99,21 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
   const { open, onClose, purposeCode, target, documentLabel } = props;
 
   /*
-   * The company the CATALOGUES are narrowed to, and nothing else.
+   * The company the CATALOGUES are narrowed to — the header picker's.
    *
-   * Not sent to `/resolve` and not sent to a render: both take the company from
-   * the access token, and the two can legitimately differ — the header picker is
-   * client state that auto-selects the first company, while the server always
-   * acts as the token's. What this narrows is which purposes, designs and
-   * assignments are offered to a human, where showing another tenant's list
-   * would be the actual fault.
+   * The header picker is client state; the access token carries the user's
+   * HOME company, and the two differ whenever a session works in another
+   * company. What this narrows is which purposes, designs and assignments are
+   * offered to a human, where showing another tenant's list would be the
+   * actual fault.
+   *
+   * `/resolve` and the render itself are scoped by the DOCUMENT's company (off
+   * the row, below), falling back to this one. Neither may be left to the token:
+   * every dataset filters on `:company_id`, so a bill raised in the working
+   * company came out as blank paper while the token still said "home".
    */
   const companyId = useAppSelector(selectBusinessContext)?.companyId?.trim() ?? "";
+  const documentCompanyId = target.companyId?.trim() || companyId;
 
   /** Which step: the five buttons, or the format list. */
   const [step, setStep] = useState<"ask" | "format">("ask");
@@ -162,11 +167,14 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
    * and chaining them would put a round trip between the click and the paper.
    * A 404 from both is a real answer: nothing is configured for this counter.
    *
-   * WHICH counter is not stated. Company, branch and device are optional on
-   * `/resolve` and default to the session's own, so the purpose and the output
-   * mode are the whole question this asks.
+   * WHICH counter is not stated. Branch and device are optional on `/resolve`
+   * and default to the session's own. The company is the document's, because
+   * the session's token may name another one (see `companyId` above).
    */
-  const resolveArgs = { purposeId: purpose?.ppoId ?? "" };
+  const resolveArgs = {
+    purposeId: purpose?.ppoId ?? "",
+    ...(documentCompanyId ? { companyId: documentCompanyId } : {}),
+  };
   const skipResolve = { skip: !open || !purpose };
   const previewResolution = useResolvePrintingAssignmentQuery(
     { ...resolveArgs, outputMode: "PREVIEW" },
@@ -391,6 +399,7 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
         ptvId={previewing.ptvId}
         autoPrint={previewing.autoPrint}
         docId={target.docId}
+        companyId={documentCompanyId || null}
         accYear={target.accYear}
         title={heading}
       />

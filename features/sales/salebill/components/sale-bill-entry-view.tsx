@@ -36,6 +36,7 @@ import {
 import { ChargePickerModal } from "@/features/sales/quotation/components/charge-picker-modal";
 import {
   focusFirstCell,
+  focusNextRowAfterRender,
   focusNextStopFrom,
 } from "@/features/sales/quotation/components/grid-focus";
 import { moveHeaderFocus } from "@/features/sales/quotation/components/header-focus";
@@ -56,6 +57,8 @@ import { HeldListModal } from "@/features/sales/quotation/components/held-list-m
 import { QuotationListModal } from "@/features/sales/quotation/components/quotation-list-modal";
 import { SaleOrderListModal } from "@/features/sales/sale-order/components/sale-order-list-modal";
 import { TenderDialog } from "@/features/sales/sale-order/components/tender-dialog";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
+import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { useGetTenderMastersQuery } from "@/store/api/saleOrderApi";
 import {
   TotalsFooterStats,
@@ -88,6 +91,7 @@ import {
   customerFieldSet,
   headerFieldSet,
   lineAdded,
+  lineDuplicated,
   lineFieldSet,
   lineInserted,
   lineRemoved,
@@ -108,7 +112,12 @@ import {
 import { isBillHold } from "../salebill.hold";
 import type { BillAutosave } from "../salebill.hold";
 import { totalAdjusted } from "../salebill.validate";
-import type { BillAdjustmentRow, SaleBillDocKey, SaleBillDraftLine } from "../salebill.types";
+import type {
+  BillAdjustmentRow,
+  SaleBillDocKey,
+  SaleBillDraftLine,
+  SavedBillRef,
+} from "../salebill.types";
 import { useSaleBillDraft } from "../use-sale-bill-draft";
 import { AdjustPanel } from "./adjust-panel";
 import { useBillVisibleSettings } from "./bill-visible-settings";
@@ -229,10 +238,28 @@ export function SaleBillEntryView({
   const [importOrderOpen, setImportOrderOpen] = useState(false);
   const [heldOpen, setHeldOpen] = useState(false);
   const [tenderOpen, setTenderOpen] = useState(false);
+  /**
+   * Save opened the settle dialog and is waiting on it: the bill is written the
+   * moment the operator OKs the tenders, and not before. Cleared when they back
+   * out, so a settle they cancelled never saves behind them.
+   *
+   * The ref is the same fact held where a render cannot lose it: the state says
+   * what the dialog's button should READ, the ref is the one-shot the deferred
+   * save consumes (and must clear, or the next render would save again).
+   */
+  const [settleThenSave, setSettleThenSave] = useState(false);
+  const settleThenSaveRef = useRef(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [editConfirmOpen, setEditConfirmOpen] = useState(false);
   const [cancelOrderOpen, setCancelOrderOpen] = useState(false);
   const [creditsLoading, setCreditsLoading] = useState(false);
+  /**
+   * The bill a save has just written, while the print dialog stands over it.
+   * Held as the SAVED reference rather than read off the draft: the draft is
+   * what the operator may already be clearing, and the paper belongs to the
+   * document that was posted.
+   */
+  const [printTarget, setPrintTarget] = useState<SavedBillRef | null>(null);
   /** A gate that asked a question (§14) — the message and the yes that answers it. */
   const [saveQuestion, setSaveQuestion] = useState<string | null>(null);
   /**
@@ -459,6 +486,25 @@ export function SaleBillEntryView({
   );
 
   /**
+   * Alt+R — copy the row into a fresh one under it.
+   *
+   * Guarded here as well as in the reducer, because focus is moved on the way
+   * out: a blank row copies to nothing, and stepping into the row below it would
+   * take the operator somewhere they did not ask to go.
+   */
+  const onDuplicateLine = useCallback(
+    (rowKey: string, fieldKey: string | null) => {
+      const source = draft.lines.find((row) => row.key === rowKey);
+      if (!source?.itemId) {
+        return;
+      }
+      dispatch(lineDuplicated(rowKey));
+      focusNextRowAfterRender(ITEM_GRID_NAME, rowKey, fieldKey);
+    },
+    [dispatch, draft.lines],
+  );
+
+  /**
    * Removing a line.
    *
    * A line that came from a sales order is a THREE-way question, not a delete
@@ -578,14 +624,19 @@ export function SaleBillEntryView({
       setInvalidCells({});
       if (outcome.status === "saved") {
         // Crash recovery has nothing left to recover.
-        //
-        // Save-and-PRINT is not wired here yet, but the pipeline does exist —
-        // see the note on the F11 binding below. The tender dialog's own print
-        // flag is what would drive it.
         setRecovery(null);
+        // The counter prints the bill it has just taken the money for, without
+        // being sent to the list to find it again — the same dialog the F8
+        // picker opens, on the reference the server just allocated.
+        //
+        // Silent when the operator may not print: the bill IS saved, and a
+        // permission toast on top of the "saved" one would read as a failure.
+        if (menuPermissions.canPrint) {
+          setPrintTarget(outcome.ref);
+        }
       }
     },
-    [api, canSaveDoc],
+    [api, canSaveDoc, menuPermissions.canPrint],
   );
 
   const onSaveQuestionConfirmed = useCallback(() => {
@@ -608,6 +659,61 @@ export function SaleBillEntryView({
     void api.refreshOpenCredits().finally(() => setCreditsLoading(false));
     setTenderOpen(true);
   }, [api, editable]);
+
+  /**
+   * What the Save button and F6 actually do: take the money first. The legacy
+   * screen never writes a bill the operator has not settled, so Save opens the
+   * settle dialog and the save runs off its OK — see the dialog's `onApply`.
+   *
+   * Three routes skip the dialog, each because it could not help:
+   *
+   *  - **The operator may not save at all**, or the bill is not editable. The
+   *    refusal is the point, and `runSave` is the one place that words it.
+   *  - **The bill would be refused for something tenders cannot fix** — no
+   *    lines, a zero quantity, a missing godown. Far better to say so before
+   *    money is keyed than after. A gate that asks a QUESTION (`confirm`) is
+   *    not a refusal and does not stop the settle: it is answered on the way
+   *    out, by the dialog `runSave` puts up.
+   *  - **A CREDIT bill is settlement-exempt** (§6 of the save gate): the party
+   *    debit is what stays open. The settle dialog refuses a short settlement,
+   *    so routing a credit bill through it would make one unsavable.
+   */
+  const requestSave = useCallback(() => {
+    if (!canSaveDoc || !editable) {
+      void runSave();
+      return;
+    }
+    const violation = api.validate();
+    if (violation && !violation.confirm && violation.field !== "sale-bill-tender") {
+      setInvalidCells(
+        violation.lineKey ? { [`${violation.lineKey}:${violation.field}`]: true } : {},
+      );
+      toast.error(violation.message);
+      return;
+    }
+    if (draft.header.billType === "CREDIT") {
+      void runSave();
+      return;
+    }
+    setSettleThenSave(true);
+    settleThenSaveRef.current = true;
+    openTender();
+  }, [api, canSaveDoc, draft.header.billType, editable, openTender, runSave]);
+
+  /**
+   * The settle dialog's OK does not save directly: `api.save` reads the draft of
+   * the render it was built in, so calling it in the same tick as
+   * `tendersReplaced` would post the bill with the tenders the operator just
+   * keyed missing from it. Arming a flag and saving from an effect puts the save
+   * one render later — on the draft that HAS the money.
+   */
+  useEffect(() => {
+    if (!settleThenSaveRef.current || tenderOpen) {
+      return;
+    }
+    settleThenSaveRef.current = false;
+    void runSave();
+  }, [runSave, tenderOpen]);
 
   const openAdjust = useCallback(() => {
     if (!editable) {
@@ -777,6 +883,7 @@ export function SaleBillEntryView({
     importOrderOpen ||
     heldOpen ||
     tenderOpen ||
+    printTarget !== null ||
     adjustOpen ||
     editConfirmOpen ||
     cancelOrderOpen ||
@@ -796,13 +903,11 @@ export function SaleBillEntryView({
    * mouse. F1 cycles Header → Items → Charges → Terms (or the Adjust panel, when
    * that is what is mounted there) and round again; Shift+F1 goes the other way.
    *
-   * F11 (print) is unbound for now, but NOT for the reason the plan gives: its
-   * §18.1 says no print pipeline exists, and that is true of the Qt client and
-   * false of this repo. The server registers three sale-bill providers
-   * (`sales.bill.header`, `sales.bill.items`, `sales.bill.tax_summary`) and
-   * `SALE_INVOICE` ("Tax Invoice") is a seeded purpose — the F8 picker already
-   * prints the highlighted bill through it. Binding F11 to the same dialog for
-   * the bill ON SCREEN is a small, separate piece of work.
+   * F11 (print) is still unbound, but print itself is no longer missing: a save
+   * ends in the print dialog (see `runSave`), and the F8 picker prints the
+   * highlighted bill. What F11 would add is a REPRINT of the bill on screen
+   * without saving it again — the same dialog on `draft.docId`, and a small,
+   * separate piece of work.
    *
    * F4 is the ADJUST panel here, and inside the item grid it is the unit switch
    * — the grid scopes its own shortcuts to itself, which is what lets one key
@@ -810,7 +915,7 @@ export function SaleBillEntryView({
    */
   const shortcuts = {
     guardedRun,
-    runSave,
+    requestSave,
     openTender,
     openAdjust,
     hold: api.hold,
@@ -856,7 +961,7 @@ export function SaleBillEntryView({
           break;
         case "F6":
           event.preventDefault();
-          void current.runSave();
+          current.requestSave();
           break;
         case "F7":
           event.preventDefault();
@@ -1048,8 +1153,8 @@ export function SaleBillEntryView({
             <span className={quotationStyles.gridHeadTitle}>Items</span>
             <span className={quotationStyles.gridHeadActions}>
               <span className={quotationStyles.modalNote}>
-                Enter next cell · F1 next panel · F4 unit · Ctrl+± row · Ctrl+1..
-                {PRICE_LEVEL_COUNT} price level
+                Enter next cell · F1 next panel · F4 unit · Ctrl+± row · Alt+R copy row ·
+                Ctrl+1..{PRICE_LEVEL_COUNT} price level
               </span>
             </span>
           </div>
@@ -1075,6 +1180,7 @@ export function SaleBillEntryView({
             }
             onAddLine={() => dispatch(lineAdded())}
             onInsertLine={(rowKey) => dispatch(lineInserted(rowKey))}
+            onDuplicateLine={onDuplicateLine}
             onRemoveLine={onRemoveLine}
             onSwitchUnit={(rowKey) => void api.switchUnit(rowKey)}
             onPriceLevelShortcut={onPriceLevelShortcut}
@@ -1184,7 +1290,7 @@ export function SaleBillEntryView({
         canCancelOrder={Boolean(draft.docId) && Boolean(draft.source) && menuPermissions.canDelete}
         onOpenTender={openTender}
         onOpenAdjust={openAdjust}
-        onSave={() => void runSave()}
+        onSave={requestSave}
         onShowList={() => guardedRun("list")}
         onImportQuotation={() => guardedRun("importQuotation")}
         onImportOrder={() => guardedRun("importOrder")}
@@ -1342,7 +1448,13 @@ export function SaleBillEntryView({
             onApply={(rows) => applyAdjustments(rows, "tender")}
           />
         }
-        onClose={() => setTenderOpen(false)}
+        confirmLabel={settleThenSave ? "OK & Save" : undefined}
+        onClose={() => {
+          // Backing out of a settle Save opened cancels the save with it.
+          setSettleThenSave(false);
+          settleThenSaveRef.current = false;
+          setTenderOpen(false);
+        }}
         onApply={(tenders, settlement) => {
           // `updateSettlementDisplay()` — the ONE place tendered, adjusted,
           // balance and refund are reconciled (§9). Everything else reads it.
@@ -1365,9 +1477,35 @@ export function SaleBillEntryView({
               },
             }),
           );
+          // The ref stays armed: the save runs one render later, off the draft
+          // these tenders have just landed in.
+          setSettleThenSave(false);
           setTenderOpen(false);
         }}
       />
+
+      {/*
+        Save → print, the counter's own order. `SALE_INVOICE` is the purpose;
+        branch and counter are claims on the access token and are deliberately
+        not sent (see the dialog). The company and the accounting year ARE sent:
+        both are the document's own — the token's company is the user's home
+        one and may not be the one this bill was raised in, and a bill saved on
+        the far side of 1 April lives in last year's partition.
+      */}
+      {printTarget ? (
+        <PrintOptionsDialog
+          open
+          onClose={() => setPrintTarget(null)}
+          purposeCode={PURPOSE_CODE.SALE_INVOICE}
+          documentLabel={printTarget.billRefno ? `Bill ${printTarget.billRefno}` : "Bill"}
+          target={{
+            docId: printTarget.sbId,
+            companyId: printTarget.sbCompanyId,
+            accYear: printTarget.sbAccYear,
+            filename: `bill-${printTarget.billRefno || printTarget.sbId}`,
+          }}
+        />
+      ) : null}
 
       <DeleteConfirmModal
         isOpen={saveQuestion !== null}

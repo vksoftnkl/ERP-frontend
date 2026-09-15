@@ -91,7 +91,6 @@ export default function DatasetGrid({
         ptdSourceKind: "PROVIDER",
         ptdProviderCode: null,
         ptdSql: null,
-        ptdRequiresCompany: true,
         ptdParentNo: null,
         ptdLinkFields: null,
         ptdRowLimit: DEFAULT_ROW_LIMIT,

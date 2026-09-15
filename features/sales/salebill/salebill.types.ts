@@ -826,6 +826,19 @@ export type BillItemPayload = {
   sbiSectionId?: string | null;
   sbiCategoryId?: string | null;
   sbiGodownName?: string | null;
+  /**
+   * May this line's item be sold below zero on hand — the EFFECTIVE answer,
+   * resolved by the GET the same way `/master-lookups/item-price` resolves it:
+   * a service item always may, and otherwise it is blocked only when the LINE's
+   * godown, the company AND the item all disallow it.
+   *
+   * Read from today's master rows rather than from `sale_bill_item` (which has
+   * no such column), so unlike `sbiAvailableStock` it is current — see
+   * `lineFromBillPayload`.
+   *
+   * GET-only, and `null` when the item join could not be made.
+   */
+  sbiAllowNegativeStock?: boolean | null;
 };
 
 /** Decimals as real NUMBERS here — the charge-detail module converts them. */

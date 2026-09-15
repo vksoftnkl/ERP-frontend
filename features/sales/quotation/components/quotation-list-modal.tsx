@@ -543,6 +543,7 @@ export function QuotationListModal(props: QuotationListModalProps) {
           }
           target={{
             docId: printRow.sq_id,
+            companyId: printRow.sq_company_id,
             accYear: printRow.sq_acc_year,
             filename: `quotation-${printRow.sq_quote_refno || printRow.sq_id}`,
           }}

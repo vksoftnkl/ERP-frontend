@@ -53,12 +53,26 @@ describe("buildDocumentPrintRequest", () => {
     });
   });
 
-  it("never sends a company, a branch or a counter", () => {
-    // All three come from the access token. A caller-supplied company would make
-    // the renderer a cross-tenant read; a caller-supplied branch or counter
+  it("sends the document's own company, and omits a blank one", () => {
+    // The token carries the user's HOME company; the header picker may be on
+    // another, and every dataset filters on :company_id. A document raised in
+    // the working company printed as blank paper until its row's company went
+    // with the request.
+    expect(
+      buildDocumentPrintRequest("01a041fa-quote", { ...target, companyId: "01a0-comp" }),
+    ).toMatchObject({ companyId: "01a0-comp" });
+    expect(
+      buildDocumentPrintRequest("01a041fa-quote", { ...target, companyId: "  " }),
+    ).not.toHaveProperty("companyId");
+  });
+
+  it("never sends a branch or a counter", () => {
+    // Both come from the access token; a caller-supplied branch or counter
     // would be a screen picking which rung of the assignment ladder it wins on.
-    const request = buildDocumentPrintRequest("01a041fa-quote", target) as Record<string, unknown>;
-    expect(request).not.toHaveProperty("companyId");
+    const request = buildDocumentPrintRequest("01a041fa-quote", {
+      ...target,
+      companyId: "01a0-comp",
+    }) as Record<string, unknown>;
     expect(request).not.toHaveProperty("branchId");
     expect(request).not.toHaveProperty("deviceId");
   });

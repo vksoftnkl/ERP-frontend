@@ -51,36 +51,42 @@ describe("buildPreviewRequest", () => {
   });
 
   it("omits blanks rather than sending empty strings", () => {
-    // `docId: ""` reaches the server as a uuid that fails validation. An absent
-    // docId is a render with no document, which a parameterised report is.
+    // `accYear: ""` reaches the server as a year that fails validation, where an
+    // absent one lets it bind the company's current fiscal year.
     const request = buildPreviewRequest({
       ...base,
-      docId: "   ",
       accYear: "",
       outputMode: "  ",
     });
 
-    expect(request).not.toHaveProperty("docId");
     expect(request).not.toHaveProperty("accYear");
     expect(request).not.toHaveProperty("outputMode");
   });
 
   it("has nowhere to put a branch or a counter — the token carries both", () => {
-    const request = buildPreviewRequest({ ...base, docId: "019f-bill" }) as Record<string, unknown>;
+    const request = buildPreviewRequest({ ...base }) as Record<string, unknown>;
     expect(request).not.toHaveProperty("branchId");
     expect(request).not.toHaveProperty("deviceId");
   });
 
-  it("passes the document and its year through, trimmed", () => {
+  it("has nowhere to put a document id — a design that reads one declares doc_id", () => {
     const request = buildPreviewRequest({
       ...base,
-      docId: " 019f-bill ",
+      params: { doc_id: "019f-bill" },
+    }) as Record<string, unknown>;
+
+    expect(request).not.toHaveProperty("docId");
+    expect(request.params).toEqual({ doc_id: "019f-bill" });
+  });
+
+  it("passes the document's year through, trimmed", () => {
+    const request = buildPreviewRequest({
+      ...base,
       accYear: " 2026-2027 ",
       outputMode: "ESCPOS",
     });
 
     expect(request).toMatchObject({
-      docId: "019f-bill",
       accYear: "2026-2027",
       outputMode: "ESCPOS",
     });

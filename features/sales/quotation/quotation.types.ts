@@ -354,6 +354,19 @@ export type QuotationItemPayload = {
    */
   sqiGodownId?: string | null;
   sqiGodownName?: string | null;
+  /**
+   * May this line's item be sold below zero on hand — the EFFECTIVE answer.
+   *
+   * Not `item_master.item_allow_neg_stock` alone: the GET resolves the same
+   * three-way rule `/master-lookups/item-price` answers with, so a service item
+   * always may, and otherwise it is blocked only when the godown, the company
+   * AND the item all disallow it. Derived from today's master rows, not stored
+   * on `sale_quotation_item`, which is why it may be trusted on a reopened or
+   * imported line even though `sqiAvailableStock` (a snapshot) may not.
+   *
+   * GET-only, and `null` when the item join could not be made.
+   */
+  sqiAllowNegativeStock?: boolean | null;
 };
 
 /** Every scalar column of `sale_charge_detail`, as JSON. No `cdLedgerName`. */

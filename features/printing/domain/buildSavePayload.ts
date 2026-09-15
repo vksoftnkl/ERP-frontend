@@ -106,7 +106,6 @@ function datasetForWire(dataset: DraftDataset): SavePrintTemplateDataset {
     // row that used to be SQL keeps its query after being switched.
     ptdProviderCode: isSql ? null : (dataset.ptdProviderCode ?? null),
     ptdSql: isSql ? (dataset.ptdSql ?? null) : null,
-    ptdRequiresCompany: dataset.ptdRequiresCompany ?? true,
     ptdParentNo: dataset.ptdParentNo ?? null,
     ptdLinkFields: dataset.ptdLinkFields ?? null,
     ptdRowLimit: dataset.ptdRowLimit,

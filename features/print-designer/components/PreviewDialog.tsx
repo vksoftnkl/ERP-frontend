@@ -32,8 +32,11 @@
  * `/reports/preview` could render against provider sample rows with no database
  * access at all. The printing engine's renderer does not: a preview runs the
  * revision's REAL datasets, which is what makes it worth looking at. So a
- * design whose datasets read a document needs a document id, and the server
- * says which dataset wanted what when one is missing.
+ * design whose datasets read a document has to ASK for one: `doc_id` is
+ * declared on the Data tab like any other prompt, and appears below as a box
+ * with the revision's own label on it. This dialog has no document field of its
+ * own — one that asked for a document the revision never declared would send an
+ * answer the render then ignores, and hide a missing declaration behind it.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -131,7 +134,6 @@ export function PreviewDialog({ open, onClose }: PreviewDialogProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [details, setDetails] = useState<RefusalDetail[]>([]);
   const [mode, setMode] = useState<string>("AUTO");
-  const [docId, setDocId] = useState(preview?.defaults?.docId ?? "");
   const [accYear, setAccYear] = useState(preview?.defaults?.accYear ?? "");
   /** One answer per declared prompt, keyed by prompt name. */
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -172,7 +174,6 @@ export function PreviewDialog({ open, onClose }: PreviewDialogProps) {
 
       const result: CanvasPreviewResult = await preview.render({
         definition,
-        docId: docId.trim() || undefined,
         accYear: accYear.trim() || undefined,
         outputMode: mode === "AUTO" ? undefined : mode,
         params: answered(answers),
@@ -196,14 +197,14 @@ export function PreviewDialog({ open, onClose }: PreviewDialogProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [accYear, answers, cleanup, definition, docId, mode, preview, replaceObjectUrl]);
+  }, [accYear, answers, cleanup, definition, mode, preview, replaceObjectUrl]);
 
   // Render once on open, then only when the user asks: every preview is a real
   // engine run against real data, and re-running it on every keystroke would
   // hammer the server.
   //
   // Both suppressions are deliberate. `exhaustive-deps` would add every render
-  // parameter and re-fire the request as the user types a document id. The
+  // parameter and re-fire the request as the user types an answer. The
   // set-state rule cannot see that `run` awaits the network before it touches
   // state — this is the "call an external system, store what it answers"
   // pattern the rule exists to allow, not a cascading render.
@@ -266,13 +267,6 @@ export function PreviewDialog({ open, onClose }: PreviewDialogProps) {
                   </option>
                 ))}
               </select>
-              <input
-                className={styles.input}
-                style={{ width: 260 }}
-                placeholder="Document id"
-                value={docId}
-                onChange={(event) => setDocId(event.target.value)}
-              />
               <input
                 className={styles.input}
                 style={{ width: 120 }}

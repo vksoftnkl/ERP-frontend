@@ -4,7 +4,7 @@
  * The stored query for the selected dataset, with the authoring guards run as
  * you type.
  *
- * THE FINDINGS ARE A LINT AND NOTHING IS BLOCKED BY THEM. The same eleven guards
+ * THE FINDINGS ARE A LINT AND NOTHING IS BLOCKED BY THEM. The same ten guards
  * exist as CHECK constraints and again in the server service, and only those two
  * decide anything; this copy exists to turn `ck_ptd_sql_no_quoted_param` into a
  * sentence before a save rather than after one. Nothing here is a security
@@ -26,24 +26,20 @@ export default function SqlEditor({
   sql,
   datasetNo,
   datasetName,
-  requiresCompany,
   sqlNorm,
   readOnly,
   onChange,
-  onRequiresCompanyChange,
 }: {
   sql: string;
   datasetNo: number;
   datasetName: string;
-  requiresCompany: boolean;
   /** GENERATED ALWAYS on the server; absent until the row has been saved once. */
   sqlNorm?: string | null;
   readOnly: boolean;
   onChange: (next: string) => void;
-  onRequiresCompanyChange: (next: boolean) => void;
 }) {
   const [showNorm, setShowNorm] = useState(false);
-  const findings = sql.trim() ? collectSqlFindings(sql, requiresCompany) : [];
+  const findings = sql.trim() ? collectSqlFindings(sql) : [];
 
   return (
     <section className={styles.section}>
@@ -65,18 +61,6 @@ export default function SqlEditor({
       />
 
       <div className={styles.toolbar}>
-        <label
-          className={styles.checkRow}
-          title="Off only for genuinely global data, such as a state-code list"
-        >
-          <input
-            type="checkbox"
-            checked={requiresCompany}
-            disabled={readOnly}
-            onChange={(event) => onRequiresCompanyChange(event.target.checked)}
-          />
-          Company scoped
-        </label>
         {sqlNorm ? (
           <button
             type="button"
@@ -94,7 +78,7 @@ export default function SqlEditor({
 
       <Note tone="amber">
         One SELECT. Parameters are <span className={styles.mono}>:name</span> and are BOUND — no
-        quotes around them. <span className={styles.mono}>:company_id</span> must appear.
+        quotes around them.
       </Note>
 
       {findings.length > 0 ? (

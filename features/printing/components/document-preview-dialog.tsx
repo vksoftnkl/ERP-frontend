@@ -55,6 +55,8 @@ export type DocumentPreviewDialogProps = {
   /** A specific revision, or null to take the published one (else the newest). */
   ptvId?: string | null;
   docId: string;
+  /** The DOCUMENT's own company, off the row — see `DocumentPrintTarget`. */
+  companyId?: string | null;
   /**
    * The DOCUMENT's own accounting year, where it may differ from the year the
    * session is working in. Left out for everything else: the server binds the
@@ -102,6 +104,7 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
     ptlId,
     ptvId,
     docId,
+    companyId,
     accYear,
     title,
     autoPrint,
@@ -150,6 +153,7 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
         buildDocumentPreviewRequest({
           versionId,
           docId,
+          companyId,
           accYear,
         }),
       ).unwrap();
@@ -170,6 +174,7 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
     }
   }, [
     accYear,
+    companyId,
     docId,
     renderPreview,
     replaceObjectUrl,

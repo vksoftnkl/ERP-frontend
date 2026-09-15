@@ -63,10 +63,8 @@ export interface SavePrintTemplateDataset {
   ptdSourceKind?: PtdSourceKind;
   /** Required when ptdSourceKind is PROVIDER, and forbidden otherwise */
   ptdProviderCode?: string | null;
-  /** Required when ptdSourceKind is SQL, and forbidden otherwise. Parameters are BOUND — write :company_id, never ':company_id'. Eleven authoring guards run on it; they are a lint, not the security boundary. */
+  /** Required when ptdSourceKind is SQL, and forbidden otherwise. Parameters are BOUND — write :company_id, never ':company_id'. Ten authoring guards run on it; they are a lint, not the security boundary. */
   ptdSql?: string | null;
-  /** false only for genuinely global data, such as a state-code list. Leaving it true is what stops one company seeing another's numbers. */
-  ptdRequiresCompany?: boolean;
   /** Nested detail: this dataset's rows are the children of the current row of the dataset with this number. Goes with ptdLinkFields; neither works alone. */
   ptdParentNo?: number | null;
   /** parent=child pairs, comma separated, no spaces. LEFT is a column the PARENT dataset returns, RIGHT is one THIS dataset returns — both output columns, neither a parameter. */
@@ -161,7 +159,6 @@ export interface PrintTemplateDatasetPayload {
   ptdSql?: string | null;
   /** Read-only, computed by the database: comments stripped, literals and quoted identifiers replaced by tokens, casts flattened, lowercased. Every SQL guard reads THIS, not ptdSql, so it is what to look at when a guard refuses a query that looks fine. */
   ptdSqlNorm?: string | null;
-  ptdRequiresCompany: boolean;
   ptdParentNo?: number | null;
   ptdLinkFields?: string | null;
   ptdRowLimit: number;

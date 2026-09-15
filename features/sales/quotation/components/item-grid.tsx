@@ -90,6 +90,7 @@ export type ItemGridProps = {
   onSetPriceLevel: (rowKey: string, priceLevel: number) => void;
   onAddLine: () => void;
   onInsertLine: (rowKey: string) => void;
+  onDuplicateLine: (rowKey: string, fieldKey: string | null) => void;
   onRemoveLine: (rowKey: string) => void;
   onSwitchUnit: (rowKey: string) => void;
   onPriceLevelShortcut: (priceLevel: number) => void;
@@ -158,6 +159,7 @@ export function ItemGrid(props: ItemGridProps) {
     onSetPriceLevel,
     onAddLine,
     onInsertLine,
+    onDuplicateLine,
     onRemoveLine,
     onSwitchUnit,
     onPriceLevelShortcut,
@@ -183,6 +185,29 @@ export function ItemGrid(props: ItemGridProps) {
     if (event.key === "F4" && rowKey) {
       event.preventDefault();
       onSwitchUnit(rowKey);
+      return;
+    }
+    // Alt+R copies the row it is pressed on into a fresh one beneath it, keyed
+    // values and all — the operator's way through a dozen near-identical lines.
+    // `event.code` is checked alongside `event.key` because Alt+letter is a dead
+    // key on some layouts, where `key` arrives as the composed character rather
+    // than as "r".
+    if (
+      event.altKey &&
+      !event.ctrlKey &&
+      (event.key.toLowerCase() === "r" || event.code === "KeyR") &&
+      rowKey
+    ) {
+      event.preventDefault();
+      // The cell commits its buffer on blur, and the copy is taken from the
+      // DRAFT — so a figure the operator has typed but not yet left the cell on
+      // would be missing from the row beneath. Blurring first flushes it: the
+      // commit dispatches before the copy does, and focus is being moved into
+      // the new row on the way out regardless.
+      const cell = event.target as HTMLElement;
+      const fieldKey = cell.getAttribute("data-quotation-field");
+      cell.blur();
+      onDuplicateLine(rowKey, fieldKey);
       return;
     }
     if (event.ctrlKey && (event.key === "+" || event.key === "=") && rowKey) {

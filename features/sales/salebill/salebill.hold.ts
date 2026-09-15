@@ -51,6 +51,7 @@ import type {
 } from "@/features/sales/quotation/quotation.types";
 import { toNullableText, toNumber } from "@/features/sales/quotation/quotation.utils";
 import {
+  DEFAULT_BILL_STATUS,
   SALE_BILL_HOLD_DOC_TYPE,
   SALE_BILL_HOLD_KIND,
   SALE_BILL_HOLD_PARTY_TYPE,
@@ -143,6 +144,10 @@ export function draftFromBillHold(
     pricing: "live",
     isDirty: false,
     storedPricing: null,
+    // A parked cart is a bill that has not been raised yet, whatever status the
+    // draft was parked with, so it comes back on the status a new bill opens on.
+    // An existing bill keeps its own — parking one does not re-post it.
+    status: state.draft.docId ? state.draft.status : DEFAULT_BILL_STATUS,
     lines: (state.draft.lines ?? []).map((line) => ({ ...line, stockGateResolved: false })),
     holdId: hold.txhId,
     holdNo: hold.txhHoldNo,
@@ -407,6 +412,7 @@ export function draftFromAutosave(record: BillAutosave): SaleBillDraft {
     pricing: "live",
     isDirty: true,
     storedPricing: null,
+    status: record.draft.docId ? record.draft.status : DEFAULT_BILL_STATUS,
     lines: (record.draft.lines ?? []).map((line) => ({ ...line, stockGateResolved: false })),
   };
 }

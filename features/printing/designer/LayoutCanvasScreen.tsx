@@ -180,7 +180,6 @@ export default function LayoutCanvasScreen({ ptlId }: { ptlId: string }) {
             versionId,
             editable,
             definition: request.definition,
-            docId: request.docId,
             accYear: request.accYear,
             params: request.params,
             outputMode: request.outputMode,

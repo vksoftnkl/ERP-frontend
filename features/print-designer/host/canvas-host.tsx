@@ -84,7 +84,6 @@ export type CanvasPreviewRequest = {
    * the server render what is stored.
    */
   definition: TemplateDefinition;
-  docId?: string;
   accYear?: string;
   outputMode?: string;
   copies?: number;
@@ -118,7 +117,7 @@ export type CanvasPreview = {
    */
   previewsUnsaved: boolean;
   /** Seeded into the dialog's inputs, so the common case needs no typing. */
-  defaults?: { docId?: string; accYear?: string };
+  defaults?: { accYear?: string };
   /**
    * What this revision asks the operator, from `ptv_params`.
    *

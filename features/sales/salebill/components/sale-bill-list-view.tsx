@@ -49,6 +49,8 @@ import { useCallback, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import { useBusinessContext } from "@/components/layout/business-context";
+import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
 import masterStyles from "@/app/master/state-master/page.module.scss";
 import { formatCurrency } from "@/domain/pricing";
 import { CONFIGURED_GRID_RUN_ENDPOINT } from "@/features/sales/quotation/quotation.constants";
@@ -125,7 +127,9 @@ function asText(value: unknown): string {
  * the only signal the list has that a bill has been cancelled.
  */
 function isCancelledRow(row: MasterTableRow): boolean {
-  return asText(sourceValue(row, "sb_status")).trim().toUpperCase() === "CANCELLED";
+  return (
+    asText(sourceValue(row, "sb_status")).trim().toUpperCase() === "CANCELLED"
+  );
 }
 
 const STATUS_CLASS: Record<string, string> = {
@@ -136,7 +140,8 @@ const STATUS_CLASS: Record<string, string> = {
 
 /** Per-column formatting, keyed by grid 86's own SQL field names. */
 const COLUMN_RENDER_OVERRIDES = {
-  sb_bill_date: (row: MasterTableRow) => toDateInput(asText(sourceValue(row, "sb_bill_date"))),
+  sb_bill_date: (row: MasterTableRow) =>
+    toDateInput(asText(sourceValue(row, "sb_bill_date"))),
   sb_bill_amt: (row: MasterTableRow) =>
     formatCurrency(toNumber(asText(sourceValue(row, "sb_bill_amt"))), 2, true),
   sb_status: (row: MasterTableRow) => {
@@ -173,7 +178,10 @@ function docKeyOf(row: MasterTableRow): SaleBillDocKey {
 const PERIOD_OPTIONS = [
   { value: "1", label: "Today" },
   { value: "7", label: "Last 7 days" },
-  { value: String(BILL_LIST_WINDOW_DAYS), label: `Last ${BILL_LIST_WINDOW_DAYS} days` },
+  {
+    value: String(BILL_LIST_WINDOW_DAYS),
+    label: `Last ${BILL_LIST_WINDOW_DAYS} days`,
+  },
   { value: "90", label: "Last 90 days" },
   { value: "365", label: "Last 365 days" },
   { value: "custom", label: "Custom" },
@@ -185,15 +193,29 @@ export type SaleBillListViewProps = {
 };
 
 export function SaleBillListView({ onCreate, onOpen }: SaleBillListViewProps) {
-  const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
+  const { activeCompany, activeBranch, activeFiscalYear } =
+    useBusinessContext();
   const companyId = activeCompany?.compId ?? activeCompany?.id ?? "";
   const branchId = activeBranch?.id ?? "";
   // The stored fiscal year, falling back to the one today's date lands in. The
   // two disagree only around 1 April, and `sb_acc_year` is a partition key, so
   // the stored one wins wherever it exists.
-  const accYear = (activeFiscalYear?.name ?? "").trim() || accountingYearOf(todayIso());
+  const accYear =
+    (activeFiscalYear?.name ?? "").trim() || accountingYearOf(todayIso());
 
-  const [fromDate, setFromDate] = useState(() => addDays(todayIso(), -BILL_LIST_WINDOW_DAYS));
+  /*
+   * The row the print dialog is about. Held here rather than read back off the
+   * shell's selection: the dialog outlives the click that opened it, and a
+   * selection that moved underneath it would print a different bill than the one
+   * asked for. The F8 picker on the entry screen holds its own row for the same
+   * reason.
+   */
+  const [printTarget, setPrintTarget] = useState<SaleBillDocKey | null>(null);
+  const [printRefno, setPrintRefno] = useState<string>("");
+
+  const [fromDate, setFromDate] = useState(() =>
+    addDays(todayIso(), -BILL_LIST_WINDOW_DAYS),
+  );
   const [toDate, setToDate] = useState(() => todayIso());
   const [period, setPeriod] = useState<string>(String(BILL_LIST_WINDOW_DAYS));
 
@@ -288,7 +310,10 @@ export function SaleBillListView({ onCreate, onOpen }: SaleBillListViewProps) {
           />
         </div>
         <div className={masterStyles.filterGroup}>
-          <label className={masterStyles.filterLabel} htmlFor="sale-bill-period">
+          <label
+            className={masterStyles.filterLabel}
+            htmlFor="sale-bill-period"
+          >
             Period
           </label>
           <select
@@ -310,61 +335,97 @@ export function SaleBillListView({ onCreate, onOpen }: SaleBillListViewProps) {
   );
 
   return (
-    <CrudMasterPage
-      title="Sales Entry"
-      listSubtitleOverride="Bills raised against customers — what was sold, what was taken and what is still owed."
-      buildListQuery={buildListQuery}
-      listStateResetKey={listStateResetKey}
-      entityLabel="bill"
-      entityLabelPlural="bills"
-      searchPlaceholder="party name, bill no or status"
-      apiEndpoints={API_ENDPOINTS}
-      lookupKeys={LOOKUP_KEYS}
-      requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
-      styles={masterStyles}
-      listTitle="Bill Register"
-      createLabel="New Bill"
-      codeColumnHeader="Bill No"
-      nameColumnHeader="Customer"
-      gridDetailId={GRID_DETAIL_ID}
-      // Without this the shell defaults to the response-driven column mode and a
-      // configured grid with no `styles` array renders a serial column only.
-      listResponseStyleArrayKey=""
-      gridTableName="sale_bill"
-      useConfiguredGridColumnsOnly
-      enableGridSettingsContextMenu
-      columnRenderOverrides={COLUMN_RENDER_OVERRIDES}
-      toolbarContent={toolbarContent}
-      rowClassName={(row) => (isCancelledRow(row) ? orderStyles.cancelledRow : undefined)}
-      onCreateAction={onCreate}
-      // A cancelled bill is readable but not writable: Edit greys out rather
-      // than opening the voucher on a document the server would refuse.
-      isRowEditDisabled={isCancelledRow}
-      rowEditDisabledReason="This bill is cancelled and cannot be edited"
-      onEditAction={(row) => onOpen(docKeyOf(row), isCancelledRow(row) ? "browse" : "entry")}
-      // Ctrl+Enter and double-click open the voucher to be READ — a bill has
-      // lines, charges, tenders and adjustments, so it does not fit the shell's
-      // view modal.
-      onViewAction={(row) => onOpen(docKeyOf(row), "browse")}
-      // NEVER. A bill is not deleted, and the route named `delete` cancels the
-      // source ORDER instead — see the module comment. Cancelling that order is
-      // a per-document decision that needs a reason the server requires, so it
-      // lives on the voucher screen, not behind a trash icon on a register.
-      isRowDeleteDisabled={() => true}
-      rowDeleteDisabledReason="A bill is never deleted — correct it with a sale return, or cancel its source order from the bill itself"
-      // No `onPrintAction` YET — and not for the reason the plan gives. Its
-      // §18.1 says no print pipeline exists, which is true of the Qt client and
-      // false of this repo: the server registers three sale-bill providers and
-      // `SALE_INVOICE` ("Tax Invoice") is a seeded purpose, which is what the F8
-      // picker's Print button already renders through. Wiring it here is the
-      // same `PrintOptionsDialog`, on the selected row.
-      auditHistory={{
-        // What the server stamps on `sale_bill` audit rows.
-        screenName: "Sale Bill",
-        getRecordId: (row) => asText(sourceValue(row, "sb_id")) || null,
-        getDisplayName: (row) =>
-          asText(sourceValue(row, "sb_bill_refno")) || asText(sourceValue(row, "cus_name")) || null,
-      }}
-    />
+    <>
+      <CrudMasterPage
+        title="Sales Entry"
+        listSubtitleOverride="Bills raised against customers — what was sold, what was taken and what is still owed."
+        buildListQuery={buildListQuery}
+        listStateResetKey={listStateResetKey}
+        entityLabel="bill"
+        entityLabelPlural="bills"
+        searchPlaceholder="party name, bill no or status"
+        apiEndpoints={API_ENDPOINTS}
+        lookupKeys={LOOKUP_KEYS}
+        requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
+        styles={masterStyles}
+        listTitle="Bill Register"
+        createLabel="New Bill"
+        codeColumnHeader="Bill No"
+        nameColumnHeader="Customer"
+        gridDetailId={GRID_DETAIL_ID}
+        // Without this the shell defaults to the response-driven column mode and a
+        // configured grid with no `styles` array renders a serial column only.
+        listResponseStyleArrayKey=""
+        gridTableName="sale_bill"
+        useConfiguredGridColumnsOnly
+        enableGridSettingsContextMenu
+        columnRenderOverrides={COLUMN_RENDER_OVERRIDES}
+        toolbarContent={toolbarContent}
+        rowClassName={(row) =>
+          isCancelledRow(row) ? orderStyles.cancelledRow : undefined
+        }
+        onCreateAction={onCreate}
+        // A cancelled bill is readable but not writable: Edit greys out rather
+        // than opening the voucher on a document the server would refuse.
+        isRowEditDisabled={isCancelledRow}
+        rowEditDisabledReason="This bill is cancelled and cannot be edited"
+        onEditAction={(row) =>
+          onOpen(docKeyOf(row), isCancelledRow(row) ? "browse" : "entry")
+        }
+        // Ctrl+Enter and double-click open the voucher to be READ — a bill has
+        // lines, charges, tenders and adjustments, so it does not fit the shell's
+        // view modal.
+        onViewAction={(row) => onOpen(docKeyOf(row), "browse")}
+        // NEVER. A bill is not deleted, and the route named `delete` cancels the
+        // source ORDER instead — see the module comment. Cancelling that order is
+        // a per-document decision that needs a reason the server requires, so it
+        // lives on the voucher screen, not behind a trash icon on a register.
+        isRowDeleteDisabled={() => true}
+        rowDeleteDisabledReason="A bill is never deleted — correct it with a sale return, or cancel its source order from the bill itself"
+        // Print the SELECTED row, through the same `SALE_INVOICE` purpose and the
+        // same five-button dialog (Print, Preview, Format, Pdf, Cancel) the entry
+        // screen's F8 picker already renders through — only the first of those
+        // writes. The document key comes off the ROW rather than the screen's
+        // company/branch/year: they agree today (grid 86 scopes on them), but the
+        // accounting year decides which partition the renderer reads and it
+        // belongs to the bill, not to the register.
+        //
+        // Deliberately NOT gated on `isCancelledRow`: a cancelled bill is still a
+        // document that was issued, the row and its lines are untouched (that
+        // route cancels the source ORDER), and the F8 picker prints one too.
+        onPrintAction={(row) => {
+          setPrintTarget(docKeyOf(row));
+          setPrintRefno(asText(sourceValue(row, "sb_bill_refno")));
+        }}
+        auditHistory={{
+          // What the server stamps on `sale_bill` audit rows.
+          screenName: "Sale Bill",
+          getRecordId: (row) => asText(sourceValue(row, "sb_id")) || null,
+          getDisplayName: (row) =>
+            asText(sourceValue(row, "sb_bill_refno")) ||
+            asText(sourceValue(row, "cus_name")) ||
+            null,
+        }}
+      />
+      {printTarget ? (
+        <PrintOptionsDialog
+          open
+          onClose={() => setPrintTarget(null)}
+          purposeCode={PURPOSE_CODE.SALE_INVOICE}
+          documentLabel={printRefno ? `Bill ${printRefno}` : "Bill"}
+          // The row's own company and accounting year. Branch and counter are
+          // claims on the access token and the server takes them from there;
+          // the company is NOT left to the token, which carries the user's home
+          // company while the header picker may be on another — the bill's
+          // datasets all filter on it, and printed blank until it was sent.
+          target={{
+            docId: printTarget.sbId,
+            companyId: printTarget.sbCompanyId,
+            accYear: printTarget.sbAccYear,
+            filename: `bill-${printRefno || printTarget.sbId}`,
+          }}
+        />
+      ) : null}
+    </>
   );
 }

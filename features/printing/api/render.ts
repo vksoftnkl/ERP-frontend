@@ -40,14 +40,25 @@ const BASE = "/print-render";
 /**
  * What the dialog asks for.
  *
- * Company, branch and counter are NOT here: the server takes all three from the
- * session, where they are claims on the access token. A caller that could name
- * one would be choosing its own scope, and the two that matter — branch and
- * counter — are the rungs the assignment ladder resolves by.
+ * Branch and counter are NOT here: the server takes both from the session,
+ * where they are claims on the access token, and they are the rungs the
+ * assignment ladder resolves by — a caller that could name one would be
+ * choosing its own design. The company IS here, and for a reason that bit: the
+ * token carries the user's HOME company while the header picker lets a session
+ * work in any company it lists, and every dataset filters on `:company_id`. A
+ * render bound to the token's company printed blank paper for a bill raised in
+ * the working one.
  */
 export type RenderPreviewRequest = {
   /** The revision to render — print_template_version.ptv_id. */
   versionId: string;
+  /**
+   * The DOCUMENT's company — binds :company_id and scopes the design.
+   *
+   * Sent from the row itself, never from the header: the row is what is being
+   * printed. Left out, the server binds the token's company.
+   */
+  companyId?: string;
   /**
    * The canvas's unsaved bands. Accepted only against a DRAFT revision; a
    * published one is frozen and the server refuses, naming the way through.
@@ -102,11 +113,11 @@ export type RenderPreviewResult = {
 /**
  * What `POST /print-render/print` needs to know.
  *
- * Company, branch and counter are all absent for the same reason: the server
- * takes them from the session. A caller-supplied company would make this a
- * cross-tenant read with a friendly name, and a caller-supplied branch or
- * counter would be a caller choosing which rung of the assignment ladder it
- * wins on — which is the one thing this endpoint exists to decide by data.
+ * Branch and counter are absent: the server takes them from the session, and a
+ * caller-supplied one would be a caller choosing which rung of the assignment
+ * ladder it wins on — which is the one thing this endpoint exists to decide by
+ * data. The company is sent, from the ROW, because the session's token and the
+ * header picker can disagree (see `RenderPreviewRequest`).
  *
  * The counter in particular is worth not having: this client holds two ids
  * called "device" and only `userInfo.deviceId` is a real
@@ -119,6 +130,8 @@ export type PrintDocumentRequest = {
   purposeId: string;
   /** The document. Binds :doc_id. */
   docId: string;
+  /** The document's company. Binds :company_id; defaults to the token's. */
+  companyId?: string;
   /**
    * The DOCUMENT's accounting year — the partition it lives in, `2026-2027`.
    *

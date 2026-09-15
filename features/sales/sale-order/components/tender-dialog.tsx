@@ -83,6 +83,12 @@ export type TenderDialogProps = {
    * whichever the operator reaches for, there is one source of truth.
    */
   adjustPanel?: ReactNode;
+  /**
+   * What the commit button says. The bill screen routes its Save through this
+   * dialog, so there it reads "OK & Save" — the operator is told, on the button
+   * itself, that OK writes the document.
+   */
+  confirmLabel?: string;
   onClose: () => void;
   onApply: (tenders: TenderDraftRow[], settlement: SettlementState) => void;
 };
@@ -165,6 +171,7 @@ function TenderDialogBody({
   creditAllowed = true,
   adjustedAmount = 0,
   adjustPanel,
+  confirmLabel = "OK",
   onClose,
   onApply,
 }: TenderDialogProps) {
@@ -294,27 +301,6 @@ function TenderDialogBody({
     setRawText((current) => ({ ...current, [activeRow.key]: String(next) }));
   }, [activeRow, computation.totals.balance, confirmCreditIfNeeded, patchRow]);
 
-  const onDialogKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "F1") {
-        event.preventDefault();
-        payBalanceHere();
-        return;
-      }
-      // A hotkey jumps the cursor to that row's amount. Held with Alt so the
-      // letter still types normally into a reference field.
-      if (event.altKey && /^[a-zA-Z]$/.test(event.key)) {
-        const letter = event.key.toUpperCase();
-        const target = rows.find((row) => row.hotkey === letter);
-        if (target) {
-          event.preventDefault();
-          focusAmount(target.key);
-        }
-      }
-    },
-    [focusAmount, payBalanceHere, rows],
-  );
-
   const apply = () => {
     const violation = validateTenderRows(rows, {
       purpose,
@@ -349,6 +335,27 @@ function TenderDialogBody({
     });
   };
 
+  const onDialogKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "F1") {
+        event.preventDefault();
+        payBalanceHere();
+        return;
+      }
+      // A hotkey jumps the cursor to that row's amount. Held with Alt so the
+      // letter still types normally into a reference field.
+      if (event.altKey && /^[a-zA-Z]$/.test(event.key)) {
+        const letter = event.key.toUpperCase();
+        const target = rows.find((row) => row.hotkey === letter);
+        if (target) {
+          event.preventDefault();
+          focusAmount(target.key);
+        }
+      }
+    },
+    [focusAmount, payBalanceHere, rows],
+  );
+
   return (
     <ModalShell
       title={`${captions.title}${documentRefno ? ` — ${documentRefno}` : ""}`}
@@ -365,7 +372,7 @@ function TenderDialogBody({
             className={cx(quotationStyles.button, quotationStyles.buttonPrimary)}
             onClick={apply}
           >
-            OK
+            {confirmLabel}
           </button>
         </>
       }
@@ -380,7 +387,8 @@ function TenderDialogBody({
           </div>
         ) : (
           <div className={styles.tenderKeyHint}>
-            F1 pay the balance with this row · Alt+letter jump to a tender · Enter commit · Esc close
+            F1 pay the balance with this row · Alt+letter jump to a tender · Enter commits the
+            amount, Enter again the dialog · Esc close
           </div>
         )}
 
@@ -439,6 +447,15 @@ function TenderDialogBody({
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.preventDefault();
+                          // Enter on a half-typed amount COMMITS it; Enter on a
+                          // cell with nothing pending commits the DIALOG. That
+                          // is the counter's rhythm — key the cash, Enter, Enter
+                          // — and it is why `rawText` is deleted on commit: its
+                          // absence is what says "this cell is settled".
+                          if (rawText[row.key] === undefined) {
+                            apply();
+                            return;
+                          }
                           onAmountCommit(row);
                         }
                       }}

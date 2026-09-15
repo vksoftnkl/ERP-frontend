@@ -47,6 +47,7 @@ import {
   createBillDraft,
   createBillDraftLine,
   customerChangeCosts,
+  duplicateBillDraftLine,
   seedCreditPeriod,
 } from "@/features/sales/salebill/salebill.state";
 import type {
@@ -359,6 +360,20 @@ const saleBillSlice = createSlice({
       state.lines.splice(index, 0, line);
     },
     /**
+     * Copy a line into a fresh one right under it (Alt+R).
+     *
+     * A blank row is nothing to copy, so it is declined outright rather than
+     * inserting an empty row the operator did not ask for — Ctrl++ is the
+     * shortcut for that.
+     */
+    lineDuplicated(state, action: PayloadAction<string>) {
+      const index = state.lines.findIndex((row) => row.key === action.payload);
+      if (index < 0 || !state.lines[index].itemId) {
+        return;
+      }
+      state.lines.splice(index + 1, 0, duplicateBillDraftLine(state.lines[index]));
+    },
+    /**
      * Drop a line.
      *
      * A line that came from a sales order is NOT removed here: that is a
@@ -554,6 +569,7 @@ export const {
   saveResponseApplied,
   lineAdded,
   lineInserted,
+  lineDuplicated,
   lineRemoved,
   lineFieldSet,
   itemPriceApplied,

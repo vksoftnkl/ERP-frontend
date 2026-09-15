@@ -171,6 +171,14 @@ export type DocumentPreviewInput = {
   /** Binds :doc_id. */
   docId: string;
   /**
+   * The DOCUMENT's company, from the row — binds :company_id.
+   *
+   * Left out, the server binds the token's company, which is the user's home
+   * company and not necessarily the one the header picker is on. A document
+   * raised in the working company reads as nothing under the wrong one.
+   */
+  companyId?: string | null;
+  /**
    * The DOCUMENT's accounting year, so the render reads the right partition.
    *
    * Only where the document carries one that may not be the year the session is
@@ -196,12 +204,10 @@ export type DocumentPreviewInput = {
  * DRAFT-versus-published rule the server enforces cannot be tripped, so a
  * frozen revision and a draft are rendered by exactly the same request.
  *
- * The company is absent for the reason it is absent everywhere in this module:
- * the server takes it from the session, and a caller-supplied one would make
- * the endpoint a cross-tenant read with a friendly name. The branch and the
- * counter are absent for the same reason — both are claims on the access token,
- * and both are rungs of the assignment ladder, so a print button that named one
- * would be choosing its own design.
+ * The company is the DOCUMENT's, off the row. The branch and the counter are
+ * absent — both are claims on the access token, and both are rungs of the
+ * assignment ladder, so a print button that named one would be choosing its
+ * own design.
  */
 export function buildDocumentPreviewRequest(
   input: DocumentPreviewInput,
@@ -216,11 +222,13 @@ export function buildDocumentPreviewRequest(
     throw new Error("There is no saved document to preview yet.");
   }
 
+  const companyId = trimmed(input.companyId);
   const accYear = trimmed(input.accYear);
 
   return {
     versionId: input.versionId,
     docId,
+    ...(companyId ? { companyId } : {}),
     ...(accYear ? { accYear } : {}),
     ...(input.params && Object.keys(input.params).length > 0
       ? { params: input.params }

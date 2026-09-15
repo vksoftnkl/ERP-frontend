@@ -159,7 +159,6 @@ function toDraftDataset(dataset: {
   ptdSourceKind?: string | null;
   ptdProviderCode?: string | null;
   ptdSql?: string | null;
-  ptdRequiresCompany?: boolean | null;
   ptdParentNo?: number | null;
   ptdLinkFields?: string | null;
   ptdRowLimit?: number | null;
@@ -176,8 +175,7 @@ function toDraftDataset(dataset: {
     ptdSourceKind: (dataset.ptdSourceKind ?? "PROVIDER") as DraftDataset["ptdSourceKind"],
     ptdProviderCode: dataset.ptdProviderCode ?? null,
     ptdSql: dataset.ptdSql ?? null,
-    ptdRequiresCompany: dataset.ptdRequiresCompany ?? true,
-    ptdParentNo: dataset.ptdParentNo ?? null,
+      ptdParentNo: dataset.ptdParentNo ?? null,
     ptdLinkFields: dataset.ptdLinkFields ?? null,
     ptdRowLimit: dataset.ptdRowLimit ?? DEFAULT_ROW_LIMIT,
     ptdTimeoutMs: dataset.ptdTimeoutMs ?? DEFAULT_TIMEOUT_MS,

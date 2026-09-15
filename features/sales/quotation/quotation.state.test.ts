@@ -17,6 +17,7 @@ import {
   createDraftChargeRow,
   createDraftLine,
   customerFromDetail,
+  duplicateDraftLine,
   emptyHeader,
   MAX_PRICE_LEVEL,
   MIN_PRICE_LEVEL,
@@ -415,5 +416,53 @@ describe("copyDraftAsNew", () => {
     expect(next.isDeleted).toBe(false);
     expect(next.mode).toBe("entry");
     expect(next.lines[0].itemId).toBe(savedDraft().lines[0].itemId);
+  });
+});
+
+describe("duplicateDraftLine", () => {
+  const source = () =>
+    createDraftLine({
+      sqiId: "sqi-1",
+      srcDocId: "soi-1",
+      itemId: "item-1",
+      itemName: "TEAK PLANK",
+      billQty: 4,
+      rate: 250,
+      discPerc: 5,
+      itemSize: "45*2*2*6",
+      batchNo: "B-77",
+    });
+
+  it("carries every keyed and looked-up value across", () => {
+    const copy = duplicateDraftLine(source());
+    expect(copy.itemId).toBe("item-1");
+    expect(copy.itemName).toBe("TEAK PLANK");
+    expect(copy.billQty).toBe(4);
+    expect(copy.rate).toBe(250);
+    expect(copy.discPerc).toBe(5);
+    expect(copy.itemSize).toBe("45*2*2*6");
+    expect(copy.batchNo).toBe("B-77");
+  });
+
+  it("takes a key of its own — two rows on one key would edit as a single row", () => {
+    const original = source();
+    const copy = duplicateDraftLine(original);
+    expect(copy.key).not.toBe(original.key);
+    expect(copy.key).toBeTruthy();
+  });
+
+  it("drops the saved line id, so the next save INSERTS rather than updating the original", () => {
+    expect(duplicateDraftLine(source()).sqiId).toBeNull();
+  });
+
+  it("drops the source-document link, so one source line is not claimed twice", () => {
+    expect(duplicateDraftLine(source()).srcDocId).toBeNull();
+  });
+
+  it("leaves the row it copied untouched", () => {
+    const original = source();
+    duplicateDraftLine(original);
+    expect(original.sqiId).toBe("sqi-1");
+    expect(original.srcDocId).toBe("soi-1");
   });
 });

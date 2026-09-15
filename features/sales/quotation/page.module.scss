@@ -39,6 +39,19 @@
   padding: u(0.6) u(0.75);
   height: 100%;
   min-height: 0;
+  /*
+   * The layout container every breakpoint on this screen (and on the order and
+   * the bill, which wear this shell) is measured against.
+   *
+   * NOT `@media`, which is blind to the app's `zoom`: `html { zoom: var(--erp-ui-scale) }`
+   * scales the whole UI to the screen, so a 1368-wide laptop lays this page out
+   * in ~1520 LOGICAL pixels — and a media query, which only ever sees the raw
+   * 1368, would collapse a header that has room to spare. A container is
+   * measured in its own zoomed pixels, so the number the query compares is the
+   * number the layout actually has.
+   */
+  container-type: inline-size;
+  container-name: erp-txn-page;
   font-family: var(--erp-font-family, "Segoe UI", system-ui, Arial, sans-serif);
   font-size: u(0.78);
   color: var(--text-main, #222222);
@@ -1355,7 +1368,7 @@
   border-color: var(--primary, #7b1515);
 }
 
-@media (max-width: 1100px) {
+@container erp-txn-page (max-width: 1100px) {
   .headerRow {
     grid-template-columns: minmax(0, 1fr);
   }

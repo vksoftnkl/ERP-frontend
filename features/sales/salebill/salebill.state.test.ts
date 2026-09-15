@@ -17,6 +17,7 @@ import {
   createBillDraft,
   createBillDraftLine,
   customerChangeCosts,
+  duplicateBillDraftLine,
   emptyBillHeader,
   nowStamp,
   seedCreditPeriod,
@@ -75,7 +76,7 @@ describe("createBillDraft", () => {
     expect(draft.isLocalSale).toBe(true);
   });
 
-  it("opens on CASH terms, DRAFT status and no due period", () => {
+  it("opens on CASH terms, POSTED status and no due period", () => {
     const draft = createBillDraft(CONTEXT);
     expect(draft.header.billType).toBe(DEFAULT_BILL_TYPE);
     expect(draft.status).toBe(DEFAULT_BILL_STATUS);
@@ -478,5 +479,69 @@ describe("copyBillDraftAsNew", () => {
     expect(copy.lines[0].sbiId).toBeNull();
     expect(copy.header.billDate).toBe("2026-09-20");
     expect(copy.header.billDatetime).toBe("2026-09-20T10:00:00");
+  });
+});
+
+describe("duplicateBillDraftLine", () => {
+  const source = () =>
+    createBillDraftLine({
+      sbiId: "sbi-1",
+      stockId: "stk-1",
+      serialNo: "3",
+      itemId: "item-1",
+      itemName: "TEAK PLANK",
+      billQty: 3,
+      rate: 250,
+      batchNo: "B-77",
+      stockQty: 12,
+      stockGateResolved: true,
+      srcDocType: "SALES_ORDER",
+      srcDocId: "soi-1",
+      srcDocYear: "2026-2027",
+      srcDocRefno: "SO/1",
+      srcDocLineNo: 1,
+      srcItemQty: 10,
+      orderQtyLocked: true,
+    });
+
+  it("carries the goods across and takes a key of its own", () => {
+    const original = source();
+    const copy = duplicateBillDraftLine(original);
+    expect(copy.itemId).toBe("item-1");
+    expect(copy.billQty).toBe(3);
+    expect(copy.rate).toBe(250);
+    expect(copy.batchNo).toBe("B-77");
+    expect(copy.key).not.toBe(original.key);
+  });
+
+  it("drops the saved line id, so the next save INSERTS the copy", () => {
+    expect(duplicateBillDraftLine(source()).sbiId).toBeNull();
+  });
+
+  it("drops the whole source trail — one order line cannot be billed twice", () => {
+    const copy = duplicateBillDraftLine(source());
+    expect(copy.srcDocId).toBeNull();
+    expect(copy.srcDocType).toBeNull();
+    expect(copy.srcDocYear).toBeNull();
+    expect(copy.srcDocRefno).toBeNull();
+    expect(copy.srcDocLineNo).toBeNull();
+    expect(copy.srcItemQty).toBeNull();
+  });
+
+  it("unlocks the order quantity, which no order is holding on the copy", () => {
+    expect(duplicateBillDraftLine(source()).orderQtyLocked).toBe(false);
+  });
+
+  it("keeps the stock gate's verdict — same item, same figure, same moment", () => {
+    const copy = duplicateBillDraftLine(source());
+    expect(copy.stockGateResolved).toBe(true);
+    expect(copy.stockQty).toBe(12);
+  });
+
+  it("leaves the row it copied untouched", () => {
+    const original = source();
+    duplicateBillDraftLine(original);
+    expect(original.sbiId).toBe("sbi-1");
+    expect(original.orderQtyLocked).toBe(true);
   });
 });

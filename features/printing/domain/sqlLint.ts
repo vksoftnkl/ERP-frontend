@@ -63,7 +63,7 @@ function countMatches(subject: string, pattern: RegExp): number {
  * Every guard, in the order the constraints are declared, collected rather than
  * short-circuited so one bad query is answered with all of its problems.
  */
-export function collectSqlFindings(sql: string, requiresCompany: boolean): SqlLintFinding[] {
+export function collectSqlFindings(sql: string): SqlLintFinding[] {
   const findings: SqlLintFinding[] = [];
   const norm = normalizeDatasetSql(sql);
   const push = (rule: string, message: string): void => {
@@ -167,16 +167,6 @@ export function collectSqlFindings(sql: string, requiresCompany: boolean): SqlLi
     push(
       "ck_ptd_sql_no_quoted_param",
       "A parameter is written inside a string literal or a comment. Parameters are BOUND, not pasted: write  x = :company_id , never  x = ':company_id' . (A :name mentioned in a \"--\" comment reads the same way to this check — move it out of the comment.)",
-    );
-  }
-
-  // ck_ptd_sql_company_scoped -- THE CHECK 3.0 MOST NEEDED AND NOBODY WROTE. In
-  // a chain, a query that is not company-scoped shows one company another
-  // company's numbers.
-  if (requiresCompany && !/:company_id\b/.test(norm)) {
-    push(
-      "ck_ptd_sql_company_scoped",
-      'The query must be company-scoped: bind :company_id somewhere in it. Set "requires company" off only for genuinely global data, such as a state-code list. (If it IS scoped, check for a "--" inside a string literal — that mangles the residue this check reads.)',
     );
   }
 

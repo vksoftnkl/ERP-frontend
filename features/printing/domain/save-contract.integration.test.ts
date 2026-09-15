@@ -94,7 +94,6 @@ function seedDraft(): DesignerDraft {
           ptdName: "header",
           ptdSourceKind: "PROVIDER",
           ptdProviderCode: "sales.bill.header",
-          ptdRequiresCompany: true,
           ptdRowLimit: 5_000,
           ptdTimeoutMs: 15_000,
         },
@@ -106,7 +105,6 @@ function seedDraft(): DesignerDraft {
           ptdSourceKind: "SQL",
           ptdSql:
             "SELECT sbi_item_name AS item_name FROM sales.sale_bill_items WHERE sbi_comp_id = :company_id AND sbi_sb_id = :doc_id",
-          ptdRequiresCompany: true,
           ptdRowLimit: 5_000,
           ptdTimeoutMs: 15_000,
         },
