@@ -93,6 +93,15 @@ export type ItemGridProps = {
   onDuplicateLine: (rowKey: string, fieldKey: string | null) => void;
   onRemoveLine: (rowKey: string) => void;
   onSwitchUnit: (rowKey: string) => void;
+  /**
+   * Open the Size Entry dialog on this row (double-click / F3).
+   *
+   * Optional because this grid is also the Sale Order and Sale Bill item grid:
+   * multi-size entry is a Quotation feature, and a screen that does not pass
+   * this has no size dialog — double-click and F3 do nothing there, exactly as
+   * before.
+   */
+  onOpenSizeEntry?: (rowKey: string) => void;
   onPriceLevelShortcut: (priceLevel: number) => void;
 };
 
@@ -162,10 +171,12 @@ export function ItemGrid(props: ItemGridProps) {
     onDuplicateLine,
     onRemoveLine,
     onSwitchUnit,
+    onOpenSizeEntry,
     onPriceLevelShortcut,
   } = props;
 
   const visible = useMemo(() => columns.filter((column) => column.visible), [columns]);
+  const canOpenSizeEntry = editable && Boolean(onOpenSizeEntry);
   // `table-layout: fixed` needs the table's own width stated, or the `<col>`
   // widths are only a hint and the browser re-fits them to the container.
   const tableWidth = useMemo(() => totalColumnWidth(visible, ROW_ACTION_PX), [visible]);
@@ -185,6 +196,13 @@ export function ItemGrid(props: ItemGridProps) {
     if (event.key === "F4" && rowKey) {
       event.preventDefault();
       onSwitchUnit(rowKey);
+      return;
+    }
+    // F3, not F4: F4 has switched the unit on this grid since the port, and
+    // rebinding it would retrain every operator for the sake of one new dialog.
+    if (event.key === "F3" && rowKey && onOpenSizeEntry) {
+      event.preventDefault();
+      onOpenSizeEntry(rowKey);
       return;
     }
     // Alt+R copies the row it is pressed on into a fresh one beneath it, keyed
@@ -280,8 +298,21 @@ export function ItemGrid(props: ItemGridProps) {
                 className={cx(
                   rowIndex % 2 === 0 ? styles.rowOdd : styles.rowEven,
                   isActive && styles.rowActive,
+                  // Only a row the size dialog can actually open on: the class
+                  // makes this row's read-only cells transparent to the mouse,
+                  // which costs them their hover text. See the rule itself.
+                  canOpenSizeEntry && line.itemId && styles.rowSizable,
                 )}
                 onFocusCapture={() => onActiveRowChange(line.key)}
+                // Double-click, never single: a single click is how a cell is
+                // reached for editing, and opening a modal on it would make the
+                // grid unusable. A row with no item has nothing to size — the
+                // trailing blank row is the common case — so it does not open.
+                onDoubleClick={() => {
+                  if (canOpenSizeEntry && line.itemId) {
+                    onOpenSizeEntry?.(line.key);
+                  }
+                }}
               >
                 {visible.map((column, columnIndex) => {
                   const cellEditable = isColumnEditable(column, line, editable, canEditPrice);

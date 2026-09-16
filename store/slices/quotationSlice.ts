@@ -37,6 +37,8 @@ import {
   emptyCustomer,
   resolveLocalSale,
 } from "@/features/sales/quotation/quotation.state";
+import { applySizeEntry } from "@/features/sales/quotation/quotation.sizes";
+import type { SizeEntryRow } from "@/features/sales/quotation/quotation.sizes";
 import type {
   ChargeMasterRow,
   CustomerDetailPayload,
@@ -240,6 +242,32 @@ const quotationSlice = createSlice({
       }
       state.lines.splice(index + 1, 0, duplicateDraftLine(state.lines[index]));
     },
+    /**
+     * Replace one item's run of size rows with the Size Entry dialog's rows
+     * (double-click / F3 on an item row).
+     *
+     * The whole transition is `applySizeEntry`, a pure function this hands the
+     * lines to — the dialog holds its rows locally and nothing reaches the draft
+     * until Save, so there is no half-applied state to reason about here. Both
+     * cross-cutting rules come free from the wrapper below: the draft is marked
+     * dirty because this is a handled action, and every total is re-derived
+     * because `recalcDocument` reads the lines on the next render.
+     *
+     * Immer's draft lines are handed to a function that returns plain objects
+     * built by spreading them, so the result is assigned back wholesale rather
+     * than mutated in place — `current()` is not needed because the spread
+     * already reads through the proxy.
+     */
+    lineSizesApplied(
+      state,
+      action: PayloadAction<{ anchorKey: string; rows: SizeEntryRow[] }>,
+    ) {
+      state.lines = applySizeEntry(
+        state.lines as DraftLine[],
+        action.payload.anchorKey,
+        action.payload.rows,
+      );
+    },
     lineRemoved(state, action: PayloadAction<string>) {
       state.lines = state.lines.filter((line) => line.key !== action.payload);
     },
@@ -423,6 +451,7 @@ export const {
   lineInserted,
   lineDuplicated,
   lineRemoved,
+  lineSizesApplied,
   lineFieldSet,
   itemPriceApplied,
   linePriceLevelSet,

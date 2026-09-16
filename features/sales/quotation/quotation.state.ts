@@ -236,6 +236,7 @@ export function createDraftLine(overrides: Partial<DraftLine> = {}): DraftLine {
     cashDiscAmt: 0,
     remarks: null,
     itemSize: null,
+    lineGroupKey: null,
     decimalCount: 2,
     batchConfig: 0,
     allowNegative: false,
@@ -355,6 +356,10 @@ export function applyItemPrice(
     unitId: extra.unitId ?? line.unitId,
     itemName: lookup.item_name,
     itemCode: lookup.item_code,
+    // Re-picking the item takes the row out of any size group it was in: the
+    // stamp names an item this row no longer is, and leaving it would let the
+    // next double-click sweep an unrelated neighbour into the dialog.
+    lineGroupKey: null,
     barcode: lookup.barcode ?? line.barcode,
     godownId: lookup.godown_id,
     godownName: lookup.godown_name || null,

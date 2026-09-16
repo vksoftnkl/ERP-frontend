@@ -1368,6 +1368,140 @@
   border-color: var(--primary, #7b1515);
 }
 
+/**
+ * A row the Size Entry dialog can open on.
+ *
+ * Chromium suppresses mouse events on a DISABLED form control entirely — they do
+ * not even bubble — and a read-only grid cell is a disabled `<input>` filling its
+ * whole `<td>`. So the row's own double-click never fired over Code, Hsn,
+ * GodownName or any other read-out: it worked on the editable half of the row
+ * and did nothing on the rest, which reads as a broken feature rather than a
+ * rule. Making those inputs transparent to the pointer hands the event to the
+ * row.
+ *
+ * Scoped to rows that have a dialog to open, because it costs a disabled input
+ * its `title` hover: a browse-mode document, where EVERY cell is disabled and
+ * hovering a truncated value is how it is read, carries no `.rowSizable` and
+ * keeps all of them.
+ */
+.rowSizable .cellInput:disabled {
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------- size entry */
+
+.sizeEntry {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: u(0.5);
+  min-height: 0;
+}
+
+/* The read-only item strip. A definition list rather than a row of labelled
+   inputs: none of it is keyable, and a disabled input says otherwise. */
+.sizeEntryHead {
+  display: grid;
+  gap: u(0.3) u(0.6);
+  /* Five tracks, because the item name takes two of them — four would wrap the
+     base rate onto a second line. */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  padding: u(0.4) u(0.5);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #fafafa;
+}
+
+.sizeEntryHead > div {
+  min-width: 0;
+}
+
+.sizeEntryHead dt {
+  color: var(--text-muted, #666666);
+  font-size: u(0.65);
+  text-transform: uppercase;
+}
+
+.sizeEntryHead dd {
+  overflow: hidden;
+  margin: 0;
+  font-size: u(0.78);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The item name is the one field that needs the room; the other three are a
+   code, a three-letter unit and a rate. */
+.sizeEntryHeadWide {
+  grid-column: span 2;
+}
+
+.sizeEntryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Narrow enough that the four Size boxes keep the width they need. */
+.sizeEntrySerialCell {
+  width: u(1.6);
+  text-align: center;
+}
+
+/* Cancel and OK read as a pair, so they get one width rather than sizing to
+   their own two- and six-letter labels. */
+.sizeEntryFooterButton {
+  min-width: u(4.2);
+  text-align: center;
+}
+
+/* Sits over the boxes, which cluster at the left of a wide column. */
+.sizeEntrySizeHead {
+  text-align: left;
+}
+
+/* In the dialog the four boxes are the ONE thing being keyed, so they cluster at
+   a readable width instead of stretching across the column, and they carry a
+   visible border — `.cellInput` is borderless because a dense grid cell must be,
+   but a lone field in a dialog that looks like plain text is unfindable. */
+.sizeEntry .cellSizeBoxes {
+  max-width: u(15);
+}
+
+.sizeEntry .cellSizeBox {
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+}
+
+.sizeEntry .cellSizeBox:focus-visible {
+  border-color: var(--primary, #7b1515);
+}
+
+/* The CFT a size works out to — a read-out, not a field. Dimmed so the row still
+   reads as one input followed by its consequence. */
+.sizeEntryCftCell {
+  width: u(4);
+  color: var(--text-muted, #666666);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Under the cell it belongs to, not in a banner: the operator has to be able to
+   see WHICH row is wrong without matching a message to a line by eye. */
+.sizeEntryError {
+  display: block;
+  padding: u(0.1) u(0.3) 0;
+  color: var(--danger, #b3261e);
+  font-size: u(0.65);
+  line-height: 1.3;
+  text-align: left;
+  white-space: normal;
+}
+
 @container erp-txn-page (max-width: 1100px) {
   .headerRow {
     grid-template-columns: minmax(0, 1fr);

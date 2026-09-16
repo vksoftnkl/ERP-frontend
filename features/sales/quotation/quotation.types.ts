@@ -749,6 +749,16 @@ export type DraftLine = Line & {
   remarks: string | null;
   /** Free text, `sqi_item_size` — no master backs it, the operator types it. */
   itemSize: string | null;
+  /**
+   * The item id, stamped on every row the Size Entry dialog writes, so a run of
+   * sizes of one item is found with a single string comparison instead of
+   * re-deriving "same item and both carry a size" (see `sizeGroupKeyOf`).
+   *
+   * Client-side only: there is no column for it, so a loaded document has it
+   * `null` on every line and the grouping falls back to the derived rule. It is
+   * cleared whenever a row's item is re-picked — the row has left the group.
+   */
+  lineGroupKey: string | null;
   /** Quantity precision for this line's unit. */
   decimalCount: number;
   batchConfig: number;
