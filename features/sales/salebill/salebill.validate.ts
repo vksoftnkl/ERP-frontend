@@ -146,12 +146,8 @@ export function validateSaveInputs(
   context: BillValidationContext = {},
 ): SaleBillViolation | null {
   // ---- 1. a customer ------------------------------------------------------
-  // `sbCustId` is REQUIRED server-side, unlike the quotation's. A walk-in has to
-  // be a master record before they can be billed, so this is not the quotation's
-  // "a name will do".
-  if (!draft.customer.custId) {
-    return { message: "Pick a customer before saving the bill.", field: "sale-bill-customer" };
-  }
+  // A name is enough here: a walk-in need not be a master record first, so only
+  // the name is gated and `sbCustId` is left to whatever the header holds.
   if (!draft.customer.name.trim()) {
     return { message: "The customer name cannot be blank.", field: "sale-bill-customer-name" };
   }

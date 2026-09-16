@@ -157,18 +157,17 @@ describe("stockGateOf — three answers, and the third is the one Qt cannot give
 // ---------------------------------------------------------------------------
 
 describe("validateSaveInputs — in the plan's order, first failure wins", () => {
-  it("wants a customer before anything else", () => {
+  it("wants a customer name before anything else", () => {
     const draft = createBillDraft(CONTEXT);
     // No customer AND no lines: the customer is what it complains about.
-    expect(check(draft)?.field).toBe("sale-bill-customer");
+    expect(check(draft)?.field).toBe("sale-bill-customer-name");
   });
 
-  it("refuses a walk-in with no master record", () => {
-    // `sbCustId` is REQUIRED server-side, unlike the quotation's — a name will
-    // not do on this screen.
+  it("lets a walk-in with no master record through the customer gate", () => {
+    // A name is all this screen asks for — it no longer insists on `sbCustId`.
     const base = createBillDraft(CONTEXT);
     const named = { ...base, customer: { ...base.customer, name: "WALK IN" } };
-    expect(check(named)?.field).toBe("sale-bill-customer");
+    expect(check(named)?.field).not.toBe("sale-bill-customer-name");
   });
 
   it("wants at least one item row", () => {
