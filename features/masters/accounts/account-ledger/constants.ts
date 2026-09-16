@@ -115,6 +115,15 @@ export const LEDGER_GROUP_NAME_KEYS = [
   "acc_group_name",
 ] as const;
 
+// `ledTaxName` is the label the ledger `get` response echoes for `ledTaxId`; it is
+// read-only (the name lives on the rate, not the ledger) and only seeds the picker.
+export const LEDGER_TAX_NAME_KEYS = [
+  "ledTaxName",
+  "led_tax_name",
+  "taxName",
+  "tax_name",
+] as const;
+
 export const GRID_DETAIL_ID_KEYS = ["grid_id", "gridId", "id"] as const;
 export const GRID_DETAIL_SQL_KEYS = ["grid_sql", "gridSql", "sql"] as const;
 export const GRID_DETAIL_NAME_KEYS = ["grid_name", "gridName", "name"] as const;

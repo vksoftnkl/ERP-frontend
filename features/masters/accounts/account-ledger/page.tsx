@@ -56,6 +56,7 @@ import {
   LEDGER_COMPANY_NAME_KEYS,
   LEDGER_BRANCH_NAME_KEYS,
   LEDGER_GROUP_NAME_KEYS,
+  LEDGER_TAX_NAME_KEYS,
 } from "./constants";
 import type {
   ModalMode,
@@ -700,6 +701,9 @@ export default function AccountLedgerMasterPage() {
   const { run: runStateDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
     toast: { error: false },
   });
+  const { run: runTaxRateDropdown } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, {
+    toast: { error: false },
+  });
   // State for options
   const [companyOptions, setCompanyOptions] = useState<ERPDynamicSelectOption[]>([
     { value: "", label: "" },
@@ -711,6 +715,9 @@ export default function AccountLedgerMasterPage() {
     { value: "", label: "" },
   ]);
   const [stateNameOptions, setStateNameOptions] = useState<ERPDynamicSelectOption[]>([
+    { value: "", label: "" },
+  ]);
+  const [taxRateOptions, setTaxRateOptions] = useState<ERPDynamicSelectOption[]>([
     { value: "", label: "" },
   ]);
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
@@ -915,6 +922,12 @@ export default function AccountLedgerMasterPage() {
             );
             break;
           }
+          case "taxRate": {
+            const payload = await runTaxRateDropdown({ query });
+            if (payload === undefined) return;
+            setTaxRateOptions(buildDropdownOptions(payload, config.idKeys, config.labelKeys));
+            break;
+          }
           case "state": {
             const payload = await runStateDropdown({ query });
             if (payload === undefined) return;
@@ -931,7 +944,13 @@ export default function AccountLedgerMasterPage() {
         setDropdownLoading((current) => ({ ...current, [config.kind]: false }));
       }
     },
-    [runAccountGroupDropdown, runBranchDropdown, runCompanyDropdown, runStateDropdown],
+    [
+      runAccountGroupDropdown,
+      runBranchDropdown,
+      runCompanyDropdown,
+      runStateDropdown,
+      runTaxRateDropdown,
+    ],
   );
   // Fetch on open (immediate) and on typed search (debounced). Only the currently open
   // lazy dropdown is fetched, so "open = one API call" with no up-front loading.
@@ -956,6 +975,7 @@ export default function AccountLedgerMasterPage() {
     setBranchOptions([{ value: "", label: "" }]);
     setAccountGroupOptions([{ value: "", label: "" }]);
     setStateNameOptions([{ value: "", label: "" }]);
+    setTaxRateOptions([{ value: "", label: "" }]);
     setStateCodeByName({});
     setStateNameByCode({});
     setDropdownLoading({});
@@ -979,6 +999,12 @@ export default function AccountLedgerMasterPage() {
       setCompanyOptions(seedOne(values.ledCompanyId, companyName));
       setBranchOptions(seedOne(values.ledBranchId, branchName));
       setAccountGroupOptions(seedOne(values.ledGroupId, groupName));
+      setTaxRateOptions(
+        seedOne(
+          values.ledTaxId,
+          toDisplayValue(getFirstDefinedValue(detailSource, LEDGER_TAX_NAME_KEYS)),
+        ),
+      );
       // State name + region state name both store the state name as their value and share
       // stateNameOptions, so seed both selected names.
       const stateSeed: ERPDynamicSelectOption[] = [blank];
@@ -1057,8 +1083,14 @@ export default function AccountLedgerMasterPage() {
   // Load form fields
   const ledgerFormFields = useMemo(
     () =>
-      buildLedgerFormFields(companyOptions, branchOptions, accountGroupOptions, stateNameOptions),
-    [accountGroupOptions, branchOptions, companyOptions, stateNameOptions],
+      buildLedgerFormFields(
+        companyOptions,
+        branchOptions,
+        accountGroupOptions,
+        stateNameOptions,
+        taxRateOptions,
+      ),
+    [accountGroupOptions, branchOptions, companyOptions, stateNameOptions, taxRateOptions],
   );
   // Tabs of the ledger modal (Identity / GST & Tax / Address & Contact /
   // Regional Details). The bank-accounts grid is now an inline sub-section under

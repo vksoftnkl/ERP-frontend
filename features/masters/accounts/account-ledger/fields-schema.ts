@@ -41,14 +41,6 @@ const TYPE_OF_SUPPLY_OPTIONS: ERPDynamicSelectOption[] = [
   { label: "Services", value: "Services" },
 ];
 
-const TAXABILITY_OPTIONS: ERPDynamicSelectOption[] = [
-  { label: "", value: "" },
-  { label: "Taxable", value: "Taxable" },
-  { label: "Exempt", value: "Exempt" },
-  { label: "Nil Rated", value: "Nil Rated" },
-  { label: "Non-GST", value: "Non-GST" },
-];
-
 const GST_PARTY_REG_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
   { label: "Regular", value: "REGULAR" },
   { label: "Composition", value: "COMPOSITION" },
@@ -97,6 +89,7 @@ export function buildLedgerFormFields(
   branchOptions: ERPDynamicSelectOption[],
   accountGroupOptions: ERPDynamicSelectOption[],
   stateNameOptions: ERPDynamicSelectOption[],
+  taxRateOptions: ERPDynamicSelectOption[],
 ): LedgerFormBuildField[] {
   return [
     // ===== Tab: Identity =====================================================
@@ -151,12 +144,16 @@ export function buildLedgerFormFields(
       options: TYPE_OF_SUPPLY_OPTIONS,
     },
     { name: "ledHsnSac", label: "HSN / SAC" },
-    { name: "ledGstRate", label: "GST Rate %", type: "number", step: "0.01", min: 0 },
+    // The GST rate this ledger carries when it appears as a taxable line (a service
+    // ledger such as freight or packing). One id into inventory.tax_rate_master —
+    // it replaced the old bare `GST Rate %` + `Taxability` pair, which could express
+    // neither cess nor taxability. The rate and taxability now live on the rate row.
     {
-      name: "ledTaxability",
-      label: "Taxability",
+      name: "ledTaxId",
+      label: "GST Rate",
       type: "select",
-      options: TAXABILITY_OPTIONS,
+      searchable: true,
+      options: taxRateOptions,
     },
 
     // -- Bank Details (inline grid) ------------------------------------------
@@ -236,13 +233,6 @@ export function buildLedgerFormFields(
       label: "Duty Head",
       type: "select",
       options: GST_DUTY_HEAD_OPTIONS,
-    },
-    {
-      name: "ledTaxRate",
-      label: "Percentage of Calculation",
-      type: "number",
-      step: "0.01",
-      min: 0,
     },
     {
       name: "ledRoundingMethod",

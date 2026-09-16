@@ -9,7 +9,12 @@ export const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
 // The Account Ledger form select fields that are lazily loaded from a configured
 // server dropdown (fetched on open + on debounced server-side search) instead of the
 // eager master-lookups endpoint. State name + region state name share dropdown 21.
-export type LedgerDropdownKind = "company" | "branch" | "accountGroup" | "state";
+export type LedgerDropdownKind =
+  | "company"
+  | "branch"
+  | "accountGroup"
+  | "state"
+  | "taxRate";
 
 type LedgerDropdownFieldConfig = {
   kind: LedgerDropdownKind;
@@ -48,6 +53,15 @@ export const LEDGER_DROPDOWN_FIELD_CONFIG: Record<string, LedgerDropdownFieldCon
     dropdownId: "21",
     idKeys: ["state_code", "stateCode"],
     labelKeys: ["state_name", "stateName"],
+  },
+  // `GST RATES` — inventory.tax_rate_master, the rate a service ledger carries
+  // when it appears as a taxable line. Rows also carry tax_rate_perc /
+  // tax_taxability, which are the rate's own properties and read-only here.
+  ledTaxId: {
+    kind: "taxRate",
+    dropdownId: "53",
+    idKeys: ["tax_id", "taxId"],
+    labelKeys: ["tax_name", "taxName"],
   },
 };
 
