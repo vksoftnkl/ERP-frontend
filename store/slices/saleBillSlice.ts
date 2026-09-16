@@ -244,9 +244,10 @@ const saleBillSlice = createSlice({
      *
      * The document stores its own copy of these (`sbCustName`, `sbCustAddr`, …)
      * rather than pointing at the master, so editing them amends THIS bill only.
-     * Unlike the quotation, `sbCustId` is REQUIRED server-side: a walk-in still
-     * needs a master record, so these amend a linked customer, they do not
-     * replace one.
+     * `sbCustId` is nullable server-side, so a walk-in may be billed to a name
+     * alone: these can stand in for a master record as well as amend one. What
+     * that does NOT relax is accounts — a credit bill still needs a party
+     * ledger to post against.
      */
     customerFieldSet(
       state,

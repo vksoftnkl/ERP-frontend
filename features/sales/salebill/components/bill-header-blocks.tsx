@@ -114,8 +114,8 @@ export function BillCustomerBlock({
         Amendable, and it amends THIS bill only — the document stores its own
         copy of the name, address, place, phone and GSTIN, so a bill prints the
         customer as they were when it was raised even after the master moves on.
-        Unlike the quotation, though, `sbCustId` is REQUIRED server-side: these
-        amend a linked customer, they cannot stand in for one.
+        A walk-in may be billed to a name alone — `sbCustId` goes over as null —
+        so these can stand in for a master record as well as amend one.
       */}
       {fields.isVisible("customerName") ? (
         <TextField

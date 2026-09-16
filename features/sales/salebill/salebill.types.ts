@@ -626,8 +626,8 @@ export type SaveBillDto = {
   sbSrcDocRefno?: string | null;
   sbSrcDocDate?: string | null;
   sbSrcDocYear?: string | null;
-  /** REQUIRED — a walk-in still needs a master record on this screen. */
-  sbCustId: string;
+  /** NULL for a walk-in: `sbCustName` is snapshotted, but no master row backs it. */
+  sbCustId?: string | null;
   sbCustName: string;
   sbCustAddr?: string | null;
   sbCustPlace?: string | null;
@@ -935,7 +935,7 @@ export type BillPayload = {
   sbSrcDocRefno: string | null;
   sbSrcDocDate: string | null;
   sbSrcDocYear: string | null;
-  sbCustId: string;
+  sbCustId: string | null;
   sbCustName: string;
   sbCustAddr: string | null;
   sbCustPlace: string | null;

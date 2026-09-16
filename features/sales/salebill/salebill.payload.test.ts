@@ -126,6 +126,16 @@ describe("identity", () => {
   it("sends the counter's clock, to the second", () => {
     expect(build(draftWith()).sbBillDatetime).toBe("2026-09-12T09:30:00");
   });
+
+  it("bills a walk-in with a null customer id, never a blank one", () => {
+    // sb_cust_id is a nullable uuid. "" is not an absent uuid to it, it is a
+    // malformed one, and it comes back as a 400 naming the field.
+    const draft = draftWith();
+    draft.customer = { ...draft.customer, custId: null, name: "WALK IN" };
+    const payload = build(draft);
+    expect(payload.sbCustId).toBeNull();
+    expect(payload.sbCustName).toBe("WALK IN");
+  });
 });
 
 describe("the uuid[] people columns", () => {

@@ -4,8 +4,9 @@
  * `buildSavePayload` is the only place that knows the save contract's traps, and
  * they are not the quotation's:
  *
- *  - **`sbCustId` is REQUIRED.** A walk-in cannot be billed without a master
- *    record, unlike a quotation.
+ *  - **`sbCustId` is nullable, and blank must go over as `null`.** A walk-in is
+ *    billed to a snapshotted `sbCustName` with no master row behind it; `""`
+ *    is not "no customer" to a uuid column, it is a malformed one.
  *  - **`sbiGodownId` is REQUIRED on every line.** It comes from the item price
  *    lookup and that lookup can answer null; `validate.ts` refuses the bill
  *    before the server has to.
@@ -80,6 +81,15 @@ import type {
 function dateOrNull(value: string | null | undefined): string | null {
   const text = toDateInput(value);
   return text || null;
+}
+
+/**
+ * A nullable uuid column. An unset id is `null`, never `""`: the empty string
+ * is not an absent uuid to Postgres or to the DTO's uuid pattern, it is an
+ * invalid one, and it comes back as a 400 naming the field.
+ */
+function uuidOrNull(id: string | null | undefined): string | null {
+  return (id ?? "").trim() || null;
 }
 
 /**
@@ -351,7 +361,7 @@ export function buildSavePayload(
     sbSrcDocRefno: toNullableText(draft.source?.refno ?? null, 100),
     sbSrcDocDate: dateOrNull(draft.source?.date ?? null),
     sbSrcDocYear: draft.source?.accYear ?? null,
-    sbCustId: draft.customer.custId ?? "",
+    sbCustId: uuidOrNull(draft.customer.custId),
     sbCustName: draft.customer.name.trim(),
     sbCustAddr: toNullableText(draft.customer.address, 500),
     sbCustPlace: toNullableText(draft.customer.place, 100),
@@ -735,7 +745,7 @@ export function parseLoadedBill(
     }),
     customer: {
       ...emptyCustomer(),
-      custId: payload.sbCustId,
+      custId: payload.sbCustId ?? null,
       name: payload.sbCustName,
       masterName: payload.sbCustName,
       address: payload.sbCustAddr,
