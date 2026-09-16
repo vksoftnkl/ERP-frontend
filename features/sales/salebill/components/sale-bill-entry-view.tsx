@@ -1105,10 +1105,9 @@ export function SaleBillEntryView({
           header={draft.header}
           fields={visibleFields}
           disabled={!editable}
-          locked={Boolean(draft.source)}
-          lockReason={
+          sourceNote={
             draft.source
-              ? `Locked: this bill was raised from ${draft.source.refno ?? "another document"} for this customer.`
+              ? `Raised from ${draft.source.refno ?? "another document"}: the imported prices were quoted to the customer below, so re-check them if you repoint the bill at somebody else.`
               : undefined
           }
           onRequestCustomer={onRequestCustomer}

@@ -72,12 +72,13 @@ export type BillCustomerBlockProps = {
   header: SaleBillHeader;
   disabled: boolean;
   /**
-   * Locked while the bill was raised from another document (§13): the imported
-   * prices were the source customer's, and repointing the bill would leave
-   * `sb_src_doc_id` naming a document raised for somebody else.
+   * Shown as a title on the block while the bill was raised from another
+   * document (§13), as a caution rather than a lock: the imported prices were
+   * the source customer's, so a bill repointed at somebody else keeps prices
+   * that were never quoted to them. The operator, not the screen, decides
+   * whether that is what they meant.
    */
-  locked: boolean;
-  lockReason?: string;
+  sourceNote?: string;
   fields: BillFields;
   onRequestCustomer: (customerId: string) => void;
   onSetCustomerField: (field: EditableCustomerField, value: string) => void;
@@ -87,15 +88,14 @@ export function BillCustomerBlock({
   customer,
   header,
   disabled,
-  locked,
-  lockReason,
+  sourceNote,
   fields,
   onRequestCustomer,
   onSetCustomerField,
   onSetPos,
 }: BillCustomerBlockProps) {
   return (
-    <div className={styles.fieldGrid} title={locked ? lockReason : undefined}>
+    <div className={styles.fieldGrid} title={sourceNote}>
       {fields.isVisible("existingCustomer") ? (
         <DropdownCombo
           id="sale-bill-customer"
@@ -105,7 +105,7 @@ export function BillCustomerBlock({
           labelKey="cus_name"
           value={customer.custId ?? ""}
           selectedLabel={customer.masterName}
-          disabled={disabled || locked}
+          disabled={disabled}
           placeholder="Search customers…"
           onSelect={onRequestCustomer}
         />
@@ -115,14 +115,16 @@ export function BillCustomerBlock({
         copy of the name, address, place, phone and GSTIN, so a bill prints the
         customer as they were when it was raised even after the master moves on.
         A walk-in may be billed to a name alone — `sbCustId` goes over as null —
-        so these can stand in for a master record as well as amend one.
+        so these can stand in for a master record as well as amend one — a
+        trading name, a spelling, a care-of — on an imported bill as much as on
+        one keyed from scratch.
       */}
       {fields.isVisible("customerName") ? (
         <TextField
           id="sale-bill-customer-name"
           label={fields.labelFor("customerName")}
           value={customer.name}
-          disabled={disabled || locked}
+          disabled={disabled}
           required
           maxLength={200}
           onChange={(value) => onSetCustomerField("name", value.toUpperCase())}
