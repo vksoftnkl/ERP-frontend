@@ -22,7 +22,10 @@ import {
   type ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
-import { extractRows } from "@/features/masters/shared/normalizers";
+import {
+  useLazyConfiguredDropdown,
+  type LazyDropdownHandlers,
+} from "@/features/masters/shared/use-lazy-configured-dropdown";
 import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/value-mappers";
 import { useDataRefresh } from "@/lib/data-freshness";
 const API_ENDPOINTS = {
@@ -31,7 +34,6 @@ const API_ENDPOINTS = {
   create: "/account-groups/create",
   delete: "/account-groups/delete",
 } as const;
-const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const GRID_TABLE_NAME = "account_groups";
 // The form fields below are re-labelled, re-ordered, and shown/hidden from the
 // backend widget-masters config (fixed.form_section / form_field) for this
@@ -61,9 +63,6 @@ const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 // Backend fieldNames (lowercased) that map to a real form field, so their popup
 // checkbox can actually show/hide something. Others are left out of the popup.
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD_NAME_BY_FORM_FIELD);
-const LOOKUP_QUERY_ACCOUNT_GROUPS = {
-  module: "accountGroups",
-} as const;
 const LOOKUP_KEYS = {
   id: ["accGroupId", "acc_group_id", "id", "_id"],
   code: ["accGroupAlias", "acc_group_alias", "accGroupShort", "acc_group_short", "code"],
@@ -84,11 +83,24 @@ const REQUEST_PAYLOAD_KEYS = {
   sort: "accGroupSort",
 } as const;
 const GROUP_PARENT_ID_KEYS = ["accGroupParentId", "acc_group_parent_id"] as const;
-const LOOKUP_ARRAY_KEYS = ["items", "data", "results", "rows", "list"] as const;
+// `/account-groups/get` resolves the parent's name alongside its id, so the trigger can
+// show the saved parent on edit/view before the lazy list has loaded.
+const GROUP_PARENT_NAME_KEYS = ["accGroupParentName", "acc_group_parent_name"] as const;
 const DEFAULT_SELECT_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "None",
 };
+// Group Parent is a lazy, server-side searchable configured dropdown: fixed.dropdown_details
+// id 23 (ACCOUNT GROUPS -> active, undeleted accounts.acc_group_master rows). Nothing is
+// fetched until the field is opened; typing re-queries the server (columns acc_group_short
+// and acc_group_name are filter-enabled). Rows carry the raw SQL column names, not the
+// id/name shape master-lookups returns, hence the explicit key lists.
+const PARENT_GROUP_DROPDOWN_CONFIG = {
+  dropdownId: "23",
+  idKeys: ["acc_group_id", "accGroupId"] as const,
+  labelKeys: ["acc_group_name", "accGroupName"] as const,
+  defaultOption: DEFAULT_SELECT_OPTION,
+} as const;
 const ACCOUNT_GROUP_INITIAL_FORM_VALUES = {
   masterName: "",
   masterAlias: "",
@@ -99,6 +111,7 @@ const ACCOUNT_GROUP_INITIAL_FORM_VALUES = {
 } as const;
 function buildAccountGroupFormFields(
   parentGroupOptions: ERPDynamicSelectOption[],
+  parentGroupHandlers: LazyDropdownHandlers,
 ): ERPDynamicModalField[] {
   return [
     {
@@ -123,12 +136,16 @@ function buildAccountGroupFormFields(
     {
       name: "accGroupParentId",
       label: "Group Parent",
-      required:true,
+      required: true,
       type: "select",
       colSpan: 2,
       searchable: true,
+      // The server does the filtering; don't also filter the fetched page client-side.
+      serverSearch: true,
       options: parentGroupOptions,
-      
+      onSearchOpenChange: parentGroupHandlers.onSearchOpenChange,
+      onSearchQueryChange: parentGroupHandlers.onSearchQueryChange,
+      onValueChange: parentGroupHandlers.onValueChange,
     },
     {
       name: "position",
@@ -156,76 +173,19 @@ function toNullableReference(value: string): string | null {
   const normalized = value.trim();
   return normalized ? normalized : null;
 }
-function buildLookupOptions(payload: unknown, includeEmptyOption = false): ERPDynamicSelectOption[] {
-  const optionMap = new Map<string, string>();
-  const rows = extractRows(payload, LOOKUP_ARRAY_KEYS);
-  for (const row of rows) {
-    if (!row || typeof row !== "object" || Array.isArray(row)) {
-      continue;
-    }
-    const source = row as Record<string, unknown>;
-    const id = toDisplayValue(getFirstDefinedValue(source, ["id", "value"]));
-    if (!id) {
-      continue;
-    }
-    const name = toDisplayValue(
-      getFirstDefinedValue(source, ["name", "label", "accGroupName", "acc_group_name"]),
-    );
-    const label = name || id;
-    if (!optionMap.has(id)) {
-      optionMap.set(id, label);
-    }
-  }
-  const options = Array.from(optionMap.entries())
-    .map(([value, label]) => ({ value, label }))
-    .sort((left, right) => left.label.localeCompare(right.label));
-  if (!includeEmptyOption) {
-    return options;
-  }
-  return [DEFAULT_SELECT_OPTION, ...options];
-}
 export default function AccountLedgerGroupsMasterPage() {
-  const { getAll: getParentGroupLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  const parentGroup = useLazyConfiguredDropdown(PARENT_GROUP_DROPDOWN_CONFIG);
   // Silent progressive enhancement: a failed config fetch leaves the form on its
   // hardcoded labels/order (empty map), so don't nag the user with an error toast.
   const { getAll: getWidgetConfig } = useApi<WidgetMastersResponse>(WIDGET_CONFIG_ENDPOINT, {
     toast: { error: false },
   });
-  const [parentGroupOptions, setParentGroupOptions] = useState<ERPDynamicSelectOption[]>([
-    DEFAULT_SELECT_OPTION,
-  ]);
   const [widgetFieldConfig, setWidgetFieldConfig] = useState<Map<string, ResolvedFieldConfig>>(
     () => new Map(),
   );
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
   // can see soft-deleted account groups. Lives beside the list search input.
   const [wantDelete, setWantDelete] = useState(false);
-  // Lookup options come from master tables that other users and other screens
-  // change, so they are re-read on every data-refresh signal, not just on mount.
-  const loadParentGroupOptions = useCallback(() => {
-    let mounted = true;
-    void (async () => {
-      try {
-        const parentGroupsPayload = await getParentGroupLookup(LOOKUP_QUERY_ACCOUNT_GROUPS);
-        if (!mounted) {
-          return;
-        }
-        setParentGroupOptions(buildLookupOptions(parentGroupsPayload, true));
-      } catch {
-        if (!mounted) {
-          return;
-        }
-        setParentGroupOptions([DEFAULT_SELECT_OPTION]);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [getParentGroupLookup]);
-  useEffect(() => loadParentGroupOptions(), [loadParentGroupOptions]);
-  useDataRefresh(() => {
-    loadParentGroupOptions();
-  });
   // Field config comes from the database, so it is read on mount and again on
   // every data-refresh signal instead of only once per page load.
   const loadWidgetFieldConfig = useCallback(() => {
@@ -257,11 +217,11 @@ export default function AccountLedgerGroupsMasterPage() {
   const accountGroupFormFields = useMemo(
     () =>
       applyWidgetFieldConfig(
-        buildAccountGroupFormFields(parentGroupOptions),
+        buildAccountGroupFormFields(parentGroup.options, parentGroup.handlers),
         widgetFieldConfig,
         WIDGET_FIELD_NAME_BY_FORM_FIELD,
       ),
-    [parentGroupOptions, widgetFieldConfig],
+    [parentGroup.options, parentGroup.handlers, widgetFieldConfig],
   );
   // Adds the `grid_param` payload to the default page/limit/search list query.
   // The server JSON-parses it and binds each key into the matching named token in
@@ -520,8 +480,24 @@ export default function AccountLedgerGroupsMasterPage() {
       modalPanelStyle={{ width: "min(40rem, calc(calc(100vw/var(--erp-ui-scale)) - 2.4rem))" }}
       customFields={accountGroupFormFields}
       createInitialValues={ACCOUNT_GROUP_INITIAL_FORM_VALUES}
+      onModalOpenChange={(open, variantKey) => {
+        // Clear the lazy Group Parent dropdown when the create modal opens so no
+        // selection from a previously edited group lingers (it reloads on open).
+        if (open && variantKey === "master-create") {
+          parentGroup.seedSelected("", "");
+        }
+      }}
       mapFormValues={({ source, defaults }) => {
         const rowSource = source ?? {};
+        const accGroupParentId = toDisplayValue(
+          getFirstDefinedValue(rowSource, GROUP_PARENT_ID_KEYS),
+        );
+        // Seed the lazy dropdown so the trigger shows the saved parent's name on
+        // edit/view, before the list is opened and fetched.
+        parentGroup.seedSelected(
+          accGroupParentId,
+          toDisplayValue(getFirstDefinedValue(rowSource, GROUP_PARENT_NAME_KEYS)),
+        );
         return {
           ...ACCOUNT_GROUP_INITIAL_FORM_VALUES,
           masterName:
@@ -535,9 +511,7 @@ export default function AccountLedgerGroupsMasterPage() {
           masterDescription:
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.description)) ||
             defaults.masterDescription,
-          accGroupParentId: toDisplayValue(
-            getFirstDefinedValue(rowSource, GROUP_PARENT_ID_KEYS),
-          ),
+          accGroupParentId,
           position:
             toDisplayValue(getFirstDefinedValue(rowSource, LOOKUP_KEYS.position)) || defaults.position,
         };
