@@ -35,6 +35,7 @@ import {
 } from "@/features/sales/quotation/components/charge-grid";
 import { ChargePickerModal } from "@/features/sales/quotation/components/charge-picker-modal";
 import {
+  focusCell,
   focusFirstCell,
   focusNextRowAfterRender,
   focusNextStopFrom,
@@ -52,6 +53,7 @@ import {
   ItemPickerModal,
   type ItemPick,
 } from "@/features/sales/quotation/components/item-picker-modal";
+import { SizeEntryModal } from "@/features/sales/quotation/components/size-entry-modal";
 import { PriceLevelPrompt } from "@/features/sales/quotation/components/price-level-prompt";
 import { HeldListModal } from "@/features/sales/quotation/components/held-list-modal";
 import { QuotationListModal } from "@/features/sales/quotation/components/quotation-list-modal";
@@ -95,6 +97,7 @@ import {
   lineFieldSet,
   lineInserted,
   lineRemoved,
+  lineSizesApplied,
   peopleFieldSet,
   posSet,
   tendersReplaced,
@@ -223,6 +226,8 @@ export function SaleBillEntryView({
 
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
   const [itemPickerRow, setItemPickerRow] = useState<string | null>(null);
+  /** The item row the Size Entry dialog is open on; `null` while it is closed. */
+  const [sizeEntryRow, setSizeEntryRow] = useState<string | null>(null);
   /**
    * The row a pick has just been made on — see the focus effect below. A ref,
    * not state: the render the effect needs is the one the pick itself causes.
@@ -430,6 +435,18 @@ export function SaleBillEntryView({
    * disabled until the row has an item, so the walk has to run on the render
    * that priced the line.
    */
+  /**
+   * Whether the item layout shows a Size column — what decides if picking an
+   * item opens the Size Entry dialog. Read off the resolved columns rather than
+   * assumed: table 22 configures no Size column at all, so on this screen it is
+   * the INJECTED one (`SALE_BILL_INJECTED_ITEM_COLUMNS`) that puts it there, and
+   * a deployment that seeds its own under either name gets that one instead.
+   */
+  const sizeColumnVisible = useMemo(
+    () => itemResize.columns.some((column) => column.visible && column.write === "itemSize"),
+    [itemResize.columns],
+  );
+
   useEffect(() => {
     const rowKey = pickedItemRow.current;
     if (!rowKey) {
@@ -444,7 +461,14 @@ export function SaleBillEntryView({
     if (anchor) {
       focusNextStopFrom(ITEM_GRID_NAME, rowKey, anchor);
     }
-  }, [draft.lines, itemResize.columns]);
+    // Keying the sizes is what comes next on a size-priced line, so the dialog
+    // opens itself rather than waiting for an F3 the operator has to know about
+    // — the same hand-off the quotation screen makes. Focus is moved first
+    // regardless, so cancelling leaves the cursor in the grid.
+    if (sizeColumnVisible) {
+      setSizeEntryRow(rowKey);
+    }
+  }, [draft.lines, itemResize.columns, sizeColumnVisible]);
 
   useEffect(() => {
     const rowKey = pickedChargeRow.current;
@@ -868,10 +892,26 @@ export function SaleBillEntryView({
     setPriceLevelPrompt(priceLevel);
   }, []);
 
+  /**
+   * Close the dialog and put the cursor back in the Size cell it was opened
+   * from. Without it the dialog's own autofocus is abandoned and focus falls to
+   * `<body>`: cancelling would leave nowhere to key a size by hand, and F3 —
+   * which the grid reads off the focused cell — could not re-open it at all.
+   */
+  const closeSizeEntry = useCallback(() => {
+    const rowKey = sizeEntryRow;
+    setSizeEntryRow(null);
+    if (!rowKey) {
+      return;
+    }
+    window.requestAnimationFrame(() => focusCell(ITEM_GRID_NAME, rowKey, "itemSize"));
+  }, [sizeEntryRow]);
+
   // --------------------------------------------------------------- shortcuts
 
   const modalOpen =
     itemPickerRow !== null ||
+    sizeEntryRow !== null ||
     chargePickerRow !== null ||
     priceLevelPrompt !== null ||
     customerToConfirm !== null ||
@@ -1152,8 +1192,8 @@ export function SaleBillEntryView({
             <span className={quotationStyles.gridHeadTitle}>Items</span>
             <span className={quotationStyles.gridHeadActions}>
               <span className={quotationStyles.modalNote}>
-                Enter next cell · F1 next panel · F4 unit · Ctrl+± row · Alt+R copy row ·
-                Ctrl+1..{PRICE_LEVEL_COUNT} price level
+                Enter next cell · F1 next panel · F3 sizes · F4 unit · Ctrl+± row ·
+                Alt+R copy row · Ctrl+1..{PRICE_LEVEL_COUNT} price level
               </span>
             </span>
           </div>
@@ -1182,6 +1222,7 @@ export function SaleBillEntryView({
             onDuplicateLine={onDuplicateLine}
             onRemoveLine={onRemoveLine}
             onSwitchUnit={(rowKey) => void api.switchUnit(rowKey)}
+            onOpenSizeEntry={setSizeEntryRow}
             onPriceLevelShortcut={onPriceLevelShortcut}
           />
         </section>
@@ -1306,6 +1347,16 @@ export function SaleBillEntryView({
       {chargeSettings.overlays}
       {visibleFields.overlays}
 
+      {/* Mounted only while open: the dialog snapshots the lines at mount and
+          owns them until OK, so its lifetime has to BE the open. */}
+      {sizeEntryRow !== null ? (
+        <SizeEntryModal
+          anchorKey={sizeEntryRow}
+          lines={draft.lines}
+          onClose={closeSizeEntry}
+          onSave={(anchorKey, rows) => dispatch(lineSizesApplied({ anchorKey, rows }))}
+        />
+      ) : null}
       <ItemPickerModal
         isOpen={itemPickerRow !== null}
         usedItemIds={usedItemIds}

@@ -266,6 +266,9 @@ const quotationSlice = createSlice({
         state.lines as DraftLine[],
         action.payload.anchorKey,
         action.payload.rows,
+        // What a brand-new size row must not inherit is the same question Alt+R
+        // answers, so it is the same function.
+        duplicateDraftLine,
       );
     },
     lineRemoved(state, action: PayloadAction<string>) {

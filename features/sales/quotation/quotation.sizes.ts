@@ -1,5 +1,13 @@
 /**
- * Quotation Entry — multi-size entry. Pure: no React, no Redux, no API.
+ * Multi-size entry — one item keyed in several sizes. Pure: no React, no Redux,
+ * no API.
+ *
+ * Shared by Quotation Entry and Sale Bill, which is why every function here is
+ * generic over the line type: `SaleBillDraftLine` is the quotation's `DraftLine`
+ * plus the bill's own columns, and the two differ in exactly one thing this
+ * module cares about — what identity a brand-new row has to shed. Each screen
+ * answers that by handing in its own line-copier (see `applySizeEntry`), so the
+ * rules below are stated once and cannot drift between the screens.
  *
  * One item quoted in four sizes is four `sale_quotation_item` rows, not one row
  * with a list — the line table has a single `sqi_size` and the unique index
@@ -27,6 +35,16 @@
  *    dirty for any action it handles, so replacing the rows IS the whole edit.
  */
 import type { DraftLine } from "./quotation.types";
+
+/**
+ * The shape this module needs off a draft line. Both screens' line types satisfy
+ * it — `SaleBillDraftLine` by extending `DraftLine` — and naming it here keeps
+ * the generics honest about what is actually read.
+ */
+export type SizeGroupLine = Pick<
+  DraftLine,
+  "key" | "itemId" | "itemSize" | "itemName" | "itemCode" | "unitName" | "billQty" | "rate" | "lineGroupKey"
+>;
 import {
   SIZE_FACTOR_COUNT,
   cubicFeetFromSize,
@@ -35,8 +53,13 @@ import {
   splitSizeFactors,
 } from "./quotation.utils";
 
-/** One row of the Size Entry dialog. Local to the dialog until Save. */
-export type SizeEntryRow = {
+/**
+ * The keyed part of a dialog row — everything the operator types, and nothing
+ * about which line it came from. Split out so the readers and the validator
+ * below stay non-generic: they answer questions about the keystrokes, which are
+ * the same on every screen.
+ */
+export type SizeEntryValues = {
   /** Identity inside the dialog only — never the draft line's `key`. */
   key: string;
   /** The four dimension boxes, exactly as keyed. */
@@ -53,12 +76,16 @@ export type SizeEntryRow = {
    * well and the dialog must not disagree with the cell it stands in for.
    */
   qtyTouched: boolean;
+};
+
+/** One row of the Size Entry dialog. Local to the dialog until Save. */
+export type SizeEntryRow<T extends SizeGroupLine = DraftLine> = SizeEntryValues & {
   /**
    * The draft line this row was opened from, or `null` for a row the operator
-   * added in the dialog. This is what lets Save preserve `sqiId` and everything
-   * else the dialog does not show.
+   * added in the dialog. This is what lets Save preserve the row's server id and
+   * everything else the dialog does not show.
    */
-  source: DraftLine | null;
+  source: T | null;
 };
 
 /** Per-row validation messages, keyed by the cell they belong under. */
@@ -78,12 +105,12 @@ export type SizeEntryValidation = {
 };
 
 /** A contiguous run of lines that are one item quoted in several sizes. */
-export type SizeGroup = {
+export type SizeGroup<T extends SizeGroupLine = DraftLine> = {
   /** Index of the first line of the run. */
   start: number;
   /** Index of the last line of the run, inclusive. */
   end: number;
-  lines: DraftLine[];
+  lines: T[];
 };
 
 // ---------------------------------------------------------------------------
@@ -105,7 +132,7 @@ export type SizeGroup = {
  * the same item keyed as two batches, or copied with Alt+R, are not sizes of one
  * line and must not be swallowed into a dialog that would rewrite them.
  */
-export function sizeGroupKeyOf(line: DraftLine): string | null {
+export function sizeGroupKeyOf(line: SizeGroupLine): string | null {
   if (!line.itemId) {
     return null;
   }
@@ -123,7 +150,10 @@ export function sizeGroupKeyOf(line: DraftLine): string | null {
  * no group is a group of one, which is the normal way a second size gets added
  * to a line that was keyed as a single.
  */
-export function findSizeGroup(lines: DraftLine[], rowKey: string): SizeGroup | null {
+export function findSizeGroup<T extends SizeGroupLine>(
+  lines: T[],
+  rowKey: string,
+): SizeGroup<T> | null {
   const index = lines.findIndex((line) => line.key === rowKey);
   if (index < 0 || !lines[index].itemId) {
     return null;
@@ -158,36 +188,36 @@ function numberOf(raw: string): number {
  * it, otherwise the CFT the size works out to. This is the one figure the rest
  * of the dialog (Amount, the totals, the save) reads — never `row.qty` directly.
  */
-export function sizeRowQty(row: SizeEntryRow): number {
+export function sizeRowQty(row: SizeEntryValues): number {
   if (row.qtyTouched) {
     return numberOf(row.qty);
   }
   return cubicFeetFromSize(joinSizeFactors(row.factors)) ?? 0;
 }
 
-export function sizeRowRate(row: SizeEntryRow): number {
+export function sizeRowRate(row: SizeEntryValues): number {
   return numberOf(row.rate);
 }
 
-export function sizeRowAmount(row: SizeEntryRow): number {
+export function sizeRowAmount(row: SizeEntryValues): number {
   // Two decimals, the precision the grid's currency cells carry. Rounded through
   // a string so float dust never reaches the footer total.
   return Number((sizeRowQty(row) * sizeRowRate(row)).toFixed(2));
 }
 
-export function sizeEntryTotals(rows: SizeEntryRow[]): { qty: number; amount: number } {
+export function sizeEntryTotals(rows: SizeEntryValues[]): { qty: number; amount: number } {
   const qty = rows.reduce((total, row) => total + sizeRowQty(row), 0);
   const amount = rows.reduce((total, row) => total + sizeRowAmount(row), 0);
   return { qty: Number(qty.toFixed(3)), amount: Number(amount.toFixed(2)) };
 }
 
 /** The size string a row would be saved as. */
-export function sizeRowText(row: SizeEntryRow): string {
+export function sizeRowText(row: SizeEntryValues): string {
   return joinSizeFactors(row.factors);
 }
 
 /** A blank row, rated at the group's base rate. */
-export function createSizeEntryRow(baseRate: number): SizeEntryRow {
+export function createSizeEntryRow<T extends SizeGroupLine>(baseRate: number): SizeEntryRow<T> {
   return {
     key: nextRowKey("size"),
     factors: Array.from({ length: SIZE_FACTOR_COUNT }, () => ""),
@@ -217,7 +247,7 @@ export function createSizeEntryRow(baseRate: number): SizeEntryRow {
  * edits that row's dimensions it follows them again, exactly as it would if they
  * had keyed the size in the grid instead.
  */
-export function openSizeEntry(group: SizeGroup): SizeEntryRow[] {
+export function openSizeEntry<T extends SizeGroupLine>(group: SizeGroup<T>): SizeEntryRow<T>[] {
   return group.lines.map((line) => ({
     key: nextRowKey("size"),
     factors: splitSizeFactors(line.itemSize),
@@ -240,7 +270,7 @@ export function openSizeEntry(group: SizeGroup): SizeEntryRow[] {
  * which of two identical sizes is "the duplicate" is not something this can
  * know, and marking only the later one sends the operator to fix the wrong row.
  */
-export function validateSizeEntry(rows: SizeEntryRow[]): SizeEntryValidation {
+export function validateSizeEntry(rows: SizeEntryValues[]): SizeEntryValidation {
   const result: Record<string, SizeRowErrors> = {};
   if (rows.length === 0) {
     return { ok: false, formError: "Add at least one size.", rows: result };
@@ -301,28 +331,31 @@ export function validateSizeEntry(rows: SizeEntryRow[]): SizeEntryValidation {
  *
  * What each emitted row carries:
  *
- *  - a row that came from the quotation keeps **itself** — its `key` (so grid
- *    focus survives the save), its `sqiId` (so the next save updates that line
+ *  - a row that came from the document keeps **itself** — its `key` (so grid
+ *    focus survives the save), its server id (so the next save updates that line
  *    rather than inserting a second one) and every column the dialog does not
  *    show: discounts, scheme, batch, godown, salesman, the tax block;
  *  - a row the operator added in the dialog is cut from the **template** — the
  *    group's first line — so it inherits exactly those same columns, which is
- *    what "copied from the original row" means here. Its `sqiId` and `srcDocId`
- *    are cleared for the reason `duplicateDraftLine` clears them: those ids
- *    belong to one line each, and a copy claiming them would make the save
- *    update the original or claim a source line twice.
+ *    what "copied from the original row" means here.
  *
- * Note what this does NOT do: it never renumbers, never touches `sq_line_no`
+ * `duplicateLine` is how a screen says what a brand-new row must NOT inherit,
+ * and it is deliberately the screen's own Alt+R copier rather than a list of
+ * field names: the two answers must be the same one. On a quotation that is the
+ * row key and the ids owned outside the draft; a bill sheds `sbiId` and its
+ * whole `srcDoc*` trail as well, because three size rows inheriting one order
+ * line's trail would make that line look billed three times.
+ *
+ * Note what this does NOT do: it never renumbers, never touches the line number
  * (the payload builder numbers the populated lines on the way out) and never
- * repricies. The engine derives from the fields set here on the next render.
+ * reprices. The engine derives from the fields set here on the next render.
  */
-export function applySizeEntry(
-  lines: DraftLine[],
+export function applySizeEntry<T extends SizeGroupLine>(
+  lines: T[],
   anchorKey: string,
-  rows: SizeEntryRow[],
-  /** Injected so tests get deterministic keys. */
-  makeKey: () => string = () => nextRowKey("line"),
-): DraftLine[] {
+  rows: SizeEntryRow<T>[],
+  duplicateLine: (template: T) => T,
+): T[] {
   const group = findSizeGroup(lines, anchorKey);
   if (!group || rows.length === 0) {
     return lines;
@@ -330,7 +363,7 @@ export function applySizeEntry(
   const template = group.lines[0];
   // The dialog may hand back the same source line twice if a caller duplicated
   // a row object instead of adding a blank one; the second claim would emit two
-  // lines sharing a key AND an sqiId. First claim wins, the rest are new rows.
+  // lines sharing a key AND a server id. First claim wins, the rest are new rows.
   const claimed = new Set<string>();
 
   const replacement = rows.map((row) => {
@@ -341,19 +374,15 @@ export function applySizeEntry(
     if (source) {
       claimed.add(source.key);
     }
-    const base = source ?? template;
     return {
-      ...base,
-      ...(source
-        ? {}
-        : { key: makeKey(), sqiId: null, srcDocId: null }),
+      ...(source ?? duplicateLine(template)),
       // Rows the dialog writes are stamped, so the next double-click groups them
       // without having to fall back to "same item and both have a size".
       lineGroupKey: template.itemId,
       itemSize: sizeRowText(row) || null,
       billQty: sizeRowQty(row),
       rate: sizeRowRate(row),
-    } satisfies DraftLine;
+    };
   });
 
   return [...lines.slice(0, group.start), ...replacement, ...lines.slice(group.end + 1)];

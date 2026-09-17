@@ -19,6 +19,8 @@
 import { createSlice, original, type PayloadAction } from "@reduxjs/toolkit";
 import type { VoucherPolicy } from "@/domain/pricing";
 import { DISCOUNT_ALTERNATES } from "@/features/sales/quotation/quotation.constants";
+import { applySizeEntry } from "@/features/sales/quotation/quotation.sizes";
+import type { SizeEntryRow } from "@/features/sales/quotation/quotation.sizes";
 import {
   chargeRowFromMaster,
   clampPriceLevel,
@@ -386,6 +388,29 @@ const saleBillSlice = createSlice({
     lineRemoved(state, action: PayloadAction<string>) {
       state.lines = state.lines.filter((line) => line.key !== action.payload);
     },
+    /**
+     * Replace one item's run of size rows with the Size Entry dialog's rows —
+     * the same transition the quotation screen raises, over the same pure
+     * function (`applySizeEntry`), because a bill line is a quotation line plus
+     * the bill's own columns.
+     *
+     * `duplicateBillDraftLine` is what makes it a BILL's row-replace: a row the
+     * operator added in the dialog sheds `sbiId` and the whole `srcDoc*` trail,
+     * so three sizes cut from an imported line cannot make one order line look
+     * billed three times. The row that came from the document keeps itself, cap
+     * and trail included — it IS that order line, now sized.
+     */
+    lineSizesApplied(
+      state,
+      action: PayloadAction<{ anchorKey: string; rows: SizeEntryRow<SaleBillDraftLine>[] }>,
+    ) {
+      state.lines = applySizeEntry(
+        state.lines as SaleBillDraftLine[],
+        action.payload.anchorKey,
+        action.payload.rows,
+        duplicateBillDraftLine,
+      );
+    },
     lineFieldSet(
       state,
       action: PayloadAction<{ key: string; field: keyof SaleBillDraftLine; value: unknown }>,
@@ -572,6 +597,7 @@ export const {
   lineInserted,
   lineDuplicated,
   lineRemoved,
+  lineSizesApplied,
   lineFieldSet,
   itemPriceApplied,
   linePriceLevelSet,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDraftLine } from "./quotation.state";
+import { createDraftLine, duplicateDraftLine } from "./quotation.state";
 import {
   applySizeEntry,
   createSizeEntryRow,
@@ -28,12 +28,15 @@ function sizeRow(size: string, overrides: Partial<SizeEntryRow> = {}): SizeEntry
   };
 }
 
-/** Deterministic keys, so a replacement can be asserted on exactly. */
-function keyMaker(): () => string {
+/**
+ * The quotation's own line copier with a deterministic key, so a replacement can
+ * be asserted on exactly. Mirrors `duplicateDraftLine` — same fields shed.
+ */
+function keyMaker(): (template: DraftLine) => DraftLine {
   let next = 0;
-  return () => {
+  return (template) => {
     next += 1;
-    return `new-${next}`;
+    return { ...duplicateDraftLine(template), key: `new-${next}` };
   };
 }
 

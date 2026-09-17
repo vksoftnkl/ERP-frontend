@@ -1,7 +1,12 @@
 "use client";
 
 /**
- * Size Entry — one item quoted in several sizes, keyed in one pass.
+ * Size Entry — one item keyed in several sizes in one pass.
+ *
+ * Shared by Quotation Entry and Sale Bill: generic over the line type, because
+ * `SaleBillDraftLine` is the quotation's `DraftLine` plus the bill's columns and
+ * this dialog reads only what both have. The screen supplies its own line copier
+ * so a new size row sheds the right identity — see `applySizeEntry`.
  *
  * Opened by double-click or F3 on an item row (F4 is the unit switcher). The
  * rows here are **local state until Save**: the draft is not touched while the
@@ -34,8 +39,8 @@ import {
   sizeEntryTotals,
   validateSizeEntry,
   type SizeEntryRow,
+  type SizeGroupLine,
 } from "../quotation.sizes";
-import type { DraftLine } from "../quotation.types";
 import {
   SIZE_FACTOR_COUNT,
   SIZE_FACTOR_LABELS,
@@ -50,13 +55,13 @@ import {
 import { ModalShell } from "./modal-shell";
 import styles from "../page.module.scss";
 
-export type SizeEntryModalProps = {
+export type SizeEntryModalProps<T extends SizeGroupLine> = {
   /** The row the dialog was opened on. */
   anchorKey: string;
   /** The draft's lines, read ONCE at mount — see `useState` below. */
-  lines: DraftLine[];
+  lines: T[];
   onClose: () => void;
-  onSave: (anchorKey: string, rows: SizeEntryRow[]) => void;
+  onSave: (anchorKey: string, rows: SizeEntryRow<T>[]) => void;
 };
 
 /**
@@ -117,7 +122,7 @@ function SizeBoxes(props: {
   );
 }
 
-export function SizeEntryModal(props: SizeEntryModalProps) {
+export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalProps<T>) {
   const { anchorKey, lines, onClose, onSave } = props;
 
   /**
@@ -131,7 +136,7 @@ export function SizeEntryModal(props: SizeEntryModalProps) {
    * while the dialog owns them, so a snapshot is the honest model.
    */
   const [group] = useState(() => findSizeGroup(lines, anchorKey));
-  const [rows, setRows] = useState<SizeEntryRow[]>(() =>
+  const [rows, setRows] = useState<SizeEntryRow<T>[]>(() =>
     group ? openSizeEntry(group) : [],
   );
   /**
@@ -150,7 +155,7 @@ export function SizeEntryModal(props: SizeEntryModalProps) {
   const validation = useMemo(() => validateSizeEntry(rows), [rows]);
   const totals = useMemo(() => sizeEntryTotals(rows), [rows]);
 
-  const patchRow = (key: string, patch: Partial<SizeEntryRow>): void => {
+  const patchRow = (key: string, patch: Partial<SizeEntryRow<T>>): void => {
     setRows((current) =>
       current.map((row) => (row.key === key ? { ...row, ...patch } : row)),
     );
@@ -178,7 +183,7 @@ export function SizeEntryModal(props: SizeEntryModalProps) {
   };
 
   const addRow = useCallback((): void => {
-    setRows((current) => [...current, createSizeEntryRow(baseRate)]);
+    setRows((current) => [...current, createSizeEntryRow<T>(baseRate)]);
   }, [baseRate]);
 
   const removeRow = (key: string): void => {
@@ -206,7 +211,13 @@ export function SizeEntryModal(props: SizeEntryModalProps) {
    */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      // `event.code` alongside `event.key` for the same reason Alt+R checks it:
+      // a layout or IME can report the composed character rather than "Enter",
+      // and NumpadEnter is a separate code. Ctrl OR Meta, so a Mac keyboard
+      // works without learning a second chord.
+      const isEnter =
+        event.key === "Enter" || event.code === "Enter" || event.code === "NumpadEnter";
+      if (isEnter && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         event.stopPropagation();
         save();
