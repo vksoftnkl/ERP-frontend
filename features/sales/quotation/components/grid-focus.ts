@@ -95,21 +95,49 @@ function stopsInRow(row: readonly Focusable[], from: Focusable | null): Focusabl
 }
 
 /**
+ * A picker cell that already names something.
+ *
+ * The lookup cell is read-only and its Enter RE-OPENS the picker, so entering a
+ * priced row on it hands the operator a cell they cannot type into and an Enter
+ * that re-picks the item they already picked. On the blank trailing row the same
+ * cell is exactly where they want to be — so it is the VALUE that decides, not
+ * the column.
+ */
+function namesSomething(cell: Focusable): boolean {
+  return (
+    cell.hasAttribute(GRID_LOOKUP_ATTR) &&
+    typeof cell.value === "string" &&
+    cell.value.trim() !== ""
+  );
+}
+
+/**
  * Where the walk lands when it steps INTO a row: the row's first flagged cell,
  * or — when the layout's flagged columns are all shut, as on the blank row that
  * always trails the grid — the picker cell, which is the one thing that row is
  * there for. Falls back to the row's first editable cell (Barcode, on a layout
  * that hides the picker column).
+ *
+ * A row that ALREADY names its item is entered one stop further along — Size on
+ * grid 23, whatever the layout puts after Description elsewhere. Finishing a
+ * line and stepping down onto a line that is already picked should leave the
+ * cursor on the first thing there is left to key, not on the item name.
  */
 function entryStopOf(row: readonly Focusable[], delta: 1 | -1): Focusable | null {
   const flagged = flaggedIn(row);
   if (flagged.length > 0) {
-    return delta === 1 ? flagged[0] : flagged[flagged.length - 1];
+    if (delta === -1) {
+      return flagged[flagged.length - 1];
+    }
+    // Only the first stop is skipped, and only when it is a filled picker: a row
+    // whose next stop does not exist keeps it rather than declining the hop.
+    return namesSomething(flagged[0]) && flagged[1] ? flagged[1] : flagged[0];
   }
   if (delta === 1) {
-    const lookup = row.find((cell) => cell.hasAttribute(GRID_LOOKUP_ATTR));
-    if (lookup) {
-      return lookup;
+    const lookupIndex = row.findIndex((cell) => cell.hasAttribute(GRID_LOOKUP_ATTR));
+    if (lookupIndex >= 0) {
+      const lookup = row[lookupIndex];
+      return namesSomething(lookup) ? (row[lookupIndex + 1] ?? lookup) : lookup;
     }
   }
   return (delta === 1 ? row[0] : row[row.length - 1]) ?? null;

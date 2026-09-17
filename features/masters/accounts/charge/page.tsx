@@ -9,6 +9,7 @@ import type {
 import styles from "@/app/master/state-master/page.module.scss";
 import {
   buildLookupOptions,
+  extractRows,
   getFirstDefinedValue,
   toDisplayValue,
   toNullableInteger,
@@ -31,6 +32,14 @@ const API_ENDPOINTS = {
 const GRID_TABLE_NAME = "charge_master";
 const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const LOOKUP_QUERY_ACCOUNT_LEDGERS = { module: "accountLedgers" } as const;
+// inventory.tax_rate_master, the rates chgTaxId may point at. There is no
+// master-lookups module for them (its `itemTaxes` fetcher still reads the
+// retired inventory.item_tax_master, whose ids the FK refuses), so the rate
+// master's own list endpoint feeds the select. It defaults to active_only and
+// rejects unknown query params, so it is called bare — which is also exactly
+// the set the server accepts on a save, and it arrives in tax_sort_order
+// (0, 0.25, 3, 5, 12, 18, 28) rather than alphabetically.
+const TAX_RATE_LIST_ENDPOINT = "/tax-rates/list";
 const LOOKUP_KEYS = {
   id: ["chgId", "chg_id", "id", "_id"],
   code: ["chgCode", "chg_code", "code"],
@@ -69,12 +78,16 @@ const CHG_LANDING_COST_KEYS = ["chgLandingCost", "chg_landing_cost"] as const;
 const CHG_COST_ALLOC_KEYS = ["chgCostAlloc", "chg_cost_alloc"] as const;
 const CHG_LEDGER_CODE_KEYS = ["chgLedgerCode", "chg_ledger_code"] as const;
 const CHG_TAX_APL_KEYS = ["chgTaxApl", "chg_tax_apl"] as const;
+const CHG_TAX_ID_KEYS = ["chgTaxId", "chg_tax_id"] as const;
 const CHG_BEFORE_TAX_KEYS = ["chgBeforeTax", "chg_before_tax"] as const;
 const CHG_SEP_POST_KEYS = ["chgSepPost", "chg_sep_post"] as const;
 const CHG_MAN_PARTY_KEYS = ["chgManParty", "chg_man_party"] as const;
 const CHG_DISP_ORDER_KEYS = ["chgDispOrder", "chg_disp_order"] as const;
 const CHG_AUTO_APPLY_KEYS = ["chgAutoApply", "chg_auto_apply"] as const;
 const CHG_IS_ACTIVE_KEYS = ["chgIsActive", "chg_is_active", "isActive", "is_active", "status"] as const;
+// Columns of a /tax-rates/list row, which answers in snake_case.
+const TAX_ID_KEYS = ["tax_id", "taxId"] as const;
+const TAX_NAME_KEYS = ["tax_name", "taxName"] as const;
 // Value sets mirror the DB CHECK constraints on charge_master and the server DTO
 // (CHARGE_MODULES / CHARGE_ROLES / ... in charge-master-api.types.ts).
 const MODULE_OPTIONS: ERPDynamicSelectOption[] = [
@@ -119,6 +132,12 @@ const DEFAULT_LEDGER_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "Select Account Ledger",
 };
+// Empty is a real answer here, not a missing one: the charge then inherits the
+// posting ledger's own rate (acc_ledger_master.led_tax_id).
+const DEFAULT_TAX_RATE_OPTION: ERPDynamicSelectOption = {
+  value: "",
+  label: "Inherit From Ledger",
+};
 const CHARGE_INITIAL_FORM_VALUES = {
   chgName: "",
   chgCode: "",
@@ -133,6 +152,7 @@ const CHARGE_INITIAL_FORM_VALUES = {
   chgCostAlloc: "",
   chgTaxApl: "false",
   chgBeforeTax: "false",
+  chgTaxId: "",
   chgSepPost: "false",
   chgManParty: "false",
   chgAutoApply: "false",
@@ -144,8 +164,40 @@ const CHARGE_INITIAL_FORM_VALUES = {
 function isLandingCost(values: Record<string, string>): boolean {
   return (values.chgLandingCost ?? "false") === "true";
 }
+// chg_tax_id is only meaningful on a charge that carries its OWN GST: a
+// before-tax charge is taxed at the item's rate inside the item line, and a
+// non-taxable one is never taxed. This is the DB CHECK ck_chg_tax_id, which
+// the server restates as a 400 on chgTaxId — so the field only shows when the
+// rule allows a rate, and the payload clears it when it does not.
+function carriesOwnTax(values: Record<string, string>): boolean {
+  return (values.chgTaxApl ?? "false") === "true" && (values.chgBeforeTax ?? "false") !== "true";
+}
+// Server order is tax_sort_order, so the slabs stay in rate order — hence the
+// rows are mapped here rather than through buildLookupOptions, which re-sorts
+// alphabetically and would read 0%, 0.25%, 12%, 18%, 28%, 3%, 5%.
+function buildTaxRateOptions(payload: unknown): ERPDynamicSelectOption[] {
+  const options: ERPDynamicSelectOption[] = [DEFAULT_TAX_RATE_OPTION];
+  const seen = new Set<string>();
+  for (const row of extractRows(payload, DEFAULT_LOOKUP_ARRAY_KEYS)) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      continue;
+    }
+    const source = row as Record<string, unknown>;
+    const value = toDisplayValue(getFirstDefinedValue(source, TAX_ID_KEYS));
+    if (!value || seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    options.push({
+      value,
+      label: toDisplayValue(getFirstDefinedValue(source, TAX_NAME_KEYS)) || value,
+    });
+  }
+  return options;
+}
 function buildChargeFormFields(
   ledgerOptions: ERPDynamicSelectOption[],
+  taxRateOptions: ERPDynamicSelectOption[],
 ): ERPDynamicModalField[] {
   return [
     { name: "__subheading_identity", label: "Charge Identity", type: "subheading" },
@@ -229,6 +281,16 @@ function buildChargeFormFields(
     },
     { name: "chgTaxApl", label: "Charge Is Taxable", type: "checkbox" },
     { name: "chgBeforeTax", label: "Apply Before Tax", type: "checkbox" },
+    {
+      name: "chgTaxId",
+      label: "Tax Rate",
+      type: "select",
+      searchable: true,
+      options: taxRateOptions,
+      placeholder: "Search tax rate",
+      visibleWhen: carriesOwnTax,
+      helperText: "Leave blank to use the ledger's own GST rate.",
+    },
     { name: "chgSepPost", label: "Post Separately", type: "checkbox" },
     { name: "chgManParty", label: "Party Mandatory", type: "checkbox" },
     { name: "__subheading_landing_cost", label: "Landing Cost (Purchase)", type: "subheading" },
@@ -257,8 +319,12 @@ function buildChargeFormFields(
 }
 export default function ChargeMasterPage() {
   const { getAll: getLedgerLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
+  const { getAll: getTaxRates } = useApi<unknown>(TAX_RATE_LIST_ENDPOINT);
   const [ledgerOptions, setLedgerOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_LEDGER_OPTION,
+  ]);
+  const [taxRateOptions, setTaxRateOptions] = useState<ERPDynamicSelectOption[]>([
+    DEFAULT_TAX_RATE_OPTION,
   ]);
   // Lookup options come from master tables that other users and other screens
   // change, so they are re-read on every data-refresh signal, not just on mount.
@@ -288,11 +354,36 @@ export default function ChargeMasterPage() {
       mounted = false;
     };
   }, [getLedgerLookup]);
+  const loadTaxRateOptions = useCallback(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        const taxRatesPayload = await getTaxRates();
+        if (!mounted) {
+          return;
+        }
+        setTaxRateOptions(buildTaxRateOptions(taxRatesPayload));
+      } catch {
+        if (!mounted) {
+          return;
+        }
+        setTaxRateOptions([DEFAULT_TAX_RATE_OPTION]);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [getTaxRates]);
   useEffect(() => loadLedgerOptions(), [loadLedgerOptions]);
+  useEffect(() => loadTaxRateOptions(), [loadTaxRateOptions]);
   useDataRefresh(() => {
     loadLedgerOptions();
+    loadTaxRateOptions();
   });
-  const formFields = useMemo(() => buildChargeFormFields(ledgerOptions), [ledgerOptions]);
+  const formFields = useMemo(
+    () => buildChargeFormFields(ledgerOptions, taxRateOptions),
+    [ledgerOptions, taxRateOptions],
+  );
   return (
     <CrudMasterPage
       title="Charge Master"
@@ -343,6 +434,7 @@ export default function ChargeMasterPage() {
           ),
           chgCostAlloc: toUpper(toDisplayValue(getFirstDefinedValue(rowSource, CHG_COST_ALLOC_KEYS))),
           chgTaxApl: toSelectBoolean(getFirstDefinedValue(rowSource, CHG_TAX_APL_KEYS), "false"),
+          chgTaxId: toDisplayValue(getFirstDefinedValue(rowSource, CHG_TAX_ID_KEYS)),
           chgBeforeTax: toSelectBoolean(
             getFirstDefinedValue(rowSource, CHG_BEFORE_TAX_KEYS),
             "false",
@@ -378,6 +470,10 @@ export default function ChargeMasterPage() {
           chgCostAlloc: landingCost ? toUpperNullable(values.chgCostAlloc ?? "") : null,
           chgTaxApl: (values.chgTaxApl ?? "false") === "true",
           chgBeforeTax: (values.chgBeforeTax ?? "false") === "true",
+          // Cleared rather than sent stale whenever the rule hides the field,
+          // so unticking "Charge Is Taxable" drops the rate with it instead of
+          // failing ck_chg_tax_id on the way in.
+          chgTaxId: carriesOwnTax(values) ? toNullableString(values.chgTaxId ?? "") : null,
           chgSepPost: (values.chgSepPost ?? "false") === "true",
           chgManParty: (values.chgManParty ?? "false") === "true",
           chgDispOrder: toNullableInteger(values.chgDispOrder ?? ""),

@@ -18,6 +18,8 @@ type Cell = {
   flagged: boolean;
   lookup?: boolean;
   focused?: boolean;
+  /** What the cell holds — only a picker cell's value changes the walk. */
+  value?: string;
 };
 
 let cells: Cell[] = [];
@@ -26,6 +28,7 @@ let focused: Cell | null = null;
 function makeElement(cell: Cell) {
   const element = {
     disabled: cell.disabled,
+    value: cell.value ?? "",
     getAttribute(name: string) {
       return name === "data-quotation-row" ? cell.row : name === "data-quotation-field" ? cell.field : null;
     },
@@ -130,6 +133,66 @@ describe("moveCellFocus", () => {
     expect(moveCellFocus("items", elementFor("r2", "barcode"), -1)).toBe(true);
     expect(focused!.row).toBe("r1");
     expect(focused!.field).toBe("rate");
+  });
+
+  /**
+   * The reported friction: finishing a line and stepping down onto one that is
+   * already picked used to land on its item name — a read-only cell whose Enter
+   * re-opens the picker — instead of on the first thing left to key.
+   */
+  it("enters a row that already names its item one stop further along", () => {
+    build([
+      { row: "r1", field: "itemName", disabled: false, flagged: true, lookup: true, value: "001" },
+      { row: "r1", field: "qty", disabled: false, flagged: true },
+      { row: "r2", field: "itemName", disabled: false, flagged: true, lookup: true, value: "001" },
+      { row: "r2", field: "size", disabled: false, flagged: true },
+      { row: "r2", field: "qty", disabled: false, flagged: true },
+    ]);
+    expect(moveCellFocus("items", elementFor("r1", "qty"), 1)).toBe(true);
+    expect(focused!.row).toBe("r2");
+    expect(focused!.field).toBe("size");
+  });
+
+  it("still enters an unpicked row on its picker", () => {
+    gridWithBlankTail(true);
+    expect(moveCellFocus("items", elementFor("r1", "rate"), 1)).toBe(true);
+    expect(focused!.row).toBe("r2");
+    expect(focused!.field).toBe("itemName");
+  });
+
+  it("keeps a filled picker when the row has no stop after it", () => {
+    build([
+      { row: "r1", field: "itemName", disabled: false, flagged: true, lookup: true, value: "001" },
+      { row: "r1", field: "qty", disabled: false, flagged: true },
+      { row: "r2", field: "itemName", disabled: false, flagged: true, lookup: true, value: "002" },
+    ]);
+    expect(moveCellFocus("items", elementFor("r1", "qty"), 1)).toBe(true);
+    expect(focused!.row).toBe("r2");
+    expect(focused!.field).toBe("itemName");
+  });
+
+  it("skips a filled picker on a layout that flags nothing", () => {
+    build([
+      { row: "r1", field: "itemName", disabled: false, flagged: false, lookup: true, value: "001" },
+      { row: "r1", field: "qty", disabled: false, flagged: false },
+      { row: "r2", field: "itemName", disabled: false, flagged: false, lookup: true, value: "002" },
+      { row: "r2", field: "size", disabled: false, flagged: false },
+    ]);
+    expect(moveCellFocus("items", elementFor("r1", "qty"), 1)).toBe(true);
+    expect(focused!.row).toBe("r2");
+    expect(focused!.field).toBe("size");
+  });
+
+  it("walks back into a picked row's LAST stop, not past its item", () => {
+    build([
+      { row: "r1", field: "itemName", disabled: false, flagged: true, lookup: true, value: "001" },
+      { row: "r1", field: "qty", disabled: false, flagged: true },
+      { row: "r2", field: "itemName", disabled: false, flagged: true, lookup: true, value: "002" },
+      { row: "r2", field: "qty", disabled: false, flagged: true },
+    ]);
+    expect(moveCellFocus("items", elementFor("r2", "itemName"), -1)).toBe(true);
+    expect(focused!.row).toBe("r1");
+    expect(focused!.field).toBe("qty");
   });
 
   it("declines at the very end of the grid", () => {

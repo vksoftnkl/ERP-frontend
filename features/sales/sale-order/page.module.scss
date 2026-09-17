@@ -318,6 +318,12 @@
   color: #b91c1c;
 }
 
+/* The dialog body holds focus on open so its keys work before anything is
+   clicked; it is a container, not a control, so it draws no focus ring. */
+.tenderBody {
+  outline: none;
+}
+
 .tenderKeyHint {
   font-size: 11.5px;
   color: #64748b;

@@ -75,15 +75,17 @@ export type SizeEntryModalProps<T extends SizeGroupLine> = {
  */
 function SizeBoxes(props: {
   factors: string[];
+  /** Stamped on the wrapper so the dialog can put the cursor in THIS row. */
+  rowKey: string;
   disabled?: boolean;
   invalid?: boolean;
   autoFocus?: boolean;
   onChange: (factors: string[]) => void;
   onKeyDown?: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
 }) {
-  const { factors, disabled, invalid, autoFocus, onChange, onKeyDown } = props;
+  const { factors, rowKey, disabled, invalid, autoFocus, onChange, onKeyDown } = props;
   return (
-    <span className={styles.cellSizeBoxes}>
+    <span className={styles.cellSizeBoxes} data-size-row={rowKey}>
       {factors.map((factor, index) => (
         <Fragment key={SIZE_FACTOR_LABELS[index]}>
           {index > 0 && (
@@ -182,12 +184,48 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
     }
   };
 
+  /**
+   * The row whose first box the cursor owes a visit, once React has rendered
+   * it. "+ Add size" is a BUTTON: clicking it takes focus off whatever box was
+   * being keyed and parks it on the button, where the next keystroke types
+   * nothing and Enter adds a second empty row. So adding a size names the row
+   * here and the effect below moves the cursor into it — the click and Alt+R
+   * both end where the operator is about to type.
+   */
+  const pendingFocusRef = useRef<string | null>(null);
+
   const addRow = useCallback((): void => {
-    setRows((current) => [...current, createSizeEntryRow<T>(baseRate)]);
+    // Built outside the updater: the key has to be known HERE, and an updater
+    // React may run twice must not mint two rows.
+    const row = createSizeEntryRow<T>(baseRate);
+    pendingFocusRef.current = row.key;
+    setRows((current) => [...current, row]);
   }, [baseRate]);
 
+  useEffect(() => {
+    const key = pendingFocusRef.current;
+    if (!key) {
+      return;
+    }
+    pendingFocusRef.current = null;
+    const box = bodyRef.current?.querySelector<HTMLInputElement>(
+      `[data-size-row="${key}"] input:not([disabled])`,
+    );
+    box?.focus();
+    box?.select();
+  }, [rows]);
+
   const removeRow = (key: string): void => {
-    setRows((current) => current.filter((row) => row.key !== key));
+    setRows((current) => {
+      const index = current.findIndex((row) => row.key === key);
+      const next = current.filter((row) => row.key !== key);
+      // The × button that had focus is about to unmount, and focus would fall
+      // to <body> — where Enter and the arrows do nothing. Hand it to the row
+      // that took this one's place, or to the one above when it was the last.
+      const neighbour = next[index] ?? next[index - 1] ?? null;
+      pendingFocusRef.current = neighbour?.key ?? null;
+      return next;
+    });
   };
 
   const save = useCallback((): void => {
@@ -334,6 +372,7 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
                     <td>
                       <SizeBoxes
                         factors={row.factors}
+                        rowKey={row.key}
                         invalid={Boolean(errors?.size)}
                         autoFocus={index === 0}
                         onKeyDown={(event) => {

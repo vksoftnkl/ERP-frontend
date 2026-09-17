@@ -17,7 +17,7 @@
  * All arithmetic is `domain/arithmetic.ts` and all refusals are
  * `domain/validate.ts`; this component computes nothing and judges nothing.
  */
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "react-toastify";
 import { cx } from "@/components/design-system/cx";
 import { formatCurrency, money } from "@/domain/pricing";
@@ -193,6 +193,14 @@ function TenderDialogBody({
   /** "Put this on credit anyway?" — asked once per settle, not per keystroke. */
   const [creditOverridden, setCreditOverridden] = useState(false);
   const amountRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  /**
+   * The dialog's own body. Nothing inside it is autofocused on open — the
+   * operator may be about to key an amount, or to hit Ctrl+Enter on a bill that
+   * is already covered — but SOMETHING inside it has to hold focus, or the keys
+   * below never reach this handler: the dialog is portaled, so a keystroke aimed
+   * at whatever was focused behind it does not bubble through this tree.
+   */
+  const bodyRef = useRef<HTMLDivElement | null>(null);
 
   const fallbackReason: TenderFallbackReason | null = mastersFailed
     ? "unavailable"
@@ -237,6 +245,52 @@ function TenderDialogBody({
     setActiveKey(key);
     window.requestAnimationFrame(() => amountRefs.current[key]?.focus());
   }, []);
+
+  // Park focus on the body when the dialog opens, so F1 / Alt+letter / the
+  // arrows / Ctrl+Enter work on a dialog nobody has clicked into yet.
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => bodyRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  /**
+   * The rows the cursor walks. Panel-owned rows (RRN, loyalty) are read-only,
+   * so stepping onto one would strand the cursor on a cell that refuses every
+   * key — the walk skips them exactly as the initial cursor does.
+   */
+  const walkableKeys = useMemo(
+    () => rows.filter((row) => !rowIsPanelOwned(row)).map((row) => row.key),
+    [rows],
+  );
+
+  /**
+   * Down/Up step between tender rows — and from the body itself, with nothing
+   * focused, Down lands on the FIRST amount. That is the open-and-type rhythm:
+   * the dialog opens, Down, key the cash.
+   */
+  const stepRow = useCallback(
+    (delta: number, fromKey: string | null) => {
+      if (walkableKeys.length === 0) {
+        return;
+      }
+      if (fromKey === null) {
+        focusAmount(delta > 0 ? walkableKeys[0] : walkableKeys[walkableKeys.length - 1]);
+        return;
+      }
+      const index = walkableKeys.indexOf(fromKey);
+      if (index < 0) {
+        focusAmount(walkableKeys[0]);
+        return;
+      }
+      // Clamped, not wrapped: an operator holding Down should stop at the last
+      // tender rather than silently reappear at the top of the list.
+      const next = Math.min(walkableKeys.length - 1, Math.max(0, index + delta));
+      if (next !== index) {
+        focusAmount(walkableKeys[next]);
+      }
+    },
+    [focusAmount, walkableKeys],
+  );
 
   /**
    * Keying an amount onto a cash-only customer's CREDIT row asks once and
@@ -335,26 +389,49 @@ function TenderDialogBody({
     });
   };
 
-  const onDialogKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "F1") {
-        event.preventDefault();
-        payBalanceHere();
+  /**
+   * Not memoised: it calls `apply`, which is rebuilt every render off the
+   * current rows, and a `useCallback` around it would settle yesterday's bill.
+   */
+  const onDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // Ctrl+Enter commits the dialog from anywhere inside it — the amount cell
+    // mid-number, a reference field, the body. On the bill screen OK is
+    // "OK & Save", so this is the one keystroke that settles AND writes.
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      apply();
+      return;
+    }
+    if (event.key === "F1") {
+      event.preventDefault();
+      payBalanceHere();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const target = event.target as HTMLElement | null;
+      const amountKey =
+        Object.keys(amountRefs.current).find((key) => amountRefs.current[key] === target) ?? null;
+      // Arrows belong to whatever field owns them — the bank combobox walks its
+      // own options, a date field steps its own value — so the walk only runs
+      // from an amount cell or from the body itself.
+      if (amountKey === null && target?.closest("input, select, textarea, [role='combobox']")) {
         return;
       }
-      // A hotkey jumps the cursor to that row's amount. Held with Alt so the
-      // letter still types normally into a reference field.
-      if (event.altKey && /^[a-zA-Z]$/.test(event.key)) {
-        const letter = event.key.toUpperCase();
-        const target = rows.find((row) => row.hotkey === letter);
-        if (target) {
-          event.preventDefault();
-          focusAmount(target.key);
-        }
+      event.preventDefault();
+      stepRow(event.key === "ArrowDown" ? 1 : -1, amountKey);
+      return;
+    }
+    // A hotkey jumps the cursor to that row's amount. Held with Alt so the
+    // letter still types normally into a reference field.
+    if (event.altKey && /^[a-zA-Z]$/.test(event.key)) {
+      const letter = event.key.toUpperCase();
+      const target = rows.find((row) => row.hotkey === letter);
+      if (target) {
+        event.preventDefault();
+        focusAmount(target.key);
       }
-    },
-    [focusAmount, payBalanceHere, rows],
-  );
+    }
+  };
 
   return (
     <ModalShell
@@ -377,7 +454,7 @@ function TenderDialogBody({
         </>
       }
     >
-      <div onKeyDown={onDialogKeyDown}>
+      <div ref={bodyRef} tabIndex={-1} className={styles.tenderBody} onKeyDown={onDialogKeyDown}>
         {/* The seeding reason takes the hint bar over for the rest of the
             dialog — it is a fault to fix in the master, not a layout to get
             used to. */}
@@ -387,8 +464,8 @@ function TenderDialogBody({
           </div>
         ) : (
           <div className={styles.tenderKeyHint}>
-            F1 pay the balance with this row · Alt+letter jump to a tender · Enter commits the
-            amount, Enter again the dialog · Esc close
+            ↑↓ move between tenders · F1 pay the balance with this row · Alt+letter jump to a
+            tender · Enter commits the amount, Enter again the dialog · Ctrl+Enter OK · Esc close
           </div>
         )}
 
@@ -445,7 +522,7 @@ function TenderDialogBody({
                       onChange={(event) => onAmountInput(row, event.target.value)}
                       onBlur={() => onAmountCommit(row)}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter") {
+                        if (event.key === "Enter" && !event.ctrlKey && !event.metaKey) {
                           event.preventDefault();
                           // Enter on a half-typed amount COMMITS it; Enter on a
                           // cell with nothing pending commits the DIALOG. That
