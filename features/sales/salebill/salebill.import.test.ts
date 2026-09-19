@@ -395,6 +395,16 @@ describe("importQuotation", () => {
     expect(line.gstPerc).toBe(18);
   });
 
+  it("names the customer in the NAME field and leaves the picker empty", () => {
+    // The Existing Customer box is the picker for linking a master record, not
+    // a read-back of the one already linked: it opens ready to search, exactly
+    // as it does on the quotation screen. The link itself rides on `custId`.
+    const { draft } = importQuotation(createBillDraft(CONTEXT), quotationPayload());
+    expect(draft.customer.custId).toBe("cust-1");
+    expect(draft.customer.name).toBe("ACME");
+    expect(draft.customer.masterName).toBe("");
+  });
+
   it("carries the POS the source was priced under, overridable", () => {
     // The quotation was quoted at IGST for a ship-to across a state line.
     // Silently re-taxing it on import would change the money the customer was

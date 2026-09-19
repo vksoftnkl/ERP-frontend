@@ -180,7 +180,12 @@ function paintCommon(
       ...draft.customer,
       custId: values.custId,
       name: values.custName,
-      masterName: values.custName,
+      // Blank on purpose, as on the quotation screen: the imported bill already
+      // names its customer in the Customer Name field below, and the Existing
+      // Customer box is the picker for LINKING one — it opens ready to search
+      // and fills in again only if the operator picks somebody else. `custId`
+      // above is what keeps the link; this is only what the box reads back.
+      masterName: "",
       address: values.custAddr,
       place: values.custPlace,
       phone: values.custPhone,
