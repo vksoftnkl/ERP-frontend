@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getOrCreateClientDeviceId, setAuthUserId } from "@/lib/auth/session";
 import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
@@ -42,6 +42,19 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [login, { isLoading, error }] = useLoginMutation();
   const loginError = getApiErrorMessage(error);
+  const usernameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const field = usernameRef.current;
+      if (!field) return;
+      if (document.activeElement === field) return;
+      field.focus();
+      const end = field.value.length;
+      field.setSelectionRange(end, end);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const validate = () => {
     const next: Errors = {};
     const username = values.username.trim();
@@ -87,6 +100,11 @@ export default function LoginPage() {
     } catch {
       // Error state is surfaced by the RTK Query mutation hook.
     }
+  };
+  const onUsernameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    passwordRef.current?.focus();
   };
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -184,7 +202,7 @@ export default function LoginPage() {
             </svg>
             <h2>Sign in</h2>
             <p className={styles.sub}>to access VK Nex ERP</p>
-            <form onSubmit={onSubmit} noValidate>
+            <form onSubmit={onSubmit} noValidate autoComplete="off">
               <div className={`${styles.field} ${errors.username ? styles.invalid : ""}`} id="f-user">
                 <label htmlFor="user">Email or username</label>
                 <div className={styles.control}>
@@ -192,10 +210,22 @@ export default function LoginPage() {
                     id="user"
                     name="username"
                     type="text"
-                    autoComplete="username"
+                    // Browser and password-manager autofill is off on this
+                    // screen by request: "username" would be filled from saved
+                    // credentials on load, "off" alone is ignored for a field
+                    // the browser reads as the sign-in name.
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-form-type="other"
+                    data-lpignore="true"
+                    data-1p-ignore=""
                     placeholder="you@company.in"
                     value={values.username}
                     onChange={onChange}
+                    onKeyDown={onUsernameKeyDown}
+                    ref={usernameRef}
                     autoFocus
                   />
                 </div>
@@ -208,10 +238,20 @@ export default function LoginPage() {
                     id="pass"
                     name="password"
                     type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
+                    // "new-password" rather than "off": Chrome ignores "off" on
+                    // a password box and fills the saved pair anyway, and it is
+                    // that fill which drags the username in with it.
+                    autoComplete="new-password"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-form-type="other"
+                    data-lpignore="true"
+                    data-1p-ignore=""
                     placeholder="••••••••"
                     value={values.password}
                     onChange={onChange}
+                    ref={passwordRef}
                   />
                   <button
                     type="button"
