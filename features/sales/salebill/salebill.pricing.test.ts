@@ -28,10 +28,12 @@ import {
   chargeAdded,
   customerApplied,
   draftReplaced,
+  headerFieldSet,
   lineFieldSet,
   posSet,
   saleBillReducer,
   settlementSet,
+  walkInCustomerSeeded,
   type SaleBillState,
 } from "@/store/slices/saleBillSlice";
 import { createBillDraft } from "./salebill.state";
@@ -270,6 +272,79 @@ function freshState(): SaleBillState {
   return saleBillReducer(undefined, draftReplaced(createBillDraft(CONTEXT)));
 }
 
+/**
+ * One customer master answer, shared by every block below that needs one: the
+ * lock, the walk-in seed and the replacement that follows it. Each overrides
+ * only the fields its own case is about.
+ */
+const BASE_CUSTOMER_DETAIL = {
+  cust_id: "cust-2",
+  cust_name: "SECOND CUSTOMER",
+  cust_address: null,
+  cust_place: null,
+  cust_ename: null,
+  cust_eadd1: null,
+  cust_eadd2: null,
+  cust_eadd3: null,
+  cust_pin: null,
+  ecommerce_gstin: null,
+  gst_no: null,
+  gst_type: null,
+  state_code: "33",
+  state_name: "Tamil Nadu",
+  area_id: "a1",
+  area_name: null,
+  distance_km: null,
+  cust_phone1: null,
+  debit_days: 0,
+  debit_limit: 0,
+  debit_allowed: false,
+  freight_charge: false,
+  cooly: false,
+  unloading_charge: false,
+  allow_promotion: false,
+  allow_loyalty: false,
+  allow_discount: true,
+  overdue_billing: false,
+  price_level: 1,
+  cust_disc_perc: 0,
+  salesman_id: null,
+  salesman_name: null,
+  tcs_company: false,
+  tcs_customer: false,
+  cust_pan: false,
+  local_sales: true,
+  cust_points: null,
+  billed_date: null,
+} satisfies CustomerDetailPayload;
+
+const AUTO_CHARGE_MASTER = {
+  chgId: "chg-1",
+  chgName: "FREIGHT",
+  chgCode: null,
+  chgModule: "S",
+  chgRole: "FREIGHT",
+  chgMethod: "FIXED",
+  chgType: "ADD",
+  chgApplyOn: "VALUE",
+  chgDefaultRate: 250,
+  chgLandingCost: false,
+  chgCostAlloc: null,
+  chgLedgerCode: "led-1",
+  chgLedgerName: "Freight Outward",
+  ledHsnSac: null,
+  ledGstRate: 18,
+  ledTaxability: null,
+  chgTaxApl: true,
+  chgBeforeTax: false,
+  chgSepPost: false,
+  chgManParty: false,
+  chgDispOrder: 1,
+  chgAutoApply: true,
+  chgIsActive: true,
+} satisfies ChargeMasterRow;
+
+
 describe("place of supply, and the flag the Qt screen leaves behind", () => {
   it("goes inter-state when the POS leaves the company's state", () => {
     const state = saleBillReducer(freshState(), posSet({ stateCode: "29", stateName: "Karnataka" }));
@@ -412,46 +487,7 @@ describe("the discount one-of-three rule", () => {
 });
 
 describe("the customer lock (§4.3)", () => {
-  const detail = {
-    cust_id: "cust-2",
-    cust_name: "SECOND CUSTOMER",
-    cust_address: null,
-    cust_place: null,
-    cust_ename: null,
-    cust_eadd1: null,
-    cust_eadd2: null,
-    cust_eadd3: null,
-    cust_pin: null,
-    ecommerce_gstin: null,
-    gst_no: null,
-    gst_type: null,
-    state_code: "33",
-    state_name: "Tamil Nadu",
-    area_id: "a1",
-    area_name: null,
-    distance_km: null,
-    cust_phone1: null,
-    debit_days: 0,
-    debit_limit: 0,
-    debit_allowed: false,
-    freight_charge: false,
-    cooly: false,
-    unloading_charge: false,
-    allow_promotion: false,
-    allow_loyalty: false,
-    allow_discount: true,
-    overdue_billing: false,
-    price_level: 1,
-    cust_disc_perc: 0,
-    salesman_id: null,
-    salesman_name: null,
-    tcs_company: false,
-    tcs_customer: false,
-    cust_pan: false,
-    local_sales: true,
-    cust_points: null,
-    billed_date: null,
-  } satisfies CustomerDetailPayload;
+  const detail = BASE_CUSTOMER_DETAIL;
 
   it("applies a customer freely while the bill has taken nothing", () => {
     const next = saleBillReducer(freshState(), customerApplied(detail));
@@ -517,32 +553,90 @@ describe("the customer lock (§4.3)", () => {
   });
 });
 
+describe("the walk-in customer a new bill opens on (§4.1)", () => {
+  const walkIn = {
+    ...BASE_CUSTOMER_DETAIL,
+    cust_id: "cust-walkin",
+    cust_name: "WALK IN CUSTOMER",
+    cust_phone1: "0000000000",
+  } satisfies CustomerDetailPayload;
+  const real = {
+    ...BASE_CUSTOMER_DETAIL,
+    cust_id: "cust-7",
+    cust_name: "REAL CUSTOMER",
+    cust_phone1: "9876543210",
+    debit_allowed: true,
+    debit_days: 30,
+    price_level: 2,
+  } satisfies CustomerDetailPayload;
+
+  it("seeds a bill that has only just been opened", () => {
+    const next = saleBillReducer(freshState(), walkInCustomerSeeded(walkIn));
+    expect(next.customer.custId).toBe("cust-walkin");
+  });
+
+  it("does not dirty the bill it seeded", () => {
+    // The same rule as the auto-apply charges, and it matters for the same two
+    // reasons: F7 must not prompt about work nobody did, and `autoChargesSeeded`
+    // declines on a dirty draft — a dirtying seed would cost every bill its
+    // standing charges.
+    const next = saleBillReducer(freshState(), walkInCustomerSeeded(walkIn));
+    expect(next.isDirty).toBe(false);
+    const withCharges = saleBillReducer(
+      next,
+      autoChargesSeeded([AUTO_CHARGE_MASTER]),
+    );
+    expect(withCharges.charges.filter((row) => row.chgId)).toHaveLength(1);
+  });
+
+  it("never seeds over a customer somebody already chose", () => {
+    const picked = saleBillReducer(freshState(), customerApplied(real));
+    const next = saleBillReducer(picked, walkInCustomerSeeded(walkIn));
+    expect(next.customer.custId).toBe("cust-7");
+  });
+
+  it("never seeds onto a loaded bill", () => {
+    const loaded: SaleBillState = {
+      ...freshState(),
+      docId: "sb-1",
+      isNewEntry: false,
+    };
+    const next = saleBillReducer(loaded, walkInCustomerSeeded(walkIn));
+    expect(next.customer.custId).toBeNull();
+  });
+
+  it("is replaced outright by the customer the operator then picks", () => {
+    // The whole point of the default: it is where the bill starts, not what it
+    // is stuck with. Everything the walk-in brought with it — the term, the
+    // price level, the contact — has to follow the new party.
+    const seeded = saleBillReducer(freshState(), walkInCustomerSeeded(walkIn));
+    expect(seeded.header.contactPerson).toBe("WALK IN CUSTOMER");
+    const next = saleBillReducer(seeded, customerApplied(real));
+    expect(next.customer.custId).toBe("cust-7");
+    expect(next.customer.name).toBe("REAL CUSTOMER");
+    expect(next.header.contactPerson).toBe("REAL CUSTOMER");
+    expect(next.header.contactNo).toBe("9876543210");
+    expect(next.header.priceLevel).toBe(2);
+    expect(next.header.billType).toBe("CREDIT");
+    expect(next.isDirty).toBe(true);
+  });
+
+  it("keeps a contact the operator keyed themselves", () => {
+    // A contact that is only the outgoing customer's name echoed in belongs to
+    // the party being replaced; one somebody typed is theirs and survives the
+    // change.
+    const seeded = saleBillReducer(freshState(), walkInCustomerSeeded(walkIn));
+    const keyed = saleBillReducer(
+      seeded,
+      headerFieldSet({ field: "contactPerson", value: "SITE ENGINEER" }),
+    );
+    const next = saleBillReducer(keyed, customerApplied(real));
+    expect(next.header.contactPerson).toBe("SITE ENGINEER");
+  });
+});
+
 describe("auto-apply charges (§6)", () => {
-  const master = {
-    chgId: "chg-1",
-    chgName: "FREIGHT",
-    chgCode: null,
-    chgModule: "S",
-    chgRole: "FREIGHT",
-    chgMethod: "FIXED",
-    chgType: "ADD",
-    chgApplyOn: "VALUE",
-    chgDefaultRate: 250,
-    chgLandingCost: false,
-    chgCostAlloc: null,
-    chgLedgerCode: "led-1",
-    chgLedgerName: "Freight Outward",
-    ledHsnSac: null,
-    ledGstRate: 18,
-    ledTaxability: null,
-    chgTaxApl: true,
-    chgBeforeTax: false,
-    chgSepPost: false,
-    chgManParty: false,
-    chgDispOrder: 1,
-    chgAutoApply: true,
-    chgIsActive: true,
-  } satisfies ChargeMasterRow;
+  const master = AUTO_CHARGE_MASTER;
 
   it("seeds a pristine new bill", () => {
     const next = saleBillReducer(freshState(), autoChargesSeeded([master]));

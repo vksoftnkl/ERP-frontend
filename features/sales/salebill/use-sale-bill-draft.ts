@@ -91,7 +91,12 @@ import {
   saveResponseApplied,
   selectSaleBillDraft,
   tenantSet,
+  walkInCustomerSeeded,
 } from "@/store/slices/saleBillSlice";
+import {
+  selectAppSettingBool,
+  selectAppSettingText,
+} from "@/store/slices/appSettingsSlice";
 import type { AppDispatch } from "@/store/store";
 import {
   getAuthSessionId,
@@ -117,12 +122,16 @@ import {
   SALE_BILL_ITEM_COLUMN_NUMBERS,
   SALE_BILL_ITEM_COLUMN_WIDTH_UNIT,
   SALE_BILL_ITEM_GRID_UI_TABLE_KEY,
+  WALK_IN_CUSTOMER_ENABLED_SETTING_KEY,
+  WALK_IN_CUSTOMER_ID_SETTING_KEY,
 } from "./salebill.constants";
 import {
   copyBillDraftAsNew,
   createBillDraft,
   customerChangeCosts,
   nowStamp,
+  resolveWalkInCustomerId,
+  shouldSeedWalkInCustomer,
 } from "./salebill.state";
 import { buildSavePayload, parseLoadedBill } from "./salebill.payload";
 import {
@@ -890,25 +899,39 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     dispatch(customerBoundStateCleared());
   }, [dispatch]);
   /**
-   * Apply a picked customer, and fetch the two things that hang off them: the
-   * freight bands for their distance and their credit standing (§4.2).
+   * Apply a customer, and fetch the two things that hang off them: the freight
+   * bands for their distance and their credit standing (§4.2).
    *
    * The caller is responsible for having asked first when `customerChangeCost`
    * says the change costs something — the reducer refuses outright while it
    * does, so a screen that forgets gets a no-op rather than a silent loss.
+   *
+   * `seed: true` is the walk-in default a new bill opens on rather than the
+   * operator's own pick: same lookup, same two follow-ups, but it applies
+   * through `walkInCustomerSeeded`, which refuses on anything but a blank new
+   * bill and leaves the draft pristine. Nothing about it is sticky — the
+   * operator picking a real customer is an ordinary call and replaces it.
    */
-  const pickCustomer = useCallback(
-    async (customerId: string) => {
+  const applyCustomer = useCallback(
+    async (customerId: string, options: { seed?: boolean } = {}) => {
+      const seeding = options.seed === true;
       if (!customerId) {
         return;
       }
       if (!draft.companyId || !draft.branchId) {
-        toast.warn(
-          "The company and branch are still loading — try again in a moment.",
-        );
+        if (!seeding) {
+          toast.warn(
+            "The company and branch are still loading — try again in a moment.",
+          );
+        }
         return;
       }
-      setBusy("loading");
+      // The seed is the screen opening, not a keystroke waiting on an answer:
+      // blocking the whole form behind `busy` while it runs would make a fresh
+      // bill unusable for the length of a lookup nobody asked for.
+      if (!seeding) {
+        setBusy("loading");
+      }
       try {
         const detail = await fetchCustomerDetail({
           cus_id: customerId,
@@ -916,7 +939,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           branch_id: draft.branchId,
           regional,
         }).unwrap();
-        dispatch(customerApplied(detail));
+        dispatch(seeding ? walkInCustomerSeeded(detail) : customerApplied(detail));
         // Freight bands are only worth fetching when the distance actually
         // changed and the policy is not manual.
         const distance = detail.distance_km;
@@ -955,9 +978,23 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           dispatch(partyCreditSet(null));
         }
       } catch (error) {
-        toast.error(errorMessage(error));
+        // A seed that fails costs the bill nothing the operator cannot do
+        // themselves — the picker is simply empty, which is where a bill
+        // started before there was a default at all. It is not toasted for
+        // that reason, and it IS logged: an id that names no customer is a
+        // mis-set `sales.default_customer_id`, and the console is where that
+        // shows up rather than in front of whoever is billing.
+        if (seeding) {
+          console.warn(
+            `[sale-bill] the walk-in customer (${customerId}) could not be read: ${errorMessage(error)}`,
+          );
+        } else {
+          toast.error(errorMessage(error));
+        }
       } finally {
-        setBusy("idle");
+        if (!seeding) {
+          setBusy("idle");
+        }
       }
     },
     [
@@ -973,6 +1010,57 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       regional,
     ],
   );
+  const pickCustomer = useCallback(
+    (customerId: string) => applyCustomer(customerId),
+    [applyCustomer],
+  );
+  // -------------------------------------------------------------------------
+  // The walk-in customer (§4.1)
+  // -------------------------------------------------------------------------
+  /**
+   * The party a new bill opens on, from the two settings the catalog states it
+   * with. Both are resolved for THIS session's scope by `SessionAppSettings`,
+   * so a till that names its own walk-in gets its own.
+   */
+  const walkInCustomerId = useAppSelector((state) =>
+    resolveWalkInCustomerId(
+      selectAppSettingBool(state, WALK_IN_CUSTOMER_ENABLED_SETTING_KEY, true),
+      selectAppSettingText(state, WALK_IN_CUSTOMER_ID_SETTING_KEY),
+    ),
+  );
+  /** Held in a ref so the effect below does not re-fire on every keystroke. */
+  const applyCustomerRef = useRef(applyCustomer);
+  applyCustomerRef.current = applyCustomer;
+  /**
+   * Seeded from the DRAFT rather than once on mount, exactly like the
+   * auto-apply charges above: Clear opens another blank bill, and an effect
+   * keyed only on the setting would seed the first bill of the session and
+   * leave every one after it on an empty picker. Every guard about *whether* to
+   * seed lives in `shouldSeedWalkInCustomer`, which the reducer re-checks — so
+   * this only has to say "there is an id to seed with, and nothing is already
+   * out asking for it".
+   *
+   * The in-flight ref is not the reducer's job: the lookup is a round trip, and
+   * the draft it guards on is still blank while the request is out.
+   *
+   * A failure is not retried on the spot — the deps have not moved — so a
+   * mis-set id costs one lookup per bill and nothing else.
+   */
+  const seedingWalkIn = useRef(false);
+  const needsWalkInCustomer = shouldSeedWalkInCustomer(draft);
+  useEffect(() => {
+    if (!needsWalkInCustomer || !walkInCustomerId || seedingWalkIn.current) {
+      return;
+    }
+    seedingWalkIn.current = true;
+    void (async () => {
+      try {
+        await applyCustomerRef.current(walkInCustomerId, { seed: true });
+      } finally {
+        seedingWalkIn.current = false;
+      }
+    })();
+  }, [needsWalkInCustomer, walkInCustomerId]);
   // -------------------------------------------------------------------------
   // Document lifecycle
   // -------------------------------------------------------------------------

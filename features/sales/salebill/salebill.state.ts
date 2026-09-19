@@ -346,6 +346,57 @@ export function seedCreditPeriod(
 }
 
 // ---------------------------------------------------------------------------
+// The walk-in customer (§4.1)
+// ---------------------------------------------------------------------------
+
+/**
+ * The customer a NEW bill starts on, as the two settings state it:
+ * `sales.pop_default_customer` (is there one at all) and
+ * `sales.default_customer_id` (who). Both are resolved for the session's own
+ * scope — the id is a DEVICE-level setting, because the counter a till stands
+ * at decides who its walk-in is.
+ *
+ * This is a default, never a decision: the operator picks a real customer over
+ * it and the picked one replaces it outright.
+ */
+export function resolveWalkInCustomerId(
+  enabled: boolean,
+  settingText: string | null | undefined,
+): string | null {
+  if (!enabled) {
+    return null;
+  }
+  const id = (settingText ?? "").trim();
+  return id ? id : null;
+}
+
+/**
+ * Whether this draft is a bill that has only just been opened — the one state
+ * the walk-in customer may be seeded onto.
+ *
+ * Every clause is a document that must be left alone: a loaded bill carries the
+ * party it was raised for, a resumed cart carries the one it was parked with, a
+ * touched draft carries the operator's own work, and a hand-keyed name with no
+ * master behind it (`custId` null, a name typed in) is a walk-in the operator
+ * has already described themselves. The tenant clause is not about the
+ * document: the customer lookup is scoped by company and branch, so there is
+ * nothing to ask with until those have landed.
+ */
+export function shouldSeedWalkInCustomer(draft: SaleBillDraft): boolean {
+  return (
+    draft.mode === "entry" &&
+    draft.isNewEntry &&
+    !draft.docId &&
+    !draft.isDirty &&
+    !draft.holdId &&
+    !draft.customer.custId &&
+    !draft.customer.name.trim() &&
+    Boolean(draft.companyId) &&
+    Boolean(draft.branchId)
+  );
+}
+
+// ---------------------------------------------------------------------------
 // The customer lock (§4.3)
 // ---------------------------------------------------------------------------
 

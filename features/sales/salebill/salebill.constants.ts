@@ -120,6 +120,25 @@ export { CHARGE_GRID_UI_TABLE_KEY } from "@/features/sales/quotation/quotation.c
 export const SALE_BILL_WIDGET_MENU_ID = "12";
 
 // ---------------------------------------------------------------------------
+// Settings this screen reads (`fixed.app_setting_def`, resolved for the session)
+// ---------------------------------------------------------------------------
+
+/**
+ * "Seed walk-in customer" — whether a new bill opens on a default party at all.
+ * BOOL, catalogued `true`, and settable down to the DEVICE, because the walk-in
+ * is a property of the counter rather than of the company.
+ */
+export const WALK_IN_CUSTOMER_ENABLED_SETTING_KEY = "sales.pop_default_customer";
+
+/**
+ * "Walk-in customer" — WHO that party is, as a `customer_master` id. Read as
+ * text, like every setting value, and handed straight to the customer lookup:
+ * an id that names no customer simply fails the lookup and leaves the picker
+ * empty, which is the same place the operator would have started anyway.
+ */
+export const WALK_IN_CUSTOMER_ID_SETTING_KEY = "sales.default_customer_id";
+
+// ---------------------------------------------------------------------------
 // Enum-shaped columns (`ck_sb_*`, re-checked server-side per save)
 // ---------------------------------------------------------------------------
 

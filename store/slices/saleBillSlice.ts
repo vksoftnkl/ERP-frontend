@@ -51,6 +51,7 @@ import {
   customerChangeCosts,
   duplicateBillDraftLine,
   seedCreditPeriod,
+  shouldSeedWalkInCustomer,
 } from "@/features/sales/salebill/salebill.state";
 import type {
   AdjustableCredit,
@@ -79,6 +80,72 @@ const initialState: SaleBillState = createBillDraft({
   accYear: "",
   companyStateCode: "",
 });
+
+/**
+ * Put a customer master's answer onto the draft.
+ *
+ * Shared by the operator's own pick and by the walk-in seed, which differ only
+ * in what they are allowed to run on — never in what applying a customer means.
+ */
+function applyCustomerDetail(state: SaleBillDraft, detail: CustomerDetailPayload): void {
+  const customer = customerFromDetail(detail);
+  // Read before the snapshot is swapped in: a changed distance invalidates
+  // the cached freight bands, and the contact fields below have to be able to
+  // tell the outgoing customer's own details from the operator's.
+  const previousDistance = state.customer.distanceKm;
+  const previousName = state.customer.name;
+  const previousPhone = state.customer.phone ?? "";
+  state.customer = customer;
+  // The customer's state and the PLACE OF SUPPLY are two different facts
+  // (§5). Picking a customer moves the POS to their state because that is
+  // the overwhelmingly common case, but the operator may then override it
+  // for a ship-to across a state line, and `sbCustStcd` keeps the master's
+  // answer either way.
+  state.header.posStateCode = customer.stateCode || state.header.posStateCode;
+  state.header.posStateName = customer.stateName || state.header.posStateName;
+  state.header.people.salesmanId = detail.salesman_id ?? state.header.people.salesmanId;
+  state.header.people.salesmanName = detail.salesman_name ?? state.header.people.salesmanName;
+  // A contact the operator keyed is theirs and stays. One that is only the
+  // OUTGOING customer's own name or number, echoed in when that customer was
+  // applied, belongs to the party being replaced and goes with them —
+  // otherwise every bill seeded with the walk-in customer would print
+  // "WALK IN CUSTOMER" as the contact for whoever the operator then picked.
+  if (!state.header.contactPerson || state.header.contactPerson === previousName) {
+    state.header.contactPerson = customer.name;
+  }
+  if (!state.header.contactNo || state.header.contactNo === previousPhone) {
+    state.header.contactNo = customer.phone ?? "";
+  }
+  state.header.priceLevel = customer.priceLevel;
+  // The customer master's own charge applicability drives the header flags.
+  state.header.hasFreight = detail.freight_charge;
+  state.header.hasLoad = detail.cooly;
+  state.header.hasUnload = detail.unloading_charge;
+  state.header.hasPromo = detail.allow_promotion;
+  state.header.hasLoyalty = detail.allow_loyalty;
+  // A customer the master lets buy on credit bills CREDIT; one it does not
+  // bills CASH. The operator can still change it — this is the default, not
+  // the decision.
+  state.header.billType = detail.debit_allowed ? "CREDIT" : "CASH";
+  state.header = seedCreditPeriod(state.header, customer);
+  // `local_sales` is computed server-side against this company, so it is
+  // authoritative — and it tells us the company's own state code whenever it
+  // is true. It is the FALLBACK for the tax basis, not the source: once a
+  // POS is on the document, `resolveLocalSale` reads that instead.
+  state.isLocalSale = resolveLocalSale(
+    state.header.posStateCode,
+    state.companyStateCode,
+    detail.local_sales,
+  );
+  if (detail.local_sales && customer.stateCode && !state.companyStateCode) {
+    state.companyStateCode = customer.stateCode;
+  }
+  if (customer.distanceKm !== previousDistance) {
+    state.freightBands = [];
+  }
+  // A different party is a different credit decision.
+  state.partyCredit = null;
+}
 
 const saleBillSlice = createSlice({
   name: "saleBill",
@@ -194,52 +261,28 @@ const saleBillSlice = createSlice({
       if (customerChangeCosts(state as SaleBillDraft).blocked) {
         return;
       }
-      const detail = action.payload;
-      const customer = customerFromDetail(detail);
-      // Read before the snapshot is swapped in: a changed distance invalidates
-      // the cached freight bands.
-      const previousDistance = state.customer.distanceKm;
-      state.customer = customer;
-      // The customer's state and the PLACE OF SUPPLY are two different facts
-      // (§5). Picking a customer moves the POS to their state because that is
-      // the overwhelmingly common case, but the operator may then override it
-      // for a ship-to across a state line, and `sbCustStcd` keeps the master's
-      // answer either way.
-      state.header.posStateCode = customer.stateCode || state.header.posStateCode;
-      state.header.posStateName = customer.stateName || state.header.posStateName;
-      state.header.people.salesmanId = detail.salesman_id ?? state.header.people.salesmanId;
-      state.header.people.salesmanName = detail.salesman_name ?? state.header.people.salesmanName;
-      state.header.contactPerson = state.header.contactPerson || customer.name;
-      state.header.contactNo = state.header.contactNo || (customer.phone ?? "");
-      state.header.priceLevel = customer.priceLevel;
-      // The customer master's own charge applicability drives the header flags.
-      state.header.hasFreight = detail.freight_charge;
-      state.header.hasLoad = detail.cooly;
-      state.header.hasUnload = detail.unloading_charge;
-      state.header.hasPromo = detail.allow_promotion;
-      state.header.hasLoyalty = detail.allow_loyalty;
-      // A customer the master lets buy on credit bills CREDIT; one it does not
-      // bills CASH. The operator can still change it — this is the default, not
-      // the decision.
-      state.header.billType = detail.debit_allowed ? "CREDIT" : "CASH";
-      state.header = seedCreditPeriod(state.header, customer);
-      // `local_sales` is computed server-side against this company, so it is
-      // authoritative — and it tells us the company's own state code whenever it
-      // is true. It is the FALLBACK for the tax basis, not the source: once a
-      // POS is on the document, `resolveLocalSale` reads that instead.
-      state.isLocalSale = resolveLocalSale(
-        state.header.posStateCode,
-        state.companyStateCode,
-        detail.local_sales,
-      );
-      if (detail.local_sales && customer.stateCode && !state.companyStateCode) {
-        state.companyStateCode = customer.stateCode;
+      applyCustomerDetail(state as SaleBillDraft, action.payload);
+    },
+    /**
+     * The walk-in customer a new bill opens on — settings
+     * `sales.pop_default_customer` and `sales.default_customer_id` (§4.1).
+     *
+     * The same apply, under two differences that are the whole point of it
+     * being its own action. It refuses on anything but a bill that has only
+     * just been opened, so it can never overwrite a party somebody chose; and
+     * it is a NON_EDIT_ACTION, because the screen opening on a default is not
+     * the operator typing. Were it dirty, F7 and the close guard would prompt
+     * about work nobody did and the auto-apply charges — which decline on a
+     * dirty draft — would never seed at all.
+     *
+     * Nothing here locks the seeded customer in: picking a real one is an
+     * ordinary `customerApplied`, and it replaces this outright.
+     */
+    walkInCustomerSeeded(state, action: PayloadAction<CustomerDetailPayload>) {
+      if (!shouldSeedWalkInCustomer(state as SaleBillDraft)) {
+        return;
       }
-      if (customer.distanceKm !== previousDistance) {
-        state.freightBands = [];
-      }
-      // A different party is a different credit decision.
-      state.partyCredit = null;
+      applyCustomerDetail(state as SaleBillDraft, action.payload);
     },
     /**
      * A hand-keyed customer detail.
@@ -583,6 +626,7 @@ export const {
   statusSet,
   holdSet,
   customerApplied,
+  walkInCustomerSeeded,
   customerFieldSet,
   customerBoundStateCleared,
   customerCleared,
@@ -628,6 +672,12 @@ const NON_EDIT_ACTIONS = new Set<string>([
   // dirtying it here would make Clear and the close guard prompt about work
   // nobody did.
   autoChargesSeeded.type,
+  // The walk-in customer is the same kind of pre-load: a bill that has only
+  // been opened on the counter's default party is still pristine, and marking
+  // it dirty would both prompt about work nobody did and — because
+  // `autoChargesSeeded` declines on a dirty draft — cost the bill its standing
+  // charges.
+  walkInCustomerSeeded.type,
 ]);
 
 /**

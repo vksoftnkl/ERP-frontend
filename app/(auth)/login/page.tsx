@@ -145,7 +145,7 @@ export default function LoginPage() {
             </div>
           </div>
           <div className={styles.brandFoot}>
-            <span>© 2026 VK Softwares · Trichy</span>
+            <span>© 2026 VK Softwares</span>
             <span>v1.0.0</span>
           </div>
         </aside>

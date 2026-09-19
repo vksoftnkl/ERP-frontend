@@ -20,7 +20,9 @@ import {
   duplicateBillDraftLine,
   emptyBillHeader,
   nowStamp,
+  resolveWalkInCustomerId,
   seedCreditPeriod,
+  shouldSeedWalkInCustomer,
 } from "./salebill.state";
 import type { SaleBillDraft } from "./salebill.types";
 
@@ -268,6 +270,68 @@ describe("customerChangeCosts", () => {
       settlement: { ...createBillDraft(CONTEXT).settlement, tenderAmt: 0 },
     };
     expect(customerChangeCosts(draft).blocked).toBe(true);
+  });
+});
+
+describe("resolveWalkInCustomerId", () => {
+  it("answers the configured id when the seed is on", () => {
+    expect(resolveWalkInCustomerId(true, " cus-1 ")).toBe("cus-1");
+  });
+
+  it("answers nothing when the seed is off, however the id is set", () => {
+    // The two settings are independent: a counter that turns the seed off keeps
+    // its walk-in id on file for when it turns it back on.
+    expect(resolveWalkInCustomerId(false, "cus-1")).toBeNull();
+  });
+
+  it("answers nothing when no id is on file", () => {
+    expect(resolveWalkInCustomerId(true, "   ")).toBeNull();
+    expect(resolveWalkInCustomerId(true, null)).toBeNull();
+    expect(resolveWalkInCustomerId(true, undefined)).toBeNull();
+  });
+});
+
+describe("shouldSeedWalkInCustomer", () => {
+  it("seeds a bill that has only just been opened", () => {
+    expect(shouldSeedWalkInCustomer(createBillDraft(CONTEXT))).toBe(true);
+  });
+
+  it("waits for the company and branch — the lookup is scoped by them", () => {
+    const draft = createBillDraft({ ...CONTEXT, companyId: "", branchId: "" });
+    expect(shouldSeedWalkInCustomer(draft)).toBe(false);
+  });
+
+  it("leaves a customer somebody already chose alone", () => {
+    const draft: SaleBillDraft = {
+      ...createBillDraft(CONTEXT),
+      customer: { ...emptyCustomer(), custId: "cus-9", name: "REAL CUSTOMER" },
+    };
+    expect(shouldSeedWalkInCustomer(draft)).toBe(false);
+  });
+
+  it("leaves a hand-keyed walk-in name alone, master or no master", () => {
+    // `sbCustId` is nullable: a bill may be raised to a name alone. Somebody who
+    // has typed one has already said who this bill is for.
+    const draft: SaleBillDraft = {
+      ...createBillDraft(CONTEXT),
+      customer: { ...emptyCustomer(), name: "SITE DELIVERY" },
+    };
+    expect(shouldSeedWalkInCustomer(draft)).toBe(false);
+  });
+
+  it("does not touch a bill the operator has started working on", () => {
+    expect(
+      shouldSeedWalkInCustomer({ ...createBillDraft(CONTEXT), isDirty: true }),
+    ).toBe(false);
+  });
+
+  it("does not touch a loaded bill, a resumed cart or browse mode", () => {
+    const fresh = createBillDraft(CONTEXT);
+    expect(
+      shouldSeedWalkInCustomer({ ...fresh, docId: "sb-1", isNewEntry: false }),
+    ).toBe(false);
+    expect(shouldSeedWalkInCustomer({ ...fresh, holdId: "txh-1" })).toBe(false);
+    expect(shouldSeedWalkInCustomer({ ...fresh, mode: "browse" })).toBe(false);
   });
 });
 
