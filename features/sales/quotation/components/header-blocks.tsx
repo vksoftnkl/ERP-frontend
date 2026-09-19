@@ -20,11 +20,11 @@
  */
 import type { MouseEvent as ReactMouseEvent } from "react";
 import {
-  AREA_DROPDOWN_ID,
-  CUSTOMER_DROPDOWN_ID,
-  POS_DROPDOWN_ID,
-  SALESMAN_DROPDOWN_ID,
-  AGENT_DROPDOWN_ID,
+  AREA_DROPDOWN_KEY,
+  CUSTOMER_DROPDOWN_KEY,
+  POS_DROPDOWN_KEY,
+  SALESMAN_DROPDOWN_KEY,
+  AGENT_DROPDOWN_KEY,
   QUOTATION_TERMS_FIELD_NAMES,
   type QuotationHeaderFieldKey,
   type QuotationTermsFieldKey,
@@ -48,6 +48,7 @@ import {
 } from "./fields";
 import type { HeaderFieldConfig, TermsFieldConfig } from "./visible-settings";
 import styles from "../page.module.scss";
+import { useDropdownId } from "@/lib/configured-dropdowns";
 
 /**
  * Lower case on purpose: these values are both stored verbatim on the voucher and
@@ -73,13 +74,17 @@ export function CustomerBlock({
   onSetCustomerField,
   onSetPos,
 }: CustomerBlockProps) {
+  // Configured dropdowns are named, not numbered — the registry answers with
+  // this deployment's id (see lib/configured-dropdowns).
+  const customerDropdownId = useDropdownId(CUSTOMER_DROPDOWN_KEY);
+  const posDropdownId = useDropdownId(POS_DROPDOWN_KEY);
   return (
     <div className={styles.fieldGrid}>
       {fields.isVisible("existingCustomer") ? (
         <DropdownCombo
           id="quotation-customer"
           label={fields.labelFor("existingCustomer")}
-          dropdownId={CUSTOMER_DROPDOWN_ID}
+          dropdownId={customerDropdownId}
           valueKey="cus_id"
           labelKey="cus_name"
           value={customer.custId ?? ""}
@@ -155,7 +160,7 @@ export function CustomerBlock({
         <DropdownCombo
           id="quotation-pos"
           label={fields.labelFor("posStateCode")}
-          dropdownId={POS_DROPDOWN_ID}
+          dropdownId={posDropdownId}
           valueKey="state_code"
           labelKey="state_name"
           metaKey="state_code"
@@ -283,6 +288,11 @@ export function SalesInfoBlock({
   onSetSalesman,
   onSetAgent,
 }: SalesInfoBlockProps) {
+  // Configured dropdowns are named, not numbered — the registry answers with
+  // this deployment's id (see lib/configured-dropdowns).
+  const areaDropdownId = useDropdownId(AREA_DROPDOWN_KEY);
+  const salesmanDropdownId = useDropdownId(SALESMAN_DROPDOWN_KEY);
+  const agentDropdownId = useDropdownId(AGENT_DROPDOWN_KEY);
   // The four flags share one row, which is only worth drawing if at least one
   // of them survived the config.
   const showChecks =
@@ -296,7 +306,7 @@ export function SalesInfoBlock({
         <DropdownCombo
           id="quotation-beat"
           label={fields.labelFor("beat")}
-          dropdownId={AREA_DROPDOWN_ID}
+          dropdownId={areaDropdownId}
           valueKey="arm_id"
           labelKey="arm_name"
           value={header.areaId ?? ""}
@@ -309,7 +319,7 @@ export function SalesInfoBlock({
         <DropdownCombo
           id="quotation-salesman"
           label={fields.labelFor("salesman")}
-          dropdownId={SALESMAN_DROPDOWN_ID}
+          dropdownId={salesmanDropdownId}
           valueKey="emp_id"
           labelKey="emp_name"
           value={header.salesmanId ?? ""}
@@ -322,7 +332,7 @@ export function SalesInfoBlock({
         <DropdownCombo
           id="quotation-agent"
           label={fields.labelFor("agent")}
-          dropdownId={AGENT_DROPDOWN_ID}
+          dropdownId={agentDropdownId}
           valueKey="emp_id"
           labelKey="emp_name"
           value={header.agentId ?? ""}

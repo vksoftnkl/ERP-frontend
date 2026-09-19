@@ -149,7 +149,8 @@ function isUiTableColumnConfigRecord(
   );
 }
 function toConfiguredColumnWidth(value: unknown): string | undefined {
-  const normalized = toDisplayValue(value);
+  // Accepts both the stored fraction (a bare number) and a px value ("120px").
+  const normalized = toDisplayValue(value).replace(/px$/i, "");
   if (!normalized) {
     return undefined;
   }
@@ -276,9 +277,10 @@ export function applyConfiguredLinkedTableColumnConfig<
         focus: isFocused,
         necessity: isNecessary,
         width:
-          toConfiguredColumnWidth(
-            getFieldValue(configuredColumn, "uiTblClmColumnWidth"),
-          ) ?? baseColumn.column.width,
+          // The dragged width first; the Qt fraction only where nobody has dragged.
+          toConfiguredColumnWidth(getFieldValue(configuredColumn, "uiTblClmPx")) ??
+          toConfiguredColumnWidth(getFieldValue(configuredColumn, "uiTblClmColumnWidth")) ??
+          baseColumn.column.width,
       },
       index: baseColumn.index,
       position: Number.isFinite(position) ? position : baseColumn.index,

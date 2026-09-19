@@ -37,8 +37,15 @@ import {
   resolveStoredPhotoPreview,
 } from "@/features/masters/shared/stored-photo";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+import { getDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - ITEM BRAND". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "itemBrandList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=7",
   getById: "/item-brands/get",
   create: "/item-brands/create",
   delete: "/item-brands/delete",
@@ -81,7 +88,8 @@ const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD
 // debounced server-side search via /dropdown-details/run; nothing is fetched up front
 // and dropdown_param is never sent.
 const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
-const PARENT_BRAND_DROPDOWN_ID = "18";
+/** The Dropdown Master row the parent picker reads — "ITEM BRANDS". */
+const PARENT_BRAND_DROPDOWN_KEY: ConfiguredDropdownKey = "itemBrand";
 const PARENT_BRAND_DROPDOWN_ID_KEYS = ["brand_id", "brandId"] as const;
 const PARENT_BRAND_DROPDOWN_LABEL_KEYS = ["brand_name", "brandName"] as const;
 const PARENT_BRAND_SEARCH_DEBOUNCE_MS = 250;
@@ -151,7 +159,7 @@ function buildParentOptions(payload: unknown): ERPDynamicSelectOption[] {
 // dropdown_param is never sent.
 function buildParentRunQuery(search: string): Record<string, string> {
   const query: Record<string, string> = {
-    dropdown_id: PARENT_BRAND_DROPDOWN_ID,
+    dropdown_id: getDropdownId(PARENT_BRAND_DROPDOWN_KEY),
     page: "1",
     limit: "20",
   };
@@ -434,7 +442,7 @@ export default function ItemBrandMasterPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -641,6 +649,7 @@ export default function ItemBrandMasterPage() {
       entityLabel="item brand"
       entityLabelPlural="item brands"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>

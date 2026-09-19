@@ -18,10 +18,11 @@ import type {
 import type { PhysicalStockListRow } from "./PhysicalStockListModal";
 import type { ItemPriceDetailsPayload } from "@/store/api/lookupsApi";
 import type { ColumnAlign } from "@/features/stocks/_shared/types";
+import { getUiTableId } from "@/lib/ui-tables";
 import {
   PHYSICAL_STOCK_COLUMNS,
   PHYSICAL_STOCK_COLUMN_SCHEMA,
-  UI_TABLE_COLUMNS_QUERY,
+  PHYSICAL_STOCK_UI_TABLE_KEY,
   NON_NEGATIVE_NUMBER_FIELD_KEYS,
   DATE_FIELD_KEYS,
   HIDDEN_ROW_VALUE_DEFAULTS,
@@ -48,7 +49,11 @@ import {
   SERIAL_NUMBER_COLUMN_WIDTH,
   DELETE_ACTION_COLUMN_WIDTH,
 } from "@/features/stocks/_shared/constants";
-import { parseColumnWidth, toColumnWidth } from "@/features/stocks/_shared/stock-utils";
+import {
+  configuredColumnWidth,
+  parseColumnWidth,
+  storedColumnPx,
+} from "@/features/stocks/_shared/stock-utils";
 
 export function createDefaultRowValues(): Record<string, string> {
   return {
@@ -280,8 +285,9 @@ export function buildPhysicalStockColumnSettingsRows(
       key: column.key,
       label: column.header,
       uiTblClmNo: String(index + 1),
-      uiTblClmTableId: UI_TABLE_COLUMNS_QUERY.uiTableId,
-      width: parseColumnWidth(column.width),
+      uiTblClmTableId: getUiTableId(PHYSICAL_STOCK_UI_TABLE_KEY),
+      width: null,
+      widthPx: `${Math.round(parseColumnWidth(column.width))}px`,
       visible: true,
       focus: false,
       position: index + 1,
@@ -300,8 +306,9 @@ export function buildPhysicalStockColumnSettingsRows(
         label: column.uiTblClmName?.trim() || `Column ${fallbackPosition}`,
         uiTblClmId: column.uiTblClmId,
         uiTblClmNo: column.uiTblClmNo,
-        uiTblClmTableId: column.uiTblClmTableId ?? UI_TABLE_COLUMNS_QUERY.uiTableId,
+        uiTblClmTableId: column.uiTblClmTableId ?? getUiTableId(PHYSICAL_STOCK_UI_TABLE_KEY),
         width: column.uiTblClmColumnWidth,
+        widthPx: storedColumnPx(column.uiTblClmPx),
         visible: column.uiTblClmColumnVisibility ?? true,
         focus: column.uiTblClmColumnFocus ?? false,
         position: column.uiTblClmColumnPosition ?? fallbackPosition,
@@ -322,6 +329,7 @@ export function buildPhysicalStockUiTableColumnSettingsRequest(
     uiTblClmName: row.label,
     uiTblClmTableId: row.uiTblClmTableId,
     uiTblClmColumnWidth: row.width,
+    uiTblClmPx: row.widthPx,
     uiTblClmColumnVisibility: settings.visible,
     uiTblClmColumnFocus: settings.focus,
     uiTblClmColumnPosition: row.position,
@@ -339,7 +347,7 @@ export function buildPhysicalStockUiTableColumnRequest(
     Pick<
       SavePhysicalStockUiTableColumnRequest,
       | "uiTblClmColumnPosition"
-      | "uiTblClmColumnWidth"
+      | "uiTblClmPx"
       | "uiTblClmColumnVisibility"
       | "uiTblClmColumnFocus"
       | "uiTblClmColumnNecessity"
@@ -351,11 +359,13 @@ export function buildPhysicalStockUiTableColumnRequest(
     ...(configuredColumn?.uiTblClmId ? { uiTblClmId: configuredColumn.uiTblClmId } : {}),
     uiTblClmNo: configuredColumn?.uiTblClmNo || String(fallbackPosition),
     uiTblClmName: configuredColumn?.uiTblClmName?.trim() || column.header || column.key,
-    uiTblClmTableId: configuredColumn?.uiTblClmTableId ?? UI_TABLE_COLUMNS_QUERY.uiTableId,
-    uiTblClmColumnWidth:
-      overrides.uiTblClmColumnWidth ??
-      configuredColumn?.uiTblClmColumnWidth ??
-      parseColumnWidth(column.width),
+    uiTblClmTableId: configuredColumn?.uiTblClmTableId ?? getUiTableId(PHYSICAL_STOCK_UI_TABLE_KEY),
+    // Handed back exactly as stored: the Qt fraction is the desktop client's.
+    uiTblClmColumnWidth: configuredColumn?.uiTblClmColumnWidth ?? null,
+    uiTblClmPx:
+      overrides.uiTblClmPx ??
+      storedColumnPx(configuredColumn?.uiTblClmPx) ??
+      `${Math.round(parseColumnWidth(column.width))}px`,
     uiTblClmColumnVisibility:
       overrides.uiTblClmColumnVisibility ??
       configuredColumn?.uiTblClmColumnVisibility ??
@@ -436,7 +446,7 @@ export function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload
     resolvedColumns.push({
       ...schema,
       header,
-      width: toColumnWidth(configuredColumn.uiTblClmColumnWidth, schema.width),
+      width: configuredColumnWidth(configuredColumn, schema.width),
     });
     seenKeys.add(key);
   }
@@ -449,7 +459,7 @@ export function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload
       resolvedColumns.unshift({
         ...barcodeSchema,
         header: barcodeConfig?.uiTblClmName?.trim() || barcodeSchema.header,
-        width: toColumnWidth(barcodeConfig?.uiTblClmColumnWidth, barcodeSchema.width),
+        width: configuredColumnWidth(barcodeConfig, barcodeSchema.width),
       });
     }
   }
@@ -470,7 +480,7 @@ export function resolveConfiguredColumns(configuredColumns: UiTableColumnPayload
       resolvedColumns.splice(insertIndex, 0, {
         ...uomSchema,
         header: uomConfig?.uiTblClmName?.trim() || uomSchema.header,
-        width: toColumnWidth(uomConfig?.uiTblClmColumnWidth, uomSchema.width),
+        width: configuredColumnWidth(uomConfig, uomSchema.width),
       });
     }
   }

@@ -109,7 +109,7 @@ export function useColumnConfig<TColumn extends { key: string; header: string; w
       try {
         const response = await saveUiTableColumn({
           body: buildUiTableColumnRequest(column, configuredColumn, columnIndex, tableId, {
-            uiTblClmColumnWidth: width,
+            uiTblClmPx: `${Math.round(width)}px`,
           }),
         });
         const savedColumn = response?.data;
@@ -135,7 +135,8 @@ export function useColumnConfig<TColumn extends { key: string; header: string; w
           const response = await saveUiTableColumn({
             body: buildUiTableColumnRequest(column, configuredColumn, columnIndex, tableId, {
               uiTblClmColumnPosition: columnIndex + 1,
-              uiTblClmColumnWidth: parseColumnWidth(column.width),
+              // Re-sent so a reorder carries each column's dragged width with it.
+              uiTblClmPx: `${Math.round(parseColumnWidth(column.width))}px`,
             }),
           });
           const savedColumn = response?.data;

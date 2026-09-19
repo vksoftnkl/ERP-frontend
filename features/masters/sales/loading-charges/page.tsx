@@ -18,10 +18,15 @@ import {
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { type ConfiguredGridKey } from "@/lib/configured-grids";
 
-const GRID_DETAIL_ID = 76;
+/**
+ * The Grid Master row this list reads — "MAIN LIST - LOADING CHARGES". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "loadingChargeList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-  list: `/configured-grid-sql/run?grid_id=${GRID_DETAIL_ID}`,
   getById: "/sale-loading-charges/get",
   create: "/sale-loading-charges/create",
   delete: "/sale-loading-charges/delete",
@@ -232,8 +237,8 @@ export default function LoadingChargesMasterPage() {
       entityLabel="loading charge"
       entityLabelPlural="loading charges"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       gridTableName={GRID_TABLE_NAME}
-      gridDetailId={GRID_DETAIL_ID}
       listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}

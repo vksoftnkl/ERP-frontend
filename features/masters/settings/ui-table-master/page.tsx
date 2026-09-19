@@ -15,9 +15,14 @@ import {
   toSelectBoolean,
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
-const GRID_DETAIL_ID = 35;
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - UI TABLES". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "uiTableMasterList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-  list: `/configured-grid-sql/run?grid_id=${GRID_DETAIL_ID}`,
   getById: "/ui-table-masters/get",
   create: "/ui-table-masters/create",
   delete: "/ui-table-masters/delete",
@@ -156,7 +161,7 @@ export default function UiTableMasterPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -167,6 +172,7 @@ export default function UiTableMasterPage() {
       entityLabel="UI table"
       entityLabelPlural="UI tables"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>
@@ -180,7 +186,6 @@ export default function UiTableMasterPage() {
           </label>
         </div>
       }
-      gridDetailId={GRID_DETAIL_ID}
       listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}

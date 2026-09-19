@@ -93,6 +93,7 @@ import type {
 } from "./type";
 import {
   API_ENDPOINTS,
+  LIST_GRID_KEY,
   GRID_TABLE_NAME,
   LOOKUP_ENDPOINT,
   BRANCH_LOOKUP_ENDPOINT,
@@ -108,9 +109,9 @@ import {
   ITEM_MASTER_WIDGET_SECTION_MENU_ID,
   ITEM_MASTER_WIDGET_TYPE,
   TAX_RATE_MASTER_LIST_ENDPOINT,
-  ITEM_REORDER_TABLE_UI_ID,
-  ITEM_PRICE_TABLE_UI_ID,
-  ITEM_EAN_TABLE_UI_ID,
+  ITEM_REORDER_TABLE_UI_KEY,
+  ITEM_PRICE_TABLE_UI_KEY,
+  ITEM_EAN_TABLE_UI_KEY,
   UUID_PATTERN,
   ITEM_PRICE_ROWS_FIELD_NAME,
   ITEM_UNIT_CONVERSION_ROWS_FIELD_NAME,
@@ -120,9 +121,6 @@ import {
   COMPANY_LOOKUP_QUERY,
   UNIT_LOOKUP_QUERY,
   GODOWN_LOOKUP_QUERY,
-  UI_TABLE_COLUMNS_QUERY,
-  UI_REORDER_TABLE_COLUMNS_QUERY,
-  UI_EAN_TABLE_COLUMNS_QUERY,
   ITEM_MASTER_WIDGET_QUERY,
   LOOKUP_QUERY_ITEMS,
   HSN_LOOKUP_QUERY,
@@ -197,11 +195,14 @@ import {
   normalizeItemBatchConfigValue,
 } from "./item-master-page.constants";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { getUiTableId, useUiTableId } from "@/lib/ui-tables";
+import { buildGridDeletedParam } from "@/lib/configured-grids";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 // Company is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
 // 8=company comp_id/comp_name). Loaded on open + on debounced server-side search via
 // /dropdown-details/run; nothing fetched up front.
 const COMPANY_DROPDOWN_CONFIG = {
-  dropdownId: "8",
+  dropdownKey: "company",
   idKeys: ["comp_id", "compId"] as const,
   labelKeys: ["comp_name", "compName"] as const,
   defaultOption: DEFAULT_COMPANY_OPTION,
@@ -214,7 +215,7 @@ const COMPANY_SOURCE_NAME_KEYS = ["item_company_name", "itemCompanyName"] as con
 // 17=item groups itg_id/itg_name from inventory.item_group_master where active). Loaded on
 // open + on debounced server-side search via /dropdown-details/run; nothing fetched up front.
 const GROUP_DROPDOWN_CONFIG = {
-  dropdownId: "17",
+  dropdownKey: "itemGroup",
   idKeys: ["itg_id", "itgId"] as const,
   labelKeys: ["itg_name", "itgName"] as const,
   defaultOption: DEFAULT_GROUP_OPTION,
@@ -226,7 +227,7 @@ const GROUP_SOURCE_NAME_KEYS = ["item_group_name", "itemGroupName"] as const;
 // Item Category is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
 // 20=item categories category_id/category_name from inventory.item_category_master where active).
 const CATEGORY_DROPDOWN_CONFIG = {
-  dropdownId: "20",
+  dropdownKey: "itemCategory",
   idKeys: ["category_id", "categoryId"] as const,
   labelKeys: ["category_name", "categoryName"] as const,
   defaultOption: DEFAULT_CATEGORY_OPTION,
@@ -236,7 +237,7 @@ const CATEGORY_SOURCE_NAME_KEYS = ["item_category_name", "itemCategoryName"] as 
 // Item Section is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
 // 19=item sections sec_id/sec_name from inventory.item_section_master where active).
 const SECTION_DROPDOWN_CONFIG = {
-  dropdownId: "19",
+  dropdownKey: "itemSection",
   idKeys: ["sec_id", "secId"] as const,
   labelKeys: ["sec_name", "secName"] as const,
   defaultOption: DEFAULT_SECTION_OPTION,
@@ -246,7 +247,7 @@ const SECTION_SOURCE_NAME_KEYS = ["item_section_name", "itemSectionName"] as con
 // Item Brand is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
 // 18=item brands brand_id/brand_name from inventory.item_brand_master where active).
 const BRAND_DROPDOWN_CONFIG = {
-  dropdownId: "18",
+  dropdownKey: "itemBrand",
   idKeys: ["brand_id", "brandId"] as const,
   labelKeys: ["brand_name", "brandName"] as const,
   defaultOption: DEFAULT_BRAND_OPTION,
@@ -256,7 +257,7 @@ const BRAND_SOURCE_NAME_KEYS = ["item_brand_name", "itemBrandName"] as const;
 // Item Customer Group is a lazy, server-side searchable configured dropdown
 // (fixed.dropdown_details 3=customerGroups cgr_id/cgr_name from sales.cust_groups where active).
 const CUSTOMER_GROUP_DROPDOWN_CONFIG = {
-  dropdownId: "3",
+  dropdownKey: "customerGroup",
   idKeys: ["cgr_id", "cgrId"] as const,
   labelKeys: ["cgr_name", "cgrName"] as const,
   defaultOption: DEFAULT_CUSTOMER_GROUP_OPTION,
@@ -266,7 +267,7 @@ const CUSTOMER_GROUP_SOURCE_NAME_KEYS = ["item_cust_group_name", "itemCustGroupN
 // Default Supplier is a lazy, server-side searchable configured dropdown (fixed.dropdown_details
 // 35=SUPPLIERS sup_id/sup_name from purchase.suppliers where active).
 const SUPPLIER_DROPDOWN_CONFIG = {
-  dropdownId: "35",
+  dropdownKey: "supplier",
   idKeys: ["sup_id", "supId"] as const,
   labelKeys: ["sup_name", "supName"] as const,
   defaultOption: DEFAULT_SUPPLIER_OPTION,
@@ -280,7 +281,7 @@ const SUPPLIER_SOURCE_NAME_KEYS = ["item_supplier_name", "itemSupplierName"] as 
 // records (rate + both cess figures) still load eagerly via /tax-rates/list into
 // itemTaxRecordsById for the price-with-tax math — this dropdown only supplies the field options.
 const TAX_DROPDOWN_CONFIG = {
-  dropdownId: "36",
+  dropdownKey: "tax",
   idKeys: ["tax_id", "taxId"] as const,
   labelKeys: ["tax_name", "taxName"] as const,
   defaultOption: DEFAULT_TAX_OPTION,
@@ -3256,11 +3257,16 @@ function buildUiTableColumnLayoutRequest(
     ? toDisplayValue(getFieldValue(configuredColumn, "uiTblClmId"))
     : "";
   const fallbackColumnNumber = String(column.position);
-  const width =
+  // The pixels the column was dragged to are the width this screen writes; the
+  // stored Qt fraction is handed back exactly as it came.
+  const widthPx =
     column.widthPx ??
-    (configuredColumn
-      ? toNullableLayoutNumber(getFieldValue(configuredColumn, "uiTblClmColumnWidth"))
-      : null);
+    toNullableLayoutNumber(
+      configuredColumn ? getFieldValue(configuredColumn, "uiTblClmPx") : undefined,
+    );
+  const width = configuredColumn
+    ? toNullableLayoutNumber(getFieldValue(configuredColumn, "uiTblClmColumnWidth"))
+    : null;
   return {
     ...(uiTblClmId ? { uiTblClmId } : {}),
     uiTblClmNo:
@@ -3275,6 +3281,7 @@ function buildUiTableColumnLayoutRequest(
       column.key,
     uiTblClmTableId: tableId,
     uiTblClmColumnWidth: width,
+    uiTblClmPx: widthPx === null ? null : `${Math.round(widthPx)}px`,
     uiTblClmColumnVisibility: column.visible,
     uiTblClmColumnFocus: column.focus,
     uiTblClmColumnPosition: column.position,
@@ -3994,7 +4001,7 @@ function buildItemFormFields(
               }
               onColumnLayoutChange={(columns) =>
                 onLinkedTableColumnLayoutChange?.({
-                  tableId: ITEM_PRICE_TABLE_UI_ID,
+                  tableId: getUiTableId(ITEM_PRICE_TABLE_UI_KEY),
                   columns,
                   configuredColumns: itemPriceTableColumnsConfig,
                   columnNameToKey: ITEM_PRICE_TABLE_COLUMN_NAME_TO_KEY,
@@ -4069,7 +4076,7 @@ function buildItemFormFields(
               }
               onColumnLayoutChange={(columns) =>
                 onLinkedTableColumnLayoutChange?.({
-                  tableId: ITEM_EAN_TABLE_UI_ID,
+                  tableId: getUiTableId(ITEM_EAN_TABLE_UI_KEY),
                   columns,
                   configuredColumns: itemEanTableColumnsConfig,
                   columnNameToKey: ITEM_EAN_TABLE_COLUMN_NAME_TO_KEY,
@@ -4133,7 +4140,7 @@ function buildItemFormFields(
               }
               onColumnLayoutChange={(columns) =>
                 onLinkedTableColumnLayoutChange?.({
-                  tableId: ITEM_REORDER_TABLE_UI_ID,
+                  tableId: getUiTableId(ITEM_REORDER_TABLE_UI_KEY),
                   columns,
                   configuredColumns: itemReorderTableColumnsConfig,
                   columnNameToKey: ITEM_REORDER_TABLE_COLUMN_NAME_TO_KEY,
@@ -4432,6 +4439,11 @@ export default function ItemMasterPageContent({
   onModalOpenChange,
   onItemSaved,
 }: ItemMasterPageContentProps = {}) {
+  // The three linked grids (price, reorder, alt barcodes) are laid out by their
+  // own UI Table Master rows, named rather than numbered — see lib/ui-tables.
+  const itemPriceUiTableId = useUiTableId(ITEM_PRICE_TABLE_UI_KEY);
+  const itemReorderUiTableId = useUiTableId(ITEM_REORDER_TABLE_UI_KEY);
+  const itemEanUiTableId = useUiTableId(ITEM_EAN_TABLE_UI_KEY);
   const { getAll: getItemLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: listTaxRates } = useApi<unknown>(TAX_RATE_MASTER_LIST_ENDPOINT);
   // Configured price levels (fixed.price_levels): levels 1-4 relabel the price
@@ -4672,9 +4684,9 @@ export default function ItemMasterPageContent({
         listTaxRates(),
         getHsnLookup(HSN_LOOKUP_QUERY),
         getItemLookup(LOOKUP_QUERY_ITEMS),
-        getItemPriceTableColumns(UI_TABLE_COLUMNS_QUERY),
-        getItemReorderTableColumns(UI_REORDER_TABLE_COLUMNS_QUERY),
-        getItemEanTableColumns(UI_EAN_TABLE_COLUMNS_QUERY),
+        getItemPriceTableColumns({ uiTableId: itemPriceUiTableId }),
+        getItemReorderTableColumns({ uiTableId: itemReorderUiTableId }),
+        getItemEanTableColumns({ uiTableId: itemEanUiTableId }),
         getItemMasterWidgets(ITEM_MASTER_WIDGET_QUERY),
         getPriceLevelMasters(),
       ]);
@@ -4728,7 +4740,7 @@ export default function ItemMasterPageContent({
         uiTableColumnsPayload.status === "fulfilled"
           ? extractUiTableColumnConfigRecords(
             uiTableColumnsPayload.value,
-            ITEM_PRICE_TABLE_UI_ID,
+            itemPriceUiTableId,
           )
           : [],
       );
@@ -4736,7 +4748,7 @@ export default function ItemMasterPageContent({
         uiReorderTableColumnsPayload.status === "fulfilled"
           ? extractUiTableColumnConfigRecords(
             uiReorderTableColumnsPayload.value,
-            ITEM_REORDER_TABLE_UI_ID,
+            itemReorderUiTableId,
           )
           : [],
       );
@@ -4744,7 +4756,7 @@ export default function ItemMasterPageContent({
         uiEanTableColumnsPayload.status === "fulfilled"
           ? extractUiTableColumnConfigRecords(
             uiEanTableColumnsPayload.value,
-            ITEM_EAN_TABLE_UI_ID,
+            itemEanUiTableId,
           )
           : [],
       );
@@ -4780,6 +4792,9 @@ export default function ItemMasterPageContent({
     getPriceLevelMasters,
     getPriceRowCompanyLookup,
     getUnitLookup,
+    itemEanUiTableId,
+    itemPriceUiTableId,
+    itemReorderUiTableId,
     listTaxRates,
   ]);
   useEffect(() => loadItemMasterLookups(), [loadItemMasterLookups]);
@@ -5307,7 +5322,7 @@ export default function ItemMasterPageContent({
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -5563,6 +5578,7 @@ export default function ItemMasterPageContent({
       editModalTitle="Item Master"
       auditHistory={{ screenName: "Item Master" }}
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>

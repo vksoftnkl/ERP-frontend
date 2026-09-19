@@ -32,8 +32,15 @@ import {
   resolveStoredPhotoPreview,
 } from "@/features/masters/shared/stored-photo";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+import { getDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - ITEM CATEGORY". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "itemCategoryList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-list: "/configured-grid-sql/run?grid_id=11",
   getById: "/item-categories/get",
   create: "/item-categories/create",
   delete: "/item-categories/delete",
@@ -76,7 +83,8 @@ const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD
 // debounced server-side search via /dropdown-details/run; nothing is fetched up front
 // and dropdown_param is never sent.
 const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
-const PARENT_CATEGORY_DROPDOWN_ID = "20";
+/** The Dropdown Master row the parent picker reads — "ITEM CATEGORIES". */
+const PARENT_CATEGORY_DROPDOWN_KEY: ConfiguredDropdownKey = "itemCategory";
 const PARENT_CATEGORY_SEARCH_DEBOUNCE_MS = 250;
 const LOOKUP_KEYS = {
   id: [
@@ -404,7 +412,7 @@ const PARENT_CATEGORY_LOOKUP_KEYS: OptionLookupKeys = {
 // dropdown_param is never sent.
 function buildParentRunQuery(search: string): Record<string, string> {
   const query: Record<string, string> = {
-    dropdown_id: PARENT_CATEGORY_DROPDOWN_ID,
+    dropdown_id: getDropdownId(PARENT_CATEGORY_DROPDOWN_KEY),
     page: "1",
     limit: "20",
   };
@@ -588,7 +596,7 @@ export default function ItemCategoryMasterPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -795,6 +803,7 @@ export default function ItemCategoryMasterPage() {
       entityLabel="item category"
       entityLabelPlural="item categories"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>
@@ -810,7 +819,6 @@ export default function ItemCategoryMasterPage() {
       }
       gridTableName={GRID_TABLE_NAME}
         listResponseStyleArrayKey=""
-        gridDetailId={11}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

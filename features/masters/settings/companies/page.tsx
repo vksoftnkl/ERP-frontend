@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import MasterModulePage from "@/features/masters/shared/module-page";
 import styles from "@/app/master/state-master/page.module.scss";
 import { useCompaniesModule } from "./module";
+import { buildGridDeletedParam } from "@/lib/configured-grids";
 export default function CompaniesFeaturePage() {
   const companiesModule = useCompaniesModule();
   // Toggles the `wantdelete` grid param; ticking it re-runs the list so the user
@@ -26,7 +27,7 @@ export default function CompaniesFeaturePage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam("companyList", wantDelete)),
     }),
     [wantDelete],
   );

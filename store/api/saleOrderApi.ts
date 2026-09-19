@@ -15,7 +15,7 @@ import {
   PARTY_CREDIT_ENDPOINT,
   SALE_ORDER_DELETE_ENDPOINT,
   SALE_ORDER_GET_ENDPOINT,
-  SALE_ORDER_LIST_GRID_ID,
+  SALE_ORDER_LIST_GRID_KEY,
   SALE_ORDER_SAVE_ENDPOINT,
   TENDER_MASTERS_LIST_ENDPOINT,
 } from "@/features/sales/sale-order/sale-order.constants";
@@ -27,6 +27,7 @@ import type {
   SaveSaleOrderDto,
   TenderMasterRow,
 } from "@/features/sales/sale-order/sale-order.types";
+import { getGridId } from "@/lib/configured-grids";
 
 /** One row of the browse list (configured grid 87, "SO - MAIN LIST"). */
 export type SaleOrderListRow = {
@@ -96,7 +97,7 @@ export const saleOrderApi = baseApi.injectEndpoints({
       query: (params) => ({
         url: CONFIGURED_GRID_RUN_ENDPOINT,
         params: {
-          grid_id: SALE_ORDER_LIST_GRID_ID,
+          grid_id: getGridId(SALE_ORDER_LIST_GRID_KEY),
           page: params.page ?? 1,
           limit: params.limit ?? 20,
           ...(params.sort_by ? { sort_by: params.sort_by } : {}),

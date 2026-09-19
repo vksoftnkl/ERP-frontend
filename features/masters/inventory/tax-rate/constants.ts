@@ -1,7 +1,13 @@
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
+import type { ConfiguredGridKey } from "@/lib/configured-grids";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 
-/** `MAIN LIST - GST RATES`. Its SQL binds one token — see `GRID_ACTIVE_ONLY_TOKEN`. */
-export const GRID_DETAIL_ID = 103;
+/**
+ * The Grid Master row this list reads — "MAIN LIST - GST RATES", resolved to a
+ * grid id at runtime (see lib/configured-grids). Its SQL binds one token — see
+ * `GRID_ACTIVE_ONLY_TOKEN`.
+ */
+export const LIST_GRID_KEY = "gstRateList" satisfies ConfiguredGridKey;
 
 /**
  * Grid 103's SQL ends `AND (NOT itax_is_active OR t.tax_is_active)`, and the
@@ -13,7 +19,7 @@ export const GRID_DETAIL_ID = 103;
 export const GRID_ACTIVE_ONLY_TOKEN = "itax_is_active";
 
 /** `POSTING ROLES - RATE WISE` — the roles whose `alr_by_rate` is true. */
-export const ROLE_DROPDOWN_ID = 52;
+export const ROLE_DROPDOWN_KEY: ConfiguredDropdownKey = "postingRoleRateWise";
 
 /**
  * `LEDGERS FOR POSTING ROLE`. Its SQL joins `acc_ledger_role` on the bare token
@@ -23,16 +29,15 @@ export const ROLE_DROPDOWN_ID = 52;
  * rate pointing at a company-scoped ledger would post everyone's revenue into
  * one company's books.
  */
-export const LEDGER_DROPDOWN_ID = 51;
+export const LEDGER_DROPDOWN_KEY: ConfiguredDropdownKey = "ledgerForPostingRole";
 
 /** `GST RATES` — for the `tax_supersedes_id` picker. */
-export const RATE_DROPDOWN_ID = 53;
+export const RATE_DROPDOWN_KEY: ConfiguredDropdownKey = "gstRate";
 
-/** The parameter name dropdown 51's SQL declares. */
+/** The parameter name the `ledgerForPostingRole` dropdown's SQL declares. */
 export const LEDGER_DROPDOWN_ROLE_PARAM = "itrl_role";
 
 export const API_ENDPOINTS = {
-  list: `/configured-grid-sql/run?grid_id=${GRID_DETAIL_ID}`,
   getById: "/tax-rates/get",
   create: "/tax-rates/create",
   delete: "/tax-rates/delete",

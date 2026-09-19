@@ -8,6 +8,7 @@ import { SearchableSelect } from "@/components/design-system/ui/searchable-selec
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import { getUserInfo } from "@/lib/auth/session";
+import { useUiTableId } from "@/lib/ui-tables";
 import { useAppSelector } from "@/store/hooks";
 import { selectUserInfo } from "@/store/slices/authSlice";
 import {
@@ -22,7 +23,7 @@ import {
   useGetItemQtyPriceColumnConfigQuery,
   useLazyListItemQtyPricesQuery,
   useSaveItemQtyPricesMutation,
-  ITEM_QTY_PRICE_UI_TABLE_ID,
+  ITEM_QTY_PRICE_UI_TABLE_KEY,
   type ItemQtyPriceMode,
   type SaveItemQtyPriceDto,
 } from "@/store/api/itemQtyPriceApi";
@@ -300,8 +301,9 @@ export default function ItemQtyPricePage() {
   // rehydrated auth but this render happens before the selector settles.
   const userInfo = useAppSelector(selectUserInfo);
   const actorName = userInfo?.userName ?? null;
+  const uiTableId = useUiTableId(ITEM_QTY_PRICE_UI_TABLE_KEY);
   const { data: columnConfig } = useGetItemQtyPriceColumnConfigQuery({
-    uiTableId: ITEM_QTY_PRICE_UI_TABLE_ID,
+    uiTableId,
   });
   const { data: rawCompanyOptions = [] } = useGetCompanyOptionsQuery();
   const { data: rawBranchOptions = [] } = useGetBranchOptionsQuery();

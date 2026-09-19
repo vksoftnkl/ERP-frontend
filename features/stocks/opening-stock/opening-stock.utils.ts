@@ -38,7 +38,7 @@ import type {
   UiTableColumnPayload,
 } from "./opening-stock.types";
 import {
-  toColumnWidth,
+  configuredColumnWidth,
   resolveDefaultItemPriceRecord,
   resolveItemPriceUnitConversion,
 } from "@/features/stocks/_shared/stock-utils";
@@ -1321,7 +1321,7 @@ export function resolveConfiguredColumns(
     resolvedColumns.push({
       key,
       header,
-      width: toColumnWidth(configuredColumn.uiTblClmColumnWidth, schema.defaultWidth),
+      width: configuredColumnWidth(configuredColumn, schema.defaultWidth),
       align: schema.align,
       kind: schema.kind,
       lookupKind: schema.lookupKind,

@@ -5,9 +5,15 @@ import {
   COLLECTION_DAY_SHORT_OPTIONS,
   GST_TYPE_OPTIONS,
 } from "@/utils/constant";
+import type { ConfiguredGridKey } from "@/lib/configured-grids";
 // API Endpoints
+/**
+ * The Grid Master row this screen's list reads — "MAIN LIST - SUPPLIERS".
+ * `CrudMasterPage` resolves it to a grid id at runtime (see
+ * lib/configured-grids) and uses it for the rows and the columns alike.
+ */
+export const LIST_GRID_KEY = "supplierList" satisfies ConfiguredGridKey;
 export const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=17",
   getById: "/suppliers/get",
   create: "/suppliers/create",
   delete: "/suppliers/delete",

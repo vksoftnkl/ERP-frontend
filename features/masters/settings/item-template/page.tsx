@@ -49,6 +49,7 @@ import {
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useApi } from "@/hooks/useApi";
 import { useDataRefresh } from "@/lib/data-freshness";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 // The item template — what a new item starts with — is the
 // `masters.item_form_defaults` SETTING, read and written through the app-settings
 // catalog, exactly like the customer one:
@@ -128,49 +129,49 @@ const RENDERED_DOCUMENT_KEYS = new Set<string>([
 // 20 item category, 19 item section, 18 item brand, 3 item customer group,
 // 35 supplier, 36 item tax. Each is keyed by ID and the label is stored beside it.
 const COMPANY_DROPDOWN_CONFIG = {
-  dropdownId: "8",
+  dropdownKey: "company",
   idKeys: ["comp_id", "compId"] as const,
   labelKeys: ["comp_name", "compName"] as const,
   defaultOption: { value: "", label: "Select Company" } as ERPDynamicSelectOption,
 } as const;
 const GROUP_DROPDOWN_CONFIG = {
-  dropdownId: "17",
+  dropdownKey: "itemGroup",
   idKeys: ["itg_id", "itgId"] as const,
   labelKeys: ["itg_name", "itgName"] as const,
   defaultOption: { value: "", label: "Select Item Group" } as ERPDynamicSelectOption,
 } as const;
 const CATEGORY_DROPDOWN_CONFIG = {
-  dropdownId: "20",
+  dropdownKey: "itemCategory",
   idKeys: ["category_id", "categoryId"] as const,
   labelKeys: ["category_name", "categoryName"] as const,
   defaultOption: { value: "", label: "Select Item Category" } as ERPDynamicSelectOption,
 } as const;
 const SECTION_DROPDOWN_CONFIG = {
-  dropdownId: "19",
+  dropdownKey: "itemSection",
   idKeys: ["sec_id", "secId"] as const,
   labelKeys: ["sec_name", "secName"] as const,
   defaultOption: { value: "", label: "Select Item Section" } as ERPDynamicSelectOption,
 } as const;
 const BRAND_DROPDOWN_CONFIG = {
-  dropdownId: "18",
+  dropdownKey: "itemBrand",
   idKeys: ["brand_id", "brandId"] as const,
   labelKeys: ["brand_name", "brandName"] as const,
   defaultOption: { value: "", label: "Select Item Brand" } as ERPDynamicSelectOption,
 } as const;
 const CUSTOMER_GROUP_DROPDOWN_CONFIG = {
-  dropdownId: "3",
+  dropdownKey: "customerGroup",
   idKeys: ["cgr_id", "cgrId"] as const,
   labelKeys: ["cgr_name", "cgrName"] as const,
   defaultOption: { value: "", label: "Select Customer Group" } as ERPDynamicSelectOption,
 } as const;
 const SUPPLIER_DROPDOWN_CONFIG = {
-  dropdownId: "35",
+  dropdownKey: "supplier",
   idKeys: ["sup_id", "supId"] as const,
   labelKeys: ["sup_name", "supName"] as const,
   defaultOption: { value: "", label: "Select Supplier" } as ERPDynamicSelectOption,
 } as const;
 const TAX_DROPDOWN_CONFIG = {
-  dropdownId: "36",
+  dropdownKey: "tax",
   idKeys: ["tax_id", "taxId"] as const,
   labelKeys: ["tax_name", "taxName"] as const,
   defaultOption: { value: "", label: "Select Default Tax" } as ERPDynamicSelectOption,

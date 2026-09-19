@@ -36,6 +36,7 @@ import {
 import { getApiErrorMessage } from "@/store/api/baseApi";
 import { useApi } from "@/hooks/useApi";
 import { useDataRefresh } from "@/lib/data-freshness";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 // The customer template — what a new customer starts with — is the
 // `masters.customer_form_defaults` SETTING, read and written through the app-settings
 // catalog:
@@ -68,25 +69,25 @@ function resolveOptionLabel(options: ERPDynamicSelectOption[], value: string): s
 // 28 = customer group (cgr_id/cgr_name), 9 = state (state_code/state_name). Every one of
 // them is keyed by ID, like the customer form itself — the label is saved beside it.
 const COMPANY_DROPDOWN_CONFIG = {
-  dropdownId: "8",
+  dropdownKey: "company",
   idKeys: ["comp_id", "compId"] as const,
   labelKeys: ["comp_name", "compName"] as const,
   defaultOption: { value: "", label: "Select Company" } as ERPDynamicSelectOption,
 } as const;
 const AREA_DROPDOWN_CONFIG = {
-  dropdownId: "10",
+  dropdownKey: "area",
   idKeys: ["arm_id", "armId"] as const,
   labelKeys: ["arm_name", "armName"] as const,
   defaultOption: { value: "", label: "Select Area" } as ERPDynamicSelectOption,
 } as const;
 const CUSTOMER_GROUP_DROPDOWN_CONFIG = {
-  dropdownId: "28",
+  dropdownKey: "customerGroup",
   idKeys: ["cgr_id", "cgrId"] as const,
   labelKeys: ["cgr_name", "cgrName"] as const,
   defaultOption: { value: "", label: "Select Customer Group" } as ERPDynamicSelectOption,
 } as const;
 const STATE_DROPDOWN_CONFIG = {
-  dropdownId: "9",
+  dropdownKey: "gstStateCode",
   idKeys: ["state_code", "stateCode"] as const,
   labelKeys: ["state_name", "stateName"] as const,
   defaultOption: { value: "", label: "Select State" } as ERPDynamicSelectOption,

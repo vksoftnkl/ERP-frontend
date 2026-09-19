@@ -1,6 +1,7 @@
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import { extractRows, getFirstDefinedValue, toDisplayValue } from "./transformers";
 import { LOOKUP_ARRAY_KEYS } from "./constants";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 
 // Configured-dropdown endpoint (fixed.dropdown_details). Mirrors configured-grid-sql/run:
 // GET ?dropdown_id=<n>&page=1&limit=20&search=<q>&dropdown_param=<json> -> { data: { items, total } }.
@@ -18,7 +19,7 @@ export type LedgerDropdownKind =
 
 type LedgerDropdownFieldConfig = {
   kind: LedgerDropdownKind;
-  dropdownId: string;
+  dropdownKey: ConfiguredDropdownKey;
   idKeys: readonly string[];
   labelKeys: readonly string[];
 };
@@ -26,31 +27,31 @@ type LedgerDropdownFieldConfig = {
 export const LEDGER_DROPDOWN_FIELD_CONFIG: Record<string, LedgerDropdownFieldConfig> = {
   ledCompanyId: {
     kind: "company",
-    dropdownId: "22",
+    dropdownKey: "company",
     idKeys: ["comp_id", "compId"],
     labelKeys: ["comp_name", "compName"],
   },
   ledBranchId: {
     kind: "branch",
-    dropdownId: "24",
+    dropdownKey: "branchActive",
     idKeys: ["br_id", "brId"],
     labelKeys: ["br_name", "brName"],
   },
   ledGroupId: {
     kind: "accountGroup",
-    dropdownId: "23",
+    dropdownKey: "accountGroup",
     idKeys: ["acc_group_id", "accGroupId"],
     labelKeys: ["acc_group_name", "accGroupName"],
   },
   ledStateName: {
     kind: "state",
-    dropdownId: "21",
+    dropdownKey: "gstStateCode",
     idKeys: ["state_code", "stateCode"],
     labelKeys: ["state_name", "stateName"],
   },
   ledRegionStateName: {
     kind: "state",
-    dropdownId: "21",
+    dropdownKey: "gstStateCode",
     idKeys: ["state_code", "stateCode"],
     labelKeys: ["state_name", "stateName"],
   },
@@ -59,7 +60,7 @@ export const LEDGER_DROPDOWN_FIELD_CONFIG: Record<string, LedgerDropdownFieldCon
   // tax_taxability, which are the rate's own properties and read-only here.
   ledTaxId: {
     kind: "taxRate",
-    dropdownId: "53",
+    dropdownKey: "gstRate",
     idKeys: ["tax_id", "taxId"],
     labelKeys: ["tax_name", "taxName"],
   },

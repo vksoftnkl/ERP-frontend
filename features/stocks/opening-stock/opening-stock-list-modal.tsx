@@ -8,6 +8,7 @@ import ModalPortal from "@/components/ui/modal-portal";
 import styles from "@/features/stocks/_shared/stock-page.module.scss";
 import { QUANTITY_FORMATTER, VALUE_FORMATTER } from "./constants";
 import { cx, formatDateForDisplay } from "./opening-stock.utils";
+import { useGridId, type ConfiguredGridKey } from "@/lib/configured-grids";
 type OpeningStockListFilters = {
   search: string;
   dateFrom: string;
@@ -43,7 +44,17 @@ type OpeningStockListModalProps = {
   onLoadSelected: () => void;
 };
 const PAGE_SIZE_OPTIONS = [10, 20, 25, 50, 100] as const;
-const OPENING_STOCK_LIST_GRID_ID = 16;
+/**
+ * The Grid Master row whose column config this popup renders — "MAIN LIST -
+ * OPENING STOCK", resolved at runtime (see lib/configured-grids). The rows come
+ * from the opening-stock list endpoint, not this grid; only the headers,
+ * widths and visibility do.
+ *
+ * It used to be the literal 16, a `web` grid that no longer exists at all — the
+ * columns query simply answered with nothing and the popup fell back to the
+ * hardcoded columns below.
+ */
+const LIST_GRID_KEY = "openingStockList" satisfies ConfiguredGridKey;
 function resolveTextValue(
   row: OpeningStockHeaderPayload,
   keys: readonly string[],
@@ -221,8 +232,9 @@ export function OpeningStockListModal({
   onLoadRow,
   onLoadSelected,
 }: OpeningStockListModalProps): ReactNode {
+  const listGridId = useGridId(LIST_GRID_KEY);
   const { data: gridColumnsData } = useGetGridColumnsQuery(
-    { gridId: OPENING_STOCK_LIST_GRID_ID },
+    { gridId: Number(listGridId) },
     {
       skip: !isOpen,
     },

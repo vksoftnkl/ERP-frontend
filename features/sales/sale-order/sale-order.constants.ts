@@ -4,9 +4,9 @@
  * Same architecture as the quotation screen: the grid LAYOUT (order, width,
  * visibility) comes from `GET /ui-table-masters/get`, the column MEANING lives
  * here, and `normalizeColumnToken` bridges the two. The charge grid, the item
- * picker and the charge master are literally the quotation's — same ui table
- * 21, same grid 71, same `chgModule=S` — so those constants are imported, not
- * restated.
+ * picker and the charge master are literally the quotation's — same "CHARGES"
+ * ui table, same grid 71, same `chgModule=S` — so those constants are imported,
+ * not restated.
  */
 import type {
   GridCellKind,
@@ -14,6 +14,8 @@ import type {
   ItemColumnMeaning,
 } from "@/features/sales/quotation/quotation.constants";
 import { normalizeColumnToken } from "@/features/sales/quotation/quotation.constants";
+import type { UiTableKey } from "@/lib/ui-tables";
+import type { ConfiguredGridKey } from "@/lib/configured-grids";
 
 // ---------------------------------------------------------------------------
 // Endpoints and configured ids
@@ -34,16 +36,19 @@ export const TENDER_MASTERS_LIST_ENDPOINT = "/tender-masters/list";
 export const PARTY_CREDIT_ENDPOINT = "/master-lookups/party-credit";
 
 /**
- * `fixed.ui_tables.ui_tbl_id` 24 — "Sale Order Item Table", 96 columns, one per
- * `SALES_ITEM_COLUMN_MEANINGS` entry in the same `ui_tbl_clm_no` order. The
- * four reserve columns the entity dropped (IsReserved, ReservedQty,
- * ReserveExpiresOn, LineDeliveryDate) are NOT in the live layout — 96 is the
- * whole table, verified against the database, so a 100-entry map here would
- * mislabel everything past index 91.
+ * The UI Table Master row this screen's item grid is laid out by — "SO - ITEM",
+ * 96 columns, one per `SALES_ITEM_COLUMN_MEANINGS` entry in the same
+ * `ui_tbl_clm_no` order. The four reserve columns the entity dropped
+ * (IsReserved, ReservedQty, ReserveExpiresOn, LineDeliveryDate) are NOT in the
+ * live layout — 96 is the whole table, verified against the database, so a
+ * 100-entry map here would mislabel everything past index 91.
+ *
+ * `useUiTableId` turns this into a `fixed.ui_tables.ui_tbl_id` at runtime (24 on
+ * the reference database) — the id is per-deployment, the name is not.
  */
-export const SALE_ORDER_ITEM_GRID_UI_TABLE_ID = "24";
-/** The charges grid is the quotation's own ui table 26 — shared, not similar. */
-export { CHARGE_GRID_UI_TABLE_ID } from "@/features/sales/quotation/quotation.constants";
+export const SALE_ORDER_ITEM_GRID_UI_TABLE_KEY: UiTableKey = "saleOrderLines";
+/** The charges grid is the quotation's own — shared, not similar. */
+export { CHARGE_GRID_UI_TABLE_KEY } from "@/features/sales/quotation/quotation.constants";
 /**
  * `fixed.grid_details.grid_id` 87 — "SO - MAIN LIST". Binds `icompany_id`,
  * `ibranch_id`, `ifrom_date`, `ito_date` (no year token — the dates scope it).
@@ -51,7 +56,7 @@ export { CHARGE_GRID_UI_TABLE_ID } from "@/features/sales/quotation/quotation.co
  * list cannot badge converted-from-quotation rows (backend gap §11.7) and a
  * deleted order shows only through its CANCELLED status.
  */
-export const SALE_ORDER_LIST_GRID_ID = "87";
+export const SALE_ORDER_LIST_GRID_KEY: ConfiguredGridKey = "saleOrderList";
 /**
  * Orders outlive bills: the F8 list opens on a 90-day window (the quotation's
  * uses the grid default).

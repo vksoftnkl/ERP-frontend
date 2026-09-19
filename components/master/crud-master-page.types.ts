@@ -1,4 +1,6 @@
 import { type CSSProperties, type ReactNode } from "react";
+import type { UiTableKey } from "@/lib/ui-tables";
+import type { ConfiguredGridKey } from "@/lib/configured-grids";
 import { type ReusableTableColumn } from "@/components/ui/table";
 import { type ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
 import { type MasterIconName } from "@/components/design-system/icons/master-icons";
@@ -52,6 +54,16 @@ export type CrudMasterApiEndpoints = {
   getById: string;
   create: string;
   delete: string;
+};
+
+/**
+ * What a screen passes. `list` is optional here because a screen that names its
+ * grid with `gridKey` has the run URL built for it from the resolved id — the
+ * grid number never appears in a screen. Everything downstream still receives
+ * the strict `CrudMasterApiEndpoints`.
+ */
+export type CrudMasterApiEndpointsInput = Omit<CrudMasterApiEndpoints, "list"> & {
+  list?: string;
 };
 
 export type CrudMasterLookupKeys = {
@@ -144,7 +156,7 @@ export type CrudMasterPageProps = {
   // both are omitted the modal falls back to the generic placeholder icon.
   iconName?: MasterIconName;
   icon?: ReactNode;
-  apiEndpoints: CrudMasterApiEndpoints;
+  apiEndpoints: CrudMasterApiEndpointsInput;
   lookupKeys: CrudMasterLookupKeys;
   requestPayloadKeys: CrudMasterRequestPayloadKeys;
   requestPayloadExtra?: Record<string, unknown>;
@@ -268,6 +280,20 @@ export type CrudMasterPageProps = {
   gridDetailId?: number;
   gridTableName?: string;
   gridTableNameAliases?: readonly string[];
+  /**
+   * The list this screen reads, by the Grid Master row that defines it — the way
+   * to name one, since `grid_id` differs from database to database and Grid
+   * Master only lists the Desktop grids. Resolved through `lib/configured-grids`:
+   * it supplies both `apiEndpoints.list` and the grid whose configured columns
+   * the table renders, so neither has to be spelled out.
+   */
+  gridKey?: ConfiguredGridKey;
+  /**
+   * The grid's layout, by the UI Table Master row that holds it — the way to
+   * name one, since `uiTableId` differs from database to database. Resolved
+   * through `lib/ui-tables`; ignored when `uiTableId` is given outright.
+   */
+  uiTableKey?: UiTableKey;
   uiTableId?: string | number;
   useConfiguredGridColumnsOnly?: boolean;
   getByIdMethod?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";

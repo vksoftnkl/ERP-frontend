@@ -2,9 +2,16 @@ import type { CSSProperties } from "react";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import { DEFAULT_LOOKUP_ARRAY_KEYS } from "@/features/masters/shared/normalizers";
 import { toDisplayValue } from "@/features/masters/shared/value-mappers";
+import type { UiTableKey } from "@/lib/ui-tables";
+import type { ConfiguredGridKey } from "@/lib/configured-grids";
 
+/**
+ * The Grid Master row this screen's list reads — "MAIN LIST - ITEMS".
+ * `CrudMasterPage` resolves it to a grid id at runtime (see
+ * lib/configured-grids) and uses it for the rows and the columns alike.
+ */
+export const LIST_GRID_KEY = "itemList" satisfies ConfiguredGridKey;
 export const API_ENDPOINTS = {
-list: "/configured-grid-sql/run?grid_id=1",
   getById: "/items/get",
   create: "/items/create",
   delete: "/items/delete",
@@ -35,9 +42,16 @@ export const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 // `active_only` defaults to true server-side and the DTO rejects unknown params,
 // so this is called with no query at all.
 export const TAX_RATE_MASTER_LIST_ENDPOINT = "/tax-rates/list";
-export const ITEM_REORDER_TABLE_UI_ID = "2";
-export const ITEM_PRICE_TABLE_UI_ID = "3";
-export const ITEM_EAN_TABLE_UI_ID = "4";
+/**
+ * The UI Table Master rows the item modal's three linked grids are laid out by.
+ * Named, not numbered: `useUiTableId` (or `getUiTableId` off React) resolves each
+ * to a `fixed.ui_tables.ui_tbl_id` at runtime, because those ids are assigned per
+ * database — these three were still pointing at 2, 3 and 4 long after the tables
+ * had been re-authored as 16, 17 and 15.
+ */
+export const ITEM_REORDER_TABLE_UI_KEY: UiTableKey = "itemReorder";
+export const ITEM_PRICE_TABLE_UI_KEY: UiTableKey = "itemPrice";
+export const ITEM_EAN_TABLE_UI_KEY: UiTableKey = "itemAltBarcode";
 // Item Master screen's menu id (fixed.menu_master). Selects this screen's
 // configured widget sections/fields from GET /widget-masters/get.
 export const ITEM_MASTER_WIDGET_SECTION_MENU_ID = "29";
@@ -71,15 +85,7 @@ export const UNIT_LOOKUP_QUERY = {
 export const GODOWN_LOOKUP_QUERY = {
   module: "godownLocations",
 } as const;
-export const UI_TABLE_COLUMNS_QUERY = {
-  uiTableId: ITEM_PRICE_TABLE_UI_ID,
-} as const;
-export const UI_REORDER_TABLE_COLUMNS_QUERY = {
-  uiTableId: ITEM_REORDER_TABLE_UI_ID,
-} as const;
-export const UI_EAN_TABLE_COLUMNS_QUERY = {
-  uiTableId: ITEM_EAN_TABLE_UI_ID,
-} as const;
+
 // GET /widget-masters/get is filtered by section menu id + platform (see the
 // server's ListWidgetQueryDto). The legacy page/limit/widgetGroupId/widgetType
 // params are rejected by the endpoint's whitelist validation.
@@ -613,7 +619,10 @@ export type UiTableColumnLayoutItem = {
   uiTblClmNo?: string;
   uiTblClmName: string;
   uiTblClmTableId: string | null;
+  /** Passed back unchanged: the item grids do not own the Qt fraction. */
   uiTblClmColumnWidth: number | null;
+  /** The dragged width ("120px") — the only width these grids write. */
+  uiTblClmPx: string | null;
   uiTblClmColumnVisibility: boolean;
   uiTblClmColumnFocus: boolean;
   uiTblClmColumnPosition: number;

@@ -4,9 +4,15 @@ import type {
   ERPDynamicSelectOption,
 } from "@/components/design-system/ui/dynamic-modal-form";
 import { DEFAULT_LOOKUP_ARRAY_KEYS } from "@/features/masters/shared/normalizers";
+import type { ConfiguredGridKey } from "@/lib/configured-grids";
 
+/**
+ * The Grid Master row this screen's list reads — "MAIN LIST - CUSTOMERS".
+ * `CrudMasterPage` resolves it to a grid id at runtime (see
+ * lib/configured-grids) and uses it for the rows and the columns alike.
+ */
+export const LIST_GRID_KEY = "customerList" satisfies ConfiguredGridKey;
 export const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=8",
   getById: "/customers/get",
   create: "/customers/create",
   delete: "/customers/delete",

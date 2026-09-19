@@ -21,6 +21,8 @@ export default defineConfig({
       // `.test.ts` only: the dropdown module keeps its pure config/format/query
       // helpers beside the components that use them, and those stay renderless.
       "components/**/*.test.ts",
+      // Slice reducers and payload normalizers — plain functions over JSON.
+      "store/**/*.test.ts",
     ],
     reporters: ["default"],
   },

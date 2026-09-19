@@ -62,7 +62,7 @@ import {
   tenantSet,
 } from "@/store/slices/saleOrderSlice";
 import {
-  CHARGE_GRID_UI_TABLE_ID,
+  CHARGE_GRID_UI_TABLE_KEY,
   FREIGHT_CALC_TYPES,
   LOADING_CALC_TYPES,
   DEFAULT_FREIGHT_CALC_TYPE,
@@ -87,7 +87,7 @@ import type { ColumnWidthUnit } from "@/features/sales/quotation/quotation.utils
 import {
   SALES_ITEM_COLUMN_COUNT,
   SALES_ITEM_COLUMN_MEANINGS,
-  SALE_ORDER_ITEM_GRID_UI_TABLE_ID,
+  SALE_ORDER_ITEM_GRID_UI_TABLE_KEY,
 } from "./sale-order.constants";
 import { buildSavePayload, importQuotationAsOrder, parseLoadedDocument } from "./sale-order.payload";
 import { copyOrderDraftAsNew, createOrderDraft, isCustomerLocked } from "./sale-order.state";
@@ -98,6 +98,7 @@ import type {
   TenderMasterRow,
 } from "./sale-order.types";
 import { validateSaveInputs, type OrderValidationContext } from "./sale-order.validate";
+import { useUiTableId } from "@/lib/ui-tables";
 
 /** Table 24 stores Qt-style percent widths, not pixels. */
 export const SALES_ITEM_COLUMN_WIDTH_UNIT: ColumnWidthUnit = "qtPercent";
@@ -204,11 +205,13 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
   const { data: capabilities } = useGetUserCapabilitiesQuery(actor.userId, {
     skip: !actor.userId,
   });
+  const itemUiTableId = useUiTableId(SALE_ORDER_ITEM_GRID_UI_TABLE_KEY);
+  const chargeUiTableId = useUiTableId(CHARGE_GRID_UI_TABLE_KEY);
   const { data: itemLayout } = useGetQuotationGridLayoutQuery({
-    uiTableId: SALE_ORDER_ITEM_GRID_UI_TABLE_ID,
+    uiTableId: itemUiTableId,
   });
   const { data: chargeLayout } = useGetQuotationGridLayoutQuery({
-    uiTableId: CHARGE_GRID_UI_TABLE_ID,
+    uiTableId: chargeUiTableId,
   });
   const { data: chargeMasters = [] } = useGetSalesChargesQuery();
   const { data: priceLevelNames = [] } = useGetPriceLevelsQuery();

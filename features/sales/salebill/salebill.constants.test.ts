@@ -12,6 +12,7 @@
  * `fixed.ui_tables` id 22 as seeded in `prisma/seed/Ui_Table_Columns.sql`.
  */
 import { describe, expect, it } from "vitest";
+import { UI_TABLES } from "@/lib/ui-tables";
 import { normalizeColumnToken } from "@/features/sales/quotation/quotation.constants";
 import type { UiTableColumnRow } from "@/features/sales/quotation/quotation.types";
 import { resolveItemColumnsWith } from "@/features/sales/quotation/quotation.utils";
@@ -22,7 +23,7 @@ import {
   SALE_BILL_ITEM_COLUMN_MEANINGS,
   SALE_BILL_ITEM_COLUMN_NUMBERS,
   SALE_BILL_ITEM_COLUMN_WIDTH_UNIT,
-  SALE_BILL_ITEM_GRID_UI_TABLE_ID,
+  SALE_BILL_ITEM_GRID_UI_TABLE_KEY,
   SALE_BILL_SIZE_COLUMN_MEANING,
 } from "./salebill.constants";
 
@@ -51,12 +52,12 @@ const TABLE_22_COLUMN_NAMES = [
 /** The five columns table 22 ships hidden (`ui_tbl_clm_column_visibility = false`). */
 const TABLE_22_HIDDEN = ["Code", "AliasName", "SchemeName", "CashDiscPerc", "CashDiscAmt"];
 
-describe("grid 22 identity", () => {
-  it("is ui table 22 and measures its widths in Qt percents", () => {
-    // Table 22 is a DESKTOP layout — the Qt client's own — so its widths are
+describe("grid identity", () => {
+  it("names the SALE BILL - LINES table and measures its widths in Qt percents", () => {
+    // That table is a DESKTOP layout — the Qt client's own — so its widths are
     // percentages of the viewport, not pixels. Reading them as pixels renders a
     // 2.13% column as a 2px one.
-    expect(SALE_BILL_ITEM_GRID_UI_TABLE_ID).toBe("22");
+    expect(UI_TABLES[SALE_BILL_ITEM_GRID_UI_TABLE_KEY].name).toBe("SALE BILL - LINES");
     expect(SALE_BILL_ITEM_COLUMN_WIDTH_UNIT).toBe("qtPercent");
   });
 });

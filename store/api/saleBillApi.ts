@@ -19,7 +19,7 @@ import { CONFIGURED_GRID_RUN_ENDPOINT } from "@/features/sales/quotation/quotati
 import {
   BILL_CANCEL_SOURCE_ORDER_ENDPOINT,
   BILL_GET_ENDPOINT,
-  BILL_LIST_GRID_ID,
+  BILL_LIST_GRID_KEY,
   BILL_SAVE_ENDPOINT,
   OPEN_CREDITS_ENDPOINT,
   SALE_ORDER_CANCEL_LINES_ENDPOINT,
@@ -33,6 +33,7 @@ import type {
   SaleBillDocKey,
   SaveBillDto,
 } from "@/features/sales/salebill/salebill.types";
+import { getGridId } from "@/lib/configured-grids";
 
 /** A uuid that matches nothing, so an unresolved tenant lists no rows. */
 const NO_TENANT_ID = "00000000-0000-0000-0000-000000000000";
@@ -173,7 +174,7 @@ export const saleBillApi = baseApi.injectEndpoints({
       query: (params) => ({
         url: CONFIGURED_GRID_RUN_ENDPOINT,
         params: {
-          grid_id: BILL_LIST_GRID_ID,
+          grid_id: getGridId(BILL_LIST_GRID_KEY),
           page: params.page ?? 1,
           limit: params.limit ?? 20,
           // Every token must be bound, the dates as "" when open-ended.

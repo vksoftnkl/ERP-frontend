@@ -1,8 +1,12 @@
-// Canonical grid id for the Account Ledger master (drives the configured grid SQL/columns).
-export const ACCOUNT_LEDGER_GRID_ID = 26;
+import type { ConfiguredGridKey } from "@/lib/configured-grids";
+/**
+ * The Grid Master row this screen's list reads — "MAIN LIST - LEDGERS", resolved
+ * to a grid id at runtime (`useGridId`, see lib/configured-grids). It drives the
+ * configured grid SQL and the columns alike.
+ */
+export const LIST_GRID_KEY = "accountLedgerList" satisfies ConfiguredGridKey;
 
 export const API_ENDPOINTS = {
-  list: `/configured-grid-sql/run?grid_id=${ACCOUNT_LEDGER_GRID_ID}`,
   getById: "/account-ledger-masters/get",
   create: "/account-ledger-masters/create",
   delete: "/account-ledger-masters/delete",
@@ -37,10 +41,8 @@ export const ACCOUNT_LEDGER_TABLE_NAME_ALIASES = [
   "account_ledgers",
 ] as const;
 
-export const GRID_DETAILS_QUERY = {
-  grid_id: String(ACCOUNT_LEDGER_GRID_ID),
-  search: ACCOUNT_LEDGER_TABLE_NAME,
-} as const;
+/** `/grid-details/get` narrows by name; the grid id is added by the screen. */
+export const GRID_DETAILS_SEARCH = ACCOUNT_LEDGER_TABLE_NAME;
 
 export const LOOKUP_QUERY_COMPANIES = {
   module: "companies",

@@ -31,8 +31,14 @@ import {
   toUpdateId,
 } from "@/features/masters/shared/value-mappers";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - CUSTOMER GROUPS". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "customerGroupList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=19",
   getById: "/customer-groups/get",
   create: "/customer-groups/create",
   delete: "/customer-groups/delete",
@@ -330,7 +336,7 @@ export default function CustomerGroupsPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -544,6 +550,7 @@ export default function CustomerGroupsPage() {
       entityLabel="customer group"
       entityLabelPlural="customer groups"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>
@@ -559,7 +566,6 @@ export default function CustomerGroupsPage() {
       }
       gridTableName={GRID_TABLE_NAME}
         listResponseStyleArrayKey=""
-        gridDetailId={19}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

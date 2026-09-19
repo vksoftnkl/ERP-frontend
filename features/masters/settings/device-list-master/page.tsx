@@ -42,8 +42,15 @@ import {
 } from "@/features/masters/shared/widget-config";
 import { useApi } from "@/hooks/useApi";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+/**
+ * The Grid Master row this list reads — "DESKTOP - DEVICE MASTER LIST". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "deviceList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=28",
   getById: "/device-list-masters/get",
   create: "/device-list-masters/create",
   delete: "/device-list-masters/delete",
@@ -135,13 +142,13 @@ const DEFAULT_USER_OPTION: ERPDynamicSelectOption = { value: "", label: "Select 
 // (fixed.dropdown_details 8=company comp_id/comp_name, 5=branch br_id/br_name). The eager
 // RTK lists are still loaded to resolve names in the list table (grid 28 returns only ids).
 const COMPANY_DROPDOWN_CONFIG = {
-  dropdownId: "8",
+  dropdownKey: "company",
   idKeys: ["comp_id", "compId"] as const,
   labelKeys: ["comp_name", "compName"] as const,
   defaultOption: DEFAULT_COMPANY_OPTION,
 } as const;
 const BRANCH_DROPDOWN_CONFIG = {
-  dropdownId: "5",
+  dropdownKey: "branch",
   idKeys: ["br_id", "brId"] as const,
   labelKeys: ["br_name", "brName"] as const,
   defaultOption: DEFAULT_BRANCH_OPTION,
@@ -500,7 +507,7 @@ export default function DeviceListMasterPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -706,6 +713,7 @@ export default function DeviceListMasterPage() {
       entityLabel="device"
       entityLabelPlural="devices"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>

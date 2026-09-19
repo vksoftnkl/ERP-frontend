@@ -29,8 +29,14 @@ import {
   toUpdateId,
 } from "@/features/masters/shared/value-mappers";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - CUSTOMER STATES". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "stateList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-    list: "/configured-grid-sql/run?grid_id=2",
   getById: "/states/get",
   create: "/states/create",
   delete: "/states/delete",
@@ -207,7 +213,7 @@ export default function StateMasterPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -410,6 +416,7 @@ export default function StateMasterPage() {
       entityLabel="state"
       entityLabelPlural="states"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>

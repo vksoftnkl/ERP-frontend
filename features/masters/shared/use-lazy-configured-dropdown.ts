@@ -10,6 +10,7 @@ import type {
 } from "@/components/design-system/ui/dynamic-modal-form";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/value-mappers";
+import { useDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 
 // Lazy, server-side searchable configured dropdown (fixed.dropdown_details).
 // Mirrors configured-grid-sql/run: GET /dropdown-details/run?dropdown_id=<n>&page=1&
@@ -27,8 +28,14 @@ export type LazyDropdownHandlers = {
 };
 
 export type UseLazyConfiguredDropdownOptions = {
-  // dropdown_id from fixed.dropdown_details (stringified).
-  dropdownId: string;
+  /**
+   * Which configured dropdown to read, by the name Dropdown Master stores it
+   * under (see `lib/configured-dropdowns`). The id it resolves to differs from
+   * database to database, so this is what a screen should name.
+   */
+  dropdownKey?: ConfiguredDropdownKey;
+  /** A literal `dropdown_id`, for a dropdown the registry does not carry. */
+  dropdownId?: string;
   // Row keys that hold the option value (id) and the option label (name).
   idKeys: readonly string[];
   labelKeys: readonly string[];
@@ -106,13 +113,16 @@ function withPinnedOption(
 }
 
 export function useLazyConfiguredDropdown({
-  dropdownId,
+  dropdownKey,
+  dropdownId: explicitDropdownId,
   idKeys,
   labelKeys,
   defaultOption,
   limit = 20,
   debounceMs = DROPDOWN_SEARCH_DEBOUNCE_MS,
 }: UseLazyConfiguredDropdownOptions): UseLazyConfiguredDropdownResult {
+  const registryDropdownId = useDropdownId(dropdownKey);
+  const dropdownId = registryDropdownId || explicitDropdownId || "";
   const head = defaultOption ?? EMPTY_HEAD;
   // Errors aren't toasted — a failed dropdown fetch shouldn't interrupt the form.
   const { run } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, { toast: { error: false } });

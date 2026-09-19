@@ -38,8 +38,15 @@ import {
 import { GST_TYPE_OPTIONS } from "@/utils/constant";
 import { validateGstin } from "@/utils/validation";
 import { useDataRefresh } from "@/lib/data-freshness";
+import type { ConfiguredGridKey } from "@/lib/configured-grids";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - COMPANYS". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it for
+ * both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "companyList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-   list: "/configured-grid-sql/run?grid_id=12",
   getById: "/company-masters/get",
   create: "/company-masters/create",
   delete: "/company-masters/delete",
@@ -81,7 +88,7 @@ const DEFAULT_STATE_OPTION: ERPDynamicSelectOption = {
 // (compState), so options map state_name -> state_name. The full code<->name maps below
 // still load eagerly because GSTIN auto-fill and submit code-derivation need every state.
 const STATE_DROPDOWN_CONFIG = {
-  dropdownId: "9",
+  dropdownKey: "gstStateCode",
   idKeys: ["state_name", "stateName"] as const,
   labelKeys: ["state_name", "stateName"] as const,
   defaultOption: DEFAULT_STATE_OPTION,
@@ -94,7 +101,7 @@ const DEFAULT_APP_THEME_OPTION: ERPDynamicSelectOption = {
 // DTO types compStylesheetId as an integer. Options come from configured dropdown 27
 // (APP THEMES -> thm_id/thm_name), lazily loaded like the State field.
 const APP_THEME_DROPDOWN_CONFIG = {
-  dropdownId: "27",
+  dropdownKey: "appTheme",
   idKeys: ["thm_id", "thmId"] as const,
   labelKeys: ["thm_name", "thmName"] as const,
   defaultOption: DEFAULT_APP_THEME_OPTION,
@@ -1120,8 +1127,8 @@ export function useCompaniesModule() {
         entityLabel: "company",
         entityLabelPlural: "companies",
         apiEndpoints: API_ENDPOINTS,
+        gridKey: LIST_GRID_KEY,
         gridTableName: GRID_TABLE_NAME,
-        gridDetailId: 12,
         listResponseStyleArrayKey: "",
         lookupKeys: LOOKUP_KEYS,
         requestPayloadKeys: REQUEST_PAYLOAD_KEYS,

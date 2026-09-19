@@ -1,7 +1,8 @@
 /**
  * Quotation Entry — configuration constants.
  *
- * The two grids are laid out by the server (`fixed.ui_tables` rows 18 and 21):
+ * The two grids are laid out by the server (the UI Table Master rows named
+ * "QUOTATION - LINES" and "CHARGES" — see `lib/ui-tables`):
  * the *layout* — order, width, visibility, heading — comes from
  * `GET /ui-table-masters/get`, and the column *meaning* lives here, because
  * `fixed.ui_table_columns` stores only a display name (no field token, no data
@@ -9,7 +10,10 @@
  * as the stock grids do it.
  */
 import type { ChargeApplyOn, ChargeMethod, ChargeRole, ChargeType } from "@/domain/pricing";
+import type { UiTableKey } from "@/lib/ui-tables";
 import type { DraftChargeRow, DraftLine } from "./quotation.types";
+import type { ConfiguredGridKey } from "@/lib/configured-grids";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 // ---------------------------------------------------------------------------
 // Endpoints and configured ids
 // ---------------------------------------------------------------------------
@@ -82,29 +86,28 @@ export const txnHoldLockEndpoint = (
 ): string => `/txn-holds/${txhId}/${action}`;
 export const HOLD_DEVICE_ID_HEADER = "X-Device-Id";
 /**
- * `fixed.ui_tables.ui_tbl_id` for the item grid — 23 ("Quotation-item", 90
- * columns, one per `ITEM_COLUMN_MEANINGS` entry and in the same order).
+ * The UI Table Master row this screen's item grid is laid out by —
+ * "QUOTATION - LINES", resolved to a `fixed.ui_tables.ui_tbl_id` at runtime by
+ * `useUiTableId`, because that id differs from database to database.
  *
- * NOT 18 ("Quotation"): that is the Qt screen's own layout, and its widths are
- * that grid's fractional percents rather than pixels — see `ColumnWidthUnit`.
+ * This used to be the literal 23 ("Quotation-item"), a web-only duplicate of the
+ * Desktop layout seeded alongside it. Those duplicates are gone: the browser and
+ * the Qt screen now share one row, so an "Admin settings" save here is the same
+ * layout edit an admin makes in UI Table Master. The one thing they still do not
+ * share is the width scale — this screen reads widths as pixels
+ * (`ITEM_COLUMN_WIDTH_UNIT`) where the Qt screen wrote fractional percents.
  */
-export const ITEM_GRID_UI_TABLE_ID = "23";
+export const ITEM_GRID_UI_TABLE_KEY: UiTableKey = "quotationLines";
 /**
- * `fixed.ui_tables.ui_tbl_id` for the additional-charges grid — 26
- * ("QUOTATION - CHARGES", 33 columns, one per `CHARGE_COLUMN_MEANINGS` entry and
- * in the same order). Shared by this screen and Sale Order, which re-exports it.
- *
- * NOT 21 ("CHARGES") for the same reason the item grid is not 18: that is the Qt
- * screen's own layout, in that grid's fractional percents rather than pixels, and
- * it opens on three columns. Pointing the web screens at it also meant every save
- * from the browser's "Admin settings" rewrote the desktop screen's layout.
- * Provisioned by the server's `Quotation_Charges_Grid_Web.sql` seed.
+ * The UI Table Master row for the additional-charges grid — "CHARGES", shared by
+ * this screen, Sale Bill and Sale Order (both re-export this key). Was the
+ * literal 26 ("QUOTATION - CHARGES"), the web-only duplicate of the same grid.
  */
-export const CHARGE_GRID_UI_TABLE_ID = "26";
-/** `fixed.grid_details.grid_id` for the item picker popup ("POPUP - ITEMS"). */
-export const ITEM_PICKER_GRID_ID = "71";
+export const CHARGE_GRID_UI_TABLE_KEY: UiTableKey = "charges";
+/** The Grid Master row behind the item picker popup — "POPUP - ITEMS". */
+export const ITEM_PICKER_GRID_KEY: ConfiguredGridKey = "itemPickerPopup";
 /**
- * `fixed.grid_details.grid_id` for the browse list — grid 84 ("Quotation").
+ * The Grid Master row behind the browse list — "TXN MAIN LIST - QUOTATION".
  *
  * Two properties of this grid drive how the list is built:
  *
@@ -119,33 +122,35 @@ export const ITEM_PICKER_GRID_ID = "71";
  *    `meta.total` counts them; the list shows them, tagged, rather than hiding
  *    rows the grid plainly returned.
  *
- * (Grid 83, "QUOTATION - MAIN LIST", selects the same columns behind the same
- * parameters, but hides half of them and is not the configured list for this
- * screen.)
+ * This screen used to read grid 84 ("Quotation"), a `web` copy of the same SELECT
+ * behind the same parameters. The copy was invisible in Grid Master — which lists
+ * Desktop rows only — so nothing an admin did there reached this list. The
+ * difference they will notice is that this grid ships several of its columns
+ * hidden; unhiding them is now a Grid Master edit rather than a code change.
  */
-export const QUOTATION_LIST_GRID_ID = "84";
-/** `fixed.dropdown_details.dropdown_id` for the customer combobox. */
-export const CUSTOMER_DROPDOWN_ID = "39";
+export const QUOTATION_LIST_GRID_KEY: ConfiguredGridKey = "quotationList";
+/** The Dropdown Master row behind the customer combobox — "CUSTOMERS". */
+export const CUSTOMER_DROPDOWN_KEY: ConfiguredDropdownKey = "customer";
 /**
  * Place of supply. Keyed on the 2-char GST `state_code` (`"33"`), matching what
- * `customer-detail` returns — NOT the `state_master` uuid that dropdowns 2/29
- * serve.
+ * `customer-detail` returns — NOT the `state_master` uuid the `customerState`
+ * dropdown serves.
  */
-export const POS_DROPDOWN_ID = "21";
-export const AGENT_DROPDOWN_ID = "38";
+export const POS_DROPDOWN_KEY: ConfiguredDropdownKey = "gstStateCode";
+export const AGENT_DROPDOWN_KEY: ConfiguredDropdownKey = "employee";
 /**
- * The Beat picker — dropdown 13 ("AREA LIST", active non-deleted rows ordered by
+ * The Beat picker — "AREA LIST" (active non-deleted rows ordered by
  * name). Beat IS the area on this screen: the voucher stores one route id,
  * `sq_cust_area_id`, which the customer master seeds and the operator can change.
  */
-export const AREA_DROPDOWN_ID = "13";
+export const AREA_DROPDOWN_KEY: ConfiguredDropdownKey = "area";
 /**
- * Dropdown 34 ("PRICE LEVELS") over `inventory.item_price_levels` — `ipl_id` is
+ * "PRICE LEVELS" over `inventory.item_price_levels` — `ipl_id` is
  * the same 1..7 level the voucher and `/item-price` use, `ipl_name` is what the
  * deployment calls it ("WS Price", "Retail Price", …).
  */
-export const PRICE_LEVEL_DROPDOWN_ID = "34";
-export const SALESMAN_DROPDOWN_ID = "38";
+export const PRICE_LEVEL_DROPDOWN_KEY: ConfiguredDropdownKey = "priceLevel";
+export const SALESMAN_DROPDOWN_KEY: ConfiguredDropdownKey = "employee";
 /** Sales-side charges only: `chgModule IN ('S','B')`. */
 export const CHARGE_MODULE_SALES = "S";
 /** Default place of supply: Tamil Nadu. */

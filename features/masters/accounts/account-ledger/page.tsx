@@ -41,14 +41,14 @@ import {
   SEARCHABLE_SELECT_OPTIONS_MAX_HEIGHT,
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
-  ACCOUNT_LEDGER_GRID_ID,
+  LIST_GRID_KEY,
   ACCOUNT_GROUP_GET_ENDPOINT,
   GRID_DETAILS_ENDPOINT,
   GRID_COLUMNS_CREATE_ENDPOINT,
   GRID_COLUMN_WIDTH_ENDPOINT,
   GRID_FILTER_SETTINGS_ENDPOINT,
   GRID_VISIBILITY_SETTINGS_ENDPOINT,
-  GRID_DETAILS_QUERY,
+  GRID_DETAILS_SEARCH,
   GST_LOOKUP_ENDPOINT,
   GST_LOOKUP_PATTERN,
   STATE_NAME_SEARCH_FIELD_NAMES,
@@ -130,6 +130,8 @@ import {
 import { Z_MODAL_NESTED } from "@/lib/z-index";
 import { layoutPointer, layoutViewportSize } from "@/lib/ui-scale";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, gridRunEndpoint, useGridId } from "@/lib/configured-grids";
+import { getDropdownId } from "@/lib/configured-dropdowns";
 const GRID_SETTINGS_CONTEXT_MENU_WIDTH = 190;
 const GRID_SETTINGS_CONTEXT_MENU_HEIGHT = 130;
 const GRID_SETTINGS_CONTEXT_MENU_PADDING = 8;
@@ -184,7 +186,15 @@ function getColumnExportValue(
   }
   return "";
 }
-type GridColumnWidthUpdate = { grid_column_id: string; grid_column_width: number };
+/**
+ * One resized column, as `/grid-details/column-width` takes it. Pixels only:
+ * `grid_column_width` is the desktop client's Qt fraction, which this table no
+ * longer sizes from and must not overwrite.
+ */
+type GridColumnWidthUpdate = {
+  grid_column_id: string;
+  grid_column_px: string;
+};
 type GridColumnFilterUpdate = { grid_column_id: string; grid_column_filter: boolean };
 type GridColumnVisibilityUpdate = {
   grid_column_id: string;
@@ -624,13 +634,15 @@ function LedgerFieldRenderer({
   );
 }
 export default function AccountLedgerMasterPage() {
+  // The list is a configured grid, named rather than numbered — see lib/configured-grids.
+  const listGridId = useGridId(LIST_GRID_KEY);
   const {
     data,
     error,
     loading,
     getAll,
     refresh: refreshList,
-  } = useApi<unknown>(API_ENDPOINTS.list);
+  } = useApi<unknown>(gridRunEndpoint(listGridId));
   const { getAll: getGridDetails } = useApi<unknown>(GRID_DETAILS_ENDPOINT);
   const { run: saveGridColumnWidth } = useApi<unknown, Record<string, unknown>>(
     GRID_COLUMNS_CREATE_ENDPOINT,
@@ -742,8 +754,7 @@ export default function AccountLedgerMasterPage() {
   } | null>(null);
   const router = useRouter();
   // State for grid details
-  const [accountLedgerGridId, setAccountLedgerGridId] =
-    useState<number | null>(ACCOUNT_LEDGER_GRID_ID);
+  const [accountLedgerGridId, setAccountLedgerGridId] = useState<number | null>(null);
   const [accountLedgerGridName, setAccountLedgerGridName] = useState<string | null>(null);
   // State for modal form
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -793,7 +804,7 @@ export default function AccountLedgerMasterPage() {
   const gstLookupRequestIdRef = useRef(0);
   // Grid columns query. Seed from the known grid id so headers load immediately,
   // independent of the grid-details resolution; refines to the resolved id when ready.
-  const selectedGridId = accountLedgerGridId ?? ACCOUNT_LEDGER_GRID_ID;
+  const selectedGridId = accountLedgerGridId ?? Number(listGridId);
   const {
     data: gridColumnsData,
     error: gridColumnsQueryError,
@@ -822,10 +833,13 @@ export default function AccountLedgerMasterPage() {
     let mounted = true;
     void (async () => {
       try {
-        const payload = await getGridDetails(GRID_DETAILS_QUERY);
+        const payload = await getGridDetails({
+          grid_id: listGridId,
+          search: GRID_DETAILS_SEARCH,
+        });
         if (!mounted) return;
         const resolvedGrid = resolveAccountLedgerGridDetails(payload);
-        setAccountLedgerGridId(resolvedGrid.gridId ?? ACCOUNT_LEDGER_GRID_ID);
+        setAccountLedgerGridId(resolvedGrid.gridId ?? Number(listGridId));
         setAccountLedgerGridName(resolvedGrid.gridName);
       } catch {
         if (mounted) {
@@ -837,7 +851,7 @@ export default function AccountLedgerMasterPage() {
     return () => {
       mounted = false;
     };
-  }, [getGridDetails]);
+  }, [getGridDetails, listGridId]);
   useEffect(() => loadGridDetails(), [loadGridDetails]);
   useDataRefresh(() => {
     loadGridDetails();
@@ -898,7 +912,9 @@ export default function AccountLedgerMasterPage() {
     async (fieldName: string, search: string) => {
       const config = LEDGER_DROPDOWN_FIELD_CONFIG[fieldName];
       if (!config) return;
-      const query = buildDropdownRunQuery(config.dropdownId, search);
+      // The dropdown is named, not numbered; the registry answers with the id
+      // Dropdown Master gave it on this database (see lib/configured-dropdowns).
+      const query = buildDropdownRunQuery(getDropdownId(config.dropdownKey), search);
       setDropdownLoading((current) => ({ ...current, [config.kind]: true }));
       try {
         switch (config.kind) {
@@ -1163,8 +1179,8 @@ export default function AccountLedgerMasterPage() {
         page: String(Math.max(1, page)),
         limit: String(Math.max(1, limit)),
         // The server JSON-parses this and binds each key into the matching named
-        // token in grid 26's stored SQL; keys with no matching token are ignored.
-        grid_param: JSON.stringify({ wantdelete: wantDelete }),
+        // token in the grid's stored SQL; keys with no matching token are ignored.
+        grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
       };
       if (normalizedTerm) {
         query.search = normalizedTerm;
@@ -1977,22 +1993,22 @@ export default function AccountLedgerMasterPage() {
     !selectedRow || `${selectedRow.__recordId}`.trim().length === 0;
   const handleGridColumnResizeEnd = useCallback(
     (payload: ReusableTableColumnResizeEndPayload<LedgerTableRow>) => {
-      if (payload.tableWidthPx <= 0) {
+      if (payload.widthPx <= 0) {
         return;
       }
       const gridColumn = resolveGridColumnForLedgerTableColumn(payload.column, gridColumns);
       if (!gridColumn?.serialId) {
         return;
       }
-      const widthPercent = Number(((payload.widthPx * 100) / payload.tableWidthPx).toFixed(4));
-      if (!Number.isFinite(widthPercent) || widthPercent <= 0) {
+      const widthPx = Math.round(payload.widthPx);
+      if (!Number.isFinite(widthPx) || widthPx <= 0) {
         return;
       }
       pendingColumnWidthsRef.current = {
         ...pendingColumnWidthsRef.current,
         [gridColumn.serialId]: {
           grid_column_id: gridColumn.serialId,
-          grid_column_width: widthPercent,
+          grid_column_px: `${widthPx}px`,
         },
       };
     },

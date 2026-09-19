@@ -63,6 +63,7 @@ import { COLLECTION_DAY_OPTIONS } from "@/utils/constant";
 import { validateGstin, validateOptionalGstin } from "@/utils/validation";
 import {
   API_ENDPOINTS,
+  LIST_GRID_KEY,
   GRID_TABLE_NAME,
   STATE_GET_ENDPOINT,
   STATE_UPSERT_ENDPOINT,
@@ -145,6 +146,8 @@ import {
   useSessionSettingQuery,
 } from "@/features/masters/shared/form-defaults-setting";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam } from "@/lib/configured-grids";
+import { getDropdownId } from "@/lib/configured-dropdowns";
 function withCustomerBasicValidation(field: ERPDynamicModalField): ERPDynamicModalField {
   const basicValidation = CUSTOMER_BASIC_VALIDATIONS[field.name];
   if (!basicValidation) {
@@ -1566,7 +1569,9 @@ export default function CustomerPage() {
   const fetchDropdown = useCallback(
     async (kind: CustomerDropdownKind, search: string) => {
       const config = CUSTOMER_DROPDOWN_CONFIG[kind];
-      const query = buildDropdownRunQuery(config.dropdownId, search);
+      // The dropdown is named, not numbered; the registry answers with the id
+      // Dropdown Master gave it on this database (see lib/configured-dropdowns).
+      const query = buildDropdownRunQuery(getDropdownId(config.dropdownKey), search);
       try {
         switch (kind) {
           case "company": {
@@ -2501,7 +2506,7 @@ export default function CustomerPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -2760,6 +2765,7 @@ export default function CustomerPage() {
         entityLabel="customer"
         entityLabelPlural="customers"
         apiEndpoints={API_ENDPOINTS}
+        gridKey={LIST_GRID_KEY}
         buildListQuery={buildListQuery}
         toolbarContent={
           <div className={styles.filterCheckGroup}>
@@ -2790,7 +2796,6 @@ export default function CustomerPage() {
           </>
         }
         gridTableName={GRID_TABLE_NAME}
-        gridDetailId={8}
         listResponseStyleArrayKey=""
         lookupKeys={LOOKUP_KEYS}
         requestPayloadKeys={REQUEST_PAYLOAD_KEYS}

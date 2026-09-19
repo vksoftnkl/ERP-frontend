@@ -40,16 +40,14 @@ import {
   CONFIGURED_GRID_RUN_ENDPOINT,
   QUOTATION_DELETE_ENDPOINT,
   QUOTATION_GET_ENDPOINT,
-  QUOTATION_LIST_GRID_ID,
+  QUOTATION_LIST_GRID_KEY,
   QUOTATION_SAVE_ENDPOINT,
 } from "../quotation.constants";
 import type { QuotationDocKey } from "../quotation.types";
 import { toDateInput, toNumber } from "../quotation.utils";
 
-const GRID_DETAIL_ID = Number(QUOTATION_LIST_GRID_ID);
 
 const API_ENDPOINTS = {
-  list: `${CONFIGURED_GRID_RUN_ENDPOINT}?grid_id=${QUOTATION_LIST_GRID_ID}`,
   getById: QUOTATION_GET_ENDPOINT,
   create: QUOTATION_SAVE_ENDPOINT,
   delete: QUOTATION_DELETE_ENDPOINT,
@@ -206,6 +204,7 @@ export function QuotationListView({
         entityLabel="quotation"
         entityLabelPlural="quotations"
         apiEndpoints={API_ENDPOINTS}
+        gridKey={QUOTATION_LIST_GRID_KEY}
         lookupKeys={LOOKUP_KEYS}
         requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
         styles={styles}
@@ -213,7 +212,6 @@ export function QuotationListView({
         createLabel="New Quotation"
         codeColumnHeader="Quote No"
         nameColumnHeader="Customer"
-        gridDetailId={GRID_DETAIL_ID}
         // Without this the shell defaults to `"styles"` — the response-driven column
         // mode — and a configured grid that carries no `styles` array renders a
         // serial-number column and nothing else. Every master page on a configured

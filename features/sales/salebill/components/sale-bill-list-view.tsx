@@ -68,16 +68,14 @@ import {
 import orderStyles from "@/features/sales/sale-order/page.module.scss";
 import {
   BILL_GET_ENDPOINT,
-  BILL_LIST_GRID_ID,
+  BILL_LIST_GRID_KEY,
   BILL_LIST_WINDOW_DAYS,
   BILL_SAVE_ENDPOINT,
 } from "../salebill.constants";
 import type { SaleBillDocKey } from "../salebill.types";
 
-const GRID_DETAIL_ID = Number(BILL_LIST_GRID_ID);
 
 const API_ENDPOINTS = {
-  list: `${CONFIGURED_GRID_RUN_ENDPOINT}?grid_id=${BILL_LIST_GRID_ID}`,
   getById: BILL_GET_ENDPOINT,
   create: BILL_SAVE_ENDPOINT,
   // Empty ON PURPOSE — see the module comment. `isRowDeleteDisabled` below
@@ -345,6 +343,7 @@ export function SaleBillListView({ onCreate, onOpen }: SaleBillListViewProps) {
         entityLabelPlural="bills"
         searchPlaceholder="party name, bill no or status"
         apiEndpoints={API_ENDPOINTS}
+        gridKey={BILL_LIST_GRID_KEY}
         lookupKeys={LOOKUP_KEYS}
         requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
         styles={masterStyles}
@@ -352,7 +351,6 @@ export function SaleBillListView({ onCreate, onOpen }: SaleBillListViewProps) {
         createLabel="New Bill"
         codeColumnHeader="Bill No"
         nameColumnHeader="Customer"
-        gridDetailId={GRID_DETAIL_ID}
         // Without this the shell defaults to the response-driven column mode and a
         // configured grid with no `styles` array renders a serial column only.
         listResponseStyleArrayKey=""

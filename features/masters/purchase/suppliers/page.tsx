@@ -44,6 +44,7 @@ import {
 } from "@/app/master/_shared/crud-utils";
 import {
   API_ENDPOINTS,
+  LIST_GRID_KEY,
   GRID_TABLE_NAME,
   SUPPLIER_MODAL_PANEL_STYLE,
   STATE_MODAL_PANEL_STYLE,
@@ -107,6 +108,8 @@ import {
   type LedgerBankAccountFormRow,
 } from "@/features/masters/accounts/account-ledger/bank-accounts";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam } from "@/lib/configured-grids";
+import { getDropdownId } from "@/lib/configured-dropdowns";
 // Lowercased backend fieldNames that actually bind to a field on this form; the
 // popup lists only these.
 const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(
@@ -232,7 +235,7 @@ export default function SuppliersMasterPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -271,7 +274,9 @@ export default function SuppliersMasterPage() {
   const fetchDropdown = useCallback(
     async (kind: SupplierDropdownKind, search: string) => {
       const config = SUPPLIER_DROPDOWN_CONFIG[kind];
-      const query = buildDropdownRunQuery(config.dropdownId, search);
+      // The dropdown is named, not numbered; the registry answers with the id
+      // Dropdown Master gave it on this database (see lib/configured-dropdowns).
+      const query = buildDropdownRunQuery(getDropdownId(config.dropdownKey), search);
       try {
         switch (kind) {
           case "company": {
@@ -1108,6 +1113,7 @@ export default function SuppliersMasterPage() {
         createModalTitle="Supplier Master"
         editModalTitle="Supplier Master"
         apiEndpoints={API_ENDPOINTS}
+        gridKey={LIST_GRID_KEY}
         buildListQuery={buildListQuery}
         toolbarContent={
           <div className={styles.filterCheckGroup}>
@@ -1123,7 +1129,6 @@ export default function SuppliersMasterPage() {
         }
         gridTableName={GRID_TABLE_NAME}
         listResponseStyleArrayKey=""
-        gridDetailId={17}
         lookupKeys={LOOKUP_KEYS}
         requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
         styles={styles}

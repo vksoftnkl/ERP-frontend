@@ -1,3 +1,4 @@
+import type { ConfiguredGridKey } from "@/lib/configured-grids";
 import type { ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
@@ -8,8 +9,12 @@ import {
   toSelectBoolean,
   toUpdateId,
 } from "@/features/masters/shared";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - CUSTOMER STATES", resolved
+ * to a grid id at runtime (see lib/configured-grids).
+ */
+const LIST_GRID_KEY = "stateList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=2",
   getById: "/states/get",
   create: "/states/create",
   delete: "/states/delete",
@@ -89,6 +94,7 @@ export const stateModule = defineMasterModule({
   entityLabel: "state",
   entityLabelPlural: "states",
   apiEndpoints: API_ENDPOINTS,
+  gridKey: LIST_GRID_KEY,
   gridTableName: GRID_TABLE_NAME,
   listResponseStyleArrayKey: "",
   lookupKeys: LOOKUP_KEYS,

@@ -139,7 +139,7 @@ import {
   STOCK_ADJ_REASONS_ENDPOINT,
   UI_TABLE_COLUMNS_LIST_ENDPOINT,
   UI_TABLE_COLUMNS_CREATE_ENDPOINT,
-  UI_TABLE_COLUMNS_QUERY,
+  PHYSICAL_STOCK_UI_TABLE_KEY,
   LOOKUP_SEARCH_DEBOUNCE_MS,
   TRACKING_OPTIONS,
   TRACKING_TYPE_OPTION_LABELS,
@@ -202,6 +202,7 @@ import {
 import { Z_MODAL_NESTED } from "@/lib/z-index";
 import { layoutPointer, layoutViewportSize, toLayoutPx } from "@/lib/ui-scale";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { useUiTableId } from "@/lib/ui-tables";
 type TableSettingsContextMenuPosition = Pick<CSSProperties, "left" | "top">;
 type InlineItemMasterRequest = {
   itemId: string;
@@ -219,6 +220,8 @@ function clampContextMenuPosition(value: number, min: number, max: number): numb
   return Math.min(Math.max(value, min), max);
 }
 export default function PhysicalStockPage() {
+  // Which ui_table this grid's layout lives in, by name — see lib/ui-tables.
+  const uiTableId = useUiTableId(PHYSICAL_STOCK_UI_TABLE_KEY);
   const [voucherDate, setVoucherDate] = useState(() => getTodayInputValue());
   const [voucherRefNo, setVoucherRefNo] = useState("");
   const [rows, setRows] = useState<PhysicalStockRow[]>(() => [createEmptyRow(1)]);
@@ -560,16 +563,16 @@ export default function PhysicalStockPage() {
   const loadUiColumnConfig = useCallback(() => {
     void (async () => {
       try {
-        const payload = await listUiTableColumns(UI_TABLE_COLUMNS_QUERY);
+        const payload = await listUiTableColumns({ uiTableId });
         const allTables = Array.isArray((payload as { data?: unknown[] })?.data) ? (payload as { data: { uiTblId?: string; columns?: UiTableColumnPayload[] }[] }).data : [];
-        const matchingTable = allTables.find((t) => t.uiTblId === UI_TABLE_COLUMNS_QUERY.uiTableId);
+        const matchingTable = allTables.find((t) => t.uiTblId === uiTableId);
         const configuredColumns = (Array.isArray(matchingTable?.columns) ? matchingTable.columns : []).filter((c) => c.uiTblClmIsActive !== false);
         applyPhysicalStockColumnConfigs(configuredColumns);
       } catch {
         applyPhysicalStockColumnConfigs([]);
       }
     })();
-  }, [applyPhysicalStockColumnConfigs, listUiTableColumns]);
+  }, [applyPhysicalStockColumnConfigs, listUiTableColumns, uiTableId]);
   useEffect(() => loadUiColumnConfig(), [loadUiColumnConfig]);
   useDataRefresh(() => {
     loadUiColumnConfig();
@@ -1157,7 +1160,7 @@ export default function PhysicalStockPage() {
     try {
       await saveUiTableColumn({
         body: {
-          uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId,
+          uiTblId: uiTableId,
           uiTblColumns: columnSettingsRows.map((row) => {
             const draft =
               columnSettingsDraft[row.key] ??
@@ -1170,9 +1173,9 @@ export default function PhysicalStockPage() {
           }),
         },
       });
-      const payload = await listUiTableColumns(UI_TABLE_COLUMNS_QUERY);
+      const payload = await listUiTableColumns({ uiTableId });
       const allTables = Array.isArray((payload as { data?: unknown[] })?.data) ? (payload as { data: { uiTblId?: string; columns?: UiTableColumnPayload[] }[] }).data : [];
-      const matchingTable = allTables.find((t) => t.uiTblId === UI_TABLE_COLUMNS_QUERY.uiTableId);
+      const matchingTable = allTables.find((t) => t.uiTblId === uiTableId);
       const nextColumnConfigs = (Array.isArray(matchingTable?.columns) ? matchingTable.columns : []).filter((c) => c.uiTblClmIsActive !== false);
       applyPhysicalStockColumnConfigs(nextColumnConfigs);
       setIsColumnSettingsOpen(false);
@@ -1188,6 +1191,7 @@ export default function PhysicalStockPage() {
     isColumnSettingsOpen,
     listUiTableColumns,
     saveUiTableColumn,
+    uiTableId,
   ]);
   const handleTableBodyContextMenu = useCallback(
     (event: ReactMouseEvent<HTMLTableSectionElement>) => {
@@ -1329,10 +1333,10 @@ export default function PhysicalStockPage() {
           column,
           configuredColumn,
           columnIndex,
-          { uiTblClmColumnWidth: width },
+          { uiTblClmPx: `${Math.round(width)}px` },
         );
         const response = await saveUiTableColumn({
-          body: { uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId, uiTblColumns: [columnRequest] },
+          body: { uiTblId: uiTableId, uiTblColumns: [columnRequest] },
         });
         const savedColumn = (response?.data?.columns ?? []).find(
           (c) =>
@@ -1355,7 +1359,7 @@ export default function PhysicalStockPage() {
         // Keep the local resize even if persistence fails.
       }
     },
-    [saveUiTableColumn],
+    [saveUiTableColumn, uiTableId],
   );
   const persistPhysicalStockColumnOrder = useCallback(
     async (orderedColumns: PhysicalStockColumn[]) => {
@@ -1364,12 +1368,13 @@ export default function PhysicalStockPage() {
         const configuredColumn = findPhysicalStockUiTableColumnConfig(currentConfigs, column.key);
         return buildPhysicalStockUiTableColumnRequest(column, configuredColumn, columnIndex, {
           uiTblClmColumnPosition: columnIndex + 1,
-          uiTblClmColumnWidth: parseColumnWidth(column.width),
+          // Re-sent so a reorder carries each column's dragged width with it.
+          uiTblClmPx: `${Math.round(parseColumnWidth(column.width))}px`,
         });
       });
       try {
         const response = await saveUiTableColumn({
-          body: { uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId, uiTblColumns: columnRequests },
+          body: { uiTblId: uiTableId, uiTblColumns: columnRequests },
         });
         const savedColumns = response?.data?.columns;
         if (savedColumns?.length) {
@@ -1380,7 +1385,7 @@ export default function PhysicalStockPage() {
         // Keep the local order even if persistence fails.
       }
     },
-    [saveUiTableColumn],
+    [saveUiTableColumn, uiTableId],
   );
   const handleColumnDragStart = useCallback(
     (event: ReactDragEvent<HTMLDivElement>, columnKey: string) => {

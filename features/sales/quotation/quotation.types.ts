@@ -38,7 +38,14 @@ export type UiTableColumnRow = {
   uiTblClmId: string;
   uiTblClmNo: string;
   uiTblClmName: string | null;
+  /** The desktop client's Qt fraction — the fallback width, never written here. */
   uiTblClmColumnWidth: number | null;
+  /**
+   * The width a drag left the column at ("120px"). What the grid sizes from
+   * wherever it is set. Optional because the hand-built layouts the tests and
+   * fallbacks use carry only the fraction.
+   */
+  uiTblClmPx?: string | null;
   uiTblClmColumnVisibility: boolean | null;
   uiTblClmColumnFocus: boolean | null;
   uiTblClmColumnPosition: number;

@@ -29,8 +29,14 @@ import {
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - SUPPLIER GROUPS". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "supplierGroupList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
- list: "/configured-grid-sql/run?grid_id=18",
   getById: "/supplier-groups/get",
   create: "/supplier-groups/create",
   delete: "/supplier-groups/delete",
@@ -216,7 +222,7 @@ export default function SupplierGroupsPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -430,6 +436,7 @@ export default function SupplierGroupsPage() {
       entityLabel="supplier group"
       entityLabelPlural="supplier groups"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>
@@ -445,7 +452,6 @@ export default function SupplierGroupsPage() {
       }
       gridTableName={GRID_TABLE_NAME}
         listResponseStyleArrayKey=""
-        gridDetailId={18}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

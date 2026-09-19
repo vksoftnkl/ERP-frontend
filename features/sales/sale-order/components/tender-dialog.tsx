@@ -46,9 +46,13 @@ import {
 } from "../tender/rows";
 import { validateTenderRows } from "../tender/validate";
 import styles from "../page.module.scss";
+import { useDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 
-/** `fixed.bank_master` — name only (166 rows); the payload carries the NAME. */
-const BANK_DROPDOWN_ID = "46";
+/**
+ * `fixed.bank_master` — name only (166 rows); the payload carries the NAME.
+ * Named through the registry (see lib/configured-dropdowns).
+ */
+const BANK_DROPDOWN_KEY: ConfiguredDropdownKey = "bank";
 
 export type TenderDialogProps = {
   isOpen: boolean;
@@ -175,6 +179,7 @@ function TenderDialogBody({
   onClose,
   onApply,
 }: TenderDialogProps) {
+  const bankDropdownId = useDropdownId(BANK_DROPDOWN_KEY);
   const built = useMemo(
     () => buildRows(masters, existingRows, documentDate, purpose),
     [masters, existingRows, documentDate, purpose],
@@ -573,7 +578,7 @@ function TenderDialogBody({
               <DropdownCombo
                 id="so-tender-bank"
                 label={`Bank${activeSpec.bank === "required" ? " *" : ""}`}
-                dropdownId={BANK_DROPDOWN_ID}
+                dropdownId={bankDropdownId}
                 // The bank master serves names only, so the value IS the name —
                 // which is what `td_bank_name` stores.
                 valueKey="bnk_name"

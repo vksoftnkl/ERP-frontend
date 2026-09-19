@@ -12,7 +12,6 @@ import {
 import { createPortal } from "react-dom";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, {
-  configColumnWidthFromPx,
   type ReusableTableBodyContextMenuPayload,
   type ReusableTableColumn,
   type ReusableTableColumnResizeEndPayload,
@@ -74,6 +73,8 @@ import type {
 } from "./crud-master-page.types";
 import { layoutPointer, layoutViewportSize } from "@/lib/ui-scale";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { useUiTableId } from "@/lib/ui-tables";
+import { gridRunEndpoint, useGridId } from "@/lib/configured-grids";
 const DEBOUNCE_MS = 300;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
@@ -84,6 +85,33 @@ const GRID_FILTER_SETTINGS_ENDPOINT = "/grid-details/filter-settings";
 const GRID_VISIBILITY_SETTINGS_ENDPOINT = "/grid-details/visibility-settings";
 const UI_TABLE_MASTER_GET_ENDPOINT = "/ui-table-masters/get";
 const MASTER_SERIAL_COLUMN_WIDTH = "40px";
+/**
+ * The `/grid-details/column-width` row for one resized column.
+ *
+ * Pixels only. `grid_column_width` is the legacy Qt fraction and is deliberately
+ * left out: it is not what this table sizes from any more, and sending it would
+ * overwrite the desktop client's own sizing with a number derived from a browser
+ * window. Omitted keys are left untouched by the endpoint.
+ */
+function buildColumnWidthPayload(
+  serialId: string,
+  widthPx: number,
+): { grid_column_id: string; grid_column_px: string } {
+  return {
+    grid_column_id: serialId,
+    grid_column_px: `${Math.round(widthPx)}px`,
+  };
+}
+/** The pixels a stored width comes back as, or null when it is not in pixels. */
+function pixelWidthOf(width: string | undefined): number | null {
+  const match = width?.trim().match(/^(\d+(?:\.\d+)?)px$/i);
+  if (!match) {
+    return null;
+  }
+  const px = Number(match[1]);
+  return Number.isFinite(px) ? px : null;
+}
+
 const MASTER_ACTIONS_COLUMN_WIDTH = "72px";
 const RESPONSE_TABLE_DEFAULT_COLUMN_WIDTH = "180px";
 const GRID_SETTINGS_CONTEXT_MENU_WIDTH = 190;
@@ -103,6 +131,8 @@ const UI_TABLE_COLUMN_ID_KEYS = ["uiTblClmId", "uiTableColumnId", "id"] as const
 const UI_TABLE_COLUMN_NAME_KEYS = ["uiTblClmName", "columnName", "name", "header", "label"] as const;
 const UI_TABLE_COLUMN_NUMBER_KEYS = ["uiTblClmNo", "columnNumber", "columnNo"] as const;
 const UI_TABLE_COLUMN_POSITION_KEYS = ["uiTblClmColumnPosition", "position", "order"] as const;
+/** The dragged width, read before the Qt fraction below it. */
+const UI_TABLE_COLUMN_PIXEL_WIDTH_KEYS = ["uiTblClmPx"] as const;
 const UI_TABLE_COLUMN_WIDTH_KEYS = ["uiTblClmColumnWidth", "width", "columnWidth"] as const;
 const UI_TABLE_COLUMN_VISIBLE_KEYS = ["uiTblClmColumnVisibility", "visible", "isVisible"] as const;
 const UI_TABLE_COLUMN_FOCUS_KEYS = ["uiTblClmColumnFocus", "focus", "sortable"] as const;
@@ -189,6 +219,8 @@ const LIST_RESPONSE_STYLE_ORDER_KEYS = [
   "position",
   "index",
 ] as const;
+/** The dragged width, in the unit the table actually lays out in. */
+const LIST_RESPONSE_STYLE_PIXEL_WIDTH_KEYS = ["grid_column_px", "gridColumnPx"] as const;
 const LIST_RESPONSE_STYLE_WIDTH_KEYS = [
   "grid_column_width",
   "gridColumnWidth",
@@ -971,7 +1003,8 @@ function normalizeUiTableColumn(
     sqlFieldName: columnName,
     sortable: sortable ?? true,
     width: normalizeUiTableColumnWidth(
-      getFirstDefinedValue(row, UI_TABLE_COLUMN_WIDTH_KEYS),
+      getFirstDefinedValue(row, UI_TABLE_COLUMN_PIXEL_WIDTH_KEYS) ??
+        getFirstDefinedValue(row, UI_TABLE_COLUMN_WIDTH_KEYS),
     ),
   };
 }
@@ -1566,7 +1599,18 @@ function buildGridColumnBasePayload(
   const alignment = gridColumn.align ?? toNullableDisplayValue(
     rawColumn?.grid_column_alignment ?? rawColumn?.gridColumnAlignment,
   );
-  const width = toNullableNumberValue(gridColumn.width) ?? rawWidth;
+  // This payload rewrites the whole row (a visibility, filter or reorder save),
+  // so it has to carry the width too — but only to hand it back unchanged.
+  // `grid_column_width` is the desktop client's Qt fraction: nothing here sizes
+  // from it any more, and nothing here writes it. The dragged width lives in
+  // `grid_column_px`, and passing it through is what keeps a resize alive
+  // through one of those saves.
+  const width = rawWidth;
+  const pixelWidth = pixelWidthOf(gridColumn.width);
+  const columnPx =
+    pixelWidth !== null
+      ? `${pixelWidth}px`
+      : toNullableDisplayValue(rawColumn?.grid_column_px ?? rawColumn?.gridColumnPx);
   const position = gridColumn.position ?? rawPosition ?? gridColumn.order;
 
   return {
@@ -1574,6 +1618,7 @@ function buildGridColumnBasePayload(
     grid_column_number: columnNumber,
     grid_column_name: columnName,
     grid_column_width: width,
+    grid_column_px: columnPx,
     grid_column_position: position,
     grid_column_alignment: alignment,
     grid_column_visibility: gridColumn.visible ?? rawVisibility ?? true,
@@ -1692,7 +1737,8 @@ function buildColumnsFromListResponseStyles(
         tableColumnLayout,
         header,
         width: normalizeListStyleWidth(
-          getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_WIDTH_KEYS),
+          getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_PIXEL_WIDTH_KEYS) ??
+            getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_WIDTH_KEYS),
         ),
         align: normalizeListStyleAlign(
           getFirstDefinedValue(styleRow, LIST_RESPONSE_STYLE_ALIGN_KEYS),
@@ -1760,7 +1806,8 @@ function normalizeListResponseStyleGridColumn(
       getFirstDefinedValue(row, LIST_RESPONSE_STYLE_ALIGN_KEYS),
     ),
     width: normalizeListStyleWidth(
-      getFirstDefinedValue(row, LIST_RESPONSE_STYLE_WIDTH_KEYS),
+      getFirstDefinedValue(row, LIST_RESPONSE_STYLE_PIXEL_WIDTH_KEYS) ??
+        getFirstDefinedValue(row, LIST_RESPONSE_STYLE_WIDTH_KEYS),
     ),
     color,
   };
@@ -2332,6 +2379,8 @@ export default function CrudMasterPage({
   gridDetailId,
   gridTableName,
   gridTableNameAliases,
+  gridKey,
+  uiTableKey,
   uiTableId,
   useConfiguredGridColumnsOnly = false,
   getByIdMethod,
@@ -2390,6 +2439,19 @@ export default function CrudMasterPage({
     GRID_VISIBILITY_SETTINGS_ENDPOINT,
     { method: "PUT", toast: { success: false } },
   );
+  // The list this screen reads is a configured grid, named rather than numbered
+  // (`gridKey`) so it resolves against Grid Master's Desktop rows — see
+  // lib/configured-grids. A screen that spells its own `list` URL keeps it.
+  const registryGridId = useGridId(gridKey);
+  const resolvedApiEndpoints = useMemo(() => {
+    // `gridKey` always resolves to at least the registry's fallback id, so the
+    // empty string is only reachable when a screen names neither a grid nor a
+    // list endpoint — a wiring mistake, and one that fails loudly on the request.
+    const list = gridKey && registryGridId
+      ? gridRunEndpoint(registryGridId)
+      : apiEndpoints.list ?? "";
+    return { ...apiEndpoints, list };
+  }, [apiEndpoints, gridKey, registryGridId]);
   const {
     list: {
       data,
@@ -2423,7 +2485,7 @@ export default function CrudMasterPage({
       error: deleteError,
     },
   } = useMasterModule({
-    apiEndpoints,
+    apiEndpoints: resolvedApiEndpoints,
     listArrayKeys: lookupKeys.array ?? DEFAULT_ARRAY_KEYS,
     getByIdMethod: getByIdMethod ?? "GET",
     buildListQuery,
@@ -2452,12 +2514,16 @@ export default function CrudMasterPage({
   );
   const gridColumns = gridColumnsData ?? [];
   const gridColumnsError = getApiErrorMessage(gridColumnsQueryError);
+  // A master names its layout table (`uiTableKey`), which the registry resolves
+  // against UI Table Master; a literal `uiTableId` still wins where a caller has
+  // one in hand.
+  const registryUiTableId = useUiTableId(uiTableKey);
   const normalizedUiTableId = useMemo(() => {
     if (uiTableId === undefined || uiTableId === null) {
-      return "";
+      return registryUiTableId;
     }
-    return String(uiTableId).trim();
-  }, [uiTableId]);
+    return String(uiTableId).trim() || registryUiTableId;
+  }, [registryUiTableId, uiTableId]);
   const shouldUseUiTableColumns = normalizedUiTableId.length > 0;
   const [uiTableColumns, setUiTableColumns] = useState<GridColumnConfig[]>([]);
   const [uiTableColumnsLoading, setUiTableColumnsLoading] = useState(false);
@@ -2509,8 +2575,14 @@ export default function CrudMasterPage({
     if (typeof gridDetailId === "number" && Number.isFinite(gridDetailId)) {
       return Math.floor(gridDetailId);
     }
+    // The columns come from the same grid the rows do, so naming the grid is
+    // enough — no second id to keep in step with the first.
+    const registryId = Number(registryGridId);
+    if (gridKey && Number.isFinite(registryId) && registryId > 0) {
+      return registryId;
+    }
     return getConfiguredModuleGridId(gridTableName);
-  }, [gridDetailId, gridTableName]);
+  }, [gridDetailId, gridKey, gridTableName, registryGridId]);
   // The grid definition behind this list is configuration in the database; re-read
   // it on every refresh signal so a changed grid takes effect without a reload.
   const loadConfiguredGridDetails = useCallback(() => {
@@ -3829,10 +3901,10 @@ export default function CrudMasterPage({
   const columnWidthSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const resizedColumnWidthsRef = useRef<Record<string, number>>({});
   const persistGridColumnWidth = useCallback(
-    async (serialId: string, configWidth: number) => {
+    async (serialId: string, widthPx: number) => {
       try {
         await saveColumnWidthApi({
-          body: { columns: [{ grid_column_id: serialId, grid_column_width: configWidth }] },
+          body: { columns: [buildColumnWidthPayload(serialId, widthPx)] },
         });
         void refetchGridColumns();
       } catch {
@@ -3842,10 +3914,10 @@ export default function CrudMasterPage({
     [refetchGridColumns, saveColumnWidthApi],
   );
   const enqueueGridColumnWidthSave = useCallback(
-    (serialId: string, configWidth: number) => {
+    (serialId: string, widthPx: number) => {
       const saveTask = columnWidthSaveQueueRef.current
         .catch(() => undefined)
-        .then(() => persistGridColumnWidth(serialId, configWidth));
+        .then(() => persistGridColumnWidth(serialId, widthPx));
       columnWidthSaveQueueRef.current = saveTask;
       return saveTask;
     },
@@ -3860,30 +3932,27 @@ export default function CrudMasterPage({
       if (!gridColumn?.serialId) {
         return;
       }
-      // Saved in the unit grid_column_width is read back in, so the column
-      // reopens at exactly the width it was dragged to.
-      const configWidth = configColumnWidthFromPx(payload.widthPx);
-      if (!Number.isFinite(configWidth) || configWidth <= 0) {
+      // The pixels the column was left at are the whole answer: that is what
+      // `grid_column_px` holds and what the column reopens at.
+      const widthPx = Math.round(payload.widthPx);
+      if (!Number.isFinite(widthPx) || widthPx <= 0) {
         return;
       }
       resizedColumnWidthsRef.current = {
         ...resizedColumnWidthsRef.current,
-        [gridColumn.serialId]: configWidth,
+        [gridColumn.serialId]: widthPx,
       };
-      const currentWidth = toNullableNumberValue(gridColumn.width);
-      if (currentWidth !== null && Math.abs(currentWidth - configWidth) < 0.01) {
+      const currentWidthPx = pixelWidthOf(gridColumn.width);
+      if (currentWidthPx !== null && Math.abs(currentWidthPx - widthPx) < 1) {
         return;
       }
-      void enqueueGridColumnWidthSave(gridColumn.serialId, configWidth);
+      void enqueueGridColumnWidthSave(gridColumn.serialId, widthPx);
     },
     [enqueueGridColumnWidthSave, gridColumns, gridId],
   );
   const saveColumnWidths = useCallback(async () => {
-    const columns = Object.entries(resizedColumnWidthsRef.current).map(
-      ([serialId, configWidth]) => ({
-        grid_column_id: serialId,
-        grid_column_width: configWidth,
-      }),
+    const columns = Object.entries(resizedColumnWidthsRef.current).map(([serialId, widthPx]) =>
+      buildColumnWidthPayload(serialId, widthPx),
     );
     if (gridId === null || columns.length === 0) {
       return;

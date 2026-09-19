@@ -29,7 +29,10 @@ export type UiTableColumnPayload = {
   uiTblClmNo?: string;
   uiTblClmTableId?: string | null;
   uiTblClmName: string | null;
+  /** The desktop client's Qt fraction — the fallback width, never written here. */
   uiTblClmColumnWidth: number | null;
+  /** The width a drag left the column at ("120px"). What the grid sizes from. */
+  uiTblClmPx?: string | null;
   uiTblClmColumnVisibility: boolean | null;
   uiTblClmColumnFocus?: boolean | null;
   uiTblClmColumnPosition: number | null;
@@ -44,7 +47,10 @@ export type SaveUiTableColumnRequest = {
   uiTblClmNo?: string;
   uiTblClmName: string;
   uiTblClmTableId: string | null;
+  /** Passed back unchanged: this screen does not own the Qt fraction. */
   uiTblClmColumnWidth: number | null;
+  /** The dragged width, in pixels. The only width this screen writes. */
+  uiTblClmPx: string | null;
   uiTblClmColumnVisibility: boolean;
   uiTblClmColumnFocus: boolean;
   uiTblClmColumnPosition: number;

@@ -136,6 +136,7 @@ import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import styles from "./page.module.scss";
 import { Z_MODAL } from "@/lib/z-index";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { gridRunEndpoint, useGridId, type ConfiguredGridKey } from "@/lib/configured-grids";
 const DEFAULT_PARTY_SCOPE_TYPE: PartyScopeType = "CUSTOMER_GROUP";
 // `/branch-masters/get` is a fetch-by-id route (it requires a `brId` UUID), not a
 // company-filtered list, so querying it with `compId` only ever returned 400 and
@@ -143,7 +144,12 @@ const DEFAULT_PARTY_SCOPE_TYPE: PartyScopeType = "CUSTOMER_GROUP";
 // context switcher already uses; the id goes in the path.
 const BRANCH_BY_COMPANY_ENDPOINT = "/master-lookups/branches/by-company";
 const ITEM_PRICE_LIST_ENDPOINT = "/item-prices/get";
-const ITEM_LIST_ENDPOINT = "/configured-grid-sql/run?grid_id=1"
+/**
+ * The item picker's rows. Named through the registry (see lib/configured-grids)
+ * rather than pointing at the old `web` item grid, whose SQL also demanded a
+ * `wantdelete` token this screen never sent — it 400s on every call.
+ */
+const ITEM_LIST_GRID_KEY = "itemList" satisfies ConfiguredGridKey;
 const MODAL_FIELD_STYLE_VARS = {
   "--erp-modal-control-height": "2.15rem",
   "--erp-modal-control-padding-y": "0.5rem",
@@ -517,7 +523,8 @@ export default function PromotionLoyaltyPointsPage() {
   const { getAll: getBranchLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, { toast: { success: false, error: false } });
   const { getAll: getCustomerLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, { toast: { success: false, error: false } });
   const { getAll: getCustomerGroupLookup } = useApi<unknown>(MASTER_LOOKUP_ENDPOINT, { toast: { success: false, error: false } });
-  const { getAll: getItemsList } = useApi<unknown>(ITEM_LIST_ENDPOINT, { toast: { success: false, error: false } });
+  const itemListGridId = useGridId(ITEM_LIST_GRID_KEY);
+  const { getAll: getItemsList } = useApi<unknown>(gridRunEndpoint(itemListGridId), { toast: { success: false, error: false } });
   const loadActiveBranchesForCompany = useCallback(
     async (companyId: string) => {
       const normalizedCompanyId = companyId.trim();

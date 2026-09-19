@@ -45,6 +45,14 @@ const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
  * Provisioned as data, so it must exist in every environment. The SQL that
  * creates it is in the module's manual; if it is missing here the picker falls
  * back to the purposes other rows already reference.
+ *
+ * The one dropdown in the app still named by number rather than through
+ * `lib/configured-dropdowns`, because the registry reads Dropdown Master's
+ * Desktop rows and this one is a `Web` row. Its Desktop twin ("PRINT PURPOSES -
+ * DESKTOP") selects `ppo_id, ppo_code` only, and this picker shows `ppo_name`
+ * and filters on `ppo_src_module` — so moving to it would leave the operator
+ * choosing between bare codes. Add those two columns to that dropdown in
+ * Dropdown Master and this becomes a registry entry like the rest.
  */
 export const PURPOSE_DROPDOWN_ID = "47";
 

@@ -44,7 +44,7 @@ import {
 } from "@/features/sales/quotation/components/totals-strip";
 import { useColumnResize } from "@/features/sales/quotation/components/use-column-resize";
 import {
-  CHARGE_GRID_UI_TABLE_ID,
+  CHARGE_GRID_UI_TABLE_KEY,
   PRICE_LEVEL_COUNT,
 } from "@/features/sales/quotation/quotation.constants";
 import type {
@@ -76,7 +76,7 @@ import {
   tendersReplaced,
   termsFieldSet,
 } from "@/store/slices/saleOrderSlice";
-import { SALE_ORDER_ITEM_GRID_UI_TABLE_ID } from "../sale-order.constants";
+import { SALE_ORDER_ITEM_GRID_UI_TABLE_KEY } from "../sale-order.constants";
 import { netSettledOf } from "../tender/arithmetic";
 import type { SaleOrderDocKey, SaleOrderDraftLine } from "../sale-order.types";
 import {
@@ -95,6 +95,7 @@ import {
   OrderInfoBlock,
   OrderSalesInfoBlock,
 } from "./order-header-blocks";
+import { useUiTableId } from "@/lib/ui-tables";
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
   DRAFT: "statusDraft",
@@ -178,19 +179,13 @@ export function SaleOrderEntryView({
   const [pendingGuard, setPendingGuard] = useState<PendingGuard>(null);
   const [invalidCells, setInvalidCells] = useState<Record<string, true>>({});
 
-  const itemResize = useColumnResize(
-    itemColumns,
-    SALE_ORDER_ITEM_GRID_UI_TABLE_ID,
-    SALES_ITEM_COLUMN_WIDTH_UNIT,
-  );
-  const chargeResize = useColumnResize(
-    chargeColumns,
-    CHARGE_GRID_UI_TABLE_ID,
-    CHARGE_COLUMN_WIDTH_UNIT,
-  );
+  const itemUiTableId = useUiTableId(SALE_ORDER_ITEM_GRID_UI_TABLE_KEY);
+  const chargeUiTableId = useUiTableId(CHARGE_GRID_UI_TABLE_KEY);
+  const itemResize = useColumnResize(itemColumns, itemUiTableId);
+  const chargeResize = useColumnResize(chargeColumns, chargeUiTableId);
   const itemSettings = useGridSettings({
     label: "Items",
-    uiTableId: SALE_ORDER_ITEM_GRID_UI_TABLE_ID,
+    uiTableId: itemUiTableId,
     columns: itemResize.columns,
     pendingWidthCount: itemResize.pendingCount,
     savingWidths: itemResize.saving,
@@ -198,7 +193,7 @@ export function SaleOrderEntryView({
   });
   const chargeSettings = useGridSettings({
     label: "Additional charges",
-    uiTableId: CHARGE_GRID_UI_TABLE_ID,
+    uiTableId: chargeUiTableId,
     columns: chargeResize.columns,
     pendingWidthCount: chargeResize.pendingCount,
     savingWidths: chargeResize.saving,

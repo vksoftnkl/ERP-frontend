@@ -10,6 +10,7 @@ import MenuAccessGuard from "@/components/auth/menu-access-guard";
 import GlobalLoader from "@/components/feedback/global-loader";
 import GlobalTextCapitalization from "@/components/feedback/global-text-capitalization";
 import SessionAppSettings from "@/components/layout/session-app-settings";
+import ConfiguredDirectories from "@/components/layout/configured-directories";
 import GlobalToasterWrapper from "@/components/feedback/global-toaster-wrapper";
 import ErrorBoundary from "@/components/feedback/error-boundary";
 import UiScaleController from "@/components/layout/ui-scale-controller";
@@ -70,6 +71,10 @@ export default function RootLayout({
               the mode must be the same in the first field touched after a
               sign-in as in the last. */}
           <SessionAppSettings />
+          {/* Grid Master and UI Table Master, resolved once so the code that
+              cannot hold a hook still reads a real id — see
+              components/layout/configured-directories.tsx. */}
+          <ConfiguredDirectories />
           <GlobalTextCapitalization />
           {/* Guards the shell itself. `app/error.tsx` only wraps the page below
               this layout, so without this a throw in the header or the

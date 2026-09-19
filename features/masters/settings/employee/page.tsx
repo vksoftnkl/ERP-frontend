@@ -26,8 +26,15 @@ import {
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - EMPLOYEES". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "employeeList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=14",
   getById: "/employee-masters/get",
   create: "/employee-masters/create",
   delete: "/employee-masters/delete",
@@ -55,13 +62,13 @@ const FILE_CONSTRAINTS = {
 // (fixed.dropdown_details 8=company comp_id/comp_name, 5=branch br_id/br_name). Loaded on
 // open + on debounced server-side search via /dropdown-details/run; nothing up front.
 const COMPANY_DROPDOWN_CONFIG = {
-  dropdownId: "8",
+  dropdownKey: "company",
   idKeys: ["comp_id", "compId"] as const,
   labelKeys: ["comp_name", "compName"] as const,
   defaultOption: { value: "", label: "Select Company" } as ERPDynamicSelectOption,
 } as const;
 const BRANCH_DROPDOWN_CONFIG = {
-  dropdownId: "5",
+  dropdownKey: "branch",
   idKeys: ["br_id", "brId"] as const,
   labelKeys: ["br_name", "brName"] as const,
   defaultOption: { value: "", label: "Select Branch" } as ERPDynamicSelectOption,
@@ -818,7 +825,7 @@ export default function EmployeeMasterPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -830,6 +837,7 @@ export default function EmployeeMasterPage() {
       entityLabel="employee"
       entityLabelPlural="employees"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>
@@ -844,7 +852,6 @@ export default function EmployeeMasterPage() {
         </div>
       }
       gridTableName={GRID_TABLE_NAME}
-        gridDetailId={14}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

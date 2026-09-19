@@ -4,6 +4,7 @@ import {
   getFirstDefinedValue,
   toDisplayValue,
 } from "@/app/master/_shared/crud-utils";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 
 // Configured-dropdown endpoint (fixed.dropdown_details). Mirrors configured-grid-sql/run:
 // GET ?dropdown_id=<n>&page=1&limit=20&search=<q> -> { data: { items, meta } }.
@@ -18,7 +19,7 @@ export const DROPDOWN_SEARCH_DEBOUNCE_MS = 250;
 export type SupplierDropdownKind = "company" | "branch" | "group" | "state";
 
 type SupplierDropdownConfig = {
-  dropdownId: string;
+  dropdownKey: ConfiguredDropdownKey;
   idKeys: readonly string[];
   labelKeys: readonly string[];
 };
@@ -28,22 +29,22 @@ type SupplierDropdownConfig = {
 // (state_code,state_name).
 export const SUPPLIER_DROPDOWN_CONFIG: Record<SupplierDropdownKind, SupplierDropdownConfig> = {
   company: {
-    dropdownId: "8",
+    dropdownKey: "company",
     idKeys: ["comp_id", "compId"],
     labelKeys: ["comp_name", "compName"],
   },
   branch: {
-    dropdownId: "5",
+    dropdownKey: "branch",
     idKeys: ["br_id", "brId"],
     labelKeys: ["br_name", "brName"],
   },
   group: {
-    dropdownId: "11",
+    dropdownKey: "supplierGroup",
     idKeys: ["spg_id", "spgId"],
     labelKeys: ["spg_name", "spgName"],
   },
   state: {
-    dropdownId: "9",
+    dropdownKey: "gstStateCode",
     idKeys: ["state_code", "stateCode"],
     labelKeys: ["state_name", "stateName"],
   },

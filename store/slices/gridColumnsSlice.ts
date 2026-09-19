@@ -72,14 +72,17 @@ const COLUMN_ORDER_KEYS = [
   "sortOrder",
 ] as const;
 const COLUMN_NUMBER_KEYS = ["grid_column_number", "gridColumnNumber", "columnNumber"] as const;
-const COLUMN_WIDTH_KEYS = [
-  "width",
-  "size",
-  "column_width",
-  "columnWidth",
-  "grid_column_width",
-  "gridColumnWidth",
-] as const;
+const COLUMN_PIXEL_WIDTH_KEYS = ["grid_column_px", "gridColumnPx"] as const;
+/**
+ * Widths carried by payloads that are not configured grid columns (a screen
+ * handing its own column list over). Always pixels.
+ *
+ * `grid_column_width` is deliberately NOT here: a configured column is sized by
+ * `grid_column_px` alone. That column is the desktop client's Qt fraction, and
+ * reading it meant every list opened at that fraction times a fixed factor —
+ * near a width, never on one.
+ */
+const COLUMN_WIDTH_KEYS = ["width", "size", "column_width", "columnWidth"] as const;
 const COLUMN_ALIGN_KEYS = [
   "align",
   "alignment",
@@ -255,6 +258,36 @@ function normalizeWidth(value: unknown, numericUnit: "px" | "%" = "px"): string 
   }
   return undefined;
 }
+/**
+ * `grid_column_px` — the width the browser actually laid the column out at, as
+ * the last drag left it ("180px").
+ *
+ * It is preferred over `grid_column_width`, which is the legacy Qt sizing: a
+ * fraction the table scales back up by a fixed factor, so a dragged column could
+ * only ever reopen near where it was left rather than on it. A row that has
+ * never been dragged has no px value and still reads its width from there.
+ */
+function normalizePixelWidth(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return `${Math.round(value)}px`;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  const match = normalized.match(/^(\d+(?:\.\d+)?)(px)?$/);
+  if (!match) {
+    return undefined;
+  }
+  const px = Number(match[1]);
+  if (!Number.isFinite(px) || px <= 0) {
+    return undefined;
+  }
+  return `${Math.round(px)}px`;
+}
 function normalizeAlign(value: unknown): GridColumnAlign | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -356,7 +389,7 @@ function normalizeGridColumnAdjustmentRow(
     sqlFieldName: sqlFieldName || undefined,
     sortable: sortable ?? undefined,
     align: normalizeAlign(row.grid_column_alignment),
-    width: normalizeWidth(row.grid_column_width, "%"),
+    width: normalizePixelWidth(row.grid_column_px ?? row.gridColumnPx),
     color: normalizeColor(row.grid_column_color),
   };
 }
@@ -380,16 +413,9 @@ function normalizeColumnRow(
   const accessorKey = normalizeKey(rawAccessor || rawKey || rawHeader) || key;
   const header = normalizeHeader(rawHeader || rawKey || rawAccessor, key);
   const order = normalizeOrder(rawOrder, fallbackOrder);
+  const pixelWidth = normalizePixelWidth(getFirstDefinedValue(row, COLUMN_PIXEL_WIDTH_KEYS));
   const widthEntry = getFirstDefinedEntry(row, COLUMN_WIDTH_KEYS);
-  const widthKey = widthEntry?.key.toLowerCase() ?? "";
-  const widthUnit =
-    widthKey === "grid_column_width" ||
-    widthKey === "gridcolumnwidth" ||
-    widthKey === "column_width" ||
-    widthKey === "columnwidth"
-      ? "%"
-      : "px";
-  const width = normalizeWidth(widthEntry?.value, widthUnit);
+  const width = pixelWidth ?? normalizeWidth(widthEntry?.value, "px");
   const align = normalizeAlign(getFirstDefinedValue(row, COLUMN_ALIGN_KEYS));
   const color = normalizeColor(getFirstDefinedValue(row, COLUMN_COLOR_KEYS));
   const sortable = toBoolean(getFirstDefinedValue(row, COLUMN_SORTABLE_KEYS));

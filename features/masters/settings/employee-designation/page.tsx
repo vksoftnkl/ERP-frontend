@@ -29,8 +29,14 @@ import {
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - EMP DESIGNATIONS". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "employeeDesignationList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=24",
   getById: "/employee-designation-masters/get",
   create: "/employee-designation-masters/create",
   delete: "/employee-designation-masters/delete",
@@ -162,7 +168,7 @@ export default function EmployeeDesignationMasterPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -414,6 +420,7 @@ export default function EmployeeDesignationMasterPage() {
       entityLabel=" designation"
       entityLabelPlural="designations"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>
@@ -429,7 +436,6 @@ export default function EmployeeDesignationMasterPage() {
       }
       gridTableName={GRID_TABLE_NAME}
         listResponseStyleArrayKey=""
-        gridDetailId={24}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

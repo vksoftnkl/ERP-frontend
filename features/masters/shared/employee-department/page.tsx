@@ -30,8 +30,14 @@ import {
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { type ConfiguredGridKey } from "@/lib/configured-grids";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - EMP DEPARTMENTS". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "employeeDepartmentList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-    list: "/configured-grid-sql/run?grid_id=23",
   getById: "/employee-department-masters/get",
   create: "/employee-department-masters/create",
   delete: "/employee-department-masters/delete",
@@ -394,9 +400,9 @@ export default function EmployeeDepartmentMasterPage() {
       entityLabel="employee department"
       entityLabelPlural="employee departments"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       gridTableName={GRID_TABLE_NAME}
         listResponseStyleArrayKey=""
-        gridDetailId={23}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

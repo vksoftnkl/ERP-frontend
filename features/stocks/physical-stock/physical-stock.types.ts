@@ -215,7 +215,10 @@ export type PhysicalStockColumnSettingsRow = {
   uiTblClmId?: string;
   uiTblClmNo?: string;
   uiTblClmTableId: string | null;
+  /** The stored Qt fraction, carried through a settings save untouched. */
   width: number | null;
+  /** The dragged width ("120px") — the one this screen sizes from and writes. */
+  widthPx: string | null;
   visible: boolean;
   focus: boolean;
   position: number;

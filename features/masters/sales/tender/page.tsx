@@ -38,14 +38,19 @@ import {
   toUpdateId,
 } from "@/features/masters/shared/value-mappers";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - TENDERS". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "tenderList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=44",
   getById: "/tender-masters/get",
   create: "/tender-masters/create",
   delete: "/tender-masters/delete",
 } as const;
 const GRID_TABLE_NAME = "tender_master";
-const GRID_DETAIL_ID = 44;
 // The form below is laid out in code to match the legacy "Tender Entry" screen
 // (tabs + label-left groups), so the backend widget-masters config
 // (fixed.form_section / form_field) is applied in "visibility-only" mode: an
@@ -854,7 +859,7 @@ export default function TenderMasterPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -1057,6 +1062,7 @@ export default function TenderMasterPage() {
       entityLabel="tender"
       entityLabelPlural="tenders"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>
@@ -1071,7 +1077,6 @@ export default function TenderMasterPage() {
         </div>
       }
       gridTableName={GRID_TABLE_NAME}
-      gridDetailId={GRID_DETAIL_ID}
       useConfiguredGridColumnsOnly
       listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}

@@ -8,6 +8,7 @@ import {
 import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/value-mappers";
 import type { StockLookupOption } from "@/features/stocks/_shared/types";
 import { baseApi } from "@/store/api/baseApi";
+import { getDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 const ITEM_LIST_ENDPOINT = "/dropdown-details/run";
 const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const ITEM_PRICE_DETAILS_ENDPOINT = "/item-price-details/get";
@@ -18,16 +19,24 @@ const ITEM_UNITS_BY_ITEM_ENDPOINT = "/master-lookups/units/by-item";
 const ITEM_BY_BARCODE_ENDPOINT = "/master-lookups/item-by-barcode";
 // `dropdown_details.dropdown_id` for the configured items dropdown. The seeded
 // items dropdown is id 6 (`SELECT item_id, ..., item_name_en ... FROM inventory.item_master`).
-const ITEM_DROPDOWN_ID = "6";
+/**
+ * The Dropdown Master row the item lookup reads — "ITEMS". It used to be the
+ * un-typed dropdown 6, which Dropdown Master never listed.
+ */
+const ITEM_DROPDOWN_KEY: ConfiguredDropdownKey = "item";
 // Dynamic filter values substituted into the dropdown SQL. The items SQL has no
 // placeholders today, so these pass through harmlessly but are kept in one place
 // for when the branch/company scope is needed.
 const ITEM_DROPDOWN_PARAM = JSON.stringify({ branch_id: 1, company_id: 2 });
-const ITEM_LOOKUP_QUERY = {
-  dropdown_id: ITEM_DROPDOWN_ID,
-  page: "1",
-  dropdown_param: ITEM_DROPDOWN_PARAM,
-} as const;
+// Built per request: the dropdown id is resolved from Dropdown Master, which is
+// only known once its directory has been read.
+function itemLookupQuery(): Record<string, string> {
+  return {
+    dropdown_id: getDropdownId(ITEM_DROPDOWN_KEY),
+    page: "1",
+    dropdown_param: ITEM_DROPDOWN_PARAM,
+  };
+}
 const UNIT_LOOKUP_QUERY = {
   module: "units",
 } as const;
@@ -93,7 +102,7 @@ const ITEM_LOOKUP_KEYS = {
   idKeys: ["item_id", "itemId", "id", "_id", "value"],
   labelKeys: ["item_name_en", "itemNameEn", "name", "label"],
 } as const;
-// The configured items dropdown (dropdown_id 6) selects `item_code`, so each
+// The configured items dropdown selects `item_code`, so each
 // option also carries it as `code` for the tabular lookup dropdown.
 const ITEM_CODE_KEYS = ["item_code", "itemCode", "code"] as const;
 function buildItemLookupOptions(payload: unknown): StockLookupOption[] {
@@ -285,7 +294,9 @@ export const lookupsApi = baseApi.injectEndpoints({
     getItemOptions: builder.query<StockLookupOption[], LookupSearchArg | void>({
       query: (arg) => ({
         url: ITEM_LIST_ENDPOINT,
-        params: arg?.search ? { ...ITEM_LOOKUP_QUERY, search: arg.search.trim() } : ITEM_LOOKUP_QUERY,
+        params: arg?.search
+          ? { ...itemLookupQuery(), search: arg.search.trim() }
+          : itemLookupQuery(),
       }),
       transformResponse: (payload: unknown) => buildItemLookupOptions(payload),
       providesTags: (_result, _error, arg) => [{ type: "ItemLookup", id: arg?.search?.trim() || "default" }],

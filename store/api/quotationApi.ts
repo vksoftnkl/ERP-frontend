@@ -20,14 +20,14 @@ import {
   DROPDOWN_RUN_ENDPOINT,
   FREIGHT_CHARGE_ENDPOINT,
   ITEM_BY_BARCODE_ENDPOINT,
-  ITEM_PICKER_GRID_ID,
+  ITEM_PICKER_GRID_KEY,
   ITEM_PRICE_ENDPOINT,
   ITEM_SWITCH_UOM_ENDPOINT,
   ITEM_UNITS_ENDPOINT,
-  PRICE_LEVEL_DROPDOWN_ID,
+  PRICE_LEVEL_DROPDOWN_KEY,
   QUOTATION_DELETE_ENDPOINT,
   QUOTATION_GET_ENDPOINT,
-  QUOTATION_LIST_GRID_ID,
+  QUOTATION_LIST_GRID_KEY,
   QUOTATION_SAVE_ENDPOINT,
   TXN_HOLD_DELETE_ENDPOINT,
   TXN_HOLD_GET_ENDPOINT,
@@ -62,6 +62,8 @@ import type {
   TxnHoldPayload,
   UiTableColumnRow,
 } from "@/features/sales/quotation/quotation.types";
+import { getGridId } from "@/lib/configured-grids";
+import { getDropdownId } from "@/lib/configured-dropdowns";
 /** `/configured-grid-sql/run` — a page of rows plus a real total. */
 export type ConfiguredGridPage<TRow> = {
   items: TRow[];
@@ -303,7 +305,7 @@ export const quotationApi = baseApi.injectEndpoints({
       query: (params) => ({
         url: CONFIGURED_GRID_RUN_ENDPOINT,
         params: {
-          grid_id: QUOTATION_LIST_GRID_ID,
+          grid_id: getGridId(QUOTATION_LIST_GRID_KEY),
           page: params.page ?? 1,
           limit: params.limit ?? 20,
           // `search` is deliberately NOT forwarded: the caller filters what it
@@ -345,21 +347,25 @@ export const quotationApi = baseApi.injectEndpoints({
     }),
     /**
      * The columns the operator dragged, saved together from the grid's
-     * "save column width" menu item. Widths are stored in the layout's own unit
-     * (see `configWidthFromPx`), and the cached layout is patched in place so
-     * re-entering the screen keeps them without a refetch.
+     * "save column width" menu item — as pixels, into `ui_tbl_clm_px`. The
+     * cached layout is patched in place so re-entering the screen keeps them
+     * without a refetch.
      */
     saveQuotationColumnWidths: builder.mutation<
       { updated: number },
-      { uiTableId: string; columns: Array<{ columnId: string; configWidth: number }> }
+      { uiTableId: string; columns: Array<{ columnId: string; widthPx: number }> }
     >({
+      // Pixels only. `uiTblClmColumnWidth` is the desktop client's Qt fraction:
+      // this grid no longer sizes from it, and writing a number taken from a
+      // browser window over it would resize the Qt screen. The route writes only
+      // the fields the body names, so leaving it out keeps it as it is.
       query: ({ columns }) => ({
         url: UI_TABLE_COLUMN_WIDTH_ENDPOINT,
         method: "PUT",
         body: {
           columns: columns.map((column) => ({
             uiTblClmId: column.columnId,
-            uiTblClmColumnWidth: column.configWidth,
+            uiTblClmPx: `${Math.round(column.widthPx)}px`,
           })),
         },
       }),
@@ -370,7 +376,7 @@ export const quotationApi = baseApi.injectEndpoints({
             for (const column of columns) {
               const row = rows.find((candidate) => candidate.uiTblClmId === column.columnId);
               if (row) {
-                row.uiTblClmColumnWidth = column.configWidth;
+                row.uiTblClmPx = `${Math.round(column.widthPx)}px`;
               }
             }
           }),
@@ -528,7 +534,7 @@ export const quotationApi = baseApi.injectEndpoints({
       query: ({ search, page = 1, limit = 20 }) => ({
         url: CONFIGURED_GRID_RUN_ENDPOINT,
         params: {
-          grid_id: ITEM_PICKER_GRID_ID,
+          grid_id: getGridId(ITEM_PICKER_GRID_KEY),
           page,
           limit,
           ...(search?.trim() ? { search: search.trim() } : {}),
@@ -586,7 +592,7 @@ export const quotationApi = baseApi.injectEndpoints({
     getPriceLevels: builder.query<Array<{ value: string; label: string }>, void>({
       query: () => ({
         url: DROPDOWN_RUN_ENDPOINT,
-        params: { dropdown_id: PRICE_LEVEL_DROPDOWN_ID, page: 1, limit: 50 },
+        params: { dropdown_id: getDropdownId(PRICE_LEVEL_DROPDOWN_KEY), page: 1, limit: 50 },
       }),
       transformResponse: (
         payload: ApiSuccessResponse<ConfiguredGridPage<Record<string, unknown>>>,

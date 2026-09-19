@@ -28,8 +28,15 @@ import styles from "@/app/master/state-master/page.module.scss";
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue, toSelectBoolean } from "@/features/masters/shared/value-mappers";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+import { getDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - CUSTOMER CITES". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "cityList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=20",
   getById: "/cities/get",
   create: "/cities/create",
   delete: "/cities/delete",
@@ -40,7 +47,12 @@ const GRID_TABLE_NAME = "city_master";
 // Loaded on open + on debounced server-side search via /dropdown-details/run; nothing
 // is fetched up front and dropdown_param is never sent.
 const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
-const STATE_DROPDOWN_ID = "2";
+/**
+ * The Dropdown Master row the State picker reads — "CUSTOMER STATES", the
+ * `state_master` rows keyed by uuid. It used to be the un-typed dropdown 2, which
+ * the Dropdown Master screen never listed.
+ */
+const STATE_DROPDOWN_KEY: ConfiguredDropdownKey = "customerState";
 const STATE_DROPDOWN_ID_KEYS = ["stm_id", "stmId"] as const;
 const STATE_DROPDOWN_LABEL_KEYS = ["stm_name", "stmName"] as const;
 const STATE_SEARCH_DEBOUNCE_MS = 250;
@@ -217,7 +229,7 @@ function buildStateOptions(payload: unknown): ERPDynamicSelectOption[] {
 // dropdown_param is never sent.
 function buildStateRunQuery(search: string): Record<string, string> {
   const query: Record<string, string> = {
-    dropdown_id: STATE_DROPDOWN_ID,
+    dropdown_id: getDropdownId(STATE_DROPDOWN_KEY),
     page: "1",
     limit: "20",
   };
@@ -396,7 +408,7 @@ export default function CityMasterPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -610,6 +622,7 @@ export default function CityMasterPage() {
       entityLabel="city"
       entityLabelPlural="cities"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>
@@ -625,7 +638,6 @@ export default function CityMasterPage() {
       }
       gridTableName={GRID_TABLE_NAME}
         listResponseStyleArrayKey=""
-        gridDetailId={20}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

@@ -25,6 +25,7 @@ import {
   getUserInfo,
 } from "@/lib/auth/session";
 import { API_BASE, extractApiErrorMessage, getAuthHeaderValue } from "@/lib/api/client";
+import { useUiTableId } from "@/lib/ui-tables";
 import {
   quotationApi,
   useConvertTxnHoldMutation,
@@ -64,12 +65,12 @@ import {
   tenantSet,
 } from "@/store/slices/quotationSlice";
 import {
-  CHARGE_GRID_UI_TABLE_ID,
+  CHARGE_GRID_UI_TABLE_KEY,
   DEFAULT_FREIGHT_CALC_TYPE,
   DEFAULT_LOADING_CALC_TYPE,
   FREIGHT_CALC_TYPES,
   HOLD_DEVICE_ID_HEADER,
-  ITEM_GRID_UI_TABLE_ID,
+  ITEM_GRID_UI_TABLE_KEY,
   LOADING_CALC_TYPES,
   PRICE_LEVEL_OPTIONS,
   SESSION_CAPABILITIES,
@@ -244,11 +245,13 @@ export function useQuotationDraft(): QuotationDraftApi {
   const { data: capabilities } = useGetUserCapabilitiesQuery(actor.userId, {
     skip: !actor.userId,
   });
+  const itemUiTableId = useUiTableId(ITEM_GRID_UI_TABLE_KEY);
+  const chargeUiTableId = useUiTableId(CHARGE_GRID_UI_TABLE_KEY);
   const { data: itemLayout } = useGetQuotationGridLayoutQuery({
-    uiTableId: ITEM_GRID_UI_TABLE_ID,
+    uiTableId: itemUiTableId,
   });
   const { data: chargeLayout } = useGetQuotationGridLayoutQuery({
-    uiTableId: CHARGE_GRID_UI_TABLE_ID,
+    uiTableId: chargeUiTableId,
   });
   const { data: chargeMasters = [] } = useGetSalesChargesQuery();
   const { data: priceLevelNames = [] } = useGetPriceLevelsQuery();

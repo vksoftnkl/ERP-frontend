@@ -312,6 +312,32 @@ export function toColumnWidth(value: number | null | undefined, fallback: string
   return `${value}px`;
 }
 
+/**
+ * The width a drag left a column at — `ui_tbl_clm_px`, in pixels.
+ *
+ * Preferred over `ui_tbl_clm_column_width` wherever it is set: it is the exact
+ * figure the browser laid the column out at, where the other is the desktop
+ * client's own sizing that this screen only ever reads as a fallback.
+ */
+export function storedColumnPx(value: string | null | undefined): string | null {
+  const match = value?.trim().match(/^(\d+(?:\.\d+)?)(px)?$/i);
+  if (!match) {
+    return null;
+  }
+  const px = Number(match[1]);
+  return Number.isFinite(px) && px > 0 ? `${Math.round(px)}px` : null;
+}
+
+/** The configured width of a column, px first, as a CSS length. */
+export function configuredColumnWidth(
+  column: Pick<UiTableColumnPayload, "uiTblClmColumnWidth" | "uiTblClmPx"> | null | undefined,
+  fallback: string,
+): string {
+  return (
+    storedColumnPx(column?.uiTblClmPx) ?? toColumnWidth(column?.uiTblClmColumnWidth, fallback)
+  );
+}
+
 export function reorderColumns<TColumn extends { key: string }>(
   current: TColumn[],
   sourceKey: string,
@@ -367,7 +393,7 @@ export function buildUiTableColumnRequest<TColumn extends { key: string; header:
     Pick<
       SaveUiTableColumnRequest,
       | "uiTblClmColumnPosition"
-      | "uiTblClmColumnWidth"
+      | "uiTblClmPx"
       | "uiTblClmColumnVisibility"
       | "uiTblClmColumnFocus"
       | "uiTblClmColumnNecessity"
@@ -380,10 +406,13 @@ export function buildUiTableColumnRequest<TColumn extends { key: string; header:
     uiTblClmNo: configuredColumn?.uiTblClmNo || String(fallbackPosition),
     uiTblClmName: configuredColumn?.uiTblClmName?.trim() || column.header || column.key,
     uiTblClmTableId: configuredColumn?.uiTblClmTableId ?? tableId,
-    uiTblClmColumnWidth:
-      overrides.uiTblClmColumnWidth ??
-      configuredColumn?.uiTblClmColumnWidth ??
-      parseColumnWidth(column.width),
+    // Handed back exactly as stored. The Qt fraction belongs to the desktop
+    // client; this screen sizes from — and writes — pixels only.
+    uiTblClmColumnWidth: configuredColumn?.uiTblClmColumnWidth ?? null,
+    uiTblClmPx:
+      overrides.uiTblClmPx ??
+      storedColumnPx(configuredColumn?.uiTblClmPx) ??
+      `${Math.round(parseColumnWidth(column.width))}px`,
     uiTblClmColumnVisibility:
       overrides.uiTblClmColumnVisibility ?? configuredColumn?.uiTblClmColumnVisibility ?? true,
     uiTblClmColumnFocus:

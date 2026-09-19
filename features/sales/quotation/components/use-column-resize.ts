@@ -20,9 +20,7 @@ import {
 import { useSaveQuotationColumnWidthsMutation } from "@/store/api/quotationApi";
 import {
   CONFIG_PX_PER_UNIT,
-  configWidthFromPx,
   MIN_RESIZED_COLUMN_PX,
-  type ColumnWidthUnit,
   type ResolvedColumn,
 } from "../quotation.utils";
 import { toLayoutPx } from "@/lib/ui-scale";
@@ -59,10 +57,16 @@ export type ColumnResize<TColumn> = {
   saveWidths: () => void;
 };
 
+/**
+ * Drag-to-resize for a configured grid's headers.
+ *
+ * No width unit any more: a drag is saved as the pixels it ended on
+ * (`ui_tbl_clm_px`). The layout's own unit still decides how an undragged
+ * column is READ (see `resolveColumns`), never how a dragged one is written.
+ */
 export function useColumnResize<TMeaning extends { key: string }>(
   columns: ResolvedColumn<TMeaning>[],
   uiTableId: string,
-  widthUnit: ColumnWidthUnit,
 ): ColumnResize<ResolvedColumn<TMeaning>> {
   const [widths, setWidths] = useState<Record<string, number>>({});
   const [resizingKey, setResizingKey] = useState<string | null>(null);
@@ -166,10 +170,10 @@ export function useColumnResize<TMeaning extends { key: string }>(
       columns: pending.map((column) => ({
         // Non-null: `pending` only keeps columns that have a configured row.
         columnId: column.columnId as string,
-        configWidth: configWidthFromPx(widths[column.key], widthUnit),
+        widthPx: Math.round(widths[column.key]),
       })),
     });
-  }, [pending, saveColumnWidths, saveState.isLoading, uiTableId, widths, widthUnit]);
+  }, [pending, saveColumnWidths, saveState.isLoading, uiTableId, widths]);
 
   return {
     columns: sized,

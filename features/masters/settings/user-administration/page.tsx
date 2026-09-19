@@ -21,9 +21,16 @@ import {
   UserMenuTree,
   parseMenuPermissions,
 } from "@/features/masters/settings/user-administration/user-menu-tree";
+import { type ConfiguredGridKey } from "@/lib/configured-grids";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 // ── API endpoints ─────────────────────────────────────────────────────────────
+/**
+ * The Grid Master row this list reads — "MAIN LIST - COMPUTER USERS". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "userList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
- list: "/configured-grid-sql/run?grid_id=29",
   getById: "/user-administration/get",
   create: "/user-administration/create",
   delete: "/user-administration/delete",
@@ -33,13 +40,13 @@ const GRID_TABLE_NAME = "user_master";
 // (fixed.dropdown_details 8=company comp_id/comp_name, 5=branch br_id/br_name). Loaded on
 // open + on debounced server-side search via /dropdown-details/run; nothing up front.
 const COMPANY_DROPDOWN_CONFIG = {
-  dropdownId: "8",
+  dropdownKey: "company",
   idKeys: ["comp_id", "compId"] as const,
   labelKeys: ["comp_name", "compName"] as const,
   defaultOption: { value: "", label: "Select Company" } as ERPDynamicSelectOption,
 } as const;
 const BRANCH_DROPDOWN_CONFIG = {
-  dropdownId: "5",
+  dropdownKey: "branch",
   idKeys: ["br_id", "brId"] as const,
   labelKeys: ["br_name", "brName"] as const,
   defaultOption: { value: "", label: "Select Branch" } as ERPDynamicSelectOption,
@@ -462,6 +469,7 @@ export default function UserAdministrationPage() {
       entityLabel="user"
       entityLabelPlural="users"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>
@@ -477,7 +485,6 @@ export default function UserAdministrationPage() {
       }
       gridTableName={GRID_TABLE_NAME}
         listResponseStyleArrayKey=""
-        gridDetailId={29}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

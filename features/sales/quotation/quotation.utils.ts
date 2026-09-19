@@ -336,6 +336,24 @@ const PX_PER_CONFIG_UNIT = 11;
 /** Narrow enough to be a flag column, wide enough to read a heading. */
 const MIN_COLUMN_PX = 34;
 const DEFAULT_COLUMN_PX = 90;
+/**
+ * The width a drag left this column at, in pixels — `ui_tbl_clm_px`.
+ *
+ * It is what the grid sizes from wherever it is set, because it is the only
+ * figure that survives a round trip exactly. A column nobody has dragged has
+ * none, and falls back to the stored Qt fraction below.
+ */
+function storedPxOf(value: string | null | undefined): number | null {
+  const match = value?.trim().match(/^(\d+(?:\.\d+)?)(px)?$/i);
+  if (!match) {
+    return null;
+  }
+  const px = Number(match[1]);
+  if (!Number.isFinite(px) || px <= 0) {
+    return null;
+  }
+  return Math.max(MIN_COLUMN_PX, Math.round(px));
+}
 function widthPxOf(configured: number | null, unit: ColumnWidthUnit): number {
   if (typeof configured !== "number" || !Number.isFinite(configured) || configured <= 0) {
     return DEFAULT_COLUMN_PX;
@@ -457,7 +475,7 @@ function resolveColumns<
       // ui table master's to set. The token is only for a row that carries no
       // name at all, and for `fallbackColumns` when there is no layout.
       header: rawName || meaning.token,
-      widthPx: widthPxOf(row.uiTblClmColumnWidth, unit),
+      widthPx: storedPxOf(row.uiTblClmPx) ?? widthPxOf(row.uiTblClmColumnWidth, unit),
       visible: row.uiTblClmColumnVisibility !== false,
       focus: row.uiTblClmColumnFocus === true,
       necessity: row.uiTblClmColumnNecessity === true,
@@ -492,10 +510,14 @@ export type ResolvedChargeColumn = ResolvedColumn<ChargeColumnMeaning>;
 /** The unit each grid's layout stores its widths in. */
 export const ITEM_COLUMN_WIDTH_UNIT: ColumnWidthUnit = "px";
 /**
- * Pixels since the charges grid moved off the Qt screen's table 21 and onto its
- * own web layout (`CHARGE_GRID_UI_TABLE_ID`), which stores them the way the item
- * grid's table 23 does. Sale Order's item grid is still the odd one out: table 24
- * is a desktop layout, so it keeps `qtPercent`.
+ * Pixels, as the quotation's item grid is read (`ITEM_COLUMN_WIDTH_UNIT`) — both
+ * grids on this screen read one unit or the layout is unreadable in the other.
+ *
+ * Note that both now resolve to the Qt client's own Desktop rows ("QUOTATION -
+ * LINES" and "CHARGES") since the web-only duplicates were dropped, and those
+ * store FRACTIONAL PERCENTS. Sale Bill and Sale Order read their Desktop layouts
+ * as `qtPercent` for exactly that reason; this screen has not been moved over
+ * yet, so widths here paint from the fallback sizing rather than the stored one.
  */
 export const CHARGE_COLUMN_WIDTH_UNIT: ColumnWidthUnit = "px";
 /** What a serial column the layout never configured is given to work with. */

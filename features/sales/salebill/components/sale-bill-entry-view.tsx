@@ -105,12 +105,12 @@ import {
 } from "@/store/slices/saleBillSlice";
 import type { CreditFieldConfig } from "@/features/sales/sale-order/components/order-header-blocks";
 import {
-  CHARGE_GRID_UI_TABLE_ID,
+  CHARGE_GRID_UI_TABLE_KEY,
   SALE_BILL_CREDIT_FIELD_KEYS,
   SALE_BILL_HOLD_DOC_TYPE,
   SALE_BILL_HOLD_KIND,
   SALE_BILL_ITEM_COLUMN_WIDTH_UNIT,
-  SALE_BILL_ITEM_GRID_UI_TABLE_ID,
+  SALE_BILL_ITEM_GRID_UI_TABLE_KEY,
 } from "../salebill.constants";
 import { isBillHold } from "../salebill.hold";
 import type { BillAutosave } from "../salebill.hold";
@@ -134,6 +134,7 @@ import {
 import { SaleBillToolbar } from "./sale-bill-toolbar";
 import { CancelLinePrompt, CancelOrderPrompt } from "./cancel-prompts";
 import styles from "../page.module.scss";
+import { useUiTableId } from "@/lib/ui-tables";
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
   DRAFT: "statusDraft",
@@ -282,19 +283,13 @@ export function SaleBillEntryView({
    */
   const [customerToConfirm, setCustomerToConfirm] = useState<string | null>(null);
 
-  const itemResize = useColumnResize(
-    itemColumns,
-    SALE_BILL_ITEM_GRID_UI_TABLE_ID,
-    SALE_BILL_ITEM_COLUMN_WIDTH_UNIT,
-  );
-  const chargeResize = useColumnResize(
-    chargeColumns,
-    CHARGE_GRID_UI_TABLE_ID,
-    CHARGE_COLUMN_WIDTH_UNIT,
-  );
+  const itemUiTableId = useUiTableId(SALE_BILL_ITEM_GRID_UI_TABLE_KEY);
+  const chargeUiTableId = useUiTableId(CHARGE_GRID_UI_TABLE_KEY);
+  const itemResize = useColumnResize(itemColumns, itemUiTableId);
+  const chargeResize = useColumnResize(chargeColumns, chargeUiTableId);
   const itemSettings = useGridSettings({
     label: "Items",
-    uiTableId: SALE_BILL_ITEM_GRID_UI_TABLE_ID,
+    uiTableId: itemUiTableId,
     columns: itemResize.columns,
     pendingWidthCount: itemResize.pendingCount,
     savingWidths: itemResize.saving,
@@ -302,7 +297,7 @@ export function SaleBillEntryView({
   });
   const chargeSettings = useGridSettings({
     label: "Additional charges",
-    uiTableId: CHARGE_GRID_UI_TABLE_ID,
+    uiTableId: chargeUiTableId,
     columns: chargeResize.columns,
     pendingWidthCount: chargeResize.pendingCount,
     savingWidths: chargeResize.saving,

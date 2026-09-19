@@ -38,8 +38,15 @@ import {
   resolveStoredPhotoPreview,
 } from "@/features/masters/shared/stored-photo";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+import { getDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - ITEM GROUPS". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "itemGroupList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-list: "/configured-grid-sql/run?grid_id=6",
   getById: "/item-groups/get",
   create: "/item-groups/create",
   delete: "/item-groups/delete",
@@ -87,7 +94,8 @@ const WIDGET_CONTROLLABLE_FIELD_NAMES = buildControllableFieldNames(WIDGET_FIELD
 // debounced server-side search via /dropdown-details/run; nothing is fetched up front
 // and dropdown_param is never sent.
 const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
-const PARENT_GROUP_DROPDOWN_ID = "17";
+/** The Dropdown Master row the parent picker reads — "ITEM GROUPS". */
+const PARENT_GROUP_DROPDOWN_KEY: ConfiguredDropdownKey = "itemGroup";
 const PARENT_GROUP_DROPDOWN_ID_KEYS = ["itg_id", "itgId"] as const;
 const PARENT_GROUP_DROPDOWN_LABEL_KEYS = ["itg_name", "itgName"] as const;
 const PARENT_GROUP_SEARCH_DEBOUNCE_MS = 250;
@@ -161,7 +169,7 @@ function buildParentOptions(payload: unknown): ERPDynamicSelectOption[] {
 // dropdown_param is never sent.
 function buildParentRunQuery(search: string): Record<string, string> {
   const query: Record<string, string> = {
-    dropdown_id: PARENT_GROUP_DROPDOWN_ID,
+    dropdown_id: getDropdownId(PARENT_GROUP_DROPDOWN_KEY),
     page: "1",
     limit: "20",
   };
@@ -445,7 +453,7 @@ export default function ItemGroupMasterPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -648,6 +656,7 @@ export default function ItemGroupMasterPage() {
       entityLabel="item group"
       entityLabelPlural="item groups"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>

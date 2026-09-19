@@ -1,3 +1,4 @@
+import type { UiTableKey } from "@/lib/ui-tables";
 import type { LookupTableColumn } from "@/features/stocks/_shared/types";
 import type { ColumnSchema, LookupKind } from "./opening-stock.types";
 
@@ -33,9 +34,14 @@ export const OPENING_STOCK_SAVE_ENDPOINT = "/opening-stocks";
 export const OPENING_STOCK_LIST_ENDPOINT = "/opening-stocks/list";
 export const OPENING_STOCK_GET_ENDPOINT = "/opening-stocks/get";
 export const OPENING_STOCK_DELETE_ENDPOINT = "/opening-stocks/delete";
-export const UI_TABLE_COLUMNS_QUERY = {
-  uiTableId: "5",
-} as const;
+/**
+ * The UI Table Master row this screen's entry grid is laid out by —
+ * "OPENING STOCK - LINES". Resolved to a `fixed.ui_tables.ui_tbl_id` at runtime
+ * (`useUiTableId`, or `getUiTableId` in the payload builders), because that id is
+ * per-deployment: this screen spent its life pointing at a literal 5, an id this
+ * table has not had since the grids were re-authored.
+ */
+export const OPENING_STOCK_UI_TABLE_KEY: UiTableKey = "openingStockLines";
 export const UI_TABLE_COLUMNS_TOAST_OPTIONS = {
   success: false,
   error: false,

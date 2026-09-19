@@ -200,6 +200,15 @@ export const API_TAG_TYPES = [
   // Rows of a configured dropdown (fixed.dropdown_details). The definitions
   // themselves are deliberately untagged - see dropdownApi.ts.
   "DropdownRows",
+  // UI Table Master as a name -> id directory, resolved once per session and
+  // read by every configured grid (see lib/ui-tables).
+  "UiTableDirectory",
+  // Grid Master as a name -> id directory, the same for configured lists
+  // (see lib/configured-grids).
+  "GridDirectory",
+  // Dropdown Master, likewise, for the configured dropdowns
+  // (see lib/configured-dropdowns).
+  "DropdownDirectory",
 ] as const;
 export const baseApi = createApi({
   reducerPath: "baseApi",

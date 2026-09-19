@@ -40,17 +40,15 @@ import { addDays, toDateInput, todayIso, toNumber } from "@/features/sales/quota
 import {
   SALE_ORDER_DELETE_ENDPOINT,
   SALE_ORDER_GET_ENDPOINT,
-  SALE_ORDER_LIST_GRID_ID,
+  SALE_ORDER_LIST_GRID_KEY,
   SALE_ORDER_LIST_WINDOW_DAYS,
   SALE_ORDER_SAVE_ENDPOINT,
 } from "../sale-order.constants";
 import type { SaleOrderDocKey } from "../sale-order.types";
 import styles from "../page.module.scss";
 
-const GRID_DETAIL_ID = Number(SALE_ORDER_LIST_GRID_ID);
 
 const API_ENDPOINTS = {
-  list: `${CONFIGURED_GRID_RUN_ENDPOINT}?grid_id=${SALE_ORDER_LIST_GRID_ID}`,
   getById: SALE_ORDER_GET_ENDPOINT,
   create: SALE_ORDER_SAVE_ENDPOINT,
   delete: SALE_ORDER_DELETE_ENDPOINT,
@@ -285,6 +283,7 @@ export function SaleOrderListView({ onCreate, onOpen }: SaleOrderListViewProps) 
       entityLabelPlural="sale orders"
       searchPlaceholder="party name, order no or amount"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={SALE_ORDER_LIST_GRID_KEY}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={masterStyles}
@@ -292,7 +291,6 @@ export function SaleOrderListView({ onCreate, onOpen }: SaleOrderListViewProps) 
       createLabel="New Order"
       codeColumnHeader="Order No"
       nameColumnHeader="Customer"
-      gridDetailId={GRID_DETAIL_ID}
       // Without this the shell defaults to the response-driven column mode and a
       // configured grid with no `styles` array renders a serial column only.
       listResponseStyleArrayKey=""

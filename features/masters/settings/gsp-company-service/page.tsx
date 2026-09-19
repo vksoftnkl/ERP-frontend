@@ -39,6 +39,7 @@ import {
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
 import { useDataRefresh } from "@/lib/data-freshness";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 const API_ENDPOINTS = {
   list: "/configured-grid-sql/run?grid_id=27",
   getById: "/gsp-company-services/get",
@@ -81,7 +82,7 @@ const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 // 8=company comp_id/comp_name). Loaded on open + on debounced server-side search via
 // /dropdown-details/run; nothing up front and dropdown_param is never sent.
 const COMPANY_DROPDOWN_CONFIG = {
-  dropdownId: "8",
+  dropdownKey: "company",
   idKeys: ["comp_id", "compId"] as const,
   labelKeys: ["comp_name", "compName"] as const,
   defaultOption: { value: "", label: "Select Company" } as ERPDynamicSelectOption,

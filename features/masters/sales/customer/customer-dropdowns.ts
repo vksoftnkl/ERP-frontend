@@ -6,6 +6,7 @@ import {
   EMPTY_FORM_DEFAULTS,
 } from "@/features/masters/shared/apply-form-defaults";
 import { CUSTOMER_TEMPLATE_FIELD_SPECS } from "./template/field-specs";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
 
 // Configured-dropdown endpoint (fixed.dropdown_details). Mirrors configured-grid-sql/run:
 // GET ?dropdown_id=<n>&page=1&limit=20&search=<q> -> { data: { items, meta } }.
@@ -19,7 +20,7 @@ export const DROPDOWN_SEARCH_DEBOUNCE_MS = 250;
 export type CustomerDropdownKind = "company" | "branch" | "area" | "group" | "state";
 
 type CustomerDropdownConfig = {
-  dropdownId: string;
+  dropdownKey: ConfiguredDropdownKey;
   idKeys: readonly string[];
   labelKeys: readonly string[];
 };
@@ -29,27 +30,27 @@ type CustomerDropdownConfig = {
 // 28 customer group (cgr_id,cgr_name), 9 state code (state_code,state_name).
 export const CUSTOMER_DROPDOWN_CONFIG: Record<CustomerDropdownKind, CustomerDropdownConfig> = {
   company: {
-    dropdownId: "8",
+    dropdownKey: "company",
     idKeys: ["comp_id", "compId"],
     labelKeys: ["comp_name", "compName"],
   },
   branch: {
-    dropdownId: "5",
+    dropdownKey: "branch",
     idKeys: ["br_id", "brId"],
     labelKeys: ["br_name", "brName"],
   },
   area: {
-    dropdownId: "10",
+    dropdownKey: "area",
     idKeys: ["arm_id", "armId"],
     labelKeys: ["arm_name", "armName"],
   },
   group: {
-    dropdownId: "28",
+    dropdownKey: "customerGroup",
     idKeys: ["cgr_id", "cgrId"],
     labelKeys: ["cgr_name", "cgrName"],
   },
   state: {
-    dropdownId: "9",
+    dropdownKey: "gstStateCode",
     idKeys: ["state_code", "stateCode"],
     labelKeys: ["state_name", "stateName"],
   },

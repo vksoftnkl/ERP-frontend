@@ -11,6 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { useUiTableId } from "@/lib/ui-tables";
 import { toast } from "react-toastify";
 import { useBusinessContext } from "@/components/layout/business-context";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
@@ -94,7 +95,7 @@ import {
   UNIT_LIST_QUERY,
   UI_TABLE_COLUMNS_CREATE_ENDPOINT,
   UI_TABLE_COLUMNS_LIST_ENDPOINT,
-  UI_TABLE_COLUMNS_QUERY,
+  OPENING_STOCK_UI_TABLE_KEY,
   UI_TABLE_COLUMNS_TOAST_OPTIONS,
   VALUE_FORMATTER,
 } from "./constants";
@@ -200,6 +201,8 @@ function renderValidationToastContent(
 }
 export default function OpeningStockPage() {
   const router = useRouter();
+  // Which ui_table this grid's layout lives in, by name — see lib/ui-tables.
+  const uiTableId = useUiTableId(OPENING_STOCK_UI_TABLE_KEY);
   const [voucherDate, setVoucherDate] = useState(() => getTodayInputValue());
   const [voucherRefNo, setVoucherRefNo] = useState("");
   const [rows, setRows] = useState<OpeningStockRow[]>(INITIAL_ROWS);
@@ -445,11 +448,11 @@ export default function OpeningStockPage() {
     let cancelled = false;
     const loadUiColumnConfig = async () => {
       try {
-        const payload = await listUiTableColumns({ ...UI_TABLE_COLUMNS_QUERY });
+        const payload = await listUiTableColumns({ uiTableId });
         if (!cancelled) {
           const allTables = Array.isArray(payload?.data) ? payload.data : [];
           const matchingTable = allTables.find(
-            (table) => table.uiTblId === UI_TABLE_COLUMNS_QUERY.uiTableId,
+            (table) => table.uiTblId === uiTableId,
           );
           const allColumns = Array.isArray(matchingTable?.columns) ? matchingTable.columns : [];
           const nextColumnConfigs = allColumns.filter((c) => c.uiTblClmIsActive !== false);
@@ -467,7 +470,7 @@ export default function OpeningStockPage() {
     return () => {
       cancelled = true;
     };
-  }, [listUiTableColumns]);
+  }, [listUiTableColumns, uiTableId]);
   useEffect(() => loadUiColumnConfig(), [loadUiColumnConfig]);
   useDataRefresh(() => {
     loadUiColumnConfig();
@@ -769,7 +772,7 @@ export default function OpeningStockPage() {
     try {
       await saveUiTableColumn({
         body: {
-          uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId,
+          uiTblId: uiTableId,
           uiTblColumns: columnSettingsRows.map((row) => {
             const draft =
               columnSettingsDraft[row.key] ??
@@ -782,10 +785,10 @@ export default function OpeningStockPage() {
           }),
         },
       });
-      const payload = await listUiTableColumns({ ...UI_TABLE_COLUMNS_QUERY });
+      const payload = await listUiTableColumns({ uiTableId });
       const allTables = Array.isArray(payload?.data) ? payload.data : [];
       const matchingTable = allTables.find(
-        (table) => table.uiTblId === UI_TABLE_COLUMNS_QUERY.uiTableId,
+        (table) => table.uiTblId === uiTableId,
       );
       const allColumns = Array.isArray(matchingTable?.columns) ? matchingTable.columns : [];
       const nextColumnConfigs = allColumns.filter((c) => c.uiTblClmIsActive !== false);
@@ -803,6 +806,7 @@ export default function OpeningStockPage() {
     isColumnSettingsOpen,
     listUiTableColumns,
     saveUiTableColumn,
+    uiTableId,
   ]);
   useEffect(() => {
     if (!isColumnSettingsOpen || typeof document === "undefined") {
@@ -2130,7 +2134,7 @@ export default function OpeningStockPage() {
           width,
         );
         const response = await saveUiTableColumn({
-          body: { uiTblId: UI_TABLE_COLUMNS_QUERY.uiTableId, uiTblColumns: [columnRequest] },
+          body: { uiTblId: uiTableId, uiTblColumns: [columnRequest] },
         });
         const savedColumn = (response?.data?.columns ?? []).find(
           (c) =>
@@ -2154,7 +2158,7 @@ export default function OpeningStockPage() {
         // useApi handles toast behavior; keep the local resize even if persistence fails.
       }
     },
-    [saveUiTableColumn],
+    [saveUiTableColumn, uiTableId],
   );
 
   const enqueueOpeningStockColumnWidthSave = useCallback(

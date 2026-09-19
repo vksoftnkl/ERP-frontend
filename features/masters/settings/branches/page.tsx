@@ -27,8 +27,15 @@ import {
   toUpperNullable,
 } from "@/app/master/_shared/crud-utils";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - BRANCHES". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "branchList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=13",
   getById: "/branch-masters/get",
   create: "/branch-masters/create",
   delete: "/branch-masters/delete",
@@ -81,7 +88,7 @@ const DEFAULT_GODOWN_OPTION: ERPDynamicSelectOption = {
 // 8=company comp_id/comp_name). Loaded on open + on debounced server-side search via
 // /dropdown-details/run; nothing up front and dropdown_param is never sent.
 const COMPANY_DROPDOWN_CONFIG = {
-  dropdownId: "8",
+  dropdownKey: "company",
   idKeys: ["comp_id", "compId"] as const,
   labelKeys: ["comp_name", "compName"] as const,
   defaultOption: DEFAULT_COMPANY_OPTION,
@@ -93,7 +100,7 @@ const COMPANY_SOURCE_NAME_KEYS = ["brCompName", "br_comp_name", "compName", "com
 // state_code/state_name); the field value is the state NAME. The full code<->name maps
 // below still load eagerly because submit derives brStateCode from the picked name.
 const STATE_DROPDOWN_CONFIG = {
-  dropdownId: "9",
+  dropdownKey: "gstStateCode",
   idKeys: ["state_name", "stateName"] as const,
   labelKeys: ["state_name", "stateName"] as const,
   defaultOption: { value: "", label: "Select State" } as ERPDynamicSelectOption,
@@ -101,7 +108,7 @@ const STATE_DROPDOWN_CONFIG = {
 // Godown is a lazy configured dropdown (dropdown 26 -> gdl_id/gdl_name). The eager godown
 // list is kept only to resolve the saved godown's name on edit (getById returns no name).
 const GODOWN_DROPDOWN_CONFIG = {
-  dropdownId: "26",
+  dropdownKey: "godown",
   idKeys: ["gdl_id", "gdlId"] as const,
   labelKeys: ["gdl_name", "gdlName"] as const,
   defaultOption: DEFAULT_GODOWN_OPTION,
@@ -825,7 +832,7 @@ export default function BranchesMasterPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -837,6 +844,7 @@ export default function BranchesMasterPage() {
       entityLabel="branch"
       entityLabelPlural="branches"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>
@@ -852,7 +860,6 @@ export default function BranchesMasterPage() {
       }
       gridTableName={GRID_TABLE_NAME}
         listResponseStyleArrayKey=""
-        gridDetailId={13}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

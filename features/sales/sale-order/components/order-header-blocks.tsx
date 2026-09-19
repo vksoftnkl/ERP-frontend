@@ -17,10 +17,10 @@
 import { cx } from "@/components/design-system/cx";
 import { formatCurrency } from "@/domain/pricing";
 import {
-  AGENT_DROPDOWN_ID,
-  CUSTOMER_DROPDOWN_ID,
-  POS_DROPDOWN_ID,
-  SALESMAN_DROPDOWN_ID,
+  AGENT_DROPDOWN_KEY,
+  CUSTOMER_DROPDOWN_KEY,
+  POS_DROPDOWN_KEY,
+  SALESMAN_DROPDOWN_KEY,
 } from "@/features/sales/quotation/quotation.constants";
 import type {
   CustomerSnapshot,
@@ -48,6 +48,7 @@ import type {
   SourceTrail,
 } from "../sale-order.types";
 import orderStyles from "../page.module.scss";
+import { useDropdownId } from "@/lib/configured-dropdowns";
 
 export type OrderCustomerBlockProps = {
   customer: CustomerSnapshot;
@@ -70,6 +71,10 @@ export function OrderCustomerBlock({
   onSetCustomerField,
   onSetPos,
 }: OrderCustomerBlockProps) {
+  // Configured dropdowns are named, not numbered — the registry answers with
+  // this deployment's id (see lib/configured-dropdowns).
+  const customerDropdownId = useDropdownId(CUSTOMER_DROPDOWN_KEY);
+  const posDropdownId = useDropdownId(POS_DROPDOWN_KEY);
   const lockTitle = customerLocked
     ? `Locked: this order was raised from ${source?.refno ?? "another document"} for this customer.`
     : undefined;
@@ -78,7 +83,7 @@ export function OrderCustomerBlock({
       <DropdownCombo
         id="sale-order-customer"
         label="Customer"
-        dropdownId={CUSTOMER_DROPDOWN_ID}
+        dropdownId={customerDropdownId}
         valueKey="cus_id"
         labelKey="cus_name"
         value={customer.custId ?? ""}
@@ -135,7 +140,7 @@ export function OrderCustomerBlock({
       <DropdownCombo
         id="sale-order-pos"
         label="POS State"
-        dropdownId={POS_DROPDOWN_ID}
+        dropdownId={posDropdownId}
         valueKey="state_code"
         labelKey="state_name"
         metaKey="state_code"
@@ -234,12 +239,16 @@ export function OrderSalesInfoBlock({
   onSetAgent,
   onSetPackedBy,
 }: OrderSalesInfoBlockProps) {
+  // Configured dropdowns are named, not numbered — the registry answers with
+  // this deployment's id (see lib/configured-dropdowns).
+  const salesmanDropdownId = useDropdownId(SALESMAN_DROPDOWN_KEY);
+  const agentDropdownId = useDropdownId(AGENT_DROPDOWN_KEY);
   return (
     <div className={styles.fieldGrid}>
       <DropdownCombo
         id="sale-order-salesman"
         label="Salesman"
-        dropdownId={SALESMAN_DROPDOWN_ID}
+        dropdownId={salesmanDropdownId}
         valueKey="emp_id"
         labelKey="emp_name"
         value={header.salesmanId ?? ""}
@@ -250,7 +259,7 @@ export function OrderSalesInfoBlock({
       <DropdownCombo
         id="sale-order-agent"
         label="Agent"
-        dropdownId={AGENT_DROPDOWN_ID}
+        dropdownId={agentDropdownId}
         valueKey="emp_id"
         labelKey="emp_name"
         value={header.agentId ?? ""}
@@ -261,7 +270,7 @@ export function OrderSalesInfoBlock({
       <DropdownCombo
         id="sale-order-packed-by"
         label="Packed By"
-        dropdownId={SALESMAN_DROPDOWN_ID}
+        dropdownId={salesmanDropdownId}
         valueKey="emp_id"
         labelKey="emp_name"
         value={header.packedId ?? ""}

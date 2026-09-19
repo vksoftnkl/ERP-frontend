@@ -18,9 +18,9 @@ import {
   API_ENDPOINTS,
   CESS_BASIS_OPTIONS,
   GRID_ACTIVE_ONLY_TOKEN,
-  GRID_DETAIL_ID,
+  LIST_GRID_KEY,
   GRID_TABLE_NAME,
-  RATE_DROPDOWN_ID,
+  RATE_DROPDOWN_KEY,
   TAXABILITY_OPTIONS,
   TAX_RATE_INITIAL_FORM_VALUES,
 } from "./constants";
@@ -30,6 +30,7 @@ import { createEmptyLedgerRow, extractLedgerRows } from "./lines";
 import ResolvePanel from "./resolve-panel";
 import type { TaxRateLedgerRow } from "./types";
 import { getLedgerRowsValidationError } from "./validate";
+import { useDropdownId } from "@/lib/configured-dropdowns";
 
 /**
  * GST Rate Master — menu 40.
@@ -119,6 +120,9 @@ function showsCessPerUnit(basis: string): boolean {
 }
 
 export default function TaxRateMasterPage() {
+  // The supersedes picker's dropdown, named rather than numbered (see
+  // lib/configured-dropdowns).
+  const rateDropdownId = useDropdownId(RATE_DROPDOWN_KEY);
   // The Ledgers tab's rows. They live here rather than in the form's string map
   // because a line is a record, not a field — and because `lines` has to reach
   // `buildRequestPayload` whole.
@@ -157,6 +161,7 @@ export default function TaxRateMasterPage() {
 
   const formFields = useMemo<ERPDynamicModalField[]>(
     () => buildFormFields({
+      rateDropdownId,
       ledgerRows,
       ledgerRowsError,
       editingTaxId,
@@ -169,6 +174,7 @@ export default function TaxRateMasterPage() {
     [
       editingTaxId,
       handleAddLedgerRow,
+      rateDropdownId,
       handleChangeLedgerRow,
       handleRemoveLedgerRow,
       ledgerRows,
@@ -205,7 +211,7 @@ export default function TaxRateMasterPage() {
       entityLabel="GST rate"
       entityLabelPlural="GST rates"
       apiEndpoints={API_ENDPOINTS}
-      gridDetailId={GRID_DETAIL_ID}
+      gridKey={LIST_GRID_KEY}
       gridTableName={GRID_TABLE_NAME}
       listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}
@@ -313,6 +319,8 @@ export default function TaxRateMasterPage() {
 }
 
 function buildFormFields(context: {
+  /** The "GST RATES" dropdown, resolved from Dropdown Master by the screen. */
+  rateDropdownId: string;
   ledgerRows: TaxRateLedgerRow[];
   ledgerRowsError: ReturnType<typeof getLedgerRowsValidationError>;
   editingTaxId: string | null;
@@ -323,6 +331,7 @@ function buildFormFields(context: {
   onSupersedesChange: (selection: DropdownSelection | null) => void;
 }): ERPDynamicModalField[] {
   const {
+    rateDropdownId,
     ledgerRows,
     ledgerRowsError,
     editingTaxId,
@@ -471,7 +480,7 @@ function buildFormFields(context: {
         "A rate change makes a new rate rather than editing this one; this keeps the chain followable.",
       render: ({ value, setValue, disabled }) => (
         <NexDropdownSingle
-          dropdownId={RATE_DROPDOWN_ID}
+          dropdownId={rateDropdownId}
           value={
             supersedesSelection ?? (value ? { id: value, text: value } : null)
           }

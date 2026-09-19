@@ -28,8 +28,15 @@ import {
 } from "@/features/masters/shared/use-lazy-configured-dropdown";
 import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/value-mappers";
 import { useDataRefresh } from "@/lib/data-freshness";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+/**
+ * The Grid Master row this list reads — "MAIN LIST - ACCOUNT GROUP". `CrudMasterPage`
+ * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
+ * for both the rows and the configured columns.
+ */
+const LIST_GRID_KEY = "accountGroupList" satisfies ConfiguredGridKey;
 const API_ENDPOINTS = {
-  list: "/configured-grid-sql/run?grid_id=25",
   getById: "/account-groups/get",
   create: "/account-groups/create",
   delete: "/account-groups/delete",
@@ -96,7 +103,7 @@ const DEFAULT_SELECT_OPTION: ERPDynamicSelectOption = {
 // and acc_group_name are filter-enabled). Rows carry the raw SQL column names, not the
 // id/name shape master-lookups returns, hence the explicit key lists.
 const PARENT_GROUP_DROPDOWN_CONFIG = {
-  dropdownId: "23",
+  dropdownKey: "accountGroup",
   idKeys: ["acc_group_id", "accGroupId"] as const,
   labelKeys: ["acc_group_name", "accGroupName"] as const,
   defaultOption: DEFAULT_SELECT_OPTION,
@@ -240,7 +247,7 @@ export default function AccountLedgerGroupsMasterPage() {
       page: String(currentPage),
       limit: String(pageSize),
       ...(searchTerm ? { search: searchTerm } : {}),
-      grid_param: JSON.stringify({ wantdelete: wantDelete }),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
     }),
     [wantDelete],
   );
@@ -447,6 +454,7 @@ export default function AccountLedgerGroupsMasterPage() {
       entityLabel="account group"
       entityLabelPlural="account groups"
       apiEndpoints={API_ENDPOINTS}
+      gridKey={LIST_GRID_KEY}
       buildListQuery={buildListQuery}
       toolbarContent={
         <div className={styles.filterCheckGroup}>
@@ -462,7 +470,6 @@ export default function AccountLedgerGroupsMasterPage() {
       }
       gridTableName={GRID_TABLE_NAME}
         listResponseStyleArrayKey=""
-        gridDetailId={25}
       lookupKeys={LOOKUP_KEYS}
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}

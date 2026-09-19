@@ -75,6 +75,24 @@ describe("resolveItemColumns", () => {
     expect(description.header).toBe("Description");
   });
 
+  it("sizes from the width the column was dragged to, over the stored fraction", () => {
+    // `ui_tbl_clm_px` is the exact figure the browser left the column at, so it
+    // wins wherever it is set — the fraction beside it is the Qt screen's.
+    const [, description] = resolveItemColumns([
+      layoutRow(4, "Description", { uiTblClmColumnWidth: 140, uiTblClmPx: "212px" }),
+    ]);
+    expect(description.widthPx).toBe(212);
+  });
+
+  it("ignores a px value that says nothing and reads the fraction instead", () => {
+    for (const px of ["", "   ", "0px", "auto", null]) {
+      const [, description] = resolveItemColumns([
+        layoutRow(4, "Description", { uiTblClmColumnWidth: 140, uiTblClmPx: px }),
+      ]);
+      expect(description.widthPx, String(px)).toBe(140);
+    }
+  });
+
   it("floors a very narrow column so its heading stays readable", () => {
     const columns = resolveItemColumns([layoutRow(1, "id", { uiTblClmColumnWidth: 12 })]);
     expect(columns[0].widthPx).toBe(34);

@@ -1,5 +1,6 @@
 import type { KeyboardShortcutDefinition } from "@/components/design-system/ui/keyboard-shortcut-hints";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
+import type { UiTableKey } from "@/lib/ui-tables";
 import type { PhysicalStockColumn, PhysicalStockListMeta, PhysicalStockListFilters } from "./physical-stock.types";
 
 export const PHYSICAL_STOCK_SAVE_ENDPOINT = "/physical-stock";
@@ -12,9 +13,14 @@ export const ITEM_BATCH_STOCK_OPTIONS_ENDPOINT = "/item-stock-balance/batch-opti
 export const STOCK_ADJ_REASONS_ENDPOINT = "/stock-adj-reasons/get";
 export const ITEM_STOCK_BALANCE_BUCKET = "SALEABLE";
 export { UI_TABLE_COLUMNS_LIST_ENDPOINT, UI_TABLE_COLUMNS_CREATE_ENDPOINT } from "@/features/stocks/_shared/constants";
-export const UI_TABLE_COLUMNS_QUERY = {
-  uiTableId: "6",
-} as const;
+/**
+ * The UI Table Master row this screen's entry grid is laid out by —
+ * "PHYSICAL STOCK - LINES". Resolved to a `fixed.ui_tables.ui_tbl_id` at runtime
+ * (`useUiTableId`, or `getUiTableId` in the payload builders), because that id is
+ * per-deployment: this screen spent its life pointing at a literal 6, an id this
+ * table has not had since the grids were re-authored.
+ */
+export const PHYSICAL_STOCK_UI_TABLE_KEY: UiTableKey = "physicalStockLines";
 export { LOOKUP_SEARCH_DEBOUNCE_MS } from "@/features/stocks/_shared/constants";
 export const PHYSICAL_STOCK_TABLE_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   { label: "Prev Cell", keys: ["Shift"] },

@@ -1,4 +1,5 @@
 import { baseApi } from "@/store/api/baseApi";
+import type { UiTableKey } from "@/lib/ui-tables";
 import type { ApiSuccessResponse, ListMeta } from "@/utils/types";
 
 const ITEM_QTY_PRICE_LIST_ENDPOINT = "/item-qty-prices/get";
@@ -6,8 +7,12 @@ const ITEM_QTY_PRICE_SAVE_ENDPOINT = "/item-qty-prices/create";
 const ITEM_QTY_PRICE_DELETE_ENDPOINT = "/item-qty-prices/delete";
 const UI_TABLE_MASTERS_ENDPOINT = "/ui-table-masters/get";
 
-// fixed.ui_tables row provisioned for this page's grid ("Item Qty Wise Price web").
-export const ITEM_QTY_PRICE_UI_TABLE_ID = "20";
+/**
+ * The UI Table Master row this page's grid is laid out by — "ITEM QTY WISE
+ * PRICE". `useUiTableId` turns it into a `fixed.ui_tables.ui_tbl_id` at runtime,
+ * since that id differs from database to database.
+ */
+export const ITEM_QTY_PRICE_UI_TABLE_KEY: UiTableKey = "itemQtyPrice";
 
 export type ItemQtyPriceMode = "P" | "R" | "F";
 

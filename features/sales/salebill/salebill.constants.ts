@@ -18,10 +18,12 @@ import {
   type GridCellKind,
   type ItemColumnMeaning,
 } from "@/features/sales/quotation/quotation.constants";
+import type { UiTableKey } from "@/lib/ui-tables";
 import type {
   ColumnWidthUnit,
   InjectedItemColumn,
 } from "@/features/sales/quotation/quotation.utils";
+import type { ConfiguredGridKey } from "@/lib/configured-grids";
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -76,17 +78,21 @@ export { QUOTATION_GET_ENDPOINT } from "@/features/sales/quotation/quotation.con
 // ---------------------------------------------------------------------------
 
 /**
- * `fixed.ui_tables.ui_tbl_id` 22 — "SALE BILL - ITEM", 94 configured columns,
- * one per `SALE_BILL_ITEM_COLUMN_MEANINGS` entry in the same `ui_tbl_clm_no`
- * order. 89 of the 94 are visible by default; the five hidden ones are Code,
- * AliasName, SchemeName, CashDiscPerc and CashDiscAmt.
+ * The UI Table Master row this screen's item grid is laid out by —
+ * "SALE BILL - LINES", 94 configured columns, one per
+ * `SALE_BILL_ITEM_COLUMN_MEANINGS` entry in the same `ui_tbl_clm_no` order. 89 of
+ * the 94 are visible by default; the five hidden ones are Code, AliasName,
+ * SchemeName, CashDiscPerc and CashDiscAmt.
+ *
+ * `useUiTableId` turns this into a `fixed.ui_tables.ui_tbl_id` at runtime (22 on
+ * the reference database) — the id is per-deployment, the name is not.
  */
-export const SALE_BILL_ITEM_GRID_UI_TABLE_ID = "22";
+export const SALE_BILL_ITEM_GRID_UI_TABLE_KEY: UiTableKey = "saleBillLines";
 
 /**
- * Table 22 is a Desktop layout (`ui_tbl_device_type = 'Desktop'`), so its widths
- * are Qt-style percentages of the viewport, not pixels — the same choice the
- * sale order's table 24 forces.
+ * That table is a Desktop layout (`ui_tbl_device_type = 'Desktop'`), so its
+ * widths are Qt-style percentages of the viewport, not pixels — the same choice
+ * the sale order's grid forces.
  */
 export const SALE_BILL_ITEM_COLUMN_WIDTH_UNIT: ColumnWidthUnit = "qtPercent";
 
@@ -98,13 +104,13 @@ export const SALE_BILL_ITEM_COLUMN_WIDTH_UNIT: ColumnWidthUnit = "qtPercent";
  * the whole scope — which is right: `sale_bill` is partitioned by
  * `sb_acc_year`, so a list that spanned years would scan every partition.
  */
-export const BILL_LIST_GRID_ID = "86";
+export const BILL_LIST_GRID_KEY: ConfiguredGridKey = "billList";
 
 /** How far back the F8 picker opens. A counter's bills are looked up by day. */
 export const BILL_LIST_WINDOW_DAYS = 30;
 
-/** The charges grid is the quotation's own web ui table 26 — shared, not similar. */
-export { CHARGE_GRID_UI_TABLE_ID } from "@/features/sales/quotation/quotation.constants";
+/** The charges grid is the quotation's own — shared, not similar. */
+export { CHARGE_GRID_UI_TABLE_KEY } from "@/features/sales/quotation/quotation.constants";
 
 /**
  * `fixed.menu_master.menu_id` 12 — "Sales Entry" (Ctrl+S), a direct child of

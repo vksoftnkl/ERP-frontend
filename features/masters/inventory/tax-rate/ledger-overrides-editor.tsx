@@ -4,14 +4,15 @@ import { FiPlusCircle, FiTrash2 } from "react-icons/fi";
 import { NexDropdownSingle } from "@/components/design-system/dropdown";
 import type { DropdownSelection } from "@/components/design-system/dropdown";
 import {
-  LEDGER_DROPDOWN_ID,
+  LEDGER_DROPDOWN_KEY,
   LEDGER_DROPDOWN_ROLE_PARAM,
-  ROLE_DROPDOWN_ID,
+  ROLE_DROPDOWN_KEY,
   SUPPLY_NATURE_OPTIONS,
 } from "./constants";
 import { roleAllowsSupplyNature } from "./lines";
 import type { TaxRateLedgerRow, TaxRateSupplyNature } from "./types";
 import type { LedgerRowValidationError } from "./validate";
+import { useDropdownId } from "@/lib/configured-dropdowns";
 
 /**
  * The Ledgers tab — the override surface, not the mapping itself.
@@ -157,6 +158,10 @@ export default function LedgerOverridesEditor({
   onChangeRow,
   onRemoveRow,
 }: LedgerOverridesEditorProps) {
+  // Configured dropdowns are named, not numbered — the registry answers with
+  // this deployment's ids (see lib/configured-dropdowns).
+  const roleDropdownId = useDropdownId(ROLE_DROPDOWN_KEY);
+  const ledgerDropdownId = useDropdownId(LEDGER_DROPDOWN_KEY);
   const invalidCell = (row: TaxRateLedgerRow, field: LedgerRowValidationError["field"]) =>
     error?.rowKey === row.rowKey && error.field === field;
 
@@ -211,7 +216,7 @@ export default function LedgerOverridesEditor({
                   <td style={tdCenterStyle}>{index + 1}</td>
                   <td style={tdStyle}>
                     <NexDropdownSingle
-                      dropdownId={ROLE_DROPDOWN_ID}
+                      dropdownId={roleDropdownId}
                       value={roleSelection}
                       disabled={disabled}
                       invalid={invalidCell(row, "role")}
@@ -271,7 +276,7 @@ export default function LedgerOverridesEditor({
                   </td>
                   <td style={tdStyle}>
                     <NexDropdownSingle
-                      dropdownId={LEDGER_DROPDOWN_ID}
+                      dropdownId={ledgerDropdownId}
                       value={ledgerSelection}
                       disabled={disabled || !row.role}
                       invalid={invalidCell(row, "ledger")}

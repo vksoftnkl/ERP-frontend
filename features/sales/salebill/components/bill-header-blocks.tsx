@@ -17,10 +17,9 @@
  * itself.
  */
 import {
-  AGENT_DROPDOWN_ID,
-  CUSTOMER_DROPDOWN_ID,
-  POS_DROPDOWN_ID,
-  SALESMAN_DROPDOWN_ID,
+  CUSTOMER_DROPDOWN_KEY,
+  POS_DROPDOWN_KEY,
+  SALESMAN_DROPDOWN_KEY,
 } from "@/features/sales/quotation/quotation.constants";
 import type {
   CustomerSnapshot,
@@ -48,6 +47,7 @@ import {
   type SaleBillTermsFieldKey,
 } from "../salebill.constants";
 import type { BillPeople, SaleBillHeader } from "../salebill.types";
+import { useDropdownId } from "@/lib/configured-dropdowns";
 /**
  * What every block below reads before it renders a field: whether this
  * deployment shows it, and what it calls it (§ widget master, menu 12).
@@ -94,13 +94,17 @@ export function BillCustomerBlock({
   onSetCustomerField,
   onSetPos,
 }: BillCustomerBlockProps) {
+  // Configured dropdowns are named, not numbered — the registry answers with
+  // this deployment's id (see lib/configured-dropdowns).
+  const customerDropdownId = useDropdownId(CUSTOMER_DROPDOWN_KEY);
+  const posDropdownId = useDropdownId(POS_DROPDOWN_KEY);
   return (
     <div className={styles.fieldGrid} title={sourceNote}>
       {fields.isVisible("existingCustomer") ? (
         <DropdownCombo
           id="sale-bill-customer"
           label={fields.labelFor("existingCustomer")}
-          dropdownId={CUSTOMER_DROPDOWN_ID}
+          dropdownId={customerDropdownId}
           valueKey="cus_id"
           labelKey="cus_name"
           value={customer.custId ?? ""}
@@ -190,7 +194,7 @@ export function BillCustomerBlock({
         <DropdownCombo
           id="sale-bill-pos"
           label={fields.labelFor("posStateCode")}
-          dropdownId={POS_DROPDOWN_ID}
+          dropdownId={posDropdownId}
           valueKey="state_code"
           labelKey="state_name"
           value={header.posStateCode}
@@ -396,18 +400,16 @@ const PEOPLE_ROLES: ReadonlyArray<{
   nameField: keyof BillPeople;
   /** The widget-master key this role is configured under. */
   field: SaleBillHeaderFieldKey;
-  dropdownId: string;
 }> = [
-  { id: "salesmanId", nameField: "salesmanName", field: "salesman", dropdownId: SALESMAN_DROPDOWN_ID },
-  { id: "agentId", nameField: "agentName", field: "agent", dropdownId: AGENT_DROPDOWN_ID },
-  { id: "driverId", nameField: "driverName", field: "driver", dropdownId: SALESMAN_DROPDOWN_ID },
-  { id: "loadmanId", nameField: "loadmanName", field: "loadman", dropdownId: SALESMAN_DROPDOWN_ID },
-  { id: "packedId", nameField: "packedName", field: "packedBy", dropdownId: SALESMAN_DROPDOWN_ID },
+  { id: "salesmanId", nameField: "salesmanName", field: "salesman" },
+  { id: "agentId", nameField: "agentName", field: "agent" },
+  { id: "driverId", nameField: "driverName", field: "driver" },
+  { id: "loadmanId", nameField: "loadmanName", field: "loadman" },
+  { id: "packedId", nameField: "packedName", field: "packedBy" },
   {
     id: "supervisorId",
     nameField: "supervisorName",
     field: "supervisor",
-    dropdownId: SALESMAN_DROPDOWN_ID,
   },
 ];
 export function BillPeopleBlock({
@@ -418,6 +420,9 @@ export function BillPeopleBlock({
   onSetPerson,
   onSetHeader,
 }: BillPeopleBlockProps) {
+  // Every role on this block picks from the same configured dropdown
+  // ("EMPLOYEES"), so one resolution serves them all.
+  const employeeDropdownId = useDropdownId(SALESMAN_DROPDOWN_KEY);
   return (
     <div className={styles.fieldGrid}>
       {PEOPLE_ROLES.filter((role) => fields.isVisible(role.field)).map((role) => {
@@ -427,7 +432,7 @@ export function BillPeopleBlock({
             key={role.id}
             id={`sale-bill-${role.id}`}
             label={label}
-            dropdownId={role.dropdownId}
+            dropdownId={employeeDropdownId}
             valueKey="emp_id"
             labelKey="emp_name"
             value={(people[role.id] as string | null) ?? ""}

@@ -23,7 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { recalcDocument, type DocumentPricing } from "@/domain/pricing";
 import {
-  POS_DROPDOWN_ID,
+  POS_DROPDOWN_KEY,
   PRICE_LEVEL_OPTIONS,
   SESSION_CAPABILITIES,
 } from "@/features/sales/quotation/quotation.constants";
@@ -109,14 +109,14 @@ import type { SaleOrderDocKey } from "@/features/sales/sale-order/sale-order.typ
 import {
   AUTOSAVE_DEBOUNCE_MS,
   CANCEL_LINES_SRC_MODULE,
-  CHARGE_GRID_UI_TABLE_ID,
+  CHARGE_GRID_UI_TABLE_KEY,
   SALE_BILL_HOLD_DOC_TYPE,
   SALE_BILL_INJECTED_ITEM_COLUMNS,
   SALE_BILL_ITEM_COLUMN_COUNT,
   SALE_BILL_ITEM_COLUMN_MEANINGS,
   SALE_BILL_ITEM_COLUMN_NUMBERS,
   SALE_BILL_ITEM_COLUMN_WIDTH_UNIT,
-  SALE_BILL_ITEM_GRID_UI_TABLE_ID,
+  SALE_BILL_ITEM_GRID_UI_TABLE_KEY,
 } from "./salebill.constants";
 import {
   copyBillDraftAsNew,
@@ -163,6 +163,8 @@ import type {
   SaleBillViolation,
   SavedBillRef,
 } from "./salebill.types";
+import { useUiTableId } from "@/lib/ui-tables";
+import { getDropdownId } from "@/lib/configured-dropdowns";
 /**
  * What a save attempt came to.
  *
@@ -336,11 +338,13 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   const { data: capabilities } = useGetUserCapabilitiesQuery(actor.userId, {
     skip: !actor.userId,
   });
+  const itemUiTableId = useUiTableId(SALE_BILL_ITEM_GRID_UI_TABLE_KEY);
+  const chargeUiTableId = useUiTableId(CHARGE_GRID_UI_TABLE_KEY);
   const { data: itemLayout } = useGetQuotationGridLayoutQuery({
-    uiTableId: SALE_BILL_ITEM_GRID_UI_TABLE_ID,
+    uiTableId: itemUiTableId,
   });
   const { data: chargeLayout } = useGetQuotationGridLayoutQuery({
-    uiTableId: CHARGE_GRID_UI_TABLE_ID,
+    uiTableId: chargeUiTableId,
   });
   const { data: chargeMasters = [] } = useGetSalesChargesQuery();
   const { data: priceLevelNames = [] } = useGetPriceLevelsQuery();
@@ -461,7 +465,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     void (async () => {
       try {
         const page = await runDropdown({
-          dropdownId: POS_DROPDOWN_ID,
+          dropdownId: getDropdownId(POS_DROPDOWN_KEY),
           search: companyStateCode,
           limit: 25,
         }).unwrap();
@@ -513,11 +517,11 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     if (itemLayout.length !== SALE_BILL_ITEM_COLUMN_COUNT) {
       warnedLayout.current = true;
       console.warn(
-        `[sale-bill] ui table ${SALE_BILL_ITEM_GRID_UI_TABLE_ID} returned ${itemLayout.length} columns; ` +
+        `[sale-bill] ui table ${itemUiTableId} returned ${itemLayout.length} columns; ` +
           `this client maps ${SALE_BILL_ITEM_COLUMN_COUNT}. Columns it cannot name are dropped.`,
       );
     }
-  }, [itemLayout]);
+  }, [itemLayout, itemUiTableId]);
   const priceLevelOptions = useMemo(
     () =>
       priceLevelNames.length > 0

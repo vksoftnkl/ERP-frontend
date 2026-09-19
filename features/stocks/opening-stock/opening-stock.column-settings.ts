@@ -6,7 +6,9 @@ import type {
   UiTableColumnPayload,
 } from "./opening-stock.types";
 import type { OpeningStockListMeta } from "./opening-stock.types";
-import { UI_TABLE_COLUMNS_QUERY } from "./constants";
+import { getUiTableId } from "@/lib/ui-tables";
+import { storedColumnPx } from "@/features/stocks/_shared/stock-utils";
+import { OPENING_STOCK_UI_TABLE_KEY } from "./constants";
 import {
   normalizeColumnName,
   parseColumnWidth,
@@ -95,7 +97,10 @@ export type OpeningStockColumnSettingsRow = {
   uiTblClmId?: string;
   uiTblClmNo?: string;
   uiTblClmTableId: string | null;
+  /** The stored Qt fraction, carried through a settings save untouched. */
   width: number | null;
+  /** The dragged width ("120px") — the one this screen sizes from and writes. */
+  widthPx: string | null;
   visible: boolean;
   focus: boolean;
   position: number;
@@ -109,7 +114,10 @@ export type SaveOpeningStockUiTableColumnRequest = {
   uiTblClmNo?: string;
   uiTblClmName: string;
   uiTblClmTableId: string | null;
+  /** Passed back unchanged: this screen does not own the Qt fraction. */
   uiTblClmColumnWidth: number | null;
+  /** The dragged width, in pixels. The only width this screen writes. */
+  uiTblClmPx: string | null;
   uiTblClmColumnVisibility: boolean;
   uiTblClmColumnFocus: boolean;
   uiTblClmColumnPosition: number;
@@ -163,8 +171,9 @@ export function buildOpeningStockColumnSettingsRows(
       key: column.key,
       label: column.header,
       uiTblClmNo: String(index + 1),
-      uiTblClmTableId: UI_TABLE_COLUMNS_QUERY.uiTableId,
-      width: parseColumnWidth(column.width),
+      uiTblClmTableId: getUiTableId(OPENING_STOCK_UI_TABLE_KEY),
+      width: null,
+      widthPx: `${Math.round(parseColumnWidth(column.width))}px`,
       visible: true,
       focus: false,
       position: index + 1,
@@ -183,8 +192,9 @@ export function buildOpeningStockColumnSettingsRows(
         label: column.uiTblClmName?.trim() || `Column ${fallbackPosition}`,
         uiTblClmId: column.uiTblClmId,
         uiTblClmNo: column.uiTblClmNo,
-        uiTblClmTableId: column.uiTblClmTableId ?? UI_TABLE_COLUMNS_QUERY.uiTableId,
+        uiTblClmTableId: column.uiTblClmTableId ?? getUiTableId(OPENING_STOCK_UI_TABLE_KEY),
         width: column.uiTblClmColumnWidth,
+        widthPx: storedColumnPx(column.uiTblClmPx),
         visible: column.uiTblClmColumnVisibility ?? true,
         focus: column.uiTblClmColumnFocus ?? false,
         position: column.uiTblClmColumnPosition ?? fallbackPosition,
@@ -206,6 +216,7 @@ export function buildOpeningStockUiTableColumnRequest(
     uiTblClmName: row.label,
     uiTblClmTableId: row.uiTblClmTableId,
     uiTblClmColumnWidth: row.width,
+    uiTblClmPx: row.widthPx,
     uiTblClmColumnVisibility: mode === "visibility" ? checked : row.visible,
     uiTblClmColumnFocus: mode === "filter" ? checked : row.focus,
     uiTblClmColumnPosition: row.position,
@@ -225,6 +236,7 @@ export function buildOpeningStockUiTableColumnSettingsRequest(
     uiTblClmName: row.label,
     uiTblClmTableId: row.uiTblClmTableId,
     uiTblClmColumnWidth: row.width,
+    uiTblClmPx: row.widthPx,
     uiTblClmColumnVisibility: settings.visible,
     uiTblClmColumnFocus: settings.focus,
     uiTblClmColumnPosition: row.position,
@@ -255,8 +267,10 @@ export function buildOpeningStockUiTableColumnWidthRequest(
     ...(configuredColumn?.uiTblClmId ? { uiTblClmId: configuredColumn.uiTblClmId } : {}),
     uiTblClmNo: configuredColumn?.uiTblClmNo || String(fallbackPosition),
     uiTblClmName: configuredColumn?.uiTblClmName?.trim() || column.header || column.key,
-    uiTblClmTableId: configuredColumn?.uiTblClmTableId ?? UI_TABLE_COLUMNS_QUERY.uiTableId,
-    uiTblClmColumnWidth: width,
+    uiTblClmTableId: configuredColumn?.uiTblClmTableId ?? getUiTableId(OPENING_STOCK_UI_TABLE_KEY),
+    // The Qt fraction is handed back as stored; only the pixels are written.
+    uiTblClmColumnWidth: configuredColumn?.uiTblClmColumnWidth ?? null,
+    uiTblClmPx: `${Math.round(width)}px`,
     uiTblClmColumnVisibility: configuredColumn?.uiTblClmColumnVisibility ?? true,
     uiTblClmColumnFocus: configuredColumn?.uiTblClmColumnFocus ?? false,
     uiTblClmColumnPosition: configuredColumn?.uiTblClmColumnPosition ?? fallbackPosition,
