@@ -10,7 +10,9 @@ import {
   resolveQuery,
   sourceLabel,
 } from "./scope";
+import { CONFIGURED_DROPDOWNS } from "@/lib/configured-dropdowns";
 import { isSessionScope, sessionQuery } from "./session-scope";
+import { SETTING_VALUE_SOURCES, valueSourceFor } from "./value-sources";
 import { isSameValue, parseBool, toText, validateText } from "./value-text";
 
 const COMPANY = "11111111-1111-4111-8111-111111111111";
@@ -311,5 +313,47 @@ describe("isSessionScope — saved values only take hold in the session's own co
       deviceId: DEVICE,
       userId: "user-1",
     });
+  });
+});
+
+describe("valueSourceFor — which settings are ids of another master", () => {
+  it("binds a bound UUID setting to the master it points at", () => {
+    const source = valueSourceFor(
+      setting({ asdKey: "sales.default_customer_id", asdDataType: "UUID", asdAllowedValues: null }),
+    );
+    expect(source?.dropdownKey).toBe("customer");
+    expect(source?.lookupModule).toBe("customers");
+  });
+
+  it("leaves every unbound setting to the typed controls", () => {
+    expect(valueSourceFor(setting({ asdKey: "sales.default_price_level" }))).toBeNull();
+    expect(
+      valueSourceFor(setting({ asdKey: "printing.default_printer", asdDataType: "UUID" })),
+    ).toBeNull();
+  });
+
+  it("refuses a binding on anything but a UUID — a TEXT setting must not start storing ids", () => {
+    expect(
+      valueSourceFor(setting({ asdKey: "sales.default_customer_id", asdDataType: "TEXT" })),
+    ).toBeNull();
+  });
+
+  it("lets an allowed-value list win, because the write trigger would refuse anything else", () => {
+    expect(
+      valueSourceFor(
+        setting({
+          asdKey: "sales.default_customer_id",
+          asdDataType: "UUID",
+          asdAllowedValues: ["019f659c-3942-7237-89b0-c4899603dd7a"],
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("names a real Dropdown Master row and a real server lookup module for every binding", () => {
+    for (const source of Object.values(SETTING_VALUE_SOURCES)) {
+      expect(CONFIGURED_DROPDOWNS[source.dropdownKey]).toBeDefined();
+      expect(source.lookupModule.trim()).not.toBe("");
+    }
   });
 });

@@ -2,7 +2,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FiTruck } from "react-icons/fi";
-import CrudMasterPage from "@/components/master/crud-master-page";
+import CrudMasterPage, {
+  type CrudMasterPageController,
+} from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import InlineRelatedMasterModal from "@/features/masters/shared/inline-related-master";
 import { toast } from "react-toastify";
@@ -1338,7 +1340,35 @@ function buildGroupModalFields(): ERPDynamicModalField[] {
     },
   ];
 }
-export default function CustomerPage() {
+/**
+ * Mounted whole by its own route, and mounted MODAL-ONLY by the screens that
+ * offer "add a customer from here" — Alt+C on a customer dropdown (see
+ * `inline-customer-master.tsx`). In that mode the list, its grid and its fetch
+ * are all skipped and only the entry modal renders, so a sale bill does not pay
+ * for a customer list it will never show.
+ */
+export type CustomerPageProps = {
+  inlineModalOnly?: boolean;
+  onCrudControllerReady?: (controller: CrudMasterPageController | null) => void;
+  onModalOpenChange?: (open: boolean, variantKey: string | null) => void;
+  /**
+   * A customer was saved. `customerId` is the record's own id, so a caller can
+   * select what was just created rather than only re-running its search.
+   */
+  onCustomerSaved?: (params: {
+    customerId: string;
+    customerName: string;
+    shouldUpdate: boolean;
+    values: Record<string, string>;
+  }) => void | Promise<void>;
+};
+
+export default function CustomerPage({
+  inlineModalOnly,
+  onCrudControllerReady,
+  onModalOpenChange,
+  onCustomerSaved,
+}: CustomerPageProps = {}) {
   const router = useRouter();
   const stateModalControllerRef = useRef<ERPDynamicModalController | null>(null);
   const areaModalControllerRef = useRef<ERPDynamicModalController | null>(null);
@@ -2839,6 +2869,8 @@ export default function CustomerPage() {
             />
           );
         }}
+        hideListPage={inlineModalOnly}
+        onCrudControllerReady={onCrudControllerReady}
         onModalOpenChange={(open, variantKey) => {
           // Clear the lazy dropdowns when the create modal opens so no stale list
           // from a previously edited record lingers (they reload on open), then seed
@@ -2847,6 +2879,33 @@ export default function CustomerPage() {
             resetDropdownSelections();
             seedTemplateDropdownDefaults();
           }
+          onModalOpenChange?.(open, variantKey);
+        }}
+        afterSubmitSuccess={async ({ response, payload, values, editingItemId, shouldUpdate }) => {
+          if (!onCustomerSaved) {
+            return;
+          }
+          // The create and update responses both answer with the record, but a
+          // deployment that answers with nothing but a message still leaves the
+          // payload (an update carries `cusId`) and the id being edited.
+          const responseSource = isRecord(response)
+            ? (isRecord(response.data) ? response.data : response)
+            : null;
+          const customerId =
+            (responseSource
+              ? toDisplayValue(getFirstDefinedValue(responseSource, ["cusId", "cus_id"]))
+              : "") ||
+            toDisplayValue(payload.cusId) ||
+            (editingItemId !== null ? String(editingItemId) : "");
+          if (!customerId) {
+            return;
+          }
+          await onCustomerSaved({
+            customerId,
+            customerName: (values.cusName ?? "").trim(),
+            shouldUpdate,
+            values,
+          });
         }}
         augmentDetailSource={async ({ source }) => {
           // getById doesn't return the customer group's name, so resolve it here to

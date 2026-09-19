@@ -1,14 +1,17 @@
 "use client";
 
 import type { ChangeEvent } from "react";
+import { valueSourceFor } from "../lib/value-sources";
 import { parseBool } from "../lib/value-text";
 import type { SettingRow } from "../use-app-settings";
+import SettingReferenceControl from "./setting-reference-control";
 import styles from "../page.module.scss";
 
 /**
  * The control is chosen by DATA, never by key.
  *
  *   an allowed-value list  -> a select of exactly those values
+ *   a UUID with a master    -> that master's searchable picker
  *   BOOL                   -> a switch
  *   INT                    -> a number box, step 1,   clamped to min/max
  *   DECIMAL                -> a number box, step .01, clamped to min/max
@@ -21,6 +24,12 @@ import styles from "../page.module.scss";
  * instead of an INSERT. The allowed-value list is tested first because the
  * catalog may pin any type to a list, not only TEXT — the trigger compares
  * `asd_allowed_values @> to_jsonb(asv_value)` whatever the column says.
+ *
+ * The UUID picker is the one line that reads a key, and it reads it for a fact
+ * rather than for a widget: which master the id belongs to, which the catalog
+ * has no column for. Every bound setting then gets the SAME control. See
+ * `lib/value-sources.ts`, which is where that goes the day the catalog can say
+ * it itself.
  *
  * The boxes carry `data-uppercase="off"`: the app uppercases free text globally,
  * and a setting value is stored exactly as typed — `warning` upper-cased is a
@@ -62,6 +71,11 @@ export default function SettingControl({
         ))}
       </select>
     );
+  }
+
+  const source = valueSourceFor(row);
+  if (source) {
+    return <SettingReferenceControl row={row} source={source} onChange={onChange} />;
   }
 
   if (row.asdDataType === "BOOL") {

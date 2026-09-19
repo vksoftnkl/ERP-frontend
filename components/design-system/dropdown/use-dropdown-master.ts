@@ -1,10 +1,12 @@
 "use client";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
 import { toast } from "react-toastify";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import {
   getDropdownMaster,
+  subscribeDropdownMasters,
   type DropdownMasterMode,
+  type DropdownMasterRegistration,
 } from "./masters";
 
 export type UseDropdownMasterArgs = {
@@ -14,6 +16,12 @@ export type UseDropdownMasterArgs = {
    * the field can select it rather than only refreshing its list.
    */
   onSaved: (saved?: { id?: string; text?: string }) => void;
+  /**
+   * The master closed without saving. The field is where the operator was and
+   * where they still are, so this is the hook for putting focus back on it —
+   * without it a cancelled Alt+C leaves the keyboard on nothing.
+   */
+  onClosed?: () => void;
 };
 
 export type DropdownMasterState = {
@@ -46,8 +54,15 @@ type OpenState = {
 export function useDropdownMaster({
   dropdownId,
   onSaved,
+  onClosed,
 }: UseDropdownMasterArgs): DropdownMasterState {
-  const registration = getDropdownMaster(dropdownId);
+  // Subscribed, not read once: a feature whose dropdown id is resolved by name
+  // registers from an effect, which lands AFTER this field's first render.
+  const registration = useSyncExternalStore<DropdownMasterRegistration | null>(
+    subscribeDropdownMasters,
+    () => getDropdownMaster(dropdownId),
+    () => null,
+  );
   const [open, setOpen] = useState<OpenState | null>(null);
 
   const { permissions } = usePagePermissions({
@@ -86,7 +101,10 @@ export function useDropdownMaster({
     [permissions.canEdit, registration],
   );
 
-  const close = useCallback(() => setOpen(null), []);
+  const close = useCallback(() => {
+    setOpen(null);
+    onClosed?.();
+  }, [onClosed]);
 
   const handleSaved = useCallback(
     (saved?: { id?: string; text?: string }) => {

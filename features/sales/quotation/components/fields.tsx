@@ -16,6 +16,7 @@ import {
   type ReactNode,
 } from "react";
 import { cx } from "@/components/design-system/cx";
+import { useDropdownMaster } from "@/components/design-system/dropdown/use-dropdown-master";
 import { useLazyRunDropdownQuery } from "@/store/api/quotationApi";
 import { SECTION_ATTR } from "../quotation.constants";
 import { fromDisplayDate, toDisplayDate } from "../quotation.utils";
@@ -409,6 +410,14 @@ export type DropdownComboProps = {
  * outside-click test is a single `contains` check. (A portaled menu whose ref is
  * left out of that test swallows every option click — a bug this codebase has
  * already paid for once.)
+ *
+ * Alt+C adds a record to the master behind the dropdown and Alt+A amends the one
+ * selected, without leaving the field — the operator books the customer who has
+ * just walked in rather than abandoning a half-keyed bill for the master screen.
+ * Which master that is comes from the registry in
+ * `components/design-system/dropdown/masters`, keyed by dropdown id: a field
+ * whose dropdown nobody has registered simply has no shortcuts, and the master's
+ * OWN menu rights decide whether they are offered.
  */
 export function DropdownCombo(props: DropdownComboProps) {
   const {
@@ -468,6 +477,36 @@ export function DropdownCombo(props: DropdownComboProps) {
     },
     [dropdownId, runDropdown],
   );
+
+  /**
+   * The master behind this dropdown, opened over the field by Alt+C / Alt+A.
+   *
+   * A record the master reports back is selected outright, which is the whole
+   * point of adding one from here: the operator keyed a customer who was not on
+   * file and the bill is now on them. One saved without reporting an id only
+   * refreshes the list, because the search runs in SQL over the configured text
+   * columns and there is nothing to match a uuid against.
+   */
+  const master = useDropdownMaster({
+    dropdownId,
+    onSaved: (saved) => {
+      if (saved?.id) {
+        onSelect(saved.id, saved.text ?? "");
+        setQuery(null);
+        setOpen(false);
+      } else {
+        fetchOptions(query ?? "");
+      }
+      // The modal took focus; give it back, or the operator's next keystroke
+      // lands on the document.
+      document.getElementById(id)?.focus();
+    },
+    // Cancelled, so nothing on the bill changed — but the operator is still
+    // standing at this field and the keyboard has to be too.
+    onClosed: () => {
+      document.getElementById(id)?.focus();
+    },
+  });
 
   // Debounced server-side search: these dropdowns filter in SQL, so typing must
   // refetch rather than narrow a cached page.
@@ -568,6 +607,34 @@ export function DropdownCombo(props: DropdownComboProps) {
             setEngaged(true);
           }}
           onKeyDown={(event) => {
+            // Alt+C / Alt+A are read before anything else: their keys are
+            // printable, so every branch below would take them for the start of
+            // a search. Checked only when a master is registered, so an
+            // unregistered field leaves the combination to whatever else on the
+            // screen claims it.
+            if (
+              master.registered &&
+              event.altKey &&
+              !event.ctrlKey &&
+              !event.metaKey &&
+              !event.shiftKey
+            ) {
+              const shortcut = event.key.trim().toLowerCase();
+              if (shortcut === "c" || shortcut === "a") {
+                event.preventDefault();
+                // The menu would otherwise sit under the modal, and the search
+                // it is showing is about to be answered by the master anyway.
+                setOpen(false);
+                setEngaged(false);
+                const typed = query ?? selectedLabel ?? "";
+                if (shortcut === "c") {
+                  master.requestCreate(typed);
+                } else {
+                  master.requestEdit(value || null, typed);
+                }
+                return;
+              }
+            }
             // The box is showing the current selection rather than a search, so
             // this keystroke has to replace the whole label instead of being
             // appended to it — otherwise the search runs for "KARTHIKV".
@@ -668,6 +735,12 @@ export function DropdownCombo(props: DropdownComboProps) {
             ))}
           </div>
         ) : null}
+        {/*
+          The master's own screen. It renders nothing until a shortcut opens it,
+          and what it does render is portaled, so sitting inside the field costs
+          the layout nothing.
+        */}
+        {master.entry}
       </div>
     </Field>
   );

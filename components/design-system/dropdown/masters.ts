@@ -41,6 +41,30 @@ export type DropdownMasterRegistration = {
 
 const registry = new Map<string, DropdownMasterRegistration>();
 
+/**
+ * Registrations are not all made at import time.
+ *
+ * A dropdown id is resolved from the configured registry BY NAME, at runtime, so
+ * a feature cannot name its dropdown at module scope — it registers from an
+ * effect once the id has landed. A field that read the registry once while
+ * rendering would therefore miss its own master by one render, which is
+ * indistinguishable from not having one. Readers subscribe instead.
+ */
+const listeners = new Set<() => void>();
+
+function notify(): void {
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
+export function subscribeDropdownMasters(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 function key(dropdownId: string | number): string {
   return String(dropdownId ?? "").trim();
 }
@@ -53,7 +77,11 @@ export function registerDropdownMaster(
   if (!id) {
     return;
   }
+  if (registry.get(id) === registration) {
+    return;
+  }
   registry.set(id, registration);
+  notify();
 }
 
 /** No registration is not an error: the shortcuts simply do nothing. */
@@ -64,10 +92,13 @@ export function getDropdownMaster(
 }
 
 export function unregisterDropdownMaster(dropdownId: string | number): void {
-  registry.delete(key(dropdownId));
+  if (registry.delete(key(dropdownId))) {
+    notify();
+  }
 }
 
 /** Test seam. */
 export function clearDropdownMasters(): void {
   registry.clear();
+  notify();
 }

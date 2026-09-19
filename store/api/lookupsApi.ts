@@ -378,6 +378,41 @@ export const lookupsApi = baseApi.injectEndpoints({
         buildLookupOptions(payload, DEFAULT_CUSTOMER_OPTION, CUSTOMER_LOOKUP_KEYS),
       keepUnusedDataFor: 300,
     }),
+    /**
+     * ONE master row, by the id it is stored under — `?module=<key>&id=<uuid>`,
+     * which the server reads from that module's own table and answers as a
+     * one-row list, or as an empty one when nothing carries the id.
+     *
+     * This is the half of a reference field that the dropdown cannot do. A
+     * configured dropdown searches its own text columns, so asking it for a
+     * uuid matches nothing: a screen holding a STORED id has no way to learn
+     * the name that belongs to it. `module` is the server's own
+     * `LOOKUP_MODULE_KEYS` spelling, so this stays one endpoint for every
+     * master rather than one per master.
+     */
+    getMasterNameById: builder.query<ERPDynamicSelectOption | null, { module: string; id: string }>({
+      query: ({ module, id }) => ({
+        url: MASTER_LOOKUP_ENDPOINT,
+        params: { module, id: id.trim() },
+      }),
+      transformResponse: (payload: unknown) => {
+        const [row] = extractRows(payload, DEFAULT_LOOKUP_ARRAY_KEYS);
+        if (!row || typeof row !== "object") {
+          return null;
+        }
+        const source = row as Record<string, unknown>;
+        const value = toDisplayValue(getFirstDefinedValue(source, ["id", "value"]));
+        if (!value) {
+          return null;
+        }
+        // Some modules answer with a blank `name` and carry the label in a
+        // column of their own; a name that never arrives leaves the id, which
+        // is still the truth about what is stored.
+        const label = toDisplayValue(getFirstDefinedValue(source, ["name", "label"]));
+        return { value, label: label || value };
+      },
+      keepUnusedDataFor: 300,
+    }),
     getPriceLevelOptions: builder.query<ERPDynamicSelectOption[], void>({
       query: () => ({
         url: MASTER_LOOKUP_ENDPOINT,
@@ -434,6 +469,7 @@ export const lookupsApi = baseApi.injectEndpoints({
 });
 export const {
   useGetBranchOptionsQuery,
+  useGetMasterNameByIdQuery,
   useGetCompanyOptionsQuery,
   useGetUserOptionsQuery,
   useGetCustomerOptionsQuery,

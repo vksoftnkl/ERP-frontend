@@ -26,6 +26,7 @@ import {
 import { toast } from "react-toastify";
 import { cx } from "@/components/design-system/cx";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
+import { useCustomerDropdownMaster } from "@/features/masters/sales/customer/use-customer-dropdown-master";
 import type { PricedLine } from "@/domain/pricing";
 import { formatCurrency } from "@/domain/pricing";
 import {
@@ -207,6 +208,15 @@ export function SaleBillEntryView({
    * elements.
    */
   const visibleFields = useBillVisibleSettings();
+
+  /**
+   * Alt+C on the Existing Customer field adds a customer, Alt+A amends the one
+   * on the bill — the counter books somebody who is not on file without
+   * abandoning a half-keyed bill. The shortcuts are the CUSTOMER master's to
+   * grant: this only offers it behind the customer dropdown (see
+   * `useCustomerDropdownMaster`).
+   */
+  useCustomerDropdownMaster();
 
   /**
    * The credit column's five rows, bridged from their labels to this screen's
