@@ -11,7 +11,7 @@
  * (Ctrl+F3), and a save that asks the credit question instead of refusing.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { recalcDocument } from "@/domain/pricing";
 import type { DocumentPricing } from "@/domain/pricing";
 import { useBusinessContext } from "@/components/layout/business-context";

@@ -197,10 +197,15 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
   const addRow = useCallback((): void => {
     // Built outside the updater: the key has to be known HERE, and an updater
     // React may run twice must not mint two rows.
-    const row = createSizeEntryRow<T>(baseRate);
+    //
+    // The new row starts as a copy of the last one — the next size is nearly
+    // always the same board in one changed dimension, and the effect below drops
+    // the cursor into its first box with the value selected, so keying over what
+    // differs is the whole edit.
+    const row = createSizeEntryRow<T>(baseRate, rows[rows.length - 1] ?? null);
     pendingFocusRef.current = row.key;
     setRows((current) => [...current, row]);
-  }, [baseRate]);
+  }, [baseRate, rows]);
 
   useEffect(() => {
     const key = pendingFocusRef.current;

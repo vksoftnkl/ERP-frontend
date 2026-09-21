@@ -23,7 +23,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { cx } from "@/components/design-system/cx";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import { useCustomerDropdownMaster } from "@/features/masters/sales/customer/use-customer-dropdown-master";
@@ -113,6 +113,7 @@ import {
   SALE_BILL_ITEM_COLUMN_WIDTH_UNIT,
   SALE_BILL_ITEM_GRID_UI_TABLE_KEY,
 } from "../salebill.constants";
+import { lastFilledLineBefore } from "../salebill.state";
 import { isBillHold } from "../salebill.hold";
 import type { BillAutosave } from "../salebill.hold";
 import { totalAdjusted } from "../salebill.validate";
@@ -515,22 +516,45 @@ export function SaleBillEntryView({
   );
 
   /**
-   * Alt+R — copy the row into a fresh one under it.
+   * Alt+R — copy a row. Where the copy LANDS decides where the cursor goes, and
+   * the two cases go opposite ways (see `lineDuplicated` for the rule itself).
+   *
+   * On a filled row the copy is inserted beneath, so focus steps down into it.
+   * On the blank row the copy fills the row the operator is already standing
+   * in, so focus stays — stepping down there would leave them on the fresh
+   * blank row that the trailing-row invariant has just opened underneath.
    *
    * Guarded here as well as in the reducer, because focus is moved on the way
-   * out: a blank row copies to nothing, and stepping into the row below it would
-   * take the operator somewhere they did not ask to go.
+   * out: a press that copied nothing must not take the operator somewhere they
+   * did not ask to go.
    */
   const onDuplicateLine = useCallback(
     (rowKey: string, fieldKey: string | null) => {
-      const source = draft.lines.find((row) => row.key === rowKey);
-      if (!source?.itemId) {
+      const index = draft.lines.findIndex((row) => row.key === rowKey);
+      if (index < 0) {
+        return;
+      }
+      if (draft.lines[index].itemId) {
+        dispatch(lineDuplicated(rowKey));
+        focusNextRowAfterRender(ITEM_GRID_NAME, rowKey, fieldKey);
+        return;
+      }
+      if (!lastFilledLineBefore(draft.lines, index)) {
         return;
       }
       dispatch(lineDuplicated(rowKey));
-      focusNextRowAfterRender(ITEM_GRID_NAME, rowKey, fieldKey);
+      // Refocusing waits for the PAINTED row. The grid blurred this cell on the
+      // way in, and a cell seeds its edit buffer from whatever is on screen when
+      // it regains focus — so focusing synchronously would seed the old, empty
+      // text straight back over the values just copied in.
+      const landing = fieldKey ?? itemLookupFieldKey(itemResize.columns);
+      if (landing) {
+        window.requestAnimationFrame(() => {
+          focusCell(ITEM_GRID_NAME, rowKey, landing);
+        });
+      }
     },
-    [dispatch, draft.lines],
+    [dispatch, draft.lines, itemResize.columns],
   );
 
   /**
@@ -1553,12 +1577,14 @@ export function SaleBillEntryView({
           onClose={() => setPrintTarget(null)}
           purposeCode={PURPOSE_CODE.SALE_INVOICE}
           documentLabel={printTarget.billRefno ? `Bill ${printTarget.billRefno}` : "Bill"}
-          target={{
-            docId: printTarget.sbId,
-            companyId: printTarget.sbCompanyId,
-            accYear: printTarget.sbAccYear,
-            filename: `bill-${printTarget.billRefno || printTarget.sbId}`,
-          }}
+          targets={[
+            {
+              docId: printTarget.sbId,
+              companyId: printTarget.sbCompanyId,
+              accYear: printTarget.sbAccYear,
+              filename: `bill-${printTarget.billRefno || printTarget.sbId}`,
+            },
+          ]}
         />
       ) : null}
 

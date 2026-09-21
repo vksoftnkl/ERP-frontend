@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import { useApi } from "@/hooks/useApi";
 import InlineRelatedMasterModal from "@/features/masters/shared/inline-related-master";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import type {
   ERPDynamicModalController,
   ERPDynamicModalSubmitPayload,

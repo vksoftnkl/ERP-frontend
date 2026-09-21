@@ -29,8 +29,10 @@
  *    "cancelled" rather than "deleted".
  */
 import { useCallback, useMemo, useState } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import CrudMasterPage from "@/components/master/crud-master-page";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
+import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import { useBusinessContext } from "@/components/layout/business-context";
 import masterStyles from "@/app/master/state-master/page.module.scss";
@@ -160,6 +162,13 @@ export function SaleOrderListView({ onCreate, onOpen }: SaleOrderListViewProps) 
   // Orders outlive bills, so the window opens at 90 days rather than at the
   // grid's unbounded default (a shop with three years of orders would otherwise
   // page through all of them to reach this morning's).
+  /*
+   * What the print dialog is open on — a LIST, because the register prints
+   * either the highlighted row or every row the operator has ticked, and both
+   * end in the same dialog. Empty means closed.
+   */
+  const [printTargets, setPrintTargets] = useState<SaleOrderDocKey[]>([]);
+  const [printRefno, setPrintRefno] = useState<string>("");
   const [fromDate, setFromDate] = useState(() => addDays(todayIso(), -SALE_ORDER_LIST_WINDOW_DAYS));
   const [toDate, setToDate] = useState(() => todayIso());
   const [period, setPeriod] = useState<string>(String(SALE_ORDER_LIST_WINDOW_DAYS));
@@ -274,6 +283,7 @@ export function SaleOrderListView({ onCreate, onOpen }: SaleOrderListViewProps) 
   );
 
   return (
+    <>
     <CrudMasterPage
       title="Sales Orders"
       listSubtitleOverride="Orders taken from customers, and what is still pending on them."
@@ -326,6 +336,38 @@ export function SaleOrderListView({ onCreate, onOpen }: SaleOrderListViewProps) 
         const refno = asText(rowSource?.so_order_refno);
         toast.success(refno ? `Order ${refno} deleted.` : "Order deleted.");
       }}
+      // Print the SELECTED order, through the SALE_ORDER purpose and the same
+      // five-button dialog the F8 picker already uses. The document key comes
+      // off the ROW rather than the screen's company/branch/year: the
+      // accounting year decides which partition the renderer reads, and it
+      // belongs to the order rather than to the register.
+      onPrintAction={(row) => {
+        setPrintTargets([docKeyOf(row)]);
+        setPrintRefno(asText(sourceValue(row, "so_order_refno")));
+      }}
+      // Tick several orders and Print renders them into ONE pdf: the server
+      // lays each out in turn and merges the pages, so Format and Preview work
+      // on a batch exactly as they do on one order.
+      enableMultiSelect
+      onBulkPrintAction={(rows) => {
+        setPrintTargets(rows.map(docKeyOf));
+        setPrintRefno("");
+      }}
+      // One render binds ONE company and ONE accounting year for every document
+      // in the batch. Grid 87 already scopes the list to the header's, so a
+      // mixed selection should be unreachable — refused rather than rendered
+      // under the wrong company, which is how a document comes out blank.
+      bulkPrintDisabledReason={(rows) => {
+        const distinct = (key: string) =>
+          new Set(rows.map((row) => asText(sourceValue(row, key)))).size;
+        if (distinct("so_company_id") > 1) {
+          return "Select orders from one company at a time.";
+        }
+        if (distinct("so_acc_year") > 1) {
+          return "Select orders from one accounting year at a time.";
+        }
+        return null;
+      }}
       auditHistory={{
         // What the server stamps on `sale_order` audit rows.
         screenName: "Sale Order",
@@ -334,5 +376,30 @@ export function SaleOrderListView({ onCreate, onOpen }: SaleOrderListViewProps) 
           asText(sourceValue(row, "so_order_refno")) || asText(sourceValue(row, "cus_name")) || null,
       }}
     />
+      {printTargets.length > 0 ? (
+        <PrintOptionsDialog
+          open
+          onClose={() => setPrintTargets([])}
+          purposeCode={PURPOSE_CODE.SALE_ORDER}
+          documentLabel={
+            printTargets.length > 1
+              ? `${printTargets.length} Orders`
+              : printRefno
+                ? `Order ${printRefno}`
+                : "Order"
+          }
+          // Each row's own company and accounting year. Branch and counter are
+          // claims on the access token and the server takes them from there;
+          // the company is the document's because the token carries the user's
+          // home company, which the header picker may not be on.
+          targets={printTargets.map((target) => ({
+            docId: target.soId,
+            companyId: target.soCompanyId,
+            accYear: target.soAccYear,
+            filename: `order-${printRefno || target.soId}`,
+          }))}
+        />
+      ) : null}
+    </>
   );
 }

@@ -158,17 +158,9 @@ describe("validateSizeEntry", () => {
     expect(validateSizeEntry([row]).rows[row.key].size).toBeTruthy();
   });
 
-  it("flags BOTH rows of a duplicated size, not just the later one", () => {
-    const first = sizeRow("45*2*2*6");
-    const second = sizeRow("45*2*2*6");
-    const result = validateSizeEntry([first, second]);
-    expect(result.ok).toBe(false);
-    expect(result.rows[first.key].size).toMatch(/more than one row/);
-    expect(result.rows[second.key].size).toMatch(/more than one row/);
-  });
-
-  it("does not call two different sizes a duplicate", () => {
-    expect(validateSizeEntry([sizeRow("45*2*2*6"), sizeRow("45*2*2*8")]).ok).toBe(true);
+  it("allows the same size on more than one row", () => {
+    const result = validateSizeEntry([sizeRow("45*2*2*6"), sizeRow("45*2*2*6")]);
+    expect(result.ok).toBe(true);
   });
 
   it("rejects a zero or negative qty", () => {
@@ -189,6 +181,35 @@ describe("validateSizeEntry", () => {
     const negative = sizeRow("45*2*2*8", { rate: "-5" });
     expect(validateSizeEntry([free]).ok).toBe(true);
     expect(validateSizeEntry([negative]).rows[negative.key].rate).toBeTruthy();
+  });
+});
+
+describe("createSizeEntryRow", () => {
+  it("is blank, at the group's base rate, when there is no row above", () => {
+    const row = createSizeEntryRow(250);
+    expect(row.factors).toEqual(["", "", "", ""]);
+    expect(row.rate).toBe("250");
+    expect(row.source).toBeNull();
+  });
+
+  it("copies the row above, so only the dimension that differs is keyed", () => {
+    const previous = sizeRow("45*2*2*6", { rate: "260" });
+    const row = createSizeEntryRow(250, previous);
+    expect(row.factors).toEqual(["45", "2", "2", "6"]);
+    expect(row.rate).toBe("260");
+    // A copy is of the keystrokes only — it is still a brand-new line, and it
+    // gets its own dialog key so patching one row never patches both.
+    expect(row.source).toBeNull();
+    expect(row.key).not.toBe(previous.key);
+  });
+
+  it("follows the copied size rather than the quantity keyed on the row above", () => {
+    // 45*2*2*6 is 7.5 CFT; the row above was cut short to 6. That 6 belongs to
+    // the board it was cut on, not to the next one.
+    const previous = sizeRow("45*2*2*6", { qty: "6", qtyTouched: true });
+    const row = createSizeEntryRow(250, previous);
+    expect(row.qtyTouched).toBe(false);
+    expect(sizeRowQty(row)).toBe(7.5);
   });
 });
 

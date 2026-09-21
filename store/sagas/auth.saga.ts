@@ -1,7 +1,7 @@
 import { call, put, takeLatest } from "redux-saga/effects";
 import type { PayloadAction } from "@reduxjs/toolkit";
 import { createAction } from "@reduxjs/toolkit";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { clearAuthSession } from "@/lib/auth/session";
 import { notifyGlobalNavigationStart } from "@/lib/navigation/global-loader";
 import { baseApi } from "@/store/api/baseApi";

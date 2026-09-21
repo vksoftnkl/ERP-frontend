@@ -50,6 +50,7 @@ import {
   createBillDraftLine,
   customerChangeCosts,
   duplicateBillDraftLine,
+  lastFilledLineBefore,
   seedCreditPeriod,
   shouldSeedWalkInCustomer,
 } from "@/features/sales/salebill/salebill.state";
@@ -406,18 +407,45 @@ const saleBillSlice = createSlice({
       state.lines.splice(index, 0, line);
     },
     /**
-     * Copy a line into a fresh one right under it (Alt+R).
+     * Copy a line (Alt+R). TWO shapes, because the cursor is usually not on the
+     * row worth copying.
      *
-     * A blank row is nothing to copy, so it is declined outright rather than
-     * inserting an empty row the operator did not ask for — Ctrl++ is the
-     * shortcut for that.
+     * On a FILLED row it inserts the copy right under it — a dozen
+     * near-identical lines, keyed once.
+     *
+     * On a BLANK row it fills THAT ROW from the last filled row above, in
+     * place. This is the common press: the grid always keeps a blank row
+     * waiting, so the moment an item is picked focus moves into it and the row
+     * under the cursor is the empty one. Declining there — which is what this
+     * used to do — reads as the shortcut being broken, since nothing happens
+     * and nothing says why. Ctrl++ remains the way to open a row that stays
+     * blank.
+     *
+     * The blank row keeps its OWN key rather than taking the copy's, so the
+     * grid updates the row the operator is standing in instead of unmounting it
+     * and losing the cursor.
+     *
+     * With nothing filled above, the state is left untouched — and because the
+     * wrapper below tests `next === state`, a press that copied nothing leaves
+     * a pristine draft clean rather than dirtying it and prompting on close.
      */
     lineDuplicated(state, action: PayloadAction<string>) {
       const index = state.lines.findIndex((row) => row.key === action.payload);
-      if (index < 0 || !state.lines[index].itemId) {
+      if (index < 0) {
         return;
       }
-      state.lines.splice(index + 1, 0, duplicateBillDraftLine(state.lines[index]));
+      if (state.lines[index].itemId) {
+        state.lines.splice(index + 1, 0, duplicateBillDraftLine(state.lines[index]));
+        return;
+      }
+      const source = lastFilledLineBefore(state.lines as SaleBillDraftLine[], index);
+      if (!source) {
+        return;
+      }
+      state.lines[index] = {
+        ...duplicateBillDraftLine(source),
+        key: state.lines[index].key,
+      };
     },
     /**
      * Drop a line.

@@ -21,7 +21,7 @@ import {
   FiSearch,
   FiTrash2,
 } from "react-icons/fi";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { useBusinessContext } from "@/components/layout/business-context";

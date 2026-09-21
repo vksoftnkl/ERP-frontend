@@ -28,7 +28,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { cx } from "@/components/design-system/cx";
 import { useSaveQuotationColumnLayoutMutation } from "@/store/api/quotationApi";
 import { ModalShell } from "./modal-shell";

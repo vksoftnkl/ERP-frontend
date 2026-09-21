@@ -216,13 +216,36 @@ export function sizeRowText(row: SizeEntryValues): string {
   return joinSizeFactors(row.factors);
 }
 
-/** A blank row, rated at the group's base rate. */
-export function createSizeEntryRow<T extends SizeGroupLine>(baseRate: number): SizeEntryRow<T> {
+/**
+ * A row to key the next size into — a copy of the row above it, or a blank one
+ * when there is nothing above.
+ *
+ * Sizes on one item are keyed as variations of each other: the same board in
+ * five lengths, the same length in three thicknesses. Starting a new row blank
+ * makes the operator re-key the three boxes that did not change, so the previous
+ * row's dimensions are carried in and the cursor lands on the first box with its
+ * value selected — typing replaces it, Enter walks to the box that actually
+ * differs. Two rows left identical are allowed — the same piece twice is a real
+ * entry, not a slip.
+ *
+ * The copy is of the KEYSTROKES only: `source` stays `null`, so a copied row is
+ * still a brand-new line and sheds its identity through the screen's own copier
+ * (see `applySizeEntry`). Qty follows the copied size rather than the previous
+ * row's keyed quantity — a quantity cut short belongs to the row it was cut on.
+ */
+export function createSizeEntryRow<T extends SizeGroupLine>(
+  baseRate: number,
+  previous?: SizeEntryValues | null,
+): SizeEntryRow<T> {
+  const factors = previous
+    ? [...previous.factors]
+    : Array.from({ length: SIZE_FACTOR_COUNT }, () => "");
+  const cft = cubicFeetFromSize(joinSizeFactors(factors));
   return {
     key: nextRowKey("size"),
-    factors: Array.from({ length: SIZE_FACTOR_COUNT }, () => ""),
-    qty: "",
-    rate: baseRate ? String(baseRate) : "",
+    factors,
+    qty: cft === null ? "" : String(cft),
+    rate: previous ? previous.rate : baseRate ? String(baseRate) : "",
     qtyTouched: false,
     source: null,
   };
@@ -266,9 +289,8 @@ export function openSizeEntry<T extends SizeGroupLine>(group: SizeGroup<T>): Siz
  * Every rule the spec blocks Save on, reported per cell so the dialog can paint
  * the offending box rather than a banner the operator has to match up by eye.
  *
- * Duplicates are flagged on every member of the pair, not just the second one:
- * which of two identical sizes is "the duplicate" is not something this can
- * know, and marking only the later one sends the operator to fix the wrong row.
+ * Repeating the same size on several rows is allowed: the operator may well be
+ * entering the same piece twice, so it is not an error.
  */
 export function validateSizeEntry(rows: SizeEntryValues[]): SizeEntryValidation {
   const result: Record<string, SizeRowErrors> = {};
@@ -276,19 +298,10 @@ export function validateSizeEntry(rows: SizeEntryValues[]): SizeEntryValidation 
     return { ok: false, formError: "Add at least one size.", rows: result };
   }
 
-  const seen = new Map<string, string[]>();
   for (const row of rows) {
     const errors: SizeRowErrors = {};
-    const size = sizeRowText(row);
-    if (!size) {
+    if (!sizeRowText(row)) {
       errors.size = "Size is required.";
-    } else {
-      const keys = seen.get(size);
-      if (keys) {
-        keys.push(row.key);
-      } else {
-        seen.set(size, [row.key]);
-      }
     }
 
     if (sizeRowQty(row) <= 0) {
@@ -303,15 +316,6 @@ export function validateSizeEntry(rows: SizeEntryValues[]): SizeEntryValidation 
     }
     if (errors.size || errors.qty || errors.rate) {
       result[row.key] = errors;
-    }
-  }
-
-  for (const keys of seen.values()) {
-    if (keys.length < 2) {
-      continue;
-    }
-    for (const key of keys) {
-      result[key] = { ...result[key], size: "This size is on more than one row." };
     }
   }
 

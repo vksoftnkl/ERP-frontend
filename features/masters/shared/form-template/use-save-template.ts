@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useMemo, useState } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import {
   useGetEffectiveSettingsQuery,
   useResetAppSettingMutation,

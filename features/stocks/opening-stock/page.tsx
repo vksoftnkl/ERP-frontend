@@ -12,7 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useUiTableId } from "@/lib/ui-tables";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { useBusinessContext } from "@/components/layout/business-context";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import type { ERPDynamicSearchShortcutPayload } from "@/components/design-system/ui/dynamic-modal-form";

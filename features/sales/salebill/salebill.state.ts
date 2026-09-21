@@ -242,6 +242,31 @@ export function duplicateBillDraftLine(source: SaleBillDraftLine): SaleBillDraft
 }
 
 /**
+ * The nearest line ABOVE `index` that carries an item, or null when there is
+ * none.
+ *
+ * What lets Alt+R be pressed where the cursor actually is. The grid always
+ * keeps a blank row waiting and focus lands in it the moment an item is picked,
+ * so the row the operator is standing on is the one they want FILLED, and the
+ * row worth copying is the last real one before it.
+ *
+ * Scans upward rather than reading `lines[index - 1]`, so a run of blank rows —
+ * Ctrl++ pressed a few times and not yet typed into — copies the last real row
+ * rather than copying emptiness onto emptiness.
+ */
+export function lastFilledLineBefore(
+  lines: readonly SaleBillDraftLine[],
+  index: number,
+): SaleBillDraftLine | null {
+  for (let i = Math.min(index, lines.length) - 1; i >= 0; i -= 1) {
+    if (lines[i].itemId) {
+      return lines[i];
+    }
+  }
+  return null;
+}
+
+/**
  * Fill a line from `/master-lookups/item-price`.
  *
  * The quotation's own mapper does the whole job — the bill adds nothing to the

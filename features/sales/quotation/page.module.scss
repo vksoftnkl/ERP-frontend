@@ -1324,6 +1324,23 @@
   box-shadow: inset 3px 0 0 0 var(--primary, #7b1515);
 }
 
+/**
+ * The tick-box column on the F8 pickers.
+ *
+ * Narrow and centred, and it deliberately carries no pointer affordance of its
+ * own: the whole row is already clickable, and the box inside it stops the
+ * click from reaching the row so a tick never moves the list cursor.
+ *
+ * It becomes `td:first-child`, so the selected-row accent bar above now paints
+ * on this cell — still the row's leading edge, which is where it belongs.
+ */
+.listTable .selectCell {
+  width: u(1.4);
+  padding-right: 0;
+  padding-left: u(0.35);
+  text-align: center;
+}
+
 .listTable tbody tr[data-deleted="true"] {
   color: var(--text-soft, #888888);
   font-style: italic;

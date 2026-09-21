@@ -20,7 +20,7 @@
  *    and it cannot be forgotten.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { recalcDocument, type DocumentPricing } from "@/domain/pricing";
 import {
   POS_DROPDOWN_KEY,

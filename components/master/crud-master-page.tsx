@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import useRowSelection from "@/hooks/useRowSelection";
 import { createPortal } from "react-dom";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import ReusableTable, {
@@ -76,6 +77,16 @@ import { useDataRefresh } from "@/lib/data-freshness";
 import { useUiTableId } from "@/lib/ui-tables";
 import { gridRunEndpoint, useGridId } from "@/lib/configured-grids";
 const DEBOUNCE_MS = 300;
+/**
+ * The tick-box column's key.
+ *
+ * Distinct from anything a grid can configure — a column key comes from a SQL
+ * alias, and none of them start with two underscores — so it can never collide
+ * with a real one.
+ */
+const SELECT_COLUMN_KEY = "__select";
+/** A ticked row is identified the same way the table identifies it. */
+const rowIdOf = (row: MasterTableRow): string | number => row.__rowId;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 const GRID_DETAIL_GET_ENDPOINT = "/grid-details/get";
@@ -2340,6 +2351,9 @@ export default function CrudMasterPage({
   isRowPrintDisabled,
   rowPrintDisabledReason,
   printBusy,
+  enableMultiSelect,
+  onBulkPrintAction,
+  bulkPrintDisabledReason,
   isRowEditDisabled,
   rowEditDisabledReason,
   isRowDeleteDisabled,
@@ -2849,6 +2863,71 @@ export default function CrudMasterPage({
     null,
   );
   const [selectedRow, setSelectedRow] = useState<MasterTableRow | null>(null);
+
+  /*
+   * ── TICKING ROWS ────────────────────────────────────────────────────────
+   *
+   * Selection is a COLUMN, not a table feature: `ReusableTable` already lets a
+   * column render whatever it likes into its header and its cells, so the whole
+   * of it lives here and `components/ui/table.tsx` stays a table.
+   *
+   * It is also kept out of `renderedColumns`, which is the DATA columns — the
+   * set the column-filter row and Export Excel read. A checkbox is neither a
+   * thing to filter by nor a thing to put in a spreadsheet, and prepending it
+   * there would have put it in both.
+   *
+   * The RULES are `useRowSelection`'s, shared with the F8 picker modals so the
+   * same gesture means the same thing on every register in the app.
+   */
+  const selection = useRowSelection(renderedRows, rowIdOf);
+  const checkedRowList = selection.selected;
+  const clearSelection = selection.clear;
+
+  const selectColumn = useMemo<ReusableTableColumn<MasterTableRow>>(
+    () => ({
+      key: SELECT_COLUMN_KEY,
+      align: "center",
+      width: "44px",
+      // Not a value, so there is nothing to order by — the table sorts every
+      // column unless told otherwise, and a sort arrow over a tick box invites
+      // a click that can do nothing.
+      sortable: false,
+      header: (
+        <input
+          type="checkbox"
+          aria-label="Select every row on this page"
+          checked={selection.allChecked}
+          ref={(node) => {
+            // Partially selected is a third state the DOM only exposes as a
+            // property, so it cannot be set in JSX.
+            if (node) node.indeterminate = selection.someChecked;
+          }}
+          disabled={renderedRows.length === 0}
+          onChange={selection.toggleVisible}
+          onClick={(event) => event.stopPropagation()}
+        />
+      ),
+      render: (row) => (
+        <input
+          type="checkbox"
+          aria-label="Select this row"
+          checked={selection.isChecked(row)}
+          onChange={() => selection.toggleRow(row)}
+          // Without this the row's own onClick fires too and drags the single
+          // highlighted selection along with every tick.
+          onClick={(event) => event.stopPropagation()}
+        />
+      ),
+    }),
+    [renderedRows.length, selection],
+  );
+
+  /** What the TABLE draws: the data columns, with the tick box in front. */
+  const tableColumns = useMemo(
+    () => (enableMultiSelect ? [selectColumn, ...renderedColumns] : renderedColumns),
+    [enableMultiSelect, renderedColumns, selectColumn],
+  );
+
   const [editingItemId, setEditingItemId] = useState<string | number | null>(
     null,
   );
@@ -3057,8 +3136,13 @@ export default function CrudMasterPage({
     if (previousListStateResetKeyRef.current !== listStateResetKey) {
       previousListStateResetKeyRef.current = listStateResetKey;
       setCurrentPage(DEFAULT_PAGE);
+      // The ticks belong to the list that was on screen. Changing the company,
+      // the branch, the year or the dates replaces that list, and carrying a
+      // selection across would leave rows ticked that are no longer in it —
+      // which a bulk action would then act on, unseen.
+      clearSelection();
     }
-  }, [listStateResetKey, setCurrentPage]);
+  }, [clearSelection, listStateResetKey, setCurrentPage]);
   useEffect(() => {
     if (selectedRowId === null) {
       setSelectedRow(null);
@@ -3787,21 +3871,54 @@ export default function CrudMasterPage({
    * The row is passed through untouched: the shell knows a row was selected,
    * and the PAGE knows what printing one means.
    */
+
+  /*
+   * ONE button, two arms.
+   *
+   * With rows ticked, Print acts on all of them and says how many. With none
+   * ticked it is exactly what it has always been — the highlighted row — so a
+   * page that never turns selection on cannot tell the difference, and one that
+   * does gets bulk printing without a second control asking the same question.
+   */
+  const printsInBulk = Boolean(
+    enableMultiSelect && onBulkPrintAction && checkedRowList.length > 0,
+  );
+  const bulkRefusal = printsInBulk
+    ? (bulkPrintDisabledReason?.(checkedRowList) ?? null)
+    : null;
+
   const printDisabledForSelection = Boolean(
-    !onPrintAction ||
+    printBusy ||
       !canPrintRecords ||
-      !selectedRow ||
-      printBusy ||
-      (selectedRow && isRowPrintDisabled?.(selectedRow)),
+      (printsInBulk
+        ? bulkRefusal
+        : !onPrintAction ||
+          !selectedRow ||
+          (selectedRow && isRowPrintDisabled?.(selectedRow))),
   );
   const handleToolbarPrint = useCallback(() => {
+    // Guarded here as well as on the button, so the rules hold for every other
+    // way in rather than only for the one that is currently wired.
+    if (printsInBulk) {
+      if (!onBulkPrintAction || bulkPrintDisabledReason?.(checkedRowList)) {
+        return;
+      }
+      void onBulkPrintAction(checkedRowList);
+      return;
+    }
     if (!onPrintAction || !selectedRow || isRowPrintDisabled?.(selectedRow)) {
       return;
     }
-    // Guarded here as well as on the button, so the rule holds for every other
-    // way in rather than only for the one that is currently wired.
     void onPrintAction(selectedRow);
-  }, [isRowPrintDisabled, onPrintAction, selectedRow]);
+  }, [
+    bulkPrintDisabledReason,
+    checkedRowList,
+    isRowPrintDisabled,
+    onBulkPrintAction,
+    onPrintAction,
+    printsInBulk,
+    selectedRow,
+  ]);
 
   const handleToolbarLogs = useCallback(() => {
     if (selectedRow) {
@@ -4150,21 +4267,30 @@ export default function CrudMasterPage({
                     onClick={handleToolbarPrint}
                     disabled={printDisabledForSelection}
                     title={
-                      !onPrintAction
-                        ? "Printing is not set up for this screen"
-                        : !canPrintRecords
-                          ? NO_PERMISSION_TITLES.print
-                          : selectedRow && isRowPrintDisabled?.(selectedRow)
-                            ? (rowPrintDisabledReason ?? "This record cannot be printed")
-                            : selectedRow
-                              ? `Print the selected ${entityLabel}`
-                              : `Select a ${entityLabel} to print`
+                      !canPrintRecords
+                        ? NO_PERMISSION_TITLES.print
+                        : printsInBulk
+                          ? (bulkRefusal ??
+                            `Print the ${checkedRowList.length} selected ${entityLabel} records as one document`)
+                          : !onPrintAction
+                            ? "Printing is not set up for this screen"
+                            : selectedRow && isRowPrintDisabled?.(selectedRow)
+                              ? (rowPrintDisabledReason ?? "This record cannot be printed")
+                              : selectedRow
+                                ? `Print the selected ${entityLabel}`
+                                : `Select a ${entityLabel} to print`
                     }
                   >
                     <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
                       <ErpActionIcon name="print" />
                     </span>
-                    <span>{printBusy ? "Printing…" : "Print"}</span>
+                    <span>
+                      {printBusy
+                        ? "Printing…"
+                        : printsInBulk
+                          ? `Print (${checkedRowList.length})`
+                          : "Print"}
+                    </span>
                   </button>
                   {auditHistory ? (
                     <>
@@ -4296,7 +4422,7 @@ export default function CrudMasterPage({
                   style={{ flex: "1 1 0", minHeight: 0, display: "flex", flexDirection: "column", outline: "none" }}
                 >
                 <ReusableTable
-                  columns={renderedColumns}
+                  columns={tableColumns}
                   rows={renderedRows}
                   rowKey="__rowId"
                   wrapperClassName={`${styles.masterTable} erp-ms-gridwrap`}

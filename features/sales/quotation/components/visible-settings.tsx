@@ -37,7 +37,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { cx } from "@/components/design-system/cx";
 import WidgetVisibilityTree, {
   type WidgetTreeSectionView,

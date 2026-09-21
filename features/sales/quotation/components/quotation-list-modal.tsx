@@ -33,9 +33,10 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiEdit3, FiLayout, FiPrinter, FiRefreshCw } from "react-icons/fi";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { cx } from "@/components/design-system/cx";
 import { useListQuotationsQuery } from "@/store/api/quotationApi";
+import useRowSelection from "@/hooks/useRowSelection";
 import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
 import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
@@ -108,6 +109,10 @@ function isDeleted(value: QuotationListRow["sq_is_deleted"]): boolean {
   return text === "true" || text === "t" || text === "1";
 }
 
+/** A ticked row is identified by its document id — stable, so the
+ *  selection hook's callbacks and memo actually hold. */
+const rowKeyOf = (row: QuotationListRow): string => row.sq_id;
+
 export function QuotationListModal(props: QuotationListModalProps) {
   const { isOpen, companyId, branchId, accYear, onClose, onPick } = props;
   const [search, setSearch] = useState("");
@@ -127,7 +132,7 @@ export function QuotationListModal(props: QuotationListModalProps) {
    * year is not in this one. Company, branch and counter do not: the server
    * takes all three from the access token.
    */
-  const [printRow, setPrintRow] = useState<QuotationListRow | null>(null);
+  const [printRows, setPrintRows] = useState<QuotationListRow[]>([]);
 
   useEffect(() => {
     if (isOpen) {
@@ -141,7 +146,7 @@ export function QuotationListModal(props: QuotationListModalProps) {
       // Closing the list unmounts the print dialog with the panel but leaves
       // this component (and so this state) alive; without the reset, reopening
       // F8 would come up with the previous row's print dialog already on it.
-      setPrintRow(null);
+      setPrintRows([]);
     }
   }, [isOpen]);
 
@@ -205,6 +210,20 @@ export function QuotationListModal(props: QuotationListModalProps) {
   const currentLocalPage = Math.min(localPage, totalLocalPages);
   const pageStartIndex = (currentLocalPage - 1) * LOCAL_PAGE_SIZE;
   const visibleRows = filtered.slice(pageStartIndex, pageStartIndex + LOCAL_PAGE_SIZE);
+
+  /*
+   * The ticked rows, on the same rules as the register screens — a tick
+   * survives the local pager, select-all means this page, and the batch comes
+   * out in list order. See `lib/row-selection.ts`.
+   */
+  const selection = useRowSelection(visibleRows, rowKeyOf);
+  const clearSelection = selection.clear;
+
+  // Reopening F8 starts clean. Separate from the reset above only because the
+  // selection cannot be declared until there are rows to select from.
+  useEffect(() => {
+    if (isOpen) clearSelection();
+  }, [clearSelection, isOpen]);
   const pageList = useMemo(
     () => buildPageList(totalLocalPages, currentLocalPage),
     [currentLocalPage, totalLocalPages],
@@ -258,7 +277,7 @@ export function QuotationListModal(props: QuotationListModalProps) {
         choose(activeRow);
       }
     },
-    paused: printRow !== null,
+    paused: printRows.length > 0,
   });
 
   const { permissions } = usePagePermissions();
@@ -283,12 +302,30 @@ export function QuotationListModal(props: QuotationListModalProps) {
    * what that costs and how to put the logging back.
    */
   const printActiveRow = (): void => {
-    if (!activeRow) return;
     if (!permissions.canPrint) {
       toast.error("You do not have permission to print on this screen.");
       return;
     }
-    setPrintRow(activeRow);
+    // Ticked rows win over the highlight: ticking IS the operator saying which
+    // quotations they mean, while the highlight is only where the arrow keys
+    // happen to be sitting. Nothing ticked falls back to the highlighted row.
+    if (selection.count > 0) {
+      if (selection.selected.some((row) => isDeleted(row.sq_is_deleted))) {
+        toast.error("One of the ticked quotations is deleted and cannot be printed.");
+        return;
+      }
+      const companies = new Set(selection.selected.map((row) => row.sq_company_id));
+      const years = new Set(selection.selected.map((row) => row.sq_acc_year));
+      if (companies.size > 1 || years.size > 1) {
+        // One render binds one company and one year for the whole batch.
+        toast.error("Select quotations from one company and one accounting year at a time.");
+        return;
+      }
+      setPrintRows(selection.selected);
+      return;
+    }
+    if (!activeRow) return;
+    setPrintRows([activeRow]);
   };
 
   return (
@@ -396,16 +433,20 @@ export function QuotationListModal(props: QuotationListModalProps) {
         <button
           type="button"
           className={styles.toolButton}
-          disabled={!activeRow || activeRowDeleted}
+          disabled={
+            selection.count > 0 ? false : !activeRow || activeRowDeleted
+          }
           title={
-            activeRowDeleted
-              ? "This quotation is deleted and cannot be printed"
-              : "Print the highlighted quotation"
+            selection.count > 0
+              ? `Print the ${selection.count} ticked quotations as one document`
+              : activeRowDeleted
+                ? "This quotation is deleted and cannot be printed"
+                : "Print the highlighted quotation"
           }
           onClick={printActiveRow}
         >
           <FiPrinter aria-hidden="true" />
-          Print
+          {selection.count > 0 ? `Print (${selection.count})` : "Print"}
         </button>
         <button
           type="button"
@@ -482,6 +523,19 @@ export function QuotationListModal(props: QuotationListModalProps) {
         <table className={styles.listTable}>
           <thead>
             <tr>
+              <th scope="col" className={styles.selectCell}>
+                <input
+                  type="checkbox"
+                  aria-label="Select every quotation on this page"
+                  checked={selection.allChecked}
+                  ref={(node) => {
+                    // The partial state is a DOM property, not an attribute.
+                    if (node) node.indeterminate = selection.someChecked;
+                  }}
+                  disabled={visibleRows.length === 0}
+                  onChange={selection.toggleVisible}
+                />
+              </th>
               <th scope="col">Date</th>
               <th scope="col">Quote No</th>
               <th scope="col">Customer</th>
@@ -508,6 +562,20 @@ export function QuotationListModal(props: QuotationListModalProps) {
                   onClick={() => setActiveIndex(index)}
                   onDoubleClick={() => choose(row)}
                 >
+                  <td
+                    className={styles.selectCell}
+                    // The row's own onClick moves the highlight; a tick must not
+                    // drag it along, and a double-tick must not open the row.
+                    onClick={(event) => event.stopPropagation()}
+                    onDoubleClick={(event) => event.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label={`Select quotation ${row.sq_quote_refno ?? ""}`}
+                      checked={selection.isChecked(row)}
+                      onChange={() => selection.toggleRow(row)}
+                    />
+                  </td>
                   <td>{toDateInput(row.sq_quote_date)}</td>
                   <td>{row.sq_quote_refno ?? "—"}</td>
                   <td>{row.sq_cust_name ?? ""}</td>
@@ -525,7 +593,7 @@ export function QuotationListModal(props: QuotationListModalProps) {
             })}
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={9} className={styles.emptyGrid}>
+                <td colSpan={10} className={styles.emptyGrid}>
                   {isFetching ? "Loading…" : "No quotation matches."}
                 </td>
               </tr>
@@ -533,20 +601,24 @@ export function QuotationListModal(props: QuotationListModalProps) {
           </tbody>
         </table>
       </div>
-      {printRow ? (
+      {printRows.length > 0 ? (
         <PrintOptionsDialog
           open
-          onClose={() => setPrintRow(null)}
+          onClose={() => setPrintRows([])}
           purposeCode={PURPOSE_CODE.SALE_QUOTATION}
           documentLabel={
-            printRow.sq_quote_refno ? `Quotation ${printRow.sq_quote_refno}` : "Quotation"
+            printRows.length > 1
+              ? `${printRows.length} Quotations`
+              : printRows[0].sq_quote_refno
+                ? `Quotation ${printRows[0].sq_quote_refno}`
+                : "Quotation"
           }
-          target={{
-            docId: printRow.sq_id,
-            companyId: printRow.sq_company_id,
-            accYear: printRow.sq_acc_year,
-            filename: `quotation-${printRow.sq_quote_refno || printRow.sq_id}`,
-          }}
+          targets={printRows.map((row) => ({
+            docId: row.sq_id,
+            companyId: row.sq_company_id,
+            accYear: row.sq_acc_year,
+            filename: `quotation-${row.sq_quote_refno || row.sq_id}`,
+          }))}
         />
       ) : null}
     </ModalShell>

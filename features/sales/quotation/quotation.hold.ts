@@ -32,6 +32,7 @@
  * `use-quotation-draft` drives the transitions.
  */
 import type { DocumentPricing } from "@/domain/pricing";
+import { createAutosaveStore, type AutosaveScope } from "@/lib/draft-autosave";
 import {
   HOLD_ACC_YEAR_LENGTH,
   HOLD_IN_USE_STATUSES,
@@ -411,4 +412,125 @@ export function holdLockMessage(error: unknown, holdNo: string): string {
 function serverMessageOf(error: unknown): string {
   const data = (error as { data?: { message?: unknown } } | null)?.data;
   return typeof data?.message === "string" ? data.message.trim() : "";
+}
+
+// ---------------------------------------------------------------------------
+// Autosave — IndexedDB, per device, crash recovery ONLY
+// ---------------------------------------------------------------------------
+
+/**
+ * A hold is the operator parking a cart on purpose; this is the counter dying
+ * with one on screen. The two are deliberately different mechanisms:
+ *
+ *  - **Holds → the server**, because a cart parked at one counter must be
+ *    resumable at another, and because the operator asked for it.
+ *  - **Autosave → IndexedDB**, per device, never a second source of truth: it
+ *    has to work when the network does not, which is exactly the failure a
+ *    half-keyed quotation is most often lost to, and a debounced write per edit
+ *    is not something to send over the wire at a busy counter.
+ *
+ * It needs at least one real item row (`isWorthAutosaving`), or every abandoned
+ * blank screen would offer itself back on the next open.
+ */
+/** One recovered snapshot, and enough about it to describe the offer. */
+export type QuotationAutosave = AutosaveScope & {
+  /** The device this was taken on — the record's own key. */
+  deviceId: string;
+  savedAt: string;
+  /** For the offer's wording: "3 lines for ACME". */
+  itemCount: number;
+  netAmount: number;
+  partyName: string;
+  draft: QuotationDraft;
+};
+
+const autosaveStore = createAutosaveStore<QuotationAutosave>("erp-quotation");
+
+/**
+ * Whether this draft is worth keeping.
+ *
+ * At least one REAL item row — the grid always keeps a blank one waiting, and
+ * without this guard every screen somebody opened and walked away from would
+ * offer itself back.
+ */
+export function isWorthAutosaving(draft: QuotationDraft): boolean {
+  return draft.lines.some((line) => Boolean(line.itemId) && line.billQty > 0);
+}
+
+/**
+ * Take a snapshot. Debounced by the caller; a draft with no real item row is
+ * silently skipped rather than stored and later offered.
+ *
+ * The whole draft goes in — item and unit names, the charge ledgers, the freight
+ * bands — which is what lets a recovered quotation redraw both grids without a
+ * single lookup, at a counter whose network is the reason it is recovering.
+ */
+export async function writeQuotationAutosave(
+  deviceId: string,
+  draft: QuotationDraft,
+  pricing: DocumentPricing,
+  now: Date = new Date(),
+): Promise<void> {
+  if (!isWorthAutosaving(draft)) {
+    return;
+  }
+  await autosaveStore.write({
+    deviceId,
+    savedAt: now.toISOString(),
+    companyId: draft.companyId,
+    branchId: draft.branchId,
+    accYear: draft.accYear,
+    itemCount: draft.lines.filter((line) => Boolean(line.itemId)).length,
+    netAmount: toNumber(pricing.totals.bill),
+    partyName: draft.customer.name,
+    draft,
+  });
+}
+
+/**
+ * The snapshot this device left behind under this tenant, or `null`.
+ *
+ * Scope-checked by the store: a quotation half-keyed under another company or
+ * accounting year is not offered here, for the same reason the screen refuses
+ * to re-tenant a dirty draft.
+ */
+export async function readQuotationAutosave(
+  deviceId: string,
+  scope: AutosaveScope,
+): Promise<QuotationAutosave | null> {
+  const record = await autosaveStore.read(deviceId, scope);
+  return record?.draft ? record : null;
+}
+
+/** Drop the snapshot — on save, on hold, and on a declined offer. */
+export async function clearQuotationAutosave(deviceId: string): Promise<void> {
+  await autosaveStore.clear(deviceId);
+}
+
+/**
+ * A recovered snapshot as a draft.
+ *
+ * Live pricing and editable, like a resumed hold — but marked DIRTY, because
+ * unlike a hold the work is safe nowhere: the snapshot is deleted the moment it
+ * is accepted, and the discard guard is then the only thing standing between it
+ * and a stray F7.
+ *
+ * Everything else comes back exactly as it was keyed, the document identity
+ * included: a snapshot taken while editing a saved quotation recovers as that
+ * quotation, and one taken on a resumed cart still knows the hold it must close
+ * when it is finally saved.
+ */
+export function draftFromAutosave(record: QuotationAutosave): QuotationDraft {
+  const heldCustomer = record.draft.customer as Partial<CustomerSnapshot> | undefined;
+  return {
+    ...record.draft,
+    customer: {
+      ...record.draft.customer,
+      masterName: heldCustomer?.masterName ?? heldCustomer?.name ?? "",
+    },
+    mode: "entry",
+    pricing: "live",
+    isDirty: true,
+    storedPricing: null,
+  };
 }

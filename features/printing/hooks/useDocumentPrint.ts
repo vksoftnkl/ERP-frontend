@@ -33,7 +33,7 @@
  */
 
 import { useCallback } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { usePrintDocumentMutation } from "@/features/printing/api/render";
 import { useGetPrintPurposeOptionsQuery } from "@/features/printing/api/purposes";
 import {

@@ -10,7 +10,7 @@
  * each line's readonly branch, so the grid can paint what it may never edit.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { cx } from "@/components/design-system/cx";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import type { PricedLine } from "@/domain/pricing";

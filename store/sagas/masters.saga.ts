@@ -1,5 +1,5 @@
 import { all, put, takeEvery } from "redux-saga/effects";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { mastersApi } from "@/store/api/mastersApi";
 import { baseApi } from "@/store/api/baseApi";
 import { editModalClosed } from "@/store/slices/mastersSlice";

@@ -28,7 +28,7 @@
  * reason: without it the list would show a deleted quotation as though it were live.
  */
 import { useCallback, useState } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import { useBusinessContext } from "@/components/layout/business-context";
@@ -158,7 +158,13 @@ export function QuotationListView({
    * shell's selection: the dialog outlives a click, and a selection that moved
    * underneath it would print a different quotation than the one asked for.
    */
-  const [printTarget, setPrintTarget] = useState<QuotationDocKey | null>(null);
+  /*
+   * What the print dialog is open on — a LIST, because the register prints
+   * either the highlighted row or every row the operator has ticked, and both
+   * end in the same dialog. Empty means closed. `printRefno` names a single
+   * quotation on the heading and is blank for a batch, which is named by count.
+   */
+  const [printTargets, setPrintTargets] = useState<QuotationDocKey[]>([]);
   const [printRefno, setPrintRefno] = useState<string>("");
 
   // The shell's default page/limit/search/sort query, plus the `grid_param` grid
@@ -262,8 +268,35 @@ export function QuotationListView({
         // Opens the legacy five-button dialog rather than printing on the spot:
         // Print, Preview, Format, Pdf, Cancel. Only the first of those writes.
         onPrintAction={(row) => {
-          setPrintTarget(docKeyOf(row));
+          setPrintTargets([docKeyOf(row)]);
           setPrintRefno(asText(sourceValue(row, "sq_quote_refno")));
+        }}
+        // Tick several quotations and Print renders them into ONE pdf, through
+        // the same purpose and the same dialog — the server lays each out in
+        // turn and merges the pages, so Format and Preview work on a batch
+        // exactly as they do on one quotation.
+        enableMultiSelect
+        onBulkPrintAction={(rows) => {
+          setPrintTargets(rows.map(docKeyOf));
+          // No single refno names five quotations; the dialog uses the count.
+          setPrintRefno("");
+        }}
+        // The single-row gates, restated for a batch. One render binds ONE
+        // company and ONE accounting year for every document in it, and a
+        // deleted quotation has no paper to reissue either way.
+        bulkPrintDisabledReason={(rows) => {
+          if (rows.some(isDeletedRow)) {
+            return "One of the selected quotations is deleted and cannot be printed.";
+          }
+          const distinct = (key: string) =>
+            new Set(rows.map((row) => asText(sourceValue(row, key)))).size;
+          if (distinct("sq_company_id") > 1) {
+            return "Select quotations from one company at a time.";
+          }
+          if (distinct("sq_acc_year") > 1) {
+            return "Select quotations from one accounting year at a time.";
+          }
+          return null;
         }}
         // A deleted quotation has no paper to reissue, and the same reasoning as
         // the Edit gate above: refused with a reason rather than left to fail.
@@ -279,22 +312,28 @@ export function QuotationListView({
             null,
         }}
       />
-      {printTarget ? (
+      {printTargets.length > 0 ? (
         <PrintOptionsDialog
           open
-          onClose={() => setPrintTarget(null)}
+          onClose={() => setPrintTargets([])}
           purposeCode={PURPOSE_CODE.SALE_QUOTATION}
-          documentLabel={printRefno ? `Quotation ${printRefno}` : "Quotation"}
-          // The row's own company and accounting year. Branch and counter are
+          documentLabel={
+            printTargets.length > 1
+              ? `${printTargets.length} Quotations`
+              : printRefno
+                ? `Quotation ${printRefno}`
+                : "Quotation"
+          }
+          // Each row's own company and accounting year. Branch and counter are
           // claims on the access token and the server takes them from there;
           // the company is the document's because the token carries the user's
           // home company, which the header picker may not be on.
-          target={{
-            docId: printTarget.sqId,
-            companyId: printTarget.sqCompanyId,
-            accYear: printTarget.sqAccYear,
-            filename: `quotation-${printRefno || printTarget.sqId}`,
-          }}
+          targets={printTargets.map((target) => ({
+            docId: target.sqId,
+            companyId: target.sqCompanyId,
+            accYear: target.sqAccYear,
+            filename: `quotation-${printRefno || target.sqId}`,
+          }))}
         />
       ) : null}
     </>

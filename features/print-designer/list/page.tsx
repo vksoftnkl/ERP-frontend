@@ -30,7 +30,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type {
   CrudMasterTableRow,

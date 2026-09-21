@@ -208,7 +208,15 @@ export function SaleBillListView({ onCreate, onOpen }: SaleBillListViewProps) {
    * asked for. The F8 picker on the entry screen holds its own row for the same
    * reason.
    */
-  const [printTarget, setPrintTarget] = useState<SaleBillDocKey | null>(null);
+  /*
+   * What the print dialog is open on.
+   *
+   * A LIST, because the register prints either the highlighted row or every row
+   * the operator has ticked, and both end in the same dialog. Empty means the
+   * dialog is closed. `printRefno` names a single bill on the popup's heading
+   * and is left blank for a batch, which is named by its count instead.
+   */
+  const [printTargets, setPrintTargets] = useState<SaleBillDocKey[]>([]);
   const [printRefno, setPrintRefno] = useState<string>("");
 
   const [fromDate, setFromDate] = useState(() =>
@@ -392,8 +400,35 @@ export function SaleBillListView({ onCreate, onOpen }: SaleBillListViewProps) {
         // document that was issued, the row and its lines are untouched (that
         // route cancels the source ORDER), and the F8 picker prints one too.
         onPrintAction={(row) => {
-          setPrintTarget(docKeyOf(row));
+          setPrintTargets([docKeyOf(row)]);
           setPrintRefno(asText(sourceValue(row, "sb_bill_refno")));
+        }}
+        // Tick several bills and Print renders them into ONE pdf, through the
+        // same purpose, the same dialog and the same five buttons — the server
+        // lays each out in turn and merges the pages, so Format and Preview
+        // work on a batch exactly as they do on one bill.
+        enableMultiSelect
+        onBulkPrintAction={(rows) => {
+          setPrintTargets(rows.map(docKeyOf));
+          // No single refno names five bills; the dialog falls back to the count.
+          setPrintRefno("");
+        }}
+        // One render binds ONE company and ONE accounting year for the whole
+        // batch. Grid 86 already scopes the list to the header's company, branch
+        // and year, so a mixed selection should be unreachable — this refuses it
+        // anyway rather than quietly rendering one company's bills under
+        // another's, which is precisely how a bill came out as blank paper
+        // before the company was sent at all.
+        bulkPrintDisabledReason={(rows) => {
+          const distinct = (key: string) =>
+            new Set(rows.map((row) => asText(sourceValue(row, key)))).size;
+          if (distinct("sb_company_id") > 1) {
+            return "Select bills from one company at a time.";
+          }
+          if (distinct("sb_acc_year") > 1) {
+            return "Select bills from one accounting year at a time.";
+          }
+          return null;
         }}
         auditHistory={{
           // What the server stamps on `sale_bill` audit rows.
@@ -405,23 +440,29 @@ export function SaleBillListView({ onCreate, onOpen }: SaleBillListViewProps) {
             null,
         }}
       />
-      {printTarget ? (
+      {printTargets.length > 0 ? (
         <PrintOptionsDialog
           open
-          onClose={() => setPrintTarget(null)}
+          onClose={() => setPrintTargets([])}
           purposeCode={PURPOSE_CODE.SALE_INVOICE}
-          documentLabel={printRefno ? `Bill ${printRefno}` : "Bill"}
-          // The row's own company and accounting year. Branch and counter are
+          documentLabel={
+            printTargets.length > 1
+              ? `${printTargets.length} Bills`
+              : printRefno
+                ? `Bill ${printRefno}`
+                : "Bill"
+          }
+          // Each row's own company and accounting year. Branch and counter are
           // claims on the access token and the server takes them from there;
           // the company is NOT left to the token, which carries the user's home
           // company while the header picker may be on another — the bill's
           // datasets all filter on it, and printed blank until it was sent.
-          target={{
-            docId: printTarget.sbId,
-            companyId: printTarget.sbCompanyId,
-            accYear: printTarget.sbAccYear,
-            filename: `bill-${printRefno || printTarget.sbId}`,
-          }}
+          targets={printTargets.map((target) => ({
+            docId: target.sbId,
+            companyId: target.sbCompanyId,
+            accYear: target.sbAccYear,
+            filename: `bill-${printRefno || target.sbId}`,
+          }))}
         />
       ) : null}
     </>

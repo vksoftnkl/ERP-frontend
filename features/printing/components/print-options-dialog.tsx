@@ -53,7 +53,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 
 import ModalPortal from "@/components/ui/modal-portal";
 import { getApiErrorMessage } from "@/store/api";
@@ -84,8 +84,20 @@ export type PrintOptionsDialogProps = {
   onClose: () => void;
   /** `PURPOSE_CODE.SALE_QUOTATION` and friends — never an id. */
   purposeCode: string;
-  /** The document, and what to call the file. */
-  target: DocumentPrintTarget;
+  /**
+   * The documents this dialog is about, and what to call the file.
+   *
+   * Usually one. SEVERAL when a list screen has ticked more than one row: all
+   * five buttons then act on the whole set, and the paper comes back as a
+   * single merged PDF. A list rather than an optional second prop because
+   * `target` and `targets` would be two names for one thing, and two names for
+   * one thing is how the two start disagreeing.
+   *
+   * Every document in the list must share a company and an accounting year:
+   * one render binds each of them once. The calling screen is what enforces
+   * that — it is the only thing that can see the rows.
+   */
+  targets: DocumentPrintTarget[];
   /** Overrides the "Godown Delivery Chit" in the question. Defaults to the purpose's name. */
   documentLabel?: string;
 };
@@ -96,7 +108,16 @@ const ASSIGNMENT_LIMIT = 100;
 const TEMPLATE_LIMIT = 100;
 
 export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
-  const { open, onClose, purposeCode, target, documentLabel } = props;
+  const { open, onClose, purposeCode, targets, documentLabel } = props;
+
+  /*
+   * The documents, and the one that speaks for the batch's scope.
+   *
+   * Company and year are bound ONCE for the whole render, so they are read off
+   * the first target and the caller guarantees the rest match.
+   */
+  const primary = targets[0];
+  const docIds = targets.map((one) => one.docId);
 
   /*
    * The company the CATALOGUES are narrowed to — the header picker's.
@@ -113,7 +134,7 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
    * company came out as blank paper while the token still said "home".
    */
   const companyId = useAppSelector(selectBusinessContext)?.companyId?.trim() ?? "";
-  const documentCompanyId = target.companyId?.trim() || companyId;
+  const documentCompanyId = primary?.companyId?.trim() || companyId;
 
   /** Which step: the five buttons, or the format list. */
   const [step, setStep] = useState<"ask" | "format">("ask");
@@ -254,12 +275,41 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
     }
   }, [chosenPtlId, options, selectedFormat, step]);
 
-  if (!open) {
+  if (!open || !primary) {
+    // No targets is not an error state worth rendering a popup for — it means a
+    // screen opened the dialog on a selection that has since gone away.
     return null;
   }
 
+  /*
+   * What the question and the popup call this.
+   *
+   * A caller's own label wins, and for a batch it is the useful one ("3 Bills").
+   * Without one, a single document falls back to the purpose's name as it
+   * always has, and a batch says how many there are — "Make sure, do you want
+   * to print Tax Invoice?" would be wrong on the face of it when five are
+   * ticked.
+   */
   const heading =
-    documentLabel ?? (purpose ? purposeLabel(purpose) : purposeCode);
+    documentLabel ??
+    (docIds.length > 1
+      ? `${docIds.length} documents`
+      : purpose
+        ? purposeLabel(purpose)
+        : purposeCode);
+
+  /*
+   * What the viewer's Save button offers.
+   *
+   * A single document keeps the caller's own stem ("bill-bil00030"). A batch
+   * cannot: the first row's name would label a file containing five, so the
+   * heading — which already reads "3 Bills" — is slugified instead.
+   */
+  const downloadName =
+    docIds.length > 1
+      ? heading.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") ||
+        `documents-${docIds.length}`
+      : primary?.filename;
 
   /** Every button ends here: one design, this document, rendered on open. */
   const showPreview = (
@@ -398,9 +448,10 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
         ptlId={previewing.ptlId}
         ptvId={previewing.ptvId}
         autoPrint={previewing.autoPrint}
-        docId={target.docId}
+        docIds={docIds}
         companyId={documentCompanyId || null}
-        accYear={target.accYear}
+        accYear={primary?.accYear}
+        filename={downloadName}
         title={heading}
       />
     );

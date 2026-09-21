@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { FiPlus, FiRotateCcw, FiSave, FiTrash2, FiX } from "react-icons/fi";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import { SearchableSelect } from "@/components/design-system/ui/searchable-select";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";

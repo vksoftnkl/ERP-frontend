@@ -67,6 +67,19 @@ export type RenderPreviewRequest = {
   /** Binds :doc_id. Required by any dataset that reads a document. */
   docId?: string;
   /**
+   * SEVERAL documents in ONE file — a list screen printing what it has ticked.
+   *
+   * Each id gets its own dataset pass, so each binds its own `:doc_id`, and the
+   * pages are merged server-side into a single PDF. Mutually exclusive with
+   * `docId`: the server refuses both, because a render told its subject twice
+   * cannot say which answer it used.
+   *
+   * The company, the accounting year and the design are ONE value for the whole
+   * batch, so every document named here must share them. `buildDocumentPreviewRequest`
+   * is what decides between this and `docId`; nothing should set both by hand.
+   */
+  docIds?: string[];
+  /**
    * The DOCUMENT's own accounting year — binds :acc_year.
    *
    * Sent only where the document carries one and it may differ from the year
@@ -80,6 +93,16 @@ export type RenderPreviewRequest = {
   /** Normally omitted: a GRAPHIC design renders as PDF, a GRID one as ESCPOS. */
   outputMode?: string;
   copies?: number;
+  /**
+   * Filename stem for the download, without extension.
+   *
+   * Sets `Content-Disposition` on the response. Note that this does NOT reach
+   * the preview popup's viewer: the bytes are turned into a blob URL at the
+   * fetch boundary and a blob carries no headers, so the dialog's Download
+   * button names the file itself. Sent anyway because it is the honest value
+   * for the response, and it is what a direct fetch of these bytes would use.
+   */
+  filename?: string;
 };
 
 /**

@@ -1,6 +1,6 @@
 import axios, { type AxiosResponse } from "axios";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import {
   clearAuthSession,
   extractAuthToken,

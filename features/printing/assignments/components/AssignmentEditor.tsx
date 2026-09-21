@@ -50,7 +50,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 
 import ModalPortal from "@/components/ui/modal-portal";
 import { getApiErrorMessage } from "@/store/api";

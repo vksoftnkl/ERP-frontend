@@ -168,8 +168,14 @@ export function revisionForPreview(
 export type DocumentPreviewInput = {
   /** The revision to render — `print_template_version.ptv_id`. */
   versionId: string;
-  /** Binds :doc_id. */
-  docId: string;
+  /**
+   * The documents to render, in the order they should appear on the paper.
+   *
+   * One for the ordinary print button. SEVERAL when a list screen has ticked
+   * more than one row and wants a single file out of them — see
+   * `buildDocumentPreviewRequest` for which shape goes on the wire.
+   */
+  docIds: string[];
   /**
    * The DOCUMENT's company, from the row — binds :company_id.
    *
@@ -188,6 +194,8 @@ export type DocumentPreviewInput = {
   accYear?: string | null;
   /** Answers to this revision's own prompts, by prompt name. */
   params?: Record<string, string>;
+  /** Filename stem for the rendered file, without extension. */
+  filename?: string | null;
 };
 
 /**
@@ -208,6 +216,14 @@ export type DocumentPreviewInput = {
  * absent — both are claims on the access token, and both are rungs of the
  * assignment ladder, so a print button that named one would be choosing its
  * own design.
+ *
+ * -- ONE DOCUMENT SENDS `docId`; SEVERAL SEND `docIds` ---------------------
+ *
+ * The server refuses both at once, and it is right to: they name the same
+ * thing, and a render told its subject twice cannot report which answer it
+ * used. So this picks exactly one of them, and the single-document request goes
+ * on the wire byte-for-byte as it always has — a batch is a new shape for a new
+ * case, not a re-spelling of the old one.
  */
 export function buildDocumentPreviewRequest(
   input: DocumentPreviewInput,
@@ -217,19 +233,27 @@ export function buildDocumentPreviewRequest(
     return text.length > 0 ? text : undefined;
   };
 
-  const docId = trimmed(input.docId);
-  if (!docId) {
+  // Blank ids are dropped rather than sent: a row whose id never loaded would
+  // otherwise reach the server as an empty string and fail UUID validation for
+  // the whole batch, losing the documents that were fine.
+  const docIds = (input.docIds ?? [])
+    .map((value) => trimmed(value))
+    .filter((value): value is string => Boolean(value));
+
+  if (docIds.length === 0) {
     throw new Error("There is no saved document to preview yet.");
   }
 
   const companyId = trimmed(input.companyId);
   const accYear = trimmed(input.accYear);
+  const filename = trimmed(input.filename);
 
   return {
     versionId: input.versionId,
-    docId,
+    ...(docIds.length === 1 ? { docId: docIds[0] } : { docIds }),
     ...(companyId ? { companyId } : {}),
     ...(accYear ? { accYear } : {}),
+    ...(filename ? { filename } : {}),
     ...(input.params && Object.keys(input.params).length > 0
       ? { params: input.params }
       : {}),

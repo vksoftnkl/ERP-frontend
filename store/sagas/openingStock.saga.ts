@@ -9,7 +9,7 @@ import {
 } from "redux-saga/effects";
 import type { Task } from "redux-saga";
 import { createAction } from "@reduxjs/toolkit";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { openingStockApi } from "@/store/api/openingStockApi";
 import { lookupsApi } from "@/store/api/lookupsApi";
 import {

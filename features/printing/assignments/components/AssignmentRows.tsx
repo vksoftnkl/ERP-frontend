@@ -26,7 +26,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import { getApiErrorMessage } from "@/store/api";

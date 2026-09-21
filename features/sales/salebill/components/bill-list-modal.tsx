@@ -37,7 +37,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiEdit3, FiLayout, FiPrinter, FiRefreshCw } from "react-icons/fi";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { cx } from "@/components/design-system/cx";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import { useListKeyboardNav } from "@/features/sales/quotation/components/use-list-keyboard-nav";
@@ -48,6 +48,7 @@ import {
   todayIso,
   toNumber,
 } from "@/features/sales/quotation/quotation.utils";
+import useRowSelection from "@/hooks/useRowSelection";
 import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
 import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
@@ -120,6 +121,10 @@ function keyOf(row: BillListRow): SaleBillDocKey {
   };
 }
 
+/** A ticked row is identified by its document id — stable, so the
+ *  selection hook's callbacks and memo actually hold. */
+const rowKeyOf = (row: BillListRow): string => row.sb_id;
+
 export function BillListModal({
   isOpen,
   companyId,
@@ -144,7 +149,7 @@ export function BillListModal({
    * accounting year travels with it, because that year decides which partition
    * the renderer reads and last year's bill is not in this one.
    */
-  const [printRow, setPrintRow] = useState<BillListRow | null>(null);
+  const [printRows, setPrintRows] = useState<BillListRow[]>([]);
 
   useEffect(() => {
     if (isOpen) {
@@ -158,7 +163,7 @@ export function BillListModal({
       // Closing the list unmounts the print dialog with the panel but leaves
       // this component alive; without the reset, reopening F8 would come up with
       // the previous row's print dialog already on it.
-      setPrintRow(null);
+      setPrintRows([]);
     }
   }, [isOpen]);
 
@@ -223,6 +228,20 @@ export function BillListModal({
   const currentLocalPage = Math.min(localPage, totalLocalPages);
   const pageStartIndex = (currentLocalPage - 1) * LOCAL_PAGE_SIZE;
   const visibleRows = filtered.slice(pageStartIndex, pageStartIndex + LOCAL_PAGE_SIZE);
+
+  /*
+   * The ticked rows, on the same rules as the register screens — a tick
+   * survives the local pager, select-all means this page, and the batch comes
+   * out in list order. See `lib/row-selection.ts`.
+   */
+  const selection = useRowSelection(visibleRows, rowKeyOf);
+  const clearSelection = selection.clear;
+
+  // Reopening F8 starts clean. Separate from the reset above only because the
+  // selection cannot be declared until there are rows to select from.
+  useEffect(() => {
+    if (isOpen) clearSelection();
+  }, [clearSelection, isOpen]);
   const pageList = useMemo(
     () => buildPageList(totalLocalPages, currentLocalPage),
     [currentLocalPage, totalLocalPages],
@@ -268,7 +287,7 @@ export function BillListModal({
         choose(activeRow);
       }
     },
-    paused: printRow !== null,
+    paused: printRows.length > 0,
   });
 
   const { permissions } = usePagePermissions();
@@ -285,14 +304,31 @@ export function BillListModal({
    * message, which is a real answer rather than a dead button.
    */
   const printActiveRow = (): void => {
-    if (!activeRow) {
-      return;
-    }
     if (!permissions.canPrint) {
       toast.error("You do not have permission to print on this screen.");
       return;
     }
-    setPrintRow(activeRow);
+    // Ticked rows win over the highlight: ticking IS the operator saying which
+    // bills they mean, and the highlight is only where the arrow keys happen to
+    // be sitting. Nothing ticked falls back to the highlighted row, so the
+    // button behaves exactly as it always has.
+    if (selection.count > 0) {
+      const companies = new Set(selection.selected.map((row) => row.sb_company_id));
+      const years = new Set(selection.selected.map((row) => row.sb_acc_year));
+      if (companies.size > 1 || years.size > 1) {
+        // One render binds one company and one year for the whole batch.
+        toast.error(
+          "Select bills from one company and one accounting year at a time.",
+        );
+        return;
+      }
+      setPrintRows(selection.selected);
+      return;
+    }
+    if (!activeRow) {
+      return;
+    }
+    setPrintRows([activeRow]);
   };
 
   return (
@@ -400,12 +436,16 @@ export function BillListModal({
         <button
           type="button"
           className={styles.toolButton}
-          disabled={!activeRow}
-          title="Print the highlighted bill"
+          disabled={selection.count === 0 && !activeRow}
+          title={
+            selection.count > 0
+              ? `Print the ${selection.count} ticked bills as one document`
+              : "Print the highlighted bill"
+          }
           onClick={printActiveRow}
         >
           <FiPrinter aria-hidden="true" />
-          Print
+          {selection.count > 0 ? `Print (${selection.count})` : "Print"}
         </button>
         <button
           type="button"
@@ -484,6 +524,19 @@ export function BillListModal({
         <table className={styles.listTable}>
           <thead>
             <tr>
+              <th scope="col" className={styles.selectCell}>
+                <input
+                  type="checkbox"
+                  aria-label="Select every bill on this page"
+                  checked={selection.allChecked}
+                  ref={(node) => {
+                    // The partial state is a DOM property, not an attribute.
+                    if (node) node.indeterminate = selection.someChecked;
+                  }}
+                  disabled={visibleRows.length === 0}
+                  onChange={selection.toggleVisible}
+                />
+              </th>
               <th scope="col">Date</th>
               <th scope="col">Bill No</th>
               <th scope="col">Term</th>
@@ -510,6 +563,20 @@ export function BillListModal({
                   onClick={() => setActiveIndex(index)}
                   onDoubleClick={() => choose(row)}
                 >
+                  <td
+                    className={styles.selectCell}
+                    // The row's own onClick moves the highlight; a tick must not
+                    // drag it along, and a double-tick must not open the bill.
+                    onClick={(event) => event.stopPropagation()}
+                    onDoubleClick={(event) => event.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label={`Select bill ${row.sb_bill_refno ?? ""}`}
+                      checked={selection.isChecked(row)}
+                      onChange={() => selection.toggleRow(row)}
+                    />
+                  </td>
                   <td>{toDateInput(row.sb_bill_date)}</td>
                   <td>{row.sb_bill_refno ?? "—"}</td>
                   <td>{row.sb_bill_type ?? ""}</td>
@@ -527,7 +594,7 @@ export function BillListModal({
             })}
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={9} className={styles.emptyGrid}>
+                <td colSpan={10} className={styles.emptyGrid}>
                   {isFetching ? "Loading…" : "No bill matches."}
                 </td>
               </tr>
@@ -535,18 +602,24 @@ export function BillListModal({
           </tbody>
         </table>
       </div>
-      {printRow ? (
+      {printRows.length > 0 ? (
         <PrintOptionsDialog
           open
-          onClose={() => setPrintRow(null)}
+          onClose={() => setPrintRows([])}
           purposeCode={PURPOSE_CODE.SALE_INVOICE}
-          documentLabel={printRow.sb_bill_refno ? `Bill ${printRow.sb_bill_refno}` : "Bill"}
-          target={{
-            docId: printRow.sb_id,
-            companyId: printRow.sb_company_id,
-            accYear: printRow.sb_acc_year,
-            filename: `bill-${printRow.sb_bill_refno || printRow.sb_id}`,
-          }}
+          documentLabel={
+            printRows.length > 1
+              ? `${printRows.length} Bills`
+              : printRows[0].sb_bill_refno
+                ? `Bill ${printRows[0].sb_bill_refno}`
+                : "Bill"
+          }
+          targets={printRows.map((row) => ({
+            docId: row.sb_id,
+            companyId: row.sb_company_id,
+            accYear: row.sb_acc_year,
+            filename: `bill-${row.sb_bill_refno || row.sb_id}`,
+          }))}
         />
       ) : null}
     </ModalShell>

@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 
 import { getApiErrorMessage } from "@/store/api";
 import { useAppSelector } from "@/store/hooks";

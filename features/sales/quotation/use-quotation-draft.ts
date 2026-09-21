@@ -11,7 +11,7 @@
  * ports.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { recalcDocument } from "@/domain/pricing";
 import type { DocumentPricing } from "@/domain/pricing";
 import { useBusinessContext } from "@/components/layout/business-context";
@@ -65,6 +65,7 @@ import {
   tenantSet,
 } from "@/store/slices/quotationSlice";
 import {
+  AUTOSAVE_DEBOUNCE_MS,
   CHARGE_GRID_UI_TABLE_KEY,
   DEFAULT_FREIGHT_CALC_TYPE,
   DEFAULT_LOADING_CALC_TYPE,
@@ -78,14 +79,20 @@ import {
 } from "./quotation.constants";
 import {
   buildHoldPayload,
+  clearQuotationAutosave,
+  draftFromAutosave,
   draftFromHold,
   holdAccYearOf,
   holdConversionOf,
   holdLockMessage,
   holdLockScope,
   nextHoldNo,
+  isWorthAutosaving,
   nextHoldSlno,
   readHoldUiState,
+  readQuotationAutosave,
+  writeQuotationAutosave,
+  type QuotationAutosave,
 } from "./quotation.hold";
 import { buildSavePayload, parseLoadedDocument } from "./quotation.payload";
 import type { SaveActor } from "./quotation.payload";
@@ -195,6 +202,16 @@ export type QuotationDraftApi = {
    * hold; it does not open it.
    */
   takeOverHold: (hold: TxnHoldPayload) => Promise<boolean>;
+  /**
+   * The snapshot this counter left behind when it died mid-quotation, or `null`
+   * when there is nothing to offer back. Crash recovery only — a hold is the
+   * operator parking a cart on purpose, this is the browser that never came back.
+   */
+  findRecovery: () => Promise<QuotationAutosave | null>;
+  /** Put a recovered snapshot on screen, and drop it from the store. */
+  acceptRecovery: (record: QuotationAutosave) => void;
+  /** Declined — the snapshot goes, and the counter starts fresh. */
+  discardRecovery: () => void;
   /** The loaded draft, or `null` when the fetch failed. */
   loadDocument: (key: QuotationDocKey) => Promise<QuotationDraft | null>;
   deleteDocument: () => Promise<boolean>;
@@ -414,6 +431,9 @@ export function useQuotationDraft(): QuotationDraftApi {
     ],
   );
   const pricing =draft.pricing === "stored" && draft.storedPricing ? draft.storedPricing : livePricing;
+  /** The live figures, for the autosave timer that fires after the draft moved on. */
+  const pricingRef = useRef(pricing);
+  pricingRef.current = pricing;
   const loadUnitOptions = useCallback(
     async (itemId: string): Promise<void> => {
       if (!itemId || unitOptions[itemId]) {
@@ -789,6 +809,8 @@ export function useQuotationDraft(): QuotationDraftApi {
         }
         dispatch(holdSet({ holdId: null, holdNo: "" }));
       }
+      // Committed, so crash recovery has nothing left to recover.
+      void clearQuotationAutosave(actor.deviceId ?? "");
       // The key rather than a flag: `clear()` is the caller's very next act on
       // a successful save, and after it the form no longer knows what it wrote.
       return {
@@ -972,6 +994,10 @@ export function useQuotationDraft(): QuotationDraftApi {
               holdSlno: nextHoldSlno(slnoScope),
             }),
           ).unwrap();
+          // The cart is safe on the server now, so the local crash snapshot has
+          // nothing left to recover — and leaving it would offer a parked cart
+          // back as if it had been lost.
+          void clearQuotationAutosave(actor.deviceId ?? "");
           // Re-parking a cart this device resumed: the row is still LOCKED to
           // it, and only `/release` can put it back to HELD *and* clear
           // `th_locked_by`. Writing the status through the save above would
@@ -1236,6 +1262,54 @@ export function useQuotationDraft(): QuotationDraftApi {
     [unitOptions],
   );
 
+  // -------------------------------------------------------------------------
+  // Autosave — crash recovery ONLY, never a second source of truth
+  // -------------------------------------------------------------------------
+  //
+  // The timer is restarted by every edit and only the last one fires, so a
+  // counter keying at speed writes once it pauses rather than once per cell. It
+  // snapshots the draft as it is WHEN IT FIRES (the refs), not the one this
+  // effect closed over, which is what makes the debounce a delay rather than a
+  // rewind. A read-only document is not autosaved: there is nothing unsaved on
+  // it to lose.
+  useEffect(() => {
+    const deviceId = actor.deviceId ?? "";
+    if (!deviceId || draft.mode !== "entry" || !isWorthAutosaving(draft)) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void writeQuotationAutosave(deviceId, draftRef.current, pricingRef.current);
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [actor.deviceId, draft]);
+  /** The snapshot this device left behind, if it is worth offering back. */
+  const findRecovery = useCallback(async (): Promise<QuotationAutosave | null> => {
+    const deviceId = actor.deviceId ?? "";
+    if (!deviceId || !context.companyId || !context.branchId || !context.accYear) {
+      return null;
+    }
+    return readQuotationAutosave(deviceId, {
+      companyId: context.companyId,
+      branchId: context.branchId,
+      accYear: context.accYear,
+    });
+  }, [actor.deviceId, context.accYear, context.branchId, context.companyId]);
+  /**
+   * Accepted: the snapshot goes on screen and is dropped from the store in the
+   * same act. Keeping it would offer the same work back a second time at the
+   * next open, behind a draft that already has it.
+   */
+  const acceptRecovery = useCallback(
+    (record: QuotationAutosave) => {
+      dispatch(draftReplaced(draftFromAutosave(record)));
+      void clearQuotationAutosave(actor.deviceId ?? "");
+    },
+    [actor.deviceId, dispatch],
+  );
+  const discardRecovery = useCallback(() => {
+    void clearQuotationAutosave(actor.deviceId ?? "");
+  }, [actor.deviceId]);
+
   return {
     draft,
     dispatch,
@@ -1260,6 +1334,9 @@ export function useQuotationDraft(): QuotationDraftApi {
     hold,
     resumeHold,
     takeOverHold,
+    findRecovery,
+    acceptRecovery,
+    discardRecovery,
     loadDocument,
     deleteDocument,
     clear,

@@ -18,7 +18,7 @@
  * `domain/validate.ts`; this component computes nothing and judges nothing.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { cx } from "@/components/design-system/cx";
 import { formatCurrency, money } from "@/domain/pricing";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";

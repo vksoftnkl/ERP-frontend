@@ -54,7 +54,14 @@ export type DocumentPreviewDialogProps = {
   ptlId: string;
   /** A specific revision, or null to take the published one (else the newest). */
   ptvId?: string | null;
-  docId: string;
+  /**
+   * The documents to render, in the order they should appear on the paper.
+   *
+   * Usually one. SEVERAL when a list screen has ticked more than one row: the
+   * server lays each out in turn and merges them into a single PDF, so the
+   * viewer below shows one scrolling document rather than a stack of popups.
+   */
+  docIds: string[];
   /** The DOCUMENT's own company, off the row — see `DocumentPrintTarget`. */
   companyId?: string | null;
   /**
@@ -63,8 +70,10 @@ export type DocumentPreviewDialogProps = {
    * company's current fiscal year, so nothing here restates it.
    */
   accYear?: string | null;
-  /** What the header calls this — "Quotation quo00034". */
+  /** What the header calls this — "Quotation quo00034", or "3 Bills". */
   title: string;
+  /** Filename stem the Download button saves under, without extension. */
+  filename?: string | null;
   /**
    * Open the browser's print dialog as soon as the paper is on screen.
    *
@@ -103,12 +112,22 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
     onClose,
     ptlId,
     ptvId,
-    docId,
+    docIds,
     companyId,
     accYear,
     title,
+    filename,
     autoPrint,
   } = props;
+
+  /*
+   * A stable identity for the set being rendered.
+   *
+   * `docIds` is a fresh array on every parent render, so it cannot be a
+   * dependency or the render-once guard below would fire forever. The joined
+   * string is what actually changes when the operator ticks a different set.
+   */
+  const docKey = docIds.join(",");
 
   // `/print-template/get` — the revisions live on the template, and which one
   // to render is not something a print button can know.
@@ -152,9 +171,12 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
       const result = await renderPreview(
         buildDocumentPreviewRequest({
           versionId,
-          docId,
+          // Split back out of the joined key so the request carries the ids,
+          // not the string the effects compare by.
+          docIds: docKey.split(","),
           companyId,
           accYear,
+          filename,
         }),
       ).unwrap();
 
@@ -175,7 +197,8 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
   }, [
     accYear,
     companyId,
-    docId,
+    docKey,
+    filename,
     renderPreview,
     replaceObjectUrl,
     versionId,
@@ -192,11 +215,15 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
    */
   const rannedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (versionId && rannedFor.current !== versionId) {
-      rannedFor.current = versionId;
+    // Keyed on the DOCUMENTS as well as the revision. Keyed on the revision
+    // alone, reopening the popup on a different set of ticked rows would find
+    // the guard already satisfied and leave the previous render on screen.
+    const renderKey = `${versionId}::${docKey}`;
+    if (versionId && rannedFor.current !== renderKey) {
+      rannedFor.current = renderKey;
       void run();
     }
-  }, [run, versionId]);
+  }, [docKey, run, versionId]);
 
   // The blob outlives this component unless it is revoked; the viewer is gone
   // by then, so nothing can be reading it — UNLESS it was handed to the
@@ -226,6 +253,33 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
     sendToPrinter(objectUrl);
     onClose();
   }, [objectUrl, onClose]);
+
+  /**
+   * Save the rendered document to a file, under a name that says what it is.
+   *
+   * The viewer below has its own download button, but it saves a BLOB URL and
+   * names the file after the uuid in it — unreadable for one document and
+   * useless for a batch of five. The `download` attribute is the only way to
+   * put a real name on it: `Content-Disposition` never reaches a blob, so the
+   * `filename` the server was sent cannot do this on its own.
+   *
+   * The URL is NOT handed over. A download reads it there and then, and the
+   * dialog still needs it for the iframe and for Print.
+   */
+  const saveIt = useCallback((): void => {
+    if (!objectUrl) return;
+    const stem =
+      (filename ?? "").trim() ||
+      title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") ||
+      "document";
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `${stem}.pdf`;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }, [filename, objectUrl, title]);
 
   /*
    * Print asked for paper, so the moment there is paper it goes to the printer.
@@ -261,6 +315,11 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
         >
           <header className={styles.modalHead}>
             <h2 className={styles.modalTitle}>{`Preview — ${title}`}</h2>
+            {/* Shown only for a batch: "1 document" on every ordinary print
+                would be stating the obvious on every screen in the app. */}
+            {docIds.length > 1 ? (
+              <span className={styles.chip}>{`${docIds.length} documents`}</span>
+            ) : null}
             {stats?.pageCount ? (
               <span className={styles.chip}>
                 {`${stats.pageCount} page${stats.pageCount === 1 ? "" : "s"}`}
@@ -346,6 +405,14 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
               onClick={printIt}
             >
               Print
+            </button>
+            <button
+              type="button"
+              className={styles.btn}
+              disabled={!objectUrl}
+              onClick={saveIt}
+            >
+              Download
             </button>
             <button
               type="button"

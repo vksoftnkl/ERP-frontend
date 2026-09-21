@@ -38,7 +38,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiCheckCircle, FiRefreshCw, FiTrash2, FiUnlock } from "react-icons/fi";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { cx } from "@/components/design-system/cx";
 import {
   useDeleteTxnHoldMutation,

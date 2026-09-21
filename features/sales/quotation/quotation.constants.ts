@@ -329,6 +329,12 @@ export const HOLD_SLNO_STORAGE_PREFIX = "erp_quotation_hold_slno";
  */
 export const HOLD_ACC_YEAR_LENGTH = 9;
 /**
+ * How long the crash-recovery autosave waits after the last edit before it
+ * snapshots the draft. Long enough that keying a line writes once at the end of
+ * it, short enough that a counter losing power loses at most the cell in hand.
+ */
+export const AUTOSAVE_DEBOUNCE_MS = 1500;
+/**
  * How long a new quotation is valid for. The screen has no other source for it —
  * there is no company setting — so this is the standard window, counted onto the
  * quote date as `validUntil` the moment a draft is created.

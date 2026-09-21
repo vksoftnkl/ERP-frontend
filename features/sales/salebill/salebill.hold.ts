@@ -39,6 +39,7 @@
  * decision, not a silent swap.
  */
 import type { DocumentPricing } from "@/domain/pricing";
+import { createAutosaveStore, type AutosaveScope } from "@/lib/draft-autosave";
 import {
   holdAccYearOf,
   nextHoldNo,
@@ -240,18 +241,19 @@ export function buildBillHoldPayload(
 // Autosave — IndexedDB, per device, crash recovery ONLY
 // ---------------------------------------------------------------------------
 
-const AUTOSAVE_DB = "erp-sale-bill";
-const AUTOSAVE_STORE = "autosave";
-const AUTOSAVE_DB_VERSION = 1;
+/**
+ * The per-device snapshot store. The database NAME is part of the contract —
+ * every counter's existing snapshot was written under it — so the plumbing moved
+ * to `@/lib/draft-autosave` (the quotation screen needs the same offer) while
+ * this screen keeps its own database and its own record shape.
+ */
+const autosaveStore = createAutosaveStore<BillAutosave>("erp-sale-bill");
 
 /** One recovered snapshot, and enough about it to describe the offer. */
-export type BillAutosave = {
+export type BillAutosave = AutosaveScope & {
   /** The device this was taken on — the record's own key. */
   deviceId: string;
   savedAt: string;
-  companyId: string;
-  branchId: string;
-  accYear: string;
   /** For the offer's wording: "3 lines for ACME, ₹4,120". */
   itemCount: number;
   netAmount: number;
@@ -270,63 +272,6 @@ export function isWorthAutosaving(draft: SaleBillDraft): boolean {
   return draft.lines.some((line) => Boolean(line.itemId) && line.billQty > 0);
 }
 
-function openDb(): Promise<IDBDatabase | null> {
-  if (typeof indexedDB === "undefined") {
-    return Promise.resolve(null);
-  }
-  return new Promise((resolve) => {
-    let request: IDBOpenDBRequest;
-    try {
-      request = indexedDB.open(AUTOSAVE_DB, AUTOSAVE_DB_VERSION);
-    } catch {
-      // Private browsing, blocked storage, a quota policy — crash recovery is a
-      // convenience and its absence must never stop the screen opening.
-      resolve(null);
-      return;
-    }
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(AUTOSAVE_STORE)) {
-        db.createObjectStore(AUTOSAVE_STORE, { keyPath: "deviceId" });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => resolve(null);
-    request.onblocked = () => resolve(null);
-  });
-}
-
-function withStore<T>(
-  mode: IDBTransactionMode,
-  run: (store: IDBObjectStore) => IDBRequest<T>,
-): Promise<T | null> {
-  return openDb().then(
-    (db) =>
-      new Promise<T | null>((resolve) => {
-        if (!db) {
-          resolve(null);
-          return;
-        }
-        let request: IDBRequest<T>;
-        try {
-          request = run(db.transaction(AUTOSAVE_STORE, mode).objectStore(AUTOSAVE_STORE));
-        } catch {
-          db.close();
-          resolve(null);
-          return;
-        }
-        request.onsuccess = () => {
-          resolve(request.result ?? null);
-          db.close();
-        };
-        request.onerror = () => {
-          resolve(null);
-          db.close();
-        };
-      }),
-  );
-}
-
 /**
  * Take a snapshot. Debounced by the caller; a draft with no real item row is
  * silently skipped rather than stored and later offered.
@@ -341,10 +286,10 @@ export async function writeAutosave(
   pricing: DocumentPricing,
   now: Date = new Date(),
 ): Promise<void> {
-  if (!deviceId || !isWorthAutosaving(draft)) {
+  if (!isWorthAutosaving(draft)) {
     return;
   }
-  const record: BillAutosave = {
+  await autosaveStore.write({
     deviceId,
     savedAt: now.toISOString(),
     companyId: draft.companyId,
@@ -354,8 +299,7 @@ export async function writeAutosave(
     netAmount: pricing.totals.bill,
     partyName: draft.customer.name,
     draft,
-  };
-  await withStore("readwrite", (store) => store.put(record) as IDBRequest<IDBValidKey>);
+  });
 }
 
 /**
@@ -368,33 +312,15 @@ export async function writeAutosave(
  */
 export async function readAutosave(
   deviceId: string,
-  scope: { companyId: string; branchId: string; accYear: string },
+  scope: AutosaveScope,
 ): Promise<BillAutosave | null> {
-  if (!deviceId) {
-    return null;
-  }
-  const record = await withStore<BillAutosave>("readonly", (store) =>
-    store.get(deviceId) as IDBRequest<BillAutosave>,
-  );
-  if (!record?.draft) {
-    return null;
-  }
-  if (
-    record.companyId !== scope.companyId ||
-    record.branchId !== scope.branchId ||
-    record.accYear !== scope.accYear
-  ) {
-    return null;
-  }
-  return record;
+  const record = await autosaveStore.read(deviceId, scope);
+  return record?.draft ? record : null;
 }
 
 /** Drop the snapshot — on save, on clear, and on a declined offer. */
 export async function clearAutosave(deviceId: string): Promise<void> {
-  if (!deviceId) {
-    return;
-  }
-  await withStore("readwrite", (store) => store.delete(deviceId) as IDBRequest<undefined>);
+  await autosaveStore.clear(deviceId);
 }
 
 /**

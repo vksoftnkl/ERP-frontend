@@ -31,7 +31,7 @@
  */
 import { useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { getApiErrorMessage } from "@/store/api";
 import DesignerShell from "@/features/print-designer/components/DesignerShell";
 import { CanvasHostProvider } from "@/features/print-designer/host/canvas-host";

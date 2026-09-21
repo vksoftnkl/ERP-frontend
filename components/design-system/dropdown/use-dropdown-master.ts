@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import {
   getDropdownMaster,

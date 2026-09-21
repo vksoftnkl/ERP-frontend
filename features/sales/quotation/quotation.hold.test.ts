@@ -26,7 +26,9 @@ import {
 } from "./quotation.constants";
 import {
   buildHoldPayload,
+  draftFromAutosave,
   draftFromHold,
+  isWorthAutosaving,
   holdAccYearOf,
   holdConversionOf,
   holdHolderLabel,
@@ -38,6 +40,7 @@ import {
   nextHoldNo,
   nextHoldSlno,
   readHoldUiState,
+  type QuotationAutosave,
 } from "./quotation.hold";
 import type { SaveActor } from "./quotation.payload";
 import { createDraft, createDraftLine } from "./quotation.state";
@@ -594,5 +597,107 @@ describe("holdLockMessage", () => {
 
   it("falls back for anything else, including a dead network", () => {
     expect(holdLockMessage(undefined, "QH1")).toBe("Hold QH1 could not be updated.");
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Autosave — the snapshot a counter that died mid-quotation is offered back
+// ---------------------------------------------------------------------------
+
+describe("isWorthAutosaving — the guard that stops every blank screen offering itself back", () => {
+  it("says no to a fresh, empty draft", () => {
+    expect(
+      isWorthAutosaving(
+        createDraft({
+          companyId: COMPANY_ID,
+          branchId: BRANCH_ID,
+          accYear: ACC_YEAR,
+          companyStateCode: "33",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("says no to a draft carrying only the grid's trailing blank row", () => {
+    expect(isWorthAutosaving({ ...baseDraft(), lines: [createDraftLine()] })).toBe(false);
+  });
+
+  it("says no to a row that names an item but has no quantity on it", () => {
+    // Half-keyed, and offering it back is noise.
+    expect(
+      isWorthAutosaving({
+        ...baseDraft(),
+        lines: [createDraftLine({ itemId: "019f7e83-2511-711b-9aa5-60fc1b3c0a1c", billQty: 0 })],
+      }),
+    ).toBe(false);
+  });
+
+  it("says yes once there is real work on it", () => {
+    expect(isWorthAutosaving(baseDraft())).toBe(true);
+  });
+});
+
+describe("draftFromAutosave", () => {
+  const record: QuotationAutosave = {
+    deviceId: "device-abc",
+    savedAt: NOW.toISOString(),
+    companyId: COMPANY_ID,
+    branchId: BRANCH_ID,
+    accYear: ACC_YEAR,
+    itemCount: 1,
+    netAmount: 1180,
+    partyName: "Acme",
+    draft: baseDraft(),
+  };
+  const recovered = draftFromAutosave(record);
+
+  it("comes back DIRTY, unlike a resumed hold", () => {
+    // The snapshot is deleted the moment it is accepted, and unlike a hold the
+    // work is safe nowhere else — so the discard guard is the only thing
+    // standing between it and a stray F7.
+    expect(recovered.isDirty).toBe(true);
+  });
+
+  it("comes back editable, and priced live", () => {
+    expect(recovered.mode).toBe("entry");
+    expect(recovered.pricing).toBe("live");
+    expect(recovered.storedPricing).toBeNull();
+  });
+
+  it("brings the lines back with everything the grids redraw from", () => {
+    // The whole point of snapshotting the DRAFT rather than the save payload:
+    // item and unit names are response-only fields, and a counter recovering
+    // from a dead network cannot look them up again.
+    expect(recovered.lines).toHaveLength(2);
+    expect(recovered.lines[0].itemName).toBe("New Claw");
+    expect(recovered.customer.name).toBe("Acme");
+    expect(recovered.terms.remarks).toBe("call before delivery");
+  });
+
+  it("keeps the document and hold identity it was keyed under", () => {
+    const onExisting = draftFromAutosave({
+      ...record,
+      draft: { ...baseDraft(), docId: "019fd07b-8368-7af8-8d7f-009ae999beef", holdId: HOLD_ID },
+    });
+    // A snapshot taken while editing a saved quotation recovers as that
+    // quotation, and one taken on a resumed cart still knows the hold it has to
+    // close when it is finally saved.
+    expect(onExisting.docId).toBe("019fd07b-8368-7af8-8d7f-009ae999beef");
+    expect(onExisting.holdId).toBe(HOLD_ID);
+  });
+
+  it("gives the Existing Customer box a name even on a snapshot taken before the split", () => {
+    // `customer.masterName` was split out of `name` after this screen shipped;
+    // `undefined` reaching that combobox flips it from uncontrolled to
+    // controlled mid-life and loses what the operator types into it.
+    const legacy = baseDraft();
+    const customer = { ...legacy.customer } as Record<string, unknown>;
+    delete customer.masterName;
+    const back = draftFromAutosave({
+      ...record,
+      draft: { ...legacy, customer } as unknown as QuotationDraft,
+    });
+    expect(back.customer.masterName).toBe("Acme");
   });
 });

@@ -189,7 +189,7 @@ describe("revisionForPreview", () => {
 });
 
 describe("buildDocumentPreviewRequest", () => {
-  const base = { versionId: "rev-1", docId: "doc-1" };
+  const base = { versionId: "rev-1", docIds: ["doc-1"] };
 
   it("names the revision and the document", () => {
     expect(buildDocumentPreviewRequest(base)).toEqual({
@@ -241,8 +241,81 @@ describe("buildDocumentPreviewRequest", () => {
   });
 
   it("refuses a document that has not been saved", () => {
-    expect(() => buildDocumentPreviewRequest({ ...base, docId: " " })).toThrow(
+    expect(() => buildDocumentPreviewRequest({ ...base, docIds: [" "] })).toThrow(
       /no saved document/i,
     );
+    expect(() => buildDocumentPreviewRequest({ ...base, docIds: [] })).toThrow(
+      /no saved document/i,
+    );
+  });
+
+  // -- A BATCH ------------------------------------------------------------
+  // Several ticked rows, one file. The server refuses docId and docIds
+  // together, so exactly one of the two may ever appear.
+
+  it("sends docIds when several documents are named", () => {
+    expect(
+      buildDocumentPreviewRequest({
+        versionId: "rev-1",
+        docIds: ["doc-1", "doc-2", "doc-3"],
+      }),
+    ).toEqual({ versionId: "rev-1", docIds: ["doc-1", "doc-2", "doc-3"] });
+  });
+
+  it("keeps the single-document wire exactly as it was", () => {
+    // One ticked row must not start sending a one-element batch: the ordinary
+    // print is the overwhelmingly common case and its request should not change
+    // shape because a list screen learned to tick two.
+    const request = buildDocumentPreviewRequest({
+      versionId: "rev-1",
+      docIds: ["doc-1"],
+    }) as Record<string, unknown>;
+    expect(request).toHaveProperty("docId", "doc-1");
+    expect(request).not.toHaveProperty("docIds");
+  });
+
+  it("never sends both docId and docIds", () => {
+    const request = buildDocumentPreviewRequest({
+      versionId: "rev-1",
+      docIds: ["doc-1", "doc-2"],
+    }) as Record<string, unknown>;
+    expect(request).not.toHaveProperty("docId");
+  });
+
+  it("drops a blank id rather than failing the whole batch", () => {
+    // One row whose id never loaded would otherwise reach the server as an
+    // empty string and fail UUID validation for every document with it.
+    expect(
+      buildDocumentPreviewRequest({
+        versionId: "rev-1",
+        docIds: ["doc-1", "  ", "doc-2"],
+      }),
+    ).toEqual({ versionId: "rev-1", docIds: ["doc-1", "doc-2"] });
+  });
+
+  it("collapses to docId when only one id survives trimming", () => {
+    expect(
+      buildDocumentPreviewRequest({ versionId: "rev-1", docIds: ["doc-1", ""] }),
+    ).toEqual({ versionId: "rev-1", docId: "doc-1" });
+  });
+
+  it("keeps the order the rows were listed in", () => {
+    // The pages come out in the order they are sent, and the operator expects
+    // the paper to match what they were looking at.
+    expect(
+      buildDocumentPreviewRequest({
+        versionId: "rev-1",
+        docIds: ["doc-c", "doc-a", "doc-b"],
+      }),
+    ).toMatchObject({ docIds: ["doc-c", "doc-a", "doc-b"] });
+  });
+
+  it("names the file when asked, and omits a blank name", () => {
+    expect(
+      buildDocumentPreviewRequest({ ...base, filename: "bills-3" }),
+    ).toMatchObject({ filename: "bills-3" });
+    expect(
+      buildDocumentPreviewRequest({ ...base, filename: "  " }),
+    ).not.toHaveProperty("filename");
   });
 });

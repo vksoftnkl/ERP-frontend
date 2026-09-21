@@ -76,11 +76,12 @@
          write a literal, and never "just add a zero" to win a fight.
        - Order is derived from what has to sit above what:
            header  <  modal  <  nested modal  <  popup  <  confirm
-                   <  input assist  <  toast  <  global loader
+                   <  input assist  <  message  <  global loader
          A portaled dropdown must clear the modal that contains it, so
          popups outrank every modal. A confirm dialog interrupts whatever
          is open, so it outranks popups. The typing assist follows the
-         caret into any of them, and toasts must be readable over all of it.
+         caret into any of them, and a message popup (an error raised by the
+         dialog you are standing in, say) must be readable over all of it.
        - Values are spaced by 1000 so a layer can be slotted between two
          tiers later without renumbering the app.
      In-page z-indexes (sticky table headers, cell overlaps, tabs) are NOT
@@ -93,22 +94,11 @@
   --erp-z-popup: 3000;
   --erp-z-confirm: 4000;
   --erp-z-input-assist: 5000;
+  /* The application message popup. Named `toast` for the tier it inherited. */
   --erp-z-toast: 6000;
   --erp-z-global-loader: 2147483640;
 
   color-scheme: light;
-}
-
-/* react-toastify hardcodes `--toastify-z-index: 9999`, which loses to any
-   overlay stacked above it — toasts fired from a dialog were painted behind it.
-   Pin it to our toast tier.
-
-   `:root:root` is deliberate, not a typo: ReactToastify.css declares that token
-   on plain `:root` and app/layout.tsx imports it *after* this file, so at equal
-   specificity the vendor rule would win on source order. Doubling the selector
-   outranks it regardless of import order. */
-:root:root {
-  --toastify-z-index: var(--erp-z-toast);
 }
 
 *,

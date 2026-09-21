@@ -19,12 +19,20 @@ import {
   customerChangeCosts,
   duplicateBillDraftLine,
   emptyBillHeader,
+  lastFilledLineBefore,
   nowStamp,
   resolveWalkInCustomerId,
   seedCreditPeriod,
   shouldSeedWalkInCustomer,
 } from "./salebill.state";
-import type { SaleBillDraft } from "./salebill.types";
+import type { SaleBillDraft, SaleBillDraftLine } from "./salebill.types";
+import {
+  draftReplaced,
+  lineDuplicated,
+  modeSet,
+  saleBillReducer,
+  type SaleBillState,
+} from "@/store/slices/saleBillSlice";
 
 const CONTEXT = {
   companyId: "c1",
@@ -607,5 +615,128 @@ describe("duplicateBillDraftLine", () => {
     duplicateBillDraftLine(original);
     expect(original.sbiId).toBe("sbi-1");
     expect(original.orderQtyLocked).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Alt+R from where the cursor actually is
+// ---------------------------------------------------------------------------
+
+describe("lastFilledLineBefore", () => {
+  const lines = (...items: string[]) =>
+    items.map((itemId, i) => createBillDraftLine({ key: `L${i}`, itemId }));
+
+  it("finds the row above the blank one the cursor lands in", () => {
+    const rows = lines("IT1", "");
+    expect(lastFilledLineBefore(rows, 1)?.itemId).toBe("IT1");
+  });
+
+  it("skips a run of blank rows rather than copying emptiness", () => {
+    // Ctrl++ pressed twice, then Alt+R on the last of them.
+    const rows = lines("IT1", "", "");
+    expect(lastFilledLineBefore(rows, 2)?.itemId).toBe("IT1");
+  });
+
+  it("takes the NEAREST filled row, not the first one", () => {
+    const rows = lines("IT1", "IT2", "");
+    expect(lastFilledLineBefore(rows, 2)?.itemId).toBe("IT2");
+  });
+
+  it("looks only above — a filled row below is not what Alt+R copies", () => {
+    const rows = lines("", "IT2");
+    expect(lastFilledLineBefore(rows, 0)).toBeNull();
+  });
+
+  it("answers null on a bill whose only row is the blank one", () => {
+    expect(lastFilledLineBefore(lines(""), 0)).toBeNull();
+  });
+});
+
+describe("lineDuplicated — the two shapes of Alt+R", () => {
+  const filled = () =>
+    createBillDraftLine({
+      key: "L1",
+      itemId: "IT1",
+      itemName: "ITEM-A",
+      itemSize: "10x12",
+      unitName: "NOS",
+      itemUnitId: "U1",
+      billQty: 2,
+      rate: 100,
+      discPerc: 5,
+    });
+
+  /** A draft in entry mode, so the trailing-blank-row invariant is live. */
+  const draftWith = (...lines: SaleBillDraftLine[]): SaleBillState => {
+    const base = saleBillReducer(
+      undefined,
+      draftReplaced({ ...createBillDraft(CONTEXT), lines }),
+    );
+    return saleBillReducer(base, modeSet("entry"));
+  };
+
+  it("inserts the copy under a FILLED row", () => {
+    const next = saleBillReducer(draftWith(filled()), lineDuplicated("L1"));
+    expect(next.lines[1].itemId).toBe("IT1");
+    expect(next.lines[1].billQty).toBe(2);
+    expect(next.lines[1].rate).toBe(100);
+    // Its own row, not the one it came from.
+    expect(next.lines[1].key).not.toBe("L1");
+  });
+
+  it("FILLS the trailing blank row the cursor lands in, rather than declining", () => {
+    // The press the operator actually makes: an item was picked on row 1, the
+    // blank row opened beneath it, and Alt+R is pressed there.
+    const state = draftWith(filled());
+    const blankKey = state.lines[1].key;
+    const next = saleBillReducer(state, lineDuplicated(blankKey));
+
+    expect(next.lines[1].itemId).toBe("IT1");
+    expect(next.lines[1].billQty).toBe(2);
+    expect(next.lines[1].rate).toBe(100);
+    expect(next.lines[1].discPerc).toBe(5);
+  });
+
+  it("fills that row IN PLACE, so the cursor keeps the row it is standing in", () => {
+    const state = draftWith(filled());
+    const blankKey = state.lines[1].key;
+    const next = saleBillReducer(state, lineDuplicated(blankKey));
+    expect(next.lines[1].key).toBe(blankKey);
+  });
+
+  it("opens a fresh blank row under the one it filled", () => {
+    const state = draftWith(filled());
+    const next = saleBillReducer(state, lineDuplicated(state.lines[1].key));
+    expect(next.lines).toHaveLength(3);
+    expect(next.lines[2].itemId).toBe("");
+  });
+
+  it("sheds the ids and the order trail, the same as any copy", () => {
+    const imported = createBillDraftLine({
+      key: "L1",
+      itemId: "IT1",
+      sbiId: "sbi-1",
+      srcDocRefno: "SO-9",
+      orderQtyLocked: true,
+    });
+    const state = draftWith(imported);
+    const next = saleBillReducer(state, lineDuplicated(state.lines[1].key));
+    expect(next.lines[1].sbiId).toBeNull();
+    expect(next.lines[1].srcDocRefno).toBeNull();
+    expect(next.lines[1].orderQtyLocked).toBe(false);
+  });
+
+  it("leaves a pristine draft CLEAN when there is nothing above to copy", () => {
+    // Alt+R on the blank row of an untouched bill: nothing happens, and nothing
+    // may prompt about work nobody did when the screen is closed.
+    const state = draftWith();
+    const next = saleBillReducer(state, lineDuplicated(state.lines[0].key));
+    expect(next.lines[0].itemId).toBe("");
+    expect(next.isDirty).toBe(false);
+  });
+
+  it("ignores a row key that is not on the bill", () => {
+    const state = draftWith(filled());
+    expect(saleBillReducer(state, lineDuplicated("nope"))).toBe(state);
   });
 });

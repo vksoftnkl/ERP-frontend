@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { extractApiErrorMessage } from "@/lib/api/client";
 import { useLazyGetItemByBarcodeQuery } from "@/store/api/lookupsApi";
 import styles from "./item-qty-price.module.scss";

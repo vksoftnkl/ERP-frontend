@@ -36,7 +36,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiEdit3, FiLayout, FiPrinter, FiRefreshCw } from "react-icons/fi";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import { cx } from "@/components/design-system/cx";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import { useListKeyboardNav } from "@/features/sales/quotation/components/use-list-keyboard-nav";
@@ -47,6 +47,7 @@ import {
   todayIso,
   toNumber,
 } from "@/features/sales/quotation/quotation.utils";
+import useRowSelection from "@/hooks/useRowSelection";
 import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
 import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
@@ -135,6 +136,10 @@ function keyOf(row: SaleOrderListRow): SaleOrderDocKey {
   };
 }
 
+/** A ticked row is identified by its document id — stable, so the
+ *  selection hook's callbacks and memo actually hold. */
+const rowKeyOf = (row: SaleOrderListRow): string => row.so_id;
+
 export function SaleOrderListModal({
   isOpen,
   companyId,
@@ -159,7 +164,7 @@ export function SaleOrderListModal({
    * accounting year travels with it, because that year decides which partition
    * the renderer reads.
    */
-  const [printRow, setPrintRow] = useState<SaleOrderListRow | null>(null);
+  const [printRows, setPrintRows] = useState<SaleOrderListRow[]>([]);
 
   useEffect(() => {
     if (isOpen) {
@@ -170,7 +175,7 @@ export function SaleOrderListModal({
       setPeriod("90d");
       setLocalPage(1);
       setActiveIndex(0);
-      setPrintRow(null);
+      setPrintRows([]);
     }
   }, [isOpen]);
 
@@ -236,6 +241,20 @@ export function SaleOrderListModal({
   const currentLocalPage = Math.min(localPage, totalLocalPages);
   const pageStartIndex = (currentLocalPage - 1) * LOCAL_PAGE_SIZE;
   const visibleRows = filtered.slice(pageStartIndex, pageStartIndex + LOCAL_PAGE_SIZE);
+
+  /*
+   * The ticked rows, on the same rules as the register screens — a tick
+   * survives the local pager, select-all means this page, and the batch comes
+   * out in list order. See `lib/row-selection.ts`.
+   */
+  const selection = useRowSelection(visibleRows, rowKeyOf);
+  const clearSelection = selection.clear;
+
+  // Reopening F8 starts clean. Separate from the reset above only because the
+  // selection cannot be declared until there are rows to select from.
+  useEffect(() => {
+    if (isOpen) clearSelection();
+  }, [clearSelection, isOpen]);
   const pageList = useMemo(
     () => buildPageList(totalLocalPages, currentLocalPage),
     [currentLocalPage, totalLocalPages],
@@ -278,7 +297,7 @@ export function SaleOrderListModal({
         choose(activeRow);
       }
     },
-    paused: printRow !== null,
+    paused: printRows.length > 0,
   });
 
   const { permissions } = usePagePermissions();
@@ -289,14 +308,28 @@ export function SaleOrderListModal({
    * import it is how an operator checks what they are about to bill.
    */
   const printActiveRow = (): void => {
-    if (!activeRow) {
-      return;
-    }
     if (!permissions.canPrint) {
       toast.error("You do not have permission to print on this screen.");
       return;
     }
-    setPrintRow(activeRow);
+    // Ticked rows win over the highlight: ticking IS the operator saying which
+    // orders they mean, while the highlight is only where the arrow keys happen
+    // to be sitting. Nothing ticked falls back to the highlighted row.
+    if (selection.count > 0) {
+      const companies = new Set(selection.selected.map((row) => row.so_company_id));
+      const years = new Set(selection.selected.map((row) => row.so_acc_year));
+      if (companies.size > 1 || years.size > 1) {
+        // One render binds one company and one year for the whole batch.
+        toast.error("Select orders from one company and one accounting year at a time.");
+        return;
+      }
+      setPrintRows(selection.selected);
+      return;
+    }
+    if (!activeRow) {
+      return;
+    }
+    setPrintRows([activeRow]);
   };
 
   return (
@@ -404,12 +437,16 @@ export function SaleOrderListModal({
         <button
           type="button"
           className={styles.toolButton}
-          disabled={!activeRow}
-          title="Print the highlighted order"
+          disabled={selection.count === 0 && !activeRow}
+          title={
+            selection.count > 0
+              ? `Print the ${selection.count} ticked orders as one document`
+              : "Print the highlighted order"
+          }
           onClick={printActiveRow}
         >
           <FiPrinter aria-hidden="true" />
-          Print
+          {selection.count > 0 ? `Print (${selection.count})` : "Print"}
         </button>
         <button
           type="button"
@@ -488,6 +525,19 @@ export function SaleOrderListModal({
         <table className={styles.listTable}>
           <thead>
             <tr>
+              <th scope="col" className={styles.selectCell}>
+                <input
+                  type="checkbox"
+                  aria-label="Select every order on this page"
+                  checked={selection.allChecked}
+                  ref={(node) => {
+                    // The partial state is a DOM property, not an attribute.
+                    if (node) node.indeterminate = selection.someChecked;
+                  }}
+                  disabled={visibleRows.length === 0}
+                  onChange={selection.toggleVisible}
+                />
+              </th>
               <th scope="col">Date</th>
               <th scope="col">Order No</th>
               <th scope="col">Type</th>
@@ -515,6 +565,20 @@ export function SaleOrderListModal({
                   onClick={() => setActiveIndex(index)}
                   onDoubleClick={() => choose(row)}
                 >
+                  <td
+                    className={styles.selectCell}
+                    // The row's own onClick moves the highlight; a tick must not
+                    // drag it along, and a double-tick must not open the row.
+                    onClick={(event) => event.stopPropagation()}
+                    onDoubleClick={(event) => event.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label={`Select order ${row.so_order_refno ?? ""}`}
+                      checked={selection.isChecked(row)}
+                      onChange={() => selection.toggleRow(row)}
+                    />
+                  </td>
                   <td>{toDateInput(row.so_order_date)}</td>
                   <td>{row.so_order_refno ?? "—"}</td>
                   <td>{row.so_order_type ?? ""}</td>
@@ -540,7 +604,7 @@ export function SaleOrderListModal({
             })}
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={9} className={styles.emptyGrid}>
+                <td colSpan={10} className={styles.emptyGrid}>
                   {isFetching ? "Loading…" : "No order matches."}
                 </td>
               </tr>
@@ -548,18 +612,24 @@ export function SaleOrderListModal({
           </tbody>
         </table>
       </div>
-      {printRow ? (
+      {printRows.length > 0 ? (
         <PrintOptionsDialog
           open
-          onClose={() => setPrintRow(null)}
+          onClose={() => setPrintRows([])}
           purposeCode={PURPOSE_CODE.SALE_ORDER}
-          documentLabel={printRow.so_order_refno ? `Order ${printRow.so_order_refno}` : "Order"}
-          target={{
-            docId: printRow.so_id,
-            companyId: printRow.so_company_id,
-            accYear: printRow.so_acc_year,
-            filename: `sale-order-${printRow.so_order_refno || printRow.so_id}`,
-          }}
+          documentLabel={
+            printRows.length > 1
+              ? `${printRows.length} Orders`
+              : printRows[0].so_order_refno
+                ? `Order ${printRows[0].so_order_refno}`
+                : "Order"
+          }
+          targets={printRows.map((row) => ({
+            docId: row.so_id,
+            companyId: row.so_company_id,
+            accYear: row.so_acc_year,
+            filename: `sale-order-${row.so_order_refno || row.so_id}`,
+          }))}
         />
       ) : null}
     </ModalShell>

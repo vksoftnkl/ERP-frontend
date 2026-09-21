@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "@/styles/library/index.scss";
-import "react-toastify/dist/ReactToastify.css";
 import Providers from "@/store/provider";
 import { BusinessContextProvider } from "@/components/layout/business-context";
 import GlobalErpHeader from "@/components/layout/global-erp-header";
@@ -11,7 +10,7 @@ import GlobalLoader from "@/components/feedback/global-loader";
 import GlobalTextCapitalization from "@/components/feedback/global-text-capitalization";
 import SessionAppSettings from "@/components/layout/session-app-settings";
 import ConfiguredDirectories from "@/components/layout/configured-directories";
-import GlobalToasterWrapper from "@/components/feedback/global-toaster-wrapper";
+import MessagePopup from "@/components/feedback/message-popup";
 import ErrorBoundary from "@/components/feedback/error-boundary";
 import UiScaleController from "@/components/layout/ui-scale-controller";
 import { uiScaleBootstrapScript } from "@/lib/ui-scale";
@@ -101,7 +100,9 @@ export default function RootLayout({
               </BusinessContextProvider>
             </GlobalRouteGuard>
           </ErrorBoundary>
-          <GlobalToasterWrapper />
+          {/* Every success, error and warning in the app opens here — one
+              popup at a time, over everything, answered with Enter or Esc. */}
+          <MessagePopup />
         </Providers>
       </body>
     </html>

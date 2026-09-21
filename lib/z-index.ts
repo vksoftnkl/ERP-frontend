@@ -28,5 +28,5 @@ export const Z_CONFIRM = "var(--erp-z-confirm)";
 /** Caret-following typing assist (Tamil suggestions). */
 export const Z_INPUT_ASSIST = "var(--erp-z-input-assist)";
 
-/** Toasts. Must stay readable over every other overlay. */
+/** The application message popup. Must stay readable over every other overlay. */
 export const Z_TOAST = "var(--erp-z-toast)";

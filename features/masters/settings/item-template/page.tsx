@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { toast } from "react-toastify";
+import { toast } from "@/lib/notify";
 import {
   ERPDynamicModalForm,
   type ERPDynamicModalController,

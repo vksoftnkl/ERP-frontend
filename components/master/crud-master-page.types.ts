@@ -221,6 +221,36 @@ export type CrudMasterPageProps = {
   /** A render is in flight — the button says so and will not fire twice. */
   printBusy?: boolean;
   /**
+   * Let the operator tick several rows, and print them as one document.
+   *
+   * OPT-IN and OFF by default, so no existing master grows a checkbox column it
+   * has no use for. A page that turns this on gets a tick box in front of every
+   * row and a select-all in the header; the Print button then acts on what is
+   * ticked, and falls back to the single highlighted row when nothing is.
+   *
+   * It is deliberately the SAME button rather than a second one. The operator's
+   * question is "print this"; whether "this" is one bill or five is already
+   * answered by what they ticked, and a separate Bulk Print would be asking it
+   * twice.
+   */
+  enableMultiSelect?: boolean;
+  /**
+   * Print the ticked rows, in the order the list has them.
+   *
+   * Required for the bulk arm to do anything — a page may turn selection on for
+   * some other purpose. WHAT a batch means is the page's, exactly as
+   * `onPrintAction` is: the shell knows which rows are ticked and nothing else.
+   */
+  onBulkPrintAction?: (rows: MasterTableRow[]) => void | Promise<void>;
+  /**
+   * Refuse a selection this page cannot print as one document, and say why.
+   *
+   * The string becomes the button's tooltip and disables it. A render binds one
+   * company and one accounting year for the whole batch, so a page whose list
+   * can span either is the thing that has to notice.
+   */
+  bulkPrintDisabledReason?: (rows: MasterTableRow[]) => string | null;
+  /**
    * Open a row for READING — Ctrl+Enter on the selection, and double-click.
    * Supplied by pages whose record does not fit the shell's view modal (a
    * voucher opens its own screen); without it both gestures fall back to that
