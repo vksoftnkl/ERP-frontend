@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { type AxiosResponse } from "axios";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
@@ -84,6 +84,9 @@ function resolveApiBase(): string {
     if (resolvedIsLocal && !currentIsLocal) {
       resolvedUrl.hostname = currentHostname;
     }
+    // Same loopback normalisation the default base gets, so a configured
+    // localhost URL resolves to the one host name the dev certificate covers.
+    resolvedUrl.hostname = resolveLoopbackHostname(resolvedUrl.hostname);
     // Avoid forcing HTTPS API calls when the app itself is served over plain HTTP.
     if (window.location.protocol === "http:" && resolvedUrl.protocol === "https:") {
       resolvedUrl.protocol = "http:";
@@ -178,9 +181,37 @@ function getPathname(requestUrl: string): string {
     return trimmedUrl.toLowerCase().split("?")[0];
   }
 }
-function isLoginEndpoint(requestUrl: string): boolean {
+// The only routes the API marks @Public(); everything else this hook can reach
+// needs a bearer token, so a missing one is worth a refresh before giving up.
+const PUBLIC_AUTH_PATHS = ["/auth/login", "/auth/refresh"] as const;
+const SESSION_EXPIRED_MESSAGE = "Session expired. Please login again.";
+// Thrown when there is no usable token to send: it takes the same logout path as
+// a 401 from the server without pretending a request was ever made.
+class SessionExpiredError extends Error {
+  constructor() {
+    super(SESSION_EXPIRED_MESSAGE);
+    this.name = "SessionExpiredError";
+  }
+}
+function matchesPath(requestUrl: string, path: string): boolean {
   const pathname = getPathname(requestUrl);
-  return pathname === "/auth/login" || pathname.endsWith("/auth/login");
+  return pathname === path || pathname.endsWith(path);
+}
+function isLoginEndpoint(requestUrl: string): boolean {
+  return matchesPath(requestUrl, "/auth/login");
+}
+function isPublicEndpoint(requestUrl: string): boolean {
+  return PUBLIC_AUTH_PATHS.some((path) => matchesPath(requestUrl, path));
+}
+function hasAuthorizationHeader(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some(
+    (headerName) => headerName.toLowerCase() === "authorization"
+  );
+}
+// Worth retrying once behind a token refresh: a protected request the server
+// rejected as unauthorised.
+function isRetriable401(error: unknown, publicRequest: boolean): boolean {
+  return !publicRequest && axios.isAxiosError(error) && error.response?.status === 401;
 }
 function redirectToLogin(): void {
   if (typeof window === "undefined") {
@@ -198,10 +229,7 @@ function buildHeaders(
   providedHeaders?: Record<string, string>
 ): Record<string, string> {
   const nextHeaders = { ...(providedHeaders ?? {}) };
-  const hasAuthorization = Object.keys(nextHeaders).some(
-    (headerName) => headerName.toLowerCase() === "authorization"
-  );
-  if (hasAuthorization || isLoginEndpoint(requestUrl)) {
+  if (hasAuthorizationHeader(nextHeaders) || isPublicEndpoint(requestUrl)) {
     return nextHeaders;
   }
   const token = getAuthSession()?.trim();
@@ -283,14 +311,12 @@ export function useApi<TResp = unknown, TBody = unknown>(
   defaultBodyRef.current = defaultBody;
   toastOptionsRef.current = toastOptions;
   const run = useCallback(
-    async (override?: UseApiRunOverride<TBody>) => {
-      try {
-        abortRef.current?.abort();
-      } catch (error) {
-        if (!isCanceledRequestError(error)) {
-          throw error;
-        }
-      }
+    async (override?: UseApiRunOverride<TBody>): Promise<TResp | undefined> => {
+      abortRef.current?.abort();
+      // Drop any background revalidation already in flight: it reads the previous
+      // query and would otherwise land after this one and overwrite `data` with it.
+      refreshAbortRef.current?.abort();
+      refreshAbortRef.current = null;
       const controller = new AbortController();
       abortRef.current = controller;
       const requestOverride = override
@@ -302,32 +328,18 @@ export function useApi<TResp = unknown, TBody = unknown>(
       lastRunOverrideRef.current = requestOverride;
       const requestUrl = requestOverride?.url ?? url;
       const loginRequest = isLoginEndpoint(requestUrl);
-      const requestHeaders = buildHeaders(requestUrl, headersRef.current);
-      const hasAuthorization = Object.keys(requestHeaders).some(
-        (headerName) => headerName.toLowerCase() === "authorization"
-      );
+      const publicRequest = isPublicEndpoint(requestUrl);
       const activeToastOptions = toastOptionsRef.current;
       const shouldToastSuccess =
         (activeToastOptions?.success ?? isMutationMethod(method)) && !loginRequest;
       const shouldToastError = activeToastOptions?.error ?? true;
       const successMessage =
         activeToastOptions?.successMessage ?? defaultSuccessMessage(method);
-      if (!loginRequest && !hasAuthorization) {
-        const message = "Session expired. Please login again.";
-        clearAuthSession();
-        dispatch(authSessionChanged({ isAuthenticated: false }));
-        setError(message);
-        if (shouldToastError) {
-          showErrorToast(activeToastOptions?.errorMessage ?? message);
-        }
-        redirectToLogin();
-        throw new Error(message);
-      }
-      setLoading(true);
-      dispatch(globalLoaderStarted());
-      setError(null);
-      try {
-        const requestConfig = {
+      // Rebuilt per attempt rather than replayed from the failed response's config:
+      // axios has already serialised the body by then, and handing the string back
+      // without the JSON content type posts it as text/plain (an empty body to Nest).
+      const execute = (requestHeaders: Record<string, string>) =>
+        axios.request<TResp>({
           url: requestUrl,
           method,
           baseURL: API_BASE || undefined,
@@ -336,10 +348,39 @@ export function useApi<TResp = unknown, TBody = unknown>(
           data:
             method === "GET"
               ? undefined
-              : requestOverride?.body ?? defaultBodyRef.current ?? {},
+              : requestOverride?.body ?? defaultBodyRef.current,
           signal: controller.signal,
-        };
-        const resp = await axios.request<TResp>(requestConfig);
+        });
+      setLoading(true);
+      dispatch(globalLoaderStarted());
+      setError(null);
+      try {
+        let requestHeaders = buildHeaders(requestUrl, headersRef.current);
+        if (!publicRequest && !hasAuthorizationHeader(requestHeaders)) {
+          // The access token is gone, but the refresh token may still be good:
+          // renew quietly instead of throwing the user out mid-action.
+          const refreshed = await refreshAuthSession(dispatch);
+          requestHeaders = refreshed
+            ? buildHeaders(requestUrl, headersRef.current)
+            : requestHeaders;
+          if (!hasAuthorizationHeader(requestHeaders)) {
+            throw new SessionExpiredError();
+          }
+        }
+        let resp: AxiosResponse<TResp>;
+        try {
+          resp = await execute(requestHeaders);
+        } catch (e: unknown) {
+          if (!isRetriable401(e, publicRequest)) {
+            throw e;
+          }
+          const refreshed = await refreshAuthSession(dispatch);
+          if (!refreshed) {
+            // Leave the original 401 to the error path below, which logs out.
+            throw e;
+          }
+          resp = await execute(buildHeaders(requestUrl, headersRef.current));
+        }
         const json = resp.data as TResp;
         setData(json);
         hasLoadedRef.current = true;
@@ -354,56 +395,32 @@ export function useApi<TResp = unknown, TBody = unknown>(
         return json;
       } catch (e: unknown) {
         if (isCanceledRequestError(e)) {
-          return;
+          return undefined;
         }
-        if (axios.isAxiosError(e)) {
-          const statusCode = e.response?.status;
-          if (!loginRequest && statusCode === 401) {
-            const refreshed = await refreshAuthSession(dispatch);
-            if (refreshed) {
-              const retryHeaders = buildHeaders(requestUrl, headersRef.current);
-              try {
-                const retryResponse = await axios.request<TResp>({
-                  ...e.config,
-                  headers: retryHeaders,
-                  signal: controller.signal,
-                });
-                const json = retryResponse.data as TResp;
-                setData(json);
-                hasLoadedRef.current = true;
-                if (isMutationMethod(method)) {
-                  notifyDataChanged(getPathname(requestUrl));
-                }
-                return json;
-              } catch (retryError) {
-                if (isCanceledRequestError(retryError)) {
-                  return;
-                }
-                throw retryError;
-              }
-            }
-            clearAuthSession();
-            dispatch(authSessionChanged({ isAuthenticated: false }));
-            redirectToLogin();
-          }
-          const responseData = e.response?.data as unknown;
-          let message = normalizeMessage(
-            responseData,
-            normalizeMessage(e.message, "Something went wrong")
+        const axiosError = axios.isAxiosError(e) ? e : null;
+        const sessionExpired =
+          e instanceof SessionExpiredError || isRetriable401(e, publicRequest);
+        let message: string;
+        if (sessionExpired) {
+          // Whatever the server called it, this only ever means one thing to the
+          // user - and they are about to land on the login page.
+          message = SESSION_EXPIRED_MESSAGE;
+          clearAuthSession();
+          dispatch(authSessionChanged({ isAuthenticated: false }));
+          redirectToLogin();
+        } else if (axiosError && !axiosError.response && axiosError.code === "ERR_NETWORK") {
+          const currentOrigin =
+            typeof window === "undefined" ? "the current origin" : window.location.origin;
+          message =
+            `Network error while connecting to API (${API_BASE}). Verify backend is running, CORS allows ${currentOrigin}, and HTTPS cert is trusted in Chrome.`;
+        } else if (axiosError) {
+          message = normalizeMessage(
+            axiosError.response?.data as unknown,
+            normalizeMessage(axiosError.message, "Something went wrong")
           );
-          if (!statusCode && e.code === "ERR_NETWORK") {
-            const currentOrigin =
-              typeof window === "undefined" ? "the current origin" : window.location.origin;
-            message =
-              `Network error while connecting to API (${API_BASE}). Verify backend is running, CORS allows ${currentOrigin}, and HTTPS cert is trusted in Chrome.`;
-          }
-          setError(message);
-          if (shouldToastError) {
-            showErrorToast(activeToastOptions?.errorMessage ?? message);
-          }
-          throw e;
+        } else {
+          message = normalizeMessage(e, "Something went wrong");
         }
-        const message = normalizeMessage(e, "Something went wrong");
         setError(message);
         if (shouldToastError) {
           showErrorToast(activeToastOptions?.errorMessage ?? message);
@@ -431,10 +448,7 @@ export function useApi<TResp = unknown, TBody = unknown>(
     const lastOverride = lastRunOverrideRef.current;
     const requestUrl = lastOverride?.url ?? url;
     const requestHeaders = buildHeaders(requestUrl, headersRef.current);
-    const hasAuthorization = Object.keys(requestHeaders).some(
-      (headerName) => headerName.toLowerCase() === "authorization",
-    );
-    if (!hasAuthorization) {
+    if (!hasAuthorizationHeader(requestHeaders)) {
       // No session to refresh with - the next user action reports that properly.
       return undefined;
     }
@@ -474,6 +488,10 @@ export function useApi<TResp = unknown, TBody = unknown>(
   );
   useEffect(() => {
     return () => {
+      // Nothing this hook started outlives the screen that owns it: a reply landing
+      // after unmount only toasts over the next page and updates state nobody reads.
+      abortRef.current?.abort();
+      abortRef.current = null;
       refreshAbortRef.current?.abort();
       refreshAbortRef.current = null;
     };

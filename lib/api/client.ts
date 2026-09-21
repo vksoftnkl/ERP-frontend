@@ -44,6 +44,10 @@ export function resolveApiBase(): string {
       resolvedUrl.hostname = currentHostname;
     }
 
+    // Same loopback normalisation the default base gets, so a configured
+    // localhost URL resolves to the one host name the dev certificate covers.
+    resolvedUrl.hostname = resolveLoopbackHostname(resolvedUrl.hostname);
+
     if (window.location.protocol === "http:" && resolvedUrl.protocol === "https:") {
       resolvedUrl.protocol = "http:";
     }
