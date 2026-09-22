@@ -383,7 +383,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   const [busy, setBusy] = useState<SaleBillBusy>("idle");
   /**
    * `busy` cannot guard re-entry on its own: `setBusy` is asynchronous, so two
-   * F6 presses inside one render both see "idle". The voucher number is
+   * F5 presses inside one render both see "idle". The voucher number is
    * allocated inside the server's create transaction, so a second in-flight
    * save stores a SECOND bill with its own refno.
    */
@@ -1248,7 +1248,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         return { status: "failed" };
       }
       // `busy` cannot guard re-entry on its own: `setBusy` is asynchronous, so
-      // two F6 presses inside one render both see "idle". The voucher number is
+      // two F5 presses inside one render both see "idle". The voucher number is
       // allocated inside the server's create transaction, so a second in-flight
       // save would store a SECOND bill with its own refno — against the same
       // customer, for the same goods, with the money taken once.

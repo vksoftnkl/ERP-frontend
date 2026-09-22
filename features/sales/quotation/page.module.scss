@@ -1001,6 +1001,13 @@
   opacity: 0.7;
 }
 
+/* White-on-maroon at 0.7 is the one place the hint reads as blank rather than
+   quiet — the Save key is the last one an operator should have to guess at. */
+.buttonPrimary .buttonHint {
+  font-weight: 600;
+  opacity: 0.92;
+}
+
 /* ------------------------------------------------------------------ modals */
 
 .modalOverlay {

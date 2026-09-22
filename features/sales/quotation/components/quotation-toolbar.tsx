@@ -124,7 +124,7 @@ export function QuotationToolbar(props: QuotationToolbarProps) {
         Clear<Hint>F7</Hint>
       </button>
       <button type="button" className={styles.button} disabled={isBusy} onClick={onCancel}>
-        Cancel
+        Cancel<Hint>Esc</Hint>
       </button>
     </div>
   );

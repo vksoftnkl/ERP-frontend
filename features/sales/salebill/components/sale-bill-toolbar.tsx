@@ -3,9 +3,9 @@
 /**
  * The bill form's action bar, in the legacy screen's own order and wording:
  *
- *   Settle - F5 · Adjust - F4 · Save - F6 · Bill List - F8 ·
+ *   Settle - F6 · Adjust - F4 · Save - F5 · Bill List - F8 ·
  *   Quotation - Ctrl+F3 · Order - Ctrl+F4 · Hold - F9 · Held - F10 ·
- *   Copy - Alt+Y · Edit - F2 · Cancel Order · Clear - F7 · Close
+ *   Copy - Alt+Y · Edit - F2 · Cancel Order · Clear - F7 · Close - Esc
  *
  * Two things are ABSENT rather than present-and-dead, and both are deliberate:
  *
@@ -78,7 +78,7 @@ export function SaleBillToolbar(props: SaleBillToolbarProps) {
         title="Take the money — cash, card, UPI, cheque, credit"
         onClick={onOpenTender}
       >
-        Settle <span className={styles.buttonHint}>F5</span>
+        Settle <span className={styles.buttonHint}>F6</span>
       </button>
       <button
         type="button"
@@ -95,7 +95,7 @@ export function SaleBillToolbar(props: SaleBillToolbarProps) {
         disabled={working || !canSave}
         onClick={onSave}
       >
-        {busy === "saving" ? "Saving…" : "Save"} <span className={styles.buttonHint}>F6</span>
+        {busy === "saving" ? "Saving…" : "Save"} <span className={styles.buttonHint}>F5</span>
       </button>
       <button type="button" className={styles.button} disabled={working} onClick={onShowList}>
         Bill List <span className={styles.buttonHint}>F8</span>
@@ -164,7 +164,7 @@ export function SaleBillToolbar(props: SaleBillToolbarProps) {
         Clear <span className={styles.buttonHint}>F7</span>
       </button>
       <button type="button" className={styles.button} disabled={working} onClick={onClose}>
-        Close
+        Close <span className={styles.buttonHint}>Esc</span>
       </button>
     </div>
   );

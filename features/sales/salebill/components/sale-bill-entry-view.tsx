@@ -714,7 +714,7 @@ export function SaleBillEntryView({
   }, [api, editable]);
 
   /**
-   * What the Save button and F6 actually do: take the money first. The legacy
+   * What the Save button and F5 actually do: take the money first. The legacy
    * screen never writes a bill the operator has not settled, so Save opens the
    * settle dialog and the save runs off its OK — see the dialog's `onApply`.
    *
@@ -962,9 +962,9 @@ export function SaleBillEntryView({
   /**
    * The legacy screen's bindings, and only the ones that DO something:
    *
-   *   F5 settle · F4 adjust · F6 save · F8 bill list · F7 clear ·
+   *   F5 save · F4 adjust · F6 settle · F8 bill list · F7 clear ·
    *   F9 hold · F10 held carts · Ctrl+F3 import quotation ·
-   *   Ctrl+F4 import order · F2 edit · Alt+Y copy
+   *   Ctrl+F4 import order · F2 edit · Alt+Y copy · Esc close
    *
    * **F1 steps between PANELS**, which is the walk above the other two: Enter
    * moves within a panel (the header's fields, a grid's cells) and never crosses
@@ -1002,6 +1002,21 @@ export function SaleBillEntryView({
         return;
       }
       switch (event.key) {
+        case "Escape":
+          // Leaves the screen, the same route as the Close button — guarded, so
+          // a bill with work on it asks before it goes.
+          //
+          // Everything layered over the bill owns the key first and this never
+          // sees it: a dialog stops Escape in capture (`ModalShell`) and is
+          // covered by `modalOpen` besides, while an open dropdown or a
+          // half-keyed cell calls `preventDefault()` on it. Only a press with
+          // nothing left to dismiss reaches the screen itself.
+          if (event.defaultPrevented) {
+            break;
+          }
+          event.preventDefault();
+          current.guardedRun("back");
+          break;
         case "F1":
           // Always prevented, help or not: the browser's own F1 opens a help
           // window over the screen, and an operator who hit it reaching for the
@@ -1010,8 +1025,10 @@ export function SaleBillEntryView({
           moveSectionFocus(event.shiftKey ? -1 : 1);
           break;
         case "F5":
+          // Save, not the browser's reload — which is exactly why this is
+          // always prevented, keyed bill on screen or not.
           event.preventDefault();
-          current.openTender();
+          current.requestSave();
           break;
         case "F4":
           if (event.ctrlKey || event.metaKey) {
@@ -1030,7 +1047,7 @@ export function SaleBillEntryView({
           break;
         case "F6":
           event.preventDefault();
-          current.requestSave();
+          current.openTender();
           break;
         case "F7":
           event.preventDefault();
