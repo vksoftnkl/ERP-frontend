@@ -217,8 +217,17 @@ export function findNextFieldTarget(
   }
   return bestTarget;
 }
-export function getFirstFocusableFieldTarget(root: HTMLElement): FocusableFieldTarget | null {
-  const targets = getFocusableFieldTargets(root);
+export function getFirstFocusableFieldTarget(
+  root: HTMLElement,
+  options?: { skipCustomFields?: boolean },
+): FocusableFieldTarget | null {
+  const targets = options?.skipCustomFields
+    ? getFocusableFieldTargets(root).filter(
+        // Custom fields own their keyboard behaviour (grids, pickers), so an
+        // automatic jump into one is left to the field itself.
+        (target) => target.container.dataset.erpModalFieldType !== "custom",
+      )
+    : getFocusableFieldTargets(root);
   if (targets.length === 0) {
     return null;
   }

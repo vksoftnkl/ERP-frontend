@@ -235,6 +235,9 @@ export type ERPDynamicModalFormProps = {
   hideFieldErrorText?: boolean;
   focusFirstInvalidFieldOnValidationError?: boolean;
   enableArrowKeyFieldNavigation?: boolean;
+  /** Puts the caret in the form's first field as soon as the modal opens, so
+   *  typing can start straight away. Defaults to true. */
+  autoFocusFirstField?: boolean;
   /** Shows the inline "Add New" (+) button on searchable select fields that
    *  have an onSearchCreateShortcut handler. Defaults to the global
    *  SHOW_DROPDOWN_ADD_BUTTON switch in config/ui.ts. */

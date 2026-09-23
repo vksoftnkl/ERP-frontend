@@ -114,6 +114,7 @@ export function ERPDynamicModalForm({
   hideFieldErrorText = false,
   focusFirstInvalidFieldOnValidationError = false,
   enableArrowKeyFieldNavigation = false,
+  autoFocusFirstField = true,
   showAddButton = SHOW_DROPDOWN_ADD_BUTTON,
   className,
   cardGridClassName,
@@ -162,6 +163,9 @@ export function ERPDynamicModalForm({
   const [filePreviews, setFilePreviews] = useState<Record<string, string>>({});
   const fieldValueChangeRequestIdsRef = useRef<Record<string, number>>({});
   const sectionTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  // Guards the open-time auto-focus so it fires once per open, not on every
+  // re-render while the modal stays open.
+  const autoFocusAppliedRef = useRef(false);
   // Replaces the whole form value set (open/reset). Keeps `formDataRef` in sync.
   const replaceFormData = useCallback((nextValues: Record<string, string>) => {
     formDataRef.current = nextValues;
@@ -300,6 +304,40 @@ export function ERPDynamicModalForm({
         closeModal();
         return;
       }
+      // Arrow Down while the form itself has no focus (a freshly opened modal,
+      // or focus parked on the header/footer chrome) drops the caret into the
+      // first field so typing can start without reaching for the mouse.
+      if (
+        event.key === "ArrowDown" &&
+        enableArrowKeyFieldNavigation &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !openSearchField
+      ) {
+        const formElement = formRef.current;
+        if (!formElement) {
+          return;
+        }
+        const active = document.activeElement;
+        if (
+          active instanceof HTMLElement &&
+          (formElement.contains(active) ||
+            active.closest('[data-erp-modal-search-dropdown="true"]'))
+        ) {
+          return;
+        }
+        const firstFieldTarget = getFirstFocusableFieldTarget(formElement, {
+          skipCustomFields: true,
+        });
+        if (!firstFieldTarget) {
+          return;
+        }
+        event.preventDefault();
+        focusFieldControl(firstFieldTarget.control);
+        return;
+      }
       const isSubmitChord =
         (!event.altKey &&
           !event.shiftKey &&
@@ -328,7 +366,14 @@ export function ERPDynamicModalForm({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeVariant, closeModal, isOpen, isSubmitting, openSearchField]);
+  }, [
+    activeVariant,
+    closeModal,
+    enableArrowKeyFieldNavigation,
+    isOpen,
+    isSubmitting,
+    openSearchField,
+  ]);
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -341,6 +386,44 @@ export function ERPDynamicModalForm({
       scrollArea.scrollTop = 0;
     });
   }, [activeVariantKey, isOpen]);
+  // Opening the modal drops the caret straight into the first field, so the
+  // form can be typed into without reaching for the mouse. Runs once per open
+  // (the ref resets on close) and never steals focus from a field the user has
+  // already reached.
+  useEffect(() => {
+    if (!isOpen) {
+      autoFocusAppliedRef.current = false;
+      return;
+    }
+    if (!autoFocusFirstField || autoFocusAppliedRef.current) {
+      return;
+    }
+    const formElement = formRef.current;
+    if (!formElement) {
+      return;
+    }
+    autoFocusAppliedRef.current = true;
+    // Two frames: the first lets the opening layout settle (the scroll reset
+    // above runs in frame one), the second measures the fields in place.
+    let frameId = window.requestAnimationFrame(() => {
+      frameId = window.requestAnimationFrame(() => {
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && formElement.contains(active)) {
+          return;
+        }
+        const firstFieldTarget = getFirstFocusableFieldTarget(formElement, {
+          skipCustomFields: true,
+        });
+        if (!firstFieldTarget) {
+          return;
+        }
+        focusFieldControl(firstFieldTarget.control);
+      });
+    });
+    return () => window.cancelAnimationFrame(frameId);
+    // activeVariantKey is a dependency so card-first modals focus their form as
+    // soon as a variant is picked, not only at open time.
+  }, [activeVariantKey, autoFocusFirstField, isOpen]);
   useEffect(() => {
     if (!isOpen) {
       return;
