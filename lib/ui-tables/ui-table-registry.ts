@@ -52,6 +52,14 @@ export const UI_TABLES = {
   itemQtyPrice: { name: "ITEM QTY WISE PRICE", fallbackId: "19" },
   /** Opening Stock entry grid. */
   openingStockLines: { name: "OPENING STOCK - LINES", fallbackId: "27" },
+  /** Opening Balance (menu 55) → the ledger set. */
+  openingBalanceLedgers: { name: "OPENING BALANCE - LEDGERS", fallbackId: "30" },
+  /** Opening Balance (menu 55) → the selected party's bill-wise breakup. */
+  openingBalanceBills: { name: "OPENING BALANCE - BILLS", fallbackId: "31" },
+  /** Receipt Entry (menu 99) → the bills grid: this party's bills AND credits. */
+  receiptBills: { name: "RECEIPT - BILLS", fallbackId: "32" },
+  /** Receipt Entry (menu 99) → the instruments grid: tenders AND role lines. */
+  receiptTenders: { name: "RECEIPT - TENDERS", fallbackId: "33" },
   /** Physical Stock entry grid. */
   physicalStockLines: { name: "PHYSICAL STOCK - LINES", fallbackId: "28" },
   /** Quotation Entry item grid. */

@@ -11,6 +11,7 @@ import GlobalTextCapitalization from "@/components/feedback/global-text-capitali
 import SessionAppSettings from "@/components/layout/session-app-settings";
 import ConfiguredDirectories from "@/components/layout/configured-directories";
 import MessagePopup from "@/components/feedback/message-popup";
+import ConfirmPopup from "@/components/feedback/confirm-popup";
 import ErrorBoundary from "@/components/feedback/error-boundary";
 import UiScaleController from "@/components/layout/ui-scale-controller";
 import { uiScaleBootstrapScript } from "@/lib/ui-scale";
@@ -103,6 +104,10 @@ export default function RootLayout({
           {/* Every success, error and warning in the app opens here — one
               popup at a time, over everything, answered with Enter or Esc. */}
           <MessagePopup />
+          {/* And every yes/no question, through `lib/confirm`. Beside the
+              message popup rather than inside a provider, because two of the
+              callers ask from outside React's render scope. */}
+          <ConfirmPopup />
         </Providers>
       </body>
     </html>

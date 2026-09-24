@@ -4,6 +4,7 @@ import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 import styles from "./erp-header.module.css";
 import { ERP_HEADER_ICON_COMPONENTS } from "./constants";
 import { toInternalRoute } from "@/lib/navigation/safe-route";
+import { toast } from "@/lib/notify";
 import type { ErpHeaderItem, MenuLinkProps, MenuTreeProps } from "./types";
 
 function cx(...tokens: Array<string | false | undefined>): string {
@@ -133,7 +134,22 @@ export function MenuLink({
         suppressHoverUntilPointerLeaves(event.currentTarget);
         event.currentTarget.blur();
         onMenuClose();
-        window.alert(`Navigating to ${item.label}`);
+        /*
+         * A leaf with no route: the menu lists it, but the screen behind it does
+         * not exist on this build yet.
+         *
+         * Raised through `lib/notify`, like every other message in the app, so
+         * it lands in the central popup rather than a native `alert()` — which
+         * looks nothing like the rest of the app, cannot be dismissed with the
+         * keyboard the way the popup can, and BLOCKS the render loop of whatever
+         * screen is underneath it while it is up.
+         *
+         * It also no longer claims to be navigating. Nothing navigates; saying
+         * so sent operators looking for a screen that never opened.
+         */
+        toast.info(
+          `"${item.label}" is on the menu, but its screen has not been built yet.`,
+        );
       }
     },
     [item.href, item.onClick, item.label, hasSubmenu, onNavigate, onMenuClose],

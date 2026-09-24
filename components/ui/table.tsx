@@ -536,6 +536,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   onPageSizeChange,
   showPageSizeSelector = true,
   paginationLabel = "Showing",
+  hintBar,
   tableMaxHeight,
   stickyHeader = true,
 }: ReusableTableProps<T>) {
@@ -1801,6 +1802,11 @@ export function ReusableTable<T extends Record<string, unknown>>({
           </tbody>
         </table>
       </div>
+      {hintBar ? (
+        <div className={styles.hintBar} data-erp-table-hint="true">
+          {hintBar}
+        </div>
+      ) : null}
       {paginated ? (
         <div className={styles.paginationBar} data-erp-table-pagination="true">
           <div className={styles.paginationInfo}>

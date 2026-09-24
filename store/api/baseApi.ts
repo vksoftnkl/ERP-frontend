@@ -170,6 +170,15 @@ export const API_TAG_TYPES = [
   "PhysicalStock",
   // Pricing modules
   "ItemQtyPrice",
+  // Accounts — the opening set of one (company, scope, year), its bill-wise
+  // breakups and its trial balance. One tag for all five routes: they all read
+  // and write the same set, and a bill save moves the ledger totals.
+  "OpeningBalance",
+  // Accounts — one receipt and everything a party's open items say about it.
+  // One tag: a post moves the bills, the credits and the party's context
+  // together, and a screen holding any of them stale is holding all of them
+  // stale.
+  "Receipt",
   // Sales transactions
   "Quotation",
   "SaleOrder",

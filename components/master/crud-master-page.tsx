@@ -1424,6 +1424,50 @@ function buildColumnsFromGridColumns(
   for (const column of visibleColumns) {
     const accessor = resolveMasterAccessorFromGridColumn(column, lookupKeys);
     const accessorTaken = accessor !== null && seenAccessors.has(accessor);
+    /*
+     * A page's own renderer for this column wins, whichever branch the column
+     * would otherwise take.
+     *
+     * The overrides used to reach only the columns that resolved to NO
+     * accessor, which meant the ones a page most wants to dress — the status
+     * it wanted as a chip, the reference it wanted greyed when absent — were
+     * silently ignored, because `lookupKeys.active` / `.code` / `.name` had
+     * already claimed them for the shell's own rendering. A caller that names
+     * a column and hands over a renderer for it has said exactly what it
+     * wants; nothing above it knows better.
+     */
+    const overrideKey = column.sqlFieldName || column.accessorKey || column.key;
+    const overrideRender = overrideKey ? columnRenderOverrides?.[overrideKey] : undefined;
+    if (overrideRender) {
+      const sourceKey = column.sqlFieldName || column.accessorKey;
+      if (accessor) {
+        seenAccessors.add(accessor);
+      }
+      if (sourceKey) {
+        seenSourceKeys.add(sourceKey);
+      }
+      columns.push({
+        key: normalizeColumnToken(column.key || sourceKey || column.header),
+        header: column.header,
+        render: overrideRender,
+        ...(sourceKey
+          ? {
+              // Sorting and searching still read the RAW value: a chip is how
+              // the cell looks, not what the row is worth.
+              sortAccessor: (row: MasterTableRow) =>
+                getSourceColumnValue(row.__source, sourceKey),
+              searchAccessor: (row: MasterTableRow) =>
+                toDisplayValue(getSourceColumnValue(row.__source, sourceKey)),
+            }
+          : {}),
+        align: column.align,
+        width: accessor === "serialNo" ? MASTER_SERIAL_COLUMN_WIDTH : column.width,
+        sortable: column.sortable ?? true,
+        headerStyle: column.color ? { backgroundColor: column.color } : undefined,
+        cellStyle: column.color ? { backgroundColor: column.color } : undefined,
+      });
+      continue;
+    }
     // A column whose heuristic accessor is already claimed (e.g. itg_parent_name
     // resolves to masterName after itg_name) still renders — from its own SQL
     // field via the source branch below — rather than being silently dropped.
@@ -2351,6 +2395,9 @@ export default function CrudMasterPage({
   isRowPrintDisabled,
   rowPrintDisabledReason,
   printBusy,
+  onDeleteAction,
+  enableListActionKeys,
+  listHintMessage,
   enableMultiSelect,
   onBulkPrintAction,
   bulkPrintDisabledReason,
@@ -3540,17 +3587,27 @@ export default function CrudMasterPage({
         const deleteId = resolveRecordId(row, lookupKeys.id);
         // A record keyed by more than one field (a partitioned voucher) hands
         // its whole compound key over; the id param stays unless restated.
-        const deleteOverride = buildDeleteRequest?.({
-          deleteId,
-          rowSource: row.__source,
-        });
-        await deleteRecord({
-          ...(deleteOverride?.url ? { url: deleteOverride.url } : {}),
-          query: {
-            [requestPayloadKeys.id]: String(deleteId),
-            ...(deleteOverride?.query ?? {}),
-          },
-        });
+        if (onDeleteAction) {
+          // The page owns the request — `POST /receipts/delete` wants its four
+          // keys in a body, which no url-and-query override can express. A
+          // false answer leaves the list exactly as it was, message included.
+          const removed = await onDeleteAction(row);
+          if (!removed) {
+            return;
+          }
+        } else {
+          const deleteOverride = buildDeleteRequest?.({
+            deleteId,
+            rowSource: row.__source,
+          });
+          await deleteRecord({
+            ...(deleteOverride?.url ? { url: deleteOverride.url } : {}),
+            query: {
+              [requestPayloadKeys.id]: String(deleteId),
+              ...(deleteOverride?.query ?? {}),
+            },
+          });
+        }
         setSelectedRowId((current) =>
           current === row.__rowId ? null : current,
         );
@@ -3586,6 +3643,7 @@ export default function CrudMasterPage({
     searchTerm,
     afterDeleteSuccess,
     buildDeleteRequest,
+    onDeleteAction,
   ]);
   const fields = useMemo<ERPDynamicModalField[]>(
     () =>
@@ -3862,6 +3920,132 @@ export default function CrudMasterPage({
       handleDeleteRow(selectedRow);
     }
   }, [canDeleteRecords, selectedRow, handleDeleteRow, isRowDeleteDisabled]);
+
+  /**
+   * The list's function keys — F1 add, F2 / Enter edit, F3 delete, F5 refresh.
+   *
+   * OPT-IN (`enableListActionKeys`), because these are window-level keys: F5
+   * stops reloading the browser and F1 stops opening its help, and a page that
+   * has not asked for that should not get it. Each one goes through the same
+   * handler as the button beside it, so a key can never do what the button
+   * refuses — permission, a row the page will not edit, a request in flight.
+   *
+   * Plain Enter is bound ONLY while the grid itself has focus. The list
+   * keyboard hook leaves it alone for a good reason — it submits the search
+   * box and activates whatever button is focused — and that reason does not
+   * apply when the row list is what the operator is standing on.
+   */
+  useEffect(() => {
+    if (hideListPage || !enableListActionKeys) {
+      return;
+    }
+    const handleActionKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+      // A dialog over the list owns the keyboard: the grid settings modal
+      // already answers to Esc and F5, and the delete confirmation to Enter.
+      if (gridSettingsMode !== null || pendingDeleteRow !== null) {
+        return;
+      }
+      const key = event.key;
+      if (key === "F5") {
+        if (event.ctrlKey) {
+          return;
+        }
+        event.preventDefault();
+        if (!loading) {
+          handleRefresh();
+        }
+        return;
+      }
+      if (event.ctrlKey) {
+        return;
+      }
+      if (key === "F1") {
+        event.preventDefault();
+        if (canCreateRecords && !saveLoading && !detailsLoading) {
+          handleCreateAction();
+        }
+        return;
+      }
+      if (key === "F2" || key === "Enter") {
+        if (key === "Enter") {
+          const target = event.target as HTMLElement | null;
+          const withinGrid = Boolean(
+            target && tableContainerRef.current?.contains(target),
+          );
+          if (!withinGrid) {
+            return;
+          }
+        }
+        if (!selectedRow || editDisabledForSelection || saveLoading || detailsLoading) {
+          return;
+        }
+        event.preventDefault();
+        handleToolbarEdit();
+        return;
+      }
+      if (key === "F3") {
+        event.preventDefault();
+        if (
+          selectedRow &&
+          !deleteDisabledForSelection &&
+          !deleteLoading &&
+          !saveLoading &&
+          !detailsLoading
+        ) {
+          handleToolbarDelete();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleActionKey);
+    return () => {
+      window.removeEventListener("keydown", handleActionKey);
+    };
+  }, [
+    canCreateRecords,
+    deleteDisabledForSelection,
+    deleteLoading,
+    detailsLoading,
+    editDisabledForSelection,
+    enableListActionKeys,
+    gridSettingsMode,
+    handleCreateAction,
+    handleRefresh,
+    handleToolbarDelete,
+    handleToolbarEdit,
+    hideListPage,
+    loading,
+    pendingDeleteRow,
+    saveLoading,
+    selectedRow,
+  ]);
+
+  /**
+   * What the hint bar says. Built from what is actually bound above, so the
+   * legend cannot drift from the behaviour, and the page's own sentence about
+   * the highlighted row sits beside it.
+   */
+  const listHintBar = useMemo(() => {
+    const hintMessage =
+      typeof listHintMessage === "function" ? listHintMessage(selectedRow) : listHintMessage;
+    if (!enableListActionKeys && !hintMessage) {
+      return null;
+    }
+    return (
+      <>
+        {enableListActionKeys ? (
+          <span className="erp-ms-hint-keys">
+            ↑↓ move · F1 add · Enter / F2 edit · Ctrl+Enter view · F3 delete · F5 refresh
+          </span>
+        ) : null}
+        {hintMessage ? (
+          <span className="erp-ms-hint-message">{hintMessage}</span>
+        ) : null}
+      </>
+    );
+  }, [enableListActionKeys, listHintMessage, selectedRow]);
 
   /*
    * Print is OPT-IN — `onPrintAction` is absent on every master that lists
@@ -4462,6 +4646,7 @@ export default function CrudMasterPage({
                       ? `Loading ${entityLabel} data...`
                       : listEmptyText ?? `No ${entityLabel} data found`
                   }
+                  hintBar={listHintBar}
                 />
                 </div>
               </section>

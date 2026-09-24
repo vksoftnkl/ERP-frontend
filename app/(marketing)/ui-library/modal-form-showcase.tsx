@@ -4,6 +4,7 @@ import {
   ERPDynamicModalForm,
   type ERPDynamicModalVariant,
 } from "@/components/design-system";
+import { toast } from "@/lib/notify";
 
 const modalVariants: ERPDynamicModalVariant[] = [
   {
@@ -261,7 +262,9 @@ export default function ModalFormShowcase() {
       onSubmit={({ variantKey, values }) => {
         // Replace this with API integration in your application.
         console.log("Dynamic form submit", variantKey, values);
-        window.alert(`${variantKey.toUpperCase()} form submitted successfully.`);
+        // `lib/notify`, not `alert()` — the showcase should demonstrate the
+        // message popup every real screen raises through, not a native dialog.
+        toast.success(`${variantKey.toUpperCase()} form submitted successfully.`);
       }}
     />
   );

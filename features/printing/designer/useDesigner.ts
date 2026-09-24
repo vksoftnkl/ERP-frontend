@@ -43,6 +43,7 @@ import {
 } from "@/features/printing/domain/draft";
 import { printingDesignerRoute } from "@/features/printing/routes";
 import type { PrintTemplateVersionPayload } from "@/features/printing/types/printing";
+import { confirm } from "@/lib/confirm";
 
 export type DesignerTab = "template" | "layout" | "data";
 
@@ -271,8 +272,16 @@ export function useDesigner(
 
   /** Point the tabs at another revision, to read it. */
   const openRevision = useCallback(
-    (version: PrintTemplateVersionPayload) => {
-      if (dirty && !window.confirm("Discard the unsaved changes to this draft?")) {
+    async (version: PrintTemplateVersionPayload) => {
+      if (
+        dirty &&
+        !(await confirm({
+          title: "Discard the unsaved changes?",
+          message: `Opening revision ${version.ptvRevNo} replaces the draft on screen.`,
+          confirmLabel: "Discard",
+          iconVariant: "replace",
+        }))
+      ) {
         return;
       }
       setDraft((current) => ({ ...current, working: toDraftVersion(version) }));

@@ -59,7 +59,18 @@ export const CONFIGURED_DROPDOWNS = {
   /** Salesmen and agents alike. Its SQL binds a company token — send `dropdown_param`. */
   employee: { name: "EMPLOYEES", fallbackId: "38", paramBound: true },
   customer: { name: "CUSTOMERS", fallbackId: "39", paramBound: false },
+  /**
+   * Receipt Entry's customer picker, narrowed by the beat. Its SQL names a bare
+   * `iarea_id` token, so `dropdown_param` is ALWAYS sent — as an empty string
+   * for "every beat". Left out, the literal word reaches Postgres and choosing
+   * NO beat returns NO customers ("invalid input syntax for type uuid").
+   */
+  customerByArea: { name: "CUSTOMERS BY AREA", fallbackId: "54", paramBound: true },
   item: { name: "ITEMS", fallbackId: "42", paramBound: false },
+  /** Ledgers under the bank group — where a cheque is deposited. */
+  bankLedger: { name: "BANK LEDGERS", fallbackId: "25", paramBound: false },
+  /** Every live ledger — the cheque register's party filter. */
+  ledgerAll: { name: "LEDGERS - ALL", fallbackId: "43", paramBound: false },
   bank: { name: "INDIAN BANKS LIST", fallbackId: "46", paramBound: false },
   ledgerForPostingRole: { name: "LEDGERS FOR POSTING ROLE", fallbackId: "51", paramBound: true },
   postingRoleRateWise: { name: "POSTING ROLES - RATE WISE", fallbackId: "52", paramBound: false },

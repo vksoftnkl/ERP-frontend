@@ -27,6 +27,8 @@ export type DropdownRowsArgs = {
   search?: string;
   page?: number;
   params?: DropdownParams;
+  /** Guarded placeholders that must travel even when blank — see `api.ts`. */
+  keepEmptyParams?: readonly string[];
 };
 
 const EMPTY_PAGE: DropdownRowsPage = { items: [], meta: { page: 1, limit: 0, total: 0 } };
@@ -64,7 +66,7 @@ export const dropdownApi = baseApi.injectEndpoints({
      * abandoned search lands in that search's entry, not this one's.
      */
     getDropdownRows: builder.query<DropdownRowsPage, DropdownRowsArgs>({
-      query: ({ dropdownId, search, page, params }) => ({
+      query: ({ dropdownId, search, page, params, keepEmptyParams }) => ({
         url: DROPDOWN_RUN_ENDPOINT,
         params: buildDropdownRunQuery({
           dropdownId,
@@ -72,12 +74,15 @@ export const dropdownApi = baseApi.injectEndpoints({
           page,
           limit: DROPDOWN_PAGE_SIZE,
           params,
+          keepEmptyParams,
         }),
       }),
       transformResponse: (payload: ApiSuccessResponse<DropdownRowsPage>) =>
         payload.data ?? EMPTY_PAGE,
       serializeQueryArgs: ({ endpointName, queryArgs }) =>
-        `${endpointName}(${queryArgs.dropdownId}|${queryArgs.search?.trim() ?? ""}|${dropdownParamsKey(queryArgs.params)})`,
+        // The cache key must see the blank too: "every beat" and "this beat"
+        // are different result sets, and one of them is spelled "".
+        `${endpointName}(${queryArgs.dropdownId}|${queryArgs.search?.trim() ?? ""}|${dropdownParamsKey(queryArgs.params, queryArgs.keepEmptyParams)})`,
       merge: (current, incoming, { arg }) => {
         // Page 1 replaces: it is also what a refetch (freshness signal, reconnect)
         // asks for, and appending there would double every row on screen.

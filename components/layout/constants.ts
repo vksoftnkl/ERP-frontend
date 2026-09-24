@@ -136,6 +136,17 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
         href: "/master/account-ledger-groups-master",
       },
       { label: "Ledger Master", href: "/master/account-ledger-master" },
+      // Menu 55. The label has to match `fixed.menu_master.menu_name` exactly:
+      // hrefs are attached to the server-driven menu by normalized-label match
+      // against THIS list, and an unmatched route is also an ungoverned one —
+      // menu permissions fail open until the href appears here.
+      { label: "Opening Balance", href: "/accounts/opening-balance" },
+      // Menu 99. Same rule as above: the label must match
+      // `fixed.menu_master.menu_name` exactly, or the route is ungoverned and
+      // menu permissions fail open on it.
+      { label: "Receipt", href: "/accounts/receipt" },
+      // Menu 51. Same rule: must match `fixed.menu_master.menu_name` exactly.
+      { label: "Received Cheques", href: "/accounts/received-cheques" },
            {
         label:"GSP Service Master",href:"/master/gsp-service-master"
       },{

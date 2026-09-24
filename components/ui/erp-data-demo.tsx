@@ -2,6 +2,7 @@
 
 import { type FormEvent, useMemo, useState } from "react";
 import ReusableTable, { type ReusableTableColumn } from "@/components/ui/table";
+import { confirm } from "@/lib/confirm";
 
 type TabType = "employee" | "project" | "inventory";
 type SortDirection = "asc" | "desc";
@@ -382,8 +383,13 @@ export default function ERPAdvancedFixed() {
     setViewMode(true);
   };
 
-  const handleDelete = (type: TabType, id: number) => {
-    const allowDelete = window.confirm("Are you sure you want to delete this record?");
+  const handleDelete = async (type: TabType, id: number) => {
+    const allowDelete = await confirm({
+      title: "Are you sure?",
+      message: "Do you really want to delete this record?",
+      note: "This action cannot be undone.",
+      confirmLabel: "Delete",
+    });
     if (!allowDelete) {
       return;
     }

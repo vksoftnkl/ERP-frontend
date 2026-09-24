@@ -24,6 +24,31 @@ describe("dropdownParamsKey", () => {
     expect(dropdownParamsKey({ iemp_branch_id: null, other: undefined })).toBe("");
   });
 
+  it("keeps a GUARDED placeholder even when it is blank", () => {
+    /*
+     * Dropdown 54, CUSTOMERS BY AREA, spells "every beat" as an empty
+     * `iarea_id`: its SQL reads `NULLIF('iarea_id','') IS NULL OR …`. Dropping
+     * the key leaves the literal word in the statement and the run answers
+     * 400 — verified live, where `{"iarea_id":""}` returns every customer and
+     * omitting it answers "Invalid dropdown SQL configuration".
+     */
+    expect(dropdownParamsKey({ iarea_id: "" }, ["iarea_id"])).toBe('{"iarea_id":""}');
+    expect(dropdownParamsKey({ iarea_id: "  " }, ["iarea_id"])).toBe('{"iarea_id":""}');
+    // An absent value still has to send something for the guard to read.
+    expect(dropdownParamsKey({ iarea_id: null }, ["iarea_id"])).toBe('{"iarea_id":""}');
+  });
+
+  it("still drops a blank placeholder the caller did not name", () => {
+    // Dropdown 38's `iemp_branch_id::uuid` is unguarded: '' fails the cast.
+    expect(dropdownParamsKey({ iemp_branch_id: "" }, ["iarea_id"])).toBe("");
+  });
+
+  it("passes a chosen beat through unchanged", () => {
+    expect(dropdownParamsKey({ iarea_id: "area-1" }, ["iarea_id"])).toBe(
+      '{"iarea_id":"area-1"}',
+    );
+  });
+
   it("is stable regardless of key order", () => {
     expect(dropdownParamsKey({ b: 2, a: 1 })).toBe(dropdownParamsKey({ a: 1, b: 2 }));
   });

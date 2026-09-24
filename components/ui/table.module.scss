@@ -1499,3 +1499,18 @@
 .tableShell .headerCell .headerButton {
   justify-content: center;
 }
+
+/**
+ * The strip between the rows and the pager: what the grid answers to, and what
+ * the highlighted row means. Rendered only when a caller passes `hintBar`.
+ */
+.hintBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border, #e6e6e6);
+  font-size: 12px;
+  color: var(--text-muted, #6d6d6d);
+}

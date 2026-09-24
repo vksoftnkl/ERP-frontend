@@ -1,0 +1,659 @@
+/**
+ * Opening Balance — the screen's skin.
+ *
+ * `.erp-app-content` already gives the page a definite height, so the shell is
+ * `height: 100%` and NEVER `100dvh` / `100vh` — the latter pushes the totals
+ * band and the Save button out of view. Only the two grid viewports scroll.
+ *
+ * Lengths are `u(n)`, n times `--erp-q-u`, the same fluid unit the transaction
+ * screens use, so this screen sits at the same density as the rest of the app on
+ * any monitor. It is declared on `:root` rather than on `.page` because the
+ * picker and the confirmation are portaled to `document.body`, and a var they
+ * cannot see would make every length in them an invalid calc.
+ */
+/*
+ * The same fluid unit the transaction screens declare, re-declared here because
+ * a CSS module is only loaded with its own route: a screen that merely READ
+ * `--erp-q-u` would fall back to 1rem wherever the quotation stylesheet has not
+ * been loaded. On `:root` rather than on `.page`, so the portaled picker and
+ * confirmation can see it too.
+ */
+:root {
+  --erp-q-u: clamp(
+    0.875rem,
+    0.2rem + calc(0.5vw / var(--erp-ui-scale, 1)) + calc(0.35vh / var(--erp-ui-scale, 1)),
+    1.25rem
+  );
+}
+
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.5);
+  padding: u(0.6) u(0.75);
+  height: 100%;
+  min-height: 0;
+  font-family: var(--erp-font-family, "Segoe UI", system-ui, Arial, sans-serif);
+  font-size: u(0.78);
+  color: var(--text-main, #222222);
+  background: var(--surface-muted, #f6f6f6);
+}
+
+/* ----------------------------------------------------------------- title bar */
+.titleBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.6);
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-bottom: u(0.35);
+  border-bottom: 3px solid var(--primary, #7b1515);
+}
+.titleBlock {
+  min-width: 0;
+}
+.title {
+  margin: 0;
+  font-size: u(1.15);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.dirtyMark {
+  color: var(--danger, #b3261e);
+}
+.subtitle {
+  margin: u(0.1) 0 0;
+  font-size: u(0.72);
+  color: var(--text-muted, #666666);
+}
+.subtitleNote {
+  font-style: italic;
+}
+.titleActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.35);
+  align-items: center;
+}
+
+/* A pill that says in one word what the band below says in three figures. */
+.balancePill {
+  padding: u(0.15) u(0.5);
+  border-radius: 999px;
+  font-size: u(0.72);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.balancePillOk {
+  background: #e3f4e6;
+  color: #1c6b2c;
+}
+.balancePillOut {
+  background: #fdecec;
+  color: var(--danger, #b3261e);
+}
+
+.scopeCombo {
+  display: flex;
+  gap: u(0.25);
+  align-items: center;
+}
+.scopeComboLabel {
+  font-size: u(0.7);
+  color: var(--text-muted, #666666);
+  text-transform: uppercase;
+}
+.scopeComboSelect {
+  padding: u(0.15) u(0.3);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  font: inherit;
+  font-size: u(0.74);
+}
+
+/* ------------------------------------------------------------------ buttons */
+.primaryButton,
+.secondaryButton {
+  padding: u(0.2) u(0.6);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  font: inherit;
+  font-size: u(0.74);
+  cursor: pointer;
+}
+.primaryButton {
+  border-color: var(--primary, #7b1515);
+  background: var(--primary, #7b1515);
+  color: #ffffff;
+  font-weight: 700;
+}
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.linkButton {
+  border: 0;
+  background: none;
+  color: var(--primary, #7b1515);
+  font: inherit;
+  font-size: u(0.72);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ banners */
+.banners {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.25);
+}
+.bannerWarn,
+.bannerInfo {
+  margin: 0;
+  padding: u(0.3) u(0.5);
+  border-left: 3px solid;
+  border-radius: var(--erp-radius, 4px);
+  font-size: u(0.72);
+  line-height: 1.45;
+}
+.bannerWarn {
+  border-color: #b8860b;
+  background: #fdf6e3;
+  color: #5c4405;
+}
+.bannerInfo {
+  border-color: #2f6fb3;
+  background: #eef4fb;
+  color: #1d4a7a;
+}
+.bannerLink {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
+.problems {
+  margin: 0;
+  padding: u(0.3) u(0.5) u(0.3) u(1.4);
+  border-left: 3px solid var(--danger, #b3261e);
+  border-radius: var(--erp-radius, 4px);
+  background: #fdecec;
+  color: #7a1a15;
+  font-size: u(0.72);
+  line-height: 1.5;
+}
+
+/* -------------------------------------------------------------------- grids */
+.gridsRow {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: u(0.5);
+  min-height: 0;
+}
+.gridShell {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  isolation: isolate;
+}
+/* The breakup takes its height from the row it sits in, not from its content. */
+.billShell {
+  flex: 0 0 auto;
+  max-height: 42%;
+}
+.gridHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.4);
+  align-items: center;
+  justify-content: space-between;
+  padding: u(0.25) u(0.4);
+  border-bottom: 1px solid var(--border, #c9c9c9);
+  background: #f2f2f2;
+}
+.gridHeadTitle {
+  font-size: u(0.72);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.gridHeadNote {
+  font-size: u(0.68);
+  color: var(--text-muted, #666666);
+}
+.gridViewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #ffffff;
+}
+.grid {
+  /* The width is set inline from the configured widths. `ui_tbl_clm_column_width`
+     is the desktop client's Qt FRACTION, not a percent: used as a CSS `%` under
+     `table-layout: fixed` it feeds back into its own container and blows the
+     table up to millions of pixels. `columns.ts` converts it to px first. */
+  min-width: 100%;
+  font-size: var(--erp-q-u, 1rem);
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+.grid thead th {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  padding: u(0.2) u(0.3);
+  border-right: 1px solid var(--border-light, #e2e2e2);
+  border-bottom: 1px solid var(--border, #c9c9c9);
+  background: var(--header-bg, #efe6e6);
+  color: var(--table-header-text, #4a0f0f);
+  font-size: u(0.7);
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+/* ------------------------------------------------- resizable column headers */
+.gridHeaderCell {
+  position: relative;
+}
+.gridHeaderCellResizing {
+  background: var(--row-selected, #f6ecec);
+}
+/* Straddles the cell border so the grab zone is the same on both sides of it,
+   and reaches past the header's own padding for a comfortable target. */
+.columnResizeHandle {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: -4px;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+}
+.columnResizeHandle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: transparent;
+}
+.columnResizeHandle:hover::after,
+.gridHeaderCellResizing .columnResizeHandle::after {
+  background: var(--primary, #7b1515);
+}
+
+.grid tbody td {
+  padding: 0;
+  border-right: 1px solid var(--border-light, #eeeeee);
+  border-bottom: 1px solid var(--border-light, #eeeeee);
+  white-space: nowrap;
+}
+.gridLoading {
+  padding: u(0.6);
+  color: var(--text-muted, #666666);
+  text-align: center;
+}
+.rowOdd {
+  background: #ffffff;
+}
+.rowEven {
+  background: #fafafa;
+}
+.rowActive {
+  background: var(--row-selected, #f6ecec);
+}
+.rowStale td {
+  box-shadow: inset 2px 0 0 #b8860b;
+}
+.rowFrozen {
+  background: #f7f4ee;
+}
+
+.cellText,
+.cellInput {
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  padding: u(0.15) u(0.3);
+  font: inherit;
+  font-size: u(0.74);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cellInput {
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+/* The current cell, dark with its own border — the one thing a Qt delegate had
+   to paint by hand, because a QTableWidgetItem has no border-radius and
+   `::item:focus` does not follow the current index. Here it is one rule. */
+.cellInput:focus-visible,
+.cellSelect:focus-visible {
+  outline: 2px solid var(--primary, #7b1515);
+  outline-offset: -2px;
+  background: #fffdf5;
+}
+/* Disabled is not invisible: a read-only figure still has to be readable, and
+   the tooltip beside it is what explains why it cannot be typed into. */
+.cellInput:disabled,
+.cellSelect:disabled {
+  color: var(--text-muted, #555555);
+  background: #f4f4f4;
+  cursor: not-allowed;
+}
+.cellInput::-webkit-outer-spin-button,
+.cellInput::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+}
+/*
+ * A read-only cell that is still in the keyboard walk.
+ *
+ * It has to LOOK like the settled text it holds — a control the operator cannot
+ * type into reads as broken — while staying focusable, because a disabled cell
+ * drops out of the walk and would take its whole row with it.
+ */
+.cellInputPlain {
+  cursor: default;
+}
+.cellInputPlain:focus-visible {
+  background: #fffdf5;
+}
+
+.cellSelect {
+  width: 100%;
+  padding: u(0.1) u(0.2);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: u(0.74);
+}
+.alignRight {
+  text-align: right;
+}
+.alignCenter {
+  text-align: center;
+}
+.rowActionCell {
+  text-align: center;
+}
+.rowRemove {
+  width: u(1.1);
+  height: u(1.1);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--danger, #b3261e);
+  font-size: u(0.9);
+  line-height: 1;
+  cursor: pointer;
+}
+.rowRemove:hover {
+  background: #fdecec;
+}
+
+/* --------------------------------------------------------------------- tie */
+.tieBand {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.15);
+  padding: u(0.25) u(0.45);
+  border-bottom: 1px solid var(--border-light, #e2e2e2);
+  background: #fbf9f4;
+  font-size: u(0.72);
+}
+.tieAlarm {
+  color: var(--danger, #b3261e);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------- chips */
+.chip {
+  display: inline-block;
+  padding: 0 u(0.3);
+  border-radius: 999px;
+  font-size: u(0.64);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.chipAmber {
+  background: #fdf0d5;
+  color: #7a5205;
+}
+.chipBlue {
+  background: #e7eefa;
+  color: #1d4a7a;
+}
+.chipGreen {
+  background: #e3f4e6;
+  color: #1c6b2c;
+}
+.chipGrey {
+  background: #eeeeee;
+  color: #555555;
+}
+
+/* ------------------------------------------------------------------ footer */
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: stretch;
+  justify-content: space-between;
+}
+/* The band the difference gets to itself. Squeezed onto the button row these
+   figures read as a caption; they are the number that decides whether saving
+   makes sense, so they stand beside the button that saves. */
+.totalsBand {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: u(0.75);
+  align-items: center;
+  padding: u(0.3) u(0.6);
+  border: 1px solid;
+  border-radius: var(--erp-radius, 4px);
+}
+/* The WHOLE band takes the colour: an unbalanced opening is a fact about the
+   set, not about one number in it. */
+.totalsBalanced {
+  border-color: #b5ddbd;
+  background: #eef8f0;
+  color: #1c6b2c;
+}
+.totalsOut {
+  border-color: #eec2c0;
+  background: #fdf2f2;
+  color: #7a1a15;
+}
+.totalsFigures {
+  display: flex;
+  gap: u(1);
+}
+.totalsCell {
+  display: flex;
+  flex-direction: column;
+}
+.totalsCaption {
+  font-size: u(0.62);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+.totalsValue {
+  font-size: u(1.05);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.totalsNotes {
+  display: flex;
+  flex: 1 1 u(14);
+  flex-direction: column;
+  gap: u(0.1);
+}
+.totalsNote {
+  margin: 0;
+  font-size: u(0.7);
+}
+.totalsAlarm {
+  margin: 0;
+  font-size: u(0.7);
+  font-weight: 700;
+}
+.footerActions {
+  display: flex;
+  gap: u(0.5);
+  align-items: center;
+}
+.footerHint {
+  font-size: u(0.68);
+  color: var(--text-muted, #666666);
+}
+
+/* ------------------------------------------------------------------- modal */
+/*
+ * Portaled to `document.body` (see `components/ui/modal-portal.tsx`), so the
+ * overlay carries its own colours: a token scoped to `.page` collapses to
+ * transparent out here. The scrim is a SEPARATE layer under the panel rather
+ * than a background on the overlay itself — a scrim on the overlay ghosts over
+ * the panel on a compositing-promoted scroller.
+ */
+.modalOverlay {
+  position: fixed;
+  z-index: var(--erp-z-modal, 1000);
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  isolation: isolate;
+}
+.modalBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+.modalPanel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(48rem, 92vw);
+  max-height: 80vh;
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  /* Pre-promoted, so it never lands under the page's own scroller layer. */
+  will-change: transform;
+}
+.modalHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: u(0.4) u(0.6);
+  border-bottom: 1px solid var(--border, #c9c9c9);
+}
+.modalTitle {
+  margin: 0;
+  font-size: u(0.9);
+  font-weight: 700;
+}
+.modalClose {
+  border: 0;
+  background: none;
+  font-size: u(1.2);
+  line-height: 1;
+  cursor: pointer;
+}
+.modalSearch {
+  padding: u(0.4) u(0.6);
+  border-bottom: 1px solid var(--border-light, #e2e2e2);
+}
+.modalSearchInput {
+  width: 100%;
+  padding: u(0.25) u(0.4);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  font: inherit;
+  font-size: u(0.78);
+}
+.modalBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.modalFoot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.4);
+  align-items: center;
+  justify-content: space-between;
+  padding: u(0.4) u(0.6);
+  border-top: 1px solid var(--border, #c9c9c9);
+}
+.modalFootActions {
+  display: flex;
+  gap: u(0.3);
+}
+.modalNote {
+  font-size: u(0.7);
+  color: var(--text-muted, #666666);
+}
+.pickerTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: u(0.76);
+}
+.pickerTable th {
+  position: sticky;
+  top: 0;
+  padding: u(0.25) u(0.4);
+  border-bottom: 1px solid var(--border, #c9c9c9);
+  background: #f2f2f2;
+  text-align: left;
+}
+.pickerTable td {
+  padding: u(0.2) u(0.4);
+  border-bottom: 1px solid var(--border-light, #eeeeee);
+}
+.pickerTable tbody tr {
+  cursor: pointer;
+}
+.pickerRowActive {
+  background: var(--row-selected, #f6ecec);
+}
+/* Already on the grid. Shown rather than hidden: "it is not in the list" and
+   "it is already in the set" are different answers, and only one of them is
+   the operator's mistake. */
+.pickerRowUsed td {
+  color: var(--text-muted, #999999);
+  text-decoration: line-through;
+}
+.pickerEmpty {
+  padding: u(0.8);
+  color: var(--text-muted, #666666);
+  text-align: center;
+}

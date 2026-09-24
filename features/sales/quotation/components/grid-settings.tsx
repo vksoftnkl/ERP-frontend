@@ -143,6 +143,17 @@ export type UseGridSettingsOptions = {
   pendingWidthCount: number;
   savingWidths: boolean;
   onSaveWidths: () => void;
+  /**
+   * What the Focus column does on THIS grid, when it is not what it does on the
+   * entry grids.
+   *
+   * The default sentence describes the walk these grids run: Focus is the subset
+   * of columns Enter stops at. A screen whose grid does not subset the walk that
+   * way — Opening Balance stops at every editable cell and uses the flag only to
+   * choose where the caret lands on entering a row — must say so here, or the
+   * dialog invites an operator to tick boxes that change nothing.
+   */
+  focusNote?: string;
 };
 
 export type GridSettings = {
@@ -162,6 +173,7 @@ export function useGridSettings({
   pendingWidthCount,
   savingWidths,
   onSaveWidths,
+  focusNote = "Focus is where Enter stops while keying a row; clear every box and it stops everywhere.",
 }: UseGridSettingsOptions): GridSettings {
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -443,8 +455,7 @@ export function useGridSettings({
         <>
           <span className={styles.settingsNote}>
             Applies to this grid for every user. Drag a row — or use ▲▼ — to
-            reposition it. Focus is where Enter stops while keying a row; clear
-            every box and it stops everywhere. Necessity is stored only.
+            reposition it. {focusNote} Necessity is stored only.
           </span>
           <span className={styles.settingsFooterActions}>
           <button

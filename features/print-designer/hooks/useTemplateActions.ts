@@ -22,6 +22,7 @@ import {
 import { metaPatched } from "@/features/print-designer/store/designerSlice";
 import { selectMeta, selectTemplateId } from "@/features/print-designer/store/selectors";
 import { printDesignerRoute } from "@/features/print-designer/routes";
+import { confirm } from "@/lib/confirm";
 
 export function useTemplateActions() {
   const dispatch = useAppDispatch();
@@ -50,7 +51,13 @@ export function useTemplateActions() {
       String(meta.outputMode),
       meta.paperCode,
     ].join(" · ");
-    if (!window.confirm(`Make "${meta.name}" the default for ${scope}?`)) {
+    const proceed = await confirm({
+      title: `Make "${meta.name}" the default?`,
+      message: `It becomes the default for ${scope}.`,
+      confirmLabel: "Make default",
+      iconVariant: "replace",
+    });
+    if (!proceed) {
       return;
     }
     try {

@@ -1,0 +1,761 @@
+/**
+ * The cheque register's skin — shared by Received and Issued Cheques.
+ *
+ * Top to bottom: title, the five summary tiles, the filter bar, the register
+ * (the only thing that scrolls), its pager, the detail strip, and the action
+ * bar with its one "why" line.
+ *
+ * `.erp-app-content` already gives the page a definite height, so the shell is
+ * `height: 100%` and NEVER `100dvh` / `100vh` — the latter pushes the action
+ * bar out of view.
+ *
+ * Lengths are `u(n)`, n times `--erp-q-u`, the fluid unit the receipt and the
+ * transaction screens use. The dialogs are portaled to `document.body`, which
+ * is why the unit is read from `:root` (the receipt stylesheet declares it
+ * there; it is declared again here so this screen does not depend on that one
+ * having been loaded).
+ */
+:root {
+  --erp-q-u: clamp(
+    0.875rem,
+    0.2rem + calc(0.5vw / var(--erp-ui-scale, 1)) + calc(0.35vh / var(--erp-ui-scale, 1)),
+    1.25rem
+  );
+}
+
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.45);
+  padding: u(0.4) u(0.6) u(0.3);
+  height: 100%;
+  min-height: 0;
+  font-family: var(--erp-font-family, "Segoe UI", system-ui, Arial, sans-serif);
+  font-size: u(0.78);
+  color: var(--text-main, #222222);
+  background: var(--surface-muted, #f7f7f7);
+}
+
+/* ----------------------------------------------------------------- title */
+.titleBar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: u(0.6);
+  padding-bottom: u(0.25);
+  border-bottom: 2px solid var(--primary, #7b1515);
+}
+.title {
+  margin: 0;
+  font-size: u(1.15);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.subtitle {
+  margin: u(0.05) 0 0;
+  font-size: u(0.7);
+  color: var(--text-muted, #6b6b6b);
+}
+.titleRight {
+  display: flex;
+  align-items: center;
+  gap: u(0.4);
+  min-width: 0;
+}
+.statusLine {
+  max-width: u(34);
+  padding: u(0.15) u(0.55);
+  border-radius: u(0.25);
+  font-size: u(0.7);
+  background: #e3f4e6;
+  color: #1c6b2a;
+  border: 1px solid #bfe3c6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scopeNotice {
+  max-width: u(26);
+  padding: u(0.15) u(0.55);
+  border-radius: u(0.25);
+  font-size: u(0.68);
+  background: #fff4d6;
+  color: #7a4b00;
+  border: 1px solid #f0d9a0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help;
+}
+
+/* ----------------------------------------------------------------- tiles */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.25fr);
+  gap: u(0.4);
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.05);
+  padding: u(0.35) u(0.6);
+  border-radius: u(0.25);
+  border: 1px solid transparent;
+  border-left-width: u(0.3);
+  background: var(--surface, #ffffff);
+  cursor: help;
+  min-width: 0;
+}
+.tileCaption {
+  font-size: u(0.6);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+.tileFigure {
+  font-size: u(1.05);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tileCount {
+  font-size: u(0.66);
+  opacity: 0.8;
+}
+.tileAmber {
+  border-color: #ecd9a2;
+  border-left-color: #d49b00;
+  color: #6b4700;
+  background: #fffaf0;
+}
+.tileBlue {
+  border-color: #c3d4ef;
+  border-left-color: #2d6cc0;
+  color: #1f4a8c;
+  background: #f5f8fe;
+}
+.tileRed {
+  border-color: #efb9b5;
+  border-left-color: #c0392b;
+  color: #8b1e17;
+  background: #fdf5f4;
+}
+.tileGreen {
+  border-color: #bfe3c6;
+  border-left-color: #2e8b3e;
+  color: #1c6b2a;
+  background: #f4fbf5;
+}
+.tileSlate {
+  border-color: #c9d0d8;
+  border-left-color: #4a5a6c;
+  color: #2c3a4a;
+  background: #f3f5f8;
+}
+.tilesUnavailable {
+  grid-column: 1 / -1;
+  font-size: u(0.66);
+  color: var(--text-muted, #6b6b6b);
+}
+
+/* ------------------------------------------------------------ filter bar */
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: u(0.4) u(0.6);
+  padding: u(0.4) u(0.5);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: u(0.2);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.15);
+  min-width: 0;
+}
+.fieldGrow {
+  flex: 1 1 u(12);
+}
+.fieldLabel {
+  font-size: u(0.62);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6d6d6d);
+}
+.input,
+.select,
+.textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: u(0.25) u(0.4);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: u(0.2);
+  background: var(--surface, #ffffff);
+  color: inherit;
+  font: inherit;
+  font-size: u(0.76);
+}
+.textarea {
+  resize: vertical;
+  min-height: u(2.6);
+}
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: 2px solid var(--primary-soft, #e9b9b9);
+  outline-offset: 0;
+  border-color: var(--primary, #7b1515);
+}
+.dateInput {
+  width: u(8.2);
+}
+.dropdownField {
+  width: u(13);
+}
+.ticks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.25);
+}
+.tick {
+  display: inline-flex;
+  align-items: center;
+  gap: u(0.25);
+  padding: u(0.2) u(0.5);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: u(1);
+  background: var(--surface, #ffffff);
+  font-size: u(0.72);
+  cursor: pointer;
+  user-select: none;
+}
+.tickOn {
+  border-color: var(--primary, #7b1515);
+  background: #fbeeee;
+  color: var(--primary, #7b1515);
+  font-weight: 600;
+}
+.tick input {
+  margin: 0;
+}
+
+/* --------------------------------------------------------------- buttons */
+.button,
+.primaryButton,
+.secondaryButton {
+  padding: u(0.28) u(0.7);
+  border-radius: u(0.25);
+  border: 1px solid var(--border, #c9c9c9);
+  background: var(--surface, #ffffff);
+  color: var(--text-main, #222222);
+  font: inherit;
+  font-size: u(0.74);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.primaryButton {
+  background: var(--primary, #7b1515);
+  border-color: var(--primary, #7b1515);
+  color: #ffffff;
+  font-weight: 600;
+}
+.button:disabled,
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.button:not(:disabled):hover,
+.secondaryButton:not(:disabled):hover {
+  background: var(--surface-muted, #f2f2f2);
+}
+
+/* -------------------------------------------------------------- register */
+.registerShell {
+  flex: 1 1 auto;
+  min-height: u(8);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: u(0.2);
+  overflow: hidden;
+}
+.registerViewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+}
+.registerViewport:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--primary-soft, #e9b9b9);
+}
+.table {
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+  font-size: u(0.74);
+}
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: u(0.3) u(0.4);
+  background: var(--table-header-bg, #f1eded);
+  border-bottom: 1px solid var(--border, #d8d8d8);
+  font-size: u(0.66);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #555555);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.table td {
+  padding: u(0.24) u(0.4);
+  border-bottom: 1px solid var(--border-soft, #efefef);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.alignRight {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+.alignCenter {
+  text-align: center !important;
+}
+.checkCell {
+  width: u(2);
+  text-align: center !important;
+}
+.checkCell input {
+  margin: 0;
+  cursor: pointer;
+}
+.row {
+  cursor: default;
+}
+.row:hover td {
+  background: #faf6f6;
+}
+.rowCurrent td {
+  background: #f6e7e7 !important;
+}
+.rowTicked td {
+  background: #fdf3d3;
+}
+/* Finished paper reads quieter. Never applied to BOUNCED — see domain/bucket. */
+.rowDimmed td {
+  color: var(--text-muted, #8a8a8a);
+}
+.emptyCell {
+  padding: u(1.2) u(0.6) !important;
+  text-align: center;
+  color: var(--text-muted, #6b6b6b);
+  white-space: normal !important;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: u(0.4);
+  padding: u(0.25) u(0.5);
+  border-top: 1px solid var(--border, #e0e0e0);
+  font-size: u(0.7);
+  color: var(--text-muted, #555555);
+}
+.pageButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.2);
+}
+.pageButton {
+  min-width: u(1.7);
+  padding: u(0.12) u(0.35);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: u(0.2);
+  background: var(--surface, #ffffff);
+  font: inherit;
+  cursor: pointer;
+}
+.pageButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pageButtonActive {
+  background: var(--primary, #7b1515);
+  border-color: var(--primary, #7b1515);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ pill */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 u(0.45);
+  border-radius: u(0.8);
+  border: 1px solid transparent;
+  font-size: u(0.64);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.pillAmber {
+  background: #fdf3d3;
+  color: #7a5200;
+  border-color: #ecd9a2;
+}
+.pillBlue {
+  background: #e3ecfa;
+  color: #1f4a8c;
+  border-color: #c3d4ef;
+}
+.pillRed {
+  background: #f8e1e0;
+  color: #a1231a;
+  border-color: #e9a7a1;
+}
+.pillGreen {
+  background: #e3f4e6;
+  color: #1c6b2a;
+  border-color: #bfe3c6;
+}
+.pillGrey {
+  background: #eeeeee;
+  color: #555555;
+  border-color: #dddddd;
+}
+.pillSlate {
+  background: #e8ecf1;
+  color: #34465a;
+  border-color: #cfd6df;
+}
+.pillDimmed {
+  opacity: 0.7;
+}
+
+/* ---------------------------------------------------------- detail strip */
+.detailStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: u(0.2) u(0.9);
+  min-height: u(2.2);
+  padding: u(0.35) u(0.6);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-left: u(0.25) solid var(--primary, #7b1515);
+  border-radius: u(0.2);
+  font-size: u(0.74);
+}
+.detailHead {
+  font-weight: 700;
+}
+.detailItem {
+  color: var(--text-main, #333333);
+}
+.detailItem b {
+  font-weight: 700;
+}
+.detailMuted {
+  color: var(--text-muted, #6b6b6b);
+}
+.detailWarn {
+  color: #8b1e17;
+}
+
+/* ------------------------------------------------------------ action bar */
+.actionBar {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.3);
+  padding: u(0.4) u(0.5);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: u(0.2);
+}
+.actionButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.3);
+  align-items: center;
+}
+.actionSpacer {
+  flex: 1 1 auto;
+}
+.whyLine {
+  font-size: u(0.72);
+  color: var(--text-muted, #555555);
+  min-height: 1.3em;
+}
+.whyReason {
+  color: #8a5a00;
+  font-weight: 600;
+}
+.keyHints {
+  font-size: u(0.64);
+  color: var(--text-muted, #7a7a7a);
+}
+
+/* --------------------------------------------------------------- dialogs */
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.5);
+  padding: u(0.2) 0;
+  font-size: u(0.76);
+}
+.dialogGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: u(0.45) u(0.6);
+}
+.span2 {
+  grid-column: 1 / -1;
+}
+.dialogNote {
+  margin: 0;
+  padding: u(0.35) u(0.5);
+  border-radius: u(0.2);
+  background: #f3f5f8;
+  color: #34465a;
+  font-size: u(0.72);
+}
+.dialogProblem {
+  margin: 0;
+  padding: u(0.35) u(0.5);
+  border-radius: u(0.2);
+  background: #fff4d6;
+  color: #7a4b00;
+  border: 1px solid #f0d9a0;
+  font-size: u(0.72);
+}
+.dialogError {
+  margin: 0;
+  padding: u(0.4) u(0.55);
+  border-radius: u(0.2);
+  background: #f8e1e0;
+  color: #8b1e17;
+  border: 1px solid #efb9b5;
+  font-size: u(0.74);
+  font-weight: 600;
+}
+.dialogConfirm {
+  margin: 0;
+  font-size: u(0.8);
+  font-weight: 600;
+  line-height: 1.45;
+}
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: u(0.4);
+}
+.targetList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: u(9);
+  overflow: auto;
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: u(0.2);
+  font-size: u(0.72);
+}
+.targetList li {
+  display: flex;
+  justify-content: space-between;
+  gap: u(0.6);
+  padding: u(0.2) u(0.45);
+  border-bottom: 1px solid var(--border-soft, #efefef);
+}
+.targetList li:last-child {
+  border-bottom: 0;
+}
+.targetCaption {
+  font-size: u(0.62);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6d6d6d);
+}
+.radioRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.8);
+}
+.radio {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: u(0.3);
+  cursor: pointer;
+}
+.radio small {
+  display: block;
+  color: var(--text-muted, #6b6b6b);
+}
+.dialogTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: u(0.72);
+}
+.dialogTable th,
+.dialogTable td {
+  padding: u(0.22) u(0.4);
+  border-bottom: 1px solid var(--border-soft, #efefef);
+  text-align: left;
+  white-space: nowrap;
+}
+.dialogTable th {
+  font-size: u(0.62);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted, #555555);
+  background: var(--table-header-bg, #f1eded);
+}
+.dialogTable tfoot td {
+  font-weight: 700;
+  border-top: 1px solid var(--border, #d8d8d8);
+}
+.slipHead {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: u(0.2) u(0.8);
+  font-size: u(0.74);
+}
+
+/* ------------------------------------------------ the action dialog skin */
+/*
+ * Compact, form-shaped: labels on the left, the fields beside them, one line
+ * saying what is on the slip, and the two buttons bottom-right. Skins the
+ * shared ModalShell panel through `panelClassName`, so the portal, the scrim
+ * and the Escape handling stay the shared ones.
+ */
+.actionDialog {
+  width: min(u(31), 100%) !important;
+  border-top: 3px solid var(--primary, #7b1515) !important;
+  border-radius: u(0.35) !important;
+}
+.actionDialog > header {
+  border-bottom: 0 !important;
+  padding: u(0.65) u(0.75) u(0.25) !important;
+}
+.actionDialog > header h2 {
+  color: var(--text-main, #1d1d1d) !important;
+  text-transform: none !important;
+  font-size: u(0.88) !important;
+  font-weight: 700;
+}
+.actionDialog > header button {
+  display: none;
+}
+.actionDialog > footer {
+  border-top: 0 !important;
+  justify-content: flex-end !important;
+  padding: u(0.8) u(0.75) u(0.65) !important;
+}
+.actionDialog > footer button {
+  padding: u(0.4) u(1.1);
+  font-size: u(0.76);
+  border-radius: u(0.3);
+}
+.formGrid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  column-gap: u(0.55);
+  row-gap: u(0.45);
+  font-size: u(0.76);
+}
+/* The label element spans both cells, so a click on the words focuses the box. */
+.formRow {
+  display: contents;
+}
+.formLabel {
+  justify-self: end;
+  color: var(--text-main, #222222);
+  white-space: nowrap;
+}
+.formGrid .input,
+.formGrid .select {
+  padding: u(0.35) u(0.5);
+  font-size: u(0.76);
+}
+.formAside {
+  grid-column: 2;
+  margin: 0;
+}
+.summaryLine {
+  grid-column: 2;
+  margin: u(0.3) 0 0;
+  font-size: u(0.76);
+  color: var(--text-main, #222222);
+}
+.problemLine {
+  grid-column: 2;
+  margin: 0;
+  font-size: u(0.7);
+  color: #8a5a00;
+}
+.errorLine {
+  grid-column: 1 / -1;
+  margin: 0 0 u(0.2);
+  padding: u(0.35) u(0.5);
+  border-radius: u(0.2);
+  background: #f8e1e0;
+  color: #8b1e17;
+  border: 1px solid #efb9b5;
+  font-size: u(0.72);
+  font-weight: 600;
+}
+.mutedLine {
+  grid-column: 2;
+  margin: 0;
+  font-size: u(0.68);
+  color: var(--text-muted, #6b6b6b);
+}
+
+/* ------------------------------------------- one control height, filter bar */
+/*
+ * The dates, the two dropdowns, the search and the button share ONE height.
+ * The dropdown's own input carries a `min-height` of 2.15rem while a plain
+ * input sizes to its text, so without this the dropdowns stood taller and
+ * their captions rode higher than the rest of the row.
+ */
+.filterBar {
+  --cheque-control-h: #{u(2)};
+}
+.filterBar .input,
+.filterBar .dropdownField input,
+.filterBar .secondaryButton {
+  box-sizing: border-box;
+  height: var(--cheque-control-h);
+  min-height: var(--cheque-control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: u(0.76);
+  line-height: 1;
+}
+.filterBar .ticks {
+  min-height: var(--cheque-control-h);
+  align-items: center;
+}

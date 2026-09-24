@@ -134,6 +134,15 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   onPageSizeChange?: (pageSize: number) => void;
   showPageSizeSelector?: boolean;
   paginationLabel?: string;
+  /**
+   * A strip rendered between the rows and the pagination bar.
+   *
+   * For what the grid can be TOLD — the keys it answers to, and what the
+   * highlighted row means. It sits there rather than above the table because
+   * it is about the row under the cursor, and the eye is already at the bottom
+   * of the list when it wants that. Nothing renders when it is omitted.
+   */
+  hintBar?: ReactNode;
   tableMaxHeight?: string;
   stickyHeader?: boolean;
 };

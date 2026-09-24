@@ -31,20 +31,46 @@ export function buildDropdownConfigQuery(dropdownId: string): Record<string, str
 }
 
 /**
- * Drop the keys with nothing to bind.
+ * Drop the keys with nothing to bind — except the ones the caller says the SQL
+ * GUARDS.
  *
- * The substitution into `dropdown_sql` is textual, so an empty string is not
- * "unfiltered" — it lands in the statement as `''::uuid` and fails the run. A
- * parameter that has no value yet is better left out, so the failure names the
- * placeholder instead of the cast.
+ * The substitution into `dropdown_sql` is textual, and the two shapes in use
+ * disagree about what an empty value means:
+ *
+ *   · **Unguarded** — `emp_branch_id = iemp_branch_id::uuid` (dropdown 38).
+ *     An empty string lands as `''::uuid` and fails the run, so the key is
+ *     better left out: the failure then names the placeholder rather than the
+ *     cast.
+ *   · **Guarded** — `NULLIF('iarea_id','') IS NULL OR cus_area_id =
+ *     NULLIF('iarea_id','')::uuid` (dropdown 54, CUSTOMERS BY AREA). An empty
+ *     string is exactly how that SQL spells "no filter" — and LEAVING IT OUT is
+ *     the thing that breaks it, because the literal word `iarea_id` stays in
+ *     the statement and the whole run answers 400.
+ *
+ * Nothing about a dropdown id says which shape it has, so the caller names the
+ * guarded placeholders in `keepEmptyParams`. Verified live on dropdown 54:
+ * `{"iarea_id":""}` returns every customer; omitting it answers
+ * *Invalid dropdown SQL configuration*.
  */
-function usableParams(params: DropdownParams | undefined): Record<string, string | number | boolean> {
+function usableParams(
+  params: DropdownParams | undefined,
+  keepEmptyParams?: readonly string[],
+): Record<string, string | number | boolean> {
+  const keepEmpty = new Set(keepEmptyParams ?? []);
   const usable: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(params ?? {})) {
     if (value === null || value === undefined) {
+      // Even a guarded placeholder needs SOMETHING to send; an absent value
+      // becomes the empty string the guard reads as "no bound".
+      if (keepEmpty.has(key)) {
+        usable[key] = "";
+      }
       continue;
     }
     if (typeof value === "string" && !value.trim()) {
+      if (keepEmpty.has(key)) {
+        usable[key] = "";
+      }
       continue;
     }
     usable[key] = value;
@@ -56,8 +82,11 @@ function usableParams(params: DropdownParams | undefined): Record<string, string
  * A stable key for a params object, for cache keys and change detection.
  * Sorted, so `{a,b}` and `{b,a}` are the same request.
  */
-export function dropdownParamsKey(params: DropdownParams | undefined): string {
-  const usable = usableParams(params);
+export function dropdownParamsKey(
+  params: DropdownParams | undefined,
+  keepEmptyParams?: readonly string[],
+): string {
+  const usable = usableParams(params, keepEmptyParams);
   const keys = Object.keys(usable).sort();
   if (keys.length === 0) {
     return "";
@@ -71,6 +100,8 @@ export type DropdownRunQueryArgs = {
   page?: number;
   limit?: number;
   params?: DropdownParams;
+  /** Placeholders the SQL guards, which must travel even when blank. */
+  keepEmptyParams?: readonly string[];
 };
 
 export function buildDropdownRunQuery({
@@ -79,6 +110,7 @@ export function buildDropdownRunQuery({
   page = 1,
   limit = DROPDOWN_PAGE_SIZE,
   params,
+  keepEmptyParams,
 }: DropdownRunQueryArgs): Record<string, string | number> {
   const query: Record<string, string | number> = {
     dropdown_id: String(dropdownId).trim(),
@@ -89,7 +121,7 @@ export function buildDropdownRunQuery({
   if (trimmedSearch) {
     query.search = trimmedSearch;
   }
-  const paramsKey = dropdownParamsKey(params);
+  const paramsKey = dropdownParamsKey(params, keepEmptyParams);
   if (paramsKey) {
     query.dropdown_param = paramsKey;
   }

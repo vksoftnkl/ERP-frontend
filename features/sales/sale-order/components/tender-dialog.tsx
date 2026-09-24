@@ -47,6 +47,7 @@ import {
 import { validateTenderRows } from "../tender/validate";
 import styles from "../page.module.scss";
 import { useDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+import { confirm } from "@/lib/confirm";
 
 /**
  * `fixed.bank_master` — name only (166 rows); the payload carries the NAME.
@@ -303,13 +304,16 @@ function TenderDialogBody({
    * answer out of anyone.
    */
   const confirmCreditIfNeeded = useCallback(
-    (row: TenderDraftRow): boolean => {
+    async (row: TenderDraftRow): Promise<boolean> => {
       if (row.typeCode !== "CREDIT" || creditAllowed || creditOverridden) {
         return true;
       }
-      const answer = window.confirm(
-        "This customer is not allowed to buy on credit. Put this bill on credit anyway?",
-      );
+      const answer = await confirm({
+        title: "Put this bill on credit?",
+        message: "This customer is not allowed to buy on credit.",
+        confirmLabel: "Put on credit",
+        iconVariant: "replace",
+      });
       if (answer) {
         setCreditOverridden(true);
       }
@@ -329,8 +333,8 @@ function TenderDialogBody({
 
   /** On commit: validate the row, then rewrite the cell to the charged amount. */
   const onAmountCommit = useCallback(
-    (row: TenderDraftRow) => {
-      if (row.keyed > 0 && !confirmCreditIfNeeded(row)) {
+    async (row: TenderDraftRow) => {
+      if (row.keyed > 0 && !(await confirmCreditIfNeeded(row))) {
         patchRow(row.key, { keyed: 0 });
         setRawText((current) => ({ ...current, [row.key]: "" }));
         return;
@@ -345,7 +349,7 @@ function TenderDialogBody({
   );
 
   /** F1 — settle whatever is outstanding with the row under the cursor. */
-  const payBalanceHere = useCallback(() => {
+  const payBalanceHere = useCallback(async () => {
     if (!activeRow || rowIsPanelOwned(activeRow)) {
       return;
     }
@@ -353,7 +357,7 @@ function TenderDialogBody({
     if (next === activeRow.keyed) {
       return;
     }
-    if (!confirmCreditIfNeeded(activeRow)) {
+    if (!(await confirmCreditIfNeeded(activeRow))) {
       return;
     }
     patchRow(activeRow.key, { keyed: next });

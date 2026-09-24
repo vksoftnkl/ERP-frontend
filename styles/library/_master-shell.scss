@@ -1441,3 +1441,17 @@
     font-weight: 700;
   }
 }
+
+/*
+ * The grid's hint bar (opt-in, `enableListActionKeys` / `listHintMessage`):
+ * the keys on the left, what the highlighted row means on the right.
+ */
+.erp-master-shell .erp-ms-hint-keys {
+  color: var(--erp-ms-muted, #6d6d6d);
+  white-space: nowrap;
+}
+
+.erp-master-shell .erp-ms-hint-message {
+  color: var(--primary, #7b1515);
+  font-weight: 600;
+}

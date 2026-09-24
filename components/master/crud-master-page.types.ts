@@ -221,6 +221,43 @@ export type CrudMasterPageProps = {
   /** A render is in flight — the button says so and will not fire twice. */
   printBusy?: boolean;
   /**
+   * Delete this row THIS way, instead of the shell's `DELETE {delete}?id=`.
+   *
+   * OPT-IN, and absent everywhere it is not needed: a master record is removed
+   * by its id and the shell's own call is right for it. A voucher is not —
+   * `POST /receipts/delete` takes the whole four-field key in a JSON BODY, and
+   * no arrangement of url and query reaches it.
+   *
+   * Return true when the record is gone; the shell then clears the selection,
+   * runs `afterDeleteSuccess` and reloads the list exactly as it does for its
+   * own call. Return false (or throw) and the list is left alone — the page
+   * owns the message, because it owns the request.
+   *
+   * The confirmation dialog is still the shell's: what is being deleted, and
+   * whether the operator meant it, is the same question either way.
+   */
+  onDeleteAction?: (row: MasterTableRow) => boolean | Promise<boolean>;
+  /**
+   * Bind the list's function keys, and say so under the grid.
+   *
+   * OFF by default: these are keys the whole window listens for, and a page
+   * that did not ask for them should not have F5 quietly stop reloading the
+   * browser. On, the shell binds what it already has buttons for — F1 add,
+   * F2 / Enter edit, F3 delete, F5 refresh — alongside the ↑↓ walk and the
+   * Ctrl+Enter view it binds anyway, and prints that legend in the hint bar so
+   * what is advertised is what is bound.
+   */
+  enableListActionKeys?: boolean;
+  /**
+   * The page's own sentence in that hint bar, usually about the highlighted
+   * row: "Posted — the money is in the ledger. Cancel it to reverse."
+   *
+   * Given a function, it is called with the selected row (or null) — the shell
+   * already holds that selection, so a page that wants to speak about it needs
+   * no second copy of it to keep in step.
+   */
+  listHintMessage?: ReactNode | ((row: MasterTableRow | null) => ReactNode);
+  /**
    * Let the operator tick several rows, and print them as one document.
    *
    * OPT-IN and OFF by default, so no existing master grows a checkbox column it

@@ -56,6 +56,13 @@ export const CONFIGURED_GRIDS = {
   employeeDesignationList: { name: "MAIN LIST - EMP DESIGNATIONS", fallbackId: "75", deletedParam: "ied_is_deleted" },
   accountGroupList: { name: "MAIN LIST - ACCOUNT GROUP", fallbackId: "53", deletedParam: null },
   accountLedgerList: { name: "MAIN LIST - LEDGERS", fallbackId: "54", deletedParam: "iled_is_deleted" },
+  /**
+   * The Opening Balance screen's ledger picker. Its SQL restricts to the two
+   * balance-sheet natures on its own, which is why the screen adds no nature
+   * filter of its own — an opening on an income ledger is a category error, and
+   * the grid already refuses to offer one.
+   */
+  ledgerPickerPopup: { name: "POPUP - LEDGERS", fallbackId: "107", deletedParam: null },
   userList: { name: "MAIN LIST - COMPUTER USERS", fallbackId: "62", deletedParam: null },
   deviceList: { name: "DESKTOP - DEVICE MASTER LIST", fallbackId: "31", deletedParam: null },
   gridMasterList: { name: "GRID MASTER LIST", fallbackId: "34", deletedParam: null },
@@ -70,6 +77,30 @@ export const CONFIGURED_GRIDS = {
   quotationList: { name: "TXN MAIN LIST - QUOTATION", fallbackId: "83", deletedParam: null },
   billList: { name: "TXN MAIN LIST - BILLS", fallbackId: "86", deletedParam: null },
   saleOrderList: { name: "TXN MAIN LIST - SALES ORDER", fallbackId: "87", deletedParam: null },
+  /**
+   * Receipt Entry (menu 99) — the register behind F8.
+   *
+   * Its SQL names a bare `iavh_status` token, which the runner substitutes as
+   * TEXT rather than binding: a call that omits it leaves the literal word in
+   * the statement and the WHOLE query fails, not just the filter. So the screen
+   * always sends it, empty string for "every status".
+   */
+  receiptList: { name: "MAIN LIST - RECEIPTS", fallbackId: "108", deletedParam: null },
+  /**
+   * Received Cheques (menu 51) — the register. Its SQL names NINE bare tokens
+   * (`iapd_company_id` … `isearch`) and every one must be sent, empty string
+   * for "no filter", or the whole query fails. The search is `isearch` inside
+   * `grid_param`, never the runner's own `search` key.
+   */
+  receivedChequeList: { name: "MAIN LIST - RECEIVED CHEQUES", fallbackId: "109", deletedParam: null },
+  /** Receipt Entry — the bank picker on a cheque row. Free text is allowed too. */
+  bankPopup: { name: "POPUP - BANKS", fallbackId: "111", deletedParam: null },
+  /** Receipt Entry — F7, everything that has ever settled the bill under the cursor. */
+  billPaymentHistoryPopup: {
+    name: "POPUP - BILL PAYMENT HISTORY",
+    fallbackId: "112",
+    deletedParam: null,
+  },
 } as const;
 export type ConfiguredGridKey = keyof typeof CONFIGURED_GRIDS;
 const ID_KEYS = ["grid_id", "gridId", "id"] as const;

@@ -26,6 +26,14 @@ export type NexDropdownMultiProps = {
   onChange: (next: DropdownSelection[]) => void;
   params?: DropdownParams;
   /**
+   * Placeholders this dropdown's SQL GUARDS — `NULLIF('itoken','') IS NULL OR
+   * …` — for which a blank value means "no filter". They are sent even when
+   * empty, because leaving one out puts the literal token into the statement
+   * and fails the whole run. Dropdown 54, CUSTOMERS BY AREA, is the one this
+   * exists for: with no beat chosen it must still send `iarea_id: ""`.
+   */
+  keepEmptyParams?: readonly string[];
+  /**
    * Close the list after each pick.
    *
    * Default false, deliberately diverging from the Qt widget, which closes and so
@@ -57,6 +65,7 @@ export function NexDropdownMulti({
   value,
   onChange,
   params,
+  keepEmptyParams,
   closeOnSelect = false,
   id,
   name,
@@ -83,7 +92,7 @@ export function NexDropdownMulti({
   const [query, setQuery] = useState("");
 
   const { config, columns, rows, loading, errorMessage, hasMore, total, loadMore, retry } =
-    useDropdownSearch({ dropdownId: resolvedId, open, search: query, params });
+    useDropdownSearch({ dropdownId: resolvedId, open, search: query, params, keepEmptyParams });
 
   const onChangeRef = useRef(onChange);
   useEffect(() => {

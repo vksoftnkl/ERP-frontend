@@ -42,6 +42,14 @@ export type NexDropdownSingleProps = {
    */
   params?: DropdownParams;
   /**
+   * Placeholders this dropdown's SQL GUARDS — `NULLIF('itoken','') IS NULL OR
+   * …` — for which a blank value means "no filter". They are sent even when
+   * empty, because leaving one out puts the literal token into the statement
+   * and fails the whole run. Dropdown 54, CUSTOMERS BY AREA, is the one this
+   * exists for: with no beat chosen it must still send `iarea_id: ""`.
+   */
+  keepEmptyParams?: readonly string[];
+  /**
    * Drop the selection when `params` change, on the grounds that a value chosen
    * under the old filter may not be in the new list (set a branch after picking an
    * employee and the field would otherwise keep showing an employee from another
@@ -80,6 +88,7 @@ export function NexDropdownSingle({
   value,
   onChange,
   params,
+  keepEmptyParams,
   clearOnParamsChange = true,
   advanceFocusOnSelect = true,
   id,
@@ -114,7 +123,7 @@ export function NexDropdownSingle({
   const [query, setQuery] = useState<string | null>(null);
 
   const { config, columns, rows, loading, errorMessage, hasMore, total, loadMore, retry } =
-    useDropdownSearch({ dropdownId: resolvedId, open, search: query ?? "", params });
+    useDropdownSearch({ dropdownId: resolvedId, open, search: query ?? "", params, keepEmptyParams });
 
   // Read through a ref so committing does not have to re-memoize on every render
   // of the parent form.

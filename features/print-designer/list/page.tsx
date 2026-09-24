@@ -52,6 +52,7 @@ import { OUTPUT_MODES, PAPER_PRESETS } from "@/features/print-designer/lib/vocab
 import { newPrintDesignerRoute, printDesignerRoute } from "@/features/print-designer/routes";
 import PaperSetupDialog from "@/features/print-designer/components/PaperSetupDialog";
 import styles from "./page.module.scss";
+import { confirm } from "@/lib/confirm";
 
 const TEMPLATES_ENDPOINT = "/reports/templates";
 
@@ -223,7 +224,13 @@ export default function PrintTemplatesPage() {
         asText(row, "ptOutputMode"),
         asText(row, "ptPaperCode"),
       ].join(" · ");
-      if (!window.confirm(`Make "${row.masterName}" the default for ${scope}?`)) {
+      const proceed = await confirm({
+        title: `Make "${row.masterName}" the default?`,
+        message: `It becomes the default for ${scope}.`,
+        confirmLabel: "Make default",
+        iconVariant: "replace",
+      });
+      if (!proceed) {
         return;
       }
       try {

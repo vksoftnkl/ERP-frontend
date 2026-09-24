@@ -26,11 +26,13 @@ export type ModalShellProps = {
    */
   fixedHeight?: boolean;
   footer?: ReactNode;
+  /** An extra class on the panel, for a screen that skins its own dialogs. */
+  panelClassName?: string;
   children: ReactNode;
   onClose: () => void;
 };
 
-export function ModalShell({ title, isOpen, narrow, wide, fixedHeight, footer, children, onClose }: ModalShellProps) {
+export function ModalShell({ title, isOpen, narrow, wide, fixedHeight, footer, panelClassName, children, onClose }: ModalShellProps) {
   const panelRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -75,6 +77,7 @@ export function ModalShell({ title, isOpen, narrow, wide, fixedHeight, footer, c
             narrow && styles.modalPanelNarrow,
             wide && styles.modalPanelWide,
             fixedHeight && styles.modalPanelFixed,
+            panelClassName,
           )}
           role="dialog"
           aria-modal="true"

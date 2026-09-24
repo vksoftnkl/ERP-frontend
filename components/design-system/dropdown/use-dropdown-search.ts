@@ -14,6 +14,12 @@ export type UseDropdownSearchArgs = {
   /** What the operator has typed. Debounced before it reaches the server. */
   search: string;
   params?: DropdownParams;
+  /**
+   * Placeholders whose SQL GUARDS them (`NULLIF('itoken','') IS NULL OR …`),
+   * so a blank value means "no filter" and must still be sent. Leaving one out
+   * fails the whole run — see `usableParams`.
+   */
+  keepEmptyParams?: readonly string[];
 };
 
 export type UseDropdownSearchResult = {
@@ -81,9 +87,10 @@ export function useDropdownSearch({
   open,
   search,
   params,
+  keepEmptyParams,
 }: UseDropdownSearchArgs): UseDropdownSearchResult {
   const id = String(dropdownId ?? "").trim();
-  const paramsKey = dropdownParamsKey(params);
+  const paramsKey = dropdownParamsKey(params, keepEmptyParams);
   const debouncedSearch = useDebouncedSearch(search, open);
   /**
    * Which page of the current result set is loaded, keyed by that result set.
@@ -101,7 +108,7 @@ export function useDropdownSearch({
   const page = pageState.key === resultSetKey ? pageState.page : 1;
 
   const rowsQuery = useGetDropdownRowsQuery(
-    { dropdownId: id, search: debouncedSearch, page, params },
+    { dropdownId: id, search: debouncedSearch, page, params, keepEmptyParams },
     { skip: !open || !id || !config },
   );
 

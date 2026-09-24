@@ -1,0 +1,809 @@
+/**
+ * Receipt Entry — the screen's skin.
+ *
+ * The layout is the reference screen's, top to bottom: a title with the
+ * document's status, one strip of header fields, three panels (the party, what
+ * they last paid, what of theirs we still hold), the bills grid, the
+ * instruments grid, the identity band, and one row of actions.
+ *
+ * `.erp-app-content` already gives the page a definite height, so the shell is
+ * `height: 100%` and NEVER `100dvh` / `100vh` — the latter pushes the identity
+ * band and the action row out of view. Only the two grid viewports scroll.
+ *
+ * Lengths are `u(n)`, n times `--erp-q-u`, the same fluid unit the transaction
+ * screens use. Declared on `:root` rather than on `.page` because the dialogs
+ * are portaled to `document.body`, and a var they cannot see would make every
+ * length in them an invalid calc.
+ */
+:root {
+  --erp-q-u: clamp(
+    0.875rem,
+    0.2rem + calc(0.5vw / var(--erp-ui-scale, 1)) + calc(0.35vh / var(--erp-ui-scale, 1)),
+    1.25rem
+  );
+}
+
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+.page {
+  /*
+   * ONE height for every control on this screen.
+   *
+   * The header strip mixes plain inputs with two `NexDropdownSingle`s, and the
+   * dropdown sizes itself in fixed rem (2.15rem, 0.82rem type) while
+   * everything here is in the fluid `u()` unit — so the two can only agree by
+   * accident, and on most monitors they did not. Every field below takes its
+   * height from this, the dropdown's inner input included, so they cannot
+   * drift apart again.
+   */
+  --erp-rcpt-control: #{u(1.85)};
+  display: flex;
+  flex-direction: column;
+  gap: u(0.45);
+  padding: u(0.4) u(0.6) u(0.3);
+  height: 100%;
+  min-height: 0;
+  font-family: var(--erp-font-family, "Segoe UI", system-ui, Arial, sans-serif);
+  font-size: u(0.78);
+  color: var(--text-main, #222222);
+  background: var(--surface-muted, #f7f7f7);
+}
+
+/* ----------------------------------------------------------------- title */
+.titleBar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: u(0.6);
+  padding-bottom: u(0.25);
+  border-bottom: 2px solid var(--primary, #7b1515);
+}
+.titleBlock {
+  min-width: 0;
+}
+.title {
+  margin: 0;
+  font-size: u(1.15);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--text-main, #1d1d1d);
+}
+.subtitle {
+  margin: u(0.05) 0 0;
+  font-size: u(0.7);
+  color: var(--text-muted, #6b6b6b);
+}
+.dirtyMark {
+  color: var(--danger, #b3261e);
+}
+.titleRight {
+  display: flex;
+  align-items: center;
+  gap: u(0.4);
+  flex-shrink: 0;
+}
+.docNumber {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: u(0.9);
+  font-weight: 700;
+  color: var(--primary, #7b1515);
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  padding: u(0.2) u(0.7);
+  border-radius: u(0.25);
+  font-size: u(0.7);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: #fdf3d3;
+  color: #7a5200;
+  border: 1px solid #ecd9a2;
+}
+.statusPosted {
+  background: #e3f4e6;
+  color: #1c6b2a;
+  border-color: #bfe3c6;
+}
+.statusCancelled {
+  background: #f8e1e0;
+  color: #8b1e17;
+  border-color: #efb9b5;
+}
+.statusAmending {
+  background: #e3ecfa;
+  color: #1f4a8c;
+  border-color: #c3d4ef;
+}
+
+/** The title-row notice: SHORT, with the whole sentence in its popover. */
+.statusChip {
+  display: inline-flex;
+  align-items: center;
+  gap: u(0.3);
+  max-width: u(24);
+  padding: u(0.15) u(0.5);
+  border-radius: u(0.25);
+  font-size: u(0.68);
+  background: #fff4d6;
+  color: #7a4b00;
+  border: 1px solid #f0d9a0;
+  cursor: help;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.statusChipClose {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: u(0.85);
+  line-height: 1;
+  padding: 0 u(0.1);
+}
+
+/* --------------------------------------------------------------- buttons */
+.button,
+.primaryButton,
+.dangerButton {
+  padding: u(0.28) u(0.7);
+  border-radius: u(0.25);
+  border: 1px solid var(--border, #c9c9c9);
+  background: var(--surface, #ffffff);
+  color: var(--text-main, #222222);
+  font: inherit;
+  font-size: u(0.74);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.primaryButton {
+  background: var(--primary, #7b1515);
+  border-color: var(--primary, #7b1515);
+  color: #ffffff;
+  font-weight: 600;
+}
+.dangerButton {
+  color: var(--danger, #b3261e);
+  border-color: #e0b4b1;
+}
+.button:disabled,
+.primaryButton:disabled,
+.dangerButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.button:not(:disabled):hover,
+.dangerButton:not(:disabled):hover {
+  background: var(--surface-muted, #f2f2f2);
+}
+
+/* ------------------------------------------------------------- doc strip */
+.docStrip {
+  display: grid;
+  grid-template-columns:
+    minmax(u(7), 0.9fr) minmax(u(6.5), 0.8fr) minmax(u(6.5), 0.9fr) minmax(u(7), 1fr)
+    minmax(u(6.5), 0.9fr) minmax(u(6.5), 0.8fr) minmax(u(6.5), 0.9fr) minmax(u(10), 1.8fr);
+  gap: u(0.4);
+  padding: u(0.4) u(0.5);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: u(0.2);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.15);
+  min-width: 0;
+}
+.fieldLabel {
+  font-size: u(0.62);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6d6d6d);
+}
+.input,
+.select {
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--erp-rcpt-control);
+  min-height: var(--erp-rcpt-control);
+  padding: 0 u(0.4);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: u(0.2);
+  background: var(--surface, #ffffff);
+  font: inherit;
+  font-size: u(0.78);
+  color: inherit;
+}
+.input:disabled,
+.select:disabled {
+  background: var(--surface-muted, #f4f4f4);
+  color: var(--text-muted, #7a7a7a);
+}
+.input:focus-visible,
+.select:focus-visible {
+  outline: 2px solid var(--primary, #7b1515);
+  outline-offset: -1px;
+}
+.inputInvalid {
+  border-color: var(--danger, #b3261e);
+}
+/*
+ * A `NexDropdownSingle` wearing this class matches the inputs beside it. The
+ * right padding stays generous: the chevron (and the clear button) are
+ * absolutely positioned over that gap, and squeezing it would put them on top
+ * of the text.
+ */
+.dropdownField input {
+  box-sizing: border-box;
+  height: var(--erp-rcpt-control);
+  min-height: var(--erp-rcpt-control);
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: u(0.4);
+  font: inherit;
+  font-size: u(0.78);
+  border-radius: u(0.2);
+}
+
+.inputReadOnly {
+  background: var(--surface-muted, #f7f7f7);
+  color: var(--text-muted, #8a8a8a);
+}
+
+/* ---------------------------------------------------------- panels row */
+.panelsRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: u(0.5);
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: u(8.5);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #d8d8d8);
+  border-radius: u(0.2);
+  overflow: hidden;
+}
+/** The party's own panel, tinted so the eye starts there. */
+.panelParty {
+  background: #f7f9fc;
+  border-color: #cfd9e8;
+}
+/** Cheques we are still holding: their money, and it is not ours yet. */
+.panelAmber {
+  border-color: #e8c877;
+  background: #fffdf6;
+}
+.panelTitle {
+  margin: 0;
+  padding: u(0.25) u(0.5);
+  font-size: u(0.68);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary, #7b1515);
+}
+.panelBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 u(0.5) u(0.4);
+  overflow: auto;
+}
+.partyPickerRow {
+  display: grid;
+  grid-template-columns: u(5) minmax(0, 1fr);
+  align-items: center;
+  gap: u(0.4);
+  padding: 0 u(0.5) u(0.4);
+}
+.partyPickerLabel {
+  font-size: u(0.82);
+  font-weight: 600;
+}
+.partyFacts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: u(0.3) u(0.5);
+  padding: 0 u(0.5) u(0.4);
+}
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.02);
+  min-width: 0;
+}
+.factLabel {
+  font-size: u(0.6);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #7a7a7a);
+}
+.factValue {
+  font-size: u(0.82);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.factOverdue {
+  color: var(--danger, #b3261e);
+}
+.factCredit {
+  color: #1c6b2a;
+}
+.factMuted {
+  color: var(--text-muted, #8a8a8a);
+  font-weight: 500;
+}
+.pdcNote {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: u(0.66);
+  color: #7a4b00;
+}
+.panelTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: u(0.72);
+}
+.panelTable th {
+  padding: u(0.2) u(0.4);
+  text-align: center;
+  font-weight: 600;
+  font-size: u(0.7);
+  color: var(--primary, #7b1515);
+  background: var(--surface-muted, #f4f4f4);
+  border: 1px solid var(--border, #e2e2e2);
+  white-space: nowrap;
+}
+.panelTable td {
+  padding: u(0.18) u(0.4);
+  border: 1px solid var(--border, #eeeeee);
+  white-space: nowrap;
+}
+.panelEmpty {
+  padding: u(0.5) u(0.2);
+  margin: 0;
+  color: var(--text-muted, #8a8a8a);
+  font-style: italic;
+  font-size: u(0.72);
+}
+
+/* -------------------------------------------------------------- sections */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.3);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.sectionBar {
+  display: flex;
+  align-items: center;
+  gap: u(0.5);
+  flex-wrap: wrap;
+}
+.sectionCaption {
+  margin: 0;
+  font-size: u(0.72);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--primary, #7b1515);
+}
+.sectionHint {
+  margin-left: auto;
+  font-size: u(0.68);
+  color: var(--text-muted, #8a8a8a);
+  text-align: right;
+}
+.amountBox {
+  display: flex;
+  align-items: center;
+  gap: u(0.35);
+}
+.amountLabel {
+  font-size: u(0.7);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #5f5f5f);
+}
+.amountInput {
+  width: u(9);
+  min-height: u(1.7);
+  padding: u(0.2) u(0.4);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: u(0.2);
+  text-align: right;
+  font: inherit;
+  font-size: u(0.82);
+}
+.amountInput:focus-visible {
+  outline: 2px solid var(--primary, #7b1515);
+  outline-offset: -1px;
+}
+.smallButtons {
+  display: flex;
+  gap: u(0.25);
+}
+.iconButton {
+  min-width: u(1.8);
+  padding: u(0.2) u(0.45);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: u(0.2);
+  background: var(--surface, #ffffff);
+  font: inherit;
+  cursor: pointer;
+}
+.iconButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------------ grids */
+.gridShell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #d8d8d8);
+  border-radius: u(0.2);
+  overflow: hidden;
+}
+.billShell {
+  flex: 1 1 auto;
+}
+/** Pinned to about two rows, as the desktop screen is. A layout choice. */
+.tenderShell {
+  flex: 0 0 auto;
+  max-height: u(9);
+}
+.gridViewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.grid {
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: u(0.74);
+}
+.grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: u(0.25) u(0.3);
+  text-align: center;
+  font-weight: 700;
+  font-size: u(0.72);
+  color: var(--primary, #7b1515);
+  background: var(--surface-muted, #f4f4f4);
+  border: 1px solid var(--border, #e0e0e0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/*
+ * The drag target straddles the cell border so the grab zone is the same on
+ * both sides of it, and reaches past the header's padding for a comfortable
+ * target. The bar only shows on hover or while dragging — a permanent one on
+ * nineteen columns is a row of stripes.
+ */
+.gridHeaderCell {
+  position: relative;
+}
+.gridHeaderCellResizing {
+  background: #f6ecec;
+}
+.columnResizeHandle {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: -4px;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+}
+.columnResizeHandle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: transparent;
+}
+.columnResizeHandle:hover::after,
+.gridHeaderCellResizing .columnResizeHandle::after {
+  background: var(--primary, #7b1515);
+}
+
+.grid tbody td {
+  padding: 0;
+  border: 1px solid var(--border, #ededed);
+  vertical-align: middle;
+}
+.rowOdd {
+  background: var(--surface, #ffffff);
+}
+.rowEven {
+  background: #fbfbfb;
+}
+/** A credit row is tinted THE WHOLE WAY ACROSS — what the party holds. */
+.rowCredit td {
+  background: #eaf6ec;
+}
+/** An instrument that cannot be posted yet: no amount on it. */
+.rowIncomplete td {
+  background: #fbe9e7;
+}
+.rowSelected td {
+  box-shadow: inset 0 0 0 1px var(--primary, #7b1515);
+}
+.cellText,
+.cellInput,
+.cellSelect {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: u(1.5);
+  padding: u(0.15) u(0.3);
+  font: inherit;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cellInput,
+.cellSelect {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  border-radius: 0;
+}
+.cellInput:focus-visible,
+.cellSelect:focus-visible {
+  outline: 2px solid var(--primary, #7b1515);
+  outline-offset: -2px;
+  background: #fffbe6;
+}
+.cellInput:disabled,
+.cellSelect:disabled {
+  color: var(--text-muted, #9a9a9a);
+  cursor: not-allowed;
+}
+.cellInput::-webkit-outer-spin-button,
+.cellInput::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.cellInput[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.cellTyped {
+  font-weight: 700;
+}
+.cellMuted {
+  color: var(--text-muted, #9a9a9a);
+}
+.alignRight {
+  text-align: right;
+}
+.alignCenter {
+  text-align: center;
+}
+.gridEmpty {
+  padding: u(0.7) u(0.5);
+  margin: 0;
+  color: var(--text-muted, #8a8a8a);
+  font-style: italic;
+}
+
+/* ------------------------------------------------------------------ chips */
+.chip {
+  display: inline-block;
+  padding: u(0.05) u(0.4);
+  border-radius: u(0.2);
+  font-size: u(0.62);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.chipAmber {
+  background: #fff4d6;
+  color: #7a4b00;
+}
+.chipBlue {
+  background: #e3ecfa;
+  color: #1f4a8c;
+}
+.chipGreen {
+  background: #d9efdc;
+  color: #1c6b2a;
+}
+.chipGrey {
+  background: #ededed;
+  color: #5a5a5a;
+}
+.chipRed {
+  background: #f8e1e0;
+  color: #8b1e17;
+}
+
+/* ---------------------------------------------------------- identity band */
+.identityStrip {
+  display: flex;
+  align-items: center;
+  gap: u(0.45);
+  padding: u(0.4) u(0.7);
+  border-radius: u(0.2);
+  border: 1px solid #bfe3c6;
+  background: #eef8f0;
+}
+.identityOut {
+  border-color: #efb9b5;
+  background: #fdf1f0;
+}
+.identityCell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.identityCaption {
+  font-size: u(0.66);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted, #4f4f4f);
+}
+.identityValue {
+  font-size: u(0.9);
+  font-weight: 700;
+}
+.identityOperator {
+  font-size: u(0.95);
+  font-weight: 700;
+  color: var(--text-muted, #6a6a6a);
+}
+.identityDifference {
+  margin-left: auto;
+  text-align: right;
+}
+.identityDifferenceOut .identityValue {
+  color: var(--danger, #b3261e);
+}
+.identityDifferenceOk .identityValue {
+  color: #1c6b2a;
+}
+.identityHint {
+  margin: 0;
+  font-size: u(0.7);
+  color: var(--text-muted, #5f5f5f);
+}
+
+/* ---------------------------------------------------------------- footer */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: u(0.35);
+  flex-wrap: wrap;
+  padding-top: u(0.15);
+}
+.footerHints {
+  margin-right: auto;
+}
+.problems {
+  margin: 0;
+  padding: u(0.25) u(0.6);
+  list-style: none;
+  font-size: u(0.7);
+  color: var(--danger, #b3261e);
+  background: #fdf2f1;
+  border: 1px solid #efb9b5;
+  border-radius: u(0.2);
+}
+
+/* ---------------------------------------------------------------- dialogs */
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.5);
+  min-width: u(22);
+}
+.dialogGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: u(0.4) u(0.6);
+}
+.fieldWide {
+  grid-column: span 2;
+}
+.dialogNote {
+  margin: 0;
+  font-size: u(0.72);
+  color: var(--text-muted, #666666);
+}
+.dialogNoteWarn {
+  color: #7a4b00;
+}
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: u(0.4);
+}
+.registerFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.4);
+  align-items: flex-end;
+  margin-bottom: u(0.4);
+}
+.registerTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: u(0.74);
+}
+.registerTable th,
+.registerTable td {
+  padding: u(0.2) u(0.45);
+  border-bottom: 1px solid var(--border, #eeeeee);
+  text-align: left;
+  white-space: nowrap;
+}
+.registerTable th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-muted, #f4f4f4);
+  color: var(--primary, #7b1515);
+  font-weight: 700;
+  font-size: u(0.7);
+}
+.registerRow {
+  cursor: pointer;
+}
+.registerRowActive td {
+  background: #fff4d6;
+}
+.registerViewport {
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--border, #dddddd);
+  border-radius: u(0.2);
+}
+.pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: u(0.5);
+  margin-top: u(0.4);
+  font-size: u(0.72);
+}
+.footerActions {
+  display: flex;
+  gap: u(0.35);
+}
+
+/**
+ * A cancelled receipt in the register. Struck through rather than hidden: it
+ * happened, a reversal voucher answers for it, and the operator looking for it
+ * needs to find it.
+ */
+.cancelledRow td {
+  text-decoration: line-through;
+  color: var(--text-muted, #8a8a8a);
+}
