@@ -169,6 +169,14 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       { label: "Day Book" },
       { label: "Sales Register" },
       {
+        label: "Financial Statements",
+        children: [
+          // Menu 258, seeded by the server's Menu_Master.sql + the
+          // ledger_statement_prereqs migration (which also un-hides 137).
+          { label: "Ledger Statement", href: "/reports/ledger-statement" },
+        ],
+      },
+      {
         label: "Profit Reports",
         children: [
           { label: "Daily Profit & Loss" },
