@@ -1384,7 +1384,7 @@ export function SaleBillScreen({
         key === "remarks" && visibleFields.terms.isVisible(key),
       anyVisible: visibleFields.terms.isVisible("remarks"),
     }),
-    [visibleFields.terms],
+    [visibleFields],
   );
 
   const shortcuts = {
