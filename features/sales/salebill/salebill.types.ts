@@ -386,6 +386,42 @@ export type SaleBillTerms = {
 };
 
 // ---------------------------------------------------------------------------
+// Tender rows (§15.7, §15.10)
+// ---------------------------------------------------------------------------
+
+/** "Temp Credit — who is borrowing" (§15.7 TEMP_CR). */
+export type TempCreditDetails = {
+  name: string;
+  mobile: string;
+  place: string | null;
+  addr: string | null;
+  idRef: string | null;
+  /** Pay in N days; due = app date + N. */
+  days: number;
+  notes: string | null;
+};
+
+/** The cheque's instrument details (notes 48): drawer, bank branch, IFSC, MICR. */
+export type ChequeDetails = {
+  drawerName: string | null;
+  bankBranch: string | null;
+  ifsc: string | null;
+  micr: string | null;
+};
+
+/**
+ * One tender row on the bill: the shared draft row plus what the bill's
+ * panels add. `keyed` is the BASE (§15.4); the surcharge is derived.
+ */
+export type BillTenderRow = TenderDraftRow & {
+  tempCredit: TempCreditDetails | null;
+  cheque: ChequeDetails | null;
+  /** LOYALTY: the points spent (`tdUnitsUsed`); the rate used is the scheme's (D4). */
+  loyaltyPoints: number;
+  loyaltyRate: number;
+};
+
+// ---------------------------------------------------------------------------
 // What the bill adds below the grid
 // ---------------------------------------------------------------------------
 
@@ -548,8 +584,8 @@ export type SaleBillDraft = {
   // ----- what the bill adds over the quotation and the order -----
   /** Non-null exactly when `sbSrcDocId` is set. Cleared by Copy as new. */
   source: BillSourceTrail | null;
-  /** The tender dialog's rows — what the customer actually paid with (§9). */
-  tenders: TenderDraftRow[];
+  /** The settle dialog's rows — what the customer actually paid with (§15). */
+  tenders: BillTenderRow[];
   /**
    * Credits the customer already holds, set off against this bill (§10).
    *
@@ -985,14 +1021,32 @@ export type SaveBillChargeDto = {
   cdIsActive?: boolean;
 };
 
-/** `acc_tender_detail`, the tender-detail module's own DTO. */
+/** `acc_tender_detail`, the tender-detail module's own DTO (§15.10). */
 export type SaveBillTenderDto = {
   tdId?: string;
   tdRowNo?: number;
+  tdCompanyId?: string;
+  tdBranchId?: string;
+  tdAccYear?: string;
+  /** The bill date. */
+  tdDocDate?: string;
+  /** The customer id IS the ledger id (house rule 1). */
+  tdPartyLedgerId?: string | null;
+  tdDrCr?: "DR" | "CR";
   tdTenderId?: string;
   tdTenderTypeId?: string | number;
   tdTenderLedgerId?: string | null;
   tdAmount?: number;
+  /** LOYALTY: the points (D4). */
+  tdUnitsUsed?: number;
+  /** LOYALTY: the SCHEME's rate (D4). */
+  tdConversionRate?: number;
+  tdDeviceId?: string | null;
+  tdUserId?: string | null;
+  /** TEMP_CR only. */
+  tempCredit?: TempCreditDetails;
+  /** CHEQUE, when any detail is set. */
+  cheque?: ChequeDetails;
   tdSurchargePerc?: number;
   tdSurchargeAmt?: number;
   tdSurchargeLedgerId?: string | null;
@@ -1410,6 +1464,13 @@ export type BillTenderPayload = {
   tdExpectedSettleOn: string | null;
   tdNotes: string | null;
   tdIsDeleted: boolean;
+  tdUnitsUsed?: number | string | null;
+  tdConversionRate?: number | string | null;
+  tdTenderName?: string | null;
+  /** Decoded back off a TEMP_CR row (§15.10). */
+  tempCredit?: Partial<TempCreditDetails> | null;
+  /** From the cheque register once posted, from the draft before (notes 48). */
+  cheque?: Partial<ChequeDetails> | null;
 };
 
 export type BillPayload = {

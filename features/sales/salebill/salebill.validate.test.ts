@@ -104,6 +104,10 @@ function settled(draft: SaleBillDraft): SaleBillDraft {
         cardDigits: null,
         instrumentDate: null,
         notes: null,
+        tempCredit: null,
+        cheque: null,
+        loyaltyPoints: 0,
+        loyaltyRate: 0,
       },
     ],
   };

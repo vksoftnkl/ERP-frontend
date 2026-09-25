@@ -369,6 +369,10 @@ describe("the money", () => {
           cardDigits: null,
           instrumentDate: null,
           notes: null,
+          tempCredit: null,
+          cheque: null,
+          loyaltyPoints: 0,
+          loyaltyRate: 0,
         },
       ],
     });
@@ -832,9 +836,37 @@ describe("parseLoadedBill", () => {
     expect(loaded.lines[0].toBaseFactorKnown).toBe(true);
   });
 
-  it("sends nothing for adjustments, because the GET returned none", () => {
+  it("is authoritative on adjustments when nothing was set off (§14.4) — `[]` reverses nothing", () => {
     expect(loaded.adjustments).toEqual([]);
-    expect(loaded.adjustmentsTouched).toBe(false);
+    expect(loaded.adjustmentsTouched).toBe(true);
+  });
+
+  it("OMITS adjustments when the bill was settled with credit the server did not return", () => {
+    const settledWithCredit = parseLoadedBill(
+      { ...billPayload(), sbAdvanceAmt: "300", adjustments: [] },
+      { companyStateCode: "33", companyStateName: "Tamil Nadu" },
+    );
+    expect(settledWithCredit.adjustmentsTouched).toBe(false);
+    const payload = buildSavePayload(settledWithCredit, priceOf(settledWithCredit), ACTOR) as Record<string, unknown>;
+    expect("adjustments" in payload).toBe(false);
+  });
+
+  it("rebuilds a POSTED bill's live set-offs as panel rows, so an amend re-sends them", () => {
+    const posted = parseLoadedBill(
+      {
+        ...billPayload(),
+        sbStatus: "POSTED",
+        sbAdvanceAmt: "300",
+        adjustments: [{ againstBillId: "abl-9", againstBillAccYear: "2025-2026", refno: "ADV-9", amount: 300, adjType: "ADVANCE_ADJUST" }],
+      },
+      { companyStateCode: "33", companyStateName: "Tamil Nadu" },
+    );
+    expect(posted.adjustmentsTouched).toBe(true);
+    expect(posted.adjustments).toHaveLength(1);
+    expect(posted.adjustments[0].amount).toBe(300);
+    expect(posted.adjustments[0].credit.billAccYear).toBe("2025-2026");
+    // The stored paid figure INCLUDES the set-off; the strip's counter part is what crossed the counter.
+    expect(posted.settlement.adjustedAmt).toBe(300);
   });
 
   it("falls back between the two state columns on a pre-split record", () => {

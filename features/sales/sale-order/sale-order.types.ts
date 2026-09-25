@@ -619,6 +619,10 @@ export type TenderMasterRow = {
   tndEditSurcharge: boolean;
   tndEditLedger: boolean;
   tndConversionRate: number;
+  /** The instrument identifiers the settle hint shows (§15.7); absent on older rows. */
+  tndUpiVpa?: string | null;
+  tndMerchantId?: string | null;
+  tndTerminalId?: string | null;
   tndNeedsRef: boolean | null;
   tndAllowChange: boolean | null;
   tndAllowInReturn: boolean | null;

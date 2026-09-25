@@ -43,10 +43,12 @@ import {
   toNullableText,
   toNumber,
 } from "@/features/sales/quotation/quotation.utils";
-import { buildTenderPayload, settledTenderRows } from "@/features/sales/sale-order/sale-order.payload";
-import { computeTenders } from "@/features/sales/sale-order/tender/arithmetic";
-import type { TenderDraftRow } from "@/features/sales/sale-order/sale-order.types";
-import { typeDefaultsOf } from "@/features/sales/sale-order/tender/rows";
+import { settledTenderRows } from "@/features/sales/sale-order/sale-order.payload";
+import { money } from "@/domain/pricing";
+import { cardLast4OrNull, isPdc } from "@/features/sales/sale-order/tender/instruments";
+import { CHEQUE_TENDER_TYPE_ID, typeDefaultsOf } from "@/features/sales/sale-order/tender/rows";
+import { adjustmentsAuthoritative, rowsFromHeld } from "./salebill.adjust";
+import { rollupsOf, settleRows, settlementOutcome, type Rollups } from "./salebill.settle";
 import {
   BILL_DOC_TYPES,
   BILL_MODES,
@@ -69,6 +71,7 @@ import { advanceAdjusted, noteAdjusted } from "./salebill.validate";
 import type {
   AmendBillDto,
   BillAdjustmentSummary,
+  BillTenderRow,
   BillChargePayload,
   BillItemPayload,
   BillKey,
@@ -289,18 +292,125 @@ function adjustmentDto(
   };
 }
 
-/** The dominant tender mode, for the quick filters `sb_pay_mode` drives. */
-function payModeOf(rows: TenderDraftRow[]): string | null {
-  let best: { code: string; amount: number } | null = null;
-  for (const row of rows) {
-    if (row.keyed <= 0) {
-      continue;
-    }
-    if (!best || row.keyed > best.amount) {
-      best = { code: row.typeCode, amount: row.keyed };
-    }
+function addDaysIso(value: string, days: number): string | null {
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
   }
-  return best ? best.code : null;
+  parsed.setDate(parsed.getDate() + days);
+  return toDateInput(parsed.toISOString().slice(0, 10)) || null;
+}
+
+/**
+ * One `tenders[]` row (§15.10), `tdRowNo` from 1.
+ *
+ *   received = keyed base + surcharge + change handed back
+ *   total    = received − change;  base = total − surcharge
+ *
+ * Never sent: `tdSrcModule / tdSrcDocType / tdSrcDocId / tdVoucherId` — the
+ * parent implies them. The ADJUST row never appears. `tdPartyLedgerId` is the
+ * customer id (house rule 1). `tdIsPdc` keys on the TYPE ID, not the name
+ * (D9). LOYALTY sends the SCHEME rate and the points (D4). A TEMP_CR row's
+ * spare columns are overwritten server-side from `tempCredit`.
+ */
+export function buildBillTenderDto(
+  row: BillTenderRow,
+  settled: { base: number; surchargeAmt: number; amount: number },
+  refundAmt: number,
+  position: number,
+  draft: SaleBillDraft,
+  actor: SaveActor,
+): SaveBillTenderDto {
+  const isCheque = row.tenderTypeId === CHEQUE_TENDER_TYPE_ID;
+  const isCard = row.typeCode === "CARD";
+  const isLoyalty = row.typeCode === "LOYALTY";
+  const isTempCredit = row.typeCode === "TEMP_CR";
+  const instrumentDate = row.instrumentDate ? dateOrNull(row.instrumentDate) : null;
+  const billDate = draft.header.billDate;
+  const total = money(settled.base + settled.surchargeAmt);
+  const cheque =
+    isCheque && row.cheque && Object.values(row.cheque).some((value) => value !== null && value !== "")
+      ? {
+          drawerName: toNullableText(row.cheque.drawerName, 150),
+          bankBranch: toNullableText(row.cheque.bankBranch, 100),
+          ifsc: toNullableText(row.cheque.ifsc, 11)?.toUpperCase() ?? null,
+          micr: toNullableText(row.cheque.micr, 9),
+        }
+      : undefined;
+  const tempCredit =
+    isTempCredit && row.tempCredit
+      ? {
+          name: row.tempCredit.name.trim().slice(0, 100),
+          mobile: row.tempCredit.mobile.trim().slice(0, 15),
+          place: toNullableText(row.tempCredit.place, 100),
+          addr: toNullableText(row.tempCredit.addr, 250),
+          idRef: toNullableText(row.tempCredit.idRef, 50),
+          days: Math.max(0, Math.trunc(row.tempCredit.days)),
+          notes: toNullableText(row.tempCredit.notes, 250),
+        }
+      : undefined;
+  return {
+    ...(row.tdId ? { tdId: row.tdId } : {}),
+    tdRowNo: position + 1,
+    tdCompanyId: draft.companyId,
+    tdBranchId: draft.branchId,
+    tdAccYear: draft.accYear,
+    tdDocDate: billDate,
+    tdTenderId: row.tenderId,
+    tdTenderTypeId: row.tenderTypeId || undefined,
+    tdTenderLedgerId: row.tenderLedgerId,
+    tdPartyLedgerId: uuidOrNull(draft.customer.custId),
+    tdDrCr: "DR",
+    tdAmount: settled.base,
+    tdSurchargePerc: row.surchargePerc,
+    tdSurchargeAmt: settled.surchargeAmt,
+    tdSurchargeLedgerId: row.surchargeLedgerId,
+    tdTotalAmt: total,
+    tdReceivedAmt: money(total + refundAmt),
+    tdChangeAmt: money(refundAmt),
+    ...(isLoyalty
+      ? { tdConversionRate: row.loyaltyRate > 0 ? row.loyaltyRate : row.conversionRate || 1, tdUnitsUsed: row.loyaltyPoints }
+      : {}),
+    tdRefNo: isTempCredit ? null : toNullableText(row.refNo, 100),
+    tdAuthCode: toNullableText(row.authCode, 50),
+    // Only the last 4 digits go on the wire; the full number never leaves the screen.
+    tdCardLast4: isCard ? cardLast4OrNull(row.cardDigits) : null,
+    tdBankName: isTempCredit ? null : toNullableText(row.bankName, 150),
+    tdPayerVpa: null,
+    tdInstrumentDate: instrumentDate,
+    tdIsPdc: isCheque ? isPdc(instrumentDate, billDate) : false,
+    tdSettleStatus: row.settleStatus || "NA",
+    tdSettleLedgerId: row.settleLedgerId,
+    tdExpectedSettleOn: row.settlementDays > 0 ? addDaysIso(billDate, row.settlementDays) : null,
+    tdDeviceId: uuidOrNull(actor.deviceMasterId ?? null),
+    tdUserId: uuidOrNull(actor.userId),
+    tdNotes: toNullableText(row.notes, 250),
+    ...(row.tdId ? { tdModifiedBy: actorLabel(actor) } : { tdCreatedBy: actorLabel(actor) }),
+    ...(cheque ? { cheque } : {}),
+    ...(tempCredit ? { tempCredit } : {}),
+  };
+}
+
+/**
+ * The settlement's roll-ups for the payload (§15.9), from the draft's rows:
+ * the dialog's outcome when there are lines, the plain-route figures when
+ * there are none.
+ */
+export function rollupsForPayload(draft: SaleBillDraft, bill: number, totalAdjusted: number): Rollups {
+  const rows = settledTenderRows(draft.tenders) as BillTenderRow[];
+  const settleAmount = Math.max(0, money(bill - totalAdjusted));
+  const outcome = settlementOutcome(rows, settleAmount);
+  const settled = settleRows(rows, settleAmount).rows;
+  return rollupsOf({
+    bill,
+    totalAdjusted,
+    term: draft.header.billType === "CREDIT" ? "CREDIT" : "CASH",
+    lines: rows.map((row, index) => ({ typeCode: row.typeCode, base: settled[index].base, amount: settled[index].amount })),
+    tender: outcome.tender,
+    credit: outcome.credit,
+    refund: outcome.refund,
+    surcharge: outcome.surcharge,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -322,37 +432,22 @@ export function buildSavePayload(
   const pricedByKey = new Map(pricing.charges.map((row) => [row.key, row]));
   const chargeTotals = { totQty: totals.totQty, totWeight: totals.totWeight };
 
-  const tenderRows = settledTenderRows(draft.tenders);
-  const tenderComputation = computeTenders(
-    tenderRows.map((row) => ({
-      key: row.key,
-      keyed: row.keyed,
-      allowChange: row.allowChange,
-      surcharge: { perc: row.surchargePerc, flat: row.surchargeFlat },
-    })),
-    totals.bill,
-  );
+  const tenderRows = settledTenderRows(draft.tenders) as BillTenderRow[];
   const adjustmentRows = draft.adjustments.filter((row) => row.amount > 0);
   // Two figures, never one total (§14.5): the server refuses a single sum
-  // across both, and each must equal its own type's rows ±0.01.
+  // across both, and each must equal its own type's rows ±0.01. Not a sum
+  // with the loaded figure — an import would count twice.
   const advance = advanceAdjusted(draft);
   const notes = noteAdjusted(draft);
-  const adjusted = Math.round((advance + notes) * 100) / 100;
+  const adjusted = Math.min(totals.bill, Math.round((advance + notes) * 100) / 100);
 
-  // A CREDIT tender settles the document and posts no accounting leg at all —
-  // the party debit simply stays open (§9). It is reported separately in
-  // `sbCreditAmt` so the server can tell the two apart without re-deriving the
-  // tender type.
-  const creditAmt =
-    Math.round(
-      tenderRows
-        .filter((row) => row.typeCode === "CREDIT")
-        .reduce((sum, row) => sum + row.keyed, 0) * 100,
-    ) / 100;
-
-  const settled = tenderComputation.totals.settled;
-  const paid = Math.round((settled + adjusted) * 100) / 100;
-  const balance = Math.max(0, Math.round((totals.bill - paid) * 100) / 100);
+  // The settlement (§15.4–15.10): the rows priced against the bill NET of
+  // the set-offs, change routed onto the first row that can hold it, and the
+  // roll-ups from the outcome. `sbCreditAmt` is CREDIT + TEMP_CR (D5).
+  const settleAmount = Math.max(0, Math.round((totals.bill - adjusted) * 100) / 100);
+  const settledRows = settleRows(tenderRows, settleAmount).rows;
+  const outcome = settlementOutcome(tenderRows, settleAmount);
+  const rollups = rollupsForPayload(draft, totals.bill, adjusted);
 
   const isCredit = draft.header.billType === "CREDIT";
 
@@ -460,19 +555,20 @@ export function buildSavePayload(
     sbMarginPerc: totals.marginPerc,
     sbMrpSavings: totals.savingAmt,
     sbMrpSavingsPerc: totals.savingPerc,
-    sbPayMode: payModeOf(tenderRows),
-    sbCreditAmt: creditAmt,
+    sbPayMode: rollups.payMode,
+    sbCreditAmt: rollups.creditAmt,
     // The bank's cut, never the shop's takings, and NEVER re-entered into the
-    // pricing engine (§9): a surcharge is a charge on the payment instrument,
-    // not on the goods.
-    sbSurchargeAmt: tenderComputation.totals.surchargeTotal,
-    sbTenderAmt: tenderComputation.totals.tendered,
-    sbRefundAmt: tenderComputation.totals.refund,
+    // pricing engine: a surcharge is a charge on the payment instrument, not
+    // on the goods. `sbTenderAmt` = Σ amount incl. surcharge, as Qt sends it,
+    // until C4 defines it (§15.9).
+    sbSurchargeAmt: rollups.surchargeAmt,
+    sbTenderAmt: rollups.tenderAmt,
+    sbRefundAmt: rollups.refundAmt,
     sbAdvanceAmt: advance,
     sbNoteAdjAmt: notes,
-    sbPaidAmt: paid,
-    sbBalanceAmt: balance,
-    sbPayStatus: payStatusOf(paid, totals.bill),
+    sbPaidAmt: rollups.paidAmt,
+    sbBalanceAmt: rollups.balanceAmt,
+    sbPayStatus: rollups.payStatus,
     sbPaymentTerms: toNullableText(draft.terms.paymentTerms, 250),
     sbDeliveryTerms: toNullableText(draft.terms.deliveryTerms, 250),
     sbTermsConditions: toNullableText(draft.terms.termsConditions),
@@ -495,15 +591,15 @@ export function buildSavePayload(
     ),
     ...(tenderRows.length > 0 || draft.tenders.some((row) => row.tdId)
       ? {
-          tenders: tenderRows.map(
-            (row, position) =>
-              buildTenderPayload(
-                row,
-                tenderComputation.rows[position],
-                position,
-                draft.header.billDate,
-                actor,
-              ) as SaveBillTenderDto,
+          tenders: tenderRows.map((row, position) =>
+            buildBillTenderDto(
+              row,
+              settledRows[position],
+              outcome.refunds.get(row.key) ?? 0,
+              position,
+              draft,
+              actor,
+            ),
           ),
         }
       : {}),
@@ -541,13 +637,6 @@ function transportFlat(band: SaleBillDraft["transport"]): Partial<SaveBillDto> {
         ? null
         : Math.max(0, Math.trunc(band.distanceKm)),
   };
-}
-
-function payStatusOf(paid: number, bill: number): string {
-  if (bill <= 0 || paid <= 0) {
-    return "UNPAID";
-  }
-  return Math.round(paid * 100) >= Math.round(bill * 100) ? "PAID" : "PARTIAL";
 }
 
 // ---------------------------------------------------------------------------
@@ -782,32 +871,40 @@ const CHARGE_TYPES = ["ADD", "DEDUCT"] as const;
 const CHARGE_APPLY_ONS = ["FLAT", "QTY", "VALUE", "WEIGHT"] as const;
 const CHARGE_COST_ALLOCS = ["VALUE", "QTY", "WEIGHT"] as const;
 
-function tenderFromPayload(row: BillTenderPayload): TenderDraftRow {
-  const defaults = typeDefaultsOf(row.tdTenderTypeId);
+/**
+ * A stored tender line as a bill row. No type name is stored (§15.10) —
+ * every rule keys on `tdTenderTypeId`, and the dialog re-merges the live
+ * master by tender id when it opens. `tdAmount` is the base and
+ * `tdChangeAmt` the change handed back, so `keyed` (the BASE the cashier
+ * typed) is `tdAmount` — the change was taken out of it at save.
+ */
+export function tenderFromPayload(row: BillTenderPayload): BillTenderRow {
+  const typeId = typeof row.tdTenderTypeId === "number" ? row.tdTenderTypeId : Number(row.tdTenderTypeId) || 0;
+  const defaults = typeDefaultsOf(typeId);
+  const surchargePerc = row.tdSurchargePerc ?? 0;
+  const base = row.tdAmount ?? 0;
+  const surchargeFlat = Math.max(0, money((row.tdSurchargeAmt ?? 0) - money((base * surchargePerc) / 100)));
   return {
     key: nextRowKey("tender"),
     tdId: row.tdId,
     tenderId: row.tdTenderId,
-    tenderTypeId: row.tdTenderTypeId,
+    tenderTypeId: typeId,
     typeCode: defaults.code,
-    tenderName: defaults.displayName,
+    tenderName: row.tdTenderName ?? defaults.displayName,
     tenderLedgerId: row.tdTenderLedgerId,
     settleLedgerId: row.tdSettleLedgerId,
     surchargeLedgerId: row.tdSurchargeLedgerId,
-    surchargePerc: row.tdSurchargePerc ?? 0,
-    surchargeFlat: 0,
+    surchargePerc,
+    surchargeFlat,
     settlementDays: 0,
     minAmount: 0,
     maxAmount: null,
-    conversionRate: 1,
+    conversionRate: toNumber(row.tdConversionRate) || 1,
     editSurcharge: false,
     allowChange: defaults.allowChange,
     needsRef: defaults.needsRef,
     hotkey: null,
-    // What was KEPT plus what was handed back: `computeTenders` takes the keyed
-    // amount and re-derives the change, so reloading must reconstruct what the
-    // operator actually typed, not what settled.
-    keyed: (row.tdAmount ?? 0) + (row.tdChangeAmt ?? 0),
+    keyed: base,
     settleStatus: row.tdSettleStatus || "NA",
     refNo: row.tdRefNo,
     authCode: row.tdAuthCode,
@@ -815,6 +912,27 @@ function tenderFromPayload(row: BillTenderPayload): TenderDraftRow {
     cardDigits: row.tdCardLast4,
     instrumentDate: toDateInput(row.tdInstrumentDate) || null,
     notes: row.tdNotes,
+    tempCredit: row.tempCredit
+      ? {
+          name: row.tempCredit.name ?? "",
+          mobile: row.tempCredit.mobile ?? "",
+          place: row.tempCredit.place ?? null,
+          addr: row.tempCredit.addr ?? null,
+          idRef: row.tempCredit.idRef ?? null,
+          days: toNumber(row.tempCredit.days),
+          notes: row.tempCredit.notes ?? null,
+        }
+      : null,
+    cheque: row.cheque
+      ? {
+          drawerName: row.cheque.drawerName ?? null,
+          bankBranch: row.cheque.bankBranch ?? null,
+          ifsc: row.cheque.ifsc ?? null,
+          micr: row.cheque.micr ?? null,
+        }
+      : null,
+    loyaltyPoints: toNumber(row.tdUnitsUsed),
+    loyaltyRate: toNumber(row.tdConversionRate),
   };
 }
 
@@ -985,12 +1103,17 @@ export function parseLoadedBill(
       .slice()
       .sort((a, b) => (a.tdRowNo ?? 0) - (b.tdRowNo ?? 0))
       .map(tenderFromPayload),
-    // `GET /bills/get` returns no adjustments array at all, so a loaded bill
-    // cannot know what was set off against it. `adjustmentsTouched` stays false,
-    // which is what makes the save OMIT the key and leave the stored settlement
-    // exactly as it is (§15). Sending `[]` here would silently reverse it.
-    adjustments: [],
-    adjustmentsTouched: false,
+    // Absent ≠ empty (§14.4). A POSTED bill's `/get` adjustments are its live
+    // set-offs: they rebuild the panel's rows so an amend re-sends what the
+    // operator chose. A bill settled with credit whose adjustments did NOT
+    // come back is not authoritative: the save omits the key entirely, and
+    // the panel says so. A reloaded DRAFT's set-offs are not stored at all.
+    adjustments: payload.sbStatus === "POSTED" ? rowsFromHeld(heldAdjustmentsOf(payload.adjustments)) : [],
+    adjustmentsTouched: adjustmentsAuthoritative(
+      payload.sbStatus === "POSTED" ? heldAdjustmentsOf(payload.adjustments).length : 0,
+      toNumber(payload.sbAdvanceAmt),
+      toNumber(payload.sbNoteAdjAmt),
+    ),
     settlement: {
       ...emptySettlement(),
       tenderAmt: toNumber(payload.sbTenderAmt),

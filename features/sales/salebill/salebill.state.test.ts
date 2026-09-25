@@ -210,6 +210,10 @@ function tenderRow(keyed: number, typeCode = "CASH"): SaleBillDraft["tenders"][n
     cardDigits: null,
     instrumentDate: null,
     notes: null,
+    tempCredit: null,
+    cheque: null,
+    loyaltyPoints: 0,
+    loyaltyRate: 0,
   };
 }
 

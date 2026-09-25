@@ -411,3 +411,113 @@
   font-size: 11px;
   color: var(--text-muted, #666666);
 }
+
+/* ---------------------------------------------------- settle dialog (§15.2) -- */
+/*
+ * Two columns: the amount table on the left (min 280), the panel on the right
+ * FIXED at 560 px — the window never resizes as rows change. On a narrow
+ * screen the columns stack; they still never resize on a row change.
+ */
+.settleBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settleColumns {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) 560px;
+  gap: 16px;
+  align-items: start;
+}
+
+@container erp-txn-page (max-width: 1000px) {
+  .settleColumns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.settleLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settleRight {
+  min-height: 240px;
+  border: 1px solid var(--erp-border-color, #d7dce3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fafbfc;
+}
+
+.settlePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settleInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settleDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.settleChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--erp-border-color, #d7dce3);
+}
+
+.settleChip {
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 110px;
+  padding: 4px 10px;
+  border: 1px solid;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settleChipLabel {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.settleChipValue {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.settleCashLine {
+  font-size: 11.5px;
+  color: var(--text-muted, #666666);
+}
+
+.settleCashLineOver {
+  color: #b3261e;
+  font-weight: 700;
+}
+
+.settleIdentity {
+  padding: 6px 0;
+  border-top: 1px dashed var(--erp-border-color, #d7dce3);
+}
+
+.settleWarning {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: #7a4a00;
+}

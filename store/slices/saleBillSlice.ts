@@ -37,7 +37,7 @@ import type {
   FreightBand,
   ItemPriceLookupPayload,
 } from "@/features/sales/quotation/quotation.types";
-import type { TenderDraftRow } from "@/features/sales/sale-order/sale-order.types";
+
 import { applyBillLifecycle, applyBillSaveResponse } from "@/features/sales/salebill/salebill.payload";
 import { overridesAgainst } from "@/features/sales/salebill/salebill.notes";
 import {
@@ -63,6 +63,7 @@ import type {
   BillPayload,
   BillRights,
   BillSettlement,
+  BillTenderRow,
   PartyContext,
   PendingScanValue,
   ValidationNote,
@@ -528,7 +529,7 @@ const saleBillSlice = createSlice({
      */
     tendersReplaced(
       state,
-      action: PayloadAction<{ tenders: TenderDraftRow[]; settlement: BillSettlement }>,
+      action: PayloadAction<{ tenders: BillTenderRow[]; settlement: BillSettlement }>,
     ) {
       state.tenders = action.payload.tenders;
       state.settlement = { ...state.settlement, ...action.payload.settlement };

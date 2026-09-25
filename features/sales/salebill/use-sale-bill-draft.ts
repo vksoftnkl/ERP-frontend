@@ -90,6 +90,9 @@ import {
   customerApplied,
   customerBoundStateCleared,
   creditAlertConsumed,
+  headerFieldSet,
+  headerIdentitySet,
+  tendersReplaced,
   discountAppliedToAll,
   draftReplaced,
   freeLineInserted,
@@ -171,6 +174,9 @@ import {
   shouldSeedWalkInCustomer,
 } from "./salebill.state";
 import { creditAlertMessage, termForcedToParty } from "./salebill.party";
+import { clampAdjustmentsToBill, mergeHeldCredits } from "./salebill.adjust";
+import { releaseAdjustments, rollupsOf } from "./salebill.settle";
+import type { SettleResult } from "./components/settle-dialog";
 import { decodeWeightBarcode, parseWeightBarcodeConfig } from "./salebill.scan";
 import {
   evaluatePromotions,
@@ -423,6 +429,14 @@ export type SaleBillDraftApi = {
     rows: BillAdjustmentRow[],
     from: "bill" | "tender",
   ) => boolean;
+  /** The open credits with this bill's own held set-offs merged in (§14.2). */
+  adjustableCredits: AdjustableCredit[];
+  /** The open-credits read failed; the panel says so, never a modal. */
+  openCreditsFailed: boolean;
+  /** Set-off is given back before change (§15.5): newest first. Returns what was released. */
+  releaseAdjustmentsBy: (amount: number) => number;
+  /** The settle dialog's Save (§15.9): rows, roll-ups, the term flip, the identity box. */
+  applySettlement: (result: SettleResult) => void;
   // ----- the document (§14, §15, §16) -----
   validate: (context?: BillValidationContext) => SaleBillViolation | null;
   save: (options?: SaveOptions) => Promise<SaveOutcome>;
@@ -1470,31 +1484,117 @@ export function useSaleBillDraft(): SaleBillDraftApi {
    * are never carried forward, so a March advance really does settle an April
    * invoice, and each row reports its own.
    */
+  const [openCreditsFailed, setOpenCreditsFailed] = useState(false);
+  /** A per-fetch token keyed by the party (§5.4): a reply for the previous customer is dropped. */
+  const openCreditsToken = useRef(0);
   const refreshOpenCredits = useCallback(async (): Promise<
     AdjustableCredit[]
   > => {
     const current = draftRef.current;
-    if (!current.customer.custId || !current.companyId) {
+    const partyId = current.customer.custId;
+    if (!partyId || !current.companyId) {
       dispatch(openCreditsSet([]));
+      setOpenCreditsFailed(false);
       return [];
     }
+    const token = (openCreditsToken.current += 1);
     try {
       const credits = await fetchOpenCredits({
-        partyId: current.customer.custId,
+        partyId,
         companyId: current.companyId,
       }).unwrap();
+      if (token !== openCreditsToken.current || draftRef.current.customer.custId !== partyId) {
+        return [];
+      }
       dispatch(openCreditsSet(credits));
+      setOpenCreditsFailed(false);
       return credits;
-    } catch (error) {
-      // An empty panel is honest; a stale one is not. The operator is told,
-      // because "no credits" and "could not ask" are different facts.
-      toast.warn(
-        `Could not read this customer's credits: ${errorMessage(error)}`,
-      );
+    } catch {
+      if (token !== openCreditsToken.current) {
+        return [];
+      }
+      // "Open credits aren't available just now." — an error state on the
+      // panel, never a modal (§14.2).
       dispatch(openCreditsSet([]));
+      setOpenCreditsFailed(true);
       return [];
     }
   }, [dispatch, fetchOpenCredits]);
+  /**
+   * The credits the panel offers: the live list with this POSTED bill's own
+   * set-offs merged back in (§14.2), so an amend can re-send what it holds.
+   */
+  const adjustableCredits = useMemo(
+    () => mergeHeldCredits(draft.openCredits, draft.status === "POSTED" ? draft.heldAdjustments : []),
+    [draft.heldAdjustments, draft.openCredits, draft.status],
+  );
+  /**
+   * `setDocumentTotal(bill)` after every recompute (§14.2): Σ adjusted may
+   * not exceed the bill — trim FIFO. An effect, because the bill is derived;
+   * it reads nothing it writes.
+   */
+  useEffect(() => {
+    if (draft.mode !== "entry" || draft.adjustments.length === 0) {
+      return;
+    }
+    const clamped = clampAdjustmentsToBill(draft.adjustments, pricing.totals.bill);
+    if (clamped.changed) {
+      dispatch(adjustmentsApplied({ rows: clamped.rows, from: draft.adjustmentsFrom }));
+    }
+  }, [dispatch, draft.adjustments, draft.adjustmentsFrom, draft.mode, pricing.totals.bill]);
+  const releaseAdjustmentsBy = useCallback(
+    (amount: number): number => {
+      const current = draftRef.current;
+      const released = releaseAdjustments(current.adjustments, amount);
+      if (released.released > 0.005) {
+        dispatch(adjustmentsApplied({ rows: released.rows, from: "tender" }));
+      }
+      return released.released;
+    },
+    [dispatch],
+  );
+  /**
+   * The settle dialog's Save (§15.9): the rows and the roll-ups in ONE
+   * assignment, then the term flip (a CREDIT row on a Cash bill → Credit, due
+   * re-derived, no promotion re-run) and the identity box.
+   */
+  const applySettlement = useCallback(
+    (result: SettleResult) => {
+      const current = draftRef.current;
+      const bill = pricingRef.current.totals.bill;
+      const adjusted = current.adjustments.reduce((sum, row) => sum + row.amount, 0);
+      const rollups = rollupsOf({
+        bill,
+        totalAdjusted: adjusted,
+        term: current.header.billType === "CREDIT" ? "CREDIT" : "CASH",
+        lines: result.rows.map((row) => ({ typeCode: row.typeCode, base: row.keyed, amount: row.keyed })),
+        tender: result.tender,
+        credit: result.credit,
+        refund: result.refund,
+        surcharge: result.surcharge,
+      });
+      dispatch(
+        tendersReplaced({
+          tenders: result.rows,
+          settlement: {
+            tenderAmt: rollups.tenderAmt,
+            surchargeAmt: rollups.surchargeAmt,
+            creditAmt: rollups.creditAmt,
+            adjustedAmt: Math.round(adjusted * 100) / 100,
+            refundAmt: rollups.refundAmt,
+            payStatus: rollups.payStatus,
+          },
+        }),
+      );
+      if (result.identity.pan !== current.header.custPan || result.identity.form60 !== current.header.form60Ref) {
+        dispatch(headerIdentitySet({ custPan: result.identity.pan, form60Ref: result.identity.form60 }));
+      }
+      if (result.creditFlipsTerm && current.header.billType !== "CREDIT") {
+        dispatch(headerFieldSet({ field: "billType", value: "CREDIT" }));
+      }
+    },
+    [dispatch],
+  );
   const applyAdjustments = useCallback(
     (rows: BillAdjustmentRow[], from: "bill" | "tender") => {
       const candidate: SaleBillDraft = {
@@ -2721,6 +2821,10 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     applyPriceLevel,
     refreshOpenCredits,
     applyAdjustments,
+    adjustableCredits,
+    openCreditsFailed,
+    releaseAdjustmentsBy,
+    applySettlement,
     validate,
     save,
     autoPost,

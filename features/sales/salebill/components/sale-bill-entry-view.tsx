@@ -59,7 +59,8 @@ import { PriceLevelPrompt } from "@/features/sales/quotation/components/price-le
 import { HeldListModal } from "@/features/sales/quotation/components/held-list-modal";
 import { QuotationListModal } from "@/features/sales/quotation/components/quotation-list-modal";
 import { SaleOrderListModal } from "@/features/sales/sale-order/components/sale-order-list-modal";
-import { TenderDialog } from "@/features/sales/sale-order/components/tender-dialog";
+import { SettleDialog, type SettleContext } from "./settle-dialog";
+import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
 import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { useGetTenderMastersQuery } from "@/store/api/saleOrderApi";
@@ -101,7 +102,6 @@ import {
   lineSizesApplied,
   peopleFieldSet,
   posSet,
-  tendersReplaced,
   termsFieldSet,
 } from "@/store/slices/saleBillSlice";
 import type { CreditFieldConfig } from "@/features/sales/sale-order/components/order-header-blocks";
@@ -278,9 +278,11 @@ export function SaleBillEntryView({
    * what the dialog's button should READ, the ref is the one-shot the deferred
    * save consumes (and must clear, or the next render would save again).
    */
-  const [settleThenSave, setSettleThenSave] = useState(false);
+  const [, setSettleThenSave] = useState(false);
   const settleThenSaveRef = useRef(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
+  /** F4's Cancel restores the snapshot taken on open (§14.3). */
+  const adjustSnapshot = useRef<BillAdjustmentRow[]>([]);
   const [editConfirmOpen, setEditConfirmOpen] = useState(false);
   /** Cancel bill (§17.9): the reason prompt. */
   const [cancelBillOpen, setCancelBillOpen] = useState(false);
@@ -1051,10 +1053,11 @@ export function SaleBillEntryView({
       toast.warn("There is nothing on this bill to adjust against yet.");
       return;
     }
+    adjustSnapshot.current = draft.adjustments;
     setCreditsLoading(true);
     void api.refreshOpenCredits().finally(() => setCreditsLoading(false));
     setAdjustOpen(true);
-  }, [api, draft.customer.custId, editable, pricing.totals.bill]);
+  }, [api, draft.adjustments, draft.customer.custId, editable, pricing.totals.bill]);
   /** Alt+O (§6.2): the current line's cost. */
   const showLineCost = useCallback(() => {
     const text = api.lineCostText(activeRowKey);
@@ -1065,15 +1068,41 @@ export function SaleBillEntryView({
     toast.info(text);
   }, [activeRowKey, api]);
 
-  const applyAdjustments = useCallback(
-    (rows: BillAdjustmentRow[], from: "bill" | "tender") => {
-      const ok = api.applyAdjustments(rows, from);
-      if (ok && from === "bill") {
-        setAdjustOpen(false);
-      }
-      return ok;
-    },
-    [api],
+  /** F4's Apply: validate, and the modal closes on a pass. */
+  const applyAdjustModal = useCallback(() => {
+    const ok = api.applyAdjustments(draft.adjustments, "bill");
+    if (ok) {
+      setAdjustOpen(false);
+    }
+  }, [api, draft.adjustments]);
+  const cancelAdjustModal = useCallback(() => {
+    api.applyAdjustments(adjustSnapshot.current, "bill");
+    setAdjustOpen(false);
+  }, [api]);
+  /** The dialog's ADJUST panel writes the bill's state directly — set-offs made there PERSIST (§15.8). */
+  const settleContext = useMemo<SettleContext>(
+    () => ({
+      grossAmount: pricing.totals.bill,
+      totalAdjusted: adjusted,
+      billDate: draft.header.billDate,
+      billRefno: draft.billRefno,
+      billToName: draft.customer.name,
+      billToPhone: draft.customer.phone,
+      billToPlace: draft.customer.place,
+      billToAddr: draft.customer.address,
+      creditAllowed: draft.customer.debitAllowed,
+      isWalkIn: api.isWalkIn,
+      loyaltyAllowed: (draft.party?.party.allowLoyalty ?? draft.header.hasLoyalty) && draft.header.hasLoyalty,
+      loyalty: draft.party?.loyalty ?? null,
+      fallbackPoints: draft.customer.points ?? 0,
+      cashToday: draft.party?.cashToday ?? 0,
+      notes: draft.notes,
+      openTempCredits: draft.party?.tempCredits ?? [],
+      custPan: draft.header.custPan,
+      form60Ref: draft.header.form60Ref,
+      settings: api.settings,
+    }),
+    [adjusted, api.isWalkIn, api.settings, draft.billRefno, draft.customer, draft.header, draft.notes, draft.party, pricing.totals.bill],
   );
 
   // ------------------------------------------------------------- documents
@@ -1693,35 +1722,12 @@ export function SaleBillEntryView({
             />
           </section>
 
-          {/*
-            §10's panel, mount point ONE: on the bill, beside the totals. The
-            other is inside the settle dialog. Same component, same state — the
-            operator reaches for whichever is in front of them and there is still
-            one source of truth.
-          */}
-          {adjustOpen ? (
-            <AdjustPanel
-              credits={draft.openCredits}
-              rows={draft.adjustments}
-              billAmount={pricing.totals.bill}
-              tendered={draft.settlement.tenderAmt - draft.settlement.surchargeAmt}
-              disabled={!editable}
-              loading={creditsLoading}
-              hasCustomer={Boolean(draft.customer.custId)}
-              onRefresh={() => {
-                setCreditsLoading(true);
-                void api.refreshOpenCredits().finally(() => setCreditsLoading(false));
-              }}
-              onApply={(rows) => applyAdjustments(rows, "bill")}
-            />
-          ) : (
-            <TermsBlock
-              terms={draft.terms}
-              fields={visibleFields.terms}
-              disabled={!editable}
-              onSetTerms={(field, value) => dispatch(termsFieldSet({ field, value }))}
-            />
-          )}
+          <TermsBlock
+            terms={draft.terms}
+            fields={visibleFields.terms}
+            disabled={!editable}
+            onSetTerms={(field, value) => dispatch(termsFieldSet({ field, value }))}
+          />
           {/*
             The bill's own money reads in the same grid as the rest of the
             totals. All four are zero until the tender dialog and the adjustment
@@ -1925,71 +1931,87 @@ export function SaleBillEntryView({
       />
 
       {/*
-        The settle dialog, with §10's panel as its second mount point. The
-        adjustments reduce what the TENDERS must cover — money already taken is
-        money already taken — but they are never a tender row and never reach
-        `tenders[]`.
+        §14.3 — F4, "Adjust Advance / Credit Notes": mount point ONE. Apply
+        validates; Cancel restores the snapshot taken on open. The other mount
+        point is inside the settle dialog — same component, same state.
       */}
-      <TenderDialog
+      <ModalShell
+        title="Adjust Advance / Credit Notes"
+        isOpen={adjustOpen}
+        onClose={cancelAdjustModal}
+        footer={
+          <>
+            <button type="button" className={quotationStyles.button} onClick={cancelAdjustModal}>
+              Cancel <span className={quotationStyles.buttonHint}>Esc</span>
+            </button>
+            <button type="button" className={cx(quotationStyles.button, quotationStyles.buttonPrimary)} onClick={applyAdjustModal}>
+              Apply
+            </button>
+          </>
+        }
+      >
+        <AdjustPanel
+          credits={api.adjustableCredits}
+          rows={draft.adjustments}
+          billAmount={pricing.totals.bill}
+          disabled={!editable}
+          loading={creditsLoading}
+          loadError={api.openCreditsFailed}
+          hasCustomer={Boolean(draft.customer.custId)}
+          notAuthoritative={!draft.adjustmentsTouched && draft.settlement.adjustedAmt > 0.005 ? { amount: draft.settlement.adjustedAmt } : null}
+          onChange={(rows) => api.applyAdjustments(rows, "bill")}
+          onRefresh={() => {
+            setCreditsLoading(true);
+            void api.refreshOpenCredits().finally(() => setCreditsLoading(false));
+          }}
+        />
+      </ModalShell>
+
+      {/*
+        §15 — the settle dialog. The adjustments reduce what the TENDERS must
+        cover, but they are never a tender row and never reach `tenders[]`;
+        the ADJUST row inside is a read-only mirror of the panel.
+      */}
+      <SettleDialog
         isOpen={tenderOpen}
-        purpose="settlement"
-        documentAmount={pricing.totals.bill}
-        documentDate={draft.header.billDate}
-        documentRefno={draft.billRefno}
+        context={settleContext}
         existingRows={draft.tenders}
         masters={tenderMasters}
         mastersFailed={Boolean(tenderMasterError)}
         mastersError={tenderMasterError ? "the tender master could not be read" : null}
-        creditAllowed={draft.customer.debitAllowed}
-        refundAmt={draft.settlement.refundAmt}
-        adjustedAmount={adjusted}
         adjustPanel={
           <AdjustPanel
-            credits={draft.openCredits}
+            embedded
+            credits={api.adjustableCredits}
             rows={draft.adjustments}
             billAmount={pricing.totals.bill}
-            tendered={draft.settlement.tenderAmt - draft.settlement.surchargeAmt}
             disabled={!editable}
             loading={creditsLoading}
+            loadError={api.openCreditsFailed}
             hasCustomer={Boolean(draft.customer.custId)}
+            notAuthoritative={!draft.adjustmentsTouched && draft.settlement.adjustedAmt > 0.005 ? { amount: draft.settlement.adjustedAmt } : null}
+            onChange={(rows) => api.applyAdjustments(rows, "tender")}
             onRefresh={() => {
               setCreditsLoading(true);
               void api.refreshOpenCredits().finally(() => setCreditsLoading(false));
             }}
-            onApply={(rows) => applyAdjustments(rows, "tender")}
           />
         }
-        confirmLabel={settleThenSave ? "OK & Save" : undefined}
+        onReleaseAdjustments={api.releaseAdjustmentsBy}
         onClose={() => {
-          // Backing out of a settle Save opened cancels the save with it.
+          // Backing out of a settle Save opened cancels the save with it. The
+          // set-offs made inside stay: they are the bill's state.
           setSettleThenSave(false);
           settleThenSaveRef.current = false;
           setTenderOpen(false);
         }}
-        onApply={(tenders, settlement) => {
+        onSave={(result) => {
           // `updateSettlementDisplay()` — the ONE place tendered, adjusted,
-          // balance and refund are reconciled (§9). Everything else reads it.
-          dispatch(
-            tendersReplaced({
-              tenders,
-              settlement: {
-                ...draft.settlement,
-                tenderAmt: settlement.tenderAmt,
-                surchargeAmt: settlement.surchargeAmt,
-                refundAmt: settlement.refundAmt,
-                payStatus: settlement.payStatus,
-                // A CREDIT tender settles the bill and posts NO accounting leg —
-                // the party debit simply stays open (§9). It is reported apart
-                // from the rest so the server need not re-derive the type.
-                creditAmt: tenders
-                  .filter((row) => row.typeCode === "CREDIT")
-                  .reduce((sum, row) => sum + Math.max(0, row.keyed), 0),
-                adjustedAmt: adjusted,
-              },
-            }),
-          );
+          // balance and refund are reconciled (§15.9). Everything else reads it.
+          api.applySettlement(result);
           // The ref stays armed: the save runs one render later, off the draft
-          // these tenders have just landed in.
+          // these tenders have just landed in. F6 inside the dialog prints.
+          settlePrintRef.current = result.print;
           setSettleThenSave(false);
           setTenderOpen(false);
         }}
