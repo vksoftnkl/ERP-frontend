@@ -1,0 +1,720 @@
+/*
+ * Sale Bill Entry — the styles the bill adds over the quotation screen.
+ *
+ * Everything structural (page shell, header grid, field controls, both grids,
+ * totals, toolbar) is the quotation's own stylesheet, imported by the components
+ * that reuse those classes. The credit panel's paints are the sale order's, for
+ * the same reason its component is: one panel, one look, one set of rules about
+ * when a figure turns red.
+ *
+ * What is here is only what this screen adds.
+ */
+
+/* ----------------------------------------------------------------- title -- */
+/* The legacy screen shouts its name; the shared `.title` is sentence case. */
+.entryTitle {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* ---------------------------------------------------------- header layout -- */
+/*
+ * Four columns: customer · bill · people · credit.
+ *
+ * The customer column is widest because it carries the two state fields side by
+ * side — the customer's own state and the place of supply, which are different
+ * facts and have to be readable as such. The credit column is narrowest: every
+ * cell in it is a read-out.
+ */
+.headerRowFour {
+  grid-template-columns:
+    minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1.05fr)
+    minmax(0, 0.8fr);
+}
+
+/*
+ * Measured against the page container, not the viewport: the app zooms itself
+ * to the screen, so a 1368-wide laptop lays this header out in ~1500 logical
+ * pixels and keeps all four columns. `@media (max-width: 1400px)` saw the raw
+ * 1368 instead and dropped the credit column onto a second row, costing a band
+ * of vertical space the items grid needed. See `--erp-ui-scale`.
+ */
+@container erp-txn-page (max-width: 1340px) {
+  .headerRowFour {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@container erp-txn-page (max-width: 1000px) {
+  .headerRowFour {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ------------------------------------------------------------ source chip -- */
+/*
+ * "FROM SALES_ORDER · SO0042 · 11-09-2026".
+ *
+ * Reads the RAW source document type, so a future DELIVERY_CHALLAN needs no
+ * change here. It is the only place the operator can see that this bill is
+ * consuming another document — which is also why the customer picker is locked
+ * whenever it is showing.
+ */
+.sourceChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: #eef2ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+  white-space: nowrap;
+}
+
+.sourceChipDivider {
+  opacity: 0.5;
+}
+
+/* ------------------------------------------------------- adjustment panel -- */
+/*
+ * §10's panel, rendered in two places: inside the settle dialog and beside the
+ * totals on the bill. Same component, same state, so the styling has to work in
+ * a modal and in the page — hence no fixed height and no own scroll container
+ * beyond the table's.
+ */
+.adjustPanel {
+  border: 1px solid var(--erp-border-color, #d7dce3);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.adjustHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/*
+ * The credit's originating year, beside its reference. Quiet, but never hidden:
+ * acc_bill_balance is partitioned by it and never carried forward, so two
+ * same-numbered documents from different years are different credits.
+ */
+.adjustYear {
+  margin-left: 6px;
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+.adjustFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid var(--erp-border-color, #e2e8f0);
+}
+
+.adjustTotal {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.adjustTotalLabel {
+  opacity: 0.7;
+}
+
+.adjustTotalValue {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* -------------------------------------------------- warning strip (§16.4) -- */
+/*
+ * The footer's one-liner: what the server said, in the worst colour, and a
+ * View button. It hides when there is nothing to say (rule 3), so the bar it
+ * sits in must not reserve room for it.
+ */
+.warningStrip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  border: 1px solid transparent;
+}
+
+.warningStripRefused {
+  background: #fdecec;
+  border-color: #f2b8b5;
+  color: #8c1d18;
+}
+
+.warningStripWarn {
+  background: #fff4e5;
+  border-color: #f5d39c;
+  color: #7a4a00;
+}
+
+.warningStripText {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notePill {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: currentColor;
+  color: #fff;
+  line-height: 16px;
+}
+
+/* The popup's rows — colour is on the pill, the message stays readable. */
+.notePillRefuse {
+  background: #b3261e;
+}
+
+.notePillWarn {
+  background: #b26a00;
+}
+
+.notePillInfo {
+  background: #4b5563;
+}
+
+.noteBanner {
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.noteBannerRefused {
+  background: #fdecec;
+  color: #8c1d18;
+}
+
+.noteBannerWarn {
+  background: #fff4e5;
+  color: #7a4a00;
+}
+
+.noteList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.noteRow {
+  display: grid;
+  grid-template-columns: auto minmax(120px, auto) 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--erp-border-color, #e2e8f0);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.noteRow .notePill {
+  background: #4b5563;
+}
+
+.noteRow .notePillRefuse {
+  background: #b3261e;
+}
+
+.noteRow .notePillWarn {
+  background: #b26a00;
+}
+
+.noteCode {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+.noteMessage {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.noteStatutory {
+  opacity: 0.7;
+}
+
+.noteAction {
+  white-space: nowrap;
+}
+
+.noteOverride {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.noteHint {
+  color: var(--text-muted, #666666);
+  font-size: 11px;
+}
+
+.noteFootnote {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-muted, #666666);
+}
+
+/* ----------------------------------------------------- reason presets -- */
+.reasonPresets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+
+.reasonPreset {
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--erp-border-color, #d7dce3);
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.reasonPreset:hover {
+  background: #f3f4f6;
+}
+
+/* --------------------------------------------------- posting badges (§21) -- */
+.postingBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--erp-border-color, #d7dce3);
+  background: #f8fafc;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.postingBadgeGenerated {
+  background: #e8f5e9;
+  border-color: #a5d6a7;
+  color: #1c6b2e;
+}
+
+.postingBadgeFailed {
+  background: #fdecec;
+  border-color: #f2b8b5;
+  color: #8c1d18;
+}
+
+.postingBadgePending {
+  background: #fff4e5;
+  border-color: #f5d39c;
+  color: #7a4a00;
+}
+
+.postingBadgeMuted {
+  color: var(--text-muted, #666666);
+}
+
+/* ------------------------------------------------------- facts line (§7.5) -- */
+/*
+ * `GST … · PAN / Form 60 · Advances · Credit notes · Cash today · Temp credit`.
+ * Always shown, because of 269ST and TCS; grey when empty, and Clear resets it.
+ */
+.factsLine {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 2px 0 0;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.fact {
+  white-space: nowrap;
+}
+
+.factGreen {
+  color: #1c6b2e;
+}
+
+.factAmber {
+  color: #7a4a00;
+}
+
+.factGrey {
+  color: var(--text-muted, #666666);
+}
+
+/* The AskText prompt's question keeps its line breaks. */
+.askTextMessage {
+  white-space: pre-line;
+}
+
+/* ------------------------------------------------------- source chips (§13.6) -- */
+.sourceTag {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 16px;
+}
+
+/* The ± rate variance annotation in the Rate cell (§8.6). */
+.rateVarianceUp {
+  color: #1c6b2e;
+}
+
+.rateVarianceDown {
+  color: #b3261e;
+}
+
+/* The stats line under the totals (§10.4). */
+.statsLine {
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--text-muted, #666666);
+}
+
+/* ---------------------------------------------------- settle dialog (§15.2) -- */
+/*
+ * Two columns: the amount table on the left (min 280), the panel on the right
+ * FIXED at 560 px — the window never resizes as rows change. On a narrow
+ * screen the columns stack; they still never resize on a row change.
+ */
+.settleBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settleColumns {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) 560px;
+  gap: 16px;
+  align-items: start;
+}
+
+@container erp-txn-page (max-width: 1000px) {
+  .settleColumns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.settleLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settleRight {
+  min-height: 240px;
+  border: 1px solid var(--erp-border-color, #d7dce3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fafbfc;
+}
+
+.settlePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settleInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settleDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.settleChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--erp-border-color, #d7dce3);
+}
+
+.settleChip {
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 110px;
+  padding: 4px 10px;
+  border: 1px solid;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settleChipLabel {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.settleChipValue {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.settleCashLine {
+  font-size: 11.5px;
+  color: var(--text-muted, #666666);
+}
+
+.settleCashLineOver {
+  color: #b3261e;
+  font-weight: 700;
+}
+
+.settleIdentity {
+  padding: 6px 0;
+  border-top: 1px dashed var(--erp-border-color, #d7dce3);
+}
+
+.settleWarning {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: #7a4a00;
+}
+
+/* ------------------------------------------------- source tree (§13.4) -- */
+.sourceTree {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sourceDoc {
+  border: 1px solid var(--erp-border-color, #d7dce3);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.sourceDocHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sourceDocPastWindow {
+  color: #b3261e;
+}
+
+.sourceDocTitle {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sourceLines {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.sourceLines th,
+.sourceLines td {
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--erp-border-color, #eef1f5);
+  text-align: left;
+}
+
+/* The identity strip's source list (§13.6). */
+.sourceList {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+}
+
+/* ------------------------------------------------- carry strip (§12.4) -- */
+.carryStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 4px 8px;
+  font-size: 11px;
+  border: 1px dashed var(--erp-border-color, #d7dce3);
+  border-radius: 6px;
+}
+
+.carryTitle {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #666666);
+}
+
+.carryRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.carryName {
+  font-weight: 600;
+}
+
+.carryFigures {
+  color: var(--text-muted, #666666);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------- shipping (§20) -- */
+.shippingBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shippingColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+@container erp-txn-page (max-width: 900px) {
+  .shippingColumns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.shippingGroup {
+  margin: 0;
+}
+
+.shippingReadOnly {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted, #666666);
+  padding: 4px 0;
+}
+
+.shippingMood {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.shippingMood_red {
+  background: #fdecec;
+  color: #8c1d18;
+}
+
+.shippingMood_blue {
+  background: #e8f0fe;
+  color: #1a5fb4;
+}
+
+.shippingMood_grey {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.shippingMood_amber {
+  background: #fff4e5;
+  color: #7a4a00;
+}
+
+/* --------------------------------------------------- re-tender (§22) -- */
+.retenderHead {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+.retenderTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.retenderTable th,
+.retenderTable td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--erp-border-color, #eef1f5);
+  text-align: left;
+  vertical-align: top;
+}
+
+.retenderInstrument {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px 10px;
+  padding: 4px 0;
+}
+
+.retenderFigures {
+  margin-right: auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------ registers (§24) -- */
+.registerPage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+}
+
+.registerViewport {
+  flex: 1 1 auto;
+  min-height: 200px;
+}
+
+/* The bottom bar's stats (§10.4). */
+.statsFigure {
+  font-variant-numeric: tabular-nums;
+}

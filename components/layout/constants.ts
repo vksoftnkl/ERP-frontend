@@ -44,6 +44,12 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       // server-driven menu by normalized-label match against THIS list.
       { label: "Sales Entry", href: "/sales/sale-bill" },
       { label: "Sales Return" },
+      // Menu 226 "Bill Delivery Update" (grid 113) and menu 257 "Temp Credits"
+      // (grid 114) — the two registers the sale bill owns
+      // (plan-react-sale-bill §24). Exact DB labels, for the same reason as
+      // "Sales Entry" above.
+      { label: "Bill Delivery Update", href: "/sales/bill-delivery" },
+      { label: "Temp Credits", href: "/sales/temp-credits" },
       {
         label: "Master",
         children: [

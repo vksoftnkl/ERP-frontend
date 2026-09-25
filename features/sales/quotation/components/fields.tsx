@@ -406,6 +406,11 @@ export type DropdownComboProps = {
   selectedLabel: string;
   disabled?: boolean;
   placeholder?: string;
+  /**
+   * The tokens a param-bound dropdown's SQL binds (`itrn_company_id`, …),
+   * ALWAYS sent when given — `''` for an unset one. Pass a stable object.
+   */
+  params?: Record<string, string>;
   onSelect: (value: string, label: string) => void;
 };
 
@@ -439,6 +444,7 @@ export function DropdownCombo(props: DropdownComboProps) {
     selectedLabel,
     disabled,
     placeholder,
+    params,
     onSelect,
   } = props;
 
@@ -481,9 +487,9 @@ export function DropdownCombo(props: DropdownComboProps) {
 
   const fetchOptions = useCallback(
     (search: string) => {
-      void runDropdown({ dropdownId, search, limit: 25 });
+      void runDropdown({ dropdownId, search, limit: 25, ...(params ? { params } : {}) });
     },
-    [dropdownId, runDropdown],
+    [dropdownId, params, runDropdown],
   );
 
   /**

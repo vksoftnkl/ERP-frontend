@@ -563,20 +563,23 @@ export const quotationApi = baseApi.injectEndpoints({
      *
      * The rows come back with the stored SQL's own column names, so the caller
      * says which key is the value and which is the label. `dropdown_param` is
-     * never sent: none of these dropdowns' SQL has a placeholder, and the
-     * substitution is textual, so a stray key could corrupt the query.
+     * sent ONLY when the caller binds `params`: the substitution is textual,
+     * so a stray key could corrupt the query, and a param-bound dropdown
+     * (transporters, vehicles, employees) 400s without its token — every
+     * optional token is sent, `''` = unset (plan-react-sale-bill §6.4).
      */
     runDropdown: builder.query<
       ConfiguredGridPage<Record<string, unknown>>,
-      { dropdownId: string; search?: string; limit?: number }
+      { dropdownId: string; search?: string; limit?: number; params?: Record<string, string> }
     >({
-      query: ({ dropdownId, search, limit = 25 }) => ({
+      query: ({ dropdownId, search, limit = 25, params }) => ({
         url: DROPDOWN_RUN_ENDPOINT,
         params: {
           dropdown_id: dropdownId,
           page: 1,
           limit,
           ...(search?.trim() ? { search: search.trim() } : {}),
+          ...(params && Object.keys(params).length > 0 ? { dropdown_param: JSON.stringify(params) } : {}),
         },
       }),
       transformResponse: (
