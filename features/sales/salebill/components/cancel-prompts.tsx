@@ -8,19 +8,25 @@
  *    is not one action but THREE, and the operator has to choose. A dialog that
  *    offered only "remove" would decide on their behalf whether the order line
  *    stays open, and nobody would know it had.
- *  - **`CancelOrderPrompt` (§16)** — "cancel bill" is what an operator would
- *    call it, and it is NOT what the route does. It writes off every open line
- *    of the source ORDER and leaves the bill exactly as it is. Saying so is the
- *    whole job of this dialog.
+ *  - **`CancelBillPrompt` (§17.9)** — a POSTED bill is cancelled by reversal.
+ *    It keeps its number and stays on the list; the stock, the ledger and the
+ *    register are reversed. The reason is stored with the cancellation and
+ *    cannot be edited afterwards, so the dialog says so and offers the usual
+ *    ones ready-made.
+ *  - **`AmendRemarkPrompt` (§17.8)** — a posted bill being saved again keeps
+ *    its number and date, and the operator is asked what they changed. The
+ *    remark rides on `/bills/amend` as `editRemark`.
  *
- * Both reasons are mandatory: `soi_cancel_reason` is `varchar(250)` and the
- * server rejects a blank, so there is nowhere to hide an unexplained
- * cancellation — which is the point.
+ * Every reason is mandatory: the columns are `varchar(250)` and the server
+ * rejects a blank, so there is nowhere to hide an unexplained cancellation —
+ * which is the point.
  */
 import { useState } from "react";
 import { cx } from "@/components/design-system/cx";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import styles from "@/features/sales/quotation/page.module.scss";
+import { CANCEL_REASON_PRESETS, REMARK_MAX_LENGTH } from "../salebill.constants";
+import billStyles from "../page.module.scss";
 
 const REASON_MAX = 250;
 
@@ -101,28 +107,21 @@ export function CancelLinePrompt({
   );
 }
 
-export type CancelOrderPromptProps = {
+export type CancelBillPromptProps = {
   isOpen: boolean;
-  /** The source document's reference, for the wording. */
-  refno: string | null;
+  refno: string;
   busy: boolean;
   onCancel: () => void;
   onConfirm: (reason: string) => void | Promise<void>;
 };
 
-export function CancelOrderPrompt({
-  isOpen,
-  refno,
-  busy,
-  onCancel,
-  onConfirm,
-}: CancelOrderPromptProps) {
+export function CancelBillPrompt({ isOpen, refno, busy, onCancel, onConfirm }: CancelBillPromptProps) {
   const [reason, setReason] = useState("");
-  const [username, setUsername] = useState("");
   return (
     <ModalShell
-      title="Cancel the source order"
+      title={`Cancel bill ${refno}`}
       isOpen={isOpen}
+      narrow
       onClose={onCancel}
       footer={
         <>
@@ -135,54 +134,111 @@ export function CancelOrderPrompt({
             disabled={busy || !reason.trim()}
             onClick={() => void onConfirm(reason)}
           >
-            {busy ? "Cancelling…" : "Cancel the order"}
+            {busy ? "Cancelling…" : "Cancel the bill"}
           </button>
         </>
       }
     >
-      {/*
-        Said plainly, because the route's name says the opposite. An operator who
-        reads "cancel" and expects the bill to go away will not find out
-        otherwise until the accounts do.
-      */}
-      <p className={styles.warning}>
-        This does <strong>not</strong> cancel the bill. There is no route that does.
-      </p>
       <p className={styles.modalNote}>
-        Every still-open line of {refno ? <strong>{refno}</strong> : "the source order"} is written
-        off: its pending quantity moves into cancelled, and the order&apos;s status and amounts
-        follow. The bill, its lines, its charges, its tenders and its voucher posting are left
-        exactly as they are. Running it twice cancels nothing the second time.
+        Why is bill {refno} being cancelled? The reason is stored with the cancellation and cannot
+        be edited afterwards.
       </p>
-      <label className={styles.label} htmlFor="cancel-order-reason">
+      <div className={billStyles.reasonPresets}>
+        {CANCEL_REASON_PRESETS.map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            className={billStyles.reasonPreset}
+            disabled={busy}
+            onClick={() => setReason(preset)}
+          >
+            {preset}
+          </button>
+        ))}
+      </div>
+      <label className={styles.label} htmlFor="cancel-bill-reason">
         Reason
         <span className={styles.requiredMark}>*</span>
         <input
-          id="cancel-order-reason"
+          id="cancel-bill-reason"
           className={styles.input}
           value={reason}
-          maxLength={REASON_MAX}
+          maxLength={REMARK_MAX_LENGTH}
           disabled={busy}
-          placeholder="Why is the order being closed out?"
+          autoFocus
+          placeholder="Why is this bill being cancelled?"
           onChange={(event) => setReason(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && reason.trim() && !busy) {
+              event.preventDefault();
+              void onConfirm(reason);
+            }
+          }}
         />
       </label>
-      {/*
-        Shown but not keyed in practice: the actor defaults to the signed-in
-        operator. It is here because the server records it on every row the call
-        writes, and an operator cancelling on somebody else's instruction should
-        be able to say so.
-      */}
-      <label className={styles.label} htmlFor="cancel-order-user">
-        Recorded as
+      <p className={styles.modalNote}>
+        The stock, the ledger and the register are reversed. The bill keeps its number and stays on
+        the list.
+      </p>
+    </ModalShell>
+  );
+}
+
+export type AmendRemarkPromptProps = {
+  isOpen: boolean;
+  refno: string;
+  busy: boolean;
+  /** Save changes & Print, or plain Save changes — for the button's wording. */
+  print: boolean;
+  onCancel: () => void;
+  onConfirm: (editRemark: string) => void | Promise<void>;
+};
+
+export function AmendRemarkPrompt({ isOpen, refno, busy, print, onCancel, onConfirm }: AmendRemarkPromptProps) {
+  const [remark, setRemark] = useState("");
+  return (
+    <ModalShell
+      title="What did you change?"
+      isOpen={isOpen}
+      narrow
+      onClose={onCancel}
+      footer={
+        <>
+          <button type="button" className={styles.button} disabled={busy} onClick={onCancel}>
+            Back
+          </button>
+          <button
+            type="button"
+            className={cx(styles.button, styles.buttonPrimary)}
+            disabled={busy || !remark.trim()}
+            onClick={() => void onConfirm(remark)}
+          >
+            {busy ? "Saving…" : print ? "Save changes & Print" : "Save changes"}
+          </button>
+        </>
+      }
+    >
+      <p className={styles.modalNote}>
+        Bill {refno} keeps its number and date. The remark is stored with the new revision.
+      </p>
+      <label className={styles.label} htmlFor="amend-remark">
+        Remark
+        <span className={styles.requiredMark}>*</span>
         <input
-          id="cancel-order-user"
+          id="amend-remark"
           className={styles.input}
-          value={username}
-          maxLength={50}
+          value={remark}
+          maxLength={REMARK_MAX_LENGTH}
           disabled={busy}
-          placeholder="(the signed-in operator)"
-          onChange={(event) => setUsername(event.target.value)}
+          autoFocus
+          placeholder="e.g. quantity of line 2 corrected"
+          onChange={(event) => setRemark(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && remark.trim() && !busy) {
+              event.preventDefault();
+              void onConfirm(remark);
+            }
+          }}
         />
       </label>
     </ModalShell>

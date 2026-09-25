@@ -69,7 +69,15 @@ export type SaleBillDraftLine = QuotationDraftLine & {
   stockId: string | null;
   /** `sbi_serial_no` — one serial per row, like the batch. */
   serialNo: string | null;
-  /** Source trail — stamped by the quotation / order import (§13). */
+  /**
+   * Source trail — stamped by the quotation / order import (§13.5). The
+   * inherited `srcDocId` names the DOCUMENT (`so_id` / `sq_id` / `sd_id`);
+   * `srcItemId` names the LINE (`soi_id` / `sqi_id` / `sdi_id`), which is what
+   * the post guards, the open-qty draw-down and "Cancel on Order" key on. The
+   * Qt model once held the line id in `SrcDocId`; only the corrected model is
+   * ported.
+   */
+  srcItemId: string | null;
   srcDocType: string | null;
   srcDocYear: string | null;
   srcDocRefno: string | null;
@@ -185,6 +193,12 @@ export type SaleBillHeader = {
    */
   hasLoyalty: boolean;
   priceLevel: number;
+  /**
+   * `sb_bill_mode` — WHOLESALE from menu 12, never a combo (§3.4). A loaded bill
+   * keeps its own; the POS screen will set its own. It changes the number
+   * series, the e-way warning and the delivery status, all server-side.
+   */
+  billMode: string;
 };
 
 export type SaleBillTerms = {
@@ -289,10 +303,60 @@ export type SaleBillDraft = {
    * say in either.
    */
   billRefno: string;
+  /** DRAFT | POSTED | CANCELLED. A bill that has never been saved is a DRAFT with `isNewEntry`. */
   status: string;
   versionNo: number;
+  /**
+   * `sb_revision_no` as loaded — the optimistic lock `/bills/amend` takes as
+   * `baseRevision`. A stale one is a 409 `SALES_REVISION_STALE`: someone else
+   * amended the bill meanwhile, and the answer is to reload, never to retry.
+   */
+  revisionNo: number;
   isNewEntry: boolean;
   isDeleted: boolean;
+  /**
+   * Edit (F2) on a POSTED bill (§17.8). The fields are open, Save becomes
+   * "Save changes" and goes to `/bills/amend` with a remark the operator is
+   * asked for. Never derived from the status: a posted bill is read-only until
+   * the operator chose to amend it.
+   */
+  amending: boolean;
+  /**
+   * A failed auto-post left this draft behind (§17.4–17.6). A retry then sends
+   * `sbId` and updates rather than creating a second bill — the missing id was
+   * the duplicate-bill cause — and a refusal deletes the draft so nothing is
+   * left half-done.
+   */
+  draftFromAutoPost: boolean;
+  /**
+   * The five `user_menus` rights for menu 12, READ from `/bills/get` and never
+   * computed (§17.2). `null` on a bill that has not been loaded: a new bill has
+   * no rights yet, and the server checks — the screen must not refuse Post on
+   * `!rights.post` for one.
+   */
+  rights: BillRights | null;
+  /** Derived server-side at read time (§17.2). `null` until loaded. */
+  locks: BillLocks | null;
+  /** What the post wrote: voucher, register, COGS, loyalty, IRN, EWB (§21). */
+  posting: BillPostingBlock | null;
+  /**
+   * The last `/validate` (or refused `/post` / `/amend`) answer, painted in the
+   * warning strip (§16). Replaced whole on every new answer; cleared on reset.
+   */
+  notes: ValidationNote[];
+  /**
+   * WARN codes the operator ticked to override. Reset on every new answer
+   * (§16.2 rule 4). Sent, de-duplicated, on `/validate`, `/post` and `/amend`.
+   */
+  overrides: string[];
+  /** Every source document once, for the identity strip's chips (§13.6). */
+  sources: BillSourceSummary[];
+  /**
+   * The set-offs a POSTED bill holds, as `/bills/get` reports them (§14.4).
+   * They are the live allocations, not the save DTO: they feed the adjust
+   * panel's "held by this document" figure on an amend, and are never echoed.
+   */
+  heldAdjustments: BillAdjustmentSummary[];
 
   policy: VoucherPolicy;
   customer: CustomerSnapshot;
@@ -371,6 +435,170 @@ export type SaleBillDocKey = {
   sbAccYear: string;
 };
 
+/**
+ * The four keys, as one type (§3.1). `sale_bill` is partitioned by the
+ * accounting year, so the year is part of the identity and not a filter; a
+ * caller that could send three keys would find out about the fourth at runtime
+ * — and on the GETs it would not even find out, because an unknown or missing
+ * query key is silently ignored, not refused.
+ */
+export type BillKey = SaleBillDocKey;
+
+// ---------------------------------------------------------------------------
+// Rights, locks, posting, notes — what `/bills/get` and `/bills/validate` say
+// ---------------------------------------------------------------------------
+
+/** The five `user_menus` flags for menu 12, for the calling user (§17.2). */
+export type BillRights = {
+  post: boolean;
+  cancel: boolean;
+  amend: boolean;
+  override: boolean;
+  retender: boolean;
+};
+
+/** Every field derived server-side at read time; nothing here is stored. */
+export type BillLocks = {
+  returns: number;
+  allocations: number;
+  dayClosed: boolean;
+  irnLive: boolean;
+  ewbLive: boolean;
+  irnCancelWindowUntil: string | null;
+  ewbValidUpto: string | null;
+  editable: {
+    /**
+     * Lock 1: false on EVERY posted bill. It means "the fields are open right
+     * now" and drives read-only only — Amend is the verb that reopens a posted
+     * bill, and it is never gated on this (§17.2).
+     */
+    document: boolean;
+    /** Lock 2: false once an IRN or an e-way bill is GENERATED. */
+    transportBand: boolean;
+  };
+};
+
+export type GstDocStatus =
+  | "NA"
+  | "PENDING"
+  | "GENERATED"
+  | "FAILED"
+  | "CANCELLED"
+  | "EXPIRED"
+  | "REJECTED";
+
+export type BillPostingBlock = {
+  voucherId: string | null;
+  voucherRefno: string | null;
+  postedOn: string | null;
+  registerId: string | null;
+  cogsAmt: number;
+  loyaltyEarned: number;
+  loyaltyRedeemed: number;
+  irn: {
+    status: GstDocStatus;
+    number: string | null;
+    ackNo: string | null;
+    ackOn: string | null;
+    message: string | null;
+  };
+  ewb: {
+    status: GstDocStatus;
+    number: string | null;
+    generatedOn: string | null;
+    validUpto: string | null;
+    message: string | null;
+    vehicleNo: string | null;
+  };
+};
+
+/** One source document, once, from `/get` `sources[]` (§13.6). */
+export type BillSourceSummary = {
+  kind: "DC" | "ORDER" | "QUOTATION";
+  docId: string;
+  accYear: string;
+  refno: string | null;
+  date: string | null;
+  lines: number;
+  takenQty: number;
+  openQtyAfter: number | null;
+};
+
+/**
+ * A posted bill's live set-offs as `/get` reports them (§14.4). NOT the save
+ * DTO — `refno` would 400 on an echo.
+ */
+export type BillAdjustmentSummary = {
+  againstBillId: string;
+  againstBillAccYear: string;
+  refno: string | null;
+  amount: number;
+  adjType: string;
+};
+
+export type BillTempCreditSummary = {
+  atcId: string;
+  name: string;
+  mobile: string;
+  balance: number;
+  dueDate: string | null;
+  status: string;
+};
+
+/** The statutory provenance a note carries when its figure came from an Act. */
+export type StatutoryRef = {
+  code: string;
+  value: number | string | null;
+  effectiveFrom: string;
+  isCompanyOverride: boolean;
+};
+
+/**
+ * One thing the server has to say about the document (§16.1). A refusal is
+ * never tickable; a WARN may be overridden when `overridable` and the user
+ * holds `rights.override`. On `/post` and `/amend` an overridable WARN becomes
+ * a refusal unless its code rides in `overrides[]` (§16.3).
+ */
+export type ValidationNote = {
+  code: string;
+  level: "REFUSE" | "WARN" | "INFO";
+  message: string;
+  field: string | null;
+  /** 1-based line number, when the note is about one line. */
+  line: number | null;
+  overridable: boolean;
+  isRefusal: boolean;
+  statutory: StatutoryRef | null;
+};
+
+/** A charge carry proposal from `/validate` (§12.4). Applied in phase 5. */
+export type ChargeCarryProposal = {
+  cdSrcCdId: string;
+  cdSrcAccYear: string;
+  chgName: string | null;
+  orderAmount: number;
+  carriedSoFar: number;
+  proposed: number;
+  basis: string;
+  isFinalBill: boolean;
+};
+
+/** `POST /bills/validate` — the success body. A 422 carries the refusals instead. */
+export type ValidateBillResult = {
+  ok: boolean;
+  refusals: unknown[];
+  warnings: unknown[];
+  rights?: Partial<BillRights> | null;
+  proposals?: { charges?: ChargeCarryProposal[] } | null;
+};
+
+/** `POST /bills/cancel` — NOT the `/get` shape; reload with `/get` after (§17.9). */
+export type CancelBillResult = BillKey & {
+  sbStatus: string;
+  reversalVoucherRefno: string | null;
+  cancelledOn: string | null;
+};
+
 // ---------------------------------------------------------------------------
 // Wire shapes — `POST /bills/create`, `GET /bills/get`
 // ---------------------------------------------------------------------------
@@ -402,6 +630,17 @@ export type SaveBillItemDto = {
   sbiSrcDocLineNo?: number | null;
   sbiSrcItemQty?: number | null;
   sbiSrcFreeQty?: number | null;
+  /**
+   * The source LINE (`soi_id` / `sdi_id`), as opposed to `sbiSrcDocId`, the
+   * document (§13.5). The post guards and the open-qty draw-down key on it.
+   */
+  sbiSrcItemId?: string | null;
+  /**
+   * NEVER null (§18.2): an explicit null beats the NOT NULL default and is a
+   * bare 500. Upper-cased, or `SALEABLE`.
+   */
+  sbiBucket?: string;
+  sbiLotId?: string | null;
   sbiItemId: string;
   /** `item_unit_conversion.iuc_id` — NOT a raw `unit_id`. */
   sbiItemUnitId: string;
@@ -692,7 +931,10 @@ export type SaveBillDto = {
   sbSurchargeAmt?: number;
   sbTenderAmt?: number;
   sbRefundAmt?: number;
+  /** ADVANCE set-offs only (§14.5) — it feeds the order's advance ledger. */
   sbAdvanceAmt?: number;
+  /** Credit-note set-offs only. Each must equal its own type's rows ±0.01. */
+  sbNoteAdjAmt?: number;
   sbPaidAmt?: number;
   sbBalanceAmt?: number;
   sbPayStatus?: string | null;
@@ -703,10 +945,40 @@ export type SaveBillDto = {
   /** Lower case, and NOT normalised server-side — send `'manual'`, not `'MANUAL'`. */
   sbFreightCalcType?: string | null;
   sbLoadingCalcType?: string | null;
-  sbDiscAlterBase?: boolean | null;
+  /** A bool or omitted — `null` is a 400 (§18.1). */
+  sbDiscAlterBase?: boolean;
   sbRoundOffStep?: number;
+  /**
+   * Declared on the DTO and IGNORED: a save is always a DRAFT, and only
+   * `/bills/post` moves it. Not sent (§18.1) — the Qt habit of sending the
+   * status label's text is not ported.
+   */
   sbStatus?: string | null;
+  /** Declared and ignored likewise; server-owned. Not sent. */
   sbVersionNo?: number;
+  sbBillMode?: string | null;
+  sbUsrRefdate?: string | null;
+  sbCustPan?: string | null;
+  sbForm60Ref?: string | null;
+  sbLoyaltyMemberId?: string | null;
+  /** Transport, flat (§18.1, §20.3). Written on `/create` for a DRAFT; the PUT after a post. */
+  sbShipAddrId?: string | null;
+  sbShipName?: string | null;
+  sbShipAddr?: string | null;
+  sbShipPlace?: string | null;
+  sbShipPin?: string | null;
+  sbShipPhone?: string | null;
+  sbShipStcd?: string | null;
+  sbShipGstin?: string | null;
+  sbDispatchGodownId?: string | null;
+  sbDispatchBranchId?: string | null;
+  sbTransportMode?: string | null;
+  sbTransporterId?: string | null;
+  sbTransporterName?: string | null;
+  sbTransporterGstin?: string | null;
+  sbLrNo?: string | null;
+  sbLrDate?: string | null;
+  sbDistanceKm?: number | null;
   sbCreatedBy?: string | null;
   sbModifiedBy?: string | null;
   items?: SaveBillItemDto[];
@@ -719,6 +991,40 @@ export type SaveBillDto = {
    */
   adjustments?: SaveBillAdjustmentDto[];
 };
+
+// ------------------------------- lifecycle ---------------------------------
+//
+// §4.1. Every body DTO runs `forbidNonWhitelisted`, so each of these is built
+// from state by `salebill.payload.ts`, never from a response (§4.4).
+
+/** `POST /bills/validate` — the save body plus the codes the operator overrides. */
+export type ValidateBillDto = SaveBillDto & { overrides?: string[] };
+
+/**
+ * `POST /bills/post` — the four keys only: it posts what the server HOLDS, not
+ * what the screen shows (§1 fact 1). `adjustments` must ride along whenever the
+ * draft has them, or the server picks the party's oldest credits instead (§17.5).
+ */
+export type PostBillDto = BillKey & {
+  overrides?: string[];
+  printAfter?: boolean;
+  adjustments?: SaveBillAdjustmentDto[];
+};
+
+/** `POST /bills/amend` — the whole payload plus the lock and the remark (§17.8). */
+export type AmendBillDto = SaveBillDto & {
+  sbId: string;
+  baseRevision: number;
+  editRemark: string;
+  overrides?: string[];
+  printAfter?: boolean;
+};
+
+/** `POST /bills/cancel` — POSTED only; the reason is mandatory (§17.9). */
+export type CancelBillDto = BillKey & { reason: string };
+
+/** `POST /bills/delete` — DRAFT only (§17.9). */
+export type DeleteBillDto = BillKey;
 
 // --------------------------------- read ------------------------------------
 
@@ -733,6 +1039,9 @@ export type BillItemPayload = {
   sbiSrcDocLineNo: number | null;
   sbiSrcItemQty: WireDecimal;
   sbiSrcFreeQty: WireDecimal;
+  sbiSrcItemId?: string | null;
+  sbiBucket?: string | null;
+  sbiLotId?: string | null;
   sbiItemId: string;
   sbiItemUnitId: string;
   sbiToBaseFactor: WireDecimal;
@@ -997,6 +1306,7 @@ export type BillPayload = {
   sbTenderAmt: WireDecimal;
   sbRefundAmt: WireDecimal;
   sbAdvanceAmt: WireDecimal;
+  sbNoteAdjAmt?: WireDecimal;
   sbPaidAmt: WireDecimal;
   sbBalanceAmt: WireDecimal;
   sbPayStatus: string;
@@ -1014,6 +1324,30 @@ export type BillPayload = {
   sbCancelledOn: string | null;
   sbCancelReason: string | null;
   sbVersionNo: number;
+  sbRevisionNo?: number | null;
+  sbBillMode?: string | null;
+  sbUsrRefdate?: string | null;
+  sbCustPan?: string | null;
+  sbForm60Ref?: string | null;
+  sbLoyaltyMemberId?: string | null;
+  sbDeliveryStatus?: string | null;
+  sbShipAddrId?: string | null;
+  sbShipName?: string | null;
+  sbShipAddr?: string | null;
+  sbShipPlace?: string | null;
+  sbShipPin?: string | null;
+  sbShipPhone?: string | null;
+  sbShipStcd?: string | null;
+  sbShipGstin?: string | null;
+  sbDispatchGodownId?: string | null;
+  sbDispatchBranchId?: string | null;
+  sbTransportMode?: string | null;
+  sbTransporterId?: string | null;
+  sbTransporterName?: string | null;
+  sbTransporterGstin?: string | null;
+  sbLrNo?: string | null;
+  sbLrDate?: string | null;
+  sbDistanceKm?: number | null;
   sbPrintCount: number;
   sbIsDeleted: boolean;
   sbCreatedOn?: string;
@@ -1023,6 +1357,14 @@ export type BillPayload = {
   items?: BillItemPayload[];
   charges?: BillChargePayload[];
   tenders?: BillTenderPayload[];
+  // The blocks a GET carries (§19). Absent on the save response of older builds.
+  posting?: BillPostingBlock | null;
+  locks?: BillLocks | null;
+  rights?: BillRights | null;
+  sources?: BillSourceSummary[] | null;
+  tempCredits?: BillTempCreditSummary[] | null;
+  adjustments?: BillAdjustmentSummary[] | null;
+  transport?: Record<string, unknown> | null;
 };
 
 /**
@@ -1032,14 +1374,6 @@ export type BillPayload = {
  * "Save & print" with nothing to name.
  */
 export type SavedBillRef = SaleBillDocKey & { billRefno: string | null };
-
-/** `POST /bills/delete` — the body, which cancels the SOURCE ORDER (§16). */
-export type CancelBillDto = SaleBillDocKey & {
-  /** Lands in `soi_cancel_reason`, varchar(250). Required. */
-  remarks: string;
-  /** The actor on every row the call writes. varchar(50). Required. */
-  username: string;
-};
 
 export type CancelledOrderLine = {
   soiId: string;
@@ -1059,15 +1393,6 @@ export type CancelOrderResult = {
   soCancelledAmt: number;
   soPendingAmt: number;
   lines: CancelledOrderLine[];
-};
-
-export type BillCancelResult = {
-  sbId: string;
-  cancelled: true;
-  remarks: string;
-  username: string;
-  cancelledOn: string;
-  orders: CancelOrderResult[];
 };
 
 // ---------------------------------------------------------------------------

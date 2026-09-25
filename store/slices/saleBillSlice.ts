@@ -41,7 +41,8 @@ import type {
   PartyCreditSummary,
   TenderDraftRow,
 } from "@/features/sales/sale-order/sale-order.types";
-import { applyBillSaveResponse } from "@/features/sales/salebill/salebill.payload";
+import { applyBillLifecycle, applyBillSaveResponse } from "@/features/sales/salebill/salebill.payload";
+import { overridesAgainst } from "@/features/sales/salebill/salebill.notes";
 import {
   applyBillHeaderField,
   applyBillItemPrice,
@@ -59,7 +60,9 @@ import type {
   BillAdjustmentRow,
   BillPeople,
   BillPayload,
+  BillRights,
   BillSettlement,
+  ValidationNote,
   SaleBillDraft,
   SaleBillDraftLine,
   SaleBillHeader,
@@ -235,6 +238,96 @@ const saleBillSlice = createSlice({
     },
     statusSet(state, action: PayloadAction<string>) {
       state.status = action.payload;
+    },
+    // ----- the lifecycle (§16, §17) -----------------------------------------
+    /**
+     * A `/get`-shaped answer from post, amend or a reload: status, revision,
+     * rights, locks, posting. The lines are left as the operator sees them.
+     */
+    lifecycleApplied(state, action: PayloadAction<BillPayload>) {
+      return applyBillLifecycle(state as SaleBillDraft, action.payload);
+    },
+    /**
+     * A NEW bill's first `/create` answered (§17.5 step 4): adopt the key and
+     * the number so a retry UPDATES instead of duplicating — the missing id was
+     * the duplicate-bill cause. `draftFromAutoPost` marks the draft as one a
+     * refused post must delete again.
+     */
+    draftAdopted(
+      state,
+      action: PayloadAction<{ payload: BillPayload; fromAutoPost: boolean }>,
+    ) {
+      const { payload, fromAutoPost } = action.payload;
+      state.docId = payload.sbId;
+      state.billRefno = payload.sbBillRefno ?? state.billRefno;
+      state.billSlno = payload.sbBillSlno ?? state.billSlno;
+      state.status = "DRAFT";
+      state.versionNo = payload.sbVersionNo ?? state.versionNo;
+      state.revisionNo = payload.sbRevisionNo ?? state.revisionNo;
+      state.isNewEntry = false;
+      state.draftFromAutoPost = fromAutoPost;
+    },
+    /** A refused auto-post deleted its draft (§17.6): an unsaved bill again. */
+    draftDisowned(state) {
+      state.docId = null;
+      state.billRefno = "";
+      state.billSlno = "";
+      state.status = "DRAFT";
+      state.versionNo = 0;
+      state.revisionNo = 0;
+      state.isNewEntry = true;
+      state.draftFromAutoPost = false;
+      state.lines = state.lines.map((line) => ({ ...line, sbiId: null }));
+      state.charges = state.charges.map((row) => ({ ...row, cdId: null }));
+      state.tenders = state.tenders.map((row) => ({ ...row, tdId: null }));
+    },
+    /**
+     * What the server said (§16). Replaced whole; the override ticks are kept
+     * only for codes the NEW answer still raises as overridable, and only while
+     * the user holds the right (rule 4).
+     */
+    notesSet(
+      state,
+      action: PayloadAction<{ notes: ValidationNote[]; rights?: Partial<BillRights> | null }>,
+    ) {
+      const { notes, rights } = action.payload;
+      if (rights && typeof rights.override === "boolean") {
+        state.rights = {
+          post: rights.post ?? state.rights?.post ?? false,
+          cancel: rights.cancel ?? state.rights?.cancel ?? false,
+          amend: rights.amend ?? state.rights?.amend ?? false,
+          override: rights.override,
+          retender: rights.retender ?? state.rights?.retender ?? false,
+        };
+      }
+      state.notes = notes;
+      state.overrides = overridesAgainst(notes, state.overrides, state.rights?.override === true);
+    },
+    notesCleared(state) {
+      state.notes = [];
+      state.overrides = [];
+    },
+    /** The Override tick on one note. Never passes for a refusal (rule 1). */
+    overrideToggled(state, action: PayloadAction<string>) {
+      const code = action.payload;
+      const note = state.notes.find((entry) => entry.code === code);
+      if (!note || !note.overridable || state.rights?.override !== true) {
+        return;
+      }
+      state.overrides = state.overrides.includes(code)
+        ? state.overrides.filter((entry) => entry !== code)
+        : [...state.overrides, code];
+    },
+    /** Edit (F2) on a POSTED bill (§17.8): the fields open, the strip clears. */
+    amendBegun(state) {
+      state.amending = true;
+      state.mode = "entry";
+      state.notes = [];
+      state.overrides = [];
+    },
+    amendAbandoned(state) {
+      state.amending = false;
+      state.mode = "browse";
     },
     /**
      * Which `txn_hold` row this cart is parked as — set when it is held or
@@ -652,6 +745,14 @@ export const {
   posSet,
   termsFieldSet,
   statusSet,
+  lifecycleApplied,
+  draftAdopted,
+  draftDisowned,
+  notesSet,
+  notesCleared,
+  overrideToggled,
+  amendBegun,
+  amendAbandoned,
   holdSet,
   customerApplied,
   walkInCustomerSeeded,
@@ -695,6 +796,17 @@ const NON_EDIT_ACTIONS = new Set<string>([
   // the operator committed something while it was in flight), and the wrapper
   // below would otherwise stamp it back to dirty on every successful save.
   saveResponseApplied.type,
+  // None of the lifecycle bookkeeping is an operator edit: what the server said
+  // about the bill, and adopting the id it handed back, leave the document as
+  // the operator keyed it.
+  lifecycleApplied.type,
+  draftAdopted.type,
+  draftDisowned.type,
+  notesSet.type,
+  notesCleared.type,
+  overrideToggled.type,
+  amendBegun.type,
+  amendAbandoned.type,
   // Seeding the auto-apply charges is the screen opening, not the operator
   // typing: a new bill that has only been pre-loaded is still pristine, and
   // dirtying it here would make Clear and the close guard prompt about work

@@ -123,7 +123,7 @@ import type {
   SaleBillDraftLine,
   SavedBillRef,
 } from "../salebill.types";
-import { useSaleBillDraft } from "../use-sale-bill-draft";
+import { useSaleBillDraft, type SaveOutcome } from "../use-sale-bill-draft";
 import { AdjustPanel } from "./adjust-panel";
 import { useBillVisibleSettings } from "./bill-visible-settings";
 import { BillListModal } from "./bill-list-modal";
@@ -134,7 +134,9 @@ import {
   BillPeopleBlock,
 } from "./bill-header-blocks";
 import { SaleBillToolbar } from "./sale-bill-toolbar";
-import { CancelLinePrompt, CancelOrderPrompt } from "./cancel-prompts";
+import { AmendRemarkPrompt, CancelBillPrompt, CancelLinePrompt } from "./cancel-prompts";
+import { ValidationPopup, WarningStrip } from "./warning-strip";
+import { verbState } from "../salebill.verbs";
 import styles from "../page.module.scss";
 import { useUiTableId } from "@/lib/ui-tables";
 
@@ -142,6 +144,14 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
   DRAFT: "statusDraft",
   POSTED: "statusAccepted",
   CANCELLED: "statusCancelled",
+};
+
+/** §21: GENERATED green · FAILED/REJECTED red · PENDING amber · the rest grey. */
+const GST_BADGE_CLASS: Record<string, string> = {
+  GENERATED: styles.postingBadgeGenerated,
+  FAILED: styles.postingBadgeFailed,
+  REJECTED: styles.postingBadgeFailed,
+  PENDING: styles.postingBadgePending,
 };
 
 /**
@@ -234,7 +244,6 @@ export function SaleBillEntryView({
   const { permissions: menuPermissions } = usePagePermissions();
   const canSaveDoc = draft.docId ? menuPermissions.canEdit : menuPermissions.canCreate;
   const editable = draft.mode === "entry" && !draft.isDeleted && canSaveDoc;
-  const canCopyDoc = Boolean(draft.docId) && menuPermissions.canCreate;
 
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
   const [itemPickerRow, setItemPickerRow] = useState<string | null>(null);
@@ -268,7 +277,15 @@ export function SaleBillEntryView({
   const settleThenSaveRef = useRef(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [editConfirmOpen, setEditConfirmOpen] = useState(false);
-  const [cancelOrderOpen, setCancelOrderOpen] = useState(false);
+  /** Cancel bill (§17.9): the reason prompt. */
+  const [cancelBillOpen, setCancelBillOpen] = useState(false);
+  /** Save while amending (§17.8): "what did you change?", and whether to print after. */
+  const [amendPrompt, setAmendPrompt] = useState<{ print: boolean } | null>(null);
+  /**
+   * The gate asked a question (`confirm-needed`) and this is what to run again
+   * with the answer yes — a save, a post or an amend, whichever asked.
+   */
+  const confirmRetry = useRef<(() => void) | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
   /**
    * The bill a save has just written, while the print dialog stands over it.
@@ -339,7 +356,12 @@ export function SaleBillEntryView({
     }
     void api.loadDocument(initialDocument).then((loaded) => {
       if (loaded && !loaded.isDeleted && initialMode === "entry") {
-        api.beginEdit();
+        // Edit on a POSTED bill is Amend (§17.8); on a draft it just opens.
+        if (loaded.status === "POSTED") {
+          void api.beginAmend();
+        } else {
+          api.beginEdit();
+        }
       }
     });
   }, [api, initialDocument, initialMode]);
@@ -573,7 +595,9 @@ export function SaleBillEntryView({
       // A line that came from a sales order is not one action but THREE, and the
       // operator has to choose (§8). Anything else silently decides on their
       // behalf whether the order line stays open.
-      if (line?.srcDocId && draft.source?.docType === "SALES_ORDER") {
+      // Keyed on the LINE's trail (§8.4): a quotation line carries a source
+      // line id too, which is why the type is checked, and per line.
+      if (line?.srcItemId && line.srcDocType === "SALES_ORDER") {
         setCancelReason("");
         setCancelLineKey(rowKey);
         return;
@@ -583,7 +607,7 @@ export function SaleBillEntryView({
         setActiveRowKey(null);
       }
     },
-    [activeRowKey, dispatch, draft.lines, draft.source],
+    [activeRowKey, dispatch, draft.lines],
   );
 
   /** "Remove from Bill" — off this bill, still pending on the order. */
@@ -652,13 +676,14 @@ export function SaleBillEntryView({
 
   // ------------------------------------------------------------------- save
 
-  const runSave = useCallback(
-    async (confirmed = false) => {
-      if (!canSaveDoc) {
-        toast.error("You do not have permission to save bills on this screen.");
-        return;
-      }
-      const outcome = await api.save({ confirmed });
+  /**
+   * What every lifecycle verb comes back with, handled once (§17): a violation
+   * lights its cell, a question is put to the operator with the verb remembered
+   * so a yes repeats it, and a written bill prints when the verb asked to.
+   * `refused` needs nothing here — the strip and the popup already say why.
+   */
+  const handleOutcome = useCallback(
+    (outcome: SaveOutcome, retry: () => void, print: boolean) => {
       if (outcome.status === "invalid" || outcome.status === "confirm-needed") {
         const violation = outcome.violation;
         setInvalidCells(
@@ -668,6 +693,7 @@ export function SaleBillEntryView({
           // A question, not a refusal: the stock position could not be
           // established, or the customer is over their limit. The operator may
           // know better than the screen does.
+          confirmRetry.current = retry;
           setSaveQuestion(violation.message);
           return;
         }
@@ -675,27 +701,72 @@ export function SaleBillEntryView({
         return;
       }
       setInvalidCells({});
-      if (outcome.status === "saved") {
+      if (outcome.status === "remark-needed") {
+        setAmendPrompt({ print });
+        return;
+      }
+      if (outcome.status === "saved" || outcome.status === "posted") {
         // Crash recovery has nothing left to recover.
         setRecovery(null);
-        // The counter prints the bill it has just taken the money for, without
-        // being sent to the list to find it again — the same dialog the F8
-        // picker opens, on the reference the server just allocated.
-        //
-        // Silent when the operator may not print: the bill IS saved, and a
-        // permission toast on top of the "saved" one would read as a failure.
-        if (menuPermissions.canPrint) {
+        // The counter prints the bill it has just written, without being sent
+        // to the list to find it again — the same dialog the F8 picker opens,
+        // on the reference the server just allocated. Only when asked to
+        // (F6, Ctrl+Enter), and silent when the operator may not print: the
+        // bill IS written, and a permission toast on top of the success would
+        // read as a failure.
+        if (print && menuPermissions.canPrint) {
           setPrintTarget(outcome.ref);
         }
       }
     },
-    [api, canSaveDoc, menuPermissions.canPrint],
+    [menuPermissions.canPrint],
+  );
+
+  /** Save (F5 on the plain route, the tender dialog's OK): §17.4. */
+  const runSave = useCallback(
+    async (options: { confirmed?: boolean; print?: boolean } = {}) => {
+      if (!canSaveDoc) {
+        toast.error("You do not have permission to save bills on this screen.");
+        return;
+      }
+      const print = options.print === true;
+      const outcome = await api.save({ confirmed: options.confirmed, print });
+      handleOutcome(outcome, () => void runSave({ confirmed: true, print }), print);
+    },
+    [api, canSaveDoc, handleOutcome],
+  );
+
+  /** Post (F6, Ctrl+Enter, Ctrl+Shift+Enter): create → validate → confirm → post (§17.5). */
+  const runPost = useCallback(
+    async (options: { confirmed?: boolean; print: boolean }) => {
+      if (!canSaveDoc) {
+        toast.error("You do not have permission to save bills on this screen.");
+        return;
+      }
+      const outcome = await api.post({ confirmed: options.confirmed, print: options.print });
+      handleOutcome(outcome, () => void runPost({ ...options, confirmed: true }), options.print);
+    },
+    [api, canSaveDoc, handleOutcome],
+  );
+
+  /** Save while amending, once the remark is in (§17.8). */
+  const runAmend = useCallback(
+    async (options: { editRemark: string; confirmed?: boolean; print: boolean }) => {
+      const outcome = await api.amend(options);
+      if (outcome.status !== "remark-needed") {
+        setAmendPrompt(null);
+      }
+      handleOutcome(outcome, () => void runAmend({ ...options, confirmed: true }), options.print);
+    },
+    [api, handleOutcome],
   );
 
   const onSaveQuestionConfirmed = useCallback(() => {
     setSaveQuestion(null);
-    void runSave(true);
-  }, [runSave]);
+    const retry = confirmRetry.current;
+    confirmRetry.current = null;
+    retry?.();
+  }, []);
 
   // --------------------------------------------------------------- settle
 
@@ -736,6 +807,11 @@ export function SaleBillEntryView({
       void runSave();
       return;
     }
+    if (draft.amending) {
+      // Amending never re-opens the tender from Save: the remark comes first.
+      void runSave();
+      return;
+    }
     const violation = api.validate();
     if (violation && !violation.confirm && violation.field !== "sale-bill-tender") {
       setInvalidCells(
@@ -751,7 +827,7 @@ export function SaleBillEntryView({
     setSettleThenSave(true);
     settleThenSaveRef.current = true;
     openTender();
-  }, [api, canSaveDoc, draft.header.billType, editable, openTender, runSave]);
+  }, [api, canSaveDoc, draft.amending, draft.header.billType, editable, openTender, runSave]);
 
   /**
    * The settle dialog's OK does not save directly: `api.save` reads the draft of
@@ -767,6 +843,124 @@ export function SaleBillEntryView({
     settleThenSaveRef.current = false;
     void runSave();
   }, [runSave, tenderOpen]);
+
+  /**
+   * The verb bar and the keymap read ONE state (§17.1). The tender route is
+   * still "a cash bill settles at the counter" until phase 4 reads
+   * `sales.tender_type`; a credit bill and an amend go straight to Save.
+   */
+  const tenderRoute = draft.header.billType !== "CREDIT" && !draft.amending;
+  const verbs = useMemo(
+    () =>
+      verbState({
+        status: draft.status,
+        isNew: draft.isNewEntry,
+        editable,
+        amending: draft.amending,
+        autoPost: api.autoPost,
+        tenderRoute,
+        rights: draft.rights,
+        locks: draft.locks,
+        canEditScreen: !draft.isDeleted && menuPermissions.canEdit,
+        canDeleteScreen: menuPermissions.canDelete,
+      }),
+    [
+      api.autoPost,
+      draft.amending,
+      draft.isDeleted,
+      draft.isNewEntry,
+      draft.locks,
+      draft.rights,
+      draft.status,
+      editable,
+      menuPermissions.canDelete,
+      menuPermissions.canEdit,
+      tenderRoute,
+    ],
+  );
+
+  /** F6: Save & Print on the plain route, Post & Print otherwise; the tender on its route. */
+  const onSaveAndPrint = useCallback(() => {
+    if (!verbs.saveAndPrint.visible && !verbs.tender.visible) {
+      return;
+    }
+    if (verbs.tender.visible) {
+      setSettleThenSave(true);
+      settleThenSaveRef.current = true;
+      openTender();
+      return;
+    }
+    if (!verbs.saveAndPrint.enabled) {
+      if (verbs.saveAndPrint.tooltip) {
+        toast.warn(verbs.saveAndPrint.tooltip);
+      }
+      return;
+    }
+    if (verbs.saveRoute === "amend" || verbs.saveRoute === "autoPost") {
+      void runSave({ print: true });
+      return;
+    }
+    void runPost({ print: true });
+  }, [openTender, runPost, runSave, verbs]);
+
+  /** Ctrl+Enter / Ctrl+Shift+Enter: post, with or without the print (§6.3). */
+  const onPostFromKeyboard = useCallback(
+    (print: boolean) => {
+      if (draft.amending) {
+        void runSave({ print });
+        return;
+      }
+      if (!editable) {
+        return;
+      }
+      void runPost({ print });
+    },
+    [draft.amending, editable, runPost, runSave],
+  );
+
+  /** Edit (F2): Amend on a posted bill, a confirm on a read-only draft (§17.9). */
+  const onEdit = useCallback(() => {
+    if (!verbs.edit.visible) {
+      return;
+    }
+    if (!verbs.edit.enabled) {
+      if (verbs.edit.tooltip) {
+        toast.warn(verbs.edit.tooltip);
+      }
+      return;
+    }
+    if (draft.status === "POSTED") {
+      void api.beginAmend();
+      return;
+    }
+    setEditConfirmOpen(true);
+  }, [api, draft.status, verbs.edit]);
+
+  const onCancelBill = useCallback(() => {
+    if (!verbs.cancelBill.visible) {
+      return;
+    }
+    if (!verbs.cancelBill.enabled) {
+      if (verbs.cancelBill.tooltip) {
+        toast.warn(verbs.cancelBill.tooltip);
+      }
+      return;
+    }
+    setCancelBillOpen(true);
+  }, [verbs.cancelBill]);
+
+  const onDelete = useCallback(() => {
+    if (!verbs.delete.visible) {
+      return;
+    }
+    if (!verbs.delete.enabled) {
+      if (verbs.delete.tooltip) {
+        toast.warn(verbs.delete.tooltip);
+      }
+      return;
+    }
+    void api.deleteDraft();
+  }, [api, verbs.delete]);
 
   const openAdjust = useCallback(() => {
     if (!editable) {
@@ -795,7 +989,11 @@ export function SaleBillEntryView({
       setListOpen(false);
       void api.loadDocument(key).then((loaded) => {
         if (loaded && !loaded.isDeleted && mode === "entry") {
-          api.beginEdit();
+          if (loaded.status === "POSTED") {
+            void api.beginAmend();
+          } else {
+            api.beginEdit();
+          }
         }
       });
     },
@@ -955,7 +1153,10 @@ export function SaleBillEntryView({
     printTarget !== null ||
     adjustOpen ||
     editConfirmOpen ||
-    cancelOrderOpen ||
+    cancelBillOpen ||
+    amendPrompt !== null ||
+    api.notesPopupOpen ||
+    api.proceedAsk !== null ||
     visibleFields.isOpen ||
     pendingGuard !== null;
 
@@ -989,7 +1190,11 @@ export function SaleBillEntryView({
     openAdjust,
     hold: api.hold,
     copyAsNew: api.copyAsNew,
-    beginEdit: api.beginEdit,
+    onEdit,
+    onDelete,
+    onSaveAndPrint,
+    onPostFromKeyboard,
+    validateOnServer: api.validateOnServer,
     modalOpen,
   };
   const shortcutsRef = useRef(shortcuts);
@@ -1046,11 +1251,26 @@ export function SaleBillEntryView({
           }
           break;
         case "F6":
+          // Post & Print on the plain route, Save & Print under auto-post or an
+          // amend, the tender on its route (§6.3).
           event.preventDefault();
-          current.openTender();
+          current.onSaveAndPrint();
+          break;
+        case "Enter":
+          // Ctrl+Enter posts & prints; Ctrl+Shift+Enter posts without printing.
+          // There is no button for the second.
+          if (event.ctrlKey || event.metaKey) {
+            event.preventDefault();
+            current.onPostFromKeyboard(!event.shiftKey);
+          }
           break;
         case "F7":
           event.preventDefault();
+          if (event.ctrlKey || event.metaKey) {
+            // Ctrl+F7: the operator's dry run (§17.7).
+            void current.validateOnServer();
+            break;
+          }
           current.guardedRun("clear");
           break;
         case "F8":
@@ -1069,11 +1289,18 @@ export function SaleBillEntryView({
           if (event.ctrlKey || event.metaKey) {
             event.preventDefault();
             current.guardedRun("importQuotation");
+            break;
+          }
+          // Bare F3 is Delete (DRAFT only) — outside the grid, where F3 opens
+          // the size entry and the grid has already consumed it.
+          if (!(event.target as HTMLElement)?.closest?.("[data-quotation-grid]")) {
+            event.preventDefault();
+            current.onDelete();
           }
           break;
         case "F2":
           event.preventDefault();
-          current.beginEdit();
+          current.onEdit();
           break;
         default:
           if (event.altKey && (event.key === "y" || event.key === "Y")) {
@@ -1148,8 +1375,29 @@ export function SaleBillEntryView({
             ) : null}
           </span>
         ) : null}
+        {draft.posting?.voucherRefno ? (
+          <span
+            className={cx(styles.postingBadge, styles.postingBadgeGenerated)}
+            title={draft.posting.postedOn ? `Posted ${toDisplayDate(draft.posting.postedOn.slice(0, 10))}` : undefined}
+          >
+            voucher {draft.posting.voucherRefno}
+            {draft.posting.cogsAmt > 0 ? ` · COGS ${formatCurrency(draft.posting.cogsAmt, 2, true)}` : ""}
+          </span>
+        ) : null}
+        {draft.status !== "DRAFT" && draft.posting ? (
+          <>
+            <span className={cx(styles.postingBadge, GST_BADGE_CLASS[draft.posting.irn.status] ?? styles.postingBadgeMuted)} title={draft.posting.irn.message ?? draft.posting.irn.ackNo ?? undefined}>
+              IRN {draft.posting.irn.status}
+            </span>
+            <span className={cx(styles.postingBadge, GST_BADGE_CLASS[draft.posting.ewb.status] ?? styles.postingBadgeMuted)} title={draft.posting.ewb.message ?? draft.posting.ewb.validUpto ?? undefined}>
+              EWB {draft.posting.ewb.status}
+            </span>
+          </>
+        ) : null}
         <div className={quotationStyles.titleMeta}>
-          {draft.mode === "browse" ? (
+          {draft.amending ? (
+            <span className={quotationStyles.readOnlyBadge}>Amending · rev {draft.revisionNo}</span>
+          ) : draft.mode === "browse" ? (
             <span className={quotationStyles.readOnlyBadge}>Read only</span>
           ) : null}
           {draft.pricing === "stored" ? <span>showing saved figures</span> : null}
@@ -1367,25 +1615,22 @@ export function SaleBillEntryView({
 
       <TotalsFooterStats totals={pricing.totals} />
 
+      <WarningStrip notes={draft.notes} onView={() => api.setNotesPopupOpen(true)} />
+
       <SaleBillToolbar
-        mode={draft.mode}
+        verbs={verbs}
         busy={busy}
-        canEdit={!draft.isDeleted && menuPermissions.canEdit}
-        canSave={editable}
-        canCopyAsNew={canCopyDoc}
-        canCancelOrder={Boolean(draft.docId) && Boolean(draft.source) && menuPermissions.canDelete}
-        onOpenTender={openTender}
-        onOpenAdjust={openAdjust}
+        onTender={requestSave}
         onSave={requestSave}
-        onShowList={() => guardedRun("list")}
-        onImportQuotation={() => guardedRun("importQuotation")}
-        onImportOrder={() => guardedRun("importOrder")}
+        onSaveAndPrint={onSaveAndPrint}
         onHold={() => void api.hold()}
         onShowHeld={() => guardedRun("held")}
-        onCancelOrder={() => setCancelOrderOpen(true)}
-        onCopyAsNew={api.copyAsNew}
-        onEdit={() => setEditConfirmOpen(true)}
         onClear={() => guardedRun("clear")}
+        onDelete={onDelete}
+        onEdit={onEdit}
+        onCopyAsNew={api.copyAsNew}
+        onShowList={() => guardedRun("list")}
+        onCancelBill={onCancelBill}
         onClose={() => guardedRun("back")}
       />
 
@@ -1630,23 +1875,48 @@ export function SaleBillEntryView({
           api.beginEdit();
         }}
       />
-      {/*
-        §16. "Cancel bill" is what an operator would call it, and the wording has
-        to say what actually happens, because it is NOT what the name suggests:
-        the route writes off every open line of the SOURCE ORDER and leaves the
-        bill — its lines, charges, tenders and voucher posting — exactly as it is.
-        There is no endpoint that cancels a bill.
-      */}
-      <CancelOrderPrompt
-        isOpen={cancelOrderOpen}
-        refno={draft.source?.refno ?? null}
+      {/* §17.9 — a POSTED bill is cancelled by reversal and keeps its number. */}
+      <CancelBillPrompt
+        isOpen={cancelBillOpen}
+        refno={draft.billRefno}
         busy={busy === "saving"}
-        onCancel={() => setCancelOrderOpen(false)}
+        onCancel={() => setCancelBillOpen(false)}
         onConfirm={async (reason) => {
-          const done = await api.cancelSourceOrders(reason);
+          const done = await api.cancelBill(reason);
           if (done) {
-            setCancelOrderOpen(false);
+            setCancelBillOpen(false);
           }
+        }}
+      />
+      {/* §17.8 — what did you change? */}
+      <AmendRemarkPrompt
+        isOpen={amendPrompt !== null}
+        refno={draft.billRefno}
+        busy={busy === "saving"}
+        print={amendPrompt?.print === true}
+        onCancel={() => setAmendPrompt(null)}
+        onConfirm={(editRemark) => void runAmend({ editRemark, print: amendPrompt?.print === true })}
+      />
+      {/*
+        §16.4 — the Validation popup: View from the strip, a refusal, or
+        `confirmProceed` (Back and the verb). Never the generic error box.
+      */}
+      <ValidationPopup
+        isOpen={api.notesPopupOpen || api.proceedAsk !== null}
+        notes={draft.notes}
+        overrides={draft.overrides}
+        canOverride={draft.rights?.override === true}
+        proceedVerb={api.proceedAsk?.verb ?? null}
+        onToggleOverride={api.toggleOverride}
+        onBack={() => {
+          if (api.proceedAsk) {
+            api.answerProceed(false);
+          }
+          api.setNotesPopupOpen(false);
+        }}
+        onProceed={() => {
+          api.setNotesPopupOpen(false);
+          api.answerProceed(true);
         }}
       />
       {/* §8 — three choices, and the operator makes it. */}

@@ -301,8 +301,11 @@ function billLineFromQuotationItem(
     schemeId: item.sqiSchemeId,
     schemeName: item.sqiSchemeName,
     remarks: item.sqiRemarks,
+    // The trail is per line (§13.5): the DOCUMENT on `srcDocId`, the LINE on
+    // `srcItemId` — the server keys its guards and draw-down on the latter.
     srcDocType: source.docType,
-    srcDocId: item.sqiId,
+    srcDocId: source.docId,
+    srcItemId: item.sqiId,
     srcDocYear: source.accYear,
     srcDocRefno: source.refno,
     srcDocLineNo: item.sqiLineNo,
@@ -491,11 +494,13 @@ function billLineFromOrderItem(
     schemeId: item.soiSchemeId,
     schemeName: item.soiSchemeName,
     remarks: item.soiRemarks,
-    // The source trail names the ORDER LINE (`soi_id`), not the order: that is
-    // what "Cancel on Order" addresses, and what the server re-derives
-    // fulfilment from.
+    // The trail is per line (§13.5): the ORDER on `srcDocId`, the ORDER LINE
+    // (`soi_id`) on `srcItemId`. The line id is what "Cancel on Order"
+    // addresses and what the server draws fulfilment down by; the Qt model once
+    // held it in `SrcDocId`, and that is not ported.
     srcDocType: source.docType,
-    srcDocId: item.soiId,
+    srcDocId: source.docId,
+    srcItemId: item.soiId,
     srcDocYear: source.accYear,
     srcDocRefno: source.refno,
     srcDocLineNo: item.soiLineNo,

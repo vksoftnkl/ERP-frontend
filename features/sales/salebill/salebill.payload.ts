@@ -49,9 +49,11 @@ import type { TenderDraftRow } from "@/features/sales/sale-order/sale-order.type
 import { typeDefaultsOf } from "@/features/sales/sale-order/tender/rows";
 import {
   BILL_DOC_TYPES,
+  BILL_MODES,
   BILL_STATUSES,
   BILL_TYPES,
   DEFAULT_BILL_DOC_TYPE,
+  DEFAULT_BILL_MODE,
   DEFAULT_BILL_STATUS,
   DEFAULT_BILL_TYPE,
 } from "./salebill.constants";
@@ -63,11 +65,20 @@ import {
   emptySettlement,
   nowStamp,
 } from "./salebill.state";
+import { advanceAdjusted, noteAdjusted } from "./salebill.validate";
 import type {
+  AmendBillDto,
+  BillAdjustmentSummary,
   BillChargePayload,
   BillItemPayload,
+  BillKey,
+  BillLocks,
   BillPayload,
+  BillPostingBlock,
+  BillRights,
+  BillSourceSummary,
   BillTenderPayload,
+  PostBillDto,
   SaleBillDraft,
   SaleBillDraftLine,
   SaveBillAdjustmentDto,
@@ -75,6 +86,7 @@ import type {
   SaveBillDto,
   SaveBillItemDto,
   SaveBillTenderDto,
+  ValidateBillDto,
 } from "./salebill.types";
 
 /** `yyyy-mm-dd`, or null for a blank / unparseable date. */
@@ -119,8 +131,13 @@ function itemDto(line: SaleBillDraftLine, priced: PricedLine, index: number): Sa
     // picker lands and one line can draw on two batches, this is where the split
     // number starts mattering.
     sbiSplitNo: 1,
+    // The trail is per line (§13.5): the document, then the LINE — which is what
+    // the post guards and the open-qty draw-down key on. `sbiSrcDocLineNo` must
+    // be sent: it was null once, and billed orders stayed CONFIRMED. A line
+    // without a trail sends nulls, never the header's.
     sbiSrcDocType: line.srcDocType,
     sbiSrcDocId: line.srcDocId,
+    sbiSrcItemId: line.srcItemId,
     sbiSrcDocYear: line.srcDocYear,
     sbiSrcDocRefno: toNullableText(line.srcDocRefno, 100),
     sbiSrcDocLineNo: line.srcDocLineNo,
@@ -129,6 +146,10 @@ function itemDto(line: SaleBillDraftLine, priced: PricedLine, index: number): Sa
     // the order's own arithmetic be re-derived against the wrong denominator.
     sbiSrcItemQty: line.srcItemQty,
     sbiSrcFreeQty: null,
+    // NEVER null (§18.2): an explicit null beats the NOT NULL default and is a
+    // bare 500. Nothing on this screen picks a bucket yet, so every line is
+    // saleable stock.
+    sbiBucket: "SALEABLE",
     sbiItemId: line.itemId,
     sbiItemUnitId: line.itemUnitId,
     sbiToBaseFactor: line.toBaseFactor || 1,
@@ -312,7 +333,11 @@ export function buildSavePayload(
     totals.bill,
   );
   const adjustmentRows = draft.adjustments.filter((row) => row.amount > 0);
-  const adjusted = Math.round(adjustmentRows.reduce((sum, row) => sum + row.amount, 0) * 100) / 100;
+  // Two figures, never one total (§14.5): the server refuses a single sum
+  // across both, and each must equal its own type's rows ±0.01.
+  const advance = advanceAdjusted(draft);
+  const notes = noteAdjusted(draft);
+  const adjusted = Math.round((advance + notes) * 100) / 100;
 
   // A CREDIT tender settles the document and posts no accounting leg at all —
   // the party debit simply stays open (§9). It is reported separately in
@@ -337,14 +362,17 @@ export function buildSavePayload(
     sbBranchId: draft.branchId,
     sbAccYear: draft.accYear,
     sbSessionId: actor.sessionId,
-    sbCounterId: null,
-    // Both are part of the bill's identity — the counters are offline-first, so
-    // a bill has to say which device raised it, and both are `@IsNotEmpty`
-    // server-side. `deviceId` is this browser's own localStorage id (free text;
-    // nothing joins on it), NOT `device_master.dev_id` — that one is the hold's,
-    // and the two are not interchangeable.
+    // `sbCounterId` is not sent (§3.3).
+    //
+    // The device is the REGISTERED one the login returned (`device_master`),
+    // because the stock voucher the post writes carries a foreign key to it and
+    // a browser fingerprint is refused with `SALES_DEVICE_UNREGISTERED`. The
+    // browser's own id is the fallback only so a DRAFT can still be saved; the
+    // post path refuses to guess (see `useSaleBillDraft`).
     sbDeviceType: actor.deviceType || "WEB",
-    sbDeviceId: actor.deviceId ?? "",
+    sbDeviceId: actor.deviceMasterId || actor.deviceId || "",
+    // From the launching menu, never a combo (§3.4). A loaded bill keeps its own.
+    sbBillMode: asEnum(draft.header.billMode, BILL_MODES, DEFAULT_BILL_MODE),
     sbDocType: asEnum(draft.header.docType, BILL_DOC_TYPES, DEFAULT_BILL_DOC_TYPE),
     sbBillType: asEnum(draft.header.billType, BILL_TYPES, DEFAULT_BILL_TYPE),
     sbCategoryId: draft.header.categoryId,
@@ -433,7 +461,8 @@ export function buildSavePayload(
     sbSurchargeAmt: tenderComputation.totals.surchargeTotal,
     sbTenderAmt: tenderComputation.totals.tendered,
     sbRefundAmt: tenderComputation.totals.refund,
-    sbAdvanceAmt: adjusted,
+    sbAdvanceAmt: advance,
+    sbNoteAdjAmt: notes,
     sbPaidAmt: paid,
     sbBalanceAmt: balance,
     sbPayStatus: payStatusOf(paid, totals.bill),
@@ -444,17 +473,12 @@ export function buildSavePayload(
     // Lower case, and NOT normalised server-side.
     sbFreightCalcType: (draft.policy.freightCalcType || "manual").toLowerCase(),
     sbLoadingCalcType: (draft.policy.loadingCalcType || "manual").toLowerCase(),
-    sbDiscAlterBase: draft.policy.discountAlterBaseRate,
+    // A bool, never null — `null` is a 400 (§18.1).
+    sbDiscAlterBase: draft.policy.discountAlterBaseRate === true,
     sbRoundOffStep: draft.policy.roundOffStep,
-    // A bill is RAISED, never drafted: the screen has no save-as-draft door, so
-    // a create always posts. Only an existing bill carries its own status back
-    // (a POSTED bill re-saved stays posted; a CANCELLED one stays cancelled) —
-    // which also keeps a cart parked before this rule from re-posting as DRAFT.
-    sbStatus: draft.docId
-      ? asEnum(draft.status, BILL_STATUSES, DEFAULT_BILL_STATUS)
-      : DEFAULT_BILL_STATUS,
-    sbCreatedBy: actorLabel(actor),
-    sbModifiedBy: actorLabel(actor),
+    // `sbStatus` is NOT sent: a save is always a DRAFT and only `/bills/post`
+    // moves it (§18.1). Nor is `sbVersionNo`; both are server-owned.
+    ...(draft.docId ? { sbModifiedBy: actorLabel(actor) } : { sbCreatedBy: actorLabel(actor) }),
     items: lineIndexes.map(({ line, index }, position) =>
       itemDto(line, pricing.lines[index], position),
     ),
@@ -491,6 +515,81 @@ function payStatusOf(paid: number, bill: number): string {
     return "UNPAID";
   }
   return Math.round(paid * 100) >= Math.round(bill * 100) ? "PAID" : "PARTIAL";
+}
+
+// ---------------------------------------------------------------------------
+// The lifecycle bodies (§4.1, §17). Built from state, never from a response.
+// ---------------------------------------------------------------------------
+
+/** The four keys of a saved bill, or `null` for one that has never been saved. */
+export function billKeyOf(draft: SaleBillDraft): BillKey | null {
+  if (!draft.docId) {
+    return null;
+  }
+  return {
+    sbId: draft.docId,
+    sbCompanyId: draft.companyId,
+    sbBranchId: draft.branchId,
+    sbAccYear: draft.accYear,
+  };
+}
+
+/**
+ * The `adjustments[]` the lifecycle verbs carry, or `undefined` when the key
+ * must be OMITTED (§14.4): absent means "leave them", `[]` means "reverse every
+ * set-off". Draft set-offs are not stored server-side, so they ride again on
+ * `/post` and `/amend` — without them the server picks the party's oldest
+ * credits instead of the ones the operator chose.
+ */
+export function adjustmentsForWire(draft: SaleBillDraft): SaveBillAdjustmentDto[] | undefined {
+  if (!draft.adjustmentsTouched) {
+    return undefined;
+  }
+  return draft.adjustments.filter((row) => row.amount > 0.005).map(adjustmentDto);
+}
+
+function dedupeCodes(codes: readonly string[]): string[] | undefined {
+  const unique = Array.from(new Set(codes.filter((code) => code.trim())));
+  return unique.length > 0 ? unique : undefined;
+}
+
+/** `POST /bills/validate`: the save body plus the ticked overrides (§16.4). */
+export function buildValidateBody(payload: SaveBillDto, overrides: readonly string[]): ValidateBillDto {
+  const codes = dedupeCodes(overrides);
+  return codes ? { ...payload, overrides: codes } : { ...payload };
+}
+
+/**
+ * `POST /bills/post`: the keys only — it posts what the server HOLDS (§17.5).
+ * `adjustments` is sent whenever the draft has them (§14.4).
+ */
+export function buildPostBody(
+  key: BillKey,
+  options: { overrides?: readonly string[]; adjustments?: SaveBillAdjustmentDto[]; printAfter?: boolean } = {},
+): PostBillDto {
+  const codes = dedupeCodes(options.overrides ?? []);
+  return {
+    ...key,
+    ...(codes ? { overrides: codes } : {}),
+    ...(options.printAfter ? { printAfter: true } : {}),
+    ...(options.adjustments !== undefined ? { adjustments: options.adjustments } : {}),
+  };
+}
+
+/** `POST /bills/amend`: the whole payload, the optimistic lock and the remark (§17.8). */
+export function buildAmendBody(
+  payload: SaveBillDto,
+  options: { sbId: string; baseRevision: number; editRemark: string; overrides?: readonly string[]; printAfter?: boolean },
+): AmendBillDto {
+  const codes = dedupeCodes(options.overrides ?? []);
+  return {
+    ...payload,
+    sbId: options.sbId,
+    baseRevision: options.baseRevision,
+    editRemark: options.editRemark.trim().slice(0, 250),
+    ...(codes ? { overrides: codes } : {}),
+    ...(options.printAfter ? { printAfter: true } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -573,6 +672,7 @@ function lineFromPayload(item: BillItemPayload): SaleBillDraftLine {
     // `orderQty`.
     srcDocType: item.sbiSrcDocType,
     srcDocId: item.sbiSrcDocId,
+    srcItemId: item.sbiSrcItemId ?? null,
     srcDocYear: item.sbiSrcDocYear,
     srcDocRefno: item.sbiSrcDocRefno,
     srcDocLineNo: item.sbiSrcDocLineNo,
@@ -733,8 +833,24 @@ export function parseLoadedBill(
     billRefno: payload.sbBillRefno ?? "",
     status: asEnum(payload.sbStatus, BILL_STATUSES, DEFAULT_BILL_STATUS),
     versionNo: payload.sbVersionNo ?? 0,
+    // The optimistic lock `/bills/amend` takes back as `baseRevision`.
+    revisionNo: payload.sbRevisionNo ?? 0,
     isNewEntry: false,
     isDeleted: payload.sbIsDeleted === true || Boolean(payload.sbCancelledOn),
+    amending: false,
+    draftFromAutoPost: false,
+    // Read, never computed (§17.2). A save response of an older build carries
+    // none of these; the screen then treats the bill as it would a new one.
+    rights: rightsOf(payload.rights),
+    locks: locksOf(payload.locks),
+    posting: postingOf(payload.posting),
+    notes: [],
+    overrides: [],
+    sources: sourcesOf(payload.sources),
+    // Only a POSTED bill holds live set-offs; a reloaded DRAFT's `adjustments`
+    // is `[]` because draft set-offs are not stored (§14.4).
+    heldAdjustments:
+      payload.sbStatus === "POSTED" ? heldAdjustmentsOf(payload.adjustments) : [],
     // The document's OWN policy snapshot, never the current session's: a bill
     // reopened next year still prices the way it was created.
     policy: defaultPolicy({
@@ -794,6 +910,7 @@ export function parseLoadedBill(
       hasComm: payload.sbHasComm === true,
       hasLoyalty: payload.sbHasLoyalty === true,
       priceLevel: clampPriceLevel(payload.sbPriceLevel ?? 1),
+      billMode: asEnum(payload.sbBillMode ?? null, BILL_MODES, DEFAULT_BILL_MODE),
     },
     terms: {
       ...emptyBillTerms(),
@@ -844,6 +961,129 @@ export function parseLoadedBill(
       refundAmt: toNumber(payload.sbRefundAmt),
       payStatus: payload.sbPayStatus || "UNPAID",
     },
+  };
+}
+
+function rightsOf(value: BillPayload["rights"]): BillRights | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  return {
+    post: value.post === true,
+    cancel: value.cancel === true,
+    amend: value.amend === true,
+    override: value.override === true,
+    retender: value.retender === true,
+  };
+}
+
+function locksOf(value: BillPayload["locks"]): BillLocks | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  return {
+    returns: toNumber(value.returns),
+    allocations: toNumber(value.allocations),
+    dayClosed: value.dayClosed === true,
+    irnLive: value.irnLive === true,
+    ewbLive: value.ewbLive === true,
+    irnCancelWindowUntil: value.irnCancelWindowUntil ?? null,
+    ewbValidUpto: value.ewbValidUpto ?? null,
+    editable: {
+      document: value.editable?.document === true,
+      transportBand: value.editable?.transportBand === true,
+    },
+  };
+}
+
+function postingOf(value: BillPayload["posting"]): BillPostingBlock | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  return {
+    voucherId: value.voucherId ?? null,
+    voucherRefno: value.voucherRefno ?? null,
+    postedOn: value.postedOn ?? null,
+    registerId: value.registerId ?? null,
+    cogsAmt: toNumber(value.cogsAmt),
+    loyaltyEarned: toNumber(value.loyaltyEarned),
+    loyaltyRedeemed: toNumber(value.loyaltyRedeemed),
+    irn: {
+      status: value.irn?.status ?? "NA",
+      number: value.irn?.number ?? null,
+      ackNo: value.irn?.ackNo ?? null,
+      ackOn: value.irn?.ackOn ?? null,
+      message: value.irn?.message ?? null,
+    },
+    ewb: {
+      status: value.ewb?.status ?? "NA",
+      number: value.ewb?.number ?? null,
+      generatedOn: value.ewb?.generatedOn ?? null,
+      validUpto: value.ewb?.validUpto ?? null,
+      message: value.ewb?.message ?? null,
+      vehicleNo: value.ewb?.vehicleNo ?? null,
+    },
+  };
+}
+
+function sourcesOf(value: BillPayload["sources"]): BillSourceSummary[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((row) => row && typeof row === "object" && typeof row.docId === "string")
+    .map((row) => ({
+      kind: row.kind,
+      docId: row.docId,
+      accYear: row.accYear ?? "",
+      refno: row.refno ?? null,
+      date: toDateInput(row.date) || null,
+      lines: toNumber(row.lines),
+      takenQty: toNumber(row.takenQty),
+      openQtyAfter: row.openQtyAfter === null || row.openQtyAfter === undefined ? null : toNumber(row.openQtyAfter),
+    }));
+}
+
+function heldAdjustmentsOf(value: BillPayload["adjustments"]): BillAdjustmentSummary[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((row) => row && typeof row === "object" && typeof row.againstBillId === "string")
+    .map((row) => ({
+      againstBillId: row.againstBillId,
+      againstBillAccYear: row.againstBillAccYear ?? "",
+      refno: row.refno ?? null,
+      amount: toNumber(row.amount),
+      adjType: row.adjType ?? "",
+    }));
+}
+
+/**
+ * What a lifecycle answer (the `/get` shape from `/post`, `/amend` or a
+ * reload) changes on the draft WITHOUT repainting it: status, revision, the
+ * rights, the locks and the posting block. The lines stay as the operator sees
+ * them; a screen that wants the stored figures reloads.
+ */
+export function applyBillLifecycle(draft: SaleBillDraft, payload: BillPayload): SaleBillDraft {
+  return {
+    ...draft,
+    docId: payload.sbId ?? draft.docId,
+    billRefno: payload.sbBillRefno ?? draft.billRefno,
+    billSlno: payload.sbBillSlno ?? draft.billSlno,
+    status: asEnum(payload.sbStatus, BILL_STATUSES, DEFAULT_BILL_STATUS),
+    versionNo: payload.sbVersionNo ?? draft.versionNo,
+    revisionNo: payload.sbRevisionNo ?? draft.revisionNo,
+    isNewEntry: false,
+    isDeleted: payload.sbIsDeleted === true || Boolean(payload.sbCancelledOn),
+    rights: rightsOf(payload.rights) ?? draft.rights,
+    locks: locksOf(payload.locks) ?? draft.locks,
+    posting: postingOf(payload.posting) ?? draft.posting,
+    sources: payload.sources ? sourcesOf(payload.sources) : draft.sources,
+    heldAdjustments:
+      payload.sbStatus === "POSTED" && payload.adjustments
+        ? heldAdjustmentsOf(payload.adjustments)
+        : draft.heldAdjustments,
   };
 }
 
@@ -912,9 +1152,13 @@ export function applyBillSaveResponse(
     billSlno: payload.sbBillSlno ?? draft.billSlno,
     billRefno: payload.sbBillRefno ?? draft.billRefno,
     versionNo: payload.sbVersionNo ?? draft.versionNo,
+    revisionNo: payload.sbRevisionNo ?? draft.revisionNo,
     status: asEnum(payload.sbStatus, BILL_STATUSES, DEFAULT_BILL_STATUS),
     isNewEntry: false,
     isDeleted: payload.sbIsDeleted === true,
+    // The save answers the `/get` shape, so the rights and locks arrive with it.
+    rights: rightsOf(payload.rights) ?? draft.rights,
+    locks: locksOf(payload.locks) ?? draft.locks,
     isDirty: sentDraft === undefined ? false : sentDraft !== draft,
     lines,
     charges,

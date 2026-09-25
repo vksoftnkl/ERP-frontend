@@ -240,12 +240,13 @@ describe("importOrder", () => {
     expect(outcome.note).toContain("2 lines");
   });
 
-  it("names the ORDER LINE as the source, not the order", () => {
-    // `soi_id` is what "Cancel on Order" addresses and what the server
-    // re-derives fulfilment from. An `so_id` here would make a line-level
-    // cancellation close out the whole order.
+  it("names the ORDER on the document trail and the ORDER LINE on the line trail", () => {
+    // §13.5: `srcDocId` is the document, `srcItemId` the line — `soi_id` is
+    // what "Cancel on Order" addresses and what the server draws fulfilment
+    // down by. The Qt model once held the line id in `SrcDocId`; not ported.
     const outcome = importOrder(createBillDraft(CONTEXT), orderPayload([orderItem()]));
-    expect(outcome.draft.lines[0].srcDocId).toBe("soi-1");
+    expect(outcome.draft.lines[0].srcDocId).toBe("so-1");
+    expect(outcome.draft.lines[0].srcItemId).toBe("soi-1");
     expect(outcome.draft.source?.docId).toBe("so-1");
     expect(outcome.draft.source?.docType).toBe("SALES_ORDER");
     // The SOURCE's own accounting year — every txn table is partitioned by it.
@@ -469,9 +470,10 @@ describe("importQuotation", () => {
     expect(stockGateOf(outcome.draft.lines[0])).toBe("unavailable");
   });
 
-  it("names the quotation LINE as the source", () => {
+  it("names the quotation on the document trail and its line on the line trail", () => {
     const outcome = importQuotation(createBillDraft(CONTEXT), quotationPayload());
-    expect(outcome.draft.lines[0].srcDocId).toBe("sqi-1");
+    expect(outcome.draft.lines[0].srcDocId).toBe("q1");
+    expect(outcome.draft.lines[0].srcItemId).toBe("sqi-1");
     expect(outcome.draft.source?.docType).toBe("QUOTATION");
     expect(outcome.draft.source?.docId).toBe("q1");
   });

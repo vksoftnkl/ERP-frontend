@@ -7,7 +7,27 @@
 import { describe, expect, it } from "vitest";
 import { recalcDocument, type DocumentPricing } from "@/domain/pricing";
 import type { SaveActor } from "@/features/sales/quotation/quotation.payload";
-import { applyBillSaveResponse, buildSavePayload, parseLoadedBill } from "./salebill.payload";
+import { createDraftChargeRow } from "@/features/sales/quotation/quotation.state";
+import {
+  adjustmentsForWire,
+  applyBillSaveResponse,
+  billKeyOf,
+  buildAmendBody,
+  buildPostBody,
+  buildSavePayload,
+  buildValidateBody,
+  parseLoadedBill,
+} from "./salebill.payload";
+import {
+  AMEND_BILL_DTO_KEYS,
+  POST_BILL_DTO_KEYS,
+  SAVE_BILL_ADJUSTMENT_DTO_KEYS,
+  SAVE_BILL_DTO_KEYS,
+  SAVE_BILL_ITEM_DTO_KEYS,
+  SAVE_CHARGE_DETAIL_DTO_KEYS,
+  VALIDATE_BILL_DTO_KEYS,
+  keysOutside,
+} from "./salebill.dto-keys";
 import { createBillDraft, createBillDraftLine } from "./salebill.state";
 import { stockGateOf } from "./salebill.validate";
 import type {
@@ -97,16 +117,26 @@ describe("the bill number is the SERVER's, both halves", () => {
   });
 });
 
-describe("a created bill is POSTED", () => {
-  it("posts a new bill whatever status the draft carries", () => {
-    // The screen has no save-as-draft door, so a create always posts — even
-    // from a cart parked back when a new draft opened on DRAFT.
-    expect(build(draftWith()).sbStatus).toBe("POSTED");
-    expect(build(draftWith({ status: "DRAFT" })).sbStatus).toBe("POSTED");
+describe("a save is always a DRAFT", () => {
+  it("never sends a status or a version — both are server-owned (§18.1)", () => {
+    // A save is a draft until `/bills/post`; the server ignores whatever status
+    // it is sent, and the Qt habit of sending the label's text is not ported.
+    expect(build(draftWith())).not.toHaveProperty("sbStatus");
+    expect(build(draftWith({ docId: "sb-1", status: "POSTED" }))).not.toHaveProperty("sbStatus");
+    expect(build(draftWith({ docId: "sb-1" }))).not.toHaveProperty("sbVersionNo");
   });
 
-  it("leaves an existing bill on its own status", () => {
-    expect(build(draftWith({ docId: "sb-1", status: "CANCELLED" })).sbStatus).toBe("CANCELLED");
+  it("sends the bill mode from the menu, never a combo (§3.4)", () => {
+    expect(build(draftWith()).sbBillMode).toBe("WHOLESALE");
+  });
+
+  it("stamps created-by on a new bill and modified-by on a loaded one", () => {
+    const created = build(draftWith());
+    expect(created.sbCreatedBy).toBe("counter1");
+    expect(created).not.toHaveProperty("sbModifiedBy");
+    const updated = build(draftWith({ docId: "sb-1" }));
+    expect(updated.sbModifiedBy).toBe("counter1");
+    expect(updated).not.toHaveProperty("sbCreatedBy");
   });
 });
 
@@ -118,9 +148,17 @@ describe("identity", () => {
     const payload = build(draftWith());
     expect(payload.sbCompanyId).toBe(CONTEXT.companyId);
     expect(payload.sbAccYear).toBe("2026-2027");
-    expect(payload.sbDeviceId).toBe("browser-abc");
+    // The REGISTERED device the login returned, never the browser's fingerprint:
+    // the stock voucher the post writes has a foreign key to device_master (§3.3).
+    expect(payload.sbDeviceId).toBe(ACTOR.deviceMasterId);
     expect(payload.sbDeviceType).toBe("WEB");
     expect(payload.sbSessionId).toBe(ACTOR.sessionId);
+    expect(payload).not.toHaveProperty("sbCounterId");
+  });
+
+  it("falls back to the browser id only so a DRAFT can still be saved", () => {
+    const payload = buildSavePayload(draftWith(), priceOf(draftWith()), { ...ACTOR, deviceMasterId: null });
+    expect(payload.sbDeviceId).toBe("browser-abc");
   });
 
   it("sends the counter's clock, to the second", () => {
@@ -206,11 +244,39 @@ describe("the lines", () => {
     // as `sbiSrcItemQty` would let the order's own arithmetic be re-derived
     // against the wrong denominator.
     const draft = draftWith({
-      lines: [line({ srcItemQty: 10, orderQty: 4, orderQtyLocked: true, srcDocId: "soi-1" })],
+      lines: [
+        line({
+          srcItemQty: 10,
+          orderQty: 4,
+          orderQtyLocked: true,
+          srcDocType: "SALES_ORDER",
+          srcDocId: "so-1",
+          srcItemId: "soi-1",
+          srcDocLineNo: 3,
+        }),
+      ],
     });
     const item = build(draft).items?.[0];
     expect(item?.sbiSrcItemQty).toBe(10);
-    expect(item?.sbiSrcDocId).toBe("soi-1");
+    // The trail is per line (§13.5): the DOCUMENT, then the LINE the server
+    // keys its guards and draw-down on, and the line number that was once
+    // always null (billed orders stayed CONFIRMED).
+    expect(item?.sbiSrcDocId).toBe("so-1");
+    expect(item?.sbiSrcItemId).toBe("soi-1");
+    expect(item?.sbiSrcDocLineNo).toBe(3);
+  });
+
+  it("never sends a null bucket — an explicit null is a bare 500 (§18.2)", () => {
+    expect(build(draftWith()).items?.[0].sbiBucket).toBe("SALEABLE");
+  });
+
+  it("sends a hand-keyed line's trail as nulls, never the header's", () => {
+    const draft = draftWith({
+      source: { docType: "SALES_ORDER", docId: "so-1", accYear: "2026-2027", refno: "SO1", date: null },
+    });
+    const item = build(draft).items?.[0];
+    expect(item?.sbiSrcDocId).toBeNull();
+    expect(item?.sbiSrcItemId).toBeNull();
   });
 
   it("zeroes the discount ladders the engine does not model", () => {
@@ -362,7 +428,122 @@ describe("adjustments — the one array where absent is not empty", () => {
     expect(payload.sbAccYear).toBe("2026-2027");
     expect(payload.adjustments?.[0].againstBillAccYear).toBe("2025-2026");
     expect(payload.adjustments?.[0].againstBillId).toBe("abl-1");
+    // Two figures, never one total (§14.5): advances feed the order's advance
+    // ledger, credit notes are their own, and the server refuses a single sum.
     expect(payload.sbAdvanceAmt).toBe(500);
+    expect(payload.sbNoteAdjAmt).toBe(0);
+  });
+
+  it("puts a credit note under sbNoteAdjAmt, not sbAdvanceAmt", () => {
+    const draft = draftWith({
+      adjustmentsTouched: true,
+      adjustments: [
+        {
+          key: "adj-1",
+          amount: 120,
+          credit: {
+            billId: "abl-2",
+            billAccYear: "2026-2027",
+            billType: "SALES_RETURN",
+            drCr: "CR",
+            docRefno: "SR-7",
+            docDate: "2026-09-01",
+            billAmount: 120,
+            pendingAmount: 120,
+            status: "OPEN",
+            srcModule: "SALES",
+            srcDocType: "SALE_RETURN",
+            srcDocId: null,
+            srcAccYear: null,
+            narration: null,
+            adjType: "NOTE_ADJUST",
+            settlementMode: "CREDIT_NOTE",
+          },
+        },
+      ],
+    });
+    const payload = build(draft);
+    expect(payload.sbAdvanceAmt).toBe(0);
+    expect(payload.sbNoteAdjAmt).toBe(120);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The whitelist (§4.4, §29): no key outside the server's DTOs, at any level
+// ---------------------------------------------------------------------------
+
+describe("every body stays inside the server's whitelist", () => {
+  const draft = draftWith({
+    docId: "sb-1",
+    adjustmentsTouched: true,
+    charges: [
+      {
+        ...createDraftChargeRow(),
+        chgId: "chg-1",
+        chgName: "Freight",
+        ledgerCode: "led-1",
+        role: "FREIGHT",
+        method: "FIXED",
+        type: "ADD",
+        applyOn: "FLAT",
+        rate: 50,
+      },
+    ],
+  });
+  const payload = build(draft);
+
+  it("the save body, its items and its charges", () => {
+    expect(keysOutside(payload as Record<string, unknown>, SAVE_BILL_DTO_KEYS)).toEqual([]);
+    for (const item of payload.items ?? []) {
+      expect(keysOutside(item as Record<string, unknown>, SAVE_BILL_ITEM_DTO_KEYS)).toEqual([]);
+    }
+    expect(payload.charges?.length).toBe(1);
+    for (const row of payload.charges ?? []) {
+      expect(keysOutside(row as Record<string, unknown>, SAVE_CHARGE_DETAIL_DTO_KEYS)).toEqual([]);
+    }
+  });
+
+  it("the validate, post and amend bodies", () => {
+    const validate = buildValidateBody(payload, ["SALES_RATE_BELOW_MIN", "SALES_RATE_BELOW_MIN"]);
+    expect(keysOutside(validate as Record<string, unknown>, VALIDATE_BILL_DTO_KEYS)).toEqual([]);
+    expect(validate.overrides).toEqual(["SALES_RATE_BELOW_MIN"]);
+
+    const key = billKeyOf(draft);
+    expect(key).not.toBeNull();
+    const post = buildPostBody(key as NonNullable<typeof key>, {
+      overrides: [],
+      adjustments: adjustmentsForWire(draft),
+      printAfter: true,
+    });
+    expect(keysOutside(post as Record<string, unknown>, POST_BILL_DTO_KEYS)).toEqual([]);
+    expect(post).not.toHaveProperty("overrides");
+    expect(post.adjustments).toEqual([]);
+    for (const row of post.adjustments ?? []) {
+      expect(keysOutside(row as Record<string, unknown>, SAVE_BILL_ADJUSTMENT_DTO_KEYS)).toEqual([]);
+    }
+
+    const amend = buildAmendBody(payload, {
+      sbId: "sb-1",
+      baseRevision: 2,
+      editRemark: "  quantity of line 2 corrected  ",
+      overrides: ["A", "A", "B"],
+    });
+    expect(keysOutside(amend as Record<string, unknown>, AMEND_BILL_DTO_KEYS)).toEqual([]);
+    expect(amend.baseRevision).toBe(2);
+    expect(amend.editRemark).toBe("quantity of line 2 corrected");
+    expect(amend.overrides).toEqual(["A", "B"]);
+  });
+
+  it("omits `adjustments` entirely when the screen never handled them (§14.4)", () => {
+    expect(adjustmentsForWire(draftWith({ adjustmentsTouched: false }))).toBeUndefined();
+    const post = buildPostBody({ sbId: "sb-1", sbCompanyId: "c", sbBranchId: "b", sbAccYear: "2026-2027" }, {
+      adjustments: adjustmentsForWire(draftWith({ adjustmentsTouched: false })),
+    });
+    expect(post).not.toHaveProperty("adjustments");
+  });
+
+  it("never sends a null sbDiscAlterBase", () => {
+    expect(typeof payload.sbDiscAlterBase).toBe("boolean");
   });
 });
 
@@ -691,6 +872,64 @@ describe("parseLoadedBill", () => {
     );
     expect(fromOrder.lines[0].orderQtyLocked).toBe(true);
     expect(fromOrder.lines[0].srcDocId).toBe("soi-1");
+  });
+
+  it("reads rights, locks, posting and the revision — never computes them (§17.2)", () => {
+    const posted = parseLoadedBill(
+      billPayload({
+        sbStatus: "POSTED",
+        sbRevisionNo: 3,
+        rights: { post: true, cancel: false, amend: true, override: false, retender: true },
+        locks: {
+          returns: 1,
+          allocations: 0,
+          dayClosed: false,
+          irnLive: false,
+          ewbLive: true,
+          irnCancelWindowUntil: null,
+          ewbValidUpto: "2026-09-30",
+          editable: { document: false, transportBand: false },
+        },
+        posting: {
+          voucherId: "v-1",
+          voucherRefno: "SV0001",
+          postedOn: "2026-09-25T10:00:00Z",
+          registerId: null,
+          cogsAmt: 700,
+          loyaltyEarned: 0,
+          loyaltyRedeemed: 0,
+          irn: { status: "NA", number: null, ackNo: null, ackOn: null, message: null },
+          ewb: { status: "GENERATED", number: "EWB1", generatedOn: null, validUpto: "2026-09-30", message: null, vehicleNo: "TN01AB1234" },
+        },
+        sources: [{ kind: "ORDER", docId: "so-1", accYear: "2026-2027", refno: "SO1", date: "2026-09-20T00:00:00.000Z", lines: 2, takenQty: 5, openQtyAfter: 0 }],
+        adjustments: [{ againstBillId: "abl-1", againstBillAccYear: "2025-2026", refno: "ADV1", amount: 300, adjType: "ADVANCE_ADJUST" }],
+      }),
+      { companyStateCode: "33", companyStateName: "Tamil Nadu" },
+    );
+    expect(posted.revisionNo).toBe(3);
+    expect(posted.rights).toEqual({ post: true, cancel: false, amend: true, override: false, retender: true });
+    expect(posted.locks?.ewbLive).toBe(true);
+    expect(posted.locks?.editable.document).toBe(false);
+    expect(posted.posting?.voucherRefno).toBe("SV0001");
+    expect(posted.posting?.ewb.vehicleNo).toBe("TN01AB1234");
+    expect(posted.sources[0]).toMatchObject({ kind: "ORDER", refno: "SO1", date: "2026-09-20" });
+    expect(posted.heldAdjustments[0]).toMatchObject({ refno: "ADV1", amount: 300 });
+    expect(posted.amending).toBe(false);
+    expect(posted.notes).toEqual([]);
+  });
+
+  it("holds no set-offs for a DRAFT, whose adjustments are never stored (§14.4)", () => {
+    const draft = parseLoadedBill(
+      billPayload({ sbStatus: "DRAFT", adjustments: [{ againstBillId: "x", againstBillAccYear: "y", refno: null, amount: 1, adjType: "" }] }),
+      { companyStateCode: "33", companyStateName: "Tamil Nadu" },
+    );
+    expect(draft.heldAdjustments).toEqual([]);
+  });
+
+  it("a save response without the blocks leaves the draft's rights alone", () => {
+    const loaded = parseLoadedBill(billPayload(), { companyStateCode: "33", companyStateName: "Tamil Nadu" });
+    expect(loaded.rights).toBeNull();
+    expect(loaded.locks).toBeNull();
   });
 });
 

@@ -32,16 +32,26 @@ import type { ConfiguredGridKey } from "@/lib/configured-grids";
 /** `/api/v1` is already part of `API_BASE` — never write it in a path. */
 export const BILL_SAVE_ENDPOINT = "/bills/create";
 export const BILL_GET_ENDPOINT = "/bills/get";
-/**
- * POST, and it deletes nothing.
- *
- * The plan's §16 reads this as "cancel the bill". It is not: the server cancels
- * the **sale order the bill was raised against**, writing off every open line
- * and leaving the bill row, its lines, its charges, its tenders and its voucher
- * posting untouched. Naming it `CANCEL_SOURCE_ORDER` rather than `DELETE` is the
- * cheapest way to stop the next reader making the same inference.
- */
-export const BILL_CANCEL_SOURCE_ORDER_ENDPOINT = "/bills/delete";
+
+// The lifecycle (§4.1). Every one takes the four keys; every body DTO runs
+// `forbidNonWhitelisted`, so the bodies are built from state, never echoed.
+/** Dry run: `{ok, refusals[], warnings[], rights, proposals}`, or 422 with the refusals. */
+export const BILL_VALIDATE_ENDPOINT = "/bills/validate";
+/** Keys + `overrides[]?` + `adjustments[]?` + `printAfter?`. Posts what the SERVER holds. */
+export const BILL_POST_ENDPOINT = "/bills/post";
+/** The whole payload + `baseRevision` + `editRemark`. Restates the voucher in place. */
+export const BILL_AMEND_ENDPOINT = "/bills/amend";
+/** POSTED only, by reversal, reason mandatory. The bill keeps its number. */
+export const BILL_CANCEL_ENDPOINT = "/bills/cancel";
+/** DRAFT only. A POSTED id is a 409 `SALES_BILL_POSTED` (use cancel). */
+export const BILL_DELETE_ENDPOINT = "/bills/delete";
+/** BARE keys: `partyId, companyId, branchId, accYear, billDate` (§7.3). */
+export const BILL_PARTY_CONTEXT_ENDPOINT = "/bills/party-context";
+export const BILL_OPEN_SOURCES_ENDPOINT = "/bills/open-sources";
+export const BILL_TRANSPORT_ENDPOINT = "/bills/transport";
+export const BILL_TENDER_CONTEXT_ENDPOINT = "/bills/tender-context";
+export const BILL_RETENDER_ENDPOINT = "/bills/retender";
+export const BILL_DELIVERY_STATUS_ENDPOINT = "/bills/delivery-status";
 
 /**
  * The credit panel (§4.2). Shared with the sale order, which got there first —
@@ -161,9 +171,36 @@ export const BILL_TYPES = ["CASH", "CREDIT"] as const;
 export type BillType = (typeof BILL_TYPES)[number];
 export const DEFAULT_BILL_TYPE: BillType = "CASH";
 
+/**
+ * The lifecycle: DRAFT → POSTED → (amend → POSTED rev+1) → CANCELLED (§1). A
+ * save is ALWAYS a draft — the server ignores whatever status is sent — and only
+ * `/bills/post` moves it. A cancelled bill keeps its number and stays on the
+ * list.
+ */
 export const BILL_STATUSES = ["DRAFT", "POSTED", "CANCELLED"] as const;
 export type BillStatus = (typeof BILL_STATUSES)[number];
-export const DEFAULT_BILL_STATUS: BillStatus = "POSTED";
+export const DEFAULT_BILL_STATUS: BillStatus = "DRAFT";
+
+/** `sb_bill_mode` — menu 12 is WHOLESALE; POS will be its own screen (§3.4). */
+export const BILL_MODES = ["WHOLESALE", "POS"] as const;
+export const DEFAULT_BILL_MODE = "WHOLESALE";
+
+/**
+ * `sales.auto_post` — Save is check → create → post, and a refused post leaves
+ * NO draft behind (§17.4–17.6). Off, Save writes a draft and Post is F6.
+ */
+export const AUTO_POST_SETTING_KEY = "sales.auto_post";
+
+/** The reasons a cancel offers ready-made (§17.9). Free text is always allowed. */
+export const CANCEL_REASON_PRESETS = [
+  "Keyed wrong",
+  "Wrong customer",
+  "Duplicate bill",
+  "Customer cancelled the purchase",
+] as const;
+
+/** `sb_cancel_reason` / `editRemark` — varchar(250) on both. */
+export const REMARK_MAX_LENGTH = 250;
 
 export const PAY_STATUSES = ["UNPAID", "PARTIAL", "PAID"] as const;
 export const DEFAULT_PAY_STATUS = "UNPAID";

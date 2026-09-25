@@ -17,21 +17,30 @@ import type { ApiSuccessResponse } from "@/utils/types";
 import type { ConfiguredGridPage } from "@/store/api/quotationApi";
 import { CONFIGURED_GRID_RUN_ENDPOINT } from "@/features/sales/quotation/quotation.constants";
 import {
-  BILL_CANCEL_SOURCE_ORDER_ENDPOINT,
+  BILL_AMEND_ENDPOINT,
+  BILL_CANCEL_ENDPOINT,
+  BILL_DELETE_ENDPOINT,
   BILL_GET_ENDPOINT,
   BILL_LIST_GRID_KEY,
+  BILL_POST_ENDPOINT,
   BILL_SAVE_ENDPOINT,
+  BILL_VALIDATE_ENDPOINT,
   OPEN_CREDITS_ENDPOINT,
   SALE_ORDER_CANCEL_LINES_ENDPOINT,
 } from "@/features/sales/salebill/salebill.constants";
 import type {
   AdjustableCredit,
-  BillCancelResult,
+  AmendBillDto,
   BillPayload,
   CancelBillDto,
+  CancelBillResult,
   CancelOrderResult,
+  DeleteBillDto,
+  PostBillDto,
   SaleBillDocKey,
   SaveBillDto,
+  ValidateBillDto,
+  ValidateBillResult,
 } from "@/features/sales/salebill/salebill.types";
 import { getGridId } from "@/lib/configured-grids";
 
@@ -131,24 +140,52 @@ export const saleBillApi = baseApi.injectEndpoints({
       invalidatesTags: ["SaleBill", "PartyCredit", "SaleOrder"],
     }),
 
+    // -- the lifecycle (§4.1, §17) -------------------------------------------
+    //
+    // All five are MUTATIONS, including the dry run: a query would be cached
+    // and de-duplicated by its arguments, and a second validate of the same
+    // payload must go to the server again — the party's credit may have moved.
+
     /**
-     * `POST /bills/delete`, and it deletes NOTHING.
-     *
-     * Despite the path this cancels the **sale order the bill was raised
-     * against** — every open line of it — and leaves the bill row, its lines,
-     * charges, tenders and voucher posting untouched. Idempotent: a second call
-     * finds nothing open and answers `cancelledLines: 0` rather than an error.
-     *
-     * There is no route that cancels a BILL. See `salebill.constants.ts`.
+     * `POST /bills/validate` — writes nothing. A 422 is the ANSWER, not an
+     * error: the hook reads its refusals off the error body (§16).
      */
-    cancelBillSourceOrders: builder.mutation<BillCancelResult, CancelBillDto>({
-      query: (body) => ({
-        url: BILL_CANCEL_SOURCE_ORDER_ENDPOINT,
-        method: "POST",
-        body,
-      }),
-      transformResponse: (payload: ApiSuccessResponse<BillCancelResult>) => payload.data,
-      invalidatesTags: ["SaleBill", "SaleOrder"],
+    validateBill: builder.mutation<ValidateBillResult, ValidateBillDto>({
+      query: (body) => ({ url: BILL_VALIDATE_ENDPOINT, method: "POST", body }),
+      transformResponse: (payload: ApiSuccessResponse<ValidateBillResult>) => payload.data,
+    }),
+
+    /** `POST /bills/post` — the one-way door. Idempotent on a POSTED id. */
+    postBill: builder.mutation<BillPayload, PostBillDto>({
+      query: (body) => ({ url: BILL_POST_ENDPOINT, method: "POST", body }),
+      transformResponse: (payload: ApiSuccessResponse<BillPayload>) => payload.data,
+      // Stock moved, the party owes, credits were spent, the order drew down.
+      invalidatesTags: ["SaleBill", "PartyCredit", "SaleOrder"],
+    }),
+
+    /** `POST /bills/amend` — restates the voucher in place, revision + 1. */
+    amendBill: builder.mutation<BillPayload, AmendBillDto>({
+      query: (body) => ({ url: BILL_AMEND_ENDPOINT, method: "POST", body }),
+      transformResponse: (payload: ApiSuccessResponse<BillPayload>) => payload.data,
+      invalidatesTags: ["SaleBill", "PartyCredit", "SaleOrder"],
+    }),
+
+    /**
+     * `POST /bills/cancel` — POSTED only, by reversal. The answer is NOT the
+     * `/get` shape; the screen reloads after (§17.9).
+     */
+    cancelBill: builder.mutation<CancelBillResult, CancelBillDto>({
+      query: (body) => ({ url: BILL_CANCEL_ENDPOINT, method: "POST", body }),
+      transformResponse: (payload: ApiSuccessResponse<CancelBillResult>) => payload.data,
+      invalidatesTags: ["SaleBill", "PartyCredit", "SaleOrder"],
+    }),
+
+    /** `POST /bills/delete` — DRAFT only. A body, not a query DELETE. */
+    deleteBill: builder.mutation<{ sbId: string; deleted: boolean }, DeleteBillDto>({
+      query: (body) => ({ url: BILL_DELETE_ENDPOINT, method: "POST", body }),
+      transformResponse: (payload: ApiSuccessResponse<{ sbId: string; deleted: boolean }>) =>
+        payload.data,
+      invalidatesTags: ["SaleBill"],
     }),
 
     /**
@@ -211,7 +248,11 @@ export const saleBillApi = baseApi.injectEndpoints({
 export const {
   useLazyGetBillQuery,
   useSaveBillMutation,
-  useCancelBillSourceOrdersMutation,
+  useValidateBillMutation,
+  usePostBillMutation,
+  useAmendBillMutation,
+  useCancelBillMutation,
+  useDeleteBillMutation,
   useCancelOrderLineMutation,
   useLazyGetOpenCreditsQuery,
   useListBillsQuery,

@@ -27,6 +27,7 @@ import type {
 import { addDays, daysBetween, todayIso } from "@/features/sales/quotation/quotation.utils";
 import {
   DEFAULT_BILL_DOC_TYPE,
+  DEFAULT_BILL_MODE,
   DEFAULT_BILL_STATUS,
   DEFAULT_BILL_TYPE,
   DEFAULT_DUE_DAYS,
@@ -122,6 +123,7 @@ export function emptyBillHeader(billDate: string, billDatetime: string): SaleBil
     hasComm: false,
     hasLoyalty: false,
     priceLevel: 1,
+    billMode: DEFAULT_BILL_MODE,
   };
 }
 
@@ -158,8 +160,18 @@ export function createBillDraft(context: BillDraftContext): SaleBillDraft {
     billRefno: "",
     status: DEFAULT_BILL_STATUS,
     versionNo: 0,
+    revisionNo: 0,
     isNewEntry: true,
     isDeleted: false,
+    amending: false,
+    draftFromAutoPost: false,
+    rights: null,
+    locks: null,
+    posting: null,
+    notes: [],
+    overrides: [],
+    sources: [],
+    heldAdjustments: [],
     policy: seedDocumentPolicy(context.policy),
     customer: emptyCustomer(),
     header: {
@@ -198,6 +210,7 @@ export function createBillDraftLine(
     sbiId: null,
     stockId: null,
     serialNo: null,
+    srcItemId: null,
     srcDocType: null,
     srcDocYear: null,
     srcDocRefno: null,
@@ -231,6 +244,7 @@ export function duplicateBillDraftLine(source: SaleBillDraftLine): SaleBillDraft
     sbiId: null,
     stockId: null,
     serialNo: null,
+    srcItemId: null,
     srcDocType: null,
     srcDocYear: null,
     srcDocRefno: null,
@@ -504,8 +518,20 @@ export function copyBillDraftAsNew(
     billRefno: "",
     status: DEFAULT_BILL_STATUS,
     versionNo: 0,
+    revisionNo: 0,
     isNewEntry: true,
     isDeleted: false,
+    // A copy is a NEW bill: nothing the server said about the old one — its
+    // rights, its locks, its posting, its notes — applies (§17.10).
+    amending: false,
+    draftFromAutoPost: false,
+    rights: null,
+    locks: null,
+    posting: null,
+    notes: [],
+    overrides: [],
+    sources: [],
+    heldAdjustments: [],
     header: {
       ...applyBillHeaderField(draft.header, "billDate", billDate),
       billDatetime,
@@ -514,6 +540,7 @@ export function copyBillDraftAsNew(
     lines: draft.lines.map((line) => ({
       ...line,
       sbiId: null,
+      srcItemId: null,
       srcDocType: null,
       srcDocId: null,
       srcDocYear: null,
