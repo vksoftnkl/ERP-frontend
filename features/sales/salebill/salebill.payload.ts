@@ -393,7 +393,14 @@ export function buildSavePayload(
     sbCustName: draft.customer.name.trim(),
     sbCustAddr: toNullableText(draft.customer.address, 500),
     sbCustPlace: toNullableText(draft.customer.place, 100),
-    sbCustPin: null,
+    sbCustPin: toNullableText(draft.header.custPin, 10),
+    // The identity box (§15.8 B) and the loyalty member (§15.7).
+    sbCustPan: toNullableText(draft.header.custPan, 10),
+    sbForm60Ref: toNullableText(draft.header.form60Ref, 50),
+    sbLoyaltyMemberId: uuidOrNull(draft.header.loyaltyMemberId),
+    // The transport band, FLAT, on a DRAFT (§18.1, §20.3). All-blank = no
+    // write server-side; a posted band is written through the PUT instead.
+    ...transportFlat(draft.transport),
     sbCustPhone: toNullableText(draft.customer.phone, 20),
     sbCustGstin: toNullableText(draft.customer.gstin, 15),
     sbCustGstType: toNullableText(draft.customer.gstType, 20),
@@ -507,6 +514,32 @@ export function buildSavePayload(
     ...(draft.adjustmentsTouched
       ? { adjustments: adjustmentRows.map(adjustmentDto) }
       : {}),
+  };
+}
+
+/** The band's flat header columns (§18.1 Transport). Blank text goes as null. */
+function transportFlat(band: SaleBillDraft["transport"]): Partial<SaveBillDto> {
+  return {
+    sbShipAddrId: uuidOrNull(band.to.addrId),
+    sbShipName: toNullableText(band.to.name, 200),
+    sbShipAddr: toNullableText(band.to.addr, 500),
+    sbShipPlace: toNullableText(band.to.place, 100),
+    sbShipPin: toNullableText(band.to.pin, 10),
+    sbShipPhone: toNullableText(band.to.phone, 20),
+    sbShipStcd: toNullableText(band.to.stcd, 2),
+    sbShipGstin: toNullableText(band.to.gstin, 15),
+    sbDispatchGodownId: uuidOrNull(band.from.godownId),
+    sbDispatchBranchId: uuidOrNull(band.from.branchId),
+    sbTransportMode: toNullableText(band.mode, 10)?.toUpperCase() ?? null,
+    sbTransporterId: uuidOrNull(band.transporterId),
+    sbTransporterName: toNullableText(band.transporterName, 200),
+    sbTransporterGstin: toNullableText(band.transporterGstin, 15),
+    sbLrNo: toNullableText(band.lrNo, 50),
+    sbLrDate: dateOrNull(band.lrDate),
+    sbDistanceKm:
+      band.distanceKm === null || band.distanceKm === undefined
+        ? null
+        : Math.max(0, Math.trunc(band.distanceKm)),
   };
 }
 
@@ -911,7 +944,13 @@ export function parseLoadedBill(
       hasLoyalty: payload.sbHasLoyalty === true,
       priceLevel: clampPriceLevel(payload.sbPriceLevel ?? 1),
       billMode: asEnum(payload.sbBillMode ?? null, BILL_MODES, DEFAULT_BILL_MODE),
+      custPan: payload.sbCustPan ?? null,
+      form60Ref: payload.sbForm60Ref ?? null,
+      loyaltyMemberId: payload.sbLoyaltyMemberId ?? null,
+      custPin: payload.sbCustPin ?? null,
     },
+    // The band, from the flat columns (§19). `transport` (nested) says the same.
+    transport: transportFromPayload(payload),
     terms: {
       ...emptyBillTerms(),
       remarks: payload.sbRemarks ?? "",
@@ -957,10 +996,54 @@ export function parseLoadedBill(
       tenderAmt: toNumber(payload.sbTenderAmt),
       surchargeAmt: toNumber(payload.sbSurchargeAmt),
       creditAmt: toNumber(payload.sbCreditAmt),
-      adjustedAmt: toNumber(payload.sbAdvanceAmt),
+      // Both kinds of set-off (§14.5): the stored `sbPaidAmt` INCLUDES them,
+      // so the counter part is `paid − advance − note` (§15.9). Before this an
+      // amend sent an advance twice as "paid" and 500'd.
+      adjustedAmt: toNumber(payload.sbAdvanceAmt) + toNumber(payload.sbNoteAdjAmt),
       refundAmt: toNumber(payload.sbRefundAmt),
       payStatus: payload.sbPayStatus || "UNPAID",
     },
+  };
+}
+
+/** The flat `sbShip* / sbDispatch* / sbTransport* / sbLr* / sbDistanceKm` columns → the band. */
+export function transportFromPayload(payload: BillPayload): SaleBillDraft["transport"] {
+  return {
+    from: {
+      godownId: payload.sbDispatchGodownId ?? null,
+      branchId: payload.sbDispatchBranchId ?? null,
+      addrId: null,
+      name: null,
+      addr: null,
+      place: null,
+      pin: null,
+      phone: null,
+      stcd: null,
+      gstin: null,
+    },
+    to: {
+      godownId: null,
+      branchId: null,
+      addrId: payload.sbShipAddrId ?? null,
+      name: payload.sbShipName ?? null,
+      addr: payload.sbShipAddr ?? null,
+      place: payload.sbShipPlace ?? null,
+      // The PIN may arrive as a number or a string.
+      pin: payload.sbShipPin === null || payload.sbShipPin === undefined ? null : String(payload.sbShipPin),
+      phone: payload.sbShipPhone ?? null,
+      stcd: payload.sbShipStcd ?? null,
+      gstin: payload.sbShipGstin ?? null,
+    },
+    mode: (payload.sbTransportMode ?? "").toUpperCase(),
+    transporterId: payload.sbTransporterId ?? null,
+    transporterName: payload.sbTransporterName ?? null,
+    transporterGstin: payload.sbTransporterGstin ?? null,
+    lrNo: payload.sbLrNo ?? null,
+    lrDate: toDateInput(payload.sbLrDate) || null,
+    distanceKm:
+      payload.sbDistanceKm === null || payload.sbDistanceKm === undefined
+        ? null
+        : toNumber(payload.sbDistanceKm),
   };
 }
 

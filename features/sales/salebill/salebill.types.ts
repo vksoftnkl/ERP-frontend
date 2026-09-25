@@ -26,10 +26,7 @@ import type {
   DraftLine as QuotationDraftLine,
   FreightBand,
 } from "@/features/sales/quotation/quotation.types";
-import type {
-  PartyCreditSummary,
-  TenderDraftRow,
-} from "@/features/sales/sale-order/sale-order.types";
+import type { TenderDraftRow } from "@/features/sales/sale-order/sale-order.types";
 
 // ---------------------------------------------------------------------------
 // Lines
@@ -199,6 +196,186 @@ export type SaleBillHeader = {
    * series, the e-way warning and the delivery status, all server-side.
    */
   billMode: string;
+  /**
+   * The identity box (§15.8 B): a PAN (`^[A-Z]{5}[0-9]{4}[A-Z]$`) or a Form 60
+   * reference, asked for when a cash sale crosses the 269ST line. Both are
+   * snapshotted on the bill (`sbCustPan` / `sbForm60Ref`).
+   */
+  custPan: string | null;
+  form60Ref: string | null;
+  /** `sbLoyaltyMemberId` — from party-context; the server refuses a LOYALTY tender without it. */
+  loyaltyMemberId: string | null;
+  /** `sbCustPin` — the bill-to PIN, from customer-detail / party-context, or the stored one. */
+  custPin: string | null;
+};
+
+// ---------------------------------------------------------------------------
+// The party, as `/bills/party-context` answers it (§7.3)
+// ---------------------------------------------------------------------------
+
+/** `credit.mode` — what `/validate` will do about a breach. OFF = the check is disabled. */
+export type CreditLimitMode = "OFF" | "WARN" | "REFUSE";
+
+export type PartyCreditFacts = {
+  /** 0 = no limit. */
+  limitAmount: number;
+  limitBills: number;
+  creditDays: number;
+  used: number;
+  openBills: number;
+  oldestOpenDays: number;
+  amtExceeded: boolean;
+  billExceeded: boolean;
+  daysExceeded: boolean;
+  mode: CreditLimitMode;
+};
+
+/** One open credit the party holds — an advance or a credit note. */
+export type PartyOpenCredit = {
+  ablId: string;
+  ablAccYear: string;
+  refno: string | null;
+  pending: number;
+  date: string | null;
+};
+
+/** `loyalty: null` means NOT A MEMBER. That is an answer, not missing data. */
+export type PartyLoyalty = {
+  memberId: string;
+  cardNo: string | null;
+  balance: number;
+  redeemable: number;
+  rate: number;
+  minPoints: number;
+  maxPoints: number;
+  maxRedeemAmount: number;
+  multiple: number;
+  schemeId: string | null;
+  allowPointRedeem: boolean;
+};
+
+export type PartyShipTo = {
+  saaId: string;
+  name: string | null;
+  addr: string | null;
+  place: string | null;
+  pin: string | null;
+  stcd: string | null;
+  gstin: string | null;
+  phone: string | null;
+  distanceKm: number | null;
+  isDefault: boolean;
+};
+
+export type PartyTempCredit = {
+  atcId: string;
+  billRefno: string | null;
+  name: string;
+  mobile: string;
+  balance: number;
+  dueDate: string | null;
+};
+
+export type PartyFacts = {
+  ledId: string;
+  name: string | null;
+  gstType: string | null;
+  gstin: string | null;
+  stateCode: string | null;
+  isWalkIn: boolean;
+  panNo: string | null;
+  panVerifiedOn: string | null;
+  form60On: string | null;
+  /** Overrides the customer-detail flag (§7.3): a loaded bill never runs customer-detail. */
+  creditAllowed: boolean;
+  defaultPriceLevel: number | null;
+  addr: string | null;
+  place: string | null;
+  pin: string | null;
+  phone: string | null;
+  areaId: string | null;
+  areaName: string | null;
+  distanceKm: number | null;
+  salesmanId: string | null;
+  salesmanName: string | null;
+  freightCharge: boolean;
+  loadingCharge: boolean;
+  unloadingCharge: boolean;
+  allowDiscount: boolean;
+  allowPromotion: boolean;
+  allowLoyalty: boolean;
+};
+
+/**
+ * Everything the screen needs on a customer pick, in one call (§7.3). Keyed by
+ * the customer it was asked FOR, so a reply that lands after the operator has
+ * moved on is dropped rather than painted against the wrong party (§5.4).
+ */
+export type PartyContext = {
+  partyId: string;
+  /** The bill date the credit ageing was judged against. */
+  billDate: string;
+  party: PartyFacts;
+  credit: PartyCreditFacts;
+  /** Cash taken from this party today, POSTED bills only (269ST). */
+  cashToday: number;
+  advances: PartyOpenCredit[];
+  creditNotes: PartyOpenCredit[];
+  loyalty: PartyLoyalty | null;
+  shipTo: PartyShipTo[];
+  tempCredits: PartyTempCredit[];
+  openSources: { dc: number; orders: number };
+};
+
+// ---------------------------------------------------------------------------
+// Weight / price barcode labels (§9.2)
+// ---------------------------------------------------------------------------
+
+/** `sales.weight_barcode`, parsed. `null` when the label format is not enabled. */
+export type WeightBarcodeConfig = {
+  prefix: string;
+  itemLen: number;
+  valueLen: number;
+  valueKind: "WEIGHT" | "PRICE";
+  /** ≤ 0 is read as 1. */
+  divisor: number;
+};
+
+/** The value a weight/price label carries, waiting for the price lookup to fill the line. */
+export type PendingScanValue = {
+  kind: "WEIGHT" | "PRICE";
+  value: number;
+};
+
+// ---------------------------------------------------------------------------
+// Transport band (§20)
+// ---------------------------------------------------------------------------
+
+/** One end of the band: the dispatch (from) or the ship-to (to). */
+export type TransportEnd = {
+  godownId: string | null;
+  branchId: string | null;
+  addrId: string | null;
+  name: string | null;
+  addr: string | null;
+  place: string | null;
+  pin: string | null;
+  phone: string | null;
+  stcd: string | null;
+  gstin: string | null;
+};
+
+export type TransportBand = {
+  from: TransportEnd;
+  to: TransportEnd;
+  /** `'' | ROAD | RAIL | AIR | SHIP` */
+  mode: string;
+  transporterId: string | null;
+  transporterName: string | null;
+  transporterGstin: string | null;
+  lrNo: string | null;
+  lrDate: string | null;
+  distanceKm: number | null;
 };
 
 export type SaleBillTerms = {
@@ -403,8 +580,25 @@ export type SaleBillDraft = {
   /** The open credits as last fetched, for the panel to offer. */
   openCredits: AdjustableCredit[];
   settlement: BillSettlement;
-  /** The credit panel's data; null until a customer is picked, or on failure. */
-  partyCredit: PartyCreditSummary | null;
+  /**
+   * `/bills/party-context` for the customer on the bill, or `null` (§7.3). A
+   * failure never blocks billing: it clears the panel and `/validate` stays the
+   * authority. Keyed by the customer it was asked for, so a stale reply is
+   * dropped, never painted.
+   */
+  party: PartyContext | null;
+  /**
+   * Only an OPERATOR pick earns the one-time credit popup (§7.4). Set on the
+   * pick, consumed when party-context lands. Loads and seeds stay silent.
+   */
+  creditAlertPending: boolean;
+  /** The transport band (§20), flat on `/create`, its own PUT once posted. */
+  transport: TransportBand;
+  /**
+   * The validate note that marked the shipping dialog "required" (§16.5), or
+   * null. The dialog opens on it and shows the message in red.
+   */
+  transportRequired: string | null;
   /**
    * The `txn_hold` row this draft is parked as, or was pulled back from.
    *

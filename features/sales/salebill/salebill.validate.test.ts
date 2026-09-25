@@ -160,14 +160,15 @@ describe("validateSaveInputs — in the plan's order, first failure wins", () =>
   it("wants a customer name before anything else", () => {
     const draft = createBillDraft(CONTEXT);
     // No customer AND no lines: the customer is what it complains about.
-    expect(check(draft)?.field).toBe("sale-bill-customer-name");
+    expect(check(draft)?.field).toBe("sale-bill-customer");
+    expect(check(draft)?.message).toBe("Select a customer.");
   });
 
   it("lets a walk-in with no master record through the customer gate", () => {
     // A name is all this screen asks for — it no longer insists on `sbCustId`.
     const base = createBillDraft(CONTEXT);
     const named = { ...base, customer: { ...base.customer, name: "WALK IN" } };
-    expect(check(named)?.field).not.toBe("sale-bill-customer-name");
+    expect(check(named)?.field).not.toBe("sale-bill-customer");
   });
 
   it("wants at least one item row", () => {
@@ -187,7 +188,7 @@ describe("validateSaveInputs — in the plan's order, first failure wins", () =>
   it("refuses a line with no quantity, naming the row", () => {
     const violation = check(billable({ lines: [line({ billQty: 0 })] }));
     expect(violation?.message).toContain("Row 1");
-    expect(violation?.message).toContain("greater than zero");
+    expect(violation?.message).toContain("Quantity cannot be zero");
   });
 
   it("refuses a line with no godown BEFORE the server has to", () => {
@@ -209,7 +210,7 @@ describe("validateSaveInputs — in the plan's order, first failure wins", () =>
     // Settled, so that waiving the MRP gate reaches the END of the run rather
     // than tripping over the settlement gate two rules later.
     const draft = settled(billable({ lines: [line({ rate: 400, mrp: 320 })] }));
-    expect(check(draft)?.message).toContain("above the MRP");
+    expect(check(draft)?.message).toContain("cannot exceed MRP");
     expect(check(draft, { skipMrp: true })).toBeNull();
   });
 
@@ -231,7 +232,7 @@ describe("validateSaveInputs — in the plan's order, first failure wins", () =>
     const draft = settled(
       billable({ lines: [line({ billQty: 5, orderQty: 2, orderQtyLocked: true })] }),
     );
-    expect(check(draft)?.message).toContain("over-bill");
+    expect(check(draft)?.message).toContain("against an order quantity");
     expect(check(draft, { allowBillOverOrderQty: true })).toBeNull();
   });
 });
@@ -246,10 +247,6 @@ describe("the credit term (§14.5)", () => {
     };
   }
 
-  it("wants due days or a due date on a credit bill", () => {
-    expect(check(creditBill())?.field).toBe("sale-bill-due-days");
-  });
-
   it("accepts a credit bill with a period, and needs no settlement for it", () => {
     // The party debit is what stays open; demanding cover for it would make the
     // term meaningless.
@@ -261,7 +258,7 @@ describe("the credit term (§14.5)", () => {
     expect(violation?.field).toBe("sale-bill-due-date");
   });
 
-  it("ASKS before putting a cash-only customer on credit", () => {
+  it("REFUSES a cash-only customer on credit — §28 Q1, 'credit anyway' is not offered", () => {
     const base = billable();
     const draft: SaleBillDraft = {
       ...base,
@@ -269,67 +266,150 @@ describe("the credit term (§14.5)", () => {
       header: { ...base.header, billType: "CREDIT", dueDays: 30, dueDate: "2026-10-12" },
     };
     const violation = check(draft);
-    expect(violation?.confirm).toBe(true);
-    expect(violation?.message).toContain("not allowed to buy on credit");
+    expect(violation?.confirm).toBeUndefined();
+    expect(violation?.message).toBe("This customer is not allowed to buy on credit.");
+  });
+
+  it("wants no due days: the server derives them, and a cash-term bill sends none", () => {
+    // Due days are seeded from the party's credit days (§7.6); a zero is not
+    // a refusal here, `/validate` judges the term.
+    expect(check(creditBill())?.field).not.toBe("sale-bill-due-days");
   });
 });
 
-describe("the credit standing (§4.2) — a setting, not a verdict", () => {
-  function overLimit(): SaleBillDraft {
+describe("the credit standing (§17.3 step 8) — a confirm, never a verdict", () => {
+  function overLimit(mode: "OFF" | "WARN" | "REFUSE" = "REFUSE"): SaleBillDraft {
     const base = billable();
     return {
       ...base,
       customer: { ...base.customer, debitAllowed: true },
       header: { ...base.header, billType: "CREDIT", dueDays: 30, dueDate: "2026-10-12" },
-      partyCredit: {
+      party: {
         partyId: "cust-1",
-        partyName: "ACME",
-        accYear: "2026-2027",
-        asOnDate: "2026-09-12",
-        pendingAmount: 90000,
-        pendingBillCount: 4,
-        overdueAmount: 0,
-        overdueBillCount: 0,
-        oldestOverdueDueDate: null,
-        maxOverdueDays: 0,
-        creditAmtLimit: 50000,
-        creditBillLimit: 10,
-        availableCreditAmount: 0,
-        availableBillCount: 6,
-        isAmtLimitExceeded: true,
-        isBillLimitExceeded: false,
-        isCreditCheckEnabled: true,
+        billDate: "2026-09-12",
+        party: {
+          ledId: "cust-1",
+          name: "ACME",
+          gstType: null,
+          gstin: null,
+          stateCode: "33",
+          isWalkIn: false,
+          panNo: null,
+          panVerifiedOn: null,
+          form60On: null,
+          creditAllowed: true,
+          defaultPriceLevel: 1,
+          addr: null,
+          place: null,
+          pin: null,
+          phone: null,
+          areaId: null,
+          areaName: null,
+          distanceKm: null,
+          salesmanId: null,
+          salesmanName: null,
+          freightCharge: false,
+          loadingCharge: false,
+          unloadingCharge: false,
+          allowDiscount: true,
+          allowPromotion: true,
+          allowLoyalty: false,
+        },
+        credit: {
+          limitAmount: 50000,
+          limitBills: 10,
+          creditDays: 30,
+          used: 90000,
+          openBills: 4,
+          oldestOpenDays: 12,
+          amtExceeded: true,
+          billExceeded: false,
+          daysExceeded: false,
+          mode,
+        },
+        cashToday: 0,
+        advances: [],
+        creditNotes: [],
+        loyalty: null,
+        shipTo: [],
+        tempCredits: [],
+        openSources: { dc: 0, orders: 0 },
       },
     };
   }
 
-  it("asks by default when the amount limit is breached", () => {
+  it("asks when the amount limit is breached — /validate is the authority", () => {
     const violation = check(overLimit());
     expect(violation?.confirm).toBe(true);
-    expect(violation?.message).toContain("over their credit limit");
+    expect(violation?.message).toContain("exhausted");
   });
 
-  it("REFUSES when the deployment says the limit is enforced", () => {
-    const violation = check(overLimit(), { enforceCreditLimit: true });
-    expect(violation?.confirm).toBeUndefined();
+  it("asks under WARN too: the flag is the party's, the mode is what the server will do", () => {
+    expect(check(overLimit("WARN"))?.confirm).toBe(true);
   });
 
   it("says nothing at all when the credit check is switched off", () => {
+    expect(check(overLimit("OFF"))).toBeNull();
+  });
+
+  it("says nothing before party-context has landed — there is no figure to judge", () => {
     const draft = overLimit();
-    draft.partyCredit = { ...draft.partyCredit!, isCreditCheckEnabled: false };
+    draft.party = null;
     expect(check(draft)).toBeNull();
   });
 });
 
-describe("the settlement gate (§14.6)", () => {
-  it("refuses a cash bill nothing has been taken against", () => {
-    const violation = check(billable());
-    expect(violation?.field).toBe("sale-bill-tender");
-    expect(violation?.message).toContain("has been settled");
+function creditRow(amount: number, billType: AdjustableCredit["billType"], pending = amount) {
+  return {
+    key: `a-${billType}-${amount}`,
+    amount,
+    credit: {
+      billId: `abl-${billType}`,
+      billAccYear: "2025-2026",
+      billType,
+      drCr: "CR" as const,
+      docRefno: billType === "ADVANCE" ? "SO-2201" : "SR-4412",
+      docDate: "2026-03-30",
+      billAmount: pending,
+      pendingAmount: pending,
+      status: "OPEN" as const,
+      srcModule: "SALES",
+      srcDocType: null,
+      srcDocId: null,
+      srcAccYear: "2025-2026",
+      narration: null,
+      adjType: (billType === "ADVANCE" ? "ADVANCE_ADJUST" : "NOTE_ADJUST") as
+        | "ADVANCE_ADJUST"
+        | "NOTE_ADJUST",
+      settlementMode: (billType === "ADVANCE" ? "ADVANCE" : "CREDIT_NOTE") as
+        | "ADVANCE"
+        | "CREDIT_NOTE",
+    },
+  };
+}
+
+describe("check 7 — settled + adjusted may not exceed the bill (§17.3)", () => {
+  it("passes a cash bill nothing has been taken against: the plain route settles it in cash (§15.9)", () => {
+    expect(check(billable())).toBeNull();
   });
 
   it("passes once the tenders cover it", () => {
     expect(check(settled(billable()))).toBeNull();
+  });
+
+  it("refuses tenders that, with the set-off, exceed the bill — unless the tender is being re-opened", () => {
+    const draft = settled(billable());
+    const bill = priceOf(draft).totals.bill;
+    const over: SaleBillDraft = {
+      ...draft,
+      adjustments: [creditRow(100, "ADVANCE")],
+      tenders: [{ ...draft.tenders[0], keyed: bill, allowChange: false }],
+    };
+    const violation = check(over);
+    expect(violation?.field).toBe("sale-bill-tender");
+    expect(violation?.message).toContain("Re-open settlement (F5)");
+    expect(check(over, { openingTender: true })).toBeNull();
+    expect(check(over, { allowExcessTender: true })).toBeNull();
   });
 
   it("counts an ADJUSTMENT as settlement, though it is not a tender", () => {
@@ -369,27 +449,90 @@ describe("the settlement gate (§14.6)", () => {
 
   it("does not let a surcharge look like settlement", () => {
     // The surcharge is the bank's cut, not the shop's takings: it settles no
-    // part of the bill. A card fee counted as coverage would pass a bill that is
-    // still short.
+    // part of the bill, so it never counts toward `settledAmountOf`.
     const draft = billable();
     const bill = priceOf(draft).totals.bill;
     const short = settled(draft);
     short.tenders = [
       { ...short.tenders[0], keyed: bill - 10, allowChange: false, surchargePerc: 5 },
     ];
-    expect(check(short)?.field).toBe("sale-bill-tender");
+    expect(settledAmountOf(short, priceOf(short))).toBe(Math.round((bill - 10) * 100) / 100);
   });
 });
 
-describe("the charge-role gate (§14.7)", () => {
-  it("refuses a bill marked for freight that carries no freight charge row", () => {
+describe("the salesman (§17.3 step 4) and the ledger on a charge (step 11)", () => {
+  it("wants a salesman only when the branch says so", () => {
     const draft = settled(billable());
+    expect(check(draft, { salesmanMandatory: true })?.message).toBe("Select a salesman.");
+    expect(check(draft)).toBeNull();
+  });
+
+  it("refuses a charge row without a posting ledger", () => {
+    const draft = settled(billable());
+    draft.charges = [
+      {
+        key: "c1",
+        cdId: null,
+        chgId: "chg-1",
+        chgName: "PACKING",
+        ledgerCode: "",
+        ledgerName: null,
+        role: "NONE",
+        method: "FIXED",
+        type: "ADD",
+        applyOn: "FLAT",
+        beforeTax: false,
+        taxApl: false,
+        rate: 0,
+        amount: 10,
+        taxPerc: 0,
+        cgstPerc: 0,
+        sgstPerc: 0,
+        igstPerc: 0,
+        cessPerc: 0,
+        hsn: null,
+        taxCode: null,
+        unit: null,
+        qtyVal: null,
+        weight: null,
+        sepPost: false,
+        landingCost: false,
+        costAlloc: null,
+        remarks: null,
+        isActive: true,
+      },
+    ];
+    expect(check(draft)?.message).toContain("has no posting ledger");
+  });
+
+  it("refuses a zero rate on a paid line, and lets free-item tax waive it", () => {
+    const draft = settled(billable({ lines: [line({ rate: 0 })] }));
+    expect(check(draft)?.message).toContain("Rate cannot be zero");
+    expect(check(draft, { freeItemTax: true })?.message).not.toContain("Rate cannot be zero");
+  });
+});
+
+describe("the charge-role gate (§17.3 step 12)", () => {
+  it("refuses a bill whose items price freight but whose grid has no freight row", () => {
+    // Only when the items actually carry a freight amount: a Freight tick on a
+    // bill with no per-qty freight bills nothing, so nothing is missing.
+    const draft = settled(billable({ lines: [line({ hasFreight: true, freightPerQty: 5 })] }));
     draft.header = { ...draft.header, hasFreight: true };
+    draft.policy = { ...draft.policy, freightCalcType: "item" };
     expect(check(draft)?.field).toBe("charges");
+    expect(check(draft)?.message).toContain("Freight");
+  });
+
+  it("says nothing when the calc type is manual — the operator types the charge in", () => {
+    const draft = settled(billable({ lines: [line({ hasFreight: true, freightPerQty: 5 })] }));
+    draft.header = { ...draft.header, hasFreight: true };
+    draft.policy = { ...draft.policy, freightCalcType: "manual" };
+    expect(check(draft)).toBeNull();
   });
 
   it("is satisfied by a charge row in that role", () => {
-    const draft = settled(billable());
+    const draft = settled(billable({ lines: [line({ loadingPerQty: 2 })] }));
+    draft.policy = { ...draft.policy, loadingCalcType: "item" };
     draft.header = { ...draft.header, hasLoad: true };
     draft.charges = [
       {
@@ -432,35 +575,6 @@ describe("the charge-role gate (§14.7)", () => {
 // Adjustments (§10)
 // ---------------------------------------------------------------------------
 
-function creditRow(amount: number, billType: AdjustableCredit["billType"], pending = amount) {
-  return {
-    key: `a-${billType}-${amount}`,
-    amount,
-    credit: {
-      billId: `abl-${billType}`,
-      billAccYear: "2025-2026",
-      billType,
-      drCr: "CR" as const,
-      docRefno: billType === "ADVANCE" ? "SO-2201" : "SR-4412",
-      docDate: "2026-03-30",
-      billAmount: pending,
-      pendingAmount: pending,
-      status: "OPEN" as const,
-      srcModule: "SALES",
-      srcDocType: null,
-      srcDocId: null,
-      srcAccYear: "2025-2026",
-      narration: null,
-      adjType: (billType === "ADVANCE" ? "ADVANCE_ADJUST" : "NOTE_ADJUST") as
-        | "ADVANCE_ADJUST"
-        | "NOTE_ADJUST",
-      settlementMode: (billType === "ADVANCE" ? "ADVANCE" : "CREDIT_NOTE") as
-        | "ADVANCE"
-        | "CREDIT_NOTE",
-    },
-  };
-}
-
 describe("the adjustment sums the settlement strip reads", () => {
   // A cart big enough for the credits to be a PART of, not larger than: a
   // 20-plank line at 100 prices to 2,360 with tax.
@@ -491,7 +605,7 @@ describe("the adjustment sums the settlement strip reads", () => {
 describe("validateAdjustments", () => {
   it("refuses more than a credit has left on it", () => {
     const draft = billable({ adjustments: [creditRow(600, "ADVANCE", 500)] });
-    expect(validateAdjustments(draft, 10000)?.message).toContain("only 500 left");
+    expect(validateAdjustments(draft, 10000)?.message).toContain("has only 500.00 left on it");
   });
 
   it("refuses a negative adjustment", () => {

@@ -490,7 +490,7 @@ describe("the customer lock (§4.3)", () => {
   const detail = BASE_CUSTOMER_DETAIL;
 
   it("applies a customer freely while the bill has taken nothing", () => {
-    const next = saleBillReducer(freshState(), customerApplied(detail));
+    const next = saleBillReducer(freshState(), customerApplied({ detail: detail, forceTerm: true }));
     expect(next.customer.custId).toBe("cust-2");
   });
 
@@ -537,16 +537,16 @@ describe("the customer lock (§4.3)", () => {
         },
       ],
     };
-    const next = saleBillReducer(settled, customerApplied(detail));
+    const next = saleBillReducer(settled, customerApplied({ detail: detail, forceTerm: true }));
     expect(next.customer.custId).toBeNull();
   });
 
   it("takes the customer's term: credit-allowed bills CREDIT, otherwise CASH", () => {
-    const cash = saleBillReducer(freshState(), customerApplied(detail));
+    const cash = saleBillReducer(freshState(), customerApplied({ detail: detail, forceTerm: true }));
     expect(cash.header.billType).toBe("CASH");
     const credit = saleBillReducer(
       freshState(),
-      customerApplied({ ...detail, debit_allowed: true, debit_days: 30 }),
+      customerApplied({ detail: { ...detail, debit_allowed: true, debit_days: 30 }, forceTerm: true }),
     );
     expect(credit.header.billType).toBe("CREDIT");
     expect(credit.header.dueDays).toBe(30);
@@ -590,7 +590,7 @@ describe("the walk-in customer a new bill opens on (§4.1)", () => {
   });
 
   it("never seeds over a customer somebody already chose", () => {
-    const picked = saleBillReducer(freshState(), customerApplied(real));
+    const picked = saleBillReducer(freshState(), customerApplied({ detail: real, forceTerm: true }));
     const next = saleBillReducer(picked, walkInCustomerSeeded(walkIn));
     expect(next.customer.custId).toBe("cust-7");
   });
@@ -611,7 +611,7 @@ describe("the walk-in customer a new bill opens on (§4.1)", () => {
     // price level, the contact — has to follow the new party.
     const seeded = saleBillReducer(freshState(), walkInCustomerSeeded(walkIn));
     expect(seeded.header.contactPerson).toBe("WALK IN CUSTOMER");
-    const next = saleBillReducer(seeded, customerApplied(real));
+    const next = saleBillReducer(seeded, customerApplied({ detail: real, forceTerm: true }));
     expect(next.customer.custId).toBe("cust-7");
     expect(next.customer.name).toBe("REAL CUSTOMER");
     expect(next.header.contactPerson).toBe("REAL CUSTOMER");
@@ -630,7 +630,7 @@ describe("the walk-in customer a new bill opens on (§4.1)", () => {
       seeded,
       headerFieldSet({ field: "contactPerson", value: "SITE ENGINEER" }),
     );
-    const next = saleBillReducer(keyed, customerApplied(real));
+    const next = saleBillReducer(keyed, customerApplied({ detail: real, forceTerm: true }));
     expect(next.header.contactPerson).toBe("SITE ENGINEER");
   });
 });

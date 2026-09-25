@@ -72,6 +72,14 @@ export const CONFIGURED_DROPDOWNS = {
   /** Every live ledger — the cheque register's party filter. */
   ledgerAll: { name: "LEDGERS - ALL", fallbackId: "43", paramBound: false },
   bank: { name: "INDIAN BANKS LIST", fallbackId: "46", paramBound: false },
+  /** Sale Bill (§6.4): agents. Binds `isa_branch_id`. */
+  salesAgent: { name: "SALES AGENTS", fallbackId: "45", paramBound: true },
+  /** Sale Bill (§6.4): the customer list filtered by beat. Binds `icus_area_id` ('' = every beat). */
+  customerByBeat: { name: "CUSTOMERS BY BEAT", fallbackId: "58", paramBound: true },
+  /** Shipping (§20.2). Binds `itrn_company_id`. */
+  transporter: { name: "TRANSPORTERS", fallbackId: "55", paramBound: true },
+  /** Shipping (§20.2). Binds `iveh_company_id`. */
+  vehicle: { name: "VEHICLES", fallbackId: "56", paramBound: true },
   ledgerForPostingRole: { name: "LEDGERS FOR POSTING ROLE", fallbackId: "51", paramBound: true },
   postingRoleRateWise: { name: "POSTING ROLES - RATE WISE", fallbackId: "52", paramBound: false },
   gstRate: { name: "GST RATES", fallbackId: "53", paramBound: false },

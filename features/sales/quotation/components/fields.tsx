@@ -86,6 +86,7 @@ export function TextField({
   maxLength,
   placeholder,
   required,
+  title,
   onChange,
 }: {
   id: string;
@@ -95,6 +96,8 @@ export function TextField({
   maxLength?: number;
   placeholder?: string;
   required?: boolean;
+  /** Hover text — why a field is locked, for instance. */
+  title?: string;
   onChange: (value: string) => void;
 }) {
   return (
@@ -106,6 +109,7 @@ export function TextField({
         disabled={disabled}
         maxLength={maxLength}
         placeholder={placeholder}
+        title={title}
         autoComplete="off"
         data-quotation-focus={id}
         onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
@@ -270,6 +274,7 @@ export function SelectField({
   value,
   options,
   disabled,
+  title,
   onChange,
 }: {
   id: string;
@@ -277,6 +282,8 @@ export function SelectField({
   value: string;
   options: readonly { value: string; label: string }[];
   disabled?: boolean;
+  /** Hover text — why a field is locked, for instance. */
+  title?: string;
   onChange: (value: string) => void;
 }) {
   return (
@@ -286,6 +293,7 @@ export function SelectField({
         className={styles.select}
         value={value}
         disabled={disabled}
+        title={title}
         data-quotation-focus={id}
         onChange={(event) => onChange(event.target.value)}
       >

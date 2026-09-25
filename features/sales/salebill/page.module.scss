@@ -346,3 +346,68 @@
 .postingBadgeMuted {
   color: var(--text-muted, #666666);
 }
+
+/* ------------------------------------------------------- facts line (§7.5) -- */
+/*
+ * `GST … · PAN / Form 60 · Advances · Credit notes · Cash today · Temp credit`.
+ * Always shown, because of 269ST and TCS; grey when empty, and Clear resets it.
+ */
+.factsLine {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 2px 0 0;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.fact {
+  white-space: nowrap;
+}
+
+.factGreen {
+  color: #1c6b2e;
+}
+
+.factAmber {
+  color: #7a4a00;
+}
+
+.factGrey {
+  color: var(--text-muted, #666666);
+}
+
+/* The AskText prompt's question keeps its line breaks. */
+.askTextMessage {
+  white-space: pre-line;
+}
+
+/* ------------------------------------------------------- source chips (§13.6) -- */
+.sourceTag {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 16px;
+}
+
+/* The ± rate variance annotation in the Rate cell (§8.6). */
+.rateVarianceUp {
+  color: #1c6b2e;
+}
+
+.rateVarianceDown {
+  color: #b3261e;
+}
+
+/* The stats line under the totals (§10.4). */
+.statsLine {
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--text-muted, #666666);
+}

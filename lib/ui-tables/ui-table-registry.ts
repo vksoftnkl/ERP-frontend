@@ -66,6 +66,8 @@ export const UI_TABLES = {
   quotationLines: { name: "QUOTATION - LINES", fallbackId: "18" },
   /** Sale Bill Entry item grid. */
   saleBillLines: { name: "SALE BILL - LINES", fallbackId: "22" },
+  /** The bill's adjust panel (§14.2): Credit · Date · Kind · Pending · Adjust · Remarks. */
+  advanceAdj: { name: "ADVANCE ADJ", fallbackId: "25" },
   /** Sale Order Entry item grid. */
   saleOrderLines: { name: "SO - ITEM", fallbackId: "24" },
   /**

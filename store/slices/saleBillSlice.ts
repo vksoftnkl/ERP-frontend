@@ -37,15 +37,15 @@ import type {
   FreightBand,
   ItemPriceLookupPayload,
 } from "@/features/sales/quotation/quotation.types";
-import type {
-  PartyCreditSummary,
-  TenderDraftRow,
-} from "@/features/sales/sale-order/sale-order.types";
+import type { TenderDraftRow } from "@/features/sales/sale-order/sale-order.types";
 import { applyBillLifecycle, applyBillSaveResponse } from "@/features/sales/salebill/salebill.payload";
 import { overridesAgainst } from "@/features/sales/salebill/salebill.notes";
 import {
+  adjustLinePrices,
   applyBillHeaderField,
   applyBillItemPrice,
+  applyDiscountToAllLines,
+  applyPartyContext,
   clearCustomerBoundState,
   createBillDraft,
   createBillDraftLine,
@@ -55,6 +55,7 @@ import {
   seedCreditPeriod,
   shouldSeedWalkInCustomer,
 } from "@/features/sales/salebill/salebill.state";
+import { clampDueDays, partyTerm } from "@/features/sales/salebill/salebill.party";
 import type {
   AdjustableCredit,
   BillAdjustmentRow,
@@ -62,12 +63,15 @@ import type {
   BillPayload,
   BillRights,
   BillSettlement,
+  PartyContext,
+  PendingScanValue,
   ValidationNote,
   SaleBillDraft,
   SaleBillDraftLine,
   SaleBillHeader,
   SaleBillMode,
   SaleBillTerms,
+  TransportBand,
 } from "@/features/sales/salebill/salebill.types";
 import type { RootState } from "@/store/store";
 
@@ -91,7 +95,11 @@ const initialState: SaleBillState = createBillDraft({
  * Shared by the operator's own pick and by the walk-in seed, which differ only
  * in what they are allowed to run on — never in what applying a customer means.
  */
-function applyCustomerDetail(state: SaleBillDraft, detail: CustomerDetailPayload): void {
+function applyCustomerDetail(
+  state: SaleBillDraft,
+  detail: CustomerDetailPayload,
+  options: { forceTerm: boolean } = { forceTerm: true },
+): void {
   const customer = customerFromDetail(detail);
   // Read before the snapshot is swapped in: a changed distance invalidates
   // the cached freight bands, and the contact fields below have to be able to
@@ -121,17 +129,28 @@ function applyCustomerDetail(state: SaleBillDraft, detail: CustomerDetailPayload
     state.header.contactNo = customer.phone ?? "";
   }
   state.header.priceLevel = customer.priceLevel;
+  state.header.custPin = detail.cust_pin ?? null;
   // The customer master's own charge applicability drives the header flags.
   state.header.hasFreight = detail.freight_charge;
   state.header.hasLoad = detail.cooly;
   state.header.hasUnload = detail.unloading_charge;
   state.header.hasPromo = detail.allow_promotion;
   state.header.hasLoyalty = detail.allow_loyalty;
-  // A customer the master lets buy on credit bills CREDIT; one it does not
-  // bills CASH. The operator can still change it — this is the default, not
-  // the decision.
-  state.header.billType = detail.debit_allowed ? "CREDIT" : "CASH";
-  state.header = seedCreditPeriod(state.header, customer);
+  // Term (§7.2): when the branch does not allow a term change, or the bill
+  // has no source document, the term is the PARTY's — Credit iff
+  // `debit_allowed`, else Cash. An imported bill keeps its source's term only
+  // while the change is allowed. Then the due days re-derive (§7.6).
+  if (options.forceTerm) {
+    state.header = applyBillHeaderField(state.header, "billType", partyTerm(detail.debit_allowed));
+  }
+  if (state.header.billType === "CREDIT") {
+    state.header = {
+      ...state.header,
+      dueDays: state.header.dueDays > 0 ? state.header.dueDays : clampDueDays(detail.debit_days),
+    };
+    state.header = applyBillHeaderField(state.header, "dueDays", state.header.dueDays);
+    state.header = seedCreditPeriod(state.header, customer);
+  }
   // `local_sales` is computed server-side against this company, so it is
   // authoritative — and it tells us the company's own state code whenever it
   // is true. It is the FALLBACK for the tax basis, not the source: once a
@@ -147,8 +166,11 @@ function applyCustomerDetail(state: SaleBillDraft, detail: CustomerDetailPayload
   if (customer.distanceKm !== previousDistance) {
     state.freightBands = [];
   }
-  // A different party is a different credit decision.
-  state.partyCredit = null;
+  // A different party is a different credit decision: the context is asked
+  // again and, until it lands, the panel says nothing.
+  if (state.party && state.party.partyId !== customer.custId) {
+    state.party = null;
+  }
 }
 
 const saleBillSlice = createSlice({
@@ -204,9 +226,37 @@ const saleBillSlice = createSlice({
       state.header = applyBillHeaderField(state.header, action.payload.field, action.payload.value);
       // Switching TO credit is when the customer's own terms become relevant;
       // `seedCreditPeriod` declines if the operator already keyed a period.
+      // Party-context's credit days are the first source (§7.6), the
+      // customer master's the fallback.
       if (action.payload.field === "billType" && action.payload.value === "CREDIT") {
+        if (state.header.dueDays <= 0 && state.party && state.party.credit.creditDays > 0) {
+          state.header = applyBillHeaderField(
+            state.header,
+            "dueDays",
+            clampDueDays(state.party.credit.creditDays),
+          );
+        }
         state.header = seedCreditPeriod(state.header, state.customer);
       }
+      if (action.payload.field === "dueDays") {
+        state.header.dueDays = clampDueDays(state.header.dueDays);
+      }
+    },
+    /** The identity box (§15.8 B): PAN or a Form 60 reference, on the bill. */
+    headerIdentitySet(
+      state,
+      action: PayloadAction<{ custPan: string | null; form60Ref: string | null }>,
+    ) {
+      state.header.custPan = action.payload.custPan;
+      state.header.form60Ref = action.payload.form60Ref;
+    },
+    /** The transport band (§20), whole. */
+    transportSet(state, action: PayloadAction<TransportBand>) {
+      state.transport = action.payload;
+    },
+    /** A validate note marked the shipping dialog required (§16.5), or cleared it. */
+    transportRequiredSet(state, action: PayloadAction<string | null>) {
+      state.transportRequired = action.payload;
     },
     /** One of the six people a bill names, plus the vehicle. */
     peopleFieldSet(
@@ -351,11 +401,54 @@ const saleBillSlice = createSlice({
      * first, dispatches `customerBoundStateCleared` on a yes, and only then
      * repeats this. A no leaves the document exactly as it was.
      */
-    customerApplied(state, action: PayloadAction<CustomerDetailPayload>) {
+    customerApplied(
+      state,
+      action: PayloadAction<{ detail: CustomerDetailPayload; forceTerm: boolean }>,
+    ) {
       if (customerChangeCosts(state as SaleBillDraft).blocked) {
         return;
       }
-      applyCustomerDetail(state as SaleBillDraft, action.payload);
+      applyCustomerDetail(state as SaleBillDraft, action.payload.detail, {
+        forceTerm: action.payload.forceTerm,
+      });
+      // Only an OPERATOR pick earns the one-time credit popup (§7.4).
+      state.creditAlertPending = true;
+    },
+    /**
+     * `/bills/party-context` landed (§7.3). Applied only when it answers for
+     * the customer still on the bill — a stale reply is money shown against
+     * the wrong party (§5.4). Failure clears the panel instead.
+     */
+    partyContextSet(state, action: PayloadAction<PartyContext | null>) {
+      const context = action.payload;
+      if (context === null) {
+        state.party = null;
+        state.creditAlertPending = false;
+        return;
+      }
+      if (context.partyId !== state.customer.custId) {
+        return;
+      }
+      return applyPartyContext(state as SaleBillDraft, context);
+    },
+    /** The credit popup was shown (or declined to show): one per pick. */
+    creditAlertConsumed(state) {
+      state.creditAlertPending = false;
+    },
+    /** Disc % All (Alt+D). */
+    discountAppliedToAll(state, action: PayloadAction<number>) {
+      state.lines = applyDiscountToAllLines(state.lines as SaleBillDraftLine[], action.payload);
+    },
+    /** ± Price. */
+    pricesAdjusted(state, action: PayloadAction<number>) {
+      state.lines = adjustLinePrices(state.lines as SaleBillDraftLine[], action.payload);
+    },
+    /**
+     * The promotion pass wrote its tiers and the free lines were reconciled
+     * (§11). Replaces the line array whole; the pass is pure and idempotent.
+     */
+    promotionsApplied(state, action: PayloadAction<SaleBillDraftLine[]>) {
+      state.lines = action.payload;
     },
     /**
      * The walk-in customer a new bill opens on — settings
@@ -377,6 +470,7 @@ const saleBillSlice = createSlice({
         return;
       }
       applyCustomerDetail(state as SaleBillDraft, action.payload);
+      state.creditAlertPending = false;
     },
     /**
      * A hand-keyed customer detail.
@@ -404,17 +498,11 @@ const saleBillSlice = createSlice({
     customerCleared(state) {
       state.customer = emptyCustomer();
       state.freightBands = [];
-      state.partyCredit = null;
+      state.party = null;
+      state.creditAlertPending = false;
     },
     freightBandsSet(state, action: PayloadAction<FreightBand[]>) {
       state.freightBands = action.payload;
-    },
-    /**
-     * The credit panel's data landing is not an operator edit: it must neither
-     * dirty the draft nor flip a loaded document off its stored figures.
-     */
-    partyCreditSet(state, action: PayloadAction<PartyCreditSummary | null>) {
-      state.partyCredit = action.payload;
     },
     /**
      * The settlement roll-ups — `updateSettlementDisplay()` in one assignment
@@ -593,6 +681,18 @@ const saleBillSlice = createSlice({
         return;
       }
       (line as unknown as Record<string, unknown>)[field] = value;
+      // A free line's rate is forced to 0 in STATE, not just in the local
+      // calculation (§10.1): the grid, the totals and the payload tell one
+      // story. `actualPrice` keeps the real price for the savings figure.
+      if (field === "isFree" && value === true) {
+        line.rate = 0;
+        line.discPerc = 0;
+        line.discPerQty = 0;
+        line.discAmt = 0;
+      }
+      if (field === "isFree" && value === false && line.rate === 0 && line.actualPrice > 0) {
+        line.rate = line.actualPrice;
+      }
       const alternates = DISCOUNT_ALTERNATES[field as keyof typeof DISCOUNT_ALTERNATES];
       if (!alternates) {
         return;
@@ -618,17 +718,81 @@ const saleBillSlice = createSlice({
         lookup: ItemPriceLookupPayload;
         unitName?: string;
         unitId?: string;
+        /** `session.autoPopQty` (§9.1): a scan lands with qty 1. */
+        autoPopQty?: boolean;
+        /** A weight/price label's value, landing AFTER the fill (§9.2). */
+        pending?: PendingScanValue | null;
       }>,
     ) {
-      const { key, lookup, unitName, unitId } = action.payload;
+      const { key, lookup, unitName, unitId, autoPopQty, pending } = action.payload;
       const index = state.lines.findIndex((row) => row.key === key);
       if (index < 0) {
         return;
       }
-      state.lines[index] = applyBillItemPrice(state.lines[index] as SaleBillDraftLine, lookup, {
+      let line = applyBillItemPrice(state.lines[index] as SaleBillDraftLine, lookup, {
         unitName,
         unitId,
       });
+      if (autoPopQty && line.billQty === 0 && line.caseQty === 0) {
+        line = { ...line, billQty: 1 };
+      }
+      // A free line prices at 0; `actualPrice` keeps the real price (§9.1).
+      if (line.isFree) {
+        line = { ...line, rate: 0, discPerc: 0, discPerQty: 0, discAmt: 0 };
+      }
+      if (pending) {
+        line =
+          pending.kind === "WEIGHT"
+            ? { ...line, billQty: pending.value }
+            : { ...line, rate: line.isFree ? 0 : pending.value };
+      }
+      state.lines[index] = line;
+    },
+    /**
+     * A free line the promotion pass asked for (§11): inserted below the last
+     * line stamped with the scheme, `schemeFlag: false` so a giveaway cannot
+     * trigger a scheme, and priced through the normal lookup by the caller.
+     */
+    freeLineInserted(
+      state,
+      action: PayloadAction<{
+        key: string;
+        afterLineKey: string | null;
+        schemeId: string;
+        schemeName: string;
+        itemId: string;
+        itemUnitId: string | null;
+        itemName: string | null;
+        qty: number;
+      }>,
+    ) {
+      const { key, afterLineKey, schemeId, schemeName, itemId, itemUnitId, itemName, qty } = action.payload;
+      if (state.lines.some((row) => row.key === key)) {
+        return;
+      }
+      const line = createBillDraftLine({
+        key,
+        itemId,
+        itemUnitId: itemUnitId ?? "",
+        itemName: itemName ?? "",
+        billQty: qty,
+        isFree: true,
+        freeType: "SCHEME",
+        schemeId,
+        schemeName,
+        schemeFlag: false,
+        isPromo: true,
+        priceLevel: state.header.priceLevel,
+      });
+      const anchor = afterLineKey ? state.lines.findIndex((row) => row.key === afterLineKey) : -1;
+      if (anchor < 0) {
+        // Before the trailing blank row, never after it.
+        const last = state.lines.length - 1;
+        const at = last >= 0 && !state.lines[last].itemId ? last : state.lines.length;
+        state.lines.splice(at, 0, line);
+        return;
+      }
+      state.lines.splice(anchor + 1, 0, line);
     },
     linePriceLevelSet(
       state,
@@ -760,7 +924,15 @@ export const {
   customerBoundStateCleared,
   customerCleared,
   freightBandsSet,
-  partyCreditSet,
+  partyContextSet,
+  creditAlertConsumed,
+  discountAppliedToAll,
+  pricesAdjusted,
+  promotionsApplied,
+  freeLineInserted,
+  headerIdentitySet,
+  transportSet,
+  transportRequiredSet,
   settlementSet,
   tendersReplaced,
   adjustmentsApplied,
@@ -789,7 +961,10 @@ const NON_EDIT_ACTIONS = new Set<string>([
   companyStateSet.type,
   holdSet.type,
   freightBandsSet.type,
-  partyCreditSet.type,
+  // The party's standing landing is an answer arriving, not an edit.
+  partyContextSet.type,
+  creditAlertConsumed.type,
+  transportRequiredSet.type,
   openCreditsSet.type,
   // A save is not an operator edit: `applyBillSaveResponse` decides the dirty
   // flag itself (clear when the response matches what was sent, still dirty when

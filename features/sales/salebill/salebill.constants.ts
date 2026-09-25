@@ -53,11 +53,17 @@ export const BILL_TENDER_CONTEXT_ENDPOINT = "/bills/tender-context";
 export const BILL_RETENDER_ENDPOINT = "/bills/retender";
 export const BILL_DELIVERY_STATUS_ENDPOINT = "/bills/delivery-status";
 
-/**
- * The credit panel (§4.2). Shared with the sale order, which got there first —
- * `partyId` is the CUSTOMER id, params are camelCase, nothing is cached.
- */
-export { PARTY_CREDIT_ENDPOINT } from "@/features/sales/sale-order/sale-order.constants";
+/** `GET /promotion-scheme/list?company=` — the whole graph. NEVER pass a branch (§11). */
+export const PROMOTION_SCHEME_LIST_ENDPOINT = "/promotion-scheme/list";
+/** `GET /branch-masters/get?brId` — the dispatch-from address (§20.2). */
+export const BRANCH_GET_ENDPOINT = "/branch-masters/get";
+/** `GET /temp-credits/open` and `PUT /temp-credits/follow-up` (§24). */
+export const TEMP_CREDIT_OPEN_ENDPOINT = "/temp-credits/open";
+export const TEMP_CREDIT_FOLLOW_UP_ENDPOINT = "/temp-credits/follow-up";
+/** The GST actions (§21). Not on the test box (404); the screen shows the answer. */
+export const GST_EINVOICE_GENERATE_ENDPOINT = "/gst/einvoice/generate";
+export const GST_EWAYBILL_GENERATE_ENDPOINT = "/gst/ewaybill/generate";
+export const GST_EWAYBILL_VEHICLE_ENDPOINT = "/gst/ewaybill/vehicle";
 
 /**
  * The credits a customer already holds, for the adjustment panel (§10).
@@ -118,6 +124,17 @@ export const BILL_LIST_GRID_KEY: ConfiguredGridKey = "billList";
 
 /** How far back the F8 picker opens. A counter's bills are looked up by day. */
 export const BILL_LIST_WINDOW_DAYS = 30;
+
+/** Grid 113 — "MAIN LIST - BILL DELIVERY" (§24): `idelivery_status` filter, '' = the pending set. */
+export const BILL_DELIVERY_LIST_GRID_KEY: ConfiguredGridKey = "billDeliveryList";
+/** Grid 114 — "MAIN LIST - TEMP CREDITS" (§24): `istatus` + `ioverdue_only`; 365 days. */
+export const TEMP_CREDIT_LIST_GRID_KEY: ConfiguredGridKey = "tempCreditList";
+export const TEMP_CREDIT_LIST_WINDOW_DAYS = 365;
+/** Grid 115 — "POPUP - RECENT BILLS FOR RE-TENDER" (§22): this device's bills, today. */
+export const RETENDER_PICKER_GRID_KEY: ConfiguredGridKey = "retenderBillPopup";
+
+/** ui table 25 — "ADVANCE ADJ", the adjust panel's layout (§14.2). */
+export const ADJUST_GRID_UI_TABLE_KEY: UiTableKey = "advanceAdj";
 
 /** The charges grid is the quotation's own — shared, not similar. */
 export { CHARGE_GRID_UI_TABLE_KEY } from "@/features/sales/quotation/quotation.constants";
@@ -190,6 +207,93 @@ export const DEFAULT_BILL_MODE = "WHOLESALE";
  * NO draft behind (§17.4–17.6). Off, Save writes a draft and Post is F6.
  */
 export const AUTO_POST_SETTING_KEY = "sales.auto_post";
+
+// The rest of the settings this screen reads (§25). All `sales.*`; a TEXT /
+// UUID override of `null` is read as `''`, only bools and numbers fall back to
+// their compiled defaults.
+/** `none | cash_bills | all_bills` (DEVICE): the tender route (§15.1). */
+export const TENDER_TYPE_SETTING_KEY = "sales.tender_type";
+export const TENDER_TYPES = ["none", "cash_bills", "all_bills"] as const;
+export const DEFAULT_TENDER_TYPE = "all_bills";
+/** Disables (never hides) the settle dialog's Save. */
+export const TENDER_PRINT_ONLY_SETTING_KEY = "sales.tender_print_only";
+/** Client check 7, the tender "cannot exceed" gate, and the server's `SALES_TENDER_MIN_MAX`. */
+export const ALLOW_EXCESS_TENDER_SETTING_KEY = "sales.allow_excess_tender";
+/**
+ * BRANCH scope. Its definition row (SQL 38) is not applied on the box, so the
+ * default "locked" holds (§7.6, §27 SET-38).
+ */
+export const ALLOW_PAYMENT_TERM_CHANGE_SETTING_KEY = "sales.allow_payment_term_change";
+/** A bill with a source document locks Customer and Beat unless this is on (§7.7). */
+export const ALLOW_CUSTOMER_CHANGE_ON_IMPORT_SETTING_KEY = "sales.allow_customer_change_on_import";
+/** Off → a re-pick bumps the existing line's qty; on → confirm "add it again?" (§8.3). */
+export const ALLOW_DUPLICATE_ITEM_SETTING_KEY = "sales.allow_duplicate_item";
+/** The order cap (§8.6). */
+export const ALLOW_BILL_OVER_ORDER_QTY_SETTING_KEY = "sales.allow_bill_over_order_qty";
+export const SALESMAN_MANDATORY_SETTING_KEY = "sales.salesman_mandatory";
+/** A second order may be appended to a bill (§13.3). */
+export const MULTI_ORDER_BILL_SETTING_KEY = "sales.multi_order_bill";
+/** JSON `{prefix, itemLen, valueLen, valueKind, divisor}` (§9.2). */
+export const WEIGHT_BARCODE_SETTING_KEY = "sales.weight_barcode";
+/** DEVICE: a scan lands with qty 1 (§9.1). */
+export const AUTO_POP_QTY_SETTING_KEY = "sales.auto_pop_qty";
+export const AUTO_SAVE_TEMP_BILL_SETTING_KEY = "sales.auto_save_temp_bill";
+/** DEVICE: Clear drops the crew too. Off, a trip keeps its van across customers (§7.9). */
+export const CLEAR_DELIVERY_ON_CLEAR_SETTING_KEY = "sales.clear_delivery_on_clear";
+export const TEMP_CREDIT_MAX_DAYS_SETTING_KEY = "sales.temp_credit_max_days";
+export const TEMP_CREDIT_MAX_AMOUNT_SETTING_KEY = "sales.temp_credit_max_amount";
+/** Read as an ENUM `OFF | WARN | REFUSE` (§15.7 D7); the catalogue types it BOOL, so `true` = REFUSE. */
+export const TEMP_CREDIT_BLOCK_OPEN_SETTING_KEY = "sales.temp_credit_block_open";
+/** A free line may still carry tax (the "rate 0" client check exempts it). */
+export const FREE_ITEM_TAX_SETTING_KEY = "sales.free_item_tax";
+export const REQUIRE_VERIFICATION_BEFORE_DISPATCH_SETTING_KEY =
+  "sales.require_verification_before_dispatch";
+export const DELIVERY_STATUS_TRACKING_SETTING_KEY = "sales.delivery_status_tracking";
+/** The policy snapshot's defaults, taken once per document (§25). */
+export const DEFAULT_PRICE_LEVEL_SETTING_KEY = "sales.default_price_level";
+export const ROUND_OFF_STEP_SETTING_KEY = "sales.round_off_step";
+export const FREIGHT_CALC_TYPE_SETTING_KEY = "sales.freight_calc_type";
+export const LOADING_CALC_TYPE_SETTING_KEY = "sales.loading_calc_type";
+export const DISC_ALTER_BASE_RATE_SETTING_KEY = "sales.disc_alter_base_rate";
+
+/** The colour a source kind's tag paints (§13.6). */
+export const SOURCE_KIND_COLOURS: Record<string, string> = {
+  ORDER: "#1a5fb4",
+  SALES_ORDER: "#1a5fb4",
+  DC: "#7048e8",
+  DELIVERY_CHALLAN: "#7048e8",
+  QUOTATION: "#0b7285",
+};
+export const SOURCE_KIND_TAGS: Record<string, string> = {
+  ORDER: "SO",
+  SALES_ORDER: "SO",
+  DC: "DC",
+  DELIVERY_CHALLAN: "DC",
+  QUOTATION: "QT",
+};
+
+/** The transport modes the band accepts (§20.2): '' = unset. */
+export const TRANSPORT_MODES = ["", "ROAD", "RAIL", "AIR", "SHIP"] as const;
+
+/** The re-tender void reasons (§22), `OTHER` included — the server accepts it. */
+export const RETENDER_VOID_REASONS = [
+  { value: "UPI_FAILED", label: "UPI failed" },
+  { value: "CARD_DECLINED", label: "Card declined" },
+  { value: "CHEQUE_REFUSED", label: "Cheque refused" },
+  { value: "KEYED_WRONG", label: "Keyed wrong" },
+  { value: "CUSTOMER_CHANGED", label: "Customer changed" },
+  { value: "OTHER", label: "Other" },
+] as const;
+
+/** Delivery events (§24), in the order the server enforces. */
+export const DELIVERY_EVENTS = ["VERIFIED", "PACKED", "DISPATCHED", "DELIVERED"] as const;
+export type DeliveryEvent = (typeof DELIVERY_EVENTS)[number];
+
+/** Menu ids for the registers Shift+F2 / Shift+F3 open (§21). */
+export const EINVOICE_REGISTER_MENU_ID = 152;
+export const EWAYBILL_REGISTER_MENU_ID = 153;
+/** The temp-credit follow-up list's "Receive" opens the receipt (menu 99). */
+export const RECEIPT_ROUTE = "/accounts/receipt";
 
 /** The reasons a cancel offers ready-made (§17.9). Free text is always allowed. */
 export const CANCEL_REASON_PRESETS = [

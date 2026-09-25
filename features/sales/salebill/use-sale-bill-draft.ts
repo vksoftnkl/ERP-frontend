@@ -52,7 +52,6 @@ import {
   useLazyGetFreightBandsQuery,
   useLazyGetItemPriceQuery,
   useLazyGetItemUnitsQuery,
-  useLazyGetQuotationItemByBarcodeQuery,
   useLazyGetQuotationQuery,
   useLazyGetTxnHoldQuery,
   useLazyRunDropdownQuery,
@@ -61,10 +60,7 @@ import {
   useResumeTxnHoldMutation,
   useSaveTxnHoldMutation,
 } from "@/store/api/quotationApi";
-import {
-  useLazyGetPartyCreditQuery,
-  useLazyGetSaleOrderQuery,
-} from "@/store/api/saleOrderApi";
+import { useLazyGetSaleOrderQuery } from "@/store/api/saleOrderApi";
 import {
   saleBillApi,
   useAmendBillMutation,
@@ -74,6 +70,9 @@ import {
   usePostBillMutation,
   useValidateBillMutation,
   useLazyGetOpenCreditsQuery,
+  useLazyGetPartyContextQuery,
+  useLazyGetBillItemByBarcodeQuery,
+  useListPromotionSchemesQuery,
   useSaveBillMutation,
 } from "@/store/api/saleBillApi";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -90,7 +89,10 @@ import {
   companyStateSet,
   customerApplied,
   customerBoundStateCleared,
+  creditAlertConsumed,
+  discountAppliedToAll,
   draftReplaced,
+  freeLineInserted,
   freightBandsSet,
   holdSet,
   itemPriceApplied,
@@ -99,7 +101,9 @@ import {
   linePriceLevelSet,
   modeSet,
   openCreditsSet,
-  partyCreditSet,
+  partyContextSet,
+  pricesAdjusted,
+  promotionsApplied,
   saveResponseApplied,
   selectSaleBillDraft,
   tenantSet,
@@ -107,6 +111,7 @@ import {
 } from "@/store/slices/saleBillSlice";
 import {
   selectAppSettingBool,
+  selectAppSettingNumber,
   selectAppSettingText,
 } from "@/store/slices/appSettingsSlice";
 import type { AppDispatch } from "@/store/store";
@@ -124,10 +129,21 @@ import type {
 } from "@/features/sales/quotation/quotation.types";
 import type { SaleOrderDocKey } from "@/features/sales/sale-order/sale-order.types";
 import {
+  ALLOW_BILL_OVER_ORDER_QTY_SETTING_KEY,
+  ALLOW_CUSTOMER_CHANGE_ON_IMPORT_SETTING_KEY,
+  ALLOW_DUPLICATE_ITEM_SETTING_KEY,
+  ALLOW_EXCESS_TENDER_SETTING_KEY,
+  ALLOW_PAYMENT_TERM_CHANGE_SETTING_KEY,
+  AUTO_POP_QTY_SETTING_KEY,
   AUTO_POST_SETTING_KEY,
+  AUTO_SAVE_TEMP_BILL_SETTING_KEY,
   AUTOSAVE_DEBOUNCE_MS,
   CANCEL_LINES_SRC_MODULE,
   CHARGE_GRID_UI_TABLE_KEY,
+  CLEAR_DELIVERY_ON_CLEAR_SETTING_KEY,
+  DEFAULT_TENDER_TYPE,
+  FREE_ITEM_TAX_SETTING_KEY,
+  MULTI_ORDER_BILL_SETTING_KEY,
   SALE_BILL_HOLD_DOC_TYPE,
   SALE_BILL_INJECTED_ITEM_COLUMNS,
   SALE_BILL_ITEM_COLUMN_COUNT,
@@ -135,17 +151,34 @@ import {
   SALE_BILL_ITEM_COLUMN_NUMBERS,
   SALE_BILL_ITEM_COLUMN_WIDTH_UNIT,
   SALE_BILL_ITEM_GRID_UI_TABLE_KEY,
+  SALESMAN_MANDATORY_SETTING_KEY,
+  TEMP_CREDIT_BLOCK_OPEN_SETTING_KEY,
+  TEMP_CREDIT_MAX_AMOUNT_SETTING_KEY,
+  TEMP_CREDIT_MAX_DAYS_SETTING_KEY,
+  TENDER_PRINT_ONLY_SETTING_KEY,
+  TENDER_TYPE_SETTING_KEY,
   WALK_IN_CUSTOMER_ENABLED_SETTING_KEY,
   WALK_IN_CUSTOMER_ID_SETTING_KEY,
+  WEIGHT_BARCODE_SETTING_KEY,
 } from "./salebill.constants";
 import {
   copyBillDraftAsNew,
   createBillDraft,
   customerChangeCosts,
   nowStamp,
+  resetBillDraft,
   resolveWalkInCustomerId,
   shouldSeedWalkInCustomer,
 } from "./salebill.state";
+import { creditAlertMessage, termForcedToParty } from "./salebill.party";
+import { decodeWeightBarcode, parseWeightBarcodeConfig } from "./salebill.scan";
+import {
+  evaluatePromotions,
+  promotionHint,
+  reconcileFreeLines,
+  type PromotionNote,
+} from "./promotions/evaluate";
+import type { PromotionContext } from "./promotions/match";
 import {
   adjustmentsForWire,
   billKeyOf,
@@ -198,6 +231,7 @@ import type {
   AdjustableCredit,
   BillAdjustmentRow,
   BillKey,
+  PendingScanValue,
   SaleBillDocKey,
   SaleBillDraft,
   SaleBillDraftLine,
@@ -240,6 +274,14 @@ export type ServerValidation =
   | { status: "ok"; warnings: number }
   | { status: "refused" }
   | { status: "unreachable"; message: string };
+/** `useAppSelector` on an object: only re-render when a value moved. */
+function shallowSettingsEqual(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
+  const keys = Object.keys(left);
+  if (keys.length !== Object.keys(right).length) {
+    return false;
+  }
+  return keys.every((key) => left[key] === right[key]);
+}
 function errorMessage(error: unknown): string {
   if (typeof error === "object" && error !== null) {
     const data = (error as { data?: { message?: string | string[] } }).data;
@@ -278,6 +320,44 @@ function clampFreightType(value: string): string {
 export type SaleBillBusy =
   "idle" | "loading" | "pricing" | "saving" | "holding" | "resuming";
 export type PriceLevelScope = "selected" | "all";
+
+/** `sales.*`, as this screen reads them (§25). */
+export type BillScreenSettings = {
+  tenderType: "none" | "cash_bills" | "all_bills";
+  tenderPrintOnly: boolean;
+  allowExcessTender: boolean;
+  allowPaymentTermChange: boolean;
+  allowCustomerChangeOnImport: boolean;
+  allowDuplicateItem: boolean;
+  allowBillOverOrderQty: boolean;
+  salesmanMandatory: boolean;
+  multiOrderBill: boolean;
+  autoPopQty: boolean;
+  autoSaveTempBill: boolean;
+  clearDeliveryOnClear: boolean;
+  freeItemTax: boolean;
+  tempCreditMaxDays: number;
+  tempCreditMaxAmount: number;
+  /** Read as an enum (§15.7 D7); the catalogue types it BOOL, so `true` reads REFUSE. */
+  tempCreditBlockOpen: "OFF" | "WARN" | "REFUSE";
+  weightBarcode: ReturnType<typeof parseWeightBarcodeConfig>;
+};
+
+function tempCreditBlockModeOf(text: string | null): BillScreenSettings["tempCreditBlockOpen"] {
+  const raw = (text ?? "").trim().toUpperCase();
+  if (raw === "WARN" || raw === "REFUSE" || raw === "OFF") {
+    return raw;
+  }
+  if (raw === "TRUE" || raw === "1" || raw === "YES") {
+    return "REFUSE";
+  }
+  return "OFF";
+}
+
+function tenderTypeOf(text: string | null): BillScreenSettings["tenderType"] {
+  const raw = (text ?? "").trim().toLowerCase();
+  return raw === "none" || raw === "cash_bills" || raw === "all_bills" ? raw : DEFAULT_TENDER_TYPE;
+}
 export type SaleBillDraftApi = {
   draft: SaleBillDraft;
   dispatch: AppDispatch;
@@ -300,10 +380,28 @@ export type SaleBillDraftApi = {
   /** Drops the settlement and the credit standing; the confirmation's "yes". */
   releaseCustomerBoundState: () => void;
   pickCustomer: (customerId: string) => Promise<void>;
+  /** Re-read `/bills/party-context` for the customer on the bill (a hold restore, a copy). */
+  refreshPartyContext: () => Promise<void>;
+  /**
+   * The settings the screen reads (§25), resolved for the session. One object
+   * so the view, the validate context and the dialogs read the same values.
+   */
+  settings: BillScreenSettings;
+  /** `sales.tender_type` applied to the term (§15.1): F5 opens the tender, or saves. */
+  tenderRoute: boolean;
+  /** Disc % All (Alt+D, §6.2). */
+  discountAll: (perc: number) => void;
+  /** ± Price (§6.2). */
+  adjustPrices: (perc: number) => void;
+  /** Cost (Alt+O, §6.2): the line's cost text, or null when there is no line. */
+  lineCostText: (lineKey: string | null) => string | null;
+  /** The promotion hint on the scheme figure and the Promo tick (§11). */
+  promotionHintText: string;
   pickItem: (
     lineKey: string,
     itemId: string,
     itemUnitId?: string,
+    pending?: PendingScanValue | null,
   ) => Promise<void>;
   recoverBaseFactor: (lineKey: string) => Promise<void>;
   switchUnit: (lineKey: string) => Promise<void>;
@@ -338,6 +436,14 @@ export type SaleBillDraftApi = {
   canPostOnThisDevice: boolean;
   /** Ctrl+F7, the operator's dry run (§17.7). */
   validateOnServer: () => Promise<ServerValidation>;
+  /**
+   * The `/validate` before the tender opens (§15.1): OK → the notes paint
+   * without a popup and the dialog opens; a refusal paints WITH the popup and
+   * the dialog stays shut; the server away → it opens anyway.
+   */
+  validateForTender: () => Promise<ServerValidation>;
+  /** The customer on the bill is the walk-in (§7.7): party-context's answer, or the setting's. */
+  isWalkIn: boolean;
   /** F6 / Ctrl+Enter / Ctrl+Shift+Enter: create → validate → confirm → post (§17.5). */
   post: (options?: SaveOptions) => Promise<SaveOutcome>;
   /** Save while amending, once the operator has said what changed (§17.8). */
@@ -436,10 +542,54 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   const [fetchItemPrice] = useLazyGetItemPriceQuery();
   const [fetchNextUnit] = useLazySwitchItemUomQuery();
   const [fetchItemUnits] = useLazyGetItemUnitsQuery();
-  const [fetchBarcode] = useLazyGetQuotationItemByBarcodeQuery();
+  const [fetchBarcode] = useLazyGetBillItemByBarcodeQuery();
   const [fetchFreightBands] = useLazyGetFreightBandsQuery();
-  const [fetchPartyCredit] = useLazyGetPartyCreditQuery();
+  const [fetchPartyContext] = useLazyGetPartyContextQuery();
   const [runDropdown] = useLazyRunDropdownQuery();
+  // --- the settings this screen reads (§25) --------------------------------
+  const settingsFromStore = useAppSelector((state) => ({
+    tenderType: tenderTypeOf(selectAppSettingText(state, TENDER_TYPE_SETTING_KEY)),
+    tenderPrintOnly: selectAppSettingBool(state, TENDER_PRINT_ONLY_SETTING_KEY, false),
+    allowExcessTender: selectAppSettingBool(state, ALLOW_EXCESS_TENDER_SETTING_KEY, false),
+    allowPaymentTermChange: selectAppSettingBool(state, ALLOW_PAYMENT_TERM_CHANGE_SETTING_KEY, false),
+    allowCustomerChangeOnImport: selectAppSettingBool(state, ALLOW_CUSTOMER_CHANGE_ON_IMPORT_SETTING_KEY, false),
+    allowDuplicateItem: selectAppSettingBool(state, ALLOW_DUPLICATE_ITEM_SETTING_KEY, true),
+    allowBillOverOrderQty: selectAppSettingBool(state, ALLOW_BILL_OVER_ORDER_QTY_SETTING_KEY, false),
+    salesmanMandatory: selectAppSettingBool(state, SALESMAN_MANDATORY_SETTING_KEY, false),
+    multiOrderBill: selectAppSettingBool(state, MULTI_ORDER_BILL_SETTING_KEY, true),
+    autoPopQty: selectAppSettingBool(state, AUTO_POP_QTY_SETTING_KEY, false),
+    autoSaveTempBill: selectAppSettingBool(state, AUTO_SAVE_TEMP_BILL_SETTING_KEY, true),
+    clearDeliveryOnClear: selectAppSettingBool(state, CLEAR_DELIVERY_ON_CLEAR_SETTING_KEY, false),
+    freeItemTax: selectAppSettingBool(state, FREE_ITEM_TAX_SETTING_KEY, false),
+    tempCreditMaxDays: selectAppSettingNumber(state, TEMP_CREDIT_MAX_DAYS_SETTING_KEY, 30),
+    tempCreditMaxAmount: selectAppSettingNumber(state, TEMP_CREDIT_MAX_AMOUNT_SETTING_KEY, 0),
+    tempCreditBlockOpenText: selectAppSettingText(state, TEMP_CREDIT_BLOCK_OPEN_SETTING_KEY),
+    weightBarcodeText: selectAppSettingText(state, WEIGHT_BARCODE_SETTING_KEY),
+  }), shallowSettingsEqual);
+  const settings = useMemo<BillScreenSettings>(
+    () => ({
+      tenderType: settingsFromStore.tenderType,
+      tenderPrintOnly: settingsFromStore.tenderPrintOnly,
+      allowExcessTender: settingsFromStore.allowExcessTender,
+      allowPaymentTermChange: settingsFromStore.allowPaymentTermChange,
+      allowCustomerChangeOnImport: settingsFromStore.allowCustomerChangeOnImport,
+      allowDuplicateItem: settingsFromStore.allowDuplicateItem,
+      allowBillOverOrderQty: settingsFromStore.allowBillOverOrderQty,
+      salesmanMandatory: settingsFromStore.salesmanMandatory,
+      multiOrderBill: settingsFromStore.multiOrderBill,
+      autoPopQty: settingsFromStore.autoPopQty,
+      autoSaveTempBill: settingsFromStore.autoSaveTempBill,
+      clearDeliveryOnClear: settingsFromStore.clearDeliveryOnClear,
+      freeItemTax: settingsFromStore.freeItemTax,
+      tempCreditMaxDays: settingsFromStore.tempCreditMaxDays,
+      tempCreditMaxAmount: settingsFromStore.tempCreditMaxAmount,
+      tempCreditBlockOpen: tempCreditBlockModeOf(settingsFromStore.tempCreditBlockOpenText),
+      weightBarcode: parseWeightBarcodeConfig(settingsFromStore.weightBarcodeText),
+    }),
+    [settingsFromStore],
+  );
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   // --- the bill's own endpoints -------------------------------------------
   const [saveBill] = useSaveBillMutation();
   const [validateBill] = useValidateBillMutation();
@@ -778,7 +928,12 @@ export function useSaleBillDraft(): SaleBillDraftApi {
    * which is what stops the gate answering from a month-old snapshot.
    */
   const pickItem = useCallback(
-    async (lineKey: string, itemId: string, itemUnitId?: string) => {
+    async (
+      lineKey: string,
+      itemId: string,
+      itemUnitId?: string,
+      pending: PendingScanValue | null = null,
+    ) => {
       const line = draft.lines.find((row) => row.key === lineKey);
       const level = line?.priceLevel ?? draft.header.priceLevel;
       setBusy("pricing");
@@ -786,7 +941,16 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         const lookup = await fetchItemPrice(
           priceQueryFor(line, itemId, itemUnitId, level),
         ).unwrap();
-        dispatch(itemPriceApplied({ key: lineKey, lookup }));
+        // Applied by `lineUid`, never by a row index captured across the
+        // await (§5.4): a delete in between would price the wrong line.
+        dispatch(
+          itemPriceApplied({
+            key: lineKey,
+            lookup,
+            autoPopQty: settingsRef.current.autoPopQty,
+            pending,
+          }),
+        );
         void loadUnitOptions(itemId);
       } catch (error) {
         toast.error(errorMessage(error));
@@ -884,15 +1048,24 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [draft.lines, dispatch, fetchItemPrice, fetchNextUnit, priceQueryFor],
   );
+  /**
+   * A scan into an empty line's Barcode cell (§9.2). A weight/price label is
+   * split first: its item code goes to the lookup and its VALUE waits, landing
+   * only after the price lookup has filled the line — WEIGHT into the
+   * quantity, PRICE into the rate — because applied earlier the lookup would
+   * overwrite it. `company_id` is always sent.
+   */
   const resolveBarcode = useCallback(
     async (lineKey: string, barcode: string): Promise<boolean> => {
       const trimmed = barcode.trim();
       if (!trimmed) {
         return false;
       }
+      const decoded = decodeWeightBarcode(trimmed, settingsRef.current.weightBarcode);
+      const code = decoded ? decoded.itemCode : trimmed;
       setBusy("pricing");
       try {
-        const scanned = await fetchBarcode(trimmed).unwrap();
+        const scanned = await fetchBarcode({ barcode: code, company_id: draft.companyId }).unwrap();
         if (!scanned.allowSales) {
           toast.warn(`${scanned.itemName} is not available for sale.`);
           return false;
@@ -908,17 +1081,29 @@ export function useSaleBillDraft(): SaleBillDraftApi {
             line?.priceLevel ?? draft.header.priceLevel,
           ),
         ).unwrap();
-        dispatch(itemPriceApplied({ key: lineKey, lookup }));
+        dispatch(
+          itemPriceApplied({
+            key: lineKey,
+            lookup,
+            autoPopQty: settingsRef.current.autoPopQty,
+            pending: decoded?.pending ?? null,
+          }),
+        );
         void loadUnitOptions(scanned.itemId);
         return true;
       } catch (error) {
-        toast.error(errorMessage(error));
+        if (errorStatusOf(error) === 404) {
+          toast.error(`No item carries barcode ${trimmed}.`);
+        } else {
+          toast.error(errorMessage(error));
+        }
         return false;
       } finally {
         setBusy("idle");
       }
     },
     [
+      draft.companyId,
       draft.lines,
       draft.header.priceLevel,
       dispatch,
@@ -999,6 +1184,53 @@ export function useSaleBillDraft(): SaleBillDraftApi {
    * bill and leaves the draft pristine. Nothing about it is sticky — the
    * operator picking a real customer is an ordinary call and replaces it.
    */
+  /**
+   * `/bills/party-context` for the customer on the bill (§7.3). Guarded by
+   * the thing it was asked for — the reducer drops a reply for another
+   * customer (§5.4). A failure never blocks billing: it clears the panel and
+   * `/validate` stays the authority.
+   */
+  const readPartyContext = useCallback(
+    async (target: { custId: string | null; companyId: string; branchId: string; accYear: string; billDate: string }) => {
+      if (!target.custId || !target.companyId || !target.branchId) {
+        dispatch(partyContextSet(null));
+        return;
+      }
+      try {
+        const context = await fetchPartyContext({
+          partyId: target.custId,
+          companyId: target.companyId,
+          branchId: target.branchId,
+          accYear: target.accYear,
+          billDate: target.billDate,
+        }).unwrap();
+        dispatch(partyContextSet(context));
+        // The one popup per OPERATOR pick (§7.4): a loaded bill and a seed
+        // stay silent. Consumed whether or not there was anything to say.
+        const current = draftRef.current;
+        if (current.creditAlertPending && current.customer.custId === context.partyId) {
+          const message = creditAlertMessage(context);
+          dispatch(creditAlertConsumed());
+          if (message) {
+            toast.warn(message);
+          }
+        }
+      } catch {
+        dispatch(partyContextSet(null));
+      }
+    },
+    [dispatch, fetchPartyContext],
+  );
+  const refreshPartyContext = useCallback(async () => {
+    const current = draftRef.current;
+    await readPartyContext({
+      custId: current.customer.custId,
+      companyId: current.companyId,
+      branchId: current.branchId,
+      accYear: current.accYear,
+      billDate: current.header.billDate,
+    });
+  }, [readPartyContext]);
   const applyCustomer = useCallback(
     async (customerId: string, options: { seed?: boolean } = {}) => {
       const seeding = options.seed === true;
@@ -1019,6 +1251,16 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       if (!seeding) {
         setBusy("loading");
       }
+      // Both reads fire in parallel and each writes its OWN fields (§7.1):
+      // customer-detail the address, the state and the option ticks;
+      // party-context the standing, the loyalty membership and `creditAllowed`.
+      const partyRead = readPartyContext({
+        custId: customerId,
+        companyId: draft.companyId,
+        branchId: draft.branchId,
+        accYear: draft.accYear,
+        billDate: draft.header.billDate,
+      });
       try {
         const detail = await fetchCustomerDetail({
           cus_id: customerId,
@@ -1026,9 +1268,15 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           branch_id: draft.branchId,
           regional,
         }).unwrap();
-        dispatch(seeding ? walkInCustomerSeeded(detail) : customerApplied(detail));
+        // The term is forced to the party's unless the branch allows a change
+        // AND the bill has a source document (§7.2).
+        const forceTerm = termForcedToParty(
+          settingsRef.current.allowPaymentTermChange,
+          Boolean(draftRef.current.source),
+        );
+        dispatch(seeding ? walkInCustomerSeeded(detail) : customerApplied({ detail, forceTerm }));
         // Freight bands are only worth fetching when the distance actually
-        // changed and the policy is not manual.
+        // changed and the policy is not manual (§9.3).
         const distance = detail.distance_km;
         const distanceChanged = distance !== draft.customer.distanceKm;
         const manualFreight =
@@ -1047,22 +1295,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           } catch {
             // No band for this distance is an ordinary answer, not an error.
           }
-        }
-        // The credit panel. Two independent limits — an AMOUNT limit and a BILL
-        // COUNT limit — and either can be exceeded; whether exceeding one blocks
-        // the save is `isCreditCheckEnabled`, a setting, not a verdict this
-        // screen invents (§4.2). Failure leaves the panel empty rather than
-        // guessing: "no answer" and "within the limit" are different facts.
-        try {
-          const credit = await fetchPartyCredit({
-            partyId: customerId,
-            companyId: draft.companyId,
-            branchId: draft.branchId,
-            accYear: draft.accYear,
-          }).unwrap();
-          dispatch(partyCreditSet(credit));
-        } catch {
-          dispatch(partyCreditSet(null));
         }
       } catch (error) {
         // A seed that fails costs the bill nothing the operator cannot do
@@ -1083,17 +1315,19 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           setBusy("idle");
         }
       }
+      await partyRead;
     },
     [
       draft.companyId,
       draft.branchId,
       draft.accYear,
+      draft.header.billDate,
       draft.customer.distanceKm,
       draft.policy.freightCalcType,
       dispatch,
       fetchCustomerDetail,
       fetchFreightBands,
-      fetchPartyCredit,
+      readPartyContext,
       regional,
     ],
   );
@@ -1151,16 +1385,22 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   // -------------------------------------------------------------------------
   // Document lifecycle
   // -------------------------------------------------------------------------
+  /** Clear (F7) in every state = start a new bill (§17.11). */
   const clear = useCallback(() => {
     dispatch(
       draftReplaced(
-        createBillDraft({
-          companyId: context.companyId,
-          branchId: context.branchId,
-          accYear: context.accYear,
-          companyStateCode,
-          companyStateName: draftRef.current.companyStateName,
-        }),
+        resetBillDraft(
+          draftRef.current,
+          {
+            companyId: context.companyId,
+            branchId: context.branchId,
+            accYear: context.accYear,
+            companyStateCode,
+            companyStateName: draftRef.current.companyStateName,
+          },
+          // A trip bills many customers with the same van (§7.9).
+          { keepCrew: !settingsRef.current.clearDeliveryOnClear },
+        ),
       ),
     );
   }, [
@@ -1176,7 +1416,32 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         copyBillDraftAsNew(draftRef.current, todayIso(), nowStamp()),
       ),
     );
-  }, [dispatch]);
+    // Re-read party-context, silently (§17.10).
+    void refreshPartyContext();
+  }, [dispatch, refreshPartyContext]);
+  // -------------------------------------------------------------------------
+  // The quick strip (§6.2)
+  // -------------------------------------------------------------------------
+  const discountAll = useCallback(
+    (perc: number) => {
+      dispatch(discountAppliedToAll(perc));
+    },
+    [dispatch],
+  );
+  const adjustPrices = useCallback(
+    (perc: number) => {
+      dispatch(pricesAdjusted(perc));
+    },
+    [dispatch],
+  );
+  const lineCostText = useCallback((lineKey: string | null): string | null => {
+    const line = lineKey ? draftRef.current.lines.find((row) => row.key === lineKey) : null;
+    if (!line?.itemId) {
+      return null;
+    }
+    const money = (value: number) => value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `${line.itemName}\nCost: ₹${money(line.costPrice)} · Cost (pre-tax): ₹${money(line.costBeforeTax)}`;
+  }, []);
   /**
    * Edit (F2). A CANCELLED bill is never edited; a POSTED one is amended
    * (§17.8), and the screen routes that through `beginAmend`; a read-only
@@ -1293,33 +1558,26 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     },
     [actor.deviceMasterId, actor.userId, convertHoldLock, dispatch],
   );
-  const refreshPartyCredit = useCallback(
-    async (target: SaleBillDraft) => {
-      if (!target.customer.custId || !target.companyId) {
-        return;
-      }
-      try {
-        const credit = await fetchPartyCredit({
-          partyId: target.customer.custId,
-          companyId: target.companyId,
-          branchId: target.branchId,
-          accYear: target.accYear,
-        }).unwrap();
-        dispatch(partyCreditSet(credit));
-      } catch {
-        dispatch(partyCreditSet(null));
-      }
-    },
-    [dispatch, fetchPartyCredit],
-  );
   const validate = useCallback(
     (extra: BillValidationContext = {}) =>
       validateSaveInputs(draft, pricing, {
         skipMrp: SESSION_CAPABILITIES.skipMrp,
+        allowBillOverOrderQty: settings.allowBillOverOrderQty,
+        salesmanMandatory: settings.salesmanMandatory,
+        allowExcessTender: settings.allowExcessTender,
+        freeItemTax: settings.freeItemTax,
         ...extra,
       }),
-    [draft, pricing],
+    [draft, pricing, settings],
   );
+  /**
+   * The tender route (§15.1): `all_bills`, or `cash_bills` on a non-credit
+   * term. An amend never re-opens the tender from Save.
+   */
+  const tenderRoute =
+    !draft.amending &&
+    (settings.tenderType === "all_bills" ||
+      (settings.tenderType === "cash_bills" && draft.header.billType !== "CREDIT"));
   // -------------------------------------------------------------------------
   // The lifecycle (§16, §17): save, validate, post, amend, cancel, delete
   // -------------------------------------------------------------------------
@@ -1725,6 +1983,24 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     ],
   );
 
+  /** Before the tender opens (§15.1): the checks with `openingTender`, then `/validate`. */
+  const validateForTender = useCallback(async (): Promise<ServerValidation> => {
+    const violation = validate({ openingTender: true });
+    if (violation && !violation.confirm) {
+      toast.error(violation.message);
+      return { status: "refused" };
+    }
+    setBusy("saving");
+    try {
+      const payload = buildSavePayload(draftRef.current, pricing, actor);
+      // OK → painted, no popup. Refusal → painted with the popup. Server away
+      // → `unreachable`, and the caller opens anyway: a sale must not stop.
+      return await runServerValidation(payload, { popupOnRefusal: true });
+    } finally {
+      setBusy("idle");
+    }
+  }, [actor, pricing, runServerValidation, validate]);
+
   /** Ctrl+F7 (§17.7): the operator's dry run, painted WITH the popup. */
   const validateOnServer = useCallback(async (): Promise<ServerValidation> => {
     const violation = validate();
@@ -1964,9 +2240,16 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           companyStateName: draftRef.current.companyStateName,
         });
         dispatch(draftReplaced(loaded));
-        // The credit standing is an answer about the party TODAY, not when the
-        // bill was raised, so it is asked again rather than read off the record.
-        void refreshPartyCredit(loaded);
+        // The party's standing is an answer about the party TODAY, not when
+        // the bill was raised, so it is asked again rather than read off the
+        // record (§19 step 4). Silent: a load never earns the credit popup.
+        void readPartyContext({
+          custId: loaded.customer.custId,
+          companyId: loaded.companyId,
+          branchId: loaded.branchId,
+          accYear: loaded.accYear,
+          billDate: loaded.header.billDate,
+        });
         return loaded;
       } catch (error) {
         toast.error(errorMessage(error));
@@ -1975,7 +2258,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         setBusy("idle");
       }
     },
-    [companyStateCode, dispatch, refreshPartyCredit],
+    [companyStateCode, dispatch, readPartyContext],
   );
   loadDocumentRef.current = loadDocument;
   // -------------------------------------------------------------------------
@@ -2094,7 +2377,13 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         if (outcome.note) {
           toast.info(outcome.note);
         }
-        void refreshPartyCredit(next);
+        void readPartyContext({
+          custId: next.customer.custId,
+          companyId: next.companyId,
+          branchId: next.branchId,
+          accYear: next.accYear,
+          billDate: next.header.billDate,
+        });
         return outcome.imported > 0;
       } catch (error) {
         toast.error(errorMessage(error));
@@ -2103,7 +2392,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         setBusy("idle");
       }
     },
-    [dispatch, fetchOpenCredits, fetchOrder, refreshPartyCredit],
+    [dispatch, fetchOpenCredits, fetchOrder, readPartyContext],
   );
   // -------------------------------------------------------------------------
   // Holds (§12)
@@ -2241,14 +2530,139 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   // -------------------------------------------------------------------------
   useEffect(() => {
     const deviceId = actor.deviceId ?? "";
-    if (!deviceId || draft.mode !== "entry" || !isWorthAutosaving(draft)) {
+    // `sales.auto_save_temp_bill` (§23.2): a NEW bill with at least one line,
+    // debounced. A loaded document has a row of its own to fall back on.
+    if (
+      !deviceId ||
+      !settings.autoSaveTempBill ||
+      draft.mode !== "entry" ||
+      !draft.isNewEntry ||
+      !isWorthAutosaving(draft)
+    ) {
       return;
     }
     const timer = window.setTimeout(() => {
       void writeAutosave(deviceId, draftRef.current, pricingRef.current);
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [actor.deviceId, draft]);
+  }, [actor.deviceId, draft, settings.autoSaveTempBill]);
+  // -------------------------------------------------------------------------
+  // Promotions (§11)
+  // -------------------------------------------------------------------------
+  //
+  // The graph is fetched once per company — NEVER narrowed by branch (the
+  // list matches the column literally and drops company-wide schemes) — and
+  // the pass runs over the lines' INPUTS whenever one of them moves: term,
+  // bill date, qty, size, rate, scheme flag, any discount, the Promo tick, the
+  // customer, a cache refresh. Its outputs (the scheme tier, the free lines)
+  // are not in its own signature, so it cannot feed back on itself; and the
+  // pass is idempotent, so running it once more costs nothing.
+  //
+  // Skipped on a loaded (stored) bill and in browse mode: a loaded bill is
+  // history, and today's campaigns must not touch it (§5.2).
+  const { data: promotionSchemes = [], isError: promotionsFailed } = useListPromotionSchemesQuery(
+    draft.companyId,
+    { skip: !draft.companyId },
+  );
+  const [promotionNotes, setPromotionNotes] = useState<{ applied: PromotionNote[]; notApplied: PromotionNote[] }>({
+    applied: [],
+    notApplied: [],
+  });
+  const promotionSignature = useMemo(() => {
+    if (draft.mode !== "entry" || draft.pricing === "stored") {
+      return "";
+    }
+    const lines = draft.lines
+      .filter((line) => line.itemId && !(line.isFree && line.schemeId))
+      .map((line) =>
+        [
+          line.key,
+          line.itemId,
+          line.itemUnitId,
+          line.caseQty,
+          line.billQty,
+          line.lengthQty,
+          line.toBaseFactor,
+          line.rate,
+          line.isInclusiveTax ? 1 : 0,
+          line.isFree ? 1 : 0,
+          line.schemeFlag ? 1 : 0,
+          line.discPerc,
+          line.discPerQty,
+          line.discAmt,
+          line.splDiscPerc,
+          line.splDiscPerQty,
+          line.splDiscAmt,
+          line.priceLevel,
+          line.groupId,
+          line.brandId,
+          line.categoryId,
+          line.sectionId,
+        ].join(":"),
+      )
+      .join("|");
+    return [
+      draft.companyId,
+      draft.branchId,
+      draft.header.billDate,
+      draft.header.billType,
+      draft.header.hasPromo ? 1 : 0,
+      draft.header.priceLevel,
+      draft.customer.custId ?? "",
+      draft.customer.areaId ?? "",
+      draft.policy.discountAlterBaseRate ? 1 : 0,
+      promotionSchemes.length,
+      lines,
+    ].join("#");
+  }, [draft, promotionSchemes.length]);
+  const lastPromotionSignature = useRef("");
+  useEffect(() => {
+    if (!promotionSignature || promotionSignature === lastPromotionSignature.current) {
+      return;
+    }
+    lastPromotionSignature.current = promotionSignature;
+    const current = draftRef.current;
+    const now = new Date();
+    const context: PromotionContext = {
+      compId: current.companyId,
+      branchId: current.branchId,
+      docDate: current.header.billDate,
+      docTime: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+      custId: current.customer.custId,
+      areaId: current.customer.areaId,
+      priceLevelId: current.header.priceLevel,
+      billType: current.header.billType === "CREDIT" ? "CREDIT" : current.header.billType === "CASH" ? "CASH" : "ALL",
+      promotionsEnabled: current.header.hasPromo && !promotionsFailed,
+    };
+    const result = evaluatePromotions(promotionSchemes, context, current.lines, current.policy);
+    setPromotionNotes({ applied: result.applied, notApplied: result.notApplied });
+    const reconciled = reconcileFreeLines(result.lines, result.freeLines);
+    if (result.changed || reconciled.changed) {
+      dispatch(promotionsApplied(reconciled.lines));
+    }
+    for (const intent of reconciled.toInsert) {
+      dispatch(
+        freeLineInserted({
+          key: `free-${intent.key}`,
+          afterLineKey: intent.afterLineKey,
+          schemeId: intent.schemeId,
+          schemeName: intent.schemeName,
+          itemId: intent.itemId,
+          itemUnitId: intent.unitId,
+          itemName: intent.itemName,
+          qty: intent.qty,
+        }),
+      );
+      // Each inserted free line is priced through the normal lookup; the
+      // reducer forces its rate to 0 and keeps the real price in
+      // `actualPrice` for the savings figure.
+      void pickItem(`free-${intent.key}`, intent.itemId, intent.unitId ?? undefined);
+    }
+  }, [dispatch, pickItem, promotionSchemes, promotionSignature, promotionsFailed]);
+  const promotionHintText = useMemo(
+    () => promotionHint(draft.header.hasPromo, promotionNotes.applied, promotionNotes.notApplied),
+    [draft.header.hasPromo, promotionNotes],
+  );
   /** The snapshot this device left behind, if it is worth offering back. */
   const findRecovery = useCallback(async (): Promise<BillAutosave | null> => {
     const deviceId = actor.deviceId ?? "";
@@ -2292,6 +2706,13 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     customerChangeCost,
     releaseCustomerBoundState,
     pickCustomer,
+    refreshPartyContext,
+    settings,
+    tenderRoute,
+    discountAll,
+    adjustPrices,
+    lineCostText,
+    promotionHintText,
     pickItem,
     recoverBaseFactor,
     switchUnit,
@@ -2305,6 +2726,10 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     autoPost,
     canPostOnThisDevice,
     validateOnServer,
+    validateForTender,
+    isWalkIn:
+      draft.party?.party.isWalkIn ??
+      (Boolean(walkInCustomerId) && draft.customer.custId === walkInCustomerId),
     post,
     amend,
     beginAmend,

@@ -93,6 +93,12 @@ export const CONFIGURED_GRIDS = {
    * `grid_param`, never the runner's own `search` key.
    */
   receivedChequeList: { name: "MAIN LIST - RECEIVED CHEQUES", fallbackId: "109", deletedParam: null },
+  /** Sale Bill (§24) — the delivery register, menu 226. Binds `idelivery_status` ('' = pending set). */
+  billDeliveryList: { name: "MAIN LIST - BILL DELIVERY", fallbackId: "113", deletedParam: null },
+  /** Sale Bill (§24) — the temp-credit follow-up list, menu 257. Binds `istatus` and `ioverdue_only`. */
+  tempCreditList: { name: "MAIN LIST - TEMP CREDITS", fallbackId: "114", deletedParam: null },
+  /** Sale Bill (§22) — Ctrl+F6's picker: this device's bills from today. Binds `idevice_id`. */
+  retenderBillPopup: { name: "POPUP - RECENT BILLS FOR RE-TENDER", fallbackId: "115", deletedParam: null },
   /** Receipt Entry — the bank picker on a cheque row. Free text is allowed too. */
   bankPopup: { name: "POPUP - BANKS", fallbackId: "111", deletedParam: null },
   /** Receipt Entry — F7, everything that has ever settled the bill under the cursor. */

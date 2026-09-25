@@ -125,11 +125,14 @@ import type {
 } from "../salebill.types";
 import { useSaleBillDraft, type SaveOutcome } from "../use-sale-bill-draft";
 import { AdjustPanel } from "./adjust-panel";
+import { AskText } from "./ask-text";
+import { BillQuickStrip } from "./bill-quick-strip";
 import { useBillVisibleSettings } from "./bill-visible-settings";
 import { BillListModal } from "./bill-list-modal";
 import {
-  BillCreditBlock,
+  BillCreditPanel,
   BillCustomerBlock,
+  BillFactsLine,
   BillInfoBlock,
   BillPeopleBlock,
 } from "./bill-header-blocks";
@@ -244,6 +247,8 @@ export function SaleBillEntryView({
   const { permissions: menuPermissions } = usePagePermissions();
   const canSaveDoc = draft.docId ? menuPermissions.canEdit : menuPermissions.canCreate;
   const editable = draft.mode === "entry" && !draft.isDeleted && canSaveDoc;
+  /** Import lock (§7.7): a bill with a source document, unless the setting allows the change. */
+  const customerLocked = Boolean(draft.source) && !api.settings.allowCustomerChangeOnImport;
 
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
   const [itemPickerRow, setItemPickerRow] = useState<string | null>(null);
@@ -310,6 +315,12 @@ export function SaleBillEntryView({
    * money — held, not applied, until they confirm losing it (§4.3).
    */
   const [customerToConfirm, setCustomerToConfirm] = useState<string | null>(null);
+  /** Alt+D — Disc % All (§6.2). */
+  const [discountPromptOpen, setDiscountPromptOpen] = useState(false);
+  /** ± Price (§6.2). */
+  const [pricePromptOpen, setPricePromptOpen] = useState(false);
+  /** A re-pick of an item already on the bill, waiting on "add it again?" (§8.3). */
+  const [duplicatePick, setDuplicatePick] = useState<{ rowKey: string; pick: ItemPick; row: number } | null>(null);
 
   const itemUiTableId = useUiTableId(SALE_BILL_ITEM_GRID_UI_TABLE_KEY);
   const chargeUiTableId = useUiTableId(CHARGE_GRID_UI_TABLE_KEY);
@@ -392,16 +403,44 @@ export function SaleBillEntryView({
       }
       const value = parseCell(raw);
       if (field === "rate") {
+        // Below the minimum selling price (§8.6): warn and CLEAR the rate.
+        // Above MRP is only a warning here; the save check refuses it.
+        if (line.minPrice > 0 && !line.isFree && value > 0 && value < line.minPrice) {
+          toast.warn("Selling rate < minimum selling price.");
+          dispatch(lineFieldSet({ key: rowKey, field, value: 0 }));
+          return;
+        }
         const warning = rateWarning(value, line.minPrice, line.mrp);
         if (warning) {
           toast.warn(warning);
         }
-        // Below the minimum selling price the edit is REFUSED, not warned
-        // about: this is the document that takes the money, and a rate under
-        // the floor is a loss the counter cannot authorise. Above MRP is only a
-        // warning, because a line can legitimately carry one when MRP is stale.
-        if (line.minPrice > 0 && value > 0 && value < line.minPrice) {
+      }
+      if (field === "billQty" || field === "caseQty") {
+        // The order cap (§8.6): warn and PUT THE QTY BACK to the pending
+        // figure. Lines without an order qty are not capped.
+        const nextBill = field === "billQty" ? value : line.billQty;
+        if (
+          line.orderQtyLocked &&
+          line.orderQty > 0 &&
+          nextBill > line.orderQty &&
+          !api.settings.allowBillOverOrderQty
+        ) {
+          toast.warn(
+            `Only ${line.orderQty} is pending on this order line — billing more than was ordered is not allowed.`,
+          );
+          dispatch(lineFieldSet({ key: rowKey, field: "billQty", value: line.orderQty }));
           return;
+        }
+        // Negative stock (§8.6): warn, and the value is NOT reverted. The
+        // operator may knowingly accept it; the save gate asks again.
+        if (
+          !line.allowNegative &&
+          !line.isService &&
+          line.stockGateResolved &&
+          line.stockQty !== null &&
+          nextBill > line.stockQty
+        ) {
+          toast.warn(`Only ${line.stockQty} in stock — this item does not allow negative stock.`);
         }
       }
       dispatch(lineFieldSet({ key: rowKey, field, value }));
@@ -432,6 +471,12 @@ export function SaleBillEntryView({
 
   // ------------------------------------------------------------------ pickers
 
+  /**
+   * A picked item (§8.3). A DUPLICATE — another non-free line already carries
+   * the item — is either bumped by 1 on that line and focused, with the picker
+   * row left empty (`!sales.allow_duplicate_item`), or confirmed: "This item is
+   * already on row N. Add it again?".
+   */
   const onPickItem = useCallback(
     (pick: ItemPick) => {
       const rowKey = itemPickerRow;
@@ -439,20 +484,34 @@ export function SaleBillEntryView({
       if (!rowKey) {
         return;
       }
-      const duplicate = draft.lines.some(
-        (line) => line.key !== rowKey && line.itemId === pick.itemId,
+      const existing = draft.lines.find(
+        (line) => line.key !== rowKey && line.itemId === pick.itemId && !line.isFree,
       );
-      if (duplicate) {
-        // Not refused: a bill may legitimately carry one item twice, because a
-        // line is a BATCH ALLOCATION and two batches of the same item are two
-        // lines. Said out loud so a double-pick is still noticed.
-        toast.info(`${pick.itemName} is already on this bill.`);
+      if (existing) {
+        const row = draft.lines.filter((line) => line.itemId).findIndex((line) => line.key === existing.key) + 1;
+        if (!api.settings.allowDuplicateItem) {
+          dispatch(lineFieldSet({ key: existing.key, field: "billQty", value: existing.billQty + 1 }));
+          toast.info(`${pick.itemName} is already on row ${row} — its quantity was bumped by 1.`);
+          window.requestAnimationFrame(() => focusCell(ITEM_GRID_NAME, existing.key, "billQty"));
+          return;
+        }
+        setDuplicatePick({ rowKey, pick, row });
+        return;
       }
       pickedItemRow.current = rowKey;
       void api.pickItem(rowKey, pick.itemId, pick.itemUnitId);
     },
-    [api, draft.lines, itemPickerRow],
+    [api, dispatch, draft.lines, itemPickerRow],
   );
+  const onDuplicateConfirmed = useCallback(() => {
+    const pending = duplicatePick;
+    setDuplicatePick(null);
+    if (!pending) {
+      return;
+    }
+    pickedItemRow.current = pending.rowKey;
+    void api.pickItem(pending.rowKey, pending.pick.itemId, pending.pick.itemUnitId);
+  }, [api, duplicatePick]);
 
   /**
    * Picking an item hands focus back to the grid, on the next stop of the
@@ -772,9 +831,20 @@ export function SaleBillEntryView({
 
   const adjusted = totalAdjusted(draft);
 
-  const openTender = useCallback(() => {
+  /**
+   * F5 on the tender route (§15.1): read-only → refused; the client checks with
+   * `openingTender`; then `/validate` — OK opens with the notes painted, a
+   * refusal keeps it shut (counting money for a bill that cannot post is
+   * wasted), the server away opens anyway (a sale must not stop).
+   */
+  const openTender = useCallback(async () => {
     if (!editable) {
-      return;
+      toast.warn("This bill is read-only.");
+      return false;
+    }
+    const validation = await api.validateForTender();
+    if (validation.status === "refused") {
+      return false;
     }
     // The credits are re-read on the way in: another counter may have spent one
     // since the panel was last opened, and the ceiling this list reports is what
@@ -782,6 +852,7 @@ export function SaleBillEntryView({
     setCreditsLoading(true);
     void api.refreshOpenCredits().finally(() => setCreditsLoading(false));
     setTenderOpen(true);
+    return true;
   }, [api, editable]);
 
   /**
@@ -802,6 +873,23 @@ export function SaleBillEntryView({
    *    debit is what stays open. The settle dialog refuses a short settlement,
    *    so routing a credit bill through it would make one unsavable.
    */
+  /**
+   * The tender route: settle, and the save runs off the dialog's OK. Every
+   * other route saves directly (§15.1, §17.4).
+   */
+  const openTenderThenSave = useCallback(
+    async (print: boolean) => {
+      setSettleThenSave(true);
+      settleThenSaveRef.current = true;
+      settlePrintRef.current = print;
+      const opened = await openTender();
+      if (!opened) {
+        setSettleThenSave(false);
+        settleThenSaveRef.current = false;
+      }
+    },
+    [openTender],
+  );
   const requestSave = useCallback(() => {
     if (!canSaveDoc || !editable) {
       void runSave();
@@ -812,22 +900,12 @@ export function SaleBillEntryView({
       void runSave();
       return;
     }
-    const violation = api.validate();
-    if (violation && !violation.confirm && violation.field !== "sale-bill-tender") {
-      setInvalidCells(
-        violation.lineKey ? { [`${violation.lineKey}:${violation.field}`]: true } : {},
-      );
-      toast.error(violation.message);
+    if (api.tenderRoute) {
+      void openTenderThenSave(false);
       return;
     }
-    if (draft.header.billType === "CREDIT") {
-      void runSave();
-      return;
-    }
-    setSettleThenSave(true);
-    settleThenSaveRef.current = true;
-    openTender();
-  }, [api, canSaveDoc, draft.amending, draft.header.billType, editable, openTender, runSave]);
+    void runSave();
+  }, [api.tenderRoute, canSaveDoc, draft.amending, editable, openTenderThenSave, runSave]);
 
   /**
    * The settle dialog's OK does not save directly: `api.save` reads the draft of
@@ -836,20 +914,18 @@ export function SaleBillEntryView({
    * keyed missing from it. Arming a flag and saving from an effect puts the save
    * one render later — on the draft that HAS the money.
    */
+  /** Whether the settle that Save opened was asked to print after (F6). */
+  const settlePrintRef = useRef(false);
   useEffect(() => {
     if (!settleThenSaveRef.current || tenderOpen) {
       return;
     }
     settleThenSaveRef.current = false;
-    void runSave();
+    void runSave({ print: settlePrintRef.current });
   }, [runSave, tenderOpen]);
 
-  /**
-   * The verb bar and the keymap read ONE state (§17.1). The tender route is
-   * still "a cash bill settles at the counter" until phase 4 reads
-   * `sales.tender_type`; a credit bill and an amend go straight to Save.
-   */
-  const tenderRoute = draft.header.billType !== "CREDIT" && !draft.amending;
+  /** The verb bar and the keymap read ONE state (§17.1); the route is `sales.tender_type` (§15.1). */
+  const tenderRoute = api.tenderRoute;
   const verbs = useMemo(
     () =>
       verbState({
@@ -885,9 +961,7 @@ export function SaleBillEntryView({
       return;
     }
     if (verbs.tender.visible) {
-      setSettleThenSave(true);
-      settleThenSaveRef.current = true;
-      openTender();
+      void openTenderThenSave(true);
       return;
     }
     if (!verbs.saveAndPrint.enabled) {
@@ -901,7 +975,7 @@ export function SaleBillEntryView({
       return;
     }
     void runPost({ print: true });
-  }, [openTender, runPost, runSave, verbs]);
+  }, [openTenderThenSave, runPost, runSave, verbs]);
 
   /** Ctrl+Enter / Ctrl+Shift+Enter: post, with or without the print (§6.3). */
   const onPostFromKeyboard = useCallback(
@@ -962,14 +1036,34 @@ export function SaleBillEntryView({
     void api.deleteDraft();
   }, [api, verbs.delete]);
 
+  /** F4 (§14.3): independent of the tender route and the term. */
   const openAdjust = useCallback(() => {
     if (!editable) {
+      toast.warn("This bill is read-only.");
+      return;
+    }
+    if (!draft.customer.custId) {
+      toast.warn("Pick the customer first — credits belong to a party.");
+      document.getElementById("sale-bill-customer")?.focus();
+      return;
+    }
+    if (pricing.totals.bill <= 0) {
+      toast.warn("There is nothing on this bill to adjust against yet.");
       return;
     }
     setCreditsLoading(true);
     void api.refreshOpenCredits().finally(() => setCreditsLoading(false));
     setAdjustOpen(true);
-  }, [api, editable]);
+  }, [api, draft.customer.custId, editable, pricing.totals.bill]);
+  /** Alt+O (§6.2): the current line's cost. */
+  const showLineCost = useCallback(() => {
+    const text = api.lineCostText(activeRowKey);
+    if (!text) {
+      toast.info("Stand on a line to see its cost.");
+      return;
+    }
+    toast.info(text);
+  }, [activeRowKey, api]);
 
   const applyAdjustments = useCallback(
     (rows: BillAdjustmentRow[], from: "bill" | "tender") => {
@@ -1142,6 +1236,9 @@ export function SaleBillEntryView({
     chargePickerRow !== null ||
     priceLevelPrompt !== null ||
     customerToConfirm !== null ||
+    discountPromptOpen ||
+    pricePromptOpen ||
+    duplicatePick !== null ||
     cancelLineKey !== null ||
     saveQuestion !== null ||
     recovery !== null ||
@@ -1195,6 +1292,8 @@ export function SaleBillEntryView({
     onSaveAndPrint,
     onPostFromKeyboard,
     validateOnServer: api.validateOnServer,
+    openDiscountPrompt: () => setDiscountPromptOpen(true),
+    showLineCost,
     modalOpen,
   };
   const shortcutsRef = useRef(shortcuts);
@@ -1306,6 +1405,14 @@ export function SaleBillEntryView({
           if (event.altKey && (event.key === "y" || event.key === "Y")) {
             event.preventDefault();
             current.copyAsNew();
+          } else if (event.altKey && (event.key === "d" || event.key === "D")) {
+            // Alt+D — Disc % All (§6.2).
+            event.preventDefault();
+            current.openDiscountPrompt();
+          } else if (event.altKey && (event.key === "o" || event.key === "O")) {
+            // Alt+O — the current line's cost (§6.2).
+            event.preventDefault();
+            current.showLineCost();
           }
           break;
       }
@@ -1326,6 +1433,10 @@ export function SaleBillEntryView({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [draft.isDirty]);
 
+  const activeLine = useMemo(
+    () => (activeRowKey ? draft.lines.find((line) => line.key === activeRowKey) ?? null : null),
+    [activeRowKey, draft.lines],
+  );
   const usedItemIds = useMemo(
     () => draft.lines.map((line) => line.itemId).filter(Boolean),
     [draft.lines],
@@ -1422,6 +1533,31 @@ export function SaleBillEntryView({
         </div>
       </header>
 
+      <BillQuickStrip
+        editable={editable}
+        posted={draft.status === "POSTED"}
+        isNew={draft.isNewEntry}
+        hasLines={draft.lines.some((line) => Boolean(line.itemId))}
+        onQuickAddCustomer={() => {
+          document.getElementById("sale-bill-customer")?.focus();
+          toast.info("Alt+C on the customer field adds a customer without leaving the bill.");
+        }}
+        onImportQuotation={() => guardedRun("importQuotation")}
+        onImportOrder={() => guardedRun("importOrder")}
+        onImportChallan={() => toast.info("Challan import arrives with the Open Sources dialog.")}
+        onDiscountAll={() => setDiscountPromptOpen(true)}
+        onAdjustPrices={() => setPricePromptOpen(true)}
+        onShowCost={showLineCost}
+        onShipping={() => toast.info("The shipping dialog arrives with the transport band.")}
+        onEinvoice={() => toast.info("e-Invoice actions arrive with the GST band.")}
+        onEwaybill={() => toast.info("e-Way actions arrive with the GST band.")}
+        onCopyAsNew={api.copyAsNew}
+        einvoiceLabel="e-Inv"
+        ewaybillLabel="e-Way"
+        einvoiceEnabled={false}
+        ewaybillEnabled={false}
+        shippingSummary="Not filled — opens itself when the e-way rule needs it"
+      />
       {/*
         One stop of the F1 panel walk (`section-focus.ts`). The whole header is
         ONE panel, not four: its columns are a single hand-laid-out row that the
@@ -1439,6 +1575,16 @@ export function SaleBillEntryView({
           header={draft.header}
           fields={visibleFields}
           disabled={!editable}
+          // One derived flag per bill-to field (§7.7): only the walk-in's
+          // snapshot is typeable, and an imported bill locks the customer
+          // unless the setting allows the change.
+          billToEditable={api.isWalkIn && !customerLocked}
+          customerLocked={customerLocked}
+          customerLockReason={
+            customerLocked
+              ? `Imported from ${draft.source?.refno ?? "another document"} — the customer belongs to that document and can't be changed here.`
+              : undefined
+          }
           sourceNote={
             draft.source
               ? `Raised from ${draft.source.refno ?? "another document"}: the imported prices were quoted to the customer below, so re-check them if you repoint the bill at somebody else.`
@@ -1454,6 +1600,7 @@ export function SaleBillEntryView({
           priceLevelOptions={priceLevelOptions}
           fields={visibleFields}
           disabled={!editable}
+          termLocked={!api.settings.allowPaymentTermChange}
           onSetHeader={(field, value) => dispatch(headerFieldSet({ field, value }))}
         />
         <BillPeopleBlock
@@ -1465,15 +1612,18 @@ export function SaleBillEntryView({
           onSetHeader={(field, value) => dispatch(headerFieldSet({ field, value }))}
         />
         {/*
-          The credit column is the sale ORDER's component, fed this screen's
-          config: its rows are addressed by their shipped label, which
-          `SALE_BILL_CREDIT_FIELD_KEYS` maps back to the bill's own field keys.
+          The credit column (§7.4), painted from `/bills/party-context` — never
+          a verdict computed here. Its rows are addressed by their shipped
+          label, which `SALE_BILL_CREDIT_FIELD_KEYS` maps back to the bill's own
+          field keys.
         */}
-        <BillCreditBlock
-          credit={draft.partyCredit}
+        <BillCreditPanel
+          party={draft.party}
           hasCustomer={Boolean(draft.customer.custId)}
+          loyaltyTicked={draft.header.hasLoyalty}
           fields={creditFields}
         />
+        <BillFactsLine party={draft.party} customer={draft.customer} isLocalSale={draft.isLocalSale} />
       </div>
 
       <div className={quotationStyles.gridsRow}>
@@ -1614,6 +1764,26 @@ export function SaleBillEntryView({
       </div>
 
       <TotalsFooterStats totals={pricing.totals} />
+      <div className={styles.statsLine}>
+        {activeLine?.itemId ? (
+          <span>
+            Stock: {activeLine.stockQty ?? "—"} {activeLine.unitName}
+            {activeLine.actualPrice > 0 && Math.abs(activeLine.rate - activeLine.actualPrice) >= 0.005 && !activeLine.isFree ? (
+              <span
+                className={activeLine.rate > activeLine.actualPrice ? styles.rateVarianceUp : styles.rateVarianceDown}
+                title="Rate against the list price"
+              >
+                {" "}
+                {activeLine.rate > activeLine.actualPrice ? "+" : "−"}
+                {formatCurrency(Math.abs(activeLine.rate - activeLine.actualPrice), 2, true)}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
+        <span title={api.promotionHintText}>
+          Promotions: {draft.header.hasPromo ? "on ⓘ" : "off"}
+        </span>
+      </div>
 
       <WarningStrip notes={draft.notes} onView={() => api.setNotesPopupOpen(true)} />
 
@@ -1823,6 +1993,59 @@ export function SaleBillEntryView({
           setSettleThenSave(false);
           setTenderOpen(false);
         }}
+      />
+
+      {/* §6.2 — Disc % All and ± Price. */}
+      <AskText
+        isOpen={discountPromptOpen}
+        title="Disc % on every line"
+        message="For every line that is not free: the per-qty and amount tiers are cleared and this percentage is set."
+        label="Discount %"
+        placeholder="0 – 100"
+        required
+        maxLength={6}
+        confirmLabel="Apply"
+        onCancel={() => setDiscountPromptOpen(false)}
+        onConfirm={(value) => {
+          const perc = parseCell(value);
+          if (perc < 0 || perc > 100) {
+            toast.error("Enter a percentage from 0 to 100.");
+            return;
+          }
+          setDiscountPromptOpen(false);
+          api.discountAll(perc);
+        }}
+      />
+      <AskText
+        isOpen={pricePromptOpen}
+        title="Adjust every rate"
+        message="rate × (1 + p / 100) on every line that is not free. −100 to 100; 0 changes nothing. MRP and minimum checks apply at save."
+        label="Change %"
+        placeholder="−100 … 100"
+        required
+        maxLength={7}
+        confirmLabel="Apply"
+        onCancel={() => setPricePromptOpen(false)}
+        onConfirm={(value) => {
+          const perc = parseCell(value);
+          if (perc < -100 || perc > 100) {
+            toast.error("Enter a percentage from −100 to 100.");
+            return;
+          }
+          setPricePromptOpen(false);
+          api.adjustPrices(perc);
+        }}
+      />
+      <DeleteConfirmModal
+        isOpen={duplicatePick !== null}
+        title="Add it again?"
+        itemName={duplicatePick?.pick.itemName}
+        message={`This item is already on row ${duplicatePick?.row ?? ""}. Add it again?`}
+        iconVariant="replace"
+        confirmLabel="Add again"
+        cancelLabel="No"
+        onCancel={() => setDuplicatePick(null)}
+        onConfirm={onDuplicateConfirmed}
       />
 
       {/*

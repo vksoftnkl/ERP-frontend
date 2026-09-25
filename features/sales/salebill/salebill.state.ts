@@ -36,10 +36,13 @@ import {
 import type {
   BillPeople,
   BillSettlement,
+  PartyContext,
   SaleBillDraft,
   SaleBillDraftLine,
   SaleBillHeader,
   SaleBillTerms,
+  TransportBand,
+  TransportEnd,
 } from "./salebill.types";
 
 // ---------------------------------------------------------------------------
@@ -124,11 +127,62 @@ export function emptyBillHeader(billDate: string, billDatetime: string): SaleBil
     hasLoyalty: false,
     priceLevel: 1,
     billMode: DEFAULT_BILL_MODE,
+    custPan: null,
+    form60Ref: null,
+    loyaltyMemberId: null,
+    custPin: null,
   };
 }
 
 export function emptyBillTerms(): SaleBillTerms {
   return { remarks: "", paymentTerms: "", deliveryTerms: "", termsConditions: "" };
+}
+
+export function emptyTransportEnd(): TransportEnd {
+  return {
+    godownId: null,
+    branchId: null,
+    addrId: null,
+    name: null,
+    addr: null,
+    place: null,
+    pin: null,
+    phone: null,
+    stcd: null,
+    gstin: null,
+  };
+}
+
+/** The band with nothing in it — "as the bill-to", dispatched from the branch (§20). */
+export function emptyTransportBand(): TransportBand {
+  return {
+    from: emptyTransportEnd(),
+    to: emptyTransportEnd(),
+    mode: "",
+    transporterId: null,
+    transporterName: null,
+    transporterGstin: null,
+    lrNo: null,
+    lrDate: null,
+    distanceKm: null,
+  };
+}
+
+/** Whether the band says anything at all — an empty one is never written. */
+export function transportBandIsEmpty(band: TransportBand): boolean {
+  const end = (value: TransportEnd) =>
+    Object.values(value).every((field) => field === null || field === "");
+  return (
+    end(band.from) &&
+    end(band.to) &&
+    !band.mode &&
+    !band.transporterId &&
+    !band.transporterName &&
+    !band.transporterGstin &&
+    !band.lrNo &&
+    !band.lrDate &&
+    (band.distanceKm === null || band.distanceKm === 0)
+  );
 }
 
 export type BillDraftContext = {
@@ -195,9 +249,104 @@ export function createBillDraft(context: BillDraftContext): SaleBillDraft {
     adjustmentsTouched: false,
     openCredits: [],
     settlement: emptySettlement(),
-    partyCredit: null,
+    party: null,
+    creditAlertPending: false,
+    transport: emptyTransportBand(),
+    transportRequired: null,
     holdId: null,
     holdNo: "",
+  };
+}
+
+/**
+ * Clear (F7) in every state = start a new bill (§17.11): the document state,
+ * the party, the strip, the grids and the settlement all go; the tenant and
+ * the company state stay; the CREW stays unless `sales.clear_delivery_on_clear`
+ * — a trip bills many customers with the same van. The agent is always
+ * cleared.
+ */
+export function resetBillDraft(
+  draft: SaleBillDraft,
+  context: BillDraftContext,
+  options: { keepCrew: boolean },
+): SaleBillDraft {
+  const fresh = createBillDraft(context);
+  if (!options.keepCrew) {
+    return fresh;
+  }
+  return {
+    ...fresh,
+    header: {
+      ...fresh.header,
+      people: {
+        ...draft.header.people,
+        agentId: null,
+        agentName: "",
+      },
+    },
+  };
+}
+
+/**
+ * Disc % All (Alt+D, §6.2): for every non-free line clear the per-qty and
+ * amount tiers, then set Disc %. Blank rows are left alone.
+ */
+export function applyDiscountToAllLines(
+  lines: readonly SaleBillDraftLine[],
+  perc: number,
+): SaleBillDraftLine[] {
+  const value = Math.min(100, Math.max(0, Math.round(perc * 100) / 100));
+  return lines.map((line) =>
+    line.itemId && !line.isFree
+      ? { ...line, discPerc: value, discPerQty: 0, discAmt: 0 }
+      : line,
+  );
+}
+
+/**
+ * ± Price (§6.2): `rate *= 1 + p/100` on non-free lines, −100…100, 0 = no-op.
+ * MRP and minimum checks apply at save, not here.
+ */
+export function adjustLinePrices(
+  lines: readonly SaleBillDraftLine[],
+  perc: number,
+): SaleBillDraftLine[] {
+  const value = Math.min(100, Math.max(-100, perc));
+  if (!value) {
+    return [...lines];
+  }
+  return lines.map((line) =>
+    line.itemId && !line.isFree
+      ? { ...line, rate: Math.round(line.rate * (1 + value / 100) * 100) / 100 }
+      : line,
+  );
+}
+
+/**
+ * What party-context writes, and ONLY what it writes (§7.1: one writer per
+ * field). Customer-detail owns the address, the state and the option ticks;
+ * this owns the credit standing, the loyalty membership, and the party's
+ * `creditAllowed` — which overrides the customer-detail flag, because a loaded
+ * bill never runs customer-detail (§7.3).
+ */
+export function applyPartyContext(draft: SaleBillDraft, context: PartyContext): SaleBillDraft {
+  return {
+    ...draft,
+    party: context,
+    customer: {
+      ...draft.customer,
+      debitAllowed: context.party.creditAllowed,
+      // Fallbacks only: customer-detail already wrote these on a pick, and a
+      // loaded bill carries its own snapshot.
+      areaId: draft.customer.areaId ?? context.party.areaId,
+      areaName: draft.customer.areaName ?? context.party.areaName,
+      distanceKm: draft.customer.distanceKm ?? context.party.distanceKm,
+    },
+    header: {
+      ...draft.header,
+      loyaltyMemberId: context.loyalty?.memberId ?? null,
+      custPin: draft.header.custPin ?? context.party.pin,
+    },
   };
 }
 
@@ -482,7 +631,8 @@ export function clearCustomerBoundState(draft: SaleBillDraft): SaleBillDraft {
     // credit against this bill.
     openCredits: [],
     settlement: emptySettlement(),
-    partyCredit: null,
+    party: null,
+    creditAlertPending: false,
     freightBands: [],
   };
 }
@@ -557,6 +707,13 @@ export function copyBillDraftAsNew(
     adjustmentsTouched: false,
     openCredits: draft.openCredits,
     settlement: emptySettlement(),
+    // Re-read by the caller: the party's standing is judged as of today.
+    party: null,
+    creditAlertPending: false,
+    // A copy is a fresh consignment: the band, the identity box and the
+    // shipping "required" mark belong to the bill being copied.
+    transport: emptyTransportBand(),
+    transportRequired: null,
     holdId: null,
     holdNo: "",
     storedPricing: null,

@@ -361,7 +361,7 @@ describe("clearCustomerBoundState", () => {
     expect(cleared.settlement.tenderAmt).toBe(0);
     expect(cleared.settlement.adjustedAmt).toBe(0);
     expect(cleared.settlement.refundAmt).toBe(0);
-    expect(cleared.partyCredit).toBeNull();
+    expect(cleared.party).toBeNull();
     expect(cleared.freightBands).toEqual([]);
     // The offered list goes too: it was an answer about the party being
     // replaced, and leaving it would let the panel adjust another customer's
@@ -738,5 +738,86 @@ describe("lineDuplicated — the two shapes of Alt+R", () => {
   it("ignores a row key that is not on the bill", () => {
     const state = draftWith(filled());
     expect(saleBillReducer(state, lineDuplicated("nope"))).toBe(state);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 2 additions: Clear keeps the crew, the quick-strip transforms, and
+// what party-context is allowed to write (§7.1, §7.9, §6.2, §17.11)
+// ---------------------------------------------------------------------------
+
+describe("resetBillDraft — Clear (F7) in every state", () => {
+  it("keeps the crew but never the agent when the setting says so, else drops everything", async () => {
+    const { resetBillDraft } = await import("./salebill.state");
+    const base = createBillDraft(CONTEXT);
+    const worked: SaleBillDraft = {
+      ...base,
+      isDirty: true,
+      customer: { ...base.customer, custId: "cust-1", name: "ACME" },
+      header: {
+        ...base.header,
+        people: { ...base.header.people, salesmanId: "emp-1", salesmanName: "RAVI", driverId: "emp-2", driverName: "MANI", agentId: "ag-1", agentName: "AGENT", vehicleNo: "TN01AB1234" },
+      },
+    };
+    const kept = resetBillDraft(worked, CONTEXT, { keepCrew: true });
+    expect(kept.customer.custId).toBeNull();
+    expect(kept.header.people.salesmanId).toBe("emp-1");
+    expect(kept.header.people.driverName).toBe("MANI");
+    expect(kept.header.people.vehicleNo).toBe("TN01AB1234");
+    expect(kept.header.people.agentId).toBeNull();
+    expect(kept.isDirty).toBe(false);
+    const dropped = resetBillDraft(worked, CONTEXT, { keepCrew: false });
+    expect(dropped.header.people.salesmanId).toBeNull();
+  });
+});
+
+describe("Disc % All and ± Price (§6.2)", () => {
+  it("Disc % All clears the per-qty and amount tiers on every non-free line", async () => {
+    const { applyDiscountToAllLines } = await import("./salebill.state");
+    const lines = applyDiscountToAllLines(
+      [
+        createBillDraftLine({ itemId: "i1", discPerQty: 5, discAmt: 20 }),
+        createBillDraftLine({ itemId: "i2", isFree: true, discPerc: 3 }),
+        createBillDraftLine(),
+      ],
+      12.345,
+    );
+    expect(lines[0]).toMatchObject({ discPerc: 12.35, discPerQty: 0, discAmt: 0 });
+    expect(lines[1].discPerc).toBe(3);
+    expect(lines[2].discPerc).toBe(0);
+  });
+
+  it("± Price scales the rate on non-free lines; 0 is a no-op", async () => {
+    const { adjustLinePrices } = await import("./salebill.state");
+    const lines = [createBillDraftLine({ itemId: "i1", rate: 100 }), createBillDraftLine({ itemId: "i2", isFree: true, rate: 0 })];
+    expect(adjustLinePrices(lines, 10)[0].rate).toBe(110);
+    expect(adjustLinePrices(lines, -10)[0].rate).toBe(90);
+    expect(adjustLinePrices(lines, 10)[1].rate).toBe(0);
+    expect(adjustLinePrices(lines, 0)[0].rate).toBe(100);
+  });
+});
+
+describe("applyPartyContext — one writer per field (§7.1)", () => {
+  it("writes the standing, `creditAllowed` and the loyalty member, and only falls back on the rest", async () => {
+    const { applyPartyContext } = await import("./salebill.state");
+    const { parsePartyContext } = await import("./salebill.party");
+    const base = createBillDraft(CONTEXT);
+    const draft: SaleBillDraft = {
+      ...base,
+      customer: { ...base.customer, custId: "cust-1", name: "ACME", debitAllowed: false, areaId: "area-keyed" },
+    };
+    const context = parsePartyContext(
+      { data: { party: { ledId: "cust-1", creditAllowed: true, areaId: "area-ctx", pin: "600001" }, credit: { mode: "WARN" }, loyalty: { memberId: "mem-1" } } },
+      "cust-1",
+      "2026-09-12",
+    );
+    const next = applyPartyContext(draft, context);
+    expect(next.party?.credit.mode).toBe("WARN");
+    expect(next.customer.debitAllowed).toBe(true);
+    expect(next.customer.areaId).toBe("area-keyed");
+    expect(next.header.loyaltyMemberId).toBe("mem-1");
+    expect(next.header.custPin).toBe("600001");
+    // Customer-detail's own fields are untouched.
+    expect(next.customer.name).toBe("ACME");
   });
 });

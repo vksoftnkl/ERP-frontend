@@ -63,7 +63,7 @@ export const BILL_FIELDS_AS_AUTHORED: BillFields = {
   isVisible: () => true,
   labelFor: (key) => SALE_BILL_HEADER_FIELD_NAMES[key],
 };
-export { OrderCreditBlock as BillCreditBlock } from "@/features/sales/sale-order/components/order-header-blocks";
+export { BillCreditPanel, BillFactsLine } from "./bill-credit-panel";
 // ---------------------------------------------------------------------------
 // Customer
 // ---------------------------------------------------------------------------
@@ -71,6 +71,16 @@ export type BillCustomerBlockProps = {
   customer: CustomerSnapshot;
   header: SaleBillHeader;
   disabled: boolean;
+  /**
+   * The bill-to snapshot is typeable ONLY for the walk-in (§7.7): every other
+   * customer's snapshot is filled from the master and disabled. One derived
+   * flag — `walkIn && !importLocked && mode === 'entry'` — not two locks
+   * fighting over one property.
+   */
+  billToEditable: boolean;
+  /** A bill with a source document locks Customer (and Beat) unless the setting allows (§7.7). */
+  customerLocked: boolean;
+  customerLockReason?: string;
   /**
    * Shown as a title on the block while the bill was raised from another
    * document (§13), as a caution rather than a lock: the imported prices were
@@ -88,18 +98,23 @@ export function BillCustomerBlock({
   customer,
   header,
   disabled,
+  billToEditable,
+  customerLocked,
+  customerLockReason,
   sourceNote,
   fields,
   onRequestCustomer,
   onSetCustomerField,
   onSetPos,
 }: BillCustomerBlockProps) {
+  const snapshotDisabled = disabled || !billToEditable;
+  const lockTitle = !disabled && !billToEditable ? "Filled from the customer master — only the walk-in's bill-to is typeable." : undefined;
   // Configured dropdowns are named, not numbered — the registry answers with
   // this deployment's id (see lib/configured-dropdowns).
   const customerDropdownId = useDropdownId(CUSTOMER_DROPDOWN_KEY);
   const posDropdownId = useDropdownId(POS_DROPDOWN_KEY);
   return (
-    <div className={styles.fieldGrid} title={sourceNote}>
+    <div className={styles.fieldGrid} title={customerLocked ? customerLockReason : sourceNote}>
       {fields.isVisible("existingCustomer") ? (
         <DropdownCombo
           id="sale-bill-customer"
@@ -109,7 +124,7 @@ export function BillCustomerBlock({
           labelKey="cus_name"
           value={customer.custId ?? ""}
           selectedLabel={customer.masterName}
-          disabled={disabled}
+          disabled={disabled || customerLocked}
           placeholder="Search customers…"
           onSelect={onRequestCustomer}
         />
@@ -128,7 +143,8 @@ export function BillCustomerBlock({
           id="sale-bill-customer-name"
           label={fields.labelFor("customerName")}
           value={customer.name}
-          disabled={disabled}
+          disabled={snapshotDisabled}
+          title={lockTitle}
           required
           maxLength={200}
           onChange={(value) => onSetCustomerField("name", value.toUpperCase())}
@@ -139,7 +155,8 @@ export function BillCustomerBlock({
           id="sale-bill-customer-address"
           label={fields.labelFor("address")}
           value={customer.address ?? ""}
-          disabled={disabled}
+          disabled={snapshotDisabled}
+          title={lockTitle}
           maxLength={500}
           onChange={(value) => onSetCustomerField("address", value)}
         />
@@ -149,7 +166,8 @@ export function BillCustomerBlock({
           id="sale-bill-customer-place"
           label={fields.labelFor("place")}
           value={customer.place ?? ""}
-          disabled={disabled}
+          disabled={snapshotDisabled}
+          title={lockTitle}
           maxLength={100}
           onChange={(value) => onSetCustomerField("place", value)}
         />
@@ -159,7 +177,8 @@ export function BillCustomerBlock({
           id="sale-bill-customer-phone"
           label={fields.labelFor("phone")}
           value={customer.phone ?? ""}
-          disabled={disabled}
+          disabled={snapshotDisabled}
+          title={lockTitle}
           maxLength={20}
           onChange={(value) => onSetCustomerField("phone", value)}
         />
@@ -169,7 +188,8 @@ export function BillCustomerBlock({
           id="sale-bill-customer-gstin"
           label={fields.labelFor("gstin")}
           value={customer.gstin ?? ""}
-          disabled={disabled}
+          disabled={snapshotDisabled}
+          title={lockTitle}
           maxLength={15}
           onChange={(value) => onSetCustomerField("gstin", value.toUpperCase())}
         />
@@ -215,6 +235,8 @@ export type BillInfoBlockProps = {
   billRefno: string;
   priceLevelOptions: ReadonlyArray<{ value: string; label: string }>;
   disabled: boolean;
+  /** `sales.allow_payment_term_change` is off: the term is the customer's own (§7.6). */
+  termLocked: boolean;
   fields: BillFields;
   onSetHeader: (field: keyof SaleBillHeader, value: string | number | boolean) => void;
 };
@@ -223,6 +245,7 @@ export function BillInfoBlock({
   billRefno,
   priceLevelOptions,
   disabled,
+  termLocked,
   fields,
   onSetHeader,
 }: BillInfoBlockProps) {
@@ -288,8 +311,13 @@ export function BillInfoBlock({
           id="sale-bill-type"
           label={fields.labelFor("billType")}
           value={header.billType}
-          disabled={disabled}
-          options={BILL_TYPES.map((type) => ({ value: type, label: type }))}
+          disabled={disabled || termLocked}
+          title={
+            termLocked
+              ? "The customer's own term — changing it is off for this branch (Allow payment term change)."
+              : undefined
+          }
+          options={BILL_TYPES.map((type) => ({ value: type, label: type === "CASH" ? "Cash" : "Credit" }))}
           onChange={(value) => onSetHeader("billType", value)}
         />
       ) : null}
@@ -298,21 +326,23 @@ export function BillInfoBlock({
         date: editing either re-derives the other. Both are disabled outright on
         a cash bill, because there is no period to state.
       */}
-      {fields.isVisible("dueDays") ? (
+      {/* Due days show only on Credit (§7.6): 0–3650, defaulting to the
+          party's credit days; `dueDate = billDate + dueDays`. */}
+      {fields.isVisible("dueDays") && isCredit ? (
         <NumberField
           id="sale-bill-due-days"
           label={fields.labelFor("dueDays")}
           value={header.dueDays}
-          disabled={disabled || !isCredit}
-          onChange={(value) => onSetHeader("dueDays", value)}
+          disabled={disabled}
+          onChange={(value) => onSetHeader("dueDays", Math.min(3650, Math.max(0, value)))}
         />
       ) : null}
-      {fields.isVisible("dueDate") ? (
+      {fields.isVisible("dueDate") && isCredit ? (
         <DateField
           id="sale-bill-due-date"
           label={fields.labelFor("dueDate")}
           value={header.dueDate}
-          disabled={disabled || !isCredit}
+          disabled={disabled}
           onChange={(value) => onSetHeader("dueDate", value)}
         />
       ) : null}
