@@ -216,6 +216,7 @@ import {
   adjustmentsForWire,
   billKeyOf,
   buildAmendBody,
+  bareBillKey,
   buildPostBody,
   buildSavePayload,
   buildValidateBody,
@@ -1917,7 +1918,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     async (key: BillKey, reason: string) => {
       const refno = draftRef.current.billRefno || "this bill";
       try {
-        await deleteBillMutation(key).unwrap();
+        await deleteBillMutation(bareBillKey(key)).unwrap();
         dispatch(draftDisowned());
         toast.error(
           `The bill could NOT be posted:\n\n${reason}\n\nNothing was saved — correct it and press Save again.`,

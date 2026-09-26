@@ -682,6 +682,20 @@ export function buildValidateBody(payload: SaveBillDto, overrides: readonly stri
 }
 
 /**
+ * The four keys and nothing else. Callers hand in a `SavedBillRef` (the keys +
+ * `billRefno`) where a `BillKey` is typed, and the server's whitelist 400s on
+ * any extra property — so a key is copied field by field before it goes out.
+ */
+export function bareBillKey(key: BillKey): BillKey {
+  return {
+    sbId: key.sbId,
+    sbCompanyId: key.sbCompanyId,
+    sbBranchId: key.sbBranchId,
+    sbAccYear: key.sbAccYear,
+  };
+}
+
+/**
  * `POST /bills/post`: the keys only — it posts what the server HOLDS (§17.5).
  * `adjustments` is sent whenever the draft has them (§14.4).
  */
@@ -691,7 +705,7 @@ export function buildPostBody(
 ): PostBillDto {
   const codes = dedupeCodes(options.overrides ?? []);
   return {
-    ...key,
+    ...bareBillKey(key),
     ...(codes ? { overrides: codes } : {}),
     ...(options.printAfter ? { printAfter: true } : {}),
     ...(options.adjustments !== undefined ? { adjustments: options.adjustments } : {}),
