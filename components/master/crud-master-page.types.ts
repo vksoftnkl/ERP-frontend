@@ -238,6 +238,14 @@ export type CrudMasterPageProps = {
    */
   onDeleteAction?: (row: MasterTableRow) => boolean | Promise<boolean>;
   /**
+   * The delete dialog's own words. The shell asks "Do you really want to
+   * delete this record?" and names the row; a page whose delete takes more
+   * with it — a user's menu rights go with the user — says so here instead.
+   * Given a function, it is called with the row about to be deleted.
+   */
+  deleteConfirmMessage?: string | ((row: MasterTableRow) => string);
+  deleteConfirmNote?: string | ((row: MasterTableRow) => string);
+  /**
    * Bind the list's function keys, and say so under the grid.
    *
    * OFF by default: these are keys the whole window listens for, and a page

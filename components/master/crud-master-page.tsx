@@ -2458,6 +2458,8 @@ export default function CrudMasterPage({
   afterSubmitSuccess,
   afterDeleteSuccess,
   onCrudControllerReady,
+  deleteConfirmMessage,
+  deleteConfirmNote,
   hideListPage = false,
   hideRowsWhenAllGridColumnFiltersDisabled = false,
   onModalOpenChange,
@@ -4804,6 +4806,20 @@ export default function CrudMasterPage({
           isOpen={pendingDeleteRow !== null}
           itemName={pendingDeleteLabel}
           title={`Delete ${effectiveTitle}?`}
+          message={
+            typeof deleteConfirmMessage === "function"
+              ? pendingDeleteRow
+                ? deleteConfirmMessage(pendingDeleteRow)
+                : undefined
+              : deleteConfirmMessage
+          }
+          note={
+            typeof deleteConfirmNote === "function"
+              ? pendingDeleteRow
+                ? deleteConfirmNote(pendingDeleteRow)
+                : undefined
+              : deleteConfirmNote
+          }
           confirmLabel="Delete"
           cancelLabel="Cancel"
           loading={deleteLoading}

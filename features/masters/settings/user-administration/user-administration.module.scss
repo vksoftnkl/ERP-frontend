@@ -1,0 +1,550 @@
+/* User Administration — the entry dialog's own skin.
+   The panel, header, tab strip, footer and buttons are the shared modal
+   module's (dynamic-modal-form.module.scss) under the master-shell skin
+   (`.erp-ms-modal*`); this file holds only what those do not: the two tabs. */
+
+/* The panel's size is inline (see the dialog): the shell's 460px rule is a
+   two-class selector nothing here outranks. */
+.panel {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header, tab strip and footer keep their height; only the body flexes. */
+.fixedBand {
+  flex: 0 0 auto;
+}
+
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.tabBadge {
+  margin-left: 0.3rem;
+}
+
+.readOnlyTag {
+  margin-left: 0.6rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+
+.footerHint {
+  margin: 0;
+  min-width: 0;
+  color: var(--erp-ms-ink-faint, #888);
+  font-size: 11.5px;
+}
+
+.footerBanner {
+  margin: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  color: #b00;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ── Identity tab ───────────────────────────────────────────────────────── */
+
+.identityBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 28px;
+}
+
+.group {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding-bottom: 12px;
+}
+
+.groupWide {
+  grid-column: 1 / -1;
+}
+
+.groupTitle {
+  margin: 4px 0 2px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--erp-ms-line-soft, #e3e3e3);
+  color: var(--erp-ms-accent, #7e1717);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.fieldError {
+  grid-column: 2;
+  margin: 0;
+  color: #b00;
+  font-size: 11.5px;
+}
+
+.controlInvalid {
+  border-color: #b00 !important;
+}
+
+.passwordRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.passwordRow > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.revealButton {
+  flex: 0 0 auto;
+  height: var(--erp-modal-control-height, 1.7rem);
+  padding: 0 8px;
+  border: 1px solid var(--erp-ms-line, #c9c9c9);
+  background: var(--erp-ms-paper, #fff);
+  color: var(--erp-ms-ink-soft, #555);
+  font-size: 11.5px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--erp-ms-bg, #f2f2f2);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+
+.select {
+  appearance: auto;
+  height: var(--erp-modal-control-height, 1.7rem);
+  padding-block: 0 !important;
+}
+
+.dropdownField input {
+  height: var(--erp-modal-control-height, 1.7rem);
+  padding-top: 0;
+  padding-bottom: 0;
+  border-color: var(--erp-ms-line, #c9c9c9);
+  border-radius: var(--erp-radius, 2px);
+  font-size: 13px;
+
+  &:focus {
+    border-color: var(--erp-ms-accent, #7e1717);
+    box-shadow: none;
+  }
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  color: var(--erp-ms-ink, #222);
+  font-size: 13px;
+  cursor: pointer;
+
+  input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: var(--erp-ms-accent, #7e1717);
+  }
+}
+
+.checkDisabled {
+  cursor: default;
+  color: var(--erp-ms-ink-faint, #888);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--erp-ms-line-soft, #e3e3e3);
+  background: var(--erp-ms-bg, #f2f2f2);
+  font-size: 12px;
+}
+
+.factLabel {
+  display: block;
+  color: var(--erp-ms-ink-faint, #888);
+  font-size: 11px;
+}
+
+.factValue {
+  display: block;
+  color: var(--erp-ms-ink, #222);
+  font-weight: 600;
+}
+
+.factLocked {
+  color: #b00;
+}
+
+.factNote {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--erp-ms-ink-faint, #888);
+  font-size: 11px;
+}
+
+/* ── Permissions tab ────────────────────────────────────────────────────── */
+
+.permBody {
+  --perm-columns: minmax(14rem, 1fr) repeat(11, 5rem);
+  --perm-row-height: 26px;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--erp-ms-paper, #fff);
+}
+
+.permToolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--erp-ms-line-soft, #e3e3e3);
+  background: var(--erp-ms-bg, #f2f2f2);
+}
+
+.permFilter {
+  width: 15rem;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--erp-ms-line, #c9c9c9);
+  background: var(--erp-ms-paper, #fff);
+  font-size: 12.5px;
+
+  &:focus {
+    outline: none;
+    border-color: var(--erp-ms-accent, #7e1717);
+  }
+}
+
+.permButton {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--erp-ms-line, #c9c9c9);
+  background: var(--erp-ms-paper, #fff);
+  color: var(--erp-ms-ink-soft, #555);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--erp-ms-hover, #f6f6f6);
+    color: var(--erp-ms-ink, #222);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+}
+
+.permSpacer {
+  flex: 1 1 auto;
+}
+
+.permCount {
+  color: var(--erp-ms-ink-soft, #555);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.permCountKept {
+  color: var(--erp-ms-ink-faint, #888);
+}
+
+.permHold {
+  margin: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid #e8c5c2;
+  background: #fbedec;
+  color: #7e1717;
+  font-size: 12px;
+}
+
+.permHint {
+  margin: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--erp-ms-line-soft, #e3e3e3);
+  background: #f3f7f2;
+  color: #2f5d2f;
+  font-size: 12px;
+}
+
+.gridScroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.gridInner {
+  min-width: max-content;
+}
+
+.gridHead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: var(--perm-columns);
+  align-items: center;
+  height: 30px;
+  border-bottom: 1px solid var(--erp-ms-line, #c9c9c9);
+  background: var(--erp-ms-head, #ededed);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--erp-ms-ink-soft, #555);
+}
+
+.gridHeadMenu {
+  padding: 0 10px;
+}
+
+.gridHeadCell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  border-left: 1px solid var(--erp-ms-line-soft, #e3e3e3);
+  padding: 0 2px;
+  white-space: nowrap;
+  cursor: pointer;
+
+  input {
+    width: 13px;
+    height: 13px;
+    margin: 0;
+    accent-color: var(--erp-ms-accent, #7e1717);
+  }
+}
+
+.gridRows {
+  position: relative;
+}
+
+.gridRow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: var(--perm-columns);
+  align-items: center;
+  height: var(--perm-row-height);
+  border-bottom: 1px solid var(--erp-ms-line-soft, #e3e3e3);
+  background: var(--erp-ms-paper, #fff);
+  font-size: 12.5px;
+
+  &:hover {
+    background: var(--erp-ms-hover, #f6f6f6);
+  }
+}
+
+.gridRowAlt {
+  background: #fafafa;
+}
+
+.gridRowTicked {
+  background: var(--erp-ms-selected, #f7ecec);
+}
+
+.menuCell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.caret {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--erp-ms-ink-faint, #888);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.caretSpacer {
+  flex: 0 0 auto;
+  width: 16px;
+}
+
+.menuTick {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--erp-ms-accent, #7e1717);
+}
+
+.menuLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menuLabelParent {
+  font-weight: 600;
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  border-left: 1px solid var(--erp-ms-line-soft, #e3e3e3);
+
+  input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: var(--erp-ms-accent, #7e1717);
+  }
+}
+
+/* A verb this screen does not have: no box, only a faint mark so the row
+   does not look unfinished. */
+.cellNone {
+  color: #d0d0d0;
+  font-size: 10px;
+  user-select: none;
+}
+
+.contextMenu {
+  position: fixed;
+  z-index: var(--erp-z-popup);
+  min-width: 13rem;
+  padding: 4px 0;
+  border: 1px solid var(--erp-ms-line, #c9c9c9);
+  background: var(--erp-ms-paper, #fff);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: 12.5px;
+}
+
+.contextMenuTitle {
+  margin: 0;
+  padding: 4px 12px 6px;
+  color: var(--erp-ms-ink-faint, #888);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.contextMenuItem {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--erp-ms-ink, #222);
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--erp-ms-selected, #f7ecec);
+  }
+}
+
+/* ── Copy-rights picker ─────────────────────────────────────────────────── */
+
+.pickerSearch {
+  width: 100%;
+  height: 28px;
+  margin-bottom: 8px;
+  padding: 0 8px;
+  border: 1px solid var(--erp-ms-line, #c9c9c9);
+  font-size: 13px;
+
+  &:focus {
+    outline: none;
+    border-color: var(--erp-ms-accent, #7e1717);
+  }
+}
+
+.pickerList {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pickerRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--erp-ms-line-soft, #e3e3e3);
+  background: var(--erp-ms-paper, #fff);
+  text-align: left;
+  font-size: 12.5px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--erp-ms-selected, #f7ecec);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+
+.pickerRowName {
+  font-weight: 600;
+}
+
+.pickerRowMeta {
+  color: var(--erp-ms-ink-faint, #888);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.pickerEmpty {
+  margin: 0;
+  padding: 18px 0;
+  color: var(--erp-ms-ink-faint, #888);
+  text-align: center;
+  font-size: 12.5px;
+}
