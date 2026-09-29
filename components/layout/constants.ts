@@ -31,7 +31,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
     label: "Sales",
     iconKey: "sales",
     children: [
-      {label: "Customers", href: "/master/customer"},
+      { label: "Customers", href: "/master/customer"},
       { label: "Promotion Loyalty Points", href: "/sales/promotion-loyalty-points" },
       { label: "Quotation", href: "/sales/quotation" },
       // The live menu tree (fixed.menu_master) names this "Sales Order" —
@@ -56,7 +56,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
           { label: "State Master", href: "/master/state-master" },
           { label: "City Master", href: "/master/city-master" },
           { label: "Area Master", href: "/master/area-master" },
-          {label: "Customer Type master", href: "/master/customer-groups"},
+          { label: "Customer Type master", href: "/master/customer-groups"},
           { label: "Vehicle Freight Charges", href: "/master/freight-charges-master" },
           { label: "Loading Charges", href: "/master/loading-charges-master" },
         ],
@@ -138,19 +138,19 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
     iconKey: "accounts",
     children: [
       {
-        label: " Ledger Group Master",
+        label: " Ledger Groups",
         href: "/master/account-ledger-groups-master",
       },
-      { label: "Ledger Master", href: "/master/account-ledger-master" },
+      { label: "Ledgers", href: "/master/account-ledger-master" },
       // Menu 55. The label has to match `fixed.menu_master.menu_name` exactly:
       // hrefs are attached to the server-driven menu by normalized-label match
       // against THIS list, and an unmatched route is also an ungoverned one —
       // menu permissions fail open until the href appears here.
-      { label: "Opening Balance", href: "/accounts/opening-balance" },
+      { label: "Opening Balances", href: "/accounts/opening-balance" },
       // Menu 99. Same rule as above: the label must match
       // `fixed.menu_master.menu_name` exactly, or the route is ungoverned and
       // menu permissions fail open on it.
-      { label: "Receipt", href: "/accounts/receipt" },
+      { label: "Bill-wise Receipt", href: "/accounts/receipt" },
       // Menu 51. Same rule: must match `fixed.menu_master.menu_name` exactly.
       { label: "Received Cheques", href: "/accounts/received-cheques" },
            {
