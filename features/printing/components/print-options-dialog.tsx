@@ -17,8 +17,8 @@
  *
  * All four render the same way, through `/print-render/preview`, and end in the
  * SAME popup. They differ by which template they pick and, for Print, by
- * whether the browser's print dialog opens on top. NONE of them writes to
- * `print_log` — see `onPrint` for what that costs and how to put it back.
+ * whether the browser's print dialog opens on top. Rendering is not logged;
+ * printing or saving from the popup is — see `onPrint`.
  *
  * Nothing navigates: the operator stays on the list they were working, and the
  * paper appears over it. Sending a till operator to the designer's canvas route
@@ -379,20 +379,20 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
   /**
    * Print — the same document Preview shows, with the print dialog on top.
    *
-   * -- IT NO LONGER WRITES TO `print_log` -----------------------------------
+   * -- HOW IT REACHES `print_log` ------------------------------------------
    *
    * It used to go through `POST /print-render/print`, which resolves the
    * ladder, renders every copy the purpose calls for, and appends one
    * `print_log` row per copy. It now renders through `/print-render/preview`
-   * like the other three buttons, so nothing is logged and the copy count and
-   * copy labels (ORIGINAL / DUPLICATE / TRIPLICATE) are not applied — one copy
-   * of the paper, and no record that it came out.
+   * like the other three buttons, so a chosen Format is honoured — and the
+   * copy count and copy labels (ORIGINAL / DUPLICATE / TRIPLICATE) are not
+   * applied: one copy of the paper.
    *
-   * That is a deliberate instruction, not an oversight, and it is reversible:
-   * `useDocumentPrint` still exists, unchanged and fully wired, though no screen
-   * calls it any more — every way into a quotation's paper (the list page, the
-   * entry screen's Save & print, and its F8 picker) now comes through here.
-   * Restoring the logging is swapping this back for that hook.
+   * The record comes from the popup instead: when it sends the paper to the
+   * printer, or the operator saves the PDF, `DocumentPreviewDialog` posts
+   * `/print-render/log` — one row per document, PRINT or FILE, against the
+   * revision it rendered. A preview that is only looked at is not logged.
+   * `useDocumentPrint` still exists, unchanged, though no screen calls it.
    */
   const onPrint = (): void => {
     const design = designForAction();

@@ -1,4 +1,5 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
+import { mergeUserInfo } from "@/lib/auth/session";
 export type PersistedRecentPage = {
   path: string;
   label: string;
@@ -84,8 +85,13 @@ function applyAuthSession(state: AuthState, payload: AuthSessionPayload): void {
   if (Object.prototype.hasOwnProperty.call(payload, "businessContext")) {
     state.businessContext = payload.businessContext ?? null;
   }
+  // Per field, exactly as `setAuthSession` stores it. The refresh response
+  // names the user and sends every device field as null; taking that block
+  // wholesale blanked `deviceId` here, and the store's persistence then wrote
+  // the blank over the merged sessionStorage copy, so the next reload lost the
+  // device for the rest of the session.
   if (Object.prototype.hasOwnProperty.call(payload, "userInfo")) {
-    state.userInfo = payload.userInfo ?? null;
+    state.userInfo = mergeUserInfo(state.userInfo, payload.userInfo);
   }
 }
 const authSlice = createSlice({

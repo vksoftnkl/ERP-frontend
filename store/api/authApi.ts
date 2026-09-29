@@ -4,6 +4,7 @@ import {
   extractAuthUserId,
   extractRefreshToken,
   extractUserInfo,
+  getUserInfo,
   setAuthSession,
 } from "@/lib/auth/session";
 import { authSessionChanged } from "@/store/slices/authSlice";
@@ -44,7 +45,9 @@ export const authApi = baseApi.injectEndpoints({
             },
           };
         }
-        api.dispatch(authSessionChanged({ token, refreshToken, userId, userInfo }));
+        api.dispatch(
+          authSessionChanged({ token, refreshToken, userId, userInfo: getUserInfo() }),
+        );
         return { data: { authenticated, userId } };
       },
       invalidatesTags: ["Auth"],

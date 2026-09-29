@@ -183,6 +183,29 @@ export type PrintDocumentRequest = {
   filename?: string;
 };
 
+/**
+ * What `POST /print-render/log` needs: a print made from a preview.
+ *
+ * The preview popup renders through `/preview` and the operator then prints or
+ * saves from it; this is how that act reaches `print_log`. The document, company
+ * and year are the ones the preview was rendered with, so the row names the
+ * same subject the paper shows. Purpose, module and document type are not sent —
+ * the server reads them off the revision's template.
+ */
+export type RecordPrintRequest = {
+  /** The revision that was rendered — becomes `plg_version_id`. */
+  versionId: string;
+  docId?: string;
+  docIds?: string[];
+  companyId?: string;
+  accYear?: string;
+  /** PRINT — sent to the printer. FILE — saved as a PDF. */
+  outputMode: "PRINT" | "FILE";
+  /** From the render's `X-Print-Pages`; the server keeps it only for one document. */
+  pageCount?: number;
+  byteCount?: number;
+};
+
 /** A render, plus the two facts only a real print produces. */
 export type PrintDocumentResult = RenderPreviewResult & {
   /** One `print_log` id per copy, from `X-Print-Log-Ids`. Empty when CORS hides it. */
@@ -339,6 +362,19 @@ export const printRenderApi = baseApi.injectEndpoints({
     }),
 
     /**
+     * Record a print the operator made from a preview.
+     *
+     * Not a render — the bytes are already in the popup. A failure here is
+     * never shown to the operator: the paper is out either way, and the server
+     * logs what the row would have said.
+     */
+    recordPrint: builder.mutation<{ printLogIds: string[] }, RecordPrintRequest>({
+      query: (body) => ({ url: `${BASE}/log`, method: "POST", body }),
+      transformResponse: (response: ApiSuccessResponse<{ printLogIds: string[] }>) =>
+        response.data,
+    }),
+
+    /**
      * The dataset providers this build carries.
      *
      * What a `ptdProviderCode` may name. A provider is CODE, so a template
@@ -362,5 +398,6 @@ export type PrintDataProvider = {
 export const {
   useRenderPrintPreviewMutation,
   usePrintDocumentMutation,
+  useRecordPrintMutation,
   useListPrintDataProvidersQuery,
 } = printRenderApi;

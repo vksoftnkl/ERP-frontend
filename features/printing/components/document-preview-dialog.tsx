@@ -38,7 +38,10 @@ import ModalPortal from "@/components/ui/modal-portal";
 import { getApiErrorMessage } from "@/store/api";
 import { useGetPrintingTemplateQuery } from "@/features/printing/api/templates";
 import {
+  useRecordPrintMutation,
   useRenderPrintPreviewMutation,
+  type RecordPrintRequest,
+  type RenderPreviewRequest,
   type RenderPreviewResult,
 } from "@/features/printing/api/render";
 import {
@@ -133,6 +136,19 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
   // to render is not something a print button can know.
   const template = useGetPrintingTemplateQuery(ptlId, { skip: !ptlId });
   const [renderPreview] = useRenderPrintPreviewMutation();
+  const [recordPrint] = useRecordPrintMutation();
+
+  /*
+   * What the paper on screen was rendered from, and what came back.
+   *
+   * Kept with the render rather than rebuilt from props when the operator
+   * prints, so the print log names exactly the revision and documents the bytes
+   * were drawn from.
+   */
+  const rendered = useRef<{
+    request: RenderPreviewRequest;
+    result: RenderPreviewResult;
+  } | null>(null);
 
   /*
    * Once a document is handed to the printer its blob belongs to
@@ -168,22 +184,23 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
       setDetails([]);
       setIsRendering(true);
 
-      const result = await renderPreview(
-        buildDocumentPreviewRequest({
-          versionId,
-          // Split back out of the joined key so the request carries the ids,
-          // not the string the effects compare by.
-          docIds: docKey.split(","),
-          companyId,
-          accYear,
-          filename,
-        }),
-      ).unwrap();
+      const request = buildDocumentPreviewRequest({
+        versionId,
+        // Split back out of the joined key so the request carries the ids,
+        // not the string the effects compare by.
+        docIds: docKey.split(","),
+        companyId,
+        accYear,
+        filename,
+      });
+      const result = await renderPreview(request).unwrap();
 
+      rendered.current = { request, result };
       setStats(result);
       setRawText(result.text);
       replaceObjectUrl(result.objectUrl);
     } catch (thrown) {
+      rendered.current = null;
       setMessage(
         getApiErrorMessage(thrown as never) ?? "The render was refused.",
       );
@@ -241,6 +258,41 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
   );
 
   /**
+   * Put this print in `print_log` — PRINT for paper, FILE for a saved PDF.
+   *
+   * The popup renders through `/preview`, which logs nothing, so the act of
+   * printing or saving is recorded here, against the revision and documents
+   * the bytes came from. Fire and forget: the paper is out whatever the log
+   * says, so a failure is a console warning and never a message to the
+   * operator.
+   */
+  const logPrint = useCallback(
+    (outputMode: RecordPrintRequest["outputMode"]): void => {
+      const current = rendered.current;
+      if (!current) return;
+      const { versionId, docId, docIds, companyId, accYear } = current.request;
+
+      recordPrint({
+        versionId,
+        outputMode,
+        ...(docId ? { docId } : {}),
+        ...(docIds ? { docIds } : {}),
+        ...(companyId ? { companyId } : {}),
+        ...(accYear ? { accYear } : {}),
+        ...(current.result.pageCount !== null
+          ? { pageCount: current.result.pageCount }
+          : {}),
+        byteCount: current.result.byteLength,
+      })
+        .unwrap()
+        .catch((thrown: unknown) => {
+          console.warn("The print could not be recorded in print_log.", thrown);
+        });
+    },
+    [recordPrint],
+  );
+
+  /**
    * Hand the rendered page to the printer and step out of the way.
    *
    * The document goes to `print-delivery`'s own frame rather than being printed
@@ -250,9 +302,10 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
   const printIt = useCallback((): void => {
     if (!objectUrl) return;
     handedOver.current = true;
+    logPrint("PRINT");
     sendToPrinter(objectUrl);
     onClose();
-  }, [objectUrl, onClose]);
+  }, [logPrint, objectUrl, onClose]);
 
   /**
    * Save the rendered document to a file, under a name that says what it is.
@@ -279,7 +332,8 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
     document.body.appendChild(link);
     link.click();
     link.remove();
-  }, [filename, objectUrl, title]);
+    logPrint("FILE");
+  }, [filename, logPrint, objectUrl, title]);
 
   /*
    * Print asked for paper, so the moment there is paper it goes to the printer.

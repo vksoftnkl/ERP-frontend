@@ -262,7 +262,7 @@ function hasUserInfoContent(userInfo: UserInfo | null | undefined): boolean {
  * inherits nothing from the last one. Signing out goes through
  * `clearAuthSession`, which is what actually drops the block.
  */
-function mergeUserInfo(
+export function mergeUserInfo(
   stored: UserInfo | null,
   incoming: UserInfo | null | undefined,
 ): UserInfo | null {
@@ -306,7 +306,10 @@ export function setAuthSession(
   // Merged per field rather than replaced: the refresh paths report the user
   // and null every device field, and blanking those is what used to cost a
   // long-lived session its `deviceId`. See `mergeUserInfo`.
-  const normalizedUserInfo = mergeUserInfo(getUserInfo(), userInfo);
+  const normalizedUserInfo = withTokenDeviceId(
+    mergeUserInfo(getUserInfo(), userInfo),
+    normalizedToken,
+  );
   memoryAuthToken = normalizedToken;
   memoryRefreshToken = normalizedRefreshToken;
   memoryAuthUserId = normalizedUserId;
@@ -400,6 +403,23 @@ function decodeJwtPayload(token: string): JsonRecord | null {
   } catch {
     return null;
   }
+}
+/**
+ * The session's device, filled from the access token when the block has none.
+ *
+ * The token is the one place the server never drops it: login signs the
+ * matched `fixed.device_master` id in as `device_id`, and every refresh copies
+ * that claim forward — while the refresh RESPONSE body reports `device_id:
+ * null`. So a block that lost its `deviceId` (any session that refreshed
+ * before the Redux copy stopped taking the partial block wholesale) gets it
+ * back on the next refresh instead of only on the next sign-in.
+ */
+function withTokenDeviceId(userInfo: UserInfo | null, token: string): UserInfo | null {
+  if (!userInfo || normalizeStoredValue(userInfo.deviceId)) {
+    return userInfo;
+  }
+  const claimed = normalizeStoredValue(decodeJwtPayload(token)?.device_id as StorageValue);
+  return claimed ? { ...userInfo, deviceId: claimed } : userInfo;
 }
 export function getAuthSessionId(): string | null {
   const token = getAuthSession();

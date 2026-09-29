@@ -9,6 +9,7 @@ import {
   getAuthSession,
   getRefreshToken,
   extractUserInfo,
+  getUserInfo,
   setAuthSession,
 } from "@/lib/auth/session";
 import { notifyDataChanged, useDataRefresh } from "@/lib/data-freshness";
@@ -270,7 +271,9 @@ async function refreshAuthSession(dispatch: ReturnType<typeof useAppDispatch>): 
           token,
           refreshToken: nextRefreshToken,
           userId,
-          ...(userInfo ? { userInfo } : {}),
+          // What setAuthSession stored (merged, device kept), not the raw
+          // partial block — its device fields are always null.
+          userInfo: getUserInfo(),
         }),
       );
       return true;

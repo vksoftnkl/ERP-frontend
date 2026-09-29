@@ -25,6 +25,11 @@ const SUPER_ADMIN = {
   deviceType: null,
 };
 
+function jwt(payload: Record<string, unknown>): string {
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${encode({ alg: "HS256", typ: "JWT" })}.${encode(payload)}.signature`;
+}
+
 // The module keeps in-memory copies beside the storage, so each case gets a
 // fresh import over a fresh fake storage.
 async function loadSession(): Promise<SessionModule> {
@@ -129,6 +134,23 @@ describe("setAuthSession", () => {
     });
 
     expect(session.getUserInfo()?.userType).toBe("USER");
+  });
+
+  // Sessions that already lost it (the Redux copy used to take the partial
+  // refresh block wholesale) recover from the token, which the server signs
+  // the device into and copies forward on every refresh.
+  it("restores a lost deviceId from the token's device_id claim", async () => {
+    const session = await loadSession();
+    session.setAuthSession("token-1", "user-1", "refresh-1", SUPER_ADMIN);
+
+    session.setAuthSession(
+      jwt({ sub: "user-1", device_id: "019e7257-ec4c-79a3-bad6-99faf77c536c" }),
+      "user-1",
+      "refresh-2",
+      session.extractUserInfo({ user_name: "vijay", user_type: "SUPER ADMIN", device_id: null }),
+    );
+
+    expect(session.getUserInfo()?.deviceId).toBe("019e7257-ec4c-79a3-bad6-99faf77c536c");
   });
 
   it("drops it on sign-out", async () => {
