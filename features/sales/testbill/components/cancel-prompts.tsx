@@ -86,7 +86,7 @@ export function CancelLinePrompt({
           </span>
         </button>
       </div>
-      <label className={styles.label} htmlFor="cancel-line-reason">
+      <label className={cx(styles.label, billStyles.promptField)} htmlFor="cancel-line-reason">
         Reason
         <span className={styles.requiredMark}>*</span>
         <input
@@ -156,7 +156,7 @@ export function CancelBillPrompt({ isOpen, refno, busy, onCancel, onConfirm }: C
           </button>
         ))}
       </div>
-      <label className={styles.label} htmlFor="cancel-bill-reason">
+      <label className={cx(styles.label, billStyles.promptField)} htmlFor="cancel-bill-reason">
         Reason
         <span className={styles.requiredMark}>*</span>
         <input
@@ -221,7 +221,7 @@ export function AmendRemarkPrompt({ isOpen, refno, busy, print, onCancel, onConf
       <p className={styles.modalNote}>
         Bill {refno} keeps its number and date. The remark is stored with the new revision.
       </p>
-      <label className={styles.label} htmlFor="amend-remark">
+      <label className={cx(styles.label, billStyles.promptField)} htmlFor="amend-remark">
         Remark
         <span className={styles.requiredMark}>*</span>
         <input

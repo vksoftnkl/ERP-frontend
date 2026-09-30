@@ -18,7 +18,7 @@
  * its own section — a screen that passes no config (the sale order) gets the
  * block exactly as authored.
  */
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 import {
   AREA_DROPDOWN_KEY,
   CUSTOMER_DROPDOWN_KEY,
@@ -46,6 +46,7 @@ import {
   SelectField,
   TextField,
 } from "./fields";
+import { moveHeaderFocus } from "./header-focus";
 import type { HeaderFieldConfig, TermsFieldConfig } from "./visible-settings";
 import styles from "../page.module.scss";
 import { useDropdownId } from "@/lib/configured-dropdowns";
@@ -423,6 +424,21 @@ const TERMS_AS_AUTHORED: TermsFieldConfig<QuotationTermsFieldKey> = {
   anyVisible: true,
 };
 
+/**
+ * Enter walks the Terms rows the way it walks the header (`header-focus.ts`):
+ * key a remark, press Enter, land on Payment Terms; Shift+Enter walks back. The
+ * last row stays put — what follows the block is the totals, not another field.
+ * A hidden row is not rendered, so it is not in the walk.
+ */
+function onTermsKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+  if (event.key !== "Enter" || event.defaultPrevented) {
+    return;
+  }
+  if (moveHeaderFocus(event.currentTarget, event.target, event.shiftKey ? -1 : 1)) {
+    event.preventDefault();
+  }
+}
+
 export type TermsBlockProps = {
   terms: QuotationTerms;
   disabled: boolean;
@@ -448,11 +464,12 @@ export function TermsBlock({
     <GroupBox title="Terms" section="Terms" onContextMenu={onContextMenu}>
       {/* One field per row: every row here is long free text, and a second
           column would halve the width it gets. */}
-      <div className={styles.fieldGrid}>
+      <div className={styles.fieldGrid} onKeyDown={onTermsKeyDown}>
         {fields.isVisible("remarks") ? (
           <Field label={fields.labelFor("remarks")} htmlFor="quotation-remarks">
             <input
               id="quotation-remarks"
+              data-quotation-focus="quotation-remarks"
               className={styles.input}
               value={terms.remarks}
               disabled={disabled}
@@ -466,6 +483,7 @@ export function TermsBlock({
           <Field label={fields.labelFor("paymentTerms")} htmlFor="quotation-payment-terms">
             <input
               id="quotation-payment-terms"
+              data-quotation-focus="quotation-payment-terms"
               className={styles.input}
               value={terms.paymentTerms}
               disabled={disabled}
@@ -479,6 +497,7 @@ export function TermsBlock({
           <Field label={fields.labelFor("deliveryTerms")} htmlFor="quotation-delivery-terms">
             <input
               id="quotation-delivery-terms"
+              data-quotation-focus="quotation-delivery-terms"
               className={styles.input}
               value={terms.deliveryTerms}
               disabled={disabled}
@@ -492,6 +511,7 @@ export function TermsBlock({
           <Field label={fields.labelFor("termsConditions")} htmlFor="quotation-tc">
             <input
               id="quotation-tc"
+              data-quotation-focus="quotation-tc"
               className={styles.input}
               value={terms.termsConditions}
               disabled={disabled}
