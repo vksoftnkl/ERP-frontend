@@ -186,8 +186,8 @@ export type PrintDocumentRequest = {
 /**
  * What `POST /print-render/log` needs: a print made from a preview.
  *
- * The preview popup renders through `/preview` and the operator then prints or
- * saves from it; this is how that act reaches `print_log`. The document, company
+ * The preview popup renders through `/preview` and the operator then views,
+ * prints or saves it; this is how that act reaches `print_log`. The document, company
  * and year are the ones the preview was rendered with, so the row names the
  * same subject the paper shows. Purpose, module and document type are not sent —
  * the server reads them off the revision's template.
@@ -199,8 +199,8 @@ export type RecordPrintRequest = {
   docIds?: string[];
   companyId?: string;
   accYear?: string;
-  /** PRINT — sent to the printer. FILE — saved as a PDF. */
-  outputMode: "PRINT" | "FILE";
+  /** PRINT — sent to the printer. FILE — saved as a PDF. PREVIEW — opened in the popup. */
+  outputMode: "PRINT" | "FILE" | "PREVIEW";
   /** From the render's `X-Print-Pages`; the server keeps it only for one document. */
   pageCount?: number;
   byteCount?: number;

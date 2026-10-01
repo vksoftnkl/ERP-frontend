@@ -17,8 +17,8 @@
  *
  * All four render the same way, through `/print-render/preview`, and end in the
  * SAME popup. They differ by which template they pick and, for Print, by
- * whether the browser's print dialog opens on top. Rendering is not logged;
- * printing or saving from the popup is — see `onPrint`.
+ * whether the browser's print dialog opens on top. Every one of them reaches
+ * `print_log` from the popup — PREVIEW on opening, PRINT, FILE — see `onPrint`.
  *
  * Nothing navigates: the operator stays on the list they were working, and the
  * paper appears over it. Sending a till operator to the designer's canvas route
@@ -391,7 +391,8 @@ export function PrintOptionsDialog(props: PrintOptionsDialogProps) {
    * The record comes from the popup instead: when it sends the paper to the
    * printer, or the operator saves the PDF, `DocumentPreviewDialog` posts
    * `/print-render/log` — one row per document, PRINT or FILE, against the
-   * revision it rendered. A preview that is only looked at is not logged.
+   * revision it rendered. Preview and Pdf, which only open the popup, post
+   * PREVIEW as soon as the paper is on screen.
    * `useDocumentPrint` still exists, unchanged, though no screen calls it.
    */
   const onPrint = (): void => {

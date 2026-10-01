@@ -176,6 +176,42 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
 
   const versionId = revisionForPreview(template.data, ptvId);
 
+  /**
+   * Put this in `print_log` — PREVIEW when the popup opens on the paper, PRINT
+   * for paper, FILE for a saved PDF.
+   *
+   * The popup renders through `/preview`, which logs nothing, so what the
+   * operator does with the paper is recorded here, against the revision and
+   * documents the bytes came from. Fire and forget: the paper is out whatever
+   * the log says, so a failure is a console warning and never a message to the
+   * operator.
+   */
+  const logPrint = useCallback(
+    (outputMode: RecordPrintRequest["outputMode"]): void => {
+      const current = rendered.current;
+      if (!current) return;
+      const { versionId, docId, docIds, companyId, accYear } = current.request;
+
+      recordPrint({
+        versionId,
+        outputMode,
+        ...(docId ? { docId } : {}),
+        ...(docIds ? { docIds } : {}),
+        ...(companyId ? { companyId } : {}),
+        ...(accYear ? { accYear } : {}),
+        ...(current.result.pageCount !== null
+          ? { pageCount: current.result.pageCount }
+          : {}),
+        byteCount: current.result.byteLength,
+      })
+        .unwrap()
+        .catch((thrown: unknown) => {
+          console.warn("The print could not be recorded in print_log.", thrown);
+        });
+    },
+    [recordPrint],
+  );
+
   const run = useCallback(async () => {
     if (!versionId) return;
 
@@ -196,6 +232,9 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
       const result = await renderPreview(request).unwrap();
 
       rendered.current = { request, result };
+      // Print logs PRINT once the paper reaches the printer; Preview and Pdf
+      // only show it, and that look is the record.
+      if (!autoPrint) logPrint("PREVIEW");
       setStats(result);
       setRawText(result.text);
       replaceObjectUrl(result.objectUrl);
@@ -213,9 +252,11 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
     }
   }, [
     accYear,
+    autoPrint,
     companyId,
     docKey,
     filename,
+    logPrint,
     renderPreview,
     replaceObjectUrl,
     versionId,
@@ -258,41 +299,6 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
   );
 
   /**
-   * Put this print in `print_log` — PRINT for paper, FILE for a saved PDF.
-   *
-   * The popup renders through `/preview`, which logs nothing, so the act of
-   * printing or saving is recorded here, against the revision and documents
-   * the bytes came from. Fire and forget: the paper is out whatever the log
-   * says, so a failure is a console warning and never a message to the
-   * operator.
-   */
-  const logPrint = useCallback(
-    (outputMode: RecordPrintRequest["outputMode"]): void => {
-      const current = rendered.current;
-      if (!current) return;
-      const { versionId, docId, docIds, companyId, accYear } = current.request;
-
-      recordPrint({
-        versionId,
-        outputMode,
-        ...(docId ? { docId } : {}),
-        ...(docIds ? { docIds } : {}),
-        ...(companyId ? { companyId } : {}),
-        ...(accYear ? { accYear } : {}),
-        ...(current.result.pageCount !== null
-          ? { pageCount: current.result.pageCount }
-          : {}),
-        byteCount: current.result.byteLength,
-      })
-        .unwrap()
-        .catch((thrown: unknown) => {
-          console.warn("The print could not be recorded in print_log.", thrown);
-        });
-    },
-    [recordPrint],
-  );
-
-  /**
    * Hand the rendered page to the printer and step out of the way.
    *
    * The document goes to `print-delivery`'s own frame rather than being printed
@@ -310,8 +316,8 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
   /**
    * Save the rendered document to a file, under a name that says what it is.
    *
-   * The viewer below has its own download button, but it saves a BLOB URL and
-   * names the file after the uuid in it — unreadable for one document and
+   * The viewer's own download button (hidden now, see the iframe) saves a BLOB
+   * URL and names the file after the uuid in it — unreadable for one document and
    * useless for a batch of five. The `download` attribute is the only way to
    * put a real name on it: `Content-Disposition` never reaches a blob, so the
    * `filename` the server was sent cannot do this on its own.
@@ -426,8 +432,16 @@ export function DocumentPreviewDialog(props: DocumentPreviewDialogProps) {
                 ))}
               </div>
             ) : objectUrl ? (
+              /*
+               * The browser viewer's own toolbar is hidden. Its print and
+               * download icons act inside the PDF plugin, where this page can
+               * never see them, so a bill printed from there left no
+               * `print_log` row. The footer's Print and Download do the same
+               * jobs and are recorded. Chrome and Edge honour the fragment;
+               * Firefox's viewer ignores it.
+               */
               <iframe
-                src={objectUrl}
+                src={`${objectUrl}#toolbar=0&navpanes=0`}
                 title={`Print preview — ${title}`}
                 style={{ width: "100%", height: "100%", border: 0 }}
               />
