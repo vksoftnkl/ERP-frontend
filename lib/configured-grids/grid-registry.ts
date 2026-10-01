@@ -36,7 +36,7 @@ export const CONFIGURED_GRID_DEVICE_TYPE = "desktop";
  * are no deleted rows to ask for, and a screen should not offer the checkbox.
  */
 export const CONFIGURED_GRIDS = {
-  itemList: { name: "MAIN LIST - ITEMS", fallbackId: "67", deletedParam: null },
+  itemList: { name: "MAIN LIST - ITEMS", fallbackId: "67", deletedParam: "iitem_is_deleted" },
   itemPickerPopup: { name: "POPUP - ITEMS", fallbackId: "71", deletedParam: null },
   itemGroupList: { name: "MAIN LIST - ITEM GROUPS", fallbackId: "48", deletedParam: "iitg_is_deleted" },
   itemBrandList: { name: "MAIN LIST - ITEM BRAND", fallbackId: "49", deletedParam: "ibrand_is_deleted" },
@@ -49,8 +49,8 @@ export const CONFIGURED_GRIDS = {
   customerGroupList: { name: "MAIN LIST - CUSTOMER GROUPS", fallbackId: "66", deletedParam: "icgr_is_deleted" },
   supplierList: { name: "MAIN LIST - SUPPLIERS", fallbackId: "63", deletedParam: "isup_is_deleted" },
   supplierGroupList: { name: "MAIN LIST - SUPPLIER GROUPS", fallbackId: "61", deletedParam: "ispg_is_deleted" },
-  companyList: { name: "MAIN LIST - COMPANYS", fallbackId: "52", deletedParam: null },
-  branchList: { name: "MAIN LIST - BRANCHES", fallbackId: "56", deletedParam: null },
+  companyList: { name: "MAIN LIST - COMPANYS", fallbackId: "52", deletedParam: "icomp_is_deleted" },
+  branchList: { name: "MAIN LIST - BRANCHES", fallbackId: "56", deletedParam: "ibr_is_deleted" },
   employeeList: { name: "MAIN LIST - EMPLOYEES", fallbackId: "77", deletedParam: null },
   employeeDepartmentList: { name: "MAIN LIST - EMP DEPARTMENTS", fallbackId: "73", deletedParam: null },
   employeeDesignationList: { name: "MAIN LIST - EMP DESIGNATIONS", fallbackId: "75", deletedParam: "ied_is_deleted" },

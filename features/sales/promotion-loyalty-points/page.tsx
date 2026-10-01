@@ -136,7 +136,7 @@ import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
 import styles from "./page.module.scss";
 import { Z_MODAL } from "@/lib/z-index";
 import { useDataRefresh } from "@/lib/data-freshness";
-import { gridRunEndpoint, useGridId, type ConfiguredGridKey } from "@/lib/configured-grids";
+import { buildGridDeletedParam, gridRunEndpoint, useGridId, type ConfiguredGridKey } from "@/lib/configured-grids";
 const DEFAULT_PARTY_SCOPE_TYPE: PartyScopeType = "CUSTOMER_GROUP";
 // `/branch-masters/get` is a fetch-by-id route (it requires a `brId` UUID), not a
 // company-filtered list, so querying it with `compId` only ever returned 400 and
@@ -1081,7 +1081,7 @@ export default function PromotionLoyaltyPointsPage() {
         customerGroupsPayload,
       ] = await Promise.allSettled([
         getItemLookup({ module: "items" }),
-        getItemsList({ limit: "100" }),
+        getItemsList({ limit: "100", grid_param: JSON.stringify(buildGridDeletedParam(ITEM_LIST_GRID_KEY, false)) }),
         getItemGroupLookup({ module: "itemGroups" }),
         getItemCategoryLookup({ module: "itemCategories" }),
         getItemBrandLookup({ module: "itemBrands" }),
