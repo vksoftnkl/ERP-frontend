@@ -14,8 +14,11 @@
  * letting the user work for ten minutes and then fail at the last step.
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
+import { layoutRect, layoutViewportSize, type LayoutRect } from "@/lib/ui-scale";
+import { Z_POPUP } from "@/lib/z-index";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { nameChanged } from "@/features/print-designer/store/designerSlice";
 import {
@@ -60,7 +63,52 @@ export function DesignerTopBar({
    */
   const host = useCanvasHost();
 
-  const [menuOpen, setMenuOpen] = useState(false);
+  /*
+   * The bar scrolls sideways (`.toolbar` is `overflow-x: auto`), and that clips
+   * anything hanging out of its 28px strip — an inline dropdown opened there
+   * invisibly. The panel is portaled to <body> and pinned under the button
+   * instead; the anchor is measured once, on open, and any resize or scroll
+   * closes the menu rather than leaving it stranded.
+   */
+  const [menuAnchor, setMenuAnchor] = useState<LayoutRect | null>(null);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const menuPanelRef = useRef<HTMLDivElement | null>(null);
+
+  const closeMenu = useCallback(() => setMenuAnchor(null), []);
+
+  useEffect(() => {
+    if (!menuAnchor) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      // The panel lives outside this subtree, so it needs its own check.
+      if (menuPanelRef.current?.contains(target) || menuButtonRef.current?.contains(target)) {
+        return;
+      }
+      closeMenu();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+    };
+  }, [closeMenu, menuAnchor]);
+
+  const toggleMenu = () => {
+    const button = menuButtonRef.current;
+    setMenuAnchor((anchor) => (anchor || !button ? null : layoutRect(button)));
+  };
 
   const lastSaved = useMemo(() => {
     const stamp = meta.version ? `v${meta.version}` : "unsaved";
@@ -172,60 +220,79 @@ export function DesignerTopBar({
 
       <div className={styles.menuWrap}>
         <button
+          ref={menuButtonRef}
           type="button"
           className={styles.toolButton}
           aria-label="More actions"
-          onClick={() => setMenuOpen((open) => !open)}
+          aria-haspopup="menu"
+          aria-expanded={Boolean(menuAnchor)}
+          onClick={toggleMenu}
         >
           <span className={styles.toolIcon}>⋮</span>
         </button>
-        {menuOpen ? (
-          <div className={styles.menuPanel} onMouseLeave={() => setMenuOpen(false)}>
-            <button
-              type="button"
-              className={styles.menuItem}
-              disabled={!templateId}
-              onClick={() => {
-                setMenuOpen(false);
-                onOpenRevisions();
-              }}
-            >
-              Version history…
-            </button>
-            <button
-              type="button"
-              className={styles.menuItem}
-              disabled={!templateId}
-              onClick={() => {
-                setMenuOpen(false);
-                void exportJson();
-              }}
-            >
-              Export JSON
-            </button>
-            <button
-              type="button"
-              className={styles.menuItem}
-              disabled={!templateId}
-              onClick={() => {
-                setMenuOpen(false);
-                void clone();
-              }}
-            >
-              Duplicate template
-            </button>
-            <button
-              type="button"
-              className={styles.menuItem}
-              onClick={() => {
-                setMenuOpen(false);
-                onOpenShortcuts();
-              }}
-            >
-              Keyboard shortcuts
-            </button>
-          </div>
-        ) : null}
+        {menuAnchor
+          ? createPortal(
+              <div
+                ref={menuPanelRef}
+                role="menu"
+                className={`${styles.overlayTokens} ${styles.menuPanel}`}
+                style={{
+                  top: menuAnchor.bottom + 2,
+                  right: Math.max(4, layoutViewportSize().width - menuAnchor.right),
+                  zIndex: Z_POPUP,
+                }}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.menuItem}
+                  disabled={!templateId}
+                  onClick={() => {
+                    closeMenu();
+                    onOpenRevisions();
+                  }}
+                >
+                  Version history…
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.menuItem}
+                  disabled={!templateId}
+                  onClick={() => {
+                    closeMenu();
+                    void exportJson();
+                  }}
+                >
+                  Export JSON
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.menuItem}
+                  disabled={!templateId}
+                  onClick={() => {
+                    closeMenu();
+                    void clone();
+                  }}
+                >
+                  Duplicate template
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.menuItem}
+                  onClick={() => {
+                    closeMenu();
+                    onOpenShortcuts();
+                  }}
+                >
+                  Keyboard shortcuts
+                </button>
+              </div>,
+              document.body,
+            )
+          : null}
       </div>
     </div>
   );

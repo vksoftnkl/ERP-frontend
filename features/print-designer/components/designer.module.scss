@@ -1458,18 +1458,22 @@
   display: flex;
 }
 
+/*
+ * Portaled to <body> and placed by DesignerTopBar (inline top/right/z-index):
+ * hung inside the toolbar it was clipped by the bar's `overflow-x: auto`.
+ */
 .menuPanel {
-  position: absolute;
-  top: calc(100% + 2px);
-  right: 0;
+  position: fixed;
   min-width: 190px;
   padding: 2px;
   background: var(--pd-chrome-sunken);
+  color: var(--pd-text);
+  line-height: 1.35;
   border: 1px solid var(--pd-border);
   box-shadow: 2px 3px 8px rgba(0, 0, 0, 0.25);
-  z-index: 30;
   display: flex;
   flex-direction: column;
+  user-select: none;
 }
 
 .menuItem {
