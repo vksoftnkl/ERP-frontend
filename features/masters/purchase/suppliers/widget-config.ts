@@ -3,6 +3,7 @@ import {
   applyWidgetFieldConfig,
   buildWidgetFieldConfigFromSections,
   pruneEmptyGroups,
+  qualifyRegionalSectionFieldNames,
   type ResolvedFieldConfig,
   type WidgetMasterSectionConfig,
 } from "@/features/masters/shared/widget-config";
@@ -25,7 +26,9 @@ export const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 // case-insensitively. Menu 22's config names fields after their labels, so the
 // Regional Details tab's names carry a "Regional " prefix — without it the
 // Identity tab's Address 1 / City / District / State / Country would collide with
-// the regional ones and the two sets would show and hide together.
+// the regional ones and the two sets would show and hide together. A database
+// whose regional rows were authored without the prefix is covered by
+// normalizeSupplierWidgetSections, which adds it on read.
 export const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
   // ── Identity ──
   supGstNo: "GST_No",
@@ -78,7 +81,18 @@ export const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
 export function buildSupplierWidgetFieldConfig(
   sections: WidgetMasterSectionConfig[] | null | undefined,
 ): Map<string, ResolvedFieldConfig> {
-  return buildWidgetFieldConfigFromSections(sections, { foldSectionVisibility: true });
+  return buildWidgetFieldConfigFromSections(normalizeSupplierWidgetSections(sections), {
+    foldSectionVisibility: true,
+  });
+}
+
+// The menu's sections with the Regional Details field names qualified. The popup
+// tree keys its toggles by fieldName, so it must read the same names as the form
+// config — the page runs `/widget-masters/config` through this too.
+export function normalizeSupplierWidgetSections(
+  sections: WidgetMasterSectionConfig[] | null | undefined,
+): WidgetMasterSectionConfig[] {
+  return qualifyRegionalSectionFieldNames(sections);
 }
 
 // The tabs, groups, order, and labels of this screen are authored in

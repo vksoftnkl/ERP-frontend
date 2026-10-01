@@ -211,6 +211,46 @@ export function pruneEmptyGroups(fields: ERPDynamicModalField[]): ERPDynamicModa
   closeHeading();
   return fields.filter((_, index) => keep[index]);
 }
+// A screen's "Regional Details" section, recognised by its name or gui name
+// ("Customers-Region details" / "Region Details" / "Regional Details" …).
+const REGIONAL_SECTION_PATTERN = /region/i;
+const REGIONAL_FIELD_PREFIX = "Regional ";
+/**
+ * Gives every field of a "Regional Details" section a "Regional " prefix on its
+ * `fieldName` (one that already has it is left alone).
+ *
+ * Why: Customer and Supplier repeat Address 1/2/3, City, District, State and
+ * Country on a Regional Details tab, and every lookup here is keyed by fieldName
+ * alone. A config authored in the widget-master admin UI names each field after
+ * its label, so unless that database had its regional rows renamed ("Regional
+ * Address 1"…, as the seed ships them) the two sets share keys: switching a
+ * regional field off hides the Identity input instead, and the regional input
+ * never binds at all. Qualifying the names here makes both spellings resolve the
+ * same way. Only the in-memory name changes — the visibility PATCH goes by fieldId.
+ */
+export function qualifyRegionalSectionFieldNames(
+  sections: WidgetMasterSectionConfig[] | null | undefined,
+): WidgetMasterSectionConfig[] {
+  if (!Array.isArray(sections)) {
+    return [];
+  }
+  return sections.map((section) => {
+    const sectionLabel = `${section?.sectionName ?? ""} ${section?.sectionGuiName ?? ""}`;
+    if (!REGIONAL_SECTION_PATTERN.test(sectionLabel) || !Array.isArray(section.fields)) {
+      return section;
+    }
+    return {
+      ...section,
+      fields: section.fields.map((field) => {
+        const name = (field?.fieldName ?? "").trim();
+        if (!name || name.toLowerCase().startsWith(REGIONAL_FIELD_PREFIX.trim().toLowerCase())) {
+          return field;
+        }
+        return { ...field, fieldName: `${REGIONAL_FIELD_PREFIX}${name}` };
+      }),
+    };
+  });
+}
 /**
  * Picks, for each form field, the backend `field_name` that this deployment's
  * config actually uses.

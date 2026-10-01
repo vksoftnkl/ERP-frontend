@@ -4,6 +4,7 @@ import {
   buildControllableFieldNames,
   buildWidgetFieldConfigFromSections,
   pruneEmptyGroups,
+  qualifyRegionalSectionFieldNames,
   type ResolvedFieldConfig,
   type WidgetMasterSectionConfig,
   type WidgetMastersResponse,
@@ -31,9 +32,11 @@ export const WIDGET_VISIBILITY_ENDPOINT = "/widget-masters/visibility";
 // the field out of the popup entirely.
 //
 // The Region Details tab repeats Address 1/2/3, City, District, State and Country
-// from Identity, and this map is keyed by field_name alone, so section 68's names
-// carry a "Regional " prefix in the DB (field_gui_name still reads "Address 1" in
-// the popup) — without it the two sets would collide and show/hide together.
+// from Identity, and this map is keyed by field_name alone, so the regional names
+// carry a "Regional " prefix. Some databases store it (section 68 here and in the
+// seed); others were authored as plain "Address 1"…, so the sections are always
+// read through qualifyRegionalSectionFieldNames, which adds the prefix when it is
+// missing — without it the two sets would collide and show/hide together.
 export const WIDGET_FIELD_NAME_BY_FORM_FIELD: Record<string, string> = {
   // ── Identity (section 66) ──
   cusName: "Customer Name",
@@ -124,7 +127,21 @@ export function buildCustomerWidgetFieldConfig(
 export function buildCustomerWidgetFieldConfigFromSections(
   sections: WidgetMasterSectionConfig[] | null | undefined,
 ): Map<string, ResolvedFieldConfig> {
-  return buildWidgetFieldConfigFromSections(sections, { foldSectionVisibility: true });
+  return buildWidgetFieldConfigFromSections(normalizeCustomerWidgetSections(sections), {
+    foldSectionVisibility: true,
+  });
+}
+
+/**
+ * The menu's sections with the Regional Details field names qualified (see the
+ * bridge map above). The popup tree must read the same names as the form config —
+ * its toggles are keyed by fieldName — so the page runs `/widget-masters/config`
+ * through this too.
+ */
+export function normalizeCustomerWidgetSections(
+  sections: WidgetMasterSectionConfig[] | null | undefined,
+): WidgetMasterSectionConfig[] {
+  return qualifyRegionalSectionFieldNames(sections);
 }
 
 // The tabs, groups, order, and labels of this screen are authored in

@@ -28,6 +28,7 @@ import {
 import {
   applySupplierWidgetConfig,
   buildSupplierWidgetFieldConfig,
+  normalizeSupplierWidgetSections,
   WIDGET_CONFIG_ENDPOINT,
   WIDGET_CONFIG_TREE_ENDPOINT,
   WIDGET_FIELD_NAME_BY_FORM_FIELD,
@@ -886,7 +887,9 @@ export default function SuppliersMasterPage() {
     setTreeError(null);
     try {
       const payload = await getWidgetConfigTree({ menu_id: String(WIDGET_SECTION_MENU_ID) });
-      setConfigSections(Array.isArray(payload?.data) ? payload.data : []);
+      // Same field names as the form config, or a Regional Details toggle would
+      // address the Identity field it shares a label with.
+      setConfigSections(normalizeSupplierWidgetSections(payload?.data));
     } catch {
       treeLoadedRef.current = false;
       setTreeError("Unable to load field configuration.");
