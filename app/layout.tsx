@@ -15,6 +15,8 @@ import ConfirmPopup from "@/components/feedback/confirm-popup";
 import ErrorBoundary from "@/components/feedback/error-boundary";
 import UiScaleController from "@/components/layout/ui-scale-controller";
 import { uiScaleBootstrapScript } from "@/lib/ui-scale";
+import AppThemeController from "@/components/layout/app-theme-controller";
+import { themeBootstrapScript } from "@/lib/app-theme";
 import RegionErrorBoundary from "@/components/feedback/region-error-boundary";
 export const metadata: Metadata = {
   title: "ERP Client | Operations Platform",
@@ -57,6 +59,9 @@ export default function RootLayout({
             painted. Must stay first in <head> and must stay blocking:
             deferring it would show one frame of unscaled UI. */}
         <script dangerouslySetInnerHTML={{ __html: uiScaleBootstrapScript() }} />
+        {/* The last company theme this browser used, for the same reason:
+            a reload must not paint one frame of maroon first. */}
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript() }} />
         {enableFigmaCapture ? (
           <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async />
         ) : null}
@@ -71,6 +76,8 @@ export default function RootLayout({
               the mode must be the same in the first field touched after a
               sign-in as in the last. */}
           <SessionAppSettings />
+          {/* The company's colours — see components/layout/app-theme-controller.tsx. */}
+          <AppThemeController />
           {/* Grid Master and UI Table Master, resolved once so the code that
               cannot hold a hook still reads a real id — see
               components/layout/configured-directories.tsx. */}

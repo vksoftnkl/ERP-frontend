@@ -36,9 +36,15 @@
   --hdr-select-fy: clamp(80px, calc(80px + 52 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 132px);
   --hdr-go-min: clamp(32px, calc(32px + 16 * (calc(100vw / var(--erp-ui-scale)) - 1024px) / 576), 48px);
 
-  background: linear-gradient(180deg, #8b1d1d 0%, #711010 100%);
-  color: #fff;
-  border-bottom: 1px solid rgba(71, 0, 0, 0.72);
+  /* The company theme's menu.bg / menu.fg (lib/app-theme.ts); the fallbacks
+     are the compiled maroon. */
+  background: linear-gradient(
+    180deg,
+    var(--erp-header-bar-top, #8b1d1d) 0%,
+    var(--erp-header-bar-bottom, #711010) 100%
+  );
+  color: var(--erp-header-bar-text, #fff);
+  border-bottom: 1px solid var(--erp-header-bar-edge, rgba(71, 0, 0, 0.72));
   padding: 6px 10px;
   display: flex;
   align-items: center;
@@ -172,7 +178,7 @@
 .menuItem:focus-within > .quickTab {
   background: #ffffff;
   border-color: #b8c2d0;
-  color: #7b1111;
+  color: var(--erp-header-bar-top, #7b1111);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
 }
 
@@ -345,8 +351,8 @@ li.menuItem[data-menu-suppressed="true"] .submenuList {
   width: 24px;
   height: 24px;
   border-radius: var(--erp-radius);
-  background: #bf4a4a;
-  border: 1px solid #f0c2c2;
+  background: var(--erp-header-bar-tile, #bf4a4a);
+  border: 1px solid var(--erp-header-bar-tile-edge, #f0c2c2);
   display: grid;
   place-items: center;
   font-size: 8px;
@@ -498,7 +504,7 @@ li.menuItem[data-menu-suppressed="true"] .submenuList {
   font-size: var(--hdr-ctl-font);
   font-weight: 700;
   background: #fff;
-  color: #6e0c0c;
+  color: var(--erp-header-bar-bottom, #6e0c0c);
   flex: 0 0 auto;
   padding: 0 4px;
 }
@@ -599,7 +605,7 @@ li.menuItem[data-menu-suppressed="true"] .submenuList {
 
 .userMenuLogoutButton:hover {
   background-color: #f5f5f5;
-  color: #6e0c0c;
+  color: var(--erp-header-bar-bottom, #6e0c0c);
 }
 /* Calendar icon button */
 .calendarIconButton {
