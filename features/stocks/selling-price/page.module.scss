@@ -1,0 +1,640 @@
+/*
+ * Change Selling Price — the screen's skin. Buttons, inputs, modals and the
+ * picker list wear the quotation's stylesheet (imported by the components
+ * that use those classes); this file carries the grid, its band header and
+ * chips, the three cards and the strips.
+ *
+ * Lengths are `u(n)` off `--erp-q-u`, the transaction screens' fluid unit
+ * (declared on :root by the quotation stylesheet), with a fixed fallback.
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 14px));
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.4);
+  height: 100%;
+  min-height: 0;
+  padding: u(0.6) u(0.75);
+  font-family: var(--erp-font-family, "Segoe UI", system-ui, Arial, sans-serif);
+  font-size: u(0.78);
+  color: var(--text-main, #222222);
+  background: var(--surface, #ffffff);
+}
+
+/* ---------------------------------------------------------------- title */
+.titleBar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: u(0.75);
+  padding-bottom: u(0.35);
+  border-bottom: 3px solid var(--primary, #7b1515);
+}
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.title {
+  margin: 0;
+  color: var(--primary, #7b1515);
+  font-size: u(0.95);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.subtitle {
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+}
+.changedChip {
+  flex: 0 0 auto;
+  padding: u(0.1) u(0.6);
+  border: 1px solid #f59e0b;
+  border-radius: 999px;
+  background: #fffbeb;
+  color: #b45309;
+  font-size: u(0.68);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- scope */
+.scopeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: u(0.45);
+}
+.scopeCap {
+  color: var(--text-muted, #666666);
+  font-size: u(0.66);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.scopeGroup {
+  display: inline-flex;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  overflow: hidden;
+}
+.scopeButton {
+  padding: u(0.22) u(0.75);
+  border: 0;
+  background: #ffffff;
+  color: var(--text-main, #222222);
+  font: inherit;
+  font-size: u(0.74);
+  font-weight: 600;
+  cursor: pointer;
+}
+.scopeButton + .scopeButton {
+  border-left: 1px solid var(--border, #c9c9c9);
+}
+.scopeButton:disabled {
+  color: var(--text-soft, #aaaaaa);
+  cursor: not-allowed;
+}
+.scopeButtonOn {
+  background: var(--primary, #7b1515);
+  color: #ffffff;
+}
+.scopeButtonOn:disabled {
+  color: #ffffff;
+  opacity: 0.85;
+}
+.scopeNote {
+  color: var(--text-muted, #666666);
+  font-size: u(0.68);
+}
+
+/* ---------------------------------------------------------------- filter strip */
+.filterStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: u(0.75);
+  font-size: u(0.72);
+}
+.filterSummary {
+  color: var(--text-main, #222222);
+  font-weight: 600;
+}
+.rowsHint {
+  color: var(--text-muted, #888888);
+}
+.filterStripAction {
+  margin-left: auto;
+}
+
+/* ---------------------------------------------------------------- grid */
+.gridShell {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: u(10);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  isolation: isolate;
+}
+.gridViewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.grid {
+  min-width: 100%;
+  font-size: var(--erp-q-u, 14px);
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+.grid thead th {
+  position: sticky;
+  z-index: 2;
+  padding: 0 u(0.3);
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border, #c9c9c9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bandRow th {
+  top: 0;
+  height: u(1.3);
+  font-size: u(0.62);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.headRow th {
+  top: u(1.3);
+  height: u(1.5);
+  background: var(--header-bg, #efe6e6);
+  color: var(--table-header-text, #4a0f0f);
+  font-size: u(0.7);
+  font-weight: 700;
+  text-align: center;
+}
+.headCell {
+  position: relative;
+}
+.headCellResizing {
+  background: #e7d9d9;
+}
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  z-index: 3;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+}
+.resizeHandle:hover {
+  background: rgb(123 21 21 / 20%);
+}
+.grid tbody td {
+  position: relative;
+  padding: 0;
+  border-right: 1px solid #eeeeee;
+  border-bottom: 1px solid #eeeeee;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.row {
+  background: #ffffff;
+}
+/* A changed row is cream, so the operator sees what Save will send. */
+.rowChanged {
+  background: #fffbeb;
+}
+.rowCurrent > td {
+  box-shadow: inset 0 1px 0 #d6c6c6, inset 0 -1px 0 #d6c6c6;
+}
+.rowProblem > td:first-child {
+  box-shadow: inset 3px 0 0 #b42318;
+}
+
+.cellText,
+.cellInput {
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  padding: u(0.15) u(0.3);
+  font: inherit;
+  font-size: u(0.74);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cellInput {
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.cellInput:focus-visible,
+.cellInput:focus {
+  outline: 2px solid var(--primary, #7b1515);
+  outline-offset: -2px;
+  background: #fffdf5;
+}
+.cellInput[readonly] {
+  cursor: default;
+}
+.alignLeft {
+  text-align: left;
+}
+.alignRight {
+  text-align: right;
+}
+.alignCenter {
+  text-align: center;
+}
+.muted {
+  color: #9ca3af;
+}
+.chainText {
+  color: #6d28d9;
+}
+
+/* The price cell: delta chip at the left edge, the figure at the right. */
+.numCell {
+  position: relative;
+}
+.delta {
+  position: absolute;
+  top: 50%;
+  left: u(0.3);
+  transform: translateY(-50%);
+  font-size: u(0.6);
+  font-weight: 600;
+  pointer-events: none;
+}
+.deltaUp {
+  color: #15803d;
+}
+.deltaDown {
+  color: #b42318;
+}
+.verdictRed {
+  background: #fdecec;
+  color: #b42318;
+}
+.verdictAmber {
+  background: #fef6e7;
+  color: #b45309;
+}
+.minRed {
+  color: #b42318;
+  font-weight: 600;
+}
+
+/* The Src chip. */
+.chip {
+  display: inline-block;
+  padding: 0 u(0.5);
+  border-radius: 999px;
+  font-size: u(0.6);
+  font-weight: 700;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.chipCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: u(0.1) 0;
+}
+
+/* The Item cell: "CODE  Name", the code in bold, over a key-catching input. */
+.itemCell {
+  position: relative;
+}
+.itemOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: u(0.45);
+  padding: 0 u(0.3);
+  overflow: hidden;
+  font-size: u(0.74);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.itemCode {
+  font-weight: 700;
+}
+.itemName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.itemInput {
+  color: transparent;
+  caret-color: transparent;
+  cursor: pointer;
+}
+.sparePlaceholder {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.emptyGrid {
+  padding: u(0.9);
+  color: var(--text-muted, #666666);
+  text-align: center;
+}
+
+.widthsBar {
+  display: flex;
+  justify-content: flex-end;
+  gap: u(0.4);
+  padding: u(0.2) u(0.4);
+  border-top: 1px solid #eeeeee;
+  background: #fafafa;
+}
+
+/* ---------------------------------------------------------------- strips */
+.validation {
+  padding: u(0.25) u(0.5);
+  border-radius: var(--erp-radius, 4px);
+  font-size: u(0.72);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.validationRed {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b42318;
+}
+.validationAmber {
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+.hint {
+  min-height: u(1.1);
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+}
+
+/* ---------------------------------------------------------------- cards */
+.cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: u(0.9);
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.3);
+  min-width: 0;
+  padding: u(0.45) u(0.6);
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+.cardTitle {
+  color: #64748b;
+  font-size: u(0.62);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.legendGrid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: u(0.25) u(0.5);
+  align-items: center;
+  font-size: u(0.7);
+}
+.legendChip {
+  justify-self: start;
+  min-width: u(5.2);
+  text-align: center;
+}
+
+.fourCard {
+  border-color: #ddd6fe;
+  background: #f5f3ff;
+}
+.fourCard .cardTitle {
+  color: #6d28d9;
+}
+.fourWhich {
+  color: #4c1d95;
+  font-size: u(0.7);
+  font-weight: 600;
+}
+.fourGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: u(0.15) u(0.25);
+  align-items: center;
+}
+.fourCap {
+  color: #6d28d9;
+  font-size: u(0.62);
+  font-weight: 600;
+}
+.fourArrow {
+  color: #8b5cf6;
+  text-align: center;
+}
+.fourInput {
+  width: 100%;
+  max-width: u(6.5);
+  padding: u(0.15) u(0.3);
+  border: 1px solid #c4b5fd;
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  font: inherit;
+  font-size: u(0.74);
+  text-align: right;
+}
+.fourInput:disabled {
+  background: #f3f4f6;
+  color: #9ca3af;
+}
+.fourNote {
+  color: #5b21b6;
+  font-size: u(0.64);
+  line-height: 1.4;
+}
+.cessNote {
+  color: #b45309;
+  font-size: u(0.66);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.rowCardNew {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+.rowCardTitle {
+  color: #334155;
+  font-size: u(0.68);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.rowCardNew .rowCardTitle {
+  color: #15803d;
+}
+.rowCardNote {
+  color: #475569;
+  font-size: u(0.7);
+  line-height: 1.45;
+  white-space: pre-line;
+}
+.rowCardNew .rowCardNote {
+  color: #166534;
+}
+
+/* ---------------------------------------------------------------- buttons */
+.buttonBar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: u(0.35);
+  padding-top: u(0.1);
+}
+
+/* ---------------------------------------------------------------- dialogs */
+.dlgMuted {
+  margin: 0;
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+  line-height: 1.45;
+}
+.dlgNote {
+  margin: 0;
+  color: var(--text-main, #333333);
+  font-size: u(0.7);
+  line-height: 1.45;
+}
+.dlgSection {
+  margin: u(0.2) 0 0;
+  color: var(--text-muted, #888888);
+  font-size: u(0.62);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dlgRule {
+  height: 0;
+  margin: u(0.2) 0;
+  border: 0;
+  border-top: 1px solid #e5e7eb;
+}
+.filterGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: u(0.45) u(1);
+}
+/* One dropdown: its caption, the combo, and the × that sets it back to All. */
+.filterCell {
+  display: grid;
+  grid-template-columns: u(5.2) minmax(0, 1fr) auto;
+  gap: u(0.3);
+  align-items: center;
+  min-width: 0;
+}
+.filterFieldClear {
+  flex: 0 0 auto;
+  padding: 0 u(0.3);
+  border: 0;
+  background: none;
+  color: var(--text-muted, #888888);
+  font-size: u(0.9);
+  line-height: 1;
+  cursor: pointer;
+}
+.filterFieldClear:hover {
+  color: var(--primary, #7b1515);
+}
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: u(0.2);
+}
+.searchBox input {
+  flex: 1 1 auto;
+}
+.checkLine {
+  display: inline-flex;
+  align-items: center;
+  gap: u(0.35);
+  font-size: u(0.74);
+}
+.dialogButtons {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: u(0.35);
+}
+.dialogButtonsSpacer {
+  flex: 1 1 auto;
+}
+.dlgTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: u(0.72);
+}
+.dlgTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: u(0.2) u(0.35);
+  border-bottom: 1px solid var(--border, #c9c9c9);
+  background: var(--header-bg, #efe6e6);
+  color: var(--table-header-text, #4a0f0f);
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+.dlgTable td {
+  padding: u(0.2) u(0.35);
+  border-bottom: 1px solid #eeeeee;
+  white-space: nowrap;
+}
+.dlgTable tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+.dlgTable tbody tr[data-selected="true"] > td {
+  background: var(--row-selected, #f6ecec);
+}
+.dlgTable tbody tr {
+  cursor: pointer;
+}
+.dlgTableStatic tbody tr {
+  cursor: default;
+}
+.dlgViewport {
+  flex: 1 1 auto;
+  min-height: u(8);
+  max-height: u(22);
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--erp-radius, 4px);
+}
+.dlgViewport:focus-visible {
+  outline: 2px solid var(--primary, #7b1515);
+  outline-offset: 1px;
+}
+.belowCostTitle {
+  margin: 0;
+  color: #b45309;
+  font-size: u(0.85);
+  font-weight: 700;
+}

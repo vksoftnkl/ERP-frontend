@@ -1,242 +1,139 @@
-import type { KeyboardShortcutDefinition } from "@/components/design-system/ui/keyboard-shortcut-hints";
-import type { ERPDynamicSelectOption } from "@/components/design-system/ui";
-import type { UiTableKey } from "@/lib/ui-tables";
-import type { PhysicalStockColumn, PhysicalStockListMeta, PhysicalStockListFilters } from "./physical-stock.types";
-
-export const PHYSICAL_STOCK_SAVE_ENDPOINT = "/physical-stock";
-export const PHYSICAL_STOCK_LIST_ENDPOINT = "/physical-stock/list";
-export const PHYSICAL_STOCK_GET_ENDPOINT = "/physical-stock/get";
-export const PHYSICAL_STOCK_DELETE_ENDPOINT = "/physical-stock/delete";
-export const ITEM_STOCK_BALANCE_GET_ENDPOINT = "/item-stock-balance/get";
-export const ITEM_STOCK_BALANCE_BULK_LIST_ENDPOINT = "/item-stock-balance/bulk-list";
-export const ITEM_BATCH_STOCK_OPTIONS_ENDPOINT = "/item-stock-balance/batch-options";
-export const STOCK_ADJ_REASONS_ENDPOINT = "/stock-adj-reasons/get";
-export const ITEM_STOCK_BALANCE_BUCKET = "SALEABLE";
-export { UI_TABLE_COLUMNS_LIST_ENDPOINT, UI_TABLE_COLUMNS_CREATE_ENDPOINT } from "@/features/stocks/_shared/constants";
 /**
- * The UI Table Master row this screen's entry grid is laid out by —
- * "PHYSICAL STOCK - LINES". Resolved to a `fixed.ui_tables.ui_tbl_id` at runtime
- * (`useUiTableId`, or `getUiTableId` in the payload builders), because that id is
- * per-deployment: this screen spent its life pointing at a literal 6, an id this
- * table has not had since the grids were re-authored.
+ * Physical Stock Update (menu 45) — the fixed vocabulary of the screen, ported
+ * from the Qt `PhysicalStockEntry` / `PhysicalStockCols` / `TxnDocTypes::
+ * physicalStock()` trio. Nothing here talks to the network.
  */
-export const PHYSICAL_STOCK_UI_TABLE_KEY: UiTableKey = "physicalStockLines";
-export { LOOKUP_SEARCH_DEBOUNCE_MS } from "@/features/stocks/_shared/constants";
-export const PHYSICAL_STOCK_TABLE_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
-  { label: "Prev Cell", keys: ["Shift"] },
-  { label: "Next Cell", keys: ["Enter"] },
-  { label: "Close Lookup", keys: ["Escape"] },
-  { label: "Open List", keys: ["F5"] },
+import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+import type { ConfiguredGridKey } from "@/lib/configured-grids";
+import type { UiTableKey } from "@/lib/ui-tables";
+
+// ---------------------------------------------------------------------------
+// Routes — `/api/v1` is the base query's, never spelled here.
+// ---------------------------------------------------------------------------
+
+export const PHYSICAL_STOCK_ENDPOINTS = {
+  create: "/stock/physical/create",
+  get: "/stock/physical/get",
+  validate: "/stock/physical/validate",
+  post: "/stock/physical/post",
+  cancel: "/stock/physical/cancel",
+  /** One row per godown × lot × bucket, straight off stock_balance. */
+  countSheet: "/stock/physical/count-sheet",
+  /** The scan path's first hop: symbol → item. */
+  itemByBarcode: "/master-lookups/item-by-barcode",
+  /** The configured-grid runner the two line pickers read through. */
+  gridRun: "/configured-grid-sql/run",
+} as const;
+
+// ---------------------------------------------------------------------------
+// Registry keys — the numbers the Qt screen hard-codes, by name.
+// ---------------------------------------------------------------------------
+
+/** "MAIN LIST - PHYSICAL STOCK" — grid 101, what menu 45 opens. */
+export const PHYSICAL_STOCK_LIST_GRID_KEY: ConfiguredGridKey = "physicalStockList";
+/** "POPUP - STOCK REASONS" — grid 102, the per-line reason picker. */
+export const STOCK_REASON_POPUP_GRID_KEY: ConfiguredGridKey = "stockReasonPopup";
+/** "POPUP - ITEMS" — grid 71, the same item search every voucher opens. */
+export const ITEM_POPUP_GRID_KEY: ConfiguredGridKey = "itemPickerPopup";
+/** "PHYSICAL STOCK - LINES" — ui table 28, 30 columns in PhysicalStockCols order. */
+export const PHYSICAL_STOCK_LINES_UI_TABLE_KEY: UiTableKey = "physicalStockLines";
+/** "GODOWNS" — dropdown 26. */
+export const GODOWN_DROPDOWN_KEY: ConfiguredDropdownKey = "godown";
+/** "STOCK REASONS" — dropdown 50, filtered to PHYSICAL_* server-side. */
+export const STOCK_REASON_DROPDOWN_KEY: ConfiguredDropdownKey = "stockReason";
+
+/** What the server stamps on `stock_voucher` audit rows for this type. */
+export const PHYSICAL_STOCK_AUDIT_SCREEN = "Physical Stock Count";
+
+// ---------------------------------------------------------------------------
+// The line grid's column numbers — `PhysicalStockCols`, verbatim.
+//
+// A column NUMBER is the slot the layout's `ui_tbl_clm_no` joins on, so these
+// are never renumbered; where a column APPEARS is `ui_tbl_clm_column_position`'s
+// job. Barcode is 29 for exactly that reason.
+// ---------------------------------------------------------------------------
+
+export const PhysicalStockCols = {
+  Id: 0,
+  LineNo: 1,
+  ItemCode: 2,
+  Description: 3,
+  UomName: 4,
+  BatchNo: 5,
+  ExpiryDate: 6,
+  Mrp: 7,
+  SerialNo: 8,
+  SupplierName: 9,
+  Bucket: 10,
+  BookQty: 11,
+  CountedQty: 12,
+  DiffQty: 13,
+  AvgCostRate: 14,
+  DiffValue: 15,
+  ReasonName: 16,
+  Remarks: 17,
+  ItemId: 18,
+  LotId: 19,
+  GodownId: 20,
+  GodownName: 21,
+  BaseUomId: 22,
+  SupplierId: 23,
+  ReasonId: 24,
+  SplitNo: 25,
+  MfgDate: 26,
+  SalePrice: 27,
+  StockValue: 28,
+  Barcode: 29,
+} as const;
+
+export const PHYSICAL_STOCK_COLUMN_COUNT = 30;
+
+/** The three columns a blind count hides — the ones that give the book figure away. */
+export const BLIND_HIDDEN_COLUMNS: readonly number[] = [
+  PhysicalStockCols.BookQty,
+  PhysicalStockCols.DiffQty,
+  PhysicalStockCols.DiffValue,
 ];
-export const TRACKING_OPTIONS = ["0", "1", "2", "3"] as const;
-export const TRACKING_TYPE_OPTION_LABELS: Record<(typeof TRACKING_OPTIONS)[number], string> = {
-  "0": "NONE",
-  "1": "MRP",
-  "2": "BATCH",
-  "3": "SERIAL",
-};
-export const PHYSICAL_STOCK_COLUMNS: PhysicalStockColumn[] = [
-  { key: "barcode", header: "Barcode", width: "110px", align: "left", kind: "text" },
-  { key: "code", header: "Code", width: "100px", align: "left", kind: "text" },
-  {
-    key: "itemname",
-    header: "Item name",
-    width: "220px",
-    align: "left",
-    kind: "lookup",
-    lookupKind: "item",
-  },
-  {
-    key: "godown",
-    header: "Godown",
-    width: "160px",
-    align: "left",
-    kind: "lookup",
-    lookupKind: "godown",
-  },
-  { key: "uom", header: "Uom", width: "105px", align: "left", kind: "text" },
-  { key: "batchno", header: "Batch no", width: "120px", align: "left", kind: "text" },
-  { key: "serialno", header: "Serial no", width: "120px", align: "left", kind: "text" },
-  { key: "batchdate", header: "Batch date", width: "120px", align: "left", kind: "date" },
-  { key: "mfgdate", header: "Mfg date", width: "120px", align: "left", kind: "date" },
-  { key: "expirydate", header: "Expiry date", width: "120px", align: "left", kind: "date" },
-  {
-    key: "bookqty",
-    header: "Book qty",
-    width: "110px",
-    align: "right",
-    kind: "number",
-    readOnly: true,
-  },
-  {
-    key: "bookfreeqty",
-    header: "Book Free qty",
-    width: "120px",
-    align: "right",
-    kind: "number",
-    readOnly: true,
-  },
-  {
-    key: "bookbaseqty",
-    header: "Book Base qty",
-    width: "130px",
-    align: "right",
-    kind: "number",
-    readOnly: true,
-  },
-  {
-    key: "bookfreebaseqty",
-    header: "Book free base qty",
-    width: "150px",
-    align: "right",
-    kind: "number",
-    readOnly: true,
-  },
-  {
-    key: "physicalqty",
-    header: "Physical qty",
-    width: "120px",
-    align: "right",
-    kind: "number",
-  },
-  {
-    key: "physicalfreeqty",
-    header: "Physical Free qty",
-    width: "140px",
-    align: "right",
-    kind: "number",
-  },
-  {
-    key: "physicalbaseqty",
-    header: "Physical Base qty",
-    width: "150px",
-    align: "right",
-    kind: "number",
-    readOnly: true,
-  },
-  {
-    key: "physicalfreebaseqty",
-    header: "Physical free base qty",
-    width: "170px",
-    align: "right",
-    kind: "number",
-    readOnly: true,
-  },
-  {
-    key: "diffqty",
-    header: "Diff Qty",
-    width: "110px",
-    align: "right",
-    kind: "number",
-    readOnly: true,
-  },
-  {
-    key: "convfactor",
-    header: "Conv factor",
-    width: "120px",
-    align: "right",
-    kind: "number",
-    defaultValue: "1.000",
-    readOnly: true,
-  },
-  {
-    key: "costprice",
-    header: "Cost price",
-    width: "115px",
-    align: "right",
-    kind: "number",
-  },
-  { key: "costwot", header: "Cost wot", width: "110px", align: "right", kind: "number" },
-  { key: "mrp", header: "M.R.P", width: "100px", align: "right", kind: "number" },
-  { key: "reason", header: "Reason", width: "180px", align: "left", kind: "lookup", lookupKind: "reason" },
-  { key: "remarks", header: "Remarks", width: "220px", align: "left", kind: "text" },
-  {
-    key: "oslitemid",
-    header: "osl item id",
-    width: "130px",
-    align: "left",
-    kind: "text",
-    readOnly: true,
-  },
-  {
-    key: "oslunitid",
-    header: "osl unit id",
-    width: "130px",
-    align: "left",
-    kind: "text",
-    readOnly: true,
-  },
-  {
-    key: "oslbaseuomid",
-    header: "osl base uom id",
-    width: "145px",
-    align: "left",
-    kind: "text",
-    readOnly: true,
-  },
-  {
-    key: "oslgodownid",
-    header: "osl godown id",
-    width: "145px",
-    align: "left",
-    kind: "text",
-    readOnly: true,
-  },
-  {
-    key: "osltrackingtype",
-    header: "osl tracking type",
-    width: "140px",
-    align: "left",
-    kind: "select",
-    options: TRACKING_OPTIONS,
-    defaultValue: "0",
-  },
-  {
-    key: "total",
-    header: "Total",
-    width: "120px",
-    align: "right",
-    kind: "number",
-    readOnly: true,
-  },
+
+// ---------------------------------------------------------------------------
+// Header vocabularies
+// ---------------------------------------------------------------------------
+
+/**
+ * What `svh_rate_source` may be. AVG_COST FIRST: found stock is worth what the
+ * rest of that item is worth, and nobody can say what three bags discovered on
+ * a shelf cost. Only the OVERAGE side reads it.
+ */
+export const RATE_SOURCES = ["AVG_COST", "LAST_PURCHASE", "LOT_COST", "MRP", "MANUAL"] as const;
+export type RateSource = (typeof RATE_SOURCES)[number];
+export const DEFAULT_RATE_SOURCE: RateSource = "AVG_COST";
+
+/** ck_svi_bucket — display only on a count: the bucket is part of the holding. */
+export const STOCK_BUCKETS = ["SALEABLE", "DAMAGED", "QUARANTINE", "EXPIRED", "SAMPLE"] as const;
+
+export const STATUS_DRAFT = "DRAFT";
+export const STATUS_POSTED = "POSTED";
+export const STATUS_CANCELLED = "CANCELLED";
+
+/** The cancel prompt's presets — the same five on the screen and on the list. */
+export const CANCEL_REASON_PRESETS: readonly string[] = [
+  "Counted against the wrong godown",
+  "Counting error — the sheet was wrong",
+  "Counted before an unposted receipt was entered",
+  "Counted twice — duplicate sheet",
+  "Superseded by a recount",
 ];
-export const PHYSICAL_STOCK_COLUMN_SCHEMA = new Map(
-  PHYSICAL_STOCK_COLUMNS.map((column) => [column.key, column]),
-);
-export const HIDDEN_ROW_VALUE_DEFAULTS: Record<string, string> = {
-  baseunitid: "",
-  batchid: "",
-  mfgbatchno: "",
-};
-export const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-export const DATE_FIELD_KEYS = ["batchdate", "mfgdate", "expirydate"] as const;
-export const QUANTITY_FIELD_KEYS = new Set([
-  "bookqty",
-  "bookfreeqty",
-  "physicalqty",
-  "physicalfreeqty",
-]);
-export const DERIVED_FIELD_KEYS = new Set([
-  "bookbaseqty",
-  "bookfreebaseqty",
-  "physicalbaseqty",
-  "physicalfreebaseqty",
-  "diffqty",
-  "total",
-]);
-export const NON_NEGATIVE_NUMBER_FIELD_KEYS = PHYSICAL_STOCK_COLUMNS.filter(
-  (column) => column.kind === "number" && column.key !== "diffqty",
-).map((column) => column.key);
-export const DEFAULT_BATCH_OPTION: ERPDynamicSelectOption = { value: "", label: "None" };
-export const DEFAULT_PHYSICAL_STOCK_LIST_FILTERS: PhysicalStockListFilters = {
-  search: "",
-  dateFrom: "",
-  dateTo: "",
-};
-export const EMPTY_PHYSICAL_STOCK_LIST_META: PhysicalStockListMeta = {
-  page: 1,
-  limit: 20,
-  total: 0,
-  total_pages: 0,
-};
+
+/** A freeze window defaults to "now, for the next three hours". */
+export const DEFAULT_FREEZE_HOURS = 3;
+
+/** The count sheet is paged server-side (default 200, max 1000). */
+export const COUNT_SHEET_PAGE_SIZE = 1000;
+/** A runaway guard on the page walk — 50 000 holdings is no godown anybody walks. */
+export const COUNT_SHEET_MAX_PAGES = 50;
+
+/** The list's default window — `defaultDaysBack` on the Qt descriptor. */
+export const LIST_DEFAULT_DAYS_BACK = 30;
+
+/** A castable uuid, so a pre-context list request comes back empty instead of failing. */
+export const NO_TENANT_ID = "00000000-0000-0000-0000-000000000000";

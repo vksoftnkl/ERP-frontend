@@ -1,0 +1,393 @@
+/**
+ * Stock Adjustment — the screen's own skin, on top of the quotation shell's
+ * page / title bar / fields / grid / buttons (imported where used). Lengths
+ * are `u(n)` off the same fluid unit the transaction screens share.
+ */
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+/* --------------------------------------------------------------- title */
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.1);
+  min-width: 0;
+}
+.kindHint {
+  color: var(--text-muted, #666666);
+  font-size: u(0.72);
+}
+.statusPill {
+  padding: u(0.08) u(0.6);
+  border-radius: 999px;
+  font-size: u(0.7);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.statusDraft {
+  background: #fef3e2;
+  color: #b45309;
+}
+.statusPosted {
+  background: #e8f5ea;
+  color: #15803d;
+}
+.statusCancelled {
+  background: #fde8e8;
+  color: #b42318;
+}
+
+/* ------------------------------------------------------- type selector */
+.kindRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.35);
+  align-items: center;
+}
+.kindLabel {
+  min-width: u(6);
+  font-size: u(0.72);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.kindButton {
+  padding: u(0.25) u(0.8);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: 999px;
+  background: #ffffff;
+  font: inherit;
+  font-size: u(0.74);
+  font-weight: 600;
+  cursor: pointer;
+}
+.kindButton:hover:not(:disabled) {
+  border-color: var(--primary, #7b1515);
+}
+.kindButton:disabled {
+  color: var(--text-soft, #999999);
+  cursor: default;
+}
+.kindButtonActive,
+.kindButtonActive:disabled {
+  border-color: var(--primary, #7b1515);
+  background: var(--primary, #7b1515);
+  color: #ffffff;
+}
+
+/* --------------------------------------------------------------- header */
+/* Two plain rows, as the .ui lays them: Doc no · Date · Godown · Default
+   reason · Rate source, then Their ref · Remarks — each field a label and
+   its control, sharing the row by the .ui's column stretches. */
+.headerRows {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.35);
+  padding: u(0.55) u(0.75);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+.headerLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.35) u(1);
+  align-items: center;
+}
+.fieldRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: u(0.45);
+  align-items: center;
+  min-width: u(9);
+}
+.flex1 {
+  flex: 1 1 0;
+}
+.flex2 {
+  flex: 2 1 0;
+}
+.flex3 {
+  flex: 3 1 0;
+}
+.flex5 {
+  flex: 5 1 0;
+}
+
+/* ------------------------------------------------------------ the grid */
+.gridShell {
+  flex: 0 0 auto;
+}
+.gridViewport {
+  min-height: u(10);
+  max-height: 50vh;
+}
+.lineGrid {
+  width: 100%;
+  min-width: u(52);
+}
+.problemRow > td {
+  background: #fdf3d8;
+}
+.cellReadOnly {
+  cursor: default;
+}
+.cellRefused {
+  color: var(--text-main, #222222);
+}
+.cellMuted {
+  color: #9ca3af;
+}
+.cellAuto {
+  color: #1d4ed8;
+}
+.cellPlaceholder::placeholder {
+  color: #9ca3af;
+}
+.cellRequired {
+  box-shadow: inset 0 0 0 1px #b42318;
+}
+.cellRequired::placeholder {
+  color: #b42318;
+  font-style: italic;
+  opacity: 1;
+}
+.hintCell {
+  color: #6b7280;
+  font-size: u(0.7);
+}
+.hintWarn {
+  color: #b42318;
+}
+.chip {
+  display: inline-block;
+  padding: 0 u(0.5);
+  border-radius: 999px;
+  font-size: u(0.64);
+  font-weight: 800;
+  line-height: 1.6;
+}
+.chipCell {
+  text-align: center;
+}
+.chipOut {
+  background: #fde8e8;
+  color: #b42318;
+}
+.chipIn {
+  background: #e8f5ea;
+  color: #15803d;
+}
+.chipBoth {
+  background: #f1eafd;
+  color: #6d28d9;
+}
+.chipMove {
+  background: #fef3e2;
+  color: #b45309;
+}
+.bucketChip {
+  display: inline-block;
+  margin-left: u(0.3);
+  padding: 0 u(0.55);
+  border-radius: 999px;
+  font-size: u(0.68);
+  font-weight: 700;
+  line-height: 1.6;
+}
+.bucketSaleable {
+  background: #e8f5ea;
+  color: #15803d;
+}
+.bucketDamaged {
+  background: #fef3e2;
+  color: #b45309;
+}
+.bucketOther {
+  background: #f1f5f9;
+  color: #475569;
+}
+.arrowCell {
+  color: var(--text-muted, #666666);
+  text-align: center;
+}
+
+/* ------------------------------------------------------ notes and cards */
+.kindNote {
+  margin: 0;
+  color: var(--text-muted, #555555);
+  font-size: u(0.72);
+}
+.relotBalance {
+  margin: 0;
+  font-size: u(0.74);
+  font-weight: 600;
+  white-space: pre-line;
+}
+.toneGood {
+  color: #15803d;
+}
+.toneBad {
+  color: #b42318;
+}
+.summaryRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(1);
+}
+.card {
+  flex: 1 1 u(18);
+  min-width: 0;
+  padding: u(0.45) u(0.7);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: var(--card-bg, #ffffff);
+}
+.cardWide {
+  flex: 2 1 u(28);
+}
+.cardTitle {
+  margin: 0 0 u(0.25);
+  color: var(--primary, #7b1515);
+  font-size: u(0.68);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.cardLine {
+  margin: 0;
+  font-size: u(0.74);
+  white-space: pre;
+}
+.accounts {
+  margin: 0;
+  overflow-x: auto;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: u(0.7);
+  white-space: pre;
+}
+.cardNote {
+  margin: u(0.25) 0 0;
+  color: var(--text-muted, #666666);
+  font-size: u(0.66);
+}
+
+/* ------------------------------------------------- panel 12: damaged */
+.damagedPanel {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.25);
+}
+.damagedViewport {
+  max-height: u(12);
+  overflow: auto;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+}
+
+/* ---------------------------------------------------- strip and hint */
+.validation {
+  margin: 0;
+  padding: u(0.3) u(0.6);
+  border: 1px solid #f0c36d;
+  border-radius: var(--erp-radius, 4px);
+  background: #fdf3d8;
+  color: #7a4b00;
+  font-size: u(0.74);
+}
+.hintLine {
+  min-height: u(1);
+  margin: 0;
+  color: var(--text-muted, #555555);
+  font-size: u(0.72);
+}
+.spacer {
+  flex: 1 1 auto;
+}
+.buttonBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.35);
+  justify-content: flex-end;
+}
+
+/* --------------------------------------------------------- pick dialog */
+.pickFilters {
+  display: flex;
+  gap: u(0.6);
+  align-items: center;
+}
+.pickFilters > input {
+  flex: 1 1 auto;
+}
+.pickSub {
+  margin: 0;
+  color: var(--text-muted, #666666);
+  font-size: u(0.7);
+}
+.pickNote {
+  margin: 0;
+  font-size: u(0.7);
+}
+.pickNoteBlock {
+  color: #b42318;
+}
+.groupRow > td {
+  background: #eef2f8;
+  font-weight: 700;
+}
+.greyRow > td {
+  color: #999999;
+}
+.damagedCell {
+  background: #fef3e2;
+  color: #b45309;
+}
+.presetList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.3);
+}
+.presetButton {
+  padding: u(0.15) u(0.5);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: 999px;
+  background: #ffffff;
+  font: inherit;
+  font-size: u(0.7);
+  cursor: pointer;
+}
+.presetButton:hover {
+  border-color: var(--primary, #7b1515);
+}
+.fieldError {
+  margin: 0;
+  color: #b42318;
+  font-size: u(0.7);
+}
+.prompt {
+  margin: 0 0 u(0.35);
+  font-size: u(0.76);
+}
+
+/* --------------------------------------------------------------- list */
+.listPill {
+  padding: u(0.05) u(0.5);
+  border-radius: 999px;
+  font-size: u(0.66);
+  font-weight: 800;
+}
+.cancelledRow {
+  opacity: 0.7;
+}
+.filterSelect,
+.filterDate {
+  padding: u(0.15) u(0.3);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  font: inherit;
+  font-size: u(0.74);
+}

@@ -1,7 +1,6 @@
 /**
  * Quotation Entry — pure helpers. No React, no API.
  */
-import { formatAccountingYear } from "@/features/stocks/opening-stock/opening-stock.utils";
 import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import {
   CHARGE_COLUMN_MEANINGS,
@@ -297,6 +296,24 @@ export function daysBetween(from: string, to: string): number | null {
  * `sq_acc_year` is `char(9)` and the DTO caps it at 9 — the fiscal year the
  * voucher date falls in, April-start, e.g. `"2026-2027"`.
  */
+/**
+ * The Indian accounting year a date falls in — 1 April to 31 March, named
+ * `yyyy-(yyyy+1)`. Takes `yyyy-mm-dd` (with or without a time) or the
+ * operator's `dd-mm-yyyy` / `dd/mm/yyyy`; null when it is neither.
+ */
+export function formatAccountingYear(referenceDate: string | null | undefined): string | null {
+  const text = (referenceDate ?? "").trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  const display = /^(\d{2})[-/.](\d{2})[-/.](\d{4})$/.exec(text);
+  const year = Number(iso ? iso[1] : display?.[3]);
+  const month = Number(iso ? iso[2] : display?.[2]);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+    return null;
+  }
+  const startYear = month >= 4 ? year : year - 1;
+  return `${startYear}-${startYear + 1}`;
+}
+
 export function accountingYearOf(quoteDate: string): string {
   return formatAccountingYear(quoteDate) ?? formatAccountingYear(todayIso()) ?? "";
 }

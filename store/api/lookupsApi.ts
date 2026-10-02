@@ -6,9 +6,11 @@ import {
   extractRows,
 } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/value-mappers";
-import type { StockLookupOption } from "@/features/stocks/_shared/types";
 import { baseApi } from "@/store/api/baseApi";
 import { getDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+
+/** An item option for the lookups: the select option plus the item's code. */
+export type StockLookupOption = ERPDynamicSelectOption & { code?: string };
 const ITEM_LIST_ENDPOINT = "/dropdown-details/run";
 const MASTER_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const ITEM_PRICE_DETAILS_ENDPOINT = "/item-price-details/get";

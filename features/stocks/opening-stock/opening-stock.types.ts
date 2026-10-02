@@ -1,315 +1,368 @@
-import type { ColumnAlign, ColumnKind, LookupKind } from "@/features/stocks/_shared/types";
+/**
+ * Opening Stock — wire shapes (the `stock/opening` contract) and the screen's
+ * own draft.
+ *
+ * The wire types follow `opening-stock-voucher/dto/*.ts` on the server exactly:
+ * `SaveOpeningStockVoucherDto` is STANDALONE and runs under
+ * `forbidNonWhitelisted`, so a property not declared there is a 400 — nothing
+ * may be sent that is not on these types.
+ */
+import type { RateSource, StockBucket, VoucherStatus } from "./opening-stock.constants";
 
-export type {
-  ColumnAlign,
-  ColumnKind,
-  LookupCellState,
-  LookupKind,
-  LookupTableColumn,
-  StockLookupOption,
-} from "@/features/stocks/_shared/types";
+// ---------------------------------------------------------------------------
+// Save — POST /stock/opening/create
+// ---------------------------------------------------------------------------
 
-export type {
-  UiTableColumnPayload,
-  UiTableMasterResponse,
-} from "@/features/stocks/_shared/types";
-export type ColumnSchema = {
-  header: string;
-  defaultWidth: string;
-  align: ColumnAlign;
-  kind: ColumnKind;
-  lookupKind?: LookupKind;
-  placeholder?: string;
-  options?: readonly string[];
-  defaultValue?: string;
-};
-export type ColumnDefinition = ColumnSchema & {
-  key: string;
-  width: string;
-};
-export type OpeningStockRow = {
-  id: number;
-  values: Record<string, string>;
-};
-export type RowValidationIssue = {
-  fieldKey: string;
-  message: string;
-};
-export type AccountLedgerRecord = {
-  ledId: string;
-  ledName: string;
-};
-export type GodownLookupRecord = {
-  gdl_id?: string | null;
-  gdlId?: string | null;
-  gdl_location_id?: string | null;
-  godown_id?: string | null;
-  godownId?: string | null;
-  id?: string | null;
-  _id?: string | null;
-  value?: string | null;
-  "Location ID"?: string | null;
-  "location id"?: string | null;
-  gdl_name?: string | null;
-  gdlName?: string | null;
-  godown_name?: string | null;
-  godownName?: string | null;
-  name?: string | null;
-  label?: string | null;
-  "Location Name"?: string | null;
-  "location name"?: string | null;
-  gdl_code?: string | null;
-  gdlCode?: string | null;
-  gdl_short?: string | null;
-  gdlShort?: string | null;
-  search_code?: string | null;
-  searchCode?: string | null;
-  gdl_branch_id?: string | null;
-  gdlBranchId?: string | null;
-  branch_id?: string | null;
-  branchId?: string | null;
-  "Branch ID"?: string | null;
-  "branch id"?: string | null;
-};
-export type LoadedOpeningStockMeta = {
-  voucherId: string;
-  voucherLabel: string;
-  voucherDate: string;
+export type SaveOpeningStockHeaderDto = {
+  /** Present = update the existing DRAFT; absent = create. The server branches on this alone. */
+  svhId?: string;
+  accYear: string;
   companyId: string;
   branchId: string;
+  /** `fixed.device_master.dev_id` — a real FK, and what mints the number. */
+  deviceId: string;
+  /** yyyy-MM-dd */
+  docDate: string;
+  toGodownId: string;
+  rateSource?: RateSource;
+  usrRefno?: string;
+  remarks?: string;
+  /** The totals as THE SCREEN counted them — nothing server-side recomputes a draft's. */
+  lineCount?: number;
+  totalQty?: number;
+  totalValue?: number;
+  totalValueWot?: number;
+  /** Omitted = DRAFT. 'POSTED' saves and posts in ONE transaction. */
+  status?: "DRAFT" | "POSTED";
 };
-export type OpeningStockSaveHeader = {
-  avh_voucher_id?: string;
-  avh_voucher_type_id: number;
-  osh_acc_year: string;
-  osh_company_id: string;
-  osh_branch_id: string;
-  osh_voucher_date: string;
-  avh_party_id: string;
-  avh_bill_date: string;
-  avh_opposite_ledger_id: null;
-  avh_employee_id: string[];
-  osh_device_type: "WEB";
-  osh_counter_id: string;
-  osh_session_id: string | null;
-  osh_device_id: string | null;
-  osh_status: "DRAFT";
-  osh_ref_no: null;
-  osh_narration: string | null;
-  osh_total_lines: number;
-  osh_total_qty: number;
-  osh_total_value: number;
-  osh_user_id: string | null;
+
+export type SaveOpeningStockLineDto = {
+  lineNo: number;
+  splitNo?: number;
+  itemId: string;
+  /** item_unit_conversion.iuc_id — never a unit_id. */
+  uomId: string;
+  baseUomId: string;
+  toBaseFactor: number;
+  godownId: string;
+  bucket?: StockBucket;
+  qty?: number;
+  baseQty: number;
+  freeQty?: number;
+  freeBaseQty?: number;
+  weightQty?: number;
+  costRate?: number;
+  costRateWot?: number;
+  landedRate?: number;
+  taxPerc?: number;
+  batchNo?: string;
+  mfgDate?: string;
+  expiryDate?: string;
+  serialNo?: string;
+  mrp?: number;
+  salePrice?: number;
+  supplierId?: string;
+  barcode?: string;
+  remarks?: string;
 };
-export type OpeningStockSaveDetail = {
-  osl_barcode: string | null;
-  osl_item_id: string;
-  osl_unit_id: string;
-  osl_base_uom_id: string | null;
-  osl_godown_id: string;
-  osl_tracking_type: string;
-  osl_tax_id: string | null;
-  osl_tax_perc: number;
-  osl_cess_type: string;
-  osl_cess_perc: number;
-  osl_cess_per_unit: number;
-  osl_qty: number;
-  osl_free_qty: number;
-  osl_base_qty: number;
-  osl_free_base_qty: number;
-  osl_conv_factor: number;
-  osl_batch_no: string | null;
-  osl_serial_no: string | null;
-  osl_batch_date: string | null;
-  osl_mfg_date: string | null;
-  osl_expiry_date: string | null;
-  osl_cost_rate: number;
-  osl_cost_rate_wot: number;
-  osl_sale_rate_a_wot: number;
-  osl_markup_perc_a: number;
-  osl_sale_rate_a: number;
-  osl_sale_rate_b_wot: number;
-  osl_markup_perc_b: number;
-  osl_sale_rate_b: number;
-  osl_sale_rate_c_wot: number;
-  osl_markup_perc_c: number;
-  osl_sale_rate_c: number;
-  osl_sale_rate_d_wot: number;
-  osl_markup_perc_d: number;
-  osl_sale_rate_d: number;
-  osl_mrp_rate: number;
-  osl_min_rate: number;
-  osl_remarks: string | null;
-  item_code: string | null;
-  item_name: string | null;
-  godown_name: string | null;
-  uom_name: string | null;
-  tax_name: string | null;
-  profit_type: string | null;
-  round_off: number;
+
+export type SaveOpeningStockDto = {
+  header: SaveOpeningStockHeaderDto;
+  lines: SaveOpeningStockLineDto[];
 };
-export type OpeningStockSaveRequest = {
-  header: OpeningStockSaveHeader;
-  audit_notes?: string | null;
-  details: OpeningStockSaveDetail[];
-};
-export type OpeningStockSuccessResponse<T, TMeta = Record<string, unknown>> = {
-  success: true;
-  message: string;
-  data: T;
-  meta?: TMeta;
-};
+
+// ---------------------------------------------------------------------------
+// The stored document — GET /stock/opening/get, and every write's answer
+// ---------------------------------------------------------------------------
+
+/** Postgres numerics can arrive as strings; everything numeric is read through `toNumber`. */
+export type WireNumber = number | string | null;
+
 export type OpeningStockHeaderPayload = {
-  avh_voucher_id: string;
-  avh_voucher_refno: string;
-  avh_voucher_type_id: number;
-  avh_bill_refno: string;
-  avh_user_refno: string | null;
-  avh_user_name?: string | null;
-  osh_user_name?: string | null;
-  user_name?: string | null;
-  avh_bill_date: string | null;
-  avh_party_id: string;
-  avh_opposite_ledger_id: string | null;
-  avh_employee_id: string[];
-  avh_pay_notes: string | null;
-  avh_remarks: string | null;
-  avh_voucher_status: string;
-  avh_user_id: string;
-  avh_session_id: string | null;
-  avh_device_type: string;
-  avh_device_id: string | null;
-  avh_counter_id: string;
-  avh_counter_name?: string | null;
-  osh_counter_name?: string | null;
-  counter_name?: string | null;
-  osh_id: string;
-  osh_acc_year: string;
-  osh_company_id: string;
-  osh_branch_id: string;
-  osh_voucher_no: string;
-  osh_voucher_date: string;
-  osh_ref_no: string | null;
-  osh_narration: string | null;
-  osh_total_lines: number;
-  osh_total_qty: number;
-  osh_total_value: number;
-  osh_status: string;
-  osh_user_id: string;
-  osh_session_id: string | null;
-  osh_device_type: string;
-  osh_device_id: string | null;
-  osh_counter_id: string | null;
-  osh_is_active: boolean;
-  osh_is_deleted: boolean;
-  osh_created_on: string;
-  osh_created_by: string | null;
-  osh_updated_on: string | null;
-  osh_updated_by: string | null;
+  svhId: string;
+  accYear: string;
+  companyId: string;
+  branchId: string;
+  deviceId: string;
+  refno: string | null;
+  usrRefno: string | null;
+  docDate: string | null;
+  godownId: string | null;
+  godownName: string | null;
+  status: string | null;
+  lineCount: WireNumber;
+  totalQty: WireNumber;
+  totalValue: WireNumber;
+  totalValueWot: WireNumber;
+  rateSource: string | null;
+  remarks: string | null;
+  postedOn?: string | null;
+  postedByName?: string | null;
+  cancelledOn?: string | null;
+  cancelReason?: string | null;
 };
-export type OpeningStockDetailPayload = {
-  osl_id: string;
-  osl_voucher_id: string;
-  osl_opening_id: string;
-  osl_line_no: number;
-  osl_acc_year: string;
-  osl_company_id: string;
-  osl_branch_id: string;
-  osl_item_id: string;
-  osl_item_code: string | null;
-  osl_item_name: string | null;
-  osl_unit_id: string;
-  osl_unit_name: string | null;
-  osl_base_uom_id: string | null;
-  osl_base_uom_name: string | null;
-  osl_godown_id: string;
-  osl_godown_name: string | null;
-  osl_tracking_type: string;
-  osl_barcode: string | null;
-  osl_batch_no: string | null;
-  osl_batch_date: string | null;
-  osl_mfg_date: string | null;
-  osl_expiry_date: string | null;
-  osl_serial_no: string | null;
-  osl_qty: number;
-  osl_base_qty: number;
-  osl_free_qty: number;
-  osl_free_base_qty: number;
-  osl_conv_factor: number;
-  osl_tax_id: string | null;
-  osl_tax_name: string | null;
-  osl_tax_perc: number;
-  osl_cess_type: string;
-  osl_cess_perc: number;
-  osl_cess_per_unit: number;
-  osl_cost_rate: number;
-  osl_cost_rate_wot: number;
-  osl_stock_value: number;
-  osl_stock_value_wot: number;
-  osl_sale_rate_a: number;
-  osl_sale_rate_b: number;
-  osl_sale_rate_c: number;
-  osl_sale_rate_d: number;
-  osl_sale_rate_a_wot: number;
-  osl_sale_rate_b_wot: number;
-  osl_sale_rate_c_wot: number;
-  osl_sale_rate_d_wot: number;
-  osl_markup_perc_a: number;
-  osl_markup_perc_b: number;
-  osl_markup_perc_c: number;
-  osl_markup_perc_d: number;
-  osl_mrp_rate: number;
-  osl_min_rate: number;
-  osl_remarks: string | null;
-  osl_is_active: boolean;
-  osl_is_deleted: boolean;
-  osl_created_on: string;
-  osl_created_by: string | null;
-  osl_updated_on: string | null;
-  osl_updated_by: string | null;
+
+export type OpeningStockLinePayload = {
+  sviId: string;
+  lineNo: WireNumber;
+  splitNo: WireNumber;
+  itemId: string;
+  itemCode: string | null;
+  itemName: string | null;
+  unitName: string | null;
+  uomId: string;
+  baseUomId: string;
+  toBaseFactor: WireNumber;
+  godownId: string | null;
+  godownName: string | null;
+  bucket: string | null;
+  barcode: string | null;
+  batchNo: string | null;
+  mfgDate: string | null;
+  expiryDate: string | null;
+  mrp: WireNumber;
+  salePrice: WireNumber;
+  serialNo: string | null;
+  supplierId: string | null;
+  supplierName: string | null;
+  qty: WireNumber;
+  baseQty: WireNumber;
+  freeQty: WireNumber;
+  freeBaseQty: WireNumber;
+  weightQty: WireNumber;
+  costRate: WireNumber;
+  costRateWot: WireNumber;
+  landedRate: WireNumber;
+  taxPerc: WireNumber;
+  value: WireNumber;
+  valueWot: WireNumber;
+  lotId: string | null;
+  remarks: string | null;
+  /** The effective policy on the DOCUMENT's date — the same answer item-lookup gives. */
+  trackSignature: string | null;
 };
+
 export type OpeningStockDocumentPayload = {
   header: OpeningStockHeaderPayload;
-  details: OpeningStockDetailPayload[];
+  lines: OpeningStockLinePayload[];
 };
-export type { StockListMeta as OpeningStockListMeta } from "@/features/stocks/_shared/types";
-export type BulkOpeningStockItemPayload = {
-  item_id: string;
-  item_name: string;
-  item_code: string | null;
-  item_default_barcode: string | null;
-  item_base_unit_id: string | null;
-  item_batch_config: number;
-  price_master_id: string | null;
-  unit_id: string | null;
-  unit_name: string | null;
-  base_unit_id: string | null;
-  godown_id: string | null;
-  godown_name: string | null;
-  to_base_factor: number;
-  cost_price: number;
-  cost_wot: number;
+
+/** /create's answer: the document, plus the ledger rows a save-and-post wrote (null on a draft). */
+export type OpeningStockSaveResult = OpeningStockDocumentPayload & {
+  rowsPosted: number | null;
+};
+
+export type OpeningStockCancelResult = OpeningStockDocumentPayload & {
+  rowsReversed: number;
+  status: string;
+  cancelledOn: string | null;
+};
+
+/** The scope every read and the cancel are addressed by — the DOCUMENT's own. */
+export type OpeningStockScope = {
+  companyId: string;
+  branchId: string;
+  accYear: string;
+};
+
+export type OpeningStockDocKey = OpeningStockScope & {
+  svhId: string;
+  /** The list row's refno and status — what the list's own cancel prompt names. */
+  refno?: string;
+  status?: string;
+};
+
+export type CancelOpeningStockDto = OpeningStockScope & {
+  svhId: string;
+  reason: string;
+};
+
+// ---------------------------------------------------------------------------
+// GET /stock/opening/item-lookup
+// ---------------------------------------------------------------------------
+
+export type OpeningStockItemLookupQuery = {
+  companyId: string;
+  branchId: string;
+  itemId: string;
+  /** An iuc_id; omitted for the item's default unit. */
+  uomId?: string;
+  /** The DOCUMENT's date — the tracking policy is resolved as at this day. */
+  onDate: string;
+};
+
+export type OpeningStockItemLookup = {
+  itemId: string;
+  itemCode: string | null;
+  itemName: string;
+  barcode: string | null;
+  uomId: string;
+  unitName: string | null;
+  toBaseFactor: WireNumber;
+  baseUomId: string;
+  taxPerc: WireNumber;
+  cessPerc?: WireNumber;
+  cessUnit?: WireNumber;
+  trackSignature: string | null;
+  mrp: WireNumber;
+  salePrice: WireNumber;
+  /** A warning, not a refusal — the preflight's per-holding rule is the real check. */
+  alreadyOpened: boolean;
+};
+
+/** GET /master-lookups/item-by-barcode — `unitId` is an iuc_id. */
+export type BarcodeItem = {
+  itemId: string;
+  unitId: string;
+  itemName: string;
+};
+
+/** `/configured-grid-sql/run` — one page of rows. */
+export type ConfiguredGridPage<TRow> = {
+  items: TRow[];
+  meta: { page: number; limit: number; total: number };
+};
+
+/** One row of a configured popup grid, keyed by its SELECT's own column names. */
+export type GridRow = Record<string, unknown>;
+
+/** A failed write's body: `{ success:false, message, errors:[{ field, message }] }`. */
+export type ApiFieldError = { field?: string; message?: string };
+
+// ---------------------------------------------------------------------------
+// The draft — what the screen holds between the round trips
+// ---------------------------------------------------------------------------
+
+/**
+ * One grid row — `OpeningStockCols`, as fields. Numbers are 0 where the Qt cell
+ * is blank: `cellNumber()` reads a blank cell as 0, and every rule of the screen
+ * ("derive the without-tax rate only when it is 0") is written against that.
+ */
+export type OpeningStockLine = {
+  /** React's key for the row; never sent. */
+  key: string;
+  /** svi_id (col 0) — the stored line's id; empty on a line never saved. */
+  sviId: string;
+  /** The stored line number, as loaded. Display only; the save numbers lines itself. */
+  lineNo: number;
+  splitNo: number;
+  barcode: string;
+  itemCode: string;
+  itemName: string;
+  unitName: string;
+  qty: number;
+  freeQty: number;
+  batchNo: string;
+  /** dd-mm-yyyy as keyed (the cell's text) — converted to ISO only on the way out. */
+  mfgDate: string;
+  expiryDate: string;
   mrp: number;
-  min_price: number;
-  sales_price_a: number;
-  sales_price_b: number;
-  sales_price_c: number;
-  sales_price_d: number;
-  price_a_wot: number;
-  price_b_wot: number;
-  price_c_wot: number;
-  price_d_wot: number;
-  price_a_markup: number;
-  price_b_markup: number;
-  price_c_markup: number;
-  price_d_markup: number;
-  profit_type: string | null;
-  round_off: number;
-  tax_id: string | null;
-  tax_name: string | null;
-  tax_perc: number;
-  cess_type: string;
-  cess_perc: number;
-  cess_per_unit: number;
-  tracking_type: string;
+  salePrice: number;
+  serialNo: string;
+  bucket: string;
+  /** What the operator TYPES: the cost of one of the unit on the line. Never sent. */
+  costPerUnit: number;
+  taxPerc: number;
+  costRateWot: number;
+  landedRate: number;
+  weightQty: number;
+  value: number;
+  valueWot: number;
+  remarks: string;
+  itemId: string;
+  uomId: string;
+  baseUomId: string;
+  toBaseFactor: number;
+  baseQty: number;
+  freeBaseQty: number;
+  godownId: string;
+  godownName: string;
+  lotId: string;
+  supplierId: string;
+  supplierName: string;
+  /** item_decimal_count — the quantity editors' precision; 0 = the default 3. */
+  decimalCount: number;
+  /** stp_track_signature — "BE", "BMEP", "N"; empty only on a row with no item. */
+  trackSignature: string;
+  /** svi_cost_rate — PER BASE UNIT, derived from costPerUnit; the wire value. */
+  costRate: number;
+  /** What the server's pre-post check said about this line, when Save & Post was refused. */
+  problem: string;
 };
+
+/** The text fields of a line the grid can write. */
+export type OpeningStockLineTextField =
+  | "barcode"
+  | "batchNo"
+  | "mfgDate"
+  | "expiryDate"
+  | "serialNo"
+  | "bucket"
+  | "remarks";
+
+/** The numeric fields of a line the grid can write. */
+export type OpeningStockLineNumberField =
+  | "splitNo"
+  | "qty"
+  | "freeQty"
+  | "mrp"
+  | "salePrice"
+  | "costPerUnit"
+  | "taxPerc"
+  | "costRateWot"
+  | "landedRate"
+  | "weightQty";
+
+export type OpeningStockLineField = OpeningStockLineTextField | OpeningStockLineNumberField;
+
+export type OpeningStockHeader = {
+  /** yyyy-MM-dd; empty when the field was cleared. */
+  docDate: string;
+  godownId: string;
+  godownName: string;
+  rateSource: RateSource;
+  usrRefno: string;
+  remarks: string;
+};
+
+export type OpeningStockDraft = {
+  /** This document's own scope — the session's for a new one, the header's for a loaded one. */
+  companyId: string;
+  branchId: string;
+  accYear: string;
+  deviceId: string;
+  svhId: string;
+  refno: string;
+  status: VoucherStatus;
+  header: OpeningStockHeader;
+  /** Always ends in one blank row — the row the next item is picked into. */
+  lines: OpeningStockLine[];
+  /** FormMode: Entry (keyable) or Browse (read-only). */
+  mode: "entry" | "browse";
+  dirty: boolean;
+  /** lblAudit — "X already has an opening in this branch". */
+  audit: string;
+};
+
+export type OpeningStockTotals = {
+  /** Counted by SPLIT NO — a split of 1 starts a line, so three splits are one line. */
+  lines: number;
+  /** BASE units, free goods included — the quantity the ledger will carry. */
+  qty: number;
+  value: number;
+  valueWot: number;
+};
+
+/** A client-side refusal: Qt's warning, and where it put the cursor. */
+export type OpeningStockViolation = {
+  title: string;
+  message: string;
+  focus:
+    | { kind: "godown" }
+    | { kind: "date" }
+    | { kind: "cell"; rowKey: string; field: OpeningStockFocusField }
+    | null;
+};
+
+/** Every cell a refusal can point at — the writable fields plus the item picker. */
+export type OpeningStockFocusField = OpeningStockLineField | "itemName";

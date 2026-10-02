@@ -1,283 +1,289 @@
-import type { ColumnAlign, ColumnKind, LookupKind, StockListMeta } from "@/features/stocks/_shared/types";
-import type { PhysicalStockListRow } from "./PhysicalStockListModal";
+/**
+ * Physical Stock Update — the wire shapes (`/stock/physical/*`, camelCase as
+ * the server answers) and the screen's own draft.
+ */
 
-export type PhysicalStockColumn = {
-  key: string;
-  header: string;
-  width: string;
-  align: ColumnAlign;
-  kind: ColumnKind;
-  lookupKind?: LookupKind;
-  options?: readonly string[];
-  defaultValue?: string;
-  readOnly?: boolean;
-};
-export type PhysicalStockRow = {
-  id: number;
-  values: Record<string, string>;
-};
-export type PhysicalStockSaveDetail = {
-  psdRowNo: number;
-  psdAccYear: string;
-  psdCompanyId: string;
-  psdBranchId: string;
-  psdGodownId: string;
-  psdItemId: string;
-  psdUnitId: string;
-  psdBaseUnitId: string;
-  psdToBaseFactor: number;
-  psdBarcode?: string | null;
-  psdMrp?: number;
-  psdTrackingType?: "NONE" | "MRP" | "BATCH" | "SERIAL";
-  psdBookQty?: number;
-  psdBookBaseQty?: number;
-  psdPhysicalQty?: number;
-  psdPhysicalBaseQty?: number;
-  psdDiffQty?: number;
-  psdDiffBaseQty?: number;
-  psdStockRateWot?: number;
-  psdStockRateWithTax?: number;
-  psdReasonId?: string | null;
-  psdResolution?: "ADJUST_LOSS_GAIN";
-  psdNotes?: string | null;
-  batchDetails?: PhysicalStockSaveBatchDetail[];
-};
-export type PhysicalStockSaveBatchDetail = {
-  psbRowNo: number;
-  psbAccYear: string;
-  psbCompanyId: string;
-  psbBranchId: string;
-  psbGodownId: string;
-  psbItemId: string;
-  psbUnitId: string;
-  psbBaseUnitId: string;
-  psbToBaseFactor: number;
-  psbBatchId?: string | null;
-  psbBatchNo?: string | null;
-  psbMfgBatchNo?: string | null;
-  psbBatchDate?: string | null;
-  psbMfgDate?: string | null;
-  psbExpiryDate?: string | null;
-  psbMrp?: number;
-  psbBarcode?: string | null;
-  psbSerialNo?: string | null;
-  psbBookQty?: number;
-  psbBookBaseQty?: number;
-  psbPhysicalQty?: number;
-  psbPhysicalBaseQty?: number;
-  psbDiffQty?: number;
-  psbDiffBaseQty?: number;
-  psbStockRateWot?: number;
-  psbStockRateWithTax?: number;
-  psbReasonId?: string | null;
-  psbResolution?: "ADJUST_LOSS_GAIN";
-  psbNotes?: string | null;
-};
-export type PhysicalStockSaveRequest = {
-  psId?: string;
-  psAccYear: string;
-  psCompanyId: string;
-  psBranchId: string;
-  psGodownId: string;
-  psDocNo: number;
-  psDocRefNo: string | null;
-  psDocDate: string;
-  psCountType: "FULL";
-  psStockCutoffAt: string;
-  psFreezeStock: boolean;
-  psPostingMode: "ADJUST_DIFFERENCE_ONLY";
-  psRateSource: "MANUAL";
-  psTotalLines: number;
-  psTotalBookValue: number;
-  psTotalCountedValue: number;
-  psNetVarianceValue: number;
-  psStatus: "DRAFT";
-  psApprovalRequired: boolean;
-  psDeviceType: "WEB";
-  psDeviceId: string | null;
-  psCounterId: string;
-  psSessionId: string | null;
-  psRemarks: string | null;
-  psCreatedBy: string;
-  psModifiedBy?: string | null;
-  details: PhysicalStockSaveDetail[];
-};
-export type PhysicalStockSuccessResponse<T> = {
-  success: true;
-  message: string;
-  data: T;
-  meta?: StockListMeta;
-};
-export type { StockListMeta as PhysicalStockListMeta } from "@/features/stocks/_shared/types";
-export type PhysicalStockHeaderPayload = PhysicalStockListRow & {
-  psc_acc_year?: string;
-  psc_company_id?: string;
-  psc_branch_id?: string;
-  psc_godown_id?: string;
-  psc_godown_name?: string | null;
-  psc_device_type?: string | null;
-  psc_device_id?: string | null;
-  psc_session_id?: string | null;
-  psc_remarks?: string | null;
-};
-export type PhysicalStockBatchDetailPayload = {
-  psb_id: string;
-  psb_psd_id: string;
-  psb_row_no: number;
-  psb_batch_id?: string | null;
-  psb_batch_no?: string | null;
-  psb_mfg_batch_no?: string | null;
-  psb_to_base_factor?: number | null;
-  psb_batch_date?: string | null;
-  psb_mfg_date?: string | null;
-  psb_expiry_date?: string | null;
-  psb_mrp?: number | null;
-  psb_barcode?: string | null;
-  psb_serial_no?: string | null;
-  psb_book_qty?: number | null;
-  psb_book_base_qty?: number | null;
-  psb_physical_qty?: number | null;
-  psb_physical_base_qty?: number | null;
-  psb_diff_qty?: number | null;
-  psb_diff_base_qty?: number | null;
-  psb_stock_rate_wot?: number | null;
-  psb_stock_rate_with_tax?: number | null;
-  psb_notes?: string | null;
-};
-export type PhysicalStockDetailPayload = {
-  psd_id: string;
-  psd_psc_id: string;
-  psd_row_no: number;
-  psd_godown_id?: string;
-  psd_godown_name?: string | null;
-  psd_item_id?: string;
-  psd_item_code?: string | null;
-  psd_item_name?: string | null;
-  psd_unit_id?: string;
-  psd_unit_name?: string | null;
-  psd_base_unit_id?: string;
-  psd_base_unit_name?: string | null;
-  psd_to_base_factor?: number | null;
-  psd_barcode?: string | null;
-  psd_mrp?: number | null;
-  psd_tracking_type?: string | null;
-  psd_book_qty?: number | null;
-  psd_book_base_qty?: number | null;
-  psd_physical_qty?: number | null;
-  psd_physical_base_qty?: number | null;
-  psd_diff_qty?: number | null;
-  psd_diff_base_qty?: number | null;
-  psd_stock_rate_wot?: number | null;
-  psd_stock_rate_with_tax?: number | null;
-  psd_notes?: string | null;
-  batch_details: PhysicalStockBatchDetailPayload[];
-};
-export type PhysicalStockDocumentResponse = {
-  header: PhysicalStockHeaderPayload;
-  details: PhysicalStockDetailPayload[];
-};
-export type ItemStockBalancePayload = {
-  isb_closing_qty?: number | string | null;
-  isb_free_closing_qty?: number | string | null;
-  book_qty?: number | string | null;
-  book_base_qty?: number | string | null;
-  book_free_qty?: number | string | null;
-  book_free_base_qty?: number | string | null;
-};
-export type ItemBatchStockLookupPayload = ItemStockBalancePayload & {
-  ibs_id: string;
-  ibs_batch_id: string;
-  ibs_batch_no: string | null;
-  ibs_mfg_batch_no?: string | null;
-  ibs_batch_date?: string | null;
-  ibs_mfg_date?: string | null;
-  ibs_expiry_date?: string | null;
-  ibs_mrp?: number | string | null;
-  ibs_barcode?: string | null;
-  ibs_serial_no?: string | null;
-  ibs_avg_stock_rate?: number | string | null;
-  ibs_avg_stock_rate_wot?: number | string | null;
-};
-export type ItemStockBalanceRowScope = {
+// ---------------------------------------------------------------------------
+// Wire — what the server sends
+// ---------------------------------------------------------------------------
+
+/** Decimals arrive as numbers, but nothing stops a `numeric` reaching us as text. */
+export type WireNumber = number | string | null | undefined;
+
+/** GET /stock/physical/count-sheet — one holding: godown × lot × bucket. */
+export type CountSheetRow = {
+  lineNo: number;
+  splitNo: number;
   itemId: string;
-  unitId: string;
+  itemCode: string | null;
+  itemName: string;
+  lotId: string;
   godownId: string;
-};
-export type RowValidationIssue = {
-  rowId: number;
-  fieldKey: string;
-  message: string;
-};
-export type { UiTableColumnPayload, SaveUiTableColumnRequest as SavePhysicalStockUiTableColumnRequest, SaveUiTableMasterRequest as SavePhysicalStockUiTableMasterRequest } from "@/features/stocks/_shared/types";
-export type PhysicalStockColumnSettingsRow = {
-  key: string;
-  label: string;
-  uiTblClmId?: string;
-  uiTblClmNo?: string;
-  uiTblClmTableId: string | null;
-  /** The stored Qt fraction, carried through a settings save untouched. */
-  width: number | null;
-  /** The dragged width ("120px") — the one this screen sizes from and writes. */
-  widthPx: string | null;
-  visible: boolean;
-  focus: boolean;
-  position: number;
-  necessity: boolean;
-  nextColumn: number | null;
-  previousColumn: number | null;
-  isActive: boolean;
-};
-export type BulkItemStockPayload = {
-  isb_item_id: string;
-  item_name: string;
-  item_code: string | null;
-  item_default_barcode: string | null;
-  isb_unit_id: string;
-  unit_name: string;
-  isb_base_unit_id: string | null;
-  isb_price_master_id: string | null;
-  isb_godown_id: string;
-  godown_name: string | null;
-  isb_to_base_factor: number;
-  book_qty: number;
-  book_base_qty: number;
-  book_free_qty: number;
-  book_free_base_qty: number;
-  avg_stock_rate: number;
-  avg_stock_rate_wot: number;
-  mrp: number;
-  cost_price: number;
-  cost_wot: number;
-  tracking_type: string;
+  godownName: string | null;
+  bucket: string;
+  baseUomId: string;
+  unitName: string | null;
+  batchNo: string | null;
+  mfgDate: string | null;
+  expiryDate: string | null;
+  mrp: WireNumber;
+  salePrice: WireNumber;
+  serialNo: string | null;
+  supplierId: string | null;
+  bookQty: WireNumber;
+  avgCostRate: WireNumber;
+  stockValue: WireNumber;
+  countedQty: null;
 };
 
-export type PhysicalStockColumnSettingsDraftEntry = {
-  visible: boolean;
-  focus: boolean;
-  necessity: boolean;
+/** One saved line, as `/get`, `/create`, `/post` and `/cancel` answer it. */
+export type PhysicalStockWireLine = {
+  sviId: string;
+  lineNo: number;
+  splitNo: number;
+  itemId: string;
+  itemCode: string | null;
+  itemName: string;
+  unitName: string | null;
+  uomId?: string;
+  baseUomId: string;
+  godownId: string;
+  godownName: string | null;
+  bucket: string;
+  batchNo: string | null;
+  mfgDate: string | null;
+  expiryDate: string | null;
+  mrp: WireNumber;
+  salePrice: WireNumber;
+  serialNo: string | null;
+  supplierId: string | null;
+  supplierName: string | null;
+  bookQty: WireNumber;
+  countedQty: WireNumber;
+  diffQty: WireNumber;
+  reasonId: string | null;
+  reasonName: string | null;
+  lotId: string | null;
+  remarks: string | null;
 };
-export type PhysicalStockLoadRequest =
-  | { type: "latest" }
-  | { type: "refno"; refNo: string }
-  | { type: "stock"; stockId: string; label: string };
-export type PhysicalStockListFilters = {
-  search: string;
-  dateFrom: string;
-  dateTo: string;
+
+export type PhysicalStockWireHeader = {
+  svhId: string;
+  accYear: string;
+  companyId: string;
+  branchId: string;
+  deviceId: string;
+  refno: string;
+  usrRefno: string | null;
+  docDate: string;
+  godownId: string | null;
+  godownName: string | null;
+  reasonId: string | null;
+  reasonName: string | null;
+  freezeStock: boolean;
+  freezeFrom: string | null;
+  freezeTo: string | null;
+  status: string;
+  lineCount: WireNumber;
+  totalQty: WireNumber;
+  totalValue: WireNumber;
+  rateSource: string | null;
+  remarks: string | null;
 };
-export type LoadedPhysicalStockMeta = {
-  stockId: string;
-  stockLabel: string;
-  stockDate: string;
-  stockDocNo: string | null;
-  companyId: string | null;
-  branchId: string | null;
+
+export type PhysicalStockDocument = {
+  header: PhysicalStockWireHeader;
+  lines: PhysicalStockWireLine[];
 };
-export type StockAdjReasonPayload = {
-  sarId: string;
-  sarCode: string;
-  sarName: string;
-  sarReasonKind: string;
-  sarIsActive: boolean;
-  sarIsDeleted: boolean;
+
+export type PhysicalStockPostResult = PhysicalStockDocument & {
+  rowsPosted: number;
+  status: string;
+};
+
+export type PhysicalStockCancelResult = PhysicalStockDocument & {
+  rowsReversed: number;
+  status: string;
+};
+
+/** GET /stock/physical/validate — every line, `problem` null on the clean ones. */
+export type PhysicalStockLineProblem = {
+  sviId: string;
+  lineNo: number;
+  splitNo: number;
+  itemId: string;
+  itemCode: string | null;
+  itemName: string;
+  problem: string | null;
+};
+
+/** GET /master-lookups/item-by-barcode */
+export type BarcodeLookup = {
+  itemId: string;
+  itemName: string;
+};
+
+// ---------------------------------------------------------------------------
+// Wire — what the screen sends
+// ---------------------------------------------------------------------------
+
+export type PhysicalStockScope = {
+  companyId: string;
+  branchId: string;
+  accYear: string;
+};
+
+/** The routes that address one document: get, validate, post, cancel. */
+export type PhysicalStockDocKey = PhysicalStockScope & { svhId: string };
+
+/** A count line is four required fields and one typed number. */
+export type SavePhysicalStockLine = {
+  lineNo: number;
+  splitNo: number;
+  itemId: string;
+  godownId: string;
+  lotId: string;
+  bucket: string;
+  countedQty: number;
+  reasonId?: string;
+  remarks?: string;
+};
+
+export type SavePhysicalStockHeader = {
+  svhId?: string;
+  accYear: string;
+  companyId: string;
+  branchId: string;
+  deviceId: string;
+  docDate: string;
+  toGodownId: string;
+  rateSource: string;
+  reasonId?: string;
+  freezeStock: boolean;
+  freezeFrom?: string;
+  freezeTo?: string;
+  lineCount: number;
+  totalQty: number;
+  totalValue: number;
+  totalValueWot: number;
+  usrRefno?: string;
+  remarks?: string;
+};
+
+export type SavePhysicalStockPayload = {
+  header: SavePhysicalStockHeader;
+  lines: SavePhysicalStockLine[];
+};
+
+export type CountSheetQuery = PhysicalStockScope & {
+  godownId: string;
+  bucket?: string;
+  itemGroupId?: string;
+  includeZero?: boolean;
+  limit?: number;
+  offset?: number;
+};
+
+// ---------------------------------------------------------------------------
+// The draft
+// ---------------------------------------------------------------------------
+
+/**
+ * One grid row. A row with no `lotId` is the BLANK row at the bottom — the one
+ * the item picker and the scanner land in. Every other row is a holding.
+ *
+ * `countedText` is kept as typed, never as a number: an empty string means
+ * "nobody has walked this line", and `"0"` means "walked, found nothing". The
+ * whole screen turns on that distinction.
+ */
+export type CountLine = {
+  key: string;
+  sviId: string;
+  lineNo: number | null;
+  splitNo: number | null;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  unitName: string;
+  baseUomId: string;
+  lotId: string;
+  godownId: string;
+  godownName: string;
+  bucket: string;
+  batchNo: string;
+  /** ISO `yyyy-mm-dd`, or "". */
+  mfgDate: string;
+  expiryDate: string;
+  mrp: number | null;
+  salePrice: number | null;
+  serialNo: string;
+  supplierId: string;
+  supplierName: string;
+  bookQty: number | null;
+  countedText: string;
+  /** counted − book, SIGNED. null while uncounted. */
+  diffQty: number | null;
+  avgCostRate: number | null;
+  /** diff × avg cost — an ESTIMATE. null while uncounted. */
+  diffValue: number | null;
+  stockValue: number | null;
+  reasonId: string;
+  reasonName: string;
+  remarks: string;
+  /** What the scanner read; only a blank row takes one. */
+  barcode: string;
+};
+
+export type PhysicalStockMode = "entry" | "browse";
+
+export type PhysicalStockDraft = {
+  companyId: string;
+  branchId: string;
+  accYear: string;
+  deviceId: string;
+  svhId: string;
+  refno: string;
+  status: string;
+  /** Qt's FormMode: Entry may key, Browse only reads. */
+  mode: PhysicalStockMode;
+  dirty: boolean;
+  /** ISO `yyyy-mm-dd`. */
+  docDate: string;
+  godownId: string;
+  godownName: string;
+  reasonId: string;
+  reasonName: string;
+  rateSource: string;
+  usrRefno: string;
+  remarks: string;
+  freezeStock: boolean;
+  /** Local wall-clock `yyyy-mm-ddTHH:mm`. */
+  freezeFrom: string;
+  freezeTo: string;
+  /** Survives New and the next sheet — it is the counter's choice, not the document's. */
+  blind: boolean;
+  lines: CountLine[];
+  /** The status line under the grid (Qt's lblAudit). */
+  audit: string;
+  /** The title bar's "godown · year" (Qt's lblScope). */
+  scope: string;
+  /** Hands out row keys. */
+  seq: number;
+};
+
+/** The totals bar, as computed — never re-parsed from what it displays. */
+export type CountTotals = {
+  lines: number;
+  counted: number;
+  varianceLines: number;
+  netQty: number;
+  netValue: number;
+};
+
+/** Where the session is working — the document's own scope once one is loaded. */
+export type SessionScope = {
+  companyId: string;
+  branchId: string;
+  accYear: string;
+  deviceId: string;
 };

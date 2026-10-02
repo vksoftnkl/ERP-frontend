@@ -101,7 +101,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
   iconKey: "inventory",
   children: [
     { label: "Item Master", href: "/master/item-master" },
-    { label: "Change Selling" },
+    { label: "Change Selling", href: "/stock/change-selling-price" },
     { label: "Change Selling (Purchase)" },
     { label: "Item Qty Wise Price", href: "/master/item-qty-price-master" },
     { label: "Item Group wise Discount" },
@@ -131,6 +131,7 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
     children: [
       { label: "Opening Stock", href: "/stock/opening-stock" },
       { label: "Physical Stock Update", href: "/stock/physical-stock" },
+      { label: "Stock Adjustment", href: "/stock/stock-adjustment" },
     ],
   },
   {
@@ -331,10 +332,11 @@ export const ERP_MENU_OBJECT: ERPMenuObject = {
   Stock: {
     "Opening Stock": null,
     "Physical Stock Update": null,
+    "Stock Adjustment": null,
   },
   Inventory: {
     "Item Master": "Ctrl+I",
-    "Change Selling": null,
+    "Change Selling": "Ctrl+G",
     "Change Selling (Purchase)": null,
     "Item Qty Wise Price": null,
     "Item Group wise Discount": null,

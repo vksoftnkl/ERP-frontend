@@ -62,6 +62,10 @@ export const UI_TABLES = {
   receiptTenders: { name: "RECEIPT - TENDERS", fallbackId: "33" },
   /** Physical Stock entry grid. */
   physicalStockLines: { name: "PHYSICAL STOCK - LINES", fallbackId: "28" },
+  /** Stock Adjustment (menu 264) entry grid — every kind. */
+  stockAdjustmentLines: { name: "STOCK ADJUSTMENT - ITEM", fallbackId: "41" },
+  /** Change Selling Price (menu 30) — the bulk price grid. */
+  sellingPriceRows: { name: "CHANGE SELLING PRICE - ROWS", fallbackId: "44" },
   /** Quotation Entry item grid. */
   quotationLines: { name: "QUOTATION - LINES", fallbackId: "18" },
   /** Sale Bill Entry item grid. */

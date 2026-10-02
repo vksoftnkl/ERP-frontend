@@ -11,8 +11,6 @@ import gridColumnsReducer, {
 import globalLoaderReducer from "@/store/slices/globalLoaderSlice";
 import businessContextReducer from "@/store/slices/businessContextSlice";
 import mastersReducer from "@/store/slices/mastersSlice";
-import openingStockReducer from "@/store/slices/openingStockSlice";
-import physicalStockReducer from "@/store/slices/physicalStockSlice";
 import quotationReducer from "@/store/slices/quotationSlice";
 import saleOrderReducer from "@/store/slices/saleOrderSlice";
 import saleBillReducer from "@/store/slices/saleBillSlice";
@@ -26,8 +24,6 @@ const rootReducer = combineReducers({
   globalLoader: globalLoaderReducer,
   businessContextUi: businessContextReducer,
   masters: mastersReducer,
-  openingStock: openingStockReducer,
-  physicalStock: physicalStockReducer,
   quotation: quotationReducer,
   saleOrder: saleOrderReducer,
   saleBill: saleBillReducer,

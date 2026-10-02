@@ -83,6 +83,10 @@ export const CONFIGURED_DROPDOWNS = {
   ledgerForPostingRole: { name: "LEDGERS FOR POSTING ROLE", fallbackId: "51", paramBound: true },
   postingRoleRateWise: { name: "POSTING ROLES - RATE WISE", fallbackId: "52", paramBound: false },
   gstRate: { name: "GST RATES", fallbackId: "53", paramBound: false },
+  /** Stock reasons (`stock.stock_reason_master`) — Physical Stock's header reason. */
+  stockReason: { name: "STOCK REASONS", fallbackId: "50", paramBound: false },
+  /** Stock-tracking presets — Change Selling Price's "Tracked as" filter. */
+  stockTrackPreset: { name: "STOCK TRACK PRESETS", fallbackId: "49", paramBound: false },
 } as const;
 export type ConfiguredDropdownKey = keyof typeof CONFIGURED_DROPDOWNS;
 const ID_KEYS = ["dropdown_id", "dropdownId", "id"] as const;

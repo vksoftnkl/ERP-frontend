@@ -74,6 +74,16 @@ export const CONFIGURED_GRIDS = {
   loadingChargeList: { name: "MAIN LIST - LOADING CHARGES", fallbackId: "76", deletedParam: null },
   gstRateList: { name: "MAIN LIST - GST RATES", fallbackId: "103", deletedParam: null },
   openingStockList: { name: "MAIN LIST - OPENING STOCK", fallbackId: "99", deletedParam: null },
+  /** Physical Stock Update (menu 45) — its list. */
+  physicalStockList: { name: "MAIN LIST - PHYSICAL STOCK", fallbackId: "101", deletedParam: null },
+  /** Stock Adjustment (menu 264) — every kind's list. */
+  stockAdjustmentList: { name: "TXN MAIN LIST - STOCK ADJUSTMENT", fallbackId: "122", deletedParam: null },
+  /** Opening Stock's line supplier picker. */
+  supplierPickerPopup: { name: "POPUP - SUPPLIERS", fallbackId: "100", deletedParam: null },
+  /** Physical Stock's line reason picker. */
+  stockReasonPopup: { name: "POPUP - STOCK REASONS", fallbackId: "102", deletedParam: null },
+  /** Change Selling Price's price-level picker. */
+  priceLevelPopup: { name: "POPUP - PRICE LEVELS", fallbackId: "78", deletedParam: null },
   quotationList: { name: "TXN MAIN LIST - QUOTATION", fallbackId: "83", deletedParam: null },
   billList: { name: "TXN MAIN LIST - BILLS", fallbackId: "86", deletedParam: null },
   saleOrderList: { name: "TXN MAIN LIST - SALES ORDER", fallbackId: "87", deletedParam: null },
