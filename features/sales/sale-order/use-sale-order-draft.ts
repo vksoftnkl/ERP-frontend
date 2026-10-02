@@ -90,7 +90,14 @@ import {
   SALE_ORDER_ITEM_GRID_UI_TABLE_KEY,
 } from "./sale-order.constants";
 import { buildSavePayload, importQuotationAsOrder, parseLoadedDocument } from "./sale-order.payload";
-import { copyOrderDraftAsNew, createOrderDraft, isCustomerLocked } from "./sale-order.state";
+import {
+  copyOrderDraftAsNew,
+  createOrderDraft,
+  deliveryDefaultsToKeep,
+  isCustomerLocked,
+  type OrderHeaderDefaults,
+} from "./sale-order.state";
+import { newOrderStatusFor, toEnginePolicy, type SaleOrderSettings } from "./sale-order.settings";
 import type {
   SaleOrderDocKey,
   SaleOrderDraft,
@@ -98,6 +105,7 @@ import type {
   TenderMasterRow,
 } from "./sale-order.types";
 import { validateSaveInputs, type OrderValidationContext } from "./sale-order.validate";
+import { useSaleOrderSettings } from "./use-sale-order-settings";
 import { useUiTableId } from "@/lib/ui-tables";
 
 /** Table 24 stores Qt-style percent widths, not pixels. */
@@ -121,11 +129,20 @@ function clampCalcType(value: string, allowed: readonly string[], fallback: stri
 
 export type SaleOrderBusy = "idle" | "loading" | "saving" | "deleting" | "pricing" | "importing";
 
-/** What `save` came back with — the credit question is an answer, not a refusal. */
-export type SaveOutcome = { status: "saved" } | { status: "failed" } | {
-  status: "confirm-credit";
-  message: string;
+/** The order a save wrote — what Save & Print and F11 (Last Order) print. */
+export type SavedOrderRef = {
+  soId: string;
+  soCompanyId: string;
+  soBranchId: string;
+  soAccYear: string;
+  soOrderRefno: string | null;
 };
+
+/** What `save` came back with — the credit question is an answer, not a refusal. */
+export type SaveOutcome =
+  | { status: "saved"; document: SavedOrderRef }
+  | { status: "failed" }
+  | { status: "confirm-credit"; message: string };
 
 export type SaleOrderDraftApi = {
   draft: SaleOrderDraft;
@@ -133,6 +150,8 @@ export type SaleOrderDraftApi = {
   pricing: DocumentPricing;
   isReady: boolean;
   busy: SaleOrderBusy;
+  /** The app settings this screen obeys (`sale-order.settings.ts`). */
+  settings: SaleOrderSettings;
   canEditPrice: boolean;
   regional: boolean;
   customerLocked: boolean;
@@ -157,6 +176,8 @@ export type SaleOrderDraftApi = {
     scope: "selected" | "all",
     lineKeys: string[],
   ) => Promise<void>;
+  /** Ctrl+± — the row's price level one position up or down, within `inventory.price_level_count`. */
+  stepLinePriceLevel: (lineKey: string, delta: 1 | -1) => Promise<void>;
   save: (context?: OrderValidationContext) => Promise<SaveOutcome>;
   /** The credit question answered yes: remember it and go again. */
   confirmCreditAndSave: (context?: OrderValidationContext) => Promise<SaveOutcome>;
@@ -199,9 +220,17 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
   const actor = useSaveActor();
   const dispatch = useAppDispatch();
   const draft = useAppSelector(selectSaleOrderDraft);
-  const { data: companyStateCode = "" } = useGetCompanyStateCodeQuery(context.companyId, {
-    skip: !context.companyId,
-  });
+  const { settings, loaded: settingsLoaded } = useSaleOrderSettings(
+    context.companyId,
+    context.branchId,
+  );
+  const { data: companyStateCodeFromMaster = "" } = useGetCompanyStateCodeQuery(
+    context.companyId,
+    { skip: !context.companyId },
+  );
+  // `system.company_state_code` is the Qt screen's source; an installation
+  // that never set it falls back to the company master's own state.
+  const companyStateCode = settings.companyStateCode || companyStateCodeFromMaster;
   const { data: capabilities } = useGetUserCapabilitiesQuery(actor.userId, {
     skip: !actor.userId,
   });
@@ -303,9 +332,32 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
       priceLevelNames.length > 0 ? priceLevelNames : PRICE_LEVEL_OPTIONS.map((o) => ({ ...o })),
     [priceLevelNames],
   );
-  const canEditPrice = capabilities?.editRate ?? SESSION_CAPABILITIES.editPrice;
+  // Both the user's own flag and the installation's `inventory.edit_price`
+  // have to allow it — either one off locks the rate and the price levels.
+  const canEditPrice =
+    (capabilities?.editRate ?? SESSION_CAPABILITIES.editPrice) && settings.editPrice;
   const language = (capabilities?.language ?? "").trim().toLowerCase();
-  const regional = language ? !ENGLISH_LANGUAGE_CODES.has(language) : SESSION_CAPABILITIES.regional;
+  const regional =
+    settings.regional ??
+    (language ? !ENGLISH_LANGUAGE_CODES.has(language) : SESSION_CAPABILITIES.regional);
+
+  // What a fresh order starts with — the settings' answer, so a cleared screen
+  // and an import both begin where the installation says (the Qt defaults).
+  const draftDefaults = useMemo<OrderHeaderDefaults>(
+    () => ({
+      priceLevel: settings.defaultPriceLevel,
+      deliveryMode: settings.defaultDeliveryMode,
+      validityDays: settings.defaultValidityDays,
+      posStateCode: companyStateCode,
+    }),
+    [
+      companyStateCode,
+      settings.defaultDeliveryMode,
+      settings.defaultPriceLevel,
+      settings.defaultValidityDays,
+    ],
+  );
+  const draftPolicy = useMemo(() => toEnginePolicy(settings), [settings]);
 
   const livePricing = useMemo(
     () =>
@@ -382,6 +434,21 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
     ],
   );
 
+  /**
+   * `sales.auto_pop_qty` — a line that has just been priced and carries no
+   * quantity yet is given one, the way the Qt screen fills it on the price
+   * lookup's answer. The lookup never touches the quantities, so the line as
+   * it was BEFORE the fill is the right thing to judge.
+   */
+  const popQuantity = useCallback(
+    (lineKey: string, line: { billQty: number; caseQty: number } | undefined) => {
+      if (settings.autoPopQty && (line?.billQty ?? 0) === 0 && (line?.caseQty ?? 0) === 0) {
+        dispatch(lineFieldSet({ key: lineKey, field: "billQty", value: 1 }));
+      }
+    },
+    [dispatch, settings.autoPopQty],
+  );
+
   const pickItem = useCallback(
     async (lineKey: string, itemId: string, itemUnitId?: string) => {
       const line = draft.lines.find((row) => row.key === lineKey);
@@ -390,6 +457,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
       try {
         const lookup = await fetchItemPrice(priceQueryFor(line, itemId, itemUnitId, level)).unwrap();
         dispatch(itemPriceApplied({ key: lineKey, lookup }));
+        popQuantity(lineKey, line);
         void loadUnitOptions(itemId);
       } catch (error) {
         toast.error(errorMessage(error));
@@ -397,7 +465,15 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
         setBusy("idle");
       }
     },
-    [dispatch, draft.lines, draft.header.priceLevel, fetchItemPrice, loadUnitOptions, priceQueryFor],
+    [
+      dispatch,
+      draft.lines,
+      draft.header.priceLevel,
+      fetchItemPrice,
+      loadUnitOptions,
+      popQuantity,
+      priceQueryFor,
+    ],
   );
 
   /** A line imported from a quotation can carry the placeholder factor. */
@@ -475,6 +551,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
           priceQueryFor(line, scanned.itemId, scanned.unitId, line?.priceLevel ?? draft.header.priceLevel),
         ).unwrap();
         dispatch(itemPriceApplied({ key: lineKey, lookup }));
+        popQuantity(lineKey, line);
         void loadUnitOptions(scanned.itemId);
         return true;
       } catch (error) {
@@ -491,6 +568,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
       fetchBarcode,
       fetchItemPrice,
       loadUnitOptions,
+      popQuantity,
       priceQueryFor,
     ],
   );
@@ -527,7 +605,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
       if (!customerId) {
         return;
       }
-      if (isCustomerLocked(draft.source)) {
+      if (isCustomerLocked(draft.source, settings.allowCustomerChangeOnImport)) {
         toast.warn(
           `The customer is locked: this order was raised from ${draft.source?.refno ?? "another document"}.`,
         );
@@ -576,6 +654,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
       fetchFreightBands,
       refreshPartyCredit,
       regional,
+      settings.allowCustomerChangeOnImport,
     ],
   );
 
@@ -617,13 +696,55 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
     [canEditPrice, dispatch, draft.lines, fetchItemPrice, priceQueryFor],
   );
 
+  /**
+   * Ctrl+`+` / Ctrl+`-` on a row (the Qt screen's `stepRowPriceLevel`): one
+   * level up or down, clamped to `inventory.price_level_count`, re-priced; the
+   * document's own level is left alone.
+   */
+  const stepLinePriceLevel = useCallback(
+    async (lineKey: string, delta: 1 | -1) => {
+      const line = draft.lines.find((row) => row.key === lineKey);
+      if (!line?.itemId) {
+        return;
+      }
+      if (!canEditPrice) {
+        toast.warn("You do not have permission to change prices.");
+        return;
+      }
+      const next = Math.min(settings.priceLevelCount, Math.max(1, line.priceLevel + delta));
+      if (next === line.priceLevel) {
+        return;
+      }
+      await applyPriceLevel(next, "selected", [lineKey]);
+    },
+    [applyPriceLevel, canEditPrice, draft.lines, settings.priceLevelCount],
+  );
+
+  // The settings' three validation switches, under whatever the caller adds.
+  const settingsContext = useMemo<OrderValidationContext>(
+    () => ({
+      skipMrp: settings.skipMrp,
+      salesmanMandatory: settings.salesmanMandatory,
+      freeItemTax: settings.freeItemTax,
+    }),
+    [settings.freeItemTax, settings.salesmanMandatory, settings.skipMrp],
+  );
+
   const validate = useCallback(
     (validationContext: OrderValidationContext = {}) =>
-      validateSaveInputs(draft, pricing, {
-        skipMrp: SESSION_CAPABILITIES.skipMrp,
-        ...validationContext,
-      }),
-    [draft, pricing],
+      validateSaveInputs(draft, pricing, { ...settingsContext, ...validationContext }),
+    [draft, pricing, settingsContext],
+  );
+
+  const savedRefOf = useCallback(
+    (saved: { soId: string; soCompanyId: string; soBranchId: string; soAccYear: string; soOrderRefno: string | null }): SavedOrderRef => ({
+      soId: saved.soId,
+      soCompanyId: saved.soCompanyId,
+      soBranchId: saved.soBranchId,
+      soAccYear: saved.soAccYear,
+      soOrderRefno: saved.soOrderRefno,
+    }),
+    [],
   );
 
   const save = useCallback(
@@ -652,13 +773,19 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
       inFlight.current = true;
       setBusy("saving");
       try {
-        const payload = buildSavePayload(draft, pricing, actor);
+        // A new order is written CONFIRMED or DRAFT by `sales.auto_post`; an
+        // existing one keeps the status it was loaded with.
+        const payload = buildSavePayload(draft, pricing, actor, {
+          newOrderStatus: newOrderStatusFor(settings),
+        });
         const saved = await saveSaleOrder(payload).unwrap();
         dispatch(saveResponseApplied({ payload: saved, sentDraft: draft }));
         toast.success(
-          saved.soOrderRefno ? `Order ${saved.soOrderRefno} saved.` : "Order saved.",
+          saved.soOrderRefno
+            ? `Order ${saved.soOrderRefno} saved successfully.`
+            : "Order saved successfully.",
         );
-        return { status: "saved" };
+        return { status: "saved", document: savedRefOf(saved) };
       } catch (error) {
         toast.error(errorMessage(error));
         return { status: "failed" };
@@ -667,7 +794,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
         setBusy("idle");
       }
     },
-    [actor, dispatch, draft, pricing, saveSaleOrder, validate],
+    [actor, dispatch, draft, pricing, saveSaleOrder, savedRefOf, settings, validate],
   );
 
   const confirmCreditAndSave = useCallback(
@@ -677,7 +804,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
       // validation is run against a patched copy rather than waiting a render.
       const patched = { ...draft, creditOverride: true };
       const violation = validateSaveInputs(patched, pricing, {
-        skipMrp: SESSION_CAPABILITIES.skipMrp,
+        ...settingsContext,
         ...validationContext,
       });
       if (violation) {
@@ -694,11 +821,17 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
       inFlight.current = true;
       setBusy("saving");
       try {
-        const payload = buildSavePayload(patched, pricing, actor);
+        const payload = buildSavePayload(patched, pricing, actor, {
+          newOrderStatus: newOrderStatusFor(settings),
+        });
         const saved = await saveSaleOrder(payload).unwrap();
         dispatch(saveResponseApplied({ payload: saved, sentDraft: draft }));
-        toast.success(saved.soOrderRefno ? `Order ${saved.soOrderRefno} saved.` : "Order saved.");
-        return { status: "saved" };
+        toast.success(
+          saved.soOrderRefno
+            ? `Order ${saved.soOrderRefno} saved successfully.`
+            : "Order saved successfully.",
+        );
+        return { status: "saved", document: savedRefOf(saved) };
       } catch (error) {
         toast.error(errorMessage(error));
         return { status: "failed" };
@@ -707,7 +840,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
         setBusy("idle");
       }
     },
-    [actor, dispatch, draft, pricing, saveSaleOrder],
+    [actor, dispatch, draft, pricing, saveSaleOrder, savedRefOf, settings, settingsContext],
   );
 
   const loadDocument = useCallback(
@@ -794,11 +927,18 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
           toast.warn(`${payload.sqQuoteRefno ?? "That quotation"} is deleted and cannot be imported.`);
           return false;
         }
-        const imported = importQuotationAsOrder(payload, companyStateCode, todayIso());
+        const imported = importQuotationAsOrder(
+          payload,
+          companyStateCode,
+          todayIso(),
+          draftDefaults,
+        );
         dispatch(draftReplaced(imported));
         void refreshPartyCredit(imported.customer.custId);
         toast.success(
-          `Imported ${payload.sqQuoteRefno ?? "quotation"} — the customer is locked to the source document.`,
+          settings.allowCustomerChangeOnImport
+            ? `Imported ${payload.sqQuoteRefno ?? "quotation"}.`
+            : `Imported ${payload.sqQuoteRefno ?? "quotation"} — the customer is locked to the source document.`,
         );
         return true;
       } catch (error) {
@@ -808,7 +948,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
         setBusy("idle");
       }
     },
-    [companyStateCode, dispatch, refreshPartyCredit],
+    [companyStateCode, dispatch, draftDefaults, refreshPartyCredit, settings.allowCustomerChangeOnImport],
   );
 
   const clear = useCallback(() => {
@@ -819,10 +959,43 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
           branchId: context.branchId,
           accYear: context.accYear,
           companyStateCode,
+          policy: draftPolicy,
+          defaults: {
+            ...draftDefaults,
+            // The salesman and the packer survive a Clear unless
+            // `sales.clear_delivery_on_clear` says otherwise (the Qt rule).
+            ...deliveryDefaultsToKeep(draftRef.current.header, settings.clearDeliveryOnClear),
+          },
         }),
       ),
     );
-  }, [companyStateCode, context.accYear, context.branchId, context.companyId, dispatch]);
+  }, [
+    companyStateCode,
+    context.accYear,
+    context.branchId,
+    context.companyId,
+    dispatch,
+    draftDefaults,
+    draftPolicy,
+    settings.clearDeliveryOnClear,
+  ]);
+
+  // The settings land after the first draft was made: an untouched screen is
+  // re-seeded so the first order of the session starts on the installation's
+  // defaults too, not on the constants. Live work is never replaced.
+  const reseededForSettings = useRef(false);
+  useEffect(() => {
+    if (!settingsLoaded || reseededForSettings.current) {
+      return;
+    }
+    reseededForSettings.current = true;
+    const current = draftRef.current;
+    const untouched =
+      !current.docId && !current.isDirty && !current.lines.some((line) => Boolean(line.itemId));
+    if (untouched && current.mode === "entry") {
+      clear();
+    }
+  }, [clear, settingsLoaded]);
 
   const deleteDocument = useCallback(async (): Promise<boolean> => {
     if (!draft.docId) {
@@ -858,19 +1031,24 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
       toast.info("This is already a new order.");
       return;
     }
-    dispatch(draftReplaced(copyOrderDraftAsNew(draft, todayIso())));
+    dispatch(draftReplaced(copyOrderDraftAsNew(draft, todayIso(), settings.defaultValidityDays)));
     void refreshPartyCredit(draft.customer.custId);
-  }, [dispatch, draft, refreshPartyCredit]);
+  }, [dispatch, draft, refreshPartyCredit, settings.defaultValidityDays]);
 
   const beginEdit = useCallback(() => {
     if (draft.isDeleted) {
       toast.warn(
-        "This order is deleted and cannot be edited. Use Copy as new (Ctrl+F9) to raise a fresh one from it.",
+        "This order is deleted and cannot be edited. Use Copy as new (Alt+Y) to raise a fresh one from it.",
       );
       return;
     }
+    // The Qt screen's refusal, word for word: a cancelled order is history.
+    if (draft.status.toUpperCase().includes("CANCEL")) {
+      toast.warn("A cancelled order can't be edited — raise a new one.");
+      return;
+    }
     dispatch(modeSet("entry"));
-  }, [dispatch, draft.isDeleted]);
+  }, [dispatch, draft.isDeleted, draft.status]);
 
   const unitOptionsFor = useCallback(
     (itemId: string): ItemUnitOption[] => unitOptions[itemId] ?? [],
@@ -883,9 +1061,10 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
     pricing,
     isReady: Boolean(draft.companyId && draft.branchId && draft.accYear),
     busy,
+    settings,
     canEditPrice,
     regional,
-    customerLocked: isCustomerLocked(draft.source),
+    customerLocked: isCustomerLocked(draft.source, settings.allowCustomerChangeOnImport),
     itemColumns,
     chargeColumns,
     priceLevelOptions,
@@ -904,6 +1083,7 @@ export function useSaleOrderDraft(): SaleOrderDraftApi {
     setLineUnit,
     resolveBarcode,
     applyPriceLevel,
+    stepLinePriceLevel,
     save,
     confirmCreditAndSave,
     loadDocument,

@@ -1,16 +1,16 @@
 "use client";
 /**
- * The order form's action bar, in the legacy screen's own order and wording:
+ * The order form's action bar, in the Qt screen's own order and wording:
  *
- *   Tender - F5 · Save & Print - F6 · Order List - F8 · Copy - Alt+Y ·
+ *   Tender - F5 | Save - F5 · Save & Print - F6 · Order List - F8 · Copy - Alt+Y ·
  *   Edit - F2 · Delete - F3 · Clear - F7 · Last Order - F11 · Cancel
  *
  * Two things follow from that set, and they are deliberate:
  *
- *  - **F5 opens the tender dialog, it does not save.** On the legacy screen the
- *    money is taken first and the document is committed by Save & Print (F6),
- *    which is therefore the only save path — printing is simply unavailable
- *    until the server grows a print endpoint, and says so.
+ *  - **F5 is one button of two.** `sales.tender_type` decides the route: on the
+ *    tender route F5 takes the money and the dialog's own Save / Save & Print
+ *    writes the order; off it, F5 is a plain Save. Save & Print (F6) is always
+ *    there.
  *  - **There is no Hold.** An order is saved, not parked; the quotation screen's
  *    F9/F10 have no counterpart here.
  */
@@ -18,20 +18,26 @@ import { cx } from "@/components/design-system/cx";
 import styles from "@/features/sales/quotation/page.module.scss";
 import type { SaleOrderBusy } from "../use-sale-order-draft";
 
+export type SaleOrderSaveRoute = "tender" | "save";
+
 export type SaleOrderToolbarProps = {
   mode: "entry" | "browse";
   busy: SaleOrderBusy;
+  /** Which F5 the operator gets — see `tenderRouteApplies`. */
+  saveRoute: SaleOrderSaveRoute;
   canEdit: boolean;
   canDelete: boolean;
   canCopyAsNew: boolean;
   canTender: boolean;
   onOpenTender: () => void;
+  onSave: () => void;
   onSaveAndPrint: () => void;
   onShowList: () => void;
   onCopyAsNew: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onClear: () => void;
+  /** F11 — reprint the order saved last on this screen. */
   onLastOrder: () => void;
   onCancel: () => void;
 };
@@ -40,11 +46,13 @@ export function SaleOrderToolbar(props: SaleOrderToolbarProps) {
   const {
     mode,
     busy,
+    saveRoute,
     canEdit,
     canDelete,
     canCopyAsNew,
     canTender,
     onOpenTender,
+    onSave,
     onSaveAndPrint,
     onShowList,
     onCopyAsNew,
@@ -58,15 +66,26 @@ export function SaleOrderToolbar(props: SaleOrderToolbarProps) {
   const editable = mode === "entry";
   return (
     <div className={styles.buttonBar}>
-      <button
-        type="button"
-        className={styles.button}
-        disabled={working || !canTender}
-        title="Record the advance the customer is handing over"
-        onClick={onOpenTender}
-      >
-        Tender <span className={styles.buttonHint}>F5</span>
-      </button>
+      {saveRoute === "tender" ? (
+        <button
+          type="button"
+          className={styles.button}
+          disabled={working || !canTender}
+          title="Record the advance the customer is handing over, then save"
+          onClick={onOpenTender}
+        >
+          Tender <span className={styles.buttonHint}>F5</span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          className={styles.button}
+          disabled={working || !editable}
+          onClick={onSave}
+        >
+          {busy === "saving" ? "Saving…" : "Save"} <span className={styles.buttonHint}>F5</span>
+        </button>
+      )}
       <button
         type="button"
         className={cx(styles.button, styles.buttonPrimary)}
@@ -104,7 +123,7 @@ export function SaleOrderToolbar(props: SaleOrderToolbarProps) {
         type="button"
         className={styles.button}
         disabled={working}
-        title="Open the most recent order in this branch"
+        title="Reprint the order saved last on this screen"
         onClick={onLastOrder}
       >
         Last Order <span className={styles.buttonHint}>F11</span>

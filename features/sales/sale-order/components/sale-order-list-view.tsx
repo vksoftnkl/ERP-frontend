@@ -97,8 +97,27 @@ function asText(value: unknown): string {
  * `so_status = 'CANCELLED'` in the same write — and grid 87 projects no
  * `so_is_deleted`, so the status is the only signal the list has.
  */
+function statusOf(row: MasterTableRow): string {
+  return asText(sourceValue(row, "so_status")).trim().toUpperCase();
+}
+
 function isCancelledRow(row: MasterTableRow): boolean {
-  return asText(sourceValue(row, "so_status")).trim().toUpperCase() === "CANCELLED";
+  return statusOf(row) === "CANCELLED";
+}
+
+/**
+ * The Qt list's row policy: a fully delivered order (CLOSED / COMPLETED) is
+ * neither edited nor deleted — "this order is closed" — and a partly delivered
+ * one (PARTIAL) may still be edited but not deleted: a bill already stands on
+ * part of it.
+ */
+function isClosedRow(row: MasterTableRow): boolean {
+  const status = statusOf(row);
+  return status === "CLOSED" || status === "COMPLETED";
+}
+
+function isPartialRow(row: MasterTableRow): boolean {
+  return statusOf(row) === "PARTIAL";
 }
 
 const STATUS_CLASS: Record<string, string> = {
@@ -323,9 +342,18 @@ export function SaleOrderListView({ onCreate, onOpen }: SaleOrderListViewProps) 
       // A cancelled order is readable but not writable: the toolbar's Edit
       // button greys out rather than opening the voucher on a document the
       // server would refuse to update.
-      isRowEditDisabled={isCancelledRow}
-      rowEditDisabledReason="This order is cancelled and cannot be edited"
-      onEditAction={(row) => onOpen(docKeyOf(row), isCancelledRow(row) ? "browse" : "entry")}
+      isRowEditDisabled={(row) => isCancelledRow(row) || isClosedRow(row)}
+      rowEditDisabledReason="Cancelled or fully delivered — this order is closed; raise a new one instead"
+      // Delete stops one step earlier than Edit: a partly delivered order has a
+      // bill standing on it, so it may be amended but not removed (the Qt rule).
+      isRowDeleteDisabled={(row) => isCancelledRow(row) || isClosedRow(row) || isPartialRow(row)}
+      rowDeleteDisabledReason="A cancelled, partly or fully delivered order cannot be deleted"
+      deleteConfirmMessage={(row) =>
+        `Delete order "${asText(sourceValue(row, "so_order_refno")) || "this order"}"? This cannot be undone.`
+      }
+      onEditAction={(row) =>
+        onOpen(docKeyOf(row), isCancelledRow(row) || isClosedRow(row) ? "browse" : "entry")
+      }
       // Ctrl+Enter and double-click open the voucher to be READ — an order has
       // lines, charges and tenders, so it does not fit the shell's view modal.
       // A cancelled row still opens: unlike a soft-deleted quotation, `GET

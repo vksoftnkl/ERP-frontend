@@ -249,6 +249,8 @@ export type SaveSaleOrderDto = {
   soRefundAmt?: number;
   /** UNPAID / PARTIAL / PAID, decided by the NET. Explicit null is rejected. */
   soPayStatus?: string;
+  /** The type of the largest tender line (CASH, CARD, …), or null when nothing was tendered. */
+  soPayMode?: string | null;
 
   soPaymentTerms?: string | null;
   soDeliveryTerms?: string | null;
@@ -855,6 +857,8 @@ export type SaleOrderDraft = {
   creditOverride: boolean;
   /** The credit panel's data; null until a customer is picked or it failed. */
   partyCredit: PartyCreditSummary | null;
+  /** Created / modified by and on — from the GET; null on a new or copied order. */
+  audit: import("./sale-order.state").OrderAudit | null;
 };
 
 /** What `validate` returns — same contract as the quotation's. */

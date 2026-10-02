@@ -28,11 +28,13 @@ import type {
   ItemPriceLookupPayload,
 } from "@/features/sales/quotation/quotation.types";
 import {
+  applyDiscountPercToLines,
   applyOrderHeaderField,
   applyOrderSaveResponse,
   createOrderDraft,
   createOrderDraftLine,
   duplicateOrderDraftLine,
+  scaleLineRates,
 } from "@/features/sales/sale-order/sale-order.state";
 import type {
   PartyCreditSummary,
@@ -129,9 +131,11 @@ const saleOrderSlice = createSlice({
       state.header.hasLoad = detail.cooly;
       state.header.hasUnload = detail.unloading_charge;
       state.header.hasPromo = detail.allow_promotion;
-      // A customer the master lets buy on credit books a CREDIT order; one it
-      // does not books CASH — the operator can still change it.
-      state.header.orderType = detail.debit_allowed ? "CREDIT" : "CASH";
+      // The Qt rule: the Term stays whatever the operator set, except that a
+      // customer the master does not let buy on credit is forced back to CASH.
+      if (!detail.debit_allowed) {
+        state.header.orderType = "CASH";
+      }
       state.isLocalSale = detail.local_sales;
       if (detail.local_sales && customer.stateCode) {
         state.companyStateCode = customer.stateCode;
@@ -250,6 +254,14 @@ const saleOrderSlice = createSlice({
         ...applyItemPrice(existing, lookup, { unitName, unitId }),
       };
     },
+    /** Alt+D — one discount percent on every priced, non-free line. */
+    linesDiscountPercApplied(state, action: PayloadAction<number>) {
+      state.lines = applyDiscountPercToLines(state.lines, action.payload);
+    },
+    /** The ± Price button — every priced, non-free rate scaled by a percent. */
+    linesRateScaled(state, action: PayloadAction<number>) {
+      state.lines = scaleLineRates(state.lines, action.payload);
+    },
     linePriceLevelSet(
       state,
       action: PayloadAction<{ keys: string[]; priceLevel: number; commitDocument: boolean }>,
@@ -344,6 +356,8 @@ export const {
   lineRemoved,
   lineFieldSet,
   itemPriceApplied,
+  linesDiscountPercApplied,
+  linesRateScaled,
   linePriceLevelSet,
   chargeAdded,
   chargeRemoved,

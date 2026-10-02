@@ -20,20 +20,25 @@ import { validateTenderRows } from "./tender/validate";
 import { settledTenderRows, toArithRow } from "./sale-order.payload";
 
 export type OrderValidationContext = {
+  /** `inventory.skip_mrp` — a rate above MRP is allowed. */
   skipMrp?: boolean;
-  /** Some deployments insist an order names its salesman. No wire source yet. */
+  /** `sales.salesman_mandatory` — an order has to name its salesman. */
   salesmanMandatory?: boolean;
+  /** `sales.free_item_tax` — a zero rate is allowed on a line that is not marked free. */
+  freeItemTax?: boolean;
 };
 
 /**
  * The credit gate (the plan's §7.2): judged on the SAME object the panel
  * rendered. `isCreditCheckEnabled === false` is an answer — no gate. A summary
- * that never arrived is also no gate (a failed lookup blocks nothing). The
- * result asks for confirmation; only a declined confirmation stops the save,
- * and `draft.creditOverride` remembers a granted one for this settle.
+ * that never arrived is also no gate (a failed lookup blocks nothing). A
+ * customer whose master allows billing while overdue (`overdue_billing`) is
+ * never asked either — the Qt screen's rule. The result asks for confirmation;
+ * only a declined confirmation stops the save, and `draft.creditOverride`
+ * remembers a granted one for this settle.
  */
 export function creditGate(draft: SaleOrderDraft): SaleOrderViolation | null {
-  if (draft.creditOverride) {
+  if (draft.creditOverride || draft.customer.overdueBilling) {
     return null;
   }
   const credit = draft.partyCredit;
@@ -138,7 +143,9 @@ export function validateSaveInputs(
         lineKey: line.key,
       };
     }
-    if (line.rate === 0 && !line.isFree) {
+    // `sales.free_item_tax` lets a line go out at nothing without being marked
+    // free — the tax on a free-of-charge item is still the seller's.
+    if (line.rate === 0 && !line.isFree && !context.freeItemTax) {
       return {
         message: `${line.itemName || "This line"} has no rate. Mark it free if that is intended.`,
         field: "rate",
@@ -186,6 +193,11 @@ export function validateSaveInputs(
     }
   }
 
+  const roleViolation = chargeRoleGate(draft, pricing);
+  if (roleViolation) {
+    return roleViolation;
+  }
+
   const tenderViolation = validateTenders(draft, pricing);
   if (tenderViolation) {
     return tenderViolation;
@@ -194,6 +206,53 @@ export function validateSaveInputs(
   // Last, because it is the only gate that CONFIRMS rather than refuses: every
   // hard failure above must win over a question.
   return creditGate(draft);
+}
+
+/**
+ * The Qt screen's role gate: freight / loading / unloading that the items
+ * work out to (the box ticked, the policy not manual, the per-line sum above
+ * zero) is only billed through a charge row carrying that role. Without one the
+ * money would fall off the order, so the save stops and says which role.
+ */
+export function chargeRoleGate(
+  draft: SaleOrderDraft,
+  pricing: DocumentPricing,
+): SaleOrderViolation | null {
+  const manual = (calcType: string) => calcType.trim().toUpperCase() === "MANUAL";
+  const lineSum = (pick: (line: DocumentPricing["lines"][number]) => number) =>
+    money(pricing.lines.reduce((total, line) => total + (pick(line) || 0), 0));
+  const hasRole = (role: string) =>
+    pricing.charges.some((row) => row.role === role && draft.charges.some((d) => d.key === row.key && d.chgId));
+
+  const gates: Array<{ role: string; label: string; on: boolean; amount: number }> = [
+    {
+      role: "FREIGHT",
+      label: "Freight",
+      on: draft.header.hasFreight && !manual(draft.policy.freightCalcType),
+      amount: lineSum((line) => line.freightAmt),
+    },
+    {
+      role: "LOADING",
+      label: "Loading",
+      on: draft.header.hasLoad && !manual(draft.policy.loadingCalcType),
+      amount: lineSum((line) => line.loadingAmt),
+    },
+    {
+      role: "UNLOADING",
+      label: "Unloading",
+      on: draft.header.hasUnload && !manual(draft.policy.loadingCalcType),
+      amount: lineSum((line) => line.loadingAmt),
+    },
+  ];
+  for (const gate of gates) {
+    if (gate.on && gate.amount > 0 && !hasRole(gate.role)) {
+      return {
+        message: `${gate.label} of ${gate.amount} is calculated on the items, but the charges grid has no ${gate.label} line — the amount would not be billed. Add the ${gate.label} charge, or untick ${gate.label}.`,
+        field: "charges",
+      };
+    }
+  }
+  return null;
 }
 
 /**

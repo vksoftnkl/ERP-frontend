@@ -9,8 +9,19 @@
  * 96-column meanings — the fulfilment quartet reaches them flattened out of
  * each line's readonly branch, so the grid can paint what it may never edit.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { toast } from "@/lib/notify";
+import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
+import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
+import { moveHeaderFocus } from "@/features/sales/quotation/components/header-focus";
 import { cx } from "@/components/design-system/cx";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
 import type { PricedLine } from "@/domain/pricing";
@@ -43,10 +54,7 @@ import {
   TotalsStrip,
 } from "@/features/sales/quotation/components/totals-strip";
 import { useColumnResize } from "@/features/sales/quotation/components/use-column-resize";
-import {
-  CHARGE_GRID_UI_TABLE_KEY,
-  PRICE_LEVEL_COUNT,
-} from "@/features/sales/quotation/quotation.constants";
+import { CHARGE_GRID_UI_TABLE_KEY } from "@/features/sales/quotation/quotation.constants";
 import type {
   ChargeMasterRow,
   DraftChargeRow,
@@ -72,18 +80,24 @@ import {
   lineFieldSet,
   lineInserted,
   lineRemoved,
+  linesDiscountPercApplied,
+  linesRateScaled,
   posSet,
   tendersReplaced,
   termsFieldSet,
 } from "@/store/slices/saleOrderSlice";
 import { SALE_ORDER_ITEM_GRID_UI_TABLE_KEY } from "../sale-order.constants";
+import { tenderRouteApplies } from "../sale-order.settings";
+import { findDuplicateLine } from "../sale-order.state";
 import { netSettledOf } from "../tender/arithmetic";
-import type { SaleOrderDocKey, SaleOrderDraftLine } from "../sale-order.types";
+import type { SaleOrderDocKey, SaleOrderDraftLine, SaleOrderHeader } from "../sale-order.types";
 import {
   SALES_ITEM_COLUMN_WIDTH_UNIT,
   useSaleOrderDraft,
+  type SavedOrderRef,
 } from "../use-sale-order-draft";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
+import { NumberPromptModal } from "./number-prompt-modal";
 import { OrderIconToolbar } from "./order-icon-toolbar";
 import { SaleOrderListModal } from "./sale-order-list-modal";
 import { SaleOrderToolbar } from "./sale-order-toolbar";
@@ -120,6 +134,45 @@ type PendingGuard = "list" | "clear" | "back" | "import" | null;
 
 const NEW_DOCUMENT = " new";
 
+/** The four option boxes the Qt screen confirms before it flips them. */
+const OPTION_LABELS: Partial<Record<keyof SaleOrderHeader, string>> = {
+  hasFreight: "Freight",
+  hasLoad: "Load",
+  hasUnload: "Unload",
+  hasPromo: "Promo",
+};
+
+type OptionQuestion = { field: keyof SaleOrderHeader; label: string; checked: boolean };
+type DuplicateQuestion = { rowKey: string; pick: ItemPick; rowNo: number };
+
+/** "created VIJI · 02-10-2026 14:05" — the title bar's audit line. */
+function formatAuditStamp(iso: string | null): string {
+  if (!iso) {
+    return "";
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  const two = (value: number) => String(value).padStart(2, "0");
+  return `${two(date.getDate())}-${two(date.getMonth() + 1)}-${date.getFullYear()} ${two(date.getHours())}:${two(date.getMinutes())}`;
+}
+
+/** Enter walks the header the way the Qt dialog's Enter-as-Tab does. */
+function onHeaderKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+  if (event.key !== "Enter" || event.defaultPrevented) {
+    return;
+  }
+  // A combo box that is open takes Enter for its own pick.
+  const target = event.target as HTMLElement | null;
+  if (target?.getAttribute("aria-expanded") === "true") {
+    return;
+  }
+  if (moveHeaderFocus(event.currentTarget, event.target, event.shiftKey ? -1 : 1)) {
+    event.preventDefault();
+  }
+}
+
 export type SaleOrderEntryViewProps = {
   initialDocument?: SaleOrderDocKey;
   initialMode?: "browse" | "entry";
@@ -137,6 +190,7 @@ export function SaleOrderEntryView({
     dispatch,
     pricing,
     busy,
+    settings,
     canEditPrice,
     customerLocked,
     itemColumns,
@@ -178,6 +232,20 @@ export function SaleOrderEntryView({
   const [creditQuestion, setCreditQuestion] = useState<string | null>(null);
   const [pendingGuard, setPendingGuard] = useState<PendingGuard>(null);
   const [invalidCells, setInvalidCells] = useState<Record<string, true>>({});
+  /** The tender dialog closed on Save / Save & Print: write the order on the next render. */
+  const [saveAfterTender, setSaveAfterTender] = useState<{ print: boolean } | null>(null);
+  /** What F11 (Last Order) reprints — the order saved last on THIS screen. */
+  const [lastSaved, setLastSaved] = useState<SavedOrderRef | null>(null);
+  const [printTarget, setPrintTarget] = useState<SavedOrderRef | null>(null);
+  const [duplicateQuestion, setDuplicateQuestion] = useState<DuplicateQuestion | null>(null);
+  const [optionQuestion, setOptionQuestion] = useState<OptionQuestion | null>(null);
+  const [discountPromptOpen, setDiscountPromptOpen] = useState(false);
+  const [hikePromptOpen, setHikePromptOpen] = useState(false);
+  /** Whether the save the credit question interrupted was a Save & Print. */
+  const creditSavePrint = useRef(false);
+
+  // `sales.tender_type` — which F5 this order gets (the Qt route).
+  const tenderRoute = tenderRouteApplies(settings.tenderType, draft.header.orderType);
 
   const itemUiTableId = useUiTableId(SALE_ORDER_ITEM_GRID_UI_TABLE_KEY);
   const chargeUiTableId = useUiTableId(CHARGE_GRID_UI_TABLE_KEY);
@@ -280,6 +348,19 @@ export function SaleOrderEntryView({
     [dispatch],
   );
 
+  const priceRowWithPick = useCallback(
+    (rowKey: string, pick: ItemPick) => {
+      pickedItemRow.current = rowKey;
+      void api.pickItem(rowKey, pick.itemId, pick.itemUnitId);
+    },
+    [api],
+  );
+
+  /**
+   * The Qt duplicate rule: the same item picked twice either bumps the row it
+   * is already on by one (`sales.allow_duplicate_item` off — the cursor parks
+   * there) or asks "Add it again?" (on). A free row is never "the same line".
+   */
   const onPickItem = useCallback(
     (pick: ItemPick) => {
       const rowKey = itemPickerRow;
@@ -287,17 +368,35 @@ export function SaleOrderEntryView({
       if (!rowKey) {
         return;
       }
-      const duplicate = draft.lines.some(
-        (line) => line.key !== rowKey && line.itemId === pick.itemId,
-      );
-      if (duplicate) {
-        toast.info(`${pick.itemName} is already on this order.`);
+      const duplicate = findDuplicateLine(draft.lines, pick.itemId, rowKey);
+      if (!duplicate) {
+        priceRowWithPick(rowKey, pick);
+        return;
       }
-      pickedItemRow.current = rowKey;
-      void api.pickItem(rowKey, pick.itemId, pick.itemUnitId);
+      if (!settings.allowDuplicateItem) {
+        dispatch(
+          lineFieldSet({
+            key: duplicate.line.key,
+            field: "billQty",
+            value: duplicate.line.billQty + 1,
+          }),
+        );
+        setActiveRowKey(duplicate.line.key);
+        toast.info(`${pick.itemName} is already on row ${duplicate.rowNo} — one more was added there.`);
+        return;
+      }
+      setDuplicateQuestion({ rowKey, pick, rowNo: duplicate.rowNo });
     },
-    [api, draft.lines, itemPickerRow],
+    [dispatch, draft.lines, itemPickerRow, priceRowWithPick, settings.allowDuplicateItem],
   );
+
+  const onDuplicateConfirmed = useCallback(() => {
+    const question = duplicateQuestion;
+    setDuplicateQuestion(null);
+    if (question) {
+      priceRowWithPick(question.rowKey, question.pick);
+    }
+  }, [duplicateQuestion, priceRowWithPick]);
 
   /**
    * Picking an item hands focus back to the grid, on the next stop of the
@@ -403,6 +502,26 @@ export function SaleOrderEntryView({
   );
 
   // ----------------------------------------------------------------- actions
+  /**
+   * After a save: the screen resets for the next order (the Qt
+   * `resetScreenState`), the saved document is remembered for F11, and a
+   * Save & Print opens the print dialog on it — the same five-button dialog
+   * the order list uses, since the server's render endpoint has been there
+   * all along.
+   */
+  const afterSaved = useCallback(
+    (document: SavedOrderRef, print: boolean) => {
+      setLastSaved(document);
+      if (print) {
+        setPrintTarget(document);
+      }
+      api.clear();
+      setActiveRowKey(null);
+      setInvalidCells({});
+    },
+    [api],
+  );
+
   const runSave = useCallback(
     async (print: boolean) => {
       if (!canSaveDoc) {
@@ -415,31 +534,59 @@ export function SaleOrderEntryView({
       );
       const outcome = await api.save();
       if (outcome.status === "confirm-credit") {
+        creditSavePrint.current = print;
         setCreditQuestion(outcome.message);
         return;
       }
       if (outcome.status !== "saved") {
         return;
       }
-      if (print) {
-        toast.info("Saved. Printing is not available yet — the server has no print endpoint.");
-      }
-      api.clear();
-      setActiveRowKey(null);
-      setInvalidCells({});
+      afterSaved(outcome.document, print);
     },
-    [api, canSaveDoc],
+    [afterSaved, api, canSaveDoc],
   );
 
   const onCreditConfirmed = useCallback(async () => {
     setCreditQuestion(null);
     const outcome = await api.confirmCreditAndSave();
     if (outcome.status === "saved") {
-      api.clear();
-      setActiveRowKey(null);
-      setInvalidCells({});
+      afterSaved(outcome.document, creditSavePrint.current);
     }
-  }, [api]);
+  }, [afterSaved, api]);
+
+  // The tender dialog's Save / Save & Print: its rows were dispatched as it
+  // closed, so the save runs on the render that holds them.
+  useEffect(() => {
+    if (!saveAfterTender) {
+      return;
+    }
+    const { print } = saveAfterTender;
+    setSaveAfterTender(null);
+    void runSave(print);
+  }, [runSave, saveAfterTender]);
+
+  /** F11 — Last Order: reprint the order saved last on this screen. */
+  const printLastSaved = useCallback(() => {
+    if (!lastSaved) {
+      toast.info(
+        "No order has been saved on this screen yet. Open one from the order list to print it.",
+      );
+      return;
+    }
+    setPrintTarget(lastSaved);
+  }, [lastSaved]);
+
+  /** Alt+O — the current line's cost, for the operator's eyes. */
+  const showCurrentLineCost = useCallback(() => {
+    const line = activeRowKey ? draft.lines.find((row) => row.key === activeRowKey) : undefined;
+    if (!line?.itemId) {
+      toast.info("Select an item line first.");
+      return;
+    }
+    toast.info(
+      `${line.itemName} · Cost: ${formatCurrency(line.costPrice)} · Cost (pre-tax): ${formatCurrency(line.costBeforeTax)}`,
+    );
+  }, [activeRowKey, draft.lines]);
 
   const guardedRun = useCallback(
     (action: Exclude<PendingGuard, null>) => {
@@ -488,8 +635,57 @@ export function SaleOrderEntryView({
     if (draft.mode === "entry" || draft.isDeleted) {
       return;
     }
+    if (draft.status.toUpperCase().includes("CANCEL")) {
+      toast.warn("A cancelled order can't be edited — raise a new one.");
+      return;
+    }
     setEditConfirmOpen(true);
-  }, [draft.isDeleted, draft.mode]);
+  }, [draft.isDeleted, draft.mode, draft.status]);
+
+  /**
+   * The header's Price Level is the Qt screen's `changePriceLevel`: refused
+   * when prices are locked, applied straight away while the order has no priced
+   * line, and otherwise a question — the selected line, or every line (only the
+   * latter moves the document's own level).
+   */
+  const onHeaderPriceLevel = useCallback(
+    (level: number) => {
+      if (level === draft.header.priceLevel) {
+        return;
+      }
+      if (!canEditPrice) {
+        toast.warn("You do not have permission to change prices.");
+        return;
+      }
+      if (!draft.lines.some((line) => line.itemId)) {
+        dispatch(headerFieldSet({ field: "priceLevel", value: level }));
+        return;
+      }
+      setPriceLevelPrompt(level);
+    },
+    [canEditPrice, dispatch, draft.header.priceLevel, draft.lines],
+  );
+
+  /** Freight / Load / Unload / Promo each ask before they flip (the Qt "Order Option" confirm). */
+  const onHeaderField = useCallback(
+    (field: keyof SaleOrderHeader, value: string | number | boolean) => {
+      const label = OPTION_LABELS[field];
+      if (label && typeof value === "boolean") {
+        setOptionQuestion({ field, label, checked: value });
+        return;
+      }
+      dispatch(headerFieldSet({ field, value }));
+    },
+    [dispatch],
+  );
+
+  const onOptionConfirmed = useCallback(() => {
+    const question = optionQuestion;
+    setOptionQuestion(null);
+    if (question) {
+      dispatch(headerFieldSet({ field: question.field, value: question.checked }));
+    }
+  }, [dispatch, optionQuestion]);
 
   const onEditConfirmed = useCallback(() => {
     setEditConfirmOpen(false);
@@ -532,8 +728,38 @@ export function SaleOrderEntryView({
       toast.warn("Open the order for editing before recording an advance.");
       return;
     }
+    // On the tender route the dialog's OK WRITES the order, so the order has
+    // to be saveable before the money is taken — the Qt screen validates first.
+    if (tenderRoute) {
+      const violation = api.validate();
+      if (violation && !violation.confirm) {
+        toast.error(violation.message);
+        setInvalidCells(
+          violation.lineKey ? { [`${violation.lineKey}:${violation.field}`]: true } : {},
+        );
+        return;
+      }
+    }
     setTenderOpen(true);
-  }, [editable]);
+  }, [api, editable, tenderRoute]);
+
+  /** F5 — Tender on the tender route, a plain Save otherwise (the Qt `btnTender` / `btnSave` pair). */
+  const onF5 = useCallback(() => {
+    if (tenderRoute) {
+      openTender();
+    } else {
+      void runSave(false);
+    }
+  }, [openTender, runSave, tenderRoute]);
+
+  /** F6 — Save & Print; on the tender route the dialog's Save & Print does it. */
+  const onF6 = useCallback(() => {
+    if (tenderRoute) {
+      openTender();
+    } else {
+      void runSave(true);
+    }
+  }, [openTender, runSave, tenderRoute]);
 
   // --------------------------------------------------------------- shortcuts
   const modalOpen =
@@ -546,26 +772,27 @@ export function SaleOrderEntryView({
     deleteOpen ||
     editConfirmOpen ||
     creditQuestion !== null ||
-    pendingGuard !== null;
+    pendingGuard !== null ||
+    printTarget !== null ||
+    duplicateQuestion !== null ||
+    optionQuestion !== null ||
+    discountPromptOpen ||
+    hikePromptOpen;
 
-  const shortcutsRef = useRef({
-    runSave,
+  const shortcuts = {
+    onF5,
+    onF6,
     guardedRun,
     requestEdit,
-    openTender,
     copyAsNew: api.copyAsNew,
-    loadLastOrder: api.loadLastOrder,
-    modalOpen,
-  });
-  shortcutsRef.current = {
-    runSave,
-    guardedRun,
-    requestEdit,
-    openTender,
-    copyAsNew: api.copyAsNew,
-    loadLastOrder: api.loadLastOrder,
+    printLastSaved,
+    showCurrentLineCost,
+    openDiscountPrompt: () => setDiscountPromptOpen(true),
+    editable,
     modalOpen,
   };
+  const shortcutsRef = useRef(shortcuts);
+  shortcutsRef.current = shortcuts;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -573,18 +800,18 @@ export function SaleOrderEntryView({
         return;
       }
       switch (event.key) {
-        // The legacy binding: F5 takes the money, F6 commits the document.
+        // The Qt binding: F5 is Tender or Save by route, F6 is Save & Print.
         case "F5":
           event.preventDefault();
-          shortcutsRef.current.openTender();
+          shortcutsRef.current.onF5();
           break;
         case "F6":
           event.preventDefault();
-          void shortcutsRef.current.runSave(true);
+          shortcutsRef.current.onF6();
           break;
         case "F11":
           event.preventDefault();
-          void shortcutsRef.current.loadLastOrder();
+          shortcutsRef.current.printLastSaved();
           break;
         case "F7":
           event.preventDefault();
@@ -610,11 +837,20 @@ export function SaleOrderEntryView({
           }
           break;
         default:
-          // Copy as new is Alt+Y here, not Ctrl+F9: the order screen's own
-          // binding, and `event.key` for it is the letter, not a function key.
-          if (event.altKey && (event.key === "y" || event.key === "Y")) {
-            event.preventDefault();
-            shortcutsRef.current.copyAsNew();
+          // The Alt+letter keys of the Qt screen. `event.code` is checked as
+          // well because Alt+letter is a dead key on some layouts.
+          if (event.altKey && !event.ctrlKey) {
+            const key = event.key.toLowerCase();
+            if (key === "y" || event.code === "KeyY") {
+              event.preventDefault();
+              shortcutsRef.current.copyAsNew();
+            } else if ((key === "d" || event.code === "KeyD") && shortcutsRef.current.editable) {
+              event.preventDefault();
+              shortcutsRef.current.openDiscountPrompt();
+            } else if (key === "o" || event.code === "KeyO") {
+              event.preventDefault();
+              shortcutsRef.current.showCurrentLineCost();
+            }
           }
           break;
       }
@@ -716,24 +952,40 @@ export function SaleOrderEntryView({
           <span>
             Pay <strong>{draft.settlement.payStatus}</strong>
           </span>
+          {draft.audit?.createdBy || draft.audit?.createdOn ? (
+            <span title="Who raised the order, and who last changed it">
+              created {draft.audit.createdBy ?? "—"} · {formatAuditStamp(draft.audit.createdOn)}
+              {draft.audit.modifiedOn && draft.audit.modifiedOn !== draft.audit.createdOn ? (
+                <>
+                  {" "}
+                  · modified {draft.audit.modifiedBy ?? "—"} ·{" "}
+                  {formatAuditStamp(draft.audit.modifiedOn)}
+                </>
+              ) : null}
+            </span>
+          ) : null}
         </div>
       </header>
 
       <OrderIconToolbar
         editable={editable}
-        canTender={editable}
+        canTender={editable && tenderRoute}
         canDelete={canAlter}
         canCopy={canCopyDoc}
         onOpenTender={openTender}
         onImportQuotation={() => guardedRun("import")}
         onShowList={() => guardedRun("list")}
         onCopyAsNew={api.copyAsNew}
-        onPrint={() => void runSave(true)}
+        onPrint={onF6}
         onClear={() => guardedRun("clear")}
         onDelete={() => setDeleteOpen(true)}
+        onDiscountAll={() => setDiscountPromptOpen(true)}
+        onHikePrices={() => setHikePromptOpen(true)}
+        onShowCost={showCurrentLineCost}
       />
 
-      <div className={cx(quotationStyles.headerRow, styles.headerRowFour)}>
+      {/* Enter walks the header fields, as the Qt dialog's Enter-as-Tab does. */}
+      <div className={cx(quotationStyles.headerRow, styles.headerRowFour)} onKeyDown={onHeaderKeyDown}>
         <OrderCustomerBlock
           customer={draft.customer}
           header={draft.header}
@@ -750,20 +1002,20 @@ export function SaleOrderEntryView({
           priceLevelOptions={priceLevelOptions}
           disabled={!editable}
           onSetHeader={(field, value) => {
-            const switchedToCash =
-              field === "orderType" && value === "CASH" && draft.header.orderType !== "CASH";
-            dispatch(headerFieldSet({ field, value }));
-            // A CASH term means the money is taken now — switching to it opens
-            // the receive dialog immediately, exactly as F5 would.
-            if (switchedToCash) {
-              openTender();
+            // The Term is just the term here (the Qt screen): the money is
+            // taken by F5, not by switching to Cash. The price level is the
+            // one header field with a question behind it.
+            if (field === "priceLevel") {
+              onHeaderPriceLevel(Number(value) || 1);
+              return;
             }
+            dispatch(headerFieldSet({ field, value }));
           }}
         />
         <OrderSalesInfoBlock
           header={draft.header}
           disabled={!editable}
-          onSetHeader={(field, value) => dispatch(headerFieldSet({ field, value }))}
+          onSetHeader={onHeaderField}
           onSetSalesman={(id, name) => {
             dispatch(headerFieldSet({ field: "salesmanId", value: id }));
             dispatch(headerFieldSet({ field: "salesmanName", value: name }));
@@ -825,8 +1077,8 @@ export function SaleOrderEntryView({
             <span className={quotationStyles.gridHeadTitle}>Items</span>
             <span className={quotationStyles.gridHeadActions}>
               <span className={quotationStyles.modalNote}>
-                Enter next cell · F4 unit · Ctrl+± row · Alt+R copy row · Ctrl+1..
-                {PRICE_LEVEL_COUNT} price level · back-orders allowed
+                Enter next cell · F4 unit · Ctrl+± row price level · Alt+± row · Alt+R copy row ·
+                Ctrl+1..{settings.priceLevelCount} price level · back-orders allowed
               </span>
             </span>
           </div>
@@ -854,6 +1106,8 @@ export function SaleOrderEntryView({
             onRemoveLine={onRemoveLine}
             onSwitchUnit={(rowKey) => void api.switchUnit(rowKey)}
             onPriceLevelShortcut={onPriceLevelShortcut}
+            priceLevelCount={settings.priceLevelCount}
+            onStepPriceLevel={(rowKey, delta) => void api.stepLinePriceLevel(rowKey, delta)}
           />
         </section>
 
@@ -910,18 +1164,20 @@ export function SaleOrderEntryView({
       <SaleOrderToolbar
         mode={draft.mode}
         busy={busy}
+        saveRoute={tenderRoute ? "tender" : "save"}
         canEdit={!draft.isDeleted && menuPermissions.canEdit}
         canDelete={canAlter}
         canCopyAsNew={canCopyDoc}
         canTender={editable}
         onOpenTender={openTender}
-        onSaveAndPrint={() => void runSave(true)}
+        onSave={() => void runSave(false)}
+        onSaveAndPrint={onF6}
         onShowList={() => guardedRun("list")}
         onCopyAsNew={api.copyAsNew}
         onEdit={requestEdit}
         onDelete={() => setDeleteOpen(true)}
         onClear={() => guardedRun("clear")}
-        onLastOrder={() => void api.loadLastOrder()}
+        onLastOrder={printLastSaved}
         onCancel={() => guardedRun("back")}
       />
 
@@ -968,10 +1224,18 @@ export function SaleOrderEntryView({
         mastersError={tenderMasterError}
         creditAllowed={draft.customer.debitAllowed}
         refundAmt={draft.settlement.refundAmt}
+        saveOnApply={tenderRoute}
+        savePrintOnly={settings.tenderPrintOnly}
         onClose={() => setTenderOpen(false)}
-        onApply={(tenders, settlement) => {
+        onApply={(tenders, settlement, print) => {
           dispatch(tendersReplaced({ tenders, settlement }));
           setTenderOpen(false);
+          // On the tender route the money and the order are one act (the Qt
+          // `onTenderValues` saves at once); the effect above runs the save on
+          // the render that holds these rows.
+          if (tenderRoute) {
+            setSaveAfterTender({ print });
+          }
         }}
       />
       <PriceLevelPrompt
@@ -980,6 +1244,74 @@ export function SaleOrderEntryView({
         onClose={() => setPriceLevelPrompt(null)}
         onApply={applyPriceLevel}
       />
+      <NumberPromptModal
+        isOpen={discountPromptOpen}
+        title="Discount % on every item"
+        label="Apply discount % to every item:"
+        min={0}
+        max={100}
+        note="Every priced line takes this percent; a free line is left alone."
+        onClose={() => setDiscountPromptOpen(false)}
+        onApply={(value) => {
+          setDiscountPromptOpen(false);
+          dispatch(linesDiscountPercApplied(value));
+        }}
+      />
+      <NumberPromptModal
+        isOpen={hikePromptOpen}
+        title="Raise or lower every rate"
+        label="Increase (+) / decrease (−) every rate by %:"
+        min={-100}
+        max={100}
+        note="Every priced line's rate is scaled by this percent; free lines stay at nothing."
+        onClose={() => setHikePromptOpen(false)}
+        onApply={(value) => {
+          setHikePromptOpen(false);
+          dispatch(linesRateScaled(value));
+        }}
+      />
+      <DeleteConfirmModal
+        isOpen={duplicateQuestion !== null}
+        title="Duplicate Item"
+        itemName={duplicateQuestion?.pick.itemName ?? ""}
+        message={`This item is already on row ${duplicateQuestion?.rowNo ?? ""}. Add it again?`}
+        iconVariant="replace"
+        confirmLabel="Add again"
+        cancelLabel="No"
+        onCancel={() => setDuplicateQuestion(null)}
+        onConfirm={onDuplicateConfirmed}
+      />
+      <DeleteConfirmModal
+        isOpen={optionQuestion !== null}
+        title="Order Option"
+        itemName={optionQuestion?.label ?? ""}
+        message={
+          optionQuestion?.checked
+            ? `Apply ${optionQuestion.label} on this order?`
+            : `Remove ${optionQuestion?.label ?? ""} from this order?`
+        }
+        iconVariant="replace"
+        confirmLabel="Yes"
+        cancelLabel="No"
+        onCancel={() => setOptionQuestion(null)}
+        onConfirm={onOptionConfirmed}
+      />
+      {printTarget ? (
+        <PrintOptionsDialog
+          open
+          onClose={() => setPrintTarget(null)}
+          purposeCode={PURPOSE_CODE.SALE_ORDER}
+          documentLabel={printTarget.soOrderRefno ? `Order ${printTarget.soOrderRefno}` : "Order"}
+          targets={[
+            {
+              docId: printTarget.soId,
+              companyId: printTarget.soCompanyId,
+              accYear: printTarget.soAccYear,
+              filename: `order-${(printTarget.soOrderRefno || printTarget.soId).toLowerCase()}`,
+            },
+          ]}
+        />
+      ) : null}
       <DeleteConfirmModal
         isOpen={deleteOpen}
         itemName={draft.orderRefno || "this order"}

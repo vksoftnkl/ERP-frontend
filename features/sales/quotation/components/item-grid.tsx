@@ -20,6 +20,7 @@ import { useMemo, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 
 import { cx } from "@/components/design-system/cx";
 import type { PricedLine } from "@/domain/pricing";
 import {
+  PRICE_LEVEL_COUNT,
   PRICE_LEVEL_OPTIONS,
   type ItemColumnMeaning,
 } from "../quotation.constants";
@@ -103,6 +104,15 @@ export type ItemGridProps = {
    */
   onOpenSizeEntry?: (rowKey: string) => void;
   onPriceLevelShortcut: (priceLevel: number) => void;
+  /** How many Ctrl+N shortcuts exist (`inventory.price_level_count`); 4 when unstated. */
+  priceLevelCount?: number;
+  /**
+   * Step THIS ROW's price level one position up or down — the Qt order
+   * screen's Ctrl+`+` / Ctrl+`-`. A screen that passes it gets the Qt key map:
+   * Ctrl+± steps the level and Alt+± inserts / removes a row; one that does
+   * not keeps Ctrl+± on the rows, as the quotation always has.
+   */
+  onStepPriceLevel?: (rowKey: string, delta: 1 | -1) => void;
 };
 
 /**
@@ -173,6 +183,8 @@ export function ItemGrid(props: ItemGridProps) {
     onSwitchUnit,
     onOpenSizeEntry,
     onPriceLevelShortcut,
+    priceLevelCount = PRICE_LEVEL_COUNT,
+    onStepPriceLevel,
   } = props;
 
   const visible = useMemo(() => columns.filter((column) => column.visible), [columns]);
@@ -228,20 +240,33 @@ export function ItemGrid(props: ItemGridProps) {
       onDuplicateLine(rowKey, fieldKey);
       return;
     }
-    if (event.ctrlKey && (event.key === "+" || event.key === "=") && rowKey) {
+    // Ctrl+± is the row's price level where the screen steps levels (the Qt
+    // order map), the row insert / remove where it does not; Alt+± takes the
+    // rows over in the first case so nothing is lost.
+    const plus = event.key === "+" || event.key === "=";
+    const minus = event.key === "-";
+    if (rowKey && (plus || minus) && (event.ctrlKey || event.altKey) && !(event.ctrlKey && event.altKey)) {
+      const stepsLevels = Boolean(onStepPriceLevel);
+      const rowAction = event.altKey ? stepsLevels : !stepsLevels;
       event.preventDefault();
-      onInsertLine(rowKey);
+      if (rowAction) {
+        if (plus) {
+          onInsertLine(rowKey);
+        } else {
+          onRemoveLine(rowKey);
+        }
+      } else if (onStepPriceLevel && event.ctrlKey) {
+        onStepPriceLevel(rowKey, plus ? 1 : -1);
+      }
       return;
     }
-    if (event.ctrlKey && event.key === "-" && rowKey) {
-      event.preventDefault();
-      onRemoveLine(rowKey);
-      return;
-    }
-    if (event.ctrlKey && /^[1-4]$/.test(event.key)) {
-      event.preventDefault();
-      onPriceLevelShortcut(Number.parseInt(event.key, 10));
-      return;
+    if (event.ctrlKey && /^[1-9]$/.test(event.key)) {
+      const level = Number.parseInt(event.key, 10);
+      if (level <= priceLevelCount) {
+        event.preventDefault();
+        onPriceLevelShortcut(level);
+        return;
+      }
     }
     if (event.key === "Enter") {
       // The cell has already committed its buffer on Enter; move on.

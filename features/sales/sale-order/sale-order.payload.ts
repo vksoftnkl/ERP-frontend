@@ -276,12 +276,41 @@ export function settledTenderRows(rows: TenderDraftRow[]): TenderDraftRow[] {
 // Save — the document
 // ---------------------------------------------------------------------------
 
+export type SavePayloadOptions = {
+  /**
+   * The status a NEW order is written with — `sales.auto_post` decides between
+   * CONFIRMED and DRAFT (`newOrderStatusFor`). An existing order keeps the
+   * status it was loaded with; the server owns every later move.
+   */
+  newOrderStatus?: string;
+};
+
+/**
+ * `so_pay_mode` — the type of the largest tender line, the Qt screen's
+ * "dominant tender"; null when nothing was tendered.
+ */
+export function dominantTenderType(rows: readonly TenderDraftRow[]): string | null {
+  let best: TenderDraftRow | null = null;
+  for (const row of rows) {
+    if (row.keyed > 0 && (!best || row.keyed > best.keyed)) {
+      best = row;
+    }
+  }
+  return best ? best.typeCode : null;
+}
+
 export function buildSavePayload(
   draft: SaleOrderDraft,
   pricing: DocumentPricing,
   actor: SaveActor,
+  options: SavePayloadOptions = {},
 ): SaveSaleOrderDto {
   const totals = pricing.totals;
+  const status = asEnum(draft.status, SALE_ORDER_STATUSES, DEFAULT_SALE_ORDER_STATUS);
+  const savedStatus =
+    !draft.docId && options.newOrderStatus
+      ? asEnum(options.newOrderStatus, SALE_ORDER_STATUSES, status)
+      : status;
   const lineIndexes = draft.lines
     .map((line, index) => ({ line, index }))
     .filter(({ line }) => Boolean(line.itemId));
@@ -315,7 +344,7 @@ export function buildSavePayload(
     soPriority: asEnum(draft.header.priority, ORDER_PRIORITIES, "NORMAL"),
     soValidUntil: dateOrNull(draft.header.validUntil),
     soDeliveryMode: asEnum(draft.header.deliveryMode, DELIVERY_MODES, "STORE_PICKUP"),
-    soStatus: asEnum(draft.status, SALE_ORDER_STATUSES, DEFAULT_SALE_ORDER_STATUS),
+    soStatus: savedStatus,
     // Source — null when there is no source (the plan's §9), so a cleared
     // import genuinely clears the stored columns.
     soSrcDocType: draft.source?.docType ?? null,
@@ -325,6 +354,7 @@ export function buildSavePayload(
     soSrcDocDate: draft.source?.date ?? null,
     soCustAddr: toNullableText(draft.customer.address, 500),
     soCustPlace: toNullableText(draft.customer.place, 100),
+    soCustPin: toNullableText(draft.customer.pin ?? "", 10),
     soCustPhone: toNullableText(draft.customer.phone, 20),
     soCustEmail: toNullableText(draft.customer.email, 150),
     soCustGstin: toNullableText(draft.customer.gstin, 15),
@@ -380,6 +410,7 @@ export function buildSavePayload(
       tenderRows.length > 0
         ? payStatusOf(money(settled - draft.settlement.refundAmt), totals.bill)
         : asEnum(draft.settlement.payStatus, PAY_STATUSES, "UNPAID"),
+    soPayMode: dominantTenderType(tenderRows),
     soPaymentTerms: toNullableText(draft.terms.paymentTerms, 250),
     soDeliveryTerms: toNullableText(draft.terms.deliveryTerms, 250),
     soTermsConditions: toNullableText(draft.terms.termsConditions),
@@ -749,6 +780,7 @@ export function parseLoadedDocument(
       masterName: payload.soCustName ?? "",
       address: payload.soCustAddr,
       place: payload.soCustPlace,
+      pin: payload.soCustPin,
       phone: payload.soCustPhone,
       email: payload.soCustEmail,
       gstin: payload.soCustGstin,
@@ -830,6 +862,12 @@ export function parseLoadedDocument(
     },
     creditOverride: false,
     partyCredit: null,
+    audit: {
+      createdBy: payload.soCreatedBy,
+      createdOn: payload.soCreatedOn,
+      modifiedBy: payload.soModifiedBy,
+      modifiedOn: payload.soModifiedOn,
+    },
   };
 }
 
@@ -847,6 +885,7 @@ export function importQuotationAsOrder(
   quotation: QuotationPayload,
   fallbackCompanyStateCode: string,
   orderDate: string,
+  defaults: import("./sale-order.state").OrderHeaderDefaults = {},
 ): SaleOrderDraft {
   const quotationDraft = parseLoadedQuotation(quotation, fallbackCompanyStateCode);
   const source: SourceTrail = {
@@ -876,7 +915,7 @@ export function importQuotationAsOrder(
     policy: quotationDraft.policy,
     customer: quotationDraft.customer,
     header: {
-      ...emptyOrderHeader(orderDate),
+      ...emptyOrderHeader(orderDate, defaults),
       contactPerson: quotationDraft.header.contactPerson,
       contactNo: quotationDraft.header.contactNo,
       salesmanId: quotationDraft.header.salesmanId,
@@ -910,5 +949,6 @@ export function importQuotationAsOrder(
     fulfilment: emptyFulfilment(),
     creditOverride: false,
     partyCredit: null,
+    audit: null,
   };
 }

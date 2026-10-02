@@ -94,8 +94,17 @@ export type TenderDialogProps = {
    * itself, that OK writes the document.
    */
   confirmLabel?: string;
+  /**
+   * The Qt order screen's route: the dialog's OK is **Save** / **Save & Print**
+   * and the caller writes the document the moment it closes, so the money and
+   * the order are one act. Off, the dialog only records the rows (the bill's
+   * settle flow).
+   */
+  saveOnApply?: boolean;
+  /** `sales.tender_print_only` — only Save & Print is offered. */
+  savePrintOnly?: boolean;
   onClose: () => void;
-  onApply: (tenders: TenderDraftRow[], settlement: SettlementState) => void;
+  onApply: (tenders: TenderDraftRow[], settlement: SettlementState, print: boolean) => void;
 };
 
 const CAPTIONS: Record<TenderPurpose, { total: string; tendered: string; title: string }> = {
@@ -177,6 +186,8 @@ function TenderDialogBody({
   adjustedAmount = 0,
   adjustPanel,
   confirmLabel = "OK",
+  saveOnApply = false,
+  savePrintOnly = false,
   onClose,
   onApply,
 }: TenderDialogProps) {
@@ -364,7 +375,7 @@ function TenderDialogBody({
     setRawText((current) => ({ ...current, [activeRow.key]: String(next) }));
   }, [activeRow, computation.totals.balance, confirmCreditIfNeeded, patchRow]);
 
-  const apply = () => {
+  const apply = (print = false) => {
     const violation = validateTenderRows(rows, {
       purpose,
       documentAmount: settleAmount,
@@ -390,12 +401,16 @@ function TenderDialogBody({
       }
     }
     const kept = rows.filter((row) => row.keyed > 0 || row.tdId);
-    onApply(kept, {
-      tenderAmt: computation.totals.tendered,
-      surchargeAmt: computation.totals.surchargeTotal,
-      refundAmt,
-      payStatus: payStatusOf(computation.totals.settled - refundAmt, settleAmount),
-    });
+    onApply(
+      kept,
+      {
+        tenderAmt: computation.totals.tendered,
+        surchargeAmt: computation.totals.surchargeTotal,
+        refundAmt,
+        payStatus: payStatusOf(computation.totals.settled - refundAmt, settleAmount),
+      },
+      print,
+    );
   };
 
   /**
@@ -408,7 +423,21 @@ function TenderDialogBody({
     // "OK & Save", so this is the one keystroke that settles AND writes.
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
-      apply();
+      apply(savePrintOnly && saveOnApply);
+      return;
+    }
+    // On the save route the dialog's own F5 / F6 are its two buttons, so the
+    // operator who pressed F5 to get here presses it again to finish.
+    if (saveOnApply && event.key === "F5") {
+      event.preventDefault();
+      if (!savePrintOnly) {
+        apply(false);
+      }
+      return;
+    }
+    if (saveOnApply && event.key === "F6") {
+      event.preventDefault();
+      apply(true);
       return;
     }
     if (event.key === "F1") {
@@ -453,13 +482,38 @@ function TenderDialogBody({
           <button type="button" className={quotationStyles.button} onClick={onClose}>
             Cancel <span className={quotationStyles.buttonHint}>Esc</span>
           </button>
-          <button
-            type="button"
-            className={cx(quotationStyles.button, quotationStyles.buttonPrimary)}
-            onClick={apply}
-          >
-            {confirmLabel}
-          </button>
+          {saveOnApply ? (
+            <>
+              <button
+                type="button"
+                className={quotationStyles.button}
+                disabled={savePrintOnly}
+                title={
+                  savePrintOnly
+                    ? "This counter prints every tendered order (sales.tender_print_only)."
+                    : "Save the order with this advance"
+                }
+                onClick={() => apply(false)}
+              >
+                Save <span className={quotationStyles.buttonHint}>F5</span>
+              </button>
+              <button
+                type="button"
+                className={cx(quotationStyles.button, quotationStyles.buttonPrimary)}
+                onClick={() => apply(true)}
+              >
+                Save &amp; Print <span className={quotationStyles.buttonHint}>F6</span>
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className={cx(quotationStyles.button, quotationStyles.buttonPrimary)}
+              onClick={() => apply(false)}
+            >
+              {confirmLabel}
+            </button>
+          )}
         </>
       }
     >

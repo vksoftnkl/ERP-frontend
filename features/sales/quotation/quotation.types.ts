@@ -818,6 +818,8 @@ export type CustomerSnapshot = {
   englishName: string | null;
   address: string | null;
   place: string | null;
+  /** Pin code — the sale order stores it (`so_cust_pin`); the quotation has no column. */
+  pin?: string | null;
   phone: string | null;
   email: string | null;
   gstin: string | null;

@@ -411,6 +411,7 @@ export function customerFromDetail(detail: CustomerDetailPayload): CustomerSnaps
     englishName: detail.cust_ename,
     address: detail.cust_address,
     place: detail.cust_place,
+    pin: detail.cust_pin,
     phone: detail.cust_phone1,
     email: null,
     gstin: detail.gst_no || detail.ecommerce_gstin,
