@@ -25,6 +25,7 @@ import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { useMasterModule } from "@/store/hooks/useMasterModule";
 import { getConfiguredModuleGridId } from "@/features/masters/shared/configured-grid-detail-ids";
 import { getApiErrorMessage } from "@/store/api/baseApi";
+import { toast } from "@/lib/notify";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
 import type { GridColumnConfig } from "@/store/slices/gridColumnsSlice";
 import {
@@ -2366,6 +2367,18 @@ function downloadMasterRowsCsv(
   anchor.remove();
   window.URL.revokeObjectURL(url);
 }
+/** The first refused field's message (errors arrive in field order), as a warning. */
+function showFirstValidationError(errors: Record<string, string>): void {
+  const [first] = Object.values(errors);
+  if (first) {
+    toast.warn(first, { toastId: "master-modal-validation" });
+  }
+}
+/** "Delete" → "Deleting", "Restore" → "Restoring": the busy caption of the confirm button. */
+function toProgressiveLabel(label: string): string {
+  const trimmed = label.trim() || "Delete";
+  return `${trimmed.replace(/e$/i, "")}ing`;
+}
 export default function CrudMasterPage({
   title,
   iconName,
@@ -2433,6 +2446,7 @@ export default function CrudMasterPage({
   modalHideFieldHelperText,
   modalHideFieldErrorText,
   modalFocusFirstInvalidFieldOnValidationError,
+  modalShowValidationErrorPopup = false,
   modalEnableArrowKeyFieldNavigation,
   modalFooterLeadingActions,
   auditHistory,
@@ -2460,6 +2474,7 @@ export default function CrudMasterPage({
   onCrudControllerReady,
   deleteConfirmMessage,
   deleteConfirmNote,
+  deleteActionLabel = "Delete",
   hideListPage = false,
   hideRowsWhenAllGridColumnFiltersDisabled = false,
   onModalOpenChange,
@@ -4398,13 +4413,13 @@ export default function CrudMasterPage({
                         ? NO_PERMISSION_TITLES.delete
                         : deleteDisabledForSelection
                           ? rowDeleteDisabledReason ?? "This row cannot be deleted"
-                          : "Delete selected row"
+                          : `${deleteActionLabel} selected row`
                     }
                   >
                     <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
                       <ErpActionIcon name="delete" />
                     </span>
-                    <span>Delete</span>
+                    <span>{deleteActionLabel}</span>
                   </button>
                   <span className="erp-ms-tsep" aria-hidden="true" />
                   <button
@@ -4792,6 +4807,9 @@ export default function CrudMasterPage({
         focusFirstInvalidFieldOnValidationError={
           modalFocusFirstInvalidFieldOnValidationError
         }
+        onValidationError={
+          modalShowValidationErrorPopup ? showFirstValidationError : undefined
+        }
         enableArrowKeyFieldNavigation={modalEnableArrowKeyFieldNavigation}
         footerLeadingActions={modalFooterLeadingActions}
         onControllerReady={(controller) => {
@@ -4805,7 +4823,7 @@ export default function CrudMasterPage({
         <DeleteConfirmModal
           isOpen={pendingDeleteRow !== null}
           itemName={pendingDeleteLabel}
-          title={`Delete ${effectiveTitle}?`}
+          title={`${deleteActionLabel} ${effectiveTitle}?`}
           message={
             typeof deleteConfirmMessage === "function"
               ? pendingDeleteRow
@@ -4820,10 +4838,10 @@ export default function CrudMasterPage({
                 : undefined
               : deleteConfirmNote
           }
-          confirmLabel="Delete"
+          confirmLabel={deleteActionLabel}
           cancelLabel="Cancel"
           loading={deleteLoading}
-          loadingLabel="Deleting..."
+          loadingLabel={`${toProgressiveLabel(deleteActionLabel)}...`}
           onConfirm={handleDeleteConfirm}
           onCancel={handleDeleteCancel}
         />

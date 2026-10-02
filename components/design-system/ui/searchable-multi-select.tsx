@@ -15,6 +15,7 @@ import { focusNextInteractiveControl } from "@/components/design-system/ui/focus
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { layoutRect, layoutViewportSize } from "@/lib/ui-scale";
+import { matchesSearchTokens, searchTokens } from "@/lib/search-text";
 export type SearchableMultiSelectProps = {
   id?: string;
   values: readonly string[];
@@ -29,9 +30,6 @@ export type SearchableMultiSelectProps = {
   name?: string;
 };
 const DEFAULT_DROPDOWN_MAX_HEIGHT = 280;
-function normalizeSearchValue(value: string): string {
-  return value.trim().toLowerCase();
-}
 export function SearchableMultiSelect({
   id,
   values,
@@ -60,13 +58,13 @@ export function SearchableMultiSelect({
     [values],
   );
   const filteredOptions = useMemo(() => {
-    const normalizedQuery = normalizeSearchValue(query);
-    if (!normalizedQuery) return [...options];
-    return options.filter((option) => {
-      const label = normalizeSearchValue(option.label);
-      const optionValue = normalizeSearchValue(option.value);
-      return label.includes(normalizedQuery) || optionValue.includes(normalizedQuery);
-    });
+    // Loose match, as the server does for lists (lib/search-text): spaces and
+    // punctuation ignored, every typed word required.
+    const tokens = searchTokens(query);
+    if (tokens.length === 0) return [...options];
+    return options.filter((option) =>
+      matchesSearchTokens(tokens, option.label, option.value),
+    );
   }, [options, query]);
   const selectedSummary = useMemo(() => {
     if (selectedValueSet.size === 0) {

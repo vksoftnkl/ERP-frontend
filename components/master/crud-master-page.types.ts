@@ -246,6 +246,14 @@ export type CrudMasterPageProps = {
   deleteConfirmMessage?: string | ((row: MasterTableRow) => string);
   deleteConfirmNote?: string | ((row: MasterTableRow) => string);
   /**
+   * What the destructive button is called — "Delete" unless the page says
+   * otherwise. A page whose deleted view turns that same button into Restore
+   * (the company / branch masters under "Show deleted records", notes 72 B1)
+   * passes "Restore" while that view is on; the toolbar button, the dialog's
+   * title, its confirm button and its busy label all follow the word.
+   */
+  deleteActionLabel?: string;
+  /**
    * Bind the list's function keys, and say so under the grid.
    *
    * OFF by default: these are keys the whole window listens for, and a page
@@ -342,6 +350,14 @@ export type CrudMasterPageProps = {
   modalHideFieldHelperText?: boolean;
   modalHideFieldErrorText?: boolean;
   modalFocusFirstInvalidFieldOnValidationError?: boolean;
+  /**
+   * Say WHY a save was refused: the first failing field's message (in field
+   * order — the field `modalFocusFirstInvalidFieldOnValidationError` lands
+   * on) is raised as a warning popup. For a form that hides field error text
+   * yet has rules a red outline cannot explain — "the GSTIN belongs to state
+   * code 33, but the State chosen is 24". Off by default.
+   */
+  modalShowValidationErrorPopup?: boolean;
   modalEnableArrowKeyFieldNavigation?: boolean;
   /** Rendered at the far left of the create/update modal footer, called with
    *  the form as it stands. For a per-master action that acts on the draft

@@ -11,12 +11,16 @@ import type {
 import { extractRows } from "@/features/masters/shared/normalizers";
 import { getFirstDefinedValue, toDisplayValue } from "@/features/masters/shared/value-mappers";
 import { useDropdownId, type ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+import { dropdownParamsKey } from "@/components/design-system/dropdown/api";
+import type { DropdownParams } from "@/components/design-system/dropdown/types";
 
 // Lazy, server-side searchable configured dropdown (fixed.dropdown_details).
 // Mirrors configured-grid-sql/run: GET /dropdown-details/run?dropdown_id=<n>&page=1&
-// limit=20&search=<q> -> { data: { items, meta } }. dropdown_param is intentionally
-// never sent (these dropdowns take no bound params). Nothing is fetched until the field
-// is opened; typing re-fetches with a debounce so the server does the filtering.
+// limit=20&search=<q>[&dropdown_param=<json>] -> { data: { items, meta } }. Most of
+// these dropdowns take no bound params and dropdown_param is not sent; one that does
+// (godowns of ONE branch, dropdown 26's `ibranch_id`) passes `params`. Nothing is
+// fetched until the field is opened; typing re-fetches with a debounce so the server
+// does the filtering.
 export const DROPDOWN_RUN_ENDPOINT = "/dropdown-details/run";
 export const DROPDOWN_SEARCH_DEBOUNCE_MS = 250;
 
@@ -44,6 +48,16 @@ export type UseLazyConfiguredDropdownOptions = {
   defaultOption?: ERPDynamicSelectOption;
   limit?: number;
   debounceMs?: number;
+  /**
+   * Values for the placeholders the dropdown's SQL binds, sent as
+   * `dropdown_param` (JSON) on open and on every search. Blank values are
+   * dropped (name them in `keepEmptyParams` when the SQL guards them and
+   * wants the key present); with nothing left the param is not sent at all.
+   * Changing them while the list is open does not refetch by itself — the
+   * next open or keystroke does.
+   */
+  params?: DropdownParams;
+  keepEmptyParams?: readonly string[];
 };
 
 export type UseLazyConfiguredDropdownResult = {
@@ -56,7 +70,12 @@ export type UseLazyConfiguredDropdownResult = {
 
 const EMPTY_HEAD: ERPDynamicSelectOption = { value: "", label: "" };
 
-function buildRunQuery(dropdownId: string, search: string, limit: number): Record<string, string> {
+function buildRunQuery(
+  dropdownId: string,
+  search: string,
+  limit: number,
+  paramsKey: string,
+): Record<string, string> {
   const query: Record<string, string> = {
     dropdown_id: dropdownId,
     page: "1",
@@ -65,6 +84,9 @@ function buildRunQuery(dropdownId: string, search: string, limit: number): Recor
   const trimmed = search.trim();
   if (trimmed) {
     query.search = trimmed;
+  }
+  if (paramsKey) {
+    query.dropdown_param = paramsKey;
   }
   return query;
 }
@@ -120,10 +142,15 @@ export function useLazyConfiguredDropdown({
   defaultOption,
   limit = 20,
   debounceMs = DROPDOWN_SEARCH_DEBOUNCE_MS,
+  params,
+  keepEmptyParams,
 }: UseLazyConfiguredDropdownOptions): UseLazyConfiguredDropdownResult {
   const registryDropdownId = useDropdownId(dropdownKey);
   const dropdownId = registryDropdownId || explicitDropdownId || "";
   const head = defaultOption ?? EMPTY_HEAD;
+  // The params as the ONE string the request carries: a sorted JSON key, so a
+  // caller passing a fresh object each render does not re-create the fetcher.
+  const paramsKey = dropdownParamsKey(params, keepEmptyParams);
   // Errors aren't toasted — a failed dropdown fetch shouldn't interrupt the form.
   const { run } = useApi<unknown>(DROPDOWN_RUN_ENDPOINT, { toast: { error: false } });
   const [options, setOptions] = useState<ERPDynamicSelectOption[]>([head]);
@@ -145,7 +172,7 @@ export function useLazyConfiguredDropdown({
   const fetchOptions = useCallback(
     async (search: string) => {
       try {
-        const payload = await run({ query: buildRunQuery(dropdownId, search, limit) });
+        const payload = await run({ query: buildRunQuery(dropdownId, search, limit, paramsKey) });
         if (payload === undefined) {
           return;
         }
@@ -154,7 +181,7 @@ export function useLazyConfiguredDropdown({
         // Keep whatever options are currently shown (e.g. the seeded selection).
       }
     },
-    [applyOptions, run, dropdownId, limit, idKeys, labelKeys, head],
+    [applyOptions, run, dropdownId, limit, paramsKey, idKeys, labelKeys, head],
   );
   const handlers = useMemo<LazyDropdownHandlers>(
     () => ({

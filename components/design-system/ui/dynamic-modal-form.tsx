@@ -85,6 +85,7 @@ import {
   ModalFooterSubmitIcon,
 } from "./dynamic-modal-form.parts";
 import { requestDataRefresh } from "@/lib/data-freshness";
+import { matchesSearchTokens, searchTokens } from "@/lib/search-text";
 
 export function ERPDynamicModalForm({
   title,
@@ -1612,26 +1613,17 @@ export function ERPDynamicModalForm({
         ? ""
         : (field.placeholder ?? `Select ${field.label}`)
       : selectedLabel || (field.placeholder ?? `Select ${field.label}`);
-    const normalizedQuery = (searchQuery ?? "")
-      .trim()
-      .toLowerCase();
+    // The same loose rule the server applies to lists and lazy dropdowns
+    // (lib/search-text): spaces and punctuation ignored, every word required.
+    const queryTokens = searchTokens(searchQuery);
     const filteredOptions = !shouldUseSearchableSelect
       ? []
       : field.serverSearch
         ? // Options are already filtered by the owner (server-side/lazy dropdown).
           (field.options ?? [])
-        : (field.options ?? []).filter((option) => {
-            if (!normalizedQuery) {
-              return true;
-            }
-            const valueMatch = option.value
-              .toLowerCase()
-              .includes(normalizedQuery);
-            const labelMatch = option.label
-              .toLowerCase()
-              .includes(normalizedQuery);
-            return valueMatch || labelMatch;
-          });
+        : (field.options ?? []).filter((option) =>
+            matchesSearchTokens(queryTokens, option.label, option.value),
+          );
     const highlightedOptionIndexRaw =
       searchActiveOptionIndex[field.name];
     const highlightedOptionIndex =

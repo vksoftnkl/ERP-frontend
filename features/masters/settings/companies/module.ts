@@ -19,10 +19,10 @@ import {
 } from "@/features/masters/shared/use-lazy-configured-dropdown";
 import styles from "@/app/master/state-master/page.module.scss";
 import {
-  buildLookupOptions,
   defineMasterModule,
   extractRows,
   getFirstDefinedValue,
+  toCsvFromArray,
   toDateInputValue,
   toDisplayValue,
   toNonNegativeNumber,
@@ -31,15 +31,53 @@ import {
   toNullableNumber,
   toNullableString,
   toSelectBoolean,
+  toUniqueStringArrayFromCsv,
   toUpdateId,
   toUpper,
   toUpperNullable,
 } from "@/features/masters/shared";
-import { GST_TYPE_OPTIONS } from "@/utils/constant";
-import { validateGstin } from "@/utils/validation";
+import {
+  GST_REG_TYPE_OPTIONS,
+  buildGstinFieldValidators,
+  gstinFieldNames,
+  normalizeGstin,
+  type GstinFieldValidators,
+} from "@/features/masters/shared/gst-registration";
+import {
+  GSTIN_LOOKUP_ENDPOINT,
+  GSTIN_LOOKUP_INPUT_PATTERN,
+  fetchGstinDetails,
+  gstinLookupToValues,
+  prefixedGstinLookupFieldMap,
+} from "@/features/masters/shared/gstin-lookup";
+import {
+  currentIndianFiscalYear,
+  validateFiscalYearFields,
+  type FiscalYearFieldKey,
+} from "@/features/masters/shared/fiscal-year";
+import {
+  EDIT_MODE_FIELD,
+  isEditingValues,
+  whenEditing,
+  withEditMode,
+} from "@/features/masters/shared/edit-mode-field";
+import {
+  readFileAsDataUrl,
+  resolveStoredPhotoName,
+  resolveStoredPhotoPreview,
+} from "@/features/masters/shared/stored-photo";
 import { useDataRefresh } from "@/lib/data-freshness";
 import type { ConfiguredGridKey } from "@/lib/configured-grids";
 import type { ConfiguredDropdownKey } from "@/lib/configured-dropdowns";
+
+/**
+ * Company master — the React twin of the Qt `company_entry.cpp` form (notes 72).
+ * Same four tabs (Identity · Tax and Compliance · Preferences · Regional), same
+ * required set (Name, GST Reg Type, Price Fixing, State, Turnover band), same
+ * GSTIN / fiscal-year checks before the request leaves, so the server's 400s
+ * are read here first in the same words.
+ */
+
 /**
  * The Grid Master row this list reads — "MAIN LIST - COMPANYS". `CrudMasterPage`
  * resolves it to a grid id at runtime (see lib/configured-grids), and uses it for
@@ -52,13 +90,9 @@ const API_ENDPOINTS = {
   delete: "/company-masters/delete",
 } as const;
 const GRID_TABLE_NAME = "companys";
-const LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const STATE_LOOKUP_ENDPOINT = "/master-lookups/name-id/all-masters";
 const STATE_LOOKUP_QUERY = {
   module: "stateCodes",
-} as const;
-const BANK_LEDGER_LOOKUP_QUERY = {
-  module: "accountLedgers",
 } as const;
 const LOOKUP_KEYS = {
   id: ["compId", "comp_id", "id", "_id"],
@@ -70,6 +104,17 @@ const LOOKUP_KEYS = {
   position: ["compStylesheetId", "comp_stylesheet_id", "position", "sort"],
   description: ["compRemarks", "comp_remarks", "description", "remarks"],
   array: ["data", "items", "results", "rows", "list", "companies"],
+} as const;
+/**
+ * Delete / Restore for the list (notes 72 B1, B2): a soft-deleted company
+ * comes back through `/restore`, not through `/create`.
+ */
+export const COMPANY_SOFT_DELETE = {
+  deleteEndpoint: API_ENDPOINTS.delete,
+  restoreEndpoint: "/company-masters/restore",
+  idParam: "compId",
+  idKeys: LOOKUP_KEYS.id,
+  entityTitle: "Company",
 } as const;
 const REQUEST_PAYLOAD_KEYS = {
   id: "compId",
@@ -84,9 +129,10 @@ const DEFAULT_STATE_OPTION: ERPDynamicSelectOption = {
   label: "Select State",
 };
 // The State select is a lazy, server-side searchable configured dropdown
-// (fixed.dropdown_details 9 -> state_code/state_name). The field value is the state NAME
-// (compState), so options map state_name -> state_name. The full code<->name maps below
-// still load eagerly because GSTIN auto-fill and submit code-derivation need every state.
+// (dropdown 21, GST - STATE CODES -> state_code/state_name). The field value is
+// the state NAME (compState), so options map state_name -> state_name. The full
+// code<->name maps below still load eagerly because the GSTIN auto-fill, the
+// GSTIN/State check and the submit's code derivation need every state.
 const STATE_DROPDOWN_CONFIG = {
   dropdownKey: "gstStateCode",
   idKeys: ["state_name", "stateName"] as const,
@@ -108,8 +154,16 @@ const APP_THEME_DROPDOWN_CONFIG = {
 } as const;
 const DEFAULT_BANK_LEDGER_OPTION: ERPDynamicSelectOption = {
   value: "",
-  label: "Select Bank Ledger",
+  label: "Select Bank",
 };
+// Bank is dropdown 25 (BANK LEDGERS -> led_id/led_name): only the ledgers under
+// the bank group, lazily searched, instead of every ledger in the book.
+const BANK_LEDGER_DROPDOWN_CONFIG = {
+  dropdownKey: "bankLedger" satisfies ConfiguredDropdownKey,
+  idKeys: ["led_id", "ledId"] as const,
+  labelKeys: ["led_name", "ledName"] as const,
+  defaultOption: DEFAULT_BANK_LEDGER_OPTION,
+} as const;
 const STATE_LOOKUP_ARRAY_KEYS = [
   "items",
   "data",
@@ -122,33 +176,14 @@ const STATE_LOOKUP_ARRAY_KEYS = [
 ] as const;
 const STATE_LOOKUP_NAME_KEYS = ["stateName", "state_name", "name", "label"] as const;
 const STATE_LOOKUP_CODE_KEYS = ["id", "value", "stateCode", "state_code", "code"] as const;
-const GST_LOOKUP_ENDPOINT = "/api/gst/search";
-const GST_LOOKUP_PATTERN = /^[0-9A-Z]{15}$/;
 const GST_LOOKUP_HELPER_TEXT =
   "Type a 15-character GSTIN to load company details automatically.";
-const GST_LOOKUP_SOURCE_KEYS = ["data", "taxpayer", "result"] as const;
-const GST_LEGAL_NAME_KEYS = ["lgnm", "legalName", "legal_name"] as const;
-const GST_TRADE_NAME_KEYS = ["tradeNam", "tradeName", "trade_name"] as const;
-const GST_REGISTRATION_TYPE_KEYS = [
-  "dty",
-  "gstType",
-  "gst_type",
-  "registrationType",
-  "registration_type",
-] as const;
-const GST_PRIMARY_ADDRESS_KEYS = [
-  "pradr",
-  "principalAddress",
-  "primaryAddress",
-  "primary_address",
-] as const;
-const GST_ADDRESS_KEYS = ["addr", "address"] as const;
-const GST_ADDRESS_BUILDING_KEYS = ["bno", "flno", "bnm"] as const;
-const GST_ADDRESS_LOCALITY_KEYS = ["st", "loc"] as const;
-const GST_ADDRESS_DISTRICT_KEYS = ["dst", "district"] as const;
-const GST_ADDRESS_CITY_KEYS = ["city", "loc"] as const;
-const GST_ADDRESS_STATE_KEYS = ["stcd", "state", "stateName", "state_name"] as const;
-const GST_ADDRESS_PIN_KEYS = ["pncd", "pin", "pincode"] as const;
+/** compGstinNo / compGstRegType / compPanNo — the three the GSTIN rules read. */
+const COMPANY_GSTIN_FIELDS = gstinFieldNames("comp");
+/** Where a GSTIN lookup lands; the company also switches GST Applicable on. */
+const COMPANY_LOOKUP_FIELD_MAP = prefixedGstinLookupFieldMap("comp", {
+  gstApplicable: "compGstApplicable",
+});
 const PRICE_FIXING_OPTIONS: ERPDynamicSelectOption[] = [
   {
     value: "Do not Update When Purchase",
@@ -159,27 +194,60 @@ const PRICE_FIXING_OPTIONS: ERPDynamicSelectOption[] = [
     label: "Update Sales Price When Purchase",
   },
   {
-    label:"Update Only Cost Price When Purchase",
-    value:"Update Only Cost Price When Purchase",
+    label: "Update Only Cost Price When Purchase",
+    value: "Update Only Cost Price When Purchase",
   },
   {
-    label:"Open Change Selling when Purchase",
-    value:"Open Change Selling when Purchase",
-  }
+    label: "Open Change Selling when Purchase",
+    value: "Open Change Selling when Purchase",
+  },
 ];
+/**
+ * ck_comp_aato_class — the annual aggregate turnover band (notes 72 A2). It
+ * decides e-invoice applicability and HSN digits; NOT NULL, column default
+ * LE_5CR, so a new company starts there.
+ */
+const AATO_CLASS_OPTIONS: ERPDynamicSelectOption[] = [
+  { value: "LE_1_5CR", label: "Up to 1.5 Cr" },
+  { value: "LE_5CR", label: "Up to 5 Cr" },
+  { value: "LE_10CR", label: "Up to 10 Cr" },
+  { value: "GT_10CR", label: "Above 10 Cr" },
+];
+const DEFAULT_AATO_CLASS = "LE_5CR";
+/**
+ * The delivery-challan purposes a company may issue (notes 72 A3; the CHECK on
+ * sales.sale_dc.sdc_purpose). At least one; the column default is the four the
+ * Qt widget ticks for a new company.
+ */
+const DC_PURPOSE_OPTIONS: ERPDynamicSelectOption[] = [
+  { value: "SUPPLY", label: "Supply" },
+  { value: "APPROVAL", label: "Approval" },
+  { value: "JOB_WORK", label: "Job Work" },
+  { value: "EXHIBITION", label: "Exhibition" },
+  { value: "OWN_USE", label: "Own Use" },
+  { value: "LINE_SALES", label: "Line Sales" },
+  { value: "OTHER", label: "Other" },
+];
+const DEFAULT_DC_PURPOSES = "SUPPLY,APPROVAL,JOB_WORK,OTHER";
+const DC_PURPOSES_REQUIRED_MESSAGE = "Tick at least one delivery-challan purpose.";
+/** Notes 72 C5: the signature is an image of at most this size, of these kinds. */
+const SIGNATURE_MAX_BYTES = 512 * 1024;
+const SIGNATURE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+/** Holds the stored signature's data URL for the file field's preview on edit. */
+const SIGNATURE_PREVIEW_FIELD = "compAuthorizeSignaturePreview";
 const APPLICABILITY_CHECKBOX_FIELD_STYLE: CSSProperties = {
   marginBlock: "0.5rem",
 };
 const COMPANY_MODAL_PANEL_STYLE: CSSProperties = {
   width: "min(calc(92vw/var(--erp-ui-scale)), 70rem)",
   // Fixed height, sized to the tallest tab rather than to whichever tab is open,
-  // so the panel does not resize as you move between them (content-sized, the
-  // four tabs measured 612 / 714 / 604 / 270px). 720px clears the tallest one
-  // ("Tax and Compliance") with the header and footer; shorter tabs leave an
-  // empty band above the footer, which is the cost of a stable panel. The vh
-  // term keeps it inside short viewports, where the body scrolls instead.
-  height: "min(calc(86vh/var(--erp-ui-scale)), 720px)",
-  maxHeight: "calc(86vh/var(--erp-ui-scale))",
+  // so the panel does not resize as you move between them. The Tax tab is the
+  // tallest (the turnover band and the delivery-challan purposes joined it);
+  // shorter tabs leave an empty band above the footer, which is the cost of a
+  // stable panel. The vh term keeps it inside short viewports, where the body
+  // scrolls instead.
+  height: "min(calc(88vh/var(--erp-ui-scale)), 800px)",
+  maxHeight: "calc(88vh/var(--erp-ui-scale))",
 };
 const COMPANY_STANDARD_FIELD_NAMES = [
   "compName",
@@ -193,6 +261,7 @@ const COMPANY_STANDARD_FIELD_NAMES = [
   "compCinNo",
   "compFssaiNo",
   "compDrugLicenseNo",
+  "compAatoClass",
   "compAddr1",
   "compAddr2",
   "compAddr3",
@@ -227,22 +296,21 @@ const COMPANY_STANDARD_FIELD_NAMES = [
   "compCurrencySymbol",
   "compLocaleCode",
   "compRemarks",
-  "compAuthorizeSignature",
-  "compNegStkApl",
-  "compDefault",
-  "compIsActive",
 ] as const;
+// Create-only on the server (notes 72 C2): they seed the company's first
+// fiscal_years row; on update they are ignored and GET returns the current
+// year's. The lock date belongs to the year and is not offered here.
 const COMPANY_DATE_FIELD_NAMES = [
   "compFinYearFrom",
   "compFinYearTo",
   "compBooksBeginFrom",
-  "compBooksLockDate",
   "compEwayDate",
   "compEinvoiceDate",
 ] as const;
 const COMPANY_BOOLEAN_FIELD_NAMES = [
   "compGstApplicable",
   "compTcsApplicable",
+  "compTdsApplicable",
   "compSmsApplicable",
   "compEinvoiceApplicable",
   "compEwayApplicable",
@@ -252,6 +320,11 @@ const COMPANY_BOOLEAN_FIELD_NAMES = [
   "compDefault",
   "compIsActive",
 ] as const;
+/**
+ * Create defaults. Where Qt and the column defaults disagree (Qt ticks Send
+ * SMS, the column is false), the COLUMN wins: a row saved from anywhere else
+ * gets the column's value, and the two clients should agree with it.
+ */
 const COMPANY_INITIAL_FORM_VALUES = {
   compName: "",
   compCode: "",
@@ -264,6 +337,8 @@ const COMPANY_INITIAL_FORM_VALUES = {
   compCinNo: "",
   compFssaiNo: "",
   compDrugLicenseNo: "",
+  compAatoClass: DEFAULT_AATO_CLASS,
+  compDcPurposes: DEFAULT_DC_PURPOSES,
   compAddr1: "",
   compAddr2: "",
   compAddr3: "",
@@ -279,7 +354,7 @@ const COMPANY_INITIAL_FORM_VALUES = {
   compRegionCity: "",
   compRegionDistrict: "",
   compRegionState: "",
-  compRegionCountry: "India",
+  compRegionCountry: "",
   compRegionName: "",
   compTel: "",
   compPhone: "",
@@ -290,9 +365,9 @@ const COMPANY_INITIAL_FORM_VALUES = {
   compFinYearFrom: "",
   compFinYearTo: "",
   compBooksBeginFrom: "",
-  compBooksLockDate: "",
   compGstApplicable: "true",
   compTcsApplicable: "false",
+  compTdsApplicable: "false",
   compSmsApplicable: "false",
   compEinvoiceApplicable: "false",
   compEwayApplicable: "false",
@@ -314,130 +389,11 @@ const COMPANY_INITIAL_FORM_VALUES = {
   compCurrencySymbol: "",
   compLocaleCode: "en-IN",
   compRemarks: "",
+  // The file field shows the stored file's NAME; the preview key holds its data URL.
   compAuthorizeSignature: "",
+  [SIGNATURE_PREVIEW_FIELD]: "",
 } as const;
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-function getObjectValue(
-  source: Record<string, unknown>,
-  keys: readonly string[],
-): Record<string, unknown> | null {
-  const candidate = getFirstDefinedValue(source, keys);
-  return isRecord(candidate) ? candidate : null;
-}
-function joinDisplayValues(parts: unknown[]): string {
-  return parts
-    .map((part) => toDisplayValue(part))
-    .filter(Boolean)
-    .join(", ");
-}
-function toCompanyGstRegType(value: string): string {
-  const normalized = value.trim().toUpperCase();
-  if (!normalized) {
-    return "REGULAR";
-  }
-  if (normalized.includes("COMPOSITION")) {
-    return "COMPOSITION";
-  }
-  return "REGULAR";
-}
-function extractGstLookupSource(payload: unknown): Record<string, unknown> | null {
-  if (!isRecord(payload)) {
-    return null;
-  }
-  return getObjectValue(payload, GST_LOOKUP_SOURCE_KEYS) ?? payload;
-}
-function extractGstAddress(source: Record<string, unknown>): Record<string, unknown> {
-  const primaryAddress = getObjectValue(source, GST_PRIMARY_ADDRESS_KEYS);
-  if (!primaryAddress) {
-    return {};
-  }
-  return getObjectValue(primaryAddress, GST_ADDRESS_KEYS) ?? primaryAddress;
-}
-function setFieldValueIfPresent(
-  target: Record<string, string>,
-  fieldName: string,
-  value: string,
-): void {
-  const normalized = value.trim();
-  if (!normalized) {
-    return;
-  }
-  target[fieldName] = normalized;
-}
-function buildCompanyLookupValues(
-  gstin: string,
-  payload: Record<string, unknown>,
-  stateNameByCode: Record<string, string>,
-): Record<string, string> {
-  const address = extractGstAddress(payload);
-  const legalName = toDisplayValue(getFirstDefinedValue(payload, GST_LEGAL_NAME_KEYS));
-  const tradeName = toDisplayValue(getFirstDefinedValue(payload, GST_TRADE_NAME_KEYS));
-  const city = toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_CITY_KEYS));
-  const district =
-    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_DISTRICT_KEYS)) || city;
-  const stateCode = gstin.slice(0, 2);
-  const stateName =
-    stateNameByCode[stateCode] ||
-    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_STATE_KEYS));
-  const values: Record<string, string> = {
-    compGstinNo: gstin,
-    compPanNo: gstin.slice(2, 12),
-    compGstApplicable: "true",
-    compCountry: "India",
-  };
-  setFieldValueIfPresent(values, "compName", tradeName || legalName);
-  setFieldValueIfPresent(values, "compLegalName", legalName);
-  setFieldValueIfPresent(
-    values,
-    "compGstRegType",
-    toCompanyGstRegType(
-      toDisplayValue(getFirstDefinedValue(payload, GST_REGISTRATION_TYPE_KEYS)),
-    ),
-  );
-  setFieldValueIfPresent(
-    values,
-    "compAddr1",
-    joinDisplayValues(
-      GST_ADDRESS_BUILDING_KEYS.map((key) => getFirstDefinedValue(address, [key])),
-    ),
-  );
-  setFieldValueIfPresent(
-    values,
-    "compAddr2",
-    joinDisplayValues(
-      GST_ADDRESS_LOCALITY_KEYS.map((key) => getFirstDefinedValue(address, [key])),
-    ),
-  );
-  setFieldValueIfPresent(
-    values,
-    "compAddr3",
-    joinDisplayValues([
-      getFirstDefinedValue(address, GST_ADDRESS_DISTRICT_KEYS),
-      getFirstDefinedValue(address, GST_ADDRESS_CITY_KEYS),
-    ]),
-  );
-  setFieldValueIfPresent(values, "compCity", city);
-  setFieldValueIfPresent(values, "compDistrict", district);
-  setFieldValueIfPresent(values, "compState", stateName);
-  setFieldValueIfPresent(values, "compStateCode", stateCode);
-  setFieldValueIfPresent(
-    values,
-    "compPin",
-    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_PIN_KEYS)),
-  );
-  return values;
-}
-function getLookupErrorMessage(payload: unknown, fallback: string): string {
-  if (!isRecord(payload)) {
-    return fallback;
-  }
-  return (
-    toDisplayValue(getFirstDefinedValue(payload, ["message", "error", "detail"])) ||
-    fallback
-  );
-}
+
 function buildStateCodeByName(payload: unknown): Record<string, string> {
   const codeByName = new Map<string, string>();
   const rows = extractRows(payload, STATE_LOOKUP_ARRAY_KEYS);
@@ -480,35 +436,60 @@ function buildStateNameByCode(payload: unknown): Record<string, string> {
   }
   return Object.fromEntries(nameByCode.entries());
 }
+/**
+ * The Qt form's three fiscal-year checks, one `validation.custom` per date
+ * field: each reports only its own failure, first failure wins. Create only —
+ * on edit the three are read-only and show the stored year.
+ */
+function fiscalYearFieldValidator(field: FiscalYearFieldKey) {
+  return (_value: string, values: Record<string, string>): string | null => {
+    if (isEditingValues(values)) {
+      return null;
+    }
+    const error = validateFiscalYearFields({
+      from: values.compFinYearFrom ?? "",
+      to: values.compFinYearTo ?? "",
+      books: values.compBooksBeginFrom ?? "",
+    });
+    return error?.field === field ? error.message : null;
+  };
+}
 function buildCompanyFormFields({
   bankOptions,
+  bankHandlers,
   stateOptions,
   stateHandlers,
   appThemeOptions,
   appThemeHandlers,
   onCompanyGstinValueChange,
+  gstinValidators,
 }: {
   bankOptions: ERPDynamicSelectOption[];
+  bankHandlers: LazyDropdownHandlers;
   stateOptions: ERPDynamicSelectOption[];
   stateHandlers: LazyDropdownHandlers;
   appThemeOptions: ERPDynamicSelectOption[];
   appThemeHandlers: LazyDropdownHandlers;
   onCompanyGstinValueChange: ERPDynamicFieldValueChangeHandler;
+  gstinValidators: GstinFieldValidators;
 }): ERPDynamicModalField[] {
   return [
+    // == Identity (tab) ======================================================
     {
       name: "__heading_identity",
       label: "Identity",
       type: "heading",
     },
+    // Never shown: tells disabledWhen / the validators whether this is an edit.
+    EDIT_MODE_FIELD,
     {
       name: "compGstinNo",
       label: "GSTIN No",
-      placeholder: "24ABCDE1234F1Z5",
+      placeholder: "24ABCDE1234F1Z6",
       helperText: GST_LOOKUP_HELPER_TEXT,
       onValueChange: onCompanyGstinValueChange,
       validation: {
-        custom: (value) => validateGstin(value),
+        custom: gstinValidators.gstin,
       },
     },
     {
@@ -516,10 +497,10 @@ function buildCompanyFormFields({
       label: "GST Reg Type",
       type: "select",
       searchable: true,
-      options: GST_TYPE_OPTIONS,
+      required: true,
+      options: GST_REG_TYPE_OPTIONS,
       validation: {
-        maxLength: 30,
-        maxLengthMessage: "GST Reg Type must be at most 30 characters.",
+        requiredMessage: "Choose registration type.",
       },
     },
     {
@@ -529,6 +510,15 @@ function buildCompanyFormFields({
       validation: {
         minLength: 2,
         minLengthMessage: "Company Name must be at least 2 characters.",
+        requiredMessage: "Enter the company name.",
+      },
+    },
+    {
+      name: "compCode",
+      label: "Company Code",
+      validation: {
+        maxLength: 20,
+        maxLengthMessage: "Company Code must be at most 20 characters.",
       },
     },
     {
@@ -543,8 +533,10 @@ function buildCompanyFormFields({
       name: "compPriceFixing",
       label: "Price Fixing",
       type: "select",
+      required: true,
       options: PRICE_FIXING_OPTIONS,
       validation: {
+        requiredMessage: "Choose price fixing.",
         maxLength: 50,
         maxLengthMessage: "Price Fixing must be at most 50 characters.",
       },
@@ -569,7 +561,6 @@ function buildCompanyFormFields({
     {
       name: "compCity",
       label: "City",
-      required: true,
       validation: {
         maxLength: 100,
         maxLengthMessage: "City must be at most 100 characters.",
@@ -578,7 +569,6 @@ function buildCompanyFormFields({
     {
       name: "compDistrict",
       label: "District",
-      required: true,
       validation: {
         maxLength: 100,
         maxLengthMessage: "District must be at most 100 characters.",
@@ -596,14 +586,13 @@ function buildCompanyFormFields({
       onSearchQueryChange: stateHandlers.onSearchQueryChange,
       onValueChange: stateHandlers.onValueChange,
       validation: {
-        requiredMessage: "State is required.",
+        requiredMessage: "Choose state name.",
       },
     },
     {
       name: "compPin",
       label: "Pin Code",
       type: "number",
-      required: true,
       min: 0,
       step: 1,
       inputMode: "numeric",
@@ -614,7 +603,10 @@ function buildCompanyFormFields({
     {
       name: "compCountry",
       label: "Country",
-      disabled: true,
+      validation: {
+        maxLength: 60,
+        maxLengthMessage: "Country must be at most 60 characters.",
+      },
     },
     {
       name: "__subheading_contact",
@@ -642,15 +634,16 @@ function buildCompanyFormFields({
       type: "url",
     },
     {
-      name: "compSupportEmail",
-      label: "Support Email",
-      type: "email",
-    },
-    {
       name: "compSupportPhone",
       label: "Support Phone",
       type: "tel",
     },
+    {
+      name: "compSupportEmail",
+      label: "Support Email",
+      type: "email",
+    },
+    // == Tax and Compliance (tab) ============================================
     {
       name: "__heading_tax",
       label: "Tax and Compliance",
@@ -667,6 +660,8 @@ function buildCompanyFormFields({
         maxLengthMessage: "PAN No must be exactly 10 characters.",
         pattern: "^[A-Za-z]{5}[0-9]{4}[A-Za-z]$",
         patternMessage: "PAN No must match the standard PAN format.",
+        // Characters 3-12 of the GSTIN are the holder's PAN: the two must agree.
+        custom: gstinValidators.pan,
       },
     },
     {
@@ -694,6 +689,16 @@ function buildCompanyFormFields({
       },
     },
     {
+      name: "compAatoClass",
+      label: "Turnover (AATO)",
+      type: "select",
+      required: true,
+      options: AATO_CLASS_OPTIONS,
+      validation: {
+        requiredMessage: "Choose the turnover band.",
+      },
+    },
+    {
       name: "compGstApplicable",
       label: "GST Applicable",
       type: "checkbox",
@@ -701,7 +706,13 @@ function buildCompanyFormFields({
     },
     {
       name: "compTcsApplicable",
-      label: "TCS/TDS Applicable",
+      label: "TCS Applicable",
+      type: "checkbox",
+      fieldStyle: APPLICABILITY_CHECKBOX_FIELD_STYLE,
+    },
+    {
+      name: "compTdsApplicable",
+      label: "TDS Applicable",
       type: "checkbox",
       fieldStyle: APPLICABILITY_CHECKBOX_FIELD_STYLE,
     },
@@ -794,6 +805,22 @@ function buildCompanyFormFields({
       },
     },
     {
+      name: "__subheading_dc",
+      label: "Delivery Challan Purposes",
+      type: "subheading",
+    },
+    {
+      name: "compDcPurposes",
+      label: "Allowed Purposes",
+      type: "checkbox-group",
+      options: DC_PURPOSE_OPTIONS,
+      colSpan: 2,
+      validation: {
+        custom: (value) => (value.trim() ? null : DC_PURPOSES_REQUIRED_MESSAGE),
+      },
+    },
+    // == Preferences (tab) ===================================================
+    {
       name: "__heading_preferences",
       label: "Preferences",
       type: "heading",
@@ -817,7 +844,13 @@ function buildCompanyFormFields({
       name: "compBankId",
       label: "Bank",
       type: "select",
+      searchable: true,
+      serverSearch: true,
       options: bankOptions,
+      placeholder: "Search bank ledger",
+      onSearchOpenChange: bankHandlers.onSearchOpenChange,
+      onSearchQueryChange: bankHandlers.onSearchQueryChange,
+      onValueChange: bankHandlers.onValueChange,
     },
     {
       name: "compPrefixCode",
@@ -830,10 +863,55 @@ function buildCompanyFormFields({
     {
       name: "compCurrencyCode",
       label: "Currency Code",
+      placeholder: "INR",
+      validation: {
+        maxLength: 3,
+        maxLengthMessage: "Currency Code must be at most 3 characters.",
+      },
     },
     {
       name: "compCurrencySymbol",
       label: "Currency Symbol",
+      validation: {
+        maxLength: 10,
+        maxLengthMessage: "Currency Symbol must be at most 10 characters.",
+      },
+    },
+    {
+      name: "__subheading_books",
+      label: "Books",
+      type: "subheading",
+    },
+    // On create these seed the company's first fiscal year (notes 72 A1); the
+    // server ignores them on update and GET returns the current year's dates,
+    // so they are read-only in edit mode. A year's dates change on its own
+    // screen, not by editing the company.
+    {
+      name: "compFinYearFrom",
+      label: "Financial Year From",
+      type: "date",
+      disabledWhen: whenEditing,
+      validation: {
+        custom: fiscalYearFieldValidator("from"),
+      },
+    },
+    {
+      name: "compFinYearTo",
+      label: "Financial Year To",
+      type: "date",
+      disabledWhen: whenEditing,
+      validation: {
+        custom: fiscalYearFieldValidator("to"),
+      },
+    },
+    {
+      name: "compBooksBeginFrom",
+      label: "Books Begin From",
+      type: "date",
+      disabledWhen: whenEditing,
+      validation: {
+        custom: fiscalYearFieldValidator("books"),
+      },
     },
     {
       name: "compBillGreeting",
@@ -849,38 +927,26 @@ function buildCompanyFormFields({
       rows: 3,
       colSpan: 2,
     },
+    // Notes 72 C5: a PNG / JPEG / GIF / WebP of at most 512 KB, stored and
+    // returned as a data URL — an image, not a line of text.
     {
       name: "compAuthorizeSignature",
       label: "Authorized Signature",
-      type: "textarea",
-      rows: 2,
+      type: "file",
+      accept: SIGNATURE_MIME_TYPES.join(","),
+      maxFileSizeBytes: SIGNATURE_MAX_BYTES,
+      allowedMimeTypes: SIGNATURE_MIME_TYPES,
+      previewImageValueKey: SIGNATURE_PREVIEW_FIELD,
+      helperText: "Optional. PNG, JPEG, GIF or WebP up to 512 KB.",
       colSpan: 2,
     },
     {
-      name: "__subheading_financial",
-      label: "Financial Year & Books",
-      type: "subheading",
+      name: SIGNATURE_PREVIEW_FIELD,
+      label: "",
+      type: "text",
+      visibleWhen: () => false,
     },
-    {
-      name: "compFinYearFrom",
-      label: "Financial Year From",
-      type: "date",
-    },
-    {
-      name: "compFinYearTo",
-      label: "Financial Year To",
-      type: "date",
-    },
-    {
-      name: "compBooksBeginFrom",
-      label: "Books Begin From",
-      type: "date",
-    },
-    {
-      name: "compBooksLockDate",
-      label: "Books Lock Date",
-      type: "date",
-    },
+    // == Regional Details (tab) ==============================================
     {
       name: "__heading_regional",
       label: "Regional Details",
@@ -916,6 +982,18 @@ function buildCompanyFormFields({
       validation: {
         maxLength: 100,
         maxLengthMessage: "Regional District must be at most 100 characters.",
+      },
+    },
+    {
+      name: "compRegionState",
+      label: "Regional State",
+    },
+    {
+      name: "compRegionCountry",
+      label: "Regional Country",
+      validation: {
+        maxLength: 60,
+        maxLengthMessage: "Regional Country must be at most 60 characters.",
       },
     },
   ];
@@ -955,6 +1033,18 @@ function mapCompanyFormValues(
       fallback,
     );
   }
+  // GET returns the purposes as an array; the checkbox-group holds them comma-joined.
+  values.compDcPurposes =
+    toCsvFromArray(getCompanyFieldValue(rowSource, "compDcPurposes")) ||
+    mergedDefaults.compDcPurposes ||
+    "";
+  // The stored signature comes back as a data URL: name it for the file field,
+  // and hand the URL to its preview.
+  const storedSignature = toDisplayValue(
+    getCompanyFieldValue(rowSource, "compAuthorizeSignature"),
+  );
+  values.compAuthorizeSignature = resolveStoredPhotoName("", storedSignature.length > 0);
+  values[SIGNATURE_PREVIEW_FIELD] = resolveStoredPhotoPreview(storedSignature, "");
   const existingStateCode = toDisplayValue(
     getCompanyFieldValue(rowSource, "compStateCode"),
   ).toUpperCase();
@@ -965,17 +1055,33 @@ function mapCompanyFormValues(
   return values;
 }
 export function useCompaniesModule() {
-  const { getAll: getBankLedgerLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getStateLookup } = useApi<unknown>(STATE_LOOKUP_ENDPOINT);
-  // The State select itself is a lazy server-side dropdown (configured dropdown 9).
-  const state = useLazyConfiguredDropdown(STATE_DROPDOWN_CONFIG);
+  // GET /gst/search (notes 72 C6). Its failures are shown on the GSTIN field,
+  // not as a popup: a 503 "not configured" must not interrupt typing a company.
+  const { getAll: searchGstin } = useApi<unknown>(GSTIN_LOOKUP_ENDPOINT, {
+    toast: { error: false },
+  });
+  // The State select itself is a lazy server-side dropdown (configured dropdown 21).
+  const {
+    options: stateOptions,
+    handlers: stateHandlers,
+    seedSelected: seedState,
+  } = useLazyConfiguredDropdown(STATE_DROPDOWN_CONFIG);
   // Stylesheet is a lazy server-side dropdown too (configured dropdown 27).
-  const appTheme = useLazyConfiguredDropdown(APP_THEME_DROPDOWN_CONFIG);
-  const [bankOptions, setBankOptions] = useState<ERPDynamicSelectOption[]>([
-    DEFAULT_BANK_LEDGER_OPTION,
-  ]);
+  const {
+    options: appThemeOptions,
+    handlers: appThemeHandlers,
+    seedSelected: seedAppTheme,
+  } = useLazyConfiguredDropdown(APP_THEME_DROPDOWN_CONFIG);
+  // Bank: dropdown 25, the bank-group ledgers only.
+  const {
+    options: bankOptions,
+    handlers: bankHandlers,
+    seedSelected: seedBank,
+  } = useLazyConfiguredDropdown(BANK_LEDGER_DROPDOWN_CONFIG);
   // Full code<->name maps are still loaded eagerly: GSTIN auto-fill derives the state
-  // name from the GSTIN's leading code, and submit derives the code from the picked name.
+  // name from the GSTIN's leading code, the GSTIN/State check reads the picked
+  // state's code, and submit derives the code from the picked name.
   const [stateCodeByName, setStateCodeByName] = useState<Record<string, string>>({});
   const [stateNameByCode, setStateNameByCode] = useState<Record<string, string>>({});
   const gstLookupCacheRef = useRef<Record<string, Record<string, string>>>({});
@@ -984,49 +1090,51 @@ export function useCompaniesModule() {
   const loadLookupOptions = useCallback(() => {
     let mounted = true;
     void (async () => {
-      const [stateLookupResult, bankLedgerLookupResult] = await Promise.allSettled([
-        getStateLookup(STATE_LOOKUP_QUERY),
-        getBankLedgerLookup(BANK_LEDGER_LOOKUP_QUERY),
-      ]);
-      if (!mounted) {
-        return;
-      }
-      if (stateLookupResult.status === "fulfilled") {
-        const payload = stateLookupResult.value;
+      try {
+        const payload = await getStateLookup(STATE_LOOKUP_QUERY);
+        if (!mounted) {
+          return;
+        }
         setStateCodeByName(buildStateCodeByName(payload));
         setStateNameByCode(buildStateNameByCode(payload));
-      } else {
+      } catch {
+        if (!mounted) {
+          return;
+        }
         setStateCodeByName({});
         setStateNameByCode({});
-      }
-      if (bankLedgerLookupResult.status === "fulfilled") {
-        setBankOptions(
-          buildLookupOptions(bankLedgerLookupResult.value, DEFAULT_BANK_LEDGER_OPTION),
-        );
-      } else {
-        setBankOptions([DEFAULT_BANK_LEDGER_OPTION]);
       }
     })();
     return () => {
       mounted = false;
     };
-  }, [getBankLedgerLookup, getStateLookup]);
+  }, [getStateLookup]);
   useEffect(() => loadLookupOptions(), [loadLookupOptions]);
   useDataRefresh(() => {
     loadLookupOptions();
   });
+  // The GSTIN rules (notes 72 C7, Qt's extraValidate): blank only for an
+  // UNREGISTERED company; format + checksum; the state it names must be the
+  // State picked; the PAN typed must be the one it carries.
+  const gstinValidators = useMemo(
+    () =>
+      buildGstinFieldValidators({
+        fields: COMPANY_GSTIN_FIELDS,
+        // "" while the map has not loaded or no state is picked: the check waits.
+        stateCodeOf: (values) => stateCodeByName[(values.compState ?? "").trim()] ?? "",
+      }),
+    [stateCodeByName],
+  );
   const handleCompanyGstinValueChange =
     useCallback<ERPDynamicFieldValueChangeHandler>(
-      async ({ value }) => {
-        const normalizedGstin = value.trim().toUpperCase();
-        const normalizedValuePatch =
-          normalizedGstin && normalizedGstin !== value
-            ? { compGstinNo: normalizedGstin }
-            : undefined;
-
-        if (!GST_LOOKUP_PATTERN.test(normalizedGstin)) {
+      async ({ value, values }) => {
+        // Upper-case what was typed and fill a blank PAN from a well-formed GSTIN.
+        const typingPatch = gstinValidators.valueChangePatch(value, values);
+        const typingValues = Object.keys(typingPatch).length ? { values: typingPatch } : {};
+        const normalizedGstin = normalizeGstin(value);
+        if (!GSTIN_LOOKUP_INPUT_PATTERN.test(normalizedGstin)) {
           return {
-            ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
+            ...typingValues,
             errors: { compGstinNo: null },
           };
         }
@@ -1034,90 +1142,73 @@ export function useCompaniesModule() {
         if (cachedValues) {
           // Pin the auto-filled state so the lazy dropdown can display it.
           if (cachedValues.compState) {
-            state.seedSelected(cachedValues.compState, cachedValues.compState);
+            seedState(cachedValues.compState, cachedValues.compState);
           }
           return {
-            values: cachedValues,
+            values: { ...typingPatch, ...cachedValues },
             errors: { compGstinNo: null },
           };
         }
-        try {
-          const response = await fetch(
-            `${GST_LOOKUP_ENDPOINT}?gstin=${encodeURIComponent(normalizedGstin)}`,
-            {
-              method: "GET",
-              cache: "no-store",
-              headers: {
-                Accept: "application/json",
-              },
-            },
-          );
-          const payload = (await response.json().catch(() => null)) as unknown;
-          if (!response.ok) {
-            return {
-              ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
-              errors: {
-                compGstinNo: getLookupErrorMessage(
-                  payload,
-                  "Unable to load GST details for this GSTIN.",
-                ),
-              },
-            };
-          }
-          const lookupSource = extractGstLookupSource(payload);
-          if (!lookupSource) {
-            return {
-              ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
-              errors: {
-                compGstinNo: "GST details were not available for this GSTIN.",
-              },
-            };
-          }
-          const resolvedValues = buildCompanyLookupValues(
-            normalizedGstin,
-            lookupSource,
-            stateNameByCode,
-          );
-          gstLookupCacheRef.current[normalizedGstin] = resolvedValues;
-          // Pin the auto-filled state so the lazy dropdown can display it.
-          if (resolvedValues.compState) {
-            state.seedSelected(resolvedValues.compState, resolvedValues.compState);
-          }
+        const result = await fetchGstinDetails(searchGstin, normalizedGstin);
+        if (!result.ok) {
           return {
-            values: resolvedValues,
-            errors: { compGstinNo: null },
-          };
-        } catch {
-          return {
-            ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
-            errors: {
-              compGstinNo:
-                "Unable to load GST details right now. Please try again.",
-            },
+            ...typingValues,
+            errors: { compGstinNo: result.message },
           };
         }
+        const resolvedValues = gstinLookupToValues(result.payload, COMPANY_LOOKUP_FIELD_MAP, {
+          stateNameByCode,
+        });
+        gstLookupCacheRef.current[normalizedGstin] = resolvedValues;
+        // Pin the auto-filled state so the lazy dropdown can display it.
+        if (resolvedValues.compState) {
+          seedState(resolvedValues.compState, resolvedValues.compState);
+        }
+        return {
+          values: { ...typingPatch, ...resolvedValues },
+          errors: { compGstinNo: null },
+        };
       },
-      [stateNameByCode, state.seedSelected],
+      [gstinValidators, searchGstin, stateNameByCode, seedState],
     );
   const companyFormFields = useMemo(
     () =>
       buildCompanyFormFields({
         bankOptions,
-        stateOptions: state.options,
-        stateHandlers: state.handlers,
-        appThemeOptions: appTheme.options,
-        appThemeHandlers: appTheme.handlers,
+        bankHandlers,
+        stateOptions,
+        stateHandlers,
+        appThemeOptions,
+        appThemeHandlers,
         onCompanyGstinValueChange: handleCompanyGstinValueChange,
+        gstinValidators,
       }),
     [
       bankOptions,
+      bankHandlers,
+      gstinValidators,
       handleCompanyGstinValueChange,
-      state.options,
-      state.handlers,
-      appTheme.options,
-      appTheme.handlers,
+      stateOptions,
+      stateHandlers,
+      appThemeOptions,
+      appThemeHandlers,
     ],
   );
+  // A new company starts in the Indian financial year running today, books
+  // beginning with it (what the server would seed anyway, shown so it can be
+  // changed to an earlier year before the first save).
+  const createInitialValues = useMemo(() => {
+    const fiscalYear = currentIndianFiscalYear();
+    return withEditMode(
+      {
+        ...COMPANY_INITIAL_FORM_VALUES,
+        compFinYearFrom: fiscalYear.from,
+        compFinYearTo: fiscalYear.to,
+        compBooksBeginFrom: fiscalYear.from,
+      },
+      false,
+    );
+  }, []);
   return useMemo(
     () =>
       defineMasterModule({
@@ -1145,10 +1236,10 @@ export function useCompaniesModule() {
         formDescription:
           "Create and update companies with statutory, contact, fiscal, and system settings.",
         customFields: companyFormFields,
-        createInitialValues: COMPANY_INITIAL_FORM_VALUES,
+        createInitialValues,
         modalPanelStyle: COMPANY_MODAL_PANEL_STYLE,
-         createModalTitle:"Company Entry",
-      editModalTitle:"Edit Company Entry",
+        createModalTitle: "Company Entry",
+        editModalTitle: "Edit Company Entry",
         modalFormGridColumns: 2,
         modalFormDenseGrid: false,
         modalStackLabels: false,
@@ -1156,13 +1247,17 @@ export function useCompaniesModule() {
         modalHideFieldHelperText: true,
         modalHideFieldErrorText: true,
         modalFocusFirstInvalidFieldOnValidationError: true,
+        // Field errors are hidden, and the GSTIN / financial-year / PAN rules
+        // need their words: the first one is raised as a warning, as Qt does.
+        modalShowValidationErrorPopup: true,
         modalEnableArrowKeyFieldNavigation: true,
         onModalOpenChange: (open, variantKey) => {
-          // Clear the lazy State dropdown when the create modal opens so no stale
-          // selection from a previously edited company lingers (it reloads on open).
+          // Clear the lazy dropdowns when the create modal opens so no stale
+          // selection from a previously edited company lingers (they reload on open).
           if (open && variantKey === "master-create") {
-            state.seedSelected("", "");
-            appTheme.seedSelected("", "");
+            seedState("", "");
+            seedAppTheme("", "");
+            seedBank("", "");
           }
         },
         mapFormValues: ({ source, defaults }) => {
@@ -1176,20 +1271,29 @@ export function useCompaniesModule() {
               toDisplayValue(getCompanyFieldValue(rowSource, "compStateCode")).toUpperCase()
             ] ||
             "";
-          state.seedSelected(stateName, stateName);
-          // Seed the lazy Stylesheet dropdown from the saved theme id; /company-masters/get
-          // returns the resolved name alongside it so the trigger has a label to show.
+          seedState(stateName, stateName);
+          // Seed the lazy Stylesheet and Bank dropdowns from the saved ids;
+          // /company-masters/get returns the resolved names alongside them so the
+          // triggers have a label to show.
           const appThemeId = toDisplayValue(
             getCompanyFieldValue(rowSource, "compStylesheetId"),
           );
-          appTheme.seedSelected(
+          seedAppTheme(
             appThemeId,
             toDisplayValue(getCompanyFieldValue(rowSource, "compStylesheetName")) ||
               appThemeId,
           );
-          return mapCompanyFormValues(source, defaults, stateNameByCode);
+          const bankId = toDisplayValue(getCompanyFieldValue(rowSource, "compBankId"));
+          seedBank(
+            bankId,
+            toDisplayValue(getCompanyFieldValue(rowSource, "compBankName")) || bankId,
+          );
+          return withEditMode(
+            mapCompanyFormValues(source, defaults, stateNameByCode),
+            source !== null,
+          );
         },
-        buildRequestPayload: ({ values, shouldUpdate, editingItemId }) => {
+        buildRequestPayload: async ({ values, shouldUpdate, editingItemId, files }) => {
           const isEwayApplicable =
             (values.compEwayApplicable ?? "false") === "true";
           const isEinvoiceApplicable =
@@ -1206,12 +1310,14 @@ export function useCompaniesModule() {
             compShort: toNullableString(values.compShort ?? ""),
             compLegalName: toNullableString(values.compLegalName ?? ""),
             compGstinNo: toUpperNullable(values.compGstinNo ?? ""),
-            compGstRegType: toNullableString(values.compGstRegType ?? ""),
+            compGstRegType: toUpperNullable(values.compGstRegType ?? ""),
             compPanNo: toUpperNullable(values.compPanNo ?? ""),
             compTanNo: toUpperNullable(values.compTanNo ?? ""),
             compCinNo: toUpperNullable(values.compCinNo ?? ""),
             compFssaiNo: toNullableString(values.compFssaiNo ?? ""),
             compDrugLicenseNo: toNullableString(values.compDrugLicenseNo ?? ""),
+            compAatoClass: toUpper(values.compAatoClass ?? "") || DEFAULT_AATO_CLASS,
+            compDcPurposes: toUniqueStringArrayFromCsv(values.compDcPurposes ?? "").map(toUpper),
             compAddr1: toNullableString(values.compAddr1 ?? ""),
             compAddr2: toNullableString(values.compAddr2 ?? ""),
             compAddr3: toNullableString(values.compAddr3 ?? ""),
@@ -1220,14 +1326,14 @@ export function useCompaniesModule() {
             compState: toNullableString(values.compState ?? ""),
             compStateCode: toUpper(derivedStateCode),
             compPin: toNullableInteger(values.compPin ?? ""),
-            compCountry:"India",
+            compCountry: (values.compCountry ?? "").trim() || "India",
             compRegionAddr1: toNullableString(values.compRegionAddr1 ?? ""),
             compRegionAddr2: toNullableString(values.compRegionAddr2 ?? ""),
             compRegionAddr3: toNullableString(values.compRegionAddr3 ?? ""),
             compRegionCity: toNullableString(values.compRegionCity ?? ""),
             compRegionDistrict: toNullableString(values.compRegionDistrict ?? ""),
-            compRegionState:toNullableString(values.compState ?? ""),
-            compRegionCountry:"India",
+            compRegionState: toNullableString(values.compRegionState ?? ""),
+            compRegionCountry: toNullableString(values.compRegionCountry ?? ""),
             compRegionName: toNullableString(values.compRegionName ?? ""),
             compTel: toNullableString(values.compTel ?? ""),
             compPhone: toNullableString(values.compPhone ?? ""),
@@ -1235,12 +1341,9 @@ export function useCompaniesModule() {
             compSupportEmail: toNullableString(values.compSupportEmail ?? ""),
             compSupportPhone: toNullableString(values.compSupportPhone ?? ""),
             compWebsiteName: toNullableString(values.compWebsiteName ?? ""),
-            compFinYearFrom: toNullableDate(values.compFinYearFrom ?? ""),
-            compFinYearTo: toNullableDate(values.compFinYearTo ?? ""),
-            compBooksBeginFrom: toNullableDate(values.compBooksBeginFrom ?? ""),
-            compBooksLockDate: toNullableDate(values.compBooksLockDate ?? ""),
             compGstApplicable: (values.compGstApplicable ?? "false") === "true",
             compTcsApplicable: (values.compTcsApplicable ?? "false") === "true",
+            compTdsApplicable: (values.compTdsApplicable ?? "false") === "true",
             compSmsApplicable: (values.compSmsApplicable ?? "false") === "true",
             compEinvoiceApplicable: isEinvoiceApplicable,
             compEwayApplicable: isEwayApplicable,
@@ -1268,14 +1371,24 @@ export function useCompaniesModule() {
             compNegStkApl: (values.compNegStkApl ?? "false") === "true",
             compDefault: (values.compDefault ?? "false") === "true",
             compIsActive: (values.compIsActive ?? "false") === "true",
-            compCurrencyCode: (values.compCurrencyCode ?? "").trim() || "INR",
+            compCurrencyCode: toUpper(values.compCurrencyCode ?? "") || "INR",
             compCurrencySymbol: toNullableString(values.compCurrencySymbol ?? ""),
-            compLocaleCode:"en-IN",
+            compLocaleCode: (values.compLocaleCode ?? "").trim() || "en-IN",
             compRemarks: toNullableString(values.compRemarks ?? ""),
-            compAuthorizeSignature: toNullableString(
-              values.compAuthorizeSignature ?? "",
-            ),
           };
+          if (!shouldUpdate) {
+            // Create only: the first fiscal year (notes 72 A1). On update the
+            // server ignores them, so they are not sent at all.
+            payload.compFinYearFrom = toNullableDate(values.compFinYearFrom ?? "");
+            payload.compFinYearTo = toNullableDate(values.compFinYearTo ?? "");
+            payload.compBooksBeginFrom = toNullableDate(values.compBooksBeginFrom ?? "");
+          }
+          // A newly chosen image goes as a data URL; with none chosen the key is
+          // left out and the stored signature stays (null / "" would clear it).
+          const signatureFile = files.compAuthorizeSignature;
+          if (signatureFile && signatureFile.size > 0) {
+            payload.compAuthorizeSignature = await readFileAsDataUrl(signatureFile);
+          }
           if (shouldUpdate && editingItemId !== null) {
             payload.compId = toUpdateId(editingItemId);
           }
@@ -1284,10 +1397,12 @@ export function useCompaniesModule() {
       }),
     [
       companyFormFields,
+      createInitialValues,
       stateCodeByName,
       stateNameByCode,
-      state.seedSelected,
-      appTheme.seedSelected,
+      seedState,
+      seedAppTheme,
+      seedBank,
     ],
   );
 }

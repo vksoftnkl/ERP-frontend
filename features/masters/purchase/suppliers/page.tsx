@@ -54,7 +54,6 @@ import {
   SUPPLIER_GROUP_CREATE_ENDPOINT,
   STATE_GET_ENDPOINT,
   STATE_CREATE_ENDPOINT,
-  GST_LOOKUP_ENDPOINT,
   GST_LOOKUP_PATTERN,
   LOOKUP_KEYS,
   REQUEST_PAYLOAD_KEYS,
@@ -67,9 +66,11 @@ import {
 } from "./constants";
 import type { SupplierFormValues } from "./types";
 import {
-  extractGstLookupSource,
+  GSTIN_LOOKUP_ENDPOINT,
+  fetchGstinDetails,
+} from "@/features/masters/shared/gstin-lookup";
+import {
   buildSupplierLookupValues,
-  getLookupErrorMessage,
   extractDetailSource,
   mapStateDetailToFormValues,
   mapSupplierGroupDetailToFormValues,
@@ -242,6 +243,10 @@ export default function SuppliersMasterPage() {
   );
   // Cache for GST Lookups
   const gstLookupCacheRef = useRef<Record<string, Record<string, string>>>({});
+  // GET /gst/search: its failures show on the GSTIN field, not as a popup.
+  const { getAll: searchGstin } = useApi<unknown>(GSTIN_LOOKUP_ENDPOINT, {
+    toast: { error: false },
+  });
   // Lazy-dropdown plumbing: mirror of the latest options per field (so the value handler
   // can resolve a picked label), the pinned selection per field (kept visible after a
   // fetch), and a debounce handle per field for server-side search typing.
@@ -717,62 +722,21 @@ export default function SuppliersMasterPage() {
             errors: { supGstNo: null },
           };
         }
-        try {
-          const response = await fetch(
-            `${GST_LOOKUP_ENDPOINT}?gstin=${encodeURIComponent(normalizedGstin)}`,
-            {
-              method: "GET",
-              cache: "no-store",
-              headers: {
-                Accept: "application/json",
-              },
-            },
-          );
-          const payload = (await response.json().catch(() => null)) as unknown;
-          if (!response.ok) {
-            return {
-              ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
-              errors: {
-                supGstNo: getLookupErrorMessage(
-                  payload,
-                  "Unable to load GST details for this GSTIN.",
-                ),
-              },
-            };
-          }
-          const lookupSource = extractGstLookupSource(payload);
-          if (!lookupSource) {
-            return {
-              ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
-              errors: {
-                supGstNo: "GST details were not available for this GSTIN.",
-              },
-            };
-          }
-          const resolvedValues = buildSupplierLookupValues(
-            normalizedGstin,
-            lookupSource,
-            stateNameByCode,
-          );
-          gstLookupCacheRef.current[normalizedGstin] = resolvedValues as Record<
-            string,
-            string
-          >;
-          return {
-            values: resolvedValues,
-            errors: { supGstNo: null },
-          };
-        } catch {
+        const result = await fetchGstinDetails(searchGstin, normalizedGstin);
+        if (!result.ok) {
           return {
             ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
-            errors: {
-              supGstNo:
-                "Unable to load GST details right now. Please try again.",
-            },
+            errors: { supGstNo: result.message },
           };
         }
+        const resolvedValues = buildSupplierLookupValues(result.payload, stateNameByCode);
+        gstLookupCacheRef.current[normalizedGstin] = resolvedValues;
+        return {
+          values: resolvedValues,
+          errors: { supGstNo: null },
+        };
       },
-      [stateNameByCode],
+      [searchGstin, stateNameByCode],
     );
   // First invalid bank-account row/field (or null), recomputed as rows change. Drives
   // both the inline cell highlight and the custom field's submit-blocking validation.

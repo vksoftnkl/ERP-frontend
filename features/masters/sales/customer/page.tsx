@@ -65,6 +65,12 @@ import {
 import { COLLECTION_DAY_OPTIONS } from "@/utils/constant";
 import { validateGstin, validateOptionalGstin } from "@/utils/validation";
 import {
+  GSTIN_LOOKUP_ENDPOINT,
+  fetchGstinDetails,
+  gstinLookupToValues,
+  type GstinLookupFieldMap,
+} from "@/features/masters/shared/gstin-lookup";
+import {
   API_ENDPOINTS,
   LIST_GRID_KEY,
   GRID_TABLE_NAME,
@@ -78,7 +84,6 @@ import {
   CITY_LOOKUP_ENDPOINT,
   CITY_LOOKUP_REQUEST_QUERY,
   PRICE_LEVEL_LOOKUP_REQUEST_QUERY,
-  GST_LOOKUP_ENDPOINT,
   GST_LOOKUP_PATTERN,
   GST_LOOKUP_HELPER_TEXT,
   LOOKUP_KEYS,
@@ -101,17 +106,6 @@ import {
   GROUP_MODAL_PANEL_STYLE,
   GST_TYPE_OPTIONS,
   GST_TYPE_VALUES,
-  GST_LOOKUP_SOURCE_KEYS,
-  GST_LEGAL_NAME_KEYS,
-  GST_TRADE_NAME_KEYS,
-  GST_REGISTRATION_TYPE_KEYS,
-  GST_PRIMARY_ADDRESS_KEYS,
-  GST_ADDRESS_KEYS,
-  GST_ADDRESS_BUILDING_KEYS,
-  GST_ADDRESS_LOCALITY_KEYS,
-  GST_ADDRESS_DISTRICT_KEYS,
-  GST_ADDRESS_CITY_KEYS,
-  GST_ADDRESS_PIN_KEYS,
   CUSTOMER_BOOLEAN_FIELD_NAMES,
   CUSTOMER_DATE_FIELD_NAMES,
   CUSTOMER_TEXT_FIELD_NAMES,
@@ -180,118 +174,27 @@ function validateCustomerGstin(
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
-function getObjectValue(
-  source: Record<string, unknown>,
-  keys: readonly string[],
-): Record<string, unknown> | null {
-  const candidate = getFirstDefinedValue(source, keys);
-  return isRecord(candidate) ? candidate : null;
-}
-function joinDisplayValues(parts: unknown[]): string {
-  return parts
-    .map((part) => toDisplayValue(part))
-    .filter(Boolean)
-    .join(", ");
-}
-function toCustomerLookupGstType(value: string): string {
-  const normalized = value.trim().toUpperCase();
-  if (!normalized) {
-    return "REGULAR";
-  }
-  if (normalized.includes("COMPOSITION")) {
-    return "COMPOSITION";
-  }
-  return "REGULAR";
-}
-function extractGstLookupSource(payload: unknown): Record<string, unknown> | null {
-  if (!isRecord(payload)) {
-    return null;
-  }
-  return getObjectValue(payload, GST_LOOKUP_SOURCE_KEYS) ?? payload;
-}
-function extractGstAddress(source: Record<string, unknown>): Record<string, unknown> {
-  const primaryAddress = getObjectValue(source, GST_PRIMARY_ADDRESS_KEYS);
-  if (!primaryAddress) {
-    return {};
-  }
-  return getObjectValue(primaryAddress, GST_ADDRESS_KEYS) ?? primaryAddress;
-}
-function setFieldValueIfPresent(
-  target: Record<string, string>,
-  fieldName: string,
-  value: string,
-): void {
-  const normalized = value.trim();
-  if (!normalized) {
-    return;
-  }
-  target[fieldName] = normalized;
-}
-function buildCustomerLookupValues(
-  gstin: string,
-  payload: Record<string, unknown>,
-): Record<string, string> {
-  const address = extractGstAddress(payload);
-  const legalName = toDisplayValue(getFirstDefinedValue(payload, GST_LEGAL_NAME_KEYS));
-  const tradeName = toDisplayValue(getFirstDefinedValue(payload, GST_TRADE_NAME_KEYS));
-  const city = toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_CITY_KEYS));
-  const district =
-    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_DISTRICT_KEYS)) || city;
-  const stateCode = gstin.slice(0, 2);
-  const values: Record<string, string> = {
-    cusGstNo: gstin,
-    cusPanNo: gstin.slice(2, 12),
-    cusCountry: "India",
-  };
-  setFieldValueIfPresent(values, "cusName", tradeName || legalName);
-  setFieldValueIfPresent(
-    values,
-    "cusGstType",
-    toCustomerLookupGstType(
-      toDisplayValue(getFirstDefinedValue(payload, GST_REGISTRATION_TYPE_KEYS)),
-    ),
-  );
-  setFieldValueIfPresent(
-    values,
-    "cusAddr1",
-    joinDisplayValues(
-      GST_ADDRESS_BUILDING_KEYS.map((key) => getFirstDefinedValue(address, [key])),
-    ),
-  );
-  setFieldValueIfPresent(
-    values,
-    "cusAddr2",
-    joinDisplayValues(
-      GST_ADDRESS_LOCALITY_KEYS.map((key) => getFirstDefinedValue(address, [key])),
-    ),
-  );
-  setFieldValueIfPresent(
-    values,
-    "cusAddr3",
-    joinDisplayValues([
-      getFirstDefinedValue(address, GST_ADDRESS_DISTRICT_KEYS),
-      getFirstDefinedValue(address, GST_ADDRESS_CITY_KEYS),
-    ]),
-  );
-  setFieldValueIfPresent(values, "cusCity", city);
-  setFieldValueIfPresent(values, "cusDistrict", district);
-  setFieldValueIfPresent(values, "cusStateCode", stateCode);
-  setFieldValueIfPresent(
-    values,
-    "cusPin",
-    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_PIN_KEYS)),
-  );
-  return values;
-}
-function getLookupErrorMessage(payload: unknown, fallback: string): string {
-  if (!isRecord(payload)) {
-    return fallback;
-  }
-  return (
-    toDisplayValue(getFirstDefinedValue(payload, ["message", "error", "detail"])) ||
-    fallback
-  );
-}
+/**
+ * Where a GSTIN lookup (`GET /gst/search`, the server's normalised record)
+ * lands on the customer form. The state is filled as its code: cusStateCode
+ * is the field's value.
+ */
+const CUSTOMER_GSTIN_LOOKUP_FIELDS: GstinLookupFieldMap = {
+  gstin: "cusGstNo",
+  pan: "cusPanNo",
+  country: "cusCountry",
+  name: "cusName",
+  regType: "cusGstType",
+  addr1: "cusAddr1",
+  addr2: "cusAddr2",
+  addr3: "cusAddr3",
+  city: "cusCity",
+  district: "cusDistrict",
+  stateCode: "cusStateCode",
+  pin: "cusPin",
+};
+/** The customer's GST Type list has no SEZ; a SEZ registration reads as REGULAR. */
+const CUSTOMER_LOOKUP_REG_TYPES = GST_TYPE_OPTIONS.map((option) => option.value);
 type LazyDropdownFieldHandlers = {
   onSearchOpenChange: (open: boolean) => void;
   onSearchQueryChange: ERPDynamicSearchQueryChangeHandler;
@@ -1463,6 +1366,10 @@ export default function CustomerPage({
   const [editingAreaId, setEditingAreaId] = useState<string | null>(null);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const gstLookupCacheRef = useRef<Record<string, Record<string, string>>>({});
+  // GET /gst/search: its failures show on the GSTIN field, not as a popup.
+  const { getAll: searchGstin } = useApi<unknown>(GSTIN_LOOKUP_ENDPOINT, {
+    toast: { error: false },
+  });
   // Debounce handles per lazy field name (server-side search typing).
   const dropdownSearchTimeoutsRef = useRef<Record<string, number | null>>({});
   // Latest options shown for each lazy field, mirrored so the selection handler can
@@ -2403,58 +2310,23 @@ export default function CustomerPage({
             errors: { cusGstNo: null },
           };
         }
-        try {
-          const response = await fetch(
-            `${GST_LOOKUP_ENDPOINT}?gstin=${encodeURIComponent(normalizedGstin)}`,
-            {
-              method: "GET",
-              cache: "no-store",
-              headers: {
-                Accept: "application/json",
-              },
-            },
-          );
-          const payload = (await response.json().catch(() => null)) as unknown;
-          if (!response.ok) {
-            return {
-              ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
-              errors: {
-                cusGstNo: getLookupErrorMessage(
-                  payload,
-                  "Unable to load GST details for this GSTIN.",
-                ),
-              },
-            };
-          }
-          const lookupSource = extractGstLookupSource(payload);
-          if (!lookupSource) {
-            return {
-              ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
-              errors: {
-                cusGstNo: "GST details were not available for this GSTIN.",
-              },
-            };
-          }
-          const resolvedValues = buildCustomerLookupValues(
-            normalizedGstin,
-            lookupSource,
-          );
-          gstLookupCacheRef.current[normalizedGstin] = resolvedValues;
-          return {
-            values: resolvedValues,
-            errors: { cusGstNo: null },
-          };
-        } catch {
+        const result = await fetchGstinDetails(searchGstin, normalizedGstin);
+        if (!result.ok) {
           return {
             ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
-            errors: {
-              cusGstNo:
-                "Unable to load GST details right now. Please try again.",
-            },
+            errors: { cusGstNo: result.message },
           };
         }
+        const resolvedValues = gstinLookupToValues(result.payload, CUSTOMER_GSTIN_LOOKUP_FIELDS, {
+          allowedRegTypes: CUSTOMER_LOOKUP_REG_TYPES,
+        });
+        gstLookupCacheRef.current[normalizedGstin] = resolvedValues;
+        return {
+          values: resolvedValues,
+          errors: { cusGstNo: null },
+        };
       },
-      [],
+      [searchGstin],
     );
   const customerFormFields = useMemo(
     () =>

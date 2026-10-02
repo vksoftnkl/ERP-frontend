@@ -21,6 +21,10 @@ import ReusableTable, {
   type ReusableTableColumnResizeEndPayload,
 } from "@/components/ui/table";
 import { useApi } from "@/hooks/useApi";
+import {
+  GSTIN_LOOKUP_ENDPOINT,
+  fetchGstinDetails,
+} from "@/features/masters/shared/gstin-lookup";
 import { useMasterListKeyboard } from "@/components/master/use-master-list-keyboard";
 import type {
   ERPDynamicModalField,
@@ -49,7 +53,6 @@ import {
   GRID_FILTER_SETTINGS_ENDPOINT,
   GRID_VISIBILITY_SETTINGS_ENDPOINT,
   GRID_DETAILS_SEARCH,
-  GST_LOOKUP_ENDPOINT,
   GST_LOOKUP_PATTERN,
   STATE_NAME_SEARCH_FIELD_NAMES,
   REQUEST_PAYLOAD_KEYS,
@@ -70,9 +73,7 @@ import {
   buildStateNameOptions,
   buildStateCodeByName,
   buildStateNameByCode,
-  extractGstLookupSource,
   buildLedgerGstLookupValues,
-  getLookupErrorMessage,
   extractPaginationInfo,
   extractRows,
   extractDetailSource,
@@ -802,6 +803,10 @@ export default function AccountLedgerMasterPage() {
   const sectionTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const gstLookupCacheRef = useRef<Record<string, Partial<LedgerFormValues>>>({});
   const gstLookupRequestIdRef = useRef(0);
+  // GET /gst/search: its failures show beside the GSTIN field, not as a popup.
+  const { getAll: searchGstin } = useApi<unknown>(GSTIN_LOOKUP_ENDPOINT, {
+    toast: { error: false },
+  });
   // Grid columns query. Seed from the known grid id so headers load immediately,
   // independent of the grid-details resolution; refines to the resolved id when ready.
   const selectedGridId = accountLedgerGridId ?? Number(listGridId);
@@ -1432,56 +1437,22 @@ export default function AccountLedgerMasterPage() {
       }
 
       void (async () => {
-        try {
-          const response = await fetch(
-            `${GST_LOOKUP_ENDPOINT}?gstin=${encodeURIComponent(normalizedGstin)}`,
-            {
-              method: "GET",
-              cache: "no-store",
-              headers: {
-                Accept: "application/json",
-              },
-            },
-          );
-          const payload = (await response.json().catch(() => null)) as unknown;
-          if (gstLookupRequestIdRef.current !== requestId) {
-            return;
-          }
-          if (!response.ok) {
-            setGstLookupError(
-              getLookupErrorMessage(
-                payload,
-                "Unable to load GST details for this GSTIN.",
-              ),
-            );
-            setValidationFieldName("ledGstinNo");
-            return;
-          }
-          const lookupSource = extractGstLookupSource(payload);
-          if (!lookupSource) {
-            setGstLookupError("GST details were not available for this GSTIN.");
-            setValidationFieldName("ledGstinNo");
-            return;
-          }
-          const resolvedValues = buildLedgerGstLookupValues(
-            normalizedGstin,
-            lookupSource,
-            stateNameByCode,
-          );
-          gstLookupCacheRef.current[normalizedGstin] = resolvedValues;
-          applyLookupValues(resolvedValues);
-        } catch {
-          if (gstLookupRequestIdRef.current !== requestId) {
-            return;
-          }
-          setGstLookupError(
-            "Unable to load GST details right now. Please try again.",
-          );
-          setValidationFieldName("ledGstinNo");
+        const result = await fetchGstinDetails(searchGstin, normalizedGstin);
+        // A later keystroke started its own lookup: this answer is stale.
+        if (gstLookupRequestIdRef.current !== requestId) {
+          return;
         }
+        if (!result.ok) {
+          setGstLookupError(result.message);
+          setValidationFieldName("ledGstinNo");
+          return;
+        }
+        const resolvedValues = buildLedgerGstLookupValues(result.payload, stateNameByCode);
+        gstLookupCacheRef.current[normalizedGstin] = resolvedValues;
+        applyLookupValues(resolvedValues);
       })();
     },
-    [stateNameByCode],
+    [searchGstin, stateNameByCode],
   );
 
   const handleFieldChange = useCallback(

@@ -15,18 +15,6 @@ import {
 } from "@/app/master/_shared/crud-utils";
 import {
   DEFAULT_LOOKUP_OPTION,
-  GST_ADDRESS_BUILDING_KEYS,
-  GST_ADDRESS_CITY_KEYS,
-  GST_ADDRESS_DISTRICT_KEYS,
-  GST_ADDRESS_KEYS,
-  GST_ADDRESS_LOCALITY_KEYS,
-  GST_ADDRESS_PIN_KEYS,
-  GST_ADDRESS_STATE_KEYS,
-  GST_LEGAL_NAME_KEYS,
-  GST_LOOKUP_SOURCE_KEYS,
-  GST_PRIMARY_ADDRESS_KEYS,
-  GST_REGISTRATION_TYPE_KEYS,
-  GST_TRADE_NAME_KEYS,
   GST_TYPE_VALUES,
   STATE_DETAIL_KEYS,
   STATE_LOOKUP_ARRAY_KEYS,
@@ -37,6 +25,11 @@ import {
   SUPPLIER_GROUP_LOOKUP_ARRAY_KEYS,
   SUPPLIER_GROUP_NAME_KEYS,
 } from "./constants";
+import {
+  gstinLookupToValues,
+  type GstinLookupFieldMap,
+  type GstinLookupPayload,
+} from "@/features/masters/shared/gstin-lookup";
 import type {
   SupplierFormValues,
   StateModalFormValues,
@@ -44,27 +37,22 @@ import type {
   GstLookupResult,
 } from "./types";
 
-// Type Guards
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-// Object Value Extraction
-function getObjectValue(
-  source: Record<string, unknown>,
-  keys: readonly string[],
-): Record<string, unknown> | null {
-  const candidate = getFirstDefinedValue(source, keys);
-  return isRecord(candidate) ? candidate : null;
-}
-
-// Display Value Joining
-export function joinDisplayValues(parts: unknown[]): string {
-  return parts
-    .map((part) => toDisplayValue(part))
-    .filter(Boolean)
-    .join(", ");
-}
+/** Where a GSTIN lookup lands on the supplier form. */
+const SUPPLIER_GSTIN_LOOKUP_FIELDS: GstinLookupFieldMap = {
+  gstin: "supGstNo",
+  pan: "supPanNo",
+  country: "supCountry",
+  name: "supName",
+  regType: "supGstType",
+  addr1: "supAddr1",
+  addr2: "supAddr2",
+  addr3: "supAddr3",
+  city: "supCity",
+  district: "supDistrict",
+  stateCode: "supStateCode",
+  stateName: "supStateName",
+  pin: "supPincode",
+};
 
 // Collection Days Handling
 export function parseCollectionDays(value: string): number[] {
@@ -112,16 +100,6 @@ export function toGstTypeValue(value: string): string {
   return GST_TYPE_VALUES.has(normalized) ? normalized : "";
 }
 
-export function toSupplierLookupGstType(value: string): string {
-  const normalized = value.trim().toUpperCase();
-  if (!normalized) {
-    return "REGULAR";
-  }
-  if (normalized.includes("COMPOSITION")) {
-    return "COMPOSITION";
-  }
-  return "REGULAR";
-}
 
 // Lookup Selection
 export function toNullableLookupSelection(value: string): string | null {
@@ -273,57 +251,24 @@ export function buildStateNameByCode(payload: unknown): Record<string, string> {
 }
 
 // GST Lookup
-export function extractGstLookupSource(
-  payload: unknown,
-): Record<string, unknown> | null {
-  if (!isRecord(payload)) {
-    return null;
-  }
-  return getObjectValue(payload, GST_LOOKUP_SOURCE_KEYS) ?? payload;
-}
-
-export function extractGstAddress(
-  source: Record<string, unknown>,
-): Record<string, unknown> {
-  const primaryAddress = getObjectValue(source, GST_PRIMARY_ADDRESS_KEYS);
-  if (!primaryAddress) {
-    return {};
-  }
-  return getObjectValue(primaryAddress, GST_ADDRESS_KEYS) ?? primaryAddress;
-}
-
-function setFieldValueIfPresent(
-  target: Record<string, string>,
-  fieldName: string,
-  value: string,
-): void {
-  const normalized = value.trim();
-  target[fieldName] = normalized;
-}
-
+/**
+ * The supplier form's patch for a GSTIN lookup (`GET /gst/search`, already
+ * normalised by the server). Every lookup key is written — blank where the
+ * record has nothing — so a second lookup does not leave the first one's
+ * address behind. The state goes in as code and name, and the regional state
+ * starts as the same name.
+ */
 export function buildSupplierLookupValues(
-  gstin: string,
-  payload: Record<string, unknown>,
+  payload: GstinLookupPayload,
   stateNameByCode: Record<string, string>,
 ): GstLookupResult {
-  const address = extractGstAddress(payload);
-  const legalName = toDisplayValue(
-    getFirstDefinedValue(payload, GST_LEGAL_NAME_KEYS),
-  );
-  const tradeName = toDisplayValue(
-    getFirstDefinedValue(payload, GST_TRADE_NAME_KEYS),
-  );
-  const city = toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_CITY_KEYS));
-  const district =
-    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_DISTRICT_KEYS)) || city;
-  const stateCode = gstin.slice(0, 2);
-  const stateName =
-    stateNameByCode[stateCode] ||
-    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_STATE_KEYS));
-  
+  const looked = gstinLookupToValues(payload, SUPPLIER_GSTIN_LOOKUP_FIELDS, {
+    stateNameByCode,
+    allowedRegTypes: Array.from(GST_TYPE_VALUES),
+  });
   const values: GstLookupResult = {
-    supGstNo: gstin,
-    supPanNo: gstin.slice(2, 12),
+    supGstNo: "",
+    supPanNo: "",
     supCountry: "India",
     supName: "",
     supGstType: "",
@@ -336,61 +281,10 @@ export function buildSupplierLookupValues(
     supStateName: "",
     supRegionStateName: "",
     supPincode: "",
+    ...looked,
   };
-
-  setFieldValueIfPresent(values, "supName", tradeName || legalName);
-  setFieldValueIfPresent(
-    values,
-    "supGstType",
-    toSupplierLookupGstType(
-      toDisplayValue(getFirstDefinedValue(payload, GST_REGISTRATION_TYPE_KEYS)),
-    ),
-  );
-  setFieldValueIfPresent(
-    values,
-    "supAddr1",
-    joinDisplayValues(
-      GST_ADDRESS_BUILDING_KEYS.map((key) => getFirstDefinedValue(address, [key])),
-    ),
-  );
-  setFieldValueIfPresent(
-    values,
-    "supAddr2",
-    joinDisplayValues(
-      GST_ADDRESS_LOCALITY_KEYS.map((key) => getFirstDefinedValue(address, [key])),
-    ),
-  );
-  setFieldValueIfPresent(
-    values,
-    "supAddr3",
-    joinDisplayValues([
-      getFirstDefinedValue(address, GST_ADDRESS_DISTRICT_KEYS),
-      getFirstDefinedValue(address, GST_ADDRESS_CITY_KEYS),
-    ]),
-  );
-  setFieldValueIfPresent(values, "supCity", city);
-  setFieldValueIfPresent(values, "supDistrict", district);
-  setFieldValueIfPresent(values, "supStateCode", stateCode);
-  setFieldValueIfPresent(values, "supStateName", stateName);
-  setFieldValueIfPresent(values, "supRegionStateName", stateName);
-  setFieldValueIfPresent(
-    values,
-    "supPincode",
-    toDisplayValue(getFirstDefinedValue(address, GST_ADDRESS_PIN_KEYS)),
-  );
-
+  values.supRegionStateName = values.supStateName;
   return values;
-}
-
-export function getLookupErrorMessage(payload: unknown, fallback: string): string {
-  if (!isRecord(payload)) {
-    return fallback;
-  }
-  return (
-    toDisplayValue(
-      getFirstDefinedValue(payload, ["message", "error", "detail"]),
-    ) || fallback
-  );
 }
 
 // Detail Source Extraction

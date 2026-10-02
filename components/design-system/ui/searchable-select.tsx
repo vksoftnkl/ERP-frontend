@@ -17,6 +17,7 @@ import { focusNextInteractiveControl } from "@/components/design-system/ui/focus
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
 import dynamicFormStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
 import { Z_POPUP } from "@/lib/z-index";
+import { matchesSearchTokens, searchTokens } from "@/lib/search-text";
 export type SearchableSelectProps = {
   id?: string;
   value: string;
@@ -33,9 +34,6 @@ export type SearchableSelectProps = {
 };
 const DEFAULT_DROPDOWN_MAX_HEIGHT = 280;
 const DROPDOWN_VIEWPORT_PADDING = 8;
-function normalizeSearchValue(value: string): string {
-  return value.trim().toLowerCase();
-}
 export function SearchableSelect({
   id,
   value,
@@ -67,13 +65,13 @@ export function SearchableSelect({
     [options, value],
   );
   const filteredOptions = useMemo(() => {
-    const normalizedQuery = normalizeSearchValue(query);
-    if (!normalizedQuery) return [...options];
-    return options.filter((option) => {
-      const label = normalizeSearchValue(option.label);
-      const optionValue = normalizeSearchValue(option.value);
-      return label.includes(normalizedQuery) || optionValue.includes(normalizedQuery);
-    });
+    // Loose match, as the server does for lists (lib/search-text): spaces and
+    // punctuation ignored, every typed word required.
+    const tokens = searchTokens(query);
+    if (tokens.length === 0) return [...options];
+    return options.filter((option) =>
+      matchesSearchTokens(tokens, option.label, option.value),
+    );
   }, [options, query]);
   const activeDescendantId =
     isOpen && highlightedIndex >= 0

@@ -67,7 +67,6 @@ export const STATE_LOOKUP_QUERY = {
   module: "stateCodes",
 } as const;
 // GST Lookup Configuration
-export const GST_LOOKUP_ENDPOINT = "/api/gst/search";
 export const GST_LOOKUP_PATTERN = /^[0-9A-Z]{15}$/;
 export const GST_LOOKUP_HELPER_TEXT =
   "Type a 15-character GSTIN to load supplier details automatically.";
@@ -161,34 +160,6 @@ export const STATE_LOOKUP_CODE_KEYS = [
   "code",
 ] as const;
 // GST Lookup Keys
-export const GST_LOOKUP_SOURCE_KEYS = ["data", "taxpayer", "result"] as const;
-export const GST_LEGAL_NAME_KEYS = ["lgnm", "legalName", "legal_name"] as const;
-export const GST_TRADE_NAME_KEYS = ["tradeNam", "tradeName", "trade_name"] as const;
-export const GST_REGISTRATION_TYPE_KEYS = [
-  "dty",
-  "gstType",
-  "gst_type",
-  "registrationType",
-  "registration_type",
-] as const;
-export const GST_PRIMARY_ADDRESS_KEYS = [
-  "pradr",
-  "principalAddress",
-  "primaryAddress",
-  "primary_address",
-] as const;
-export const GST_ADDRESS_KEYS = ["addr", "address"] as const;
-export const GST_ADDRESS_BUILDING_KEYS = ["bno", "flno", "bnm"] as const;
-export const GST_ADDRESS_LOCALITY_KEYS = ["st", "loc"] as const;
-export const GST_ADDRESS_DISTRICT_KEYS = ["dst", "district"] as const;
-export const GST_ADDRESS_CITY_KEYS = ["city", "loc"] as const;
-export const GST_ADDRESS_STATE_KEYS = [
-  "stcd",
-  "state",
-  "stateName",
-  "state_name",
-] as const;
-export const GST_ADDRESS_PIN_KEYS = ["pncd", "pin", "pincode"] as const;
 // State Modal Detail Keys
 export const STATE_DETAIL_KEYS = {
   code: ["stateCode", "state_code", "code"],
