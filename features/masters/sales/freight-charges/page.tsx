@@ -19,7 +19,7 @@ import {
   DEFAULT_LOOKUP_ARRAY_KEYS,
 } from "@/app/master/_shared/crud-utils";
 import { useDataRefresh } from "@/lib/data-freshness";
-import { type ConfiguredGridKey } from "@/lib/configured-grids";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
 
 /**
  * The Grid Master row this list reads — "MAIN LIST - FREIGHT CHARGES". `CrudMasterPage`
@@ -193,6 +193,30 @@ export default function FreightChargesMasterPage() {
   const [branchOptions, setBranchOptions] = useState<ERPDynamicSelectOption[]>([
     DEFAULT_BRANCH_OPTION,
   ]);
+  // Toggles the deleted-rows grid param; ticking it re-runs the list so the user
+  // can see soft-deleted freight charges. Lives beside the list search input.
+  const [wantDelete, setWantDelete] = useState(false);
+  // The grid's SQL binds its `*_is_deleted` filter to a named token, and the
+  // runner leaves an unsent token in the statement as-is, so `grid_param` has to
+  // go on every run — not only when the checkbox is ticked. `ifr_branch_id` is
+  // the grid's quoted branch token; "" lists every branch.
+  const buildListQuery = useCallback(
+    ({
+      searchTerm,
+      currentPage,
+      pageSize,
+    }: {
+      searchTerm: string;
+      currentPage: number;
+      pageSize: number;
+    }): Record<string, string> => ({
+      page: String(currentPage),
+      limit: String(pageSize),
+      ...(searchTerm ? { search: searchTerm } : {}),
+      grid_param: JSON.stringify({ ifr_branch_id: "", ...buildGridDeletedParam(LIST_GRID_KEY, wantDelete) }),
+    }),
+    [wantDelete],
+  );
 
   // Lookup options come from master tables that other users and other screens
   // change, so they are re-read on every data-refresh signal, not just on mount.
@@ -251,6 +275,19 @@ export default function FreightChargesMasterPage() {
       entityLabelPlural="freight charges"
       apiEndpoints={API_ENDPOINTS}
       gridKey={LIST_GRID_KEY}
+      buildListQuery={buildListQuery}
+      toolbarContent={
+        <div className={styles.filterCheckGroup}>
+          <label className={styles.filterCheckLabel}>
+            <input
+              type="checkbox"
+              checked={wantDelete}
+              onChange={(event) => setWantDelete(event.target.checked)}
+            />
+            Show deleted records
+          </label>
+        </div>
+      }
       gridTableName={GRID_TABLE_NAME}
       listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}

@@ -1,11 +1,9 @@
 /**
- * The cheque register's vocabulary — shared by Received Cheques (menu 51) and,
- * later, Issued Cheques (menu 52), which read the same table with
- * `apd_tra_type = 'P'`.
+ * The received cheque register's types — `/cheques/*` and grid 109.
  *
- * Nothing here knows which of the two screens is asking. The words on the
- * buttons are the screen's business (`vocabulary.ts`); the statuses, the keys
- * and the row are the table's.
+ * Issued Cheques (menu 52) reads the same table (`apd_tra_type = 'P'`) through
+ * a server module of its own, whose keys and shapes differ; its types are in
+ * `../issued/issued.types.ts`.
  */
 
 /** `ck_apd_status`. A later migration may add one — see `stateMachine.ts`. */

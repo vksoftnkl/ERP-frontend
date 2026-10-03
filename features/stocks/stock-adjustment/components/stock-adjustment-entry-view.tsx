@@ -17,6 +17,8 @@ import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { useDropdownId } from "@/lib/configured-dropdowns";
 import { useUiTableId } from "@/lib/ui-tables";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
+import { settingsColumnsFromLayout, useGridSettings } from "@/features/sales/quotation/components/grid-settings";
+import { FALLBACK_COLUMN_TITLES } from "../stock-adjustment.constants";
 import {
   DateField,
   DropdownCombo,
@@ -126,6 +128,19 @@ export function StockAdjustmentEntryView({
   const uiTableId = useUiTableId(LINE_GRID_UI_TABLE_KEY);
   const { data: layout } = useGetQuotationGridLayoutQuery({ uiTableId }, { skip: !uiTableId });
   const columns = useMemo(() => resolveLineColumns(layout, draft.kind), [draft.kind, layout]);
+  // Right-click on the lines: "Admin settings" over the shared layout (ui table
+  // 41). The grid sizes its columns as shares of its width, so there is no drag
+  // and no "save column width".
+  const settingsColumns = useMemo(() => settingsColumnsFromLayout(layout, FALLBACK_COLUMN_TITLES), [layout]);
+  const gridSettings = useGridSettings({
+    label: "Adjustment lines",
+    uiTableId,
+    columns: settingsColumns,
+    pendingWidthCount: 0,
+    savingWidths: false,
+    focusNote:
+      "Focus is where Enter stops in a row. Which columns show is the adjustment kind's — Visible is kept with the layout, but this grid follows the kind.",
+  });
   const godownDropdownId = useDropdownId(GODOWN_DROPDOWN_KEY);
 
   // ---------------------------------------------------- what the lines say
@@ -601,9 +616,11 @@ export function StockAdjustmentEntryView({
             Enter next cell · F2 / F12 pick from stock · Alt+= add a line · Alt+− remove the line
           </span>
         </div>
+        {gridSettings.overlays}
         <AdjustmentLineGrid
           draft={draft}
           columns={columns}
+          onContextMenu={gridSettings.onContextMenu}
           lineNos={lineNos}
           problemKeys={problemKeys}
           problemText={problemText}

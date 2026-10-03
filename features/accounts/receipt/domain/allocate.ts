@@ -19,16 +19,23 @@
  * Round at EVERY placement. Half a paisa left on each of forty bills is how an
  * identity ends up 0.02 out with nothing visibly wrong on screen.
  */
-import type { BillRow, CreditRow, OtherLineRow, TenderRow } from "../receipt.types";
+import type { BillRow, CreditRow } from "../receipt.types";
 import { roomPaise, settledPaise } from "./identity";
 import { sumOf, toPaise, toRupees } from "./money";
-import { isAddition, isUnmirroredDeduction } from "./roles";
+import {
+  RECEIPT_SETTLEMENT,
+  addsUnder,
+  unmirroredUnder,
+  type RoleLine,
+  type SettlementPolicy,
+} from "./roles";
 
+/** Structural, as `IdentityInput` is — see there. */
 export type AllocationInput = {
   bills: readonly BillRow[];
   credits: readonly CreditRow[];
-  tenders: readonly TenderRow[];
-  otherLines: readonly OtherLineRow[];
+  tenders: ReadonlyArray<{ amount: number }>;
+  otherLines: ReadonlyArray<RoleLine & { amount: number }>;
 };
 
 export type AllocationResult = {
@@ -63,7 +70,10 @@ export function clearAllocations(input: {
   };
 }
 
-export function autoAllocate(input: AllocationInput): AllocationResult {
+export function autoAllocate(
+  input: AllocationInput,
+  policy: SettlementPolicy = RECEIPT_SETTLEMENT,
+): AllocationResult {
   // ── 0. Start from a clean slate, except where the operator typed ──────────
   // A typed Receive keeps its figure AND its discount. Everything else is the
   // engine's to place, so the round-off goes too: it is derived per allocation.
@@ -102,10 +112,13 @@ export function autoAllocate(input: AllocationInput): AllocationResult {
 
   // ── 2. What the lines do to the budget ────────────────────────────────────
   const settlingDeductions = sumOf(
-    input.otherLines.filter(isUnmirroredDeduction),
+    input.otherLines.filter((line) => unmirroredUnder(line, policy)),
     (line) => line.amount,
   );
-  const additions = sumOf(input.otherLines.filter(isAddition), (line) => line.amount);
+  const additions = sumOf(
+    input.otherLines.filter((line) => addsUnder(line, policy)),
+    (line) => line.amount,
+  );
 
   // ── 3. Then the cash ──────────────────────────────────────────────────────
   const available = sumOf(input.tenders, (tender) => tender.amount);

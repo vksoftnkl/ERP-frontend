@@ -29,10 +29,26 @@ import type {
   PostReceiptOtherLinePinBody,
   ReceiptHeaderDraft,
 } from "../receipt.types";
+import { planDeductions, spreadPaise } from "../domain/deductions";
 import { computeIdentity, settledPaise } from "../domain/identity";
 import { roundMoney, toPaise, toRupees } from "../domain/money";
-import { isUnmirroredDeduction, linesThatTravel } from "../domain/roles";
+import {
+  RECEIPT_SETTLEMENT,
+  linesThatTravel,
+  type RoleLine,
+  type SettlementPolicy,
+} from "../domain/roles";
 import { buildCreditMemo } from "./build-draft";
+
+/**
+ * What the allocation and pin builders read off a line. Structural, so
+ * Bill-wise Payment's own line rows go through the same two functions.
+ */
+export type PinnableLine = RoleLine & {
+  amount: number;
+  againstBillId: string | null;
+  againstBillAccYear: string | null;
+};
 
 export type PostPayloadInput = {
   header: ReceiptHeaderDraft;
@@ -42,63 +58,24 @@ export type PostPayloadInput = {
   tenders: readonly import("../receipt.types").TenderRow[];
 };
 
-/**
- * Split `total` paise across the weights, exactly.
- *
- * Largest remainder: everybody gets the floor of their share, and the paise
- * left over go to the rows whose fractions were biggest. Without it, forty
- * bills each lose up to a paisa and the receipt is refused for the difference.
- */
-export function spreadPaise(total: number, weights: readonly number[]): number[] {
-  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
-  if (total <= 0 || weightTotal <= 0) {
-    return weights.map(() => 0);
-  }
-  const exact = weights.map((weight) => (total * weight) / weightTotal);
-  const floors = exact.map((value) => Math.floor(value));
-  let left = total - floors.reduce((sum, value) => sum + value, 0);
-  const order = exact
-    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
-    .sort((a, b) => b.fraction - a.fraction || a.index - b.index);
-  for (const entry of order) {
-    if (left <= 0) {
-      break;
-    }
-    floors[entry.index] += 1;
-    left -= 1;
-  }
-  return floors;
-}
+/** The largest-remainder split now lives beside the plan that uses it. */
+export { spreadPaise };
 
-/** Pinned deductions, totalled per bill. */
-function pinnedByBill(otherLines: readonly OtherLineRow[]): Map<string, number> {
-  const byBill = new Map<string, number>();
-  for (const line of otherLines) {
-    if (!isUnmirroredDeduction(line) || !line.againstBillId) {
-      continue;
-    }
-    byBill.set(line.againstBillId, (byBill.get(line.againstBillId) ?? 0) + toPaise(line.amount));
-  }
-  return byBill;
-}
-
-export function buildAllocations(input: {
-  bills: readonly BillRow[];
-  otherLines: readonly OtherLineRow[];
-}): PostReceiptAllocationBody[] {
-  const pinned = pinnedByBill(input.otherLines);
-  const unpinnedTotal = input.otherLines
-    .filter((line) => isUnmirroredDeduction(line) && !line.againstBillId)
-    .reduce((sum, line) => sum + toPaise(line.amount), 0);
-
-  // The share is weighted by the MONEY placed on each bill — the spread
-  // follows where the receipt actually settled, not how many rows it touched.
-  const weights = input.bills.map((bill) => toPaise(bill.receive));
-  const shares = spreadPaise(unpinnedTotal, weights);
+export function buildAllocations(
+  input: {
+    bills: readonly BillRow[];
+    otherLines: readonly PinnableLine[];
+  },
+  policy: SettlementPolicy = RECEIPT_SETTLEMENT,
+): PostReceiptAllocationBody[] {
+  // The same plan the identity counted — pins whole, the unpinned spread up to
+  // the bills' room — so `Σ amount + onAccount` here is the figure the strip
+  // showed. What did not fit is not on any bill; it is in `onAccount`.
+  const plan = planDeductions(input.bills, input.otherLines, policy);
 
   const rows: PostReceiptAllocationBody[] = [];
   input.bills.forEach((bill, index) => {
-    const amount = toPaise(bill.receive) + (pinned.get(bill.billId) ?? 0) + shares[index];
+    const amount = toPaise(bill.receive) + plan.pinned[index] + plan.shares[index];
     const reductions = toPaise(bill.discount) + toPaise(bill.writeOff) + toPaise(bill.roundOff);
     if (amount === 0 && reductions === 0) {
       return;
@@ -116,11 +93,15 @@ export function buildAllocations(input: {
   return rows;
 }
 
-/** The pins, numbered against the array `/create` actually sent. */
-export function buildOtherLinePins(
-  otherLines: readonly OtherLineRow[],
+/**
+ * The pins, numbered against the array `/create` actually sent — which is why
+ * the caller's own "which lines travel" rule is taken rather than assumed.
+ */
+export function buildOtherLinePins<TLine extends PinnableLine>(
+  otherLines: readonly TLine[],
+  travel: (lines: readonly TLine[]) => TLine[] = linesThatTravel,
 ): PostReceiptOtherLinePinBody[] {
-  const travelling = linesThatTravel(otherLines);
+  const travelling = travel(otherLines);
   const pins: PostReceiptOtherLinePinBody[] = [];
   travelling.forEach((line, index) => {
     if (!line.againstBillId || !line.againstBillAccYear || toPaise(line.amount) <= 0) {

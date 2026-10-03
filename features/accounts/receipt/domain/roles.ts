@@ -7,7 +7,41 @@
  * the screen and the server then disagree by exactly the amount of the line
  * that was classified twice.
  */
-import type { OtherLineRow, ReceiptRole } from "../receipt.types";
+import type { ReceiptRole } from "../receipt.types";
+
+/**
+ * What the arithmetic needs to know about a line, whichever voucher it is on.
+ *
+ * Bill-wise Payment (menu 100) runs this same identity and this same
+ * allocation engine with the money going the other way, and answers the two
+ * questions below differently — the Qt client's `SettlementRoles`. So the
+ * engine takes the answers as a POLICY rather than the payment carrying a copy
+ * of it: two copies of the engine drift, and a drifted engine is a refused
+ * post.
+ */
+export type RoleLine = { role: string | null; settlesBill: boolean };
+
+export type SettlementPolicy = {
+  /** A role the bills grid already carries as a column — never on the wire. */
+  isMirroredByBillColumn: (role: string | null) => boolean;
+  /** A role on NEITHER side of the identity: it splits a leg, it settles nothing. */
+  isLegSplit: (role: string | null) => boolean;
+};
+
+/** A line that takes money off what the party owes, under `policy`. */
+export function settlesUnder(line: RoleLine, policy: SettlementPolicy): boolean {
+  return line.settlesBill && !policy.isLegSplit(line.role);
+}
+
+/** A line paid ON TOP, under `policy`. */
+export function addsUnder(line: RoleLine, policy: SettlementPolicy): boolean {
+  return !line.settlesBill && !policy.isLegSplit(line.role);
+}
+
+/** A settling deduction the bills grid does NOT carry, under `policy`. */
+export function unmirroredUnder(line: RoleLine, policy: SettlementPolicy): boolean {
+  return settlesUnder(line, policy) && !policy.isMirroredByBillColumn(line.role);
+}
 
 /**
  * The three roles the BILLS GRID already carries as columns.
@@ -48,34 +82,40 @@ const CREDIT_SIDE_ROLES: ReadonlySet<string> = new Set([
  * role that has no line yet. The line forms delegate rather than repeat the
  * sets — one set, one answer.
  */
-export function roleIsMirroredByBillColumn(role: ReceiptRole | null): boolean {
+export function roleIsMirroredByBillColumn(role: ReceiptRole | string | null): boolean {
   return role !== null && MIRRORED_BY_BILL_COLUMN.has(role);
 }
 
-export function roleIsLegSplit(role: ReceiptRole | null): boolean {
+export function roleIsLegSplit(role: ReceiptRole | string | null): boolean {
   return role !== null && LEG_SPLIT_ROLES.has(role);
 }
+
+/** The receipt's answers — the default wherever a policy is taken. */
+export const RECEIPT_SETTLEMENT: SettlementPolicy = {
+  isMirroredByBillColumn: roleIsMirroredByBillColumn,
+  isLegSplit: roleIsLegSplit,
+};
 
 export function isCreditSide(role: ReceiptRole | null): boolean {
   return role !== null && CREDIT_SIDE_ROLES.has(role);
 }
 
-export function isMirroredByBillColumn(line: Pick<OtherLineRow, "role">): boolean {
+export function isMirroredByBillColumn(line: Pick<RoleLine, "role">): boolean {
   return roleIsMirroredByBillColumn(line.role);
 }
 
-export function isLegSplit(line: Pick<OtherLineRow, "role">): boolean {
+export function isLegSplit(line: Pick<RoleLine, "role">): boolean {
   return roleIsLegSplit(line.role);
 }
 
 /** A line that takes money off what the party owes, and is not a leg split. */
-export function isSettlingDeduction(line: OtherLineRow): boolean {
-  return line.settlesBill && !isLegSplit(line);
+export function isSettlingDeduction(line: RoleLine): boolean {
+  return settlesUnder(line, RECEIPT_SETTLEMENT);
 }
 
 /** A line the party paid ON TOP — interest, a surcharge, TCS collected. */
-export function isAddition(line: OtherLineRow): boolean {
-  return !line.settlesBill && !isLegSplit(line);
+export function isAddition(line: RoleLine): boolean {
+  return addsUnder(line, RECEIPT_SETTLEMENT);
 }
 
 /**
@@ -83,8 +123,8 @@ export function isAddition(line: OtherLineRow): boolean {
  * claim. These are the ones that have to be added to ALLOCATED by hand, and
  * the ones the post spreads pro-rata over the bills.
  */
-export function isUnmirroredDeduction(line: OtherLineRow): boolean {
-  return isSettlingDeduction(line) && !isMirroredByBillColumn(line);
+export function isUnmirroredDeduction(line: RoleLine): boolean {
+  return unmirroredUnder(line, RECEIPT_SETTLEMENT);
 }
 
 /**
@@ -94,7 +134,7 @@ export function isUnmirroredDeduction(line: OtherLineRow): boolean {
  * must be this one function — numbered against the full list, a pin points at
  * the wrong line the moment a discount is on the receipt.
  */
-export function linesThatTravel(lines: readonly OtherLineRow[]): OtherLineRow[] {
+export function linesThatTravel<TLine extends RoleLine>(lines: readonly TLine[]): TLine[] {
   return lines.filter((line) => !isMirroredByBillColumn(line));
 }
 

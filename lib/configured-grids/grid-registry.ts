@@ -45,14 +45,14 @@ export const CONFIGURED_GRIDS = {
   stateList: { name: "MAIN LIST - CUSTOMER STATES", fallbackId: "57", deletedParam: "istm_is_deleted" },
   cityList: { name: "MAIN LIST - CUSTOMER CITES", fallbackId: "58", deletedParam: "ictm_is_deleted" },
   areaList: { name: "MAIN LIST - CUSTOMER AREAS", fallbackId: "59", deletedParam: "iarm_is_deleted" },
-  customerList: { name: "MAIN LIST - CUSTOMERS", fallbackId: "65", deletedParam: null },
+  customerList: { name: "MAIN LIST - CUSTOMERS", fallbackId: "65", deletedParam: "icus_is_deleted" },
   customerGroupList: { name: "MAIN LIST - CUSTOMER GROUPS", fallbackId: "66", deletedParam: "icgr_is_deleted" },
   supplierList: { name: "MAIN LIST - SUPPLIERS", fallbackId: "63", deletedParam: "isup_is_deleted" },
   supplierGroupList: { name: "MAIN LIST - SUPPLIER GROUPS", fallbackId: "61", deletedParam: "ispg_is_deleted" },
   companyList: { name: "MAIN LIST - COMPANYS", fallbackId: "52", deletedParam: "icomp_is_deleted" },
   branchList: { name: "MAIN LIST - BRANCHES", fallbackId: "56", deletedParam: "ibr_is_deleted" },
-  employeeList: { name: "MAIN LIST - EMPLOYEES", fallbackId: "77", deletedParam: null },
-  employeeDepartmentList: { name: "MAIN LIST - EMP DEPARTMENTS", fallbackId: "73", deletedParam: null },
+  employeeList: { name: "MAIN LIST - EMPLOYEES", fallbackId: "77", deletedParam: "iemp_is_deleted" },
+  employeeDepartmentList: { name: "MAIN LIST - EMP DEPARTMENTS", fallbackId: "73", deletedParam: "iedpt_is_deleted" },
   employeeDesignationList: { name: "MAIN LIST - EMP DESIGNATIONS", fallbackId: "75", deletedParam: "ied_is_deleted" },
   accountGroupList: { name: "MAIN LIST - ACCOUNT GROUP", fallbackId: "53", deletedParam: null },
   accountLedgerList: { name: "MAIN LIST - LEDGERS", fallbackId: "54", deletedParam: "iled_is_deleted" },
@@ -70,8 +70,12 @@ export const CONFIGURED_GRIDS = {
   dropdownMasterList: { name: "MAIN LIST - DROPDOWN", fallbackId: "43", deletedParam: null },
   tenderList: { name: "MAIN LIST - TENDERS", fallbackId: "85", deletedParam: "itnd_is_deleted" },
   chargeList: { name: "CHARGES MAIN LIST", fallbackId: "81", deletedParam: null },
-  freightChargeList: { name: "MAIN LIST - FREIGHT CHARGES", fallbackId: "74", deletedParam: null },
-  loadingChargeList: { name: "MAIN LIST - LOADING CHARGES", fallbackId: "76", deletedParam: null },
+  /**
+   * Also binds a QUOTED `'ifr_branch_id'` token, "" for every branch. Unsent, it
+   * stays a literal and the branch test matches no row — the list comes back empty.
+   */
+  freightChargeList: { name: "MAIN LIST - FREIGHT CHARGES", fallbackId: "74", deletedParam: "ifr_is_deleted" },
+  loadingChargeList: { name: "MAIN LIST - LOADING CHARGES", fallbackId: "76", deletedParam: "iilc_is_deleted" },
   gstRateList: { name: "MAIN LIST - GST RATES", fallbackId: "103", deletedParam: null },
   openingStockList: { name: "MAIN LIST - OPENING STOCK", fallbackId: "99", deletedParam: null },
   /** Physical Stock Update (menu 45) — its list. */
@@ -97,12 +101,39 @@ export const CONFIGURED_GRIDS = {
    */
   receiptList: { name: "MAIN LIST - RECEIPTS", fallbackId: "108", deletedParam: null },
   /**
+   * Bill-wise Payment (menu 100) — the register behind F8. Grid 108's SQL with
+   * the voucher type swapped, so the same six bare tokens, every one always
+   * sent (`iavh_status` as "" for every status).
+   */
+  paymentList: { name: "MAIN LIST - PAYMENTS", fallbackId: "123", deletedParam: null },
+  /**
    * Received Cheques (menu 51) — the register. Its SQL names NINE bare tokens
    * (`iapd_company_id` … `isearch`) and every one must be sent, empty string
    * for "no filter", or the whole query fails. The search is `isearch` inside
    * `grid_param`, never the runner's own `search` key.
    */
   receivedChequeList: { name: "MAIN LIST - RECEIVED CHEQUES", fallbackId: "109", deletedParam: null },
+  /**
+   * Issued Cheques (menu 52) — the register. NINE bare tokens, every one sent,
+   * "" for no filter — but spelt `icompany_id` / `ibranch_id` / `iacc_year`,
+   * NOT grid 109's `iapd_*`. The search is `isearch` inside `grid_param`.
+   */
+  issuedChequeList: { name: "MAIN LIST - ISSUED CHEQUES", fallbackId: "121", deletedParam: null },
+  /**
+   * Cheque Books (menu 263) — the books list, also behind Issued Cheques' tiles.
+   * Binds `icompany_id`, `ibank_ledger_id` and `istatus` (ONE status, not a list).
+   */
+  chequeBookList: { name: "MAIN LIST - CHEQUE BOOKS", fallbackId: "120", deletedParam: null },
+  /**
+   * The Voucher Register (Contra, menu 104, and the other voucher menus) — the
+   * list. Binds `icompany_id`, `ibranch_id`, `iacc_year`, `iuser_id` (the SQL
+   * joins the user's menu rights on it; the server does NOT inject it),
+   * `itype_code`, `ifrom_date`, `ito_date` — all sent, "" for no bound. There
+   * is no status token.
+   */
+  voucherRegisterList: { name: "TXN MAIN LIST - VOUCHER REGISTER", fallbackId: "117", deletedParam: null },
+  /** The Voucher Register's Exceptions — journals and notes that settled a sales / purchase bill by hand. */
+  voucherExceptions: { name: "VOUCHER REGISTER - EXCEPTIONS", fallbackId: "118", deletedParam: null },
   /** Sale Bill (§24) — the delivery register, menu 226. Binds `idelivery_status` ('' = pending set). */
   billDeliveryList: { name: "MAIN LIST - BILL DELIVERY", fallbackId: "113", deletedParam: null },
   /** Sale Bill (§24) — the temp-credit follow-up list, menu 257. Binds `istatus` and `ioverdue_only`. */

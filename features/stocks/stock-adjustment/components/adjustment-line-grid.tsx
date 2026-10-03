@@ -18,7 +18,13 @@
  * the Item cell opens the item search; Alt+= / Alt+− add a line above / remove
  * the current one (the Qt grid's + / −, which a signed Qty cell cannot give up).
  */
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { cx } from "@/components/design-system/cx";
 import { formatCurrency } from "@/domain/pricing";
 import { moveCellFocus } from "@/features/sales/quotation/components/grid-focus";
@@ -58,6 +64,8 @@ export type AdjustmentLineGridProps = {
   onRefused: (key: string, column: number, why: string) => void;
   onInsertLine: (key: string) => void;
   onRemoveLine: (key: string) => void;
+  /** Right-click: "Admin settings" — the layout's order, focus and visibility. */
+  onContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void;
 };
 
 function cellAttrs(line: AdjustmentLine, column: LineColumn) {
@@ -243,6 +251,7 @@ export function AdjustmentLineGrid(props: AdjustmentLineGridProps) {
     onRefused,
     onInsertLine,
     onRemoveLine,
+    onContextMenu,
   } = props;
   const move = draft.kind === "Move";
   const reasonOptions = draft.reasons.map((reason) => ({ value: reason.id, label: reason.name }));
@@ -569,7 +578,7 @@ export function AdjustmentLineGrid(props: AdjustmentLineGridProps) {
   };
 
   return (
-    <div className={cx(quotationStyles.gridViewport, styles.gridViewport)}>
+    <div className={cx(quotationStyles.gridViewport, styles.gridViewport)} onContextMenu={onContextMenu}>
       <table className={cx(quotationStyles.grid, styles.lineGrid)}>
         <colgroup>
           {columns.map((column) => (

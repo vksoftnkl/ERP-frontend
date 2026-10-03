@@ -22,15 +22,28 @@
  * `isMirroredByBillColumn` is the same function here and in `allocate.ts` on
  * purpose: written twice, the two copies drift.
  */
-import type { BillRow, CreditRow, OtherLineRow, TenderRow } from "../receipt.types";
+import type { BillRow } from "../receipt.types";
+import { planDeductions, settledPaise, type DeductionLine } from "./deductions";
 import { sumOf, toPaise, toRupees } from "./money";
-import { isAddition, isLegSplit, isMirroredByBillColumn, isSettlingDeduction } from "./roles";
+import {
+  RECEIPT_SETTLEMENT,
+  addsUnder,
+  isLegSplit,
+  settlesUnder,
+  type RoleLine,
+  type SettlementPolicy,
+} from "./roles";
 
+/**
+ * Only what the arithmetic reads. Structural on purpose: Bill-wise Payment
+ * hands in its own instrument and line rows (a cheque from a book, a role set
+ * of its own), and the equation does not care what else a row carries.
+ */
 export type IdentityInput = {
   bills: readonly BillRow[];
-  credits: readonly CreditRow[];
-  tenders: readonly TenderRow[];
-  otherLines: readonly OtherLineRow[];
+  credits: ReadonlyArray<{ apply: number }>;
+  tenders: ReadonlyArray<{ amount: number }>;
+  otherLines: ReadonlyArray<RoleLine & { amount: number; againstBillId?: string | null }>;
 };
 
 /** Every figure in rupees, rounded to paise. `difference` is SIGNED. */
@@ -46,12 +59,7 @@ export type ReceiptIdentity = {
   balances: boolean;
 };
 
-/** What a bill has had placed against it, in paise. Receive is cash AND credit. */
-export function settledPaise(bill: BillRow): number {
-  return (
-    toPaise(bill.receive) + toPaise(bill.discount) + toPaise(bill.writeOff) + toPaise(bill.roundOff)
-  );
-}
+export { settledPaise };
 
 /** The same in rupees, for the grid's After column. */
 export function settled(bill: BillRow): number {
@@ -85,29 +93,42 @@ export function netProfit(bill: BillRow): number | null {
   );
 }
 
+function asDeductionLine(
+  line: RoleLine & { amount: number; againstBillId?: string | null },
+): DeductionLine {
+  return { ...line, againstBillId: line.againstBillId ?? null };
+}
+
 /** Half a paisa. Below this the two sides are the same figure. */
 const TOLERANCE_PAISE = 0;
 
-export function computeIdentity(input: IdentityInput): ReceiptIdentity {
+export function computeIdentity(
+  input: IdentityInput,
+  policy: SettlementPolicy = RECEIPT_SETTLEMENT,
+): ReceiptIdentity {
   const received = sumOf(input.tenders, (tender) => tender.amount);
   const deductions = sumOf(
-    input.otherLines.filter(isSettlingDeduction),
+    input.otherLines.filter((line) => settlesUnder(line, policy)),
     (line) => line.amount,
   );
   const creditsApplied = sumOf(input.credits, (credit) => credit.apply);
-  const additions = sumOf(input.otherLines.filter(isAddition), (line) => line.amount);
-
-  // Every settling deduction the bills grid does NOT already carry as a column.
-  // The mirrored three are inside `settledPaise` below; adding them here is
-  // the bug that leaves the strip out by exactly the discount.
-  const unmirroredDeductions = sumOf(
-    input.otherLines.filter(
-      (line) => isSettlingDeduction(line) && !isMirroredByBillColumn(line),
-    ),
+  const additions = sumOf(
+    input.otherLines.filter((line) => addsUnder(line, policy)),
     (line) => line.amount,
   );
+
+  // Every settling deduction the bills grid does NOT already carry as a column
+  // lands on the bills — but only as far as they have ROOM (`deductions.ts`):
+  // the part that does not fit is held on account by the server, so it must
+  // not be counted as allocated here. The mirrored three are inside
+  // `settledPaise` below; adding them here is the bug that leaves the strip
+  // out by exactly the discount.
+  const plan = planDeductions(input.bills, input.otherLines.map(asDeductionLine), policy);
+  const onBills =
+    plan.pinned.reduce((sum, value) => sum + value, 0) +
+    plan.shares.reduce((sum, value) => sum + value, 0);
   const placed = input.bills.reduce((total, bill) => total + settledPaise(bill), 0);
-  const allocated = placed + unmirroredDeductions;
+  const allocated = placed + onBills;
 
   const left = received + deductions + creditsApplied;
   const right = allocated + additions;

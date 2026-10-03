@@ -152,8 +152,32 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       // `fixed.menu_master.menu_name` exactly, or the route is ungoverned and
       // menu permissions fail open on it.
       { label: "Bill-wise Receipt", href: "/accounts/receipt" },
+      // Menu 100. Same rule: must match `fixed.menu_master.menu_name` exactly.
+      { label: "Bill-wise Payment", href: "/accounts/payment" },
       // Menu 51. Same rule: must match `fixed.menu_master.menu_name` exactly.
       { label: "Received Cheques", href: "/accounts/received-cheques" },
+      // Menu 52. Same rule: must match `fixed.menu_master.menu_name` exactly.
+      { label: "Issued Cheques", href: "/accounts/issued-cheques" },
+      // Menu 263. Same rule.
+      { label: "Cheque Books", href: "/accounts/cheque-books" },
+      // Menu 104. Same rule: must match `fixed.menu_master.menu_name` exactly.
+      { label: "Contra", href: "/accounts/contra" },
+      // Menu 260. Same rule: must match `fixed.menu_master.menu_name` exactly.
+      { label: "Receipt Voucher", href: "/accounts/receipt-voucher" },
+      // Menu 261. Same rule.
+      { label: "Payment Voucher", href: "/accounts/payment-voucher" },
+      // Menu 103. Same rule.
+      { label: "Journal", href: "/accounts/journal" },
+      // Menu 259. Same rule — the parentheses are part of the menu name.
+      { label: "Sales (Accounting)", href: "/accounts/sales-accounting" },
+      // Menu 163. Same rule.
+      { label: "Purchase (Accounting)", href: "/accounts/purchase-accounting" },
+      // Menu 101. Same rule.
+      { label: "Debit Note", href: "/accounts/debit-note" },
+      // Menu 102. Same rule.
+      { label: "Credit Note", href: "/accounts/credit-note" },
+      // Menu 262. Same rule.
+      { label: "Voucher Register", href: "/accounts/voucher-register" },
            {
         label:"GSP Service Master",href:"/master/gsp-service-master"
       },{

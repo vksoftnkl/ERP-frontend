@@ -21,6 +21,9 @@ import styles from "../page.module.scss";
 export type IdentityStripProps = {
   identity: ReceiptIdentity;
   hint: string;
+  /** The money's own word — "Paid" on Bill-wise Payment. */
+  movedCaption?: string;
+  ariaLabel?: string;
 };
 
 function Cell({ caption, value }: { caption: string; value: number }) {
@@ -32,14 +35,19 @@ function Cell({ caption, value }: { caption: string; value: number }) {
   );
 }
 
-export function IdentityStrip({ identity, hint }: IdentityStripProps) {
+export function IdentityStrip({
+  identity,
+  hint,
+  movedCaption = "Received",
+  ariaLabel = "Receipt identity",
+}: IdentityStripProps) {
   return (
     <section
       className={`${styles.identityStrip} ${identity.balances ? "" : styles.identityOut}`}
-      aria-label="Receipt identity"
+      aria-label={ariaLabel}
       title={hint}
     >
-      <Cell caption="Received" value={identity.received} />
+      <Cell caption={movedCaption} value={identity.received} />
       <span className={styles.identityOperator} aria-hidden>
         +
       </span>

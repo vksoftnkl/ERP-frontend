@@ -1,0 +1,538 @@
+/**
+ * The Voucher Register's own skin, over the receipt's (`receipt/page.module.scss`
+ * supplies the page shell, inputs and buttons): Qt's layout of the screen, the
+ * generated legs under the typed ones, the Instrument cell, and the lower
+ * frame of group boxes — the cheques on the voucher, the open cheque books,
+ * GST, bill-wise and the Balance box.
+ *
+ * Lengths are `u(n)`, n times `--erp-q-u`, declared on `:root` (the dialogs
+ * are portaled to `document.body`).
+ */
+:root {
+  --erp-q-u: clamp(
+    0.875rem,
+    0.2rem + calc(0.5vw / var(--erp-ui-scale, 1)) + calc(0.35vh / var(--erp-ui-scale, 1)),
+    1.25rem
+  );
+}
+
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+/* --------------------------------------------------------------- screen */
+/*
+ * The Qt `VoucherRegisterEntry` layout, top to bottom: title · rules band ·
+ * the voucher's form (four label-left columns) · the legs · the totals row ·
+ * the lower frame of group boxes · the buttons. The page shell, inputs and
+ * buttons are the receipt's (`receipt/page.module.scss`).
+ */
+
+.titleBar {
+  display: flex;
+  align-items: baseline;
+  gap: u(0.45);
+  min-width: 0;
+}
+.title {
+  margin: 0;
+  font-size: u(1.15);
+  font-weight: 800;
+  white-space: nowrap;
+  color: var(--text-main, #1d1d1d);
+}
+.context {
+  font-size: u(0.64);
+  color: var(--text-muted, #6b6b6b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.titleRight {
+  display: flex;
+  align-items: center;
+  gap: u(0.4);
+  margin-left: auto;
+  align-self: center;
+  flex-shrink: 0;
+}
+/** Qt's status label keeps its case: "DRAFT · numbered at Post". */
+.titleBar .pill {
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+/** NUMBERING · PARTY · BILL-WISE · DEBIT SIDE · CREDIT SIDE · GST · TDS — equal shares. */
+.rules {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  /* Qt centres each caption + value; a wrapped value pushes its own caption up. */
+  align-items: center;
+  gap: u(0.2) u(0.8);
+  padding: u(0.35) u(0.6);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: u(0.25);
+}
+.rule {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ruleCap {
+  font-size: u(0.58);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6b6b6b);
+}
+.ruleVal {
+  font-size: u(0.72);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+/** The voucher's own fields: Qt's four QFormLayouts — a hidden row closes up. */
+.voucherGroup {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.35);
+  padding: u(0.55) u(0.6);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: u(0.25);
+}
+.voucherForms {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+  gap: u(0.3) u(1.2);
+}
+.form {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: u(0.3) u(0.55);
+  min-width: 0;
+}
+.formCap {
+  font-size: u(0.74);
+  white-space: nowrap;
+  color: var(--text-main, #222222);
+}
+.facts {
+  margin: 0;
+  font-size: u(0.68);
+  color: var(--text-muted, #6b6b6b);
+}
+/** The party: a button that opens the picker, dressed as the dropdowns beside it. */
+.pickField {
+  display: flex;
+  align-items: center;
+  gap: u(0.4);
+  text-align: left;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+  }
+}
+.pickRequired {
+  border-color: var(--primary, #7b1515);
+}
+.pickText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pickPlaceholder {
+  color: var(--text-muted, #8a8a8a);
+}
+.chevron {
+  flex: none;
+  width: u(0.38);
+  height: u(0.38);
+  margin: 0 u(0.15) u(0.18) 0;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.45;
+}
+
+/** The legs: they take the height left over; below the rows the table is grey, as Qt's. */
+.legs {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: u(6);
+  background: #e4e7ec;
+  border: 1px solid var(--border, #d8d8d8);
+  border-radius: u(0.2);
+  overflow: hidden;
+}
+/** The cursor's line, tinted the whole way across. */
+.rowCurrent td {
+  background: #f3e3e3;
+}
+/** Dr / Cr reads as plain text, as Qt's cell does; it is still a select underneath. */
+.drCrSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: center;
+  text-align-last: center;
+  cursor: pointer;
+
+  &:disabled {
+    color: inherit;
+    cursor: default;
+  }
+}
+
+/** hint · balance ……… stale · Debit · Credit · DIFFERENCE */
+.totalsRow {
+  display: flex;
+  align-items: center;
+  gap: u(0.6);
+  min-height: u(1.4);
+  font-size: u(0.66);
+  color: var(--text-muted, #6b6b6b);
+}
+.totalsHint {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.totalsFlash {
+  color: var(--danger, #b3261e);
+}
+.totalsBalance {
+  white-space: nowrap;
+  color: var(--text-main, #333333);
+}
+.totalsStale {
+  margin-left: auto;
+  white-space: nowrap;
+  color: #7a4b00;
+}
+.totalsFigures {
+  white-space: nowrap;
+  color: #9aa0a6;
+  font-size: u(0.7);
+}
+.totalsFiguresStale {
+  font-style: italic;
+  opacity: 0.7;
+}
+.difference {
+  flex: none;
+  padding: u(0.12) u(0.6);
+  border-radius: u(0.3);
+  font-size: u(0.72);
+  font-weight: 800;
+  white-space: nowrap;
+}
+.differenceGood {
+  background: #e3f4e6;
+  color: #1c6b2a;
+}
+.differenceBad {
+  background: #f8e1e0;
+  color: #b3261e;
+}
+
+/** The footer: the server's verdict on the left, the verbs on the right. */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: u(0.35);
+  flex-wrap: wrap;
+}
+.footerStrip {
+  display: flex;
+  align-items: center;
+  gap: u(0.5);
+  margin-right: auto;
+  min-width: 0;
+  font-size: u(0.68);
+  color: var(--text-muted, #6b6b6b);
+}
+
+@media (max-width: 900px) {
+  .rules {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .voucherForms {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ------------------------------------------------------------ legs grid */
+
+/** A leg the server worked out: locked, grey. */
+.rowGenerated td {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+/** …that posts later, on the post-dated cheque's own voucher. */
+.rowPostDated td {
+  background: #fff4d6;
+  color: #7a4b00;
+}
+/** The stale answer's legs while the server is asked again. */
+.rowStale {
+  opacity: 0.6;
+}
+.lockGlyph {
+  margin-right: u(0.3);
+  font-size: u(0.62);
+  opacity: 0.7;
+}
+.instrumentCell {
+  display: flex;
+  align-items: center;
+  gap: u(0.35);
+  width: 100%;
+  min-height: 100%;
+  padding: 0 u(0.3);
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--primary, #7b1515);
+    outline-offset: -2px;
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+}
+.instrumentChip {
+  flex: none;
+  padding: 0 u(0.3);
+  border-radius: u(0.2);
+  background: #e3ecfa;
+  color: #1f4a8c;
+  font-size: u(0.6);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.instrumentChipPdc {
+  background: #fff4d6;
+  color: #7a4b00;
+}
+.instrumentText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.billsChip {
+  color: #1f4a8c;
+  font-size: u(0.66);
+}
+
+/* ---------------------------------------------------------- lower frame */
+/*
+ * Qt's `frameLower`: group boxes side by side at one fixed height — Cheques
+ * on this voucher · Cheque books · GST · Bill-wise · Balance. Balance is
+ * always there: narrow beside the others, the whole width when alone.
+ */
+
+.extras {
+  display: flex;
+  gap: u(0.5);
+  flex: 0 0 auto;
+  height: u(11);
+  min-height: 0;
+}
+.box {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+.boxWide {
+  flex-grow: 2.2;
+}
+.boxRule {
+  flex: 0 0 u(15);
+}
+.boxRule:only-child {
+  flex: 1 1 auto;
+}
+/** The group box's caption, sitting on its frame as Qt draws it. */
+.boxTitle {
+  margin: 0 0 u(0.15) u(0.75);
+  font-size: u(0.74);
+  font-weight: 700;
+  color: var(--text-main, #222222);
+}
+.boxFrame {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.3);
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: u(0.45) u(0.5);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: u(0.25);
+  overflow: hidden;
+}
+.boxBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+/** A table's viewport, framed — the empty part stays white under its headings. */
+.boxBodyFramed {
+  border: 1px solid var(--border, #d8d8d8);
+}
+.boxBodyFramed table th {
+  position: sticky;
+  top: 0;
+}
+/** A framed table's viewport: grey below the rows, as Qt's NexTable leaves it. */
+.tableViewport {
+  min-height: 100%;
+  background: #e4e7ec;
+}
+.tableViewport tbody tr {
+  background: var(--surface, #ffffff);
+}
+.boxHint {
+  flex: none;
+  margin: 0;
+  font-size: u(0.68);
+  color: var(--text-main, #333333);
+}
+
+/** Balance — THE ONE RULE, the sums, what posts later, the TDS, and why Post waits. */
+.ruleHead {
+  margin: 0;
+  font-size: u(0.74);
+  font-weight: 800;
+}
+.ruleTotals {
+  margin: 0;
+  font-size: u(0.74);
+  white-space: pre;
+}
+.ruleTotalsStale {
+  opacity: 0.6;
+}
+.ruleHint {
+  margin: auto 0 0;
+  font-size: u(0.72);
+}
+.notes {
+  flex: 0 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  font-size: u(0.7);
+}
+.notes li {
+  padding: u(0.1) 0;
+}
+.noteTds {
+  color: #1f4a8c;
+}
+.notePdc {
+  color: #7a4b00;
+}
+.alignRight {
+  text-align: right;
+}
+
+/* ------------------------------------------------------------- dialogs */
+
+.formGrid {
+  display: grid;
+  grid-template-columns: u(8) minmax(0, 1fr);
+  align-items: center;
+  gap: u(0.4) u(0.6);
+}
+.formLabel {
+  font-size: u(0.72);
+  color: var(--text-muted, #4b5563);
+}
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: u(0.4);
+  font-size: u(0.72);
+}
+.hint {
+  margin: 0 0 u(0.5);
+  font-size: u(0.72);
+  color: var(--text-muted, #4b5563);
+}
+.pdc {
+  margin: u(0.4) 0 0;
+  font-size: u(0.72);
+  color: #7a4b00;
+}
+.error {
+  margin: u(0.4) 0 0;
+  font-size: u(0.72);
+  color: #b42318;
+}
+.billsHead {
+  margin: 0 0 u(0.4);
+  font-size: u(0.78);
+}
+.billsHeadMuted {
+  color: #6b7280;
+}
+.billsTotals {
+  display: flex;
+  justify-content: space-between;
+  gap: u(0.5);
+  margin: u(0.4) 0 0;
+  font-size: u(0.74);
+}
+.billsViewport {
+  max-height: u(18);
+  overflow: auto;
+}
+.billInput {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: right;
+
+  &:focus {
+    outline: 2px solid var(--primary, #7b1515);
+    outline-offset: -2px;
+    background: #ffffff;
+  }
+}
+
+/** Bill-wise's head (Qt `layBillHead`): what the voucher raises or settles, Due days beside it. */
+.billHead {
+  display: flex;
+  align-items: center;
+  gap: u(0.6);
+  flex: none;
+}
+.billHeadText {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: u(0.7);
+}
+.dueDays {
+  width: u(6);
+}

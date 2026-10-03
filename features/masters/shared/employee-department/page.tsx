@@ -30,7 +30,7 @@ import {
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
 import { useDataRefresh } from "@/lib/data-freshness";
-import { type ConfiguredGridKey } from "@/lib/configured-grids";
+import { buildGridDeletedParam, type ConfiguredGridKey } from "@/lib/configured-grids";
 /**
  * The Grid Master row this list reads — "MAIN LIST - EMP DEPARTMENTS". `CrudMasterPage`
  * resolves it to a grid id at runtime (see lib/configured-grids), and uses it
@@ -152,6 +152,29 @@ const DEPARTMENT_FORM_FIELDS: ERPDynamicModalField[] = [
   },
 ];
 export default function EmployeeDepartmentMasterPage() {
+  // Toggles the deleted-rows grid param; ticking it re-runs the list so the user
+  // can see soft-deleted departments. Lives beside the list search input.
+  const [wantDelete, setWantDelete] = useState(false);
+  // The grid's SQL binds its `*_is_deleted` filter to a named token, and the
+  // runner leaves an unsent token in the statement as-is, so `grid_param` has to
+  // go on every run — not only when the checkbox is ticked.
+  const buildListQuery = useCallback(
+    ({
+      searchTerm,
+      currentPage,
+      pageSize,
+    }: {
+      searchTerm: string;
+      currentPage: number;
+      pageSize: number;
+    }): Record<string, string> => ({
+      page: String(currentPage),
+      limit: String(pageSize),
+      ...(searchTerm ? { search: searchTerm } : {}),
+      grid_param: JSON.stringify(buildGridDeletedParam(LIST_GRID_KEY, wantDelete)),
+    }),
+    [wantDelete],
+  );
   // Silent progressive enhancement: a failed config fetch leaves the form on its
   // hardcoded labels/order (empty map), so don't nag the user with an error toast.
   const { getAll: getWidgetConfig } = useApi<WidgetMastersResponse>(WIDGET_CONFIG_ENDPOINT, {
@@ -401,6 +424,19 @@ export default function EmployeeDepartmentMasterPage() {
       entityLabelPlural="employee departments"
       apiEndpoints={API_ENDPOINTS}
       gridKey={LIST_GRID_KEY}
+      buildListQuery={buildListQuery}
+      toolbarContent={
+        <div className={styles.filterCheckGroup}>
+          <label className={styles.filterCheckLabel}>
+            <input
+              type="checkbox"
+              checked={wantDelete}
+              onChange={(event) => setWantDelete(event.target.checked)}
+            />
+            Show deleted records
+          </label>
+        </div>
+      }
       gridTableName={GRID_TABLE_NAME}
         listResponseStyleArrayKey=""
       lookupKeys={LOOKUP_KEYS}

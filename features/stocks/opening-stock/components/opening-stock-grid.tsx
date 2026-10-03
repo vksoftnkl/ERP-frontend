@@ -18,7 +18,7 @@
  * keeps them as characters, so Ctrl+`+` / Ctrl+`-` work anywhere); F4 is the
  * unit; typing on the Item or Supplier cell opens its picker with the key.
  */
-import { useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { cx } from "@/components/design-system/cx";
 import { GridCell } from "@/features/sales/quotation/components/grid-cell";
 import { focusCell, moveCellFocus } from "@/features/sales/quotation/components/grid-focus";
@@ -142,6 +142,11 @@ export type OpeningStockGridProps = {
   onSwitchUnit: () => void;
   /** Ctrl+Enter from inside a cell — save the draft. */
   onCtrlEnter: () => void;
+  /** Right-click: "save column width" and "Admin settings". */
+  onContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void;
+  /** A heading dragged to a new width — saved from the right-click menu. */
+  resizingKey?: string | null;
+  onColumnResizeStart?: (event: ReactMouseEvent<HTMLElement>, columnKey: string) => void;
 };
 
 export function OpeningStockGrid(props: OpeningStockGridProps) {
@@ -159,6 +164,9 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
     onRemoveLine,
     onSwitchUnit,
     onCtrlEnter,
+    onContextMenu,
+    resizingKey = null,
+    onColumnResizeStart,
   } = props;
 
   const visible = useMemo(() => columns.filter((column) => column.visible), [columns]);
@@ -259,7 +267,7 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
   };
 
   return (
-    <div className={quotationStyles.gridViewport} data-erp-table-viewport="true">
+    <div className={quotationStyles.gridViewport} data-erp-table-viewport="true" onContextMenu={onContextMenu}>
       <table className={quotationStyles.grid} style={{ width: scaledWidth(tableWidth) }}>
         <colgroup>
           {visible.map((column) => (
@@ -270,8 +278,23 @@ export function OpeningStockGrid(props: OpeningStockGridProps) {
         <thead>
           <tr>
             {visible.map((column) => (
-              <th key={column.key} scope="col" className={quotationStyles.gridHeaderCell}>
+              <th
+                key={column.key}
+                scope="col"
+                className={cx(
+                  quotationStyles.gridHeaderCell,
+                  resizingKey === column.key && quotationStyles.gridHeaderCellResizing,
+                )}
+              >
                 {column.header}
+                {onColumnResizeStart ? (
+                  <span
+                    className={quotationStyles.columnResizeHandle}
+                    role="presentation"
+                    title="Drag to resize the column"
+                    onMouseDown={(event) => onColumnResizeStart(event, column.key)}
+                  />
+                ) : null}
               </th>
             ))}
             <th scope="col" aria-label="Row actions" className={quotationStyles.gridHeaderActionCell} />

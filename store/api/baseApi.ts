@@ -182,6 +182,8 @@ export const API_TAG_TYPES = [
   // together, and a screen holding any of them stale is holding all of them
   // stale.
   "Receipt",
+  // Bill-wise Payment (menu 100) — the receipt's one-tag rule, money going out.
+  "Payment",
   // Sales transactions
   "Quotation",
   "SaleOrder",

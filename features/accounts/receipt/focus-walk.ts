@@ -40,16 +40,24 @@ export const RECEIPT_FIELD_ORDER = [
 
 export type ReceiptFieldName = (typeof RECEIPT_FIELD_ORDER)[number];
 
-/** The field after this one, or null at the end of the walk. Pure. */
-export function nextFieldName(current: string | null): ReceiptFieldName | null {
+/**
+ * The field after this one, or null at the end of the walk. Pure.
+ *
+ * `order` is the receipt's unless a caller brings its own — Bill-wise Payment
+ * walks the same strip without a beat.
+ */
+export function nextFieldName<TName extends string = ReceiptFieldName>(
+  current: string | null,
+  order: readonly TName[] = RECEIPT_FIELD_ORDER as unknown as readonly TName[],
+): TName | null {
   if (!current) {
-    return RECEIPT_FIELD_ORDER[0];
+    return order[0] ?? null;
   }
-  const index = RECEIPT_FIELD_ORDER.indexOf(current as ReceiptFieldName);
-  if (index < 0 || index >= RECEIPT_FIELD_ORDER.length - 1) {
+  const index = order.indexOf(current as TName);
+  if (index < 0 || index >= order.length - 1) {
     return null;
   }
-  return RECEIPT_FIELD_ORDER[index + 1];
+  return order[index + 1];
 }
 
 /**
@@ -87,7 +95,7 @@ function fieldElement(root: ParentNode, name: string): HTMLElement | null {
 }
 
 /** Put the caret in a named field, selecting what is there. */
-export function focusReceiptField(root: ParentNode | null, name: ReceiptFieldName): boolean {
+export function focusReceiptField(root: ParentNode | null, name: string): boolean {
   const control = root ? fieldElement(root, name) : null;
   if (!control) {
     return false;
@@ -108,7 +116,11 @@ export function focusReceiptField(root: ParentNode | null, name: ReceiptFieldNam
  * every field is disabled, and Enter should do nothing at all rather than
  * strand the caret.
  */
-export function advanceReceiptField(root: ParentNode | null, from: HTMLElement | null): boolean {
+export function advanceReceiptField(
+  root: ParentNode | null,
+  from: HTMLElement | null,
+  order: readonly string[] = RECEIPT_FIELD_ORDER,
+): boolean {
   if (!root || !from) {
     return false;
   }
@@ -117,12 +129,12 @@ export function advanceReceiptField(root: ParentNode | null, from: HTMLElement |
   if (!current) {
     return false;
   }
-  let name = nextFieldName(current);
+  let name = nextFieldName(current, order);
   while (name) {
     if (focusReceiptField(root, name)) {
       return true;
     }
-    name = nextFieldName(name);
+    name = nextFieldName(name, order);
   }
   return false;
 }

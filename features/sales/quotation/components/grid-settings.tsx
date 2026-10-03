@@ -34,6 +34,7 @@ import { useSaveQuotationColumnLayoutMutation } from "@/store/api/quotationApi";
 import { ModalShell } from "./modal-shell";
 import styles from "../page.module.scss";
 import { layoutPointer, layoutViewportSize } from "@/lib/ui-scale";
+import type { UiTableColumnRow } from "../quotation.types";
 
 /** Keeps the menu on screen when the click lands near an edge. */
 const MENU_WIDTH = 190;
@@ -51,6 +52,31 @@ export type GridSettingsColumn = {
   /** `ui_tbl_clm_id`; null on the local fallback layout, which cannot be saved. */
   columnId: string | null;
 };
+
+/**
+ * Every row of a `ui_tables` layout, as the dialog lists it — for a grid whose
+ * own column model is not a `ResolvedColumn` (Stock Adjustment works in width
+ * shares and picks its columns per kind). Ordered by the layout's position.
+ */
+export function settingsColumnsFromLayout(
+  rows: readonly UiTableColumnRow[] | undefined,
+  fallbackTitles: Readonly<Record<number, string>> = {},
+): GridSettingsColumn[] {
+  return (rows ?? [])
+    .map((row) => {
+      const number = Number.parseInt(String(row.uiTblClmNo ?? ""), 10);
+      return {
+        key: String(row.uiTblClmNo),
+        header: (row.uiTblClmName ?? "").trim() || fallbackTitles[number] || `Column ${row.uiTblClmNo}`,
+        visible: row.uiTblClmColumnVisibility !== false,
+        focus: row.uiTblClmColumnFocus === true,
+        necessity: row.uiTblClmColumnNecessity === true,
+        position: Number.isFinite(row.uiTblClmColumnPosition) ? row.uiTblClmColumnPosition : number,
+        columnId: row.uiTblClmId || null,
+      };
+    })
+    .sort((left, right) => left.position - right.position);
+}
 
 /** One row's editable state while the dialog is open. */
 type SettingsDraftEntry = {
@@ -142,7 +168,8 @@ export type UseGridSettingsOptions = {
   columns: GridSettingsColumn[];
   pendingWidthCount: number;
   savingWidths: boolean;
-  onSaveWidths: () => void;
+  /** Absent on a grid with no drag-to-resize: the menu then has no "save column width". */
+  onSaveWidths?: () => void;
   /**
    * What the Focus column does on THIS grid, when it is not what it does on the
    * entry grids.
@@ -160,6 +187,8 @@ export type GridSettings = {
   onContextMenu: (event: ReactMouseEvent<HTMLElement>) => void;
   /** The menu and dialog portals; render once per grid. */
   overlays: ReactNode;
+  /** The menu or the dialog is up: a screen's own keys should stand aside. */
+  active: boolean;
 };
 
 function clampToViewport(value: number, max: number): number {
@@ -177,6 +206,25 @@ export function useGridSettings({
 }: UseGridSettingsOptions): GridSettings {
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // While the dialog is up, a screen's own shortcuts (F5 save, F7 new, Ctrl+Enter
+  // post…) must not fire underneath it. Taken on the window's capture phase —
+  // before any screen's listener — and Escape is left to the dialog's shell.
+  useEffect(() => {
+    if (!settingsOpen) {
+      return;
+    }
+    const swallow = (event: KeyboardEvent) => {
+      const functionKey = /^F([1-9]|1[0-2])$/.test(event.key);
+      const commit = event.key === "Enter" && (event.ctrlKey || event.metaKey);
+      if (functionKey || commit) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener("keydown", swallow, true);
+    return () => window.removeEventListener("keydown", swallow, true);
+  }, [settingsOpen]);
   const [draft, setDraft] = useState<SettingsDraft>(EMPTY_DRAFT);
   /** The row being dragged, and the gap the pointer is currently over. */
   const [dragKey, setDragKey] = useState<string | null>(null);
@@ -414,25 +462,27 @@ export function useGridSettings({
             role="menu"
             aria-label={`${label} table settings`}
           >
-            <button
-              type="button"
-              className={styles.settingsMenuItem}
-              disabled={pendingWidthCount === 0 || savingWidths}
-              title={
-                pendingWidthCount === 0
-                  ? "Drag a column edge first"
-                  : `Save ${pendingWidthCount} resized column${pendingWidthCount === 1 ? "" : "s"} for everyone`
-              }
-              onClick={() => {
-                setMenuPosition(null);
-                onSaveWidths();
-              }}
-            >
-              save column width
-              {pendingWidthCount > 0 ? (
-                <span className={styles.settingsMenuBadge}>{pendingWidthCount}</span>
+            {onSaveWidths ? (
+              <button
+                type="button"
+                className={styles.settingsMenuItem}
+                disabled={pendingWidthCount === 0 || savingWidths}
+                title={
+                  pendingWidthCount === 0
+                    ? "Drag a column edge first"
+                    : `Save ${pendingWidthCount} resized column${pendingWidthCount === 1 ? "" : "s"} for everyone`
+                }
+                onClick={() => {
+                  setMenuPosition(null);
+                  onSaveWidths();
+                }}
+              >
+                save column width
+                {pendingWidthCount > 0 ? (
+                  <span className={styles.settingsMenuBadge}>{pendingWidthCount}</span>
               ) : null}
             </button>
+            ) : null}
             <button
               type="button"
               className={styles.settingsMenuItem}
@@ -624,6 +674,7 @@ export function useGridSettings({
 
   return {
     onContextMenu,
+    active: menuPosition !== null || settingsOpen,
     overlays: (
       <>
         {menu}

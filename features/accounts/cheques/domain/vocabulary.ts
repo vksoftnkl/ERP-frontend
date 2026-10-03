@@ -1,11 +1,11 @@
 /**
- * The only thing that differs between Received Cheques (menu 51) and Issued
- * Cheques (menu 52): the words.
+ * The received register's words.
  *
- * It is one table read two ways (`apd_tra_type` R or P). We DEPOSIT a cheque
- * we received and PRESENT one we issued; the party is who it came FROM or who
- * it went TO. The state machine, the row and the actions never look at this —
- * the screen passes it to the components that print words.
+ * It was meant to be the only thing that differed between Received Cheques
+ * (menu 51) and Issued Cheques (menu 52). It is not: the issued side has its
+ * own server module (`/issued-cheques` — bare keys, single-cheque verbs, no
+ * deposit, no summary route) and so its own screen, under `../issued/`, which
+ * reuses this register's pieces rather than this vocabulary.
  */
 export type ChequeVocabulary = {
   /** `apd_tra_type`. */
@@ -28,15 +28,5 @@ export const RECEIVED_VOCABULARY: ChequeVocabulary = {
   subtitle: "Cheques taken in on receipts: bank them, and record what the bank says",
   depositVerb: "Deposit",
   partyLabel: "Received from",
-  emptyText: "No cheque matches these filters.",
-};
-
-export const ISSUED_VOCABULARY: ChequeVocabulary = {
-  traType: "P",
-  menuId: 52,
-  title: "Issued Cheques",
-  subtitle: "Cheques we have written: present them, and record what the bank says",
-  depositVerb: "Present",
-  partyLabel: "Issued to",
   emptyText: "No cheque matches these filters.",
 };

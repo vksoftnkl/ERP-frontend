@@ -44,6 +44,8 @@ import { useDropdownId } from "@/lib/configured-dropdowns";
 import { useGridId } from "@/lib/configured-grids";
 import { useUiTableId } from "@/lib/ui-tables";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
+import { useGridSettings } from "@/features/sales/quotation/components/grid-settings";
+import { useColumnResize } from "@/features/sales/quotation/components/use-column-resize";
 import { resolveOpeningStockColumns } from "../opening-stock.columns";
 import {
   GODOWN_DROPDOWN_KEY,
@@ -105,7 +107,19 @@ export function OpeningStockEntryView({
 
   const uiTableId = useUiTableId(OPENING_STOCK_LINES_UI_TABLE_KEY);
   const { data: layoutRows } = useGetQuotationGridLayoutQuery({ uiTableId }, { skip: !uiTableId });
-  const columns = useMemo(() => resolveOpeningStockColumns(layoutRows), [layoutRows]);
+  const configuredColumns = useMemo(() => resolveOpeningStockColumns(layoutRows), [layoutRows]);
+  // Right-click on the lines: "save column width" for a dragged heading and
+  // "Admin settings" (visibility, order, focus) — the shared layout.
+  const columnResize = useColumnResize(configuredColumns, uiTableId);
+  const gridSettings = useGridSettings({
+    label: "Opening stock lines",
+    uiTableId,
+    columns: columnResize.columns,
+    pendingWidthCount: columnResize.pendingCount,
+    savingWidths: columnResize.saving,
+    onSaveWidths: columnResize.saveWidths,
+  });
+  const columns = columnResize.columns;
 
   const itemGridId = useGridId(ITEM_PICKER_GRID_KEY);
   const supplierGridId = useGridId(SUPPLIER_PICKER_GRID_KEY);
@@ -386,8 +400,12 @@ export function OpeningStockEntryView({
               {problemLines.map((line) => line.problem).join("\n")}
             </p>
           ) : null}
+          {gridSettings.overlays}
           <OpeningStockGrid
             columns={columns}
+            onContextMenu={gridSettings.onContextMenu}
+            resizingKey={columnResize.resizingKey}
+            onColumnResizeStart={columnResize.onResizeStart}
             lines={draft.lines}
             editable={editable}
             activeRowKey={activeRowKey}

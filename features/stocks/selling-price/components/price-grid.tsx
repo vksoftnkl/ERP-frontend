@@ -30,6 +30,7 @@ import { useUiTableId } from "@/lib/ui-tables";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { moveCellFocus } from "@/features/sales/quotation/components/grid-focus";
 import { useColumnResize } from "@/features/sales/quotation/components/use-column-resize";
+import { useGridSettings } from "@/features/sales/quotation/components/grid-settings";
 import {
   GRID_FIELD_ATTR,
   GRID_GRID_ATTR,
@@ -101,6 +102,16 @@ export function PriceGrid({ screen }: { screen: SellingPriceScreen }) {
   const layout = useGetQuotationGridLayoutQuery({ uiTableId }, { skip: !uiTableId });
   const configured = useMemo(() => resolveSellingPriceColumns(layout.data), [layout.data]);
   const resize = useColumnResize(configured, uiTableId);
+  // Right-click on the grid: "save column width" and "Admin settings" — the
+  // shared layout, as the other entry grids have.
+  const settings = useGridSettings({
+    label: "Selling prices",
+    uiTableId,
+    columns: resize.columns,
+    pendingWidthCount: resize.pendingCount,
+    savingWidths: resize.saving,
+    onSaveWidths: resize.saveWidths,
+  });
   const visible = useMemo(() => resize.columns.filter((column) => column.visible), [resize.columns]);
   const bands = useMemo(() => priceBands(visible, levelNames), [levelNames, visible]);
   const tableWidth = totalColumnWidth(visible);
@@ -243,10 +254,12 @@ export function PriceGrid({ screen }: { screen: SellingPriceScreen }) {
 
   return (
     <div className={styles.gridShell}>
+      {settings.overlays}
       <div
         ref={viewportRef}
         className={styles.gridViewport}
         data-selling-price-grid="true"
+        onContextMenu={settings.onContextMenu}
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       >
         <table ref={tableRef} className={styles.grid} style={{ width: scaledWidth(tableWidth) }}>

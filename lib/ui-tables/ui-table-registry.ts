@@ -60,6 +60,14 @@ export const UI_TABLES = {
   receiptBills: { name: "RECEIPT - BILLS", fallbackId: "32" },
   /** Receipt Entry (menu 99) → the instruments grid: tenders AND role lines. */
   receiptTenders: { name: "RECEIPT - TENDERS", fallbackId: "33" },
+  /** Bill-wise Payment (menu 100) → the bills grid: what we owe AND what we hold. */
+  paymentBills: { name: "PAYMENT - BILLS", fallbackId: "42" },
+  /** Bill-wise Payment (menu 100) → the instruments grid: tenders AND role lines. */
+  paymentTenders: { name: "PAYMENT - TENDERS", fallbackId: "43" },
+  /** The Voucher Register (Contra, menu 104, …) → the typed legs. */
+  voucherLegs: { name: "VOUCHER REGISTER - LEGS", fallbackId: "39" },
+  /** The Voucher Register's bill-wise popup (Receipt / Payment Voucher, …). */
+  voucherBills: { name: "VOUCHER REGISTER - BILLWISE", fallbackId: "40" },
   /** Physical Stock entry grid. */
   physicalStockLines: { name: "PHYSICAL STOCK - LINES", fallbackId: "28" },
   /** Stock Adjustment (menu 264) entry grid — every kind. */

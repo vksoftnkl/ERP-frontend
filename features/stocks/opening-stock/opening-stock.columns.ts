@@ -68,7 +68,12 @@ export type ResolvedOpeningStockColumn = OpeningStockColumnMeaning & {
   visible: boolean;
   /** `ui_tbl_clm_column_focus` — an Enter stop. */
   focus: boolean;
+  /** Layout config only — nothing here reads it. */
+  necessity: boolean;
   position: number;
+  columnNumber: number;
+  /** `ui_tbl_clm_id`, what a resized width or the Admin settings save against; null on the fallback. */
+  columnId: string | null;
 };
 
 const RIGHT: ColumnAlign = "right";
@@ -165,7 +170,10 @@ export function resolveOpeningStockColumns(
       widthPx: DEFAULT_COLUMN_PX,
       visible: meaning.fallbackVisible,
       focus: false,
+      necessity: false,
       position: index,
+      columnNumber: meaning.number,
+      columnId: null,
     }));
   }
   const taken = new Set<number>();
@@ -183,7 +191,10 @@ export function resolveOpeningStockColumns(
       widthPx: widthPxOf(row),
       visible: row.uiTblClmColumnVisibility !== false,
       focus: row.uiTblClmColumnFocus === true,
+      necessity: row.uiTblClmColumnNecessity === true,
       position: Number.isFinite(row.uiTblClmColumnPosition) ? row.uiTblClmColumnPosition : number,
+      columnNumber: number,
+      columnId: row.uiTblClmId || null,
     });
   }
   return resolved.sort((left, right) => left.position - right.position || left.number - right.number);

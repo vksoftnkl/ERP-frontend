@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ISSUED_VOCABULARY, RECEIVED_VOCABULARY } from "./domain/vocabulary";
+import { RECEIVED_VOCABULARY } from "./domain/vocabulary";
 import { KEY_TABLE, bindingFor, buttonText, isReservedKey } from "./keys";
 
 type KeyEvent = Parameters<typeof bindingFor>[0];
@@ -90,7 +90,6 @@ describe("buttonText", () => {
 
   it("takes the bulk verb from the vocabulary", () => {
     expect(buttonText(bindingOf("deposit"), RECEIVED_VOCABULARY)).toBe("Deposit - F5");
-    expect(buttonText(bindingOf("deposit"), ISSUED_VOCABULARY)).toBe("Present - F5");
   });
 
   it("writes only the label for a binding with no key", () => {

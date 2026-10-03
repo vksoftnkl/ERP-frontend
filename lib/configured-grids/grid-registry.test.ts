@@ -95,8 +95,8 @@ describe("the deleted-rows filter", () => {
   });
 
   it("sends only the legacy name for a grid that hardcodes the filter", () => {
-    expect(buildGridDeletedParam("employeeList", false)).toEqual({ wantdelete: false });
-    expect(gridSupportsDeletedFilter("employeeList")).toBe(false);
+    expect(buildGridDeletedParam("accountGroupList", false)).toEqual({ wantdelete: false });
+    expect(gridSupportsDeletedFilter("accountGroupList")).toBe(false);
     expect(gridSupportsDeletedFilter("stateList")).toBe(true);
   });
 });

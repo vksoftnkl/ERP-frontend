@@ -759,3 +759,363 @@
   min-height: var(--cheque-control-h);
   align-items: center;
 }
+
+/*
+ * Cheque Books (menu 263) — a flat skin of its own, not the registers':
+ * inline filter labels; a ruled grid on a grey well, with a `#` column and a
+ * rose current row; the Book box with the form beside its leaves; the buttons
+ * underneath. Used on its own page and inside the dialog Issued Cheques
+ * opens; the dialog gets a wider panel than an action does. Corners come
+ * from globals.css (`--erp-radius`, !important on every control).
+ */
+.booksPage {
+  background: #f4f5f7;
+}
+.booksTitleBar {
+  padding: u(0.15) 0 u(0.3);
+}
+.booksTitle {
+  margin: 0;
+  font-size: u(1.34);
+  font-weight: 700;
+  color: #111827;
+}
+.booksPanel {
+  --books-control-h: #{u(1.92)};
+  --books-rule: #cbd0d7;
+  --books-cell-rule: #dcdfe4;
+  --books-input-rule: #d1d5db;
+  display: flex;
+  flex-direction: column;
+  gap: u(0.4);
+  min-height: 0;
+  font-size: u(0.83);
+  color: #111827;
+}
+.booksPage .booksPanel {
+  padding: 0 u(0.6) u(0.9);
+}
+.booksPanelFill {
+  flex: 1 1 auto;
+}
+
+/* ── filters: the label beside its box ─────────────────────────────────── */
+.booksFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: u(0.4) u(1.25);
+}
+.booksFilter {
+  display: inline-flex;
+  align-items: center;
+  gap: u(0.5);
+  white-space: nowrap;
+}
+.booksBankFilter {
+  width: u(15.2);
+}
+.booksStatusFilter {
+  width: u(7.9);
+}
+
+/* The NexDropdown's field (its `className` lands on the wrapper): one control
+   height, and the chevron in its own ruled-off cell. */
+.booksPicker > input {
+  box-sizing: border-box;
+  height: var(--books-control-h);
+  min-height: var(--books-control-h);
+  padding: 0 calc(var(--books-control-h) + #{u(0.3)}) 0 u(0.6);
+  border: 1px solid var(--books-input-rule);
+  font-size: u(0.83);
+  color: #111827;
+}
+.booksPicker > input::placeholder {
+  color: #9ca3af;
+}
+.booksPicker > input:focus {
+  border-color: var(--primary, #7b1515);
+  box-shadow: none;
+}
+.booksPicker > input:disabled {
+  background: #f9fafb;
+  color: #6b7280;
+}
+.booksPicker > button {
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: calc(var(--books-control-h) - 2px);
+  height: auto;
+  border-left: 1px solid #e5e7eb;
+  color: #9ca3af;
+}
+.booksSelect {
+  box-sizing: border-box;
+  height: var(--books-control-h);
+  padding: 0 calc(var(--books-control-h) + #{u(0.3)}) 0 u(0.6);
+  border: 1px solid var(--books-input-rule);
+  background-color: #ffffff;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23111827' stroke-width='1.6'/%3E%3C/svg%3E"),
+    linear-gradient(#e5e7eb, #e5e7eb);
+  background-repeat: no-repeat;
+  background-position:
+    right calc(var(--books-control-h) / 2 - 5px) center,
+    right calc(var(--books-control-h) - 2px) top;
+  background-size:
+    10px 6px,
+    1px 100%;
+  appearance: none;
+  color: #111827;
+  font: inherit;
+  font-size: u(0.83);
+  cursor: pointer;
+}
+.booksSelect:focus {
+  outline: none;
+  border-color: var(--primary, #7b1515);
+}
+
+/* ── the grid: rows on a grey well ─────────────────────────────────────── */
+.booksGrid {
+  flex: 0 0 auto;
+  height: u(13);
+  min-height: u(6);
+  overflow: auto;
+  background: #e1e4e8;
+  border: 1px solid var(--books-rule);
+  outline: none;
+}
+.booksGrid:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--primary-soft, #e9b9b9);
+}
+/* On the Cheque Books page the list takes the free height, as the Qt list
+   stretches; in the popup it stays a fixed band. */
+.booksGridFill {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: u(8);
+}
+.booksTable {
+  /* globals.css paints every th with this variable, !important. */
+  --table-header-text: #8b1a1a;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  font-size: u(0.83);
+}
+.booksTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: u(1.8);
+  padding: 0 u(0.5);
+  background: #eef1f5;
+  border-right: 1px solid var(--books-rule);
+  border-bottom: 1px solid var(--books-rule);
+  color: var(--table-header-text);
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.booksTable td {
+  height: u(1.72);
+  padding: 0 u(0.6);
+  background: #ffffff;
+  border-right: 1px solid var(--books-cell-rule);
+  border-bottom: 1px solid var(--books-cell-rule);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.booksTable th:last-child,
+.booksTable td:last-child {
+  border-right: 0;
+}
+.booksTable tbody tr {
+  cursor: default;
+}
+.booksTable tbody tr:hover td {
+  background: #f5f7fa;
+}
+.booksTable tbody tr.booksRowCurrent td {
+  background: #e8c4c4;
+}
+.booksRowClosed td {
+  color: #6b7280;
+}
+.booksRowNoCol {
+  width: u(2.55);
+}
+.booksRowNo {
+  padding: 0 !important;
+  text-align: center;
+  font-weight: 700;
+}
+.booksTable tbody tr td.booksEmptyCell {
+  height: u(3);
+  padding: u(0.6);
+  background: transparent;
+  border: 0;
+  text-align: center;
+  color: #6b7280;
+  white-space: normal;
+}
+
+/* ── the Book box: form on the left, its leaves on the right ───────────── */
+.booksGroup {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.2);
+  margin-top: u(0.15);
+}
+.booksCaption {
+  color: #111827;
+}
+.booksBox {
+  display: grid;
+  grid-template-columns: minmax(u(18), 2fr) minmax(0, 3fr);
+  gap: u(0.45);
+  padding: u(0.7);
+  background: #f1f2f4;
+  border: 1px solid #dbdcde;
+  border-radius: 2px;
+}
+.booksForm {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  align-content: start;
+  column-gap: u(0.5);
+  row-gap: u(0.38);
+}
+/* The label element spans both cells, so a click on the words focuses the box. */
+.booksFormRow {
+  display: contents;
+}
+.booksFormRow > span:first-child {
+  white-space: nowrap;
+}
+.booksInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: var(--books-control-h);
+  padding: 0 u(0.6);
+  border: 1px solid var(--books-input-rule);
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-size: u(0.83);
+}
+.booksInput::placeholder {
+  color: #9ca3af;
+}
+.booksInput:focus {
+  outline: none;
+  border-color: var(--primary, #7b1515);
+}
+.booksInput:disabled {
+  background: #f9fafb;
+  color: #6b7280;
+}
+.booksRange {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: u(0.45);
+}
+.booksCheck {
+  justify-self: start;
+  margin: 0;
+}
+.booksFigures {
+  grid-column: 2;
+  margin-top: u(0.3);
+  font-weight: 600;
+  color: #334155;
+}
+/* The leaves never set the box's height — the form does — and scroll in it. */
+.booksLeaves {
+  position: relative;
+  min-height: u(12);
+  background: #ffffff;
+  border: 1px solid var(--books-rule);
+}
+.booksLeavesScroll {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+}
+.booksLeafCol {
+  width: u(6.4);
+}
+
+/* ── the message line and the buttons ──────────────────────────────────── */
+.booksLine {
+  min-height: u(1.1);
+  font-size: u(0.8);
+  color: #6b7280;
+}
+.booksLineInfo {
+  color: #1c6b2a;
+}
+.booksLineError {
+  color: #8b1e17;
+  font-weight: 600;
+}
+.booksButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.45);
+  align-items: center;
+}
+.booksButton {
+  height: u(1.8);
+  padding: 0 u(1);
+  border: 1px solid #cbd2da;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-size: u(0.83);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.booksButton:not(:disabled):hover {
+  background: #f3f4f6;
+}
+.booksButton:disabled {
+  background: #f3f4f6;
+  border-color: #f3f4f6;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+.booksPrimary {
+  background: #7b1113;
+  border-color: #7b1113;
+  color: #ffffff;
+  font-weight: 700;
+}
+.booksPrimary:not(:disabled):hover {
+  background: #8f1517;
+}
+.booksPrimary:disabled {
+  background: #7b1113;
+  border-color: #7b1113;
+  color: #ffffff;
+  opacity: 0.45;
+}
+
+/* Wide enough for grid 120's columns at their configured widths. */
+.booksDialog {
+  width: min(u(72), 100%) !important;
+}
+@media (max-width: 760px) {
+  .booksBox {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

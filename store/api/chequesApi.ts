@@ -1,5 +1,6 @@
 /**
- * Received Cheques (menu 51) — and, later, Issued Cheques (menu 52).
+ * Received Cheques (menu 51). Issued Cheques (menu 52) reads `/issued-cheques`
+ * through `issuedChequesApi.ts`, and reuses only `runChequeAction` from here.
  *
  * ── Where the rows come from ─────────────────────────────────────────────
  * Grid 109, "MAIN LIST - RECEIVED CHEQUES", through `/configured-grid-sql/run`

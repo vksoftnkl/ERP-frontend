@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { cx } from "@/components/design-system/cx";
 import { useGridId, type ConfiguredGridKey } from "@/lib/configured-grids";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
+import { useConfiguredGridSettings } from "@/components/master/use-configured-grid-settings";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { usePhysicalStockPickerGridQuery } from "../physical-stock.api";
@@ -77,6 +78,8 @@ function OpenGridPicker(props: GridPickerModalProps) {
     { gridId: numericGridId },
     { skip: !isOpen || !Number.isFinite(numericGridId) },
   );
+  // Right-click on the list: the master tables' grid settings (filter, visibility, Admin).
+  const gridSettings = useConfiguredGridSettings({ gridId: String(gridId), columns: configured });
   const columns = useMemo<PickerColumn[]>(() => {
     const visible = (configured ?? [])
       .filter((column) => column.visible)
@@ -150,7 +153,8 @@ function OpenGridPicker(props: GridPickerModalProps) {
           }
         }}
       />
-      <div className={quotationStyles.listViewport}>
+      {gridSettings.overlays}
+      <div className={quotationStyles.listViewport} onContextMenu={gridSettings.onContextMenu}>
         <table className={quotationStyles.listTable}>
           <thead>
             <tr>

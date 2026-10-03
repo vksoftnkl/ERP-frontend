@@ -3,9 +3,10 @@
 /**
  * The cheque register — one screen, handed its words.
  *
- * Received Cheques (menu 51) mounts it with the received vocabulary; Issued
- * Cheques (menu 52) will mount it with the issued one. Nothing below knows
- * which: the state machine, the rows and the action specs are the table's.
+ * Received Cheques (menu 51) mounts it with the received vocabulary. Issued
+ * Cheques (menu 52) turned out to need its own screen (`../issued/`) — its
+ * server module has other verbs, keys and shapes — and reuses this one's
+ * pieces instead.
  *
  * There is no document here — no draft, no save, no number. Every action is
  * ONE server transition on one `acc_pdc_register` row (or a batch, for a
@@ -45,6 +46,7 @@ import {
   useGetChequeSummaryQuery,
 } from "@/store/api/chequesApi";
 import { useGetGridColumnsQuery } from "@/store/api/metadataApi";
+import { useConfiguredGridSettings } from "@/components/master/use-configured-grid-settings";
 import { useAppDispatch } from "@/store/hooks";
 import { ACTION_SPECS, type WritingVerb } from "../actions";
 import { parseBounceReasons } from "../actions/bounce";
@@ -222,6 +224,8 @@ export function ChequeRegisterScreen({ words }: ChequeRegisterScreenProps) {
     { skip: !gridId },
   );
   const columns = useMemo(() => resolveColumns(columnConfig), [columnConfig]);
+  // Right-click on the register: the master tables' grid settings (filter, visibility, Admin).
+  const gridSettings = useConfiguredGridSettings({ gridId, columns: columnConfig });
 
   const registerArgs = useMemo(
     () =>
@@ -495,7 +499,7 @@ export function ChequeRegisterScreen({ words }: ChequeRegisterScreenProps) {
   }, [router]);
 
   // ── Keys ──────────────────────────────────────────────────────────────────
-  const keyState = { dialog, runVerb, currentRow, openReceipt, closeScreen };
+  const keyState = { dialog, runVerb, currentRow, openReceipt, closeScreen, settingsOpen: gridSettings.active };
   const keyRef = useRef(keyState);
   useEffect(() => {
     keyRef.current = keyState;
@@ -509,7 +513,8 @@ export function ChequeRegisterScreen({ words }: ChequeRegisterScreenProps) {
       if (isReservedKey(event)) {
         event.preventDefault();
       }
-      if (state.dialog) {
+      // A dialog — the screen's own, or the grid settings' — has the keys.
+      if (state.dialog || state.settingsOpen) {
         return;
       }
       const binding = bindingFor(event);
@@ -572,7 +577,8 @@ export function ChequeRegisterScreen({ words }: ChequeRegisterScreenProps) {
         <FilterBar filters={filters} onChange={updateFilters} onClear={clearFilters} />
       ) : null}
 
-      <section className={styles.registerShell}>
+      {gridSettings.overlays}
+      <section className={styles.registerShell} onContextMenu={gridSettings.onContextMenu}>
         <Register
           columns={columns}
           rows={rows}

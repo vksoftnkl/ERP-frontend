@@ -66,6 +66,11 @@ export const CONFIGURED_DROPDOWNS = {
    * NO beat returns NO customers ("invalid input syntax for type uuid").
    */
   customerByArea: { name: "CUSTOMERS BY AREA", fallbackId: "54", paramBound: true },
+  /**
+   * Bill-wise Payment's payee picker: party ledgers only, shared + this
+   * company. Its SQL binds `icompany_id`, so `dropdown_param` is always sent.
+   */
+  paymentPayee: { name: "PAYMENT PAYEES", fallbackId: "60", paramBound: true },
   item: { name: "ITEMS", fallbackId: "42", paramBound: false },
   /** Ledgers under the bank group — where a cheque is deposited. */
   bankLedger: { name: "BANK LEDGERS", fallbackId: "25", paramBound: false },

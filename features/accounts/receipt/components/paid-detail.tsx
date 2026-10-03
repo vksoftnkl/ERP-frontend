@@ -24,7 +24,13 @@ export type PaidDetailTarget = {
 export type PaidDetailProps = {
   target: PaidDetailTarget | null;
   onClose: () => void;
+  /** What a held row says instead of a history. Bill-wise Payment words it its own way. */
+  heldMessage?: string;
 };
+
+const CREDIT_MESSAGE =
+  "A credit has no settlement history of its own — it is spent against bills, and each of " +
+  "those bills carries the record.";
 
 /** The grid's own column names, in the order its SQL selects them. */
 const COLUMNS: Array<{ key: string; label: string }> = [
@@ -47,7 +53,7 @@ function cell(value: unknown): string {
   return String(value);
 }
 
-export function PaidDetail({ target, onClose }: PaidDetailProps) {
+export function PaidDetail({ target, onClose, heldMessage = CREDIT_MESSAGE }: PaidDetailProps) {
   const { data, isFetching } = useGetBillPaymentHistoryQuery(
     { billId: target?.billId ?? "", billAccYear: target?.billAccYear ?? "" },
     { skip: !target || target.isCredit },
@@ -62,10 +68,7 @@ export function PaidDetail({ target, onClose }: PaidDetailProps) {
   return (
     <ModalShell title={`Settlement history — ${target.docRefno}`} isOpen wide onClose={onClose}>
       {target.isCredit ? (
-        <p className={styles.panelEmpty}>
-          A credit has no settlement history of its own — it is spent against bills, and each of
-          those bills carries the record.
-        </p>
+        <p className={styles.panelEmpty}>{heldMessage}</p>
       ) : (
         <div className={styles.registerViewport}>
           <table className={styles.registerTable}>

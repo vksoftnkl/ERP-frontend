@@ -5,9 +5,10 @@ import { aBill, aCredit, aLine, aTender } from "./fixtures";
 describe("the identity", () => {
   it("holds the worked example, with the TDS counted on BOTH sides", () => {
     // 70,000 received + 1,400 withheld + 4,000 credit = 70,750 allocated
-    // + 4,650 on account, and the 1,400 is INSIDE the 70,750.
+    // + 4,650 on account, and the 1,400 is INSIDE the 70,750. The bill has
+    // the room for it: 69,350 placed on 70,750 pending leaves 1,400.
     const identity = computeIdentity({
-      bills: [aBill({ pendingAmount: 70000, receive: 69350 })],
+      bills: [aBill({ pendingAmount: 70750, receive: 69350 })],
       credits: [aCredit({ pendingAmount: 4000, apply: 4000 })],
       tenders: [aTender({ amount: 70000 })],
       otherLines: [aLine("TDS_RECEIVABLE", { amount: 1400, settlesBill: true })],
@@ -17,6 +18,35 @@ describe("the identity", () => {
     expect(identity.creditsApplied).toBe(4000);
     expect(identity.allocated).toBe(70750);
     expect(identity.onAccount).toBe(4650);
+    expect(identity.balances).toBe(true);
+  });
+
+  it("puts the part of a deduction no bill has room for ON ACCOUNT (notes 62 A1)", () => {
+    // The same receipt against a 70,000 bill: only 650 of the TDS fits once
+    // 69,350 is on it. Counting all 1,400 as allocated claimed a settlement of
+    // 70,750 on a 70,000 bill — the server refuses that with a 409 — and an
+    // `onAccount` 750 short of the figure the server holds.
+    const identity = computeIdentity({
+      bills: [aBill({ pendingAmount: 70000, receive: 69350 })],
+      credits: [aCredit({ pendingAmount: 4000, apply: 4000 })],
+      tenders: [aTender({ amount: 70000 })],
+      otherLines: [aLine("TDS_RECEIVABLE", { amount: 1400, settlesBill: true })],
+    });
+    expect(identity.allocated).toBe(70000);
+    expect(identity.onAccount).toBe(5400);
+    expect(identity.balances).toBe(true);
+  });
+
+  it("holds a deduction on an advance — no bill at all — wholly on account", () => {
+    // 49,500 paid ahead with 500 withheld: a 50,000 advance.
+    const identity = computeIdentity({
+      bills: [],
+      credits: [],
+      tenders: [aTender({ amount: 49500 })],
+      otherLines: [aLine("TDS_RECEIVABLE", { amount: 500, settlesBill: true })],
+    });
+    expect(identity.allocated).toBe(0);
+    expect(identity.onAccount).toBe(50000);
     expect(identity.balances).toBe(true);
   });
 
