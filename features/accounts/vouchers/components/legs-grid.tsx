@@ -592,7 +592,8 @@ export function LegsGrid(props: LegsGridProps) {
                 title={problem}
                 className={[
                   index % 2 === 0 ? styles.rowOdd : styles.rowEven,
-                  line.key === currentKey ? `${styles.rowSelected} ${own.rowCurrent}` : "",
+                  // The line is tinted; only the cell with focus is ringed (see `.legs td:focus-within`).
+                  line.key === currentKey ? own.rowCurrent : "",
                   problem ? styles.rowIncomplete : "",
                 ].join(" ")}
               >

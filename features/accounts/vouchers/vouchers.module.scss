@@ -175,6 +175,23 @@
 .rowCurrent td {
   background: #f3e3e3;
 }
+/*
+ * The cursor's CELL: the one whose field has focus, ringed at the cell's own
+ * edge. The receipt's `.rowSelected` ringed every cell of the line instead,
+ * which read as a row of bordered inputs with nothing marking the active one.
+ * `:focus-within` on the cell rather than `:focus-visible` on the field, so a
+ * select or the Ledger pick button focused by mouse — which Chromium never
+ * gives a focus ring — is marked like a typed-into input. The field's own
+ * ring goes, or the two sit a padding apart as a double line.
+ */
+.legs td:focus-within {
+  box-shadow: inset 0 0 0 2px var(--primary, #7b1515);
+  background: #fffbe6;
+}
+.legs td:focus-within > :focus {
+  outline: none;
+  background: transparent;
+}
 /** Dr / Cr reads as plain text, as Qt's cell does; it is still a select underneath. */
 .drCrSelect {
   appearance: none;

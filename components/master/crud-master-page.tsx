@@ -4612,7 +4612,7 @@ export default function CrudMasterPage({
                         </div>
                       </div>
                       {toolbarContent ? (
-                        <div className={styles.filterSlot}>{toolbarContent}</div>
+                        <div className={`${styles.filterSlot} erp-ms-filter-slot`}>{toolbarContent}</div>
                       ) : null}
                     </div>
                   </div>

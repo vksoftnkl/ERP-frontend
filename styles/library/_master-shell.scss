@@ -208,7 +208,7 @@
      gets shrunk by the surrounding filter layout. */
   flex: none;
   width: 260px;
-  height: auto;
+  /* Height: the row-wide rule below, shared with the slot's controls. */
   /* 26px left inset clears the magnifier pinned at 7px + 14px wide. */
   padding: 4px 8px 4px 26px;
   border: 1px solid var(--erp-ms-line);
@@ -230,6 +230,21 @@
     border-color: var(--erp-ms-accent);
     box-shadow: none;
   }
+}
+
+/* One height for every control in the filter row. The search box's was `auto`
+   (4px padding round a 13px line at 1.5 — 30px) and a screen's own filters in
+   the slot beside it were whatever their page module made them (the receipt's
+   `u(1.85)`, about 26px, on the voucher, receipt and payment lists), so a row
+   read as two heights side by side. Pinned here, on the search box and the
+   slot's controls alike, so they cannot drift apart again. The `:not()`s keep
+   a checkbox or radio in the slot its natural size. */
+.erp-master-shell .erp-ms-search-input,
+.erp-master-shell .erp-ms-filter-slot input:not([type="checkbox"]):not([type="radio"]),
+.erp-master-shell .erp-ms-filter-slot select {
+  box-sizing: border-box;
+  height: 30px;
+  min-height: 30px;
 }
 
 /* Pinned explicitly, not left to the page module: the modules size this as a
