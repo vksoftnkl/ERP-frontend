@@ -536,3 +536,30 @@
 .dueDays {
   width: u(6);
 }
+
+/* -------------------------------------------------------------- pickers */
+/*
+ * The ledger picker sits in the quotation's `ModalShell` with `fixedHeight`:
+ * the panel holds ONE height and expects its body to absorb the slack and
+ * scroll (the item picker's `.listViewport`). The cheques' `.dialogBody` it
+ * borrows is a flex column that neither shrinks (`min-height: auto`) nor
+ * scrolls, so a list longer than the panel painted straight through its bottom
+ * edge over the screen beneath. The body gives way here and the list scrolls,
+ * its header pinned.
+ */
+.pickerBody {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.pickerList {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border-light, #e2e2e2);
+  border-radius: var(--erp-radius, 4px);
+}
+.pickerList thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}

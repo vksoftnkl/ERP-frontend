@@ -20,10 +20,12 @@
  * server's leg.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { cx } from "@/components/design-system/cx";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import { usePickVoucherLedgersQuery, type LedgerPickRow } from "@/store/api/vouchersApi";
 import { chequeError } from "@/features/accounts/cheques/api-errors";
 import styles from "@/features/accounts/cheques/cheques.module.scss";
+import voucherStyles from "../vouchers.module.scss";
 import type { DrCr } from "../vouchers.types";
 
 const SEARCH_DEBOUNCE_MS = 250;
@@ -81,6 +83,13 @@ export function LedgerPicker(props: LedgerPickerProps) {
     [currentData, excludeLedgerId, partiesOnly],
   );
   const at = Math.min(active, Math.max(0, rows.length - 1));
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  // The list scrolls inside a panel of one height, so the cursor the arrow
+  // keys move must follow it into view.
+  useEffect(() => {
+    listRef.current?.querySelector('[data-current="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [at]);
 
   return (
     <ModalShell
@@ -91,7 +100,7 @@ export function LedgerPicker(props: LedgerPickerProps) {
       onClose={onClose}
     >
       <div
-        className={styles.dialogBody}
+        className={cx(styles.dialogBody, voucherStyles.pickerBody)}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown") {
             event.preventDefault();
@@ -120,35 +129,38 @@ export function LedgerPicker(props: LedgerPickerProps) {
           }}
         />
         {error ? <p className={styles.dialogError}>{chequeError(error)}</p> : null}
-        <table className={styles.dialogTable}>
-          <thead>
-            <tr>
-              <th>Ledger</th>
-              <th>Group</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
+        <div ref={listRef} className={voucherStyles.pickerList}>
+          <table className={styles.dialogTable}>
+            <thead>
               <tr>
-                <td colSpan={2} className={styles.emptyCell}>
-                  {isFetching ? "Reading…" : partiesOnly ? "No party on this side matches." : "No ledger on this side matches."}
-                </td>
+                <th>Ledger</th>
+                <th>Group</th>
               </tr>
-            ) : null}
-            {rows.map((row, index) => (
-              <tr
-                key={row.ledId}
-                className={`${styles.row} ${index === at ? styles.rowCurrent : ""}`}
-                onMouseDown={() => setActive(index)}
-                onDoubleClick={() => onPick(row)}
-                onClick={() => onPick(row)}
-              >
-                <td>{row.name}</td>
-                <td>{row.groupName}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={2} className={styles.emptyCell}>
+                    {isFetching ? "Reading…" : partiesOnly ? "No party on this side matches." : "No ledger on this side matches."}
+                  </td>
+                </tr>
+              ) : null}
+              {rows.map((row, index) => (
+                <tr
+                  key={row.ledId}
+                  className={`${styles.row} ${index === at ? styles.rowCurrent : ""}`}
+                  data-current={index === at ? "true" : undefined}
+                  onMouseDown={() => setActive(index)}
+                  onDoubleClick={() => onPick(row)}
+                  onClick={() => onPick(row)}
+                >
+                  <td>{row.name}</td>
+                  <td>{row.groupName}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </ModalShell>
   );
