@@ -17,6 +17,7 @@ import {
   buildSavePayload,
   buildValidateBody,
   parseLoadedBill,
+  tenderFromPayload,
 } from "./salebill.payload";
 import {
   AMEND_BILL_DTO_KEYS,
@@ -33,6 +34,8 @@ import { stockGateOf } from "./salebill.validate";
 import type {
   BillItemPayload,
   BillPayload,
+  BillTenderPayload,
+  BillTenderRow,
   SaleBillDraft,
   SaleBillDraftLine,
 } from "./salebill.types";
@@ -380,6 +383,87 @@ describe("the money", () => {
     expect(payload.sbCreditAmt).toBe(500);
     expect(payload.sbPayMode).toBe("CREDIT");
     expect(payload.tenders).toHaveLength(1);
+  });
+});
+
+function tenderRow(overrides: Partial<BillTenderRow> = {}): BillTenderRow {
+  return {
+    key: "t-cash",
+    tdId: null,
+    tenderId: "tnd-1",
+    tenderTypeId: 1,
+    typeCode: "CASH",
+    tenderName: "Cash",
+    tenderLedgerId: "led-cash",
+    settleLedgerId: null,
+    surchargeLedgerId: null,
+    surchargePerc: 0,
+    surchargeFlat: 0,
+    settlementDays: 0,
+    minAmount: 0,
+    maxAmount: null,
+    conversionRate: 1,
+    editSurcharge: false,
+    allowChange: true,
+    needsRef: false,
+    hotkey: null,
+    keyed: 0,
+    settleStatus: "NA",
+    refNo: null,
+    authCode: null,
+    bankName: null,
+    cardDigits: null,
+    instrumentDate: null,
+    notes: null,
+    tempCredit: null,
+    cheque: null,
+    loyaltyPoints: 0,
+    loyaltyRate: 0,
+    ...overrides,
+  };
+}
+
+describe("a tender line keeps the change OUT of what settled the bill (§15.10)", () => {
+  const bill = build(draftWith()).sbBillAmt ?? 0;
+
+  it("sends received as what crossed the counter, and total and base net of the change", () => {
+    const payload = build(draftWith({ tenders: [tenderRow({ keyed: bill + 20 })] }));
+    expect(payload.tenders?.[0]).toMatchObject({
+      tdReceivedAmt: bill + 20,
+      tdChangeAmt: 20,
+      tdTotalAmt: bill,
+      tdAmount: bill,
+    });
+  });
+
+  it("keeps total = base + surcharge when the row carries a fee", () => {
+    const card = tenderRow({
+      key: "t-card",
+      tenderTypeId: 2,
+      typeCode: "CARD",
+      tenderName: "Card",
+      allowChange: false,
+      surchargePerc: 2,
+      keyed: bill,
+    });
+    const sent = build(draftWith({ tenders: [card] })).tenders?.[0];
+    const fee = Math.round(bill * 2) / 100;
+    expect(sent).toMatchObject({ tdAmount: bill, tdSurchargeAmt: fee, tdChangeAmt: 0 });
+    expect(sent?.tdTotalAmt).toBeCloseTo((sent?.tdAmount ?? 0) + fee, 2);
+    expect(sent?.tdReceivedAmt).toBe(sent?.tdTotalAmt);
+  });
+
+  it("loads the change back into what was keyed, so a re-save sends the same line", () => {
+    const sent = build(draftWith({ tenders: [tenderRow({ keyed: bill + 20 })] })).tenders?.[0];
+    const loaded = tenderFromPayload(sent as BillTenderPayload);
+    expect(loaded.keyed).toBe(bill + 20);
+    const resent = build(draftWith({ tenders: [loaded] })).tenders?.[0];
+    expect(resent).toMatchObject({
+      tdAmount: sent?.tdAmount,
+      tdTotalAmt: sent?.tdTotalAmt,
+      tdReceivedAmt: sent?.tdReceivedAmt,
+      tdChangeAmt: sent?.tdChangeAmt,
+    });
   });
 });
 
@@ -983,5 +1067,27 @@ describe("applyBillSaveResponse", () => {
     const current = { ...sent, lines: [line({ billQty: 9 })] };
     const merged = applyBillSaveResponse(current, billPayload(), sent);
     expect(merged.isDirty).toBe(true);
+  });
+});
+
+describe("a loaded bill shows the figures it was SAVED with (§19)", () => {
+  const context = { companyStateCode: "33", companyStateName: "Tamil Nadu" };
+
+  it("carries the stored totals verbatim, not a recompute", () => {
+    // A recompute of the fixture gives 1180; the stored bill says otherwise.
+    const loaded = parseLoadedBill(billPayload({ sbBillAmt: "1181", sbRoundOff: "1" }), context);
+    expect(loaded.pricing).toBe("stored");
+    expect(loaded.storedPricing?.totals.bill).toBe(1181);
+    expect(loaded.storedPricing?.totals.roundOff).toBe(1);
+    expect(loaded.storedPricing?.totals.amount).toBe(1180);
+    expect(loaded.storedPricing?.totals.docTax).toBe(180);
+  });
+
+  it("lines the stored figures up with the lines, in line-number order", () => {
+    const first = itemPayload({ sbiId: "sbi-1", sbiLineNo: 1, sbiNetAmt: "1180" });
+    const second = itemPayload({ sbiId: "sbi-2", sbiLineNo: 2, sbiNetAmt: "590" });
+    const loaded = parseLoadedBill(billPayload({ items: [second, first] }), context);
+    expect(loaded.lines.map((line) => line.sbiId)).toEqual(["sbi-1", "sbi-2"]);
+    expect(loaded.storedPricing?.lines.map((line) => line.total)).toEqual([1180, 590]);
   });
 });

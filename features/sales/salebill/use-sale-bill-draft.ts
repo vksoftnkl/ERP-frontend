@@ -75,7 +75,7 @@ import {
   useListPromotionSchemesQuery,
   useSaveBillMutation,
 } from "@/store/api/saleBillApi";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { useAppDispatch, useAppSelector, useAppStore } from "@/store/hooks";
 import {
   overrideToggled,
   notesSet,
@@ -526,6 +526,7 @@ function useDraftContext() {
 export function useSaleBillDraft(): SaleBillDraftApi {
   const context = useDraftContext();
   const dispatch = useAppDispatch();
+  const store = useAppStore();
   const draft = useAppSelector(selectSaleBillDraft);
   const { data: companyStateCode = "" } = useGetCompanyStateCodeQuery(
     context.companyId,
@@ -1198,9 +1199,16 @@ export function useSaleBillDraft(): SaleBillDraftApi {
    * the thing it was asked for — the reducer drops a reply for another
    * customer (§5.4). A failure never blocks billing: it clears the panel and
    * `/validate` stays the authority.
+   *
+   * `ready` holds the reply back until the customer it belongs to is on the
+   * draft: on a pick the customer-detail read is what sets `custId`, and a
+   * reply landing before it would be dropped as another customer's.
    */
   const readPartyContext = useCallback(
-    async (target: { custId: string | null; companyId: string; branchId: string; accYear: string; billDate: string }) => {
+    async (
+      target: { custId: string | null; companyId: string; branchId: string; accYear: string; billDate: string },
+      ready?: Promise<void>,
+    ) => {
       if (!target.custId || !target.companyId || !target.branchId) {
         dispatch(partyContextSet(null));
         return;
@@ -1213,10 +1221,13 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           accYear: target.accYear,
           billDate: target.billDate,
         }).unwrap();
+        await ready;
         dispatch(partyContextSet(context));
         // The one popup per OPERATOR pick (§7.4): a loaded bill and a seed
         // stay silent. Consumed whether or not there was anything to say.
-        const current = draftRef.current;
+        // Read from the store, not `draftRef`: the customer this reply waited
+        // for may have landed after the last render.
+        const current = selectSaleBillDraft(store.getState());
         if (current.creditAlertPending && current.customer.custId === context.partyId) {
           const message = creditAlertMessage(context);
           dispatch(creditAlertConsumed());
@@ -1228,7 +1239,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         dispatch(partyContextSet(null));
       }
     },
-    [dispatch, fetchPartyContext],
+    [dispatch, fetchPartyContext, store],
   );
   const refreshPartyContext = useCallback(async () => {
     const current = draftRef.current;
@@ -1263,13 +1274,22 @@ export function useSaleBillDraft(): SaleBillDraftApi {
       // Both reads fire in parallel and each writes its OWN fields (§7.1):
       // customer-detail the address, the state and the option ticks;
       // party-context the standing, the loyalty membership and `creditAllowed`.
-      const partyRead = readPartyContext({
-        custId: customerId,
-        companyId: draft.companyId,
-        branchId: draft.branchId,
-        accYear: draft.accYear,
-        billDate: draft.header.billDate,
+      // The context's reply is applied only once customer-detail has put
+      // `custId` on the draft (`detailDone`), whichever answers first.
+      let markDetailDone: () => void = () => {};
+      const detailDone = new Promise<void>((resolve) => {
+        markDetailDone = resolve;
       });
+      const partyRead = readPartyContext(
+        {
+          custId: customerId,
+          companyId: draft.companyId,
+          branchId: draft.branchId,
+          accYear: draft.accYear,
+          billDate: draft.header.billDate,
+        },
+        detailDone,
+      );
       try {
         const detail = await fetchCustomerDetail({
           cus_id: customerId,
@@ -1284,6 +1304,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           Boolean(draftRef.current.source),
         );
         dispatch(seeding ? walkInCustomerSeeded(detail) : customerApplied({ detail, forceTerm }));
+        markDetailDone();
         // Freight bands are only worth fetching when the distance actually
         // changed and the policy is not manual (§9.3).
         const distance = detail.distance_km;
@@ -1320,6 +1341,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
           toast.error(errorMessage(error));
         }
       } finally {
+        markDetailDone();
         if (!seeding) {
           setBusy("idle");
         }
@@ -1667,12 +1689,13 @@ export function useSaleBillDraft(): SaleBillDraftApi {
   );
   /**
    * The tender route (§15.1): `all_bills`, or `cash_bills` on a non-credit
-   * term. An amend never re-opens the tender from Save.
+   * term. It holds while a posted bill is being amended too, as in Qt: Tender
+   * (F5) changes the payment with the rest of the edit, and "Save changes"
+   * beside it saves an edit that does not touch the payment.
    */
   const tenderRoute =
-    !draft.amending &&
-    (settings.tenderType === "all_bills" ||
-      (settings.tenderType === "cash_bills" && draft.header.billType !== "CREDIT"));
+    settings.tenderType === "all_bills" ||
+    (settings.tenderType === "cash_bills" && draft.header.billType !== "CREDIT");
   // -------------------------------------------------------------------------
   // The lifecycle (§16, §17): save, validate, post, amend, cancel, delete
   // -------------------------------------------------------------------------
@@ -1807,7 +1830,10 @@ export function useSaleBillDraft(): SaleBillDraftApi {
    */
   const postNow = useCallback(
     async (key: BillKey, print: boolean): Promise<SaveOutcome> => {
-      const current = draftRef.current;
+      // From the store, not `draftRef`: the auto-post routes call this straight
+      // after `draftAdopted`, before any render, and `draftFromAutoPost` below
+      // is what decides whether a refused post deletes the draft it created.
+      const current = selectSaleBillDraft(store.getState());
       const body = buildPostBody(key, {
         overrides: current.overrides,
         adjustments: adjustmentsForWire(current),
@@ -1840,7 +1866,7 @@ export function useSaleBillDraft(): SaleBillDraftApi {
         return notes.length > 0 ? { status: "refused" } : { status: "failed" };
       }
     },
-    [discardFailedAutoPost, dispatch, finishDocument, postBillMutation],
+    [discardFailedAutoPost, dispatch, finishDocument, postBillMutation, store],
   );
 
   /** `/create` → adopt the key. A retry then updates instead of duplicating. */

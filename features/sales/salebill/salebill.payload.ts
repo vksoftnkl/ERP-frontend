@@ -29,7 +29,7 @@
  * POSITIVE — direction lives in the server's own `dr_cr` flag — so nothing here
  * ever negates a figure to "show" a deduction.
  */
-import type { DocumentPricing, PricedLine } from "@/domain/pricing";
+import type { DocumentPricing, DocumentTotals, PricedChargeRow, PricedLine } from "@/domain/pricing";
 import { defaultPolicy } from "@/domain/pricing";
 import { chargeDto, actorLabel, type SaveActor } from "@/features/sales/quotation/quotation.payload";
 import { clampPriceLevel, emptyCustomer } from "@/features/sales/quotation/quotation.state";
@@ -304,8 +304,10 @@ function addDaysIso(value: string, days: number): string | null {
 /**
  * One `tenders[]` row (§15.10), `tdRowNo` from 1.
  *
- *   received = keyed base + surcharge + change handed back
+ *   received = keyed base + surcharge   (the over-tender included)
  *   total    = received − change;  base = total − surcharge
+ *
+ * A 500 note on a 470 bill is received 500, change 30, total 470, base 470.
  *
  * Never sent: `tdSrcModule / tdSrcDocType / tdSrcDocId / tdVoucherId` — the
  * parent implies them. The ADJUST row never appears. `tdPartyLedgerId` is the
@@ -327,7 +329,9 @@ export function buildBillTenderDto(
   const isTempCredit = row.typeCode === "TEMP_CR";
   const instrumentDate = row.instrumentDate ? dateOrNull(row.instrumentDate) : null;
   const billDate = draft.header.billDate;
-  const total = money(settled.base + settled.surchargeAmt);
+  const received = money(settled.base + settled.surchargeAmt);
+  const change = money(refundAmt);
+  const total = money(received - change);
   const cheque =
     isCheque && row.cheque && Object.values(row.cheque).some((value) => value !== null && value !== "")
       ? {
@@ -361,13 +365,13 @@ export function buildBillTenderDto(
     tdTenderLedgerId: row.tenderLedgerId,
     tdPartyLedgerId: uuidOrNull(draft.customer.custId),
     tdDrCr: "DR",
-    tdAmount: settled.base,
+    tdAmount: money(total - settled.surchargeAmt),
     tdSurchargePerc: row.surchargePerc,
     tdSurchargeAmt: settled.surchargeAmt,
     tdSurchargeLedgerId: row.surchargeLedgerId,
     tdTotalAmt: total,
-    tdReceivedAmt: money(total + refundAmt),
-    tdChangeAmt: money(refundAmt),
+    tdReceivedAmt: received,
+    tdChangeAmt: change,
     ...(isLoyalty
       ? { tdConversionRate: row.loyaltyRate > 0 ? row.loyaltyRate : row.conversionRate || 1, tdUnitsUsed: row.loyaltyPoints }
       : {}),
@@ -888,15 +892,16 @@ const CHARGE_COST_ALLOCS = ["VALUE", "QTY", "WEIGHT"] as const;
 /**
  * A stored tender line as a bill row. No type name is stored (§15.10) —
  * every rule keys on `tdTenderTypeId`, and the dialog re-merges the live
- * master by tender id when it opens. `tdAmount` is the base and
- * `tdChangeAmt` the change handed back, so `keyed` (the BASE the cashier
- * typed) is `tdAmount` — the change was taken out of it at save.
+ * master by tender id when it opens. `tdAmount` is the base with the change
+ * already taken out, so `keyed` (what the cashier typed) puts the change back:
+ * `tdAmount + tdChangeAmt`, which is `tdReceivedAmt − tdSurchargeAmt` (Qt reads
+ * `tdReceivedAmt` as the line amount). Re-saving routes the same change again.
  */
 export function tenderFromPayload(row: BillTenderPayload): BillTenderRow {
   const typeId = typeof row.tdTenderTypeId === "number" ? row.tdTenderTypeId : Number(row.tdTenderTypeId) || 0;
   const defaults = typeDefaultsOf(typeId);
   const surchargePerc = row.tdSurchargePerc ?? 0;
-  const base = row.tdAmount ?? 0;
+  const base = money((row.tdAmount ?? 0) + (row.tdChangeAmt ?? 0));
   const surchargeFlat = Math.max(0, money((row.tdSurchargeAmt ?? 0) - money((base * surchargePerc) / 100)));
   return {
     key: nextRowKey("tender"),
@@ -951,6 +956,119 @@ export function tenderFromPayload(row: BillTenderPayload): BillTenderRow {
 }
 
 /**
+ * The saved figures, verbatim, in the engine's shape — nothing recomputed (Qt
+ * `applyLoadedTotals`). `items[i]` / `charges[i]` are the stored rows behind
+ * `lines[i]` / `chargeRows[i]`, in the same order.
+ */
+function storedPricingOf(
+  payload: BillPayload,
+  items: BillItemPayload[],
+  lines: SaleBillDraftLine[],
+  charges: BillChargePayload[],
+  chargeRows: DraftChargeRow[],
+): DocumentPricing {
+  const pricedLines: PricedLine[] = lines.map((line, index) => {
+    const item = items[index];
+    return {
+      ...line,
+      netQty: toNumber(item?.sbiNetQty),
+      rateBeforeTax: toNumber(item?.sbiRatePreTax),
+      grossAmt: toNumber(item?.sbiGrossAmt),
+      netGross: toNumber(item?.sbiNetGross),
+      discAmt: toNumber(item?.sbiItemDiscAmt),
+      splDiscAmt: toNumber(item?.sbiSplDiscAmt),
+      schAmt: toNumber(item?.sbiSchDiscAmt),
+      billSchDiscAmt: toNumber(item?.sbiBillSchAmt),
+      freightAmt: toNumber(item?.sbiFreightAmt),
+      loadingAmt: toNumber(item?.sbiLoadAmt),
+      chrgBeforeTax: toNumber(item?.sbiChrgBeforeTax),
+      chrgAfterTax: toNumber(item?.sbiChrgAfterTax),
+      taxableAmt: toNumber(item?.sbiTaxableAmt),
+      cgstAmt: toNumber(item?.sbiCgstAmt),
+      sgstAmt: toNumber(item?.sbiSgstAmt),
+      igstAmt: toNumber(item?.sbiIgstAmt),
+      gstAmt: toNumber(item?.sbiTaxAmt),
+      cessAmt: toNumber(item?.sbiCessAmt),
+      total: toNumber(item?.sbiNetAmt),
+      netPrice: toNumber(item?.sbiSoldPrice),
+      netPriceBeforeTax: toNumber(item?.sbiSoldPreTax),
+      savingsPerc: toNumber(item?.sbiMrpSavingsPerc),
+      profit: toNumber(item?.sbiItemProfit),
+      profitBeforeTax: toNumber(item?.sbiProfitPreTax),
+      rateDiff: toNumber(item?.sbiRateDiff ?? 0) || toNumber(item?.sbiRate) - toNumber(item?.sbiActPrice),
+    };
+  });
+  const pricedCharges: PricedChargeRow[] = chargeRows.map((row, index) => {
+    const stored = charges[index];
+    return {
+      ...row,
+      amountValue: toNumber(stored?.cdAmount),
+      shares: [],
+      taxPercApplied: toNumber(stored?.cdTaxPerc),
+      cgstPercApplied: toNumber(stored?.cdCgstPerc),
+      sgstPercApplied: toNumber(stored?.cdSgstPerc),
+      igstPercApplied: toNumber(stored?.cdIgstPerc),
+      cgstAmt: toNumber(stored?.cdCgstAmt),
+      sgstAmt: toNumber(stored?.cdSgstAmt),
+      igstAmt: toNumber(stored?.cdIgstAmt),
+      taxAmt: toNumber(stored?.cdTaxAmt),
+      cessAmt: toNumber(stored?.cdCessAmt),
+      netAmt: toNumber(stored?.cdNetAmt),
+    };
+  });
+  const sumLines = (pick: (line: PricedLine) => number): number =>
+    pricedLines.reduce((total, line) => total + pick(line), 0);
+  const sumCharges = (keep: (row: PricedChargeRow) => boolean): number =>
+    pricedCharges.filter(keep).reduce((total, row) => total + row.amountValue, 0);
+  const totals: DocumentTotals = {
+    grossAmt: toNumber(payload.sbGrossAmt),
+    netGross: sumLines((line) => line.netGross),
+    itemDisc: toNumber(payload.sbItemDisc),
+    splDisc: toNumber(payload.sbSplDisc),
+    schDisc: toNumber(payload.sbSchDisc),
+    billSchDisc: toNumber(payload.sbBillSchDisc),
+    lineTaxable: sumLines((line) => line.taxableAmt),
+    lineCgst: sumLines((line) => line.cgstAmt),
+    lineSgst: sumLines((line) => line.sgstAmt),
+    lineIgst: sumLines((line) => line.igstAmt),
+    lineCess: sumLines((line) => line.cessAmt),
+    lineTax: sumLines((line) => line.gstAmt + line.cessAmt),
+    lineTotal: sumLines((line) => line.total),
+    totQty: toNumber(payload.sbTotBags),
+    totWeight: toNumber(payload.sbTotWeight),
+    totItems: payload.sbTotItems ?? pricedLines.length,
+    totalCost: toNumber(payload.sbTotalCost),
+    totalProfit: sumLines((line) => line.profit * line.netQty),
+    totalProfitBeforeTax: sumLines((line) => line.profitBeforeTax * line.netQty),
+    totalLoyaltyPv: sumLines((line) => line.loyaltyPv * line.netQty),
+    totalRateDiff: sumLines((line) => line.rateDiff * line.netQty),
+    freeSchemeAmount: sumLines((line) => (line.isFree ? line.grossAmt : 0)),
+    freightAmt: toNumber(payload.sbFreightAmt),
+    loadAmt: toNumber(payload.sbLoadAmt),
+    unloadAmt: toNumber(payload.sbUnloadAmt),
+    cashDiscAmt: sumCharges((row) => row.role === "CASH_DISC"),
+    otherAmt: sumCharges((row) => row.role === "OTHERS" || row.role === "NONE"),
+    chargeTaxable: sumCharges((row) => row.taxApl && !row.beforeTax),
+    chargeOwnTax: pricedCharges.reduce((total, row) => total + row.taxAmt, 0),
+    afterTaxNonTaxable: sumCharges((row) => !row.beforeTax && !row.taxApl),
+    docTaxable: toNumber(payload.sbTaxableAmt),
+    docCgst: toNumber(payload.sbCgstAmt),
+    docSgst: toNumber(payload.sbSgstAmt),
+    docIgst: toNumber(payload.sbIgstAmt),
+    docCess: toNumber(payload.sbCessAmt),
+    docTax: toNumber(payload.sbTaxAmt),
+    amount: money(toNumber(payload.sbBillAmt) - toNumber(payload.sbRoundOff)),
+    roundOff: toNumber(payload.sbRoundOff),
+    bill: toNumber(payload.sbBillAmt),
+    savingAmt: toNumber(payload.sbMrpSavings),
+    savingPerc: toNumber(payload.sbMrpSavingsPerc),
+    marginAmt: toNumber(payload.sbMarginAmt),
+    marginPerc: toNumber(payload.sbMarginPerc),
+  };
+  return { lines: pricedLines, charges: pricedCharges, totals };
+}
+
+/**
  * A loaded bill, as a whole draft.
  *
  * **Built, then derived once.** Nothing is painted row by row through the
@@ -960,17 +1078,23 @@ export function tenderFromPayload(row: BillTenderPayload): BillTenderRow {
  * do — the masters and the policy have moved on since, and a bill must keep the
  * numbers it was raised with.
  *
- * `storedPricing` is deliberately NOT reconstructed from the payload here: it is
- * assembled by the caller, which is the only place that also has the loaded
- * document's own charge rows in engine shape. See `storedPricingOf`.
+ * `storedPricing` is those saved figures in the engine's shape (`storedPricingOf`),
+ * built from the same sorted rows as `lines` and `charges` so index i of each
+ * is the same row.
  */
 export function parseLoadedBill(
   payload: BillPayload,
   context: { companyStateCode: string; companyStateName: string },
 ): SaleBillDraft {
-  const items = (payload.items ?? []).filter((item) => item.sbiIsDeleted !== true);
-  const charges = (payload.charges ?? []).filter((row) => row.cdIsDeleted !== true);
+  const items = (payload.items ?? [])
+    .filter((item) => item.sbiIsDeleted !== true)
+    .sort((a, b) => (a.sbiLineNo ?? 0) - (b.sbiLineNo ?? 0));
+  const charges = (payload.charges ?? [])
+    .filter((row) => row.cdIsDeleted !== true)
+    .sort((a, b) => (a.cdSlno ?? 0) - (b.cdSlno ?? 0));
   const tenders = (payload.tenders ?? []).filter((row) => row.tdIsDeleted !== true);
+  const lines = items.map(lineFromPayload);
+  const chargeRows = charges.map(chargeFromBillPayload);
 
   const base = createBillDraft({
     companyId: payload.sbCompanyId,
@@ -1090,14 +1214,9 @@ export function parseLoadedBill(
       deliveryTerms: payload.sbDeliveryTerms ?? "",
       termsConditions: payload.sbTermsConditions ?? "",
     },
-    lines: items
-      .slice()
-      .sort((a, b) => (a.sbiLineNo ?? 0) - (b.sbiLineNo ?? 0))
-      .map(lineFromPayload),
-    charges: charges
-      .slice()
-      .sort((a, b) => (a.cdSlno ?? 0) - (b.cdSlno ?? 0))
-      .map(chargeFromBillPayload),
+    lines,
+    charges: chargeRows,
+    storedPricing: storedPricingOf(payload, items, lines, charges, chargeRows),
     // The place of supply decides the tax, compared against the COMPANY's state
     // — never re-derived from the customer master, which may have moved.
     isLocalSale:

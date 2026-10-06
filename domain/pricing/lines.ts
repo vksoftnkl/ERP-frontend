@@ -106,9 +106,12 @@ export type TaxBlock = {
   taxed: Dec;
 };
 /**
- * `cess = amount * cessPerc / 100 + netQty * cessPerUnit`, then local supply
- * splits GST into cgst + sgst at their own percentages while an inter-state one
- * carries igst.
+ * `cess = amount * cessPerc / 100 + netQty * cessPerUnit`, then an inter-state
+ * supply carries igst while a local one rounds its GST to paise ONCE and splits
+ * that figure: `cgst = paise(gst × cgst% / (cgst% + sgst%))`, `sgst = gst − cgst`.
+ * Rounding the halves separately loses a paisa — an inclusive ₹4,000 at 18%
+ * came to 3389.83 + 305.08 + 305.08 = 3999.99, which the server refuses as
+ * SALES_AMOUNT_MISMATCH (Qt `sale_bill_entry.cpp` `applyGstAndCess`).
  */
 export function applyGstAndCess(
   amount: Dec,
@@ -120,8 +123,11 @@ export function applyGstAndCess(
     .times(dec(line.cessPerc))
     .div(100)
     .plus(netQty.times(dec(line.cessPerUnit)));
-  const cgstAmt = isLocal ? amount.times(dec(line.cgstPerc)).div(100) : ZERO;
-  const sgstAmt = isLocal ? amount.times(dec(line.sgstPerc)).div(100) : ZERO;
+  const cgstPerc = dec(line.cgstPerc);
+  const localPerc = cgstPerc.plus(dec(line.sgstPerc));
+  const localGst = isLocal ? dec(money(amount.times(localPerc).div(100))) : ZERO;
+  const cgstAmt = localPerc.gt(0) ? dec(money(localGst.times(cgstPerc).div(localPerc))) : ZERO;
+  const sgstAmt = localGst.minus(cgstAmt);
   const igstAmt = isLocal ? ZERO : amount.times(dec(line.igstPerc)).div(100);
   const gstAmt = cgstAmt.plus(sgstAmt).plus(igstAmt);
   return { cgstAmt, sgstAmt, igstAmt, gstAmt, cessAmt, taxed: amount.plus(gstAmt).plus(cessAmt) };

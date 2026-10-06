@@ -895,17 +895,26 @@ export function SaleBillEntryView({
       void runSave();
       return;
     }
-    if (draft.amending) {
-      // Amending never re-opens the tender from Save: the remark comes first.
-      void runSave();
-      return;
-    }
+    // An amend on the tender route settles too (Qt): the dialog's OK runs the
+    // amend, remark and all.
     if (api.tenderRoute) {
       void openTenderThenSave(false);
       return;
     }
     void runSave();
-  }, [api.tenderRoute, canSaveDoc, draft.amending, editable, openTenderThenSave, runSave]);
+  }, [api.tenderRoute, canSaveDoc, editable, openTenderThenSave, runSave]);
+  /**
+   * The Save button. While amending on the tender route it is "Save changes"
+   * beside Tender — an edit that leaves the payment as it was — so it saves
+   * without the dialog; everywhere else it is the same as F5.
+   */
+  const onSaveClick = useCallback(() => {
+    if (draft.amending) {
+      void runSave();
+      return;
+    }
+    requestSave();
+  }, [draft.amending, requestSave, runSave]);
 
   /**
    * The settle dialog's OK does not save directly: `api.save` reads the draft of
@@ -960,6 +969,12 @@ export function SaleBillEntryView({
     if (!verbs.saveAndPrint.visible && !verbs.tender.visible) {
       return;
     }
+    // Amending, F6 is "Save changes & Print" on either route (Qt): the payment
+    // is changed through Tender (F5), never on the way to the printer.
+    if (verbs.saveRoute === "amend") {
+      void runSave({ print: true });
+      return;
+    }
     if (verbs.tender.visible) {
       void openTenderThenSave(true);
       return;
@@ -970,7 +985,7 @@ export function SaleBillEntryView({
       }
       return;
     }
-    if (verbs.saveRoute === "amend" || verbs.saveRoute === "autoPost") {
+    if (verbs.saveRoute === "autoPost") {
       void runSave({ print: true });
       return;
     }
@@ -1359,6 +1374,11 @@ export function SaleBillEntryView({
           // Save, not the browser's reload — which is exactly why this is
           // always prevented, keyed bill on screen or not.
           event.preventDefault();
+          if (event.ctrlKey || event.metaKey) {
+            // Ctrl+F5 is the challan import in Qt — never a save.
+            toast.info("Challan import arrives with the Open Sources dialog.");
+            break;
+          }
           current.requestSave();
           break;
         case "F4":
@@ -1380,6 +1400,11 @@ export function SaleBillEntryView({
           // Post & Print on the plain route, Save & Print under auto-post or an
           // amend, the tender on its route (§6.3).
           event.preventDefault();
+          if (event.ctrlKey || event.metaKey) {
+            // Ctrl+F6 is the re-tender in Qt — never a save or a post.
+            toast.info("Re-tender (Ctrl+F6) is not built on this screen yet.");
+            break;
+          }
           current.onSaveAndPrint();
           break;
         case "Enter":
@@ -1417,6 +1442,12 @@ export function SaleBillEntryView({
             current.guardedRun("importQuotation");
             break;
           }
+          if (event.shiftKey) {
+            // Shift+F3 is the e-way bill register in Qt — never a delete.
+            event.preventDefault();
+            toast.info("The e-way bill register (menu 153) is not built in this client yet.");
+            break;
+          }
           // Bare F3 is Delete (DRAFT only) — outside the grid, where F3 opens
           // the size entry and the grid has already consumed it.
           if (!(event.target as HTMLElement)?.closest?.("[data-quotation-grid]")) {
@@ -1426,6 +1457,11 @@ export function SaleBillEntryView({
           break;
         case "F2":
           event.preventDefault();
+          if (event.shiftKey) {
+            // Shift+F2 is the e-invoice register in Qt — never an edit.
+            toast.info("The e-invoice register (menu 152) is not built in this client yet.");
+            break;
+          }
           current.onEdit();
           break;
         default:
@@ -1795,7 +1831,7 @@ export function SaleBillEntryView({
         verbs={verbs}
         busy={busy}
         onTender={requestSave}
-        onSave={requestSave}
+        onSave={onSaveClick}
         onSaveAndPrint={onSaveAndPrint}
         onHold={() => void api.hold()}
         onShowHeld={() => guardedRun("held")}

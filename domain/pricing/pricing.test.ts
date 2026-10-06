@@ -172,6 +172,30 @@ describe("inclusive vs exclusive tax", () => {
     expectReconciled(inter.totals);
   });
 
+  it("rounds the local GST once and splits it, so an inclusive ₹4,000 stays ₹4,000", () => {
+    // Halves rounded on their own gave 3389.83 + 305.08 + 305.08 = 3999.99,
+    // refused by the server as SALES_AMOUNT_MISMATCH.
+    const result = recalcDocument([inclusiveLine({ billQty: 1, rate: 4000 })], [], STANDARD, LOCAL);
+    const [line] = result.lines;
+    expect(line.taxableAmt).toBe(3389.83);
+    expect(line.gstAmt).toBe(610.17);
+    expect(line.cgstAmt + line.sgstAmt).toBeCloseTo(610.17, 2);
+    expect(line.total).toBe(4000);
+    expect(result.totals.amount).toBe(4000);
+    expectReconciled(result.totals);
+  });
+
+  it("puts the whole local GST on the one half that has a rate", () => {
+    const result = recalcDocument(
+      [exclusiveLine({ cgstPerc: 0, sgstPerc: 18 })],
+      [],
+      STANDARD,
+      LOCAL,
+    );
+    expect(result.lines[0].cgstAmt).toBe(0);
+    expect(result.lines[0].sgstAmt).toBe(180);
+  });
+
   it("prices a mixed inclusive/exclusive document line by line", () => {
     const result = recalcDocument([exclusiveLine(), inclusiveLine()], [], STANDARD, LOCAL);
     expect(result.lines[0].total).toBe(1180);
@@ -210,7 +234,8 @@ describe("discountAlterBaseRate", () => {
     const discountFirst = recalcDocument([line], [], DISCOUNT_FIRST, LOCAL);
 
     expect(standard.totals.amount).toBe(1062);
-    expect(discountFirst.totals.amount).toBe(1079.99);
+    // 1080 inclusive: 915.25 taxable + 164.75 GST, split once — no lost paisa.
+    expect(discountFirst.totals.amount).toBe(1080);
     expect(discountFirst.totals.amount).not.toBe(standard.totals.amount);
     expectReconciled(standard.totals);
     expectReconciled(discountFirst.totals);
@@ -224,7 +249,7 @@ describe("discountAlterBaseRate", () => {
     expect(standard.totals.docCess).toBe(20);
     expect(discountFirst.totals.docCess).toBe(20);
     expect(standard.totals.amount).toBe(1064.01);
-    expect(discountFirst.totals.amount).toBe(1061.99);
+    expect(discountFirst.totals.amount).toBe(1062);
     expectReconciled(standard.totals);
     expectReconciled(discountFirst.totals);
   });
