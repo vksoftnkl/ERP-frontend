@@ -451,12 +451,6 @@ export type SaleBillDraftApi = {
   canPostOnThisDevice: boolean;
   /** Ctrl+F7, the operator's dry run (§17.7). */
   validateOnServer: () => Promise<ServerValidation>;
-  /**
-   * The `/validate` before the tender opens (§15.1): OK → the notes paint
-   * without a popup and the dialog opens; a refusal paints WITH the popup and
-   * the dialog stays shut; the server away → it opens anyway.
-   */
-  validateForTender: () => Promise<ServerValidation>;
   /** The customer on the bill is the walk-in (§7.7): party-context's answer, or the setting's. */
   isWalkIn: boolean;
   /** F6 / Ctrl+Enter / Ctrl+Shift+Enter: create → validate → confirm → post (§17.5). */
@@ -2084,24 +2078,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     ],
   );
 
-  /** Before the tender opens (§15.1): the checks with `openingTender`, then `/validate`. */
-  const validateForTender = useCallback(async (): Promise<ServerValidation> => {
-    const violation = validate({ openingTender: true });
-    if (violation && !violation.confirm) {
-      toast.error(violation.message);
-      return { status: "refused" };
-    }
-    setBusy("saving");
-    try {
-      const payload = buildSavePayload(draftRef.current, pricing, actor);
-      // OK → painted, no popup. Refusal → painted with the popup. Server away
-      // → `unreachable`, and the caller opens anyway: a sale must not stop.
-      return await runServerValidation(payload, { popupOnRefusal: true });
-    } finally {
-      setBusy("idle");
-    }
-  }, [actor, pricing, runServerValidation, validate]);
-
   /** Ctrl+F7 (§17.7): the operator's dry run, painted WITH the popup. */
   const validateOnServer = useCallback(async (): Promise<ServerValidation> => {
     const violation = validate();
@@ -2831,7 +2807,6 @@ export function useSaleBillDraft(): SaleBillDraftApi {
     autoPost,
     canPostOnThisDevice,
     validateOnServer,
-    validateForTender,
     isWalkIn:
       draft.party?.party.isWalkIn ??
       (Boolean(walkInCustomerId) && draft.customer.custId === walkInCustomerId),

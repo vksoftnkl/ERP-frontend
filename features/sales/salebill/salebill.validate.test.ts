@@ -401,7 +401,7 @@ describe("check 7 — settled + adjusted may not exceed the bill (§17.3)", () =
     expect(check(settled(billable()))).toBeNull();
   });
 
-  it("refuses tenders that, with the set-off, exceed the bill — unless the tender is being re-opened", () => {
+  it("refuses tenders that, with the set-off, exceed the bill — unless excess tender is allowed", () => {
     const draft = settled(billable());
     const bill = priceOf(draft).totals.bill;
     const over: SaleBillDraft = {
@@ -412,7 +412,6 @@ describe("check 7 — settled + adjusted may not exceed the bill (§17.3)", () =
     const violation = check(over);
     expect(violation?.field).toBe("sale-bill-tender");
     expect(violation?.message).toContain("Re-open settlement (F5)");
-    expect(check(over, { openingTender: true })).toBeNull();
     expect(check(over, { allowExcessTender: true })).toBeNull();
   });
 

@@ -834,18 +834,16 @@ export function SaleBillEntryView({
   const adjusted = totalAdjusted(draft);
 
   /**
-   * F5 on the tender route (§15.1): read-only → refused; the client checks with
-   * `openingTender`; then `/validate` — OK opens with the notes painted, a
-   * refusal keeps it shut (counting money for a bill that cannot post is
-   * wasted), the server away opens anyway (a sale must not stop).
+   * F5 on the tender route (§15.1): read-only → refused; otherwise the dialog
+   * opens at once. Nothing is validated on the way in — not the client checks,
+   * not `/validate`. Every check runs in the save that follows the dialog's OK
+   * (user 2026-10-06), so the operator settles first and hears about a
+   * refusal, a question or a zero quantity after the tender is in, the way the
+   * legacy screen does.
    */
   const openTender = useCallback(async () => {
     if (!editable) {
       toast.warn("This bill is read-only.");
-      return false;
-    }
-    const validation = await api.validateForTender();
-    if (validation.status === "refused") {
       return false;
     }
     // The credits are re-read on the way in: another counter may have spent one
@@ -862,18 +860,18 @@ export function SaleBillEntryView({
    * screen never writes a bill the operator has not settled, so Save opens the
    * settle dialog and the save runs off its OK — see the dialog's `onApply`.
    *
-   * Three routes skip the dialog, each because it could not help:
+   * Two routes skip the dialog, each because it could not help:
    *
    *  - **The operator may not save at all**, or the bill is not editable. The
    *    refusal is the point, and `runSave` is the one place that words it.
-   *  - **The bill would be refused for something tenders cannot fix** — no
-   *    lines, a zero quantity, a missing godown. Far better to say so before
-   *    money is keyed than after. A gate that asks a QUESTION (`confirm`) is
-   *    not a refusal and does not stop the settle: it is answered on the way
-   *    out, by the dialog `runSave` puts up.
    *  - **A CREDIT bill is settlement-exempt** (§6 of the save gate): the party
    *    debit is what stays open. The settle dialog refuses a short settlement,
    *    so routing a credit bill through it would make one unsavable.
+   *
+   * Nothing else is checked before the dialog. The client checks and
+   * `/validate` run in the save off its OK: a violation lights its cell, a
+   * question (`confirm`) is put up by `runSave`, a refusal paints the strip
+   * with the popup — all AFTER the tender is in (user 2026-10-06).
    */
   /**
    * The tender route: settle, and the save runs off the dialog's OK. Every

@@ -34,11 +34,6 @@ export type BillValidationContext = {
   allowExcessTender?: boolean;
   /** `sales.free_item_tax` — a zero-rate line is allowed. */
   freeItemTax?: boolean;
-  /**
-   * The tender dialog is being opened: check 7 is SKIPPED, because re-opening
-   * the tender is how a settled-plus-adjusted mismatch gets fixed.
-   */
-  openingTender?: boolean;
 };
 
 /** A one-based row number for the message. Blank rows are not counted. */
@@ -161,9 +156,9 @@ export function validateSaveInputs(
   }
 
   // ---- 7. settled + adjusted vs the bill ----------------------------------
-  // Skipped while OPENING the tender: re-opening settlement is how the
-  // mismatch gets fixed (user 2026-09-24).
-  if (!context.openingTender && !context.allowExcessTender) {
+  // The tender dialog opens WITHOUT running these checks (user 2026-10-06), so
+  // re-opening settlement — how the mismatch gets fixed — is never blocked here.
+  if (!context.allowExcessTender) {
     const rows = settledTenderRows(draft.tenders);
     if (rows.length > 0) {
       const computed = computeTenders(
