@@ -198,14 +198,33 @@ export function moveRowFocus(
 }
 
 /**
- * The first cell of a grid, for the F1 walk between the two panels.
+ * The first cell of a grid, for the F1 walk between the two panels — or of its
+ * LAST row, for ↑ pressed with nothing focused, which arrives from below.
  *
  * Enter moves WITHIN a grid and never crosses a boundary, so the breakup panel
  * under the ledger grid was otherwise reachable only with the mouse.
  */
-export function focusGrid(gridName: string): boolean {
-  const first = rowsOf(gridName)[0];
-  const landing = first ? entryOf(first) : null;
+export function focusGrid(gridName: string, end: "first" | "last" = "first"): boolean {
+  const rows = rowsOf(gridName);
+  const row = end === "first" ? rows[0] : rows[rows.length - 1];
+  const landing = row ? entryOf(row) : null;
+  if (!landing) {
+    return false;
+  }
+  select(landing);
+  return true;
+}
+
+/**
+ * Put the caret on one row, where the walk lands when it steps into it.
+ *
+ * For a click on a row's read-out text, which focuses nothing: without this the
+ * row looked selected but ↑/↓ had no cell to step FROM, so the arrows did
+ * nothing until the operator clicked again on an input.
+ */
+export function focusRow(gridName: string, rowKey: string): boolean {
+  const row = rowsOf(gridName).find((cells) => cells[0]?.getAttribute(ROW_ATTR) === rowKey);
+  const landing = row ? entryOf(row) : null;
   if (!landing) {
     return false;
   }

@@ -11,6 +11,9 @@
   align-items: center;
   gap: 0.5rem;
   width: 100%;
+  /* A caller-set width is a floor, never a clip: the swatch + hex must stay
+     inside the border. */
+  min-width: max-content;
   min-height: var(--erp-modal-control-height);
   padding: var(--erp-modal-control-padding-y) var(--erp-modal-control-padding-x);
   border: 1px solid #c9d5e3;
@@ -58,6 +61,7 @@
 }
 
 .triggerValue {
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
 }

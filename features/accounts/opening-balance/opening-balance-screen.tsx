@@ -15,10 +15,7 @@ import { useRouter } from "next/navigation";
 import { useBusinessContext } from "@/components/layout/business-context";
 import { toast } from "@/lib/notify";
 import DeleteConfirmModal from "@/components/ui/delete-confirm-modal";
-import {
-  KeyboardShortcutHints,
-  type KeyboardShortcutDefinition,
-} from "@/components/design-system/ui/keyboard-shortcut-hints";
+import type { KeyboardShortcutDefinition } from "@/components/design-system/ui/keyboard-shortcut-hints";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { useUiTableId } from "@/lib/ui-tables";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
@@ -43,14 +40,22 @@ import { LedgerGrid } from "./components/ledger-grid";
 import { LedgerPickerModal } from "./components/ledger-picker-modal";
 import { ScopeHeader } from "./components/scope-header";
 import { TotalsBand } from "./components/totals-band";
-import { focusCellAfterRender, focusGrid, focusedRowKey } from "./components/grid-focus";
+import {
+  focusCellAfterRender,
+  focusGrid,
+  focusRow,
+  focusedRowKey,
+} from "./components/grid-focus";
 import { LEDGER_GRID_NAME } from "./components/ledger-grid";
 import styles from "./page.module.scss";
 
 /** Menu 55, "Opening Balance", a child of Accounts (menu 5). */
 export const OPENING_BALANCE_MENU_ID = 55;
 
-/** What the footer shows, and what the handler below actually binds. */
+/**
+ * What the handler below actually binds — the footer hint's tooltip. The hint
+ * line itself names only the everyday keys, so it fits on one line.
+ */
 const SCREEN_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   { label: "Save", keys: ["F5"] },
   { label: "Check server", keys: ["F6"] },
@@ -61,6 +66,10 @@ const SCREEN_SHORTCUTS: readonly KeyboardShortcutDefinition[] = [
   { label: "Remove row", keys: ["-"] },
   { label: "Close", keys: ["Esc"] },
 ];
+
+const SHORTCUTS_TITLE = SCREEN_SHORTCUTS.map(
+  (shortcut) => `${shortcut.keys.join("+")} ${shortcut.label}`,
+).join(" · ");
 
 /**
  * Everything this screen asks before it acts.
@@ -80,6 +89,16 @@ type PendingConfirm = {
   iconVariant: "delete" | "replace";
   run: () => void;
 };
+
+/**
+ * No control has focus, and nothing modal is up that the key belongs to — the
+ * grid-settings overlays are not in `modalOpen`, so they are found by role.
+ */
+function caretIsNowhere(): boolean {
+  const active = document.activeElement;
+  const nowhere = !active || active === document.body || active === document.documentElement;
+  return nowhere && document.querySelector('[aria-modal="true"], [role="dialog"]') === null;
+}
 
 export default function OpeningBalanceScreen() {
   const { activeCompany, activeBranch, activeFiscalYear, loading: contextLoading } =
@@ -358,6 +377,7 @@ export default function OpeningBalanceScreen() {
    *   F7                reload — throw the screen away and re-read the set
    *   F9                carry forward
    *   F1                step between the ledger grid and the breakup panel
+   *   ↑ / ↓             with no cell focused, enter the ledger grid
    *   Alt+B             open the selected row's breakup, or say why it cannot
    *   Esc               close the breakup; with none open, leave the screen
    *
@@ -450,6 +470,26 @@ export default function OpeningBalanceScreen() {
           const inBills = focusedRowKey(BILL_GRID_NAME) !== null;
           if (!focusGrid(inBills ? LEDGER_GRID_NAME : BILL_GRID_NAME)) {
             focusGrid(LEDGER_GRID_NAME);
+          }
+          break;
+        }
+
+        case "ArrowDown":
+        case "ArrowUp": {
+          // With the caret in a cell the grid has already taken the key. With
+          // it NOWHERE — a fresh load, a picker just closed, a click on blank
+          // space — the arrow would only scroll the page; take it into the
+          // grid instead: the open breakup's row, else the top (↓) or the
+          // bottom (↑). Not past a dialog the settings overlays may have up.
+          if (event.defaultPrevented || !caretIsNowhere()) {
+            break;
+          }
+          const open = current.rows.find((row) => row.ledId === current.currentParty);
+          const entered =
+            (open !== undefined && focusRow(LEDGER_GRID_NAME, open.key)) ||
+            focusGrid(LEDGER_GRID_NAME, event.key === "ArrowDown" ? "first" : "last");
+          if (entered) {
+            event.preventDefault();
           }
           break;
         }
@@ -583,21 +623,32 @@ export default function OpeningBalanceScreen() {
 
       <footer className={styles.footer}>
         <TotalsBand totals={totals} server={draft.server} agreement={agreement} />
-        <div className={styles.footerActions}>
-          <KeyboardShortcutHints
-            className={styles.footerHint}
-            shortcuts={SCREEN_SHORTCUTS}
-            dense
-            ariaHidden
-          />
-          <button
-            type="button"
-            className={styles.primaryButton}
-            disabled={!canWrite || busyNow}
-            onClick={() => void api.save()}
-          >
-            {busy === "saving" ? "Saving…" : "Save"}
-          </button>
+        <div className={styles.footerBar}>
+          {/* F5 SAVES on this screen (F7 reloads), and a row is added by picking
+              into the last one — there is no `+` key. */}
+          <span className={styles.footerHint} title={SHORTCUTS_TITLE}>
+            pick into the last row to add one · − removes one · Ctrl+Enter saves · single click
+            opens the bills · F7 reloads
+          </span>
+          <span className={styles.footerActions}>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              disabled={!canWrite || busyNow}
+              title="Save (F5 or Ctrl+Enter)"
+              onClick={() => void api.save()}
+            >
+              {busy === "saving" ? "Saving…" : draft.dirty ? "Save *" : "Save"}
+            </button>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              title="Close (Esc)"
+              onClick={requestLeave}
+            >
+              Close
+            </button>
+          </span>
         </div>
       </footer>
 

@@ -44,12 +44,19 @@ import {
   parseHeader,
   parseOtherLines,
   parseTenders,
+  parseOpenBills,
 } from "../payload/parse";
+import {
+  collectNotice,
+  tempCreditReceive,
+  type TempCreditCollect,
+} from "../domain/collect";
 import type {
   ReceiptKeys,
   ReceiptPayload,
   ReceiptScope,
   ReceiptSettings,
+  OpenItemsPayload,
 } from "../receipt.types";
 import { identityHint, validateBeforePost, validateBeforeSave, type Problem } from "../validate";
 import {
@@ -215,6 +222,12 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
   // screen that considers itself dirty the moment it opens cannot warn
   // usefully about leaving.
   const seededTender = useRef(false);
+  /**
+   * What a collected temp credit ticked, waiting for the first instrument to
+   * carry it — the tender masters may still be loading when the register
+   * hands the receipt over, and the figure must not be lost to that.
+   */
+  const pendingCollectAmount = useRef<number | null>(null);
   useEffect(() => {
     if (draft.tenders.length > 0 || masters.length === 0 || draft.header.voucherId) {
       return;
@@ -227,7 +240,13 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
       return;
     }
     seededTender.current = true;
-    dispatch({ type: "REPLACE_DOCUMENT", draft: { ...latest.current, tenders: [tenderRowFrom(master)] } });
+    const row = tenderRowFrom(master);
+    dispatch({ type: "REPLACE_DOCUMENT", draft: { ...latest.current, tenders: [row] } });
+    const amount = pendingCollectAmount.current;
+    if (amount !== null) {
+      pendingCollectAmount.current = null;
+      dispatch({ type: "SET_TENDER", rowKey: row.key, patch: { amount } });
+    }
   }, [masters, draft.tenders.length, draft.header.voucherId]);
 
   useEffect(() => {
@@ -250,30 +269,70 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
   }, [tendersFailed, tenderMasters, masters.length]);
 
   // ── Loading a party ───────────────────────────────────────────────────────
+  /**
+   * The borrower's mobile the bills are filtered to, when the receipt was
+   * opened from the Temp Credits register (`?mobile=` on `/open-items`). It
+   * rides along on every re-read — F5, a date change — until it is cleared,
+   * and it goes with the party: picking another customer drops it.
+   */
+  const [tempCreditMobile, setTempCreditMobileState] = useState("");
+  const tempCreditMobileRef = useRef("");
+
   const loadParty = useCallback(
-    (partyId: string, onDateOverride?: string) => {
+    async (
+      partyId: string,
+      onDateOverride?: string,
+      mobileOverride?: string,
+    ): Promise<OpenItemsPayload | null> => {
       if (!partyId || !scope.companyId) {
-        return;
+        return null;
       }
       // The caller may pass the date it is ABOUT to set: a dispatch has not
       // been applied yet when the handler that made it runs on.
       const onDate = onDateOverride || latest.current.header.voucherDate || appDate;
+      const mobile = (mobileOverride ?? tempCreditMobileRef.current).trim();
       setBusy("loading");
       // Three requests in parallel. Each answer is applied only if it still
       // belongs to the party on screen — the reducer checks, so a slow reply
       // for the party the operator has just left cannot paint over the new one.
-      void Promise.allSettled([
-        fetchOpenItems({ partyId, companyId: scope.companyId, onDate })
-          .then((payload) => dispatch({ type: "OPEN_ITEMS_LOADED", partyId, payload }))
-          .catch((error: unknown) => toast.error(receiptError(error))),
+      const [items] = await Promise.allSettled([
+        fetchOpenItems({
+          partyId,
+          companyId: scope.companyId,
+          onDate,
+          ...(mobile ? { mobile } : {}),
+        })
+          .then((payload) => {
+            dispatch({ type: "OPEN_ITEMS_LOADED", partyId, payload });
+            return payload;
+          })
+          .catch((error: unknown) => {
+            toast.error(receiptError(error));
+            return null;
+          }),
         fetchPartyContext({ partyId, companyId: scope.companyId })
           .then((payload) => dispatch({ type: "CONTEXT_LOADED", partyId, payload }))
           // Context, not truth: the panels empty and the receipt is still
           // takeable. Saying nothing is the whole point.
           .catch(() => dispatch({ type: "CONTEXT_FAILED" })),
-      ]).finally(() => setBusy("idle"));
+      ]);
+      setBusy("idle");
+      return items.status === "fulfilled" ? items.value : null;
     },
     [appDate, fetchOpenItems, fetchPartyContext, scope.companyId],
+  );
+
+  const setTempCreditMobile = useCallback(
+    (mobile: string) => {
+      const next = mobile.trim();
+      tempCreditMobileRef.current = next;
+      setTempCreditMobileState(next);
+      const partyId = latest.current.header.partyId;
+      if (partyId) {
+        void loadParty(partyId, undefined, next);
+      }
+    },
+    [loadParty],
   );
 
   const pickParty = useCallback(
@@ -295,10 +354,77 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
           return;
         }
       }
+      // The mobile filter belonged to the borrower on the last party.
+      tempCreditMobileRef.current = "";
+      setTempCreditMobileState("");
       dispatch({ type: "PARTY_PICKED", partyId, partyName });
-      loadParty(partyId);
+      void loadParty(partyId, undefined, "");
     },
     [confirm, loadParty],
+  );
+
+  /**
+   * Collect a temp credit — the Temp Credits register's Receive (F5), the Qt
+   * `applyOpenArgs` + `tickTempCreditBill`. A new receipt on the ledger the
+   * bill was raised on, the bills narrowed to the borrower's mobile, and the
+   * bill ticked at its balance. Answers the amount ticked (for the Amount box),
+   * or null when nothing was.
+   */
+  const collectTempCredit = useCallback(
+    async (args: TempCreditCollect): Promise<number | null> => {
+      const current = latest.current;
+      if (current.dirty) {
+        const ok = await confirm({
+          title: "Collect a temp credit",
+          message: `This receipt has unsaved work. Discard it and collect bill ${args.ref || "—"}?`,
+          confirmLabel: "Discard and collect",
+        });
+        if (!ok) {
+          return null;
+        }
+      }
+      if (current.dirty || current.header.voucherId) {
+        seededTender.current = false;
+        dispatch({ type: "NEW_DOCUMENT", scope, voucherDate: appDate });
+      }
+      tempCreditMobileRef.current = args.mobile;
+      setTempCreditMobileState(args.mobile);
+      dispatch({ type: "PARTY_PICKED", partyId: args.partyId, partyName: args.partyName });
+      const payload = await loadParty(args.partyId, undefined, args.mobile);
+      if (!payload) {
+        return null;
+      }
+      const bills = parseOpenBills(payload.bills);
+      const borrower =
+        bills.find((bill) => (bill.tempCredit?.name ?? "").trim())?.tempCredit?.name ?? "";
+      const notice = collectNotice(args.mobile, borrower || args.name, args.partyName, bills.length);
+      const bill = bills.find((candidate) => candidate.billId === args.billId);
+      if (!bill) {
+        dispatch({
+          type: "NOTICE",
+          notice:
+            notice && bills.length === 0
+              ? notice
+              : "That temp-credit bill is no longer open — it may have been settled already.",
+        });
+        return null;
+      }
+      const receive = tempCreditReceive(bill);
+      dispatch({ type: "SET_BILL_CELL", billId: bill.billId, column: "receive", value: receive });
+      if (notice) {
+        dispatch({ type: "NOTICE", notice });
+      }
+      // Into the Amount box — onto the first instrument, as the box itself
+      // writes — or held for the instrument the seeding effect is about to add.
+      const first = latest.current.tenders[0];
+      if (first) {
+        dispatch({ type: "SET_TENDER", rowKey: first.key, patch: { amount: receive } });
+      } else {
+        pendingCollectAmount.current = receive;
+      }
+      return receive;
+    },
+    [appDate, confirm, loadParty, scope],
   );
 
   /** F5 — somebody may have posted against these bills meanwhile. */
@@ -307,7 +433,7 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
     if (!partyId) {
       return;
     }
-    loadParty(partyId);
+    void loadParty(partyId);
   }, [loadParty]);
 
   /**
@@ -325,7 +451,7 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
       const current = latest.current;
       dispatch({ type: "SET_HEADER", patch: { voucherDate } });
       if (voucherDate && current.header.partyId && current.itemsLoaded && isEditable(current)) {
-        loadParty(current.header.partyId, voucherDate);
+        void loadParty(current.header.partyId, voucherDate);
       }
     },
     [loadParty],
@@ -877,6 +1003,9 @@ export function useReceiptDraft(options: UseReceiptDraftOptions) {
     editable: isEditable(draft),
     identityHint: identityHint(identity),
     pickParty,
+    collectTempCredit,
+    tempCreditMobile,
+    setTempCreditMobile,
     setVoucherDate,
     reloadItems,
     openByKeys,

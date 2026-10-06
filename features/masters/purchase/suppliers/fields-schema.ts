@@ -16,11 +16,12 @@ export type SupplierLazyDropdownHandlers = Record<
   "supCompanyId" | "supBranchId" | "supGroupId" | "supStateName",
   SupplierLazyFieldHandlers
 >;
+import { EDIT_MODE_FIELD } from "@/features/masters/shared/edit-mode-field";
 import {
-  COLLECTION_DAY_SHORT_OPTIONS,
   GST_LOOKUP_HELPER_TEXT,
-  GST_TYPE_OPTIONS,
-  PURCHASE_TYPE_OPTIONS,
+  SUPPLIER_COLLECTION_DAY_SHORT_OPTIONS,
+  SUPPLIER_GST_TYPE_OPTIONS,
+  SUPPLIER_MAX_CREDIT_DAYS,
 } from "./constants";
 import { validateSupplierGstin, validateSupplierPan } from "./form-builder";
 
@@ -47,6 +48,10 @@ export function buildSupplierFormFields(
   // The bank-accounts grid, rendered under "Bank Details" on the Notes tab (the
   // legacy screen keeps it there rather than on a tab of its own).
   bankAccountsField: ERPDynamicModalField,
+  // LOCAL / IMPORT, plus an older record's own value when it is neither.
+  purchaseTypeOptions: ERPDynamicSelectOption[],
+  // State name → 2-digit code, for the GSTIN's state-prefix check.
+  stateCodeByName: Record<string, string>,
 ): ERPDynamicModalField[] {
   // Every tab is a 12-column grid holding two label/control pairs per row, as in
   // the legacy Supplier Entry screen: normal inputs span 6, full-width fields use
@@ -62,6 +67,8 @@ export function buildSupplierFormFields(
       type: "heading",
       sectionGridColumns: 12,
     },
+    // Never shown: tells the GSTIN lookup whether a saved record is open.
+    EDIT_MODE_FIELD,
     {
       name: "supGstNo",
       label: "GST No",
@@ -70,7 +77,7 @@ export function buildSupplierFormFields(
       onValueChange: onSupplierGstinValueChange,
       ...span(6),
       validation: {
-        custom: (value, values) => validateSupplierGstin(value, values),
+        custom: (value, values) => validateSupplierGstin(value, values, stateCodeByName),
       },
     },
     {
@@ -141,7 +148,7 @@ export function buildSupplierFormFields(
       label: "GST Type",
       type: "select",
       searchable: true,
-      options: GST_TYPE_OPTIONS,
+      options: SUPPLIER_GST_TYPE_OPTIONS,
       required: true,
       ...span(6),
       validation: {
@@ -154,7 +161,7 @@ export function buildSupplierFormFields(
       type: "select",
       searchable: false,
       required: true,
-      options: PURCHASE_TYPE_OPTIONS,
+      options: purchaseTypeOptions,
       ...span(6),
       validation: {
         requiredMessage: "Purchase Type is required.",
@@ -353,10 +360,12 @@ export function buildSupplierFormFields(
       label: "Credit Days",
       type: "number",
       min: 0,
+      max: SUPPLIER_MAX_CREDIT_DAYS,
       step: 1,
       ...span(6),
       validation: {
         minMessage: "Credit Days must be 0 or greater.",
+        maxMessage: `Credit Days must be ${SUPPLIER_MAX_CREDIT_DAYS} or less.`,
       },
     },
     {
@@ -401,7 +410,7 @@ export function buildSupplierFormFields(
       label: "Collection Days",
       type: "checkbox-group",
       colSpan: 2,
-      options: COLLECTION_DAY_SHORT_OPTIONS,
+      options: SUPPLIER_COLLECTION_DAY_SHORT_OPTIONS,
     },
     {
       name: "supNotes",

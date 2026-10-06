@@ -134,11 +134,18 @@ export const receiptApi = baseApi.injectEndpoints({
      */
     getReceiptOpenItems: builder.query<
       OpenItemsPayload,
-      { partyId: string; companyId: string; onDate?: string }
+      { partyId: string; companyId: string; onDate?: string; mobile?: string }
     >({
-      query: ({ partyId, companyId, onDate }) => ({
+      // `mobile` (HANDOVER §7): only the bills whose temp credit was given to
+      // that number — the Temp Credits register's Receive sends it.
+      query: ({ partyId, companyId, onDate, mobile }) => ({
         url: OPEN_ITEMS_ENDPOINT,
-        params: { partyId, companyId, ...(onDate ? { onDate } : {}) },
+        params: {
+          partyId,
+          companyId,
+          ...(onDate ? { onDate } : {}),
+          ...(mobile ? { mobile } : {}),
+        },
       }),
       transformResponse: (payload: ApiSuccessResponse<OpenItemsPayload>) => payload.data,
       providesTags: ["Receipt"],

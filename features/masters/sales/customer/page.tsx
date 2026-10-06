@@ -145,6 +145,7 @@ import {
 import { useDataRefresh } from "@/lib/data-freshness";
 import { buildGridDeletedParam } from "@/lib/configured-grids";
 import { getDropdownId } from "@/lib/configured-dropdowns";
+import type { LedgerPrefill } from "@/features/masters/shared/party-role-link";
 function withCustomerBasicValidation(field: ERPDynamicModalField): ERPDynamicModalField {
   const basicValidation = CUSTOMER_BASIC_VALIDATIONS[field.name];
   if (!basicValidation) {
@@ -1265,13 +1266,42 @@ export type CustomerPageProps = {
     shouldUpdate: boolean;
     values: Record<string, string>;
   }) => void | Promise<void>;
+  /**
+   * Make an existing party ledger a customer as well (server notes 81) — set by
+   * `linked-customer-entry.tsx` for a supplier's "Also a Customer". The create
+   * form opens on the ledger's details (the caller passes them to `openCreate`);
+   * this locks the name, which IS the ledger's, seeds the dropdowns' labels and
+   * sends `cusLinkLedId` with the save.
+   */
+  linkLedger?: {
+    ledgerId: string;
+    values: Record<string, string>;
+    labels: LedgerPrefill["labels"];
+  };
 };
+
+/**
+ * The name of a customer made from an existing ledger is the ledger's own: one
+ * party, one name. It is renamed from either master once both exist.
+ */
+function lockLinkedLedgerName(
+  fields: ERPDynamicModalField[],
+  locked: boolean,
+): ERPDynamicModalField[] {
+  if (!locked) {
+    return fields;
+  }
+  return fields.map((field) =>
+    field.name === "cusName" ? { ...field, disabled: true } : field,
+  );
+}
 
 export default function CustomerPage({
   inlineModalOnly,
   onCrudControllerReady,
   onModalOpenChange,
   onCustomerSaved,
+  linkLedger,
 }: CustomerPageProps = {}) {
   const router = useRouter();
   const stateModalControllerRef = useRef<ERPDynamicModalController | null>(null);
@@ -1760,6 +1790,46 @@ export default function CustomerPage({
       }
     }
   }, [applyDropdownOptions, templateDefaults]);
+  // A customer made from an existing ledger opens on the ledger's company,
+  // branch and state: pin each with the ledger's name for it, so the triggers
+  // read right unopened and the payload resolves cusStateName. A field the
+  // ledger leaves blank keeps the template's seed.
+  const seedLinkedLedgerDropdowns = useCallback(
+    (values: Record<string, string>, labels: LedgerPrefill["labels"]) => {
+      const blank: ERPDynamicSelectOption = { value: "", label: "" };
+      const pin = (
+        fieldName: string,
+        value: string | undefined,
+        label: string,
+        head: ERPDynamicSelectOption,
+      ) => {
+        const id = (value ?? "").trim();
+        if (!id) {
+          return;
+        }
+        const option: ERPDynamicSelectOption = { value: id, label: label || id };
+        pinnedDropdownOptionRef.current[fieldName] = option;
+        applyDropdownOptions(fieldName, [head, option]);
+      };
+      pin("cusCompanyId", values.cusCompanyId, labels.companyName, ALL_COMPANY_OPTION);
+      pin("cusBranchId", values.cusBranchId, labels.branchName, ALL_BRANCH_OPTION);
+      const stateCode = (values.cusStateCode ?? "").trim().toUpperCase();
+      const stateName = labels.stateName.trim();
+      pin(
+        "cusStateCode",
+        stateCode,
+        stateName ? `${stateName} (${stateCode})` : stateCode,
+        blank,
+      );
+      if (stateCode && stateName) {
+        setStateNameByCode((prev) => ({ ...prev, [stateCode]: stateName }));
+        setStateCodeByName((prev) => ({ ...prev, [stateName]: stateCode }));
+      }
+      const regionStateName = (values.cusRegionStateName ?? "").trim();
+      pin("cusRegionStateName", regionStateName, regionStateName, blank);
+    },
+    [applyDropdownOptions],
+  );
   // "Save as Default Template" needs the DISPLAY half of every id on the form —
   // the document stores `cusAreaId` and `cusAreaName` together so the next Add
   // can render a label before the lazy dropdown has loaded anything. The pinned
@@ -2330,7 +2400,8 @@ export default function CustomerPage({
     );
   const customerFormFields = useMemo(
     () =>
-      applyCustomerWidgetConfig(
+      lockLinkedLedgerName(
+        applyCustomerWidgetConfig(
         buildCustomerFormFields(
           stateOptions,
           regionStateOptions,
@@ -2352,8 +2423,11 @@ export default function CustomerPage({
         // buildCustomerFormFields; the widget config only shows/hides fields here
         // (and drops a tab or group the config has emptied out).
         widgetFieldConfig,
+        ),
+        Boolean(linkLedger),
       ),
     [
+      linkLedger,
       areaOptions,
       branchOptions,
       companyOptions,
@@ -2753,6 +2827,9 @@ export default function CustomerPage({
           if (open && variantKey === "master-create") {
             resetDropdownSelections();
             seedTemplateDropdownDefaults();
+            if (linkLedger) {
+              seedLinkedLedgerDropdowns(linkLedger.values, linkLedger.labels);
+            }
           }
           onModalOpenChange?.(open, variantKey);
         }}
@@ -2971,6 +3048,8 @@ export default function CustomerPage({
           };
           if (shouldUpdate && editingItemId !== null) {
             payload.cusId = toUpdateId(editingItemId);
+          } else if (linkLedger) {
+            payload.cusLinkLedId = linkLedger.ledgerId;
           }
           return payload;
         }}

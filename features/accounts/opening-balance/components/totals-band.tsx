@@ -32,11 +32,11 @@ export function TotalsBand({ totals, server, agreement }: TotalsBandProps) {
     <div className={`${styles.totalsBand} ${tone}`}>
       <div className={styles.totalsFigures}>
         <span className={styles.totalsCell}>
-          <span className={styles.totalsCaption}>Σ Dr</span>
+          <span className={styles.totalsCaption}>Total debit</span>
           <span className={styles.totalsValue}>{formatMoney(totals.debit)}</span>
         </span>
         <span className={styles.totalsCell}>
-          <span className={styles.totalsCaption}>Σ Cr</span>
+          <span className={styles.totalsCaption}>Total credit</span>
           <span className={styles.totalsValue}>{formatMoney(totals.credit)}</span>
         </span>
         <span className={styles.totalsCell}>

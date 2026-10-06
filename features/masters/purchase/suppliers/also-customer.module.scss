@@ -1,0 +1,28 @@
+// "Also a Customer" in the supplier modal's footer — the same quiet outline as
+// the customer form's "Save as Default Template", so a footer action that does
+// not save this record never looks like Save.
+.alsoButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: var(--erp-radius);
+  border: 1px solid #cbd5f5;
+  background: #fff;
+  color: #1e293b;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.alsoButton:hover:not(:disabled) {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.alsoButton:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

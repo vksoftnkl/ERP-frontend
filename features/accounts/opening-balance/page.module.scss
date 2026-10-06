@@ -321,6 +321,12 @@
 .rowActive {
   background: var(--row-selected, #f6ecec);
 }
+/* The row the caret is on. ↑/↓ move the caret a row at a time, and without
+   this the only sign of it was the cell's own ring — on a settled Ledger cell,
+   which is read-only and plain, next to nothing. Outranks the stripes. */
+.grid tbody tr:focus-within {
+  background: var(--row-selected, #f6ecec);
+}
 .rowStale td {
   box-shadow: inset 2px 0 0 #b8860b;
 }
@@ -457,81 +463,118 @@
 }
 
 /* ------------------------------------------------------------------ footer */
+/* Two lines: the totals band across the full width, and under it the key hint
+   on the left with Save and Close on the right. */
 .footer {
   display: flex;
-  flex-wrap: wrap;
-  gap: u(0.5);
-  align-items: stretch;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: u(0.35);
 }
 /* The band the difference gets to itself. Squeezed onto the button row these
    figures read as a caption; they are the number that decides whether saving
-   makes sense, so they stand beside the button that saves. */
+   makes sense, so they stand on a line of their own above the button. */
 .totalsBand {
   display: flex;
-  flex: 1 1 auto;
   flex-wrap: wrap;
   gap: u(0.75);
   align-items: center;
   padding: u(0.3) u(0.6);
-  border: 1px solid;
+  border: 1px solid var(--totals-line);
   border-radius: var(--erp-radius, 4px);
+  color: var(--totals-ink);
 }
 /* The WHOLE band takes the colour: an unbalanced opening is a fact about the
-   set, not about one number in it. */
+   set, not about one number in it. The caption pills, figure boxes and note box
+   draw their borders from the same two tokens, so they follow it. */
 .totalsBalanced {
-  border-color: #b5ddbd;
-  background: #eef8f0;
-  color: #1c6b2c;
+  --totals-line: #a9e2c3;
+  --totals-ink: #17703f;
+  background: #ecfaf2;
 }
 .totalsOut {
-  border-color: #eec2c0;
+  --totals-line: #eec2c0;
+  --totals-ink: #7a1a15;
   background: #fdf2f2;
-  color: #7a1a15;
 }
 .totalsFigures {
   display: flex;
-  gap: u(1);
+  flex-wrap: wrap;
+  gap: u(1.6);
 }
 .totalsCell {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: u(0.12);
 }
 .totalsCaption {
-  font-size: u(0.62);
+  padding: 0 u(0.3);
+  border: 1px solid var(--totals-line);
+  border-radius: u(0.1);
+  background: rgba(255, 255, 255, 0.55);
+  font-size: u(0.58);
   font-weight: 700;
-  letter-spacing: 0.06em;
+  line-height: 1.45;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  opacity: 0.8;
 }
 .totalsValue {
-  font-size: u(1.05);
+  min-width: u(4.6);
+  padding: 0 u(0.3);
+  border: none;
+  border-radius: u(0.3);
+  background: rgba(255, 255, 255, 0.35);
+  font-size: u(0.95);
   font-weight: 800;
+  line-height: 1.3;
   font-variant-numeric: tabular-nums;
 }
+/* What the server says, boxed at the far end of the band. */
 .totalsNotes {
   display: flex;
-  flex: 1 1 u(14);
+  flex: 0 1 auto;
   flex-direction: column;
   gap: u(0.1);
+  max-width: u(26);
+  margin-left: auto;
+  padding: u(0.3) u(0.4);
+  border: 1px solid var(--totals-line);
+  border-radius: u(0.3);
 }
 .totalsNote {
   margin: 0;
-  font-size: u(0.7);
+  font-size: u(0.66);
+  color: var(--text-muted, #5f6b65);
 }
 .totalsAlarm {
   margin: 0;
-  font-size: u(0.7);
+  font-size: u(0.66);
   font-weight: 700;
+}
+.footerBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: center;
+  justify-content: space-between;
+}
+.footerHint {
+  font-size: u(0.7);
+  color: var(--text-muted, #666666);
 }
 .footerActions {
   display: flex;
-  gap: u(0.5);
+  gap: u(0.4);
   align-items: center;
+  margin-left: auto;
 }
-.footerHint {
-  font-size: u(0.68);
-  color: var(--text-muted, #666666);
+.footerActions .primaryButton,
+.footerActions .secondaryButton {
+  min-width: u(4.2);
+  padding: u(0.3) u(0.9);
+}
+.footerActions .primaryButton {
+  min-width: u(7.6);
 }
 
 /* ------------------------------------------------------------------- modal */
@@ -641,6 +684,9 @@
 }
 .pickerTable tbody tr {
   cursor: pointer;
+  /* Room for the sticky header, so a row the arrows scroll up to is not
+     parked underneath it. */
+  scroll-margin-top: u(1.8);
 }
 .pickerRowActive {
   background: var(--row-selected, #f6ecec);

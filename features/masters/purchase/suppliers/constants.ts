@@ -1,10 +1,5 @@
 import type { CSSProperties } from "react";
 import type { ERPDynamicSelectOption } from "@/components/design-system/ui/dynamic-modal-form";
-import {
-  COLLECTION_DAY_OPTIONS,
-  COLLECTION_DAY_SHORT_OPTIONS,
-  GST_TYPE_OPTIONS,
-} from "@/utils/constant";
 import type { ConfiguredGridKey } from "@/lib/configured-grids";
 // API Endpoints
 /**
@@ -75,9 +70,48 @@ export const DEFAULT_LOOKUP_OPTION: ERPDynamicSelectOption = {
   value: "",
   label: "",
 };
+// The Qt Supplier Entry's Purchase Type combo, saved as shown. A new supplier
+// starts on LOCAL.
 export const PURCHASE_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
-  { value: "Goods Supplier", label: "Goods Supplier" },
+  { value: "LOCAL", label: "LOCAL" },
+  { value: "IMPORT", label: "IMPORT" },
 ];
+// The Qt Supplier Entry's GST Type combo, saved in these words (sup_gst_type is
+// free text; nothing downstream compares it, and the supplier's GST type never
+// reaches its ledger, so SEZ and Overseas are safe here unlike on the customer).
+// Records the web form saved as REGULAR / COMPOSITION / UNREGISTERED load onto
+// the same entries, matched without regard to case.
+export const SUPPLIER_GST_TYPE_OPTIONS: ERPDynamicSelectOption[] = [
+  { value: "Regular", label: "Regular" },
+  { value: "Composition", label: "Composition" },
+  { value: "SEZ", label: "SEZ" },
+  { value: "Overseas", label: "Overseas" },
+  { value: "Unregistered", label: "Unregistered" },
+];
+export const SUPPLIER_UNREGISTERED_GST_TYPE = "Unregistered";
+// Collection days travel as 0-based day indices, 0 = Mon … 6 = Sun, as the Qt
+// SupCollectionDaysWidget writes them (the shared COLLECTION_DAY_OPTIONS count
+// from 1, so the two clients would read each other's days one off).
+export const SUPPLIER_COLLECTION_DAY_SHORT_OPTIONS: ERPDynamicSelectOption[] = [
+  { value: "0", label: "Mon" },
+  { value: "1", label: "Tue" },
+  { value: "2", label: "Wed" },
+  { value: "3", label: "Thu" },
+  { value: "4", label: "Fri" },
+  { value: "5", label: "Sat" },
+  { value: "6", label: "Sun" },
+];
+export const SUPPLIER_COLLECTION_DAY_NAMES = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+] as const;
+// Credit Days is a 0–999 spin box on the Qt form.
+export const SUPPLIER_MAX_CREDIT_DAYS = 999;
 // Lookup Keys for Data Extraction
 export const LOOKUP_KEYS = {
   id: ["supId", "sup_id", "supplier_id", "supplierId", "id", "_id"],
@@ -176,8 +210,6 @@ export const SUPPLIER_GROUP_DETAIL_KEYS = {
   description: ["spgDesc", "spg_desc", "description", "desc"],
   active: ["spgIsActive", "spg_is_active", "isActive", "is_active", "status"],
 } as const;
-// GST Type Values
-export const GST_TYPE_VALUES = new Set(GST_TYPE_OPTIONS.map((option) => option.value));
 // Modal Initial Form Values
 export const STATE_MODAL_INITIAL_VALUES = {
   stateCode: "",
@@ -197,7 +229,7 @@ export const SUPPLIER_INITIAL_FORM_VALUES = {
   supCompanyId: "",
   supBranchId: "",
   supGroupId: "",
-  supPurchaseType: "",
+  supPurchaseType: "LOCAL",
   supName: "",
   supShort: "",
   supAddr1: "",
@@ -221,7 +253,8 @@ export const SUPPLIER_INITIAL_FORM_VALUES = {
   supGstNo: "",
   supStateCode: "",
   supPanNo: "",
-  supGstType: "",
+  // The Qt combo has no blank entry, so a new supplier starts on its first item.
+  supGstType: "Regular",
   supSupCst: "",
   supDrugLiscenceNo: "",
   supRegionName: "",
@@ -237,10 +270,6 @@ export const SUPPLIER_INITIAL_FORM_VALUES = {
   supIsActive: "true",
   supCreatedBy: "",
   supModifiedBy: "",
+  // Never shown: tells field handlers a saved record is open (see edit-mode-field).
+  __editing: "false",
 } as const;
-// Re-export shared constants
-export {
-  COLLECTION_DAY_OPTIONS,
-  COLLECTION_DAY_SHORT_OPTIONS,
-  GST_TYPE_OPTIONS,
-};

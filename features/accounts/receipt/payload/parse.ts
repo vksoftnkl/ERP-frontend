@@ -85,6 +85,7 @@ export function parseOpenBills(rows: readonly OpenBillWire[] | undefined): BillR
     receiveTyped: false,
     writeoffApprovedBy: null,
     note: "",
+    tempCredit: row.tempCredit ?? null,
   }));
 }
 

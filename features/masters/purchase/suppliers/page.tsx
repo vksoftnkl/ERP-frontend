@@ -62,25 +62,30 @@ import {
   SUPPLIER_GROUP_MODAL_INITIAL_VALUES,
   STATE_LOOKUP_ARRAY_KEYS,
   SUPPLIER_GROUP_LOOKUP_ARRAY_KEYS,
-  COLLECTION_DAY_OPTIONS,
+  PURCHASE_TYPE_OPTIONS,
 } from "./constants";
 import type { SupplierFormValues } from "./types";
 import {
   GSTIN_LOOKUP_ENDPOINT,
+  GSTIN_LOOKUP_MESSAGES,
   fetchGstinDetails,
 } from "@/features/masters/shared/gstin-lookup";
+import { isEditingValues, withEditMode } from "@/features/masters/shared/edit-mode-field";
+import { confirm } from "@/lib/confirm";
 import {
   buildSupplierLookupValues,
   extractDetailSource,
+  formatCollectionDays,
+  isStandardPurchaseType,
   mapStateDetailToFormValues,
   mapSupplierGroupDetailToFormValues,
   toSupplierFormValues,
   resolveOptionFromShortcut,
+  withStoredPurchaseType,
 } from "./transformers";
-import {
-  validateSupplierGstin,
-  buildSupplierRequestPayload,
-} from "./form-builder";
+import { buildSupplierRequestPayload } from "./form-builder";
+import { resolveSupplierRecordId } from "./table-builder";
+import { useAlsoCustomer } from "./use-also-customer";
 import {
   buildSupplierFormFields,
   buildStateModalFields,
@@ -211,6 +216,20 @@ export default function SuppliersMasterPage() {
     },
     [],
   );
+  // A Purchase Type outside LOCAL / IMPORT on the record being edited (the web
+  // form once saved "Goods Supplier"), kept selectable so it is not lost.
+  const [storedPurchaseType, setStoredPurchaseType] = useState("");
+  const purchaseTypeOptions = useMemo(
+    () => withStoredPurchaseType(PURCHASE_TYPE_OPTIONS, storedPurchaseType),
+    [storedPurchaseType],
+  );
+  // The supplier loaded into the modal, and which modal is open, for the
+  // "Also a Customer" footer action (saved records being edited only).
+  const [loadedSupplierId, setLoadedSupplierId] = useState<string | null>(null);
+  const [openModalVariant, setOpenModalVariant] = useState<string | null>(null);
+  const alsoCustomer = useAlsoCustomer(
+    openModalVariant === "master-update" ? loadedSupplierId : null,
+  );
   const handleRemoveBankAccount = useCallback((rowKey: string) => {
     setBankAccounts((rows) => rows.filter((row) => row.rowKey !== rowKey));
   }, []);
@@ -241,8 +260,14 @@ export default function SuppliersMasterPage() {
     }),
     [wantDelete],
   );
-  // Cache for GST Lookups
-  const gstLookupCacheRef = useRef<Record<string, Record<string, string>>>({});
+  // Cache for GST Lookups: the form patch, and the registration's status for
+  // the "not Active" warning, which is repeated on every fill.
+  const gstLookupCacheRef = useRef<
+    Record<string, { values: Record<string, string>; status: string }>
+  >({});
+  // GSTINs whose lookup failure has already been reported in a popup, so
+  // retyping the same number marks the field without asking again.
+  const gstLookupReportedFailuresRef = useRef<Set<string>>(new Set());
   // GET /gst/search: its failures show on the GSTIN field, not as a popup.
   const { getAll: searchGstin } = useApi<unknown>(GSTIN_LOOKUP_ENDPOINT, {
     toast: { error: false },
@@ -701,42 +726,89 @@ export default function SuppliersMasterPage() {
     supplierGroupSaveLoading,
   ]);
   // Form Field Value Change Handlers
+  // The GSTIN fills the form from the GST portal (GET /gst/search) once all 15
+  // characters are in. As on the Qt form: a saved record is only overwritten
+  // after the operator agrees, a registration that is not Active is filled but
+  // flagged, and a failed lookup says why in a popup (the field's own error
+  // text is hidden on this form).
   const handleSupplierGstinValueChange =
     useCallback<ERPDynamicFieldValueChangeHandler>(
-      async ({ value }) => {
+      async ({ value, values }) => {
         const normalizedGstin = value.trim().toUpperCase();
         const normalizedValuePatch =
           normalizedGstin && normalizedGstin !== value
             ? { supGstNo: normalizedGstin }
             : undefined;
+        const typingOnly = {
+          ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
+          errors: { supGstNo: null },
+        };
         if (!GST_LOOKUP_PATTERN.test(normalizedGstin)) {
-          return {
-            ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
-            errors: { supGstNo: null },
-          };
+          return typingOnly;
         }
-        const cachedValues = gstLookupCacheRef.current[normalizedGstin];
-        if (cachedValues) {
-          return {
-            values: cachedValues,
-            errors: { supGstNo: null },
-          };
+        if (
+          isEditingValues(values) &&
+          !(await confirm({
+            title: "Fill from GST portal",
+            message:
+              "Replace this record's name, registration and address with what the " +
+              `GST portal holds for ${normalizedGstin}?`,
+            confirmLabel: "Replace",
+            iconVariant: "replace",
+          }))
+        ) {
+          return typingOnly;
         }
-        const result = await fetchGstinDetails(searchGstin, normalizedGstin);
-        if (!result.ok) {
-          return {
-            ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
-            errors: { supGstNo: result.message },
+        let lookup = gstLookupCacheRef.current[normalizedGstin];
+        if (!lookup) {
+          const result = await fetchGstinDetails(searchGstin, normalizedGstin);
+          if (!result.ok) {
+            if (
+              result.message !== GSTIN_LOOKUP_MESSAGES.interrupted &&
+              !gstLookupReportedFailuresRef.current.has(normalizedGstin)
+            ) {
+              gstLookupReportedFailuresRef.current.add(normalizedGstin);
+              toast.warning(`${result.message} You can still fill the details in by hand.`);
+            }
+            return {
+              ...(normalizedValuePatch ? { values: normalizedValuePatch } : {}),
+              errors: { supGstNo: result.message },
+            };
+          }
+          lookup = {
+            values: buildSupplierLookupValues(result.payload, stateNameByCode),
+            status: (result.payload.status ?? "").trim(),
           };
+          gstLookupCacheRef.current[normalizedGstin] = lookup;
         }
-        const resolvedValues = buildSupplierLookupValues(result.payload, stateNameByCode);
-        gstLookupCacheRef.current[normalizedGstin] = resolvedValues;
+        // A cancelled or suspended registration still answers; filling the form
+        // is fine, billing against it is not.
+        if (lookup.status && lookup.status.toLowerCase() !== "active") {
+          toast.warning(
+            `The GST portal lists ${normalizedGstin} as "${lookup.status}". The details ` +
+              "were filled in, but check before billing this party.",
+          );
+        }
+        // Pin the filled state so the lazy State dropdown can show it unopened.
+        const lookedStateName = (lookup.values.supStateName ?? "").trim();
+        if (lookedStateName) {
+          const option: ERPDynamicSelectOption = {
+            value: lookedStateName,
+            label: lookedStateName,
+          };
+          pinnedDropdownOptionRef.current.supStateName = option;
+          applyDropdownOptions("supStateName", [{ value: "", label: "" }, option]);
+          const lookedStateCode = (lookup.values.supStateCode ?? "").trim();
+          if (lookedStateCode) {
+            setStateCodeByName((prev) => ({ ...prev, [lookedStateName]: lookedStateCode }));
+          }
+        }
         return {
-          values: resolvedValues,
+          values: lookup.values,
           errors: { supGstNo: null },
         };
       },
-      [searchGstin, stateNameByCode],
+      [applyDropdownOptions, searchGstin, stateNameByCode],
     );
   // First invalid bank-account row/field (or null), recomputed as rows change. Drives
   // both the inline cell highlight and the custom field's submit-blocking validation.
@@ -1050,11 +1122,15 @@ export default function SuppliersMasterPage() {
           handleStateEditShortcut,
           handleSupplierGstinValueChange,
           bankAccountsField,
+          purchaseTypeOptions,
+          stateCodeByName,
         ),
         widgetFieldConfig,
       ),
     [
       bankAccountsField,
+      purchaseTypeOptions,
+      stateCodeByName,
       branchOptions,
       companyOptions,
       lazyDropdownHandlers,
@@ -1090,7 +1166,9 @@ export default function SuppliersMasterPage() {
                 checked={wantDelete}
                 onChange={(event) => setWantDelete(event.target.checked)}
               />
-              Show deleted records
+              {/* Grid 63 binds `sup_is_deleted = isup_is_deleted`: ticked, the
+                  list holds the deleted suppliers alone, as the Qt label says. */}
+              Show only deleted
             </label>
           </div>
         }
@@ -1115,34 +1193,37 @@ export default function SuppliersMasterPage() {
         modalHideFieldHelperText
         modalHideFieldErrorText
         modalFocusFirstInvalidFieldOnValidationError
+        // The Qt form explains a refused save ("GST No Required", "State
+        // Mismatch") in a warning box; with the field error text hidden, this is
+        // the only place the reason shows.
+        modalShowValidationErrorPopup
         modalEnableArrowKeyFieldNavigation
+        modalFooterLeadingActions={({ variantKey }) =>
+          alsoCustomer.renderFooterAction(variantKey)
+        }
         formTitle="Supplier Form"
         formDescription="Create and update suppliers."
         customFields={supplierFormFields}
         columnRenderOverrides={{
-          sup_collection_days: (row) => {
-            const value = row.__source?.sup_collection_days;
-            if (!value) return "-";
-            const days = Array.isArray(value) ? value : String(value).split(",").filter(Boolean);
-            const dayNames = days.map((d) => {
-              const found = COLLECTION_DAY_OPTIONS.find((opt) => opt.value === String(d).trim());
-              return found ? found.label : String(d);
-            });
-            return dayNames.filter(Boolean).join(", ") || "-";
-          },
+          // 0 = Monday … 6 = Sunday, as the Qt form stores them.
+          sup_collection_days: (row) => formatCollectionDays(row.__source?.sup_collection_days),
         }}
         createInitialValues={SUPPLIER_INITIAL_FORM_VALUES}
         onModalOpenChange={(open, variantKey) => {
           // Clear the lazy dropdowns when the create modal opens so no stale selection
           // from a previously edited supplier lingers (they reload on open).
+          setOpenModalVariant(open ? variantKey : null);
           if (open && variantKey === "master-create") {
             resetDropdownSelections();
             setBankAccounts([]);
+            setStoredPurchaseType("");
+            setLoadedSupplierId(null);
           }
           // Drop the edited bank rows on close so the next create starts empty (edit/view
           // re-seed them via mapFormValues before the modal opens).
           if (!open) {
             setBankAccounts([]);
+            setLoadedSupplierId(null);
           }
         }}
         mapFormValues={({ source, defaults }) => {
@@ -1159,7 +1240,11 @@ export default function SuppliersMasterPage() {
           seedDropdownSelections(rowSource, values);
           // Seed the bank-accounts grid from the loaded record's nested ledgerBankAccount.
           setBankAccounts(extractLedgerBankAccountRows(rowSource));
-          return values;
+          setStoredPurchaseType(
+            isStandardPurchaseType(values.supPurchaseType) ? "" : values.supPurchaseType,
+          );
+          setLoadedSupplierId(source ? resolveSupplierRecordId(rowSource) : null);
+          return withEditMode(values, source !== null);
         }}
         buildRequestPayload={({ values, shouldUpdate, editingItemId }) => {
           const payload = buildSupplierRequestPayload(
@@ -1207,6 +1292,7 @@ export default function SuppliersMasterPage() {
         onOpenChange={(open) => setVisibilityModalOpen(open)}
         onSubmit={() => handleVisibilitySubmit()}
       />
+      {alsoCustomer.linkedEntry}
     </>
   );
 }

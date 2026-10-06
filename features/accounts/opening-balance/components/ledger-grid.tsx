@@ -40,6 +40,7 @@ import {
   GRID_ATTR,
   LOOKUP_ATTR,
   ROW_ATTR,
+  focusRow,
   moveCellFocus,
   moveRowFocus,
 } from "./grid-focus";
@@ -387,8 +388,17 @@ export function LedgerGrid(props: LedgerGridProps) {
                    * wired to the breakup: it is how a cell is opened for
                    * editing, and taking it over made the Qt screen answer "not a
                    * bill-wise party" where the operator wanted to type a figure.
+                   *
+                   * A click on a read-out (Group, Nature, a chip) focuses
+                   * nothing, so it also puts the caret on the row — the row
+                   * highlight follows the caret, and ↑/↓ need a cell to step from.
                    */
-                  onClick={() => onSelectRow(row)}
+                  onClick={(event) => {
+                    onSelectRow(row);
+                    if (!event.currentTarget.contains(document.activeElement)) {
+                      focusRow(LEDGER_GRID_NAME, row.key);
+                    }
+                  }}
                   onFocus={() => onSelectRow(row)}
                 >
                   {visible.map((column) => (

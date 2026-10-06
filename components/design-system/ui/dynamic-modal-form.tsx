@@ -87,6 +87,19 @@ import {
 import { requestDataRefresh } from "@/lib/data-freshness";
 import { matchesSearchTokens, searchTokens } from "@/lib/search-text";
 
+/**
+ * The open modals, oldest first. Each one listens for its keys (Escape, Ctrl+S /
+ * F12, ArrowDown) on `window`, so when one form opens over another — a State
+ * or Customer entry over the Supplier form — the key would reach both: Escape
+ * closed the pair and Ctrl+S saved the form underneath as well. Only the last
+ * one opened answers; the one below takes its keys back when it closes.
+ */
+const openModalStack: symbol[] = [];
+
+function isTopmostOpenModal(token: symbol): boolean {
+  return openModalStack[openModalStack.length - 1] === token;
+}
+
 export function ERPDynamicModalForm({
   title,
   description,
@@ -153,6 +166,7 @@ export function ERPDynamicModalForm({
     SEARCH_SELECT_LIST_MAX_HEIGHT,
   );
   const formRef = useRef<HTMLFormElement | null>(null);
+  const modalStackTokenRef = useRef<symbol>(Symbol("erp-dynamic-modal"));
   const [sectionExpandedByVariant, setSectionExpandedByVariant] = useState<
     Record<string, Record<string, boolean>>
   >({});
@@ -285,11 +299,28 @@ export function ERPDynamicModalForm({
     if (!isOpen) {
       return;
     }
+    const token = modalStackTokenRef.current;
+    openModalStack.push(token);
+    return () => {
+      const index = openModalStack.lastIndexOf(token);
+      if (index >= 0) {
+        openModalStack.splice(index, 1);
+      }
+    };
+  }, [isOpen]);
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) {
+      if (event.defaultPrevented || !isTopmostOpenModal(modalStackTokenRef.current)) {
         return;
       }
       if (event.key === "Escape") {
+        // Marked as taken: React may commit this close (and pop the stack)
+        // before a modal underneath runs its own listener, and that one must
+        // still see that the key was spent.
+        event.preventDefault();
         if (openSearchField) {
           setOpenSearchField(null);
           setSearchActiveOptionIndex((current) => {

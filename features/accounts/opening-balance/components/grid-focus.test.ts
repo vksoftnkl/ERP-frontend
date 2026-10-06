@@ -19,6 +19,7 @@ import {
   LOOKUP_ATTR,
   ROW_ATTR,
   focusGrid,
+  focusRow,
   focusedRowKey,
   moveCellFocus,
   moveRowFocus,
@@ -251,6 +252,34 @@ describe("focusGrid — the F1 step between the two panels", () => {
   it("answers false for a panel that is not on screen", () => {
     build(LEDGER_SET);
     expect(focusGrid("bills")).toBe(false);
+  });
+
+  it("arrives from below on the trailing blank row's picker for ↑", () => {
+    build(LEDGER_SET);
+    expect(focusGrid("ledgers", "last")).toBe(true);
+    expect(focused).toMatchObject({ row: "r3", field: "ledger" });
+  });
+});
+
+describe("focusRow — a click on a row's read-out puts the caret on it", () => {
+  it("lands where stepping into the row would", () => {
+    build(LEDGER_SET);
+    expect(focusRow("ledgers", "r1")).toBe(true);
+    expect(focused).toMatchObject({ row: "r1", field: "opening" });
+  });
+
+  it("keeps a bill-wise row on its Ledger cell, the only one it has", () => {
+    // Without a focusable cell the row could not be highlighted and ↑/↓ had
+    // nothing to step from.
+    build(LEDGER_SET);
+    expect(focusRow("ledgers", "r2")).toBe(true);
+    expect(focused).toMatchObject({ row: "r2", field: "ledger" });
+  });
+
+  it("answers false for a row that is not on screen", () => {
+    build(LEDGER_SET);
+    expect(focusRow("ledgers", "gone")).toBe(false);
+    expect(focused).toBeNull();
   });
 });
 

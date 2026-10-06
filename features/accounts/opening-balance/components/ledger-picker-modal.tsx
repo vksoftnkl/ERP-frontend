@@ -46,6 +46,9 @@ export function LedgerPickerModal(props: LedgerPickerModalProps) {
   const [page, setPage] = useState(1);
   const [activeIndex, setActiveIndex] = useState(0);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  /** Where the pointer last was, to tell a real move from a row sliding under it. */
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => searchRef.current?.focus(), 0);
@@ -73,6 +76,38 @@ export function LedgerPickerModal(props: LedgerPickerModalProps) {
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const used = useMemo(() => new Set(usedLedgerIds), [usedLedgerIds]);
 
+  // The list scrolls inside the panel, so the row the arrows move to has to be
+  // brought into view — below the panel's edge it was highlighted out of sight.
+  useEffect(() => {
+    bodyRef.current
+      ?.querySelector('[data-active="true"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, rows]);
+
+  /**
+   * The mouse takes the highlight only when it MOVES.
+   *
+   * Hovering used to be `mouseenter`, which also fires when a row slides under a
+   * pointer resting on the list — when the picker opens under it, when a search
+   * refills it, and on every scroll the arrows cause. So ↓ moved the highlight,
+   * the list scrolled, and the row under the idle mouse took it straight back.
+   */
+  const onRowMouseMove = (event: React.MouseEvent, index: number) => {
+    const last = pointerRef.current;
+    pointerRef.current = { x: event.clientX, y: event.clientY };
+    if (!last || (last.x === event.clientX && last.y === event.clientY)) {
+      return;
+    }
+    if (index !== activeIndex) {
+      setActiveIndex(index);
+    }
+  };
+
+  const turnPage = (to: number) => {
+    setPage(to);
+    setActiveIndex(0);
+  };
+
   const choose = (row: LedgerPickerRow) => {
     onPick({
       ledId: row.led_id,
@@ -91,7 +126,7 @@ export function LedgerPickerModal(props: LedgerPickerModalProps) {
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((current) => Math.min(rows.length - 1, current + 1));
+      setActiveIndex((current) => Math.max(0, Math.min(rows.length - 1, current + 1)));
       return;
     }
     if (event.key === "ArrowUp") {
@@ -136,7 +171,7 @@ export function LedgerPickerModal(props: LedgerPickerModalProps) {
             />
           </div>
 
-          <div className={styles.modalBody}>
+          <div ref={bodyRef} className={styles.modalBody}>
             <table className={styles.pickerTable}>
               <thead>
                 <tr>
@@ -153,7 +188,8 @@ export function LedgerPickerModal(props: LedgerPickerModalProps) {
                     className={`${index === activeIndex ? styles.pickerRowActive : ""} ${
                       used.has(row.led_id) ? styles.pickerRowUsed : ""
                     }`}
-                    onMouseEnter={() => setActiveIndex(index)}
+                    data-active={index === activeIndex ? "true" : undefined}
+                    onMouseMove={(event) => onRowMouseMove(event, index)}
                     onClick={() => choose(row)}
                   >
                     <td>{row.led_name}</td>
@@ -182,7 +218,7 @@ export function LedgerPickerModal(props: LedgerPickerModalProps) {
                 type="button"
                 className={styles.secondaryButton}
                 disabled={page <= 1}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                onClick={() => turnPage(Math.max(1, page - 1))}
               >
                 Previous
               </button>
@@ -190,7 +226,7 @@ export function LedgerPickerModal(props: LedgerPickerModalProps) {
                 type="button"
                 className={styles.secondaryButton}
                 disabled={page >= pageCount}
-                onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+                onClick={() => turnPage(Math.min(pageCount, page + 1))}
               >
                 Next
               </button>

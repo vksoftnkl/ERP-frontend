@@ -241,7 +241,6 @@ function buildSectionFormFields(sectionOptions: ERPDynamicSelectOption[]): ERPDy
       label: "Color Code",
       type: "color",
       helperText: "Choose a color.",
-      controlStyle: { width: "96px", padding: "0.2rem" },
     },
     {
       name: "masterDescription",
@@ -627,17 +626,17 @@ export default function ItemSectionMasterPage() {
       requestPayloadKeys={REQUEST_PAYLOAD_KEYS}
       styles={styles}
       listTitle="Item Section List"
-      listTitleOverride="Section List"
+      listTitleOverride="Item Section  List"
       createLabel="Add "
-      codeColumnHeader="Section Code"
-      nameColumnHeader="Section Name"
+      codeColumnHeader="Item Section Code"
+      nameColumnHeader="Item Section Name"
       nameFieldLabel="Item Section Name"
       nameFieldPlaceholder="Frozen Foods"
       formTitle="Item Section Form"
-      formDescription="Create and update item sections."
-      viewModalTitle="Section Details"
-      createModalTitle="Section Entry"
-      editModalTitle="Edit Section Entry"
+      formDescription="Create and update items Sections."
+      viewModalTitle="Item Section Details"
+      createModalTitle="Item Section Entry"
+      editModalTitle="Edit Item Section Entry"
       modalPanelStyle={{ width: "min(52rem, calc(100vw - 2rem))", maxHeight: "min(82vh, 42rem)" }}
       customFields={sectionFormFields}
       createInitialValues={SECTION_INITIAL_FORM_VALUES}

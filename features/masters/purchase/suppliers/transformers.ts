@@ -15,7 +15,7 @@ import {
 } from "@/app/master/_shared/crud-utils";
 import {
   DEFAULT_LOOKUP_OPTION,
-  GST_TYPE_VALUES,
+  PURCHASE_TYPE_OPTIONS,
   STATE_DETAIL_KEYS,
   STATE_LOOKUP_ARRAY_KEYS,
   STATE_LOOKUP_CODE_KEYS,
@@ -24,6 +24,8 @@ import {
   SUPPLIER_GROUP_ID_KEYS,
   SUPPLIER_GROUP_LOOKUP_ARRAY_KEYS,
   SUPPLIER_GROUP_NAME_KEYS,
+  SUPPLIER_COLLECTION_DAY_NAMES,
+  SUPPLIER_GST_TYPE_OPTIONS,
 } from "./constants";
 import {
   gstinLookupToValues,
@@ -95,9 +97,51 @@ export function toNullableInteger(value: string): number | null {
 }
 
 // GST Type Conversion
+/**
+ * A stored GST type as the select's entry ("Regular", "SEZ", …), matched
+ * without regard to case so the REGULAR / COMPOSITION / UNREGISTERED the web
+ * form used to save still load; anything else is "".
+ */
 export function toGstTypeValue(value: string): string {
   const normalized = value.trim().toUpperCase();
-  return GST_TYPE_VALUES.has(normalized) ? normalized : "";
+  return (
+    SUPPLIER_GST_TYPE_OPTIONS.find((option) => option.value.toUpperCase() === normalized)
+      ?.value ?? ""
+  );
+}
+
+/**
+ * The Purchase Type options, plus the record's own value when it is not one of
+ * them (the web form once saved "Goods Supplier"), so opening such a record
+ * neither blanks nor silently rewrites it.
+ */
+export function withStoredPurchaseType(
+  options: ERPDynamicSelectOption[],
+  storedValue: string,
+): ERPDynamicSelectOption[] {
+  const value = storedValue.trim();
+  if (!value || options.some((option) => option.value === value)) {
+    return options;
+  }
+  return [...options, { value, label: value }];
+}
+
+export function isStandardPurchaseType(value: string): boolean {
+  return PURCHASE_TYPE_OPTIONS.some((option) => option.value === value.trim());
+}
+
+/** "Monday, Wednesday" for the list's Collection Days cell; "-" when none. */
+export function formatCollectionDays(value: unknown): string {
+  const entries = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.replace(/[{}]/g, "").split(",")
+      : [];
+  const names = entries
+    .map((entry) => Number.parseInt(String(entry).trim(), 10))
+    .filter((index) => Number.isInteger(index) && index >= 0)
+    .map((index) => SUPPLIER_COLLECTION_DAY_NAMES[index] ?? String(index));
+  return names.join(", ") || "-";
 }
 
 
@@ -264,8 +308,13 @@ export function buildSupplierLookupValues(
 ): GstLookupResult {
   const looked = gstinLookupToValues(payload, SUPPLIER_GSTIN_LOOKUP_FIELDS, {
     stateNameByCode,
-    allowedRegTypes: Array.from(GST_TYPE_VALUES),
+    allowedRegTypes: SUPPLIER_GST_TYPE_OPTIONS.map((option) => option.value.toUpperCase()),
   });
+  // The lookup answers REGULAR / COMPOSITION / UNREGISTERED / SEZ; the select
+  // holds the Qt words.
+  if (looked.supGstType) {
+    looked.supGstType = toGstTypeValue(looked.supGstType);
+  }
   const values: GstLookupResult = {
     supGstNo: "",
     supPanNo: "",

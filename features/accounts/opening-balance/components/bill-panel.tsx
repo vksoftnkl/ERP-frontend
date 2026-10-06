@@ -39,6 +39,7 @@ import {
   FOCUS_STOP_ATTR,
   GRID_ATTR,
   ROW_ATTR,
+  focusRow,
   moveCellFocus,
   moveRowFocus,
 } from "./grid-focus";
@@ -337,6 +338,13 @@ export function BillPanel(props: BillPanelProps) {
                 ]
                   .filter(Boolean)
                   .join(" ")}
+                // A click on a read-out focuses nothing; put the caret on the
+                // row so it highlights and ↑/↓ carry on from it.
+                onClick={(event) => {
+                  if (!event.currentTarget.contains(document.activeElement)) {
+                    focusRow(BILL_GRID_NAME, row.key);
+                  }
+                }}
               >
                 {visible.map((column) => (
                   <td key={column.key} className={ALIGN_CLASS[column.align]}>

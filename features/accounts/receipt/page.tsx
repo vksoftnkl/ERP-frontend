@@ -10,15 +10,33 @@
  * the cheque register and for anything that wants to link to one receipt; this
  * page is what the menu points at.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ReceiptScreen from "./receipt-screen";
 import { ReceiptListView } from "./components/receipt-list-view";
+import { RECEIPT_ROUTE, parseReceiptCollect, type TempCreditCollect } from "./domain/collect";
 import type { ReceiptKeys } from "./receipt.types";
 
-type View = { screen: "list" } | { screen: "entry"; keys?: ReceiptKeys };
+type View =
+  | { screen: "list" }
+  | { screen: "entry"; keys?: ReceiptKeys; collect?: TempCreditCollect | null };
 
 export default function ReceiptPage() {
-  const [view, setView] = useState<View>({ screen: "list" });
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Opened from the Temp Credits register to collect one (`?collect=1…`): the
+  // voucher comes up straight away on that party and bill.
+  const [view, setView] = useState<View>(() => {
+    const collect = parseReceiptCollect(searchParams);
+    return collect ? { screen: "entry", collect } : { screen: "list" };
+  });
+  // The hand-over is consumed once: the query comes off the URL so a reload
+  // or Back lands on a plain receipt, not on a second collection.
+  useEffect(() => {
+    if (parseReceiptCollect(searchParams)) {
+      router.replace(RECEIPT_ROUTE);
+    }
+  }, [router, searchParams]);
 
   const onOpen = useCallback((keys: ReceiptKeys) => {
     setView({ screen: "entry", keys });
@@ -37,8 +55,9 @@ export default function ReceiptPage() {
       // Keyed on the document, so picking a different receipt from the
       // register starts the screen over rather than leaving it on the last
       // one's state — the open-by-keys effect runs once per mount.
-      key={view.keys?.avhVoucherId ?? "new"}
+      key={view.keys?.avhVoucherId ?? (view.collect ? "collect" : "new")}
       initialKeys={view.keys}
+      collect={view.collect ?? null}
       onBackToList={onBackToList}
     />
   );

@@ -254,6 +254,14 @@ export type CrudMasterPageProps = {
    */
   deleteActionLabel?: string;
   /**
+   * A register whose rows are made somewhere else and never edited here — a
+   * temp credit is raised by a bill's tender, not keyed on its own list. Add,
+   * Edit and Delete leave the toolbar, and their keys (Alt+C, Alt+A, F1-F3)
+   * do nothing. Opening a row (Ctrl+Enter, double-click) still reaches
+   * `onViewAction`, and the page's own verbs go in `toolbarActions`.
+   */
+  hideWriteActions?: boolean;
+  /**
    * Bind the list's function keys, and say so under the grid.
    *
    * OFF by default: these are keys the whole window listens for, and a page

@@ -2475,6 +2475,7 @@ export default function CrudMasterPage({
   deleteConfirmMessage,
   deleteConfirmNote,
   deleteActionLabel = "Delete",
+  hideWriteActions = false,
   hideListPage = false,
   hideRowsWhenAllGridColumnFiltersDisabled = false,
   onModalOpenChange,
@@ -3003,9 +3004,11 @@ export default function CrudMasterPage({
     href: permissionHref,
     disabled: disablePermissionGating,
   });
-  const canCreateRecords = menuPermissions.canCreate;
-  const canEditRecords = menuPermissions.canEdit;
-  const canDeleteRecords = menuPermissions.canDelete;
+  // A read-only register takes the rights away here, so every key and every
+  // entrance that checks them refuses along with the hidden buttons.
+  const canCreateRecords = menuPermissions.canCreate && !hideWriteActions;
+  const canEditRecords = menuPermissions.canEdit && !hideWriteActions;
+  const canDeleteRecords = menuPermissions.canDelete && !hideWriteActions;
   const canExportRecords = menuPermissions.canExport;
   const canPrintRecords = menuPermissions.canPrint;
 
@@ -3234,8 +3237,12 @@ export default function CrudMasterPage({
     resetSaveState();
     resetDetailsState();
     setEditingItemId(null);
+    // Values handed in (a name typed into a dropdown, a ledger being linked)
+    // go OVER the create defaults, not instead of them — replacing them dropped
+    // the page's own defaults (Active, the saved form template) from the form.
+    const defaults = createInitialValues ?? INITIAL_FORM_STATE;
     modalControllerRef.current?.openModal("master-create", {
-      values: overrideValues ?? createInitialValues ?? INITIAL_FORM_STATE,
+      values: overrideValues ? { ...defaults, ...overrideValues } : defaults,
     });
   }, [createInitialValues, resetDetailsState, resetSaveState]);
   const handleCreateAction = useCallback(() => {
@@ -4361,6 +4368,8 @@ export default function CrudMasterPage({
 
                 {/* Icon Toolbar */}
                 <div className={`${styles.iconToolbar} erp-ms-toolbar`}>
+                  {hideWriteActions ? null : (
+                  <>
                   <button
                     type="button"
                     className={`${styles.iconBtn} ${styles.iconBtnAdd} erp-ms-tbtn erp-ms-tbtn--primary`}
@@ -4422,6 +4431,8 @@ export default function CrudMasterPage({
                     <span>{deleteActionLabel}</span>
                   </button>
                   <span className="erp-ms-tsep" aria-hidden="true" />
+                  </>
+                  )}
                   <button
                     type="button"
                     className={`${styles.iconBtn} ${styles.iconBtnRefresh} erp-ms-tbtn`}

@@ -1,15 +1,9 @@
-import { validateGstin } from "@/utils/validation";
 import {
   toNullableString,
   toUpdateId,
 } from "@/app/master/_shared/crud-utils";
-import {
-  GST_LOOKUP_HELPER_TEXT,
-  GST_TYPE_VALUES,
-  LOOKUP_KEYS,
-  PURCHASE_TYPE_OPTIONS,
-  SUPPLIER_INITIAL_FORM_VALUES,
-} from "./constants";
+import { validateGstinField } from "@/features/masters/shared/gst-registration";
+import { SUPPLIER_MAX_CREDIT_DAYS } from "./constants";
 import type { SupplierFormValues } from "./types";
 import {
   toGstTypeValue,
@@ -18,18 +12,26 @@ import {
 } from "./transformers";
 
 // Validation Functions
+/**
+ * The Qt Supplier Entry's GSTIN rule: every GST type but Unregistered needs a
+ * GSTIN; a GSTIN must pass the format and mod-36 checksum; and its first two
+ * digits must be the code of the State picked (the form stores the state NAME,
+ * so the code comes from `stateCodeByName`, falling back to the record's own).
+ */
 export function validateSupplierGstin(
   value: string,
   values: Record<string, string>,
+  stateCodeByName: Record<string, string>,
 ): string | null {
-  const normalized = value.trim();
-  const gstType = toGstTypeValue(values.supGstType ?? "");
-  if (!normalized) {
-    return gstType === "REGULAR"
-      ? "GST No is required when GST Type is Regular."
-      : null;
-  }
-  return validateGstin(normalized);
+  return validateGstinField(value, values, {
+    fields: { gstin: "supGstNo", regType: "supGstType", pan: "supPanNo" },
+    stateCodeOf: (current) => {
+      const stateName = (current.supStateName ?? "").trim();
+      return stateName
+        ? (stateCodeByName[stateName] ?? (current.supStateCode ?? "").trim())
+        : "";
+    },
+  });
 }
 
 export function validateSupplierPan(value: string): string | null {
@@ -79,7 +81,10 @@ export function buildSupplierRequestPayload(
     supWebsiteAddress: toNullableString(values.supWebsiteAddress ?? ""),
     supChequePreName: toNullableString(values.supChequePreName ?? ""),
     supNotes: toNullableString(values.supNotes ?? ""),
-    supCreditDays: toNonNegativeInteger(values.supCreditDays ?? "0", 0),
+    supCreditDays: Math.min(
+      toNonNegativeInteger(values.supCreditDays ?? "0", 0),
+      SUPPLIER_MAX_CREDIT_DAYS,
+    ),
     supCashDiscPerc: toNonNegativeNumber(values.supCashDiscPerc ?? "0", 0),
     supCollectionDays: parseCollectionDays(values.supCollectionDays ?? ""),
     supGstNo: toNullableString((values.supGstNo ?? "").trim().toUpperCase()),

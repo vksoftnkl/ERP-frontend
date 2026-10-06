@@ -126,6 +126,21 @@ export type OpenBillWire = {
   ppdSuggested: number;
   tcsAmount: number;
   tcsPending: number;
+  /**
+   * The temp credit behind the bill (HANDOVER §7): who took the goods on a
+   * promise. Null on an ordinary bill. `?mobile=` on the request keeps only
+   * the bills whose credit was given to that mobile.
+   */
+  tempCredit?: OpenBillTempCredit | null;
+};
+
+export type OpenBillTempCredit = {
+  atcId: string;
+  name: string | null;
+  mobile: string | null;
+  dueDate: string | null;
+  balance: number;
+  status: string | null;
 };
 
 export type OpenCreditWire = {
@@ -729,6 +744,11 @@ export type BillRow = {
   writeoffApprovedBy: string | null;
   /** A scratch column. It GOES NOWHERE: there is no per-bill narration. */
   note: string;
+  /**
+   * The borrower, when the bill is a temp credit; null otherwise. Optional
+   * because the payment side builds the same row from a wire without it.
+   */
+  tempCredit?: OpenBillTempCredit | null;
 };
 
 /** One credit the party holds. In the same grid, above the bills, tinted. */

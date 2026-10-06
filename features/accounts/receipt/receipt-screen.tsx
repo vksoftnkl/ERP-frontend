@@ -45,6 +45,7 @@ import { RECEIPT_FIELD_ATTR, advanceReceiptField, focusReceiptField } from "./fo
 import { defaultTender } from "./domain/tenders";
 import type { ChequeExtras, ReceiptKeys, ReceiptScope } from "./receipt.types";
 import { receivedTotal } from "./state/draft";
+import type { TempCreditCollect } from "./domain/collect";
 import { useReceiptDraft, type ConfirmRequest, type PromptRequest } from "./state/use-receipt-draft";
 import { useReceiptSettings } from "./state/use-receipt-settings";
 import { ApproverDialog } from "./components/approver-dialog";
@@ -107,9 +108,14 @@ export type ReceiptScreenProps = {
    * browser back, which is what that URL's visitor came from.
    */
   onBackToList?: () => void;
+  /**
+   * Set when the Temp Credits register's Receive opened this screen: the
+   * party, the borrower's mobile and the bill to tick (`domain/collect`).
+   */
+  collect?: TempCreditCollect | null;
 };
 
-export default function ReceiptScreen({ initialKeys, onBackToList }: ReceiptScreenProps) {
+export default function ReceiptScreen({ initialKeys, onBackToList, collect }: ReceiptScreenProps) {
   const router = useRouter();
   const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
   const { permissions, isLoading: permissionsLoading } = usePagePermissions({
@@ -321,6 +327,19 @@ export default function ReceiptScreen({ initialKeys, onBackToList }: ReceiptScre
     },
     [dispatch, draft.tenders, masters],
   );
+
+  // ── Opened by the Temp Credits register, to collect one ──────────────────
+  // The hook picks the party, narrows the bills to the borrower's mobile,
+  // ticks the bill and puts the figure on the first instrument.
+  const collectedInitial = useRef(false);
+  const collectTempCredit = api.collectTempCredit;
+  useEffect(() => {
+    if (!collect || collectedInitial.current) {
+      return;
+    }
+    collectedInitial.current = true;
+    void collectTempCredit(collect);
+  }, [collect, collectTempCredit]);
 
   /** 3.0's `tBtnDefTndr`: put this row back on the default tender. */
   const resetRowToDefaultTender = useCallback(() => {
@@ -700,6 +719,31 @@ export default function ReceiptScreen({ initialKeys, onBackToList }: ReceiptScre
               onBlur={() => void api.runDuplicateCheck()}
             />
           </div>
+          {api.tempCreditMobile ? (
+            // The borrower the bills are narrowed to (a temp credit being
+            // collected). Clearing it shows every bill of the party again.
+            <div
+              className={styles.amountBox}
+              title="Only the bills whose temp credit was given to this mobile are listed. Clear it to see every bill of the party."
+            >
+              <span className={styles.amountLabel}>Temp credit mobile</span>
+              <input
+                className={styles.amountInput}
+                type="text"
+                value={api.tempCreditMobile}
+                readOnly
+                aria-label="Temp credit mobile"
+              />
+              <button
+                type="button"
+                className={styles.button}
+                disabled={!editable || busy !== "idle"}
+                onClick={() => api.setTempCreditMobile("")}
+              >
+                Clear
+              </button>
+            </div>
+          ) : null}
           <button
             type="button"
             className={styles.button}

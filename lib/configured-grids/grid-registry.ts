@@ -138,6 +138,12 @@ export const CONFIGURED_GRIDS = {
   billDeliveryList: { name: "MAIN LIST - BILL DELIVERY", fallbackId: "113", deletedParam: null },
   /** Sale Bill (§24) — the temp-credit follow-up list, menu 257. Binds `istatus` and `ioverdue_only`. */
   tempCreditList: { name: "MAIN LIST - TEMP CREDITS", fallbackId: "114", deletedParam: null },
+  /**
+   * Temp Credits — Ctrl+H, one credit's whole trail: given, the bill's steps,
+   * follow-ups and the money (received, written off, reversed). Binds
+   * `iatc_id`, `iacc_year`, `icompany_id`; has no ORDER BY — sort on `th_sort`.
+   */
+  tempCreditHistory: { name: "POPUP - TEMP CREDIT HISTORY", fallbackId: "132", deletedParam: null },
   /** Sale Bill (§22) — Ctrl+F6's picker: this device's bills from today. Binds `idevice_id`. */
   retenderBillPopup: { name: "POPUP - RECENT BILLS FOR RE-TENDER", fallbackId: "115", deletedParam: null },
   /** Receipt Entry — the bank picker on a cheque row. Free text is allowed too. */
