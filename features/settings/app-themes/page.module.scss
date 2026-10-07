@@ -1,0 +1,856 @@
+/**
+ * App Themes (menu 266).
+ *
+ * The screen sizes itself to `.erp-app-content`, which already gives every page
+ * the space between the header and the footer — so the shell is `height: 100%`,
+ * never a viewport unit (the app scales with `zoom` on <html>, and a vh here
+ * would measure the unscaled viewport and push the footer off the screen).
+ *
+ * Chrome colours read the theme variables, so a Preview repaints this screen
+ * with the rest of the app. The colours INSIDE the token grid swatches and the
+ * preview card are the edit itself and come in as inline styles.
+ */
+.page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 8px;
+  background: var(--page-bg);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.headerText {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.subtitle {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.previewingBadge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.primaryButton,
+.secondaryButton {
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: var(--erp-radius);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.primaryButton {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background: var(--primary-hover);
+  }
+}
+
+.secondaryButton {
+  background: var(--card-bg);
+  border-color: var(--border);
+  color: var(--text-soft);
+
+  &:hover:not(:disabled) {
+    background: var(--row-hover);
+  }
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.keyHint {
+  margin-left: 6px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  opacity: 0.7;
+}
+
+/* ── Tabs ──────────────────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  position: relative;
+  padding: 7px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text-main);
+  }
+}
+
+.tabActive {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.tabDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #b45309;
+  vertical-align: middle;
+}
+
+/* ── Shared pieces ─────────────────────────────────────────────────────── */
+
+.paneHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 30px;
+}
+
+.sectionCap {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-main);
+}
+
+.mutedNote {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.pillPrimary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.searchInput,
+.textInput,
+.selectInput,
+.findInput,
+.hexInput {
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: #fff;
+  font-size: 0.84rem;
+  color: var(--text-main);
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent);
+  }
+
+  &:disabled {
+    background: var(--page-bg);
+    color: var(--text-muted);
+  }
+}
+
+.searchInput {
+  flex: 1 1 140px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.checkLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.84rem;
+  color: var(--text-main);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tableScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: var(--card-bg);
+}
+
+.tableEmpty {
+  margin: 0;
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.listTable,
+.tokenTable,
+.placeholderTable {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.84rem;
+  color: var(--text-main);
+
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 6px 8px;
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    font-size: 0.76rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border-light);
+    vertical-align: middle;
+  }
+}
+
+.center {
+  text-align: center !important;
+}
+
+.right {
+  text-align: right !important;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.warningStrip,
+.goodStrip,
+.dangerStrip {
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: var(--erp-radius);
+  font-size: 0.8rem;
+}
+
+.warningStrip {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.goodStrip {
+  background: var(--success-bg);
+  color: var(--success-text);
+  border: 1px solid var(--success-border);
+}
+
+.dangerStrip {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid var(--danger-light);
+  max-height: 180px;
+  overflow: auto;
+}
+
+.problemList {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.lineLink {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.errorPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--danger-light);
+  border-radius: var(--erp-radius);
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.84rem;
+}
+
+.footer {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  padding-top: 2px;
+}
+
+/* ── Themes tab ────────────────────────────────────────────────────────── */
+
+.themesBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(260px, 22fr) minmax(420px, 54fr) minmax(250px, 24fr);
+  gap: 18px;
+}
+
+.listPane,
+.editorPane,
+.previewPane {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.listRow {
+  cursor: pointer;
+
+  &:hover td {
+    background: var(--row-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+  }
+}
+
+.listRowSelected td,
+.listRowSelected:hover td {
+  background: color-mix(in srgb, var(--primary) 12%, #fff);
+  font-weight: 600;
+}
+
+.listRowDeleted td {
+  color: var(--text-muted);
+}
+
+.listName {
+  max-width: 0;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deletedTag {
+  font-style: italic;
+  font-weight: 400;
+}
+
+.listButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  .secondaryButton {
+    padding: 0 10px;
+  }
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(90px, 140px) auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: var(--card-bg);
+}
+
+.fieldCap {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.fieldWide {
+  grid-column: 2 / -1;
+}
+
+.groupRow td {
+  padding-top: 8px;
+  background: var(--card-bg);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.tokenTable {
+  th:nth-child(3),
+  th:nth-child(4) {
+    width: 1%;
+  }
+
+  th:nth-child(5) {
+    width: 130px;
+  }
+}
+
+.tokenRowChanged td {
+  background: #fef3c7;
+}
+
+.meaning {
+  color: var(--text-soft);
+  font-size: 0.8rem;
+}
+
+.swatchCell {
+  position: relative;
+  display: inline-flex;
+  width: 34px;
+  height: 20px;
+}
+
+/* A see-through colour shows over a check, so its alpha reads. */
+.checker {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  background-color: #fff;
+  background-image: conic-gradient(#d1d5db 25%, #fff 0 50%, #d1d5db 0 75%, #fff 0);
+  background-size: 8px 8px;
+}
+
+.swatchInput {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+
+  &::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+
+  &::-webkit-color-swatch {
+    border: none;
+    border-radius: 2px;
+  }
+
+  &::-moz-color-swatch {
+    border: none;
+    border-radius: 2px;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+.hexInput {
+  width: 92px;
+  min-height: 26px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.8rem;
+
+  &:read-only {
+    background: transparent;
+    border-color: transparent;
+  }
+}
+
+.noteMuted {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.noteChanged {
+  color: #92400e;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── The preview card ──────────────────────────────────────────────────── */
+
+.previewCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  overflow: auto;
+  min-height: 0;
+}
+
+.previewMenu {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: center;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.previewTitle {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.previewButtons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.previewButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.previewGrid {
+  border: 1px solid;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.previewGridRow {
+  display: flex;
+  justify-content: space-between;
+  height: 22px;
+  align-items: center;
+  padding: 0 8px;
+}
+
+.previewBadges {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: 6px 8px;
+}
+
+.previewBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 20px;
+  border-radius: 10px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.previewNote {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+/* ── Template tab ──────────────────────────────────────────────────────── */
+
+.templateBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.templateColumns {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 64fr) minmax(280px, 36fr);
+  gap: 18px;
+}
+
+.editorColumn,
+.placeholderPane {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.placeholderPane .searchInput {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.findRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.findInput {
+  width: 240px;
+}
+
+.clickableRow {
+  cursor: pointer;
+
+  &:hover td {
+    background: var(--row-hover);
+  }
+}
+
+.valueWithSwatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.staticSwatch {
+  display: inline-block;
+  width: 30px;
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+/*
+ * The editor: a transparent textarea over a highlighted copy of its text.
+ * Both layers MUST share every metric that moves a glyph — font, size, line
+ * height, padding, tab size, white-space — or the caret drifts off the text.
+ */
+.editorFrame {
+  --editor-font: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --editor-size: 12.5px;
+  --editor-line: 18px;
+  --editor-pad: 6px;
+
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: var(--card-bg);
+  overflow: hidden;
+
+  &:focus-within {
+    border-color: var(--primary);
+  }
+}
+
+.editorGutter {
+  flex: 0 0 auto;
+  overflow: hidden;
+  padding: var(--editor-pad) 8px var(--editor-pad) 0;
+  background: var(--page-bg);
+  border-right: 1px solid var(--border-light);
+  font-family: var(--editor-font);
+  font-size: var(--editor-size);
+  line-height: var(--editor-line);
+  text-align: right;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.gutterCurrent {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.gutterTail {
+  height: 20px;
+}
+
+.editorBody {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.editorHighlight,
+.editorText {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: var(--editor-pad) 10px;
+  border: none;
+  font-family: var(--editor-font);
+  font-size: var(--editor-size);
+  line-height: var(--editor-line);
+  tab-size: 4;
+  white-space: pre;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.editorHighlight {
+  overflow: hidden;
+  color: var(--text-main);
+  pointer-events: none;
+}
+
+.editorText {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  resize: none;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text-main);
+
+  &::selection {
+    background: rgba(37, 99, 235, 0.28);
+  }
+}
+
+.hlComment {
+  color: var(--text-muted);
+}
+
+.hlKnown {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.hlUnknown {
+  color: #c01c28;
+  text-decoration: underline wavy #c01c28;
+}
+
+.hlMatch {
+  background: #fde68a;
+  color: inherit;
+}
+
+/*
+ * In the column panes only the scrollers (token grid, list, editor) give up
+ * height; a strip or a button row squeezed by flex would clip its own text.
+ */
+.paneHead,
+.fields,
+.checkLine,
+.listButtons,
+.mutedNote,
+.warningStrip,
+.goodStrip,
+.dangerStrip,
+.findRow,
+.errorPanel {
+  flex-shrink: 0;
+}
+
+.editorFrame {
+  min-height: 200px;
+}
+
+/* ── Narrow screens: the panes stack ───────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .page {
+    overflow: auto;
+  }
+
+  .themesBody,
+  .templateColumns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .listPane .tableScroll {
+    max-height: 260px;
+  }
+
+  .editorPane .tableScroll {
+    max-height: 480px;
+  }
+
+  .editorColumn {
+    min-height: 420px;
+  }
+}

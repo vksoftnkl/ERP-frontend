@@ -23,6 +23,12 @@ export type ErpMenuPermissionFlags = {
   canDelete: boolean;
   canPrint: boolean;
   canExport: boolean;
+  /**
+   * `um_can_post` — a verb only some menus carry (posting a bill, GST
+   * Credentials' Verify). Optional: absent means the payload said nothing,
+   * which a screen reads as allowed and leaves the server to refuse.
+   */
+  canPost?: boolean;
   isVisible: boolean;
 };
 

@@ -56,6 +56,8 @@ export const UI_TABLES = {
   openingBalanceLedgers: { name: "OPENING BALANCE - LEDGERS", fallbackId: "30" },
   /** Opening Balance (menu 55) → the selected party's bill-wise breakup. */
   openingBalanceBills: { name: "OPENING BALANCE - BILLS", fallbackId: "31" },
+  /** Posting Ledger Map (menu 250) → the role catalogue, one row per role. */
+  ledgerMapRoles: { name: "LEDGER MAP - POSTING ROLES", fallbackId: "37" },
   /** Receipt Entry (menu 99) → the bills grid: this party's bills AND credits. */
   receiptBills: { name: "RECEIPT - BILLS", fallbackId: "32" },
   /** Receipt Entry (menu 99) → the instruments grid: tenders AND role lines. */

@@ -88,6 +88,10 @@ export const CONFIGURED_DROPDOWNS = {
   ledgerForPostingRole: { name: "LEDGERS FOR POSTING ROLE", fallbackId: "51", paramBound: true },
   postingRoleRateWise: { name: "POSTING ROLES - RATE WISE", fallbackId: "52", paramBound: false },
   gstRate: { name: "GST RATES", fallbackId: "53", paramBound: false },
+  /** GST Credentials' branch. Binds a QUOTED `'ibr_comp_id'`, always sent ('' = every company). */
+  branchByCompany: { name: "BRANCHES BY COMPANY", fallbackId: "61", paramBound: true },
+  /** GST Credentials' provider: live providers, active first. */
+  gstProvider: { name: "GST PROVIDERS", fallbackId: "62", paramBound: false },
   /** Stock reasons (`stock.stock_reason_master`) — Physical Stock's header reason. */
   stockReason: { name: "STOCK REASONS", fallbackId: "50", paramBound: false },
   /** Stock-tracking presets — Change Selling Price's "Tracked as" filter. */

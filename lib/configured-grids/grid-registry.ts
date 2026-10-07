@@ -63,6 +63,11 @@ export const CONFIGURED_GRIDS = {
    * the grid already refuses to offer one.
    */
   ledgerPickerPopup: { name: "POPUP - LEDGERS", fallbackId: "107", deletedParam: null },
+  /**
+   * The Posting Ledger Map's picker. Its SQL is filtered BY ROLE through a bare
+   * `itrl_role` token, which must always be sent — see `store/api/ledgerMapApi.ts`.
+   */
+  ledgerForRolePopup: { name: "POPUP - LEDGERS FOR ROLE", fallbackId: "105", deletedParam: null },
   userList: { name: "MAIN LIST - COMPUTER USERS", fallbackId: "62", deletedParam: null },
   deviceList: { name: "DESKTOP - DEVICE MASTER LIST", fallbackId: "31", deletedParam: null },
   gridMasterList: { name: "GRID MASTER LIST", fallbackId: "34", deletedParam: null },
@@ -139,6 +144,12 @@ export const CONFIGURED_GRIDS = {
   /** Sale Bill (§24) — the temp-credit follow-up list, menu 257. Binds `istatus` and `ioverdue_only`. */
   tempCreditList: { name: "MAIN LIST - TEMP CREDITS", fallbackId: "114", deletedParam: null },
   /**
+   * App Themes (menu 266) — the theme list. Its SQL has no deleted filter: it
+   * answers every theme, deleted ones too, and the screen's "Show deleted" box
+   * filters them client-side.
+   */
+  appThemeList: { name: "MAIN LIST - APP THEMES", fallbackId: "125", deletedParam: null },
+  /**
    * Temp Credits — Ctrl+H, one credit's whole trail: given, the bill's steps,
    * follow-ups and the money (received, written off, reversed). Binds
    * `iatc_id`, `iacc_year`, `icompany_id`; has no ORDER BY — sort on `th_sort`.
@@ -154,6 +165,20 @@ export const CONFIGURED_GRIDS = {
     fallbackId: "112",
     deletedParam: null,
   },
+  /** GST Providers (menu 269) — the provider list. */
+  gstProviderList: { name: "MAIN LIST - GST PROVIDERS", fallbackId: "127", deletedParam: "igpv_is_deleted" },
+  /** GST Providers — one provider's services. Binds a QUOTED `'igpv_id'`. */
+  gstProviderServices: { name: "GST PROVIDER - SERVICES", fallbackId: "128", deletedParam: null },
+  /** GST Providers — one service's endpoints. Binds a QUOTED `'igps_id'`. */
+  gstProviderEndpoints: { name: "GST PROVIDER - ENDPOINTS", fallbackId: "129", deletedParam: null },
+  /** GST Providers — one provider's error map. Binds a QUOTED `'igpv_id'`. */
+  gstProviderErrorMap: { name: "GST PROVIDER - ERROR MAP", fallbackId: "130", deletedParam: null },
+  /**
+   * GST Credentials (menu 270). Reads `gst_company_credential`'s non-secret
+   * columns (not `vw_gst_credential`, which hides deleted rows) so Restore can
+   * list them.
+   */
+  gstCredentialList: { name: "MAIN LIST - GST CREDENTIALS", fallbackId: "131", deletedParam: "igcc_is_deleted" },
 } as const;
 export type ConfiguredGridKey = keyof typeof CONFIGURED_GRIDS;
 const ID_KEYS = ["grid_id", "gridId", "id"] as const;

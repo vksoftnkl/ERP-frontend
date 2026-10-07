@@ -63,6 +63,7 @@ function mergePermissions(a: MenuPermissions, b: MenuPermissions): MenuPermissio
     canDelete: a.canDelete || b.canDelete,
     canPrint: a.canPrint || b.canPrint,
     canExport: a.canExport || b.canExport,
+    canPost: Boolean(a.canPost || b.canPost),
     isVisible: a.isVisible || b.isVisible,
   };
 }

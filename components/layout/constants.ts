@@ -291,8 +291,19 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
           // fixed.menu_master 246 ("app settings", under Configuration) carries
           // the label; this is where it picks up its route.
           {label:"App Settings",href:"/settings/app-settings"},
+          // fixed.menu_master 266 ("App Themes", under Configuration) — seeded by
+          // the server's 20260930190000_app_theme_tokens migration, so the row
+          // exists wherever the theme tables do.
+          {label:"App Themes",href:"/settings/app-themes"},
           {label:"Price Level Configuration",href:"/master/price-level-configuration"},
           {label:"Charge Master",href:"/master/charge-master"},
+          // fixed.menu_master 250 ("Ledger mapping") — the Posting Ledger Map.
+          // The row is seeded and granted, so binding the href is safe.
+          {label:"Ledger mapping",href:"/settings/ledger-map"},
+          // fixed.menu_master 269 / 270, seeded under Configuration by the
+          // server's 20261002150000_gst_menus migration — safe to bind.
+          {label:"GST Providers",href:"/settings/gst-providers"},
+          {label:"GST Credentials",href:"/settings/gst-credentials"},
           // /settings/printing/assignments is DELIBERATELY still unbound.
           // Binding an href makes the route GOVERNED — the permission gate then
           // denies anyone whose usermenu lacks it — and fixed.menu_master has no
@@ -462,6 +473,7 @@ function toMenuPermissionFlags(value: unknown): ErpMenuPermissionFlags | null {
     canDelete: read("canDelete", "can_delete"),
     canPrint: read("canPrint", "can_print"),
     canExport: read("canExport", "can_export"),
+    canPost: read("canPost", "can_post"),
     // Visibility is the one flag that defaults to granted — the server only
     // returns menus the user may open, so an absent field is not a denial.
     isVisible: toBooleanFlag(value.isVisible) ?? toBooleanFlag(value.is_visible) ?? true,

@@ -198,6 +198,11 @@ export const API_TAG_TYPES = [
   "WidgetConfig",
   // Application settings (app_setting_def catalog + its overrides)
   "AppSettings",
+  // The theme master (menu 266): one theme by thmId, plus id "EFFECTIVE" for
+  // the company's painted theme, so a theme write repaints the shell.
+  "AppTheme",
+  // The one QSS template every company's palette fills (app_theme_template).
+  "AppThemeTemplate",
   // Print designer (reports/templates)
   "PrintTemplate",
   "PrintTemplateRevision",

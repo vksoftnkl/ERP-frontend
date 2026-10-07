@@ -1,0 +1,573 @@
+/**
+ * Posting Ledger Map — the screen's skin.
+ *
+ * `.erp-app-content` already gives the page a definite height, so the shell is
+ * `height: 100%` and NEVER `100dvh` / `100vh` — those push the footer and its
+ * Save button out of view. Only the grid viewport scrolls.
+ *
+ * Lengths are `u(n)`, n times `--erp-q-u`, the fluid unit the transaction and
+ * accounts screens use, declared on `:root` so the portaled picker and the
+ * confirmation can see it too.
+ */
+:root {
+  --erp-q-u: clamp(
+    0.875rem,
+    0.2rem + calc(0.5vw / var(--erp-ui-scale, 1)) + calc(0.35vh / var(--erp-ui-scale, 1)),
+    1.25rem
+  );
+}
+
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.5);
+  padding: u(0.6) u(0.75);
+  height: 100%;
+  min-height: 0;
+  font-family: var(--erp-font-family, "Segoe UI", system-ui, Arial, sans-serif);
+  font-size: u(0.78);
+  color: var(--text-main, #222222);
+  background: var(--surface-muted, #f6f6f6);
+}
+
+/* ----------------------------------------------------------------- title bar */
+.titleBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.6);
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-bottom: u(0.35);
+  border-bottom: 3px solid var(--primary, #7b1515);
+}
+.titleBlock {
+  min-width: 0;
+}
+.title {
+  margin: 0;
+  font-size: u(1.15);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.dirtyMark {
+  color: var(--danger, #b3261e);
+}
+.subtitle {
+  margin: u(0.1) 0 0;
+  font-size: u(0.72);
+  color: var(--text-muted, #666666);
+}
+.titleActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.35);
+  align-items: center;
+}
+
+/* One phrase for the whole map: green only at zero, there is no "mostly fine". */
+.statusPill {
+  padding: u(0.15) u(0.6);
+  border-radius: 999px;
+  font-size: u(0.72);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.statusPillGood {
+  background: #dcfce7;
+  color: #166534;
+}
+.statusPillBad {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* ------------------------------------------------------------------ buttons */
+.primaryButton,
+.secondaryButton {
+  padding: u(0.2) u(0.6);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  font: inherit;
+  font-size: u(0.74);
+  cursor: pointer;
+}
+.primaryButton {
+  border-color: var(--primary, #7b1515);
+  background: var(--primary, #7b1515);
+  color: #ffffff;
+  font-weight: 700;
+}
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ banners */
+/* Why the screen exists — permanent, because the consequence of a wrong row is
+   invisible and months away. Quiet, so the alarm below it still reads loud. */
+.why {
+  margin: 0;
+  font-size: u(0.72);
+  line-height: 1.45;
+  color: var(--text-muted, #555555);
+}
+.bannerBad,
+.bannerInfo {
+  margin: 0;
+  padding: u(0.3) u(0.5);
+  border-left: 3px solid;
+  border-radius: var(--erp-radius, 4px);
+  font-size: u(0.72);
+  line-height: 1.45;
+}
+.bannerBad {
+  border-color: #b91c1c;
+  background: #fef2f2;
+  color: #7f1d1d;
+}
+.bannerInfo {
+  border-color: #2f6fb3;
+  background: #eef4fb;
+  color: #1d4a7a;
+}
+
+/* --------------------------------------------------------------------- grid */
+.gridShell {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  isolation: isolate;
+}
+.gridHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.4);
+  align-items: center;
+  justify-content: space-between;
+  padding: u(0.25) u(0.4);
+  border-bottom: 1px solid var(--border, #c9c9c9);
+  background: #f2f2f2;
+}
+.gridHeadTitle {
+  font-size: u(0.72);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.gridHeadNote {
+  font-size: u(0.68);
+  color: var(--text-muted, #666666);
+}
+.gridViewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #ffffff;
+}
+.grid {
+  /* The width is set inline from the configured widths. `ui_tbl_clm_column_width`
+     is the desktop client's Qt fraction, not a CSS percent — `columns.ts`
+     converts it to px before anything here sees it. */
+  min-width: 100%;
+  font-size: var(--erp-q-u, 1rem);
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+.grid thead th {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  padding: u(0.2) u(0.3);
+  border-right: 1px solid var(--border-light, #e2e2e2);
+  border-bottom: 1px solid var(--border, #c9c9c9);
+  background: var(--header-bg, #efe6e6);
+  color: var(--table-header-text, #4a0f0f);
+  font-size: u(0.7);
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+.gridHeaderCell {
+  position: relative;
+}
+.gridHeaderCellResizing {
+  background: var(--row-selected, #f6ecec);
+}
+/* Straddles the cell border so the grab zone is the same on both sides of it. */
+.columnResizeHandle {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: -4px;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+}
+.columnResizeHandle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: transparent;
+}
+.columnResizeHandle:hover::after,
+.gridHeaderCellResizing .columnResizeHandle::after {
+  background: var(--primary, #7b1515);
+}
+/* The last column has no neighbour to straddle, and a handle hanging past the
+   table's edge gives the viewport a few pixels of horizontal scroll. */
+.gridHeaderCell:last-child .columnResizeHandle {
+  right: 0;
+}
+
+.grid tbody td {
+  padding: 0;
+  border-right: 1px solid var(--border-light, #eeeeee);
+  border-bottom: 1px solid var(--border-light, #eeeeee);
+  white-space: nowrap;
+}
+.gridEmpty {
+  padding: u(0.8) !important;
+  color: var(--text-muted, #666666);
+  text-align: center;
+}
+.rowOdd {
+  background: #ffffff;
+}
+.rowEven {
+  background: #fafafa;
+}
+/* A role that does not resolve, across its full width — the tint is what makes
+   the header's count findable among the rows. Listed after the stripes so it
+   wins over them. */
+.rowLoud {
+  background: #fff7ed;
+}
+/* The row the caret is on, and the row Alt+U acts on. A selection the operator
+   made says more about where they are than the warning tint does, and two
+   washes over each other read as neither — so it outranks `.rowLoud`. */
+.grid tbody tr.rowCurrent,
+.grid tbody tr:focus-within {
+  background: var(--row-selected, #f6ecec);
+}
+/* Changed and not yet saved. */
+.rowDirty td:first-child {
+  box-shadow: inset 3px 0 0 var(--primary, #7b1515);
+}
+
+.cellText,
+.cellInput {
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  padding: u(0.15) u(0.3);
+  font: inherit;
+  font-size: u(0.74);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cellMuted {
+  color: var(--text-muted, #888888);
+  font-style: italic;
+}
+.cellInput {
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.cellInput:focus-visible {
+  outline: 2px solid var(--primary, #7b1515);
+  outline-offset: -2px;
+  background: #fffdf5;
+}
+.cellInput:disabled {
+  color: var(--text-muted, #555555);
+  background: transparent;
+  cursor: not-allowed;
+}
+/* A read-only cell that is still in the keyboard walk: it reads as the settled
+   text it holds, not as a greyed-out control the operator thinks is broken. */
+.cellInputPlain {
+  cursor: default;
+}
+
+/* The Ledger cell: the name, and a chevron that opens the picker. */
+.lookupCell {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+.lookupCell .cellInput {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.lookupButton {
+  flex: 0 0 auto;
+  width: u(1.3);
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--border-light, #eeeeee);
+  background: transparent;
+  color: var(--text-muted, #777777);
+  font-size: u(0.7);
+  cursor: pointer;
+}
+.lookupButton:hover {
+  background: var(--row-selected, #f6ecec);
+  color: var(--primary, #7b1515);
+}
+/* "— not mapped —" is the failure the screen exists to show, so it is not the
+   faint grey of an ordinary placeholder. */
+.ledgerUnmapped::placeholder {
+  color: #991b1b;
+  font-style: italic;
+  opacity: 1;
+}
+.ledgerGone {
+  color: #991b1b;
+  text-decoration: line-through;
+}
+
+.dirtyDot {
+  margin-left: u(0.3);
+  color: var(--primary, #7b1515);
+  font-size: u(0.55);
+  vertical-align: middle;
+}
+
+.alignRight {
+  text-align: right;
+}
+.alignCenter {
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------- chips */
+/* A chip is read at a glance down a column; the same word in plain text is
+   read one row at a time. */
+.chip {
+  display: inline-block;
+  max-width: calc(100% - #{u(0.4)});
+  overflow: hidden;
+  padding: 0 u(0.45);
+  border-radius: 999px;
+  font-size: u(0.64);
+  font-weight: 700;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.chipGood {
+  background: #dcfce7;
+  color: #166534;
+}
+.chipBad {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.chipWarn {
+  background: #fef3c7;
+  color: #92400e;
+}
+.chipNeutral {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+/* ------------------------------------------------------------------ footer */
+.footerBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.5);
+  align-items: center;
+  justify-content: space-between;
+}
+.footerHint {
+  font-size: u(0.7);
+  color: var(--text-muted, #666666);
+}
+.footerActions {
+  display: flex;
+  gap: u(0.4);
+  align-items: center;
+  margin-left: auto;
+}
+.footerActions .primaryButton,
+.footerActions .secondaryButton {
+  min-width: u(4.2);
+  padding: u(0.3) u(0.9);
+}
+.footerActions .primaryButton {
+  min-width: u(7.6);
+}
+
+/* ------------------------------------------------------------------- modal */
+/*
+ * The overlay is an isolated, unpainted layer; the scrim is its own backdrop
+ * element and the panel is pre-promoted. Putting the scrim on the overlay
+ * itself ghosts it over the panel while the portal composites.
+ */
+.modalOverlay {
+  position: fixed;
+  z-index: var(--erp-z-modal, 1000);
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  isolation: isolate;
+}
+.modalBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+.modalPanel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(46rem, 92vw);
+  max-height: 70vh;
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  will-change: transform;
+}
+.modalHead {
+  display: flex;
+  gap: u(0.5);
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: u(0.4) u(0.6);
+  border-bottom: 1px solid var(--border, #c9c9c9);
+}
+.modalTitleBlock {
+  min-width: 0;
+}
+.modalTitle {
+  margin: 0;
+  font-size: u(0.9);
+  font-weight: 700;
+}
+.modalSubtitle {
+  margin: u(0.1) 0 0;
+  font-size: u(0.7);
+  color: var(--text-muted, #666666);
+}
+.modalClose {
+  border: 0;
+  background: none;
+  font-size: u(1.2);
+  line-height: 1;
+  cursor: pointer;
+}
+.modalSearch {
+  padding: u(0.4) u(0.6);
+  border-bottom: 1px solid var(--border-light, #e2e2e2);
+}
+.modalSearchInput {
+  width: 100%;
+  padding: u(0.25) u(0.4);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  font: inherit;
+  font-size: u(0.78);
+}
+.modalBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.modalFoot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.4);
+  align-items: center;
+  justify-content: space-between;
+  padding: u(0.4) u(0.6);
+  border-top: 1px solid var(--border, #c9c9c9);
+}
+.modalFootActions {
+  display: flex;
+  gap: u(0.3);
+}
+.modalNote {
+  font-size: u(0.7);
+  color: var(--text-muted, #666666);
+}
+.pickerTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: u(0.76);
+}
+.pickerTable th {
+  position: sticky;
+  top: 0;
+  padding: u(0.25) u(0.4);
+  border-bottom: 1px solid var(--border, #c9c9c9);
+  background: #f2f2f2;
+  text-align: left;
+}
+.pickerTable td {
+  padding: u(0.2) u(0.4);
+  border-bottom: 1px solid var(--border-light, #eeeeee);
+}
+.pickerTable tbody tr {
+  cursor: pointer;
+  scroll-margin-top: u(1.8);
+}
+.pickerRowActive {
+  background: var(--row-selected, #f6ecec);
+}
+.pickerRowCurrent td:first-child {
+  font-weight: 700;
+}
+.pickerCurrentTag {
+  margin-left: u(0.4);
+  padding: 0 u(0.35);
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: u(0.6);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.pickerEmpty {
+  padding: u(0.8);
+  color: var(--text-muted, #666666);
+  text-align: center;
+  white-space: normal;
+}
