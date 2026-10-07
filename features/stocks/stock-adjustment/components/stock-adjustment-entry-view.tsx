@@ -26,8 +26,10 @@ import {
   SelectField,
   TextField,
 } from "@/features/sales/quotation/components/fields";
-import { focusCell } from "@/features/sales/quotation/components/grid-focus";
+import { focusCell, focusFirstCell } from "@/features/sales/quotation/components/grid-focus";
 import { moveHeaderFocus } from "@/features/sales/quotation/components/header-focus";
+import { moveSectionFocus } from "@/features/sales/quotation/components/section-focus";
+import { SECTION_ATTR } from "@/features/sales/quotation/quotation.constants";
 import { addDays, isRealDate, todayIso } from "@/features/sales/quotation/quotation.utils";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { resolveLineColumns } from "../stock-adjustment.columns";
@@ -59,6 +61,7 @@ import {
   rowHint,
   titleLine,
 } from "../stock-adjustment.state";
+import { entryKeyAction, kindStep } from "../stock-adjustment.keys";
 import type { StockAdjustmentDocKey } from "../stock-adjustment.types";
 import { postConfirmMessage, validationStrip } from "../stock-adjustment.validate";
 import { useStockAdjustmentDraft } from "../use-stock-adjustment-draft";
@@ -74,9 +77,15 @@ import styles from "../page.module.scss";
 const DOC_DATE_ID = "stock-adjustment-date";
 const GODOWN_ID = "stock-adjustment-godown";
 
-/** Enter walks the header, the way the Qt dialog's Enter-as-Tab does. */
+const KINDS = KIND_BUTTONS.map((button) => button.kind);
+
+/**
+ * Enter walks the header, the way the Qt dialog's Enter-as-Tab does; Enter on
+ * its last field (Remarks) carries on into the first line, so a document is
+ * keyed from Date to the lines without the mouse.
+ */
 function onHeaderKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-  if (event.key !== "Enter" || event.defaultPrevented) {
+  if (event.key !== "Enter" || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
     return;
   }
   const target = event.target as HTMLElement | null;
@@ -85,7 +94,20 @@ function onHeaderKeyDown(event: KeyboardEvent<HTMLDivElement>) {
   }
   if (moveHeaderFocus(event.currentTarget, event.target, event.shiftKey ? -1 : 1)) {
     event.preventDefault();
+    return;
   }
+  if (!event.shiftKey && focusFirstCell(LINE_GRID_NAME, String(COL.Description))) {
+    event.preventDefault();
+  }
+}
+
+/** Put the cursor on the document date, once React has drawn the change that asked for it. */
+function focusDocDate() {
+  window.requestAnimationFrame(() => {
+    const input = document.getElementById(DOC_DATE_ID) as HTMLInputElement | null;
+    input?.focus();
+    input?.select();
+  });
 }
 
 /** Commit the cell being typed in before anything reads the lines — the Qt `tblLines->setFocus()`. */
@@ -168,6 +190,9 @@ export function StockAdjustmentEntryView({
     opened.current = target;
     if (initialDocument) {
       void api.load(initialDocument, initialMode === "entry");
+    } else {
+      // A new document starts at its date, so the keyboard can begin at once.
+      focusDocDate();
     }
   }, [api, initialDocument, initialMode]);
 
@@ -389,10 +414,17 @@ export function StockAdjustmentEntryView({
   }, [api, ask]);
 
   const runNew = useCallback(() => {
-    guardDirty("Discard entry", "This document has unsaved changes. Start a new one anyway?", () =>
-      api.newDocument(),
-    );
+    guardDirty("Discard entry", "This document has unsaved changes. Start a new one anyway?", () => {
+      api.newDocument();
+      focusDocDate();
+    });
   }, [api, guardDirty]);
+
+  const runEdit = useCallback(() => {
+    if (api.beginEdit()) {
+      focusDocDate();
+    }
+  }, [api]);
 
   const runList = useCallback(() => {
     guardDirty("Open another", "This document has unsaved changes. Discard it and open another?", onBackToList);
@@ -412,47 +444,54 @@ export function StockAdjustmentEntryView({
   }, [api]);
 
   // ------------------------------------------------------------ shortcuts
-  const modalOpen =
-    itemPicker !== null || confirm !== null || cancelTarget !== null || api.pickKey !== null;
-  const keys = { runSave, runNew, runList, runPick, modalOpen, canCreate: permissions.canCreate, editable };
-  const keysRef = useRef(keys);
+  // The key map is `stock-adjustment.keys.ts`; this only runs what it answers.
+  // Anything layered over the voucher owns the keyboard first: a dialog stops
+  // Escape in capture (`ModalShell`), the message popup swallows every key, and
+  // the grid's settings menu is counted here.
+  const overlayOpen =
+    itemPicker !== null ||
+    confirm !== null ||
+    cancelTarget !== null ||
+    api.pickKey !== null ||
+    gridSettings.active;
+  const keyState = {
+    overlayOpen,
+    mode: draft.mode,
+    status: draft.status,
+    saved,
+    busy: api.busy !== null,
+    canCreate: permissions.canCreate,
+    canEdit: permissions.canEdit,
+    canDelete: permissions.canDelete,
+  };
+  const actions = {
+    save: () => runSave(true),
+    saveDraft: () => runSave(false),
+    validate: runValidate,
+    print: () => api.setHint("Save & Print (F6 / Ctrl+Enter) — printing for stock documents comes later."),
+    new: runNew,
+    list: runList,
+    close: runClose,
+    edit: runEdit,
+    pick: runPick,
+    cancel: runCancel,
+    panelNext: () => moveSectionFocus(1),
+    panelPrev: () => moveSectionFocus(-1),
+  };
+  const keysRef = useRef({ keyState, actions });
   useLayoutEffect(() => {
-    keysRef.current = keys;
+    keysRef.current = { keyState, actions };
   });
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      const current = keysRef.current;
-      if (current.modalOpen || event.repeat || event.altKey || event.ctrlKey || event.metaKey) {
-        return;
+      const { keyState: state, actions: run } = keysRef.current;
+      const { action, swallow } = entryKeyAction(event, state);
+      if (swallow) {
+        event.preventDefault();
       }
-      switch (event.key) {
-        case "F5":
-          event.preventDefault();
-          if (current.canCreate) {
-            current.runSave(true);
-          }
-          break;
-        case "F7":
-          event.preventDefault();
-          if (current.canCreate) {
-            current.runNew();
-          }
-          break;
-        case "F8":
-          event.preventDefault();
-          current.runList();
-          break;
-        case "F2":
-        case "F12":
-          // Pick from stock for the current line.
-          event.preventDefault();
-          if (current.editable) {
-            current.runPick();
-          }
-          break;
-        default:
-          break;
+      if (action) {
+        run[action]();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -506,14 +545,33 @@ export function StockAdjustmentEntryView({
         </div>
       </header>
 
-      <div className={styles.kindRow} role="radiogroup" aria-label="Type">
+      <div
+        className={styles.kindRow}
+        role="radiogroup"
+        aria-label="Type"
+        onKeyDown={(event) => {
+          // One Tab stop for the row; the arrows walk the types (a radio group).
+          if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+            return;
+          }
+          const next = kindStep(KINDS, draft.kind, event.key);
+          if (!next || !kindSelectable(draft)) {
+            return;
+          }
+          event.preventDefault();
+          requestKind(next);
+          event.currentTarget.querySelector<HTMLButtonElement>(`[data-kind="${next}"]`)?.focus();
+        }}
+      >
         <span className={styles.kindLabel}>Type</span>
         {KIND_BUTTONS.map((button) => (
           <button
             key={button.kind}
             type="button"
             role="radio"
+            data-kind={button.kind}
             aria-checked={draft.kind === button.kind}
+            tabIndex={draft.kind === button.kind ? 0 : -1}
             className={cx(styles.kindButton, draft.kind === button.kind && styles.kindButtonActive)}
             title={button.tooltip}
             disabled={!kindSelectable(draft)}
@@ -524,7 +582,7 @@ export function StockAdjustmentEntryView({
         ))}
       </div>
 
-      <div className={styles.headerRows} onKeyDown={onHeaderKeyDown}>
+      <div className={styles.headerRows} {...{ [SECTION_ATTR]: "header" }} onKeyDown={onHeaderKeyDown}>
         <div className={styles.headerLine}>
           <div className={cx(styles.fieldRow, styles.flex2)}>
             <ReadOnlyInput id="stock-adjustment-docno" label="Doc no" value={draft.refno} placeholder="assigned at save" />
@@ -609,11 +667,12 @@ export function StockAdjustmentEntryView({
         </div>
       </div>
 
-      <section className={cx(quotationStyles.gridShell, styles.gridShell)}>
+      <section className={cx(quotationStyles.gridShell, styles.gridShell)} {...{ [SECTION_ATTR]: "lines" }}>
         <div className={quotationStyles.gridHead}>
           <span className={quotationStyles.gridHeadTitle}>Lines</span>
           <span className={quotationStyles.modalNote}>
-            Enter next cell · F2 / F12 pick from stock · Alt+= add a line · Alt+− remove the line
+            Enter next cell · ↑ ↓ row · F2 / F12 pick from stock · Alt+= add a line · Alt+− remove the line · F1
+            header ⇄ lines
           </span>
         </div>
         {gridSettings.overlays}
@@ -687,22 +746,22 @@ export function StockAdjustmentEntryView({
           <button
             type="button"
             className={quotationStyles.button}
-            title="Edit this DRAFT."
-            disabled={!permissions.canEdit}
-            onClick={() => api.beginEdit()}
+            title="F2 — edit this DRAFT."
+            disabled={!permissions.canEdit || api.busy !== null}
+            onClick={runEdit}
           >
-            Edit
+            Edit<span className={quotationStyles.buttonHint}>F2</span>
           </button>
         ) : null}
         {saved && draft.status !== "CANCELLED" ? (
           <button
             type="button"
             className={quotationStyles.button}
-            title="A POSTED document is reversed by mirror rows and a reversing accounts voucher; a DRAFT is marked cancelled."
+            title="F3 — a POSTED document is reversed by mirror rows and a reversing accounts voucher; a DRAFT is marked cancelled."
             disabled={!permissions.canDelete || api.busy !== null}
             onClick={runCancel}
           >
-            Cancel document
+            Cancel document<span className={quotationStyles.buttonHint}>F3</span>
           </button>
         ) : null}
         <button
@@ -717,20 +776,20 @@ export function StockAdjustmentEntryView({
         <button
           type="button"
           className={quotationStyles.button}
-          title="Save without moving stock. The adjustment rules still run."
+          title="F4 — save without moving stock. The adjustment rules still run."
           disabled={!draftStatus || !permissions.canCreate || api.busy !== null}
           onClick={() => runSave(false)}
         >
-          Save draft
+          Save draft<span className={quotationStyles.buttonHint}>F4</span>
         </button>
         <button
           type="button"
           className={quotationStyles.button}
-          title="Check every line against the server's rules without posting."
+          title="F9 — check every line against the server's rules without posting."
           disabled={!draftStatus || api.busy !== null}
           onClick={runValidate}
         >
-          Validate
+          Validate<span className={quotationStyles.buttonHint}>F9</span>
         </button>
         <button type="button" className={quotationStyles.button} title="F8 — the adjustment list." onClick={runList}>
           List<span className={quotationStyles.buttonHint}>F8</span>
@@ -761,8 +820,8 @@ export function StockAdjustmentEntryView({
         >
           Save<span className={quotationStyles.buttonHint}>F5</span>
         </button>
-        <button type="button" className={quotationStyles.button} onClick={runClose}>
-          Close
+        <button type="button" className={quotationStyles.button} title="Esc — back to the list." onClick={runClose}>
+          Close<span className={quotationStyles.buttonHint}>Esc</span>
         </button>
       </div>
 

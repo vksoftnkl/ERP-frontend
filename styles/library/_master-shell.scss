@@ -908,6 +908,37 @@
   font-size: 12px;
 }
 
+/* The optional "why" box (`reasonPrompt`): label over a full-width line. */
+.erp-ms-confirm .erp-ms-confirm-reason {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+
+  label {
+    color: var(--erp-ms-ink);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  input {
+    width: 100%;
+    min-height: 30px;
+    padding: 5px 8px;
+    border: 1px solid var(--erp-ms-line);
+    border-radius: 2px;
+    background: var(--erp-ms-paper);
+    color: var(--erp-ms-ink);
+    font-family: inherit;
+    font-size: 13px;
+
+    &:focus {
+      border-color: var(--erp-ms-tone);
+      outline: none;
+      box-shadow: 0 0 0 2px var(--erp-ms-tone-tint);
+    }
+  }
+}
+
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 .erp-ms-confirm .erp-ms-confirm-foot {
   display: flex;

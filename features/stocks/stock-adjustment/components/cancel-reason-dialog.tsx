@@ -30,7 +30,6 @@ export function CancelReasonDialog({ isOpen, title, onClose, onSubmit }: CancelR
     if (isOpen) {
       setReason("");
       setProblem(null);
-      window.requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [isOpen]);
 
@@ -64,6 +63,9 @@ export function CancelReasonDialog({ isOpen, title, onClose, onSubmit }: CancelR
       <p className={styles.prompt}>Why is this document being reversed?</p>
       <input
         ref={inputRef}
+        // Focus on mount: the dialog is portaled one commit late, so a focus()
+        // queued a frame after opening can land before the box exists.
+        autoFocus
         className={quotationStyles.input}
         value={reason}
         maxLength={250}

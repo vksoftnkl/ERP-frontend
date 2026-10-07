@@ -65,6 +65,11 @@
 .kindButton:hover:not(:disabled) {
   border-color: var(--primary, #7b1515);
 }
+/* The row is one Tab stop walked by the arrows — show where the cursor is. */
+.kindButton:focus-visible {
+  outline: 2px solid var(--primary, #7b1515);
+  outline-offset: 2px;
+}
 .kindButton:disabled {
   color: var(--text-soft, #999999);
   cursor: default;

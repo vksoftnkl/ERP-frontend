@@ -4,67 +4,27 @@
  * Ctrl+H — one temp credit's whole trail, from grid 132 "POPUP - TEMP CREDIT
  * HISTORY" (server notes 90): the credit given, the bill's own steps, every
  * follow-up, and the money — received at the counter or by a receipt,
- * written off, reversed. Read in order; the grid has no ORDER BY of its own,
- * so the rows are sorted here on `th_sort`.
+ * written off, reversed. The Qt `TxnHistoryDialog` over the `tempCredits()`
+ * trail: "History · <bill>", the register and year under it, a summary line
+ * once the rows land, and the Event column as pills coloured by what happened.
  */
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import { cx } from "@/components/design-system/cx";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
-import { Chip, type ChipTone } from "@/features/accounts/receipt/components/chip";
+import { Chip } from "@/features/accounts/receipt/components/chip";
 import { formatTotal } from "@/features/accounts/receipt/domain/money";
-import { extractRows } from "@/app/master/_shared/crud-utils";
 import { getGridId } from "@/lib/configured-grids";
+import { eventTone, historySummary, toHistoryRows, type HistoryRow } from "./history";
 import type { TempCreditRow } from "./row";
 
 const GRID_RUN_ENDPOINT = "/configured-grid-sql/run";
 
-type HistoryRow = {
-  th_key: string;
-  th_sort: string;
-  th_when: string;
-  th_event: string;
-  th_detail: string;
-  th_amount: number | null;
-  th_user: string;
-  th_ref: string;
-  th_kind: string;
-};
+/** What the Qt dialog names the document by: the register's own title. */
+const DOC_LABEL = "Temp Credits";
 
-/** What each kind of step means, in the chip colours the receipt uses. */
-const KIND_TONES: Record<string, ChipTone> = {
-  CREDIT: "amber",
-  BILL: "blue",
-  FOLLOWUP: "grey",
-  COUNTER: "green",
-  SETTLE: "green",
-};
-
-function text(value: unknown): string {
-  return value === null || value === undefined ? "" : String(value);
-}
-
-function toHistoryRows(payload: unknown): HistoryRow[] {
-  return extractRows(payload)
-    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
-    .map((row) => {
-      const amount = row.th_amount;
-      const parsed = typeof amount === "number" ? amount : Number.parseFloat(text(amount));
-      return {
-        th_key: text(row.th_key),
-        th_sort: text(row.th_sort),
-        th_when: text(row.th_when),
-        th_event: text(row.th_event),
-        th_detail: text(row.th_detail),
-        th_amount: Number.isFinite(parsed) ? parsed : null,
-        th_user: text(row.th_user),
-        th_ref: text(row.th_ref),
-        th_kind: text(row.th_kind).toUpperCase(),
-      };
-    })
-    .sort((left, right) => left.th_sort.localeCompare(right.th_sort));
-}
+const NO_ROWS: HistoryRow[] = [];
 
 export type HistoryDialogProps = {
   row: TempCreditRow | null;
@@ -78,7 +38,7 @@ export function HistoryDialog({ row, onClose }: HistoryDialogProps) {
   // The answer, with the credit it is about: a dialog reopened on another
   // row shows nothing until that row's own trail lands.
   const [loaded, setLoaded] = useState<{ forId: string; rows: HistoryRow[] } | null>(null);
-  const rows = row && loaded?.forId === row.atc_id ? loaded.rows : [];
+  const rows = row && loaded?.forId === row.atc_id ? loaded.rows : NO_ROWS;
 
   useEffect(() => {
     if (!row) {
@@ -89,6 +49,7 @@ export function HistoryDialog({ row, onClose }: HistoryDialogProps) {
     void getAll({
       grid_id: getGridId("tempCreditHistory"),
       page: "1",
+      // A trail is short; one page holds it.
       limit: "100",
       grid_param: JSON.stringify({
         iatc_id: row.atc_id,
@@ -109,16 +70,36 @@ export function HistoryDialog({ row, onClose }: HistoryDialogProps) {
     };
   }, [getAll, row]);
 
-  const summary = useMemo(() => {
-    if (!row) {
-      return "";
-    }
-    return `${row.atc_name || "—"} · ${row.atc_mobile || "—"} · bill ${row.atc_bill_refno || "—"} · lent ${formatTotal(row.atc_credit_amount)} · balance ${formatTotal(row.atc_balance_amount)} · ${row.atc_status}`;
-  }, [row]);
+  const summary = useMemo(() => (row ? historySummary(row, rows) : []), [row, rows]);
+  const ref = row?.atc_bill_refno ?? "";
 
   return (
-    <ModalShell title="Temp credit — history" isOpen={row !== null} wide fixedHeight onClose={onClose}>
-      <p className={quotationStyles.modalNote}>{summary}</p>
+    <ModalShell
+      title={ref ? `History · ${ref}` : "History"}
+      isOpen={row !== null}
+      wide
+      fixedHeight
+      onClose={onClose}
+      footer={
+        <button type="button" className={quotationStyles.button} onClick={onClose}>
+          Close - Esc
+        </button>
+      }
+    >
+      <p className={quotationStyles.modalNote}>
+        {DOC_LABEL} · {row?.atc_acc_year || "—"} · every step, oldest first
+      </p>
+      {summary.length > 0 ? (
+        <p className={quotationStyles.modalNote}>
+          {summary.map((part, index) => (
+            <Fragment key={index}>
+              {index > 0 ? "\u00a0\u00a0·\u00a0\u00a0" : null}
+              {part.lead}
+              {part.strong ? <strong>{part.value}</strong> : part.value}
+            </Fragment>
+          ))}
+        </p>
+      ) : null}
       <div className={quotationStyles.listViewport}>
         <table className={quotationStyles.listTable}>
           <thead>
@@ -138,7 +119,7 @@ export function HistoryDialog({ row, onClose }: HistoryDialogProps) {
               <tr key={entry.th_key}>
                 <td>{entry.th_when}</td>
                 <td>
-                  <Chip value={entry.th_event} tone={KIND_TONES[entry.th_kind] ?? "grey"} />
+                  <Chip value={entry.th_event} tone={eventTone(entry.th_event)} />
                 </td>
                 <td>{entry.th_detail}</td>
                 <td className={quotationStyles.alignRight}>
@@ -154,8 +135,8 @@ export function HistoryDialog({ row, onClose }: HistoryDialogProps) {
                   {loading
                     ? "Loading…"
                     : error
-                      ? `The history could not be read: ${error}`
-                      : "Nothing has happened to this credit yet."}
+                      ? `The history could not be loaded: ${error}`
+                      : "No history is recorded for this document."}
                 </td>
               </tr>
             ) : null}

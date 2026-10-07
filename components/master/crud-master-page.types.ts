@@ -236,7 +236,21 @@ export type CrudMasterPageProps = {
    * The confirmation dialog is still the shell's: what is being deleted, and
    * whether the operator meant it, is the same question either way.
    */
-  onDeleteAction?: (row: MasterTableRow) => boolean | Promise<boolean>;
+  onDeleteAction?: (
+    row: MasterTableRow,
+    context: { reason: string },
+  ) => boolean | Promise<boolean>;
+  /**
+   * Ask WHY in the delete confirmation: a one-line reason box the confirm
+   * button waits on, handed to `onDeleteAction` as `context.reason` (trimmed).
+   * For a delete the server records a reason for. Needs `onDeleteAction` — the
+   * shell's own `DELETE {delete}?id=` has nowhere to put it.
+   */
+  deleteReasonPrompt?: {
+    label?: string;
+    placeholder?: string;
+    maxLength?: number;
+  };
   /**
    * The delete dialog's own words. The shell asks "Do you really want to
    * delete this record?" and names the row; a page whose delete takes more
@@ -261,6 +275,12 @@ export type CrudMasterPageProps = {
    * `onViewAction`, and the page's own verbs go in `toolbarActions`.
    */
   hideWriteActions?: boolean;
+  /**
+   * Only Edit leaves: for a register whose rows are made and removed here but
+   * changed somewhere else. The Edit button goes, its keys (Alt+A, F2) do
+   * nothing, and Add / Delete stay under their own menu rights.
+   */
+  hideEditAction?: boolean;
   /**
    * Bind the list's function keys, and say so under the grid.
    *
@@ -324,8 +344,10 @@ export type CrudMasterPageProps = {
   toolbarContent?: ReactNode;
   // Extra action buttons rendered at the end of the icon toolbar (alongside
   // Add/Edit/Delete/...). Lets a page add navigation/actions without forking
-  // the shared toolbar.
-  toolbarActions?: ReactNode;
+  // the shared toolbar. Given a function, it is called with the selected row
+  // (or null), as `listHintMessage` is — so a page's own row verbs can grey
+  // out on a row they do not apply to without keeping a second selection.
+  toolbarActions?: ReactNode | ((row: MasterTableRow | null) => ReactNode);
   /**
    * Menu permissions (Settings → User Administration) gate this screen's Add /
    * Edit / Delete / Export buttons. By default the shell resolves the current

@@ -60,6 +60,7 @@ export const BRANCH_GET_ENDPOINT = "/branch-masters/get";
 /** `GET /temp-credits/open` and `PUT /temp-credits/follow-up` (§24). */
 export const TEMP_CREDIT_OPEN_ENDPOINT = "/temp-credits/open";
 export const TEMP_CREDIT_FOLLOW_UP_ENDPOINT = "/temp-credits/follow-up";
+export const TEMP_CREDIT_DELETE_ENDPOINT = "/temp-credits/delete";
 /** The GST actions (§21). Not on the test box (404); the screen shows the answer. */
 export const GST_EINVOICE_GENERATE_ENDPOINT = "/gst/einvoice/generate";
 export const GST_EWAYBILL_GENERATE_ENDPOINT = "/gst/ewaybill/generate";

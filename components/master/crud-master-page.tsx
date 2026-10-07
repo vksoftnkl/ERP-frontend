@@ -2475,7 +2475,9 @@ export default function CrudMasterPage({
   deleteConfirmMessage,
   deleteConfirmNote,
   deleteActionLabel = "Delete",
+  deleteReasonPrompt,
   hideWriteActions = false,
+  hideEditAction = false,
   hideListPage = false,
   hideRowsWhenAllGridColumnFiltersDisabled = false,
   onModalOpenChange,
@@ -3007,13 +3009,15 @@ export default function CrudMasterPage({
   // A read-only register takes the rights away here, so every key and every
   // entrance that checks them refuses along with the hidden buttons.
   const canCreateRecords = menuPermissions.canCreate && !hideWriteActions;
-  const canEditRecords = menuPermissions.canEdit && !hideWriteActions;
+  const canEditRecords = menuPermissions.canEdit && !hideWriteActions && !hideEditAction;
   const canDeleteRecords = menuPermissions.canDelete && !hideWriteActions;
   const canExportRecords = menuPermissions.canExport;
   const canPrintRecords = menuPermissions.canPrint;
 
   const [pendingDeleteRow, setPendingDeleteRow] =
     useState<MasterTableRow | null>(null);
+  /** What the operator typed in the confirmation's reason box (`deleteReasonPrompt`). */
+  const [deleteReason, setDeleteReason] = useState("");
   const [gridSettingsContextMenuPosition, setGridSettingsContextMenuPosition] =
     useState<ContextMenuPosition | null>(null);
   const [gridSettingsMode, setGridSettingsMode] = useState<"filter" | "visibility" | null>(null);
@@ -3591,6 +3595,7 @@ export default function CrudMasterPage({
       if (deleteLoading || saveLoading || detailsLoading) {
         return;
       }
+      setDeleteReason("");
       setPendingDeleteRow(row);
     },
     [deleteLoading, detailsLoading, saveLoading],
@@ -3605,6 +3610,10 @@ export default function CrudMasterPage({
     if (!pendingDeleteRow || deleteLoading || saveLoading || detailsLoading) {
       return;
     }
+    const reason = deleteReason.trim();
+    if (deleteReasonPrompt && !reason) {
+      return;
+    }
     void (async () => {
       try {
         const row = pendingDeleteRow;
@@ -3615,7 +3624,7 @@ export default function CrudMasterPage({
           // The page owns the request — `POST /receipts/delete` wants its four
           // keys in a body, which no url-and-query override can express. A
           // false answer leaves the list exactly as it was, message included.
-          const removed = await onDeleteAction(row);
+          const removed = await onDeleteAction(row, { reason });
           if (!removed) {
             return;
           }
@@ -3667,6 +3676,8 @@ export default function CrudMasterPage({
     searchTerm,
     afterDeleteSuccess,
     buildDeleteRequest,
+    deleteReason,
+    deleteReasonPrompt,
     onDeleteAction,
   ]);
   const fields = useMemo<ERPDynamicModalField[]>(
@@ -4386,6 +4397,7 @@ export default function CrudMasterPage({
                     </span>
                     <span>Add</span>
                   </button>
+                  {hideEditAction ? null : (
                   <button
                     type="button"
                     className={`${styles.iconBtn} ${styles.iconBtnEdit} erp-ms-tbtn`}
@@ -4406,6 +4418,7 @@ export default function CrudMasterPage({
                     </span>
                     <span>Edit</span>
                   </button>
+                  )}
                   <button
                     type="button"
                     className={`${styles.iconBtn} ${styles.iconBtnDelete} erp-ms-tbtn`}
@@ -4521,7 +4534,7 @@ export default function CrudMasterPage({
                       </button>
                     </>
                   ) : null}
-                  {toolbarActions}
+                  {typeof toolbarActions === "function" ? toolbarActions(selectedRow) : toolbarActions}
                 </div>
 
                 {/* Error boxes */}
@@ -4851,6 +4864,11 @@ export default function CrudMasterPage({
           }
           confirmLabel={deleteActionLabel}
           cancelLabel="Cancel"
+          reasonPrompt={
+            deleteReasonPrompt
+              ? { ...deleteReasonPrompt, value: deleteReason, onChange: setDeleteReason }
+              : undefined
+          }
           loading={deleteLoading}
           loadingLabel={`${toProgressiveLabel(deleteActionLabel)}...`}
           onConfirm={handleDeleteConfirm}

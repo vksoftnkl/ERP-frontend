@@ -8,9 +8,13 @@
  * the row highlight, the pager and the grid-settings menu.
  *
  * ── What makes this register unlike the others ───────────────────────────
- *  1. **Nothing is made or changed here.** A temp credit is raised by a bill's
- *     TEMP_CR tender and settled by a receipt, so there is no Add, no Edit and
- *     no Delete (`hideWriteActions`). The row's verbs are its own:
+ *  1. **Nothing is changed here.** A temp credit is raised by a bill's TEMP_CR
+ *     tender and settled by a receipt, so there is no Edit (`hideEditAction`).
+ *     **Add** opens a fresh bill on this route — the TEMP_CR tender is what
+ *     makes the credit. **Delete** takes the row off the register, with a
+ *     reason (`POST /temp-credits/delete`); the bill and its balance stay, so
+ *     what is owed stays owed as an ordinary credit. Both follow menu 257's
+ *     Create / Delete rights. The row's verbs are its own:
  *     **Receive F5** — collect it: the receipt opens on the bill's ledger,
  *     narrowed to the borrower's mobile, with the bill ticked at its balance.
  *     **Follow-up F6** — record the chase: a promise date and a remark.
@@ -36,6 +40,8 @@ import type { SaleBillDocKey } from "@/features/sales/salebill/salebill.types";
 import { Chip, type ChipTone } from "@/features/accounts/receipt/components/chip";
 import { formatTotal } from "@/features/accounts/receipt/domain/money";
 import { buildReceiptCollectHref } from "@/features/accounts/receipt/domain/collect";
+import { describeServerError } from "@/features/masters/shared/server-error-text";
+import { useDeleteTempCreditMutation } from "@/store/api/saleBillApi";
 import receiptStyles from "@/features/accounts/receipt/page.module.scss";
 import { FollowUpDialog } from "./follow-up-dialog";
 import { HistoryDialog } from "./history-dialog";
@@ -55,10 +61,18 @@ const DEFAULT_WINDOW_DAYS = 365;
 const NO_TENANT_ID = "00000000-0000-0000-0000-000000000000";
 
 const API_ENDPOINTS = {
-  // The shell's own form never opens here; these only satisfy the contract.
+  // The shell's own form never opens here and Delete is the page's own
+  // request (`onDeleteAction`); these only satisfy the contract.
   getById: "/temp-credits/open",
   create: "/temp-credits/follow-up",
-  delete: "/temp-credits/follow-up",
+  delete: "/temp-credits/delete",
+} as const;
+
+/** Delete asks why: the server keeps it on the row and in the credit's trail. */
+const DELETE_REASON_PROMPT = {
+  label: "Reason",
+  placeholder: "Why is it coming off the register?",
+  maxLength: 250,
 } as const;
 
 /** Grid 114's own aliases, for the fallback table and the row's label. */
@@ -137,10 +151,15 @@ const COLUMN_RENDER_OVERRIDES = {
 export type TempCreditListViewProps = {
   /** Open the bill behind the credit, read-only. */
   onOpenBill: (key: SaleBillDocKey) => void;
+  /** Add: a fresh bill, whose TEMP_CR tender raises the credit. */
+  onCreateBill: () => void;
 };
 
-export function TempCreditListView({ onOpenBill }: TempCreditListViewProps) {
+export function TempCreditListView({ onOpenBill, onCreateBill }: TempCreditListViewProps) {
   const router = useRouter();
+  const [deleteTempCredit] = useDeleteTempCreditMutation();
+  /** A delete is on the wire: a second Enter on the confirmation is not a second request. */
+  const deleting = useRef(false);
   const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
   const companyId = activeCompany?.id ?? "";
   const branchId = activeBranch?.id ?? "";
@@ -243,6 +262,56 @@ export function TempCreditListView({ onOpenBill }: TempCreditListViewProps) {
     setHistoryRow(row);
   }, []);
 
+  /**
+   * Delete, after the shell's confirmation took the reason. A false answer
+   * leaves the dialog up with the reason in it, so a refusal can be read and
+   * the delete tried again or abandoned.
+   */
+  const deleteCredit = useCallback(
+    async (shellRow: MasterTableRow, { reason }: { reason: string }) => {
+      if (deleting.current) {
+        return false;
+      }
+      const credit = tempCreditOf(shellRow);
+      if (!credit?.atc_id || !credit.atc_acc_year) {
+        toast.warn("This row names no temp credit to delete.");
+        return false;
+      }
+      deleting.current = true;
+      try {
+        await deleteTempCredit({
+          atcId: credit.atc_id,
+          atcAccYear: credit.atc_acc_year,
+          reason,
+        }).unwrap();
+        toast.success(
+          `Temp credit for bill ${credit.atc_bill_refno || "—"} taken off the register.`,
+        );
+        return true;
+      } catch (error) {
+        toast.error(describeServerError(error, "The temp credit could not be deleted."));
+        return false;
+      } finally {
+        deleting.current = false;
+      }
+    },
+    [deleteTempCredit],
+  );
+
+  const deleteConfirmMessage = useCallback((shellRow: MasterTableRow) => {
+    const credit = tempCreditOf(shellRow);
+    return credit
+      ? `Take the temp credit on bill ${credit.atc_bill_refno || "—"} (${credit.atc_name || "—"}) off the register?`
+      : "Take this temp credit off the register?";
+  }, []);
+
+  const deleteConfirmNote = useCallback((shellRow: MasterTableRow) => {
+    const credit = tempCreditOf(shellRow);
+    return credit && credit.atc_balance_amount > 0
+      ? `The bill and its balance of ${formatTotal(credit.atc_balance_amount)} stay: it is still owed, as an ordinary credit on the bill's ledger.`
+      : "The bill is not touched.";
+  }, []);
+
   const openBill = useCallback(
     (row: MasterTableRow) => {
       const key = billKeyOf(tempCreditOf(row));
@@ -256,7 +325,8 @@ export function TempCreditListView({ onOpenBill }: TempCreditListViewProps) {
   );
 
   // F5 receive, F6 follow-up, Ctrl+H history — the Qt keys. Quiet while a
-  // dialog is up, so its own keys are not also this screen's.
+  // dialog is up, so its own keys are not also this screen's — the shell's
+  // delete confirmation included, which only the DOM knows is open.
   const dialogOpen = followUpRow !== null || historyRow !== null;
   useEffect(() => {
     if (dialogOpen) {
@@ -264,6 +334,9 @@ export function TempCreditListView({ onOpenBill }: TempCreditListViewProps) {
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat || event.altKey || event.shiftKey) {
+        return;
+      }
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) {
         return;
       }
       if (event.key === "F5" && !event.ctrlKey && !event.metaKey) {
@@ -372,7 +445,8 @@ export function TempCreditListView({ onOpenBill }: TempCreditListViewProps) {
   const hintMessage = useCallback((row: MasterTableRow | null) => {
     const credit = tempCreditOf(row);
     selectedRow.current = credit;
-    const legend = "F5 receive · F6 follow-up · Enter opens the bill read-only · Ctrl+H history";
+    const legend =
+      "F5 receive · F6 follow-up · Enter opens the bill read-only · Ctrl+H history · Alt+C new bill";
     if (!credit) {
       return legend;
     }
@@ -395,43 +469,67 @@ export function TempCreditListView({ onOpenBill }: TempCreditListViewProps) {
     return `${state}  ${legend}`;
   }, []);
 
-  const toolbarActions = (
-    <>
-      <span className="erp-ms-tsep" aria-hidden="true" />
-      <button
-        type="button"
-        className={`${masterStyles.iconBtn} ${masterStyles.iconBtnEdit} erp-ms-tbtn`}
-        title="Collect it: the receipt opens on this bill's party, filtered to the borrower's mobile, with the bill ticked at its balance (F5)"
-        onClick={receive}
-      >
-        <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
-          <ErpActionIcon name="import" />
-        </span>
-        <span>Receive</span>
-      </button>
-      <button
-        type="button"
-        className={`${masterStyles.iconBtn} ${masterStyles.iconBtnShipping} erp-ms-tbtn`}
-        title="Record the chase: a promise date and a remark (F6)"
-        onClick={openFollowUp}
-      >
-        <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
-          <ErpActionIcon name="edit" />
-        </span>
-        <span>Follow-up</span>
-      </button>
-      <button
-        type="button"
-        className={`${masterStyles.iconBtn} ${masterStyles.iconBtnHistory} erp-ms-tbtn`}
-        title="The credit's own history: given, followed up, paid (Ctrl+H)"
-        onClick={openHistory}
-      >
-        <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
-          <ErpActionIcon name="history" />
-        </span>
-        <span>History</span>
-      </button>
-    </>
+  /**
+   * The row's verbs. Receive and Follow-up act on money still owed, so they
+   * grey out on a settled / written-off / cancelled row (Qt's `enabledFor`),
+   * and History needs a row; the tooltip says why a button is dead.
+   */
+  const toolbarActions = useCallback(
+    (shellRow: MasterTableRow | null) => {
+      const credit = tempCreditOf(shellRow);
+      const owed = hasBalance(credit);
+      const noBalance = credit ? "Nothing is owed on this credit." : "Highlight a temp credit first.";
+      return (
+        <>
+          <span className="erp-ms-tsep" aria-hidden="true" />
+          <button
+            type="button"
+            className={`${masterStyles.iconBtn} ${masterStyles.iconBtnEdit} erp-ms-tbtn`}
+            title={
+              owed
+                ? "Collect it: the receipt opens on this bill's party, filtered to the borrower's mobile, with the bill ticked at its balance (F5)"
+                : noBalance
+            }
+            disabled={!owed}
+            onClick={receive}
+          >
+            <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
+              <ErpActionIcon name="import" />
+            </span>
+            <span>Receive</span>
+          </button>
+          <button
+            type="button"
+            className={`${masterStyles.iconBtn} ${masterStyles.iconBtnShipping} erp-ms-tbtn`}
+            title={owed ? "Record the chase: a promise date and a remark (F6)" : noBalance}
+            disabled={!owed}
+            onClick={openFollowUp}
+          >
+            <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
+              <ErpActionIcon name="edit" />
+            </span>
+            <span>Follow-up</span>
+          </button>
+          <button
+            type="button"
+            className={`${masterStyles.iconBtn} ${masterStyles.iconBtnHistory} erp-ms-tbtn`}
+            title={
+              credit
+                ? "The credit's own history: given, followed up, paid (Ctrl+H)"
+                : "Highlight a temp credit first."
+            }
+            disabled={!credit}
+            onClick={openHistory}
+          >
+            <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
+              <ErpActionIcon name="history" />
+            </span>
+            <span>History</span>
+          </button>
+        </>
+      );
+    },
+    [openFollowUp, openHistory, receive],
   );
 
   return (
@@ -461,8 +559,15 @@ export function TempCreditListView({ onOpenBill }: TempCreditListViewProps) {
         listStateResetKey={listStateResetKey}
         listEmptyText="No temp credit in this window. Widen the dates or the status."
         listHintMessage={hintMessage}
-        // Made by a bill's tender, settled by a receipt: nothing is keyed here.
-        hideWriteActions
+        // Made by a bill's tender, settled by a receipt: nothing is edited here.
+        hideEditAction
+        // Add = a fresh bill (Alt+C too); a temp credit is its TEMP_CR tender.
+        onCreateAction={onCreateBill}
+        createLabel="New sale bill — its TEMP_CR tender raises the temp credit (Alt+C)"
+        onDeleteAction={deleteCredit}
+        deleteReasonPrompt={DELETE_REASON_PROMPT}
+        deleteConfirmMessage={deleteConfirmMessage}
+        deleteConfirmNote={deleteConfirmNote}
         rowClassName={(row) =>
           tempCreditOf(row)?.atc_status === "CANCELLED" ? receiptStyles.cancelledRow : undefined
         }

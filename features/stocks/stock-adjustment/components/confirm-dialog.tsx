@@ -5,7 +5,6 @@
  * text's line breaks kept (the post question carries the totals on their own
  * lines). Yes has the focus, so Enter answers it; Esc is No.
  */
-import { useEffect, useRef } from "react";
 import { cx } from "@/components/design-system/cx";
 import { ModalShell } from "@/features/sales/quotation/components/modal-shell";
 import quotationStyles from "@/features/sales/quotation/page.module.scss";
@@ -21,14 +20,6 @@ export type ConfirmRequest = {
 };
 
 export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest | null; onClose: () => void }) {
-  const confirmRef = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    if (request) {
-      window.requestAnimationFrame(() => confirmRef.current?.focus());
-    }
-  }, [request]);
-
   const cancel = () => {
     onClose();
     request?.onCancel?.();
@@ -42,9 +33,11 @@ export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest | 
       onClose={cancel}
       footer={
         <span className={quotationStyles.gridHeadActions}>
+          {/* autoFocus, not a focus() a frame later: ModalShell portals, and the
+              portal draws a commit after the request — the frame could beat it. */}
           <button
-            ref={confirmRef}
             type="button"
+            autoFocus
             className={cx(quotationStyles.button, quotationStyles.buttonPrimary)}
             onClick={() => {
               onClose();

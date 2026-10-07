@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import ModalPortal from "@/components/ui/modal-portal";
 import styles from "./delete-confirm-modal.module.scss";
 
@@ -15,6 +15,17 @@ type DeleteConfirmModalProps = {
   cancelLabel?: string;
   loading?: boolean;
   loadingLabel?: string;
+  /**
+   * A one-line "why" box under the message. While it is empty the confirm
+   * button is dead; Enter inside it confirms once there is something in it.
+   */
+  reasonPrompt?: {
+    label?: string;
+    placeholder?: string;
+    maxLength?: number;
+    value: string;
+    onChange: (value: string) => void;
+  };
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -35,18 +46,23 @@ export default function DeleteConfirmModal({
   cancelLabel = "Cancel",
   loading = false,
   loadingLabel = "Deleting...",
+  reasonPrompt,
   onConfirm,
   onCancel,
 }: DeleteConfirmModalProps) {
   const modalRef = useRef<HTMLDivElement | null>(null);
+  const reasonRef = useRef<HTMLInputElement | null>(null);
+  const reasonId = useId();
+  const reasonMissing = Boolean(reasonPrompt) && !reasonPrompt?.value.trim();
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
 
+    // With a reason box the operator's first job is to type in it.
     const focusTimeout = window.setTimeout(() => {
-      modalRef.current?.focus();
+      (reasonRef.current ?? modalRef.current)?.focus();
     }, 0);
 
     return () => {
@@ -96,12 +112,14 @@ export default function DeleteConfirmModal({
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      onConfirm();
+      if (!reasonMissing) {
+        onConfirm();
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, loading, onCancel, onConfirm]);
+  }, [isOpen, loading, onCancel, onConfirm, reasonMissing]);
 
   if (!isOpen) {
     return null;
@@ -186,6 +204,36 @@ export default function DeleteConfirmModal({
             {effectiveNote ? (
               <p className="erp-ms-confirm-note">{effectiveNote}</p>
             ) : null}
+            {reasonPrompt ? (
+              <div className="erp-ms-confirm-reason">
+                <label htmlFor={reasonId}>{reasonPrompt.label ?? "Reason"}</label>
+                <input
+                  ref={reasonRef}
+                  id={reasonId}
+                  type="text"
+                  value={reasonPrompt.value}
+                  placeholder={reasonPrompt.placeholder}
+                  maxLength={reasonPrompt.maxLength}
+                  disabled={loading}
+                  autoComplete="off"
+                  aria-required="true"
+                  onChange={(event) => reasonPrompt.onChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      !event.altKey &&
+                      !event.ctrlKey &&
+                      !event.metaKey &&
+                      !event.shiftKey &&
+                      !reasonMissing
+                    ) {
+                      event.preventDefault();
+                      onConfirm();
+                    }
+                  }}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -217,7 +265,8 @@ export default function DeleteConfirmModal({
             <button
               type="button"
               onClick={onConfirm}
-              disabled={loading}
+              disabled={loading || reasonMissing}
+              title={reasonMissing ? `Say why first` : undefined}
               className={`${styles.deleteButton} erp-ms-confirm-ok`}
             >
               {loading ? loadingLabel : confirmLabel}

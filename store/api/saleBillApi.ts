@@ -42,6 +42,7 @@ import {
   OPEN_CREDITS_ENDPOINT,
   PROMOTION_SCHEME_LIST_ENDPOINT,
   SALE_ORDER_CANCEL_LINES_ENDPOINT,
+  TEMP_CREDIT_DELETE_ENDPOINT,
   TEMP_CREDIT_FOLLOW_UP_ENDPOINT,
   type DeliveryEvent,
 } from "@/features/sales/salebill/salebill.constants";
@@ -194,6 +195,16 @@ export type TempCreditFollowUpDto = {
   atcAccYear: string;
   remarks: string;
   promiseDate?: string | null;
+};
+
+/**
+ * `POST /temp-credits/delete`: the register row only — the bill and its
+ * balance stay, so what is owed stays owed as an ordinary credit.
+ */
+export type DeleteTempCreditDto = {
+  atcId: string;
+  atcAccYear: string;
+  reason: string;
 };
 
 /** `GET /branch-masters/get?brId` — what the dispatch-from block reads (§20.2). */
@@ -472,6 +483,13 @@ export const saleBillApi = baseApi.injectEndpoints({
       transformResponse: (payload: ApiSuccessResponse<Record<string, unknown>>) => payload.data,
     }),
 
+    /** `POST /temp-credits/delete` — off the register, with a reason. */
+    deleteTempCredit: builder.mutation<{ atcId: string; deleted: true }, DeleteTempCreditDto>({
+      query: (body) => ({ url: TEMP_CREDIT_DELETE_ENDPOINT, method: "POST", body }),
+      transformResponse: (payload: ApiSuccessResponse<{ atcId: string; deleted: true }>) =>
+        payload.data,
+    }),
+
     /** `GET /branch-masters/get?brId` (§20.2). */
     getBranchAddress: builder.query<BranchAddress, string>({
       query: (brId) => ({ url: BRANCH_GET_ENDPOINT, params: { brId } }),
@@ -555,6 +573,7 @@ export const {
   useRetenderBillMutation,
   useUpdateDeliveryStatusMutation,
   useFollowUpTempCreditMutation,
+  useDeleteTempCreditMutation,
   useLazyGetBranchAddressQuery,
   useListPromotionSchemesQuery,
   useGenerateEinvoiceMutation,

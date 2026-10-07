@@ -58,7 +58,6 @@ export function StockPickDialog(props: StockPickDialogProps) {
       setDebounced("");
       setShowAll(false);
       setActive(-1);
-      window.requestAnimationFrame(() => searchRef.current?.focus());
     }
   }, [isOpen]);
 
@@ -186,6 +185,9 @@ export function StockPickDialog(props: StockPickDialogProps) {
         <input
           id="stock-pick-search"
           ref={searchRef}
+          // Focus on mount: the dialog is portaled one commit late, so a
+          // focus() queued a frame after opening can land before the box exists.
+          autoFocus
           className={quotationStyles.input}
           value={search}
           placeholder={item?.itemName ? `batch no of ${item.itemName}` : "item name, item code or batch no"}

@@ -14,9 +14,11 @@
  * server or the screen refused are tinted until they are fixed.
  *
  * Keys: Enter walks the layout's focus stops (the shared `grid-focus` walk);
- * Enter on an outward line's batch cell, F2 or F12 picks from stock; typing in
- * the Item cell opens the item search; Alt+= / Alt+− add a line above / remove
- * the current one (the Qt grid's + / −, which a signed Qty cell cannot give up).
+ * ↑ / ↓ keep the column and change the line; Esc in a typed cell takes the
+ * typing back; Enter on an outward line's batch cell, F2 or F12 picks from
+ * stock; typing in the Item cell opens the item search; Alt+= / Alt+− add a
+ * line above / remove the current one (the Qt grid's + / −, which a signed Qty
+ * cell cannot give up).
  */
 import {
   useEffect,
@@ -27,7 +29,7 @@ import {
 } from "react";
 import { cx } from "@/components/design-system/cx";
 import { formatCurrency } from "@/domain/pricing";
-import { moveCellFocus } from "@/features/sales/quotation/components/grid-focus";
+import { focusCell, moveCellFocus } from "@/features/sales/quotation/components/grid-focus";
 import {
   GRID_FIELD_ATTR,
   GRID_FOCUS_STOP_ATTR,
@@ -153,7 +155,12 @@ function TextCell({
       }}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
-          setText(committed.current);
+          // The first Esc takes back what was typed; only an Esc with nothing
+          // to undo reaches the screen (Close).
+          if (text !== committed.current) {
+            event.preventDefault();
+            setText(committed.current);
+          }
           return;
         }
         if (event.key === "Enter" && !event.altKey && !event.ctrlKey && !event.metaKey) {
@@ -257,6 +264,32 @@ export function AdjustmentLineGrid(props: AdjustmentLineGridProps) {
   const reasonOptions = draft.reasons.map((reason) => ({ value: reason.id, label: reason.name }));
   const bucketOptions = BUCKETS.map((code) => ({ value: code, label: bucketLabel(code) }));
   const lastKey = draft.lines[draft.lines.length - 1]?.key;
+
+  /**
+   * ↑ / ↓ — the same column one line up or down (the typed cell commits as it
+   * loses focus), else that line's item cell when the column is shut there —
+   * the blank last line has nothing open but its item. A `<select>` keeps its
+   * arrows: they choose its option.
+   */
+  const onRowArrow = (event: ReactKeyboardEvent<HTMLTableRowElement>, index: number): boolean => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+      return false;
+    }
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return false;
+    }
+    const target = event.target as HTMLElement;
+    const field = target.getAttribute(GRID_FIELD_ATTR);
+    if (!field || target instanceof HTMLSelectElement) {
+      return false;
+    }
+    event.preventDefault();
+    const next = draft.lines[index + (event.key === "ArrowDown" ? 1 : -1)];
+    if (next && !focusCell(LINE_GRID_NAME, next.key, field)) {
+      focusCell(LINE_GRID_NAME, next.key, String(COL.Description));
+    }
+    return true;
+  };
 
   const onRowKeyDown = (event: ReactKeyboardEvent<HTMLTableRowElement>, line: AdjustmentLine) => {
     if (!editable || !event.altKey || event.ctrlKey || event.metaKey) {
@@ -610,6 +643,9 @@ export function AdjustmentLineGrid(props: AdjustmentLineGridProps) {
                     event.preventDefault();
                     event.stopPropagation();
                     onOpenPick(line.key);
+                    return;
+                  }
+                  if (onRowArrow(event, index)) {
                     return;
                   }
                   onRowKeyDown(event, line);
