@@ -2419,6 +2419,7 @@ export default function CrudMasterPage({
   isRowDeleteDisabled,
   rowDeleteDisabledReason,
   onViewAction,
+  onHistoryAction,
   useResponseTableColumns,
   responseTableColumnExcludeKeys,
   toolbarContent,
@@ -3824,6 +3825,10 @@ export default function CrudMasterPage({
   );
   const handleRowLogs = useCallback(
     (row: MasterTableRow) => {
+      if (onHistoryAction) {
+        onHistoryAction(row);
+        return;
+      }
       if (!auditHistory) {
         return;
       }
@@ -3841,7 +3846,7 @@ export default function CrudMasterPage({
           auditHistory.getDisplayName?.(row) ?? resolveAuditHistoryDisplayName(row),
       });
     },
-    [auditHistory],
+    [auditHistory, onHistoryAction],
   );
   const handleSearchChange = useCallback((query: string) => {
     setCurrentPage(DEFAULT_PAGE);
@@ -4144,6 +4149,41 @@ export default function CrudMasterPage({
       handleRowLogs(selectedRow);
     }
   }, [selectedRow, handleRowLogs]);
+
+  /**
+   * Ctrl+H — the page's own History (`onHistoryAction`) on the selected row,
+   * through the same handler as the button. Only for pages that supply one:
+   * the audit-log masters never bound the key, and this does not start now.
+   * Quiet while any dialog is over the list, which owns the keyboard then.
+   */
+  useEffect(() => {
+    if (hideListPage || !onHistoryAction) {
+      return;
+    }
+    const handleHistoryKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || event.altKey || event.shiftKey) {
+        return;
+      }
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "h") {
+        return;
+      }
+      if (
+        gridSettingsMode !== null ||
+        pendingDeleteRow !== null ||
+        document.querySelector('[role="dialog"][aria-modal="true"]')
+      ) {
+        return;
+      }
+      // Claimed even with no row selected, so the key means one thing on this
+      // page rather than sometimes opening the browser's history instead.
+      event.preventDefault();
+      handleToolbarLogs();
+    };
+    window.addEventListener("keydown", handleHistoryKey);
+    return () => {
+      window.removeEventListener("keydown", handleHistoryKey);
+    };
+  }, [gridSettingsMode, handleToolbarLogs, hideListPage, onHistoryAction, pendingDeleteRow]);
   const handleGridColumnReorder = useCallback(
     (nextColumns: ReusableTableColumn<MasterTableRow>[]) => {
       if (gridId === null || gridSettingsColumns.length === 0) {
@@ -4517,7 +4557,7 @@ export default function CrudMasterPage({
                           : "Print"}
                     </span>
                   </button>
-                  {auditHistory ? (
+                  {auditHistory || onHistoryAction ? (
                     <>
                       <span className="erp-ms-tsep" aria-hidden="true" />
                       <button
@@ -4525,7 +4565,7 @@ export default function CrudMasterPage({
                         className={`${styles.iconBtn} ${styles.iconBtnHistory} erp-ms-tbtn`}
                         onClick={handleToolbarLogs}
                         disabled={!selectedRow}
-                        title="View history"
+                        title={onHistoryAction ? "View history (Ctrl+H)" : "View history"}
                       >
                         <span className={`${styles.iconBtnBox} erp-ms-tbtn-icon`}>
                           <ErpActionIcon name="history" />

@@ -20,6 +20,10 @@ import {
   ITEM_BY_BARCODE_ENDPOINT,
 } from "@/features/sales/quotation/quotation.constants";
 import type { BarcodeItemLookup } from "@/features/sales/quotation/quotation.types";
+import type {
+  QuickAddCustomerDto,
+  QuickAddCustomerResult,
+} from "@/features/sales/salebill/salebill.quick-add";
 import {
   BILL_AMEND_ENDPOINT,
   BILL_CANCEL_ENDPOINT,
@@ -36,6 +40,7 @@ import {
   BILL_TRANSPORT_ENDPOINT,
   BILL_VALIDATE_ENDPOINT,
   BRANCH_GET_ENDPOINT,
+  CUSTOMER_CREATE_ENDPOINT,
   GST_EINVOICE_GENERATE_ENDPOINT,
   GST_EWAYBILL_GENERATE_ENDPOINT,
   GST_EWAYBILL_VEHICLE_ENDPOINT,
@@ -490,6 +495,16 @@ export const saleBillApi = baseApi.injectEndpoints({
         payload.data,
     }),
 
+    /**
+     * `POST /customers/create` — Quick-add Customer (§7.7). Not named
+     * `quickAddCustomer`: the testbill module injects an endpoint under that
+     * name with `overrideExisting`, and the two would replace each other.
+     */
+    createQuickCustomer: builder.mutation<QuickAddCustomerResult, QuickAddCustomerDto>({
+      query: (body) => ({ url: CUSTOMER_CREATE_ENDPOINT, method: "POST", body }),
+      transformResponse: (payload: ApiSuccessResponse<QuickAddCustomerResult>) => payload.data,
+    }),
+
     /** `GET /branch-masters/get?brId` (§20.2). */
     getBranchAddress: builder.query<BranchAddress, string>({
       query: (brId) => ({ url: BRANCH_GET_ENDPOINT, params: { brId } }),
@@ -574,6 +589,7 @@ export const {
   useUpdateDeliveryStatusMutation,
   useFollowUpTempCreditMutation,
   useDeleteTempCreditMutation,
+  useCreateQuickCustomerMutation,
   useLazyGetBranchAddressQuery,
   useListPromotionSchemesQuery,
   useGenerateEinvoiceMutation,

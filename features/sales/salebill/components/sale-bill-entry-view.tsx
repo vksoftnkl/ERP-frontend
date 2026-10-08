@@ -127,6 +127,7 @@ import { useSaleBillDraft, type SaveOutcome } from "../use-sale-bill-draft";
 import { AdjustPanel } from "./adjust-panel";
 import { AskText } from "./ask-text";
 import { BillQuickStrip } from "./bill-quick-strip";
+import { CustomerQuickAdd } from "./customer-quick-add";
 import { useBillVisibleSettings } from "./bill-visible-settings";
 import { BillListModal } from "./bill-list-modal";
 import {
@@ -249,6 +250,9 @@ export function SaleBillEntryView({
   const editable = draft.mode === "entry" && !draft.isDeleted && canSaveDoc;
   /** Import lock (§7.7): a bill with a source document, unless the setting allows the change. */
   const customerLocked = Boolean(draft.source) && !api.settings.allowCustomerChangeOnImport;
+  const customerLockReason = customerLocked
+    ? `Imported from ${draft.source?.refno ?? "another document"} — the customer belongs to that document and can't be changed here.`
+    : undefined;
 
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
   const [itemPickerRow, setItemPickerRow] = useState<string | null>(null);
@@ -317,6 +321,8 @@ export function SaleBillEntryView({
    * money — held, not applied, until they confirm losing it (§4.3).
    */
   const [customerToConfirm, setCustomerToConfirm] = useState<string | null>(null);
+  /** Quick-add Customer (§7.7), the quick strip's "+". */
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   /** Alt+D — Disc % All (§6.2). */
   const [discountPromptOpen, setDiscountPromptOpen] = useState(false);
   /** ± Price (§6.2). */
@@ -724,6 +730,15 @@ export function SaleBillEntryView({
     },
     [api, customerChangeCost.blocked],
   );
+
+  /**
+   * Back to the customer box when the quick add closes: the dialog unmounts
+   * with the caret inside it, and choosing a customer is what the operator was
+   * doing. A frame later, once the dialog has gone.
+   */
+  const focusCustomerField = useCallback(() => {
+    window.requestAnimationFrame(() => document.getElementById("sale-bill-customer")?.focus());
+  }, []);
 
   const onCustomerChangeConfirmed = useCallback(() => {
     const customerId = customerToConfirm;
@@ -1278,6 +1293,7 @@ export function SaleBillEntryView({
     chargePickerRow !== null ||
     priceLevelPrompt !== null ||
     customerToConfirm !== null ||
+    quickAddOpen ||
     discountPromptOpen ||
     pricePromptOpen ||
     duplicatePick !== null ||
@@ -1602,8 +1618,13 @@ export function SaleBillEntryView({
         isNew={draft.isNewEntry}
         hasLines={draft.lines.some((line) => Boolean(line.itemId))}
         onQuickAddCustomer={() => {
-          document.getElementById("sale-bill-customer")?.focus();
-          toast.info("Alt+C on the customer field adds a customer without leaving the bill.");
+          // The import lock: the bill belongs to the source document's customer
+          // (Qt shows the combo's tooltip, which says the same).
+          if (customerLockReason) {
+            toast.warn(customerLockReason);
+            return;
+          }
+          setQuickAddOpen(true);
         }}
         onImportQuotation={() => guardedRun("importQuotation")}
         onImportOrder={() => guardedRun("importOrder")}
@@ -1643,11 +1664,7 @@ export function SaleBillEntryView({
           // unless the setting allows the change.
           billToEditable={api.isWalkIn && !customerLocked}
           customerLocked={customerLocked}
-          customerLockReason={
-            customerLocked
-              ? `Imported from ${draft.source?.refno ?? "another document"} — the customer belongs to that document and can't be changed here.`
-              : undefined
-          }
+          customerLockReason={customerLockReason}
           sourceNote={
             draft.source
               ? `Raised from ${draft.source.refno ?? "another document"}: the imported prices were quoted to the customer below, so re-check them if you repoint the bill at somebody else.`
@@ -1876,6 +1893,28 @@ export function SaleBillEntryView({
         hasSelection={Boolean(activeRowKey)}
         onClose={() => setPriceLevelPrompt(null)}
         onApply={applyPriceLevel}
+      />
+      {/*
+        The new customer is put on the bill exactly as an operator pick is —
+        including the confirm below when the change would clear settled money.
+      */}
+      <CustomerQuickAdd
+        isOpen={quickAddOpen}
+        companyId={draft.companyId}
+        branchId={draft.branchId}
+        defaultStateCode={draft.companyStateCode}
+        defaultStateName={draft.companyStateName}
+        onClose={() => {
+          setQuickAddOpen(false);
+          focusCustomerField();
+        }}
+        onCreated={(customerId) => {
+          setQuickAddOpen(false);
+          onRequestCustomer(customerId);
+          if (!customerChangeCost.blocked) {
+            focusCustomerField();
+          }
+        }}
       />
       <DeleteConfirmModal
         isOpen={customerToConfirm !== null}

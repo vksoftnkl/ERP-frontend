@@ -4,7 +4,7 @@
  * The screen the menu lands on: the bill register, built on the same
  * `CrudMasterPage` shell every master page (and the quotation and sale-order
  * lists) uses, so it inherits the identical header, icon toolbar,
- * configured-column table, row actions, pagination, audit history, keyboard
+ * configured-column table, row actions, pagination, history, keyboard
  * hints and grid-settings context menu.
  *
  * Like its two siblings, a bill is not editable in a modal form, so Create and
@@ -49,6 +49,7 @@ import { useCallback, useMemo, useState } from "react";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import { useBusinessContext } from "@/components/layout/business-context";
+import { TxnHistoryDialog, type TxnHistoryTarget } from "@/components/txn/txn-history-dialog";
 import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
 import masterStyles from "@/app/master/state-master/page.module.scss";
@@ -218,6 +219,8 @@ export function SaleBillListView({ onCreate, onOpen }: SaleBillListViewProps) {
    */
   const [printTargets, setPrintTargets] = useState<SaleBillDocKey[]>([]);
   const [printRefno, setPrintRefno] = useState<string>("");
+  /** The bill whose History is open, held for the same reason as the print target. */
+  const [historyTarget, setHistoryTarget] = useState<TxnHistoryTarget | null>(null);
 
   const [fromDate, setFromDate] = useState(() =>
     addDays(todayIso(), -BILL_LIST_WINDOW_DAYS),
@@ -430,15 +433,26 @@ export function SaleBillListView({ onCreate, onOpen }: SaleBillListViewProps) {
           }
           return null;
         }}
-        auditHistory={{
-          // What the server stamps on `sale_bill` audit rows.
-          screenName: "Sale Bill",
-          getRecordId: (row) => asText(sourceValue(row, "sb_id")) || null,
-          getDisplayName: (row) =>
-            asText(sourceValue(row, "sb_bill_refno")) ||
-            asText(sourceValue(row, "cus_name")) ||
-            null,
+        // History (and Ctrl+H) is the bill's STATUS TRAIL — every step from
+        // txn_status_log, as the Qt Sales Bills list shows it — not the
+        // field-level audit-log modal the masters open.
+        onHistoryAction={(row) => {
+          const key = docKeyOf(row);
+          if (!key.sbId) {
+            return;
+          }
+          setHistoryTarget({
+            docId: key.sbId,
+            companyId: key.sbCompanyId,
+            accYear: key.sbAccYear,
+            refNo: asText(sourceValue(row, "sb_bill_refno")),
+          });
         }}
+      />
+      <TxnHistoryDialog
+        target={historyTarget}
+        docLabel="Sales Bill"
+        onClose={() => setHistoryTarget(null)}
       />
       {printTargets.length > 0 ? (
         <PrintOptionsDialog

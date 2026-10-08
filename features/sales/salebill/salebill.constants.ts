@@ -57,6 +57,11 @@ export const BILL_DELIVERY_STATUS_ENDPOINT = "/bills/delivery-status";
 export const PROMOTION_SCHEME_LIST_ENDPOINT = "/promotion-scheme/list";
 /** `GET /branch-masters/get?brId` — the dispatch-from address (§20.2). */
 export const BRANCH_GET_ENDPOINT = "/branch-masters/get";
+/**
+ * `POST /customers/create` — Quick-add Customer (§7.7). Writes the customer AND
+ * its ledger in one call; a name clash is a 409 naming the ledger.
+ */
+export const CUSTOMER_CREATE_ENDPOINT = "/customers/create";
 /** `GET /temp-credits/open` and `PUT /temp-credits/follow-up` (§24). */
 export const TEMP_CREDIT_OPEN_ENDPOINT = "/temp-credits/open";
 export const TEMP_CREDIT_FOLLOW_UP_ENDPOINT = "/temp-credits/follow-up";

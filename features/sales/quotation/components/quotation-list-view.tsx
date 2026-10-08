@@ -4,7 +4,7 @@
  * The screen the menu lands on: the quotation list, built on the same
  * `CrudMasterPage` shell every master page uses, so it inherits the identical
  * header, toolbar, configured-column table, row actions, delete confirmation,
- * pagination, audit history and grid-settings context menu.
+ * pagination, history and grid-settings context menu.
  *
  * The one difference from a master page: a quotation is not editable in a modal
  * form, so `onCreateAction` / `onEditAction` are supplied and the shell's own
@@ -32,6 +32,7 @@ import { toast } from "@/lib/notify";
 import CrudMasterPage from "@/components/master/crud-master-page";
 import type { MasterTableRow } from "@/components/master/crud-master-page.types";
 import { useBusinessContext } from "@/components/layout/business-context";
+import { TxnHistoryDialog, type TxnHistoryTarget } from "@/components/txn/txn-history-dialog";
 import { PURPOSE_CODE } from "@/features/printing/domain/documentPrint";
 import { PrintOptionsDialog } from "@/features/printing/components/print-options-dialog";
 import styles from "@/app/master/state-master/page.module.scss";
@@ -166,6 +167,8 @@ export function QuotationListView({
    */
   const [printTargets, setPrintTargets] = useState<QuotationDocKey[]>([]);
   const [printRefno, setPrintRefno] = useState<string>("");
+  /** The quotation whose History is open, held for the same reason as the print target. */
+  const [historyTarget, setHistoryTarget] = useState<TxnHistoryTarget | null>(null);
 
   // The shell's default page/limit/search/sort query, plus the `grid_param` grid
   // 84's SQL needs. The date window is sent empty on purpose: each date sits
@@ -302,15 +305,27 @@ export function QuotationListView({
         // the Edit gate above: refused with a reason rather than left to fail.
         isRowPrintDisabled={isDeletedRow}
         rowPrintDisabledReason="This quotation is deleted and cannot be printed"
-        auditHistory={{
-          // What the server stamps on `sale_quotation` audit rows.
-          screenName: "Sale Quotation",
-          getRecordId: (row) => asText(sourceValue(row, "sq_id")) || null,
-          getDisplayName: (row) =>
-            asText(sourceValue(row, "sq_quote_refno")) ||
-            asText(sourceValue(row, "sq_cust_name")) ||
-            null,
+        // History (and Ctrl+H) is the quotation's STATUS TRAIL — created,
+        // converted, deleted, from txn_status_log — as the Qt Quotations list
+        // shows it, not the field-level audit-log modal the masters open. A
+        // deleted quotation keeps it: its last step is the deletion.
+        onHistoryAction={(row) => {
+          const key = docKeyOf(row);
+          if (!key.sqId) {
+            return;
+          }
+          setHistoryTarget({
+            docId: key.sqId,
+            companyId: key.sqCompanyId,
+            accYear: key.sqAccYear,
+            refNo: asText(sourceValue(row, "sq_quote_refno")),
+          });
         }}
+      />
+      <TxnHistoryDialog
+        target={historyTarget}
+        docLabel="Sales Quotation"
+        onClose={() => setHistoryTarget(null)}
       />
       {printTargets.length > 0 ? (
         <PrintOptionsDialog

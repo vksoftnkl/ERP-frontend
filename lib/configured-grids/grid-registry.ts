@@ -155,6 +155,12 @@ export const CONFIGURED_GRIDS = {
    * `iatc_id`, `iacc_year`, `icompany_id`; has no ORDER BY — sort on `th_sort`.
    */
   tempCreditHistory: { name: "POPUP - TEMP CREDIT HISTORY", fallbackId: "132", deletedParam: null },
+  /**
+   * Any transaction's History — its `txn_status_log` steps (created, posted,
+   * amended, cancelled …). Binds `idoc_id`, `iacc_year`, `icompany_id`; has no
+   * ORDER BY — sort on `tsl_seq_no`.
+   */
+  txnHistory: { name: "POPUP - TXN HISTORY", fallbackId: "126", deletedParam: null },
   /** Sale Bill (§22) — Ctrl+F6's picker: this device's bills from today. Binds `idevice_id`. */
   retenderBillPopup: { name: "POPUP - RECENT BILLS FOR RE-TENDER", fallbackId: "115", deletedParam: null },
   /** Receipt Entry — the bank picker on a cheque row. Free text is allowed too. */

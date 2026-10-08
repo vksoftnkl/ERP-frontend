@@ -339,6 +339,13 @@ export type CrudMasterPageProps = {
    * viewable through this: it is the read side, not the write side.
    */
   onViewAction?: (row: MasterTableRow) => void;
+  /**
+   * The page's OWN History for the selected row, in place of the audit-log
+   * modal `auditHistory` opens — a transaction's status trail, say. Supplying
+   * it shows the History button (with or without `auditHistory`) and binds
+   * Ctrl+H to the same handler, the key Qt's transaction lists use.
+   */
+  onHistoryAction?: (row: MasterTableRow) => void;
   useResponseTableColumns?: boolean;
   responseTableColumnExcludeKeys?: readonly string[];
   toolbarContent?: ReactNode;

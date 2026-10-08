@@ -405,6 +405,8 @@ export type DropdownComboProps = {
   /** The label to show for `value` when the list has not been fetched yet. */
   selectedLabel: string;
   disabled?: boolean;
+  /** Marks the label, for a field the save refuses to go without. */
+  required?: boolean;
   placeholder?: string;
   /**
    * The tokens a param-bound dropdown's SQL binds (`itrn_company_id`, …),
@@ -443,6 +445,7 @@ export function DropdownCombo(props: DropdownComboProps) {
     value,
     selectedLabel,
     disabled,
+    required,
     placeholder,
     params,
     onSelect,
@@ -555,7 +558,7 @@ export function DropdownCombo(props: DropdownComboProps) {
   };
 
   return (
-    <Field label={label} htmlFor={id}>
+    <Field label={label} htmlFor={id} required={required}>
       <div
         className={styles.combo}
         ref={rootRef}

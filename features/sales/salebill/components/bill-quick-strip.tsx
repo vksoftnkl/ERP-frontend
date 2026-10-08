@@ -73,7 +73,7 @@ export type BillQuickStripProps = {
 export function BillQuickStrip(props: BillQuickStripProps) {
   const { editable, posted, isNew, hasLines } = props;
   const live: QuickAction[] = [
-    { key: "quickAdd", label: "Quick add customer (Alt+C on the customer field)", icon: <FiUserPlus />, onClick: props.onQuickAddCustomer, disabled: !editable },
+    { key: "quickAdd", label: "Quick-add customer", icon: <FiUserPlus />, onClick: props.onQuickAddCustomer, disabled: !editable },
     { key: "quote", label: "Import a quotation (Ctrl+F3)", icon: <FiDownload />, onClick: props.onImportQuotation, disabled: !editable },
     { key: "order", label: "Import a sales order (Ctrl+F4)", icon: <FiFileText />, onClick: props.onImportOrder, disabled: !editable },
     { key: "challan", label: "Import challan lines (Ctrl+F5)", icon: <FiTruck />, onClick: props.onImportChallan, disabled: !editable },
