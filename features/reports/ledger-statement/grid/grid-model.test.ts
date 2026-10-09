@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { headerFixture, vouchersFixture } from "../testing/fixtures";
 import { firstPages } from "../query/pages";
-import { formatAmount, formatBal } from "../wire/money";
+import { formatAmount, formatBal } from "@/features/reports/shared/wire/money";
 import { parseHeader, parseVouchers } from "../wire/parse";
 import { buildGridModel, contraLegs, indexSpan, pairOf } from "./grid-model";
 

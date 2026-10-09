@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { exportFixture, monthlyFixture } from "../testing/fixtures";
 import { parseExport, parseMonthly } from "../wire/parse";
 import { toXlsx, VOUCHER_HEADINGS } from "./to-xlsx";
-import { columnName, crc32, writeXlsx, type Cell } from "./xlsx-writer";
+import { columnName, crc32, writeXlsx, type Cell } from "@/features/reports/shared/export/xlsx-writer";
 
 const data = parseExport(exportFixture());
 const monthly = parseMonthly(monthlyFixture());

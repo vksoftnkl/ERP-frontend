@@ -16,10 +16,10 @@
  * Amounts are strings with two decimals, and they stay strings (plan §4.2).
  */
 
-export type Side = "DR" | "CR";
+import type { Bal, Side } from "@/features/reports/shared/wire/types";
 
-/** A balance: the magnitude and its side. `side` is null only on zero, if at all. */
-export type Bal = { amount: string; side: Side | null };
+// Shared with the other reports (`features/reports/shared`), so one formatter serves them all.
+export type { Bal, Side };
 
 export type RowKind = "NORMAL" | "CANCELLED" | "REVERSAL";
 

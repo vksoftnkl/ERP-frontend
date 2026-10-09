@@ -46,6 +46,7 @@ import { defaultTender } from "./domain/tenders";
 import type { ChequeExtras, ReceiptKeys, ReceiptScope } from "./receipt.types";
 import { receivedTotal } from "./state/draft";
 import type { TempCreditCollect } from "./domain/collect";
+import type { PartyHandoff } from "@/lib/navigation/party-handoff";
 import { useReceiptDraft, type ConfirmRequest, type PromptRequest } from "./state/use-receipt-draft";
 import { useReceiptSettings } from "./state/use-receipt-settings";
 import { ApproverDialog } from "./components/approver-dialog";
@@ -113,9 +114,11 @@ export type ReceiptScreenProps = {
    * party, the borrower's mobile and the bill to tick (`domain/collect`).
    */
   collect?: TempCreditCollect | null;
+  /** Set when a report (Party-wise Outstanding's Ctrl+R) asked for a new receipt on one party. */
+  openOnParty?: PartyHandoff | null;
 };
 
-export default function ReceiptScreen({ initialKeys, onBackToList, collect }: ReceiptScreenProps) {
+export default function ReceiptScreen({ initialKeys, onBackToList, collect, openOnParty }: ReceiptScreenProps) {
   const router = useRouter();
   const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
   const { permissions, isLoading: permissionsLoading } = usePagePermissions({
@@ -340,6 +343,17 @@ export default function ReceiptScreen({ initialKeys, onBackToList, collect }: Re
     collectedInitial.current = true;
     void collectTempCredit(collect);
   }, [collect, collectTempCredit]);
+
+  // ── Opened by a report on one party (Ctrl+R) ────────────────────────────
+  const pickedInitial = useRef(false);
+  const pickParty = api.pickParty;
+  useEffect(() => {
+    if (!openOnParty || pickedInitial.current) {
+      return;
+    }
+    pickedInitial.current = true;
+    void pickParty(openOnParty.partyId, openOnParty.partyName);
+  }, [openOnParty, pickParty]);
 
   /** 3.0's `tBtnDefTndr`: put this row back on the default tender. */
   const resetRowToDefaultTender = useCallback(() => {

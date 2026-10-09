@@ -16,8 +16,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { cx } from "@/components/design-system/cx";
 import styles from "../page.module.scss";
 import { indexSpan, pairOf, type GridModel, type GridRow } from "../grid/grid-model";
-import { displayDate } from "../wire/dates";
-import { formatAmount, formatBal, formatCell } from "../wire/money";
+import { displayDate } from "@/features/reports/shared/wire/dates";
+import { formatAmount, formatBal, formatCell } from "@/features/reports/shared/wire/money";
 import type { VoucherRow } from "../wire/types";
 import { TypeChip } from "./type-chip";
 

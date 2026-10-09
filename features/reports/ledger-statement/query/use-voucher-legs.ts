@@ -8,7 +8,7 @@
  */
 import { useCallback, useRef, useState } from "react";
 import type { LedgerStatementClient } from "../api/ledger-statement";
-import { isAborted } from "../api/abort";
+import { isAborted } from "@/features/reports/shared/api/abort";
 import type { LegsState } from "../grid/grid-model";
 import { toLedgerError } from "../wire/errors";
 import type { VoucherRow } from "../wire/types";

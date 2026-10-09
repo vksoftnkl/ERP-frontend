@@ -14,9 +14,9 @@
  * No React in here: `useStatement` wraps it, and the race test drives it.
  */
 import type { LedgerStatementClient } from "../api/ledger-statement";
-import { isAborted } from "../api/abort";
+import { isAborted } from "@/features/reports/shared/api/abort";
 import type { DailyPayload, HeaderPayload, MonthlyPayload } from "../wire/types";
-import { Generations, type Ticket } from "./generation";
+import { Generations, type Ticket } from "@/features/reports/shared/query/generation";
 import { firstPages, pagesNeeded, PAGE_SIZE, withPage, type PagesState } from "./pages";
 import { rangeQuery, reportKey, scopeQuery, vouchersQuery, type Filters, type Session } from "./params";
 

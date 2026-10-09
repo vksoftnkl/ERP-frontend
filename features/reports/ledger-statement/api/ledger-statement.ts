@@ -27,7 +27,7 @@ import { useMemo } from "react";
 import { baseApi } from "@/store/api/baseApi";
 import { useAppDispatch } from "@/store/hooks";
 import type { AppDispatch } from "@/store";
-import { AbortedError } from "./abort";
+import { AbortedError } from "@/features/reports/shared/api/abort";
 import type {
   ExportQuery,
   LedgersQuery,

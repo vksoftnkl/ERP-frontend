@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { COMPANY_ID, FY, LEDGER_OTHERS, LEDGER_SKT } from "../testing/fixtures";
 import { fakeClient, flush } from "../testing/fake-client";
 import { buildGridModel } from "../grid/grid-model";
-import { formatBal } from "../wire/money";
+import { formatBal } from "@/features/reports/shared/wire/money";
 import { isLastPageLoaded, lastRow, rowAt } from "./pages";
 import { parseFilters, type Filters, type Session } from "./params";
 import { fullKey, StatementLoader, type StatementState } from "./statement-loader";

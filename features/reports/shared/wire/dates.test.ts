@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  addDays,
   clampIso,
+  dayMonthLabel,
   displayDate,
   isIsoDate,
   isoDay,
@@ -8,6 +10,7 @@ import {
   monthLabel,
   previousDay,
   todayIso,
+  weekdayOf,
 } from "./dates";
 
 describe("dates", () => {
@@ -45,5 +48,23 @@ describe("dates", () => {
 
   it("reads today in the local calendar", () => {
     expect(todayIso(new Date(2026, 8, 25, 23, 59))).toBe("2026-09-25");
+  });
+});
+
+describe("calendar helpers", () => {
+  it("adds days across month and year ends", () => {
+    expect(addDays("2026-09-25", 7)).toBe("2026-10-02");
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+    expect(addDays("2026-03-01", -1)).toBe("2026-02-28");
+  });
+
+  it("numbers weekdays Monday-first", () => {
+    expect(weekdayOf("2026-09-28")).toBe(0); // a Monday
+    expect(weekdayOf("2026-09-25")).toBe(4); // a Friday
+    expect(weekdayOf("2026-10-04")).toBe(6); // a Sunday
+  });
+
+  it("labels a day without its year", () => {
+    expect(dayMonthLabel("2026-10-02")).toBe("2 Oct");
   });
 });

@@ -82,3 +82,22 @@ export function todayIso(now: Date = new Date()): string {
 export function isWithin(iso: string, min: string | null, max: string | null): boolean {
   return (!min || iso >= min) && (!max || iso <= max);
 }
+
+/** `2026-09-25` + 7 → `2026-10-02`. Calendar layout only, never an age or a due date. */
+export function addDays(iso: string, days: number): string {
+  const date = toUtc(iso);
+  date.setUTCDate(date.getUTCDate() + days);
+  return fromUtc(date);
+}
+
+/** Monday = 0 … Sunday = 6, the column a day sits in on a Monday-first calendar. */
+export function weekdayOf(iso: string): number {
+  return (toUtc(iso).getUTCDay() + 6) % 7;
+}
+
+/** `2026-09-25` → `25 Sep`. */
+export function dayMonthLabel(iso: string): string {
+  const match = ISO_DATE.exec(iso);
+  if (!match) return iso;
+  return `${Number(match[3])} ${MONTHS[Number(match[2]) - 1] ?? match[2]}`;
+}

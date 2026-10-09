@@ -12,8 +12,8 @@ import { layoutViewportSize, type LayoutRect } from "@/lib/ui-scale";
 import { Z_POPUP } from "@/lib/z-index";
 import styles from "../page.module.scss";
 import type { LegsState } from "../grid/grid-model";
-import { displayDate } from "../wire/dates";
-import { formatAmount } from "../wire/money";
+import { displayDate } from "@/features/reports/shared/wire/dates";
+import { formatAmount } from "@/features/reports/shared/wire/money";
 import type { VoucherLeg, VoucherRow } from "../wire/types";
 import { typeText } from "./type-chip";
 

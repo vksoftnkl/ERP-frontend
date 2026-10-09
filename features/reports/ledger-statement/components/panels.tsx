@@ -8,8 +8,8 @@
  */
 import { cx } from "@/components/design-system/cx";
 import styles from "../page.module.scss";
-import { displayDate, monthLabel } from "../wire/dates";
-import { formatAmount, formatBal, isZeroAmount } from "../wire/money";
+import { displayDate, monthLabel } from "@/features/reports/shared/wire/dates";
+import { formatAmount, formatBal, isZeroAmount } from "@/features/reports/shared/wire/money";
 import type { LedgerFacts, MonthlyPayload, MonthlyRow, PeriodSummary } from "../wire/types";
 
 const DASH = "—";

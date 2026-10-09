@@ -8,7 +8,7 @@
  * filter lands, narrow `findCode` to the shape it really sends.
  */
 import { LedgerParseError } from "./parse";
-import { displayDate } from "./dates";
+import { displayDate } from "@/features/reports/shared/wire/dates";
 
 export const LEDGER_ERROR_CODES = [
   "LEDGER_NOT_IN_COMPANY",
@@ -172,7 +172,10 @@ export function toLedgerError(error: unknown, ctx: ErrorContext = {}): LedgerErr
     };
   }
   const status = isObj(error) && typeof error.status === "number" ? error.status : undefined;
-  const data = isObj(error) ? error.data : undefined;
+  // The global AllExceptionsFilter wraps a refusal one level down:
+  // `{ statusCode, message: { message, errors: [{ field, code }] } }`.
+  const outer = isObj(error) ? error.data : undefined;
+  const data = isObj(outer) && isObj(outer.message) ? outer.message : outer;
   const code = findCode(data);
 
   if (status === 403 || code === "NO_MENU_RIGHT") {

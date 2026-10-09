@@ -28,6 +28,26 @@ describe("toLedgerError", () => {
     );
   });
 
+  it("finds the code inside the global filter's wrapper", () => {
+    const result = toLedgerError(
+      {
+        status: 422,
+        data: {
+          success: false,
+          statusCode: 422,
+          message: {
+            success: false,
+            message: "Ledger statement request refused",
+            errors: [{ field: "branchId", code: "BRANCH_NOT_IN_COMPANY", message: "x" }],
+          },
+          path: "/api/v1/reports/ledger-statement/header",
+        },
+      },
+      ctx,
+    );
+    expect(result).toMatchObject({ kind: "refused", code: "BRANCH_NOT_IN_COMPANY", field: "branch" });
+  });
+
   it("turns 403 into the whole-screen refusal", () => {
     expect(toLedgerError({ status: 403, data: {} }).kind).toBe("forbidden");
   });

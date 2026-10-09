@@ -10,7 +10,7 @@
  * land, read one real response per route and correct this file (plan §15,
  * phase 4).
  */
-import { isAmountString } from "./money";
+import { isAmountString } from "@/features/reports/shared/wire/money";
 import type {
   Bal,
   DailyPayload,

@@ -14,7 +14,7 @@
  * details" row are client-side children, and they carry no report index, so
  * they never enter the paging maths.
  */
-import { previousDay } from "../wire/dates";
+import { previousDay } from "@/features/reports/shared/wire/dates";
 import type { Bal, PeriodSummary, VoucherLeg, VoucherRow } from "../wire/types";
 import { isLastPageLoaded, loadedRowCount, rowAt, type PagesState } from "../query/pages";
 

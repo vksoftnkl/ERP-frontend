@@ -28,7 +28,7 @@ import {
 } from "@/components/design-system/dropdown";
 import dropdownStyles from "@/components/design-system/dropdown/nex-dropdown.module.scss";
 import type { LedgerStatementClient } from "../api/ledger-statement";
-import { isAborted } from "../api/abort";
+import { isAborted } from "@/features/reports/shared/api/abort";
 import { toLedgerError } from "../wire/errors";
 import type { LedgerPickItem } from "../wire/types";
 

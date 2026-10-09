@@ -205,6 +205,9 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
     children: [
       { label: "Day Book" },
       { label: "Sales Register" },
+      // Menu 279, straight under Reports (server seed + the
+      // party_outstanding_menu_reports migration). Grant it in User Administration.
+      { label: "Party Outstanding", href: "/reports/party-outstanding" },
       {
         label: "Financial Statements",
         children: [

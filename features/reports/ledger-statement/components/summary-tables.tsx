@@ -11,8 +11,8 @@
 import type { KeyboardEvent } from "react";
 import { cx } from "@/components/design-system/cx";
 import styles from "../page.module.scss";
-import { displayDate, monthLabel, previousDay } from "../wire/dates";
-import { formatBal, formatCell } from "../wire/money";
+import { displayDate, monthLabel, previousDay } from "@/features/reports/shared/wire/dates";
+import { formatBal, formatCell } from "@/features/reports/shared/wire/money";
 import type { DailyPayload, MonthlyPayload, PeriodSummary } from "../wire/types";
 
 function onActivate(run: () => void) {

@@ -54,6 +54,7 @@ import { PAYMENT_SETTLEMENT } from "./domain/roles";
 import { paymentTdsOf } from "./domain/seeded-lines";
 import { defaultPaymentTender, isChequeType, isTransferType, isUpiType } from "./domain/tenders";
 import type { BillRow, CreditRow, PaymentKeys, PaymentScope } from "./payment.types";
+import type { PartyHandoff } from "@/lib/navigation/party-handoff";
 import { paidTotal } from "./state/draft";
 import { usePaymentDraft, type ConfirmRequest, type PromptRequest } from "./state/use-payment-draft";
 import { usePaymentSettings } from "./state/use-payment-settings";
@@ -115,9 +116,11 @@ type DialogRequest =
 export type PaymentScreenProps = {
   initialKeys?: PaymentKeys;
   onBackToList?: () => void;
+  /** Set when a report (Party-wise Outstanding's Ctrl+R) asked for a new payment on one party. */
+  openOnParty?: PartyHandoff | null;
 };
 
-export default function PaymentScreen({ initialKeys, onBackToList }: PaymentScreenProps) {
+export default function PaymentScreen({ initialKeys, onBackToList, openOnParty }: PaymentScreenProps) {
   const router = useRouter();
   const { activeCompany, activeBranch, activeFiscalYear } = useBusinessContext();
   const { permissions, isLoading: permissionsLoading } = usePagePermissions({
@@ -267,6 +270,17 @@ export default function PaymentScreen({ initialKeys, onBackToList }: PaymentScre
     openedInitial.current = true;
     void openByKeys(initialKeys);
   }, [initialKeys, openByKeys]);
+
+  // Opened by a report on one party (Ctrl+R): a new payment, party picked.
+  const pickedInitial = useRef(false);
+  const pickParty = api.pickParty;
+  useEffect(() => {
+    if (!openOnParty || pickedInitial.current) {
+      return;
+    }
+    pickedInitial.current = true;
+    void pickParty(openOnParty.partyId, openOnParty.partyName);
+  }, [openOnParty, pickParty]);
 
   // The caret starts on PAYMENT NO on every new or loaded document.
   useEffect(() => {

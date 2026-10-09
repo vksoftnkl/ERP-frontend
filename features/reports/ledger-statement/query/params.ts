@@ -11,7 +11,7 @@
  * choice made yet", and the screen fills in the session's branch. The two must
  * differ, or a shared link for the combined view would open on one branch.
  */
-import { displayDate, isIsoDate } from "../wire/dates";
+import { displayDate, isIsoDate } from "@/features/reports/shared/wire/dates";
 
 export type Tab = "vouchers" | "daily" | "monthly";
 

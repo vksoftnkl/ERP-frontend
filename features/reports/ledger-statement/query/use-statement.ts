@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LedgerStatementClient } from "../api/ledger-statement";
-import { sameBal } from "../wire/money";
+import { sameBal } from "@/features/reports/shared/wire/money";
 import { isLastPageLoaded, lastRow } from "./pages";
 import type { Filters, Session } from "./params";
 import { INITIAL_STATE, StatementLoader, type StatementState } from "./statement-loader";
