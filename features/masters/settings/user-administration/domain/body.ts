@@ -45,6 +45,7 @@ export function buildSaveBody({ mode, usrId, identity, grants }: SaveBodyInput):
     usrType: identity.userType || null,
     usrCompanyId: companyId || null,
     usrBranchId: branchId || null,
+    usrEmployeeId: identity.employeeId.trim() || null,
     usrMustChangePassword: identity.mustChangePassword,
     usrDesktopLogin: identity.desktopLogin,
     usrWebLogin: identity.webLogin,
@@ -60,6 +61,14 @@ export function buildSaveBody({ mode, usrId, identity, grants }: SaveBodyInput):
   const password = identity.password.trim();
   if (password) {
     body.usrPassword = password;
+  }
+
+  // usrPin: absent keeps the stored PIN, "" clears it, digits replace it.
+  const pin = identity.pin.trim();
+  if (identity.clearPin) {
+    body.usrPin = "";
+  } else if (pin) {
+    body.usrPin = pin;
   }
 
   if (mode === "edit" && usrId) {

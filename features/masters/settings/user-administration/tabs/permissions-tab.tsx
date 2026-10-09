@@ -280,8 +280,17 @@ export function PermissionsTab({
                       onChange={(event) => onChange(tickMenu(grants, node, event.target.checked, loaded))}
                     />
                     <span
-                      className={cx(styles.menuLabel, hasChildren && styles.menuLabelParent)}
-                      title={node.label}
+                      className={cx(
+                        styles.menuLabel,
+                        hasChildren && styles.menuLabelParent,
+                        node.hidden && styles.menuLabelHidden,
+                      )}
+                      // Grey says "not on anyone's menu bar", not "denied".
+                      title={
+                        node.hidden
+                          ? `${node.label} — hidden menu, not shown on the menu bar; its rights still apply`
+                          : node.label
+                      }
                     >
                       {node.label}
                     </span>

@@ -40,6 +40,22 @@ describe("parseMenuTree", () => {
     expect(parseMenuTree({ data: "nope" }).rows).toEqual([]);
   });
 
+  it("lists a hidden menu, flagged — an absent visibility is shown", () => {
+    const mixed = parseMenuTree([
+      {
+        menuId: 8,
+        menuName: "&8 Transport",
+        menuVisibility: false,
+        children: [{ menuId: 81, menuName: "Trips", menuVisibility: true }],
+      },
+      { menuId: 9, menuName: "No Flag" },
+    ]);
+    expect(mixed.byId.get(8)?.hidden).toBe(true);
+    // A visible menu under a hidden parent is reached, and is itself shown.
+    expect(mixed.byId.get(81)?.hidden).toBe(false);
+    expect(mixed.byId.get(9)?.hidden).toBe(false);
+  });
+
   it("keeps the first row of a menu id seen twice", () => {
     const dup = parseMenuTree([
       { menuId: 5, menuName: "First", menuVerbs: ["VIEW"] },

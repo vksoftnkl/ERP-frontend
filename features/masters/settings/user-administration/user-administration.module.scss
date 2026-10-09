@@ -426,6 +426,10 @@
   font-weight: 600;
 }
 
+.menuLabelHidden {
+  color: var(--erp-ms-ink-faint, #888);
+}
+
 .cell {
   display: flex;
   align-items: center;

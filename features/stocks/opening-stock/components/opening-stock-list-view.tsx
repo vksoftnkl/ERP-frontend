@@ -14,8 +14,9 @@
  *    bar says so.
  *  - **Cancel, not Delete (F3).** There is no delete route. Cancel is live on a
  *    DRAFT and a POSTED voucher, asks for a reason, says what it will do, and
- *    keeps the voucher in the list as CANCELLED. It answers to the menu's delete
- *    permission, as the entry screen's own Cancel does.
+ *    keeps the voucher in the list as CANCELLED. It answers to the document
+ *    rights as the entry screen's own Cancel does — Cancel for a POSTED voucher,
+ *    Delete for a draft — on top of the shell's delete gate (the menu's Delete).
  *  - **Every token, every time.** Grid 99's params are bare and svh-prefixed and
  *    the runner substitutes by name, so status and both dates travel as "" for
  *    "no filter" (see `listGridParams`).
@@ -27,6 +28,8 @@ import type { MasterTableRow } from "@/components/master/crud-master-page.types"
 import { useBusinessContext } from "@/components/layout/business-context";
 import masterStyles from "@/app/master/state-master/page.module.scss";
 import { formatCurrency } from "@/domain/pricing";
+import { usePagePermissions } from "@/hooks/useMenuPermissions";
+import { documentRights } from "@/lib/permissions/document-rights";
 import {
   accountingYearOf,
   toDisplayDate,
@@ -143,6 +146,8 @@ export function OpeningStockListView({ onCreate, onOpen }: OpeningStockListViewP
   const branchId = activeBranch?.id ?? "";
   const accYear = (activeFiscalYear?.name ?? "").trim() || accountingYearOf(todayIso());
   const session = useMemo(() => ({ companyId, branchId, accYear }), [accYear, branchId, companyId]);
+  const { permissions } = usePagePermissions();
+  const rights = useMemo(() => documentRights(permissions), [permissions]);
 
   const [period, setPeriod] = useState<PeriodPreset>("lastNDays");
   const [fromDate, setFromDate] = useState(
@@ -380,8 +385,10 @@ export function OpeningStockListView({ onCreate, onOpen }: OpeningStockListViewP
         // The delete slot is Cancel's: there is no delete route, and nothing
         // here is ever deleted — a cancelled voucher stays in the list.
         deleteActionLabel="Cancel Voucher"
-        isRowDeleteDisabled={(row) => !canCancelRow(sourceOf(row))}
-        rowDeleteDisabledReason="Cancelled — its reversal is part of the history."
+        isRowDeleteDisabled={(row) =>
+          !canCancelRow(sourceOf(row)) || !rights.mayCancelDocument(rowStatus(sourceOf(row)) === "POSTED")
+        }
+        rowDeleteDisabledReason="Cancelled — its reversal is part of the history. A POSTED voucher also needs the Cancel right."
         deleteConfirmMessage={(row) =>
           cancelConsequence(rowStatus(sourceOf(row)) === "POSTED").split("\n\n")[0] ?? ""
         }

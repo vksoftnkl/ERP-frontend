@@ -244,7 +244,8 @@ export function buildTenderPayload(
     // Only a cheque's date makes it a post-dated instrument; a card's expiry
     // also lives in tdInstrumentDate and must never flag PDC.
     tdIsPdc: isCheque ? isPdc(instrumentDate, documentDate) : false,
-    tdSettleStatus: row.settleStatus || "NA",
+    // No tdSettleStatus — the server owns that lifecycle (PENDING only when the
+    // key is absent); the screen says WHERE and WHEN.
     tdSettleLedgerId: row.settleLedgerId,
     tdExpectedSettleOn: documentDate
       ? addDaysIso(documentDate, row.settlementDays)

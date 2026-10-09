@@ -250,7 +250,8 @@ describe("buildTenderPayload — instrument block", () => {
     // A cheque has no card number even when digits were typed into the row.
     expect(dto.tdCardLast4).toBeNull();
     expect(dto.tdTenderTypeId).toBe(5);
-    expect(dto.tdSettleStatus).toBe("NA");
+    // The server owns the settlement lifecycle; the key is never sent.
+    expect(dto).not.toHaveProperty("tdSettleStatus");
     expect(dto.tdExpectedSettleOn).toBe("2026-08-14");
   });
 

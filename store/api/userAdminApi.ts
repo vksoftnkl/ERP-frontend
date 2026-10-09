@@ -4,7 +4,7 @@
  *   GET    /user-administration/get?usrId=     one user, menus[] included
  *   POST   /user-administration/create         create (no usrId) or update
  *   DELETE /user-administration/delete?usrId=  the user and every menu row
- *   GET    /menu-masters/get?visibleOnly=true  the menu tree
+ *   GET    /menu-masters/get                   the menu tree, hidden menus too
  *   GET    /configured-grid-sql/run grid 62     the list, for the copy-rights picker
  *
  * The two reads the dialog makes on open are declared as GET mutations, not
@@ -53,11 +53,15 @@ export const userAdminApi = baseApi.injectEndpoints({
       query: (usrId) => ({ url: USER_ADMIN_GET_ENDPOINT, method: "GET", params: { usrId } }),
       transformResponse: (payload: ApiSuccessResponse<UserAdminPayload>) => payload.data,
     }),
+    // Every menu, hidden ones too: a right on a hidden menu still applies on the
+    // server, and `visibleOnly=true` also dropped every VISIBLE menu under a
+    // hidden parent, leaving those grants unreachable from the grid (Qt
+    // `loadMenus(false)`, 2026-10-08).
     loadMenuTree: builder.mutation<MenuTreeNodePayload[], void>({
       query: () => ({
         url: MENU_MASTERS_GET_ENDPOINT,
         method: "GET",
-        params: { visibleOnly: "true" },
+        params: { visibleOnly: "false" },
       }),
       transformResponse: (payload: ApiSuccessResponse<MenuTreeNodePayload[]>) =>
         Array.isArray(payload.data) ? payload.data : [],

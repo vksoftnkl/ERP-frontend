@@ -73,19 +73,30 @@ const BRANCH_DROPDOWN_CONFIG = {
   labelKeys: ["br_name", "brName"] as const,
   defaultOption: { value: "", label: "Select Branch" } as ERPDynamicSelectOption,
 } as const;
+// The employee's own ledger under Loans & Advances (Asset): staff advances are
+// paid to it and a till shortage the cashier must make good is recovered into it.
+// Left blank, the server creates "<name> - Staff Advance" on save (notes 95); pick
+// one only for an employee whose ledger already exists (e.g. from Tally). The
+// dropdown lists that group's ledgers of the employee's company plus shared ones
+// (Qt reads LEDGERS - ALL, which offers ledgers the server then refuses).
+const STAFF_LEDGER_DROPDOWN_CONFIG = {
+  dropdownKey: "staffAdvanceLedger",
+  idKeys: ["led_id", "ledId"] as const,
+  labelKeys: ["led_name", "ledName"] as const,
+  defaultOption: { value: "", label: "Created on save" } as ERPDynamicSelectOption,
+} as const;
 // Source keys to seed the saved selection on edit/view (getById returns id + name).
 const COMPANY_SOURCE_ID_KEYS = ["empCompanyId", "emp_company_id"] as const;
 const COMPANY_SOURCE_NAME_KEYS = ["empCompanyName", "emp_company_name", "compName", "comp_name"] as const;
 const BRANCH_SOURCE_ID_KEYS = ["empBranchId", "emp_branch_id"] as const;
 const BRANCH_SOURCE_NAME_KEYS = ["empBranchName", "emp_branch_name", "brName", "br_name"] as const;
+const STAFF_LEDGER_SOURCE_ID_KEYS = ["empLoanLedgerId", "emp_loan_ledger_id"] as const;
+const STAFF_LEDGER_SOURCE_NAME_KEYS = ["empLoanLedgerName", "emp_loan_ledger_name"] as const;
 const LOOKUP_QUERY_DEPARTMENTS = {
   module: "employeeDepartments",
 } as const;
 const LOOKUP_QUERY_DESIGNATIONS = {
   module: "employeeDesignations",
-} as const;
-const LOOKUP_QUERY_LOAN_LEDGERS = {
-  module: "accountLedgers",
 } as const;
 const LOOKUP_QUERY_STATES = {
   module: "states",
@@ -326,9 +337,10 @@ function buildEmployeeFormFields(
   stateOptions: ERPDynamicSelectOption[],
   employmentStatusOptions: ERPDynamicSelectOption[],
   salaryTypeOptions: ERPDynamicSelectOption[],
-  loanLedgerOptions: ERPDynamicSelectOption[],
+  staffLedgerOptions: ERPDynamicSelectOption[],
   companyHandlers: LazyDropdownHandlers,
   branchHandlers: LazyDropdownHandlers,
+  staffLedgerHandlers: LazyDropdownHandlers,
 ): ERPDynamicModalField[] {
   return [
     {
@@ -616,6 +628,18 @@ function buildEmployeeFormFields(
       },
     },
     {
+      name: "empLoanLedgerId",
+      label: "Staff Advance Ledger",
+      type: "select",
+      searchable: true,
+      serverSearch: true,
+      options: staffLedgerOptions,
+      placeholder: "Created on save",
+      onSearchOpenChange: staffLedgerHandlers.onSearchOpenChange,
+      onSearchQueryChange: staffLedgerHandlers.onSearchQueryChange,
+      onValueChange: staffLedgerHandlers.onValueChange,
+    },
+    {
       name: "__heading_statutory",
       label: "Statutory & Accounting",
       type: "heading",
@@ -715,17 +739,33 @@ function mapEmployeeFormValues(
   return values;
 }
 export default function EmployeeMasterPage() {
-  // Company/Branch: lazy server-side configured dropdowns 8/5. The rest stay eager.
+  // Company/Branch/Staff Advance Ledger: lazy server-side configured dropdowns. The rest stay eager.
   const company = useLazyConfiguredDropdown(COMPANY_DROPDOWN_CONFIG);
   const branch = useLazyConfiguredDropdown(BRANCH_DROPDOWN_CONFIG);
+  // The staff advance ledger list follows the form's Company (its SQL binds a
+  // quoted 'icompany_id'; blank leaves only the shared ledgers).
+  const [formCompanyId, setFormCompanyId] = useState("");
+  const staffLedgerParams = useMemo(() => ({ icompany_id: formCompanyId }), [formCompanyId]);
+  const staffLedger = useLazyConfiguredDropdown({
+    ...STAFF_LEDGER_DROPDOWN_CONFIG,
+    params: staffLedgerParams,
+  });
+  const companyHandlers = useMemo<LazyDropdownHandlers>(
+    () => ({
+      ...company.handlers,
+      onValueChange: (payload) => {
+        setFormCompanyId(payload.value);
+        return company.handlers.onValueChange(payload);
+      },
+    }),
+    [company.handlers],
+  );
   const { getAll: getDepartmentLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getDesignationLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const { getAll: getStateLookup } = useApi<unknown>(STATE_LOOKUP_ENDPOINT);
-  const { getAll: getLoanLedgerLookup } = useApi<unknown>(LOOKUP_ENDPOINT);
   const [departmentOptions, setDepartmentOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [designationOptions, setDesignationOptions] = useState<ERPDynamicSelectOption[]>([]);
   const [stateOptions, setStateOptions] = useState<ERPDynamicSelectOption[]>([]);
-  const [loanLedgerOptions, setLoanLedgerOptions] = useState<ERPDynamicSelectOption[]>([]);
 
   // Lookup options come from master tables that other users and other screens
   // change, so they are re-read on every data-refresh signal, not just on mount.
@@ -736,12 +776,10 @@ export default function EmployeeMasterPage() {
         departmentsPayload,
         designationsPayload,
         statesPayload,
-        loanLedgersPayload,
       ] = await Promise.allSettled([
         getDepartmentLookup(LOOKUP_QUERY_DEPARTMENTS),
         getDesignationLookup(LOOKUP_QUERY_DESIGNATIONS),
         getStateLookup(LOOKUP_QUERY_STATES),
-        getLoanLedgerLookup(LOOKUP_QUERY_LOAN_LEDGERS),
       ]);
       if (!mounted) {
         return;
@@ -761,11 +799,6 @@ export default function EmployeeMasterPage() {
           ? toStateOptions(statesPayload.value)
           : [],
       );
-      setLoanLedgerOptions(
-        loanLedgersPayload.status === "fulfilled"
-          ? toLookupOptions(loanLedgersPayload.value)
-          : [],
-      );
     })();
     return () => {
       mounted = false;
@@ -774,7 +807,6 @@ export default function EmployeeMasterPage() {
     getDepartmentLookup,
     getDesignationLookup,
     getStateLookup,
-    getLoanLedgerLookup,
   ]);
   useEffect(() => loadLookupOptions(), [loadLookupOptions]);
   useDataRefresh(() => {
@@ -790,18 +822,20 @@ export default function EmployeeMasterPage() {
         stateOptions,
         EMPLOYMENT_STATUS_OPTIONS,
         SALARY_TYPE_OPTIONS,
-        loanLedgerOptions,
-        company.handlers,
+        staffLedger.options,
+        companyHandlers,
         branch.handlers,
+        staffLedger.handlers,
       ),
     [
       company.options,
-      company.handlers,
+      companyHandlers,
       branch.options,
       branch.handlers,
       departmentOptions,
       designationOptions,
-      loanLedgerOptions,
+      staffLedger.options,
+      staffLedger.handlers,
       stateOptions,
     ],
   );
@@ -880,6 +914,8 @@ export default function EmployeeMasterPage() {
         if (open && variantKey === "master-create") {
           company.seedSelected("", "");
           branch.seedSelected("", "");
+          staffLedger.seedSelected("", "");
+          setFormCompanyId("");
         }
       }}
       mapFormValues={({ source, defaults }) => {
@@ -894,6 +930,11 @@ export default function EmployeeMasterPage() {
           toDisplayValue(getFirstDefinedValue(rowSource, BRANCH_SOURCE_ID_KEYS)),
           toDisplayValue(getFirstDefinedValue(rowSource, BRANCH_SOURCE_NAME_KEYS)),
         );
+        staffLedger.seedSelected(
+          toDisplayValue(getFirstDefinedValue(rowSource, STAFF_LEDGER_SOURCE_ID_KEYS)),
+          toDisplayValue(getFirstDefinedValue(rowSource, STAFF_LEDGER_SOURCE_NAME_KEYS)),
+        );
+        setFormCompanyId(toDisplayValue(getFirstDefinedValue(rowSource, COMPANY_SOURCE_ID_KEYS)));
         return mapEmployeeFormValues(source, defaults);
       }}
       buildRequestPayload={async ({ values, shouldUpdate, editingItemId, files }) => {

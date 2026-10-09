@@ -96,6 +96,22 @@ export const CONFIGURED_DROPDOWNS = {
   stockReason: { name: "STOCK REASONS", fallbackId: "50", paramBound: false },
   /** Stock-tracking presets — Change Selling Price's "Tracked as" filter. */
   stockTrackPreset: { name: "STOCK TRACK PRESETS", fallbackId: "49", paramBound: false },
+  /**
+   * Employee master's Staff Advance Ledger: live ledgers under Loans &
+   * Advances (Asset). Binds a QUOTED `'icompany_id'` (shared ledgers always show).
+   */
+  staffAdvanceLedger: { name: "STAFF ADVANCE LEDGERS", fallbackId: "63", paramBound: true },
+  /**
+   * Till Masters — a counter's device: Desktop/Mobile devices of the branch not
+   * linked to ANOTHER counter. Binds QUOTED `'ibranch_id'`, `'icounter_id'`.
+   */
+  tillDevice: { name: "TILL DEVICES", fallbackId: "64", paramBound: true },
+  /** Till Masters — a safe's ledger: CASH ledgers. Binds a QUOTED `'icompany_id'`. */
+  cashLedger: { name: "CASH LEDGERS", fallbackId: "65", paramBound: true },
+  /** Till Masters — a reason's default ledger: EXPENSE / INCOME ledgers. Binds `'icompany_id'`. */
+  tillReasonLedger: { name: "TILL REASON LEDGERS", fallbackId: "66", paramBound: true },
+  /** Till Masters — where a counter's drops go. Binds QUOTED `'icompany_id'`, `'ibranch_id'`. */
+  tillSafe: { name: "TILL SAFES", fallbackId: "67", paramBound: true },
 } as const;
 export type ConfiguredDropdownKey = keyof typeof CONFIGURED_DROPDOWNS;
 const ID_KEYS = ["dropdown_id", "dropdownId", "id"] as const;

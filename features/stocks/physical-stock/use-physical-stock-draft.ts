@@ -19,6 +19,7 @@ import {
 import { useBusinessContext } from "@/components/layout/business-context";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { getUserInfo } from "@/lib/auth/session";
+import { documentRights, type DocumentRights } from "@/lib/permissions/document-rights";
 import { useUiTableId } from "@/lib/ui-tables";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { useAppDispatch } from "@/store/hooks";
@@ -123,7 +124,8 @@ export type PhysicalStockDraftApi = {
   /** The columns drawn, blind mode applied. */
   columns: CountColumn[];
   focusRequest: FocusRequest | null;
-  permissions: { canCreate: boolean; canEdit: boolean; canDelete: boolean };
+  /** The menu's rights, read as document rights; the screen ANDs each with the status. */
+  rights: DocumentRights;
   cancelPrompt: { title: string } | null;
   setHeader: (field: HeaderField, value: string) => void;
   selectGodown: (id: string, name: string) => void;
@@ -174,6 +176,7 @@ export function usePhysicalStockDraft(): PhysicalStockDraftApi {
   const [postDocumentMutation] = usePhysicalStockPostMutation();
   const [cancelDocument] = usePhysicalStockCancelMutation();
   const { permissions } = usePagePermissions();
+  const rights = useMemo(() => documentRights(permissions), [permissions]);
 
   // The godown's count sheet, fetched ONCE and kept, so picking the twelfth
   // item costs no round trip. Dropped whenever the godown, the document or
@@ -736,11 +739,7 @@ export function usePhysicalStockDraft(): PhysicalStockDraftApi {
     layout,
     columns,
     focusRequest,
-    permissions: {
-      canCreate: permissions.canCreate,
-      canEdit: permissions.canEdit,
-      canDelete: permissions.canDelete,
-    },
+    rights,
     cancelPrompt,
     setHeader: (field, value) => dispatch({ type: "headerSet", field, value }),
     selectGodown,

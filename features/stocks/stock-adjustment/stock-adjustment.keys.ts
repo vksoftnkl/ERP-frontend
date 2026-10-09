@@ -11,7 +11,11 @@
  * A key is "swallowed" (`preventDefault`) whenever it is one of the screen's
  * own, even when it does nothing right now — a held or refused F5 must never
  * fall through to the browser's reload and take the unsaved document with it.
+ *
+ * Each key obeys its button's gate — the document rights ANDed with the status
+ * (Qt's `applyStatus()`). Save is save-AND-post, so F5 is the Post right.
  */
+import type { DocumentRights } from "@/lib/permissions/document-rights";
 import type { FormMode } from "./stock-adjustment.types";
 
 export type EntryAction =
@@ -45,9 +49,8 @@ export type EntryKeyState = {
   status: string;
   saved: boolean;
   busy: boolean;
-  canCreate: boolean;
-  canEdit: boolean;
-  canDelete: boolean;
+  /** The menu's rights as document rights; the status is ANDed in here. */
+  rights: DocumentRights;
 };
 
 export type EntryKeyResult = { action: EntryAction | null; swallow: boolean };
@@ -73,7 +76,9 @@ export function entryKeyAction(event: EntryKeyEvent, state: EntryKeyState): Entr
     return NOTHING;
   }
   const draft = state.status === "DRAFT";
+  const posted = state.status === "POSTED";
   const editable = state.mode === "entry" && draft;
+  const { rights } = state;
   const act = (action: EntryAction | null): EntryKeyResult => ({ action, swallow: true });
 
   if (event.ctrlKey || event.metaKey) {
@@ -90,17 +95,19 @@ export function entryKeyAction(event: EntryKeyEvent, state: EntryKeyState): Entr
       if (editable) {
         return act("pick");
       }
-      return act(draft && state.saved && state.mode === "browse" && state.canEdit && !state.busy ? "edit" : null);
+      return act(draft && state.saved && state.mode === "browse" && rights.mayEdit && !state.busy ? "edit" : null);
     case "F3":
-      return act(state.saved && state.status !== "CANCELLED" && state.canDelete && !state.busy ? "cancel" : null);
+      return act(
+        state.saved && (draft || posted) && rights.mayCancelDocument(posted) && !state.busy ? "cancel" : null,
+      );
     case "F4":
-      return act(draft && state.canCreate && !state.busy ? "saveDraft" : null);
+      return act(draft && rights.maySaveDraft(state.saved) && !state.busy ? "saveDraft" : null);
     case "F5":
-      return act(draft && state.canCreate && !state.busy ? "save" : null);
+      return act(draft && rights.mayPost && !state.busy ? "save" : null);
     case "F6":
       return act("print");
     case "F7":
-      return act(state.canCreate && !state.busy ? "new" : null);
+      return act(rights.mayStartNew && !state.busy ? "new" : null);
     case "F8":
       return act(state.busy ? null : "list");
     case "F9":

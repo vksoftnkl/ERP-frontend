@@ -185,6 +185,16 @@ export const CONFIGURED_GRIDS = {
    * list them.
    */
   gstCredentialList: { name: "MAIN LIST - GST CREDENTIALS", fallbackId: "131", deletedParam: "igcc_is_deleted" },
+  /**
+   * Till Masters (menu 275). Each list carries every field its form shows, so a
+   * row opens straight from it (no /get). Counters and safes bind QUOTED
+   * `'icompany_id'` + `'ibranch_id'`; reasons and denominations `'icompany_id'`
+   * only (shipped rows have no company). Deleted rows are never listed.
+   */
+  tillCounterList: { name: "MAIN LIST - TILL COUNTERS", fallbackId: "133", deletedParam: null },
+  tillReasonList: { name: "MAIN LIST - TILL REASONS", fallbackId: "134", deletedParam: null },
+  tillDenominationList: { name: "MAIN LIST - TILL DENOMINATIONS", fallbackId: "135", deletedParam: null },
+  tillSafeList: { name: "MAIN LIST - TILL SAFES", fallbackId: "136", deletedParam: null },
 } as const;
 export type ConfiguredGridKey = keyof typeof CONFIGURED_GRIDS;
 const ID_KEYS = ["grid_id", "gridId", "id"] as const;

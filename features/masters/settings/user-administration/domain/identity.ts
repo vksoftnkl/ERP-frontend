@@ -3,9 +3,9 @@
  * fills it with, and the rules checked before a round trip.
  *
  * Fields the DTO has and this screen leaves unsent (the port plan's Q1):
- * `usrEmployeeId`, `usrTimezone`, `usrLanguage`, `usrAvatarUrl`. Unsent means
- * untouched — the server writes only the keys it receives, and the table
- * defaults `UTC` / `en` on create.
+ * `usrTimezone`, `usrLanguage`, `usrAvatarUrl`. Unsent means untouched — the
+ * server writes only the keys it receives, and the table defaults `UTC` / `en`
+ * on create. `usrEmployeeId` and the till PIN joined the form 2026-10-08 (Qt).
  */
 import { USER_TYPE_VALUES, type UserAdminPayload, type UserType } from "./wire";
 
@@ -23,6 +23,19 @@ export type IdentityForm = {
   companyName: string;
   branchId: string;
   branchName: string;
+  /**
+   * The person behind the login. The till recovers a cash shortage from this
+   * employee's staff advance ledger, so a cashier needs one.
+   */
+  employeeId: string;
+  employeeName: string;
+  /**
+   * What an approver types at a counter. The server keeps only a hash and the
+   * GET answers `usrPinSet`, so the box starts empty: blank = keep the stored
+   * PIN, digits = replace it, `clearPin` = remove it.
+   */
+  pin: string;
+  clearPin: boolean;
   mustChangePassword: boolean;
   desktopLogin: boolean;
   webLogin: boolean;
@@ -46,6 +59,10 @@ export const EMPTY_IDENTITY: IdentityForm = {
   companyName: "",
   branchId: "",
   branchName: "",
+  employeeId: "",
+  employeeName: "",
+  pin: "",
+  clearPin: false,
   mustChangePassword: false,
   desktopLogin: true,
   webLogin: true,
@@ -61,14 +78,32 @@ const USER_TYPE_LABELS: Record<UserType, string> = {
   "SUPER ADMIN": "Super Admin",
   ADMIN: "Admin",
   MANAGER: "Manager",
+  SUPERVISOR: "Supervisor",
   USER: "User",
   CASHIER: "Cashier",
   VIEWER: "Viewer",
   SYSTEM: "System",
 };
 
-export const USER_TYPE_OPTIONS: readonly { value: UserType; label: string }[] =
-  USER_TYPE_VALUES.map((value) => ({ value, label: USER_TYPE_LABELS[value] }));
+/**
+ * The Qt combo's order (cashier first, the till's people together), then the
+ * two roles Qt no longer offers — kept so a user saved with one still shows it.
+ */
+const USER_TYPE_ORDER: readonly UserType[] = [
+  "CASHIER",
+  "USER",
+  "ADMIN",
+  "SUPERVISOR",
+  "MANAGER",
+  "SUPER ADMIN",
+  "VIEWER",
+  "SYSTEM",
+];
+
+export const USER_TYPE_OPTIONS: readonly { value: UserType; label: string }[] = [
+  ...USER_TYPE_ORDER,
+  ...USER_TYPE_VALUES.filter((value) => !USER_TYPE_ORDER.includes(value)),
+].map((value) => ({ value, label: USER_TYPE_LABELS[value] }));
 
 export function isUserType(value: unknown): value is UserType {
   return typeof value === "string" && (USER_TYPE_VALUES as readonly string[]).includes(value);
@@ -81,6 +116,8 @@ export const IDENTITY_LIMITS = {
   fullName: 150,
   mobileNo: 20,
   email: 150,
+  /** The till PIN: 4 to 6 digits (the DTO's `^(\d{4,6})?$`). */
+  pin: 6,
 } as const;
 
 function text(value: unknown): string {
@@ -100,6 +137,10 @@ export function identityFromPayload(payload: UserAdminPayload): IdentityForm {
     companyName: text(payload.usrCompanyName),
     branchId: text(payload.usrBranchId),
     branchName: text(payload.usrBranchName),
+    employeeId: text(payload.usrEmployeeId),
+    employeeName: text(payload.usrEmployeeName),
+    pin: "",
+    clearPin: false,
     mustChangePassword: payload.usrMustChangePassword === true,
     desktopLogin: payload.usrDesktopLogin !== false,
     webLogin: payload.usrWebLogin !== false,
@@ -124,6 +165,8 @@ export type UserFacts = {
   lastLoginOn: string | null;
   passwordChangedOn: string | null;
   createdOn: string | null;
+  /** Whether a till PIN is stored — the PIN itself is never returned. */
+  pinSet: boolean;
 };
 
 export function factsFromPayload(payload: UserAdminPayload): UserFacts {
@@ -135,6 +178,7 @@ export function factsFromPayload(payload: UserAdminPayload): UserFacts {
     lastLoginOn: payload.usrLastLoginOn ?? null,
     passwordChangedOn: payload.usrPasswordChangedOn ?? null,
     createdOn: payload.usrCreatedOn ?? null,
+    pinSet: payload.usrPinSet === true,
   };
 }
 
@@ -156,7 +200,13 @@ export function validateIdentity(form: IdentityForm, mode: "create" | "edit"): I
     errors.password = "Enter a password.";
   }
   if (!form.userType) {
-    errors.userType = "Choose a user type.";
+    errors.userType = "Choose a user role.";
+  }
+  const pin = form.pin.trim();
+  if (pin && !/^\d{4,6}$/.test(pin)) {
+    errors.pin = "The till PIN is 4 to 6 digits.";
+  } else if (pin && form.clearPin) {
+    errors.pin = "Either type a new till PIN or clear it, not both.";
   }
   if (form.displayName.trim().length > IDENTITY_LIMITS.displayName) {
     errors.displayName = `Display name must be at most ${IDENTITY_LIMITS.displayName} characters.`;
@@ -194,6 +244,8 @@ export const SERVER_FIELD_TO_FORM: Readonly<Record<string, keyof IdentityForm>> 
   usrType: "userType",
   usrCompanyId: "companyId",
   usrBranchId: "branchId",
+  usrEmployeeId: "employeeId",
+  usrPin: "pin",
   usrMustChangePassword: "mustChangePassword",
   usrDesktopLogin: "desktopLogin",
   usrWebLogin: "webLogin",

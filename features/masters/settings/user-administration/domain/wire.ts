@@ -4,7 +4,7 @@
  *   GET    /user-administration/get?usrId=   → `UserAdminPayload`, menus[] included
  *   POST   /user-administration/create       ← `SaveUserAdministrationDto`
  *   DELETE /user-administration/delete?usrId=
- *   GET    /menu-masters/get?visibleOnly=true → `MenuTreeNodePayload[]`
+ *   GET    /menu-masters/get?visibleOnly=false → `MenuTreeNodePayload[]`
  *
  * Two things about the save that every module here is built around:
  *
@@ -76,6 +76,7 @@ export const USER_TYPE_VALUES = [
   "SUPER ADMIN",
   "ADMIN",
   "MANAGER",
+  "SUPERVISOR",
   "USER",
   "CASHIER",
   "VIEWER",
@@ -83,9 +84,11 @@ export const USER_TYPE_VALUES = [
 ] as const;
 
 /**
- * `UserType` on the wire. The port plan (§10) recorded the DTO as having no
- * enum; the live Swagger of 2026-09-26 declares this one and the DTO checks it
- * with `@IsEnum`, so any other value is a 400.
+ * `UserType` on the wire, shown as "User Role" (notes 96) — a label for who the
+ * person is. What they may open is the Permissions tab; what they may approve
+ * at a till is Till Approval Setup. The port plan (§10) recorded the DTO as
+ * having no enum; the DTO checks this one with `@IsEnum`, so any other value is
+ * a 400. SUPERVISOR joined it 2026-10-08.
  */
 export type UserType = (typeof USER_TYPE_VALUES)[number];
 
@@ -97,6 +100,7 @@ export type UserAdminPayload = {
   usrBranchId: string | null;
   usrBranchName?: string | null;
   usrEmployeeId: string | null;
+  usrEmployeeName?: string | null;
   usrLoginName: string;
   usrDisplayName: string;
   usrFullName: string | null;
@@ -108,6 +112,8 @@ export type UserAdminPayload = {
   usrMustChangePassword: boolean;
   usrPasswordExpiresOn: string | null;
   usrPasswordChangedOn: string | null;
+  /** The till PIN itself never comes back — only whether one is set. */
+  usrPinSet?: boolean;
   usrType: UserType | string | null;
   usrEditDate: boolean;
   usrEditEntry: boolean;
@@ -150,6 +156,8 @@ export type SaveUserAdministrationDto = {
   usrTimezone?: string;
   usrLanguage?: string;
   usrPassword?: string;
+  /** Absent keeps the stored till PIN, `""` clears it, 4–6 digits replace it. */
+  usrPin?: string;
   usrMustChangePassword?: boolean;
   usrType?: UserType | null;
   usrEditDate?: boolean;
@@ -177,6 +185,7 @@ export const SAVE_USER_KEYS: readonly (keyof SaveUserAdministrationDto)[] = [
   "usrTimezone",
   "usrLanguage",
   "usrPassword",
+  "usrPin",
   "usrMustChangePassword",
   "usrType",
   "usrEditDate",

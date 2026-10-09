@@ -9,8 +9,14 @@
  * Branch is scoped to the chosen company (Qt did not do this): it reads
  * `/master-lookups/branches/by-company/:id`, and the reducer drops the branch
  * whenever the company changes.
+ *
+ * Employee is scoped to the branch: dropdown 38 lists ONE branch's employees
+ * plus the shared ones (`emp_branch_id` NULL) and casts its token to uuid, so it
+ * always gets one — the nil uuid for a user with no branch (shared employees
+ * only). A pick is kept when the branch changes, as in Qt; the server refuses
+ * an employee of another company.
  */
-import { useId, useState, type ReactNode } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { cx } from "@/components/design-system/cx";
 import { NexDropdownSingle } from "@/components/design-system/dropdown";
 import dynamicModalStyles from "@/components/design-system/ui/dynamic-modal-form.module.scss";
@@ -26,6 +32,9 @@ import {
 } from "../domain/identity";
 import { isUserType } from "../domain/identity";
 import styles from "../user-administration.module.scss";
+
+/** Dropdown 38's token for "no branch": its SQL casts the value to uuid. */
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 
 export type IdentityTabProps = {
   identity: IdentityForm;
@@ -99,7 +108,13 @@ export function IdentityTab({ identity, errors, facts, mode, disabled, onChange 
   const ids = useId();
   const [reveal, setReveal] = useState(false);
   const companyDropdownId = useDropdownId("company");
+  const employeeDropdownId = useDropdownId("employee");
   const branches = useGetBranchesByCompanyQuery(identity.companyId, { skip: !identity.companyId });
+  const employeeParams = useMemo(
+    () => ({ iemp_branch_id: identity.branchId || NIL_UUID }),
+    [identity.branchId],
+  );
+  const pinSet = facts?.pinSet === true;
 
   const controlClass = (invalid: boolean) =>
     cx(dynamicModalStyles.control, "erp-ms-modal-control", invalid && styles.controlInvalid);
@@ -186,7 +201,37 @@ export function IdentityTab({ identity, errors, facts, mode, disabled, onChange 
               </button>
             </div>
           </Field>
-          <Field id={`${ids}-type`} label="User type" required error={errors.userType}>
+          <Field id={`${ids}-pin`} label="Till PIN" error={errors.pin}>
+            <input
+              id={`${ids}-pin`}
+              // A credential: the app-wide capitalisation rewrite leaves these alone.
+              type="password"
+              inputMode="numeric"
+              className={controlClass(Boolean(errors.pin))}
+              value={identity.pin}
+              maxLength={IDENTITY_LIMITS.pin}
+              autoComplete="off"
+              placeholder={
+                mode === "create"
+                  ? "4 to 6 digits — for approving at a counter"
+                  : pinSet
+                    ? "PIN set — type a new one to replace it"
+                    : "No PIN — 4 to 6 digits"
+              }
+              disabled={disabled || identity.clearPin}
+              onChange={(event) => onChange({ pin: event.target.value.replace(/\D/g, "") })}
+            />
+            {/* Nothing to clear on a new user, or on one with no PIN stored. */}
+            {pinSet ? (
+              <Check
+                label="Clear till PIN"
+                checked={identity.clearPin}
+                disabled={disabled}
+                onChange={(value) => onChange(value ? { clearPin: true, pin: "" } : { clearPin: false })}
+              />
+            ) : null}
+          </Field>
+          <Field id={`${ids}-type`} label="User role" required error={errors.userType}>
             <select
               id={`${ids}-type`}
               className={cx(controlClass(Boolean(errors.userType)), styles.select)}
@@ -196,7 +241,7 @@ export function IdentityTab({ identity, errors, facts, mode, disabled, onChange 
                 onChange({ userType: isUserType(event.target.value) ? event.target.value : "" })
               }
             >
-              <option value="">Select user type</option>
+              <option value="">Select user role</option>
               {USER_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -305,6 +350,23 @@ export function IdentityTab({ identity, errors, facts, mode, disabled, onChange 
                 </option>
               ))}
             </select>
+          </Field>
+          <Field id={`${ids}-employee`} label="Employee" error={errors.employeeId}>
+            <NexDropdownSingle
+              id={`${ids}-employee`}
+              dropdownId={employeeDropdownId}
+              params={employeeParams}
+              clearOnParamsChange={false}
+              value={identity.employeeId ? { id: identity.employeeId, text: identity.employeeName } : null}
+              onChange={(selection) =>
+                onChange({ employeeId: selection?.id ?? "", employeeName: selection?.text ?? "" })
+              }
+              disabled={disabled}
+              placeholder="The person behind the login — a cashier needs one"
+              aria-label="Employee"
+              className={styles.dropdownField}
+              advanceFocusOnSelect={false}
+            />
           </Field>
         </section>
 

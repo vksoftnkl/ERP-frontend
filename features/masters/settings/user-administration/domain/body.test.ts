@@ -45,6 +45,45 @@ describe("buildSaveBody", () => {
     expect(create.usrPassword).toBe("pw");
   });
 
+  it("till PIN: blank keeps (omitted), digits replace, Clear sends \"\"", () => {
+    const keep = buildSaveBody({ mode: "edit", usrId: "u1", identity: edited, grants: null });
+    expect(keep).not.toHaveProperty("usrPin");
+    const replace = buildSaveBody({
+      mode: "edit",
+      usrId: "u1",
+      identity: { ...edited, pin: " 4321 " },
+      grants: null,
+    });
+    expect(replace.usrPin).toBe("4321");
+    const clear = buildSaveBody({
+      mode: "edit",
+      usrId: "u1",
+      identity: { ...edited, clearPin: true },
+      grants: null,
+    });
+    expect(clear.usrPin).toBe("");
+    // The screen-only flag never reaches the wire.
+    expect(clear).not.toHaveProperty("clearPin");
+  });
+
+  it("sends the employee link, null when none is picked", () => {
+    const linked = buildSaveBody({
+      mode: "edit",
+      usrId: "u1",
+      identity: { ...edited, employeeId: "emp-1", employeeName: "Ravi" },
+      grants: null,
+    });
+    expect(linked.usrEmployeeId).toBe("emp-1");
+    expect(linked).not.toHaveProperty("usrEmployeeName");
+    const none = buildSaveBody({
+      mode: "edit",
+      usrId: "u1",
+      identity: { ...edited, employeeId: "" },
+      grants: null,
+    });
+    expect(none.usrEmployeeId).toBeNull();
+  });
+
   it("omits menus when the tab never loaded and sends the whole set when it did", () => {
     const unloaded = buildSaveBody({ mode: "edit", usrId: "u1", identity: edited, grants: null });
     expect(unloaded).not.toHaveProperty("menus");
@@ -104,9 +143,8 @@ describe("buildSaveBody", () => {
     ).toBe("ZT");
   });
 
-  it("leaves employee, timezone, language and avatar unsent", () => {
+  it("leaves timezone, language and avatar unsent", () => {
     const body = buildSaveBody({ mode: "edit", usrId: "u1", identity: edited, grants: null });
-    expect(body).not.toHaveProperty("usrEmployeeId");
     expect(body).not.toHaveProperty("usrTimezone");
     expect(body).not.toHaveProperty("usrLanguage");
     expect(body).not.toHaveProperty("usrAvatarUrl");

@@ -1,0 +1,546 @@
+/**
+ * Till Masters (menu 275).
+ *
+ * The screen sizes itself to `.erp-app-content`, which already gives every page
+ * the space between the header and the footer — so the shell is `height: 100%`,
+ * never a viewport unit (the app scales with `zoom` on <html>). Each tab is a
+ * grid of panes; the list and the form scroll inside their own pane.
+ */
+.page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 8px;
+  background: var(--page-bg);
+  overflow: hidden;
+}
+
+.header {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.subtitle {
+  margin: 2px 0 0;
+  min-height: 1.1em;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+
+.primaryButton,
+.secondaryButton {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: var(--erp-radius);
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.primaryButton {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background: var(--primary-hover);
+  }
+}
+
+.secondaryButton {
+  background: var(--card-bg);
+  border-color: var(--border);
+  color: var(--text-soft);
+
+  &:hover:not(:disabled) {
+    background: var(--row-hover);
+  }
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.keyHint {
+  margin-left: 6px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  opacity: 0.7;
+}
+
+.linkButton {
+  padding: 0;
+  margin-left: 8px;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ── Tabs ──────────────────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 7px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text-main);
+  }
+}
+
+.tabActive {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.tabDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #b45309;
+  vertical-align: middle;
+}
+
+.tabBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(420px, 11fr) minmax(420px, 10fr);
+  gap: 18px;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.tabBodyReasons {
+  grid-template-columns: minmax(170px, 210px) minmax(380px, 11fr) minmax(400px, 10fr);
+}
+
+.tabBodyDenominations {
+  grid-template-columns: minmax(380px, 10fr) minmax(360px, 9fr) minmax(200px, 250px);
+}
+
+@media (max-width: 1100px) {
+  .tabBody,
+  .tabBodyReasons,
+  .tabBodyDenominations {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+  }
+}
+
+.listPane,
+.formPane,
+.categoryPane,
+.previewPane {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.formPane {
+  overflow: auto;
+  padding-right: 2px;
+}
+
+/* ── Shared pieces ─────────────────────────────────────────────────────── */
+
+.sectionCap {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-main);
+}
+
+.capNote {
+  margin-left: 6px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+.mutedNote {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.warning {
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: var(--erp-radius);
+  font-size: 0.8rem;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.toneDanger {
+  color: #b91c1c !important;
+  font-weight: 600;
+}
+
+.searchInput,
+.textInput,
+.selectInput {
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: #fff;
+  font-size: 0.84rem;
+  color: var(--text-main);
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent);
+  }
+
+  &:disabled,
+  &:read-only:not(select) {
+    background: var(--page-bg);
+    color: var(--text-muted);
+  }
+}
+
+.textInput,
+.selectInput {
+  width: 100%;
+  min-width: 0;
+}
+
+.numberInput {
+  text-align: right;
+}
+
+.searchInput {
+  flex: 0 1 220px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.checkLine,
+.radioLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.84rem;
+  color: var(--text-main);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkDisabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.radioRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+
+.inlineRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+
+  > :first-child:not(input[type="checkbox"]) {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+.dropdown {
+  width: 100%;
+  min-width: 0;
+}
+
+/* ── Lists ─────────────────────────────────────────────────────────────── */
+
+.listHead,
+.formHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+}
+
+.formTitle {
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.listButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tableWrap {
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: var(--card-bg);
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+  }
+}
+
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.84rem;
+  color: var(--text-main);
+
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 6px 8px;
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    font-size: 0.76rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border-light);
+    white-space: nowrap;
+  }
+
+  tbody tr {
+    cursor: pointer;
+
+    &:hover td {
+      background: var(--row-hover);
+    }
+  }
+}
+
+.alignRight {
+  text-align: right !important;
+}
+
+.alignCenter {
+  text-align: center !important;
+}
+
+.stretch {
+  width: 100%;
+}
+
+.rowSelected td,
+.rowSelected:hover td {
+  background: color-mix(in srgb, var(--primary) 12%, #fff);
+  font-weight: 600;
+}
+
+.rowMuted td {
+  color: var(--text-muted);
+}
+
+.tableEmpty {
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+/* ── Reason categories ─────────────────────────────────────────────────── */
+
+.categoryList {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: var(--card-bg);
+}
+
+.categoryItem {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--erp-radius);
+  background: transparent;
+  font-size: 0.8rem;
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--row-hover);
+  }
+}
+
+.categoryItemActive,
+.categoryItemActive:hover {
+  background: color-mix(in srgb, var(--primary) 12%, #fff);
+  font-weight: 600;
+}
+
+.categoryReserved {
+  color: var(--text-muted);
+}
+
+.categoryCount {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The form ──────────────────────────────────────────────────────────── */
+
+.fields {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--erp-radius);
+  background: var(--card-bg);
+}
+
+.fieldCap {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.required {
+  color: #b91c1c;
+}
+
+.fieldControl {
+  min-width: 0;
+}
+
+/* A control that takes the rest of its line. */
+.fieldWide {
+  grid-column: span 3;
+}
+
+/* A caption-less cell as wide as one caption + control pair. */
+.fieldPair {
+  grid-column: span 2;
+}
+
+/* A whole line. */
+.fieldFull {
+  grid-column: 1 / -1;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--erp-radius);
+  background: var(--page-bg);
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.factCap {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.factValue {
+  font-size: 0.86rem;
+  color: var(--text-main);
+  overflow-wrap: anywhere;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.footerHint {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}

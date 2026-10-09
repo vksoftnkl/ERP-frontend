@@ -29,6 +29,10 @@ export type ErpMenuPermissionFlags = {
    * which a screen reads as allowed and leaves the server to refuse.
    */
   canPost?: boolean;
+  /** `um_can_cancel` — reverse a POSTED document (a draft is dropped on Delete). */
+  canCancel?: boolean;
+  /** `um_can_amend` — change a posted document in place. */
+  canAmend?: boolean;
   isVisible: boolean;
 };
 

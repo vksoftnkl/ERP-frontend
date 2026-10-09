@@ -110,6 +110,7 @@ describe("tickMenu", () => {
       label: "x",
       depth: 0,
       verbs: new Set<MenuVerb>(),
+      hidden: true,
       children: [],
     };
     const unticked = tickMenu(start, hidden, false, start);

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { cx } from "@/components/design-system/cx";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { useDropdownId } from "@/lib/configured-dropdowns";
+import { documentRights } from "@/lib/permissions/document-rights";
 import { useUiTableId } from "@/lib/ui-tables";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { settingsColumnsFromLayout, useGridSettings } from "@/features/sales/quotation/components/grid-settings";
@@ -140,6 +141,7 @@ export function StockAdjustmentEntryView({
   const api = useStockAdjustmentDraft();
   const { draft } = api;
   const { permissions } = usePagePermissions();
+  const rights = useMemo(() => documentRights(permissions), [permissions]);
 
   const [itemPicker, setItemPicker] = useState<{ key: string; query: string } | null>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
@@ -178,7 +180,15 @@ export function StockAdjustmentEntryView({
 
   const editable = isEditable(draft);
   const draftStatus = draft.status === "DRAFT";
+  const postedStatus = draft.status === "POSTED";
   const saved = Boolean(draft.svhId);
+  // Status and rights together (Qt's `applyStatus()`, document rights). Save is
+  // save-AND-post, so it is the Post right; the key map applies the same gates.
+  const canSave = draftStatus && rights.mayPost;
+  const canSaveDraft = draftStatus && rights.maySaveDraft(saved);
+  const canDeleteDraft = draftStatus && saved && rights.mayDeleteDraft;
+  const canCancel = saved && (draftStatus || postedStatus) && rights.mayCancelDocument(postedStatus);
+  const canEdit = draftStatus && saved && rights.mayEdit;
 
   // ---------------------------------------------------------- open a doc
   const opened = useRef<string | null>(null);
@@ -460,9 +470,7 @@ export function StockAdjustmentEntryView({
     status: draft.status,
     saved,
     busy: api.busy !== null,
-    canCreate: permissions.canCreate,
-    canEdit: permissions.canEdit,
-    canDelete: permissions.canDelete,
+    rights,
   };
   const actions = {
     save: () => runSave(true),
@@ -747,7 +755,7 @@ export function StockAdjustmentEntryView({
             type="button"
             className={quotationStyles.button}
             title="F2 — edit this DRAFT."
-            disabled={!permissions.canEdit || api.busy !== null}
+            disabled={!canEdit || api.busy !== null}
             onClick={runEdit}
           >
             Edit<span className={quotationStyles.buttonHint}>F2</span>
@@ -758,7 +766,7 @@ export function StockAdjustmentEntryView({
             type="button"
             className={quotationStyles.button}
             title="F3 — a POSTED document is reversed by mirror rows and a reversing accounts voucher; a DRAFT is marked cancelled."
-            disabled={!permissions.canDelete || api.busy !== null}
+            disabled={!canCancel || api.busy !== null}
             onClick={runCancel}
           >
             Cancel document<span className={quotationStyles.buttonHint}>F3</span>
@@ -768,7 +776,7 @@ export function StockAdjustmentEntryView({
           type="button"
           className={quotationStyles.button}
           title="Delete this DRAFT. A posted document is cancelled, never deleted."
-          disabled={!(draftStatus && saved) || !permissions.canDelete || api.busy !== null}
+          disabled={!canDeleteDraft || api.busy !== null}
           onClick={runDelete}
         >
           Delete draft
@@ -777,7 +785,7 @@ export function StockAdjustmentEntryView({
           type="button"
           className={quotationStyles.button}
           title="F4 — save without moving stock. The adjustment rules still run."
-          disabled={!draftStatus || !permissions.canCreate || api.busy !== null}
+          disabled={!canSaveDraft || api.busy !== null}
           onClick={() => runSave(false)}
         >
           Save draft<span className={quotationStyles.buttonHint}>F4</span>
@@ -798,7 +806,7 @@ export function StockAdjustmentEntryView({
           type="button"
           className={quotationStyles.button}
           title="F7 — start a new document."
-          disabled={!permissions.canCreate}
+          disabled={!rights.mayStartNew}
           onClick={runNew}
         >
           New<span className={quotationStyles.buttonHint}>F7</span>
@@ -815,7 +823,7 @@ export function StockAdjustmentEntryView({
           type="button"
           className={cx(quotationStyles.button, quotationStyles.buttonPrimary)}
           title="F5 — save and post in one go. Nothing posts unless every line passes."
-          disabled={!draftStatus || !permissions.canCreate || api.busy !== null}
+          disabled={!canSave || api.busy !== null}
           onClick={() => runSave(true)}
         >
           Save<span className={quotationStyles.buttonHint}>F5</span>

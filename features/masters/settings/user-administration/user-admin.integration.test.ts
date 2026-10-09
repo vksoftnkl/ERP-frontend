@@ -8,6 +8,7 @@
  *      the set and four rows came back all-false);
  *   3. revoke one — the confirmation names it;
  *   4. Post / Cancel granted on a posting menu reach the row;
+ *   4c. the till PIN is set, kept by a blank save and cleared; SUPERVISOR saves;
  *   5. delete the user.
  *
  * SKIPPED BY DEFAULT. It needs a running API:
@@ -198,6 +199,24 @@ suite("User Administration against the live API", () => {
       usrIsLocked: false,
     });
     expect(refused.status).toBe(400);
+  });
+
+  it("4c. the till PIN: set, kept by a blank save, cleared; SUPERVISOR is a role the DTO takes", async () => {
+    const set = await save(
+      buildSaveBody({ mode: "edit", usrId, identity: { ...identity, pin: "4321", userType: "SUPERVISOR" }, grants: null }),
+    );
+    expect(set.usrPinSet).toBe(true);
+    expect(set.usrType).toBe("SUPERVISOR");
+    expect(set).not.toHaveProperty("usrPin");
+    identity = identityFromPayload(set);
+    expect(identity.pin).toBe("");
+
+    const kept = await save(buildSaveBody({ mode: "edit", usrId, identity, grants: null }));
+    expect(kept.usrPinSet).toBe(true);
+
+    const cleared = await save(buildSaveBody({ mode: "edit", usrId, identity: { ...identity, clearPin: true }, grants: null }));
+    expect(cleared.usrPinSet).toBe(false);
+    identity = identityFromPayload(cleared);
   });
 
   it("5. deletes the user, menu rows and all", async () => {

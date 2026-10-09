@@ -92,7 +92,7 @@ export function PhysicalStockEntryView({
   onClose,
 }: PhysicalStockEntryViewProps) {
   const api = usePhysicalStockDraft();
-  const { draft, totals, editable, busy, columns, permissions } = api;
+  const { draft, totals, editable, busy, columns, rights } = api;
   const godownDropdownId = useDropdownId(GODOWN_DROPDOWN_KEY);
   const reasonDropdownId = useDropdownId(STOCK_REASON_DROPDOWN_KEY);
   const [picker, setPicker] = useState<{
@@ -102,6 +102,15 @@ export function PhysicalStockEntryView({
   } | null>(null);
   const working = busy !== "idle";
   const isDraft = draft.status === STATUS_DRAFT;
+  const isPosted = draft.status === STATUS_POSTED;
+  const saved = Boolean(draft.svhId);
+  // Document rights ANDed with the status, as Qt's `applyStatus()` does: Create
+  // saves a new draft and Edit a saved one; Post gates Save & Post; Cancel
+  // reverses a posted sheet and Delete drops a draft; New needs Create or Post.
+  const canSaveDraft = isDraft && rights.maySaveDraft(saved);
+  const canPost = isDraft && rights.mayPost;
+  const canCancel = saved && (isDraft || isPosted) && rights.mayCancelDocument(isPosted);
+  const canEdit = isDraft && rights.mayEdit;
 
   // Scoped to this document's company and branch, so the picker cannot offer
   // an item that has no holding here anyway.
@@ -136,9 +145,10 @@ export function PhysicalStockEntryView({
 
   // F9 draws the sheet, F8 shows the list, Ctrl+Enter saves — Enter alone
   // belongs to the grid, and on a 300-line sheet it is the key pressed most.
-  const keysRef = useRef({ api, editable, showList, picker });
+  // Ctrl+Enter is Save Draft's key, so it obeys Save Draft's gate.
+  const keysRef = useRef({ api, editable, canSaveDraft, showList, picker });
   useLayoutEffect(() => {
-    keysRef.current = { api, editable, showList, picker };
+    keysRef.current = { api, editable, canSaveDraft, showList, picker };
   });
   useEffect(() => {
     if (!active) {
@@ -160,7 +170,7 @@ export function PhysicalStockEntryView({
         return;
       }
       if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-        if (!current.editable) {
+        if (!current.editable || !current.canSaveDraft) {
           return;
         }
         event.preventDefault();
@@ -390,7 +400,7 @@ export function PhysicalStockEntryView({
         <button
           type="button"
           className={quotationStyles.button}
-          disabled={working || !permissions.canCreate}
+          disabled={working || !rights.mayStartNew}
           onClick={api.newDocument}
         >
           New
@@ -398,7 +408,7 @@ export function PhysicalStockEntryView({
         <button
           type="button"
           className={quotationStyles.button}
-          disabled={working || !isDraft || !permissions.canCreate}
+          disabled={working || !canSaveDraft}
           onClick={() => api.saveDraft(false)}
         >
           {busy === "saving" ? "Saving…" : "Save Draft"}{" "}
@@ -407,7 +417,7 @@ export function PhysicalStockEntryView({
         <button
           type="button"
           className={cx(quotationStyles.button, quotationStyles.buttonPrimary)}
-          disabled={working || !isDraft || !permissions.canCreate}
+          disabled={working || !canPost}
           onClick={() => api.saveDraft(true)}
         >
           {busy === "posting" ? "Posting…" : "Save & Post"}
@@ -415,12 +425,7 @@ export function PhysicalStockEntryView({
         <button
           type="button"
           className={quotationStyles.button}
-          disabled={
-            working ||
-            !draft.svhId ||
-            !(isDraft || draft.status === STATUS_POSTED) ||
-            !permissions.canDelete
-          }
+          disabled={working || !canCancel}
           onClick={api.cancelVoucher}
         >
           {busy === "cancelling" ? "Cancelling…" : "Cancel Sheet"}
@@ -428,7 +433,7 @@ export function PhysicalStockEntryView({
         <button
           type="button"
           className={quotationStyles.button}
-          disabled={working || !isDraft || !permissions.canEdit}
+          disabled={working || !canEdit}
           onClick={api.edit}
         >
           Edit

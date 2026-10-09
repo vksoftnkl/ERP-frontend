@@ -2,6 +2,8 @@
  * Stock Adjustment — the voucher's window keys and the Type row's arrows.
  */
 import { describe, expect, it } from "vitest";
+import { documentRights, type DocumentRightsInput } from "@/lib/permissions/document-rights";
+import { FULL_MENU_PERMISSIONS } from "@/lib/permissions/menu-permissions";
 import { KIND_BUTTONS } from "./stock-adjustment.constants";
 import { entryKeyAction, kindStep, type EntryKeyEvent, type EntryKeyState } from "./stock-adjustment.keys";
 
@@ -18,6 +20,15 @@ function press(key: string, extra: Partial<EntryKeyEvent> = {}): EntryKeyEvent {
   };
 }
 
+/** Every right, less the ones named. */
+function rightsWithout(...denied: (keyof DocumentRightsInput)[]) {
+  const input: DocumentRightsInput = { ...FULL_MENU_PERMISSIONS };
+  for (const right of denied) {
+    input[right] = false;
+  }
+  return documentRights(input);
+}
+
 /** A new document being keyed, by a user with every right. */
 const KEYING: EntryKeyState = {
   overlayOpen: false,
@@ -25,9 +36,7 @@ const KEYING: EntryKeyState = {
   status: "DRAFT",
   saved: false,
   busy: false,
-  canCreate: true,
-  canEdit: true,
-  canDelete: true,
+  rights: rightsWithout(),
 };
 /** A saved draft opened read-only from the list. */
 const BROWSING_DRAFT: EntryKeyState = { ...KEYING, mode: "browse", saved: true };
@@ -56,17 +65,25 @@ describe("entryKeyAction", () => {
 
   it("F2 opens a browsed draft for edit, and nothing else", () => {
     expect(entryKeyAction(press("F2"), BROWSING_DRAFT).action).toBe("edit");
-    expect(entryKeyAction(press("F2"), { ...BROWSING_DRAFT, canEdit: false })).toEqual({ action: null, swallow: true });
+    expect(entryKeyAction(press("F2"), { ...BROWSING_DRAFT, rights: rightsWithout("canEdit") })).toEqual({
+      action: null,
+      swallow: true,
+    });
     expect(entryKeyAction(press("F2"), POSTED).action).toBeNull();
     expect(entryKeyAction(press("F12"), BROWSING_DRAFT).action).toBeNull();
   });
 
-  it("F3 cancels only a saved, live document the user may delete", () => {
+  it("F3 cancels only a saved, live document: a posted one on Cancel, a draft on Delete", () => {
     expect(entryKeyAction(press("F3"), KEYING).action).toBeNull();
     expect(entryKeyAction(press("F3"), BROWSING_DRAFT).action).toBe("cancel");
     expect(entryKeyAction(press("F3"), POSTED).action).toBe("cancel");
     expect(entryKeyAction(press("F3"), { ...POSTED, status: "CANCELLED" }).action).toBeNull();
-    expect(entryKeyAction(press("F3"), { ...POSTED, canDelete: false }).action).toBeNull();
+    expect(entryKeyAction(press("F3"), { ...POSTED, rights: rightsWithout("canCancel") }).action).toBeNull();
+    expect(entryKeyAction(press("F3"), { ...POSTED, rights: rightsWithout("canDelete") }).action).toBe("cancel");
+    expect(entryKeyAction(press("F3"), { ...BROWSING_DRAFT, rights: rightsWithout("canDelete") }).action).toBeNull();
+    expect(entryKeyAction(press("F3"), { ...BROWSING_DRAFT, rights: rightsWithout("canCancel") }).action).toBe(
+      "cancel",
+    );
   });
 
   it("a posted document saves and validates nothing", () => {
@@ -76,11 +93,28 @@ describe("entryKeyAction", () => {
     expect(entryKeyAction(press("F8"), POSTED).action).toBe("list");
   });
 
-  it("follows the rights", () => {
-    const viewer = { ...KEYING, canCreate: false };
+  it("follows the document rights: F5 is Post, F4 is Create (Edit once saved), F7 is Create or Post", () => {
+    const viewer = { ...KEYING, rights: rightsWithout("canCreate", "canEdit", "canPost") };
     expect(entryKeyAction(press("F5"), viewer).action).toBeNull();
     expect(entryKeyAction(press("F4"), viewer).action).toBeNull();
     expect(entryKeyAction(press("F7"), viewer).action).toBeNull();
+
+    // Post without Create — "no drafts": New, then Save (and post); Save draft stays off.
+    const postOnly = { ...KEYING, rights: rightsWithout("canCreate", "canEdit") };
+    expect(entryKeyAction(press("F5"), postOnly).action).toBe("save");
+    expect(entryKeyAction(press("F4"), postOnly).action).toBeNull();
+    expect(entryKeyAction(press("F7"), postOnly).action).toBe("new");
+
+    // Create without Post — drafts only.
+    const draftsOnly = { ...KEYING, rights: rightsWithout("canPost") };
+    expect(entryKeyAction(press("F5"), draftsOnly)).toEqual({ action: null, swallow: true });
+    expect(entryKeyAction(press("F4"), draftsOnly).action).toBe("saveDraft");
+    expect(entryKeyAction(press("F7"), draftsOnly).action).toBe("new");
+
+    // A saved draft is saved again on Edit, not Create.
+    const savedDraft = { ...KEYING, saved: true };
+    expect(entryKeyAction(press("F4"), { ...savedDraft, rights: rightsWithout("canCreate") }).action).toBe("saveDraft");
+    expect(entryKeyAction(press("F4"), { ...savedDraft, rights: rightsWithout("canEdit") }).action).toBeNull();
   });
 
   it("does nothing while a request is in flight — not even leave", () => {

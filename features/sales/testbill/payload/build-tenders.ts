@@ -105,7 +105,9 @@ export function buildBillTenderDto(
     tdPayerVpa: null,
     tdInstrumentDate: instrumentDate,
     tdIsPdc: isCheque ? isPdc(instrumentDate, billDate) : false,
-    tdSettleStatus: row.settleStatus || "NA",
+    // No tdSettleStatus: the server owns that lifecycle and sets PENDING only
+    // when the key is absent (an update keeps the stored one) — a client "NA"
+    // kept every card/UPI row out of settlement. The screen says WHERE and WHEN.
     tdSettleLedgerId: row.settleLedgerId,
     tdExpectedSettleOn: row.settlementDays > 0 ? addDaysIso(billDate, row.settlementDays) : null,
     tdDeviceId: uuidOrNull(actor.deviceMasterId ?? null),

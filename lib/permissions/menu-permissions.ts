@@ -19,6 +19,9 @@ export const FULL_MENU_PERMISSIONS: MenuPermissions = {
   canDelete: true,
   canPrint: true,
   canExport: true,
+  canPost: true,
+  canCancel: true,
+  canAmend: true,
   isVisible: true,
 };
 
@@ -29,6 +32,9 @@ export const NO_MENU_PERMISSIONS: MenuPermissions = {
   canDelete: false,
   canPrint: false,
   canExport: false,
+  canPost: false,
+  canCancel: false,
+  canAmend: false,
   isVisible: false,
 };
 
@@ -64,6 +70,8 @@ function mergePermissions(a: MenuPermissions, b: MenuPermissions): MenuPermissio
     canPrint: a.canPrint || b.canPrint,
     canExport: a.canExport || b.canExport,
     canPost: Boolean(a.canPost || b.canPost),
+    canCancel: Boolean(a.canCancel || b.canCancel),
+    canAmend: Boolean(a.canAmend || b.canAmend),
     isVisible: a.isVisible || b.isVisible,
   };
 }

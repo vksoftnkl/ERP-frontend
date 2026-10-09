@@ -50,6 +50,12 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       // "Sales Entry" above.
       { label: "Bill Delivery Update", href: "/sales/bill-delivery" },
       { label: "Temp Credits", href: "/sales/temp-credits" },
+      // Menu 271 "Till" › 275 "Till Masters" (counters, safes, reasons,
+      // denominations). Exact DB labels, for the same reason as above.
+      {
+        label: "Till",
+        children: [{ label: "Till Masters", href: "/sales/till-masters" }],
+      },
       {
         label: "Master",
         children: [
@@ -474,6 +480,8 @@ function toMenuPermissionFlags(value: unknown): ErpMenuPermissionFlags | null {
     canPrint: read("canPrint", "can_print"),
     canExport: read("canExport", "can_export"),
     canPost: read("canPost", "can_post"),
+    canCancel: read("canCancel", "can_cancel"),
+    canAmend: read("canAmend", "can_amend"),
     // Visibility is the one flag that defaults to granted — the server only
     // returns menus the user may open, so an absent field is not a denial.
     isVisible: toBooleanFlag(value.isVisible) ?? toBooleanFlag(value.is_visible) ?? true,

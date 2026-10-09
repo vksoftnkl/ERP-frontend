@@ -20,6 +20,7 @@ import type { MasterTableRow } from "@/components/master/crud-master-page.types"
 import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons";
 import { useBusinessContext } from "@/components/layout/business-context";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
+import { documentRights } from "@/lib/permissions/document-rights";
 import masterStyles from "@/app/master/state-master/page.module.scss";
 import { accountingYearOf, todayIso } from "@/features/sales/quotation/quotation.utils";
 import { usePhysicalStockCancelMutation } from "../physical-stock.api";
@@ -148,6 +149,7 @@ export function PhysicalStockListView({
   const branchId = activeBranch?.id ?? "";
   const accYear = (activeFiscalYear?.name ?? "").trim() || accountingYearOf(todayIso());
   const { permissions } = usePagePermissions();
+  const rights = useMemo(() => documentRights(permissions), [permissions]);
   const [cancelDocument, { isLoading: cancelling }] = usePhysicalStockCancelMutation();
 
   const initialRange = useMemo(
@@ -265,8 +267,10 @@ export function PhysicalStockListView({
     [cancelDocument, cancelTarget],
   );
 
-  const cancelAllowed =
-    !pickMode && permissions.canDelete && canCancelRow(sourceOf(selected)) && !cancelling;
+  // Document rights, as the count screen's Cancel Sheet: a POSTED sheet needs
+  // the Cancel right, a draft the Delete right.
+  const cancelRight = rights.mayCancelDocument(rowStatus(sourceOf(selected)) === STATUS_POSTED);
+  const cancelAllowed = !pickMode && cancelRight && canCancelRow(sourceOf(selected)) && !cancelling;
 
   // F3 — the slot Delete would have taken. Not in Pick mode: a picker that
   // could cancel a count is easy to misfire.
@@ -418,7 +422,7 @@ export function PhysicalStockListView({
           disabled={!cancelAllowed}
           onClick={() => startCancel(selected)}
           title={
-            !permissions.canDelete
+            !cancelRight
               ? "You do not have permission to cancel"
               : rowStatus(sourceOf(selected)) === STATUS_CANCELLED
                 ? "Already cancelled"

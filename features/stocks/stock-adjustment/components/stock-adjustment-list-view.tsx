@@ -26,6 +26,7 @@ import { cx } from "@/components/design-system/cx";
 import { ErpActionIcon } from "@/components/design-system/icons/erp-action-icons";
 import { formatCurrency } from "@/domain/pricing";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
+import { documentRights } from "@/lib/permissions/document-rights";
 import { accountingYearOf, addDays, toDisplayDate, todayIso, toNumber } from "@/features/sales/quotation/quotation.utils";
 import { useCancelStockAdjustmentMutation, useDeleteStockAdjustmentMutation } from "../stock-adjustment.api";
 import {
@@ -153,6 +154,7 @@ export function StockAdjustmentListView({ onCreate, onOpen }: StockAdjustmentLis
   const branchId = activeBranch?.id ?? "";
   const accYear = (activeFiscalYear?.name ?? "").trim() || accountingYearOf(todayIso());
   const { permissions } = usePagePermissions();
+  const rights = useMemo(() => documentRights(permissions), [permissions]);
 
   const [fromDate, setFromDate] = useState(() => addDays(todayIso(), -LIST_DEFAULT_DAYS_BACK));
   const [toDate, setToDate] = useState(() => todayIso());
@@ -226,14 +228,16 @@ export function StockAdjustmentListView({ onCreate, onOpen }: StockAdjustmentLis
     [onOpen, permissions.canEdit],
   );
 
+  // Document rights, as the entry's Cancel document: a POSTED document needs
+  // the Cancel right, a draft the Delete right.
   const startCancel = useCallback(() => {
     const row = selectedRow.current;
-    if (!row || !permissions.canDelete || !cancelEnabledFor(statusOf(row))) {
+    if (!row || !cancelEnabledFor(statusOf(row)) || !rights.mayCancelDocument(statusOf(row) === "POSTED")) {
       return;
     }
     const key = docKeyOf(row);
     setCancelTarget({ key, label: key.refno || key.svhId, posted: key.status === "POSTED" });
-  }, [permissions.canDelete]);
+  }, [rights]);
 
   const runCancel = useCallback(
     async (target: CancelTarget & { key: StockAdjustmentDocKey }, reason: string) => {
@@ -438,23 +442,29 @@ export function StockAdjustmentListView({ onCreate, onOpen }: StockAdjustmentLis
     [applyPeriod, fromDate, kind, period, status, toDate],
   );
 
-  const toolbarActions = (
-    <>
-      <span className="erp-ms-tsep" aria-hidden="true" />
-      <button
-        type="button"
-        className={`${masterStyles.iconBtn} ${masterStyles.iconBtnDelete} erp-ms-tbtn`}
-        title={permissions.canDelete ? "Reverse this document (F3)" : "You do not have permission to cancel"}
-        disabled={!permissions.canDelete}
-        onClick={startCancel}
-      >
-        <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
-          <ErpActionIcon name="history" />
-        </span>
-        <span>Cancel</span>
-      </button>
-    </>
-  );
+  const toolbarActions = (row: MasterTableRow | null) => {
+    // The selected row's right; with none selected, whether any Cancel is allowed.
+    const cancelRight = row
+      ? rights.mayCancelDocument(statusOf(row) === "POSTED")
+      : rights.mayCancelDocument(true) || rights.mayCancelDocument(false);
+    return (
+      <>
+        <span className="erp-ms-tsep" aria-hidden="true" />
+        <button
+          type="button"
+          className={`${masterStyles.iconBtn} ${masterStyles.iconBtnDelete} erp-ms-tbtn`}
+          title={cancelRight ? "Reverse this document (F3)" : "You do not have permission to cancel"}
+          disabled={!cancelRight}
+          onClick={startCancel}
+        >
+          <span className={`${masterStyles.iconBtnBox} erp-ms-tbtn-icon`}>
+            <ErpActionIcon name="history" />
+          </span>
+          <span>Cancel</span>
+        </button>
+      </>
+    );
+  };
 
   return (
     <>

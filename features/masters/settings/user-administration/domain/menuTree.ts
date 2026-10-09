@@ -50,6 +50,12 @@ export type MenuNode = {
    * nothing to post".
    */
   verbs: ReadonlySet<MenuVerb>;
+  /**
+   * Not on anyone's menu bar (no screen yet, or switched off in Module Admin).
+   * Still grantable — a right on a hidden menu applies on the server — so it is
+   * listed, greyed, never dropped.
+   */
+  hidden: boolean;
   children: MenuNode[];
 };
 
@@ -132,6 +138,7 @@ export function parseMenuTree(payload: unknown): MenuTree {
       label: menuLabel(name) || name,
       depth,
       verbs: verbsOf(raw.menuVerbs),
+      hidden: raw.menuVisibility === false,
       children: [],
     };
     byId.set(id, node);

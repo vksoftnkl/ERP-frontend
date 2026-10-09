@@ -42,6 +42,7 @@ import quotationStyles from "@/features/sales/quotation/page.module.scss";
 import { usePagePermissions } from "@/hooks/useMenuPermissions";
 import { useDropdownId } from "@/lib/configured-dropdowns";
 import { useGridId } from "@/lib/configured-grids";
+import { documentRights } from "@/lib/permissions/document-rights";
 import { useUiTableId } from "@/lib/ui-tables";
 import { useGetQuotationGridLayoutQuery } from "@/store/api/quotationApi";
 import { useGridSettings } from "@/features/sales/quotation/components/grid-settings";
@@ -100,10 +101,12 @@ export function OpeningStockEntryView({
   const api = useOpeningStockDraft({ initialDocument, initialMode, onLeave: onBackToList });
   const { draft, totals, busy } = api;
 
-  // Menu permissions, as `applyPermissions()` applies them: create gates New,
-  // Save and Post; edit gates Edit; delete gates Cancel — the one destructive
-  // action left.
+  // Menu permissions as document rights, ANDed with the status the way Qt's
+  // `applyStatus()` does: Create saves a new draft and Edit a saved one; Post
+  // gates Save & Post; Cancel reverses a posted voucher and Delete drops a
+  // draft; New needs Create or Post. Each key obeys its button's gate.
   const { permissions } = usePagePermissions();
+  const rights = useMemo(() => documentRights(permissions), [permissions]);
 
   const uiTableId = useUiTableId(OPENING_STOCK_LINES_UI_TABLE_KEY);
   const { data: layoutRows } = useGetQuotationGridLayoutQuery({ uiTableId }, { skip: !uiTableId });
@@ -140,11 +143,14 @@ export function OpeningStockEntryView({
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
 
   const isDraft = draft.status === "DRAFT";
+  const isPosted = draft.status === "POSTED";
+  const saved = Boolean(draft.svhId);
   const editable = draft.mode === "entry" && isDraft;
   const working = busy !== "idle";
-  const canSave = isDraft && permissions.canCreate;
-  const canCancel = Boolean(draft.svhId) && draft.status !== "CANCELLED" && permissions.canDelete;
-  const canEdit = isDraft && permissions.canEdit;
+  const canSaveDraft = isDraft && rights.maySaveDraft(saved);
+  const canPost = isDraft && rights.mayPost;
+  const canCancel = saved && (isDraft || isPosted) && rights.mayCancelDocument(isPosted);
+  const canEdit = isDraft && rights.mayEdit;
 
   /**
    * Commit whatever is being typed into a cell before acting on the document:
@@ -159,13 +165,14 @@ export function OpeningStockEntryView({
 
   const runSave = useCallback(
     (post: boolean) => {
-      if (working || !canSave) {
+      // F5, F6 and Ctrl+Enter land here too: a key runs only what its button may.
+      if (working || !(post ? canPost : canSaveDraft)) {
         return;
       }
       commitActiveCell();
       void api.saveDraft(post);
     },
-    [api, canSave, commitActiveCell, working],
+    [api, canPost, canSaveDraft, commitActiveCell, working],
   );
 
   // ── Window keys ───────────────────────────────────────────────────────
@@ -450,7 +457,7 @@ export function OpeningStockEntryView({
         <button
           type="button"
           className={quotationStyles.button}
-          disabled={working || !canSave}
+          disabled={working || !canSaveDraft}
           title="Writes the document and nothing else. No stock moves."
           onClick={() => runSave(false)}
         >
@@ -459,7 +466,7 @@ export function OpeningStockEntryView({
         <button
           type="button"
           className={cx(quotationStyles.button, quotationStyles.buttonPrimary)}
-          disabled={working || !canSave}
+          disabled={working || !canPost}
           title="Saves, runs the pre-post check, then posts. Posting is one way: the document is frozen afterwards and can only be cancelled."
           onClick={() => runSave(true)}
         >
@@ -493,7 +500,7 @@ export function OpeningStockEntryView({
         <button
           type="button"
           className={quotationStyles.button}
-          disabled={working || !permissions.canCreate}
+          disabled={working || !rights.mayStartNew}
           onClick={() => void api.newDocument()}
         >
           New
