@@ -1414,6 +1414,13 @@
 
 /* --------------------------------------------------------------- size entry */
 
+/* Sized to the table, not the default panel. The Size column takes whatever the
+   fixed #, CFT, Rate and × columns leave, so this width is what sets the boxes
+   at ~u(16) — the stock u(64) stretched them across half the dialog. */
+.sizeEntryPanel {
+  width: min(u(32), 100%);
+}
+
 .sizeEntry {
   display: flex;
   flex: 1 1 auto;
@@ -1488,14 +1495,11 @@
   text-align: left;
 }
 
-/* In the dialog the four boxes are the ONE thing being keyed, so they cluster at
-   a readable width instead of stretching across the column, and they carry a
-   visible border — `.cellInput` is borderless because a dense grid cell must be,
-   but a lone field in a dialog that looks like plain text is unfindable. */
-.sizeEntry .cellSizeBoxes {
-  max-width: u(15);
-}
-
+/* The four boxes fill the Size column (no cap): capped, they stopped short and
+   left a gap before CFT and Rate. `.sizeEntryPanel` keeps the column narrow.
+   They carry a visible border — `.cellInput` is borderless because a dense grid
+   cell must be, but a lone field in a dialog that looks like plain text is
+   unfindable. */
 .sizeEntry .cellSizeBox {
   border: 1px solid var(--border, #c9c9c9);
   border-radius: var(--erp-radius, 4px);

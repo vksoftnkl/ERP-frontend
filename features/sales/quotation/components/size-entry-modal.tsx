@@ -321,6 +321,7 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
       title="Size entry"
       isOpen={group !== null}
       onClose={onClose}
+      panelClassName={styles.sizeEntryPanel}
       footer={
         <>
           <span className={styles.modalNote}>
@@ -347,7 +348,7 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
               className={cx(styles.button, styles.sizeEntryFooterButton)}
               onClick={onClose}
             >
-              Cancel
+              Cancel-Esc
             </button>
             <button
               ref={okButtonRef}
@@ -355,7 +356,7 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
               className={cx(styles.button, styles.buttonPrimary, styles.sizeEntryFooterButton)}
               onClick={save}
             >
-              OK
+              OK-Ctrl+Enter 
             </button>
           </span>
         </>
@@ -515,10 +516,6 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
           <button type="button" className={styles.button} onClick={addRow}>
             + Add size
           </button>
-          <span className={styles.modalNote}>
-            Each size becomes its own line · Enter next field · Enter on the last Rate adds a size
-            · Ctrl+Enter is OK · Esc cancels
-          </span>
         </div>
       </div>
     </ModalShell>
