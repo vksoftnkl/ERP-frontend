@@ -1,0 +1,626 @@
+/**
+ * Expense Voucher — the screen's skin, in the receipt's look (same fluid unit,
+ * same colours, same controls) laid out as the Qt `ExpenseVoucherEntry`:
+ *
+ *   title + status · where the cash comes from · the header facts · the GST
+ *   bill · WHAT WAS SPENT | HOW IT WAS PAID · LINES − TENDERS + notices ·
+ *   approval · refusals · POSTS · the buttons · the keys
+ *
+ * `.erp-app-content` already sizes the page, so the shell is `height: 100%`
+ * and never `100vh` / `100dvh`. The middle scrolls; the buttons stay put.
+ */
+:root {
+  --erp-q-u: clamp(
+    0.875rem,
+    0.2rem + calc(0.5vw / var(--erp-ui-scale, 1)) + calc(0.35vh / var(--erp-ui-scale, 1)),
+    1.25rem
+  );
+}
+
+@function u($n) {
+  @return calc(#{$n} * var(--erp-q-u, 1rem));
+}
+
+.page {
+  --erp-expv-control: #{u(1.85)};
+  display: flex;
+  flex-direction: column;
+  gap: u(0.4);
+  padding: u(0.4) u(0.6) u(0.3);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  font-family: var(--erp-font-family, "Segoe UI", system-ui, Arial, sans-serif);
+  font-size: u(0.78);
+  color: var(--text-main, #222222);
+  background: var(--surface-muted, #f7f7f7);
+}
+
+.scroll {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.45);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: u(0.1);
+}
+
+/* ----------------------------------------------------------------- title */
+.titleBar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: u(0.6);
+  padding-bottom: u(0.25);
+  border-bottom: 2px solid var(--primary, #7b1515);
+}
+.titleBlock {
+  min-width: 0;
+}
+.title {
+  margin: 0;
+  font-size: u(1.15);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.subtitle {
+  margin: u(0.05) 0 0;
+  font-size: u(0.7);
+  color: var(--text-muted, #6b6b6b);
+}
+.dirtyMark {
+  color: var(--danger, #b3261e);
+}
+.titleRight {
+  display: flex;
+  align-items: center;
+  gap: u(0.4);
+  flex-shrink: 0;
+}
+.docNumber {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: u(0.9);
+  font-weight: 700;
+  color: var(--primary, #7b1515);
+}
+
+/* ------------------------------------------------------------------ pills */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: u(0.15) u(0.6);
+  border-radius: u(0.25);
+  font-size: u(0.66);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.toneWarning {
+  background: #fdf3d3;
+  color: #7a5200;
+  border-color: #ecd9a2;
+}
+.toneSuccess {
+  background: #e3f4e6;
+  color: #1c6b2a;
+  border-color: #bfe3c6;
+}
+.toneDanger {
+  background: #f8e1e0;
+  color: #8b1e17;
+  border-color: #efb9b5;
+}
+.toneInfo {
+  background: #e3ecfa;
+  color: #1f4a8c;
+  border-color: #c3d4ef;
+}
+
+/* --------------------------------------------------- where the cash comes */
+.moneyFrom {
+  display: flex;
+  align-items: center;
+  gap: u(0.45);
+  padding: u(0.3) u(0.6);
+  border: 1px solid #cfd9e8;
+  border-radius: u(0.2);
+  background: #f3f7fc;
+  font-size: u(0.74);
+}
+.moneyDot {
+  color: #1f6fb2;
+  font-size: u(0.7);
+}
+
+/* ------------------------------------------------------------ header facts */
+.facts {
+  display: grid;
+  grid-template-columns: minmax(u(7), 1fr) minmax(u(7.5), 1fr) minmax(0, 3fr) minmax(0, 3fr) minmax(0, 4fr);
+  gap: u(0.2) u(0.5);
+  padding: u(0.4) u(0.5);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: u(0.2);
+}
+.gst {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 3fr) minmax(0, 2fr) minmax(0, 2fr) minmax(0, 2fr);
+  gap: u(0.2) u(0.5);
+  padding: u(0.4) u(0.5);
+  background: #fbfaf5;
+  border: 1px solid #e6dfc4;
+  border-radius: u(0.2);
+}
+.gstOff {
+  background: var(--surface, #ffffff);
+  border-color: var(--border, #e0e0e0);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.15);
+  min-width: 0;
+}
+.cap {
+  font-size: u(0.62);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6d6d6d);
+}
+.factValue {
+  display: flex;
+  align-items: center;
+  min-height: var(--erp-expv-control);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-weight: 700;
+  color: var(--primary, #7b1515);
+}
+.factValueMuted {
+  color: var(--text-muted, #8a8a8a);
+  font-weight: 500;
+  font-style: italic;
+  font-family: inherit;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: u(0.35);
+  min-height: var(--erp-expv-control);
+  font-weight: 700;
+  cursor: pointer;
+}
+.check input {
+  width: u(0.9);
+  height: u(0.9);
+}
+.muted {
+  margin: 0;
+  font-size: u(0.66);
+  color: var(--text-muted, #7a7a7a);
+}
+.input,
+.select {
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--erp-expv-control);
+  min-height: var(--erp-expv-control);
+  padding: 0 u(0.4);
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: u(0.2);
+  background: var(--surface, #ffffff);
+  font: inherit;
+  font-size: u(0.78);
+  color: inherit;
+}
+.input:disabled,
+.select:disabled {
+  background: var(--surface-muted, #f4f4f4);
+  color: var(--text-muted, #7a7a7a);
+}
+.input:focus-visible,
+.select:focus-visible {
+  outline: 2px solid var(--primary, #7b1515);
+  outline-offset: -1px;
+}
+.dropdownField input {
+  box-sizing: border-box;
+  height: var(--erp-expv-control);
+  min-height: var(--erp-expv-control);
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: u(0.4);
+  font: inherit;
+  font-size: u(0.78);
+  border-radius: u(0.2);
+}
+
+/* --------------------------------------------------------- the two grids */
+.mid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: u(0.6);
+  align-items: start;
+}
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.3);
+  min-width: 0;
+}
+.blockHead {
+  display: flex;
+  align-items: baseline;
+  gap: u(0.5);
+}
+.formCap {
+  margin: 0;
+  font-size: u(0.72);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--primary, #7b1515);
+}
+.code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: u(0.66);
+  color: var(--text-muted, #7a7a7a);
+}
+.gridShell {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #d8d8d8);
+  border-radius: u(0.2);
+  overflow: auto;
+  max-height: u(16);
+}
+.grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: u(0.74);
+}
+.grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: u(0.25) u(0.35);
+  text-align: left;
+  font-weight: 700;
+  font-size: u(0.7);
+  color: var(--primary, #7b1515);
+  background: var(--surface-muted, #f4f4f4);
+  border: 1px solid var(--border, #e0e0e0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.grid tbody td {
+  padding: 0;
+  height: u(1.9);
+  border: 1px solid var(--border, #ededed);
+  vertical-align: middle;
+}
+.grid tbody tr:nth-child(even) td {
+  background: #fbfbfb;
+}
+.rowActive td {
+  box-shadow: inset 0 1px 0 var(--primary, #7b1515), inset 0 -1px 0 var(--primary, #7b1515);
+}
+.alignRight {
+  text-align: right !important;
+}
+.alignCenter {
+  text-align: center !important;
+}
+.cellText {
+  display: block;
+  padding: 0 u(0.35);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cellPending {
+  color: var(--text-muted, #9a9a9a);
+}
+.cellInput,
+.cellSelect {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: u(1.85);
+  box-sizing: border-box;
+  padding: 0 u(0.35);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+}
+.cellInput:focus-visible,
+.cellSelect:focus-visible {
+  outline: 2px solid var(--primary, #7b1515);
+  outline-offset: -2px;
+  background: #fffbe6;
+}
+.cellInput:disabled,
+.cellSelect:disabled {
+  color: var(--text-muted, #8a8a8a);
+  cursor: not-allowed;
+}
+.cellAmount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cellCheck {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+/* The searchable ledger picker and the GST rate dropdown, flattened into the cell. */
+.cellPicker {
+  width: 100%;
+}
+/* `> button` is the searchable select's trigger only — never the dropdown's chevron. */
+.cellPicker > button,
+.cellPicker input {
+  min-height: u(1.85) !important;
+  height: u(1.85) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: u(0.74) !important;
+}
+
+.blockFoot {
+  display: flex;
+  align-items: center;
+  gap: u(0.35);
+  flex-wrap: wrap;
+}
+.strong {
+  margin-left: auto;
+  font-weight: 700;
+  white-space: pre;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------- balance + notices */
+.balanceRow {
+  display: grid;
+  grid-template-columns: minmax(u(12), 1fr) minmax(0, 3fr);
+  gap: u(0.6);
+  align-items: stretch;
+}
+.balance {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: u(0.1);
+  padding: u(0.35) u(0.7);
+  border: 1px solid var(--border, #d8d8d8);
+  border-radius: u(0.2);
+  background: var(--surface, #ffffff);
+}
+.balanceSuccess {
+  border-color: #bfe3c6;
+  background: #eef8f0;
+}
+.balanceDanger {
+  border-color: #efb9b5;
+  background: #fdf1f0;
+}
+.figure {
+  font-size: u(1.05);
+  font-weight: 800;
+  white-space: pre;
+  font-variant-numeric: tabular-nums;
+}
+.balanceSuccess .figure {
+  color: #1c6b2a;
+}
+.balanceDanger .figure {
+  color: var(--danger, #b3261e);
+}
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: u(0.5);
+  padding: u(0.35) u(0.6);
+  border-radius: u(0.2);
+  border: 1px solid #c3d4ef;
+  background: #f2f6fd;
+  white-space: pre-line;
+}
+.approval {
+  border-color: #ecd9a2;
+  background: #fffaea;
+  align-items: center;
+}
+.approvalText {
+  flex: 1 1 auto;
+}
+.approvalAmount {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.refusals {
+  margin: 0;
+  padding: u(0.3) u(0.6);
+  list-style: none;
+  font-size: u(0.72);
+  color: var(--danger, #b3261e);
+  background: #fdf2f1;
+  border: 1px solid #efb9b5;
+  border-radius: u(0.2);
+}
+.stale {
+  opacity: 0.55;
+}
+
+/* ------------------------------------------------------------------ POSTS */
+.legs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: u(0.2) u(1);
+  padding: u(0.35) u(0.6);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: u(0.2);
+  min-height: u(1.6);
+}
+.legColumn {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.1);
+  min-width: 0;
+}
+.leg {
+  display: grid;
+  grid-template-columns: u(1.6) minmax(0, 1fr) auto;
+  gap: u(0.4);
+  align-items: baseline;
+}
+.legSide {
+  font-weight: 700;
+  color: var(--text-muted, #6a6a6a);
+}
+.legName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.legAmount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.legsEmpty {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-muted, #8a8a8a);
+  font-style: italic;
+}
+.toneTextSuccess {
+  color: #1c6b2a;
+}
+.toneTextDanger {
+  color: var(--danger, #b3261e);
+}
+
+/* --------------------------------------------------------------- buttons */
+.buttons {
+  display: flex;
+  align-items: center;
+  gap: u(0.35);
+  flex-wrap: wrap;
+  padding-top: u(0.25);
+  border-top: 1px solid var(--border, #e0e0e0);
+}
+.spacer {
+  flex: 1 1 auto;
+}
+.button,
+.primaryButton,
+.dangerButton {
+  padding: u(0.3) u(0.75);
+  border-radius: u(0.25);
+  border: 1px solid var(--border, #c9c9c9);
+  background: var(--surface, #ffffff);
+  color: var(--text-main, #222222);
+  font: inherit;
+  font-size: u(0.74);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.primaryButton {
+  background: var(--primary, #7b1515);
+  border-color: var(--primary, #7b1515);
+  color: #ffffff;
+  font-weight: 600;
+}
+.dangerButton {
+  color: var(--danger, #b3261e);
+  border-color: #e0b4b1;
+}
+.button:disabled,
+.primaryButton:disabled,
+.dangerButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.button:not(:disabled):hover,
+.dangerButton:not(:disabled):hover {
+  background: var(--surface-muted, #f2f2f2);
+}
+.smallButton {
+  padding: u(0.18) u(0.55);
+  font-size: u(0.7);
+}
+.keys {
+  margin: 0;
+  font-size: u(0.66);
+  color: var(--text-muted, #7a7a7a);
+}
+.loadError {
+  margin: 0;
+  padding: u(0.4) u(0.6);
+  color: var(--danger, #b3261e);
+  background: #fdf2f1;
+  border: 1px solid #efb9b5;
+  border-radius: u(0.2);
+}
+
+/* ---------------------------------------------------------------- dialogs */
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.5);
+  min-width: u(22);
+}
+.dialogNote {
+  margin: 0;
+  font-size: u(0.74);
+  white-space: pre-line;
+}
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: u(0.4);
+}
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: u(0.3);
+}
+.preset {
+  padding: u(0.15) u(0.55);
+  border: 1px solid var(--border, #d0d0d0);
+  border-radius: 999px;
+  background: var(--surface, #ffffff);
+  font: inherit;
+  font-size: u(0.68);
+  cursor: pointer;
+}
+.preset:hover {
+  background: var(--surface-muted, #f2f2f2);
+}
+
+/* ------------------------------------------------------------ the register */
+.cancelledRow td {
+  text-decoration: line-through;
+  color: var(--text-muted, #8a8a8a);
+}
+.chip {
+  display: inline-block;
+  padding: u(0.05) u(0.4);
+  border-radius: u(0.2);
+  font-size: u(0.62);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  white-space: nowrap;
+}

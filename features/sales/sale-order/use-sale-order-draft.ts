@@ -23,6 +23,7 @@ import {
   getOrCreateClientDeviceId,
   getUserInfo,
 } from "@/lib/auth/session";
+import { getTillSessionId } from "@/features/sales/till/shared/session-store";
 import { extractApiErrorMessage } from "@/lib/api/client";
 import {
   quotationApi,
@@ -205,7 +206,8 @@ function useSaveActor(): SaveActor {
     () => ({
       userId: getAuthUserId() ?? "",
       userName: getUserInfo()?.userName ?? null,
-      sessionId: getAuthSessionId(),
+      // soSessionId: the till session this money goes into (S1), when one is open (Qt d5c3637).
+      sessionId: getTillSessionId() ?? getAuthSessionId(),
       deviceId: getOrCreateClientDeviceId(),
       deviceType: getUserInfo()?.deviceType ?? null,
     }),

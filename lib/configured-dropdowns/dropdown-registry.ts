@@ -112,6 +112,10 @@ export const CONFIGURED_DROPDOWNS = {
   tillReasonLedger: { name: "TILL REASON LEDGERS", fallbackId: "66", paramBound: true },
   /** Till Masters — where a counter's drops go. Binds QUOTED `'icompany_id'`, `'ibranch_id'`. */
   tillSafe: { name: "TILL SAFES", fallbackId: "67", paramBound: true },
+  /** Till Approval Setup (276) — who may approve: active users. Binds a QUOTED `'icompany_id'`. */
+  tillApproverUser: { name: "TILL APPROVER USERS", fallbackId: "68", paramBound: true },
+  /** Income ledgers (till Paid In, settlement write-offs). Binds a QUOTED `'icompany_id'`. */
+  incomeLedger: { name: "INCOME LEDGERS", fallbackId: "69", paramBound: true },
 } as const;
 export type ConfiguredDropdownKey = keyof typeof CONFIGURED_DROPDOWNS;
 const ID_KEYS = ["dropdown_id", "dropdownId", "id"] as const;

@@ -22,6 +22,7 @@ export const FULL_MENU_PERMISSIONS: MenuPermissions = {
   canPost: true,
   canCancel: true,
   canAmend: true,
+  canOverride: true,
   isVisible: true,
 };
 
@@ -35,6 +36,7 @@ export const NO_MENU_PERMISSIONS: MenuPermissions = {
   canPost: false,
   canCancel: false,
   canAmend: false,
+  canOverride: false,
   isVisible: false,
 };
 
@@ -72,6 +74,7 @@ function mergePermissions(a: MenuPermissions, b: MenuPermissions): MenuPermissio
     canPost: Boolean(a.canPost || b.canPost),
     canCancel: Boolean(a.canCancel || b.canCancel),
     canAmend: Boolean(a.canAmend || b.canAmend),
+    canOverride: Boolean(a.canOverride || b.canOverride),
     isVisible: a.isVisible || b.isVisible,
   };
 }

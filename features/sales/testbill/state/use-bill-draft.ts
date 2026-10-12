@@ -151,6 +151,7 @@ import {
   getOrCreateClientDeviceId,
   getUserInfo,
 } from "@/lib/auth/session";
+import { getTillSessionId } from "@/features/sales/till/shared/session-store";
 import type { SaveActor } from "@/features/sales/quotation/quotation.payload";
 import { useBusinessContext } from "@/components/layout/business-context";
 import type {
@@ -584,7 +585,8 @@ function useSaveActor(): SaveActor {
     () => ({
       userId: getAuthUserId() ?? "",
       userName: getUserInfo()?.userName ?? null,
-      sessionId: getAuthSessionId(),
+      // sbSessionId: the till session this money goes into (S1), when one is open (Qt d5c3637).
+      sessionId: getTillSessionId() ?? getAuthSessionId(),
       deviceId: getOrCreateClientDeviceId(),
       // `txn_hold.txh_device_id` is a real FK into `fixed.device_master`, so a
       // hold names the device the LOGIN registered — never the browser's own

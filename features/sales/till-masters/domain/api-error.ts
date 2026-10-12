@@ -1,14 +1,25 @@
 /**
- * The till routes answer a 400 as `{ message, errors: [{ field, message }] }`.
- * The field lines are what the operator needs; the head alone often says only
- * "Validation failed".
+ * The till routes answer a refusal through their own filter as
+ * `{ success:false, message, errors: [{ field, code, message }] }`; anything
+ * that escapes it comes back in the global filter's nested shape,
+ * `{ message: { message, errors } }`. The field lines are what the operator
+ * needs; the head alone often says only "Validation failed".
  */
 type FieldError = { field?: unknown; message?: unknown };
+type ErrorBody = { message?: unknown; errors?: unknown };
+
+function bodyOf(data: unknown): ErrorBody | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const body = data as ErrorBody;
+  // The global filter wraps the module's body one level down.
+  if (body.message && typeof body.message === "object") return body.message as ErrorBody;
+  return body;
+}
 
 export function tillErrorText(error: unknown, fallback: string): string {
   if (!error || typeof error !== "object") return fallback;
   const record = error as { message?: unknown; data?: unknown };
-  const data = record.data as { message?: unknown; errors?: unknown } | undefined;
+  const data = bodyOf(record.data);
   const lines: string[] = [];
   if (data && Array.isArray(data.errors)) {
     for (const entry of data.errors as FieldError[]) {

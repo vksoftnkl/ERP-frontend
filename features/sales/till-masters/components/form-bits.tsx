@@ -1,11 +1,27 @@
 "use client";
 
+/**
+ * The pieces every till master popup is built from — the web side of Qt's
+ * NexCrudForm fields: a heading per section, caption + control pairs two to a
+ * line, check boxes that carry their own text, and amount / count boxes held as
+ * the text typed.
+ */
 import type { ReactNode } from "react";
 
 import { cx } from "@/components/design-system/cx";
+import type { TillMasterKind } from "../domain/till-masters";
 import styles from "../page.module.scss";
 
-/** A caption and its control, in the form's two-pairs-per-line grid. */
+/** The DOM id of a popup field — also how a refused Save puts the caret back. */
+export function fieldId(kind: TillMasterKind, field: string): string {
+  return `till-${kind}-${field}`;
+}
+
+export function SectionHeading({ children }: { children: ReactNode }) {
+  return <h3 className={styles.sectionHeading}>{children}</h3>;
+}
+
+/** A caption and its control. `wide` takes the whole line. */
 export function Field({
   id,
   label,
@@ -16,47 +32,51 @@ export function Field({
   id?: string;
   label: string;
   required?: boolean;
-  /** Take the rest of the line. */
   wide?: boolean;
   children: ReactNode;
 }) {
   return (
-    <>
-      <label className={styles.fieldCap} htmlFor={id}>
+    <div className={cx(styles.field, wide && styles.fieldWide)}>
+      <label className={styles.fieldCaption} htmlFor={id}>
         {label}
         {required ? <span className={styles.required}> *</span> : null}
       </label>
-      <div className={cx(styles.fieldControl, wide && styles.fieldWide)}>{children}</div>
-    </>
+      <div className={styles.fieldControl}>{children}</div>
+    </div>
   );
 }
 
+/** A check box with its own text, in a field's place (Qt `F::checkBox`). */
 export function Check({
+  id,
   label,
   checked,
   disabled,
+  autoFocus,
   onChange,
-  span,
 }: {
+  id?: string;
   label: string;
   checked: boolean;
   disabled?: boolean;
+  autoFocus?: boolean;
   onChange: (value: boolean) => void;
-  /** In the form grid: a caption + control pair's width, or the whole line. */
-  span?: "pair" | "full";
 }) {
   return (
-    <label
-      className={cx(
-        styles.checkLine,
-        span === "pair" && styles.fieldPair,
-        span === "full" && styles.fieldFull,
-        disabled && styles.checkDisabled,
-      )}
-    >
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
-      {label}
-    </label>
+    <div className={styles.field}>
+      <span className={styles.fieldCaption} aria-hidden="true" />
+      <label className={cx(styles.checkLine, disabled && styles.checkDisabled)}>
+        <input
+          id={id}
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          autoFocus={autoFocus}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        {label}
+      </label>
+    </div>
   );
 }
 
@@ -68,6 +88,9 @@ export function NumberBox({
   disabled,
   decimals = 2,
   max,
+  placeholder,
+  required,
+  autoFocus,
 }: {
   id?: string;
   value: string;
@@ -75,6 +98,9 @@ export function NumberBox({
   disabled?: boolean;
   decimals?: number;
   max?: number;
+  placeholder?: string;
+  required?: boolean;
+  autoFocus?: boolean;
 }) {
   const pattern = decimals > 0 ? new RegExp(`^\\d*(\\.\\d{0,${decimals}})?$`) : /^\d*$/;
   return (
@@ -84,6 +110,9 @@ export function NumberBox({
       inputMode={decimals > 0 ? "decimal" : "numeric"}
       value={value}
       disabled={disabled}
+      placeholder={placeholder}
+      autoFocus={autoFocus}
+      data-required={required ? "true" : undefined}
       onChange={(event) => {
         const next = event.target.value.replace(/,/g, "");
         if (!pattern.test(next)) return;
@@ -95,21 +124,19 @@ export function NumberBox({
   );
 }
 
-/** "FACTS read-only": figures the grid derives, never typed. */
-export function Facts({ items }: { items: readonly { label: string; value: string; tone?: "danger" }[] }) {
+/** The facts line (muted) and the warning lines (amber) under a form; nothing when empty. */
+export function Notes({ facts, warnings }: { facts: string; warnings: readonly string[] }) {
+  if (!facts && warnings.length === 0) return null;
   return (
-    <div className={styles.facts}>
-      {items.map((item) => (
-        <div key={item.label} className={styles.fact}>
-          <span className={styles.factCap}>{item.label}</span>
-          <span className={cx(styles.factValue, item.tone === "danger" && styles.toneDanger)}>{item.value}</span>
-        </div>
-      ))}
+    <div className={styles.notes}>
+      {facts ? <p className={styles.facts}>{facts}</p> : null}
+      {warnings.length > 0 ? (
+        <ul className={styles.warnings}>
+          {warnings.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
-}
-
-export function Warning({ lines }: { lines: readonly string[] }) {
-  if (lines.length === 0) return null;
-  return <p className={styles.warning}>{lines.join(" · ")}</p>;
 }

@@ -33,6 +33,12 @@ export type ErpMenuPermissionFlags = {
   canCancel?: boolean;
   /** `um_can_amend` — change a posted document in place. */
   canAmend?: boolean;
+  /**
+   * `um_can_override` — a supervisor's act on a till / settlement screen
+   * (expected figures, resolve, write-off). Optional like `canPost`: absent
+   * reads as allowed and the server refuses.
+   */
+  canOverride?: boolean;
   isVisible: boolean;
 };
 

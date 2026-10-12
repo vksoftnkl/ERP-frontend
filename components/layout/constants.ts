@@ -50,11 +50,27 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       // "Sales Entry" above.
       { label: "Bill Delivery Update", href: "/sales/bill-delivery" },
       { label: "Temp Credits", href: "/sales/temp-credits" },
-      // Menu 271 "Till" › 275 "Till Masters" (counters, safes, reasons,
-      // denominations). Exact DB labels, for the same reason as above.
+      // Menu 271 "Till" (Qt NexERP d5c3637). Exact DB labels, for the same
+      // reason as above. 283 "Till Masters" is a group since the masters split
+      // into one screen each; the keyed cockpit
+      // /sales/till/sessions/:company/:branch/:year/:id inherits 273 by prefix.
       {
         label: "Till",
-        children: [{ label: "Till Masters", href: "/sales/till-masters" }],
+        children: [
+          { label: "Open Till", href: "/sales/till/open" },
+          { label: "Till Sessions", href: "/sales/till/sessions" },
+          { label: "Business Day", href: "/sales/till/business-day" },
+          {
+            label: "Till Masters",
+            children: [
+              { label: "Till Counters", href: "/sales/till/counters" },
+              { label: "Till Safes", href: "/sales/till/safes" },
+              { label: "Till Reasons", href: "/sales/till/reasons" },
+              { label: "Denominations", href: "/sales/till/denominations" },
+            ],
+          },
+          { label: "Till Approval Setup", href: "/sales/till/approval-setup" },
+        ],
       },
       {
         label: "Master",
@@ -178,6 +194,11 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
       { label: "Sales (Accounting)", href: "/accounts/sales-accounting" },
       // Menu 163. Same rule.
       { label: "Purchase (Accounting)", href: "/accounts/purchase-accounting" },
+      // Menu 277 (Qt NexERP d5c3637). Same rule; the keyed voucher route
+      // /accounts/expense-voucher/:company/:branch/:year/:id inherits it.
+      { label: "Expense Voucher", href: "/accounts/expense-voucher" },
+      // Menu 278. Same rule.
+      { label: "Settlement Reconciliation", href: "/accounts/settlement-reconciliation" },
       // Menu 101. Same rule.
       { label: "Debit Note", href: "/accounts/debit-note" },
       // Menu 102. Same rule.
@@ -485,6 +506,7 @@ function toMenuPermissionFlags(value: unknown): ErpMenuPermissionFlags | null {
     canPost: read("canPost", "can_post"),
     canCancel: read("canCancel", "can_cancel"),
     canAmend: read("canAmend", "can_amend"),
+    canOverride: read("canOverride", "can_override"),
     // Visibility is the one flag that defaults to granted — the server only
     // returns menus the user may open, so an absent field is not a denial.
     isVisible: toBooleanFlag(value.isVisible) ?? toBooleanFlag(value.is_visible) ?? true,

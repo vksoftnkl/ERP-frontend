@@ -195,6 +195,29 @@ export const CONFIGURED_GRIDS = {
   tillReasonList: { name: "MAIN LIST - TILL REASONS", fallbackId: "134", deletedParam: null },
   tillDenominationList: { name: "MAIN LIST - TILL DENOMINATIONS", fallbackId: "135", deletedParam: null },
   tillSafeList: { name: "MAIN LIST - TILL SAFES", fallbackId: "136", deletedParam: null },
+  /** Expense Voucher register (menu 277, Qt NexERP d5c3637). */
+  expenseVoucherList: { name: "MAIN LIST - EXPENSE VOUCHERS", fallbackId: "137", deletedParam: null },
+  /** Settlement Reconciliation (menu 278): the imports, one import's lines, and the exception views. */
+  tenderSettlementList: { name: "MAIN LIST - TENDER SETTLEMENTS", fallbackId: "138", deletedParam: null },
+  tenderSettlementLines: { name: "TENDER SETTLEMENT - LINES", fallbackId: "139", deletedParam: null },
+  tenderSettlementNotReceived: { name: "TENDER SETTLEMENT - NOT RECEIVED", fallbackId: "140", deletedParam: null },
+  tenderSettlementUnexplained: { name: "TENDER SETTLEMENT - UNEXPLAINED", fallbackId: "141", deletedParam: null },
+  tenderSettlementDuplicateRefs: { name: "TENDER SETTLEMENT - DUPLICATE REFS", fallbackId: "142", deletedParam: null },
+  tenderSettlementSuspense: { name: "TENDER SETTLEMENT - SUSPENSE", fallbackId: "143", deletedParam: null },
+  /** Till Sessions (menu 273) and one session's cockpit tabs. */
+  tillSessionList: { name: "MAIN LIST - TILL SESSIONS", fallbackId: "144", deletedParam: null },
+  tillSessionEvents: { name: "TILL SESSION EVENTS", fallbackId: "145", deletedParam: null },
+  tillSessionBills: { name: "TILL SESSION BILLS", fallbackId: "146", deletedParam: null },
+  tillSessionMoneyDocs: { name: "TILL SESSION MONEY DOCS", fallbackId: "147", deletedParam: null },
+  tillSessionCounts: { name: "TILL SESSION COUNTS", fallbackId: "148", deletedParam: null },
+  /** Business Day (menu 274): the days, and one day's sessions. */
+  tillBusinessDayList: { name: "MAIN LIST - TILL BUSINESS DAYS", fallbackId: "149", deletedParam: null },
+  tillDaySessions: { name: "TILL DAY SESSIONS", fallbackId: "150", deletedParam: null },
+  /** Till Approval Setup (menu 276): the rules (WHEN) and the grants (WHO). */
+  tillApprovalRules: { name: "TILL APPROVAL RULES", fallbackId: "151", deletedParam: null },
+  tillApprovalGrants: { name: "TILL APPROVAL GRANTS", fallbackId: "152", deletedParam: null },
+  /** Settlement Reconciliation: the tender lines a statement line can be confirmed against. */
+  tenderSettlementPickRow: { name: "TENDER SETTLEMENT - PICK ROW", fallbackId: "154", deletedParam: null },
 } as const;
 export type ConfiguredGridKey = keyof typeof CONFIGURED_GRIDS;
 const ID_KEYS = ["grid_id", "gridId", "id"] as const;
