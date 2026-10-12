@@ -6,7 +6,8 @@
  *    a partial answer renders as nothing rather than throwing mid-render.
  *  - `draftOfVoucher` is Qt `showVoucher()`: the voucher, back into the draft
  *    the operator edits — "Paid to" and the notes split back out of `remarks`,
- *    the reason on the first line, the lines and tenders as typed.
+ *    the reason on the first line, the lines and tenders as typed (none of
+ *    them following the balance), and a DRAFT's trailing blank rows.
  */
 import type {
   ExpenseApproval,
@@ -21,9 +22,10 @@ import type {
   ExpenseValidatePayload,
   ExpenseWarning,
 } from "../expense.types";
-import { emptyLine, emptyTender } from "./draft";
+import { emptyLine, emptyTender, withTrailingRows } from "./draft";
 import { paiseOfNumber, paiseToDecimal, tidyAmountText } from "./money";
 import { REMARKS_SEPARATOR } from "./payload";
+import { stateOfGstin } from "./pickers";
 
 type Json = Record<string, unknown>;
 
@@ -229,6 +231,7 @@ export function draftOfVoucher(voucher: ExpensePayload, today: string): ExpenseD
     ledgerId: line.ledgerId,
     ledgerName: line.ledgerName ?? "",
     description: line.description ?? "",
+    hsn: line.hsn ?? "",
     amount: tidyAmountText(paiseToDecimal(paiseOfNumber(line.amount))),
     taxId: line.taxId ?? "",
     taxName: line.taxName ?? "",
@@ -242,7 +245,11 @@ export function draftOfVoucher(voucher: ExpensePayload, today: string): ExpenseD
     tenderName: row.tenderName,
     refNo: row.refNo ?? "",
   }));
-  return {
+  // A saved place of supply other than the GSTIN's state was the operator's pick.
+  const placeOfSupply = bill?.placeOfSupplyCode ?? "";
+  const placeOfSupplyPicked =
+    placeOfSupply !== "" && placeOfSupply !== stateOfGstin(bill?.supplierGstin ?? "");
+  return withTrailingRows({
     keys: {
       companyId: voucher.companyId,
       branchId: voucher.branchId,
@@ -261,10 +268,11 @@ export function draftOfVoucher(voucher: ExpensePayload, today: string): ExpenseD
       supplierGstin: bill?.supplierGstin ?? "",
       invoiceNo: bill?.invoiceNo ?? "",
       invoiceDate: bill?.invoiceDate || today,
-      placeOfSupply: bill?.placeOfSupplyCode ?? "",
+      placeOfSupply,
+      placeOfSupplyPicked,
     },
     lines: lines.length > 0 ? lines : [emptyLine()],
     tenders: tenders.length > 0 ? tenders : [emptyTender()],
     dirty: false,
-  };
+  });
 }

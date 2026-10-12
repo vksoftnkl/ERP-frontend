@@ -4,9 +4,10 @@
  * The two questions the voucher asks, on the house `ModalShell` (portaled,
  * backdrop split, Escape closes the topmost only):
  *
- *  - `CancelReasonDialog` — Qt `AppMessage::askText` for "Cancel voucher…":
- *    a required reason with the three preset chips. An empty answer is not
- *    "cancel without one"; the confirm button waits for text.
+ *  - `CancelReasonDialog` — Qt `AppMessage::askText` for "Cancel voucher…"
+ *    and "Cancel & re-enter…" (`reenter`): a required reason with the three
+ *    preset chips. An empty answer is not "cancel without one"; the confirm
+ *    button waits for text.
  *  - `ConfirmDialog` — a Yes / No (discarding unsaved typing). Yes holds the
  *    focus, so Enter answers it; Esc is No.
  *
@@ -22,12 +23,14 @@ export const CANCEL_REASON_PRESETS = ["Entered in error", "Wrong amount", "Wrong
 
 export type CancelReasonDialogProps = {
   voucherNo: string | null;
+  /** Cancel, then open a copy to correct and post (Qt 5e25760). */
+  reenter?: boolean;
   busy: boolean;
   onCancel: () => void;
   onConfirm: (reason: string) => void;
 };
 
-export function CancelReasonDialog({ voucherNo, busy, onCancel, onConfirm }: CancelReasonDialogProps) {
+export function CancelReasonDialog({ voucherNo, reenter = false, busy, onCancel, onConfirm }: CancelReasonDialogProps) {
   const [reason, setReason] = useState("");
   const ready = reason.trim().length > 0 && !busy;
   const submit = () => {
@@ -38,7 +41,7 @@ export function CancelReasonDialog({ voucherNo, busy, onCancel, onConfirm }: Can
 
   return (
     <ModalShell
-      title={voucherNo ? `Cancel expense ${voucherNo}` : "Cancel expense"}
+      title={`${reenter ? "Cancel and re-enter expense" : "Cancel expense"}${voucherNo ? ` ${voucherNo}` : ""}`}
       isOpen
       narrow
       onClose={onCancel}
@@ -48,14 +51,16 @@ export function CancelReasonDialog({ voucherNo, busy, onCancel, onConfirm }: Can
             Back
           </button>
           <button type="button" className={styles.dangerButton} disabled={!ready} onClick={submit}>
-            {busy ? "Cancelling…" : "Cancel voucher"}
+            {busy ? "Cancelling…" : reenter ? "Cancel & re-enter" : "Cancel voucher"}
           </button>
         </div>
       }
     >
       <div className={styles.dialogBody}>
         <p className={styles.dialogNote}>
-          Cancelling writes a mirror voucher (Rev) and gives the cash back to the drawer it came from. Why?
+          {reenter
+            ? "The voucher is cancelled (a mirror Rev voucher gives the cash back to the drawer) and a copy opens to correct and post. Why?"
+            : "Cancelling writes a mirror voucher (Rev) and gives the cash back to the drawer it came from. Why?"}
         </p>
         <input
           autoFocus

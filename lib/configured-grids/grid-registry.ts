@@ -216,6 +216,12 @@ export const CONFIGURED_GRIDS = {
   /** Till Approval Setup (menu 276): the rules (WHEN) and the grants (WHO). */
   tillApprovalRules: { name: "TILL APPROVAL RULES", fallbackId: "151", deletedParam: null },
   tillApprovalGrants: { name: "TILL APPROVAL GRANTS", fallbackId: "152", deletedParam: null },
+  /**
+   * Expense Voucher (menu 277, Qt NexERP d97cdd4): the Reason and Expense
+   * ledger cells' popups. Both bind QUOTED `'icompany_id'` — always sent.
+   */
+  expenseReasonPopup: { name: "POPUP - EXPENSE REASONS", fallbackId: "155", deletedParam: null },
+  expenseLedgerPopup: { name: "POPUP - EXPENSE LEDGERS", fallbackId: "156", deletedParam: null },
   /** Settlement Reconciliation: the tender lines a statement line can be confirmed against. */
   tenderSettlementPickRow: { name: "TENDER SETTLEMENT - PICK ROW", fallbackId: "154", deletedParam: null },
 } as const;

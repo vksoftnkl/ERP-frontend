@@ -1514,6 +1514,23 @@
   font-variant-numeric: tabular-nums;
 }
 
+.sizeEntryRateCell {
+  width: u(6);
+}
+
+/* Keyed like the size boxes, so it wears the same border. */
+.sizeEntry .sizeEntryRateInput {
+  border: 1px solid var(--border, #c9c9c9);
+  border-radius: var(--erp-radius, 4px);
+  background: #ffffff;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.sizeEntry .sizeEntryRateInput:focus-visible {
+  border-color: var(--primary, #7b1515);
+}
+
 /* Under the cell it belongs to, not in a banner: the operator has to be able to
    see WHICH row is wrong without matching a message to a line by eye. */
 .sizeEntryError {

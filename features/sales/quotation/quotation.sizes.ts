@@ -76,6 +76,16 @@ export type SizeEntryValues = {
    * well and the dialog must not disagree with the cell it stands in for.
    */
   qtyTouched: boolean;
+  /**
+   * `true` for a row the dialog added that the operator has not keyed into yet.
+   *
+   * Enter on the last row's Rate opens the next row straight away with the
+   * length and width carried across, so there is always a row waiting below the
+   * last real size, holding dimensions nobody confirmed. `L*W` alone works out to
+   * a CFT, so left in it would save as a bogus line — it only becomes a size once
+   * something is keyed into it, and until then OK leaves it out (`keyedSizeRows`).
+   */
+  pristine: boolean;
 };
 
 /** One row of the Size Entry dialog. Local to the dialog until Save. */
@@ -216,39 +226,48 @@ export function sizeRowText(row: SizeEntryValues): string {
   return joinSizeFactors(row.factors);
 }
 
+/** How many leading boxes a new row carries over from the row above: L and W. */
+const SIZE_FACTORS_CARRIED = 2;
+
 /**
- * A row to key the next size into — a copy of the row above it, or a blank one
- * when there is nothing above.
+ * A row to key the next size into — the row above's length and width, or a
+ * blank one when there is nothing above.
  *
- * Sizes on one item are keyed as variations of each other: the same board in
- * five lengths, the same length in three thicknesses. Starting a new row blank
- * makes the operator re-key the three boxes that did not change, so the previous
- * row's dimensions are carried in and the cursor lands on the first box with its
- * value selected — typing replaces it, Enter walks to the box that actually
- * differs. Two rows left identical are allowed — the same piece twice is a real
- * entry, not a slip.
+ * Sizes on one item are keyed as the same face (length × width) in several
+ * thicknesses and piece counts, so L and W are carried in and T, Pcs and Rate
+ * are not: those are what differ, and a copied value there is one the operator
+ * has to notice and key over. Rate starts at the group's base rate rather than
+ * the row above's — a rate negotiated on one size belongs to that size.
  *
  * The copy is of the KEYSTROKES only: `source` stays `null`, so a copied row is
  * still a brand-new line and sheds its identity through the screen's own copier
- * (see `applySizeEntry`). Qty follows the copied size rather than the previous
- * row's keyed quantity — a quantity cut short belongs to the row it was cut on.
+ * (see `applySizeEntry`). It is `pristine` until keyed into — see that field.
  */
 export function createSizeEntryRow<T extends SizeGroupLine>(
   baseRate: number,
   previous?: SizeEntryValues | null,
 ): SizeEntryRow<T> {
-  const factors = previous
-    ? [...previous.factors]
-    : Array.from({ length: SIZE_FACTOR_COUNT }, () => "");
+  const factors = Array.from({ length: SIZE_FACTOR_COUNT }, (_, index) =>
+    previous && index < SIZE_FACTORS_CARRIED ? (previous.factors[index] ?? "") : "",
+  );
   const cft = cubicFeetFromSize(joinSizeFactors(factors));
   return {
     key: nextRowKey("size"),
     factors,
     qty: cft === null ? "" : String(cft),
-    rate: previous ? previous.rate : baseRate ? String(baseRate) : "",
+    rate: baseRate ? String(baseRate) : "",
     qtyTouched: false,
+    pristine: true,
     source: null,
   };
+}
+
+/**
+ * The rows OK acts on: every row but one the dialog added and nobody keyed into.
+ * See `pristine`.
+ */
+export function keyedSizeRows<R extends SizeEntryValues>(rows: R[]): R[] {
+  return rows.filter((row) => !row.pristine);
 }
 
 /**
@@ -277,6 +296,7 @@ export function openSizeEntry<T extends SizeGroupLine>(group: SizeGroup<T>): Siz
     qty: line.billQty ? String(line.billQty) : "",
     rate: line.rate ? String(line.rate) : "",
     qtyTouched: line.billQty > 0,
+    pristine: false,
     source: line,
   }));
 }

@@ -19,7 +19,11 @@
  * width in × thickness in × pieces): `sqi_size` is free text and no size master
  * exists to drive a dropdown from. Qty follows the CFT those dimensions work out
  * to until the operator keys one themselves, exactly as the grid's Size cell
- * feeds Bill Qty — a board cut short is why it stays editable.
+ * feeds Bill Qty — a board cut short is why it stays editable. Rate is keyed per
+ * size and lands on that size's line.
+ *
+ * Keyboard: Enter walks L → W → T → Pcs → Rate → the next row's L, and Enter on
+ * the LAST row's Rate adds a size — there is no separate chord for it.
  */
 import {
   Fragment,
@@ -35,6 +39,7 @@ import { formatCurrency, formatQty } from "@/domain/pricing";
 import {
   createSizeEntryRow,
   findSizeGroup,
+  keyedSizeRows,
   openSizeEntry,
   sizeEntryTotals,
   validateSizeEntry,
@@ -124,6 +129,15 @@ function SizeBoxes(props: {
   );
 }
 
+/** Put the cursor in a row's first box (L), its value selected. */
+function focusRowStart(root: HTMLElement | null, rowKey: string): void {
+  const box = root?.querySelector<HTMLInputElement>(
+    `[data-size-row="${rowKey}"] input:not([disabled])`,
+  );
+  box?.focus();
+  box?.select();
+}
+
 export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalProps<T>) {
   const { anchorKey, lines, onClose, onSave } = props;
 
@@ -150,16 +164,21 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
   const [showErrors, setShowErrors] = useState(false);
   /** The dialog body — the scope the Enter walker reads its boxes from. */
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  /** Where Enter on an untouched last row hands the cursor — see `onRateEnter`. */
+  const okButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const template = group?.lines[0] ?? null;
   const baseRate = template?.rate ?? 0;
 
-  const validation = useMemo(() => validateSizeEntry(rows), [rows]);
-  const totals = useMemo(() => sizeEntryTotals(rows), [rows]);
+  // Everything OK acts on — the count, the total, the validation — reads the
+  // keyed rows only: the row Enter opened below the last size is not one yet.
+  const keyed = useMemo(() => keyedSizeRows(rows), [rows]);
+  const validation = useMemo(() => validateSizeEntry(keyed), [keyed]);
+  const totals = useMemo(() => sizeEntryTotals(keyed), [keyed]);
 
   const patchRow = (key: string, patch: Partial<SizeEntryRow<T>>): void => {
     setRows((current) =>
-      current.map((row) => (row.key === key ? { ...row, ...patch } : row)),
+      current.map((row) => (row.key === key ? { ...row, ...patch, pristine: false } : row)),
     );
   };
 
@@ -188,24 +207,23 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
    * The row whose first box the cursor owes a visit, once React has rendered
    * it. "+ Add size" is a BUTTON: clicking it takes focus off whatever box was
    * being keyed and parks it on the button, where the next keystroke types
-   * nothing and Enter adds a second empty row. So adding a size names the row
-   * here and the effect below moves the cursor into it — the click and Alt+R
-   * both end where the operator is about to type.
+   * nothing. So adding a size names the row here and the effect below moves the
+   * cursor into it — the click and Enter on the last Rate both end where the
+   * operator is about to type.
    */
   const pendingFocusRef = useRef<string | null>(null);
 
-  const addRow = useCallback((): void => {
+  const addRow = (): void => {
     // Built outside the updater: the key has to be known HERE, and an updater
     // React may run twice must not mint two rows.
     //
-    // The new row starts as a copy of the last one — the next size is nearly
-    // always the same board in one changed dimension, and the effect below drops
-    // the cursor into its first box with the value selected, so keying over what
-    // differs is the whole edit.
+    // The new row carries the last one's L and W only (see
+    // `createSizeEntryRow`), and the effect below drops the cursor into its L
+    // with the value selected — Enter twice reaches T, which is what differs.
     const row = createSizeEntryRow<T>(baseRate, rows[rows.length - 1] ?? null);
     pendingFocusRef.current = row.key;
     setRows((current) => [...current, row]);
-  }, [baseRate, rows]);
+  };
 
   useEffect(() => {
     const key = pendingFocusRef.current;
@@ -213,12 +231,35 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
       return;
     }
     pendingFocusRef.current = null;
-    const box = bodyRef.current?.querySelector<HTMLInputElement>(
-      `[data-size-row="${key}"] input:not([disabled])`,
-    );
-    box?.focus();
-    box?.select();
+    focusRowStart(bodyRef.current, key);
   }, [rows]);
+
+  /**
+   * Enter on Rate — a row's last field. Mid-list it walks on to the next row's L
+   * like every other box; on the LAST row it is what adds a size.
+   *
+   * Two cases add nothing, so Enter held down cannot breed rows:
+   *  - the row is one Enter itself opened and nothing was keyed into it: the
+   *    operator is done, so the cursor goes to OK and the next Enter saves;
+   *  - the row was keyed but would not pass OK (no size, or one that works out
+   *    to nothing): its error shows and the cursor goes back to its L.
+   */
+  const onRateEnter = (input: HTMLInputElement, row: SizeEntryRow<T>, index: number): void => {
+    if (index < rows.length - 1) {
+      focusAdjacentField(input, 1);
+      return;
+    }
+    if (row.pristine) {
+      okButtonRef.current?.focus();
+      return;
+    }
+    if (!validateSizeEntry([row]).ok) {
+      setShowErrors(true);
+      focusRowStart(bodyRef.current, row.key);
+      return;
+    }
+    addRow();
+  };
 
   const removeRow = (key: string): void => {
     setRows((current) => {
@@ -234,13 +275,13 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
   };
 
   const save = useCallback((): void => {
-    if (!validateSizeEntry(rows).ok) {
+    if (!validateSizeEntry(keyed).ok) {
       setShowErrors(true);
       return;
     }
-    onSave(anchorKey, rows);
+    onSave(anchorKey, keyed);
     onClose();
-  }, [anchorKey, onClose, onSave, rows]);
+  }, [anchorKey, keyed, onClose, onSave]);
 
   /**
    * Ctrl+Enter saves, from a document listener rather than a handler on the
@@ -254,32 +295,16 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
    */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      // `event.code` alongside `event.key` for the same reason Alt+R checks it:
-      // a layout or IME can report the composed character rather than "Enter",
-      // and NumpadEnter is a separate code. Ctrl OR Meta, so a Mac keyboard
-      // works without learning a second chord.
+      // `event.code` alongside `event.key`: a layout or IME can report the
+      // composed character rather than "Enter", and NumpadEnter is a separate
+      // code. Ctrl OR Meta, so a Mac keyboard works without learning a second
+      // chord.
       const isEnter =
         event.key === "Enter" || event.code === "Enter" || event.code === "NumpadEnter";
       if (isEnter && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         event.stopPropagation();
         save();
-        return;
-      }
-      // Alt+R adds a size — the same chord the item grid uses to add a row, so
-      // it is one thing to learn rather than two. `event.code` is checked
-      // alongside `event.key` because Alt+letter is a dead key on some layouts,
-      // where `key` arrives as the composed character rather than as "r" (the
-      // grid's own Alt+R carries this same guard).
-      if (
-        event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        (event.key.toLowerCase() === "r" || event.code === "KeyR")
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        addRow();
       }
     };
     document.addEventListener("keydown", onKeyDown, true);
@@ -287,7 +312,7 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
     // Re-registered whenever the rows change rather than held in a ref: the
     // listener has to see the rows as they are NOW, and a dialog this small
     // re-binding one handler per keystroke costs nothing.
-  }, [addRow, save]);
+  }, [save]);
 
   const errorsFor = (key: string) => (showErrors ? validation.rows[key] : undefined);
 
@@ -299,14 +324,18 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
       footer={
         <>
           <span className={styles.modalNote}>
-            {rows.length} size{rows.length === 1 ? "" : "s"} · total{" "}
+            {keyed.length} size{keyed.length === 1 ? "" : "s"} · total{" "}
             <strong>
               {/* `formatQty` blanks a zero by design — an item grid full of
                   "0.00" is unreadable. A lone footer total is the opposite case:
                   "total  CFT" with a hole in it just looks broken. */}
               {totals.qty === 0 ? "0.000" : formatQty(totals.qty, 3)} {SIZE_UOM}
             </strong>
-            {showErrors && !validation.ok ? " · fix the highlighted sizes to continue" : ""}
+            {/* The form-level message too: once the only row left is one Enter
+                opened, the grid is not empty, so nothing else would say it. */}
+            {showErrors && !validation.ok
+              ? ` · ${validation.formError ?? "fix the highlighted sizes to continue"}`
+              : ""}
           </span>
           <span className={styles.gridHeadActions}>
             {/* `buttonPrimary` is a MODIFIER — colour only. On its own the button
@@ -321,6 +350,7 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
               Cancel
             </button>
             <button
+              ref={okButtonRef}
               type="button"
               className={cx(styles.button, styles.buttonPrimary, styles.sizeEntryFooterButton)}
               onClick={save}
@@ -364,13 +394,21 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
                 <th scope="col" className={styles.alignRight}>
                   = {SIZE_UOM}
                 </th>
+                <th scope="col" className={cx(styles.alignRight, styles.sizeEntryRateCell)}>
+                  Rate
+                </th>
                 <th scope="col" aria-label="Row actions" />
               </tr>
             </thead>
             <tbody>
               {rows.map((row, index) => {
                 const errors = errorsFor(row.key);
-                const cft = cubicFeetFromSize(joinSizeFactors(row.factors));
+                // A size that works out to nothing has no Qty cell here to hang
+                // its error on, so it reports under the boxes it came from.
+                const sizeError = errors?.size ?? errors?.qty;
+                // The row Enter opened shows no CFT for the L × W it carried in:
+                // that figure is not in the total until the row is keyed.
+                const cft = row.pristine ? null : cubicFeetFromSize(joinSizeFactors(row.factors));
                 return (
                   <tr key={row.key}>
                     <td className={styles.sizeEntrySerialCell}>{index + 1}</td>
@@ -378,14 +416,12 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
                       <SizeBoxes
                         factors={row.factors}
                         rowKey={row.key}
-                        invalid={Boolean(errors?.size)}
+                        invalid={Boolean(sizeError)}
                         autoFocus={index === 0}
                         onKeyDown={(event) => {
                           // Enter moves to the next box, the way it walks the
                           // cells of the grid behind this dialog — L → W → T →
-                          // Pcs → the next row's L. It does NOT add a row:
-                          // that is Alt+R, so Enter can be held down to run
-                          // through the fields without breeding empty rows.
+                          // Pcs → Rate. Only Rate's Enter can add a row.
                           if (event.key !== "Enter" || event.ctrlKey || event.metaKey) {
                             return;
                           }
@@ -409,16 +445,46 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
                           });
                         }}
                       />
-                      {errors?.size ? (
-                        <span className={styles.sizeEntryError}>{errors.size}</span>
-                      ) : null}
+                      {sizeError ? <span className={styles.sizeEntryError}>{sizeError}</span> : null}
                     </td>
-                    {/* Read-only: the quantity this size works out to. The
-                        dialog keys SIZES — Qty and Rate stay on the item grid,
-                        where they already are, and a size that yields nothing
-                        reports itself under the size boxes above. */}
+                    {/* Read-only: the quantity this size works out to. Qty is
+                        not keyed here — it stays editable on the item grid. */}
                     <td className={cx(styles.alignRight, styles.sizeEntryCftCell)}>
                       {cft === null ? "—" : formatQty(cft, 3)}
+                    </td>
+                    <td className={styles.sizeEntryRateCell}>
+                      <input
+                        className={cx(
+                          styles.cellInput,
+                          styles.sizeEntryRateInput,
+                          errors?.rate && styles.cellInvalid,
+                        )}
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        title="Rate"
+                        aria-label={`Rate, size row ${index + 1}`}
+                        value={row.rate}
+                        // Digits and a point only: a rate is never negative, and
+                        // anything else would read back as 0.
+                        onChange={(event) =>
+                          patchRow(row.key, { rate: event.target.value.replace(/[^0-9.]/g, "") })
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter" || event.ctrlKey || event.metaKey) {
+                            return;
+                          }
+                          event.preventDefault();
+                          if (event.shiftKey) {
+                            focusAdjacentField(event.currentTarget, -1);
+                            return;
+                          }
+                          onRateEnter(event.currentTarget, row, index);
+                        }}
+                      />
+                      {errors?.rate ? (
+                        <span className={styles.sizeEntryError}>{errors.rate}</span>
+                      ) : null}
                     </td>
                     <td className={styles.sizeEntrySerialCell}>
                       <button
@@ -436,7 +502,7 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
               })}
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className={styles.emptyGrid}>
+                  <td colSpan={5} className={styles.emptyGrid}>
                     {validation.formError ?? "No sizes on this item."}
                   </td>
                 </tr>
@@ -448,11 +514,10 @@ export function SizeEntryModal<T extends SizeGroupLine>(props: SizeEntryModalPro
         <div className={styles.sizeEntryActions}>
           <button type="button" className={styles.button} onClick={addRow}>
             + Add size
-            <span className={styles.buttonHint}>Alt+R</span>
           </button>
           <span className={styles.modalNote}>
-            Each size becomes its own line · Enter next field · Alt+R adds a size · Ctrl+Enter
-            is OK · Esc cancels
+            Each size becomes its own line · Enter next field · Enter on the last Rate adds a size
+            · Ctrl+Enter is OK · Esc cancels
           </span>
         </div>
       </div>

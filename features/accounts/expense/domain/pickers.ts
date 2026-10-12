@@ -1,13 +1,15 @@
 /**
- * What the three pick lists offer: the EXPENSE reasons, the expense ledgers and
- * the tenders. Pure; the screen fetches, these decide.
+ * What the pick lists offer, read out of the server's rows: the reason and
+ * ledger popups (grids 155 / 156), the GST rates, the states, and the
+ * tenders. Pure; the screen fetches, these decide.
  */
 import type { TenderMasterRow } from "@/features/sales/sale-order/sale-order.types";
 import { isTenderUsable, typeDefaultsOf } from "@/features/sales/sale-order/tender/rows";
 import type {
-  ExpenseLedgerOption,
-  ExpenseLineDraft,
-  ExpenseQuickReason,
+  ExpenseHeaderDraft,
+  ExpenseLedgerPick,
+  ExpenseRateOption,
+  ExpenseReasonPick,
   ExpenseTenderDraft,
   ExpenseTenderOption,
 } from "../expense.types";
@@ -15,72 +17,103 @@ import type {
 type Json = Record<string, unknown>;
 
 function text(value: unknown): string {
-  return value === null || value === undefined ? "" : String(value);
-}
-
-function flag(value: unknown): boolean {
-  return value === true || value === "true" || value === "t" || value === 1;
+  return value === null || value === undefined ? "" : String(value).trim();
 }
 
 /**
- * Grid 134 "MAIN LIST - TILL REASONS" rows → the quick-reasons' shape.
- *
- * Qt reads the reasons from this grid, not from `/expenses/quick-reasons`: that
- * route lists a shipped reason BESIDE the company's own copy of it, while the
- * grid (asked with `iinactive = false`) leaves the replaced one out. A ledger
- * since deleted reads as none — the grid's `ledger_name` is blank for it — as
- * quick-reasons does. A cap of 0 is "no cap".
+ * A grid 155 "POPUP - EXPENSE REASONS" row, or null for a row with no id.
+ * The SQL already blanks `trs_ledger_id` when the ledger is deleted, and
+ * `led_tax_id` / `tax_name` / `led_hsn_sac` are the ledger's own.
  */
-export function reasonsFromGridRows(rows: readonly Json[]): ExpenseQuickReason[] {
-  return rows
-    .filter((row) => text(row.trs_id) !== "")
-    .filter((row) => !row.trs_category || text(row.trs_category).toUpperCase() === "EXPENSE")
-    .map((row) => {
-      const ledgerName = text(row.ledger_name);
-      const cap = Number(row.trs_max_amount);
-      return {
-        reasonId: text(row.trs_id),
-        code: text(row.trs_code),
-        name: text(row.trs_name),
-        ledgerId: ledgerName ? text(row.trs_ledger_id) || null : null,
-        ledgerName: ledgerName || null,
-        needsNote: flag(row.trs_needs_note),
-        needsRef: flag(row.trs_needs_ref),
-        maxAmount: Number.isFinite(cap) && cap > 0 ? cap : null,
-      };
-    });
+export function readReasonPick(row: Json): ExpenseReasonPick | null {
+  const reasonId = text(row.trs_id);
+  if (!reasonId) {
+    return null;
+  }
+  const ledgerId = text(row.trs_ledger_id);
+  return {
+    reasonId,
+    name: text(row.trs_name),
+    ledgerId,
+    ledgerName: ledgerId ? text(row.ledger_name) : "",
+    taxId: ledgerId ? text(row.led_tax_id) : "",
+    taxName: ledgerId ? text(row.tax_name) : "",
+    hsn: ledgerId ? text(row.led_hsn_sac) : "",
+  };
 }
 
-/** `/expenses/quick-reasons` rows, read defensively — the fallback when grid 134 cannot run. */
-export function reasonsFromQuickReasons(rows: readonly Json[]): ExpenseQuickReason[] {
-  return rows
-    .filter((row) => text(row.reasonId) !== "")
-    .map((row) => {
-      const cap = Number(row.maxAmount);
-      return {
-        reasonId: text(row.reasonId),
-        code: text(row.code),
-        name: text(row.name),
-        ledgerId: text(row.ledgerId) || null,
-        ledgerName: text(row.ledgerName) || null,
-        needsNote: flag(row.needsNote),
-        needsRef: flag(row.needsRef),
-        maxAmount: Number.isFinite(cap) && cap > 0 ? cap : null,
-      };
-    });
+/** A grid 156 "POPUP - EXPENSE LEDGERS" row, or null for a row with no id. */
+export function readLedgerPick(row: Json): ExpenseLedgerPick | null {
+  const ledgerId = text(row.led_id);
+  if (!ledgerId) {
+    return null;
+  }
+  return {
+    ledgerId,
+    name: text(row.led_name),
+    taxId: text(row.led_tax_id),
+    taxName: text(row.tax_name),
+    hsn: text(row.led_hsn_sac),
+  };
 }
 
-/** `/expenses/ledger-pick` rows, read defensively. */
-export function ledgersFromPick(rows: readonly Json[]): ExpenseLedgerOption[] {
-  return rows
-    .filter((row) => text(row.ledgerId) !== "")
-    .map((row) => ({
-      ledgerId: text(row.ledgerId),
-      name: text(row.name),
-      groupName: text(row.groupName),
-      taxId: text(row.taxId) || null,
-      itcEligibility: text(row.itcEligibility) || null,
-    }));
+/** Grid 155's rows → reason id → name: a loaded voucher's GET carries only the id. */
+export function reasonNamesFromRows(rows: readonly Json[]): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const row of rows) {
+    const id = text(row.trs_id);
+    if (id) {
+      names.set(id, text(row.trs_name));
+    }
+  }
+  return names;
+}
+
+/** What the Reason cell shows: the picked name, the list's name for a saved id, or Qt's "(saved reason)". */
+export function reasonLabel(line: { reasonId: string; reasonName: string }, names: ReadonlyMap<string, string>): string {
+  if (!line.reasonId) {
+    return "";
+  }
+  return line.reasonName || names.get(line.reasonId) || "(saved reason)";
+}
+
+/** `/vouchers/tax-rates` `rates[]` → the GST cell's choices. */
+export function rateOptions(rates: readonly { taxId?: unknown; name?: unknown }[] | undefined): ExpenseRateOption[] {
+  return (rates ?? [])
+    .map((rate) => ({ taxId: text(rate.taxId), name: text(rate.name) }))
+    .filter((rate) => rate.taxId !== "");
+}
+
+/** Dropdown 21 "GST - STATE CODES" rows → code → name. */
+export function stateNamesFromRows(rows: readonly Json[]): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const row of rows) {
+    const code = text(row.state_code);
+    if (code) {
+      names.set(code, text(row.state_name));
+    }
+  }
+  return names;
+}
+
+/** "33" from a GSTIN that starts with a state code; "" otherwise. */
+export function stateOfGstin(gstin: string): string {
+  const trimmed = (gstin ?? "").trim();
+  return /^\d{2}/.test(trimmed) ? trimmed.slice(0, 2) : "";
+}
+
+/**
+ * The place of supply the voucher carries: the operator's pick, else the
+ * GSTIN's state (Qt `autoPlaceOfSupply`). Blank when neither says.
+ */
+export function placeOfSupplyOf(header: Pick<ExpenseHeaderDraft, "placeOfSupply" | "placeOfSupplyPicked" | "supplierGstin">): string {
+  return header.placeOfSupplyPicked ? header.placeOfSupply.trim() : stateOfGstin(header.supplierGstin);
+}
+
+/** How a state shows in the dropdown: "33 - Tamil Nadu", or the bare code before the names load. */
+export function stateLabel(code: string, names: ReadonlyMap<string, string>): string {
+  const name = names.get(code);
+  return name ? `${code} - ${name}` : code;
 }
 
 /** The tender TYPES an expense may go out on. A cheque is a bill-wise Payment's. */
@@ -136,35 +169,6 @@ export function isCashTender(options: readonly ExpenseTenderOption[], tenderId: 
 }
 
 export type Choice = { value: string; label: string };
-
-/**
- * A line's Reason choices: "—" (none), the reasons, and — when the line
- * carries a reason the list does not (yet) hold — that one, so a loaded line
- * never silently loses it (Qt "(saved reason)").
- */
-export function reasonChoices(reasons: readonly ExpenseQuickReason[], line: ExpenseLineDraft): Choice[] {
-  const choices: Choice[] = [{ value: "", label: "—" }];
-  for (const reason of reasons) {
-    choices.push({ value: reason.reasonId, label: reason.name });
-  }
-  if (line.reasonId && !reasons.some((reason) => reason.reasonId === line.reasonId)) {
-    choices.push({ value: line.reasonId, label: "(saved reason)" });
-  }
-  return choices;
-}
-
-/**
- * A line's ledger choices: the ledger-pick list, plus the line's own ledger
- * when the list does not hold it (a loaded line before the list arrives, or a
- * ledger since moved out of the Expenses groups — the server says which).
- */
-export function ledgerChoices(ledgers: readonly ExpenseLedgerOption[], line: ExpenseLineDraft): Choice[] {
-  const choices: Choice[] = ledgers.map((ledger) => ({ value: ledger.ledgerId, label: ledger.name }));
-  if (line.ledgerId && !ledgers.some((ledger) => ledger.ledgerId === line.ledgerId)) {
-    choices.push({ value: line.ledgerId, label: line.ledgerName || "(saved ledger)" });
-  }
-  return choices;
-}
 
 /**
  * A tender row's choices: the offered tenders, plus the row's own tender when

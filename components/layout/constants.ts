@@ -235,6 +235,11 @@ export const DEFAULT_PRIMARY_MENU: ErpHeaderItem[] = [
           // Menu 258, seeded by the server's Menu_Master.sql + the
           // ledger_statement_prereqs migration (which also un-hides 137).
           { label: "Ledger Statement", href: "/reports/ledger-statement" },
+          // Menu 284 (the server's day-summary plan seeds it; not in the DB
+          // yet). Menu 181, hidden, opens the same screen on the Vouchers tab;
+          // the guard strips the query, so either grant opens the route.
+          { label: "Account Day Summary", href: "/reports/day-summary" },
+          { label: "Day Book Detail", href: "/reports/day-summary?tab=vouchers" },
         ],
       },
       {

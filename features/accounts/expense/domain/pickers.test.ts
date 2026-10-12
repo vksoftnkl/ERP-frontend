@@ -1,96 +1,94 @@
 import { describe, expect, it } from "vitest";
-import { emptyLine, emptyTender } from "./draft";
+import { emptyTender } from "./draft";
 import { BRANCH, CASH_ID, COMPANY, OTHER, TENDERS, TODAY, UPI_ID, master } from "./fixtures";
 import {
   cashTenderOf,
   expenseTenderOptions,
   isCashTender,
-  ledgerChoices,
-  ledgersFromPick,
-  reasonChoices,
-  reasonsFromGridRows,
-  reasonsFromQuickReasons,
+  placeOfSupplyOf,
+  rateOptions,
+  readLedgerPick,
+  readReasonPick,
+  reasonLabel,
+  reasonNamesFromRows,
+  stateLabel,
+  stateNamesFromRows,
+  stateOfGstin,
   tenderChoices,
 } from "./pickers";
 
-describe("reasons", () => {
-  it("maps grid 134 rows to the quick-reasons' shape (Qt loadPickers)", () => {
-    const reasons = reasonsFromGridRows([
-      {
-        trs_id: "r1",
-        trs_code: "TEA",
-        trs_name: "Tea",
-        trs_category: "EXPENSE",
-        trs_ledger_id: "led-1",
-        ledger_name: "Staff Welfare",
-        trs_needs_note: true,
-        trs_needs_ref: "f",
-        trs_max_amount: "500.00",
-      },
-      // A ledger since deleted: the grid's name is blank, so no ledger.
-      { trs_id: "r2", trs_code: "X", trs_name: "Repair", trs_ledger_id: "led-gone", ledger_name: "", trs_max_amount: 0 },
-      { trs_id: "r3", trs_category: "PAID_IN", trs_name: "Not an expense" },
-      { trs_id: "", trs_name: "no id" },
-    ]);
-    expect(reasons).toEqual([
-      {
-        reasonId: "r1",
-        code: "TEA",
-        name: "Tea",
-        ledgerId: "led-1",
-        ledgerName: "Staff Welfare",
-        needsNote: true,
-        needsRef: false,
-        maxAmount: 500,
-      },
-      {
-        reasonId: "r2",
-        code: "X",
-        name: "Repair",
-        ledgerId: null,
-        ledgerName: null,
-        needsNote: false,
-        needsRef: false,
-        maxAmount: null,
-      },
-    ]);
-  });
-
-  it("reads the quick-reasons route as the fallback", () => {
+describe("the popup rows (grids 155 / 156)", () => {
+  it("reads a reason with its ledger and the ledger's GST facts", () => {
     expect(
-      reasonsFromQuickReasons([{ reasonId: "r1", code: "C", name: "Courier", ledgerId: "l", ledgerName: "Courier", maxAmount: null }]),
-    ).toEqual([
-      { reasonId: "r1", code: "C", name: "Courier", ledgerId: "l", ledgerName: "Courier", needsNote: false, needsRef: false, maxAmount: null },
-    ]);
+      readReasonPick({
+        trs_id: "r1",
+        trs_name: "Tea & Refreshments",
+        ledger_name: "Staff Welfare",
+        trs_ledger_id: "led-1",
+        trs_code: "TEA",
+        led_tax_id: "",
+        tax_name: "",
+        led_hsn_sac: "",
+        trs_max_amount: "0",
+      }),
+    ).toEqual({
+      reasonId: "r1",
+      name: "Tea & Refreshments",
+      ledgerId: "led-1",
+      ledgerName: "Staff Welfare",
+      taxId: "",
+      taxName: "",
+      hsn: "",
+    });
   });
 
-  it("offers '—', the reasons, and a saved reason the list lacks", () => {
-    const reasons = reasonsFromQuickReasons([{ reasonId: "r1", name: "Tea" }]);
-    expect(reasonChoices(reasons, emptyLine())).toEqual([
-      { value: "", label: "—" },
-      { value: "r1", label: "Tea" },
-    ]);
-    expect(reasonChoices(reasons, { ...emptyLine(), reasonId: "r-old" }).at(-1)).toEqual({
-      value: "r-old",
-      label: "(saved reason)",
-    });
+  it("a reason whose ledger is gone (blank id) carries no ledger facts; a row with no id is nothing", () => {
+    expect(readReasonPick({ trs_id: "r2", trs_name: "Repair", trs_ledger_id: "", ledger_name: "", tax_name: "GST 18%" }))
+      .toMatchObject({ ledgerId: "", ledgerName: "", taxName: "" });
+    expect(readReasonPick({ trs_name: "no id" })).toBeNull();
+  });
+
+  it("reads a ledger with its rate and HSN/SAC", () => {
+    expect(
+      readLedgerPick({ led_id: "l1", led_name: "Bank Charges", group_name: "Indirect Expenses", led_tax_id: "t18", tax_name: "GST 18%", led_hsn_sac: "997113" }),
+    ).toEqual({ ledgerId: "l1", name: "Bank Charges", taxId: "t18", taxName: "GST 18%", hsn: "997113" });
+    expect(readLedgerPick({ led_name: "x" })).toBeNull();
+  });
+
+  it("names a loaded line's reason from the grid, else Qt's \"(saved reason)\"", () => {
+    const names = reasonNamesFromRows([{ trs_id: "r1", trs_name: "Tea" }, { trs_name: "orphan" }]);
+    expect([...names]).toEqual([["r1", "Tea"]]);
+    expect(reasonLabel({ reasonId: "r1", reasonName: "" }, names)).toBe("Tea");
+    expect(reasonLabel({ reasonId: "r1", reasonName: "Picked" }, names)).toBe("Picked");
+    expect(reasonLabel({ reasonId: "r9", reasonName: "" }, names)).toBe("(saved reason)");
+    expect(reasonLabel({ reasonId: "", reasonName: "" }, names)).toBe("");
   });
 });
 
-describe("ledgers", () => {
-  it("reads ledger-pick rows", () => {
-    expect(ledgersFromPick([{ ledgerId: "l1", name: "Repairs", groupName: "Indirect Expenses", taxId: null }, { name: "x" }])).toEqual([
-      { ledgerId: "l1", name: "Repairs", groupName: "Indirect Expenses", taxId: null, itcEligibility: null },
-    ]);
+describe("GST rates and the place of supply", () => {
+  it("reads /vouchers/tax-rates", () => {
+    expect(rateOptions([{ taxId: "t18", name: "GST 18%" }, { name: "no id" }])).toEqual([{ taxId: "t18", name: "GST 18%" }]);
+    expect(rateOptions(undefined)).toEqual([]);
   });
 
-  it("keeps a loaded line's ledger the list does not hold", () => {
-    const ledgers = ledgersFromPick([{ ledgerId: "l1", name: "Repairs" }]);
-    expect(ledgerChoices(ledgers, emptyLine())).toEqual([{ value: "l1", label: "Repairs" }]);
-    expect(ledgerChoices(ledgers, { ...emptyLine(), ledgerId: "l9", ledgerName: "Old Head" }).at(-1)).toEqual({
-      value: "l9",
-      label: "Old Head",
-    });
+  it("the state is the GSTIN's first two digits", () => {
+    expect(stateOfGstin("29AACCG0527D1Z0")).toBe("29");
+    expect(stateOfGstin(" 33")).toBe("33");
+    expect(stateOfGstin("A9")).toBe("");
+    expect(stateOfGstin("")).toBe("");
+  });
+
+  it("follows the GSTIN until the operator picks one", () => {
+    const header = { supplierGstin: "29AACCG0527D1Z0", placeOfSupply: "", placeOfSupplyPicked: false };
+    expect(placeOfSupplyOf(header)).toBe("29");
+    expect(placeOfSupplyOf({ ...header, placeOfSupply: "33", placeOfSupplyPicked: true })).toBe("33");
+    expect(placeOfSupplyOf({ ...header, supplierGstin: "" })).toBe("");
+  });
+
+  it("labels a state \"33 - Tamil Nadu\", or by its code before the names load", () => {
+    const names = stateNamesFromRows([{ state_code: "33", state_name: "Tamil Nadu" }, { state_name: "x" }]);
+    expect(stateLabel("33", names)).toBe("33 - Tamil Nadu");
+    expect(stateLabel("29", names)).toBe("29");
   });
 });
 

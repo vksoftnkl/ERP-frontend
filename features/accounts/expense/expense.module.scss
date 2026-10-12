@@ -1,13 +1,17 @@
 /**
- * Expense Voucher — the screen's skin, in the receipt's look (same fluid unit,
- * same colours, same controls) laid out as the Qt `ExpenseVoucherEntry`:
+ * Expense Voucher — the screen's skin, laid out as the Qt `ExpenseVoucherEntry`
+ * card (d97cdd4 / 5e25760):
  *
- *   title + status · where the cash comes from · the header facts · the GST
- *   bill · WHAT WAS SPENT | HOW IT WAS PAID · LINES − TENDERS + notices ·
- *   approval · refusals · POSTS · the buttons · the keys
+ *   title + subtitle · where the cash comes from · status
+ *   the header facts (grey card) · the GST bill (blue card)
+ *   WHAT WAS SPENT | HOW IT WAS PAID — the grids take whatever height is left
+ *   LINES − TENDERS · notices · refusals · POSTS (once there are legs)
+ *   the verbs, right-aligned at one width
  *
- * `.erp-app-content` already sizes the page, so the shell is `height: 100%`
- * and never `100vh` / `100dvh`. The middle scrolls; the buttons stay put.
+ * Labels are sentence case, as Qt's; grid cells read as plain cells until they
+ * take the caret. `.erp-app-content` already sizes the page, so the shell is
+ * `height: 100%` and never `100vh` / `100dvh`. The middle scrolls only when the
+ * window is too short for the grids' floor; the verbs stay put.
  */
 :root {
   --erp-q-u: clamp(
@@ -21,53 +25,62 @@
   @return calc(#{$n} * var(--erp-q-u, 1rem));
 }
 
+$line: #d1d5db;
+$line-soft: #e5e7eb;
+$ink: #111827;
+$ink-soft: #4b5563;
+$ink-faint: #6b7280;
+$tint: color-mix(in srgb, var(--primary, #7b1515) 7%, #ffffff);
+$tint-strong: color-mix(in srgb, var(--primary, #7b1515) 14%, #ffffff);
+
 .page {
-  --erp-expv-control: #{u(1.85)};
+  --erp-expv-control: #{u(2.05)};
   display: flex;
   flex-direction: column;
-  gap: u(0.4);
-  padding: u(0.4) u(0.6) u(0.3);
+  gap: u(0.55);
+  box-sizing: border-box;
   height: 100%;
   min-height: 0;
+  padding: u(0.6) u(0.65) u(0.5);
   overflow: hidden;
   font-family: var(--erp-font-family, "Segoe UI", system-ui, Arial, sans-serif);
-  font-size: u(0.78);
-  color: var(--text-main, #222222);
-  background: var(--surface-muted, #f7f7f7);
+  font-size: u(0.84);
+  color: var(--text-main, $ink);
+  background: var(--surface, #ffffff);
+  border: 1px solid $line-soft;
+  border-radius: u(0.45);
 }
 
 .scroll {
   display: flex;
   flex-direction: column;
-  gap: u(0.45);
+  gap: u(0.55);
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding-right: u(0.1);
 }
 
 /* ----------------------------------------------------------------- title */
 .titleBar {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: u(0.6);
-  padding-bottom: u(0.25);
-  border-bottom: 2px solid var(--primary, #7b1515);
+  gap: u(1.1);
 }
 .titleBlock {
+  flex-shrink: 0;
   min-width: 0;
 }
 .title {
   margin: 0;
-  font-size: u(1.15);
+  font-size: u(1.3);
   font-weight: 800;
-  letter-spacing: 0.01em;
+  line-height: 1.2;
+  color: $ink;
 }
 .subtitle {
-  margin: u(0.05) 0 0;
-  font-size: u(0.7);
-  color: var(--text-muted, #6b6b6b);
+  margin: u(0.55) 0 0;
+  font-size: u(0.78);
+  color: $ink-faint;
 }
 .dirtyMark {
   color: var(--danger, #b3261e);
@@ -75,7 +88,8 @@
 .titleRight {
   display: flex;
   align-items: center;
-  gap: u(0.4);
+  gap: u(0.45);
+  margin-left: auto;
   flex-shrink: 0;
 }
 .docNumber {
@@ -85,23 +99,45 @@
   color: var(--primary, #7b1515);
 }
 
+/* Where the cash comes from — a small card beside the title. */
+.moneyFrom {
+  display: inline-flex;
+  align-items: center;
+  gap: u(0.5);
+  min-width: 0;
+  max-width: 55%;
+  padding: u(0.45) u(0.75);
+  border: 1px solid $line-soft;
+  border-radius: u(0.35);
+  background: #f8fafc;
+  font-size: u(0.82);
+  color: $ink;
+}
+.moneyDot {
+  flex-shrink: 0;
+  width: u(0.55);
+  height: u(0.55);
+  border-radius: 50%;
+  background: #15803d;
+}
+
 /* ------------------------------------------------------------------ pills */
 .pill {
   display: inline-flex;
   align-items: center;
-  padding: u(0.15) u(0.6);
-  border-radius: u(0.25);
+  padding: u(0.15) u(0.65);
+  border-radius: 999px;
   font-size: u(0.66);
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
   border: 1px solid transparent;
 }
 .toneWarning {
-  background: #fdf3d3;
+  background: #fdf3c7;
   color: #7a5200;
-  border-color: #ecd9a2;
+  border-color: #f2dc8f;
 }
 .toneSuccess {
   background: #e3f4e6;
@@ -119,88 +155,68 @@
   border-color: #c3d4ef;
 }
 
-/* --------------------------------------------------- where the cash comes */
-.moneyFrom {
-  display: flex;
-  align-items: center;
-  gap: u(0.45);
-  padding: u(0.3) u(0.6);
-  border: 1px solid #cfd9e8;
-  border-radius: u(0.2);
-  background: #f3f7fc;
-  font-size: u(0.74);
+/* --------------------------------------------------------------- header */
+/* The wrapper exists for the Enter walk; it lays nothing out itself. */
+.head {
+  display: contents;
 }
-.moneyDot {
-  color: #1f6fb2;
-  font-size: u(0.7);
-}
-
-/* ------------------------------------------------------------ header facts */
-.facts {
-  display: grid;
-  grid-template-columns: minmax(u(7), 1fr) minmax(u(7.5), 1fr) minmax(0, 3fr) minmax(0, 3fr) minmax(0, 4fr);
-  gap: u(0.2) u(0.5);
-  padding: u(0.4) u(0.5);
-  background: var(--surface, #ffffff);
-  border: 1px solid var(--border, #e0e0e0);
-  border-radius: u(0.2);
-}
+.facts,
 .gst {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 3fr) minmax(0, 2fr) minmax(0, 2fr) minmax(0, 2fr);
-  gap: u(0.2) u(0.5);
-  padding: u(0.4) u(0.5);
-  background: #fbfaf5;
-  border: 1px solid #e6dfc4;
-  border-radius: u(0.2);
+  gap: u(0.35) u(0.5);
+  padding: u(0.55) u(0.65);
+  border-radius: u(0.35);
 }
-.gstOff {
-  background: var(--surface, #ffffff);
-  border-color: var(--border, #e0e0e0);
+.facts {
+  grid-template-columns: minmax(u(7), 1fr) minmax(u(7.5), 1fr) minmax(0, 3fr) minmax(0, 3fr) minmax(0, 4fr);
+  background: #fbfbfc;
+  border: 1px solid $line-soft;
+}
+.gst {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 3fr) minmax(0, 2fr) minmax(0, 2fr) minmax(0, 2fr);
+  background: #eef5fd;
+  border: 1px solid #cfe0f5;
 }
 .field {
   display: flex;
   flex-direction: column;
-  gap: u(0.15);
+  gap: u(0.35);
   min-width: 0;
 }
 .cap {
-  font-size: u(0.62);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted, #6d6d6d);
-}
-.factValue {
-  display: flex;
-  align-items: center;
-  min-height: var(--erp-expv-control);
-  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-  font-weight: 700;
-  color: var(--primary, #7b1515);
-}
-.factValueMuted {
-  color: var(--text-muted, #8a8a8a);
+  font-size: u(0.8);
   font-weight: 500;
-  font-style: italic;
-  font-family: inherit;
+  color: $ink-soft;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* "Supplier party *" while a GST bill has none. */
+.capRequired {
+  color: var(--danger, #b3261e);
 }
 .check {
   display: inline-flex;
   align-items: center;
-  gap: u(0.35);
-  min-height: var(--erp-expv-control);
-  font-weight: 700;
+  gap: u(0.45);
+  font-size: u(0.84);
+  font-weight: 500;
+  color: $ink;
   cursor: pointer;
 }
 .check input {
-  width: u(0.9);
-  height: u(0.9);
-}
-.muted {
+  width: u(0.95);
+  height: u(0.95);
   margin: 0;
-  font-size: u(0.66);
-  color: var(--text-muted, #7a7a7a);
+}
+/* Sits on the inputs' row, under the checkbox. */
+.gstNote {
+  display: flex;
+  align-items: center;
+  min-height: var(--erp-expv-control);
+  margin: 0;
+  font-size: u(0.78);
+  color: $ink-soft;
 }
 .input,
 .select {
@@ -208,23 +224,46 @@
   box-sizing: border-box;
   height: var(--erp-expv-control);
   min-height: var(--erp-expv-control);
-  padding: 0 u(0.4);
-  border: 1px solid var(--border, #c9c9c9);
-  border-radius: u(0.2);
-  background: var(--surface, #ffffff);
+  padding: 0 u(0.55);
+  border: 1px solid $line;
+  border-radius: u(0.25);
+  background: #ffffff;
   font: inherit;
-  font-size: u(0.78);
+  font-size: u(0.84);
   color: inherit;
+}
+.input::placeholder {
+  color: #9ca3af;
 }
 .input:disabled,
 .select:disabled {
-  background: var(--surface-muted, #f4f4f4);
-  color: var(--text-muted, #7a7a7a);
+  background: #ffffff;
+  border-color: $line-soft;
+  color: #9ca3af;
 }
 .input:focus-visible,
 .select:focus-visible {
-  outline: 2px solid var(--primary, #7b1515);
-  outline-offset: -1px;
+  outline: none;
+  border-color: var(--primary, #7b1515);
+  box-shadow: 0 0 0 1px var(--primary, #7b1515);
+}
+/* The voucher number: a box, as Qt's read-only line edit. */
+.inputReadOnly {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+.inputPlaceholder {
+  font-weight: 400;
+  color: $ink-faint;
+}
+/* Disabled, the dropdown stays a white box with grey text, as Qt's. */
+.dropdownField input:disabled {
+  background: #ffffff !important;
+  color: #9ca3af;
 }
 .dropdownField input {
   box-sizing: border-box;
@@ -232,82 +271,190 @@
   min-height: var(--erp-expv-control);
   padding-top: 0;
   padding-bottom: 0;
-  padding-left: u(0.4);
+  padding-left: u(0.55);
   font: inherit;
-  font-size: u(0.78);
-  border-radius: u(0.2);
+  font-size: u(0.84);
+  border-radius: u(0.25);
+}
+
+/* A dd-mm-yyyy box with its drop-down segment (Qt `QDateEdit`). */
+.dateBox {
+  display: flex;
+  align-items: stretch;
+  box-sizing: border-box;
+  height: var(--erp-expv-control);
+  border: 1px solid $line;
+  border-radius: u(0.25);
+  background: #ffffff;
+  overflow: hidden;
+}
+.dateBox:focus-within {
+  border-color: var(--primary, #7b1515);
+  box-shadow: 0 0 0 1px var(--primary, #7b1515);
+}
+.dateBoxDisabled {
+  background: #f3f4f6;
+  border-color: $line-soft;
+  color: #9ca3af;
+}
+.dateText {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 u(0.55);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: u(0.84);
+  color: inherit;
+  outline: none;
+}
+.dateDrop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 u(1.7);
+  border-left: 1px solid $line;
+  color: #374151;
+}
+.dateDropIcon {
+  width: u(0.6);
+  height: u(0.4);
+}
+/* The native picker, kept rendered so `showPicker()` opens it, but invisible. */
+.datePicker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.datePicker:disabled {
+  cursor: default;
 }
 
 /* --------------------------------------------------------- the two grids */
 .mid {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  gap: u(0.6);
-  align-items: start;
+  gap: u(0.45);
+  flex: 1 1 auto;
+  min-height: u(17);
+  align-items: stretch;
 }
 .block {
   display: flex;
   flex-direction: column;
-  gap: u(0.3);
+  gap: u(0.35);
   min-width: 0;
+  min-height: 0;
 }
 .blockHead {
   display: flex;
   align-items: baseline;
-  gap: u(0.5);
+  gap: u(0.6);
 }
 .formCap {
   margin: 0;
-  font-size: u(0.72);
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  padding-bottom: u(0.15);
+  border-bottom: 2px solid color-mix(in srgb, var(--primary, #7b1515) 30%, transparent);
+  font-size: u(0.8);
+  font-weight: 800;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--primary, #7b1515);
+  white-space: nowrap;
 }
 .code {
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-  font-size: u(0.66);
-  color: var(--text-muted, #7a7a7a);
+  font-size: u(0.7);
+  color: $ink-faint;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+/* The grid fills its block; below the rows, the empty grey of a Qt table. */
 .gridShell {
-  background: var(--surface, #ffffff);
-  border: 1px solid var(--border, #d8d8d8);
-  border-radius: u(0.2);
+  flex: 1 1 auto;
+  min-height: u(6);
   overflow: auto;
-  max-height: u(16);
+  background: #e2e5ea;
+  border: 1px solid #cfd4db;
+  border-radius: u(0.2);
 }
+/*
+ * globals.css forces every th's colour and every control's radius with
+ * !important through two variables — so the grid redefines the variables:
+ * dark-red heads, square cells (Qt's).
+ */
 .grid {
+  --table-header-text: var(--primary, #7b1515);
+  --erp-radius: 0px;
+  /* Columns are shares of this (columns.ts): the grid always fits its block, as Qt's. */
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: u(0.74);
+  font-size: u(0.82);
 }
 .grid thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: u(0.25) u(0.35);
-  text-align: left;
+  height: u(1.95);
+  padding: 0 u(0.45);
   font-weight: 700;
-  font-size: u(0.7);
+  font-size: u(0.82);
   color: var(--primary, #7b1515);
-  background: var(--surface-muted, #f4f4f4);
-  border: 1px solid var(--border, #e0e0e0);
+  background: #eef0f3;
+  border-right: 1px solid #d5d9df;
+  border-bottom: 1px solid #cfd4db;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .grid tbody td {
+  height: u(1.95);
   padding: 0;
-  height: u(1.9);
-  border: 1px solid var(--border, #ededed);
+  background: #ffffff;
+  border-right: 1px solid $line-soft;
+  border-bottom: 1px solid $line-soft;
   vertical-align: middle;
 }
-.grid tbody tr:nth-child(even) td {
-  background: #fbfbfb;
+/* Drag-to-widen: the header's right edge. */
+.resizeHandle {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: -4px;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
 }
+.resizeHandle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: transparent;
+}
+.resizeHandle:hover::after,
+.headResizing .resizeHandle::after {
+  background: var(--primary, #7b1515);
+}
+.headResizing {
+  background: $tint !important;
+}
+/* The row the caret is on, as Qt's current-row tint. */
 .rowActive td {
-  box-shadow: inset 0 1px 0 var(--primary, #7b1515), inset 0 -1px 0 var(--primary, #7b1515);
+  background: $tint;
 }
 .alignRight {
   text-align: right !important;
@@ -317,69 +464,102 @@
 }
 .cellText {
   display: block;
-  padding: 0 u(0.35);
+  padding: 0 u(0.5);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .cellPending {
-  color: var(--text-muted, #9a9a9a);
+  color: #9ca3af;
 }
 .cellInput,
 .cellSelect {
   display: block;
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
-  min-height: u(1.85);
-  box-sizing: border-box;
-  padding: 0 u(0.35);
+  min-height: u(1.9);
+  padding: 0 u(0.5);
   border: 0;
-  border-radius: 0;
   background: transparent;
   font: inherit;
   color: inherit;
 }
-.cellInput:focus-visible,
-.cellSelect:focus-visible {
-  outline: 2px solid var(--primary, #7b1515);
-  outline-offset: -2px;
-  background: #fffbe6;
+/* A plain cell until it takes the caret: no chevron, as a Qt cell before its editor opens. */
+.cellSelect {
+  appearance: none;
+  cursor: pointer;
+}
+.cellSelect:focus {
+  appearance: auto;
+}
+.cellInput:focus,
+.cellSelect:focus {
+  outline: 1px solid var(--primary, #7b1515);
+  outline-offset: -1px;
+  background: $tint-strong;
 }
 .cellInput:disabled,
 .cellSelect:disabled {
-  color: var(--text-muted, #8a8a8a);
-  cursor: not-allowed;
+  color: #374151;
+  opacity: 1;
+  cursor: default;
 }
 .cellAmount {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.cellCheck {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+/* The first tender while it follows the balance: the figure is the screen's, not typed. */
+.cellAuto {
+  font-style: italic;
+  color: $ink-faint;
 }
-/* The searchable ledger picker and the GST rate dropdown, flattened into the cell. */
-.cellPicker {
-  width: 100%;
+/* Reason / Expense ledger: no editor — a typed key, F2, Enter or a double-click opens the picker. */
+.cellPopup {
+  cursor: default;
+  text-overflow: ellipsis;
 }
-/* `> button` is the searchable select's trigger only — never the dropdown's chevron. */
-.cellPicker > button,
-.cellPicker input {
-  min-height: u(1.85) !important;
-  height: u(1.85) !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  font-size: u(0.74) !important;
+.cellPopup:read-only:focus {
+  caret-color: transparent;
+}
+/* ITC as a chip, as the Qt delegate paints it. */
+.itcYes {
+  color: #1c6b2a;
+  font-weight: 700;
+}
+.itcNo {
+  color: var(--danger, #b3261e);
+  font-weight: 700;
 }
 
+/* One height for both feet and both notes, so the two grids end on one line (Qt). */
 .blockFoot {
   display: flex;
   align-items: center;
-  gap: u(0.35);
-  flex-wrap: wrap;
+  gap: u(0.4);
+  min-height: u(1.7);
+}
+/* The grids' "+" / "−" (Qt: 44 px wide, mouse-only). */
+.lineButton {
+  width: u(2.3);
+  height: u(1.55);
+  padding: 0;
+  border: 1px solid #cfd4db;
+  border-radius: u(0.25);
+  background: #ffffff;
+  font: inherit;
+  font-size: u(0.9);
+  font-weight: 700;
+  line-height: 1;
+  color: $ink;
+  cursor: pointer;
+}
+.lineButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.lineButton:not(:disabled):hover {
+  background: #f3f4f6;
 }
 .strong {
   margin-left: auto;
@@ -387,23 +567,23 @@
   white-space: pre;
   font-variant-numeric: tabular-nums;
 }
+.note {
+  margin: 0;
+  min-height: 2.8em;
+  font-size: u(0.78);
+  line-height: 1.4;
+  color: $ink-soft;
+}
 
 /* ------------------------------------------------------- balance + notices */
-.balanceRow {
-  display: grid;
-  grid-template-columns: minmax(u(12), 1fr) minmax(0, 3fr);
-  gap: u(0.6);
-  align-items: stretch;
-}
 .balance {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: u(0.1);
-  padding: u(0.35) u(0.7);
-  border: 1px solid var(--border, #d8d8d8);
-  border-radius: u(0.2);
-  background: var(--surface, #ffffff);
+  gap: u(0.2);
+  padding: u(0.45) u(0.65);
+  border: 1px solid $line-soft;
+  border-radius: u(0.35);
+  background: #fbfbfc;
 }
 .balanceSuccess {
   border-color: #bfe3c6;
@@ -412,6 +592,13 @@
 .balanceDanger {
   border-color: #efb9b5;
   background: #fdf1f0;
+}
+.balanceCap {
+  font-size: u(0.74);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: $ink-soft;
 }
 .figure {
   font-size: u(1.05);
@@ -429,8 +616,8 @@
   display: flex;
   align-items: flex-start;
   gap: u(0.5);
-  padding: u(0.35) u(0.6);
-  border-radius: u(0.2);
+  padding: u(0.4) u(0.65);
+  border-radius: u(0.35);
   border: 1px solid #c3d4ef;
   background: #f2f6fd;
   white-space: pre-line;
@@ -449,28 +636,32 @@
 }
 .refusals {
   margin: 0;
-  padding: u(0.3) u(0.6);
+  padding: u(0.35) u(0.65);
   list-style: none;
-  font-size: u(0.72);
+  font-size: u(0.78);
   color: var(--danger, #b3261e);
   background: #fdf2f1;
   border: 1px solid #efb9b5;
-  border-radius: u(0.2);
+  border-radius: u(0.35);
 }
 .stale {
   opacity: 0.55;
 }
 
 /* ------------------------------------------------------------------ POSTS */
+.posts {
+  display: flex;
+  flex-direction: column;
+  gap: u(0.3);
+}
 .legs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: u(0.2) u(1);
-  padding: u(0.35) u(0.6);
-  background: var(--surface, #ffffff);
-  border: 1px solid var(--border, #e0e0e0);
-  border-radius: u(0.2);
-  min-height: u(1.6);
+  padding: u(0.4) u(0.65);
+  background: #ffffff;
+  border: 1px solid $line-soft;
+  border-radius: u(0.35);
 }
 .legColumn {
   display: flex;
@@ -486,7 +677,7 @@
 }
 .legSide {
   font-weight: 700;
-  color: var(--text-muted, #6a6a6a);
+  color: $ink-faint;
 }
 .legName {
   white-space: nowrap;
@@ -496,12 +687,6 @@
 .legAmount {
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-.legsEmpty {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--text-muted, #8a8a8a);
-  font-style: italic;
 }
 .toneTextSuccess {
   color: #1c6b2a;
@@ -514,24 +699,35 @@
 .buttons {
   display: flex;
   align-items: center;
-  gap: u(0.35);
-  flex-wrap: wrap;
-  padding-top: u(0.25);
-  border-top: 1px solid var(--border, #e0e0e0);
+  justify-content: flex-end;
 }
-.spacer {
-  flex: 1 1 auto;
+/*
+ * The verbs sit right, one width each — the widest one's (Qt 5e25760). A
+ * shrink-to-fit grid of `1fr` columns sizes every column to the widest
+ * content, which is exactly that; the floor matches the desktop's buttons.
+ */
+.verbs {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(u(8.6), 1fr);
+  gap: u(0.4);
+  max-width: 100%;
+}
+.verbs > button {
+  text-align: center;
 }
 .button,
 .primaryButton,
 .dangerButton {
-  padding: u(0.3) u(0.75);
+  height: u(1.95);
+  padding: 0 u(0.9);
   border-radius: u(0.25);
-  border: 1px solid var(--border, #c9c9c9);
-  background: var(--surface, #ffffff);
-  color: var(--text-main, #222222);
+  border: 1px solid $line;
+  background: #ffffff;
+  color: $ink;
   font: inherit;
-  font-size: u(0.74);
+  font-size: u(0.82);
+  font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -539,30 +735,26 @@
   background: var(--primary, #7b1515);
   border-color: var(--primary, #7b1515);
   color: #ffffff;
-  font-weight: 600;
+  font-weight: 700;
 }
 .dangerButton {
   color: var(--danger, #b3261e);
   border-color: #e0b4b1;
 }
 .button:disabled,
-.primaryButton:disabled,
 .dangerButton:disabled {
-  opacity: 0.45;
+  background: #eef0f3;
+  border-color: $line-soft;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+.primaryButton:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 .button:not(:disabled):hover,
 .dangerButton:not(:disabled):hover {
-  background: var(--surface-muted, #f2f2f2);
-}
-.smallButton {
-  padding: u(0.18) u(0.55);
-  font-size: u(0.7);
-}
-.keys {
-  margin: 0;
-  font-size: u(0.66);
-  color: var(--text-muted, #7a7a7a);
+  background: #f3f4f6;
 }
 .loadError {
   margin: 0;
@@ -570,7 +762,7 @@
   color: var(--danger, #b3261e);
   background: #fdf2f1;
   border: 1px solid #efb9b5;
-  border-radius: u(0.2);
+  border-radius: u(0.35);
 }
 
 /* ---------------------------------------------------------------- dialogs */
@@ -582,7 +774,7 @@
 }
 .dialogNote {
   margin: 0;
-  font-size: u(0.74);
+  font-size: u(0.78);
   white-space: pre-line;
 }
 .dialogActions {
@@ -597,15 +789,15 @@
 }
 .preset {
   padding: u(0.15) u(0.55);
-  border: 1px solid var(--border, #d0d0d0);
+  border: 1px solid $line;
   border-radius: 999px;
-  background: var(--surface, #ffffff);
+  background: #ffffff;
   font: inherit;
-  font-size: u(0.68);
+  font-size: u(0.7);
   cursor: pointer;
 }
 .preset:hover {
-  background: var(--surface-muted, #f2f2f2);
+  background: #f3f4f6;
 }
 
 /* ------------------------------------------------------------ the register */

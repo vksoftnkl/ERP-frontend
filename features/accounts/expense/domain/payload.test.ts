@@ -9,6 +9,7 @@ import {
   expenseProblem,
   isEmptyLine,
   joinRemarks,
+  linesKeyOf,
 } from "./payload";
 
 function filled(overrides: Partial<ExpenseDraft> = {}): ExpenseDraft {
@@ -67,7 +68,7 @@ describe("buildExpenseBody", () => {
     expect(body.reasonId).toBeNull();
   });
 
-  it("carries the GST bill and the per-line rate and ITC only with one", () => {
+  it("carries the GST bill and the per-line rate, HSN/SAC and ITC only with one", () => {
     const draft = filled();
     draft.header = {
       ...draft.header,
@@ -77,16 +78,54 @@ describe("buildExpenseBody", () => {
       invoiceDate: "2026-10-08",
       placeOfSupply: "",
     };
-    draft.lines[0] = { ...draft.lines[0], taxId: TAX_18, itc: false };
+    draft.lines[0] = { ...draft.lines[0], taxId: TAX_18, hsn: "998719", itc: false };
     const body = buildExpenseBody(input(draft));
     expect(body.gstBill).toEqual({
       supplierGstin: "33AAACT1234F1Z5",
       invoiceNo: "INV-2231",
       invoiceDate: "2026-10-08",
-      placeOfSupplyCode: null,
+      // Not picked: the GSTIN's state.
+      placeOfSupplyCode: "33",
     });
-    expect(body.lines[0]).toMatchObject({ taxId: TAX_18, itc: false });
-    expect(body.lines[1]).toMatchObject({ taxId: null, itc: true });
+    expect(body.lines[0]).toMatchObject({ taxId: TAX_18, hsn: "998719", itc: false });
+    expect(body.lines[1]).toMatchObject({ taxId: null, hsn: null, itc: true });
+    // Without a bill none of it travels.
+    const plain = buildExpenseBody(input({ ...draft, header: { ...draft.header, gstBill: false } }));
+    expect(plain.lines[0]).not.toHaveProperty("hsn");
+    expect(plain.gstBill).toBeUndefined();
+  });
+
+  it("an operator's place of supply wins over the GSTIN's state", () => {
+    const draft = filled();
+    draft.header = {
+      ...draft.header,
+      gstBill: true,
+      supplierGstin: "29AACCG0527D1Z0",
+      invoiceNo: "X",
+      placeOfSupply: "33",
+      placeOfSupplyPicked: true,
+    };
+    expect(buildExpenseBody(input(draft)).gstBill?.placeOfSupplyCode).toBe("33");
+    draft.header = { ...draft.header, placeOfSupplyPicked: false };
+    expect(buildExpenseBody(input(draft)).gstBill?.placeOfSupplyCode).toBe("29");
+  });
+
+  it("keeps the trailing blank rows out of the body", () => {
+    const draft = filled();
+    draft.lines = [...draft.lines, emptyLine()];
+    draft.tenders = [...draft.tenders, emptyTender()];
+    const body = buildExpenseBody(input(draft));
+    expect(body.lines).toHaveLength(2);
+    expect(body.tenders).toHaveLength(2);
+  });
+
+  it("a lines key ignores the tenders", () => {
+    const one = buildExpenseBody(input(filled()));
+    const draft = filled();
+    draft.tenders[0] = { ...draft.tenders[0], amount: "999" };
+    const two = buildExpenseBody(input(draft));
+    expect(bodyKeyOf(one)).not.toBe(bodyKeyOf(two));
+    expect(linesKeyOf(one)).toBe(linesKeyOf(two));
   });
 
   it("edits a saved draft under its own keys, and names the till session when there is one", () => {
@@ -125,7 +164,7 @@ describe("expenseProblem — Qt's sentences", () => {
     noDate.header = { ...noDate.header, voucherDate: "" };
     expect(expenseProblem(input(noDate))).toBe("Enter the voucher date.");
     const noInvoiceDate = filled();
-    noInvoiceDate.header = { ...noInvoiceDate.header, gstBill: true, invoiceDate: "" };
+    noInvoiceDate.header = { ...noInvoiceDate.header, gstBill: true, invoiceDate: "", partyId: "party-1" };
     expect(expenseProblem(input(noInvoiceDate))).toBe("With a GST bill: enter the invoice date.");
   });
 
@@ -153,9 +192,17 @@ describe("expenseProblem — Qt's sentences", () => {
     expect(expenseProblem(input(unpaid))).toBe("Add how it was paid.");
   });
 
+  it("a GST bill needs its supplier party before anything else (Qt 5e25760)", () => {
+    const draft = filled();
+    draft.header = { ...draft.header, gstBill: true, invoiceNo: "INV-1", partyId: "" };
+    expect(expenseProblem(input(draft))).toBe("With a GST bill, pick the supplier in Party.");
+    draft.header = { ...draft.header, partyId: "party-1" };
+    expect(expenseProblem(input(draft))).toBeNull();
+  });
+
   it("Post also wants a GST bill's invoice number; a draft does not", () => {
     const draft = filled();
-    draft.header = { ...draft.header, gstBill: true, invoiceNo: "  " };
+    draft.header = { ...draft.header, gstBill: true, invoiceNo: "  ", partyId: "party-1" };
     expect(expenseProblem(input(draft))).toBeNull();
     expect(expensePostProblem(input(draft))).toBe("With a GST bill: enter the supplier's invoice no.");
   });

@@ -138,6 +138,37 @@ describe("draftOfVoucher (Qt showVoucher)", () => {
     ]);
   });
 
+  it("brings back each line's HSN/SAC", () => {
+    const withHsn = validateAnswer().derived;
+    withHsn.lines[0] = { ...withHsn.lines[0], hsn: "998719" };
+    const draft = draftOfVoucher(readVoucher({ ...VOUCHER, derived: withHsn }), TODAY);
+    expect(draft.lines[0].hsn).toBe("998719");
+    expect(draft.lines[1].hsn).toBe("");
+  });
+
+  it("a saved place of supply other than the GSTIN's state was the operator's pick", () => {
+    const picked = draftOfVoucher(
+      readVoucher({ ...VOUCHER, gstBill: { ...VOUCHER.gstBill, placeOfSupplyCode: "29" } }),
+      TODAY,
+    );
+    expect(picked.header).toMatchObject({ placeOfSupply: "29", placeOfSupplyPicked: true });
+    const own = draftOfVoucher(
+      readVoucher({ ...VOUCHER, gstBill: { ...VOUCHER.gstBill, placeOfSupplyCode: "33" } }),
+      TODAY,
+    );
+    expect(own.header).toMatchObject({ placeOfSupply: "33", placeOfSupplyPicked: false });
+  });
+
+  it("a DRAFT comes back with its trailing blank rows; a posted one without", () => {
+    const draft = draftOfVoucher(readVoucher({ ...VOUCHER, status: "DRAFT" }), TODAY);
+    expect(draft.lines).toHaveLength(3);
+    expect(draft.tenders).toHaveLength(3);
+    expect(draft.tenders.every((row) => !row.autoAmount)).toBe(true);
+    const posted = draftOfVoucher(readVoucher(VOUCHER), TODAY);
+    expect(posted.lines).toHaveLength(2);
+    expect(posted.tenders).toHaveLength(2);
+  });
+
   it("a voucher with no lines or tenders still shows one row of each", () => {
     const empty = readVoucher({ ...VOUCHER, derived: {}, gstBill: null });
     const draft = draftOfVoucher(empty, TODAY);

@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { ExpenseDraft } from "../expense.types";
 import { emptyLine, emptyTender, newDraft } from "./draft";
 import { CASH_ID, LEDGER_COURIER, LEDGER_REPAIRS, SCOPE, TAX_18, TENDERS, TODAY, UPI_ID, validateAnswer } from "./fixtures";
-import { bodyKeyOf, buildExpenseBody } from "./payload";
+import { bodyKeyOf, buildExpenseBody, linesKeyOf } from "./payload";
 import {
   DEFAULT_TAX_NOTE,
+  autoTenderTotalPaise,
   buildExpenseView,
+  itcPaise,
   countedLinePaise,
   countedTenderPaise,
   statusPill,
@@ -27,8 +29,21 @@ function draftWith(gst: boolean, tenders: [string, string][] = [[CASH_ID, "300"]
   };
 }
 
+function bodyOf(draft: ExpenseDraft) {
+  return buildExpenseBody({ draft, scope: SCOPE, tenders: TENDERS, session: null });
+}
+
 function keyOf(draft: ExpenseDraft): string {
-  return bodyKeyOf(buildExpenseBody({ draft, scope: SCOPE, tenders: TENDERS, session: null }));
+  return bodyKeyOf(bodyOf(draft));
+}
+
+function linesKey(draft: ExpenseDraft): string {
+  return linesKeyOf(bodyOf(draft));
+}
+
+/** An answer to exactly this draft. */
+function answered(draft: ExpenseDraft, payload = validateAnswer()): ExpenseAnswer {
+  return { kind: "validated", bodyKey: keyOf(draft), linesKey: linesKey(draft), payload };
 }
 
 function view(draft: ExpenseDraft, answer: ExpenseAnswer | null, overrides: { error?: string; sessionNo?: string } = {}) {
@@ -36,6 +51,7 @@ function view(draft: ExpenseDraft, answer: ExpenseAnswer | null, overrides: { er
     draft,
     answer,
     currentBodyKey: keyOf(draft),
+    currentLinesKey: linesKey(draft),
     validateError: overrides.error ?? null,
     session: overrides.sessionNo ? { sessionId: "s", sessionNo: overrides.sessionNo } : null,
     tenders: TENDERS,
@@ -59,17 +75,29 @@ describe("a new, empty voucher", () => {
 
 describe("the server's answer, fresh", () => {
   const draft = draftWith(true);
-  const answer: ExpenseAnswer = { kind: "validated", bodyKey: keyOf(draft), payload: validateAnswer() };
+  const answer = answered(draft);
   const v = view(draft, answer);
 
-  it("shows each line's tax and total from the server", () => {
+  it("shows each line's tax and total from the server, a zero as blank", () => {
     expect(v.fresh).toBe(true);
+    expect(v.linesFresh).toBe(true);
     expect(v.lineCells).toEqual([
       { tax: "180.00", total: "1,180.00" },
-      { tax: "0.00", total: "120.00" },
+      { tax: "", total: "120.00" },
     ]);
-    expect(v.linesSummary).toBe("Lines  1,120.00   tax 180.00   total 1,300.00");
     expect(v.tendersSummary).toBe("Tenders  1,300.00");
+  });
+
+  it("totals the lines Qt's way, with the input tax credit (d97cdd4)", () => {
+    expect(v.linesSummary).toBe("Taxable 1,120.00 · GST 180.00 · ITC 180.00 · Total 1,300.00");
+    const plain = draftWith(false);
+    expect(view(plain, answered(plain)).linesSummary).toBe("Total 1,300.00");
+  });
+
+  it("ITC is the tax of every line whose class is not ineligible", () => {
+    const lines = validateAnswer().derived.lines;
+    expect(itcPaise(lines)).toBe(18000);
+    expect(itcPaise([{ ...lines[0], itcEligibility: "INELIGIBLE" }, lines[1]])).toBe(0);
   });
 
   it("balances to the paisa", () => {
@@ -81,12 +109,15 @@ describe("the server's answer, fresh", () => {
     expect(v.moneyFrom).toBe("Back office — cash comes from the default safe Main Safe.");
   });
 
-  it("splits the tax the way the bill's place of supply says", () => {
-    expect(v.taxNote).toBe("Tax split from the GST bill: intra-state → CGST 90.00 + SGST 90.00.");
+  it("splits the tax the way the bill's place of supply says, naming the credit", () => {
+    expect(v.taxNote).toBe("Intra-state supply → CGST 90.00 + SGST 90.00. ITC 180.00 goes to Input GST; the rest is cost.");
     const inter = validateAnswer();
     inter.derived.supplyNature = "INTER";
     inter.derived.tax = { cgst: 0, sgst: 0, igst: 180, cess: 0 };
-    expect(view(draft, { ...answer, payload: inter }).taxNote).toBe("Tax split from the GST bill: inter-state → IGST 180.00.");
+    inter.derived.lines[0] = { ...inter.derived.lines[0], cgst: 0, sgst: 0, igst: 180 };
+    expect(view(draft, { ...answer, payload: inter }).taxNote).toBe(
+      "Inter-state supply → IGST 180.00. ITC 180.00 goes to Input GST; the rest is cost.",
+    );
   });
 
   it("lays the legs out in three columns and checks Dr = Cr", () => {
@@ -142,7 +173,7 @@ describe("refusals, warnings and the approval band", () => {
       enforced: false,
     },
   });
-  const v = view(draft, { kind: "validated", bodyKey: keyOf(draft), payload });
+  const v = view(draft, answered(draft, payload));
 
   it("lists refusals as CODE — message", () => {
     expect(v.refusals).toEqual([
@@ -172,18 +203,35 @@ describe("refusals, warnings and the approval band", () => {
 describe("a stale answer", () => {
   it("without a GST bill: the lines and the balance are summed here, exactly", () => {
     const before = draftWith(false, [[CASH_ID, "1120"]]);
-    const answer: ExpenseAnswer = { kind: "validated", bodyKey: keyOf(before), payload: validateAnswer() };
+    const answer = answered(before);
     const after = { ...before, lines: [before.lines[0], { ...before.lines[1], amount: "150.50" }] };
     const v = view(after, answer);
     expect(v.fresh).toBe(false);
+    expect(v.linesFresh).toBe(false);
     expect(v.lineCells).toEqual([
       { tax: "", total: "1,000.00" },
       { tax: "", total: "150.50" },
     ]);
-    expect(v.linesSummary).toBe("Lines  1,150.50   tax 0.00   total 1,150.50");
+    expect(v.linesSummary).toBe("Total 1,150.50");
     expect(v.balance).toEqual({ text: "30.50", tone: "danger" });
-    // Account falls back to the tender master's ledger until the next check.
-    expect(v.tenderAccounts).toEqual(["Cash in hand"]);
+  });
+
+  it("only the tenders changed: the lines' figures stay current, and so does a tender's account", () => {
+    const before = draftWith(true);
+    const answer = answered(before);
+    const after = { ...before, tenders: [{ ...before.tenders[0], amount: "250" }, before.tenders[1]] };
+    const v = view(after, answer);
+    expect(v.fresh).toBe(false);
+    expect(v.linesFresh).toBe(true);
+    expect(v.lineCells[0]).toEqual({ tax: "180.00", total: "1,180.00" });
+    expect(v.tenderAccounts).toEqual(["safe · Main Safe", "UPI clearing"]);
+    expect(v.balance).toEqual({ text: "50.00", tone: "danger" });
+  });
+
+  it("a tender changed to another one falls back to the master's ledger until the next check", () => {
+    const before = draftWith(false, [[CASH_ID, "1120"]]);
+    const after = { ...before, tenders: [{ ...before.tenders[0], tenderId: UPI_ID }] };
+    expect(view(after, answered(before)).tenderAccounts).toEqual(["UPI clearing"]);
   });
 
   it("with a GST bill: the tax waits for the server", () => {
@@ -191,12 +239,12 @@ describe("a stale answer", () => {
     const v = view(draft, null);
     expect(v.lineCells[0]).toEqual({ tax: "…", total: "…" });
     expect(v.balance).toEqual({ text: "…", tone: "pending" });
-    expect(v.linesSummary).toBe("Lines  1,120.00   tax …   total …");
+    expect(v.linesSummary).toBe("Taxable 1,120.00 · GST … · ITC … · Total …");
   });
 
   it("a loaded voucher's own figures stand until something is typed", () => {
     const draft = { ...draftWith(true), status: "POSTED" as const };
-    const answer: ExpenseAnswer = { kind: "saved", bodyKey: "", payload: validateAnswer() };
+    const answer: ExpenseAnswer = { kind: "saved", bodyKey: "", linesKey: "", payload: validateAnswer() };
     expect(view(draft, answer).fresh).toBe(true);
     expect(view(draft, answer).lineCells[0]).toEqual({ tax: "180.00", total: "1,180.00" });
     expect(view({ ...draft, dirty: true }, answer).fresh).toBe(false);
@@ -206,7 +254,7 @@ describe("a stale answer", () => {
     const payload = validateAnswer();
     payload.derived.lines[1] = { ...payload.derived.lines[1], rowNo: 5 };
     const draft = { ...draftWith(false), status: "POSTED" as const };
-    expect(view(draft, { kind: "saved", bodyKey: "", payload }).lineCells[1].total).toBe("120.00");
+    expect(view(draft, { kind: "saved", bodyKey: "", linesKey: "", payload }).lineCells[1].total).toBe("120.00");
   });
 });
 
@@ -227,8 +275,16 @@ describe("figures", () => {
     const plain = draftWith(false);
     expect(voucherTotalPaise(plain, null, false)).toBe(112000);
     expect(voucherTotalPaise(draftWith(true), null, false)).toBeNull();
-    const answer: ExpenseAnswer = { kind: "validated", bodyKey: "", payload: validateAnswer() };
+    const answer: ExpenseAnswer = { kind: "validated", bodyKey: "", linesKey: "", payload: validateAnswer() };
     expect(voucherTotalPaise(draftWith(true), answer, true)).toBe(130000);
+  });
+
+  it("the first tender follows the server's total while its taxable is the lines', else the lines (Qt balanceAutoTender)", () => {
+    const draft = draftWith(true);
+    expect(autoTenderTotalPaise(draft, null)).toBe(112000);
+    expect(autoTenderTotalPaise(draft, answered(draft))).toBe(130000);
+    const edited = { ...draft, lines: [draft.lines[0], { ...draft.lines[1], amount: "200" }] };
+    expect(autoTenderTotalPaise(edited, answered(draft))).toBe(120000);
   });
 
   it("colours the status pill as Qt does", () => {

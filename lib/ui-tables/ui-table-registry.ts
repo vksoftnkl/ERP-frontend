@@ -66,6 +66,10 @@ export const UI_TABLES = {
   paymentBills: { name: "PAYMENT - BILLS", fallbackId: "42" },
   /** Bill-wise Payment (menu 100) → the instruments grid: tenders AND role lines. */
   paymentTenders: { name: "PAYMENT - TENDERS", fallbackId: "43" },
+  /** Expense Voucher (menu 277) → WHAT WAS SPENT. */
+  expenseLines: { name: "EXPENSE VOUCHER - LINES", fallbackId: "51" },
+  /** Expense Voucher (menu 277) → HOW IT WAS PAID. */
+  expenseTenders: { name: "EXPENSE VOUCHER - TENDERS", fallbackId: "52" },
   /** The Voucher Register (Contra, menu 104, …) → the typed legs. */
   voucherLegs: { name: "VOUCHER REGISTER - LEGS", fallbackId: "39" },
   /** The Voucher Register's bill-wise popup (Receipt / Payment Voucher, …). */

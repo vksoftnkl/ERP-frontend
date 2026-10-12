@@ -3,6 +3,7 @@ import {
   addDays,
   clampIso,
   dayMonthLabel,
+  daysInclusive,
   displayDate,
   isIsoDate,
   isoDay,
@@ -10,6 +11,7 @@ import {
   monthLabel,
   previousDay,
   todayIso,
+  weekdayName,
   weekdayOf,
 } from "./dates";
 
@@ -66,5 +68,17 @@ describe("calendar helpers", () => {
 
   it("labels a day without its year", () => {
     expect(dayMonthLabel("2026-10-02")).toBe("2 Oct");
+  });
+
+  it("names the weekday from the ISO string", () => {
+    expect(weekdayName("2026-10-09")).toBe("Friday");
+    expect(weekdayName("2026-10-04")).toBe("Sunday");
+    expect(weekdayName("not a date")).toBe("");
+  });
+
+  it("counts a range's days, both ends included", () => {
+    expect(daysInclusive("2026-10-09", "2026-10-09")).toBe(1);
+    expect(daysInclusive("2026-10-07", "2026-10-09")).toBe(3);
+    expect(daysInclusive("2026-03-31", "2026-04-01")).toBe(2);
   });
 });

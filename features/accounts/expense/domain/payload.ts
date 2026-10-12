@@ -12,7 +12,8 @@
  *    operator sees as 3;
  *  - "Paid to" and the notes travel as the header's remarks,
  *    `"<paid to> — <notes>"` (split back by `parse.ts`);
- *  - the tax fields go only with a GST bill.
+ *  - the tax fields (rate, HSN/SAC, ITC) go only with a GST bill, and the
+ *    place of supply is the operator's pick or else the GSTIN's state.
  */
 import type {
   ExpenseDraft,
@@ -26,6 +27,7 @@ import type {
 } from "../expense.types";
 import { isEditable } from "./draft";
 import { paiseOfText, paiseToDecimal, parseAmountText } from "./money";
+import { placeOfSupplyOf } from "./pickers";
 
 /** The separator between "Paid to" and the notes inside `remarks`. */
 export const REMARKS_SEPARATOR = " — ";
@@ -74,6 +76,7 @@ export function buildExpenseBody({ draft, scope, tenders, session }: ExpenseBody
     };
     if (gst) {
       body.taxId = line.taxId ? line.taxId : null;
+      body.hsn = textOrNull(line.hsn);
       body.itc = line.itc;
     }
     lines.push(body);
@@ -113,7 +116,7 @@ export function buildExpenseBody({ draft, scope, tenders, session }: ExpenseBody
       supplierGstin: textOrNull(header.supplierGstin.toUpperCase()),
       invoiceNo: header.invoiceNo.trim().toUpperCase(),
       invoiceDate: header.invoiceDate,
-      placeOfSupplyCode: textOrNull(header.placeOfSupply),
+      placeOfSupplyCode: textOrNull(placeOfSupplyOf(header)),
     };
     body.gstBill = bill;
   }
@@ -129,6 +132,11 @@ export function expenseProblem(input: ExpenseBodyInput): string | null {
   const { draft } = input;
   if (!isEditable(draft.status)) {
     return `The voucher is ${draft.status}.`;
+  }
+  // GSTR-2 files a GST bill under its supplier's ledger (Qt 5e25760): caught
+  // here, before the server's EXPENSE_GST_INCOMPLETE.
+  if (draft.header.gstBill && !draft.header.partyId) {
+    return "With a GST bill, pick the supplier in Party.";
   }
   const body = buildExpenseBody(input);
   if (!body.companyId || !body.branchId || !body.accYear) {
@@ -193,4 +201,14 @@ export function expensePostProblem(input: ExpenseBodyInput): string | null {
 /** A stable fingerprint of a body: the validate answer is current only for this exact body. */
 export function bodyKeyOf(body: SaveExpenseBody): string {
   return JSON.stringify(body);
+}
+
+/**
+ * The same, leaving the tenders out: what the lines' tax and totals depend on.
+ * The first tender follows the total, so every answer that moves the total
+ * changes the body — but not this, and the lines' figures stay current while
+ * the tender catches up.
+ */
+export function linesKeyOf(body: SaveExpenseBody): string {
+  return JSON.stringify({ ...body, tenders: null });
 }

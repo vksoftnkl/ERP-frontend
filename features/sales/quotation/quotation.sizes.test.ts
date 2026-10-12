@@ -4,6 +4,7 @@ import {
   applySizeEntry,
   createSizeEntryRow,
   findSizeGroup,
+  keyedSizeRows,
   openSizeEntry,
   sizeEntryTotals,
   sizeGroupKeyOf,
@@ -192,24 +193,44 @@ describe("createSizeEntryRow", () => {
     expect(row.source).toBeNull();
   });
 
-  it("copies the row above, so only the dimension that differs is keyed", () => {
+  it("carries only L and W from the row above — T, Pcs and Rate start fresh", () => {
     const previous = sizeRow("45*2*2*6", { rate: "260" });
     const row = createSizeEntryRow(250, previous);
-    expect(row.factors).toEqual(["45", "2", "2", "6"]);
-    expect(row.rate).toBe("260");
+    expect(row.factors).toEqual(["45", "2", "", ""]);
+    // The base rate, not the row above's: a rate keyed on one size is that size's.
+    expect(row.rate).toBe("250");
     // A copy is of the keystrokes only — it is still a brand-new line, and it
     // gets its own dialog key so patching one row never patches both.
     expect(row.source).toBeNull();
     expect(row.key).not.toBe(previous.key);
   });
 
-  it("follows the copied size rather than the quantity keyed on the row above", () => {
-    // 45*2*2*6 is 7.5 CFT; the row above was cut short to 6. That 6 belongs to
-    // the board it was cut on, not to the next one.
+  it("never carries the quantity keyed on the row above", () => {
     const previous = sizeRow("45*2*2*6", { qty: "6", qtyTouched: true });
     const row = createSizeEntryRow(250, previous);
     expect(row.qtyTouched).toBe(false);
-    expect(sizeRowQty(row)).toBe(7.5);
+  });
+
+  it("is pristine, where an opened row is not", () => {
+    expect(createSizeEntryRow(250).pristine).toBe(true);
+    const group = findSizeGroup([line({ key: "a", itemSize: "45*2*2*6" })], "a");
+    expect(openSizeEntry(group!)[0].pristine).toBe(false);
+  });
+});
+
+describe("keyedSizeRows", () => {
+  it("leaves out the row Enter opened until something is keyed into it", () => {
+    // 45*2 alone works out to 0.625 CFT, so a carried-over L × W that nobody
+    // confirmed would otherwise pass validation and save as a line.
+    const kept = sizeRow("45*2*2*6", { pristine: false });
+    const waiting = createSizeEntryRow(250, kept);
+    expect(validateSizeEntry([waiting]).ok).toBe(true);
+    expect(keyedSizeRows([kept, waiting])).toEqual([kept]);
+    expect(keyedSizeRows([kept, { ...waiting, pristine: false }])).toHaveLength(2);
+  });
+
+  it("leaves nothing to save when the only row was never keyed", () => {
+    expect(validateSizeEntry(keyedSizeRows([createSizeEntryRow(250)])).formError).toBeTruthy();
   });
 });
 

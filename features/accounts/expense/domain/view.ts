@@ -15,6 +15,12 @@
  *    server rather than being guessed;
  *  - the refusals, warnings, approval and legs of a stale answer are kept but
  *    marked stale, and Post waits for a fresh check.
+ *
+ * The lines' own figures (tax, totals, the tax note) are current while the
+ * LINES are what the answer was for (`linesKey`): the first tender follows
+ * the total, so an answer that moves the total also changes the body, and
+ * keying those cells on the whole body would blank them for a round trip on
+ * every edit while the tender caught up.
  */
 import type {
   ExpenseDraft,
@@ -41,13 +47,18 @@ export type ExpenseAnswer = {
    */
   kind: "validated" | "saved";
   bodyKey: string;
+  /** The body the answer was for, less its tenders (`linesKeyOf`). */
+  linesKey: string;
   payload: ExpenseValidatePayload;
 };
 
 export type Tone = "success" | "danger" | "warning" | "neutral" | "pending";
 
 export type ExpenseView = {
+  /** The answer is for exactly what is on screen: refusals, warnings, legs. */
   fresh: boolean;
+  /** The answer is for these lines: their tax, totals and the tax note. */
+  linesFresh: boolean;
   lineCells: { tax: string; total: string }[];
   linesSummary: string;
   tendersSummary: string;
@@ -65,6 +76,7 @@ export type ExpenseViewInput = {
   draft: ExpenseDraft;
   answer: ExpenseAnswer | null;
   currentBodyKey: string;
+  currentLinesKey: string;
   /** The HTTP error /validate answered for the current body, if it did. */
   validateError: string | null;
   session: ExpenseTillSession | null;
@@ -72,7 +84,7 @@ export type ExpenseViewInput = {
 };
 
 export const DEFAULT_TAX_NOTE =
-  "Without a GST bill the amount is the whole cost; with one it is the taxable value and the server works out the tax (CGST+SGST or IGST from the place of supply).";
+  "Without a GST bill the amount is the whole cost; with one it is the taxable value and the server works out the tax (CGST+SGST or IGST from the place of supply). ITC YES books the tax to Input GST; NO adds it to the expense.";
 
 export const TENDER_NOTE =
   "CASH = this till's drawer (back office: the default safe). UPI / bank rows are information-only at the till's close. A cheque is a bill-wise Payment.";
@@ -81,6 +93,24 @@ const PENDING = "…";
 
 function taxOf(line: { cgst: number; sgst: number; igst: number; cess: number }): number {
   return sumPaise([line.cgst, line.sgst, line.igst, line.cess].map(paiseOfNumber));
+}
+
+/** A figure cell: blank for nothing, so the ones that matter stand out (Qt `moneyOrBlank`). */
+function paiseOrBlank(paise: number): string {
+  return paise === 0 ? "" : formatPaise(paise);
+}
+
+/**
+ * The input tax credit: the tax of every line whose ITC class is not
+ * ineligible (a line ticked ITC NO comes back INELIGIBLE; one without a rate
+ * comes back with none).
+ */
+export function itcPaise(lines: readonly ExpenseLinePayload[]): number {
+  return sumPaise(
+    lines
+      .filter((line) => Boolean(line.itcEligibility) && line.itcEligibility !== "INELIGIBLE")
+      .map(taxOf),
+  );
 }
 
 /** The statuses' pill: NEW and DRAFT amber, POSTED green, CANCELLED red (Qt tones). */
@@ -127,40 +157,66 @@ export function voucherTotalPaise(draft: ExpenseDraft, answer: ExpenseAnswer | n
   return draft.header.gstBill ? null : countedLinePaise(draft);
 }
 
+/**
+ * What the first tender follows (Qt `balanceAutoTender`): the server's total
+ * while its taxable value is still what the lines come to — it adds the tax —
+ * and the typed amounts until it does, or Post would wait on a tender that
+ * waits on the check.
+ */
+export function autoTenderTotalPaise(draft: ExpenseDraft, answer: ExpenseAnswer | null): number {
+  const lines = countedLinePaise(draft);
+  if (answer && paiseOfNumber(answer.payload.derived.taxable) === lines) {
+    return paiseOfNumber(answer.payload.derived.total);
+  }
+  return lines;
+}
+
 export function buildExpenseView(input: ExpenseViewInput): ExpenseView {
-  const { draft, answer, currentBodyKey, validateError, session, tenders } = input;
+  const { draft, answer, currentBodyKey, currentLinesKey, validateError, session, tenders } = input;
   // A loaded voucher's own figures stand until something is typed; a check
-  // stands for exactly the body it answered.
+  // stands for exactly the body it answered (its lines' figures, for those lines).
   const fresh =
     answer !== null && (answer.kind === "saved" ? !draft.dirty : answer.bodyKey === currentBodyKey);
+  const linesFresh =
+    answer !== null && (answer.kind === "saved" ? !draft.dirty : answer.linesKey === currentLinesKey);
   const gst = draft.header.gstBill;
   const derived = answer?.payload.derived ?? null;
+  const linesDerived = linesFresh ? derived : null;
 
   // ── the lines ──────────────────────────────────────────────────────────
   const lineCells = draft.lines.map((line, index) => {
-    const figure = answer && fresh ? lineFigure(answer, index) : undefined;
-    if (figure) {
-      return { tax: formatPaise(taxOf(figure)), total: formatPaise(paiseOfNumber(figure.total)) };
-    }
     if (isEmptyLine(line)) {
       return { tax: "", total: "" };
     }
+    const figure = answer && linesFresh ? lineFigure(answer, index) : undefined;
+    if (figure) {
+      const total = paiseOfNumber(figure.total);
+      return {
+        tax: gst ? paiseOrBlank(taxOf(figure)) : "",
+        total: paiseOrBlank(total > 0 ? total : paiseOfText(line.amount)),
+      };
+    }
     // No GST bill: the total is the amount, exactly. With one: the server's.
-    return gst ? { tax: PENDING, total: PENDING } : { tax: "", total: formatPaise(paiseOfText(line.amount)) };
+    return gst ? { tax: PENDING, total: PENDING } : { tax: "", total: paiseOrBlank(paiseOfText(line.amount)) };
   });
 
   const linePaise = countedLinePaise(draft);
   const tenderPaise = countedTenderPaise(draft, tenders);
-  const totalPaise = voucherTotalPaise(draft, answer, fresh);
+  const totalPaise = voucherTotalPaise(draft, answer, linesFresh);
   const hasLines = draft.lines.some((line) => !isEmptyLine(line));
+  const itc = linesDerived ? itcPaise(linesDerived.lines) : null;
 
   let linesSummary = "";
   if (hasLines) {
-    const taxable = answer && fresh && derived ? paiseOfNumber(derived.taxable) : linePaise;
-    const tax = answer && fresh && derived ? taxOf(derived.tax) : gst ? null : 0;
-    linesSummary =
-      `Lines  ${formatPaise(taxable)}   tax ${tax === null ? PENDING : formatPaise(tax)}` +
-      `   total ${totalPaise === null ? PENDING : formatPaise(totalPaise)}`;
+    const total = totalPaise === null ? PENDING : formatPaise(totalPaise);
+    if (gst) {
+      const taxable = linesDerived ? paiseOfNumber(linesDerived.taxable) : linePaise;
+      const tax = linesDerived ? formatPaise(taxOf(linesDerived.tax)) : PENDING;
+      linesSummary =
+        `Taxable ${formatPaise(taxable)} · GST ${tax} · ITC ${itc === null ? PENDING : formatPaise(itc)} · Total ${total}`;
+    } else {
+      linesSummary = `Total ${total}`;
+    }
   }
   const tendersSummary = tenderPaise > 0 || hasLines ? `Tenders  ${formatPaise(tenderPaise)}` : "";
 
@@ -181,8 +237,10 @@ export function buildExpenseView(input: ExpenseViewInput): ExpenseView {
     safeName = derived.tenders.find((row) => row.moneyFrom === "SAFE")?.ledgerName ?? "";
   }
   const tenderAccounts = draft.tenders.map((row, index) => {
-    const figure = answer && fresh ? tenderFigure(answer, index) : undefined;
-    if (figure) {
+    // Where a tender's money comes from follows the tender (and the till), not
+    // its amount: the answer stands for a row while it names the same tender.
+    const figure = answer && row.tenderId ? tenderFigure(answer, index) : undefined;
+    if (figure && figure.tenderId === row.tenderId) {
       if (figure.moneyFrom === "DRAWER") return "drawer · this session";
       if (figure.moneyFrom === "SAFE") return `safe · ${safeName}`;
       return figure.ledgerName ?? "";
@@ -207,11 +265,12 @@ export function buildExpenseView(input: ExpenseViewInput): ExpenseView {
 
   // ── the tax note ───────────────────────────────────────────────────────
   let taxNote = DEFAULT_TAX_NOTE;
-  if (gst && derived?.supplyNature && fresh) {
+  if (gst && linesDerived?.supplyNature) {
+    const credit = formatPaise(itc ?? 0);
     taxNote =
-      derived.supplyNature === "INTER"
-        ? `Tax split from the GST bill: inter-state → IGST ${formatPaise(paiseOfNumber(derived.tax.igst))}.`
-        : `Tax split from the GST bill: intra-state → CGST ${formatPaise(paiseOfNumber(derived.tax.cgst))} + SGST ${formatPaise(paiseOfNumber(derived.tax.sgst))}.`;
+      linesDerived.supplyNature === "INTER"
+        ? `Inter-state supply → IGST ${formatPaise(paiseOfNumber(linesDerived.tax.igst))}. ITC ${credit} goes to Input GST; the rest is cost.`
+        : `Intra-state supply → CGST ${formatPaise(paiseOfNumber(linesDerived.tax.cgst))} + SGST ${formatPaise(paiseOfNumber(linesDerived.tax.sgst))}. ITC ${credit} goes to Input GST; the rest is cost.`;
   }
 
   // ── refusals, warnings, approval ───────────────────────────────────────
@@ -257,6 +316,7 @@ export function buildExpenseView(input: ExpenseViewInput): ExpenseView {
 
   return {
     fresh,
+    linesFresh,
     lineCells,
     linesSummary,
     tendersSummary,

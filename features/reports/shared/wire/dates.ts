@@ -101,3 +101,16 @@ export function dayMonthLabel(iso: string): string {
   if (!match) return iso;
   return `${Number(match[3])} ${MONTHS[Number(match[2]) - 1] ?? match[2]}`;
 }
+
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+/** `2026-10-09` → `Friday`, from the ISO string itself: no local `Date`, so no timezone can move it. */
+export function weekdayName(iso: string): string {
+  return isIsoDate(iso) ? WEEKDAYS[weekdayOf(iso)] : "";
+}
+
+/** Calendar days from `from` to `to`, both counted: one day is 1. For a label, never a figure. */
+export function daysInclusive(from: string, to: string): number {
+  if (!isIsoDate(from) || !isIsoDate(to)) return 0;
+  return Math.round((toUtc(to).getTime() - toUtc(from).getTime()) / 86_400_000) + 1;
+}

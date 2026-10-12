@@ -48,6 +48,8 @@ export type ExpenseLineBody = {
   description: string | null;
   /** Only with a GST bill. */
   taxId?: string | null;
+  /** Only with a GST bill: the HSN/SAC (≤ 10 chars on the DTO; the cell takes 8 digits, as Qt). */
+  hsn?: string | null;
   /** Only with a GST bill. */
   itc?: boolean;
 };
@@ -212,28 +214,37 @@ export type ExpensePostPayload = ExpensePayload & {
   approval: ExpenseApproval | null;
 };
 
-/** `GET /expenses/ledger-pick` — live ledgers under an Expenses group. */
-export type ExpenseLedgerOption = {
-  ledgerId: string;
+/**
+ * A row picked in grid 155 "POPUP - EXPENSE REASONS" — the EXPENSE till
+ * reasons (a company copy replaces the shipped row), each with its ledger and
+ * that ledger's GST facts. A ledger since deleted reads as none.
+ */
+export type ExpenseReasonPick = {
+  reasonId: string;
   name: string;
-  groupName: string;
-  taxId: string | null;
-  itcEligibility: string | null;
+  ledgerId: string;
+  ledgerName: string;
+  taxId: string;
+  taxName: string;
+  hsn: string;
 };
 
 /**
- * One EXPENSE quick-pick, in `/expenses/quick-reasons`' shape — whichever
- * source filled it (the screen reads grid 134, as Qt does; `domain/reasons.ts`).
+ * A row picked in grid 156 "POPUP - EXPENSE LEDGERS" — live ledgers under an
+ * Expenses group, so a party, cash, bank or tax ledger is never offered.
  */
-export type ExpenseQuickReason = {
-  reasonId: string;
-  code: string;
+export type ExpenseLedgerPick = {
+  ledgerId: string;
   name: string;
-  ledgerId: string | null;
-  ledgerName: string | null;
-  needsNote: boolean;
-  needsRef: boolean;
-  maxAmount: number | null;
+  taxId: string;
+  taxName: string;
+  hsn: string;
+};
+
+/** A GST rate the line's GST cell offers (`/vouchers/tax-rates`). */
+export type ExpenseRateOption = {
+  taxId: string;
+  name: string;
 };
 
 /** A tender the voucher may be paid by — CASH, BANK or UPI, never a cheque. */
@@ -254,10 +265,17 @@ export type ExpenseTenderOption = {
 export type ExpenseLineDraft = {
   key: string;
   reasonId: string;
+  /**
+   * The picked reason's name. A loaded voucher carries only the id; its name
+   * is then read off grid 155 when the cell is drawn ("(saved reason)" until).
+   */
+  reasonName: string;
   ledgerId: string;
   /** A loaded line's ledger name, shown before (or without) the ledger list. */
   ledgerName: string;
   description: string;
+  /** HSN/SAC — kept only with a GST bill; a picked ledger's own fills it when blank. */
+  hsn: string;
   amount: string;
   taxId: string;
   taxName: string;
@@ -272,6 +290,12 @@ export type ExpenseTenderDraft = {
   tenderName: string;
   refNo: string;
   amount: string;
+  /**
+   * The first tender of a NEW voucher, until its amount is typed: it takes
+   * whatever the lines come to less the other tenders (Qt `autoAmount`). The
+   * amount is then DERIVED (`withAutoTender`), never stored.
+   */
+  autoAmount: boolean;
 };
 
 export type ExpenseHeaderDraft = {
@@ -284,7 +308,13 @@ export type ExpenseHeaderDraft = {
   supplierGstin: string;
   invoiceNo: string;
   invoiceDate: string;
+  /** The place of supply the operator PICKED — meaningful only with `placeOfSupplyPicked`. */
   placeOfSupply: string;
+  /**
+   * The operator picked the place of supply. Until then it follows the
+   * GSTIN's state (Qt `m_posOverride`); a cleared pick goes back to that.
+   */
+  placeOfSupplyPicked: boolean;
 };
 
 export type ExpenseDraft = {
