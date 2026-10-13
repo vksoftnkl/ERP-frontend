@@ -132,6 +132,16 @@
     max-height: var(--erp-table-max-height, none);
     background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
   }
+  /* `fitColumnsToWidth` measures this: a block child spans exactly the
+     viewport's content box, scrollbar excluded. It must not take up room. */
+  .fitProbe {
+    display: block;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    pointer-events: none;
+  }
   .table {
     width: 100%;
     min-width: var(--erp-table-min-width, 980px);
@@ -249,6 +259,12 @@
   }
   .columnResizeHandleRight {
     right: -6px;
+  }
+  /* Straddling the edge is right between two columns, but past the LAST one it
+     pokes 6px out of the table — enough to give a table that exactly fits its
+     viewport a horizontal scrollbar. Keep that one inside its cell. */
+  th:last-child > .columnResizeHandleRight {
+    right: 0;
   }
   .headerButton {
     width: 100%;

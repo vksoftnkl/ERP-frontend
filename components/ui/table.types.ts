@@ -21,6 +21,12 @@ export type ReusableTableColumn<T> = {
   accessor?: keyof T;
   render?: (row: T, rowIndex: number) => ReactNode;
   width?: string;
+  /**
+   * Keep `width` exactly as given when `fitColumnsToWidth` stretches or shrinks
+   * the other columns — for a tick box or an icon, which has nothing to show in
+   * extra room. Serial and actions columns are always treated this way.
+   */
+  fixedWidth?: boolean;
   align?: "left" | "center" | "right";
   mobileLabel?: string;
   headerClassName?: string;
@@ -73,6 +79,14 @@ export type ReusableTableProps<T extends Record<string, unknown>> = {
   reorderableColumns?: boolean;
   onColumnReorder?: (columns: ReusableTableColumn<T>[]) => void;
   resizableColumns?: boolean;
+  /**
+   * Treat the column widths as proportions and scale them so the table fills
+   * its viewport exactly — the same grid then looks the same on every screen
+   * size, instead of leaving a gap on a wide one and scrolling on a narrow one.
+   * Shrinking stops at 75% of the given widths; past that the table scrolls.
+   * A drag still reports (and so stores) the UNSCALED width.
+   */
+  fitColumnsToWidth?: boolean;
   onColumnResizeEnd?: (payload: ReusableTableColumnResizeEndPayload<T>) => void;
   onBodyContextMenu?: (payload: ReusableTableBodyContextMenuPayload<T>) => void;
   // Fires on right-click anywhere in the table shell (header, empty area, etc.).

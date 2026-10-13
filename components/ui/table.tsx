@@ -74,6 +74,12 @@ const FIXED_ACTIONS_COLUMN_WIDTH = "200px";
 const MIN_DATA_COLUMN_WIDTH = 100;
 const MIN_RESIZABLE_COLUMN_WIDTH = 40;
 const PERCENT_COLUMN_WIDTH_PIXEL_FACTOR = 8;
+/**
+ * `fitColumnsToWidth` never shrinks a column below this share of its given
+ * width; a grid that would need more than that scrolls instead of truncating
+ * every cell.
+ */
+const FIT_COLUMNS_MIN_SCALE = 0.75;
 const DEFAULT_ACTION_MENU_PLACEMENT: ActionMenuPlacement = {
   vertical: "down",
   horizontal: "right",
@@ -335,6 +341,82 @@ function resolveMinimumTableWidth<T extends Record<string, unknown>>(
 ): number {
   return columns.reduce((total, column) => total + resolveColumnPixelWidth(column), 0);
 }
+function isFixedWidthColumn<T extends Record<string, unknown>>(
+  column: ReusableTableColumn<T>,
+): boolean {
+  return column.fixedWidth === true || isSerialNumberColumn(column) || isActionsColumn(column);
+}
+/**
+ * The factor that makes the scalable columns fill `availableWidth` alongside
+ * the fixed ones, or null when there is nothing to scale.
+ */
+function resolveFitColumnsScale<T extends Record<string, unknown>>(
+  columns: ReusableTableColumn<T>[],
+  availableWidth: number,
+): number | null {
+  let fixedWidth = 0;
+  let scalableWidth = 0;
+  for (const column of columns) {
+    if (isFixedWidthColumn(column)) {
+      fixedWidth += resolveColumnPixelWidth(column);
+    } else {
+      scalableWidth += resolveColumnPixelWidth(column);
+    }
+  }
+  if (scalableWidth <= 0) {
+    return null;
+  }
+  return Math.max(FIT_COLUMNS_MIN_SCALE, (availableWidth - fixedWidth) / scalableWidth);
+}
+/**
+ * Scales every scalable column to whole pixels by rounding the running edge
+ * position rather than each width: the columns then sum to exactly the fitted
+ * width (no one-pixel overflow, so no scrollbar), and while one column is
+ * dragged the edges to its left never shift by a rounding pixel.
+ */
+function applyFitColumnsScale<T extends Record<string, unknown>>(
+  columns: ReusableTableColumn<T>[],
+  scale: number,
+): { columns: ReusableTableColumn<T>[]; tableWidth: number } {
+  let fixedWidth = 0;
+  let exactEdge = 0;
+  let roundedEdge = 0;
+  const fitted = columns.map((column) => {
+    if (isFixedWidthColumn(column)) {
+      fixedWidth += resolveColumnPixelWidth(column);
+      return column;
+    }
+    exactEdge += resolveColumnPixelWidth(column) * scale;
+    const nextEdge = Math.round(exactEdge);
+    const width = nextEdge - roundedEdge;
+    roundedEdge = nextEdge;
+    return { ...column, width: `${width}px` };
+  });
+  // Summed here, not re-read off the widths: `resolveColumnPixelWidth` floors a
+  // column at the drag minimum, which a column scaled below it would overstate.
+  return { columns: fitted, tableWidth: fixedWidth + roundedEdge };
+}
+/**
+ * The unscaled width a dragged column must be stored at so that, once the
+ * table refits around it, it is still drawn `renderedWidth` wide — the width
+ * the operator let go at. The other columns absorb the difference. Solves
+ * `w * scale = renderedWidth` with `scale = available / (others + w)`, and
+ * falls back to the floor scale when the grid is past it (and scrolls).
+ */
+function resolveFitDragNaturalWidth(
+  renderedWidth: number,
+  otherScalableWidth: number,
+  availableScalableWidth: number,
+): number {
+  if (availableScalableWidth > renderedWidth) {
+    const width =
+      (renderedWidth * otherScalableWidth) / (availableScalableWidth - renderedWidth);
+    if (availableScalableWidth / (otherScalableWidth + width) >= FIT_COLUMNS_MIN_SCALE) {
+      return width;
+    }
+  }
+  return renderedWidth / FIT_COLUMNS_MIN_SCALE;
+}
 function getInlineActionColumnIndex<T extends Record<string, unknown>>(
   columns: ReusableTableColumn<T>[],
 ): number {
@@ -483,6 +565,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
   reorderableColumns = false,
   onColumnReorder,
   resizableColumns = false,
+  fitColumnsToWidth = false,
   onColumnResizeEnd,
   onBodyContextMenu,
   onWrapperContextMenu,
@@ -567,6 +650,11 @@ export function ReusableTable<T extends Record<string, unknown>>({
     edge: ReusableTableColumnReorderEdge;
   } | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, string>>({});
+  // `fitColumnsToWidth`: the viewport's content width in layout pixels (0 until
+  // measured), and the scale held still while a column is being dragged.
+  const [fitAvailableWidth, setFitAvailableWidth] = useState(0);
+  const [frozenFitScale, setFrozenFitScale] = useState<number | null>(null);
+  const fitProbeRef = useRef<HTMLDivElement | null>(null);
   const resolvedOnUpdate = onUpdate ?? onEdit;
   const resolvedIsUpdateDisabled = isUpdateDisabled ?? isEditDisabled;
   const resolvedUpdateLabel = updateLabel ?? editLabel ?? "Edit";
@@ -740,7 +828,31 @@ export function ReusableTable<T extends Record<string, unknown>>({
   }, [paginatedRows, remeasureAutoPageSize]);
   useLayoutEffect(() => {
     remeasureAutoPageSize({ invalidateRowHeight: true });
-  }, [columnWidths, displayColumnSignature, remeasureAutoPageSize]);
+  }, [columnWidths, displayColumnSignature, fitAvailableWidth, remeasureAutoPageSize]);
+  // The width the fitted columns share is read off a zero-height probe at the
+  // top of the viewport rather than off the viewport itself: a block child is
+  // exactly the content box — padding and any vertical scrollbar already out —
+  // and its rect is fractional, where `clientWidth` rounds and can hand back
+  // half a pixel the table cannot have, which is enough for a scrollbar.
+  useLayoutEffect(() => {
+    const probe = fitProbeRef.current;
+    if (!fitColumnsToWidth || !probe) {
+      setFitAvailableWidth(0);
+      return;
+    }
+    const measure = () => {
+      const width = Math.max(0, Math.floor(toLayoutPx(probe.getBoundingClientRect().width)));
+      setFitAvailableWidth((current) => (current === width ? current : width));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(probe);
+    return () => observer.disconnect();
+  }, [fitColumnsToWidth]);
   const enableRowReorder = reorderableRows && typeof onRowReorder === "function";
   const enableColumnReorder = reorderableColumns && displayColumns.some(isColumnReorderable);
   const enableColumnResize = resizableColumns && displayColumns.some(isColumnReorderable);
@@ -767,11 +879,15 @@ export function ReusableTable<T extends Record<string, unknown>>({
   const dataColumnCount = configuredColumns.filter(
     (column) => !isSerialNumberColumn(column) && !isActionsColumn(column),
   ).length;
+  // A fitted table fills its viewport by scaling instead, and that slack would
+  // skew the proportions it scales — so it only applies until the first measure.
+  const isFittingColumns = fitColumnsToWidth && fitAvailableWidth > 0;
   const floorSlackPerDataColumn =
-    dataColumnCount > 0
+    dataColumnCount > 0 && !isFittingColumns
       ? Math.max(0, fallbackTableWidth - configuredColumnsWidth) / dataColumnCount
       : 0;
-  const displayColumnsForRender = configuredColumns.map((column) => {
+  // The widths as configured or dragged — the unit a resize reports and stores.
+  const naturalColumnsForRender = configuredColumns.map((column) => {
     if (isSerialNumberColumn(column) || isActionsColumn(column)) {
       return column;
     }
@@ -787,13 +903,19 @@ export function ReusableTable<T extends Record<string, unknown>>({
     }
     return column;
   });
+  const fitScale = isFittingColumns
+    ? (frozenFitScale ?? resolveFitColumnsScale(naturalColumnsForRender, fitAvailableWidth))
+    : null;
+  const fittedLayout =
+    fitScale === null ? null : applyFitColumnsScale(naturalColumnsForRender, fitScale);
+  const displayColumnsForRender = fittedLayout?.columns ?? naturalColumnsForRender;
   const hasRenderableColumns = displayColumnsForRender.length > 0;
   // The table is exactly as wide as the sum of its column widths, floored at
-  // the configured minimum.
-  const resolvedTableWidth = `${Math.max(
-    resolveMinimumTableWidth(displayColumnsForRender),
-    fallbackTableWidth,
-  )}px`;
+  // the configured minimum — or, fitted, exactly the viewport's width.
+  const resolvedTableWidth = `${
+    fittedLayout?.tableWidth ??
+    Math.max(resolveMinimumTableWidth(displayColumnsForRender), fallbackTableWidth)
+  }px`;
 
   useEffect(() => {
     if (openActionMenuKey === null) {
@@ -1291,13 +1413,35 @@ export function ReusableTable<T extends Record<string, unknown>>({
     const headerRow = event.currentTarget.closest("tr");
     const tableElement = event.currentTarget.closest("table");
 
-    // Pin every resizable column to its current rendered pixel width before
-    // the drag begins so the drag only moves the dragged column's edge —
-    // columns whose width came from browser-distributed slack would otherwise
-    // reflow on every frame.
+    // Fitted, the drag works in the UNSCALED width — the one that is stored and
+    // that every other screen scales by its own factor. The factor is held still
+    // until the mouse is released, so the dragged edge tracks the pointer and
+    // the rest of the grid stays put; the table refits once, on release. No
+    // snapshot is needed: every column already has an explicit natural width.
+    const dragFitScale = fitScale;
     let primaryStartWidth = 120;
+    // What the release-time solve needs: the other scalable columns' unscaled
+    // total, and the room the scalable columns share.
+    let otherScalableWidth = 0;
+    let availableScalableWidth = fitAvailableWidth;
     const widthSnapshot: Record<string, string> = {};
-    if (headerRow) {
+    if (dragFitScale !== null) {
+      naturalColumnsForRender.forEach((col) => {
+        const width = resolveColumnPixelWidth(col);
+        if (isFixedWidthColumn(col)) {
+          availableScalableWidth -= width;
+        } else if (col.key === column.key) {
+          primaryStartWidth = width;
+        } else {
+          otherScalableWidth += width;
+        }
+      });
+      setFrozenFitScale(dragFitScale);
+    } else if (headerRow) {
+      // Pin every resizable column to its current rendered pixel width before
+      // the drag begins so the drag only moves the dragged column's edge —
+      // columns whose width came from browser-distributed slack would otherwise
+      // reflow on every frame.
       displayColumnsForRender.forEach((col, idx) => {
         if (!isColumnReorderable(col)) {
           return;
@@ -1321,7 +1465,7 @@ export function ReusableTable<T extends Record<string, unknown>>({
     let latestPrimaryWidth = primaryStartWidth;
 
     const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-      const delta = toLayoutPx(moveEvent.clientX - startX);
+      const delta = toLayoutPx(moveEvent.clientX - startX) / (dragFitScale ?? 1);
       latestPrimaryWidth = Math.max(
         MIN_RESIZABLE_COLUMN_WIDTH,
         Math.round(primaryStartWidth + delta),
@@ -1338,6 +1482,28 @@ export function ReusableTable<T extends Record<string, unknown>>({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       const tableWidth = tableElement ? toLayoutPx(tableElement.getBoundingClientRect().width) : 0;
+      if (dragFitScale !== null) {
+        // Refit, keeping the dragged column the width it was let go at: the
+        // stored width is solved for that, and the other columns absorb the
+        // room it gave up or took. With nothing else to absorb it, it stays.
+        if (otherScalableWidth > 0) {
+          latestPrimaryWidth = Math.max(
+            MIN_RESIZABLE_COLUMN_WIDTH,
+            Math.round(
+              resolveFitDragNaturalWidth(
+                latestPrimaryWidth * dragFitScale,
+                otherScalableWidth,
+                availableScalableWidth,
+              ),
+            ),
+          );
+          setColumnWidths((current) => ({
+            ...current,
+            [column.key]: `${latestPrimaryWidth}px`,
+          }));
+        }
+        setFrozenFitScale(null);
+      }
       onColumnResizeEnd?.({
         column,
         widthPx: latestPrimaryWidth,
@@ -1514,13 +1680,17 @@ export function ReusableTable<T extends Record<string, unknown>>({
           } as CSSProperties
         }
       >
+        {fitColumnsToWidth ? (
+          <div ref={fitProbeRef} className={styles.fitProbe} aria-hidden="true" />
+        ) : null}
         <table
           className={cx(styles.table, tableClassName)}
           style={
             {
               "--erp-table-min-width": resolvedTableWidth,
-              width: resizableColumns ? resolvedTableWidth : undefined,
-              tableLayout: tableLayout ?? (resizableColumns ? "fixed" : undefined),
+              width: resizableColumns || fitScale !== null ? resolvedTableWidth : undefined,
+              tableLayout:
+                tableLayout ?? (resizableColumns || fitScale !== null ? "fixed" : undefined),
             } as CSSProperties
           }
         >

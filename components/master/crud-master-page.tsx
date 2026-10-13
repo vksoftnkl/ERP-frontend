@@ -2956,6 +2956,7 @@ export default function CrudMasterPage({
       key: SELECT_COLUMN_KEY,
       align: "center",
       width: "44px",
+      fixedWidth: true,
       // Not a value, so there is nothing to order by — the table sorts every
       // column unless told otherwise, and a sort arrow over a tick box invites
       // a click that can do nothing.
@@ -4696,6 +4697,11 @@ export default function CrudMasterPage({
                   minWidth="980px"
                   reorderableColumns
                   resizableColumns
+                  // The stored widths are proportions: the grid fills the page on
+                  // every screen size instead of leaving a gap on a wide one and
+                  // scrolling on a narrow one (the global UI scale changes how
+                  // many logical pixels a screen has, the widths do not).
+                  fitColumnsToWidth
                   onColumnReorder={handleGridColumnReorder}
                   onColumnResizeEnd={handleGridColumnResizeEnd}
                   onBodyContextMenu={
