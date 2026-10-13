@@ -44,6 +44,7 @@ import {
   PAPER_PRESETS,
   PRINT_ON_VALUES,
   findPaperPreset,
+  MAX_REPORT_PAGES,
 } from "@/features/print-designer/lib/vocabulary";
 import type {
   Band,
@@ -175,6 +176,16 @@ function normaliseBand(value: unknown, layoutMode: LayoutMode): Band | null {
     // Listed, or the next open-and-save would strip it: this function rebuilds
     // the band key by key, so a flag it does not name never comes back out.
     ...(raw.flowLayout === true ? { flowLayout: true } : {}),
+    // Same trap for the report page and the page-break options: a band that
+    // lost its `reportPage` would land on page 1 the next time it opened.
+    ...(typeof raw.reportPage === "number" &&
+    Number.isInteger(raw.reportPage) &&
+    raw.reportPage > 0 &&
+    raw.reportPage < MAX_REPORT_PAGES
+      ? { reportPage: raw.reportPage }
+      : {}),
+    ...(raw.startNewPage === true ? { startNewPage: true } : {}),
+    ...(raw.startNewNumeration === true ? { startNewNumeration: true } : {}),
     keepTogether: bool("keepTogether", base.keepTogether),
     keepWithNext: bool("keepWithNext", base.keepWithNext),
     keepWithLastDetail: bool("keepWithLastDetail", base.keepWithLastDetail),
@@ -222,6 +233,7 @@ export function toTemplateDefinition(working: DraftVersion): TemplateDefinition 
     // Kept from the body like `meta`: the definition is rebuilt key by key, and
     // a key not named here is gone after the next open-and-save.
     ...(isTemplateDefinition(stored) && stored.pageBorder ? { pageBorder: stored.pageBorder } : {}),
+    ...(isTemplateDefinition(stored) && stored.watermark ? { watermark: stored.watermark } : {}),
     datasets,
     bands,
   };

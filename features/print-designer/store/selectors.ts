@@ -34,6 +34,9 @@ export const selectLastSavedAt = (state: RootState) => state.printDesigner.lastS
 export const selectBands = (state: RootState) => state.printDesigner.definition.bands;
 export const selectPaper = (state: RootState) => state.printDesigner.definition.paper;
 export const selectPageBorder = (state: RootState) => state.printDesigner.definition.pageBorder;
+export const selectWatermark = (state: RootState) => state.printDesigner.definition.watermark;
+export const selectActiveReportPage = (state: RootState) => state.printDesigner.view.reportPage;
+export const selectUnit = (state: RootState) => state.printDesigner.view.unit;
 export const selectLayoutMode = (state: RootState) => state.printDesigner.definition.layoutMode;
 export const selectDatasetBindings = (state: RootState) =>
   state.printDesigner.definition.datasets;
@@ -75,8 +78,26 @@ export const selectPrintableWidthMm = createSelector([selectPaper], (paper) =>
  * So the canvas shows the array, and reordering bands is a real edit
  * (`bandMoved`) rather than a display preference.
  */
-export const selectOrderedBands = createSelector([selectBands], (bands) =>
-  bands.map((band, index) => ({ band, index })),
+export const selectOrderedBands = createSelector(
+  [selectBands, selectActiveReportPage],
+  (bands, reportPage) =>
+    bands
+      .map((band, index) => ({ band, index }))
+      // Only the visible report page. The index stays the band's place in the
+      // whole list, which is what every reducer addresses it by.
+      .filter((entry) => (entry.band.reportPage ?? 0) === reportPage),
+);
+
+/**
+ * The report pages the design has, in print order: page 0 always, then every
+ * page some band is on, plus the one being shown even if it is still empty.
+ */
+export const selectReportPages = createSelector(
+  [selectBands, selectActiveReportPage],
+  (bands, active) =>
+    [...new Set([0, active, ...bands.map((band) => band.reportPage ?? 0)])].sort(
+      (left, right) => left - right,
+    ),
 );
 
 export const selectSelectedBand = createSelector(

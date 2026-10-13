@@ -305,6 +305,43 @@
   padding: 0 2px;
 }
 
+/* A colour button: a glyph with a native swatch under it. */
+.toolColor {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 28px;
+  padding: 0 3px;
+  border: 1px solid transparent;
+  cursor: default;
+
+  &:hover {
+    border-color: var(--pd-border-light);
+    background: linear-gradient(#ffffff, #e6e6e6);
+  }
+
+  .toolIcon {
+    font-size: 13px;
+    line-height: 14px;
+  }
+
+  input[type="color"] {
+    width: 20px;
+    height: 7px;
+    padding: 0;
+    border: 1px solid var(--pd-border-light);
+    background: none;
+    cursor: default;
+  }
+
+  input[type="color"]:disabled {
+    opacity: 0.4;
+  }
+}
+
 .toolLabel {
   padding: 0 4px 0 2px;
   color: var(--pd-text-muted);
@@ -750,6 +787,8 @@
   grid-template-columns: var(--pd-ruler) var(--pd-gutter) max-content;
   width: max-content;
   align-items: stretch;
+  /* The containing block the sheet is absolutely positioned in. */
+  position: relative;
 }
 
 .rulerCorner {
@@ -807,10 +846,21 @@
 }
 
 /* The page itself: one white rectangle behind every band row. */
+/*
+ * Absolutely positioned IN the grid: column 3, from the first band row to the
+ * container's bottom edge. As an ordinary grid item it could not span the band
+ * rows -- the grid declares no rows, so `2 / -1` resolved to the ruler row, and
+ * an explicit span would push every auto-placed band cell below it. An
+ * absolutely positioned item takes no part in auto-placement, and `auto` as
+ * its end line means the container's padding edge.
+ */
 .sheet {
   grid-column: 3;
-  grid-row: 2 / -1;
-  position: relative;
+  grid-row: 2 / auto;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
   z-index: 0;
   background: #fff;
   box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.35);
@@ -999,6 +1049,128 @@
 
 .elementSelected {
   outline: 1px solid var(--pd-select);
+}
+
+/* The text run inside a text element. min-width 0 lets a wrapped line break
+   at the box edge instead of pushing the flex item wider than its element. */
+.elementText {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Rotated text: a box with the sides swapped, centred and turned. */
+.elementRotated {
+  position: absolute;
+  display: flex;
+  overflow: hidden;
+}
+
+/* A field frame, drawn over the element the way the engine prints it. */
+.elementFrame {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* Marks an element with conditional formatting. */
+.elementBadge {
+  position: absolute;
+  top: 0;
+  right: 1px;
+  color: #b45309;
+  font-size: 8px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Lines, shapes and chart sketches. Events go to the element box. */
+.elementSvg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.elementChart {
+  outline: 1px dashed #b0b0b0;
+  outline-offset: -1px;
+}
+
+.elementChart.elementSelected {
+  outline: 1px solid var(--pd-select);
+}
+
+/* The page watermark on the sheet: a preview of what prints behind every page. */
+.watermarkGuide {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.watermarkGuide img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Report page tabs (QtRPT's page tabs under the canvas). */
+.pageTabs {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  height: 24px;
+  padding: 0 4px;
+  border-top: 1px solid var(--pd-border);
+  background: var(--pd-chrome, #ececec);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+.pageTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-top: none;
+  background: transparent;
+  color: var(--pd-text);
+  font: inherit;
+  cursor: default;
+
+  &:hover {
+    background: linear-gradient(#ffffff, #e6e6e6);
+  }
+}
+
+.pageTabActive {
+  border-color: var(--pd-border);
+  background: #ffffff;
+  font-weight: 600;
+
+  &:hover {
+    background: #ffffff;
+  }
+}
+
+.pageTabClose {
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--pd-text-muted);
+  font: inherit;
+  cursor: default;
+
+  &:hover {
+    color: #b91c1c;
+  }
 }
 
 .elementPlaceholder {
@@ -1280,6 +1452,15 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 2px;
+}
+
+/* An expression box with controls over it (the rich-text tag buttons). */
+.expressionStack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
 }
 
 .expressionRow {

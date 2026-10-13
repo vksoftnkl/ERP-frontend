@@ -188,6 +188,23 @@ export type ERPDynamicModalSubmitPayload = {
 
 export type ERPDynamicModalOpenOptions = {
   values?: Record<string, string>;
+  /**
+   * Keeps what the user types as a draft under this key (`lib/form-drafts`):
+   * closing without saving keeps it, the next open with the same key brings it
+   * back over the opening values, and a save or the Discard button drops it.
+   * Leave it out for a form that must always open on exactly `values`.
+   */
+  draftKey?: string;
+};
+
+/** A draft laid over the form (`restored`), or taken off it again (`discarded`). */
+export type ERPDynamicModalDraftAppliedPayload = {
+  variantKey: string;
+  action: "restored" | "discarded";
+  /** The whole form as it now stands. */
+  values: Record<string, string>;
+  /** Names of the dropdown options the draft chose, by field then by value. */
+  labels: Record<string, Record<string, string>>;
 };
 
 export type ERPDynamicModalController = {
@@ -202,6 +219,12 @@ export type ERPDynamicModalFormProps = {
   onSubmit?: (payload: ERPDynamicModalSubmitPayload) => void | Promise<void>;
   onOpenChange?: (open: boolean, variantKey: string | null) => void;
   onCancel?: (variantKey: string) => void;
+  /**
+   * After a draft is restored or discarded (see `draftKey`). For a page that
+   * keeps state of its own beside the form values — a lazy dropdown's loaded
+   * options, a code-to-name map the payload reads — and must bring it in line.
+   */
+  onDraftApplied?: (payload: ERPDynamicModalDraftAppliedPayload) => void;
   initialValuesByVariant?: Record<string, Record<string, string>>;
   closeOnBackdrop?: boolean;
   closeOnSubmit?: boolean;

@@ -27,8 +27,16 @@ import {
 import {
   bandAdded,
   clipboardPasted,
+  placingPresetStarted,
   placingStarted,
   redo,
+  reportPageAdded,
+  reportPageRemoved,
+  selectionBorderSet,
+  selectionGrouped,
+  selectionSized,
+  selectionUngrouped,
+  setUnit,
   selectAllInBand,
   selectionAligned,
   selectionCopied,
@@ -46,8 +54,10 @@ import {
   undo,
 } from "@/features/print-designer/store/designerSlice";
 import {
+  selectActiveReportPage,
   selectHistoryState,
   selectMeta,
+  selectSelectedElements,
   selectSelection,
   selectView,
 } from "@/features/print-designer/store/selectors";
@@ -107,6 +117,8 @@ export function DesignerMenuBar({
   const meta = useAppSelector(selectMeta);
   const view = useAppSelector(selectView);
   const selection = useAppSelector(selectSelection);
+  const selectedElements = useAppSelector(selectSelectedElements);
+  const reportPage = useAppSelector(selectActiveReportPage);
   const history = useAppSelector(selectHistoryState);
 
   const { save, canSave } = useTemplateSave();
@@ -323,6 +335,38 @@ export function DesignerMenuBar({
             onSelect={run(() => dispatch(placingStarted(kind)))}
           />
         ))}
+        <MenuOption
+          label="Rich text"
+          disabled={bandIndex === null}
+          onSelect={run(() =>
+            dispatch(
+              placingPresetStarted({
+                kind: "TEXT",
+                preset: { markup: true, value: "<b>Bold</b> and <i>italic</i> text", w: 60 },
+                key: "rich-text",
+              }),
+            ),
+          )}
+        />
+        <Separator />
+        {(
+          [
+            ["arrow-end", "Line with arrow at the end", "LINE", { arrowEnd: true }],
+            ["arrow-start", "Line with arrow at the start", "LINE", { arrowStart: true }],
+            ["arrow-both", "Line with arrows at both ends", "LINE", { arrowStart: true, arrowEnd: true }],
+            ["rounded", "Rounded rectangle", "RECT", { radiusMm: 3 }],
+            ["ellipse", "Ellipse", "RECT", { shape: "ELLIPSE" }],
+            ["triangle", "Triangle", "RECT", { shape: "TRIANGLE" }],
+            ["rhombus", "Rhombus", "RECT", { shape: "RHOMBUS" }],
+          ] as const
+        ).map(([key, label, kind, preset]) => (
+          <MenuOption
+            key={key}
+            label={label}
+            disabled={bandIndex === null}
+            onSelect={run(() => dispatch(placingPresetStarted({ kind, preset, key })))}
+          />
+        ))}
         <Separator />
         {BAND_TYPES.map((type) => (
           <MenuOption
@@ -331,6 +375,13 @@ export function DesignerMenuBar({
             onSelect={run(() => dispatch(bandAdded(type)))}
           />
         ))}
+        <Separator />
+        <MenuOption label="New report page" onSelect={run(() => dispatch(reportPageAdded()))} />
+        <MenuOption
+          label="Delete this report page"
+          disabled={reportPage === 0}
+          onSelect={run(() => dispatch(reportPageRemoved(reportPage)))}
+        />
       </>
     ),
 
@@ -397,6 +448,53 @@ export function DesignerMenuBar({
           label="Send to back"
           disabled={!hasSelection}
           onSelect={run(() => dispatch(selectionReordered("back")))}
+        />
+        <Separator />
+        <MenuOption
+          label="Same width"
+          disabled={selection.elementIds.length < 2}
+          onSelect={run(() => dispatch(selectionSized("width")))}
+        />
+        <MenuOption
+          label="Same height"
+          disabled={selection.elementIds.length < 2}
+          onSelect={run(() => dispatch(selectionSized("height")))}
+        />
+        <Separator />
+        <MenuOption
+          label="Group"
+          shortcut="Ctrl+Shift+G"
+          disabled={selection.elementIds.length < 2}
+          onSelect={run(() => dispatch(selectionGrouped()))}
+        />
+        <MenuOption
+          label="Ungroup"
+          shortcut="Ctrl+Shift+U"
+          disabled={!selectedElements.some((element) => element.group)}
+          onSelect={run(() => dispatch(selectionUngrouped()))}
+        />
+        <Separator />
+        <MenuOption
+          label="All frame lines"
+          disabled={!hasSelection}
+          onSelect={run(() =>
+            dispatch(
+              selectionBorderSet({
+                patch: { top: true, right: true, bottom: true, left: true },
+                label: "All frame lines",
+              }),
+            ),
+          )}
+        />
+        <MenuOption
+          label="No frame"
+          disabled={!hasSelection}
+          onSelect={run(() => dispatch(selectionBorderSet({ patch: null })))}
+        />
+        <Separator />
+        <MenuOption
+          label={view.unit === "mm" ? "Measure in inches" : "Measure in millimetres"}
+          onSelect={run(() => dispatch(setUnit(view.unit === "mm" ? "in" : "mm")))}
         />
       </>
     ),

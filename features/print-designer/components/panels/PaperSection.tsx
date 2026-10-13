@@ -10,13 +10,19 @@
  */
 
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { PAPER_PRESETS } from "@/features/print-designer/lib/vocabulary";
+import {
+  LINE_STYLES,
+  LINE_STYLE_LABELS,
+  PAPER_PRESETS,
+} from "@/features/print-designer/lib/vocabulary";
+import type { LineStyle } from "@/features/print-designer/types/template-definition";
 import { gridMetrics } from "@/features/print-designer/lib/grid";
 import {
   marginsPatched,
   pageBorderSet,
   paperPatched,
   paperPresetApplied,
+  watermarkSet,
 } from "@/features/print-designer/store/designerSlice";
 import {
   selectLayoutMode,
@@ -24,6 +30,7 @@ import {
   selectPaper,
   selectPrintableWidthMm,
   selectVocabulary,
+  selectWatermark,
 } from "@/features/print-designer/store/selectors";
 import {
   CheckboxInput,
@@ -32,6 +39,7 @@ import {
   NumberInput,
   Section,
   SelectInput,
+  TextInput,
 } from "@/features/print-designer/components/panels/controls";
 import styles from "@/features/print-designer/components/designer.module.scss";
 
@@ -42,6 +50,7 @@ export function PaperSection() {
   const vocabulary = useAppSelector(selectVocabulary);
   const printableWidthMm = useAppSelector(selectPrintableWidthMm);
   const pageBorder = useAppSelector(selectPageBorder);
+  const watermark = useAppSelector(selectWatermark);
 
   const presets = vocabulary?.papers ?? PAPER_PRESETS;
   const isGridMode = layoutMode === "GRID";
@@ -224,15 +233,115 @@ export function PaperSection() {
                     onCommit={(value) => dispatch(pageBorderSet({ radiusMm: value }))}
                   />
                 </FieldGrid>
-                <ColorInput
-                  label="Colour"
-                  value={pageBorder.color}
-                  onCommit={(value) => dispatch(pageBorderSet({ color: value ?? "" }))}
-                />
+                <FieldGrid>
+                  <SelectInput
+                    label="Style"
+                    value={pageBorder.style ?? "SOLID"}
+                    options={LINE_STYLES.map((style) => ({ value: style, label: LINE_STYLE_LABELS[style] }))}
+                    onCommit={(value) => dispatch(pageBorderSet({ style: value as LineStyle }))}
+                  />
+                  <ColorInput
+                    label="Colour"
+                    value={pageBorder.color}
+                    onCommit={(value) => dispatch(pageBorderSet({ color: value ?? "" }))}
+                  />
+                </FieldGrid>
                 <p className={styles.listRowMeta}>
                   {paper.heightMm === null
                     ? "Continuous stationery has no page bottom, so the border is not printed."
                     : "Printed on every page, behind the design. The canvas shows its sides; Preview shows the whole page."}
+                </p>
+              </>
+            ) : null}
+          </>
+        )}
+      </Section>
+
+      <Section title="Watermark" defaultOpen={watermark !== undefined}>
+        {isGridMode ? (
+          <p className={styles.listRowMeta}>
+            Character-grid stationery (thermal, dot matrix) cannot print a watermark.
+          </p>
+        ) : (
+          <>
+            <CheckboxInput
+              label="Show watermark"
+              value={watermark !== undefined}
+              onCommit={(on) => dispatch(watermarkSet(on ? {} : null))}
+            />
+            {watermark ? (
+              <>
+                <TextInput
+                  label="Text"
+                  wide
+                  value={watermark.text}
+                  placeholder="DRAFT, COPY or {{ ctx.copyLabel }}"
+                  onCommit={(value) => dispatch(watermarkSet({ text: value }))}
+                />
+                <TextInput
+                  label="Image"
+                  wide
+                  mono
+                  value={watermark.image ?? ""}
+                  placeholder="https://… or {{ ctx.companyLogo }}"
+                  onCommit={(value) => dispatch(watermarkSet({ image: value.trim() || undefined }))}
+                />
+                <FieldGrid>
+                  <NumberInput
+                    label="Opacity"
+                    suffix="%"
+                    step={5}
+                    min={2}
+                    max={100}
+                    value={Math.round(watermark.opacity * 100)}
+                    onCommit={(value) =>
+                      dispatch(watermarkSet({ opacity: Math.min(1, Math.max(0.02, value / 100)) }))
+                    }
+                  />
+                  <NumberInput
+                    label="Angle"
+                    suffix="°"
+                    step={5}
+                    min={-90}
+                    max={90}
+                    value={watermark.rotationDeg}
+                    onCommit={(value) => dispatch(watermarkSet({ rotationDeg: value }))}
+                  />
+                  <NumberInput
+                    label="Text size"
+                    suffix="pt"
+                    step={4}
+                    min={6}
+                    max={300}
+                    value={watermark.fontSizePt}
+                    onCommit={(value) => dispatch(watermarkSet({ fontSizePt: value }))}
+                  />
+                  <CheckboxInput
+                    label="Bold"
+                    value={watermark.bold}
+                    onCommit={(value) => dispatch(watermarkSet({ bold: value }))}
+                  />
+                  <ColorInput
+                    label="Colour"
+                    value={watermark.color}
+                    onCommit={(value) => dispatch(watermarkSet({ color: value ?? "" }))}
+                  />
+                  {watermark.image ? (
+                    <NumberInput
+                      label="Image size"
+                      suffix="%"
+                      step={5}
+                      min={5}
+                      max={100}
+                      value={watermark.imageScalePct}
+                      onCommit={(value) => dispatch(watermarkSet({ imageScalePct: value }))}
+                    />
+                  ) : null}
+                </FieldGrid>
+                <p className={styles.listRowMeta}>
+                  {paper.heightMm === null
+                    ? "Continuous stationery has no page to centre on, so the watermark is not printed."
+                    : "Printed faintly behind every page, centred on the printable area."}
                 </p>
               </>
             ) : null}

@@ -62,6 +62,7 @@ export {
   type ERPDynamicModalField,
   type ERPDynamicModalFormProps,
   type ERPDynamicModalOpenOptions,
+  type ERPDynamicModalDraftAppliedPayload,
   type ERPDynamicModalSubmitPayload,
   type ERPDynamicModalVariant,
   type ERPDynamicSelectOption,

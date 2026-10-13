@@ -2,7 +2,10 @@ import { type CSSProperties, type ReactNode } from "react";
 import type { UiTableKey } from "@/lib/ui-tables";
 import type { ConfiguredGridKey } from "@/lib/configured-grids";
 import { type ReusableTableColumn } from "@/components/ui/table";
-import { type ERPDynamicModalField } from "@/components/design-system/ui/dynamic-modal-form";
+import {
+  type ERPDynamicModalDraftAppliedPayload,
+  type ERPDynamicModalField,
+} from "@/components/design-system/ui/dynamic-modal-form";
 import { type MasterIconName } from "@/components/design-system/icons/master-icons";
 
 export type MasterTableRow = {
@@ -403,6 +406,20 @@ export type CrudMasterPageProps = {
     variantKey: string;
     values: Record<string, string>;
   }) => ReactNode;
+  /**
+   * Keeps what the user types in the create/update modal as a draft under this
+   * name, so closing it without saving — the backdrop, Escape, another screen,
+   * a reload — loses nothing: the next New (or Edit of the same record) opens on
+   * it again, with a Discard button, until it is saved. One draft for New, one
+   * per record edited. A create opened with values handed in (a name typed into
+   * a dropdown, a ledger being linked) neither restores nor keeps one. Off when
+   * unset.
+   */
+  modalDraftKey?: string;
+  /** After a draft is restored onto the modal or discarded from it — for a page
+   *  whose own state beside the form (lazy dropdown options, lookup maps) must
+   *  follow the values. */
+  onModalDraftApplied?: (payload: ERPDynamicModalDraftAppliedPayload) => void;
   auditHistory?: CrudMasterAuditHistoryConfig;
   enableGridSettingsContextMenu?: boolean;
   gridDetailId?: number;

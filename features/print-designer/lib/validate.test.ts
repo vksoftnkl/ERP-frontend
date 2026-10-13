@@ -614,3 +614,128 @@ describe("validateDefinition: page border", () => {
     ]);
   });
 });
+
+describe("validateDefinition: QtRPT parity features", () => {
+  const chart = (overrides: Record<string, unknown> = {}): ReportElement =>
+    ({
+      kind: "CHART",
+      id: "sales",
+      x: 10,
+      y: 0,
+      w: 100,
+      h: 50,
+      z: 0,
+      chartType: "BAR",
+      dataset: "items",
+      category: "{{ row.month }}",
+      series: [{ name: "Sales", value: "{{ row.amount }}" }],
+      fn: "sum",
+      title: "",
+      showLegend: true,
+      legendPosition: "BOTTOM",
+      showValues: false,
+      showPercent: false,
+      showGrid: true,
+      holeSizePct: 0,
+      maxCategories: 12,
+      format: "#,##0",
+      ...overrides,
+    }) as ReportElement;
+
+  it("accepts a chart in a summary and refuses one in a detail band", () => {
+    expect(messages(definition({ bands: [band({ type: "SUMMARY", heightMm: 60, elements: [chart()] })] }))).toEqual([]);
+    expect(
+      messages(
+        definition({ bands: [band({ type: "DETAIL", dataset: "items", heightMm: 60, elements: [chart()] })] }),
+      ).some((message) => message.includes("cannot sit in a detail")),
+    ).toBe(true);
+  });
+
+  it("refuses a chart with no series value or an unknown dataset", () => {
+    const found = messages(
+      definition({
+        bands: [band({ type: "SUMMARY", elements: [chart({ dataset: "nope", series: [{ name: "", value: " " }] })] })],
+      }),
+    );
+    expect(found).toContain("'sales' charts unknown dataset 'nope'.");
+    expect(found).toContain("Series 1 on 'sales' has no value expression.");
+  });
+
+  it("allows one page header per report page, not two on the same page", () => {
+    expect(messages(definition({ bands: [band(), band({ reportPage: 1 })] }))).toEqual([]);
+    expect(messages(definition({ bands: [band({ reportPage: 1 }), band({ reportPage: 1 })] }))).toContain(
+      "PAGE_HEADER may appear at most once on report page 2 (found 2).",
+    );
+  });
+
+  it("refuses a frame or highlight colour the server would reject", () => {
+    const found = messages(
+      definition({
+        bands: [
+          band({
+            elements: [
+              text("t", {
+                x: 10,
+                border: { top: true, right: false, bottom: false, left: false, widthPt: 0.5, color: "red", style: "SOLID" },
+                highlights: [{ when: "{{ row.x > 1 }}", color: "#12" }],
+              } as Partial<ReportElement>),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(found).toContain("The frame colour on 't' must be #rrggbb.");
+    expect(found).toContain("Highlight 1 on 't' has a colour that is not #rrggbb.");
+  });
+
+  it("warns that GRID stationery ignores frames and rotation", () => {
+    const found = validateDefinition(
+      definition({
+        layoutMode: "GRID",
+        paper: {
+          code: "T80",
+          widthMm: 80,
+          heightMm: null,
+          orientation: "PORTRAIT",
+          margins: { top: 2, right: 2, bottom: 2, left: 2 },
+          columns: 48,
+        },
+        bands: [
+          band({
+            heightRows: 1,
+            elements: [
+              text("t", {
+                col: 0,
+                row: 0,
+                cols: 10,
+                rotation: 90,
+                border: { top: true, right: true, bottom: true, left: true, widthPt: 0.5, color: "#000000", style: "SOLID" },
+              } as Partial<ReportElement>),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(found.map((problem) => problem.message)).toContain(
+      "Character-grid stationery ignores the frame, rotation on 't'.",
+    );
+  });
+
+  it("warns about a watermark that prints nothing, and refuses a bad opacity", () => {
+    const found = messages(
+      definition({
+        watermark: {
+          text: "",
+          opacity: 2,
+          rotationDeg: -45,
+          fontSizePt: 72,
+          color: "#808080",
+          bold: true,
+          imageScalePct: 60,
+        },
+      }),
+    );
+    expect(found).toContain("The watermark has neither text nor an image, so nothing prints.");
+    expect(found).toContain("Watermark opacity must be between 2% and 100%.");
+  });
+});

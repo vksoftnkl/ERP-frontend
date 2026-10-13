@@ -46,6 +46,8 @@ import {
   selectionCut,
   selectionDeleted,
   selectionDuplicated,
+  selectionGrouped,
+  selectionUngrouped,
   setShowExpressions,
   setShowGrid,
   setSnapEnabled,
@@ -71,6 +73,8 @@ import StatusBar from "@/features/print-designer/components/StatusBar";
 import ReportTree from "@/features/print-designer/components/ReportTree";
 import DatasetTree from "@/features/print-designer/components/DatasetTree";
 import CanvasViewport from "@/features/print-designer/components/CanvasViewport";
+import ReportPageTabs from "@/features/print-designer/components/ReportPageTabs";
+import FormatToolbar from "@/features/print-designer/components/FormatToolbar";
 import PropertyPanel from "@/features/print-designer/components/PropertyPanel";
 import PreviewDialog from "@/features/print-designer/components/PreviewDialog";
 import RevisionsDrawer from "@/features/print-designer/components/RevisionsDrawer";
@@ -272,7 +276,14 @@ export function DesignerShell(props: DesignerShellProps) {
             return;
           case "g":
             event.preventDefault();
-            dispatch(setShowGrid(!view.showGrid));
+            // Ctrl+Shift+G groups (QtRPT "To group"); plain Ctrl+G stays the grid.
+            dispatch(event.shiftKey ? selectionGrouped() : setShowGrid(!view.showGrid));
+            return;
+          case "u":
+            if (event.shiftKey) {
+              event.preventDefault();
+              dispatch(selectionUngrouped());
+            }
             return;
           case "e":
             event.preventDefault();
@@ -405,6 +416,7 @@ export function DesignerShell(props: DesignerShellProps) {
       />
 
       <DesignerToolbar />
+      <FormatToolbar />
 
       <div className={bodyClass}>
         <aside
@@ -443,6 +455,7 @@ export function DesignerShell(props: DesignerShellProps) {
 
         <div className={styles.canvasWrap}>
           <CanvasViewport />
+          <ReportPageTabs />
         </div>
 
         <aside

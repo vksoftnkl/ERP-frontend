@@ -32,7 +32,7 @@ import {
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { mmToPx, ptToPx, pxToMm, roundMm } from "@/features/print-designer/lib/units";
 import { gridMetrics } from "@/features/print-designer/lib/grid";
-import { ZOOM_LEVELS } from "@/features/print-designer/lib/vocabulary";
+import { LINE_STYLE_CSS, ZOOM_LEVELS } from "@/features/print-designer/lib/vocabulary";
 import { bandHeightSet, setZoom } from "@/features/print-designer/store/designerSlice";
 import {
   selectBandWidthMm,
@@ -42,6 +42,7 @@ import {
   selectPaper,
   selectSelection,
   selectView,
+  selectWatermark,
 } from "@/features/print-designer/store/selectors";
 import CanvasRuler from "@/features/print-designer/components/CanvasRuler";
 import BandCaption from "@/features/print-designer/components/BandCaption";
@@ -110,6 +111,7 @@ export function CanvasViewport() {
   const view = useAppSelector(selectView);
   const paper = useAppSelector(selectPaper);
   const pageBorder = useAppSelector(selectPageBorder);
+  const watermark = useAppSelector(selectWatermark);
   const bands = useAppSelector(selectOrderedBands);
   const bandWidthMm = useAppSelector(selectBandWidthMm);
   const layoutMode = useAppSelector(selectLayoutMode);
@@ -190,6 +192,7 @@ export function CanvasViewport() {
             lengthMm={paper.widthMm}
             zoom={view.zoom}
             offsetPx={bodyOriginPx}
+            unit={view.unit}
             cells={
               isGridMode ? { widthMm: metrics.cellWidthMm, count: metrics.columns } : undefined
             }
@@ -225,10 +228,56 @@ export function CanvasViewport() {
                 borderColor: /^#[0-9a-fA-F]{6}$/.test(pageBorder.color)
                   ? pageBorder.color
                   : "#000000",
-                borderWidth: Math.max(1, ptToPx(pageBorder.widthPt, view.zoom)),
+                borderStyle: LINE_STYLE_CSS[pageBorder.style ?? "SOLID"],
+                borderWidth: Math.max(
+                  pageBorder.style === "DOUBLE" ? 3 : 1,
+                  ptToPx(pageBorder.widthPt, view.zoom),
+                ),
                 borderRadius: mmToPx(pageBorder.radiusMm, view.zoom),
               }}
             />
+          ) : null}
+          {/* The watermark prints centred on each page's printable area. The
+              canvas is band strips, not a page, so it is centred on the strips
+              and clipped to them -- enough to judge size, angle and fade.
+              Preview shows it on the real page. */}
+          {watermark && !isGridMode && paper.heightMm !== null ? (
+            <div
+              className={styles.watermarkGuide}
+              title="Watermark — printed behind every page"
+              style={{
+                left: marginLeftPx,
+                right: mmToPx(paper.margins.right, view.zoom),
+                top: 0,
+                bottom: 0,
+                opacity: watermark.opacity,
+              }}
+            >
+              {watermark.image && /^(https?:|data:)/.test(watermark.image) ? (
+                <img
+                  src={watermark.image}
+                  alt=""
+                  style={{
+                    position: "absolute",
+                    width: `${watermark.imageScalePct}%`,
+                    height: `${watermark.imageScalePct}%`,
+                  }}
+                />
+              ) : null}
+              {watermark.text ? (
+                <span
+                  style={{
+                    position: "relative",
+                    transform: `rotate(${watermark.rotationDeg}deg)`,
+                    fontSize: ptToPx(watermark.fontSizePt, view.zoom),
+                    fontWeight: watermark.bold ? 700 : 400,
+                    color: /^#[0-9a-fA-F]{6}$/.test(watermark.color) ? watermark.color : "#808080",
+                  }}
+                >
+                  {watermark.text}
+                </span>
+              ) : null}
+            </div>
           ) : null}
         </div>
 
@@ -252,6 +301,7 @@ export function CanvasViewport() {
                       orientation="vertical"
                       lengthMm={rulerLengthMm}
                       zoom={view.zoom}
+                      unit={view.unit}
                       cells={
                         isGridMode
                           ? { widthMm: metrics.lineHeightMm, count: heightUnits }

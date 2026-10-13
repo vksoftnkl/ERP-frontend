@@ -22,11 +22,14 @@ import {
   bandMoved,
   bandPatched,
   bandRemoved,
+  reportPageSelected,
+  selectBand,
 } from "@/features/print-designer/store/designerSlice";
 import {
   selectBands,
   selectDatasetBindings,
   selectLayoutMode,
+  selectReportPages,
 } from "@/features/print-designer/store/selectors";
 import {
   CheckboxInput,
@@ -61,6 +64,20 @@ export function BandSection({ bandIndex, band, onEditExpression }: BandSectionPr
 
   const repeats = ROW_BANDS.includes(band.type);
   const grouped = GROUPED_BANDS.includes(band.type);
+  const reportPages = useAppSelector(selectReportPages);
+  const reportPage = band.reportPage ?? 0;
+  const pageFurniture = band.type === "PAGE_HEADER" || band.type === "PAGE_FOOTER";
+
+  // Moving is within the report page: the bands of other pages are hidden from
+  // this one, and swapping with an invisible band would look like nothing
+  // happened.
+  const samePage = bands
+    .map((candidate, index) => ({ candidate, index }))
+    .filter((entry) => (entry.candidate.reportPage ?? 0) === reportPage)
+    .map((entry) => entry.index);
+  const position = samePage.indexOf(bandIndex);
+  const previous = position > 0 ? samePage[position - 1] : null;
+  const next = position >= 0 && position < samePage.length - 1 ? samePage[position + 1] : null;
 
   // A band that repeats needs a collection; a `one` dataset has nothing to
   // iterate and the server rejects the combination.
@@ -74,26 +91,41 @@ export function BandSection({ bandIndex, band, onEditExpression }: BandSectionPr
         {/* Band order is not cosmetic: the engine emits bands in DECLARATION
             order, which is how a GST invoice prints its item lines and then a
             second repeating section for the HSN/rate summary. */}
-        <FieldRow label={`Order — band ${bandIndex + 1} of ${bands.length}`} wide>
+        <FieldRow label={`Order — band ${position + 1} of ${samePage.length}`} wide>
           <div className={styles.toggleRow}>
             <button
               type="button"
               className={styles.toolButton}
-              disabled={bandIndex === 0}
-              onClick={() => dispatch(bandMoved({ from: bandIndex, to: bandIndex - 1 }))}
+              disabled={previous === null}
+              onClick={() => previous !== null && dispatch(bandMoved({ from: bandIndex, to: previous }))}
             >
               ↑ Move up
             </button>
             <button
               type="button"
               className={styles.toolButton}
-              disabled={bandIndex >= bands.length - 1}
-              onClick={() => dispatch(bandMoved({ from: bandIndex, to: bandIndex + 1 }))}
+              disabled={next === null}
+              onClick={() => next !== null && dispatch(bandMoved({ from: bandIndex, to: next }))}
             >
               ↓ Move down
             </button>
           </div>
         </FieldRow>
+
+        {reportPages.length > 1 ? (
+          <SelectInput
+            label="Report page"
+            value={String(reportPage)}
+            options={reportPages.map((page, index) => ({ value: String(page), label: `Page ${index + 1}` }))}
+            onCommit={(value) => {
+              const target = Number(value);
+              patch({ reportPage: target === 0 ? undefined : target });
+              // Follow the band to the page it went to.
+              dispatch(reportPageSelected(target));
+              dispatch(selectBand(bandIndex));
+            }}
+          />
+        ) : null}
 
         <SelectInput
           label="Type"
@@ -221,6 +253,26 @@ export function BandSection({ bandIndex, band, onEditExpression }: BandSectionPr
           value={band.keepTogether}
           onCommit={(value) => patch({ keepTogether: value })}
         />
+        {!pageFurniture ? (
+          <CheckboxInput
+            label={band.type === "DETAIL" ? "Start each row on a new page" : "Start on a new page"}
+            value={band.startNewPage === true}
+            onCommit={(value) => patch({ startNewPage: value || undefined })}
+          />
+        ) : null}
+        {band.type === "GROUP_HEADER" ? (
+          <CheckboxInput
+            label="Restart page numbers per group"
+            value={band.startNewNumeration === true}
+            onCommit={(value) => patch({ startNewNumeration: value || undefined })}
+          />
+        ) : null}
+        {band.type === "GROUP_HEADER" && band.startNewNumeration ? (
+          <p className={styles.listRowMeta}>
+            Each group starts on a new page, and page.number and page.total count that group&apos;s
+            pages only — one numbered statement per customer.
+          </p>
+        ) : null}
         <CheckboxInput
           label="Keep with the next band"
           value={band.keepWithNext}

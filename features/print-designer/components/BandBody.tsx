@@ -53,6 +53,7 @@ import {
   selectBand,
   selectElement,
   selectElements,
+  groupMembersOf,
 } from "@/features/print-designer/store/designerSlice";
 import {
   selectDatasetBindings,
@@ -233,7 +234,9 @@ export function BandBody({ bandIndex, band, widthMm, margins }: BandBodyProps) {
       }
 
       const alreadySelected = selectedIds.has(elementId) && selectedIds.size > 1;
-      const movingIds = alreadySelected ? [...selectedIds] : [elementId];
+      // A grouped element drags its whole group, as the selection reducer
+      // selects it.
+      const movingIds = alreadySelected ? [...selectedIds] : groupMembersOf(band.elements, elementId);
       const moving = new Set(movingIds);
       const anchor = band.elements.find((element) => element.id === movingIds[0]);
       if (!anchor) {
@@ -444,6 +447,7 @@ export function BandBody({ bandIndex, band, widthMm, margins }: BandBodyProps) {
             yMm: roundMm(Math.max(0, start.y)),
             col: isGridMode ? Math.max(0, Math.round(start.x)) : undefined,
             row: isGridMode ? Math.max(0, Math.round(start.y)) : undefined,
+            preset: interaction.placingPreset,
           }),
         );
         return;
@@ -496,6 +500,7 @@ export function BandBody({ bandIndex, band, widthMm, margins }: BandBodyProps) {
       dispatch,
       interaction.mode,
       interaction.placingKind,
+      interaction.placingPreset,
       isGridMode,
       runGesture,
       toBandUnits,

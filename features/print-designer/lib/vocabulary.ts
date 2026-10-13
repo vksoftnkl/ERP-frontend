@@ -11,14 +11,19 @@
 
 import type {
   BandType,
+  ChartType,
   CrosstabOverflow,
   CrosstabSort,
   ElementKind,
   LayoutMode,
+  LegendPosition,
+  LineStyle,
   OutputMode,
   PaperPreset,
   PrintOn,
+  Shape,
   TemplateSchemaVocabulary,
+  TextRotation,
 } from "@/features/print-designer/types/template-definition";
 
 export const LAYOUT_MODES: readonly LayoutMode[] = ["GRAPHIC", "GRID"];
@@ -74,6 +79,7 @@ export const ELEMENT_KINDS: readonly ElementKind[] = [
   "QRCODE",
   "PAGEBREAK",
   "CROSSTAB",
+  "CHART",
 ];
 
 export const ELEMENT_LABELS: Readonly<Record<ElementKind, string>> = {
@@ -86,7 +92,86 @@ export const ELEMENT_LABELS: Readonly<Record<ElementKind, string>> = {
   QRCODE: "QR code",
   PAGEBREAK: "Page break",
   CROSSTAB: "Crosstab",
+  CHART: "Chart",
 };
+
+/** QtRPT's six pen styles: frames, lines, shapes and the page border share them. */
+export const LINE_STYLES: readonly LineStyle[] = [
+  "SOLID",
+  "DASH",
+  "DOT",
+  "DASH_DOT",
+  "DASH_DOT_DOT",
+  "DOUBLE",
+];
+
+export const LINE_STYLE_LABELS: Readonly<Record<LineStyle, string>> = {
+  SOLID: "Solid",
+  DASH: "Dashed",
+  DOT: "Dotted",
+  DASH_DOT: "Dash-dot",
+  DASH_DOT_DOT: "Dash-dot-dot",
+  DOUBLE: "Double",
+};
+
+/** CSS for the canvas preview of each style. Double needs >= 3px to show. */
+export const LINE_STYLE_CSS: Readonly<Record<LineStyle, string>> = {
+  SOLID: "solid",
+  DASH: "dashed",
+  DOT: "dotted",
+  DASH_DOT: "dashed",
+  DASH_DOT_DOT: "dotted",
+  DOUBLE: "double",
+};
+
+/** SVG stroke-dasharray per style, in multiples of the stroke width. */
+export const LINE_STYLE_DASH: Readonly<Record<LineStyle, readonly number[]>> = {
+  SOLID: [],
+  DASH: [4, 2],
+  DOT: [1, 1],
+  DASH_DOT: [4, 2, 1, 2],
+  DASH_DOT_DOT: [4, 2, 1, 2, 1, 2],
+  DOUBLE: [],
+};
+
+export const SHAPES: readonly Shape[] = ["RECT", "ELLIPSE", "TRIANGLE", "RHOMBUS"];
+
+export const SHAPE_LABELS: Readonly<Record<Shape, string>> = {
+  RECT: "Rectangle",
+  ELLIPSE: "Ellipse",
+  TRIANGLE: "Triangle",
+  RHOMBUS: "Rhombus",
+};
+
+export const TEXT_ROTATIONS: readonly TextRotation[] = [0, 90, 180, 270];
+
+export const CHART_TYPES: readonly ChartType[] = ["BAR", "STACKED_BAR", "LINE", "PIE"];
+
+export const CHART_TYPE_LABELS: Readonly<Record<ChartType, string>> = {
+  BAR: "Bar",
+  STACKED_BAR: "Stacked bar",
+  LINE: "Line",
+  PIE: "Pie / doughnut",
+};
+
+export const LEGEND_POSITIONS: readonly LegendPosition[] = ["BOTTOM", "TOP", "LEFT", "RIGHT"];
+
+/** The server's chart palette, so the canvas sketch shows the printed colours. */
+export const CHART_PALETTE = [
+  "#4e79a7",
+  "#f28e2b",
+  "#e15759",
+  "#76b7b2",
+  "#59a14f",
+  "#edc948",
+  "#b07aa1",
+  "#ff9da7",
+  "#9c755f",
+  "#bab0ac",
+] as const;
+
+/** Report pages a template may hold, as the server's MAX_REPORT_PAGES. */
+export const MAX_REPORT_PAGES = 20;
 
 export const PRINT_ON_VALUES: readonly PrintOn[] = [
   "ALL_PAGES",
@@ -134,6 +219,9 @@ export const CROSSTAB_BANDS: readonly BandType[] = [
   "NO_DATA",
 ];
 
+/** Same rule as a crosstab: a chart reads its whole dataset. */
+export const CHART_BANDS: readonly BandType[] = CROSSTAB_BANDS;
+
 export const CROSSTAB_OVERFLOW_LABELS: Readonly<Record<CrosstabOverflow, string>> = {
   FOLD: "Fold into one column",
   CLIP: "Drop them",
@@ -146,9 +234,37 @@ export const BARCODE_SYMBOLOGIES = [
   "ean13",
   "ean8",
   "upca",
+  "upce",
   "code39",
+  "code93",
+  "codabar",
   "itf14",
+  "interleaved2of5",
+  "gs1_128",
+  "pdf417",
+  "datamatrix",
+  "azteccode",
 ] as const;
+
+export const BARCODE_LABELS: Readonly<Record<(typeof BARCODE_SYMBOLOGIES)[number], string>> = {
+  code128: "Code 128",
+  ean13: "EAN-13",
+  ean8: "EAN-8",
+  upca: "UPC-A",
+  upce: "UPC-E",
+  code39: "Code 39",
+  code93: "Code 93",
+  codabar: "Codabar",
+  itf14: "ITF-14",
+  interleaved2of5: "Interleaved 2 of 5",
+  gs1_128: "GS1-128",
+  pdf417: "PDF417 (2D)",
+  datamatrix: "Data Matrix (2D)",
+  azteccode: "Aztec (2D)",
+};
+
+/** 2D symbologies: square-ish symbols with no bar height and no text line. */
+export const TWO_D_SYMBOLOGIES: ReadonlySet<string> = new Set(["pdf417", "datamatrix", "azteccode"]);
 
 /**
  * Faces the server's font registry ships. Not free text: a family the registry

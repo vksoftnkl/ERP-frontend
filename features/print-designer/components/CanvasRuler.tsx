@@ -27,6 +27,8 @@ export type CanvasRulerProps = {
   cells?: { widthMm: number; count: number };
   /** Offset of the ruled area within the ruler strip, in pixels. */
   offsetPx?: number;
+  /** Display unit; inches are labelled in whole inches with 1/8" ticks. */
+  unit?: "mm" | "in";
 };
 
 /** Minor ticks are only drawn while they stay this far apart. */
@@ -38,6 +40,7 @@ function CanvasRulerComponent({
   zoom,
   cells,
   offsetPx = 0,
+  unit = "mm",
 }: CanvasRulerProps) {
   const horizontal = orientation === "horizontal";
   const ticks: Array<{ positionPx: number; major: boolean; label: string | null }> = [];
@@ -51,6 +54,20 @@ function CanvasRulerComponent({
         positionPx: offsetPx + column * cellPx,
         major,
         label: major ? String(column) : null,
+      });
+    }
+  } else if (unit === "in") {
+    const inchPx = mmToPx(25.4, zoom);
+    // As fine as fits: eighths, quarters, or halves of an inch.
+    const divisions =
+      inchPx / 8 >= MIN_TICK_GAP_PX ? 8 : inchPx / 4 >= MIN_TICK_GAP_PX ? 4 : 2;
+    const stepMm = 25.4 / divisions;
+    for (let index = 0; index * stepMm <= lengthMm + 1e-6; index += 1) {
+      const major = index % divisions === 0;
+      ticks.push({
+        positionPx: offsetPx + mmToPx(index * stepMm, zoom),
+        major,
+        label: major ? String(index / divisions) : null,
       });
     }
   } else {

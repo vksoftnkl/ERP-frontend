@@ -1,27 +1,41 @@
 import { describe, expect, it } from "vitest";
 import reducer, {
+  bandAdded,
+  bandRemoved,
   clipboardPasted,
   elementAdded,
   elementPatched,
   hostSaved,
   moveCommitted,
   pageBorderSet,
+  placingPresetStarted,
   redo,
+  reportPageAdded,
+  reportPageRemoved,
+  reportPageSelected,
   selectElement,
   selectElements,
   selectionAligned,
+  selectionBorderSet,
+  selectionBorderToggled,
   selectionCopied,
   selectionDeleted,
   selectionDuplicated,
+  selectionGrouped,
+  selectionSized,
+  selectionUngrouped,
   templateLoaded,
   undo,
+  watermarkSet,
   type DesignerState,
 } from "@/features/print-designer/store/designerSlice";
 import { MAX_HISTORY } from "@/features/print-designer/store/history";
 import { validateDefinition } from "@/features/print-designer/lib/validate";
 import {
   selectFieldsByDataset,
+  selectOrderedBands,
   selectProblems,
+  selectReportPages,
 } from "@/features/print-designer/store/selectors";
 import type { RootState } from "@/store";
 import type {
@@ -519,5 +533,141 @@ describe("page border", () => {
 
     state = reducer(state, undo());
     expect(state.definition.pageBorder?.insetMm).toBe(5);
+  });
+});
+
+
+// ─── QtRPT parity ───────────────────────────────────────────────────────────
+
+const asRoot = (state: DesignerState) => ({ printDesigner: state }) as unknown as RootState;
+
+describe("grouping", () => {
+  it("groups, then selects and moves the group as one", () => {
+    let state = reducer(loaded(), selectElements({ bandIndex: 0, elementIds: ["a", "b"] }));
+    state = reducer(state, selectionGrouped());
+    const group = elementsOf(state)[0].group;
+    expect(group).toBeTruthy();
+    expect(elementsOf(state)[1].group).toBe(group);
+    expect(elementsOf(state)[2].group).toBeUndefined();
+
+    // Clicking one member selects both; a marquee over one does the same.
+    // The clicked member first, so "same width" takes its size.
+    state = reducer(state, selectElement({ bandIndex: 0, elementId: "b" }));
+    expect(state.selection.elementIds).toEqual(["b", "a"]);
+    state = reducer(state, selectElements({ bandIndex: 0, elementIds: ["a"] }));
+    expect(state.selection.elementIds).toEqual(["a", "b"]);
+
+    state = reducer(state, moveCommitted({ dx: 5, dy: 0 }));
+    expect(elementsOf(state).map((element) => element.x)).toEqual([15, 55, 90]);
+
+    state = reducer(state, selectionUngrouped());
+    expect(elementsOf(state).some((element) => element.group)).toBe(false);
+  });
+
+  it("gives duplicated copies a group of their own", () => {
+    let state = reducer(loaded(), selectElements({ bandIndex: 0, elementIds: ["a", "b"] }));
+    state = reducer(state, selectionGrouped());
+    const original = elementsOf(state)[0].group;
+    state = reducer(state, selectionDuplicated());
+    const copies = elementsOf(state).slice(3);
+    expect(copies).toHaveLength(2);
+    expect(copies[0].group).toBeTruthy();
+    expect(copies[0].group).not.toBe(original);
+    expect(copies[1].group).toBe(copies[0].group);
+  });
+});
+
+describe("same width and height", () => {
+  it("sizes every selected element like the one selected first", () => {
+    let state = reducer(
+      loaded(),
+      elementPatched({ bandIndex: 0, elementIds: ["b"], patch: { w: 35, h: 9 } }),
+    );
+    state = reducer(state, selectElements({ bandIndex: 0, elementIds: ["b", "a", "c"] }));
+    state = reducer(state, selectionSized("width"));
+    expect(elementsOf(state).map((element) => element.w)).toEqual([35, 35, 35]);
+    expect(elementsOf(state).map((element) => element.h)).toEqual([6, 9, 6]);
+    state = reducer(state, selectionSized("height"));
+    expect(elementsOf(state).map((element) => element.h)).toEqual([9, 9, 9]);
+  });
+});
+
+describe("field frames", () => {
+  it("toggles sides from the first element, sets all, and removes", () => {
+    let state = reducer(loaded(), selectElements({ bandIndex: 0, elementIds: ["a", "b"] }));
+    state = reducer(state, selectionBorderToggled("top"));
+    expect(elementsOf(state)[0].border).toMatchObject({ top: true, bottom: false, widthPt: 0.5, style: "SOLID" });
+    expect(elementsOf(state)[1].border?.top).toBe(true);
+
+    // The first element has the top line, so a second toggle turns it off for both.
+    state = reducer(state, selectionBorderToggled("top"));
+    expect(elementsOf(state)[1].border?.top).toBe(false);
+
+    state = reducer(
+      state,
+      selectionBorderSet({ patch: { top: true, right: true, bottom: true, left: true, style: "DOUBLE", color: "" } }),
+    );
+    expect(elementsOf(state)[0].border).toMatchObject({ left: true, style: "DOUBLE", color: "#000000" });
+
+    state = reducer(state, selectionBorderSet({ patch: null }));
+    expect(elementsOf(state)[0].border).toBeUndefined();
+    expect(elementsOf(state)[2].border).toBeUndefined();
+  });
+});
+
+describe("report pages", () => {
+  it("adds a page with a band, shows only its bands, and deletes it", () => {
+    let state = reducer(loaded(), reportPageAdded());
+    expect(state.view.reportPage).toBe(1);
+    const added = state.definition.bands[state.definition.bands.length - 1];
+    expect(added).toMatchObject({ type: "REPORT_HEADER", reportPage: 1 });
+    expect(selectOrderedBands(asRoot(state)).map((entry) => entry.index)).toEqual([2]);
+    expect(selectReportPages(asRoot(state))).toEqual([0, 1]);
+
+    // A band added while page 2 shows lands on page 2.
+    state = reducer(state, bandAdded("PAGE_HEADER"));
+    expect(state.definition.bands[3].reportPage).toBe(1);
+
+    state = reducer(state, reportPageSelected(0));
+    expect(selectOrderedBands(asRoot(state)).map((entry) => entry.index)).toEqual([0, 1]);
+
+    state = reducer(state, reportPageRemoved(1));
+    expect(state.definition.bands).toHaveLength(2);
+    expect(state.view.reportPage).toBe(0);
+  });
+
+  it("drops back to page 1 when an extra page loses its last band", () => {
+    let state = reducer(loaded(), reportPageAdded());
+    state = reducer(state, bandRemoved(2));
+    expect(state.view.reportPage).toBe(0);
+  });
+});
+
+describe("watermark", () => {
+  it("turns on with defaults, edits, and removes", () => {
+    let state = reducer(loaded(), watermarkSet({}));
+    expect(state.definition.watermark).toMatchObject({ text: "DRAFT", opacity: 0.15 });
+    state = reducer(state, watermarkSet({ text: "COPY", image: "" }));
+    expect(state.definition.watermark?.text).toBe("COPY");
+    expect("image" in (state.definition.watermark ?? {})).toBe(false);
+    state = reducer(state, watermarkSet(null));
+    expect(state.definition.watermark).toBeUndefined();
+  });
+});
+
+describe("placing a preset", () => {
+  it("places an ellipse as a RECT with its shape", () => {
+    let state = reducer(
+      loaded(),
+      placingPresetStarted({ kind: "RECT", preset: { shape: "ELLIPSE" }, key: "ellipse" }),
+    );
+    expect(state.interaction.placingKey).toBe("ellipse");
+    state = reducer(
+      state,
+      elementAdded({ bandIndex: 0, kind: "RECT", xMm: 20, yMm: 2, preset: state.interaction.placingPreset }),
+    );
+    const placed = elementsOf(state)[3];
+    expect(placed).toMatchObject({ kind: "RECT", shape: "ELLIPSE" });
+    expect(state.interaction.mode).toBe("IDLE");
   });
 });

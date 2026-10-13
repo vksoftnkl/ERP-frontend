@@ -15,7 +15,12 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useAppSelector } from "@/store/hooks";
-import { isTextLike, type FieldMeta, type TextLikeElement } from "@/features/print-designer/types/template-definition";
+import {
+  canHaveBorder,
+  isTextLike,
+  type FieldMeta,
+  type TextLikeElement,
+} from "@/features/print-designer/types/template-definition";
 import {
   selectBoundDatasets,
   selectDatasetBindings,
@@ -28,6 +33,8 @@ import FlowSection from "@/features/print-designer/components/panels/FlowSection
 import PositionSection from "@/features/print-designer/components/panels/PositionSection";
 import FontSection from "@/features/print-designer/components/panels/FontSection";
 import FormatSection from "@/features/print-designer/components/panels/FormatSection";
+import BorderSection from "@/features/print-designer/components/panels/BorderSection";
+import HighlightSection from "@/features/print-designer/components/panels/HighlightSection";
 import VisibilitySection from "@/features/print-designer/components/panels/VisibilitySection";
 import KindSection from "@/features/print-designer/components/panels/KindSection";
 import BandSection from "@/features/print-designer/components/panels/BandSection";
@@ -108,6 +115,16 @@ export function PropertyPanel() {
               <FontSection bandIndex={selectedBand.index} elements={textElements} />
               <FormatSection bandIndex={selectedBand.index} elements={textElements} />
             </>
+          ) : null}
+          {layoutMode !== "GRID" && elements.some(canHaveBorder) ? (
+            <BorderSection bandIndex={selectedBand.index} elements={elements} />
+          ) : null}
+          {allText ? (
+            <HighlightSection
+              bandIndex={selectedBand.index}
+              elements={textElements}
+              onEditExpression={openExpression}
+            />
           ) : null}
           <VisibilitySection
             bandIndex={selectedBand.index}

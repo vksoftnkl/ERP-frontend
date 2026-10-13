@@ -2450,6 +2450,8 @@ export default function CrudMasterPage({
   modalShowValidationErrorPopup = false,
   modalEnableArrowKeyFieldNavigation,
   modalFooterLeadingActions,
+  modalDraftKey,
+  onModalDraftApplied,
   auditHistory,
   enableGridSettingsContextMenu = true,
   gridDetailId,
@@ -3249,8 +3251,11 @@ export default function CrudMasterPage({
     const defaults = createInitialValues ?? INITIAL_FORM_STATE;
     modalControllerRef.current?.openModal("master-create", {
       values: overrideValues ? { ...defaults, ...overrideValues } : defaults,
+      // A create seeded by its caller is about that caller's values, not the
+      // half-typed New entry the user left on this screen.
+      draftKey: modalDraftKey && !overrideValues ? `${modalDraftKey}:new` : undefined,
     });
-  }, [createInitialValues, resetDetailsState, resetSaveState]);
+  }, [createInitialValues, modalDraftKey, resetDetailsState, resetSaveState]);
   const handleCreateAction = useCallback(() => {
     // Guards every entrance, not just the button: the Alt+C shortcut and the
     // controller handed to host pages come through here too.
@@ -3326,7 +3331,8 @@ export default function CrudMasterPage({
               lookupKeys,
             )
           : createFallbackRowFromSource(recordId, rowSource, lookupKeys);
-        setEditingItemId(resolveRecordId(detailRow, lookupKeys.id));
+        const resolvedId = resolveRecordId(detailRow, lookupKeys.id);
+        setEditingItemId(resolvedId);
         const defaultValues = mapRowToFormState(detailRow, lookupKeys);
         modalControllerRef.current?.openModal("master-update", {
           values: mapFormValues
@@ -3335,6 +3341,7 @@ export default function CrudMasterPage({
                 defaults: defaultValues,
               })
             : defaultValues,
+          draftKey: modalDraftKey ? `${modalDraftKey}:edit:${resolvedId}` : undefined,
         });
       } catch {
         // Error UI is driven by detailsError from useApi.
@@ -3346,6 +3353,7 @@ export default function CrudMasterPage({
       getById,
       lookupKeys,
       mapFormValues,
+      modalDraftKey,
       requestPayloadKeys.id,
       resetDetailsState,
       resetSaveState,
@@ -3390,7 +3398,8 @@ export default function CrudMasterPage({
           const detailRow = mergedSource
             ? mergeRowWithDetail(row, mergedSource, lookupKeys)
             : row;
-          setEditingItemId(resolveRecordId(detailRow, lookupKeys.id));
+          const resolvedId = resolveRecordId(detailRow, lookupKeys.id);
+          setEditingItemId(resolvedId);
           const defaultValues = mapRowToFormState(detailRow, lookupKeys);
           modalControllerRef.current?.openModal("master-update", {
             values: mapFormValues
@@ -3399,6 +3408,7 @@ export default function CrudMasterPage({
                   defaults: defaultValues,
                 })
               : defaultValues,
+            draftKey: modalDraftKey ? `${modalDraftKey}:edit:${resolvedId}` : undefined,
           });
         } catch {
           // Error UI is driven by detailsError from useApi.
@@ -3411,6 +3421,7 @@ export default function CrudMasterPage({
       getById,
       lookupKeys,
       mapFormValues,
+      modalDraftKey,
       augmentDetailSource,
       requestPayloadKeys.id,
       resetDetailsState,
@@ -4886,6 +4897,7 @@ export default function CrudMasterPage({
           modalControllerRef.current = controller;
         }}
         onOpenChange={onModalOpenChange}
+        onDraftApplied={onModalDraftApplied}
         onSubmit={handleModalSubmit}
         onCancel={handleModalCancel}
       />

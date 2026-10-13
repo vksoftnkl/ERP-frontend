@@ -12,6 +12,7 @@ import type {
   ERPDynamicFieldValueChangeHandler,
   ERPDynamicFieldValueChangePayload,
   ERPDynamicModalController,
+  ERPDynamicModalDraftAppliedPayload,
   ERPDynamicModalSubmitPayload,
   ERPDynamicModalVariant,
   ERPDynamicModalField,
@@ -201,13 +202,16 @@ type LazyDropdownFieldHandlers = {
   onSearchQueryChange: ERPDynamicSearchQueryChangeHandler;
   onValueChange: ERPDynamicFieldValueChangeHandler;
 };
+const CUSTOMER_LAZY_DROPDOWN_FIELDS = [
+  "cusCompanyId",
+  "cusBranchId",
+  "cusAreaId",
+  "cusGroupId",
+  "cusStateCode",
+  "cusRegionStateName",
+] as const;
 type CustomerLazyDropdownHandlers = Record<
-  | "cusCompanyId"
-  | "cusBranchId"
-  | "cusAreaId"
-  | "cusGroupId"
-  | "cusStateCode"
-  | "cusRegionStateName",
+  (typeof CUSTOMER_LAZY_DROPDOWN_FIELDS)[number],
   LazyDropdownFieldHandlers
 >;
 function buildCustomerFormFields(
@@ -1830,6 +1834,41 @@ export default function CustomerPage({
     },
     [applyDropdownOptions],
   );
+  // A restored draft (or its Discard) sets the lazy dropdowns without the user
+  // picking from them. Each chosen option joins what the field already holds —
+  // the template or record seed stays, so Discard has it to go back to — and is
+  // pinned so a later lazy fetch keeps its name; the State maps learn the
+  // draft's state so the payload resolves cusStateName with the field unopened.
+  const applyDraftDropdownSelections = useCallback(
+    ({ values, labels }: ERPDynamicModalDraftAppliedPayload) => {
+      for (const fieldName of CUSTOMER_LAZY_DROPDOWN_FIELDS) {
+        const value = (values[fieldName] ?? "").trim();
+        if (!value) {
+          pinnedDropdownOptionRef.current[fieldName] = null;
+          continue;
+        }
+        const current = dropdownOptionsRef.current[fieldName] ?? [];
+        const existing = current.find((option) => option.value === value);
+        const option = existing ?? { value, label: labels[fieldName]?.[value] || value };
+        pinnedDropdownOptionRef.current[fieldName] = option;
+        if (!existing) {
+          applyDropdownOptions(fieldName, [...current, option]);
+        }
+      }
+      // The State option reads "State Name (CODE)".
+      const stateCode = (values.cusStateCode ?? "").trim().toUpperCase();
+      const stateLabel = pinnedDropdownOptionRef.current.cusStateCode?.label ?? "";
+      const codeSuffix = ` (${stateCode})`;
+      const stateName = stateLabel.toUpperCase().endsWith(codeSuffix)
+        ? stateLabel.slice(0, -codeSuffix.length).trim()
+        : "";
+      if (stateCode && stateName) {
+        setStateNameByCode((prev) => ({ ...prev, [stateCode]: stateName }));
+        setStateCodeByName((prev) => ({ ...prev, [stateName]: stateCode }));
+      }
+    },
+    [applyDropdownOptions],
+  );
   // "Save as Default Template" needs the DISPLAY half of every id on the form —
   // the document stores `cusAreaId` and `cusAreaName` together so the next Add
   // can render a label before the lazy dropdown has loaded anything. The pinned
@@ -2790,6 +2829,8 @@ export default function CustomerPage({
         listSubtitleOverride="Manage customers"
         customFields={customerFormFields}
         createInitialValues={customerCreateInitialValues}
+        modalDraftKey="customer"
+        onModalDraftApplied={applyDraftDropdownSelections}
         modalPanelStyle={CUSTOMER_MODAL_PANEL_STYLE}
         modalPanelClassName={`${modalSkin.modalSkin} ${modalSkin.customerModal}`}
         modalFormDenseGrid={false}

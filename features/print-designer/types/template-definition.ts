@@ -41,7 +41,8 @@ export type ElementKind =
   | "BARCODE"
   | "QRCODE"
   | "PAGEBREAK"
-  | "CROSSTAB";
+  | "CROSSTAB"
+  | "CHART";
 
 export type PrintOn =
   | "ALL_PAGES"
@@ -50,13 +51,27 @@ export type PrintOn =
   | "NOT_FIRST_PAGE"
   | "NOT_LAST_PAGE";
 
-export type HorizontalAlign = "left" | "center" | "right";
+export type HorizontalAlign = "left" | "center" | "right" | "justify";
 export type VerticalAlign = "top" | "middle" | "bottom";
 export type ImageFit = "CONTAIN" | "COVER" | "STRETCH";
 export type Cardinality = "one" | "many";
 export type AggregateFunction = "sum" | "count" | "avg" | "min" | "max";
 export type AggregateScope = "GROUP" | "PAGE" | "REPORT";
-export type BarcodeSymbology = "code128" | "ean13" | "ean8" | "upca" | "code39" | "itf14";
+export type BarcodeSymbology =
+  | "code128"
+  | "ean13"
+  | "ean8"
+  | "upca"
+  | "upce"
+  | "code39"
+  | "code93"
+  | "codabar"
+  | "itf14"
+  | "interleaved2of5"
+  | "gs1_128"
+  | "pdf417"
+  | "datamatrix"
+  | "azteccode";
 export type QrErrorCorrection = "L" | "M" | "Q" | "H";
 export type CrosstabSort =
   | "LABEL_ASC"
@@ -67,6 +82,14 @@ export type CrosstabSort =
 export type CrosstabOverflow = "FOLD" | "CLIP";
 /** Flow bands only: FLOAT moves with whatever grows or closes up above it. */
 export type PositionType = "FIX" | "FLOAT";
+/** QtRPT's pen styles, shared by frames, lines, shapes and the page border. */
+export type LineStyle = "SOLID" | "DASH" | "DOT" | "DASH_DOT" | "DASH_DOT_DOT" | "DOUBLE";
+/** What a RECT draws inside its box; RECT with a radius is the rounded rectangle. */
+export type Shape = "RECT" | "ELLIPSE" | "TRIANGLE" | "RHOMBUS";
+/** Clockwise degrees. */
+export type TextRotation = 0 | 90 | 180 | 270;
+export type ChartType = "BAR" | "STACKED_BAR" | "LINE" | "PIE";
+export type LegendPosition = "BOTTOM" | "TOP" | "LEFT" | "RIGHT";
 
 export type Margins = {
   top: number;
@@ -99,6 +122,27 @@ export type PageBorder = {
   widthPt: number;
   color: string;
   radiusMm: number;
+  /** Absent in bodies saved before line styles existed = SOLID. */
+  style?: LineStyle;
+};
+
+/**
+ * Text and/or an image printed faintly behind every page (QtRPT's page
+ * watermark). On the definition root, like the page border.
+ */
+export type Watermark = {
+  /** Expression-capable. Empty = no text. */
+  text: string;
+  /** Expression yielding a URL, data: URI or asset key. */
+  image?: string;
+  opacity: number;
+  /** Text only, clockwise degrees. */
+  rotationDeg: number;
+  fontSizePt: number;
+  color: string;
+  bold: boolean;
+  /** Image size as a percentage of the printable area. */
+  imageScalePct: number;
 };
 
 export type DatasetBinding = {
@@ -116,6 +160,7 @@ export type FontSpec = {
   bold: boolean;
   italic: boolean;
   underline: boolean;
+  strikeout: boolean;
 };
 
 export type StyleSpec = {
@@ -125,6 +170,30 @@ export type StyleSpec = {
   strokeWidthPt?: number;
   /** Millimetres inside the element box. */
   padding?: number;
+  /** LINE and RECT: how the stroke is drawn. Absent = SOLID. */
+  lineStyle?: LineStyle;
+};
+
+/** A frame around an element's box, one switch per side (QtRPT's frame lines). */
+export type ElementBorder = {
+  top: boolean;
+  right: boolean;
+  bottom: boolean;
+  left: boolean;
+  widthPt: number;
+  color: string;
+  style: LineStyle;
+};
+
+/** One conditional-formatting rule (QtRPT "Highlighting"); absent = unchanged. */
+export type Highlight = {
+  when: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strikeout?: boolean;
+  color?: string;
+  fill?: string;
 };
 
 type ElementBase = {
@@ -150,6 +219,12 @@ type ElementBase = {
    * span -- unless a visible element still occupies part of it.
    */
   removeLineWhenBlank?: boolean;
+  /** GRAPHIC only. Absent = no frame. */
+  border?: ElementBorder;
+  /** Grow the frame, background and shape by however much the band grew. */
+  stretchWithBand?: boolean;
+  /** Designer grouping: elements sharing a value select and move together. */
+  group?: string;
 };
 
 type TextLikeBase = ElementBase & {
@@ -160,6 +235,12 @@ type TextLikeBase = ElementBase & {
   wrap: boolean;
   ellipsis: boolean;
   blankWhenZero: boolean;
+  /** Clockwise. At 90/270 the text wraps to the box's height. Absent = 0. */
+  rotation?: TextRotation;
+  /** QtRPT "HTML rendering": inline <b> <i> <u> <s> <sup> <sub> <br> <font>. */
+  markup?: boolean;
+  /** Conditional formatting, applied in order. */
+  highlights?: Highlight[];
 };
 
 export type TextElement = TextLikeBase & { kind: "TEXT" };
@@ -186,6 +267,10 @@ export type LineElement = ElementBase & {
   widthPt: number;
   /** GRID mode: the character to repeat. */
   gridChar: string;
+  arrowStart?: boolean;
+  arrowEnd?: boolean;
+  /** Arrowhead length. Absent = 2.5mm. */
+  arrowSizeMm?: number;
 };
 
 export type RectElement = ElementBase & {
@@ -193,6 +278,8 @@ export type RectElement = ElementBase & {
   w: number;
   h: number;
   radiusMm: number;
+  /** Absent = RECT. */
+  shape?: Shape;
 };
 
 export type ImageElement = ElementBase & {
@@ -336,8 +423,52 @@ export type CrosstabElement = ElementBase & {
   headerFont?: Partial<FontSpec>;
   gridLines: boolean;
   headerFill?: string;
+  /** Background of the column-totals row (and of subtotal rows). */
+  totalsFill?: string;
+  /** With two or more row levels: a subtotal row after each outer group. */
+  showSubtotals?: boolean;
+  subtotalLabel?: string;
   /** Reprint the column header on each page the table spills onto. */
   repeatHeader: boolean;
+};
+
+export type ChartSeries = {
+  name: string;
+  /** Expression -> the number each source row contributes. */
+  value: string;
+  /** Absent = the next palette colour. */
+  color?: string;
+};
+
+/**
+ * A chart (QtRPT "Diagram"). Like a crosstab it reads a whole dataset and is
+ * expanded by the server at render time; the canvas can only sketch it.
+ */
+export type ChartElement = ElementBase & {
+  kind: "CHART";
+  w: number;
+  h: number;
+  chartType: ChartType;
+  dataset: string;
+  /** Expression -> x-axis label or pie slice label. */
+  category: string;
+  series: ChartSeries[];
+  fn: AggregateFunction;
+  title: string;
+  showLegend: boolean;
+  legendPosition: LegendPosition;
+  showValues: boolean;
+  showPercent: boolean;
+  showGrid: boolean;
+  holeSizePct: number;
+  maxCategories: number;
+  format: string;
+  background?: string;
+  font?: Partial<FontSpec>;
+  titleFont?: Partial<FontSpec>;
+  titleColor?: string;
+  legendFont?: Partial<FontSpec>;
+  legendColor?: string;
 };
 
 export type ReportElement =
@@ -349,7 +480,8 @@ export type ReportElement =
   | BarcodeElement
   | QrcodeElement
   | PagebreakElement
-  | CrosstabElement;
+  | CrosstabElement
+  | ChartElement;
 
 export type TextLikeElement = TextElement | FieldElement;
 
@@ -362,6 +494,7 @@ export type BoxElement =
   | ImageElement
   | BarcodeElement
   | CrosstabElement
+  | ChartElement
   | TextLikeElement;
 
 export const isBoxLike = (element: ReportElement): element is BoxElement =>
@@ -370,7 +503,15 @@ export const isBoxLike = (element: ReportElement): element is BoxElement =>
   element.kind === "RECT" ||
   element.kind === "IMAGE" ||
   element.kind === "BARCODE" ||
-  element.kind === "CROSSTAB";
+  element.kind === "CROSSTAB" ||
+  element.kind === "CHART";
+
+/**
+ * Elements that can carry a field frame. Lines draw themselves; a page break
+ * prints nothing; a crosstab draws its own grid at a height the data decides.
+ */
+export const canHaveBorder = (element: ReportElement): boolean =>
+  element.kind !== "LINE" && element.kind !== "PAGEBREAK" && element.kind !== "CROSSTAB";
 
 export type Band = {
   type: BandType;
@@ -394,6 +535,12 @@ export type Band = {
   keepWithLastDetail: boolean;
   visible?: string;
   spacingRows: number;
+  /** Which report page the band belongs to (QtRPT "New Report Page"). Absent = 0. */
+  reportPage?: number;
+  /** Start every printing of this band on a fresh page. */
+  startNewPage?: boolean;
+  /** GROUP_HEADER: each group on a fresh page, with page numbers restarted. */
+  startNewNumeration?: boolean;
   elements: ReportElement[];
 };
 
@@ -405,6 +552,8 @@ export type TemplateDefinition = {
   paper: PaperSpec;
   /** Absent = no border. */
   pageBorder?: PageBorder;
+  /** Absent = no watermark. */
+  watermark?: Watermark;
   datasets: DatasetBinding[];
   bands: Band[];
 };

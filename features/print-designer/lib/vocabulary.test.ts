@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import generated from "@/features/print-designer/lib/vocabulary.generated.json";
 import {
   BAND_TYPES,
+  BARCODE_LABELS,
   BARCODE_SYMBOLOGIES,
+  CHART_TYPES,
+  CHART_TYPE_LABELS,
+  LEGEND_POSITIONS,
+  LINE_STYLES,
+  LINE_STYLE_LABELS,
+  SHAPES,
+  SHAPE_LABELS,
   CROSSTAB_OVERFLOWS,
   CROSSTAB_OVERFLOW_LABELS,
   CROSSTAB_SORTS,
@@ -57,6 +65,26 @@ describe("vocabulary parity with the server schema", () => {
     }
     for (const overflow of CROSSTAB_OVERFLOWS) {
       expect(CROSSTAB_OVERFLOW_LABELS[overflow]).toBeTruthy();
+    }
+  });
+
+  it("agrees on line styles, shapes, chart vocabularies and alignments", () => {
+    expect([...LINE_STYLES].sort()).toEqual([...generated.lineStyles].sort());
+    expect([...SHAPES].sort()).toEqual([...generated.shapes].sort());
+    expect([...CHART_TYPES].sort()).toEqual([...generated.chartTypes].sort());
+    expect([...LEGEND_POSITIONS].sort()).toEqual([...generated.legendPositions].sort());
+    expect([...generated.horizontalAligns].sort()).toEqual(["center", "justify", "left", "right"]);
+    for (const style of LINE_STYLES) {
+      expect(LINE_STYLE_LABELS[style]).toBeTruthy();
+    }
+    for (const shape of SHAPES) {
+      expect(SHAPE_LABELS[shape]).toBeTruthy();
+    }
+    for (const type of CHART_TYPES) {
+      expect(CHART_TYPE_LABELS[type]).toBeTruthy();
+    }
+    for (const symbology of BARCODE_SYMBOLOGIES) {
+      expect(BARCODE_LABELS[symbology]).toBeTruthy();
     }
   });
 

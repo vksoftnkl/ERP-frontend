@@ -35,6 +35,7 @@ const KIND_ICON: Record<ElementKind, string> = {
   QRCODE: "▦",
   PAGEBREAK: "⤓",
   CROSSTAB: "⊞",
+  CHART: "📊",
 };
 
 export function ReportTree() {

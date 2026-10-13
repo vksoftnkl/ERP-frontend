@@ -9,6 +9,7 @@ import type {
   Band,
   BandType,
   DatasetBinding,
+  ElementBorder,
   ElementKind,
   FieldMeta,
   LayoutMode,
@@ -18,6 +19,7 @@ import type {
   ProviderDescriptor,
   ReportElement,
   TemplateDefinition,
+  Watermark,
 } from "@/features/print-designer/types/template-definition";
 import { SCHEMA_VERSION } from "@/features/print-designer/types/template-definition";
 import { defaultOutputModeForPaper } from "@/features/print-designer/lib/vocabulary";
@@ -404,9 +406,55 @@ export function createElement(options: CreateElementOptions): ReportElement {
         overflowLabel: "Other",
         gridLines: true,
         repeatHeader: true,
+        showSubtotals: false,
+        subtotalLabel: "Subtotal",
+      };
+    case "CHART":
+      return {
+        ...base,
+        kind: "CHART",
+        // Inside A5's printable width, like a new crosstab.
+        w: 100,
+        h: 60,
+        chartType: "BAR",
+        dataset: "",
+        category: "{{ row.name }}",
+        series: [{ name: "Amount", value: "{{ row.amount }}" }],
+        fn: "sum",
+        title: "",
+        showLegend: true,
+        legendPosition: "BOTTOM",
+        showValues: false,
+        showPercent: false,
+        showGrid: true,
+        holeSizePct: 0,
+        maxCategories: 12,
+        format: "#,##0",
       };
   }
 }
+
+/** A frame with every side on: what "All frame lines" and a new frame give. */
+export const DEFAULT_BORDER: ElementBorder = {
+  top: true,
+  right: true,
+  bottom: true,
+  left: true,
+  widthPt: 0.5,
+  color: "#000000",
+  style: "SOLID",
+};
+
+/** "DRAFT" across the page, faint: what ticking "Watermark" gives. */
+export const DEFAULT_WATERMARK: Watermark = {
+  text: "DRAFT",
+  opacity: 0.15,
+  rotationDeg: -45,
+  fontSizePt: 72,
+  color: "#808080",
+  bold: true,
+  imageScalePct: 60,
+};
 
 /**
  * A FIELD element for a dataset field dragged out of the tree.

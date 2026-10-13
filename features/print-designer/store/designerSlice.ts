@@ -32,7 +32,11 @@ import type {
   FieldElement,
   BarcodeElement,
   PagebreakElement,
+  ChartElement,
+  ElementBorder,
+  Watermark,
 } from "@/features/print-designer/types/template-definition";
+import { canHaveBorder } from "@/features/print-designer/types/template-definition";
 import {
   bandContentSize,
   clampRectToBand,
@@ -52,7 +56,9 @@ import {
   createFieldElement,
   nextElementId,
   paperFromPreset,
+  DEFAULT_BORDER,
   DEFAULT_PAGE_BORDER,
+  DEFAULT_WATERMARK,
 } from "@/features/print-designer/lib/defaults";
 import {
   canRedo,
@@ -68,7 +74,11 @@ import {
   PASTE_OFFSET_MM,
   setClipboard,
 } from "@/features/print-designer/lib/clipboard";
-import { PAPER_PRESETS, findPaperPreset } from "@/features/print-designer/lib/vocabulary";
+import {
+  MAX_REPORT_PAGES,
+  PAPER_PRESETS,
+  findPaperPreset,
+} from "@/features/print-designer/lib/vocabulary";
 import { cellOf, gridMetrics } from "@/features/print-designer/lib/grid";
 /**
  * A patch for one element. The union's members are flattened into one optional
@@ -89,7 +99,8 @@ export type ElementPatch = Partial<
     Omit<BarcodeElement, "kind" | "id"> &
     Omit<QrcodeElement, "kind" | "id"> &
     Omit<PagebreakElement, "kind" | "id"> &
-    Omit<CrosstabElement, "kind" | "id">
+    Omit<CrosstabElement, "kind" | "id"> &
+    Omit<ChartElement, "kind" | "id">
 >;
 export type BandPatch = Partial<Omit<Band, "elements">>;
 export type DesignerMeta = {
@@ -117,11 +128,26 @@ export type DesignerView = {
   showExpressions: boolean;
   leftPanelOpen: boolean;
   rightPanelOpen: boolean;
+  /** The report page the canvas shows (QtRPT's page tabs). */
+  reportPage: number;
+  /** Units the rulers and position inputs DISPLAY; storage is always mm. */
+  unit: DisplayUnit;
 };
+/** QtRPT's measurement setting. */
+export type DisplayUnit = "mm" | "in";
+/** A frame side, for the frame toolbar's toggles. */
+export type FrameSide = "top" | "right" | "bottom" | "left";
 export type InteractionMode = "IDLE" | "DRAGGING" | "RESIZING" | "MARQUEE" | "PLACING";
 export type DesignerInteraction = {
   mode: InteractionMode;
   placingKind: ElementKind | null;
+  /**
+   * Properties applied to the element a placing click creates -- how one RECT
+   * kind places an ellipse, a triangle or a rhombus, and one LINE an arrow.
+   */
+  placingPreset: ElementPatch | null;
+  /** Which toolbar button armed the placement, so only it shows pressed. */
+  placingKey: string | null;
   /** Millimetres; live preview only, never committed from here. */
   dragDelta: { dx: number; dy: number } | null;
   resizeHandle: ResizeHandle | null;
@@ -157,6 +183,8 @@ const freshSelection = (): Selection => ({ bandIndex: null, elementIds: [] });
 const freshInteraction = (): DesignerInteraction => ({
   mode: "IDLE",
   placingKind: null,
+  placingPreset: null,
+  placingKey: null,
   dragDelta: null,
   resizeHandle: null,
   marquee: null,
@@ -189,6 +217,8 @@ const initialState: DesignerState = {
     showExpressions: true,
     leftPanelOpen: true,
     rightPanelOpen: true,
+    reportPage: 0,
+    unit: "mm",
   },
   interaction: freshInteraction(),
   history: emptyHistory(),
@@ -280,6 +310,89 @@ function editSelectedElements(
 const applyPatchToElement = (element: ReportElement, patch: ElementPatch): ReportElement =>
   ({ ...element, ...patch }) as ReportElement;
 
+/** The report page a band belongs to; absent in older bodies = 0. */
+export const reportPageOf = (band: Band): number => band.reportPage ?? 0;
+
+/**
+ * An element's whole group in its band, or just the element.
+ *
+ * Grouping is QtRPT's "To group": the members select and move as one. A group
+ * never spans bands -- coordinates are band-relative -- so the band is the
+ * whole search space.
+ */
+export function groupMembersOf(elements: readonly ReportElement[], elementId: string): string[] {
+  const element = elements.find((candidate) => candidate.id === elementId);
+  if (!element?.group) {
+    return [elementId];
+  }
+  return elements.filter((candidate) => candidate.group === element.group).map((candidate) => candidate.id);
+}
+
+/**
+ * Every id plus the rest of each one's group, in the ORDER GIVEN -- each id
+ * first, then its group-mates. Order matters: "same width" sizes everything
+ * like the element selected first.
+ */
+function expandGroups(elements: readonly ReportElement[], ids: readonly string[]): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const id of ids) {
+    for (const member of [id, ...groupMembersOf(elements, id)]) {
+      if (!seen.has(member)) {
+        seen.add(member);
+        result.push(member);
+      }
+    }
+  }
+  return result;
+}
+
+function allGroupIds(definition: TemplateDefinition): Set<string> {
+  const groups = new Set<string>();
+  for (const band of definition.bands) {
+    for (const element of band.elements) {
+      if (element.group) {
+        groups.add(element.group);
+      }
+    }
+  }
+  return groups;
+}
+
+function nextGroupId(taken: ReadonlySet<string>): string {
+  for (let index = 1; index < 100_000; index += 1) {
+    const candidate = `group_${index}`;
+    if (!taken.has(candidate)) {
+      return candidate;
+    }
+  }
+  return `group_${taken.size + 1}`;
+}
+
+/**
+ * Give pasted or duplicated copies groups of their own. A copy that kept its
+ * group id would join the original's group, and moving one would move both.
+ */
+function regroupCopies(elements: ReportElement[], definition: TemplateDefinition): void {
+  const taken = allGroupIds(definition);
+  const renamed = new Map<string, string>();
+  for (const element of elements) {
+    if (!element.group) {
+      continue;
+    }
+    let next = renamed.get(element.group);
+    if (!next) {
+      next = nextGroupId(taken);
+      taken.add(next);
+      renamed.set(element.group, next);
+    }
+    element.group = next;
+  }
+}
+
+/** A frame with no sides yet, carrying the defaults for everything else. */
+const NO_SIDES: ElementBorder = { ...DEFAULT_BORDER, top: false, right: false, bottom: false, left: false };
+
 /** GRID templates address elements by cell; GRAPHIC ones by millimetre. */
 const isGrid = (definition: TemplateDefinition): boolean => definition.layoutMode === "GRID";
 
@@ -369,6 +482,7 @@ const designerSlice = createSlice({
       state.selection = freshSelection();
       state.interaction = freshInteraction();
       state.history = emptyHistory();
+      state.view.reportPage = 0;
       // A migrated definition is already different from what is stored, so the
       // designer opens dirty on purpose: saving is how the upgrade is persisted.
       state.dirty = template.definitionMigrated;
@@ -401,6 +515,11 @@ const designerSlice = createSlice({
       state.selection = freshSelection();
       state.interaction = freshInteraction();
       state.history = emptyHistory();
+      // Keep the page the user was on when a host re-seeds the same design,
+      // as long as that page still exists.
+      if (!action.payload.definition.bands.some((band) => reportPageOf(band) === state.view.reportPage)) {
+        state.view.reportPage = 0;
+      }
       state.dirty = action.payload.dirty ?? true;
       state.lastSavedAt = null;
     },
@@ -489,6 +608,9 @@ const designerSlice = createSlice({
     setLeftPanelOpen(state, action: PayloadAction<boolean>) {
       state.view.leftPanelOpen = action.payload;
     },
+    setUnit(state, action: PayloadAction<DisplayUnit>) {
+      state.view.unit = action.payload;
+    },
     setRightPanelOpen(state, action: PayloadAction<boolean>) {
       state.view.rightPanelOpen = action.payload;
     },
@@ -503,23 +625,29 @@ const designerSlice = createSlice({
       action: PayloadAction<{ bandIndex: number; elementId: string; additive?: boolean }>,
     ) {
       const { bandIndex, elementId, additive } = action.payload;
+      // A grouped element brings its whole group: that is what grouping is.
+      // The clicked element first, so "same width" takes its size.
+      const members = expandGroups(bandAt(state.definition, bandIndex)?.elements ?? [], [elementId]);
       // A multi-selection cannot span bands: element coordinates are
       // band-relative, so a shared bounding box across two bands would be
       // meaningless and every alignment op would move things unpredictably.
       if (!additive || state.selection.bandIndex !== bandIndex) {
-        state.selection = { bandIndex, elementIds: [elementId] };
+        state.selection = { bandIndex, elementIds: members };
         return;
       }
       const existing = state.selection.elementIds;
       state.selection.elementIds = existing.includes(elementId)
-        ? existing.filter((id) => id !== elementId)
-        : [...existing, elementId];
+        ? existing.filter((id) => !members.includes(id))
+        : [...existing, ...members.filter((id) => !existing.includes(id))];
     },
 
     selectElements(state, action: PayloadAction<{ bandIndex: number; elementIds: string[] }>) {
       state.selection = {
         bandIndex: action.payload.bandIndex,
-        elementIds: [...action.payload.elementIds],
+        elementIds: expandGroups(
+          bandAt(state.definition, action.payload.bandIndex)?.elements ?? [],
+          action.payload.elementIds,
+        ),
       };
     },
 
@@ -589,6 +717,23 @@ const designerSlice = createSlice({
     placingStarted(state, action: PayloadAction<ElementKind>) {
       state.interaction.mode = "PLACING";
       state.interaction.placingKind = action.payload;
+      state.interaction.placingPreset = null;
+      state.interaction.placingKey = action.payload;
+    },
+
+    /**
+     * Arm a placement that sets properties on the new element: an ellipse is a
+     * RECT with `shape: "ELLIPSE"`, an arrow a LINE with `arrowEnd`, rich text
+     * a TEXT with `markup`. `key` names the button, so only it shows pressed.
+     */
+    placingPresetStarted(
+      state,
+      action: PayloadAction<{ kind: ElementKind; preset: ElementPatch; key: string }>,
+    ) {
+      state.interaction.mode = "PLACING";
+      state.interaction.placingKind = action.payload.kind;
+      state.interaction.placingPreset = action.payload.preset;
+      state.interaction.placingKey = action.payload.key;
     },
 
     interactionEnded(state) {
@@ -754,6 +899,8 @@ const designerSlice = createSlice({
         yMm: number;
         col?: number;
         row?: number;
+        /** Properties to set on the new element; see `placingPresetStarted`. */
+        preset?: ElementPatch | null;
       }>,
     ) {
       const { bandIndex, kind, xMm, yMm } = action.payload;
@@ -764,7 +911,7 @@ const designerSlice = createSlice({
         if (!band) {
           return;
         }
-        const element = createElement({
+        const created = createElement({
           kind,
           id,
           xMm,
@@ -773,13 +920,16 @@ const designerSlice = createSlice({
           col: action.payload.col,
           row: action.payload.row,
         });
+        const element = action.payload.preset
+          ? applyPatchToElement(created, action.payload.preset)
+          : created;
         // A CROSSTAB with no dataset is not merely incomplete — `dataset` is a
         // required IDENTIFIER on the server, so an unbound one makes the WHOLE
         // definition fail to parse: the template stops rendering until it is
         // fixed, and the error names a JSON path rather than the element. Bind
         // it to the first repeating dataset so inserting one is always safe;
         // the property panel is where the user changes their mind.
-        if (element.kind === "CROSSTAB" && !element.dataset) {
+        if ((element.kind === "CROSSTAB" || element.kind === "CHART") && !element.dataset) {
           const repeating = definition.datasets.find(
             (dataset) => dataset.cardinality === "many",
           );
@@ -901,13 +1051,16 @@ const designerSlice = createSlice({
           return;
         }
         const bounds = boundsOf(definition, band);
+        const copies: ReportElement[] = [];
         for (const element of incoming) {
           const id = nextElementId(element.kind, taken);
           taken.add(id);
           pastedIds.push(id);
           const moved = moveElement({ ...element, id }, PASTE_OFFSET_MM, PASTE_OFFSET_MM);
-          band.elements.push(withRect(moved, clampRectToBand(elementRect(moved), bounds)));
+          copies.push(withRect(moved, clampRectToBand(elementRect(moved), bounds)));
         }
+        regroupCopies(copies, definition);
+        band.elements.push(...copies);
       });
 
       if (pastedIds.length) {
@@ -930,6 +1083,7 @@ const designerSlice = createSlice({
           return;
         }
         const bounds = boundsOf(definition, band);
+        const copies: ReportElement[] = [];
         for (const element of elements) {
           const id = nextElementId(element.kind, taken);
           taken.add(id);
@@ -939,8 +1093,10 @@ const designerSlice = createSlice({
             PASTE_OFFSET_MM,
             PASTE_OFFSET_MM,
           );
-          band.elements.push(withRect(moved, clampRectToBand(elementRect(moved), bounds)));
+          copies.push(withRect(moved, clampRectToBand(elementRect(moved), bounds)));
         }
+        regroupCopies(copies, definition);
+        band.elements.push(...copies);
       });
 
       if (newIds.length) {
@@ -1096,6 +1252,109 @@ const designerSlice = createSlice({
       });
     },
 
+    /**
+     * QtRPT's "Field same width" / "Field same height": every selected element
+     * takes the size of the one selected FIRST, which is the reference a user
+     * picks by clicking it before the others.
+     */
+    selectionSized(state, action: PayloadAction<"width" | "height">) {
+      const { bandIndex, elementIds } = state.selection;
+      if (bandIndex === null || elementIds.length < 2) {
+        return;
+      }
+      const band = bandAt(state.definition, bandIndex);
+      const anchor = band?.elements.find((element) => element.id === elementIds[0]);
+      if (!anchor) {
+        return;
+      }
+      const reference = elementRect(anchor);
+      const axis = action.payload;
+      editSelectedElements(state, axis === "width" ? "Same width" : "Same height", (element, _band, bounds) => {
+        if (element.id === anchor.id || element.kind === "PAGEBREAK") {
+          return element;
+        }
+        const rect = elementRect(element);
+        const next: Rect = axis === "width" ? { ...rect, w: reference.w } : { ...rect, h: reference.h };
+        const sized = withRect(element, clampRectToBand(next, bounds));
+        syncGridGeometry(state.definition, sized);
+        return sized;
+      });
+    },
+
+    /** QtRPT "To group": the selected elements select and move as one. */
+    selectionGrouped(state) {
+      const { bandIndex, elementIds } = state.selection;
+      if (bandIndex === null || elementIds.length < 2) {
+        return;
+      }
+      const group = nextGroupId(allGroupIds(state.definition));
+      editSelectedElements(state, "Group", (element) => ({ ...element, group }) as ReportElement);
+    },
+
+    /** QtRPT "To ungroup". */
+    selectionUngrouped(state) {
+      editSelectedElements(state, "Ungroup", (element) => {
+        if (!element.group) {
+          return element;
+        }
+        const next = { ...element } as ReportElement;
+        delete next.group;
+        return next;
+      });
+    },
+
+    /**
+     * One frame side on or off -- QtRPT's "Top line", "Bottom line", "Left
+     * line" and "Right line". The first selected element decides the
+     * direction, so a mixed selection flips as one, like the bold button.
+     */
+    selectionBorderToggled(state, action: PayloadAction<FrameSide>) {
+      const side = action.payload;
+      const first = selectedElements(state).find(canHaveBorder);
+      if (!first) {
+        return;
+      }
+      const turnOn = !first.border?.[side];
+      editSelectedElements(state, `${turnOn ? "Add" : "Remove"} ${side} line`, (element) => {
+        if (!canHaveBorder(element)) {
+          return element;
+        }
+        return { ...element, border: { ...(element.border ?? NO_SIDES), [side]: turnOn } } as ReportElement;
+      });
+    },
+
+    /**
+     * Set frame properties on the selection, or remove the frame (`null`,
+     * QtRPT's "No frame"). A patch on an element with no frame starts from one
+     * with no sides, so changing the width alone does not draw a box.
+     */
+    selectionBorderSet(
+      state,
+      action: PayloadAction<{ patch: Partial<ElementBorder> | null; label?: string; coalesceKey?: string }>,
+    ) {
+      const { patch } = action.payload;
+      editSelectedElements(
+        state,
+        action.payload.label ?? (patch ? "Edit frame" : "No frame"),
+        (element) => {
+          if (!canHaveBorder(element)) {
+            return element;
+          }
+          if (!patch) {
+            const next = { ...element } as ReportElement;
+            delete next.border;
+            return next;
+          }
+          const border = { ...(element.border ?? NO_SIDES), ...patch };
+          // A cleared colour box means the default, never an empty string the
+          // server's colour rule would refuse.
+          border.color = border.color || DEFAULT_BORDER.color;
+          return { ...element, border } as ReportElement;
+        },
+        action.payload.coalesceKey,
+      );
+    },
+
     // ── Bands ──────────────────────────────────────────────────────────
     bandPatched(state, action: PayloadAction<{ bandIndex: number; patch: BandPatch; coalesceKey?: string }>) {
       const { bandIndex, patch } = action.payload;
@@ -1130,8 +1389,10 @@ const designerSlice = createSlice({
     },
 
     bandAdded(state, action: PayloadAction<BandType>) {
+      const reportPage = state.view.reportPage;
       commitDefinitionEdit(state, `Add ${action.payload} band`, (definition) => {
-        definition.bands.push(createBand(action.payload, definition.layoutMode));
+        const band = createBand(action.payload, definition.layoutMode);
+        definition.bands.push(reportPage > 0 ? { ...band, reportPage } : band);
       });
       state.selection = { bandIndex: state.definition.bands.length - 1, elementIds: [] };
     },
@@ -1146,6 +1407,55 @@ const designerSlice = createSlice({
         }
         definition.bands.splice(bandIndex, 1);
       });
+      // The last band of an extra report page takes the page with it.
+      if (!state.definition.bands.some((band) => reportPageOf(band) === state.view.reportPage)) {
+        state.view.reportPage = 0;
+      }
+      state.selection = freshSelection();
+    },
+
+    // ── Report pages (QtRPT "New Report Page" / "Delete Report Page") ──
+    reportPageSelected(state, action: PayloadAction<number>) {
+      state.view.reportPage = action.payload;
+      state.selection = freshSelection();
+      state.interaction = freshInteraction();
+    },
+
+    /**
+     * A new report page, printed after the ones before it. It starts with a
+     * report header so there is somewhere to drop the first element.
+     */
+    reportPageAdded(state) {
+      const highest = state.definition.bands.reduce((max, band) => Math.max(max, reportPageOf(band)), 0);
+      const reportPage = highest + 1;
+      if (reportPage >= MAX_REPORT_PAGES) {
+        return;
+      }
+      commitDefinitionEdit(state, "New report page", (definition) => {
+        definition.bands.push({ ...createBand("REPORT_HEADER", definition.layoutMode), reportPage });
+      });
+      state.view.reportPage = reportPage;
+      state.selection = freshSelection();
+    },
+
+    /**
+     * Delete a report page and every band on it. Page 0 is the report itself
+     * and stays; later pages move down so the numbering has no gaps.
+     */
+    reportPageRemoved(state, action: PayloadAction<number>) {
+      const removed = action.payload;
+      if (removed <= 0) {
+        return;
+      }
+      commitDefinitionEdit(state, "Delete report page", (definition) => {
+        definition.bands = definition.bands
+          .filter((band) => reportPageOf(band) !== removed)
+          .map((band) => {
+            const page = reportPageOf(band);
+            return page > removed ? { ...band, reportPage: page - 1 } : band;
+          });
+      });
+      state.view.reportPage = Math.max(0, removed - 1);
       state.selection = freshSelection();
     },
 
@@ -1210,6 +1520,34 @@ const designerSlice = createSlice({
         // Typing in the size boxes coalesces; adding the border stays its own
         // undo step, so undoing a width change does not take the border away.
         exists ? { coalesceKey: "pageBorder" } : undefined,
+      );
+    },
+
+    /**
+     * Draw, change or remove the page watermark. `null` removes it; a patch
+     * turns it on from the defaults and changes it.
+     */
+    watermarkSet(state, action: PayloadAction<Partial<Watermark> | null>) {
+      const patch = action.payload;
+      if (patch === null) {
+        commitDefinitionEdit(state, "Remove watermark", (definition) => {
+          delete definition.watermark;
+        });
+        return;
+      }
+      const exists = state.definition.watermark !== undefined;
+      commitDefinitionEdit(
+        state,
+        exists ? "Edit watermark" : "Add watermark",
+        (definition) => {
+          const next = { ...DEFAULT_WATERMARK, ...definition.watermark, ...patch };
+          next.color = next.color || DEFAULT_WATERMARK.color;
+          if (!next.image) {
+            delete next.image;
+          }
+          definition.watermark = next;
+        },
+        exists ? { coalesceKey: "watermark" } : undefined,
       );
     },
 
@@ -1324,6 +1662,7 @@ export const {
   setShowExpressions,
   setLeftPanelOpen,
   setRightPanelOpen,
+  setUnit,
   selectBand,
   selectElement,
   selectElements,
@@ -1336,6 +1675,7 @@ export const {
   marqueeStarted,
   marqueeMoved,
   placingStarted,
+  placingPresetStarted,
   interactionEnded,
   moveCommitted,
   resizeCommitted,
@@ -1352,15 +1692,24 @@ export const {
   selectionAligned,
   selectionDistributed,
   selectionReordered,
+  selectionSized,
+  selectionGrouped,
+  selectionUngrouped,
+  selectionBorderToggled,
+  selectionBorderSet,
   bandPatched,
   bandHeightSet,
   bandAdded,
   bandRemoved,
   bandMoved,
+  reportPageSelected,
+  reportPageAdded,
+  reportPageRemoved,
   paperPatched,
   paperPresetApplied,
   marginsPatched,
   pageBorderSet,
+  watermarkSet,
   datasetUpserted,
   datasetRemoved,
   nameChanged,

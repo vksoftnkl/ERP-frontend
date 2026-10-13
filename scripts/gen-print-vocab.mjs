@@ -62,6 +62,11 @@ const vocabulary = {
   crosstabSorts: constArray(schemaSource, "CROSSTAB_SORTS"),
   crosstabOverflows: constArray(schemaSource, "CROSSTAB_OVERFLOWS"),
   positionTypes: constArray(schemaSource, "POSITION_TYPES"),
+  lineStyles: constArray(schemaSource, "LINE_STYLES"),
+  shapes: constArray(schemaSource, "SHAPES"),
+  chartTypes: constArray(schemaSource, "CHART_TYPES"),
+  legendPositions: constArray(schemaSource, "LEGEND_POSITIONS"),
+  horizontalAligns: constArray(schemaSource, "H_ALIGN"),
   transforms: constArray(jexlSource, "TRANSFORM_NAMES"),
   paperCodes: [...unitsSource.matchAll(/code:\s*'([A-Z0-9]+)'/g)].map((entry) => entry[1]),
 };

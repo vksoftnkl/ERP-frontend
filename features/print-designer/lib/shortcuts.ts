@@ -17,6 +17,8 @@ export const SHORTCUTS: readonly ShortcutEntry[] = [
   { keys: "Delete", action: "Delete the selection", group: "Editing" },
   { keys: "Ctrl+C / Ctrl+X / Ctrl+V", action: "Copy, cut, paste", group: "Editing" },
   { keys: "Ctrl+D", action: "Duplicate", group: "Editing" },
+  { keys: "Ctrl+Shift+G", action: "Group the selection", group: "Editing" },
+  { keys: "Ctrl+Shift+U", action: "Ungroup", group: "Editing" },
   { keys: "Arrows", action: "Nudge 0.5mm (one cell in GRID mode)", group: "Editing" },
   { keys: "Shift+Arrows", action: "Nudge 5mm", group: "Editing" },
   { keys: "Ctrl+A", action: "Select every element in the band", group: "Selection" },

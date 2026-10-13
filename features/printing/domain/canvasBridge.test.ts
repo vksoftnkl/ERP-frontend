@@ -275,6 +275,36 @@ describe("opening a revision on the canvas", () => {
 
     expect(reopened.pageBorder).toEqual(pageBorder);
   });
+
+  it("keeps report pages, page-break flags and the watermark through open and save", () => {
+    const watermark = {
+      text: "DRAFT",
+      opacity: 0.2,
+      rotationDeg: -30,
+      fontSizePt: 60,
+      color: "#808080",
+      bold: true,
+      imageScalePct: 60,
+    };
+    const stored = {
+      bands: [
+        { type: "DETAIL", startNewPage: true },
+        { type: "GROUP_HEADER", groupBy: "{{ row.c }}", startNewNumeration: true },
+        { type: "REPORT_HEADER", reportPage: 1 },
+        // Out of range: dropped rather than reaching the server's 400.
+        { type: "SUMMARY", reportPage: 99 },
+      ],
+      watermark,
+    };
+    const opened = toTemplateDefinition(version({ ptvBody: stored }));
+    const reopened = toTemplateDefinition(version({ ptvBody: bodyFromDefinition(opened) }));
+
+    expect(reopened.bands.map((band) => band.reportPage ?? 0)).toEqual([0, 0, 1, 0]);
+    expect(reopened.bands[0].startNewPage).toBe(true);
+    expect(reopened.bands[1].startNewNumeration).toBe(true);
+    expect("startNewPage" in reopened.bands[2]).toBe(false);
+    expect(reopened.watermark).toEqual(watermark);
+  });
 });
 
 describe("selectListColumns — the stand-in for a catalogue that does not exist", () => {

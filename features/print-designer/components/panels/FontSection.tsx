@@ -8,8 +8,12 @@
  * screen would print in a different face at the customer's counter.
  */
 
-import type { TextLikeElement } from "@/features/print-designer/types/template-definition";
-import { FONT_FAMILIES, FONT_SIZE_PRESETS } from "@/features/print-designer/lib/vocabulary";
+import type { TextLikeElement, TextRotation } from "@/features/print-designer/types/template-definition";
+import {
+  FONT_FAMILIES,
+  FONT_SIZE_PRESETS,
+  TEXT_ROTATIONS,
+} from "@/features/print-designer/lib/vocabulary";
 import {
   useElementPatch,
   useElementPatchEach,
@@ -18,7 +22,6 @@ import {
   CheckboxInput,
   ColorInput,
   FieldGrid,
-  NumberInput,
   Section,
   SelectInput,
   ToggleGroup,
@@ -37,7 +40,10 @@ export function FontSection({ bandIndex, elements }: FontSectionProps) {
   );
   const patchEach = useElementPatchEach(bandIndex, elements);
 
-  const setFont = (key: "family" | "size" | "bold" | "italic" | "underline", value: unknown) => {
+  const setFont = (
+    key: "family" | "size" | "bold" | "italic" | "underline" | "strikeout",
+    value: unknown,
+  ) => {
     patchEach(
       (element) => ({
         font: { ...("font" in element ? (element.font ?? {}) : {}), [key]: value },
@@ -70,9 +76,10 @@ export function FontSection({ bandIndex, elements }: FontSectionProps) {
           { value: "bold", label: "B", title: "Bold" },
           { value: "italic", label: "I", title: "Italic" },
           { value: "underline", label: "U", title: "Underline" },
+          { value: "strikeout", label: "S", title: "Strikeout" },
         ]}
         onCommit={(value) => {
-          const key = value as "bold" | "italic" | "underline";
+          const key = value as "bold" | "italic" | "underline" | "strikeout";
           // Toggle from the first element so the group flips as one, which is
           // what a user expects from a bold button on a multi-selection.
           const current = elements[0]?.font?.[key] ?? false;
@@ -87,6 +94,7 @@ export function FontSection({ bandIndex, elements }: FontSectionProps) {
           { value: "left", label: "⇤", title: "Left" },
           { value: "center", label: "↔", title: "Centre" },
           { value: "right", label: "⇥", title: "Right" },
+          { value: "justify", label: "☰", title: "Justify (wrapped lines reach both edges)" },
         ]}
         onCommit={(value) => patch({ align: value }, "Set alignment")}
       />
@@ -135,19 +143,19 @@ export function FontSection({ bandIndex, elements }: FontSectionProps) {
         onCommit={(value) => patch({ blankWhenZero: value }, "Set blank when zero")}
       />
 
-      <NumberInput
-        label="Stroke width"
-        suffix="pt"
-        step={0.25}
-        min={0}
-        value={sharedValue(elements, (element) => element.style?.strokeWidthPt ?? 0)}
-        onCommit={(value) =>
-          patchEach(
-            (element) => ({ style: { ...(element.style ?? {}), strokeWidthPt: value } }),
-            "Set stroke width",
-          )
-        }
+      <SelectInput
+        label="Rotation"
+        value={sharedValue(elements, (element) => String(element.rotation ?? 0))}
+        options={TEXT_ROTATIONS.map((rotation) => ({
+          value: String(rotation),
+          label: rotation === 0 ? "None" : `${rotation}° clockwise`,
+        }))}
+        onCommit={(value) => {
+          const rotation = Number(value) as TextRotation;
+          patch({ rotation: rotation === 0 ? undefined : rotation }, "Rotate text");
+        }}
       />
+
     </Section>
   );
 }

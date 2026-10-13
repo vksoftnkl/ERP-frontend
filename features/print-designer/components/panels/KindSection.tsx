@@ -13,17 +13,34 @@
 
 import type {
   AggregateFunction,
+  ChartElement,
+  ChartSeries,
+  ChartType,
   CrosstabAxis,
   CrosstabMeasure,
   CrosstabOverflow,
   CrosstabSort,
+  LegendPosition,
+  LineStyle,
   ReportElement,
+  Shape,
 } from "@/features/print-designer/types/template-definition";
+import { MARKUP_TAGS, wrapSelection } from "@/features/print-designer/lib/markup";
 import { useAppSelector } from "@/store/hooks";
 import { selectDatasetBindings } from "@/features/print-designer/store/selectors";
 import {
   AGGREGATE_FUNCTIONS,
+  BARCODE_LABELS,
   BARCODE_SYMBOLOGIES,
+  CHART_PALETTE,
+  CHART_TYPES,
+  CHART_TYPE_LABELS,
+  LEGEND_POSITIONS,
+  LINE_STYLES,
+  LINE_STYLE_LABELS,
+  SHAPES,
+  SHAPE_LABELS,
+  TWO_D_SYMBOLOGIES,
   CROSSTAB_OVERFLOWS,
   CROSSTAB_OVERFLOW_LABELS,
   CROSSTAB_SORTS,
@@ -57,40 +74,115 @@ export type KindSectionProps = {
   }) => void;
 };
 
+const LINE_STYLE_OPTIONS = LINE_STYLES.map((style) => ({ value: style, label: LINE_STYLE_LABELS[style] }));
+
+/**
+ * The rich-text buttons over a markup value: each wraps the selected text in
+ * its tag, or drops an empty pair at the caret. They act on the textarea in
+ * their own row, read at click time, so the selection is the one the user made.
+ */
+function MarkupButtons({ onInsert }: { onInsert: (tag: string, textarea: HTMLTextAreaElement) => void }) {
+  return (
+    <div className={styles.toggleRow}>
+      {MARKUP_TAGS.map((entry) => (
+        <button
+          key={entry.tag}
+          type="button"
+          className={styles.toolButton}
+          title={`${entry.title}: wraps the selected text in <${entry.tag}>`}
+          // mousedown, so the textarea keeps its selection while we read it.
+          onMouseDown={(event) => {
+            event.preventDefault();
+            const textarea = event.currentTarget
+              .closest("[data-value-row]")
+              ?.querySelector("textarea");
+            if (textarea) {
+              onInsert(entry.tag, textarea);
+            }
+          }}
+        >
+          <span className={styles.toolIcon}>{entry.label}</span>
+        </button>
+      ))}
+      <button
+        type="button"
+        className={styles.toolButton}
+        title="Colour: wraps the selection in <font color>"
+        onMouseDown={(event) => {
+          event.preventDefault();
+          const textarea = event.currentTarget.closest("[data-value-row]")?.querySelector("textarea");
+          if (textarea) {
+            onInsert('font color="#c00000"', textarea);
+          }
+        }}
+      >
+        <span className={styles.toolIcon} style={{ color: "#c00000" }}>A</span>
+      </button>
+      <button
+        type="button"
+        className={styles.toolButton}
+        title="Line break"
+        onMouseDown={(event) => {
+          event.preventDefault();
+          const textarea = event.currentTarget.closest("[data-value-row]")?.querySelector("textarea");
+          if (textarea) {
+            onInsert("br", textarea);
+          }
+        }}
+      >
+        <span className={styles.toolIcon}>↵</span>
+      </button>
+    </div>
+  );
+}
+
 function ExpressionRow({
   label,
   value,
   placeholder,
   onChange,
   onOpen,
+  above,
 }: {
   label: string;
   value: string;
   placeholder?: string;
   onChange: (value: string) => void;
   onOpen: () => void;
+  /** Controls drawn over the textarea, e.g. the rich-text buttons. */
+  above?: React.ReactNode;
 }) {
+  const row = (
+    <div className={styles.expressionRow}>
+      <textarea
+        className={styles.textarea}
+        style={{ minHeight: 40 }}
+        spellCheck={false}
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => event.stopPropagation()}
+      />
+      <button
+        type="button"
+        className={styles.fxButton}
+        title="Open the expression editor"
+        onClick={onOpen}
+      >
+        fx
+      </button>
+    </div>
+  );
   return (
     <FieldRow label={label} wide>
-      <div className={styles.expressionRow}>
-        <textarea
-          className={styles.textarea}
-          style={{ minHeight: 40 }}
-          spellCheck={false}
-          placeholder={placeholder}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={(event) => event.stopPropagation()}
-        />
-        <button
-          type="button"
-          className={styles.fxButton}
-          title="Open the expression editor"
-          onClick={onOpen}
-        >
-          fx
-        </button>
-      </div>
+      {above ? (
+        <div className={styles.expressionStack}>
+          {above}
+          {row}
+        </div>
+      ) : (
+        row
+      )}
     </FieldRow>
   );
 }
@@ -124,21 +216,49 @@ export function KindSection({ bandIndex, elements, onEditExpression }: KindSecti
       const aggregates = elements.map((element) =>
         element.kind === "FIELD" ? element.aggregate : undefined,
       );
+      const markup = sharedValue(elements, (element) =>
+        element.kind === "TEXT" || element.kind === "FIELD" ? element.markup === true : false,
+      );
+      const insertTag = (tag: string, textarea: HTMLTextAreaElement) => {
+        const name = tag.split(" ")[0];
+        if (name === "br") {
+          const at = textarea.selectionStart;
+          patch({ value: `${value.slice(0, at)}<br>${value.slice(at)}` }, "Insert line break");
+          return;
+        }
+        const wrapped = wrapSelection(value, textarea.selectionStart, textarea.selectionEnd, tag);
+        // The closing tag is the bare name, whatever attributes the opening one had.
+        const fixed = tag === name ? wrapped.value : wrapped.value.replace(`</${tag}>`, `</${name}>`);
+        patch({ value: fixed }, `Insert <${name}>`);
+      };
       return (
         <Section title={kind === "TEXT" ? "Text" : "Field"}>
-          <ExpressionRow
-            label="Value"
-            value={value}
-            placeholder="Text or {{ row.field }}"
-            onChange={(next) => patch({ value: next }, "Edit value", `value-${bandIndex}`)}
-            onOpen={() =>
-              onEditExpression({
-                title: "Value expression",
-                value,
-                onCommit: (next) => patch({ value: next }, "Edit value"),
-              })
-            }
+          <div data-value-row="" style={{ display: "contents" }}>
+            <ExpressionRow
+              label="Value"
+              value={value}
+              placeholder="Text or {{ row.field }}"
+              above={markup === true ? <MarkupButtons onInsert={insertTag} /> : undefined}
+              onChange={(next) => patch({ value: next }, "Edit value", `value-${bandIndex}`)}
+              onOpen={() =>
+                onEditExpression({
+                  title: "Value expression",
+                  value,
+                  onCommit: (next) => patch({ value: next }, "Edit value"),
+                })
+              }
+            />
+          </div>
+          <CheckboxInput
+            label="Rich text (HTML)"
+            value={markup}
+            onCommit={(next) => patch({ markup: next }, next ? "Rich text on" : "Rich text off")}
           />
+          {markup === true ? (
+            <p className={styles.listRowMeta}>
+              {"<b> <i> <u> <s> <sup> <sub> <br> and <font color=\"#c00000\" size=\"3\"> work in the typed text. Tags inside {{ }} and in the data print as typed."}
+            </p>
+          ) : null}
 
           {kind === "FIELD" ? (
             <>
@@ -260,14 +380,75 @@ export function KindSection({ bandIndex, elements, onEditExpression }: KindSecti
                 )
               }
             />
+            <SelectInput
+              label="Style"
+              value={sharedValue(elements, (element) => element.style?.lineStyle ?? "SOLID")}
+              options={LINE_STYLE_OPTIONS}
+              onCommit={(value) =>
+                patchEach(
+                  (element) => ({
+                    style: { ...(element.style ?? {}), lineStyle: value === "SOLID" ? undefined : (value as LineStyle) },
+                  }),
+                  "Set line style",
+                )
+              }
+            />
           </FieldGrid>
+          <CheckboxInput
+            label="Arrow at the start"
+            value={sharedValue(elements, (element) =>
+              element.kind === "LINE" ? element.arrowStart === true : false,
+            )}
+            onCommit={(value) => patch({ arrowStart: value }, value ? "Add start arrow" : "Remove start arrow")}
+          />
+          <CheckboxInput
+            label="Arrow at the end"
+            value={sharedValue(elements, (element) =>
+              element.kind === "LINE" ? element.arrowEnd === true : false,
+            )}
+            onCommit={(value) => patch({ arrowEnd: value }, value ? "Add end arrow" : "Remove end arrow")}
+          />
+          <NumberInput
+            label="Arrow length"
+            suffix="mm"
+            step={0.5}
+            min={0.5}
+            max={20}
+            value={sharedValue(elements, (element) =>
+              element.kind === "LINE" ? (element.arrowSizeMm ?? 2.5) : 2.5,
+            )}
+            onCommit={(value) => patch({ arrowSizeMm: value }, "Set arrow length")}
+          />
         </Section>
       );
 
     case "RECT":
       return (
-        <Section title="Rectangle">
+        <Section title="Shape">
           <FieldGrid>
+            <SelectInput
+              label="Shape"
+              value={sharedValue(elements, (element) =>
+                element.kind === "RECT" ? (element.shape ?? "RECT") : "RECT",
+              )}
+              options={SHAPES.map((shape) => ({ value: shape, label: SHAPE_LABELS[shape] }))}
+              onCommit={(value) =>
+                patch({ shape: value === "RECT" ? undefined : (value as Shape) }, `Shape ${SHAPE_LABELS[value as Shape]}`)
+              }
+            />
+            <SelectInput
+              label="Line style"
+              value={sharedValue(elements, (element) => element.style?.lineStyle ?? "SOLID")}
+              options={LINE_STYLE_OPTIONS}
+              onCommit={(value) =>
+                patchEach(
+                  (element) => ({
+                    style: { ...(element.style ?? {}), lineStyle: value === "SOLID" ? undefined : (value as LineStyle) },
+                  }),
+                  "Set line style",
+                )
+              }
+            />
             <NumberInput
               label="Corner radius"
               suffix="mm"
@@ -376,10 +557,15 @@ export function KindSection({ bandIndex, elements, onEditExpression }: KindSecti
             )}
             options={BARCODE_SYMBOLOGIES.map((symbology) => ({
               value: symbology,
-              label: symbology.toUpperCase(),
+              label: BARCODE_LABELS[symbology],
             }))}
             onCommit={(value) => patch({ symbology: value }, "Set symbology")}
           />
+          {elements.some((element) => element.kind === "BARCODE" && TWO_D_SYMBOLOGIES.has(element.symbology)) ? (
+            <p className={styles.listRowMeta}>
+              A 2D code sizes itself from its data and has no digits under it; it is fitted into the box.
+            </p>
+          ) : null}
           <CheckboxInput
             label="Print the digits under the bars"
             value={sharedValue(elements, (element) =>
@@ -883,6 +1069,31 @@ export function KindSection({ bandIndex, elements, onEditExpression }: KindSecti
               value={read((element) => element.headerFill)}
               onCommit={(value) => patch({ headerFill: value || undefined }, "Set header fill")}
             />
+            <ColorInput
+              label="Totals fill"
+              value={read((element) => element.totalsFill)}
+              onCommit={(value) => patch({ totalsFill: value || undefined }, "Set totals fill")}
+            />
+            <CheckboxInput
+              label="Subtotal each group"
+              value={read((element) => element.showSubtotals === true)}
+              onCommit={(value) => patch({ showSubtotals: value }, value ? "Show subtotals" : "Hide subtotals")}
+            />
+            {read((element) => element.showSubtotals === true) === true ? (
+              <TextInput
+                label="Subtotal label"
+                value={read((element) => element.subtotalLabel ?? "Subtotal")}
+                placeholder="Subtotal"
+                onCommit={(value) => patch({ subtotalLabel: value || "Subtotal" }, "Set subtotal label")}
+              />
+            ) : null}
+            {read((element) => element.showSubtotals === true) === true &&
+            (single?.extraRowBys ?? []).length === 0 ? (
+              <p className={styles.listRowMeta}>
+                Subtotals need a second row level — add one above; with a single level every row is
+                already its own total.
+              </p>
+            ) : null}
             <FieldGrid>
               <NumberInput
                 label="Font size"
@@ -920,6 +1131,271 @@ export function KindSection({ bandIndex, elements, onEditExpression }: KindSecti
             </p>
           </Section>
         </>
+      );
+    }
+
+    case "CHART": {
+      const read = <T,>(pick: (element: ChartElement) => T) =>
+        sharedValue(elements, (element) => (element.kind === "CHART" ? pick(element) : (undefined as T)));
+      const single = elements.length === 1 && elements[0].kind === "CHART" ? elements[0] : null;
+      const isPie = read((element) => element.chartType) === "PIE";
+      const textOf = (shared: ReturnType<typeof read<string>>) => (isMixed(shared) ? "" : (shared ?? ""));
+      const category = textOf(read((element) => element.category));
+      const setSeries = (series: ChartSeries[], label: string) => patch({ series }, label);
+      const fontSize = (key: "font" | "titleFont" | "legendFont", fallback: number) =>
+        read((element) => element[key]?.size ?? fallback);
+      const setFontSize = (key: "font" | "titleFont" | "legendFont", value: number, label: string) =>
+        patchEach(
+          (element) => (element.kind === "CHART" ? { [key]: { ...element[key], size: value } } : {}),
+          label,
+        );
+
+      return (
+        <Section title="Chart">
+          <SelectInput
+            label="Dataset"
+            wide
+            value={read((element) => element.dataset)}
+            options={[
+              { value: "", label: datasets.length ? "Choose a dataset…" : "No datasets defined" },
+              ...datasets
+                .filter((dataset) => dataset.cardinality === "many")
+                .map((dataset) => ({ value: dataset.name, label: dataset.name })),
+            ]}
+            onCommit={(value) => patch({ dataset: value }, "Set chart dataset")}
+          />
+          <FieldGrid>
+            <SelectInput
+              label="Type"
+              value={read((element) => element.chartType)}
+              options={CHART_TYPES.map((type) => ({ value: type, label: CHART_TYPE_LABELS[type] }))}
+              onCommit={(value) => patch({ chartType: value as ChartType }, "Set chart type")}
+            />
+            <SelectInput
+              label="Combine rows by"
+              value={read((element) => element.fn)}
+              options={AGGREGATE_FUNCTIONS.map((fn) => ({ value: fn, label: fn }))}
+              onCommit={(value) => patch({ fn: value as AggregateFunction }, "Set chart aggregate")}
+            />
+          </FieldGrid>
+          <ExpressionRow
+            label={isPie ? "Slice label" : "Category (x axis)"}
+            value={category}
+            placeholder="{{ row.month }}"
+            onChange={(next) => patch({ category: next }, "Edit chart category", `chart-category-${bandIndex}`)}
+            onOpen={() =>
+              onEditExpression({
+                title: "Chart category expression",
+                value: category,
+                onCommit: (next) => patch({ category: next }, "Edit chart category"),
+              })
+            }
+          />
+
+          {single ? (
+            <>
+              {single.series.map((series, index) => (
+                <div key={`series-${index}`} className={styles.axisLevel}>
+                  <div className={styles.axisLevelHead}>
+                    <span className={styles.listRowMeta}>
+                      {isPie && index > 0 ? `Series ${index + 1} (a pie plots only the first)` : `Series ${index + 1}`}
+                    </span>
+                    {single.series.length > 1 ? (
+                      <button
+                        type="button"
+                        className={styles.toolButton}
+                        title="Remove this series"
+                        onClick={() =>
+                          setSeries(single.series.filter((_s, position) => position !== index), "Remove series")
+                        }
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                  </div>
+                  <FieldGrid>
+                    <TextInput
+                      label="Name"
+                      value={series.name}
+                      placeholder={`Series ${index + 1}`}
+                      onCommit={(name) =>
+                        setSeries(
+                          single.series.map((entry, position) => (position === index ? { ...entry, name } : entry)),
+                          "Rename series",
+                        )
+                      }
+                    />
+                    <ColorInput
+                      label="Colour"
+                      value={series.color ?? CHART_PALETTE[index % CHART_PALETTE.length]}
+                      onCommit={(color) =>
+                        setSeries(
+                          single.series.map((entry, position) =>
+                            position === index ? { ...entry, color: color || undefined } : entry,
+                          ),
+                          "Set series colour",
+                        )
+                      }
+                    />
+                  </FieldGrid>
+                  <ExpressionRow
+                    label="Value"
+                    value={series.value}
+                    placeholder="{{ row.amount }}"
+                    onChange={(value) =>
+                      patch(
+                        {
+                          series: single.series.map((entry, position) =>
+                            position === index ? { ...entry, value } : entry,
+                          ),
+                        },
+                        "Edit series value",
+                        `chart-series-${bandIndex}-${index}`,
+                      )
+                    }
+                    onOpen={() =>
+                      onEditExpression({
+                        title: `Series ${index + 1} value`,
+                        value: series.value,
+                        onCommit: (value) =>
+                          setSeries(
+                            single.series.map((entry, position) =>
+                              position === index ? { ...entry, value } : entry,
+                            ),
+                            "Edit series value",
+                          ),
+                      })
+                    }
+                  />
+                </div>
+              ))}
+              {single.series.length < 8 ? (
+                <button
+                  type="button"
+                  className={styles.axisAdd}
+                  onClick={() =>
+                    setSeries([...single.series, { name: "", value: "{{ row.amount }}" }], "Add series")
+                  }
+                >
+                  + Add a series
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <p className={styles.listRowMeta}>Select one chart to edit its series.</p>
+          )}
+
+          <TextInput
+            label="Title"
+            wide
+            value={read((element) => element.title)}
+            placeholder="Sales by month"
+            onCommit={(value) => patch({ title: value }, "Set chart title")}
+          />
+          <FieldGrid>
+            <CheckboxInput
+              label="Legend"
+              value={read((element) => element.showLegend)}
+              onCommit={(value) => patch({ showLegend: value }, "Set legend")}
+            />
+            <SelectInput
+              label="Legend at"
+              value={read((element) => element.legendPosition)}
+              options={LEGEND_POSITIONS.map((position) => ({
+                value: position,
+                label: position.charAt(0) + position.slice(1).toLowerCase(),
+              }))}
+              onCommit={(value) => patch({ legendPosition: value as LegendPosition }, "Set legend position")}
+            />
+            <CheckboxInput
+              label="Show values"
+              value={read((element) => element.showValues)}
+              onCommit={(value) => patch({ showValues: value }, "Set value labels")}
+            />
+            {isPie ? (
+              <>
+                <CheckboxInput
+                  label="Show percentages"
+                  value={read((element) => element.showPercent)}
+                  onCommit={(value) => patch({ showPercent: value }, "Set percentages")}
+                />
+                <NumberInput
+                  label="Hole size"
+                  suffix="%"
+                  step={5}
+                  min={0}
+                  max={90}
+                  value={read((element) => element.holeSizePct)}
+                  onCommit={(value) => patch({ holeSizePct: value }, "Set hole size")}
+                />
+              </>
+            ) : (
+              <CheckboxInput
+                label="Grid lines"
+                value={read((element) => element.showGrid)}
+                onCommit={(value) => patch({ showGrid: value }, "Set chart grid")}
+              />
+            )}
+            <NumberInput
+              label="Max categories"
+              step={1}
+              min={1}
+              max={100}
+              value={read((element) => element.maxCategories)}
+              onCommit={(value) => patch({ maxCategories: Math.round(value) }, "Set max categories")}
+            />
+            <TextInput
+              label="Number format"
+              mono
+              value={read((element) => element.format)}
+              placeholder="#,##0"
+              onCommit={(value) => patch({ format: value || "#,##0" }, "Set chart number format")}
+            />
+            <NumberInput
+              label="Label size"
+              suffix="pt"
+              step={0.5}
+              min={4}
+              value={fontSize("font", 7)}
+              onCommit={(value) => setFontSize("font", value, "Set chart label size")}
+            />
+            <NumberInput
+              label="Title size"
+              suffix="pt"
+              step={0.5}
+              min={4}
+              value={fontSize("titleFont", 10)}
+              onCommit={(value) => setFontSize("titleFont", value, "Set chart title size")}
+            />
+            <NumberInput
+              label="Legend size"
+              suffix="pt"
+              step={0.5}
+              min={4}
+              value={fontSize("legendFont", 7)}
+              onCommit={(value) => setFontSize("legendFont", value, "Set chart legend size")}
+            />
+            <ColorInput
+              label="Background"
+              value={read((element) => element.background)}
+              onCommit={(value) => patch({ background: value || undefined }, "Set chart background")}
+            />
+            <ColorInput
+              label="Title colour"
+              value={read((element) => element.titleColor)}
+              onCommit={(value) => patch({ titleColor: value || undefined }, "Set chart title colour")}
+            />
+            <ColorInput
+              label="Legend colour"
+              value={read((element) => element.legendColor)}
+              onCommit={(value) => patch({ legendColor: value || undefined }, "Set chart legend colour")}
+            />
+          </FieldGrid>
+          <p className={styles.listRowMeta}>
+            The canvas sketches the chart with sample values. Rows sharing a category are combined;
+            Preview draws it from the real data.
+          </p>
+        </Section>
       );
     }
 

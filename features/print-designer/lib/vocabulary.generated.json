@@ -35,7 +35,8 @@
     "BARCODE",
     "QRCODE",
     "PAGEBREAK",
-    "CROSSTAB"
+    "CROSSTAB",
+    "CHART"
   ],
   "printOn": [
     "ALL_PAGES",
@@ -49,8 +50,16 @@
     "ean13",
     "ean8",
     "upca",
+    "upce",
     "code39",
-    "itf14"
+    "code93",
+    "codabar",
+    "itf14",
+    "interleaved2of5",
+    "gs1_128",
+    "pdf417",
+    "datamatrix",
+    "azteccode"
   ],
   "aggregateFunctions": [
     "sum",
@@ -78,6 +87,38 @@
   "positionTypes": [
     "FIX",
     "FLOAT"
+  ],
+  "lineStyles": [
+    "SOLID",
+    "DASH",
+    "DOT",
+    "DASH_DOT",
+    "DASH_DOT_DOT",
+    "DOUBLE"
+  ],
+  "shapes": [
+    "RECT",
+    "ELLIPSE",
+    "TRIANGLE",
+    "RHOMBUS"
+  ],
+  "chartTypes": [
+    "BAR",
+    "STACKED_BAR",
+    "LINE",
+    "PIE"
+  ],
+  "legendPositions": [
+    "BOTTOM",
+    "TOP",
+    "LEFT",
+    "RIGHT"
+  ],
+  "horizontalAligns": [
+    "left",
+    "center",
+    "right",
+    "justify"
   ],
   "transforms": [
     "fmt",

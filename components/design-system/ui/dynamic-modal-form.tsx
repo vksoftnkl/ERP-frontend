@@ -45,6 +45,7 @@ export type {
   ERPDynamicFieldType,
   ERPDynamicFieldValidation,
   ERPDynamicModalController,
+  ERPDynamicModalDraftAppliedPayload,
   ERPDynamicModalField,
   ERPDynamicModalFormProps,
   ERPDynamicModalOpenOptions,
@@ -85,6 +86,13 @@ import {
   ModalFooterSubmitIcon,
 } from "./dynamic-modal-form.parts";
 import { requestDataRefresh } from "@/lib/data-freshness";
+import {
+  clearFormDraft,
+  collectChangedFormValues,
+  readFormDraft,
+  writeFormDraft,
+  type FormDraftLabels,
+} from "@/lib/form-drafts";
 import { matchesSearchTokens, searchTokens } from "@/lib/search-text";
 
 /**
@@ -100,6 +108,48 @@ function isTopmostOpenModal(token: symbol): boolean {
   return openModalStack[openModalStack.length - 1] === token;
 }
 
+/**
+ * The names of the options a draft chose, so its dropdowns read right on the
+ * next open even before their options load. A name the field cannot supply now
+ * (its lazy list was reloaded without it) is carried over from `previous`.
+ */
+function collectDraftLabels(
+  fields: ERPDynamicModalField[],
+  values: Record<string, string>,
+  previous: FormDraftLabels,
+): FormDraftLabels {
+  const labels: FormDraftLabels = {};
+  for (const field of fields) {
+    if ((field.type ?? "text") !== "select" || !(field.name in values)) {
+      continue;
+    }
+    const chosen = field.multiple
+      ? parseMultiSelectValue(values[field.name])
+      : [values[field.name]].filter(Boolean);
+    const byValue: Record<string, string> = {};
+    for (const value of chosen) {
+      const label =
+        field.options?.find((option) => option.value === value)?.label ??
+        previous[field.name]?.[value];
+      if (label && label !== value) {
+        byValue[value] = label;
+      }
+    }
+    if (Object.keys(byValue).length > 0) {
+      labels[field.name] = byValue;
+    }
+  }
+  return labels;
+}
+
+function formatDraftSavedAt(savedAt: number): string {
+  const saved = new Date(savedAt);
+  const time = saved.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return saved.toDateString() === new Date().toDateString()
+    ? `today ${time}`
+    : `${saved.toLocaleDateString(undefined, { day: "2-digit", month: "short" })} ${time}`;
+}
+
 export function ERPDynamicModalForm({
   title,
   description,
@@ -107,6 +157,7 @@ export function ERPDynamicModalForm({
   onSubmit,
   onOpenChange,
   onCancel,
+  onDraftApplied,
   initialValuesByVariant,
   closeOnBackdrop = true,
   closeOnSubmit = true,
@@ -181,6 +232,17 @@ export function ERPDynamicModalForm({
   // Guards the open-time auto-focus so it fires once per open, not on every
   // re-render while the modal stays open.
   const autoFocusAppliedRef = useRef(false);
+  // The draft of the open form (`draftKey` on open): its key, the values the form
+  // opened on (a draft keeps only what differs from them), and the last values
+  // written, so a render that changed nothing writes nothing.
+  const draftKeyRef = useRef<string | null>(null);
+  const draftBaselineRef = useRef<Record<string, string>>({});
+  const draftWrittenRef = useRef<string | null>(null);
+  // Option names a restored draft brought back, shown until the options load.
+  const [draftLabels, setDraftLabels] = useState<FormDraftLabels>({});
+  const draftLabelsRef = useRef<FormDraftLabels>({});
+  // When the restored draft was last saved; drives the "restored" notice.
+  const [restoredDraftAt, setRestoredDraftAt] = useState<number | null>(null);
   // Replaces the whole form value set (open/reset). Keeps `formDataRef` in sync.
   const replaceFormData = useCallback((nextValues: Record<string, string>) => {
     formDataRef.current = nextValues;
@@ -246,6 +308,10 @@ export function ERPDynamicModalForm({
     setSearchDropdownPlacement("down");
     setSearchDropdownMaxHeight(SEARCH_SELECT_LIST_MAX_HEIGHT);
     fieldValueChangeRequestIdsRef.current = {};
+    // Closing without saving keeps the draft (already written as it was typed);
+    // only a save or Discard drops it.
+    draftKeyRef.current = null;
+    setRestoredDraftAt(null);
     onOpenChange?.(false, activeVariant?.key ?? null);
   }, [activeVariant?.key, onOpenChange]);
   const openModal = useCallback(
@@ -254,10 +320,19 @@ export function ERPDynamicModalForm({
       if (!variant) {
         return;
       }
-      const nextFormData = {
+      const openingValues = {
         ...buildInitialValues(variant, initialValuesByVariant),
         ...(options?.values ?? {}),
       };
+      const draftKey = options?.draftKey ?? null;
+      const draft = draftKey ? readFormDraft(draftKey) : null;
+      const nextFormData = draft ? { ...openingValues, ...draft.values } : openingValues;
+      draftKeyRef.current = draftKey;
+      draftBaselineRef.current = openingValues;
+      draftWrittenRef.current = draft ? JSON.stringify(draft.values) : null;
+      draftLabelsRef.current = draft?.labels ?? {};
+      setDraftLabels(draftLabelsRef.current);
+      setRestoredDraftAt(draft?.savedAt ?? null);
       setActiveVariantKey(variantKey);
       replaceFormData(nextFormData);
       setFileData({});
@@ -289,9 +364,60 @@ export function ERPDynamicModalForm({
       // database holds at the moment it is opened rather than at page load.
       requestDataRefresh("modal-open");
       onOpenChange?.(true, variantKey);
+      // After onOpenChange, which may reset the page's own state for a fresh form.
+      if (draft) {
+        onDraftApplied?.({
+          variantKey,
+          action: "restored",
+          values: nextFormData,
+          labels: draft.labels,
+        });
+      }
     },
-    [initialValuesByVariant, onOpenChange, replaceFormData, variants],
+    [initialValuesByVariant, onDraftApplied, onOpenChange, replaceFormData, variants],
   );
+  // Writes the draft as the user types. Effects run after every commit, so the
+  // latest keystroke is already stored when the screen is left or the tab dies.
+  useEffect(() => {
+    const draftKey = draftKeyRef.current;
+    if (!isOpen || !draftKey || !activeVariant) {
+      return;
+    }
+    const changed = collectChangedFormValues(draftBaselineRef.current, formData);
+    const serialized = changed ? JSON.stringify(changed) : null;
+    if (serialized === draftWrittenRef.current) {
+      return;
+    }
+    draftWrittenRef.current = serialized;
+    if (!changed) {
+      clearFormDraft(draftKey);
+      return;
+    }
+    const labels = collectDraftLabels(activeVariant.fields, changed, draftLabelsRef.current);
+    draftLabelsRef.current = labels;
+    writeFormDraft(draftKey, { values: changed, labels });
+  }, [activeVariant, formData, isOpen]);
+  const discardDraft = useCallback(() => {
+    const draftKey = draftKeyRef.current;
+    if (draftKey) {
+      clearFormDraft(draftKey);
+    }
+    const openingValues = draftBaselineRef.current;
+    draftWrittenRef.current = null;
+    draftLabelsRef.current = {};
+    setDraftLabels({});
+    setRestoredDraftAt(null);
+    setFieldErrors({});
+    replaceFormData(openingValues);
+    if (activeVariant) {
+      onDraftApplied?.({
+        variantKey: activeVariant.key,
+        action: "discarded",
+        values: openingValues,
+        labels: {},
+      });
+    }
+  }, [activeVariant, onDraftApplied, replaceFormData]);
   useEffect(() => {
     onControllerReady?.({ openModal, closeModal });
   }, [closeModal, onControllerReady, openModal]);
@@ -1401,6 +1527,11 @@ export function ERPDynamicModalForm({
         files: fileData,
         sectionExpandedState: activeSectionExpandedState ?? {},
       });
+      // Saved: the draft has done its job. A failed save threw above and keeps it.
+      if (draftKeyRef.current) {
+        clearFormDraft(draftKeyRef.current);
+        draftKeyRef.current = null;
+      }
       if (resetOnSubmit) {
         replaceFormData(buildInitialValues(activeVariant, initialValuesByVariant));
         setFileData({});
@@ -1617,6 +1748,8 @@ export function ERPDynamicModalForm({
       isMultiSelect || isCheckboxGroup
         ? parseMultiSelectValue(fieldValue)
         : [];
+    // A restored draft names its choices until the field's options load.
+    const draftFieldLabels = draftLabels[field.name];
     const selectedOptionEntries = isMultiSelect
       ? selectedValues.map((selectedValue) => {
           const matchedOption = field.options?.find(
@@ -1624,11 +1757,16 @@ export function ERPDynamicModalForm({
           );
           return {
             value: selectedValue,
-            label: matchedOption?.label ?? selectedValue,
+            label: matchedOption?.label ?? draftFieldLabels?.[selectedValue] ?? selectedValue,
           };
         })
       : [];
-    const selectedLabel = getSelectOptionLabel(field, fieldValue);
+    const selectedLabel =
+      fieldValue &&
+      draftFieldLabels?.[fieldValue] &&
+      !field.options?.some((option) => option.value === fieldValue)
+        ? draftFieldLabels[fieldValue]
+        : getSelectOptionLabel(field, fieldValue);
     const searchQuery = searchQueries[field.name];
     const searchInputValue = searchQuery ?? "";
     const shouldUseSearchableSelect =
@@ -2358,6 +2496,21 @@ export function ERPDynamicModalForm({
                 </button>
               </div>
             </header>
+            {restoredDraftAt !== null ? (
+              <div className={cx(styles.draftNotice, "erp-ms-modal-draft-notice")} role="status">
+                <span className={styles.draftNoticeText}>
+                  Unsaved entry restored (last typed {formatDraftSavedAt(restoredDraftAt)}).
+                </span>
+                <button
+                  type="button"
+                  className={styles.draftNoticeDiscard}
+                  onClick={discardDraft}
+                  disabled={isSubmitting}
+                >
+                  Discard
+                </button>
+              </div>
+            ) : null}
             <div
               className={cx(styles.scrollArea, "erp-ms-modal-body")}
               ref={scrollAreaRef}

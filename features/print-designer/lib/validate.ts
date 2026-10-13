@@ -24,11 +24,16 @@ import {
   templateRoots,
 } from "@/features/print-designer/lib/expression";
 import {
+  CHART_BANDS,
   CROSSTAB_BANDS,
   GROUPED_BANDS,
   ROW_BANDS,
   SINGLETON_BANDS,
 } from "@/features/print-designer/lib/vocabulary";
+
+/** What the server's colour rule accepts: #rrggbb, or an expression. */
+const isColour = (value: string | undefined): boolean =>
+  value === undefined || value === "" || /^#[0-9a-fA-F]{6}$/.test(value) || value.includes("{{");
 
 export type ProblemSeverity = "error" | "warning";
 
@@ -116,6 +121,28 @@ function expressionFields(band: Band): ExpressionField[] {
         elementId: element.id,
         rowAware: true,
       });
+    }
+    if (element.kind === "TEXT" || element.kind === "FIELD") {
+      for (const [index, rule] of (element.highlights ?? []).entries()) {
+        fields.push({
+          label: `${element.id} highlight ${index + 1}`,
+          value: rule.when,
+          elementId: element.id,
+        });
+      }
+    }
+    if (element.kind === "CHART") {
+      // Evaluated once per row of the chart's own dataset, so `row` is real.
+      fields.push({ label: `${element.id} category`, value: element.category, elementId: element.id, rowAware: true });
+      for (const [index, series] of element.series.entries()) {
+        fields.push({
+          label: `${element.id} series ${index + 1}`,
+          value: series.value,
+          elementId: element.id,
+          rowAware: true,
+        });
+      }
+      fields.push({ label: `${element.id} title`, value: element.title, elementId: element.id });
     }
     if (element.kind === "CROSSTAB") {
       // Every level and every measure, not just the first of each: an
@@ -218,6 +245,9 @@ export function validateDefinition(
         message: "Page border distance from the edge cannot be negative.",
       });
     }
+    if (border.style !== undefined && !["SOLID", "DASH", "DOT", "DASH_DOT", "DASH_DOT_DOT", "DOUBLE"].includes(border.style)) {
+      problems.push({ severity: "error", scope: "paper", message: `Unknown page border style '${border.style}'.` });
+    }
     const sides = {
       left: border.insetMm ?? paper.margins.left,
       right: border.insetMm ?? paper.margins.right,
@@ -233,6 +263,64 @@ export function validateDefinition(
         scope: "paper",
         message: "The page border's distance from the edge leaves no frame to draw.",
       });
+    }
+  }
+
+  // ── Watermark ────────────────────────────────────────────────────────
+  const watermark = definition.watermark;
+  if (watermark) {
+    if (definition.layoutMode === "GRID") {
+      problems.push({
+        severity: "warning",
+        scope: "paper",
+        message: "Character-grid stationery cannot print a watermark; it is ignored.",
+      });
+    } else if (paper.heightMm === null) {
+      problems.push({
+        severity: "warning",
+        scope: "paper",
+        message: "Continuous stationery has no page to centre a watermark on, so it is not printed.",
+      });
+    }
+    if (!watermark.text?.trim() && !watermark.image?.trim()) {
+      problems.push({
+        severity: "warning",
+        scope: "paper",
+        message: "The watermark has neither text nor an image, so nothing prints.",
+      });
+    }
+    if (!isColour(watermark.color)) {
+      problems.push({
+        severity: "error",
+        scope: "paper",
+        message: `Watermark colour '${watermark.color}' must be #rrggbb.`,
+      });
+    }
+    if (!(watermark.opacity >= 0.02 && watermark.opacity <= 1)) {
+      problems.push({
+        severity: "error",
+        scope: "paper",
+        message: "Watermark opacity must be between 2% and 100%.",
+      });
+    }
+    if (!(watermark.fontSizePt >= 6 && watermark.fontSizePt <= 300)) {
+      problems.push({
+        severity: "error",
+        scope: "paper",
+        message: "Watermark text size must be between 6pt and 300pt.",
+      });
+    }
+    for (const [label, value] of [
+      ["text", watermark.text],
+      ["image", watermark.image],
+    ] as const) {
+      for (const issue of lintTemplateString(value, datasets.map((dataset) => dataset.name))) {
+        problems.push({
+          severity: issue.severity,
+          scope: "paper",
+          message: `Watermark ${label}: ${issue.message}`,
+        });
+      }
     }
   }
 
@@ -531,6 +619,167 @@ export function validateDefinition(
         }
       }
 
+      // ── Frames and text styling ──────────────────────────────────────
+      const grid = definition.layoutMode === "GRID";
+      if (element.border) {
+        if (!isColour(element.border.color)) {
+          problems.push({
+            severity: "error",
+            bandIndex,
+            elementId: element.id,
+            message: `The frame colour on '${element.id}' must be #rrggbb.`,
+          });
+        }
+        if (!(element.border.widthPt >= 0.1 && element.border.widthPt <= 10)) {
+          problems.push({
+            severity: "error",
+            bandIndex,
+            elementId: element.id,
+            message: `The frame on '${element.id}' must be between 0.1pt and 10pt wide.`,
+          });
+        }
+      }
+      if (element.kind === "TEXT" || element.kind === "FIELD") {
+        for (const [index, rule] of (element.highlights ?? []).entries()) {
+          if (!rule.when.trim()) {
+            problems.push({
+              severity: "error",
+              bandIndex,
+              elementId: element.id,
+              message: `Highlight ${index + 1} on '${element.id}' has no condition.`,
+            });
+          }
+          if (!isColour(rule.color) || !isColour(rule.fill)) {
+            problems.push({
+              severity: "error",
+              bandIndex,
+              elementId: element.id,
+              message: `Highlight ${index + 1} on '${element.id}' has a colour that is not #rrggbb.`,
+            });
+          }
+        }
+        if (element.markup && element.kind === "FIELD" && element.aggregate) {
+          problems.push({
+            severity: "warning",
+            bandIndex,
+            elementId: element.id,
+            message: `'${element.id}' prints a total, which is a number; its markup is ignored.`,
+          });
+        }
+      }
+      if (grid) {
+        const ignored = [
+          element.border && (element.border.top || element.border.right || element.border.bottom || element.border.left)
+            ? "frame"
+            : "",
+          (element.kind === "TEXT" || element.kind === "FIELD") && (element.rotation ?? 0) !== 0 ? "rotation" : "",
+          element.kind === "RECT" && (element.shape ?? "RECT") !== "RECT" ? "shape" : "",
+          element.kind === "LINE" && (element.arrowStart || element.arrowEnd) ? "arrowheads" : "",
+        ].filter(Boolean);
+        if (ignored.length) {
+          problems.push({
+            severity: "warning",
+            bandIndex,
+            elementId: element.id,
+            message: `Character-grid stationery ignores the ${ignored.join(", ")} on '${element.id}'.`,
+          });
+        }
+      }
+
+      // ── Charts ───────────────────────────────────────────────────────
+      if (element.kind === "CHART") {
+        if (!CHART_BANDS.includes(band.type)) {
+          problems.push({
+            severity: "error",
+            bandIndex,
+            elementId: element.id,
+            message: `'${element.id}' cannot sit in a ${band.type.replace(/_/g, " ").toLowerCase()} — a chart reads its whole dataset, so it would repeat. Use a report header, summary, report footer or no-data band.`,
+          });
+        }
+        if (grid) {
+          problems.push({
+            severity: "error",
+            bandIndex,
+            elementId: element.id,
+            message: `'${element.id}' is a graphic-mode element; character-grid stationery cannot draw a chart.`,
+          });
+        }
+        if (!element.dataset) {
+          problems.push({
+            severity: "error",
+            bandIndex,
+            elementId: element.id,
+            message: `'${element.id}' has no dataset to chart.`,
+          });
+        } else if (!datasetNames.has(element.dataset)) {
+          problems.push({
+            severity: "error",
+            bandIndex,
+            elementId: element.id,
+            message: `'${element.id}' charts unknown dataset '${element.dataset}'.`,
+          });
+        }
+        if (!element.category.trim()) {
+          problems.push({
+            severity: "error",
+            bandIndex,
+            elementId: element.id,
+            message: `'${element.id}' has no category expression.`,
+          });
+        }
+        if (!element.series.length) {
+          problems.push({
+            severity: "error",
+            bandIndex,
+            elementId: element.id,
+            message: `'${element.id}' needs at least one series.`,
+          });
+        }
+        for (const [index, series] of element.series.entries()) {
+          if (!series.value.trim()) {
+            problems.push({
+              severity: "error",
+              bandIndex,
+              elementId: element.id,
+              message: `Series ${index + 1} on '${element.id}' has no value expression.`,
+            });
+          }
+          if (!isColour(series.color)) {
+            problems.push({
+              severity: "error",
+              bandIndex,
+              elementId: element.id,
+              message: `Series ${index + 1} on '${element.id}' has a colour that is not #rrggbb.`,
+            });
+          }
+        }
+        if (element.chartType === "PIE" && element.series.length > 1) {
+          problems.push({
+            severity: "warning",
+            bandIndex,
+            elementId: element.id,
+            message: `A pie plots one series; '${element.id}' ignores all but the first.`,
+          });
+        }
+        const known = element.dataset ? fieldsByDataset[element.dataset] : undefined;
+        if (known && known.length) {
+          const columns = new Set(known);
+          const expressions = [element.category, ...element.series.map((series) => series.value)];
+          for (const expression of expressions) {
+            for (const field of templateFields(expression, "row")) {
+              if (!columns.has(field)) {
+                problems.push({
+                  severity: "warning",
+                  bandIndex,
+                  elementId: element.id,
+                  message: `'${element.id}' reads '${field}', which '${element.dataset}' does not return — the chart prints empty.`,
+                });
+              }
+            }
+          }
+        }
+      }
+
       if (element.kind === "FIELD" && element.aggregate) {
         if (
           element.aggregate.dataset !== undefined &&
@@ -615,19 +864,37 @@ export function validateDefinition(
     }
   }
 
-  // ── Singleton bands ──────────────────────────────────────────────────
-  for (const bandType of SINGLETON_BANDS) {
-    const indexes = bands.reduce<number[]>((accumulator, band, index) => {
-      if (band.type === bandType) {
-        accumulator.push(index);
+  // ── Singleton bands, per report page ────────────────────────────────
+  const reportPages = [...new Set(bands.map((band) => band.reportPage ?? 0))];
+  for (const reportPage of reportPages) {
+    for (const bandType of SINGLETON_BANDS) {
+      const indexes = bands.reduce<number[]>((accumulator, band, index) => {
+        if (band.type === bandType && (band.reportPage ?? 0) === reportPage) {
+          accumulator.push(index);
+        }
+        return accumulator;
+      }, []);
+      if (indexes.length > 1) {
+        problems.push({
+          severity: "error",
+          bandIndex: indexes[1],
+          message:
+            reportPage === 0
+              ? `${bandType} may appear at most once (found ${indexes.length}).`
+              : `${bandType} may appear at most once on report page ${reportPage + 1} (found ${indexes.length}).`,
+        });
       }
-      return accumulator;
-    }, []);
-    if (indexes.length > 1) {
+    }
+  }
+
+  // Page furniture is drawn by the page, not emitted in sequence, so a fresh
+  // page cannot be asked of it.
+  for (const [bandIndex, band] of bands.entries()) {
+    if ((band.startNewPage || band.startNewNumeration) && (band.type === "PAGE_HEADER" || band.type === "PAGE_FOOTER")) {
       problems.push({
-        severity: "error",
-        bandIndex: indexes[1],
-        message: `${bandType} may appear at most once (found ${indexes.length}).`,
+        severity: "warning",
+        bandIndex,
+        message: `A ${band.type.replace(/_/g, " ").toLowerCase()} is part of every page; "start new page" does nothing on it.`,
       });
     }
   }

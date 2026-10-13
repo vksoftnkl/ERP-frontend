@@ -17,7 +17,12 @@ import {
   elementRectSet,
   elementRenamed,
 } from "@/features/print-designer/store/designerSlice";
-import { selectLayoutMode, selectPaper } from "@/features/print-designer/store/selectors";
+import {
+  selectLayoutMode,
+  selectPaper,
+  selectUnit,
+} from "@/features/print-designer/store/selectors";
+import { roundMm } from "@/features/print-designer/lib/units";
 import {
   useElementPatch,
   useElementPatchEach,
@@ -27,8 +32,12 @@ import {
   NumberInput,
   Section,
   TextInput,
+  isMixed,
   sharedValue,
+  type MaybeMixed,
 } from "@/features/print-designer/components/panels/controls";
+
+const MM_PER_INCH = 25.4;
 import styles from "@/features/print-designer/components/designer.module.scss";
 
 export type PositionSectionProps = {
@@ -40,6 +49,16 @@ export function PositionSection({ bandIndex, elements }: PositionSectionProps) {
   const dispatch = useAppDispatch();
   const layoutMode = useAppSelector(selectLayoutMode);
   const paper = useAppSelector(selectPaper);
+  // QtRPT's measurement setting: inches are a DISPLAY unit. The definition
+  // stays in millimetres, so a template means the same thing to everyone.
+  const inches = useAppSelector(selectUnit) === "in";
+  const unitSuffix = inches ? "in" : "mm";
+  const shown = (value: MaybeMixed<number> | undefined): MaybeMixed<number> | undefined =>
+    inches && value !== undefined && !isMixed(value)
+      ? Math.round((value / MM_PER_INCH) * 1000) / 1000
+      : value;
+  const stored = (value: number): number => (inches ? roundMm(value * MM_PER_INCH) : value);
+  const unitStep = inches ? 0.05 : 0.5;
   const patch = useElementPatch(
     bandIndex,
     elements.map((element) => element.id),
@@ -116,29 +135,33 @@ export function PositionSection({ bandIndex, elements }: PositionSectionProps) {
       <FieldGrid>
         <NumberInput
           label="X"
-          suffix="mm"
-          value={sharedValue(rects, (rect) => rect.x)}
-          onCommit={(value) => setRect("x", value)}
+          suffix={unitSuffix}
+          step={unitStep}
+          value={shown(sharedValue(rects, (rect) => rect.x))}
+          onCommit={(value) => setRect("x", stored(value))}
         />
         <NumberInput
           label="Y"
-          suffix="mm"
-          value={sharedValue(rects, (rect) => rect.y)}
-          onCommit={(value) => setRect("y", value)}
+          suffix={unitSuffix}
+          step={unitStep}
+          value={shown(sharedValue(rects, (rect) => rect.y))}
+          onCommit={(value) => setRect("y", stored(value))}
         />
         <NumberInput
           label="Width"
-          suffix="mm"
+          suffix={unitSuffix}
+          step={unitStep}
           min={0}
-          value={sharedValue(rects, (rect) => rect.w)}
-          onCommit={(value) => setRect("w", value)}
+          value={shown(sharedValue(rects, (rect) => rect.w))}
+          onCommit={(value) => setRect("w", stored(value))}
         />
         <NumberInput
           label="Height"
-          suffix="mm"
+          suffix={unitSuffix}
+          step={unitStep}
           min={0}
-          value={sharedValue(rects, (rect) => rect.h)}
-          onCommit={(value) => setRect("h", value)}
+          value={shown(sharedValue(rects, (rect) => rect.h))}
+          onCommit={(value) => setRect("h", stored(value))}
         />
         <NumberInput
           label="Layer"
