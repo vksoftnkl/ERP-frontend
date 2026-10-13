@@ -200,6 +200,22 @@ export function BandSection({ bandIndex, band, onEditExpression }: BandSectionPr
           value={band.autoGrow}
           onCommit={(value) => patch({ autoGrow: value })}
         />
+        {/* GRID stationery has no crosstab to stretch and its rows are not
+            millimetres to close up; the engine ignores the flag there. */}
+        {!isGridMode ? (
+          <CheckboxInput
+            label="Flow layout"
+            value={band.flowLayout === true}
+            onCommit={(value) => patch({ flowLayout: value })}
+          />
+        ) : null}
+        {!isGridMode && band.flowLayout ? (
+          <p className={styles.listRowMeta}>
+            A crosstab takes only the rows it prints and the band shrinks or grows with it.
+            Select an element to make it Float with what is above it, or to Remove its line
+            when it is hidden.
+          </p>
+        ) : null}
         <CheckboxInput
           label="Never split across pages"
           value={band.keepTogether}

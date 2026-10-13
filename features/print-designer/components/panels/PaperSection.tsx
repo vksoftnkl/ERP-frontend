@@ -14,16 +14,20 @@ import { PAPER_PRESETS } from "@/features/print-designer/lib/vocabulary";
 import { gridMetrics } from "@/features/print-designer/lib/grid";
 import {
   marginsPatched,
+  pageBorderSet,
   paperPatched,
   paperPresetApplied,
 } from "@/features/print-designer/store/designerSlice";
 import {
   selectLayoutMode,
+  selectPageBorder,
   selectPaper,
   selectPrintableWidthMm,
   selectVocabulary,
 } from "@/features/print-designer/store/selectors";
 import {
+  CheckboxInput,
+  ColorInput,
   FieldGrid,
   NumberInput,
   Section,
@@ -37,6 +41,7 @@ export function PaperSection() {
   const layoutMode = useAppSelector(selectLayoutMode);
   const vocabulary = useAppSelector(selectVocabulary);
   const printableWidthMm = useAppSelector(selectPrintableWidthMm);
+  const pageBorder = useAppSelector(selectPageBorder);
 
   const presets = vocabulary?.papers ?? PAPER_PRESETS;
   const isGridMode = layoutMode === "GRID";
@@ -149,6 +154,90 @@ export function PaperSection() {
             ? `${metrics.columns} columns at ${metrics.cellWidthMm.toFixed(2)}mm per character.`
             : `Printable width ${printableWidthMm.toFixed(1)}mm. Element X is measured from the sheet edge, not from the margin.`}
         </p>
+      </Section>
+
+      <Section title="Page border">
+        {isGridMode ? (
+          <p className={styles.listRowMeta}>
+            Character-grid stationery (thermal, dot matrix) cannot print a page border.
+          </p>
+        ) : (
+          <>
+            <CheckboxInput
+              label="Border on every page"
+              value={pageBorder !== undefined}
+              onCommit={(on) => dispatch(pageBorderSet(on ? {} : null))}
+            />
+            {pageBorder ? (
+              <>
+                <SelectInput
+                  label="Position"
+                  wide
+                  value={pageBorder.insetMm === null ? "MARGIN" : "EDGE"}
+                  options={[
+                    { value: "MARGIN", label: "On the margins" },
+                    { value: "EDGE", label: "Fixed distance from the paper edge" },
+                  ]}
+                  onCommit={(value) =>
+                    dispatch(
+                      pageBorderSet({
+                        // Start the fixed distance where the frame already is
+                        // on its nearest side, so switching does not jump it.
+                        insetMm:
+                          value === "MARGIN"
+                            ? null
+                            : Math.min(
+                                paper.margins.top,
+                                paper.margins.right,
+                                paper.margins.bottom,
+                                paper.margins.left,
+                              ),
+                      }),
+                    )
+                  }
+                />
+                <FieldGrid>
+                  {pageBorder.insetMm !== null ? (
+                    <NumberInput
+                      label="From edge"
+                      suffix="mm"
+                      min={0}
+                      value={pageBorder.insetMm}
+                      onCommit={(value) => dispatch(pageBorderSet({ insetMm: value }))}
+                    />
+                  ) : null}
+                  <NumberInput
+                    label="Line"
+                    suffix="pt"
+                    step={0.25}
+                    min={0.1}
+                    max={10}
+                    value={pageBorder.widthPt}
+                    onCommit={(value) => dispatch(pageBorderSet({ widthPt: value }))}
+                  />
+                  <NumberInput
+                    label="Corners"
+                    suffix="mm"
+                    min={0}
+                    max={50}
+                    value={pageBorder.radiusMm}
+                    onCommit={(value) => dispatch(pageBorderSet({ radiusMm: value }))}
+                  />
+                </FieldGrid>
+                <ColorInput
+                  label="Colour"
+                  value={pageBorder.color}
+                  onCommit={(value) => dispatch(pageBorderSet({ color: value ?? "" }))}
+                />
+                <p className={styles.listRowMeta}>
+                  {paper.heightMm === null
+                    ? "Continuous stationery has no page bottom, so the border is not printed."
+                    : "Printed on every page, behind the design. The canvas shows its sides; Preview shows the whole page."}
+                </p>
+              </>
+            ) : null}
+          </>
+        )}
       </Section>
     </>
   );

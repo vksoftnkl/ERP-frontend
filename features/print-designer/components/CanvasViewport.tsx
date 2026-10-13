@@ -30,7 +30,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { mmToPx, pxToMm, roundMm } from "@/features/print-designer/lib/units";
+import { mmToPx, ptToPx, pxToMm, roundMm } from "@/features/print-designer/lib/units";
 import { gridMetrics } from "@/features/print-designer/lib/grid";
 import { ZOOM_LEVELS } from "@/features/print-designer/lib/vocabulary";
 import { bandHeightSet, setZoom } from "@/features/print-designer/store/designerSlice";
@@ -38,6 +38,7 @@ import {
   selectBandWidthMm,
   selectLayoutMode,
   selectOrderedBands,
+  selectPageBorder,
   selectPaper,
   selectSelection,
   selectView,
@@ -108,6 +109,7 @@ export function CanvasViewport() {
   const dispatch = useAppDispatch();
   const view = useAppSelector(selectView);
   const paper = useAppSelector(selectPaper);
+  const pageBorder = useAppSelector(selectPageBorder);
   const bands = useAppSelector(selectOrderedBands);
   const bandWidthMm = useAppSelector(selectBandWidthMm);
   const layoutMode = useAppSelector(selectLayoutMode);
@@ -208,6 +210,26 @@ export function CanvasViewport() {
               bottom: 0,
             }}
           />
+          {/* The bands are strips, not a page, so only the border's SIDES can
+              be placed truly; it runs the sheet's full height as a reminder
+              that it frames every page. Preview draws the real page. */}
+          {pageBorder && !isGridMode ? (
+            <div
+              className={styles.pageBorderGuide}
+              title="Page border — printed on every page"
+              style={{
+                left: mmToPx(pageBorder.insetMm ?? paper.margins.left, view.zoom),
+                right: mmToPx(pageBorder.insetMm ?? paper.margins.right, view.zoom),
+                top: 0,
+                bottom: 0,
+                borderColor: /^#[0-9a-fA-F]{6}$/.test(pageBorder.color)
+                  ? pageBorder.color
+                  : "#000000",
+                borderWidth: Math.max(1, ptToPx(pageBorder.widthPt, view.zoom)),
+                borderRadius: mmToPx(pageBorder.radiusMm, view.zoom),
+              }}
+            />
+          ) : null}
         </div>
 
         {bands.map((entry) => {

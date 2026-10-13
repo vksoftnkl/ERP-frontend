@@ -549,3 +549,68 @@ describe("crosstab rules", () => {
     expect(problems.join(" ")).toMatch(/graphic-mode element/);
   });
 });
+
+describe("validateDefinition: flow layout", () => {
+  it("warns when a line set to close up has no condition that could hide it", () => {
+    const input = definition({
+      bands: [
+        band({
+          flowLayout: true,
+          elements: [
+            text("never", { x: 10, removeLineWhenBlank: true }),
+            text("sometimes", { x: 10, y: 6, removeLineWhenBlank: true, visible: "{{ items }}" }),
+          ],
+        }),
+      ],
+    });
+    expect(messages(input)).toEqual([
+      "'never' removes its line when blank but has no visibility condition, so it never is.",
+    ]);
+  });
+
+  it("says nothing about the flag outside a flow band", () => {
+    const input = definition({
+      bands: [band({ elements: [text("t", { x: 10, removeLineWhenBlank: true })] })],
+    });
+    expect(validateDefinition(input)).toEqual([]);
+  });
+
+  it("warns that GRID stationery ignores flow layout", () => {
+    const input = definition({
+      layoutMode: "GRID",
+      paper: { ...definition().paper, columns: 48 },
+      bands: [band({ flowLayout: true, heightRows: 2 })],
+    });
+    expect(messages(input)).toContain(
+      "PAGE_HEADER is set to flow layout, which GRID stationery ignores; its elements print at fixed rows.",
+    );
+  });
+});
+
+describe("validateDefinition: page border", () => {
+  const border = { insetMm: null, widthPt: 0.75, color: "#000000", radiusMm: 0 };
+
+  it("accepts a border on the margins", () => {
+    expect(validateDefinition(definition({ pageBorder: border }))).toEqual([]);
+  });
+
+  it("refuses a colour the server would refuse, before the save does", () => {
+    expect(messages(definition({ pageBorder: { ...border, color: "#12" } }))).toEqual([
+      "Page border colour '#12' must be #rrggbb.",
+    ]);
+  });
+
+  it("warns that continuous stationery does not print it", () => {
+    const input = definition({ pageBorder: border });
+    input.paper.heightMm = null;
+    expect(messages(input)).toEqual([
+      "Continuous stationery has no page bottom, so the page border is not printed.",
+    ]);
+  });
+
+  it("warns when the distance from the edge leaves no frame", () => {
+    expect(messages(definition({ pageBorder: { ...border, insetMm: 120 } }))).toEqual([
+      "The page border's distance from the edge leaves no frame to draw.",
+    ]);
+  });
+});

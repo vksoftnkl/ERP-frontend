@@ -5,6 +5,7 @@ import reducer, {
   elementPatched,
   hostSaved,
   moveCommitted,
+  pageBorderSet,
   redo,
   selectElement,
   selectElements,
@@ -490,5 +491,33 @@ describe("problems, as the designer computes them", () => {
     expect(problems.map((problem) => problem.message).join(" ")).toMatch(
       /reads 'name'.*reads 'period'.*reads 'amount'/,
     );
+  });
+});
+
+describe("page border", () => {
+  it("turns on with the defaults, edits, falls back from a cleared colour, and undoes", () => {
+    let state = reducer(loaded(), pageBorderSet({}));
+    expect(state.definition.pageBorder).toEqual({
+      insetMm: null,
+      widthPt: 0.75,
+      color: "#000000",
+      radiusMm: 0,
+    });
+
+    state = reducer(state, pageBorderSet({ insetMm: 5, widthPt: 1.5 }));
+    state = reducer(state, pageBorderSet({ color: "" }));
+    expect(state.definition.pageBorder).toEqual({
+      insetMm: 5,
+      widthPt: 1.5,
+      color: "#000000",
+      radiusMm: 0,
+    });
+
+    state = reducer(state, pageBorderSet(null));
+    expect(state.definition.pageBorder).toBeUndefined();
+    expect(state.dirty).toBe(true);
+
+    state = reducer(state, undo());
+    expect(state.definition.pageBorder?.insetMm).toBe(5);
   });
 });

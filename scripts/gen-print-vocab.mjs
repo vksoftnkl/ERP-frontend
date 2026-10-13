@@ -61,6 +61,7 @@ const vocabulary = {
   aggregateScopes: constArray(schemaSource, "AGGREGATE_SCOPES"),
   crosstabSorts: constArray(schemaSource, "CROSSTAB_SORTS"),
   crosstabOverflows: constArray(schemaSource, "CROSSTAB_OVERFLOWS"),
+  positionTypes: constArray(schemaSource, "POSITION_TYPES"),
   transforms: constArray(jexlSource, "TRANSFORM_NAMES"),
   paperCodes: [...unitsSource.matchAll(/code:\s*'([A-Z0-9]+)'/g)].map((entry) => entry[1]),
 };

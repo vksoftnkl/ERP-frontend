@@ -18,6 +18,7 @@ import type {
   ImageElement,
   LineElement,
   OutputMode,
+  PageBorder,
   PaperSpec,
   ProviderDescriptor,
   CrosstabElement,
@@ -51,6 +52,7 @@ import {
   createFieldElement,
   nextElementId,
   paperFromPreset,
+  DEFAULT_PAGE_BORDER,
 } from "@/features/print-designer/lib/defaults";
 import {
   canRedo,
@@ -1182,6 +1184,35 @@ const designerSlice = createSlice({
       state.meta.paperCode = preset.code;
     },
 
+    /**
+     * Draw, change or remove the frame printed around every page. `null`
+     * removes it; a patch turns it on (from the defaults) and changes it.
+     */
+    pageBorderSet(state, action: PayloadAction<Partial<PageBorder> | null>) {
+      const patch = action.payload;
+      if (patch === null) {
+        commitDefinitionEdit(state, "Remove page border", (definition) => {
+          delete definition.pageBorder;
+        });
+        return;
+      }
+      const exists = state.definition.pageBorder !== undefined;
+      commitDefinitionEdit(
+        state,
+        exists ? "Edit page border" : "Add page border",
+        (definition) => {
+          const next = { ...DEFAULT_PAGE_BORDER, ...definition.pageBorder, ...patch };
+          // A cleared colour box means "the default", never an empty string the
+          // server's colour rule would refuse -- taking the whole design down.
+          next.color = next.color || DEFAULT_PAGE_BORDER.color;
+          definition.pageBorder = next;
+        },
+        // Typing in the size boxes coalesces; adding the border stays its own
+        // undo step, so undoing a width change does not take the border away.
+        exists ? { coalesceKey: "pageBorder" } : undefined,
+      );
+    },
+
     marginsPatched(state, action: PayloadAction<Partial<PaperSpec["margins"]>>) {
       commitDefinitionEdit(
         state,
@@ -1329,6 +1360,7 @@ export const {
   paperPatched,
   paperPresetApplied,
   marginsPatched,
+  pageBorderSet,
   datasetUpserted,
   datasetRemoved,
   nameChanged,

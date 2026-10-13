@@ -45,6 +45,9 @@ export function BandCaption({
   if (band.autoGrow) {
     flags.push("autoGrow");
   }
+  if (band.flowLayout && !isGridMode) {
+    flags.push("flow");
+  }
   if (band.keepTogether) {
     flags.push("keepTogether");
   }

@@ -232,6 +232,49 @@ describe("opening a revision on the canvas", () => {
     expect(second.paper).toEqual(first.paper);
     expect(second.datasets).toEqual(first.datasets);
   });
+
+  it("keeps flow layout and the elements' flow flags through open and save", () => {
+    const stored = {
+      bands: [
+        {
+          type: "REPORT_FOOTER",
+          heightMm: 53.12,
+          flowLayout: true,
+          elements: [
+            {
+              kind: "TEXT",
+              id: "rf_l_disc",
+              y: 4.6,
+              value: "Discount",
+              positionType: "FLOAT",
+              removeLineWhenBlank: true,
+            },
+          ],
+        },
+        { type: "SUMMARY", heightMm: 5 },
+      ],
+    };
+    const opened = toTemplateDefinition(version({ ptvBody: stored }));
+    const reopened = toTemplateDefinition(version({ ptvBody: bodyFromDefinition(opened) }));
+
+    expect(reopened.bands[0].flowLayout).toBe(true);
+    expect(reopened.bands[0].elements[0]).toMatchObject({
+      positionType: "FLOAT",
+      removeLineWhenBlank: true,
+    });
+    // A band that never had it does not grow the key.
+    expect("flowLayout" in reopened.bands[1]).toBe(false);
+  });
+
+  it("keeps the page border through open and save", () => {
+    const pageBorder = { insetMm: 5, widthPt: 1, color: "#1f3a93", radiusMm: 2 };
+    const opened = toTemplateDefinition(
+      version({ ptvBody: { bands: [{ type: "DETAIL" }], pageBorder } }),
+    );
+    const reopened = toTemplateDefinition(version({ ptvBody: bodyFromDefinition(opened) }));
+
+    expect(reopened.pageBorder).toEqual(pageBorder);
+  });
 });
 
 describe("selectListColumns — the stand-in for a catalogue that does not exist", () => {

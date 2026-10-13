@@ -116,6 +116,8 @@ export const CROSSTAB_SORT_LABELS: Readonly<Record<CrosstabSort, string>> = {
 
 export const CROSSTAB_OVERFLOWS = ["FOLD", "CLIP"] as const;
 
+export const POSITION_TYPES = ["FIX", "FLOAT"] as const;
+
 /**
  * The bands a crosstab may sit in — the ones that appear at most once.
  *

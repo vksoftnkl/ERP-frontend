@@ -1072,6 +1072,27 @@
   opacity: 0.55;
 }
 
+.pageBorderGuide {
+  position: absolute;
+  border-style: solid;
+  box-sizing: border-box;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* A FLOAT element in a flow band moves with what grows above it. The canvas
+   draws design positions, so the move itself cannot be shown; this says it
+   will happen. */
+.elementFloat::after {
+  content: "↓";
+  position: absolute;
+  top: 0;
+  right: 1px;
+  font: 700 8px/1 var(--pd-mono);
+  color: var(--pd-select);
+  pointer-events: none;
+}
+
 .selectionBox {
   position: absolute;
   border: 1px solid var(--pd-select);

@@ -19,10 +19,12 @@ import { isTextLike, type FieldMeta, type TextLikeElement } from "@/features/pri
 import {
   selectBoundDatasets,
   selectDatasetBindings,
+  selectLayoutMode,
   selectSelectedBand,
   selectSelectedElements,
 } from "@/features/print-designer/store/selectors";
 import ExpressionEditor from "@/features/print-designer/components/ExpressionEditor";
+import FlowSection from "@/features/print-designer/components/panels/FlowSection";
 import PositionSection from "@/features/print-designer/components/panels/PositionSection";
 import FontSection from "@/features/print-designer/components/panels/FontSection";
 import FormatSection from "@/features/print-designer/components/panels/FormatSection";
@@ -42,6 +44,7 @@ type ExpressionRequest = {
 export function PropertyPanel() {
   const elements = useAppSelector(selectSelectedElements);
   const selectedBand = useAppSelector(selectSelectedBand);
+  const layoutMode = useAppSelector(selectLayoutMode);
   const bindings = useAppSelector(selectDatasetBindings);
   const bound = useAppSelector(selectBoundDatasets);
 
@@ -111,6 +114,9 @@ export function PropertyPanel() {
             elements={elements}
             onEditExpression={openExpression}
           />
+          {selectedBand.band.flowLayout && layoutMode !== "GRID" ? (
+            <FlowSection bandIndex={selectedBand.index} elements={elements} />
+          ) : null}
         </div>
         {editor}
       </>

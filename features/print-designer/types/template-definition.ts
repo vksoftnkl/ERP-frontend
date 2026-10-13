@@ -65,6 +65,8 @@ export type CrosstabSort =
   | "VALUE_ASC"
   | "FIRST_SEEN";
 export type CrosstabOverflow = "FOLD" | "CLIP";
+/** Flow bands only: FLOAT moves with whatever grows or closes up above it. */
+export type PositionType = "FIX" | "FLOAT";
 
 export type Margins = {
   top: number;
@@ -84,6 +86,19 @@ export type PaperSpec = {
   columns?: number;
   /** GRID mode only: lines per page. */
   rows?: number;
+};
+
+/**
+ * A frame printed on every page of a GRAPHIC report, behind everything else.
+ * On the definition rather than on `paper`, because the paper is rebuilt from
+ * the revision row and the border belongs to the design.
+ */
+export type PageBorder = {
+  /** Millimetres from the paper edge on all four sides; null = on the margin line. */
+  insetMm: number | null;
+  widthPt: number;
+  color: string;
+  radiusMm: number;
 };
 
 export type DatasetBinding = {
@@ -128,6 +143,13 @@ type ElementBase = {
   style?: StyleSpec;
   /** Draw order within the band; higher paints later. */
   z: number;
+  /** Flow bands only. Absent = FIX: the element stays at its design `y`. */
+  positionType?: PositionType;
+  /**
+   * Flow bands only: when `visible` hides the element, close up its vertical
+   * span -- unless a visible element still occupies part of it.
+   */
+  removeLineWhenBlank?: boolean;
 };
 
 type TextLikeBase = ElementBase & {
@@ -361,6 +383,12 @@ export type Band = {
   groupLevel: number;
   printOn: PrintOn;
   autoGrow: boolean;
+  /**
+   * Position elements by flow: a crosstab takes only the rows it prints,
+   * hidden `removeLineWhenBlank` lines close up, FLOAT elements follow, and
+   * the band's height with them. GRAPHIC only. Absent = fixed positions.
+   */
+  flowLayout?: boolean;
   keepTogether: boolean;
   keepWithNext: boolean;
   keepWithLastDetail: boolean;
@@ -375,6 +403,8 @@ export type TemplateDefinition = {
   /** Free-form designer metadata; the engine ignores it entirely. */
   meta?: Record<string, unknown>;
   paper: PaperSpec;
+  /** Absent = no border. */
+  pageBorder?: PageBorder;
   datasets: DatasetBinding[];
   bands: Band[];
 };

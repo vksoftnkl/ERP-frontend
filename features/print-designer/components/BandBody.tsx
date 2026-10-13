@@ -593,6 +593,7 @@ export function BandBody({ bandIndex, band, widthMm, margins }: BandBodyProps) {
           zoom={view.zoom}
           scale={scale}
           isGridMode={isGridMode}
+          inFlowBand={band.flowLayout === true && !isGridMode}
           selected={selectedIds.has(element.id)}
           showExpressions={view.showExpressions}
           resolveSample={resolveSample}

@@ -12,6 +12,7 @@ import type {
   ElementKind,
   FieldMeta,
   LayoutMode,
+  PageBorder,
   PaperPreset,
   PaperSpec,
   ProviderDescriptor,
@@ -25,6 +26,13 @@ import { DEFAULT_TEXT_H_MM, DEFAULT_TEXT_W_MM } from "@/features/print-designer/
 export const DEFAULT_MARGINS = { top: 10, right: 10, bottom: 10, left: 10 } as const;
 /** Thermal and dot-matrix stationery has no side margin worth the name. */
 export const GRID_MARGINS = { top: 2, right: 2, bottom: 2, left: 2 } as const;
+/** A thin black frame on the margin line: what ticking "Page border" gives. */
+export const DEFAULT_PAGE_BORDER: PageBorder = {
+  insetMm: null,
+  widthPt: 0.75,
+  color: "#000000",
+  radiusMm: 0,
+};
 export function paperFromPreset(preset: PaperPreset): PaperSpec {
   const margins = preset.layoutMode === "GRID" ? { ...GRID_MARGINS } : { ...DEFAULT_MARGINS };
   return {

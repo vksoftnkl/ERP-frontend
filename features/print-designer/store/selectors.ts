@@ -33,6 +33,7 @@ export const selectLastSavedAt = (state: RootState) => state.printDesigner.lastS
 
 export const selectBands = (state: RootState) => state.printDesigner.definition.bands;
 export const selectPaper = (state: RootState) => state.printDesigner.definition.paper;
+export const selectPageBorder = (state: RootState) => state.printDesigner.definition.pageBorder;
 export const selectLayoutMode = (state: RootState) => state.printDesigner.definition.layoutMode;
 export const selectDatasetBindings = (state: RootState) =>
   state.printDesigner.definition.datasets;

@@ -172,6 +172,9 @@ function normaliseBand(value: unknown, layoutMode: LayoutMode): Band | null {
       ? (raw.printOn as PrintOn)
       : base.printOn,
     autoGrow: bool("autoGrow", base.autoGrow),
+    // Listed, or the next open-and-save would strip it: this function rebuilds
+    // the band key by key, so a flag it does not name never comes back out.
+    ...(raw.flowLayout === true ? { flowLayout: true } : {}),
     keepTogether: bool("keepTogether", base.keepTogether),
     keepWithNext: bool("keepWithNext", base.keepWithNext),
     keepWithLastDetail: bool("keepWithLastDetail", base.keepWithLastDetail),
@@ -216,6 +219,9 @@ export function toTemplateDefinition(working: DraftVersion): TemplateDefinition 
     layoutMode,
     ...(isTemplateDefinition(stored) && stored.meta ? { meta: stored.meta } : {}),
     paper,
+    // Kept from the body like `meta`: the definition is rebuilt key by key, and
+    // a key not named here is gone after the next open-and-save.
+    ...(isTemplateDefinition(stored) && stored.pageBorder ? { pageBorder: stored.pageBorder } : {}),
     datasets,
     bands,
   };

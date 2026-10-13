@@ -171,6 +171,71 @@ export function validateDefinition(
     });
   }
 
+  // ── Page border ──────────────────────────────────────────────────────
+  // The engine skips a border it cannot draw, so those are warnings. A colour
+  // or size the server's schema refuses fails the WHOLE design, so those are
+  // errors -- the same rule the element colours follow.
+  const border = definition.pageBorder;
+  if (border) {
+    if (definition.layoutMode === "GRID") {
+      problems.push({
+        severity: "warning",
+        scope: "paper",
+        message: "Character-grid stationery cannot print the page border; it is ignored.",
+      });
+    } else if (paper.heightMm === null) {
+      problems.push({
+        severity: "warning",
+        scope: "paper",
+        message: "Continuous stationery has no page bottom, so the page border is not printed.",
+      });
+    }
+    if (!/^#[0-9a-fA-F]{6}$/.test(border.color) && !border.color.includes("{{")) {
+      problems.push({
+        severity: "error",
+        scope: "paper",
+        message: `Page border colour '${border.color}' must be #rrggbb.`,
+      });
+    }
+    if (!(border.widthPt >= 0.1 && border.widthPt <= 10)) {
+      problems.push({
+        severity: "error",
+        scope: "paper",
+        message: "Page border line must be between 0.1pt and 10pt.",
+      });
+    }
+    if (!(border.radiusMm >= 0 && border.radiusMm <= 50)) {
+      problems.push({
+        severity: "error",
+        scope: "paper",
+        message: "Page border corners must be between 0 and 50mm.",
+      });
+    }
+    if (border.insetMm !== null && border.insetMm < 0) {
+      problems.push({
+        severity: "error",
+        scope: "paper",
+        message: "Page border distance from the edge cannot be negative.",
+      });
+    }
+    const sides = {
+      left: border.insetMm ?? paper.margins.left,
+      right: border.insetMm ?? paper.margins.right,
+      top: border.insetMm ?? paper.margins.top,
+      bottom: border.insetMm ?? paper.margins.bottom,
+    };
+    const leavesNoFrame =
+      paper.widthMm - sides.left - sides.right <= 0 ||
+      (paper.heightMm !== null && paper.heightMm - sides.top - sides.bottom <= 0);
+    if (leavesNoFrame) {
+      problems.push({
+        severity: "warning",
+        scope: "paper",
+        message: "The page border's distance from the edge leaves no frame to draw.",
+      });
+    }
+  }
+
   // ── Datasets ─────────────────────────────────────────────────────────
   const datasetNames = new Set<string>();
   const cardinalityByName = new Map<string, "one" | "many">();
@@ -232,7 +297,27 @@ export function validateDefinition(
       });
     }
 
+    const flowBand = band.flowLayout === true && definition.layoutMode !== "GRID";
+    if (band.flowLayout && definition.layoutMode === "GRID") {
+      problems.push({
+        severity: "warning",
+        bandIndex,
+        message: `${band.type} is set to flow layout, which GRID stationery ignores; its elements print at fixed rows.`,
+      });
+    }
+
     for (const element of band.elements) {
+      // Only a hidden element can close up, so the flag needs a condition to
+      // hide it -- without one it is a promise the engine never gets to keep.
+      if (flowBand && element.removeLineWhenBlank && !element.visible?.trim()) {
+        problems.push({
+          severity: "warning",
+          bandIndex,
+          elementId: element.id,
+          message: `'${element.id}' removes its line when blank but has no visibility condition, so it never is.`,
+        });
+      }
+
       const firstBand = seenElementIds.get(element.id);
       if (firstBand !== undefined) {
         problems.push({

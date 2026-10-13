@@ -11,6 +11,7 @@ import {
   LAYOUT_MODES,
   OUTPUT_MODES,
   PAPER_PRESETS,
+  POSITION_TYPES,
   PRINT_ON_VALUES,
   TRANSFORM_NAMES,
   defaultOutputModeForPaper,
@@ -49,6 +50,7 @@ describe("vocabulary parity with the server schema", () => {
   it("agrees on the crosstab sort and overflow vocabularies", () => {
     expect([...CROSSTAB_SORTS].sort()).toEqual([...generated.crosstabSorts].sort());
     expect([...CROSSTAB_OVERFLOWS].sort()).toEqual([...generated.crosstabOverflows].sort());
+    expect([...POSITION_TYPES].sort()).toEqual([...generated.positionTypes].sort());
     // Every value needs a label, or the property panel renders a blank option.
     for (const sort of CROSSTAB_SORTS) {
       expect(CROSSTAB_SORT_LABELS[sort]).toBeTruthy();

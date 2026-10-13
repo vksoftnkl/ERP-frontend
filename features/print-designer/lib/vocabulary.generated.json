@@ -75,6 +75,10 @@
     "FOLD",
     "CLIP"
   ],
+  "positionTypes": [
+    "FIX",
+    "FLOAT"
+  ],
   "transforms": [
     "fmt",
     "fmtIntl",

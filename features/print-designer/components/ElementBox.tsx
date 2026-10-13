@@ -38,6 +38,11 @@ export type ElementBoxProps = {
    * 1.67mm cell turns a 48-column receipt into unreadable overlap.
    */
   isGridMode: boolean;
+  /**
+   * True when the band lays out by flow. The canvas still draws design
+   * positions -- it has no data to flow with -- so FLOAT is only marked.
+   */
+  inFlowBand: boolean;
   selected: boolean;
   /** Raw `{{ … }}` when true, sample values when false. */
   showExpressions: boolean;
@@ -89,6 +94,7 @@ function ElementBoxComponent({
   zoom,
   scale,
   isGridMode,
+  inFlowBand,
   selected,
   showExpressions,
   resolveSample,
@@ -113,10 +119,14 @@ function ElementBoxComponent({
     onPointerDown(event, element.id);
   };
 
+  const floats = inFlowBand && element.positionType === "FLOAT";
+  const closesUp = inFlowBand && element.removeLineWhenBlank === true;
+
   const className = [
     styles.element,
     selected ? styles.elementSelected : "",
     element.visible ? styles.elementHidden : "",
+    floats ? styles.elementFloat : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -124,7 +134,14 @@ function ElementBoxComponent({
   const common = {
     onPointerDown: handlePointerDown,
     "data-element-id": element.id,
-    title: element.visible ? `${element.id} — conditional: ${element.visible}` : element.id,
+    title: [
+      element.id,
+      element.visible ? `conditional: ${element.visible}` : "",
+      floats ? "floats" : "",
+      closesUp ? "removes its line when blank" : "",
+    ]
+      .filter(Boolean)
+      .join(" — "),
   } as const;
 
   switch (element.kind) {
